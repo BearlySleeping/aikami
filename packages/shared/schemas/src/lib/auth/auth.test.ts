@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import {
-  FirebaseAuthMetadataSchema,
-  FirebaseSignInProviderNameSchema,
+  AuthMetadataSchema,
   GoogleMetadataSchema,
   MicrosoftMetadataSchema,
   RegisterDataSchema,
+  SignInProviderNameSchema,
   SignInProviderSchema,
   SignInSocialProviderSchema,
   UserClaimsSchema,
@@ -15,22 +15,22 @@ import {
   UserTokenSchema,
 } from './auth.ts';
 
-describe('FirebaseAuthMetadataSchema', () => {
-  test('should parse valid firebase auth metadata', () => {
+describe('AuthMetadataSchema', () => {
+  test('should parse valid auth metadata', () => {
     const validData = {
       displayName: 'John Doe',
       email: 'john@example.com',
       phoneNumber: '+1234567890',
       photoURL: 'https://example.com/photo.jpg',
     };
-    const result = Value.Parse(FirebaseAuthMetadataSchema, validData);
+    const result = Value.Parse(AuthMetadataSchema, validData);
     expect(result.displayName).toBe('John Doe');
     expect(result.email).toBe('john@example.com');
   });
 
   test('should parse with all optional fields undefined', () => {
     const validData = {};
-    const result = Value.Parse(FirebaseAuthMetadataSchema, validData);
+    const result = Value.Parse(AuthMetadataSchema, validData);
     expect(result.displayName).toBeUndefined();
   });
 });
@@ -158,13 +158,13 @@ describe('UserRoleSchema', () => {
   });
 });
 
-describe('FirebaseSignInProviderNameSchema', () => {
+describe('SignInProviderNameSchema', () => {
   test('should parse google provider name', () => {
-    expect(Value.Parse(FirebaseSignInProviderNameSchema, 'google')).toBe('google');
+    expect(Value.Parse(SignInProviderNameSchema, 'google')).toBe('google');
   });
 
   test('should parse github provider name', () => {
-    expect(Value.Parse(FirebaseSignInProviderNameSchema, 'github')).toBe('github');
+    expect(Value.Parse(SignInProviderNameSchema, 'github')).toBe('github');
   });
 });
 

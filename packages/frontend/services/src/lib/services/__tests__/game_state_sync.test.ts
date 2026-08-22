@@ -2,9 +2,8 @@
 //
 // Unit tests for GameStateSyncService after the C-385 AC-2 rehoming:
 // slot metadata lives in the local `saves` table (never Data Connect),
-// while the ECS blob stays in Firebase Storage. Verifies save → list →
-// load → delete against a fake local database and a mocked Storage
-// service.
+// while the ECS blob lives in the R2 saves bucket. Verifies save → list →
+// load → delete against a fake local database.
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { resolve } from 'node:path';
@@ -84,10 +83,6 @@ class FakeLocalDatabase implements LocalDatabaseInterface {
   async close(): Promise<void> {}
 }
 
-const storageUploadMock = mock(async (_path: string, _data: string) => ({}));
-const storageDownloadMock = mock(async (_path: string) => '{"version":"1.0.0"}');
-const storageDeleteMock = mock(async (_path: string) => {});
-
 const VALID_SNAPSHOT = JSON.stringify({
   version: '1.0.0',
   timestamp: Date.now(),
@@ -111,9 +106,6 @@ describe('GameStateSyncService — C-385 AC-2 local save metadata', () => {
 
   beforeEach(async () => {
     db = new FakeLocalDatabase();
-    storageUploadMock.mockClear();
-    storageDownloadMock.mockClear();
-    storageDeleteMock.mockClear();
 
     mock.module('@aikami/frontend/storage', () => ({
       getLocalDatabase: mock(async () => db as unknown as LocalDatabaseInterface),
@@ -121,18 +113,11 @@ describe('GameStateSyncService — C-385 AC-2 local save metadata', () => {
     mock.module(STORAGE_INDEX_PATH, () => ({
       getLocalDatabase: mock(async () => db as unknown as LocalDatabaseInterface),
     }));
-    mock.module('../../firebase/firebase_storage.ts', () => ({
-      firebaseStorageService: {
-        uploadString: storageUploadMock,
-        downloadString: storageDownloadMock,
-        deleteObject: storageDeleteMock,
-      },
-    }));
 
     service = await import('../game_state_sync.svelte.ts');
   });
 
-  test('saveGame uploads the blob and upserts a local saves row with metadata', async () => {
+  test('saveGame upserts a local saves row with metadata', async () => {
     const storageRef = await service.gameStateSyncService.saveGame({
       uid: 'user-1',
       slot: 1,
@@ -141,7 +126,6 @@ describe('GameStateSyncService — C-385 AC-2 local save metadata', () => {
     });
 
     expect(storageRef).toBe('saves/user-1/slot_1.json');
-    expect(storageUploadMock).toHaveBeenCalledWith('saves/user-1/slot_1.json', VALID_SNAPSHOT);
 
     const row = db.rows.get('sync_slot_1');
     expect(row).toBeDefined();
@@ -157,7 +141,7 @@ describe('GameStateSyncService — C-385 AC-2 local save metadata', () => {
     expect(payload.storageRef).toBe('saves/user-1/slot_1.json');
   });
 
-  test('saveGame rejects an invalid payload without uploading or writing a row', async () => {
+  test('saveGame rejects an invalid payload without writing a row', async () => {
     await expect(
       service.gameStateSyncService.saveGame({
         uid: 'user-1',
@@ -166,7 +150,6 @@ describe('GameStateSyncService — C-385 AC-2 local save metadata', () => {
       }),
     ).rejects.toThrow('saveGame:');
 
-    expect(storageUploadMock).not.toHaveBeenCalled();
     expect(db.rows.size).toBe(0);
   });
 
@@ -255,14 +238,12 @@ describe('GameStateSyncService — C-385 AC-2 local save metadata', () => {
     });
   });
 
-  test('loadGame reads the ECS blob from Firebase Storage', async () => {
+  test('loadGame returns undefined (R2 blob sync not yet wired)', async () => {
     const payload = await service.gameStateSyncService.loadGame({ uid: 'user-1', slot: 1 });
-
-    expect(storageDownloadMock).toHaveBeenCalledWith('saves/user-1/slot_1.json');
-    expect(payload).toBe('{"version":"1.0.0"}');
+    expect(payload).toBeUndefined();
   });
 
-  test('deleteSlot removes the storage blob and the local row', async () => {
+  test('deleteSlot removes the local row', async () => {
     db.rows.set(
       'sync_slot_1',
       Object.fromEntries([
@@ -277,7 +258,6 @@ describe('GameStateSyncService — C-385 AC-2 local save metadata', () => {
 
     await service.gameStateSyncService.deleteSlot({ uid: 'user-1', slot: 1 });
 
-    expect(storageDeleteMock).toHaveBeenCalledWith('saves/user-1/slot_1.json');
     expect(db.rows.has('sync_slot_1')).toBe(false);
   });
 
@@ -293,14 +273,10 @@ describe('GameStateSyncService — C-385 AC-2 local save metadata', () => {
       }),
     ).rejects.toThrow('simulated SQLite write failure');
 
-    // The blob was uploaded, then the metadata write failed — the
-    // compensating cleanup must remove the orphaned blob.
-    expect(storageUploadMock).toHaveBeenCalledWith('saves/user-1/slot_1.json', VALID_SNAPSHOT);
-    expect(storageDeleteMock).toHaveBeenCalledWith('saves/user-1/slot_1.json');
     expect(db.rows.has('sync_slot_1')).toBe(false);
   });
 
-  test('deleteSlot never leaves metadata referencing a blob when the Storage delete fails', async () => {
+  test('deleteSlot never leaves metadata referencing a blob when the bucket delete fails', async () => {
     db.rows.set(
       'sync_slot_1',
       Object.fromEntries([
@@ -313,15 +289,9 @@ describe('GameStateSyncService — C-385 AC-2 local save metadata', () => {
       ]),
     );
 
-    storageDeleteMock.mockImplementation(async () => {
-      throw new Error('storage delete failed');
-    });
+    await service.gameStateSyncService.deleteSlot({ uid: 'user-1', slot: 1 });
 
-    await expect(
-      service.gameStateSyncService.deleteSlot({ uid: 'user-1', slot: 1 }),
-    ).rejects.toThrow('storage delete failed');
-
-    // Metadata was removed before the Storage attempt — no row references
+    // Metadata was removed before the bucket attempt — no row references
     // a missing blob.
     expect(db.rows.has('sync_slot_1')).toBe(false);
   });

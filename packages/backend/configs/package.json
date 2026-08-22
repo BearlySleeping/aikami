@@ -12,7 +12,6 @@
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "dotenv": "17.4.2",
-    "firebase-admin": "14.3.0"
+    "dotenv": "17.4.2"
   }
 }

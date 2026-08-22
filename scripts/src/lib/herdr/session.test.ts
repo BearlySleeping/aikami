@@ -96,12 +96,11 @@ describe('C-392 — dev engine services converge on the local stack', () => {
     expect(resolveReadyPort('voice', 'emulator', offset)).toBe(8089);
   });
 
-  it('client/hub/site/firebase still shift by the offset', () => {
+  it('client/hub/site still shift by the offset', () => {
     const offset = 1930;
     expect(resolveReadyPort('client', 'emulator', offset)).toBe(5274 + offset);
     expect(resolveReadyPort('hub', 'emulator', offset)).toBe(5276 + offset);
     expect(resolveReadyPort('site', 'emulator', offset)).toBe(5280 + offset);
-    expect(resolveReadyPort('firebase', 'emulator', offset)).toBe(9098 + offset);
   });
 
   it('text-ollama and image-comfyui are known services sharing the engine ports', () => {
@@ -201,20 +200,11 @@ describe('postgres herdr service (C-387)', () => {
   });
 });
 
-describe('isKillableProcess — Firebase emulator JVM cleanup on Windows', () => {
-  // 🔴 `firestack emulate` spawns Firestore/Pub-Sub/Storage-rules as separate
-  // `java.exe` processes, not children of the top-level `firebase`/`node`
-  // wrapper — confirmed on a live Windows machine via their actual command
-  // lines. `herdr tab close` only reliably reaps that top-level process (the
-  // JVMs aren't in the same Windows Job Object), so a stop/restart cycle
-  // left orphaned java.exe processes still holding their ports, which then
-  // fought the next start attempt (or, reproduced directly, destabilized a
-  // concurrently-running contract's Firebase instance through Firebase's own
-  // shared Hub/ADC machinery). `java` must be on the allowlist so killPort's
-  // cleanup sweep is actually allowed to kill them.
-  it('allows killing java (Firebase emulator JVM sub-processes)', () => {
-    expect(isKillableProcess('java')).toBe(true);
-    expect(isKillableProcess('java.exe')).toBe(true);
+describe('isKillableProcess', () => {
+  it('allows killing our own dev-server process names', () => {
+    expect(isKillableProcess('node')).toBe(true);
+    expect(isKillableProcess('bun')).toBe(true);
+    expect(isKillableProcess('vite')).toBe(true);
   });
 
   it('still refuses an unrelated bystander process', () => {
@@ -224,27 +214,6 @@ describe('isKillableProcess — Firebase emulator JVM cleanup on Windows', () =>
 });
 
 describe('portsToCleanupForService', () => {
-  it('sweeps every Firebase emulator port, not just auth, for the firebase service', () => {
-    const offset = 1930;
-    const ports = portsToCleanupForService('firebase', 'emulator', offset);
-    expect(ports).toEqual(
-      expect.arrayContaining([
-        9098 + offset, // auth
-        8081 + offset, // firestore
-        5003 + offset, // functions
-        5002 + offset, // hosting
-        8086 + offset, // pubsub
-        9198 + offset, // storage
-      ]),
-    );
-    expect(ports).toHaveLength(6);
-  });
-
-  it('firebase has no ports to clean up outside emulator mode (no local emulators there)', () => {
-    expect(portsToCleanupForService('firebase', 'staging', 0)).toEqual([]);
-    expect(portsToCleanupForService('firebase', 'production', 0)).toEqual([]);
-  });
-
   it('a single-process service only sweeps its own readyPort', () => {
     const offset = 1930;
     expect(portsToCleanupForService('client', 'emulator', offset)).toEqual([5274 + offset]);
@@ -307,14 +276,6 @@ describe('buildServiceCommand / serviceEnvArgs — F-07', () => {
     expect(args).toContain(`PUBLIC_EMULATOR_PORT_OFFSET=${offset}`);
     expect(args).toContain(`PORT=${resolveReadyPort('client', 'emulator', offset)}`);
     expect(args).toHaveLength(2);
-  });
-
-  it('serviceEnvArgs carries the offset but omits PORT when an offset-aware service has no readyPort for the mode (firebase in staging)', () => {
-    // firebase IS offset-aware, but its readyPort is emulator-only
-    // (readyPort('staging') === undefined) — so execution reaches the
-    // missing-port branch: the offset is returned, no PORT entry is added.
-    const args = serviceEnvArgs('firebase', 'staging', 60);
-    expect(args).toEqual(['PUBLIC_EMULATOR_PORT_OFFSET=60']);
   });
 });
 

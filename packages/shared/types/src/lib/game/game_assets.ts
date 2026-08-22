@@ -117,7 +117,7 @@ export type AssetRecord = {
 /** Row shape of the `asset_sources` table — a candidate download origin. */
 export type AssetSource = {
   assetId: string;
-  backend: 'bundled' | 'firebase-storage' | 'r2' | 'self-hosted';
+  backend: 'bundled' | 'r2' | 'self-hosted';
   url: string;
   priority: number;
 };

@@ -3,7 +3,7 @@
 // Start aikami services as herdr tabs.
 //
 // Usage:
-//   bun herdr:start firebase           # firebase tab
+//   bun herdr:start client           # client tab
 //   bun herdr:start client,voice          # two tabs
 //   bun herdr:start all --join         # all + attach
 //   bun herdr:start client --force-ports  # kill whatever's on :5274 first

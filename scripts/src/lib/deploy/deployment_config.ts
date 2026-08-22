@@ -11,9 +11,7 @@
  *
  * Service types:
  *   cloudflare-worker    → Build → `wrangler deploy` → Cloudflare Worker (client, site, docs)
- *   cloud-run-sveltekit  → Build + Docker + push → Cloud Run (hub SSR, fronted by Firebase Hosting)
  *   tauri-release        → Build Tauri desktop app → release artifacts
- *   firebase-functions   → Deploy via firestack (firebase)
  *   docker-release       → Docker build + push only (image, text, voice)
  *   database-migration   → Apply server-plane migrations against Neon
  */
@@ -23,9 +21,7 @@ import type { AppId } from '../../../../packages/shared/types/src/index.ts';
 
 export const ALL_SERVICE_TYPES = [
   'cloudflare-worker',
-  'cloud-run-sveltekit',
   'tauri-release',
-  'firebase-functions',
   'docker-release',
   'database-migration',
 ] as const;
@@ -101,6 +97,12 @@ export type CloudflareAppConfig =
       r2Buckets?:
         | Array<{ binding: string; bucketName: string }>
         | ((mode: string) => Array<{ binding: string; bucketName: string }>);
+      /**
+       * Plain-text env vars emitted into the generated wrangler config
+       * (`vars`). For non-secret runtime config the SSR Worker reads via
+       * `$env/dynamic/private` (e.g. CATALOG_ORIGIN_URL). Per-mode or shared.
+       */
+      vars?: Record<string, string> | ((mode: string) => Record<string, string>);
     };
 
 export type AppConfig = {
@@ -241,6 +243,9 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
           bucketName: mode === 'production' ? 'aikami-saves' : `aikami-${mode}-saves`,
         },
       ],
+      // Public catalog origin the hub reads the static index from (C-396).
+      // Injected as a plain var (not a secret) — it's a public CDN URL.
+      vars: () => ({ CATALOG_ORIGIN_URL: 'https://assets.bearlysleeping.com' }),
       routes: {
         production: 'hub.bearlysleeping.com',
         staging: 'hub.stg.bearlysleeping.com',
@@ -268,12 +273,6 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       },
       headersSource: 'public/_headers',
     },
-  },
-  firebase: {
-    serviceType: 'firebase-functions',
-    path: 'apps/backend/firebase',
-    shortName: 'firebase',
-    prefix: 'FIREBASE',
   },
   image: {
     serviceType: 'docker-release',
@@ -428,7 +427,7 @@ export const PROJECT_ENV_CONFIG: Readonly<Record<string, ProjectSecretConfig>> =
 
 /**
  * GCP region where Cloud Functions and Cloud Run services are deployed.
- * Must match the `region` field in `apps/backend/firebase/firestack.config.ts`.
+ * Must match the region used by the deploy pipeline.
  */
 export const CLOUD_FUNCTIONS_REGION = 'europe-west1' as const;
 

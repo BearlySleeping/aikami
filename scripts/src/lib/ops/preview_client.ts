@@ -34,6 +34,7 @@ import { findChromiumExecutable } from '../chromium.ts';
 import { c, error, hasFlag, info, ok, parseArg, spawnLabeled, warn } from '../cli_utils.ts';
 import {
   buildSessionName,
+  type DevService,
   startServices,
   waitForReady,
   workspaceExists,
@@ -156,15 +157,14 @@ const parseOptions = (cliArgs: string[]): PreviewOptions => {
 const ensureDevServer = async (mode: AikamiMode): Promise<void> => {
   const wsName = buildSessionName(mode);
 
-  // Emulator: firebase + client. Staging/production: client only (backend is deployed).
-  const services: ('firebase' | 'client')[] =
-    mode === 'emulator' ? ['firebase', 'client'] : ['client'];
+  // Emulator: client + hub. Staging/production: client only (backend is deployed).
+  const services: DevService[] = mode === 'emulator' ? ['client', 'hub'] : ['client'];
 
   if (!(await workspaceExists(wsName))) {
     info(`Starting ${mode} herdr workspace with ${services.join(' + ')}…`);
     await startServices({ mode, services });
     if (mode === 'emulator') {
-      await waitForReady({ services: ['firebase'], mode }, 60_000);
+      await waitForReady({ services: ['hub'], mode }, 60_000);
     }
   } else {
     // Ensure client tab exists
@@ -374,7 +374,7 @@ const launchTauriDev = async (
 ): Promise<void> => {
   await ensureLpcAssets(mode);
 
-  // Start (or reuse) the herdr dev workspace: firebase + client (emulator) or
+  // Start (or reuse) the herdr dev workspace: client + hub (emulator) or
   // client only (staging/production). The client port must match
   // tauri.conf.json build.devUrl (emulator → http://localhost:5274).
   await ensureDevServer(mode);

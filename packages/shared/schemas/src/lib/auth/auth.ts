@@ -3,14 +3,14 @@
 import Type, { Composite } from 'typebox';
 import { SupportedLocaleSchema } from '../common/preference.ts';
 
-export const FirebaseAuthMetadataSchema = Type.Object({
+export const AuthMetadataSchema = Type.Object({
   displayName: Type.Optional(Type.String()),
   email: Type.Optional(Type.String({ format: 'email' })),
   phoneNumber: Type.Optional(Type.String()),
   photoURL: Type.Optional(Type.String()),
 });
 
-export type FirebaseAuthMetadata = Type.Static<typeof FirebaseAuthMetadataSchema>;
+export type AuthMetadata = Type.Static<typeof AuthMetadataSchema>;
 export const SignInSocialProviderSchema = Type.Union([
   Type.Literal('google'),
   Type.Literal('github'),
@@ -63,13 +63,13 @@ export type MicrosoftMetadata = Type.Static<typeof MicrosoftMetadataSchema>;
 export const UserRoleSchema = Type.Union([Type.Literal('member'), Type.Literal('superAdmin')]);
 
 export type UserRole = Type.Static<typeof UserRoleSchema>;
-// firebaseSignInProviderNames = ['google', 'github'] as const
-export const FirebaseSignInProviderNameSchema = Type.Union([
+// signInProviderNames = ['google', 'github'] as const
+export const SignInProviderNameSchema = Type.Union([
   Type.Literal('google'),
   Type.Literal('github'),
 ]);
 
-export type FirebaseSignInProviderName = Type.Static<typeof FirebaseSignInProviderNameSchema>;
+export type SignInProviderName = Type.Static<typeof SignInProviderNameSchema>;
 export const UserStatusSchema = Type.Union([
   Type.Literal('unconfirmed-terms'),
   Type.Literal('active'),

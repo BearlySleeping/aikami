@@ -15,8 +15,8 @@ import { type Static, Type } from 'typebox';
  * Public read shape of a hub account.
  *
  * The public handle is the stable internal `accounts.id` uuid — the
- * Firebase uid (`firebaseUid`) is an auth-provider identifier and must not
- * appear in public wire shapes. If a self-read endpoint ever needs it, it
+ * auth-provider identifier (`authUid`) must not appear in public wire shapes.
+ * If a self-read endpoint ever needs it, it
  * is exposed through a separate self-read schema, never here.
  */
 export const AccountPublicSchema = Type.Object({

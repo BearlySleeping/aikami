@@ -29,10 +29,10 @@ describe('database app registration (AC-5)', () => {
   });
 
   test('deploying the hub never triggers the database app implicitly', () => {
-    // Each app names its own serviceType — hub is cloud-run-sveltekit, so
+    // Each app names its own serviceType — hub is cloudflare-worker, so
     // deploying `hub` runs no migration. The coupling C-385 removed stays
     // removed.
-    expect(APP_CONFIG.hub.serviceType).toBe('cloud-run-sveltekit');
+    expect(APP_CONFIG.hub.serviceType).toBe('cloudflare-worker');
     expect(APP_CONFIG.database.serviceType).toBe('database-migration');
   });
 });

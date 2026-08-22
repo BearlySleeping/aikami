@@ -12,9 +12,6 @@ export const featureFlags = {
   /** Enable push notifications */
   pushNotifications: Boolean(publicEnv.PUBLIC_VAPID_KEY),
 
-  /** Enable app check */
-  appCheck: publicEnv.PUBLIC_DISABLE_APP_CHECK !== '1',
-
   /**
    * QA/CI bypass flag for text AI capability gate.
    * When '1', allows gameplay without a resolved text AI provider.

@@ -1,5 +1,3 @@
-export * from './lib/auth.ts';
 export * from './lib/batch.ts';
 export * from './lib/secret.ts';
 export * from './lib/signature.ts';
-export * from './lib/storage.ts';

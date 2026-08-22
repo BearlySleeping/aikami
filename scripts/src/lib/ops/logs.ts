@@ -9,10 +9,11 @@
  *   - `bun run scripts -- logs <app> [flags]`   (manual CLI)
  *   - .pi/extensions/log_viewer.ts              (pi/LLM tool call)
  *
- * Cloudflare Workers (serviceType `cloudflare-worker`) and `firebase-functions`
- * — functions are queried via `gcloud logging read`/`tail` against
+ * Cloudflare Workers (serviceType `cloudflare-worker`) and Cloud Run
+ * services — functions are queried via `gcloud logging read`/`tail` against
  * `resource.type="cloud_run_revision"`; Workers logs live in Cloudflare
- * Workers Observability and are not reachable via gcloud.
+ * Workers Observability and are tailed live with `wrangler tail <workerName>`
+ * (not reachable via gcloud).
  *
  * `client` (static Worker, no server of its own) has no logs of its
  * own — its browser logger forwards cross-origin into hub's
@@ -23,8 +24,8 @@
 
 import { resolve } from 'node:path';
 import { c, error, log, parseCliArgs } from '../cli_utils';
-import { APP_CONFIG, CLOUD_FUNCTIONS_REGION } from '../deploy/deployment_config';
-import { ensureGcloudAuth, resolveProjectId, resolveRegion, runArgs } from '../deploy/utils';
+import { APP_CONFIG, resolveCloudflareWorkerName } from '../deploy/deployment_config';
+import { ensureGcloudAuth, runArgs } from '../deploy/utils';
 
 const ROOT_DIR = resolve(import.meta.dir, '../../../..');
 
@@ -33,7 +34,7 @@ const VALID_APPS = Object.keys(APP_CONFIG) as AppId[];
 
 // ── Resolve target ───────────────────────────────────────────────────────
 
-export type LogTarget = {
+export type CloudLoggingTarget = {
   projectId: string;
   region: string;
   /** Empty string = no service_name filter (all services in the region). */
@@ -42,51 +43,36 @@ export type LogTarget = {
   note?: string;
 };
 
+export type LogTarget =
+  | CloudLoggingTarget
+  | {
+      /** Cloudflare Worker name (client, site, docs, hub) — logs are live-tail only. */
+      workerName: string;
+      note?: string;
+    };
+
 /**
- * Resolve which Cloud Logging target an app maps to: Cloud Run services
- * and Firebase Functions (gen2) both live under cloud_run_revision
- * resources; `client` redirects to hub's stream with an app filter;
- * static/desktop/docker-release apps return an unsupported message.
+ * Resolve which log target an app maps to: Cloud Run services live under
+ * cloud_run_revision resources and are queried via gcloud; Cloudflare
+ * Workers (client, site, docs, hub) resolve to
+ * a workerName and are tailed live with wrangler; static/desktop/docker-release
+ * apps return an unsupported message.
  */
-export function resolveLogTarget(
-  appId: AppId,
-  mode: string,
-  only: string | undefined,
-): LogTarget | { unsupported: string } {
+export function resolveLogTarget(appId: AppId, mode: string): LogTarget | { unsupported: string } {
   const config = APP_CONFIG[appId];
-  const projectId = resolveProjectId(mode);
 
   switch (config.serviceType) {
     case 'cloudflare-worker': {
-      // client, site, docs are Cloudflare Workers now — their logs live in
-      // Cloudflare Workers Observability, not GCP Cloud Logging.
-      return {
-        unsupported:
-          `${appId} is a Cloudflare Worker — server logs are in Cloudflare Workers ` +
-          `Observability (dashboard or \`wrangler tail\`), not GCP Cloud Logging. ` +
-          `'client' browser logs are forwarded to the hub's /api/internal_logging.`,
-      };
-    }
-
-    case 'cloud-run-sveltekit': {
-      const region = resolveRegion(mode, config.region);
-      return {
-        projectId,
-        region,
-        serviceName: config.cloudRunServiceId ?? `aikami-${config.shortName}`,
-      };
-    }
-
-    case 'firebase-functions': {
-      if (!only) {
+      // client, site, docs, hub are Cloudflare Workers — their logs live in
+      // Cloudflare Workers Observability, not GCP Cloud Logging. Tail them
+      // live with `wrangler tail <workerName>`.
+      const workerName = resolveCloudflareWorkerName(appId, mode);
+      if (!workerName) {
         return {
-          projectId,
-          region: CLOUD_FUNCTIONS_REGION,
-          serviceName: '',
-          note: 'No --only <functionName> given — showing ALL functions in this region interleaved.',
+          unsupported: `${appId} is a Cloudflare Worker but has no workerName configured in APP_CONFIG.`,
         };
       }
-      return { projectId, region: CLOUD_FUNCTIONS_REGION, serviceName: only };
+      return { workerName };
     }
 
     case 'tauri-release':
@@ -133,7 +119,7 @@ const SEVERITY_LEVELS = [
  * escaping) and a raw filter fragment ANDed on.
  */
 export function buildFilter(
-  target: LogTarget,
+  target: CloudLoggingTarget,
   opts: { severity?: string; message?: string; filter?: string },
 ): string {
   const parts = [
@@ -177,10 +163,10 @@ function printUsage(): void {
   error('  --since <dur>      e.g. 1h, 30m, 2d (maps to gcloud --freshness)');
   error('  --lines <n>        Max entries for a one-shot read (default 50)');
   error('  --severity <lvl>   DEBUG|INFO|WARNING|ERROR|CRITICAL — filters severity>=lvl');
-  error('  --only <name>      Required to scope `firebase` to one function');
   error('  --message <text>   Substring match against jsonPayload.message');
   error('  --filter <raw>     Raw Cloud Logging filter fragment, ANDed onto the base filter');
   error('  --json             Full structured JSON output instead of the compact default');
+  error('  (Cloudflare Worker apps — client/site/docs/hub — are live-tail only; use --tail)');
 }
 
 /**
@@ -215,13 +201,32 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const target = resolveLogTarget(appId, mode, opts.only);
+  const target = resolveLogTarget(appId, mode);
   if ('unsupported' in target) {
     error(target.unsupported);
     process.exit(1);
   }
   if (target.note) {
     log(`${c.dim}${target.note}${c.reset}`);
+  }
+
+  // Cloudflare Workers — logs are live-tail only (wrangler tail), not gcloud.
+  if ('workerName' in target) {
+    if (!opts.tail) {
+      error(
+        `${appId} is a Cloudflare Worker — its logs are live-tail only (no one-shot read). ` +
+          `Use --tail to stream them:`,
+      );
+      error(`  bun run scripts -- logs ${appId} --tail --mode ${mode}`);
+      process.exit(1);
+    }
+    log(`${c.dim}worker: ${target.workerName}${c.reset}`);
+    const args = ['bunx', 'wrangler', 'tail', target.workerName];
+    if (opts.json) {
+      args.push('--format', 'json');
+    }
+    runArgs(args, { live: true });
+    return;
   }
 
   ensureGcloudAuth(mode, target.projectId, ROOT_DIR);

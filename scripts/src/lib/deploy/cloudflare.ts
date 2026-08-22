@@ -296,6 +296,10 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
         bucket_name: r.bucketName,
       }));
     }
+    const vars = typeof cf.vars === 'function' ? cf.vars(mode) : cf.vars;
+    if (vars && Object.keys(vars).length > 0) {
+      json.vars = vars;
+    }
   }
 
   // Workers Observability — without this, logs are disabled and there is no

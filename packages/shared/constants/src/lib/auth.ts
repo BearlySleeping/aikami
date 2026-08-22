@@ -19,4 +19,4 @@ export const userStatuses = [
   'unconfirmed',
 ] as const;
 
-export const firebaseSignInProviderNames = ['google', 'github'] as const;
+export const signInProviderNames = ['google', 'github'] as const;

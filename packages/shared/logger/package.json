@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
-    "@aikami/types": "workspace:*",
-    "firebase-functions": "7.3.2"
+    "@aikami/types": "workspace:*"
   }
 }

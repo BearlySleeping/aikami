@@ -6,7 +6,7 @@
 // prove a constraint exists. Every violation below is rejected BY THE
 // DATABASE (Postgres error codes), never by application code:
 //
-//   23505 unique_violation   — duplicate firebase_uid / slug / (pack, version)
+//   23505 unique_violation   — duplicate auth_uid / slug / (pack, version)
 //   23503 foreign_key_violation — version referencing a missing pack,
 //                                 deleting an account that owns a pack
 //   22P02 invalid_text_representation — invalid enum value for visibility
@@ -53,9 +53,9 @@ describeSuite('catalog write model (AC-3)', () => {
   test('happy path: account → pack → two versions', async () => {
     const { accounts, packs, packVersions } = createCatalogRepositories(pool);
 
-    const account = await accounts.create({ firebaseUid: 'uid-1', displayName: 'Alice' });
+    const account = await accounts.create({ authUid: 'uid-1', displayName: 'Alice' });
     expect(account.id).toBeDefined();
-    expect(account.firebaseUid).toBe('uid-1');
+    expect(account.authUid).toBe('uid-1');
     expect(account.displayName).toBe('Alice');
 
     const pack = await packs.create({ slug: 'my-campaign', ownerAccountId: account.id });
@@ -78,31 +78,31 @@ describeSuite('catalog write model (AC-3)', () => {
     expect(v1.publishedAt).toBeInstanceOf(Date);
     expect(v2.publishedAt).toBeNull();
     expect(await packVersions.listByPack(pack.id)).toHaveLength(2);
-    expect(await accounts.findByFirebaseUid('uid-1')).toBeDefined();
+    expect(await accounts.findByAuthUid('uid-1')).toBeDefined();
   });
 
-  test('violation: a second account with the same firebase_uid is rejected (23505)', async () => {
+  test('violation: a second account with the same auth_uid is rejected (23505)', async () => {
     const { accounts } = createCatalogRepositories(pool);
-    await accounts.create({ firebaseUid: 'uid-dup' });
-    await expectPgError(accounts.create({ firebaseUid: 'uid-dup' }), '23505');
+    await accounts.create({ authUid: 'uid-dup' });
+    await expectPgError(accounts.create({ authUid: 'uid-dup' }), '23505');
   });
 
   test('violation: a second pack with the same slug is rejected (23505)', async () => {
     const { accounts, packs } = createCatalogRepositories(pool);
-    const account = await accounts.create({ firebaseUid: 'uid-slug' });
+    const account = await accounts.create({ authUid: 'uid-slug' });
     await packs.create({ slug: 'same-slug', ownerAccountId: account.id });
     await expectPgError(packs.create({ slug: 'same-slug', ownerAccountId: account.id }), '23505');
   });
 
   test('violation: an invalid slug pattern is rejected by the CHECK (23514)', async () => {
     const { accounts, packs } = createCatalogRepositories(pool);
-    const account = await accounts.create({ firebaseUid: 'uid-check' });
+    const account = await accounts.create({ authUid: 'uid-check' });
     await expectPgError(packs.create({ slug: 'Not Valid!', ownerAccountId: account.id }), '23514');
   });
 
   test('violation: a second version with the same (pack_id, version) is rejected (23505)', async () => {
     const { accounts, packs, packVersions } = createCatalogRepositories(pool);
-    const account = await accounts.create({ firebaseUid: 'uid-ver' });
+    const account = await accounts.create({ authUid: 'uid-ver' });
     const pack = await packs.create({ slug: 'ver-pack', ownerAccountId: account.id });
     await packVersions.create({ packId: pack.id, version: '1.0.0', manifestHash: 'a'.repeat(64) });
     await expectPgError(
@@ -125,7 +125,7 @@ describeSuite('catalog write model (AC-3)', () => {
 
   test('violation: deleting an account that still owns a pack is REJECTED, not cascaded (23001)', async () => {
     const { accounts, packs } = createCatalogRepositories(pool);
-    const account = await accounts.create({ firebaseUid: 'uid-owner' });
+    const account = await accounts.create({ authUid: 'uid-owner' });
     await packs.create({ slug: 'owned-pack', ownerAccountId: account.id });
 
     // 23001 = restrict_violation — ON DELETE RESTRICT fired. (A plain NO
@@ -138,7 +138,7 @@ describeSuite('catalog write model (AC-3)', () => {
 
   test('violation: deleting a pack that still has versions is REJECTED, not cascaded (23001)', async () => {
     const { accounts, packs, packVersions } = createCatalogRepositories(pool);
-    const account = await accounts.create({ firebaseUid: 'uid-pack' });
+    const account = await accounts.create({ authUid: 'uid-pack' });
     const pack = await packs.create({ slug: 'with-versions', ownerAccountId: account.id });
     await packVersions.create({ packId: pack.id, version: '1.0.0', manifestHash: 'a'.repeat(64) });
 
@@ -149,7 +149,7 @@ describeSuite('catalog write model (AC-3)', () => {
 
   test('violation: an invalid visibility value is rejected by the enum (22P02)', async () => {
     const { accounts } = createCatalogRepositories(pool);
-    const account = await accounts.create({ firebaseUid: 'uid-enum' });
+    const account = await accounts.create({ authUid: 'uid-enum' });
     // Bypass the repository's typed union — the DB must reject raw bad input.
     const err = await pool
       .query(

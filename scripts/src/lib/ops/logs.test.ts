@@ -6,7 +6,6 @@
 // plain objects).
 
 import { describe, expect, it } from 'bun:test';
-import { CLOUD_FUNCTIONS_REGION } from '../deploy/deployment_config';
 import { buildFilter, resolveLogTarget } from './logs.ts';
 
 describe('buildFilter', () => {
@@ -90,76 +89,53 @@ describe('buildFilter', () => {
 });
 
 describe('resolveLogTarget', () => {
-  it('hub → cloud-run-sveltekit, resolves to Cloud Run service aikami-hub', () => {
-    const target = resolveLogTarget('hub', 'staging', undefined);
-    expect('unsupported' in target).toBe(false);
-    if ('unsupported' in target) {
+  it('hub → cloudflare-worker, resolves to its Worker name (staging)', () => {
+    const target = resolveLogTarget('hub', 'staging');
+    expect('workerName' in target).toBe(true);
+    if (!('workerName' in target)) {
       return;
     }
-    expect(target.serviceName).toBe('aikami-hub');
-    expect(target.region).toBe('europe-west4');
+    expect(target.workerName).toBe('aikami-staging-hub');
   });
 
-  it('production mode → same Cloud Run service for hub', () => {
-    const target = resolveLogTarget('hub', 'production', undefined);
-    expect('unsupported' in target).toBe(false);
-    if ('unsupported' in target) {
+  it('hub → cloudflare-worker, resolves to its Worker name (production)', () => {
+    const target = resolveLogTarget('hub', 'production');
+    expect('workerName' in target).toBe(true);
+    if (!('workerName' in target)) {
       return;
     }
-    expect(target.serviceName).toBe('aikami-hub');
+    expect(target.workerName).toBe('aikami-hub');
   });
 
-  it('firebase without --only → all functions in the region, with a hint note', () => {
-    const target = resolveLogTarget('firebase', 'staging', undefined);
-    expect('unsupported' in target).toBe(false);
-    if ('unsupported' in target) {
+  it('client → cloudflare-worker, resolves to its Worker name (browser logs go to hub Worker)', () => {
+    const target = resolveLogTarget('client', 'staging');
+    expect('workerName' in target).toBe(true);
+    if (!('workerName' in target)) {
       return;
     }
-    expect(target.region).toBe(CLOUD_FUNCTIONS_REGION);
-    expect(target.serviceName).toBe('');
-    expect(target.note).toContain('No --only');
+    expect(target.workerName).toBe('aikami-staging-client');
   });
 
-  it('firebase with --only → scoped to that one function', () => {
-    const target = resolveLogTarget('firebase', 'staging', 'pollGmail');
-    expect('unsupported' in target).toBe(false);
-    if ('unsupported' in target) {
+  it('site → cloudflare-worker, resolves to its Worker name', () => {
+    const target = resolveLogTarget('site', 'staging');
+    expect('workerName' in target).toBe(true);
+    if (!('workerName' in target)) {
       return;
     }
-    expect(target.serviceName).toBe('pollGmail');
-    expect(target.note).toBeUndefined();
+    expect(target.workerName).toBe('aikami-staging-site');
   });
 
-  it('client → cloudflare-worker unsupported (browser logs go to hub Worker)', () => {
-    const target = resolveLogTarget('client', 'staging', undefined);
-    expect('unsupported' in target).toBe(true);
-    if (!('unsupported' in target)) {
+  it('docs → cloudflare-worker, resolves to its Worker name', () => {
+    const target = resolveLogTarget('docs', 'staging');
+    expect('workerName' in target).toBe(true);
+    if (!('workerName' in target)) {
       return;
     }
-    expect(target.unsupported).toContain('Cloudflare Worker');
-    expect(target.unsupported).toContain('/api/internal_logging');
-  });
-
-  it('site → unsupported (Cloudflare Worker, no gcloud logs)', () => {
-    const target = resolveLogTarget('site', 'staging', undefined);
-    expect('unsupported' in target).toBe(true);
-    if (!('unsupported' in target)) {
-      return;
-    }
-    expect(target.unsupported).toContain('Cloudflare Worker');
-  });
-
-  it('docs → unsupported (Cloudflare Worker, no gcloud logs)', () => {
-    const target = resolveLogTarget('docs', 'staging', undefined);
-    expect('unsupported' in target).toBe(true);
-    if (!('unsupported' in target)) {
-      return;
-    }
-    expect(target.unsupported).toContain('Cloudflare Worker');
+    expect(target.workerName).toBe('aikami-staging-docs');
   });
 
   it('client-tauri → unsupported (desktop release artifact)', () => {
-    const target = resolveLogTarget('client-tauri', 'staging', undefined);
+    const target = resolveLogTarget('client-tauri', 'staging');
     expect('unsupported' in target).toBe(true);
     if (!('unsupported' in target)) {
       return;
@@ -168,7 +144,7 @@ describe('resolveLogTarget', () => {
   });
 
   it('image → unsupported (docker-release, self-hosted GPU infra)', () => {
-    const target = resolveLogTarget('image', 'staging', undefined);
+    const target = resolveLogTarget('image', 'staging');
     expect('unsupported' in target).toBe(true);
     if (!('unsupported' in target)) {
       return;
@@ -178,7 +154,7 @@ describe('resolveLogTarget', () => {
 
   it('text and voice → unsupported like image (docker-release)', () => {
     for (const app of ['text', 'voice'] as const) {
-      const target = resolveLogTarget(app, 'production', undefined);
+      const target = resolveLogTarget(app, 'production');
       expect('unsupported' in target).toBe(true);
       if ('unsupported' in target) {
         expect(target.unsupported).toContain('self-hosted GPU');

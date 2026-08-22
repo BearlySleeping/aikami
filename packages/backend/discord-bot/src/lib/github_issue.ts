@@ -2,14 +2,10 @@
 // biome-ignore-all lint/style/useNamingConvention: mirrors GitHub's REST API JSON keys (html_url, X-GitHub-Api-Version)
 //
 // Opens a GitHub issue from a #bugs-features-requests forum thread, once a
-// Moderator/Admin reviews it and @mentions the bot. Same shape as
-// apps/backend/firebase/src/lib/discord/github_issue.ts's
-// createGithubIssueFromDiscord (duplicated rather than imported — this app
-// is a separate deploy target with no dependency on the firebase app's
-// tsconfig aliases), extended to take arbitrary `labels` (derived from the
-// thread's forum tag) instead of a fixed 'bug'|'feature' enum, since a
-// forum thread might carry a "Question" tag with no GitHub-issue label at
-// all.
+// Moderator/Admin reviews it and @mentions the bot. Extended to take
+// arbitrary `labels` (derived from the thread's forum tag) instead of a
+// fixed 'bug'|'feature' enum, since a forum thread might carry a "Question"
+// tag with no GitHub-issue label at all.
 //
 // Auth: GITHUB_ISSUES_TOKEN — a fine-grained PAT scoped to ONLY
 // `issues:write` on this repo. Never reuse a broader token here.

@@ -39,9 +39,9 @@ async function main() {
     process.exit(1);
   }
 
-  // Start all three services in the mode session
+  // Start all services in the mode session
   await startServices({
-    services: ['firebase', 'client'],
+    services: ['client'],
     mode,
     force: false,
     join: !detach,

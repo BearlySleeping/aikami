@@ -10,16 +10,14 @@
  *
  * The generated .env.{mode} files are organized in sections:
  *   - PUBLIC_ keys at the top (with comment)
- *   - Firebase-specific keys (if applicable)
  *   - Backend / remaining keys
  *
  * `--mode emulator` is special-cased: `demo-aikami-emulator` isn't a real GCP
  * project, so there's nothing to fetch and no gcloud auth is required at all.
- * Required-but-blank .env.example keys (e.g. PUBLIC_FIREBASE_API_KEY, which
- * must stay blank in .env.example so it's never mistaken for a real
- * staging/production value) get safe fake values from EMULATOR_ENV_OVERRIDES
- * instead — enough for any contributor to build/run locally with zero GCP
- * access. An existing .env.emulator's values always win on re-run.
+ * Required-but-blank .env.example keys get safe fake values from
+ * EMULATOR_ENV_OVERRIDES instead — enough for any contributor to build/run
+ * locally with zero GCP access. An existing .env.emulator's values always win
+ * on re-run.
  *
  * Usage:
  *   bun run download-secrets --mode emulator            # no GCP access needed
@@ -85,28 +83,16 @@ const keysFilter = new Set(
  */
 const EMULATOR_ENV_OVERRIDES: Readonly<Record<string, Record<string, string>>> = {
   client: {
-    PUBLIC_FIREBASE_API_KEY: 'fake-api-key',
-    PUBLIC_FIREBASE_AUTH_DOMAIN: 'localhost',
-    PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-aikami-emulator.appspot.com',
     PUBLIC_DISABLE_APP_CHECK: 'true',
     PUBLIC_MODE: 'emulator',
   },
   hub: {
-    PUBLIC_FIREBASE_API_KEY: 'fake-api-key',
-    PUBLIC_FIREBASE_AUTH_DOMAIN: 'localhost',
-    PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-aikami-emulator.appspot.com',
     PUBLIC_DISABLE_APP_CHECK: '1',
     PUBLIC_MODE: 'emulator',
   },
   site: {
-    PUBLIC_FIREBASE_API_KEY: 'fake-api-key',
-    PUBLIC_FIREBASE_AUTH_DOMAIN: 'localhost',
-    PUBLIC_FIREBASE_STORAGE_BUCKET: 'demo-aikami-emulator.appspot.com',
     PUBLIC_DISABLE_APP_CHECK: 'true',
     PUBLIC_MODE: 'emulator',
-  },
-  firebase: {
-    FIREBASE_SERVICE_ACCOUNT: '{}',
   },
 };
 
@@ -273,21 +259,11 @@ type Section = {
 
 function organizeKeys(keys: string[]): Section[] {
   const sections: Section[] = [];
-  const publicKeys = keys.filter(
-    (k) => k.startsWith('PUBLIC_') && !k.startsWith('PUBLIC_FIREBASE_'),
-  );
-  const firebaseKeys = keys.filter(
-    (k) => k.startsWith('PUBLIC_FIREBASE_') || k === 'FIREBASE_SERVICE_ACCOUNT',
-  );
-  const backendKeys = keys.filter(
-    (k) => !k.startsWith('PUBLIC_') && k !== 'FIREBASE_SERVICE_ACCOUNT',
-  );
+  const publicKeys = keys.filter((k) => k.startsWith('PUBLIC_'));
+  const backendKeys = keys.filter((k) => !k.startsWith('PUBLIC_'));
 
   if (publicKeys.length > 0) {
     sections.push({ header: '------ Public ------', keys: publicKeys });
-  }
-  if (firebaseKeys.length > 0) {
-    sections.push({ header: '---- Firebase -----', keys: firebaseKeys });
   }
   if (backendKeys.length > 0) {
     sections.push({ header: '------ Backend -----', keys: backendKeys });

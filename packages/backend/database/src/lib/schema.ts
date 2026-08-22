@@ -55,8 +55,8 @@ export const accounts = pgTable(
   {
     /** Stable internal id — uuid, server-generated. */
     id: uuid('id').defaultRandom().primaryKey(),
-    /** Verified Firebase uid from the session cookie — UNIQUE NOT NULL. */
-    firebaseUid: text('firebase_uid').notNull(),
+    /** Verified auth uid from the session — UNIQUE NOT NULL. */
+    authUid: text('firebase_uid').notNull(),
     /** Optional display name. */
     displayName: text('display_name'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -66,8 +66,8 @@ export const accounts = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    // A firebaseUid can never be re-bound to a second account.
-    uniqueIndex('accounts_firebase_uid_unique').on(table.firebaseUid),
+    // An authUid can never be re-bound to a second account.
+    uniqueIndex('accounts_firebase_uid_unique').on(table.authUid),
   ],
 );
 

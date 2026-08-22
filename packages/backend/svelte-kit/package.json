@@ -10,8 +10,6 @@
     "test": "bun test src/lib"
   },
   "dependencies": {
-    "@aikami/backend-configs": "workspace:*",
-    "@aikami/backend-utils": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",

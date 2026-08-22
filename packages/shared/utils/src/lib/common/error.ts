@@ -92,27 +92,29 @@ export const toAppErrorFromUnknownError = (error: unknown): AppError => {
     } satisfies AppError;
   }
 
-  // 2. Check if it's a Firebase-style error (has a string 'code' property)
+  // 2. Check if it's a provider-style error (has a string 'code' property)
   if ('code' in error && typeof (error as Record<string, unknown>).code === 'string') {
-    const firebaseCode = (error as Record<string, unknown>).code as string;
+    const providerCode = (error as Record<string, unknown>).code as string;
 
-    // Map Firebase codes to our AppError types
+    // Map provider codes to our AppError types
     let mappedErrorType: ErrorType = 'unknown';
-    if (firebaseCode === 'auth/user-not-found') {
+    if (providerCode === 'user-not-found') {
       mappedErrorType = 'user-not-found';
     } else if (
-      firebaseCode === 'auth/invalid-credential' ||
-      firebaseCode === 'auth/wrong-password'
+      providerCode === 'invalid-credential' ||
+      providerCode === 'wrong-password' ||
+      providerCode === 'invalid_password' ||
+      providerCode === 'invalid_email'
     ) {
       mappedErrorType = 'invalid-credentials';
-    } else if (firebaseCode.startsWith('auth/')) {
+    } else if (providerCode.startsWith('auth/')) {
       mappedErrorType = 'unauthenticated';
     }
 
     return {
-      message: error.message, // Keep the original Firebase message
+      message: error.message, // Keep the original provider message
       cause: {
-        details: { code: firebaseCode }, // Store the exact Firebase code in details
+        details: { code: providerCode }, // Store the exact provider code in details
         errorType: mappedErrorType,
         statusCode: toHttpErrorStatusCode(mappedErrorType),
       },

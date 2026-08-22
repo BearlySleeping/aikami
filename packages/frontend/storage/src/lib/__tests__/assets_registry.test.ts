@@ -146,30 +146,28 @@ describe('AssetRegistryRepository', () => {
     expect(sources[0]?.url).toBe('/game-data/music/exploration/forest.mp3');
   });
 
-  test('addFirebaseStorageSources mirrors bundled paths as priority-1 bucket URLs', async () => {
+  test('addR2Sources mirrors bundled paths as priority-1 R2 URLs', async () => {
     await registry.seedFromManifest({ manifest: makeManifest(), hashes: makeHashes() });
 
-    const added = await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app');
+    const added = await registry.addR2Sources('https://assets.bearlysleeping.com');
     expect(added).toBe(3);
 
     const sources = await registry.listSources('music:exploration:forest');
     expect(sources).toHaveLength(2);
     expect(sources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
     expect(sources[0]?.priority).toBe(0);
-    expect(sources[1]?.backend).toBe('firebase-storage');
+    expect(sources[1]?.backend).toBe('r2');
     expect(sources[1]?.priority).toBe(1);
-    expect(sources[1]?.url).toBe(
-      'https://firebasestorage.googleapis.com/v0/b/aikami-staging.firebasestorage.app/o/music%2Fexploration%2Fforest.mp3?alt=media',
-    );
+    expect(sources[1]?.url).toBe('https://assets.bearlysleeping.com/music/exploration/forest.mp3');
 
     // Idempotent — second call is a cheap no-op.
-    expect(await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app')).toBe(0);
+    expect(await registry.addR2Sources('https://assets.bearlysleeping.com')).toBe(0);
   });
 
-  test('re-seeding with extra asset adds firebase-storage mirror for new asset only', async () => {
+  test('re-seeding with extra asset adds r2 mirror for new asset only', async () => {
     // Initial seed: 3 assets
     await registry.seedFromManifest({ manifest: makeManifest(), hashes: makeHashes() });
-    const added1 = await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app');
+    const added1 = await registry.addR2Sources('https://assets.bearlysleeping.com');
     expect(added1).toBe(3);
 
     // Verify initial mirrors exist
@@ -201,21 +199,21 @@ describe('AssetRegistryRepository', () => {
 
     await registry.seedFromManifest({ manifest: manifest2, hashes: hashes2 });
 
-    // Second addFirebaseStorageSources should only add the new asset's mirror
-    const added2 = await registry.addFirebaseStorageSources('aikami-staging.firebasestorage.app');
+    // Second addR2Sources should only add the new asset's mirror
+    const added2 = await registry.addR2Sources('https://assets.bearlysleeping.com');
     expect(added2).toBe(1);
 
-    // New asset should have both bundled + firebase-storage sources
+    // New asset should have both bundled + r2 sources
     const newSources = await registry.listSources('sfx:ui:click');
     expect(newSources).toHaveLength(2);
     expect(newSources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
-    expect(newSources[1]?.backend).toBe('firebase-storage');
+    expect(newSources[1]?.backend).toBe('r2');
 
     // Existing asset sources should remain unchanged (not duplicated)
     const existingSources = await registry.listSources('music:exploration:forest');
     expect(existingSources).toHaveLength(2);
     expect(existingSources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
-    expect(existingSources[1]?.backend).toBe('firebase-storage');
+    expect(existingSources[1]?.backend).toBe('r2');
   });
 
   test('meta.asset_registry_seeded is set to the manifest scannedAt', async () => {

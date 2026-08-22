@@ -298,19 +298,11 @@ for (const projectName of projectNames) {
     }
 
     if (key === 'FIREBASE_SERVICE_ACCOUNT') {
-      // Upload the real SA key to GSM (used by firebase + hub), but guard
-      // against stale placeholders: a raw '{}' or missing client_email means
-      // the local .env.{mode} was never populated by download-secrets —
-      // pushing that would overwrite the real SA in GSM with garbage.
-      const looksLikeSa =
-        value.includes('"type": "service_account"') ||
-        value.includes('client_email') ||
-        value.includes('private_key');
-      if (!looksLikeSa) {
-        console.log(`⏭️  Skipping "${key}" (value is not a service-account JSON — placeholder?)`);
-        totalSkipped++;
-        continue;
-      }
+      // Legacy key — no longer used after the Firebase→Cloudflare migration.
+      // Skip it so a stale local value never overwrites anything in GSM.
+      console.log(`⏭️  Skipping "${key}" (legacy Firebase key — no longer used)`);
+      totalSkipped++;
+      continue;
     }
 
     const secretName = resolveSecretName(key, config);

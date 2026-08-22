@@ -2,7 +2,7 @@
 // packages/shared/schemas/src/lib/domain/user.ts
 import Type, { Composite } from 'typebox';
 import {
-  FirebaseAuthMetadataSchema,
+  AuthMetadataSchema,
   SignInProviderSchema,
   UserClaimsSchema,
   UserRoleSchema,
@@ -12,14 +12,14 @@ import { CountryCodeSchema } from '../common/position.ts';
 import { getDeletableFields } from '../common/utils.ts';
 import { CoreOmitKeys, CoreSchema } from '../core/core.ts';
 
-/** The user data in firebase auth */
+/** The user data in the auth provider */
 export const UserSessionSchema = Composite(
-  Composite(UserClaimsSchema, FirebaseAuthMetadataSchema),
+  Composite(UserClaimsSchema, AuthMetadataSchema),
   Type.Object({ currentSignInProvider: SignInProviderSchema }),
 );
 
 export type UserSession = Type.Static<typeof UserSessionSchema>;
-/** The user data in firebase auth */
+/** The user data in the auth provider */
 export const UserLiteSchema = Composite(
   UserSessionSchema,
   Type.Object({

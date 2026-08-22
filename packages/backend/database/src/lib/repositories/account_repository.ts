@@ -36,22 +36,22 @@ export class AccountRepository extends BaseClass<AccountRepositoryOptions> {
     this._db = drizzle(options.pool, { schema: { accounts } });
   }
 
-  /** Insert a new account. Throws on a duplicate firebaseUid (unique). */
-  async create(options: { firebaseUid: string; displayName?: string | null }): Promise<AccountRow> {
-    const { firebaseUid, displayName = null } = options;
-    const [row] = await this._db.insert(accounts).values({ firebaseUid, displayName }).returning();
+  /** Insert a new account. Throws on a duplicate authUid (unique). */
+  async create(options: { authUid: string; displayName?: string | null }): Promise<AccountRow> {
+    const { authUid, displayName = null } = options;
+    const [row] = await this._db.insert(accounts).values({ authUid, displayName }).returning();
     if (!row) {
       throw new Error('accounts.insert returned no row');
     }
     return row;
   }
 
-  /** Create-or-fetch by Firebase uid — the lazy account-row idiom. */
+  /** Create-or-fetch by auth uid — the lazy account-row idiom. */
   async createOrFetch(options: {
-    firebaseUid: string;
+    authUid: string;
     displayName?: string | null;
   }): Promise<AccountRow> {
-    const existing = await this.findByFirebaseUid(options.firebaseUid);
+    const existing = await this.findByAuthUid(options.authUid);
     if (existing) {
       return existing;
     }
@@ -65,7 +65,7 @@ export class AccountRepository extends BaseClass<AccountRepositoryOptions> {
         throw error;
       }
       // Lost the uniqueness race — another request created the row first.
-      const winner = await this.findByFirebaseUid(options.firebaseUid);
+      const winner = await this.findByAuthUid(options.authUid);
       if (winner) {
         return winner;
       }
@@ -78,11 +78,11 @@ export class AccountRepository extends BaseClass<AccountRepositoryOptions> {
     return rows[0];
   }
 
-  async findByFirebaseUid(firebaseUid: string): Promise<AccountRow | undefined> {
+  async findByAuthUid(authUid: string): Promise<AccountRow | undefined> {
     const rows = await this._db
       .select()
       .from(accounts)
-      .where(eq(accounts.firebaseUid, firebaseUid))
+      .where(eq(accounts.authUid, authUid))
       .limit(1);
     return rows[0];
   }

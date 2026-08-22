@@ -4,7 +4,7 @@
 //
 // Usage:
 //   bun herdr:stop client              # kill client tab only
-//   bun herdr:stop firebase,voice   # kill two tabs
+//   bun herdr:stop voice   # kill two tabs
 //   bun herdr:stop all              # kill entire workspace
 
 import { parseServiceArgs } from './cli.ts';

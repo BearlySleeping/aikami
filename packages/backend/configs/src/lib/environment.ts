@@ -3,7 +3,7 @@ import process from 'node:process';
 import { MODE_PROJECT_MAP, withProjectIdOffset } from '@aikami/constants';
 import type { Mode } from '@aikami/types';
 import { isEmptyObject, toAppError, toMode } from '@aikami/utils';
-// We need dotenv for firebase functions
+// We need dotenv for backend scripts
 import { config } from 'dotenv';
 // biome-ignore lint/suspicious/noTsIgnore: See explanation below, client gets wrong type error saying $env/static/private is not defined but it is not that deep
 // @ts-ignore We need to use this for local debugging of sveltekit apps since it only has access to process.env when you build the app
@@ -88,7 +88,7 @@ const readRawEnvValue = (key: string): string | undefined => {
     }
   }
 
-  // 3. dotenv — .env file in CWD (local scripts, Firebase Functions)
+  // 3. dotenv — .env file in CWD (local scripts)
   if (!parsedDotEnv) {
     try {
       parsedDotEnv = (config().parsed ?? {}) as Record<string, string | undefined>;
@@ -237,7 +237,7 @@ export const isEmulatorMode = (): boolean => {
 export const isRunningOnCloudRun = (): boolean => !!process.env.K_SERVICE;
 
 /**
- * The Firebase/GCP project ID for the current mode.
+ * The GCP project ID for the current mode.
  * Derived from MODE_PROJECT_MAP — no need for a GCLOUD_PROJECT env var.
  */
 export const getProjectId = (): string => {

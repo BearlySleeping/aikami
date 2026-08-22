@@ -14,7 +14,7 @@
  *   essentials — bun, node, git               (required for any dev work; node runs Playwright E2E)
  *   dx         — pi, herdr                      (optional agent tools)
  *   cloud      — gcloud, gh                     (optional cloud CLIs)
- *   emulator   — jdk, chromium                  (needed for bun run dev:all)
+ *   emulator   — chromium                  (needed for Playwright E2E / dev browser)
  *   tauri      — rust, webkit2gtk, gtk3, ...    (needed for bun tauri build)
  *
  * Plus a handful of capability probes that don't fit the "run a bin
@@ -95,8 +95,8 @@ const CATEGORY_META: Record<Category, { title: string; desc: string }> = {
     desc: 'gcloud + gh — manual GCP ops, GitHub PR/issue workflows',
   },
   emulator: {
-    title: 'Firebase Emulator (optional)',
-    desc: 'Required for `bun run dev:all` (local Firebase)',
+    title: 'Browser (optional)',
+    desc: 'Chromium for Playwright E2E tests and the dev browser',
   },
   tauri: {
     title: 'Tauri Desktop Build (optional)',
@@ -294,41 +294,7 @@ const TOOLS: ToolCheck[] = [
     hint: 'Also provided inside the flake devShell (flake.nix). Run `gh auth login` after install.',
   },
 
-  // ── Emulator (optional) ────────────────────────────────────────────
-  {
-    name: 'JDK',
-    bins: ['java'],
-    why: 'Required by the Firebase Emulator Suite (firebase emulators:start).',
-    category: 'emulator',
-    versionArgs: ['-version'],
-    verify: (out) => {
-      // Parse Java major version from both legacy (1.8.0_292) and current (17.0.2, 21) formats
-      const legacyMatch = out.match(/version "1\.(\d+)/);
-      if (legacyMatch) {
-        const major = Number.parseInt(legacyMatch[1], 10);
-        return major >= 17;
-      }
-      const currentMatch = out.match(/version "(\d+)/);
-      if (currentMatch) {
-        const major = Number.parseInt(currentMatch[1], 10);
-        return major >= 17;
-      }
-      // Unparseable output - reject
-      return false;
-    },
-    install: {
-      linux: {
-        label: 'Install OpenJDK 21 (apt)',
-        commands: ['sudo apt-get install -y openjdk-21-jdk'],
-      },
-      darwin: { label: 'Install OpenJDK (brew)', commands: ['brew install openjdk'] },
-      win32: {
-        label: 'Install OpenJDK 21 (winget)',
-        commands: ['winget install --id Microsoft.OpenJDK.21'],
-      },
-    },
-    hint: 'Any JDK 17+ works. The flake devShell already provides jdk.',
-  },
+  // ── Browser (optional) ────────────────────────────────────────────
   {
     name: 'Chromium',
     bins: ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable'],

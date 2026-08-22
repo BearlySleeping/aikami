@@ -4,10 +4,7 @@
 // Gateway bot (../../index.ts), Discord POSTs each slash-command
 // interaction here directly; no persistent connection needed, but it still
 // wants a real HTTPS URL. Mounted by apps/backend/worker alongside the
-// Gateway bot so both surfaces share one always-on process — this used to
-// be its own Firebase Cloud Function
-// (apps/backend/firebase/src/controllers/api/discord_interactions.ts)
-// before moving here (docs/contracts/C-418-p2, OQ-3).
+// Gateway bot so both surfaces share one always-on process.
 //
 // Timing: /ask does async work (OpenRouter), so the handler returns the
 // DEFERRED ack immediately and completes the OpenRouter call + webhook edit

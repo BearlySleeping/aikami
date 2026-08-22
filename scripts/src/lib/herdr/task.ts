@@ -28,7 +28,7 @@
 //
 // Dev services: by default task sessions run WITHOUT ports (typecheck/lint/
 // unit tests only — the vast majority of agent work). To run the full
-// firebase/client stack FROM the worktree, pass `--with-services` to `new`;
+// client stack FROM the worktree, pass `--with-services` to `new`;
 // this records ownership in .pi/dev-stack-owner.json and prints the exact
 // restart commands. Exactly one dev stack can exist per mode (ports are
 // constants), so claiming it stops whatever the current stack serves.

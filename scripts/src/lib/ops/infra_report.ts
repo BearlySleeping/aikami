@@ -53,15 +53,12 @@ import { dirname, join } from 'node:path';
 // this module is reachable from .pi/extensions/* via worktree.ts and
 // orchestrator.ts, which pi loads under Node — see
 // scripts/src/lib/env/runtime_boundary.test.ts, the mechanical guard for
-// exactly this boundary. Minimal inline ANSI codes instead of the shared
-// (Bun-using) formatting helpers.
-const ansi = {
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
-  yellow: '\x1b[33m',
-  green: '\x1b[32m',
-  reset: '\x1b[0m',
-};
+// exactly this boundary.
+//
+// 🔴 No `import.meta.main` / CLI block in this file either: a module that
+// uses `import.meta` and is large gets loaded by jiti through a base64
+// `data:` URL, which bun rejects with ENAMETOOLONG (NameTooLong). The CLI
+// lives in infra_report_cli.ts — keep this file a plain library module.
 
 export type InfraIssueEvent = {
   /** ISO timestamp. */
@@ -252,45 +249,3 @@ export const formatInfraNotesForPrompt = (summary: InfraIssueSummary[]): string 
     '',
   ].join('\n');
 };
-
-const parseSince = (raw: string | undefined): number | undefined => {
-  if (!raw) {
-    return undefined;
-  }
-  const match = raw.match(/^(\d+)(h|d|m)$/);
-  if (!match) {
-    return undefined;
-  }
-  const n = Number(match[1]);
-  const unitMs = { m: 60_000, h: 3_600_000, d: 86_400_000 }[match[2] as 'm' | 'h' | 'd'];
-  return n * unitMs;
-};
-
-// ── CLI ──────────────────────────────────────────────────────────────────
-if (import.meta.main) {
-  const args = process.argv.slice(2);
-  const jsonMode = args.includes('--json');
-  const sinceIndex = args.indexOf('--since');
-  const sinceMs = sinceIndex >= 0 ? parseSince(args[sinceIndex + 1]) : undefined;
-
-  const events = readInfraIssues(process.cwd());
-  const summary = summarizeInfraIssues(events, { sinceMs });
-
-  if (jsonMode) {
-    console.log(JSON.stringify(summary, undefined, 2));
-  } else if (summary.length === 0) {
-    console.log(`${ansi.green}✓${ansi.reset} No infrastructure issues recorded.`);
-  } else {
-    console.log(
-      `\n${ansi.bold}Infrastructure issues (${summary.length} distinct, ${events.length} total)${ansi.reset}`,
-    );
-    for (const s of summary) {
-      console.log(
-        `\n${ansi.bold}${ansi.yellow}×${s.count}${ansi.reset}  ${ansi.bold}[${s.component}]${ansi.reset} ${s.operation}`,
-      );
-      console.log(`     ${s.error}`);
-      console.log(`     ${ansi.dim}first ${s.firstSeen} · last ${s.lastSeen}${ansi.reset}`);
-    }
-    console.log();
-  }
-}

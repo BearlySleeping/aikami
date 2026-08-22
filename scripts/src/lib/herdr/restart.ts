@@ -4,7 +4,7 @@
 //
 // Usage:
 //   bun herdr:restart client              # restart client tab only
-//   bun herdr:restart firebase,client     # restart two tabs
+//   bun herdr:restart client     # restart two tabs
 //   bun herdr:restart all --join          # restart all + attach
 
 import { parseServiceArgs } from './cli.ts';

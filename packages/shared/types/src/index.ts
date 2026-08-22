@@ -9,7 +9,6 @@ export * from './lib/api/microsoft.ts';
 export * from './lib/api/oauth2.ts';
 export * from './lib/auth/auth.ts';
 export * from './lib/backend/auth.ts';
-export * from './lib/backend/firebase.ts';
 export * from './lib/backend/firestorage.ts';
 export * from './lib/backend/http.ts';
 export * from './lib/capability.ts';
