@@ -20,29 +20,11 @@ export const api = treaty<App>(typeof window !== 'undefined' ? window.location.o
 
 export type InternalAPIServiceOptions = BaseFrontendClassOptions;
 
-export type InternalAPIServiceInterface = BaseFrontendClassInterface & {
-  /**
-   * Sync the Firebase ID token (or clears it) with the SSR session
-   * via the POST /api/auth/session endpoint.
-   *
-   * @param token The Firebase ID token, or undefined to clear the session.
-   */
-  setToken(token?: string): Promise<void>;
-};
+export type InternalAPIServiceInterface = BaseFrontendClassInterface;
 
 class InternalAPIService
   extends BaseFrontendClass<InternalAPIServiceOptions>
-  implements InternalAPIServiceInterface
-{
-  async setToken(token?: string): Promise<void> {
-    const { error } = await api.api.auth.session.post({ token });
-    if (error) {
-      // Let callers know the backend session was not synced so they do not
-      // cache a stale client-side token.
-      throw new Error(`Failed to sync session (HTTP ${error.status ?? 'error'})`);
-    }
-  }
-}
+  implements InternalAPIServiceInterface {}
 
 export const internalAPIService: InternalAPIServiceInterface = InternalAPIService.create({
   className: 'InternalAPIService',

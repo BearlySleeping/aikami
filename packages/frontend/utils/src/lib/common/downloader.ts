@@ -1,5 +1,4 @@
 import type { CommonError } from '@aikami/types';
-import axios from 'axios';
 import { logger } from '$logger';
 
 export const downloadVideoFile = ({
@@ -19,38 +18,54 @@ export const downloadVideoFile = ({
   future: () => Promise<void>;
   cancel: () => Promise<boolean> | boolean;
 } => {
-  // eslint-disable-next-line import/no-named-as-default-member
-  const cancelSource = axios.CancelToken.source();
+  const abortController = new AbortController();
   const future = async () => {
     try {
-      const response = await axios.get<BlobPart>(url, {
-        cancelToken: cancelSource.token,
-        onDownloadProgress: (event: { loaded: number; total?: number }) => {
-          if (onDownloadProgress) {
-            onDownloadProgress({
-              bytesTransferred: event.loaded,
-              totalBytes: event.total ?? -1,
-            });
-          }
-        },
-        responseType: 'blob',
-      });
+      const response = await fetch(url, { signal: abortController.signal });
+      if (!response.ok) {
+        throw new Error(`Download failed (HTTP ${response.status})`);
+      }
+      const totalBytes = Number(response.headers.get('content-length') ?? -1);
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Download failed: no response body');
+      }
 
-      const fileURL = URL.createObjectURL(new Blob([response.data]));
+      const chunks: BlobPart[] = [];
+      let bytesTransferred = 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        chunks.push(value);
+        bytesTransferred += value.byteLength;
+        if (onDownloadProgress) {
+          onDownloadProgress({ bytesTransferred, totalBytes });
+        }
+      }
+
+      const fileURL = URL.createObjectURL(new Blob(chunks));
       await downloadFile(fileURL, fileName);
     } catch (error_) {
       const error = error_ as CommonError;
       logger.error('downloadVideoFile', error);
-      if (error.code === 'canceled') {
+      // AbortController cancellation surfaces as an AbortError — treat it as a
+      // clean cancel, not a failure.
+      if (
+        typeof DOMException !== 'undefined' &&
+        error_ instanceof DOMException &&
+        error_.name === 'AbortError'
+      ) {
         return;
-        // something else we
       }
     }
   };
   return {
     cancel: () => {
       try {
-        cancelSource.cancel('canceled');
+        abortController.abort();
         return true;
       } catch (error) {
         logger.error('downloadVideoFile', error);

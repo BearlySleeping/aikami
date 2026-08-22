@@ -41,9 +41,6 @@ fileGroups:
 
   # CI/CD and deployment pipeline files
   deployment:
-    - "/.github/actions/setup_environment/action.yml"
-    - "/.github/workflows/main.yml"
-    - "/.github/workflows/pr_validation.yml"
     - "/scripts/src/lib/deploy/deployment_config.ts"
     - "/bun.lock"
     - "/package.json"

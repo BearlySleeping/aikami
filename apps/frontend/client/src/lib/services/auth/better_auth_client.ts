@@ -266,7 +266,10 @@ export const pollDeviceHandoff = async (
     // access_denied, expired_token, or unknown error — surface via error path.
     throw toAppError({
       errorType: 'unauthorized',
-      errorMessage: body.error === 'access_denied' ? 'Device authorization denied' : 'Device authorization failed',
+      errorMessage:
+        body.error === 'access_denied'
+          ? 'Device authorization denied'
+          : 'Device authorization failed',
     });
   }
   if (!response.ok) {

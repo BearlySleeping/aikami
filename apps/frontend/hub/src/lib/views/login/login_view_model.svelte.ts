@@ -3,7 +3,6 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-  routerService,
 } from '@aikami/frontend/services';
 import { authService } from '$services';
 
@@ -27,12 +26,11 @@ class LoginViewModel
     this.errorMessage = undefined;
 
     try {
+      // Google sign-in is a full-page redirect to the Better Auth social
+      // handler. On return the session cookie is set and hooks.server.ts
+      // resolves the user, routing them to the dashboard — no client-side
+      // navigation here (it would race the redirect).
       await authService.signInWithGoogle();
-
-      await routerService.goToRoute('dashboard', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
     } catch (error) {
       this.errorMessage =
         error instanceof Error ? error.message : 'Sign in failed. Please try again.';

@@ -280,7 +280,8 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
     json.assets = { binding: 'ASSETS', directory: cf.assetsDir ?? assetDir };
     // C-426 AC-3: SSR Workers (hub) need their D1 + R2 bindings and the
     // nodejs_compat flag in the generated per-mode wrangler config.
-    const d1Databases = typeof cf.d1Databases === 'function' ? cf.d1Databases(mode) : cf.d1Databases;
+    const d1Databases =
+      typeof cf.d1Databases === 'function' ? cf.d1Databases(mode) : cf.d1Databases;
     if (d1Databases?.length) {
       json.d1_databases = d1Databases.map((d) => ({
         binding: d.binding,
