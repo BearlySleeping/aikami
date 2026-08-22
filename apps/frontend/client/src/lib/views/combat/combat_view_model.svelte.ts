@@ -868,7 +868,7 @@ export class CombatViewModel
 
     const removeEntityRevived = bridge.on('ENTITY_REVIVED', (event) => {
       this.debug('ENTITY_REVIVED', event);
-      this._statusEffects.revive();
+      this._statusEffects.revive(event.entityId);
     });
 
     this._disposeListeners.push(

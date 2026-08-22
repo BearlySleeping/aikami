@@ -80,9 +80,21 @@ describe('StatusEffectsService (C-425)', () => {
       expect(svc.deathSaveState).toEqual({ successes: 1, failures: 2 });
     });
 
-    test('revive clears downed and death-save state', () => {
+    test('revive clears downed and death-save state for the player', () => {
       svc.setEntityDowned(1);
-      svc.revive();
+      svc.revive(1);
+      expect(svc.isAnyEntityDowned).toBe(false);
+      expect(svc.deathSaveState).toBeNull();
+    });
+
+    test('revive only clears the revived entity from downed tracking', () => {
+      svc.setEntityDowned(1);
+      svc.setEntityDowned(5);
+      expect(svc.isAnyEntityDowned).toBe(true);
+      svc.revive(5);
+      expect(svc.isAnyEntityDowned).toBe(true);
+      expect(svc.deathSaveState).toEqual({ successes: 0, failures: 0 });
+      svc.revive(1);
       expect(svc.isAnyEntityDowned).toBe(false);
       expect(svc.deathSaveState).toBeNull();
     });

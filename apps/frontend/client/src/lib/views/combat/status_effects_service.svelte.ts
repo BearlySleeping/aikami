@@ -45,8 +45,8 @@ export type StatusEffectsServiceInterface = BaseViewModelInterface & {
   setEntityDowned(entityId: number): void;
   /** Records a death-save roll outcome. */
   setDeathSave(successes: number, failures: number): void;
-  /** Clears the downed/death-save state (entity revived). */
-  revive(): void;
+  /** Clears the downed/death-save state for the specified entity. */
+  revive(entityId: number): void;
 };
 
 // ── Implementation ───────────────────────────────────────────────────────
@@ -60,12 +60,15 @@ export class StatusEffectsService
   deathSaveState: DeathSaveState | null = $state(null);
   isAnyEntityDowned: boolean = $state(false);
 
+  private _downedEntityIds: Set<number> = new Set();
+
   /** @inheritdoc */
   reset(): void {
     this.playerStatusEffects = [];
     this.enemyStatusEffects = {};
     this.deathSaveState = null;
     this.isAnyEntityDowned = false;
+    this._downedEntityIds.clear();
   }
 
   /** @inheritdoc */
@@ -113,6 +116,7 @@ export class StatusEffectsService
 
   /** @inheritdoc */
   setEntityDowned(entityId: number): void {
+    this._downedEntityIds.add(entityId);
     this.isAnyEntityDowned = true;
     if (entityId === 1) {
       this.deathSaveState = { successes: 0, failures: 0 };
@@ -125,9 +129,12 @@ export class StatusEffectsService
   }
 
   /** @inheritdoc */
-  revive(): void {
-    this.isAnyEntityDowned = false;
-    this.deathSaveState = null;
+  revive(entityId: number): void {
+    this._downedEntityIds.delete(entityId);
+    this.isAnyEntityDowned = this._downedEntityIds.size > 0;
+    if (entityId === 1) {
+      this.deathSaveState = null;
+    }
   }
 }
 

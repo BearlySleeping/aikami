@@ -106,6 +106,9 @@ export class SlashCommandAutocomplete
 
   /** @inheritdoc */
   selectAndApply(index: number): void {
+    if (index < 0 || index >= this.completions.length) {
+      return;
+    }
     this.selectedIndex = index;
     this.apply();
   }

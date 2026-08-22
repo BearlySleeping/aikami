@@ -108,8 +108,10 @@ describe('SlashCommandAutocomplete (C-425)', () => {
       const applied: string[] = [];
       const ac = createAutocomplete((name) => applied.push(name));
       ac.update('/');
+      const expectedName = ac.completions[1]?.name;
       ac.selectAndApply(1);
       expect(applied).toHaveLength(1);
+      expect(applied[0]).toBe(expectedName);
       expect(ac.visible).toBe(false);
     });
   });
