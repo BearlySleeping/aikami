@@ -46,6 +46,10 @@ export type DeviceHandoffStart = {
   deviceCode: string;
   userCode: string;
   verificationUri: string;
+  /** RFC 8628 polling interval (seconds) — how often to poll /device/token. */
+  interval: number;
+  /** Expiration (seconds from now) — deadline for completing the device auth. */
+  expiresIn: number;
 };
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
@@ -215,6 +219,8 @@ export const startDeviceHandoff = async (): Promise<DeviceHandoffStart> => {
     user_code?: string;
     verification_uri?: string;
     verification_uri_complete?: string;
+    interval?: number;
+    expires_in?: number;
   };
   if (!body.device_code || !body.user_code) {
     throw toAppError({ errorType: 'unavailable', errorMessage: 'Device authorization failed' });
@@ -223,17 +229,21 @@ export const startDeviceHandoff = async (): Promise<DeviceHandoffStart> => {
     deviceCode: body.device_code,
     userCode: body.user_code,
     verificationUri: body.verification_uri_complete ?? body.verification_uri ?? '/device',
+    interval: body.interval ?? 5,
+    expiresIn: body.expires_in ?? 1800,
   };
 };
 
 /**
  * Poll the hub to check whether a device authorization was approved. Returns
- * the adopted `CurrentUser` once approved, or `undefined` while still pending
- * (the hub answers 400 `authorization_pending`). On approval the session token
- * is stored as the Better Auth session cookie so subsequent requests are
- * authenticated.
+ * the adopted `CurrentUser` once approved, `undefined` while still pending,
+ * or signals slow_down when the server requests slower polling (RFC 8628).
+ * On approval the session token is stored as the Better Auth session cookie
+ * so subsequent requests are authenticated.
  */
-export const pollDeviceHandoff = async (deviceCode: string): Promise<CurrentUser | undefined> => {
+export const pollDeviceHandoff = async (
+  deviceCode: string,
+): Promise<{ user: CurrentUser } | { slowDown: true } | undefined> => {
   const response = await fetch(`${hubApiBase()}/auth/device/token`, {
     method: 'POST',
     headers: jsonHeaders,
@@ -245,8 +255,19 @@ export const pollDeviceHandoff = async (deviceCode: string): Promise<CurrentUser
     }),
   });
   if (response.status === 400) {
-    // Still pending (authorization_pending) — keep polling.
-    return undefined;
+    // RFC 8628: inspect the error field to distinguish pending/slow_down/denied.
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    if (body.error === 'authorization_pending') {
+      return undefined;
+    }
+    if (body.error === 'slow_down') {
+      return { slowDown: true };
+    }
+    // access_denied, expired_token, or unknown error — surface via error path.
+    throw toAppError({
+      errorType: 'unauthorized',
+      errorMessage: body.error === 'access_denied' ? 'Device authorization denied' : 'Device authorization failed',
+    });
   }
   if (!response.ok) {
     throw await toAppErrorFromResponse(response);
@@ -256,13 +277,16 @@ export const pollDeviceHandoff = async (deviceCode: string): Promise<CurrentUser
     throw toAppError({ errorType: 'unauthorized', errorMessage: 'Device authorization failed' });
   }
   setSessionCookie(body.access_token);
-  return await getBetterAuthSession();
+  const user = await getBetterAuthSession();
+  return user ? { user } : undefined;
 };
 
 /**
  * Store the Better Auth session token as the session cookie so subsequent
- * `credentials: 'include'` requests are authenticated. Scoped to the shared
- * root domain so it works across the client and hub subdomains.
+ * `credentials: 'include'` requests are authenticated. Uses the hub origin
+ * for the cookie (hub.bearlysleeping.com or localhost) so it matches the
+ * server-set session cookie, avoiding conflicts between client and hub
+ * domain cookies in Tauri webviews.
  */
 const setSessionCookie = (token: string): void => {
   // No-op outside a browser (e.g. unit tests) — the cookie is only meaningful
@@ -270,7 +294,11 @@ const setSessionCookie = (token: string): void => {
   if (typeof window === 'undefined' || !window.location) {
     return;
   }
-  const domain = window.location.hostname.split('.').slice(-2).join('.');
+  const hubBase = hubApiBase();
+  const isSecure = hubBase.startsWith('https://');
+  // Derive cookie name: __Secure- prefix required for Secure cookies per spec.
+  const cookieName = isSecure ? '__Secure-better-auth.session_token' : 'better-auth.session_token';
+  const secureAttr = isSecure ? 'Secure; ' : '';
   // biome-ignore lint/suspicious/noDocumentCookie: adopting the Better Auth session cookie is the intended mechanism
-  document.cookie = `better-auth.session_token=${encodeURIComponent(token)}; Path=/; Domain=${domain}; Secure; SameSite=Lax; Max-Age=2592000`;
+  document.cookie = `${cookieName}=${encodeURIComponent(token)}; Path=/; ${secureAttr}SameSite=Lax; Max-Age=2592000`;
 };

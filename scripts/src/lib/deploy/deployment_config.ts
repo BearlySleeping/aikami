@@ -93,10 +93,14 @@ export type CloudflareAppConfig =
       routes: Partial<Record<LiveMode, string>>;
       /** `_headers` filename placed into the build output dir. Default 'public/_headers' or 'static/_headers'. */
       headersSource?: string;
-      /** D1 database bindings emitted into the generated wrangler config. */
-      d1Databases?: Array<{ binding: string; databaseName: string; databaseId: string }>;
-      /** R2 bucket bindings emitted into the generated wrangler config. */
-      r2Buckets?: Array<{ binding: string; bucketName: string }>;
+      /** D1 database bindings emitted into the generated wrangler config (per-mode or shared). */
+      d1Databases?:
+        | Array<{ binding: string; databaseName: string; databaseId: string }>
+        | ((mode: string) => Array<{ binding: string; databaseName: string; databaseId: string }>);
+      /** R2 bucket bindings emitted into the generated wrangler config (per-mode or shared). */
+      r2Buckets?:
+        | Array<{ binding: string; bucketName: string }>
+        | ((mode: string) => Array<{ binding: string; bucketName: string }>);
     };
 
 export type AppConfig = {
@@ -221,14 +225,22 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       assetsDir: 'build/client',
       compatibilityDate: '2026-08-21',
       compatibilityFlags: ['nodejs_compat'],
-      d1Databases: [
+      d1Databases: (mode) => [
         {
           binding: 'DB',
-          databaseName: 'aikami-hub',
+          databaseName: mode === 'production' ? 'aikami-hub' : `aikami-${mode}-hub`,
+          // TODO: Provision separate D1 databases for staging and production to isolate
+          // Better Auth user data and save-backup metadata across environments. For now,
+          // both modes share the production database (bf77e365-058f-408f-871c-4a0567c9aa10).
           databaseId: 'bf77e365-058f-408f-871c-4a0567c9aa10',
         },
       ],
-      r2Buckets: [{ binding: 'SAVES_BUCKET', bucketName: 'aikami-saves' }],
+      r2Buckets: (mode) => [
+        {
+          binding: 'SAVES_BUCKET',
+          bucketName: mode === 'production' ? 'aikami-saves' : `aikami-${mode}-saves`,
+        },
+      ],
       routes: {
         production: 'hub.bearlysleeping.com',
         staging: 'hub.stg.bearlysleeping.com',

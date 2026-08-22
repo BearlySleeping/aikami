@@ -9,7 +9,7 @@
 
 // biome-ignore-all lint/style/useNamingConvention: device-authorization API fields are snake_case
 
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 
 import { pollDeviceHandoff, startDeviceHandoff, toCurrentUser } from './better_auth_client';
 
@@ -19,41 +19,46 @@ const jsonResponse = (body: unknown, status = 200): Response =>
     headers: { 'content-type': 'application/json' },
   });
 
+let originalFetch: typeof globalThis.fetch;
+
+beforeEach(() => {
+  originalFetch = globalThis.fetch;
+});
+
 afterEach(() => {
   mock.restore();
+  globalThis.fetch = originalFetch;
 });
 
 describe('Better Auth device handoff (AC-5)', () => {
   test('startDeviceHandoff requests a device code from /device/code', async () => {
-    const fetchMock = mock((_url: string | URL | Request, _init?: RequestInit) =>
-      Promise.resolve(
-        jsonResponse({
-          device_code: 'dev-123',
-          user_code: 'ABCD-EFGH',
-          verification_uri: '/device',
-          verification_uri_complete: 'https://hub.bearlysleeping.com/device?user_code=ABCD-EFGH',
-          expires_in: 1800,
-          interval: 5,
-        }),
-      ),
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
+      (_url: string | URL | Request, _init?: RequestInit) =>
+        Promise.resolve(
+          jsonResponse({
+            device_code: 'dev-123',
+            user_code: 'ABCD-EFGH',
+            verification_uri: '/device',
+            verification_uri_complete: 'https://hub.bearlysleeping.com/device?user_code=ABCD-EFGH',
+            expires_in: 1800,
+            interval: 5,
+          }),
+        ),
     );
-    // biome-ignore lint/suspicious/noGlobalAssign: test shim
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const result = await startDeviceHandoff();
     expect(result.deviceCode).toBe('dev-123');
     expect(result.userCode).toBe('ABCD-EFGH');
     expect(result.verificationUri).toContain('user_code=ABCD-EFGH');
-    expect(fetchMock).toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalled();
   });
 
   test('pollDeviceHandoff returns undefined while pending (400 authorization_pending)', async () => {
-    // biome-ignore lint/suspicious/noGlobalAssign: test shim
-    globalThis.fetch = mock(() =>
+    spyOn(globalThis, 'fetch').mockImplementation(() =>
       Promise.resolve(
         jsonResponse({ error: 'authorization_pending', error_description: 'pending' }, 400),
       ),
-    ) as unknown as typeof fetch;
+    );
 
     const result = await pollDeviceHandoff('dev-123');
     expect(result).toBeUndefined();
@@ -61,7 +66,7 @@ describe('Better Auth device handoff (AC-5)', () => {
 
   test('pollDeviceHandoff adopts the session on approval', async () => {
     // First call: get-session after setting the cookie returns the user.
-    const fetchMock = mock((url: string | URL | Request) => {
+    spyOn(globalThis, 'fetch').mockImplementation((url: string | URL | Request) => {
       const u = String(url);
       if (u.includes('/device/token')) {
         return Promise.resolve(
@@ -82,12 +87,10 @@ describe('Better Auth device handoff (AC-5)', () => {
       }
       return Promise.resolve(jsonResponse({}, 404));
     });
-    // biome-ignore lint/suspicious/noGlobalAssign: test shim
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const result = await pollDeviceHandoff('dev-123');
-    expect(result?.id).toBe('u1');
-    expect(result?.email).toBe('a@example.com');
+    expect(result?.user?.id).toBe('u1');
+    expect(result?.user?.email).toBe('a@example.com');
   });
 
   test('toCurrentUser maps a Better Auth user onto CurrentUser', () => {

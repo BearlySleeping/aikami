@@ -484,9 +484,13 @@ export class AuthService
    */
   private async _betterAuthDeviceHandoff(): Promise<SocialSignInResponse> {
     let deviceCode: string;
+    let interval: number;
+    let expiresIn: number;
     try {
       const start = await startDeviceHandoff();
       deviceCode = start.deviceCode;
+      interval = start.interval;
+      expiresIn = start.expiresIn;
       // Open the client's /link page (a real browser domain) with the user
       // code, where the user signs in and approves the device. The plugin's
       // own verification_uri is the hub's JSON /device endpoint, not a UI.
@@ -509,7 +513,7 @@ export class AuthService
     }
 
     try {
-      const user = await this._awaitBetterAuthDeviceApproval(deviceCode);
+      const user = await this._awaitBetterAuthDeviceApproval(deviceCode, interval, expiresIn);
       if (!user) {
         throw new Error('Sign-in timed out — please try again.');
       }
@@ -534,16 +538,21 @@ export class AuthService
   /** Poll the hub until the device authorization is approved (or times out). */
   private async _awaitBetterAuthDeviceApproval(
     deviceCode: string,
+    intervalSeconds: number,
+    expiresInSeconds: number,
   ): Promise<CurrentUser | undefined> {
-    const timeoutMs = 5 * 60 * 1000;
-    const intervalMs = 2000;
-    const deadline = Date.now() + timeoutMs;
+    const deadline = Date.now() + expiresInSeconds * 1000;
+    let delayMs = intervalSeconds * 1000;
     while (Date.now() < deadline) {
-      const user = await pollBetterAuthDeviceHandoff(deviceCode);
-      if (user) {
-        return user;
+      const result = await pollBetterAuthDeviceHandoff(deviceCode);
+      if (result?.user) {
+        return result.user;
       }
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      // RFC 8628: slow_down increases the required polling delay.
+      if (result?.slowDown) {
+        delayMs = Math.max(delayMs + 5000, delayMs * 1.5);
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
     return undefined;
   }

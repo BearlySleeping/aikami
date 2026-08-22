@@ -40,7 +40,10 @@ let { viewModel }: { viewModel: LinkViewModelInterface } = $props();
           {:else if viewModel.status === 'confirm'}
             <p class="text-base-content/70 mb-2">{m.linkConfirmPrompt()}</p>
             {#if viewModel.playerDisplayName}
-              <p class="font-medium mb-4">{viewModel.playerDisplayName}</p>
+              <p class="font-medium mb-2">{viewModel.playerDisplayName}</p>
+            {/if}
+            {#if viewModel.code}
+              <p class="text-base-content/70 mb-4 font-mono text-lg">{viewModel.code}</p>
             {/if}
             <button
               type="button"

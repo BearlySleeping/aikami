@@ -166,8 +166,8 @@ describe('hub Better Auth mount (AC-4)', () => {
     const res = await handle(get('/api/auth/get-session', 'better-auth.session_token=invalid'));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { user?: unknown } | null;
-    // Better Auth returns `null` (no session) for an invalid/absent token.
-    expect(body === null || body.user === undefined).toBe(true);
+    // Better Auth returns exactly `null` (no session) for an invalid/absent token.
+    expect(body).toBe(null);
   });
 
   test('wrong-password sign-in returns a non-200 with no session cookie', async () => {
@@ -203,5 +203,22 @@ describe('hub Better Auth mount (AC-4)', () => {
     });
     expect(betterAuthModule.getBetterAuth()).toBeUndefined();
     expect(res.status).toBe(503);
+  });
+
+  test('device route fallback handles /device/code requests (AC-5)', async () => {
+    const { fallback: deviceFallback } = await import(
+      '../../../routes/api/device/[...device]/+server.ts'
+    );
+    const res = await deviceFallback({
+      request: post('/api/device/code', { client_id: 'aikami-client' }),
+      platform: { env: { DB: client } },
+    });
+    // Device-code request succeeds (not 404) and returns a device_code + user_code.
+    expect(res.status).not.toBe(404);
+    if (res.status === 200) {
+      const body = (await res.json()) as { device_code?: string; user_code?: string };
+      expect(body.device_code).toBeDefined();
+      expect(body.user_code).toBeDefined();
+    }
   });
 });

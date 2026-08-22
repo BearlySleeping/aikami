@@ -23,6 +23,16 @@ import { toRoutePathFromRouteId, toRoutePathFromURL } from '$router';
 
 const allowExtensionCors = true;
 
+/** Security headers applied to every SSR response (matching _headers in Workers deployments). */
+const SECURITY_HEADERS: Record<string, string> = {
+  'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'X-Frame-Options': 'DENY',
+  'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+};
+
 // The `client` app (Firebase Hosting, no server of its own) forwards its
 // browser logger's HTTP sink here cross-origin — see
 // packages/shared/logger/src/lib/logger_browser.ts and
@@ -128,13 +138,19 @@ export const handle: Handle = async ({ event, resolve }) => {
   // without a Worker platform) the user is simply unauthenticated.
   const platformEnv = event.platform?.env;
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-  setBetterAuthEnv(platformEnv ? { DB: platformEnv.DB } : undefined);
+  setBetterAuthEnv(platformEnv?.DB ? { DB: platformEnv.DB } : undefined);
   const auth = getBetterAuth();
   let userSession: UserSessionData | undefined;
   if (auth) {
-    const session = await auth.api.getSession({ headers: request.headers });
-    if (session?.user) {
-      userSession = toUserSessionData(session.user);
+    try {
+      const session = await auth.api.getSession({ headers: request.headers });
+      if (session?.user) {
+        userSession = toUserSessionData(session.user);
+      }
+    } catch (error) {
+      // Failed session lookup (e.g. DB unavailable, corrupt token) leaves the
+      // request unauthenticated rather than failing the entire page load.
+      console.error('hooks.server:getSession-failed', error);
     }
   }
   locals.userSession = userSession;
@@ -212,11 +228,19 @@ export const handle: Handle = async ({ event, resolve }) => {
           preflightHeaders.set('Access-Control-Allow-Credentials', 'true');
         }
       }
+      // Apply security headers to preflight responses.
+      for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+        preflightHeaders.set(key, value);
+      }
       return new Response(null, { status: 204, headers: preflightHeaders });
     }
 
     const guardResponse = apiMethodGuard(pathname, method);
     if (guardResponse) {
+      // Apply security headers to guard responses (405, etc).
+      for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+        guardResponse.headers.set(key, value);
+      }
       return guardResponse;
     }
 
@@ -237,6 +261,11 @@ export const handle: Handle = async ({ event, resolve }) => {
       response.headers.set('Access-Control-Allow-Credentials', 'true');
     }
 
+    // Apply security headers to API responses.
+    for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+      response.headers.set(key, value);
+    }
+
     return response;
   }
 
@@ -248,6 +277,11 @@ export const handle: Handle = async ({ event, resolve }) => {
     pathname: url.pathname,
     routeId,
   });
+
+  // Apply security headers to every SSR response (matching _headers in Workers deployments).
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    response.headers.set(key, value);
+  }
 
   return response;
 };

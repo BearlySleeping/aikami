@@ -54,12 +54,20 @@ export type BetterAuthEnv = {
  * exposes `.handler` (a fetch handler) to mount at `/api/auth/*` and
  * `.api.getSession()` for server-side session checks.
  */
-export const createBetterAuth = (db: Record<string, unknown>, env: BetterAuthEnv) =>
-  betterAuth({
+export const createBetterAuth = (db: Record<string, unknown>, env: BetterAuthEnv) => {
+  // When cookieDomain is set (production cross-subdomain SSO) and no explicit
+  // trustedOrigins are configured, default to allowing all subdomains of the
+  // cookie domain (e.g. https://*.bearlysleeping.com).
+  const defaultTrustedOrigins =
+    env.cookieDomain && (!env.trustedOrigins || env.trustedOrigins.length === 0)
+      ? [`https://*.${env.cookieDomain}`]
+      : [];
+
+  return betterAuth({
     database: drizzleAdapter(db, { provider: 'sqlite', schema: betterAuthSchema }),
     baseURL: env.baseURL,
     secret: env.secret,
-    trustedOrigins: env.trustedOrigins ?? [],
+    trustedOrigins: env.trustedOrigins ?? defaultTrustedOrigins,
     // SSO across the client (`aikami.bearlysleeping.com`) and hub
     // (`hub.bearlysleeping.com`): scope the session cookie to the shared root
     // domain so both apps read the same session.
@@ -94,6 +102,7 @@ export const createBetterAuth = (db: Record<string, unknown>, env: BetterAuthEnv
         }
       : {}),
   });
+};
 
 export type BetterAuthInstance = ReturnType<typeof createBetterAuth>;
 
@@ -104,16 +113,20 @@ export type BetterAuthInstance = ReturnType<typeof createBetterAuth>;
  * The D1 `users` table has no `role` column, so every user is `member` for
  * now — the hub is a community app, not restricted to super admins.
  */
-export const toUserSessionData = (user: {
-  id: string;
-  name?: string | null;
-  email?: string | null;
-  image?: string | null;
-}): UserSessionData => ({
+export const toUserSessionData = (
+  user: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+    image?: string | null;
+  },
+  provider?: string | null,
+): UserSessionData => ({
   id: user.id,
   email: user.email ?? undefined,
   displayName: user.name ?? undefined,
   photoURL: user.image ?? undefined,
   userRole: 'member',
-  currentSignInProvider: 'email',
+  // Use the provided sign-in provider if known (google, email), otherwise default to email.
+  currentSignInProvider: (provider as UserSessionData['currentSignInProvider']) ?? 'email',
 });

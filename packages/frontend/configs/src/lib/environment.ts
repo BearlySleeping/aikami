@@ -147,9 +147,9 @@ export const isDevelopmentModePublic = () => publicEnv.PUBLIC_MODE !== 'producti
 export const getPublicMode = () => publicEnv.PUBLIC_MODE;
 
 /**
- * C-426 AC-5: which auth backend the client uses. Better Auth is now the sole
- * path; the `PUBLIC_AUTH_BACKEND` flag is kept only as a build-time escape
- * hatch and defaults to `better-auth`.
+ * C-426 AC-5: which auth backend the client uses. Better Auth is now the
+ * default and primary path; the `PUBLIC_AUTH_BACKEND` flag is kept only as a
+ * build-time escape hatch and defaults to `better-auth` (not firebase).
  */
 export const getAuthBackend = (): 'better-auth' | 'firebase' =>
   publicEnv.PUBLIC_AUTH_BACKEND === 'firebase' ? 'firebase' : 'better-auth';
