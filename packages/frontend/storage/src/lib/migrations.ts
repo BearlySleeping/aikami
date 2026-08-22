@@ -198,7 +198,7 @@ export const AIKAMI_MIGRATIONS: readonly Migration[] = [
 
       `CREATE TABLE IF NOT EXISTS asset_sources (
     asset_id TEXT NOT NULL REFERENCES assets(id),
-    backend TEXT NOT NULL, -- 'bundled' | 'firebase-storage' | 'r2' | 'self-hosted'
+    backend TEXT NOT NULL, -- 'bundled' | 'r2' | 'self-hosted'
     url TEXT NOT NULL,
     priority INTEGER NOT NULL,
     PRIMARY KEY (asset_id, backend)

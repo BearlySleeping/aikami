@@ -13,8 +13,5 @@
     "@aikami/logger": "workspace:*",
     "@aikami/types": "workspace:*",
     "device-detector-js": "^3.0.3"
-  },
-  "devDependencies": {
-    "firebase": "12.18.0"
   }
 }

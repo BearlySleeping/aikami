@@ -9,7 +9,6 @@ import { resolve } from 'node:path';
 import { startDevServer, stopAllDevServers } from './dev_server_manager.ts';
 import type { DockerServiceConfig } from './docker_manager.ts';
 import { DockerManager } from './docker_manager.ts';
-import { startEmulators, stopEmulators } from './emulator_manager.ts';
 import { startServices, stopServices } from './herdr_manager.ts';
 import { printTerminalReport, writeJsonReport } from './reporter.ts';
 import { COMFYUI_DOCKER_CONFIG } from './suites/comfyui.ts';
@@ -42,16 +41,13 @@ Options:
 
 Suites:
   schema-check      Validate Zod schemas + TypeScript types
-  functions         Firebase Functions tests (requires emulators)
   client            Client browser tests (requires Client dev server)
-  game-e2e          Game Firebase REST integration (requires firebase + client dev server)
-  cross-service     Multi-service flow tests
+  comfyui           ComfyUI image service tests
 
 Examples:
   bun run test:blackbox                         # All suites
-  bun run test:blackbox game-e2e                # Game only
   bun run test:blackbox schema-check            # Schema only
-  bun run test:blackbox client functions           # Client + Functions
+  bun run test:blackbox client                  # Client only
   bun run test:blackbox --no-cross-service      # Skip cross-service
   `);
   process.exit(0);
@@ -71,9 +67,7 @@ async function main() {
   type SuiteRef = { name: string; path: string; key: string };
   const suiteRefs: SuiteRef[] = [
     { name: 'schema-check', path: './suites/schema_check.ts', key: 'schemaCheckSuite' },
-    { name: 'functions', path: './suites/functions.api.ts', key: 'functionsSuite' },
     { name: 'client', path: './suites/client.e2e.ts', key: 'clientSuite' },
-    { name: 'game-e2e', path: './suites/game_e2e.ts', key: 'gameE2eSuite' },
     { name: 'comfyui', path: './suites/comfyui.ts', key: 'comfyuiSuite' },
   ];
   if (!noCrossService) {
@@ -103,11 +97,7 @@ async function main() {
   }
 
   // ── 2. Start services ─────────────────────────────────────
-  const needsEmulator = suites.some(
-    (s) => s.category === 'service' || s.category === 'cross-service',
-  );
   const needsClient = suites.some((s) => s.name === 'client');
-  const needsGame = suites.some((s) => s.name === 'game-e2e');
   const needsAiServices = suites.some((s) => s.name === 'ai-services');
 
   // ── 2a. Docker services (AI backends) ────────────────────
@@ -130,12 +120,6 @@ async function main() {
 
     if (herdrAvailable) {
       const only: string[] = [];
-      if (needsEmulator) {
-        only.push('firebase');
-      }
-      if (needsGame) {
-        only.push('game');
-      }
       if (needsClient) {
         only.push('client');
       }
@@ -154,14 +138,6 @@ async function main() {
     } else {
       // Fallback: process spawn (may fail in Nix env)
       const services: Promise<void>[] = [];
-
-      if (needsEmulator) {
-        services.push(
-          startEmulators().catch((e) => {
-            console.error('❌ Failed to start emulators:', e instanceof Error ? e.message : e);
-          }),
-        );
-      }
 
       if (needsClient) {
         services.push(
@@ -189,7 +165,6 @@ async function main() {
   }
   await stopServices().catch(() => {});
   await stopAllDevServers().catch(() => {});
-  await stopEmulators().catch(() => {});
 
   // ── 5. Report ─────────────────────────────────────────────
   const dur = Date.now() - overallStart;
@@ -221,7 +196,6 @@ main().catch(async (e) => {
   }
   cleanupPromises.push(stopServices());
   cleanupPromises.push(stopAllDevServers());
-  cleanupPromises.push(stopEmulators());
   await Promise.allSettled(cleanupPromises);
   process.exit(1);
 });

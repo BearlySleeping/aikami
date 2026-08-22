@@ -8,7 +8,6 @@
 //   The herdr server handles persistence — panes survive client detach.
 //
 //   Tab layout (per workspace):
-//     firebase       → bun run emulate
 //     client          → bun run dev
 //     hub             → bun run dev
 //     voice           → bun run dev
@@ -33,7 +32,6 @@
 //   3. root package.json scripts (herdr:start, herdr:stop, etc.)
 //
 // CLI:
-//   bun herdr:start firebase          # firebase tab
 //   bun herdr:start client            # add client tab
 //   bun herdr:start voice             # add voice tab
 //   bun herdr:start all --join        # all + attach
@@ -48,11 +46,7 @@ import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
-import {
-  contractPortOffset,
-  OFFSETTABLE_PORTS,
-  PORTS,
-} from '../../../../packages/shared/constants/src/index';
+import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
 import { hasDirenv } from '../env/direnv_detect';
 // Re-exported for back-compat — the canonical definition now lives in
 // ../env/mode (single source of truth for mode resolution).
@@ -74,7 +68,6 @@ import { findBash, posixQuote } from '../env/which';
 
 /** Canonical service names (used internally). */
 export type DevService =
-  | 'firebase'
   | 'client'
   | 'hub'
   | 'voice'
@@ -144,12 +137,6 @@ export type SessionInfo = {
 // ── Service definitions ────────────────────────────────────
 
 export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
-  firebase: {
-    name: 'firebase',
-    command: (mode) => `bun run emulate -- --mode ${mode}`,
-    cwd: (root) => resolve(root, 'apps/backend/firebase'),
-    readyPort: (mode) => (mode === 'emulator' ? PORTS.emulator.auth : undefined),
-  },
   client: {
     name: 'client',
     command: (mode) => `bun run dev -- --mode ${mode}`,
@@ -251,7 +238,6 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
 };
 
 export const ALL_SERVICES: DevService[] = [
-  'firebase',
   'client',
   'hub',
   'voice',
@@ -284,12 +270,12 @@ const serviceFromTabLabel = (label: string): DevService | undefined => {
   }
   return (KNOWN_SERVICES as readonly string[]).includes(label) ? (label as DevService) : undefined;
 };
-/** Services whose ports vary per contract — dev servers with a Firebase-
- *  adjacent port that collides across concurrent contract pipelines.
+/** Services whose ports vary per contract — dev servers whose port
+ *  collides across concurrent contract pipelines.
  *  voice/image/text stay on shared base ports (heavy singleton backends);
  *  the C-392 advanced engines (text-ollama, image-comfyui) stay on the same
  *  shared base ports as their modality. */
-const OFFSET_AWARE_SERVICES = new Set<DevService>(['client', 'hub', 'site', 'firebase']);
+const OFFSET_AWARE_SERVICES = new Set<DevService>(['client', 'hub', 'site']);
 
 /** Resolve a service's ready port, shifted by a contract's port offset
  *  when that service is offset-aware. */
@@ -801,13 +787,8 @@ const tcpConnectReady = (port: number, host = '127.0.0.1'): Promise<boolean> =>
 /**
  * Process names we're willing to kill to free a port — our own dev servers.
  * Anything else holding the port is someone else's and stays untouched.
- *
- * `java` covers the Firebase emulator's JVM sub-processes (Firestore,
- * Pub/Sub, Storage rules) — see the KNOWN GAP note on stopServices for why
- * these specifically need this allowlist entry, not just the `firebase`
- * (top-level Node wrapper) one.
  */
-const KILLABLE_PROCESSES = ['node', 'bun', 'vite', 'uwsgi', 'python', 'firebase', 'java'];
+const KILLABLE_PROCESSES = ['node', 'bun', 'vite', 'uwsgi', 'python'];
 
 /** True when a port holder is one of our dev servers rather than a bystander. */
 export const isKillableProcess = (name: string): boolean =>
@@ -1052,8 +1033,8 @@ export const SHELL_NAMES = new Set([
  * via wrapCommand/bashScriptForPane's `& 'bash.exe' 'script.sh'` wrapper,
  * which stays foreground for the wrapped command's ENTIRE lifetime (the
  * trailer's `read` only runs after it exits). Treating that as idle made
- * assessServicePane misread an actively-running, healthy service (vite,
- * firebase) as crashed, triggering a restart that killed it mid-run —
+ * assessServicePane misread an actively-running, healthy service (vite)
+ * as crashed, triggering a restart that killed it mid-run —
  * confirmed on a live Windows run where a healthy `client` (vite) pane got
  * silently restarted and lost its listening port. POSIX panes are
  * unaffected: there, bash genuinely is the pane's native idle shell.
@@ -1272,7 +1253,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   // Distinct from `force` (which recreates the whole workspace) — this only
   // clears the ports, so it's safe to use even when the workspace/tabs
   // already exist and are healthy. killPort() only kills known dev-tool
-  // process names (node/bun/vite/uwsgi/python/firebase), never unrelated ones.
+  // process names (node/bun/vite/uwsgi/python), never unrelated ones.
   if (forcePorts) {
     await Promise.all(
       services.map(async (s) => {
@@ -1500,33 +1481,14 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
  * Every port a service's stop-cleanup sweep should check, not just the
  * single port used for its ready-check poll.
  *
- * Needed for `firebase` specifically: `firestack emulate` spawns Firestore,
- * Pub/Sub, and Storage-rules as separate JVM child processes (confirmed on
- * a live Windows machine via their actual command lines — e.g.
- * `java -jar cloud-firestore-emulator-*.jar --port 8081`), not as
- * subprocesses of the top-level `firebase`/`node` process herdr's `tab
- * close` reaps. On Windows those JVMs are not in the same Job Object as
- * their parent (the same class of issue documented on wrapCommand/PR #153's
- * launcher-pane fix), so closing the tab kills the wrapper but can leave
- * `java.exe` orphans still bound to their ports — the next `start` for the
- * same service then hits EADDRINUSE against its own predecessor, or (worse,
- * reproduced directly) two DIFFERENT contract-scoped instances' JVMs on
- * unrelated ports interact through Firebase's shared Emulator Hub/ADC
- * machinery in ways that intermittently take down a healthy instance's Auth
- * emulator — see fix/emulator-project-id-offset's PR body. Sweeping every
- * emulator port on stop, not just `auth`, is the mitigation available from
- * this repo's side; every other service here is a single process on a
- * single port, so its readyPort alone is already enough.
+ * Every service here is a single process on a single port, so its
+ * readyPort alone is enough.
  */
 export const portsToCleanupForService = (
   serviceKey: DevService,
   mode: AikamiMode,
   offset: number,
 ): number[] => {
-  if (serviceKey === 'firebase' && mode === 'emulator') {
-    const keys = ['auth', 'firestore', 'functions', 'hosting', 'pubsub', 'storage'] as const;
-    return keys.map((key) => OFFSETTABLE_PORTS[key] + offset);
-  }
   const port = resolveReadyPort(serviceKey, mode, offset);
   return port === undefined ? [] : [port];
 };
@@ -1603,9 +1565,7 @@ export const restartServices = async (config: SessionConfig): Promise<string> =>
   }
 
   // Force-kill any stale processes on the target ports so the cooldown
-  // isn't defeated by orphaned processes from prior runs — e.g. Firebase's
-  // Firestore/Pub-Sub/Storage JVMs, which stopServices above only reaches
-  // when a workspace already existed (see portsToCleanupForService's doc).
+  // isn't defeated by orphaned processes from prior runs.
   // Uses this workspace's own offset — never touches another contract's
   // ports.
   for (const service of services) {

@@ -7,7 +7,7 @@
 //   bun herdr:join              [--mode <mode>]
 //   bun herdr:list              [--mode <mode>]
 //
-//   <services> = comma-separated: firebase,client,voice,image,text  or  all
+//   <services> = comma-separated: client,voice,image,text  or  all
 //
 // Mode defaults to AIKAMI_MODE env var, falling back to emulator when
 // neither is set.
@@ -44,7 +44,7 @@ export const parseServices = (raw: string): DevService[] => {
 
   if (inputs.length === 0) {
     throw new Error(
-      'No services specified. Use: firebase, client, hub, voice, image, text, text-ollama, image-comfyui, postgres, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)',
+      'No services specified. Use: client, hub, voice, image, text, text-ollama, image-comfyui, postgres, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)',
     );
   }
 
@@ -77,7 +77,7 @@ export const parseServiceArgs = (args: string[]): ServiceArgs => {
   if (!serviceArg) {
     console.error(
       'Usage: bun herdr:start <services> [--mode <mode>] [--join] [--force] [--force-ports]\n' +
-        '  services:      firebase, client, hub, voice, image, text, text-ollama, image-comfyui, postgres, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)\n' +
+        '  services:      client, hub, voice, image, text, text-ollama, image-comfyui, postgres, preview-client, site, preview-site, preview-hub, tauri, all (comma-separated)\n' +
         '  mode:          emulator | staging | production (default: emulator)\n' +
         '  --join:        attach to session after starting\n' +
         '  --force:       kill and recreate if workspace already exists\n' +

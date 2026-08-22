@@ -10,7 +10,6 @@ export const callSvelteKitAPI = async <
 >(
   endpoint: Endpoint,
   request: AllFunctions[Endpoint][0],
-  idToken?: string,
 ): Promise<AllFunctions[Endpoint][1]> => {
   const callEndpoint = endpoint as string;
 
@@ -21,10 +20,6 @@ export const callSvelteKitAPI = async <
   // if (appCheckToken) {
   // 	headers['X-Firebase-AppCheck'] = appCheckToken;
   // }
-
-  if (idToken) {
-    headers['firebase-auth-id-token'] = idToken;
-  }
 
   const init: RequestInit = {
     body: JSON.stringify(request ?? {}),

@@ -2,10 +2,9 @@
 //
 // Always-on Discord Gateway bot for #bugs-features-requests — forum
 // auto-reply, moderator-triggered GitHub issue creation, and in-thread LLM
-// replies. A persistent WebSocket connection (unlike
-// apps/backend/firebase's stateless HTTP Interactions Endpoint), so it
-// needs a long-running host — see apps/backend/worker, the generic
-// always-on-VM app that starts this.
+// replies. A persistent WebSocket connection (unlike a stateless HTTP
+// Interactions Endpoint), so it needs a long-running host — see
+// apps/backend/worker, the generic always-on-VM app that starts this.
 //
 // This package only knows how to run the bot GIVEN an env; it has no
 // opinion on where DISCORD_BOT_TOKEN etc. come from or what process hosts

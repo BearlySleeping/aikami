@@ -48,7 +48,7 @@ async function checkGcp(): Promise<boolean> {
     return false;
   }
 
-  // Check for GOOGLE_APPLICATION_CREDENTIALS (set by secrets.ts from FIREBASE_SERVICE_ACCOUNT)
+  // Check for GOOGLE_APPLICATION_CREDENTIALS (set by secrets.ts from the SA key)
   const credFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (credFile && existsSync(credFile)) {
     // Extract service account email from key file
@@ -82,16 +82,15 @@ async function checkGcp(): Promise<boolean> {
 
     if (code === 0 && account) {
       warn(`Using user account: ${account}`);
-      warn(`For service account auth, ensure FIREBASE_SERVICE_ACCOUNT is in .env.${mode}`);
+      warn(`For service account auth, ensure the SA key is in .env.${mode}`);
       warn(`Run: bun run scripts/src/lib/ops/download_secrets.ts --mode=${mode}`);
       return true;
     }
 
     warn('No GCP authentication found.');
     warn('Options:');
-    warn(`  1. Ensure FIREBASE_SERVICE_ACCOUNT is in apps/backend/firebase/.env.${mode}`);
-    warn('  2. Or run: gcloud auth application-default login');
-    warn("  3. Or switch to emulator: echo 'AIKAMI_MODE=emulator' > .env.local");
+    warn('  1. Run: gcloud auth login --update-adc');
+    warn("  2. Or switch to emulator: echo 'AIKAMI_MODE=emulator' > .env.local");
     return false;
   } catch {
     warn('gcloud auth check failed');

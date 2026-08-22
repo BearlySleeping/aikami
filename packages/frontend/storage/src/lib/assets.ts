@@ -157,35 +157,33 @@ export class AssetRegistryRepository {
   }
 
   /**
-   * Adds a `firebase-storage` fallback download origin for every seeded asset
-   * (C-373 `asset_sources`): the Firebase Storage download URL mirroring the
-   * bundled `/game-data/<path>` source. Idempotent — `INSERT OR REPLACE` on the
-   * (asset_id, backend) primary key.
+   * Adds an `r2` fallback download origin for every seeded asset
+   * (C-373 `asset_sources`): the R2 public download URL mirroring the
+   * bundled `/game-data/<path>` source. Idempotent — `INSERT OR REPLACE` on
+   * the (asset_id, backend) primary key.
    *
    * The AssetManager tries sources by priority: bundled (0) first, then the
-   * Firebase Storage mirror (1) when the bundled path is unavailable. Assets
-   * must be uploaded to the bucket under their manifest path (e.g.
+   * R2 mirror (1) when the bundled path is unavailable. Assets must be
+   * uploaded to the bucket under their manifest path (e.g.
    * `music/exploration/Chainsmoker.mp3`, `lpc/body/bodies_male.walk.webp`)
    * — see `scripts/src/lib/ops/upload_audio_assets.ts` / `upload_lpc_assets.ts`.
    *
-   * @param storageBucket - Firebase Storage bucket, e.g. `aikami-staging.firebasestorage.app`.
+   * @param r2BaseUrl - R2 public base URL, e.g. `https://assets.bearlysleeping.com`.
    * @returns The number of source rows written.
    */
-  async addFirebaseStorageSources(storageBucket: string): Promise<number> {
-    // Select only bundled assets lacking a firebase-storage sibling so
-    // newly re-seeded assets receive mirrors and existing mirrors remain
-    // untouched. Preserves cheap repeat-boot behavior while ensuring bucket
-    // changes can update missing mirror records.
+  async addR2Sources(r2BaseUrl: string): Promise<number> {
+    // Select only bundled assets lacking an r2 sibling so newly re-seeded
+    // assets receive mirrors and existing mirrors remain untouched.
     const result = await this._db.query({
       sql: `SELECT asset_id, url FROM asset_sources
             WHERE backend = ?
             AND asset_id NOT IN (
-              SELECT asset_id FROM asset_sources WHERE backend = 'firebase-storage'
+              SELECT asset_id FROM asset_sources WHERE backend = 'r2'
             )`,
       args: [BUNDLED_SOURCE_BACKEND],
     });
 
-    const base = `https://firebasestorage.googleapis.com/v0/b/${storageBucket}/o`;
+    const base = r2BaseUrl.replace(/\/$/, '');
     const queries: { sql: string; args: unknown[] }[] = [];
 
     for (const row of result.rows) {
@@ -196,8 +194,8 @@ export class AssetRegistryRepository {
         : bundledUrl;
       queries.push({
         sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
-              VALUES (?, 'firebase-storage', ?, 1)`,
-        args: [assetId, `${base}/${encodeURIComponent(storagePath)}?alt=media`],
+              VALUES (?, 'r2', ?, 1)`,
+        args: [assetId, `${base}/${storagePath}`],
       });
     }
 

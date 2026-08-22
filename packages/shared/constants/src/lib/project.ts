@@ -5,13 +5,12 @@
  *
  * | App       | Location                        | Use Case                        |
  * |-----------|---------------------------------|---------------------------------|
- * | `firebase`| `apps/backend/firebase`         | Cloud Functions + Firestore     |
  * | `image`   | `apps/backend/image`            | ComfyUI image generation        |
  * | `text`    | `apps/backend/text`             | Ollama text generation          |
  * | `voice`   | `apps/backend/voice`            | Kokoro voice synthesis          |
  * | `worker`  | `apps/backend/worker`           | Discord Gateway bot + Interactions Endpoint (always-on Compute Engine VM) |
  */
-export const backendAppIds = ['firebase', 'image', 'text', 'voice', 'worker'] as const;
+export const backendAppIds = ['image', 'text', 'voice', 'worker'] as const;
 
 /**
  * Aikami frontend application identifiers.

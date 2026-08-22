@@ -18,7 +18,7 @@
 //   bun autofix --only fix,typecheck         # fix + typecheck, no commit (git-scoped)
 //   bun autofix --only fix,typecheck,commit  # fix + typecheck + explicit commit (git-scoped)
 //   bun autofix --only test,commit           # test:unit then commit (git-scoped; commit explicitly authorized)
-//   bun autofix --only test:e2e              # e2e tests only (starts client + firebase)
+//   bun autofix --only test:e2e              # e2e tests only (starts client + hub)
 //   bun autofix --only test:all              # all tests including e2e
 //   bun autofix --model deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731 --thinking high
 //   bun autofix --join                       # spawn + attach
@@ -80,8 +80,7 @@ const AUTOFIX_TAB = 'autofix';
 const DEFAULT_MODEL = process.env.AUTOFIX_MODEL ?? 'deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731';
 const DEFAULT_THINKING = process.env.AUTOFIX_THINKING ?? 'high';
 const CLIENT_PORT = 5274;
-const FB_AUTH_PORT = 9098;
-const FB_HUB_PORT = 4401;
+const HUB_PORT = 5276;
 
 // ── CLI arg parsing ────────────────────────────────────────
 
@@ -123,7 +122,7 @@ const doTest = steps.includes('test');
 const doCommit = steps.includes('commit');
 const commitOnly = steps.length === 1 && doCommit;
 const needsClient = doTest;
-const needsFirebase = doTest && testMode !== 'unit';
+const needsHub = doTest && testMode !== 'unit';
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -276,15 +275,15 @@ const waitForClientReady = async (port: number, timeoutSec: number): Promise<boo
   return false;
 };
 
-const waitForFirebaseReady = async (timeoutSec: number): Promise<boolean> => {
+const waitForHubReady = async (port: number, timeoutSec: number): Promise<boolean> => {
   for (let i = 0; i < timeoutSec; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     try {
-      const res = await fetch(`http://localhost:${FB_HUB_PORT}/`, {
+      const res = await fetch(`http://localhost:${port}/`, {
         signal: AbortSignal.timeout(3000),
       });
       if (res.ok) {
-        ok('firebase emulators ready');
+        ok('hub ready');
         return true;
       }
     } catch {
@@ -295,7 +294,7 @@ const waitForFirebaseReady = async (timeoutSec: number): Promise<boolean> => {
 };
 
 const ensureService = async (
-  service: 'client' | 'firebase',
+  service: 'client' | 'hub',
   port: number,
   readyCheck: (port: number, timeout: number) => Promise<boolean>,
   timeoutSec: number,
@@ -328,8 +327,7 @@ const ensureService = async (
 const ensureClientDevServer = (): Promise<void> =>
   ensureService('client', CLIENT_PORT, waitForClientReady, 120);
 
-const ensureFirebaseEmulators = (): Promise<void> =>
-  ensureService('firebase', FB_AUTH_PORT, (_, t) => waitForFirebaseReady(t), 90);
+const ensureHubDevServer = (): Promise<void> => ensureService('hub', HUB_PORT, waitForHubReady, 90);
 
 // ── Build system prompt ────────────────────────────────────
 
@@ -488,7 +486,7 @@ const buildSystemPrompt = async (baselineSnapshotDir: string | null): Promise<st
 
 const buildTestPrompt = async (stepNum: number): Promise<string[]> => {
   const lines: string[] = [];
-  const fbRunning = needsFirebase ? ' Firebase emulators and' : '';
+  const fbRunning = needsHub ? ' hub and' : '';
 
   lines.push(`## STEP ${stepNum}: \`bun run test\``);
 
@@ -508,7 +506,7 @@ const buildTestPrompt = async (stepNum: number): Promise<string[]> => {
     `The script pre-started the${fbRunning} client dev server. Verify they are accessible:`,
     '```bash',
     'curl -s http://localhost:5274/ | wc -c    # should show >10000',
-    needsFirebase ? 'curl -s http://localhost:4401/ | head -1  # emulator hub' : '',
+    needsHub ? 'curl -s http://localhost:5276/ | head -1  # hub' : '',
     '```',
     'If connection is refused, wait 10s and retry (max 3 times). If still refused, run `herdr_session start <service>`.',
     '',
@@ -653,9 +651,9 @@ if (doTest) {
     console.log('🔍 Checking client dev server...');
     await ensureClientDevServer();
   }
-  if (needsFirebase) {
-    console.log('🔍 Checking Firebase emulators...');
-    await ensureFirebaseEmulators();
+  if (needsHub) {
+    console.log('🔍 Checking hub dev server...');
+    await ensureHubDevServer();
   }
 }
 
@@ -790,8 +788,8 @@ if (doJoin) {
   if (commitOnly) {
     console.log('  mode: commit-only (pre-commit hook skipped)');
   }
-  if (needsFirebase) {
-    console.log('  services: client + firebase');
+  if (needsHub) {
+    console.log('  services: client + hub');
   } else if (needsClient) {
     console.log('  services: client');
   }

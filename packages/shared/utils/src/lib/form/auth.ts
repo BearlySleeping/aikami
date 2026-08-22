@@ -1,6 +1,5 @@
 import type {
-  FirebaseAuthMetadata,
-  FirebaseUser,
+  AuthMetadata,
   SignInProvider,
   Timestamp,
   UserClaims,
@@ -10,7 +9,6 @@ import type {
   UserTokenData,
 } from '@aikami/types';
 import { toSignInProvider } from '../auth.ts';
-import { toAppError } from '../common/error.ts';
 
 export const toUserRole = (role?: string): UserRole => {
   switch (role) {
@@ -21,23 +19,23 @@ export const toUserRole = (role?: string): UserRole => {
   }
 };
 
-export const toFirebaseAuthMetadata = (user: FirebaseAuthMetadata): FirebaseAuthMetadata => {
-  const firebaseAuthMetadata: FirebaseAuthMetadata = {};
+export const toAuthMetadata = (user: AuthMetadata): AuthMetadata => {
+  const authMetadata: AuthMetadata = {};
 
   if (user.displayName) {
-    firebaseAuthMetadata.displayName = user.displayName;
+    authMetadata.displayName = user.displayName;
   }
   if (user.email) {
-    firebaseAuthMetadata.email = user.email;
+    authMetadata.email = user.email;
   }
   if (user.photoURL) {
-    firebaseAuthMetadata.photoURL = user.photoURL;
+    authMetadata.photoURL = user.photoURL;
   }
   if (user.phoneNumber) {
-    firebaseAuthMetadata.phoneNumber = user.phoneNumber;
+    authMetadata.phoneNumber = user.phoneNumber;
   }
 
-  return firebaseAuthMetadata;
+  return authMetadata;
 };
 
 export const toUserTokenData = (tokenData: UserTokenData): UserTokenData => {
@@ -88,7 +86,7 @@ export const toUserLiteData = ({
   const userLiteData: UserLiteData = {
     currentSignInProvider: toSignInProvider(signInProviders[0] ?? 'email'),
     ...toUserClaims({ token: claims, uid }),
-    ...toFirebaseAuthMetadata({
+    ...toAuthMetadata({
       displayName: displayName ?? '',
       email: email ?? undefined,
       phoneNumber: phoneNumber ?? undefined,
@@ -111,60 +109,19 @@ export const toUserSessionData = (
   const userLiteData: UserSessionData = {
     currentSignInProvider,
     ...toUserClaims({ token: user, uid }),
-    ...toFirebaseAuthMetadata(user),
+    ...toAuthMetadata(user),
     id: uid,
   };
 
   return userLiteData;
 };
 
-export const getUserLiteData = async ({
-  claims,
-  user,
-}: {
-  claims?: Record<string, unknown>;
-  user: FirebaseUser;
-}): Promise<UserLiteData> => {
-  const creationTime = user.metadata.creationTime;
-  if (!creationTime) {
-    throw toAppError({
-      errorType: 'invalid-argument',
-      errorMessage: 'getUserLiteData: Creation time is required',
-    });
-  }
-  const email = user.email;
-
-  const createdAt = new Date(creationTime);
-  claims = claims ?? (await user.getIdTokenResult()).claims;
-
-  if (!claims) {
-    throw toAppError({
-      errorType: 'invalid-argument',
-      errorMessage: 'getUserLiteData: Claims are required',
-    });
-  }
-
-  return toUserLiteData({
-    claims,
-    createdAt,
-    displayName: user.displayName,
-    email,
-
-    phoneNumber: user.phoneNumber,
-    photoURL: user.photoURL,
-    signInProviders: user.providerData.map((provider: { providerId: string }) =>
-      toSignInProvider(provider.providerId),
-    ),
-    uid: user.uid,
-  });
-};
-
 /**
- * Check if we should update the firebase tokens.
+ * Check if we should update the auth tokens.
  *
  * @param beforeUser the exiting user data
  * @param afterUser the new user data
- * @returns true if the new user data has different values in the firebase
+ * @returns true if the new user data has different values in the auth
  *   tokens.
  */
 export const shouldUpdateUserClaims = ({
@@ -176,19 +133,19 @@ export const shouldUpdateUserClaims = ({
 }): boolean => beforeUser.userRole !== afterUser.userRole || beforeUser.status !== afterUser.status;
 
 /**
- * Check if we should update the firebase auth.
+ * Check if we should update the auth provider.
  *
  * @param beforeUser the exiting user data
  * @param afterUser the new user data
- * @returns true if the new user data has different values in the firebase auth
+ * @returns true if the new user data has different values in the auth auth
  *   provider.
  */
-export const shouldUpdateFirebaseAuthUser = ({
+export const shouldUpdateAuthUser = ({
   afterUser,
   beforeUser,
 }: {
-  afterUser: FirebaseAuthMetadata;
-  beforeUser: FirebaseAuthMetadata;
+  afterUser: AuthMetadata;
+  beforeUser: AuthMetadata;
 }): boolean =>
   beforeUser.displayName !== afterUser.displayName ||
   beforeUser.email !== afterUser.email ||

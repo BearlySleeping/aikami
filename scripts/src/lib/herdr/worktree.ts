@@ -210,12 +210,12 @@ export const WORKTREE_SEED_PATHS: WorktreeSeedEntry[] = [
   { from: '.env', to: '.env', kind: 'file', optional: true },
   { from: '.env.emulator', to: '.env.emulator', kind: 'file', optional: true },
   { from: '.env.local', to: '.env.local', kind: 'file', optional: true },
-  // Per-app env files (client, site, hub, docs, firebase, ...) — see APP_CONFIG.
+  // Per-app env files (client, site, hub, docs, ...) — see APP_CONFIG.
   ...appConfigEnvSeedPaths(),
   // E2E + scripts env (not APP_CONFIG entries)
   { from: 'apps/e2e/.env', to: 'apps/e2e/.env', kind: 'file', optional: true },
   { from: 'scripts/.env', to: 'scripts/.env', kind: 'file', optional: true },
-  // GCP service-account keys (needed by gcloud/firebase deploys)
+  // GCP service-account keys (needed by gcloud deploys)
   { from: '.secrets', to: '.secrets', kind: 'dir', optional: true },
   // Paraglide generated i18n files — gitignored, required for client
   // typecheck/build/dev (Vite re-generates them, but only when running).
@@ -732,7 +732,7 @@ export const seedWorktreeFiles = (options: { checkoutPath: string; repoRoot: str
 
 /**
  * Last resort: free a finished contract's dev-server ports so a leftover
- * process (implementer left `client`/`firebase` running) doesn't block the
+ * process (implementer left `client` running) doesn't block the
  * next contract that happens to land on the same offset. Derives the
  * contract ID from the worktree folder name (e.g.
  * `contract-task-c-379-msqg9jqx`, hence case-insensitive) and reuses

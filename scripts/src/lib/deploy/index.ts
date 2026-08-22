@@ -25,7 +25,6 @@
  *   Cloud Run SvelteKit (client)     → checksum → build → prepare package → docker → push → deploy
  *   Tauri Release (client-tauri)      → checksum → build web → cargo tauri build → upload to GCS
  *   Firebase Hosting (site, docs)    → checksum → build (moon) → deploy via moon
- *   Firebase Functions (firebase)    → deploy via moon (firestack)
  *   Docker Release (image,text,voice)→ checksum → docker build → push
  *
  * CI-only flags (no effect on local runs, and not shown in the usage block
@@ -51,7 +50,6 @@ import { fileURLToPath } from 'node:url';
 import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString } from './cache';
-import { deployCloudRunSveltekit } from './cloud_run';
 import { deployCloudflareWorker } from './cloudflare';
 import { deployDatabaseMigration } from './database_migration';
 import {
@@ -62,7 +60,6 @@ import {
   MODE_PROJECT_MAP,
 } from './deployment_config';
 import { deployDockerRelease } from './docker_release';
-import { deployFirebaseFunctions } from './firebase';
 import { type AppResult, type NotificationInput, notifyDeployment } from './notification';
 import { deployTauriRelease } from './tauri_release';
 import {
@@ -158,22 +155,8 @@ async function deployApp(
         true, // orchestrator already built in Phase 1
       );
       return 'success';
-    case 'cloud-run-sveltekit':
-      await deployCloudRunSveltekit(
-        config,
-        appName,
-        mode,
-        rootDir,
-        version,
-        isForce,
-        preflightChecksum,
-      );
-      return 'success';
     case 'tauri-release':
       await deployTauriRelease(config, appName, mode, rootDir, version, isForce, preflightChecksum);
-      return 'success';
-    case 'firebase-functions':
-      await deployFirebaseFunctions(config, appName, mode, rootDir, isForce);
       return 'success';
     case 'docker-release':
       await deployDockerRelease(
@@ -367,13 +350,9 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // firebase-functions doesn't use checksum caching — always deploy
-    // database-migration likewise: migrations are idempotent, and a cache
-    // hit must never silently skip a pending migration.
-    if (
-      config.serviceType === 'firebase-functions' ||
-      config.serviceType === 'database-migration'
-    ) {
+    // database-migration doesn't use checksum caching — migrations are
+    // idempotent, and a cache hit must never silently skip a pending migration.
+    if (config.serviceType === 'database-migration') {
       continue;
     }
 
@@ -433,10 +412,7 @@ async function main(): Promise<void> {
     if (!config) {
       continue;
     }
-    const needsBuild =
-      config.serviceType !== 'docker-release' &&
-      config.serviceType !== 'firebase-functions' &&
-      config.needsDist !== false;
+    const needsBuild = config.serviceType !== 'docker-release' && config.needsDist !== false;
     if (needsBuild) {
       const moonTarget = config.buildProject ?? appName;
       if (!targetsToBuild.has(moonTarget)) {

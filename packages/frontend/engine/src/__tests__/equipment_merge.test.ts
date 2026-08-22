@@ -21,12 +21,6 @@ import { describe, expect, it } from 'bun:test';
 
 process.env.PUBLIC_APP_ID = 'client';
 process.env.PUBLIC_MODE = 'testing';
-process.env.PUBLIC_FIREBASE_API_KEY = 'mock-api-key';
-process.env.PUBLIC_FIREBASE_AUTH_DOMAIN = 'mock.firebaseapp.com';
-process.env.PUBLIC_FIREBASE_STORAGE_BUCKET = 'mock.appspot.com';
-process.env.PUBLIC_FIREBASE_APP_ID = 'mock-app-id';
-process.env.PUBLIC_FIREBASE_MESSAGING_SENDER_ID = 'mock-sender-id';
-process.env.PUBLIC_FIREBASE_MEASUREMENT_ID = 'mock-measurement-id';
 
 import type { LpcLayerRecipe } from '../components/appearance.ts';
 import type { EngineBridge } from '../engine_bridge.ts';

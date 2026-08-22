@@ -4,8 +4,8 @@
 // Schema-derived names re-exported from @aikami/schemas; hand-authored types remain.
 
 import type {
-  FirebaseSignInProviderName,
   SignInProvider,
+  SignInProviderName,
   SignInSocialProvider,
   UserClaims,
   UserRole,
@@ -14,8 +14,8 @@ import type {
 } from '@aikami/schemas';
 
 export type {
-  FirebaseSignInProviderName,
   SignInProvider,
+  SignInProviderName,
   SignInSocialProvider,
   UserClaims,
   UserRole,

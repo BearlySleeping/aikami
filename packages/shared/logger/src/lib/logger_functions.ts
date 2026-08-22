@@ -1,6 +1,5 @@
 import process from 'node:process';
 import type { LogEntry, LoggerInterface } from '@aikami/types';
-import { logger as firebaseFunctionsLogger } from 'firebase-functions/logger';
 import { BaseLoggerService } from './base.ts';
 
 export type FunctionsLoggerInterface = LoggerInterface;
@@ -19,12 +18,8 @@ class FunctionsLoggerService extends BaseLoggerService implements FunctionsLogge
         message = this.getMessage(element);
       }
 
-      const baseLog =
-        process.env.FIREBASE_CONFIG && !process.env.FUNCTIONS_EMULATOR
-          ? firebaseFunctionsLogger
-          : console;
-
-      const log = baseLog[logType ?? 'log'];
+      // biome-ignore lint/suspicious/noConsole: logger implementation
+      const log = console[logType ?? 'log'];
 
       log(this.getMessage(message));
       for (const element of data) {

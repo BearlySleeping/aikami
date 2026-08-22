@@ -25,7 +25,6 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "firebase": "12.18.0",
     "idb-keyval": "6.3.0"
   },
   "devDependencies": {

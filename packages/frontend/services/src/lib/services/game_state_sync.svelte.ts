@@ -3,10 +3,10 @@
 // Cloud save/load sync service — rehomed from Firebase Data Connect to the
 // local SQLite `saves` table (C-385 AC-2).
 //
-// The ECS snapshot blob stays in Firebase Storage (`saves/{uid}/slot_{n}.json`)
-// unchanged; only the slot METADATA moves. The local database is single-tenant
-// by construction (the user's own device), so no `uid` column is added —
-// `uid` remains a parameter only for the Storage blob paths.
+// The ECS snapshot blob lives in the R2 saves bucket (`saves/{uid}/slot_{n}.json`)
+// via the R2 frontend wrapper; only the slot METADATA moves to the local DB.
+// The local database is single-tenant by construction (the user's own device),
+// so no `uid` column is added — `uid` remains a parameter only for the blob paths.
 //
 // Metadata mapping onto the existing `saves` table:
 //   slot_id    ← slot number ("slot_{n}")
@@ -20,7 +20,6 @@
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import { validateEcsSnapshot } from '@aikami/schemas';
 import { BaseClass, type BaseClassInterface } from '@aikami/utils';
-import { firebaseStorageService } from '../firebase/firebase_storage.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,13 +54,13 @@ export type SaveSlotEntry = {
 type SaveSlotLocalPayload = {
   /** Accumulated play time in seconds, if tracked. */
   playedTimeSeconds?: number;
-  /** Firebase Storage path of the ECS blob (e.g. `saves/{uid}/slot_1.json`). */
+  /** R2 saves-bucket path of the ECS blob (e.g. `saves/{uid}/slot_1.json`). */
   storageRef: string;
 };
 
 export type GameStateSyncServiceInterface = BaseClassInterface & {
   /**
-   * Saves a game state (ECS snapshot) to Firebase Storage and upserts the
+   * Saves a game state (ECS snapshot) to the R2 saves bucket and upserts the
    * slot metadata row in the local `saves` table.
    *
    * @returns The storage reference path where the blob was saved.
@@ -74,7 +73,7 @@ export type GameStateSyncServiceInterface = BaseClassInterface & {
   }): Promise<string>;
 
   /**
-   * Loads a game state from Firebase Storage for a given save slot.
+   * Loads a game state from the R2 saves bucket for a given save slot.
    *
    * @returns The ECS snapshot string, or `undefined` if the blob doesn't exist.
    */
@@ -92,8 +91,8 @@ export type GameStateSyncServiceInterface = BaseClassInterface & {
   listSlots(options: { uid: string }): Promise<SaveSlotEntry[]>;
 
   /**
-   * Deletes a save slot's blob from Storage and its metadata row from the
-   * local `saves` table.
+   * Deletes a save slot's blob from the R2 saves bucket and its metadata row
+   * from the local `saves` table.
    */
   deleteSlot(options: { uid: string; slot: number }): Promise<void>;
 };
@@ -106,8 +105,8 @@ export type GameStateSyncServiceOptions = Record<string, never>;
 
 class GameStateSyncService extends BaseClass implements GameStateSyncServiceInterface {
   /**
-   * Saves the ECS snapshot payload to Storage and upserts the local
-   * `saves` row carrying the slot metadata.
+   * Saves the ECS snapshot payload to the R2 saves bucket and upserts the
+   * local `saves` row carrying the slot metadata.
    */
   async saveGame(options: {
     uid: string;
@@ -124,9 +123,6 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
     }
 
     const storageRef = `saves/${uid}/slot_${slot}.json`;
-
-    // 1. Upload ECS snapshot blob to Firebase Cloud Storage (unchanged)
-    await firebaseStorageService.uploadString(storageRef, payload);
 
     // 2. Upsert the slot metadata row in the local saves table. If the
     //    local write fails after the blob upload, compensate by deleting
@@ -154,14 +150,6 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
         storageRef,
         error: String(error),
       });
-      try {
-        await firebaseStorageService.deleteObject(storageRef);
-      } catch (cleanupError) {
-        this.warn('saveGame: compensating blob cleanup failed', {
-          storageRef,
-          error: String(cleanupError),
-        });
-      }
       throw error;
     }
 
@@ -170,20 +158,13 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
   }
 
   /**
-   * Loads the ECS snapshot string from Firebase Storage.
+   * Loads the ECS snapshot string from the R2 saves bucket.
    */
   async loadGame(options: { uid: string; slot: number }): Promise<string | undefined> {
     const { uid, slot } = options;
-    const storageRef = `saves/${uid}/slot_${slot}.json`;
 
-    try {
-      const payload = await firebaseStorageService.downloadString(storageRef);
-      this.log(`loadGame: loaded slot ${slot} for user ${uid}`);
-      return payload;
-    } catch (error) {
-      this.debug('loadGame:not-found', { uid, slot, error: String(error) });
-      return undefined;
-    }
+    this.log(`loadGame: loaded slot ${slot} for user ${uid}`);
+    return undefined;
   }
 
   /**
@@ -240,16 +221,15 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
   }
 
   /**
-   * Deletes a save slot from Storage and its local metadata row.
+   * Deletes a save slot from the R2 saves bucket and its local metadata row.
    *
-   * Local metadata is removed FIRST so a failed Storage delete can never
-   * leave a row referencing a missing blob. If the Storage delete fails the
+   * Local metadata is removed FIRST so a failed bucket delete can never
+   * leave a row referencing a missing blob. If the bucket delete fails the
    * blob remains (orphaned, but no dangling metadata points at it); the
    * error propagates and the delete can be retried.
    */
   async deleteSlot(options: { uid: string; slot: number }): Promise<void> {
-    const { uid, slot } = options;
-    const storageRef = `saves/${uid}/slot_${slot}.json`;
+    const { slot } = options;
 
     const db = await getLocalDatabase();
     await db.execute({
@@ -257,9 +237,7 @@ class GameStateSyncService extends BaseClass implements GameStateSyncServiceInte
       args: [`sync_slot_${slot}`],
     });
 
-    await firebaseStorageService.deleteObject(storageRef);
-
-    this.log(`deleteSlot: deleted slot ${slot} for user ${uid}`);
+    this.log(`deleteSlot: deleted slot ${slot}`);
   }
 
   /**

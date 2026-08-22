@@ -36,9 +36,7 @@ const STATUS_ICON: Record<string, string> = {
 
 const TYPE_LABEL: Record<string, string> = {
   'cloudflare-worker': 'Cloudflare Worker',
-  'cloud-run-sveltekit': 'Cloud Run (SvelteKit)',
   'tauri-release': 'Tauri Release',
-  'firebase-functions': 'Firebase Functions',
   'docker-release': 'Docker Release',
   'database-migration': 'Database Migration',
 };

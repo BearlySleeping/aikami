@@ -5,16 +5,8 @@ import {
   type BaseClassOptions,
   toAppErrorFromUnknownError,
 } from '@aikami/utils';
-import { firebaseAnalyticService } from '../firebase/firebase_analytics_service.ts';
 import { dialogService } from '../services/dialog.svelte.ts';
-import type {
-  AnalyticsEvent,
-  AnalyticsEventName,
-  AnalyticsEventParameters,
-  ConditionalSnackbarData,
-  ConfirmDialogData,
-  SnackbarData,
-} from '../types/index.ts';
+import type { ConditionalSnackbarData, ConfirmDialogData, SnackbarData } from '../types/index.ts';
 
 export type BaseFrontendClassOptions = BaseClassOptions;
 
@@ -26,13 +18,6 @@ export abstract class BaseFrontendClass<
   extends BaseClass<Options>
   implements BaseFrontendClassInterface
 {
-  protected async logEvent<T extends AnalyticsEventName>(
-    eventName: T,
-    eventParameters: AnalyticsEventParameters<T>,
-  ): Promise<void> {
-    return await firebaseAnalyticService.logEvent(eventName, eventParameters);
-  }
-
   protected showSnackbar(action: SnackbarData): void {
     dialogService.showSnackbar(action);
   }
@@ -79,8 +64,6 @@ export abstract class BaseFrontendClass<
        * method fails
        */
       errorText?: string;
-      /** The analytics event to send if the method succeeds */
-      successAnalyticsEvent: AnalyticsEvent[];
       /**
        * The arguments to show a confirmation dialog, before executing the
        * {@link method}
@@ -89,7 +72,6 @@ export abstract class BaseFrontendClass<
     },
   ): Promise<void> {
     const { confirmArguments, errorText, successText } = options;
-    let { successAnalyticsEvent } = options;
 
     if (confirmArguments) {
       const confirmed = await this.openConfirmDialog(confirmArguments);
@@ -107,14 +89,6 @@ export abstract class BaseFrontendClass<
           type: 'success',
         });
       }
-
-      successAnalyticsEvent = Array.isArray(successAnalyticsEvent)
-        ? successAnalyticsEvent
-        : [successAnalyticsEvent];
-
-      await Promise.all(
-        successAnalyticsEvent.map((event) => this.logEvent(event.name, event.parameters)),
-      );
     } else if (errorText) {
       // TODO: add analytic events for errors?
       // or use sentry?

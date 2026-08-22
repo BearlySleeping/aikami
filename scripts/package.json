@@ -21,7 +21,7 @@
     "discord-api-types": "0.38.53"
   },
   "devDependencies": {
-    "cf": "0.7.0",
+    "cf": "0.8.0",
     "firebase-tools": "15.28.1",
     "png-to-ico": "3.0.2",
     "sharp": "0.35.3",

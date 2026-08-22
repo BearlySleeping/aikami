@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { firebaseSignInProviderNames, userRoles, userStatuses } from './auth.ts';
+import { signInProviderNames, userRoles, userStatuses } from './auth.ts';
 
 describe('userRoles', () => {
   test('should be a tuple of valid user roles', () => {
@@ -35,16 +35,16 @@ describe('userStatuses', () => {
   });
 });
 
-describe('firebaseSignInProviderNames', () => {
+describe('signInProviderNames', () => {
   test('should be a tuple of valid provider names', () => {
-    expect(firebaseSignInProviderNames).toEqual(['google', 'github']);
+    expect(signInProviderNames).toEqual(['google', 'github']);
   });
 
   test('should contain google', () => {
-    expect(firebaseSignInProviderNames).toContain('google');
+    expect(signInProviderNames).toContain('google');
   });
 
   test('should contain github', () => {
-    expect(firebaseSignInProviderNames).toContain('github');
+    expect(signInProviderNames).toContain('github');
   });
 });
