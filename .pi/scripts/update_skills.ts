@@ -66,30 +66,6 @@ const SKILL_SOURCES: SkillSource[] = [
     sourceSubdir: 'skills',
     targetSubdir: 'coderabbit',
   },
-  {
-    name: 'Firestack',
-    repoUrl: 'https://github.com/snorreks/firestack.git',
-    sourceSubdir: '.agents/skills/firestack',
-    targetSubdir: 'firestack',
-  },
-  {
-    name: 'Firebase',
-    repoUrl: 'https://github.com/firebase/agent-skills.git',
-    sourceSubdir: 'skills',
-    targetSubdir: 'firebase',
-    // Not used by Aikami — mobile/iOS, hosting variants, and remote-config
-    // skills only bloat the agent prompt.
-    exclude: [
-      'xcode-project-setup',
-      'firebase-crashlytics',
-      'firebase-app-hosting-basics',
-      'firebase-remote-config-basics',
-      'firebase-ai-logic-basics',
-      'extension-to-functions-codebase',
-      'firebase-basics',
-      'firebase-hosting-basics',
-    ],
-  },
 ];
 
 // ── helpers ──────────────────────────────────────────────────────────

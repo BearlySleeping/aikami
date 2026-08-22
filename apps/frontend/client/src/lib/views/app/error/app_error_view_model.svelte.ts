@@ -136,16 +136,9 @@ class AppErrorViewModel
   override async initialize(): Promise<void> {
     const { error, status, url } = page;
 
-    if (status === 404) {
-      void this.logEvent('invalidUrl', {
-        url: url.href,
-      });
-    } else {
-      void this.logEvent('unknownError', {
-        code: status,
-        message: error?.message,
-      });
-    }
+    void error;
+    void url;
+    void status;
   }
 
   async handleRetry(): Promise<void> {

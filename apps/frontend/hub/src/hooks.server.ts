@@ -33,7 +33,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
 };
 
-// The `client` app (Firebase Hosting, no server of its own) forwards its
+// The `client` app (static hosting, no server of its own) forwards its
 // browser logger's HTTP sink here cross-origin — see
 // packages/shared/logger/src/lib/logger_browser.ts and
 // apps/frontend/client's PUBLIC_LOG_ENDPOINT. Any first-party
@@ -42,15 +42,10 @@ const SECURITY_HEADERS: Record<string, string> = {
 // lives in packages/backend/svelte-kit/src/lib/hooks_helpers.ts
 // (isAikamiWebOrigin), shared with tests.
 
-// App Check enforcement was removed from the hub (C-426): it was the last
-// remaining `firebase-admin` dependency in the Worker bundle, and the hub's
-// sensitive endpoints are now session-gated by Better Auth. The client may
-// still attach App Check tokens; the hub simply no longer verifies them.
-
-// Browser log ingestion must never be gated on App Check — the logger's
-// HTTP sink is fire-and-forget and cannot attach an App Check token.
+// Browser log ingestion must never be gated on auth — the logger's
+// HTTP sink is fire-and-forget and cannot attach a session token.
 // /api/ask is also excluded: its caller (apps/frontend/site, a static
-// Firebase Hosting page) has no Firebase app / App Check config of its own.
+// page) has no auth session of its own.
 
 // /api/ask's cross-origin caller is specifically the landing page
 // (production: bearlysleeping.com — the bare apex, which isAikamiWebOrigin's
@@ -64,7 +59,7 @@ const isAskOrigin = (origin: string | null | undefined): origin is string =>
 
 // C-426 AC-4: Better Auth auth endpoints under /api/auth/* (sign-in/email,
 // get-session, sign-out, …). The client app calls them cross-origin in
-// staging/production (the client runs on Firebase Hosting, the hub on a
+// staging/production (the client runs on static hosting, the hub on a
 // Cloudflare Worker), so CORS is allowed for first-party *.bearlysleeping.com
 // origins and the Tauri webview origin on exactly these paths — never a
 // wildcard, and never on any other /api route. Credentials ARE included
@@ -119,7 +114,7 @@ export const handleError = (({ error, event }) => {
 }) satisfies HandleServerError;
 
 export const handle: Handle = async ({ event, resolve }) => {
-  // ── 1. Rewrite event URL for Firebase Hosting proxy ──
+  // ── 1. Rewrite event URL for the hosting proxy ──
   event = rewriteForwardedHost(event);
 
   const { request, url } = event;
@@ -150,7 +145,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     } catch (error) {
       // Failed session lookup (e.g. DB unavailable, corrupt token) leaves the
       // request unauthenticated rather than failing the entire page load.
-      console.error('hooks.server:getSession-failed', error);
+      logger.error('hooks.server:getSession-failed', error);
     }
   }
   locals.userSession = userSession;

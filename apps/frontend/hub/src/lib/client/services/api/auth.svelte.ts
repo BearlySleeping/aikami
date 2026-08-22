@@ -72,10 +72,16 @@ export class AuthService
   async signInWithGoogle(): Promise<void> {
     this.debug('signInWithGoogle');
     this.isGoogleSigningIn = true;
-    // Full-page redirect to the Better Auth social handler. The page
-    // navigates away; on return the session cookie is set and hooks.server.ts
-    // resolves the user, routing them to the dashboard.
-    signInWithGoogleRedirect();
+    try {
+      // POST to the Better Auth social handler, which returns the Google
+      // authorize URL; the page then navigates to Google. On return the
+      // session cookie is set and hooks.server.ts resolves the user, routing
+      // them to the dashboard.
+      await signInWithGoogleRedirect();
+    } catch (error) {
+      this.error('signInWithGoogle', error);
+      this.isGoogleSigningIn = false;
+    }
   }
 
   async signOut(): Promise<void> {

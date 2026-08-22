@@ -4,14 +4,18 @@ export {
   dialogService,
   type RouterServiceInterface,
   routerService,
-  type SaveSlotEntry,
-  type SaveSlotMetadata,
 } from '@aikami/frontend/services';
 
+// GameStateSyncService is a client-only service backed by the local SQLite
+// (turso) database — it is intentionally NOT re-exported from the shared
+// services barrel (which the server-side hub imports) so the hub never
+// bundles the turso adapter. Import it from the dedicated subpath.
 export {
   type GameStateSyncServiceInterface,
   gameStateSyncService,
-} from '@aikami/frontend/services/game-state-sync';
+  type SaveSlotEntry,
+  type SaveSlotMetadata,
+} from '@aikami/frontend-services/game-state-sync';
 
 // ── Agent Pipeline ────────────────────────────────────────────────────
 export {
@@ -32,7 +36,6 @@ export * from './ai/ai_service.svelte.ts';
 export * from './ai/sentence_boundary_chunker';
 export * from './ai/stream_orchestrator_service.svelte.ts';
 export * from './ai/text_generation_service.svelte.ts';
-export * from './analytics/analytics_service.svelte.ts';
 export * from './app/app.svelte.ts';
 export * from './app/preference.svelte.ts';
 export * from './assets/asset_store.svelte.ts';

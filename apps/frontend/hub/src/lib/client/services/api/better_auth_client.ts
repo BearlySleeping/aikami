@@ -1,8 +1,9 @@
 // apps/frontend/hub/src/lib/client/services/api/better_auth_client.ts
 //
 // Client-side Better Auth transport against the hub's own `/api/auth/*`
-// endpoints (mounted in apps/frontend/hub/src/routes/api/auth/[...auth]/+server.ts).
-// Replaces the Firebase Auth SDK path for the hub's Google sign-in.
+// endpoints (mounted inside the Elysia app — see
+// apps/frontend/hub/src/lib/server/api/index.ts). Replaces the Firebase Auth
+// SDK path for the hub's Google sign-in.
 //
 // The hub is same-origin, so every request uses relative `/api/auth/*` paths
 // with `credentials: 'include'` (Better Auth authenticates via a session
@@ -85,11 +86,24 @@ export const getBetterAuthSession = async (): Promise<CurrentUser | undefined> =
  * the hub's login page — hooks.server.ts resolves the session on load and the
  * app routes the authenticated user to the dashboard.
  */
-export const signInWithGoogleRedirect = (): void => {
+export const signInWithGoogleRedirect = async (): Promise<void> => {
   const callbackURL = `${window.location.origin}/login`;
-  window.location.assign(
-    `/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackURL)}`,
-  );
+  // Better Auth's /sign-in/social is a POST endpoint that returns the
+  // provider authorize URL ({ url, redirect: true }) — it is NOT a GET
+  // redirect. POST, then navigate to the returned URL.
+  const response = await fetch('/api/auth/sign-in/social', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({ provider: 'google', callbackURL }),
+  });
+  if (!response.ok) {
+    throw await toAppErrorFromResponse(response);
+  }
+  const data = (await response.json()) as { url?: string };
+  if (!data.url) {
+    throw new Error('Google sign-in returned no authorize URL');
+  }
+  window.location.assign(data.url);
 };
 
 /** Sign out of the hub's Better Auth session. */
@@ -98,6 +112,10 @@ export const signOutBetterAuth = async (): Promise<void> => {
     method: 'POST',
     headers: jsonHeaders,
     credentials: 'include',
+    // Better Auth's /sign-out body schema is optional but the endpoint still
+    // parses the body when Content-Type: application/json is sent — an empty
+    // body fails with "Invalid JSON in request body". Send an empty object.
+    body: '{}',
   });
   if (!response.ok) {
     throw await toAppErrorFromResponse(response);

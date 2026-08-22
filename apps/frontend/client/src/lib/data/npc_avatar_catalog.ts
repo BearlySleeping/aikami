@@ -3,8 +3,8 @@
 // NPC + player portrait avatar resolution for the dialogue overlay.
 //
 // Portraits are pre-generated WebP busts stored under
-// /static/assets/npc/{sprite}/{expression}.webp (mirrored in
-// apps/backend/firebase/assets/images/npc/). Each known NPC id and player
+// /static/assets/npc/{sprite}/{expression}.webp (mirrored in the R2 assets
+// bucket). Each known NPC id and player
 // class maps to a sprite folder; resolution validates that the requested
 // expression exists for the sprite, falls back to 'neutral', and — when no
 // portrait is configured at all — logs an error and returns a placeholder

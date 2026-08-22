@@ -38,8 +38,6 @@ reviews:
     path_instructions:
         - path: "**/*.test.ts"
           instructions: "Do not nitpick stylistic choices or formatting. ONLY flag missing edge cases, false-positive assertions, or improper mocking logic."
-        - path: "apps/backend/firebase/**"
-          instructions: "Strictly validate Firebase security rules, prioritize data validation/sanitization, and ensure robust error handling in cloud functions."
         - path: "apps/frontend/**"
           instructions: "Prioritize DaisyUI best practices, Tailwind conventions, SvelteKit ViewModel patterns, and evaluate performance optimization within the PixiJS render loops."
         - path: ".pi/extensions/**"

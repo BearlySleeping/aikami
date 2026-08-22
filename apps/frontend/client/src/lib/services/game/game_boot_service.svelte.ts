@@ -711,17 +711,17 @@ class GameBootService
         return;
       }
 
-      // 4b. C-373 asset_sources: add the Firebase Storage fallback download
-      //     origin (priority 1, after the bundled path) for every seeded asset.
+      // 4b. C-373 asset_sources: add the R2 fallback download origin
+      //     (priority 1, after the bundled path) for every seeded asset.
       //     The bucket mirrors static/game-data at the same relative paths
       //     (upload_audio_assets.ts / upload_lpc_assets.ts). Idempotent.
       try {
         const { publicEnv } = await import('@aikami/frontend/configs');
-        const storageBucket = publicEnv.PUBLIC_FIREBASE_STORAGE_BUCKET;
-        if (storageBucket) {
-          const added = await registry.addFirebaseStorageSources(storageBucket);
+        const r2BaseUrl = publicEnv.PUBLIC_ASSETS_BASE_URL;
+        if (r2BaseUrl) {
+          const added = await registry.addR2Sources(r2BaseUrl);
           this.debug('stage:initializing_asset_registry:storage-sources', {
-            bucket: storageBucket,
+            r2BaseUrl,
             sourcesAdded: added,
           });
         }

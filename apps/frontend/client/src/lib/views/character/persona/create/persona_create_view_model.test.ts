@@ -197,8 +197,6 @@ const _setupServiceOverrides = (): void => {
     SentenceBoundaryChunker: class {},
     streamOrchestratorService: _createServiceStub(),
     TextGenerationService: class {},
-    analyticService: _createServiceStub(),
-    AnalyticService: class {},
     appService: _createServiceStub(),
     AppService: class {},
     audioContextManager: _createServiceStub(),

@@ -106,11 +106,10 @@ describe('assetStore.resolveUrl — LPC tags (C-372)', () => {
     expect(tag).toBe('lpc:hair:bangslong2:bg_adult:shoot');
   });
 
-  it('never returns a /src/lib/assets/ segment or Firebase Storage origin', () => {
+  it('never returns a /src/lib/assets/ segment or a remote storage origin', () => {
     const url = assetStore.resolveUrl(lpcTag('body/bodies_male', LpcAnimationState.Walk));
     expect(url).toBe('/game-data/lpc/body/bodies_male.walk.webp');
     expect(url).not.toContain('/src/lib/assets/');
-    expect(url).not.toContain('firebasestorage');
     expect(url).not.toContain('localhost:9198');
   });
 

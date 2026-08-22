@@ -65,7 +65,7 @@ const ENGINE_SLOTS = [
   'legs',
   'feet',
   'head',
-  'head_accessories',
+  'headAccessories',
 ] as const;
 
 /** LPC slot labels for the appearance step UI. */
@@ -74,7 +74,7 @@ const LPC_SLOT_LABELS: Record<string, string> = {
   accessories: 'Accessories',
   hair: 'Hair',
   head: 'Head',
-  head_accessories: 'Head Accessories',
+  headAccessories: 'Head Accessories',
   torso: 'Torso',
   legs: 'Legs',
   feet: 'Feet',
@@ -593,7 +593,7 @@ class OnboardingCoordinatorViewModel
     // entered directly (not via the index flow), no active campaign exists —
     // create one so character creation can complete.
     let campaign = campaignService.activeCampaign;
-    if (!campaign || campaign.state !== 'creating') {
+    if (campaign?.state !== 'creating') {
       try {
         campaign = await campaignService.startNewCampaign();
       } catch (error) {

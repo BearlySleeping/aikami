@@ -30,21 +30,9 @@ import { defineConfig, devices } from '@playwright/test';
 // 0 for a manual, non-contract test run.
 const EMULATOR_PORT_OFFSET = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
 
-const AUTH_PORT = 9098 + EMULATOR_PORT_OFFSET;
-const FIRESTORE_PORT = 8081 + EMULATOR_PORT_OFFSET;
-const STORAGE_PORT = 9198 + EMULATOR_PORT_OFFSET;
-const PUBSUB_PORT = 8086 + EMULATOR_PORT_OFFSET;
 const CLIENT_PORT = 5274 + EMULATOR_PORT_OFFSET;
 const SITE_PORT = 5280 + EMULATOR_PORT_OFFSET;
 const HUB_PORT = 5276 + EMULATOR_PORT_OFFSET;
-
-// ── Environment binding for Firebase Admin SDK ─────────────────
-
-// Protocol-free host strings (no http:// prefix — Firebase Admin SDK requires this)
-process.env.FIRESTORE_EMULATOR_HOST = `127.0.0.1:${FIRESTORE_PORT}`;
-process.env.FIREBASE_AUTH_EMULATOR_HOST = `127.0.0.1:${AUTH_PORT}`;
-process.env.FIREBASE_STORAGE_EMULATOR_HOST = `127.0.0.1:${STORAGE_PORT}`;
-process.env.PUBSUB_EMULATOR_HOST = `127.0.0.1:${PUBSUB_PORT}`;
 
 // ── Dev server base URLs ──────────────────────────────────────
 

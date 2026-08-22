@@ -17,9 +17,7 @@ import { type Client, createClient } from '@libsql/client';
 
 mock.module('$env/dynamic/private', () => ({
   env: {
-    // biome-ignore lint/style/useNamingConvention: env key is a SCREAMING_SNAKE_CASE literal
     BETTER_AUTH_URL: 'http://localhost:5173',
-    // biome-ignore lint/style/useNamingConvention: env key is a SCREAMING_SNAKE_CASE literal
     BETTER_AUTH_SECRET: 'test-secret-that-is-long-enough-for-better-auth',
   } as Record<string, string | undefined>,
 }));
@@ -90,17 +88,12 @@ let client: Client;
 let setBetterAuthEnv: (
   env:
     | {
-        // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
         DB: unknown;
       }
     | undefined,
 ) => void;
 let setSaveBackupEnv: (env: unknown) => void;
 let app: Awaited<ReturnType<typeof import('../index.ts')>>['app'];
-let authFallback: (v: {
-  request: Request;
-  platform?: { env: { DB: unknown } };
-}) => Response | Promise<Response>;
 let r2: ReturnType<typeof createMockR2>;
 
 const applyD1Migrations = async (): Promise<void> => {
@@ -156,8 +149,7 @@ const get = (path: string, cookie?: string) =>
 
 /** Sign up + sign in, returning the session cookie. */
 const signInCookie = async (email: string): Promise<string> => {
-  const handleAuth = (request: Request) =>
-    authFallback({ request, platform: { env: { DB: createMockD1(client) } } });
+  const handleAuth = (request: Request) => app.handle(request);
   await handleAuth(
     post('/api/auth/sign-up/email', {
       name: 'Alice',
@@ -179,16 +171,12 @@ beforeAll(async () => {
   await applyD1Migrations();
   const betterAuthModule = await import('../better_auth.ts');
   setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
-  // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
   setBetterAuthEnv({ DB: createMockD1(client) });
   const saveBackupModule = await import('../save_backup.ts');
   setSaveBackupEnv = saveBackupModule.setSaveBackupEnv;
   r2 = createMockR2();
-  // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setSaveBackupEnv({ DB: createMockD1(client), SAVES_BUCKET: r2 });
   ({ app } = await import('../index.ts'));
-  const authRoute = await import('../../../../routes/api/auth/[...auth]/+server.ts');
-  authFallback = authRoute.fallback;
 });
 
 afterAll(async () => {

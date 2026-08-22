@@ -1,73 +1,54 @@
 // apps/frontend/hub/scripts/deploy.ts
 /**
- * Firebase Hosting deploy script for the hub app.
+ * Cloudflare Worker deploy script for the hub app.
  *
- * The hub is a SvelteKit SSR app deployed to Cloud Run (`aikami-hub`); the
- * Firebase Hosting sites (`aikami-staging-hub` / `aikami-production-hub`)
- * sit in front of it and rewrite every request to the Cloud Run service.
- *
- * The site ID is resolved per mode from the shared deployment config and
- * injected into firebase.json at deploy time (the committed firebase.json
- * intentionally has no `site` field so the same file works for both modes).
+ * Delegates to the shared Cloudflare deploy module (single source of truth in
+ * scripts/src/lib/deploy/cloudflare.ts). Per-app config (worker name, route,
+ * build output dir, headers) lives in deployment_config.ts.
  */
 
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { logger } from '@aikami/logger';
 import { toMode } from '@aikami/utils';
-import { $, file } from 'bun';
-import {
-  MODE_PROJECT_MAP,
-  resolveHostingSiteId,
-} from '../../../../scripts/src/lib/deploy/deployment_config';
+import { generateVersionString } from '../../../../scripts/src/lib/deploy/cache';
+import { deployCloudflareWorker } from '../../../../scripts/src/lib/deploy/cloudflare';
+import { APP_CONFIG } from '../../../../scripts/src/lib/deploy/deployment_config';
 
+// Repo root = 4 levels up from apps/frontend/hub/scripts/deploy.ts
+const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+// 1. Parse incoming arguments
 const { values } = parseArgs({
   args: Bun.argv,
-  options: { mode: { type: 'string' } },
+  options: {
+    mode: { type: 'string' },
+    verbose: { type: 'boolean', default: false },
+  },
   strict: false,
   allowPositionals: true,
 });
 
 const mode = toMode(values.mode || process.env.MODE);
+
 if (!mode) {
   logger.error('Missing --mode argument or MODE env var');
   process.exit(1);
 }
 
-const projectId = MODE_PROJECT_MAP[mode];
-if (!projectId) {
-  logger.error(`Unknown mode: ${mode}`);
+const appName = 'hub';
+const config = APP_CONFIG[appName];
+
+if (!config?.cloudflare) {
+  logger.error('No cloudflare config for hub');
   process.exit(1);
 }
-
-const targetSite = resolveHostingSiteId('hub', projectId);
-if (!targetSite) {
-  logger.error('No hosting site ID configured for hub');
-  process.exit(1);
-}
-
-const firebaseJsonPath = 'firebase.json';
-const deployConfigPath = 'firebase.deploy.json';
 
 try {
-  const firebaseJsonFile = file(firebaseJsonPath);
-  if (!(await firebaseJsonFile.exists())) {
-    throw new Error(`Could not find ${firebaseJsonPath}`);
-  }
-
-  const config = await firebaseJsonFile.json();
-  config.hosting.site = targetSite;
-  await Bun.write(deployConfigPath, JSON.stringify(config, null, 4));
-
-  // Pinned firebase-tools version (not @latest) so deploys are reproducible.
-  await $`bunx firebase-tools@15.25.1 deploy --only hosting --project ${projectId} --config ${deployConfigPath}`.cwd(
-    process.cwd(),
-  );
+  await deployCloudflareWorker(config, appName, mode, ROOT_DIR, generateVersionString(), false);
 } catch (error) {
-  logger.error(error as Error);
+  const err = error as { stderr?: string; stdout?: string; message?: string };
+  logger.error(err.stderr ?? err.message ?? String(error));
   process.exit(1);
-} finally {
-  const tempFile = file(deployConfigPath);
-  if (await tempFile.exists()) {
-    await $`rm ${deployConfigPath}`;
-  }
 }

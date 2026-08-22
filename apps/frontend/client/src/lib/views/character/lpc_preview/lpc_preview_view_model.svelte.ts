@@ -39,7 +39,7 @@ const SLOT_Z_ORDER: Record<string, number> = {
   torso: 30,
   shoulders: 40,
   head: 50,
-  head_accessories: 55,
+  headAccessories: 55,
   hair: 60,
   hat: 70,
   weapon: 80,

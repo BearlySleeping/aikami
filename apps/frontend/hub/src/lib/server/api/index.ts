@@ -10,10 +10,19 @@
 // backed by D1). The Firebase Auth routes (/api/auth/session, /api/auth/action,
 // /api/auth/poll-device-handoff) were removed — the hub no longer touches
 // firebase-admin.
+//
+// Better Auth (auth + device-authorization) is mounted here via Elysia's
+// `.mount()`, which runs the handler BEFORE Elysia parses the request body
+// (config.mount short-circuits in dynamic-handle). This lets the Better Auth
+// fetch handler read the raw body — the reason auth previously lived in
+// dedicated SvelteKit routes (api/auth/[...auth], api/device/[...device]).
+// With `.mount()` everything is consolidated into this single Elysia app,
+// mounted at /api/[...slugs].
 
 import { AssetStatsSchema, CategoryStatsSchema } from '@aikami/schemas';
 import { Elysia, t } from 'elysia';
 import { handleAsk } from './ask.ts';
+import { getBetterAuth } from './better_auth.ts';
 import { handleCatalogStats } from './catalog_stats.ts';
 import { handleDbHealth } from './health_db.ts';
 import {
@@ -22,6 +31,7 @@ import {
   handleGetBackup,
   handleListBackups,
 } from './save_backup.ts';
+import { getStorageEnv, handleStorageUpload, handleStorageUrl } from './storage.ts';
 
 // ─── Schemas (TypeBox) ───────────────────────────────────────────────
 
@@ -59,6 +69,25 @@ const askResponseSchema = t.Union([
     error: t.Union([t.Literal('unconfigured'), t.Literal('rate_limited'), t.Literal('failed')]),
   }),
 ]);
+// C-426 AC-4/AC-5: Better Auth (auth + device-authorization) is mounted here
+// via `.mount()`. The mount handler runs before Elysia parses the body, so the
+// Better Auth fetch handler receives the raw request (body intact). The D1
+// binding is injected per-request by the catch-all route before `app.handle`,
+// so `getBetterAuth()` resolves lazily here. 503 when auth is unconfigured.
+//
+// The device-authorization plugin's endpoints live under the Better Auth base
+// path (/api/auth/device/*), so a single `/auth` mount serves both auth and
+// device flows — no separate `/device` mount is needed.
+const betterAuthHandler = (request: Request): Response | Promise<Response> => {
+  const auth = getBetterAuth();
+  if (!auth) {
+    return new Response(JSON.stringify({ error: 'auth_unconfigured' }), {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  return auth.handler(request);
+};
 
 export const app = new Elysia({
   prefix: '/api',
@@ -67,10 +96,7 @@ export const app = new Elysia({
   // dynamic handler that runs on Workers.
   aot: false,
 })
-  // C-426 AC-4/AC-5: Better Auth (auth + device-authorization) is mounted in
-  // dedicated SvelteKit catch-all routes (api/auth/[...auth], api/device/[...])
-  // that forward straight to the Better Auth handler — NOT here, because
-  // Elysia consumes the request body and locks the ReadableStream.
+  .mount('/auth', betterAuthHandler)
   .get('/health/db', handleDbHealth, {
     response: dbHealthResponseSchema,
   })
@@ -105,6 +131,28 @@ export const app = new Elysia({
       });
     }
     return handleGetBackup(request, env, params.id);
+  })
+  // C-426: R2 object storage (avatars, etc.), session-gated. 503 when the
+  // hub is not yet on a Worker with the SAVES_BUCKET binding.
+  .post('/storage/upload', ({ request }) => {
+    const env = getStorageEnv();
+    if (!env) {
+      return new Response(JSON.stringify({ error: 'storage_unconfigured' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return handleStorageUpload(request, env);
+  })
+  .get('/storage/url', ({ request }) => {
+    const env = getStorageEnv();
+    if (!env) {
+      return new Response(JSON.stringify({ error: 'storage_unconfigured' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return handleStorageUrl(request, env);
   })
   .get('/catalog/stats', handleCatalogStats, {
     response: catalogStatsResponseSchema,

@@ -70,7 +70,6 @@ mock.module('@aikami/frontend/services', () => ({
   dialogService: {},
   routerService: { goToRoute: mock(async () => {}) },
   gameStateSyncService: {},
-  firebaseAnalyticService: { logEvent: mock(async () => {}) },
 }));
 
 // Re-export constants directly (Bun test doesn't resolve tsconfig paths in worktree)

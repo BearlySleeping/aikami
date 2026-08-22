@@ -46,9 +46,10 @@ export default function (pi: ExtensionAPI) {
     name: 'service_logs',
     label: 'Logs: View Service Logs',
     description:
-      'View logs for any Aikami service — Cloud Run, Firebase Functions, or client (a static ' +
-      'app with no server of its own; its browser logs are forwarded through hub and filtered ' +
-      `automatically). Apps: ${KNOWN_APPS.join(', ')}.`,
+      'View logs for any Aikami service — Cloud Run, Firebase Functions, Cloudflare Workers, or ' +
+      'client (a static app with no server of its own; its browser logs are forwarded through hub ' +
+      `and filtered automatically). Cloudflare Worker apps (client/site/docs/hub) are live-tail ` +
+      `only — pass tail:true. Apps: ${KNOWN_APPS.join(', ')}.`,
     parameters: Type.Object({
       app: Type.String({
         description: `App to target: ${KNOWN_APPS.join(', ')}`,

@@ -8,18 +8,19 @@
 
 This is a **Bun + Moon monorepo** with strict TypeScript and Biome linting.
 
-| Tool          | Role                                                    |
-| ------------- | ------------------------------------------------------- |
-| **Bun**       | Package manager & test runner (`bun install`, `bun test`) |
-| **Moon**      | Task orchestrator (`moon.yml` in each workspace)        |
-| **Biome**     | Linter & formatter (`biome.json`, runs in CI + IDE)     |
-| **TypeScript** | Type checking (strict mode, enforced in Moon tasks)     |
+| Tool           | Role                                                      |
+| -------------- | --------------------------------------------------------- |
+| **Bun**        | Package manager & test runner (`bun install`, `bun test`) |
+| **Moon**       | Task orchestrator (`moon.yml` in each workspace)          |
+| **Biome**      | Linter & formatter (`biome.json`, runs in CI + IDE)       |
+| **TypeScript** | Type checking (strict mode, enforced in Moon tasks)       |
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
+
 - Bun 1.0+ (`bun --version`)
 - Node.js 18+ (for tooling compatibility)
 - direnv (optional, for `.envrc`)
@@ -116,7 +117,7 @@ All skills are in `.pi/skills/`. Load them via `/skill [name]` or read them dire
 ```typescript
 // ✅ CORRECT: Options object for >1 parameter
 const createUser = async (options: { email: string; name: string }) => {
-  // ...
+	// ...
 };
 
 // ✅ CORRECT: Import types from package root
@@ -176,30 +177,21 @@ touch packages/shared/[name]/package.json
 # See new-project skill for full walkthrough
 ```
 
-### Deploying
-
-```bash
-# Firebase Functions (from apps/backend/firebase/)
-moon run backend:deploy
-
-# Frontend (from apps/frontend/client/)
-moon run frontend:build && moon run frontend:publish
-```
-
 ---
 
 ## Monorepo Boundaries
 
 **Types, schemas, and constants live in `packages/shared/`.**
 
-| What                      | Where                              | Import As              |
-| ------------------------- | ---------------------------------- | ---------------------- |
-| Domain types (User, Agent) | `packages/shared/types/src/lib/`   | `@aikami/types`        |
-| Validation schemas        | `packages/shared/schemas/src/lib/` | `@aikami/schemas`      |
-| Global constants          | `packages/shared/constants/`       | `@aikami/constants`    |
-| App-specific code         | `apps/frontend/client/src/`        | Never re-export        |
+| What                       | Where                              | Import As           |
+| -------------------------- | ---------------------------------- | ------------------- |
+| Domain types (User, Agent) | `packages/shared/types/src/lib/`   | `@aikami/types`     |
+| Validation schemas         | `packages/shared/schemas/src/lib/` | `@aikami/schemas`   |
+| Global constants           | `packages/shared/constants/`       | `@aikami/constants` |
+| App-specific code          | `apps/frontend/client/src/`        | Never re-export     |
 
 **Never**:
+
 - ❌ Define a type in `apps/frontend/client/src/lib/types/`
 - ❌ Import from another app (e.g., `apps/frontend/hub/src/` into `apps/frontend/client/`)
 - ❌ Define a schema in `apps/backend/firebase/src/features/`
@@ -211,11 +203,13 @@ moon run frontend:build && moon run frontend:publish
 **The frontend is a static SPA in Tauri v2. NO server-side rendering.**
 
 Forbidden (will fail CI):
+
 - ❌ `+server.ts` (API routes)
 - ❌ `+page.server.ts` (server data loading)
 - ❌ `+layout.server.ts` (server layout data)
 
 Correct:
+
 - ✅ Client-side Firebase SDK (`getDoc`, `query`, etc.)
 - ✅ Fetch to microservices (`/tts`, `/image`, `/transcribe`)
 - ✅ Browser APIs (localStorage, IndexedDB, Web Audio)
@@ -228,18 +222,20 @@ Correct:
 ### VS Code
 
 Install:
+
 - Biome extension (Biomejs)
 - SvelteKit extension
 - Tauri extension
 - TypeScript Vue Plugin
 
 Settings:
+
 ```json
 {
-  "editor.formatOnSave": true,
-  "[typescript]": { "editor.defaultFormatter": "Biomejs.biome" },
-  "[svelte]": { "editor.defaultFormatter": "svelte.svelte-vscode" },
-  "typescript.enablePromptUseWorkspaceTsdk": true
+	"editor.formatOnSave": true,
+	"[typescript]": { "editor.defaultFormatter": "Biomejs.biome" },
+	"[svelte]": { "editor.defaultFormatter": "svelte.svelte-vscode" },
+	"typescript.enablePromptUseWorkspaceTsdk": true
 }
 ```
 
@@ -254,6 +250,7 @@ Settings:
 ## CI/CD
 
 GitHub Actions runs:
+
 - `moon ci` — Full typecheck + lint + test pipeline
 - Tests run on Node 18+, Bun 1.0+
 - PR checks require all tests to pass

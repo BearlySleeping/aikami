@@ -13,7 +13,6 @@ projects:
   docs: "apps/frontend/docs"
   hub: "apps/frontend/hub"
   e2e: "apps/e2e"
-  firebase: "apps/backend/firebase"
   worker: "apps/backend/worker"
   voice: "apps/backend/voice"
   image: "apps/backend/image"

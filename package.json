@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "moon": "moon",
-    "postinstall": "moon sync && (bun run scripts/src/lib/ops/ensure_firebase_bin.ts || true)",
+    "postinstall": "moon sync",
     "dev": "moon run client:dev",
     "build": "moon run :build",
     "build:affected": "moon run :build --affected",
@@ -91,14 +91,14 @@
     "setup:env": "bun run download-secrets --mode emulator",
     "upload-secrets": "bun run scripts/src/lib/ops/upload_secrets.ts",
     "sync-env": "bun run scripts/src/lib/ops/sync_env.ts",
-    "infra:report": "bun run scripts/src/lib/ops/infra_report.ts"
+    "infra:report": "bun run scripts/src/lib/ops/infra_report_cli.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.9",
+    "@biomejs/biome": "2.5.10",
     "@google-cloud/firestore": "^9.0.0",
     "@google-cloud/secret-manager": "^7.0.0",
     "@moonrepo/cli": "2.5.2",
-    "@types/bun": "1.3.14",
+    "@types/bun": "1.4.0",
     "@types/node": "26.2.0",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "syncpack": "15.3.3",
