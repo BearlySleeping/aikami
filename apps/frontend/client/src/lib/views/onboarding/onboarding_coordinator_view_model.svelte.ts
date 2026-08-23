@@ -1,8 +1,9 @@
 // apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view_model.svelte.ts
 //
 // Onboarding coordinator ViewModel — orchestrates the fast character onboarding
-// flow: starter hero selection, 4-step custom creation, draft persistence,
-// persona assembly, campaign attachment, and Session Zero routing.
+// flow: DM chat, 4-step custom creation, preset selection, and persona review.
+// All paths converge to a shared review page where the user can edit before
+// entering the world.
 // Contract: C-319 Replace /setup with Fast Character Onboarding
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
@@ -33,8 +34,10 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { OnboardingDraft, PersonaData, SetupMode } from '@aikami/types';
-import { campaignService, personaService, routerService } from '$services';
+import type { OnboardingDraft, PersonaData } from '@aikami/types';
+import { campaignService, personaCreationService, personaService, routerService } from '$services';
+import type { PersonaCreateViewModelInterface } from '$views/character/persona/create/persona_create_view_model.svelte';
+import { getPersonaCreateViewModel } from '$views/character/persona/create/persona_create_view_model.svelte';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -80,10 +83,27 @@ const LPC_SLOT_LABELS: Record<string, string> = {
   feet: 'Feet',
 };
 
+/**
+ * Onboarding flow mode.
+ * - 'chat': DM chat interface (default)
+ * - 'manual_steps': Step-by-step creation wizard
+ * - 'review': Shared complete page (edit before entering world)
+ */
+export type OnboardingMode = 'chat' | 'manual_steps' | 'review';
+
 // ── Interface ──────────────────────────────────────────────────────────
 
 export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
-  readonly mode: SetupMode;
+  /** Current flow mode. */
+  readonly mode: OnboardingMode;
+  /** The PersonaCreateViewModel for the DM chat phase. */
+  readonly chatViewModel: PersonaCreateViewModelInterface;
+  /** Whether a persona has been generated (from chat, manual, or preset). */
+  readonly hasPersona: boolean;
+  /** The current persona data from personaCreationService. */
+  readonly persona: PersonaData | undefined;
+
+  // Manual creation step state
   readonly step: OnboardingStep;
   readonly stepIndex: number;
   readonly starterHeroes: readonly StarterHero[];
@@ -94,23 +114,12 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly speciesOptions: readonly SpeciesOption[];
   readonly abilityLabels: typeof ABILITY_LABELS;
   readonly playStyleTags: typeof PLAY_STYLE_TAGS;
-  /** Max total across all ability scores (sum of the standard array). */
   readonly abilityScoreBudget: number;
-  /** Current sum of all ability scores. */
   readonly abilityScoreTotal: number;
   readonly appearancePresets: readonly AppearancePreset[];
   readonly hasDraft: boolean;
 
-  // Starter path
-  selectStarterHero(hero: StarterHero): Promise<void>;
-
-  // Custom path
-  startCustom(): void;
-  nextStep(): void;
-  previousStep(): void;
-  randomizeCharacter(): void;
-
-  // Custom path state (bound by step views)
+  // Manual creation form fields
   name: string;
   raceId: string;
   classId: string;
@@ -120,6 +129,30 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   background: string;
   personalityTraits: string;
   equipment: string[];
+
+  // LPC appearance state
+  lpcRecipe: Record<string, string>;
+  paletteOverrides: Record<string, string>;
+  selectedPresetId: string | undefined;
+  previewPlaying: boolean;
+  readonly lpcPreviewRecipes: LpcLayerRecipe[];
+  readonly availableLpcSlots: Array<{
+    slot: string;
+    label: string;
+    variants: Array<{ assetId: string; label: string }>;
+  }>;
+
+  // Navigation
+  /** Switch to manual creation steps. */
+  startCustom(): void;
+  /** Switch back to chat from manual steps. */
+  backToChat(): void;
+  /** Go to the next manual step. */
+  nextStep(): void;
+  /** Go to the previous manual step. */
+  previousStep(): void;
+  /** Randomize character fields. */
+  randomizeCharacter(): void;
 
   // Step mutators
   setName(value: string): void;
@@ -135,30 +168,19 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly selectedClass: ClassPreset | undefined;
   readonly selectedRace: SpeciesOption | undefined;
 
-  // LPC appearance state
-  lpcRecipe: Record<string, string>;
-  paletteOverrides: Record<string, string>;
-  selectedPresetId: string | undefined;
-  previewPlaying: boolean;
-  readonly lpcPreviewRecipes: LpcLayerRecipe[];
-  readonly availableLpcSlots: Array<{
-    slot: string;
-    label: string;
-    variants: Array<{ assetId: string; label: string }>;
-  }>;
+  // LPC appearance
   selectAppearancePreset(presetId: string): void;
   setLpcLayer(slotName: string, assetId: string): void;
   setPaletteOverride(slotName: string, hexColor: string): void;
   togglePreviewAnimation(): void;
 
+  // Preset selection
+  /** Select a starter hero preset and go to review. */
+  selectPreset(hero: StarterHero): Promise<void>;
+
   // Finalize
+  /** Confirm the persona and enter the world. */
   confirmAndEnter(): Promise<void>;
-
-  // Session Zero
-  startSessionZero(): Promise<void>;
-
-  // Mode switching
-  selectExistingCharacter(): Promise<void>;
 };
 
 // ── Options ────────────────────────────────────────────────────────────
@@ -171,9 +193,13 @@ class OnboardingCoordinatorViewModel
   extends BaseViewModel<OnboardingCoordinatorViewModelOptions>
   implements OnboardingCoordinatorViewModelInterface
 {
-  // ── Reactive state ─────────────────────────────────────────────────
+  // ── Flow mode ──────────────────────────────────────────────────────
+  mode: OnboardingMode = $state('chat');
 
-  mode: SetupMode = $state('starter_select');
+  // ── Chat ViewModel ─────────────────────────────────────────────────
+  chatViewModel: PersonaCreateViewModelInterface;
+
+  // ── Manual creation state ──────────────────────────────────────────
   step: OnboardingStep = $state('identity');
   isConfirming = $state(false);
 
@@ -194,7 +220,33 @@ class OnboardingCoordinatorViewModel
   selectedPresetId = $state<string | undefined>(undefined);
   previewPlaying = $state(false);
 
+  constructor(options: OnboardingCoordinatorViewModelOptions) {
+    super(options);
+
+    // Create the chat ViewModel for the DM chat phase
+    this.chatViewModel = getPersonaCreateViewModel({
+      className: 'PersonaCreateViewModel',
+    });
+
+    // Watch for persona being set by the chat VM → switch to review
+    $effect(() => {
+      const persona = personaCreationService.persona;
+      if (persona && this.mode === 'chat') {
+        this.debug('chatViewModel:persona-ready — switching to review');
+        this.mode = 'review';
+      }
+    });
+  }
+
   // ── Computed ──────────────────────────────────────────────────────
+
+  get hasPersona(): boolean {
+    return !!personaCreationService.persona;
+  }
+
+  get persona(): PersonaData | undefined {
+    return personaCreationService.persona;
+  }
 
   get stepIndex(): number {
     return ONBOARDING_STEPS.indexOf(this.step);
@@ -246,9 +298,6 @@ class OnboardingCoordinatorViewModel
   }
 
   get canGoNext(): boolean {
-    if (this.mode !== 'custom') {
-      return false;
-    }
     if (this.step === 'identity') {
       return this.name.trim().length > 0 && this.raceId.length > 0;
     }
@@ -266,10 +315,6 @@ class OnboardingCoordinatorViewModel
     return SPECIES_OPTIONS.find((s) => s.id === this.raceId);
   }
 
-  /**
-   * Builds LpcLayerRecipe[] from the current lpcRecipe + paletteOverrides.
-   * Recipes are ordered by engine slot priority (body, hair, torso, legs, feet, head).
-   */
   get lpcPreviewRecipes(): LpcLayerRecipe[] {
     const recipes: LpcLayerRecipe[] = [];
 
@@ -288,12 +333,6 @@ class OnboardingCoordinatorViewModel
     return recipes;
   }
 
-  /**
-   * Returns the 6 engine LPC slots with their labels.
-   *
-   * Full variant lists are not exposed here to keep the coordinator thin.
-   * The appearance step view imports variant data from the LPC catalog directly.
-   */
   get availableLpcSlots(): Array<{
     slot: string;
     label: string;
@@ -310,25 +349,21 @@ class OnboardingCoordinatorViewModel
 
   override async initialize(): Promise<void> {
     this._recoverDraft();
+    await this.chatViewModel.initialize();
     await super.initialize();
   }
 
-  // ── Starter Path ──────────────────────────────────────────────────
-
-  async selectStarterHero(hero: StarterHero): Promise<void> {
-    this.debug('selectStarterHero', { heroId: hero.id });
-
-    const persona = this._assemblePersonaFromStarter(hero);
-    await this._attachPersonaToCampaign(persona);
-  }
-
-  // ── Custom Path Navigation ────────────────────────────────────────
+  // ── Navigation ────────────────────────────────────────────────────
 
   startCustom(): void {
-    this.mode = 'custom';
+    this.mode = 'manual_steps';
     this.step = 'identity';
     this._ensureDefaultRecipe();
     this._saveDraft();
+  }
+
+  backToChat(): void {
+    this.mode = 'chat';
   }
 
   nextStep(): void {
@@ -344,9 +379,21 @@ class OnboardingCoordinatorViewModel
 
     const currentIndex = ONBOARDING_STEPS.indexOf(this.step);
     if (currentIndex >= 0 && currentIndex < ONBOARDING_STEPS.length - 1) {
-      this.step = ONBOARDING_STEPS[currentIndex + 1];
+      const nextStep = ONBOARDING_STEPS[currentIndex + 1];
+      this.step = nextStep;
+
+      // When entering the review step, assemble the persona so the
+      // OnboardingReviewView can display and edit it directly.
+      if (nextStep === 'review') {
+        const persona = this._assemblePersonaFromDraft();
+        personaCreationService.persona = persona;
+        this._clearDraft();
+      }
+
       this._saveDraft();
     }
+    // At the last step (review), the user clicks "Enter World" which
+    // calls confirmAndEnter() directly — no mode switch needed.
   }
 
   previousStep(): void {
@@ -416,10 +463,6 @@ class OnboardingCoordinatorViewModel
 
   // ── LPC Appearance ────────────────────────────────────────────────
 
-  /**
-   * Applies a curated appearance preset, replacing all layers.
-   * Uses DEFAULT_LPC_RECIPE as fallback if the preset is not found.
-   */
   selectAppearancePreset(presetId: string): void {
     const preset = APPEARANCE_PRESETS.find((p) => p.id === presetId);
 
@@ -435,21 +478,18 @@ class OnboardingCoordinatorViewModel
     this._saveDraft();
   }
 
-  /** Updates a single LPC layer's asset ID. */
   setLpcLayer(slotName: string, assetId: string): void {
     this.lpcRecipe = { ...this.lpcRecipe, [slotName]: assetId };
     this.selectedPresetId = undefined;
     this._saveDraft();
   }
 
-  /** Sets a palette override color for a specific slot. */
   setPaletteOverride(slotName: string, hexColor: string): void {
     this.paletteOverrides = { ...this.paletteOverrides, [slotName]: hexColor };
     this.selectedPresetId = undefined;
     this._saveDraft();
   }
 
-  /** Toggles the preview animation playback. */
   togglePreviewAnimation(): void {
     this.previewPlaying = !this.previewPlaying;
   }
@@ -495,6 +535,16 @@ class OnboardingCoordinatorViewModel
     this._saveDraft();
   }
 
+  // ── Preset Selection ──────────────────────────────────────────────
+
+  async selectPreset(hero: StarterHero): Promise<void> {
+    this.debug('selectPreset', { heroId: hero.id });
+
+    const persona = this._assemblePersonaFromStarter(hero);
+    personaCreationService.persona = persona;
+    this.mode = 'review';
+  }
+
   // ── Finalize ──────────────────────────────────────────────────────
 
   async confirmAndEnter(): Promise<void> {
@@ -505,7 +555,7 @@ class OnboardingCoordinatorViewModel
     this.isConfirming = true;
 
     try {
-      const persona = this._assemblePersonaFromDraft();
+      const persona = this.persona ?? this._assemblePersonaFromDraft();
       await this._attachPersonaToCampaign(persona);
     } catch (error) {
       this.error('confirmAndEnter:failed', error);
@@ -513,61 +563,8 @@ class OnboardingCoordinatorViewModel
     }
   }
 
-  // ── Session Zero ──────────────────────────────────────────────────
-
-  /**
-   * Starts the DM chat experience by navigating to /personas/create
-   * where the PersonaCreateView (chat with DM) lives.
-   */
-  async startSessionZero(): Promise<void> {
-    this.debug('startSessionZero — navigating to PersonaCreateView');
-    this.info('startSessionZero', { mode: this.mode });
-
-    // Session Zero requires the text provider — when unavailable, preserve
-    // the manual onboarding path instead of routing into a provider-dependent flow.
-    if (!this.isTextProviderAvailable) {
-      this.warn('startSessionZero:no-text-provider — staying in manual onboarding');
-      return;
-    }
-
-    try {
-      this.mode = 'session_zero';
-      await routerService.goToRoute('personaCreate', {
-        pathParameters: undefined,
-        queryParameters: undefined,
-      });
-    } catch (error) {
-      this.error('startSessionZero:navigation-failed', error);
-      this.errorMessage =
-        error instanceof Error ? error.message : 'Failed to open DM chat. Please try again.';
-    }
-  }
-
-  // ── Mode Switching ─────────────────────────────────────────────────
-
-  /**
-   * Navigates to the persona list route, where the user can select an existing
-   * character to continue their campaign.
-   */
-  async selectExistingCharacter(): Promise<void> {
-    this.debug('selectExistingCharacter — navigating to persona list');
-    this.info('selectExistingCharacter', { mode: this.mode });
-
-    try {
-      await routerService.goToRoute('personas', {
-        pathParameters: undefined,
-        queryParameters: undefined,
-      });
-    } catch (error) {
-      this.error('selectExistingCharacter:navigation-failed', error);
-      this.errorMessage =
-        error instanceof Error ? error.message : 'Failed to navigate. Please try again.';
-    }
-  }
-
   // ── Private: Persona Assembly ─────────────────────────────────────
 
-  /** Creates a PersonaData object from a starter hero definition. */
   private _assemblePersonaFromStarter(hero: StarterHero): PersonaData {
     return {
       id: crypto.randomUUID(),
@@ -600,7 +597,6 @@ class OnboardingCoordinatorViewModel
     };
   }
 
-  /** Creates a PersonaData object from the current draft state. */
   private _assemblePersonaFromDraft(): PersonaData {
     return {
       id: crypto.randomUUID(),
@@ -635,7 +631,6 @@ class OnboardingCoordinatorViewModel
 
   // ── Private: Campaign Attachment ──────────────────────────────────
 
-  /** Attaches the persona to the campaign, completes setup, and navigates to /game. */
   private async _attachPersonaToCampaign(persona: PersonaData): Promise<void> {
     // Resolve a campaign in the 'creating' state. When /setup is refreshed or
     // entered directly (not via the index flow), no active campaign exists —
@@ -655,11 +650,7 @@ class OnboardingCoordinatorViewModel
     }
 
     try {
-      // Persist the persona to the same stores the game reads so the created
-      // character (not the default LPC sprite) shows up in /game:
-      //   1. `aikami-characters` localStorage (legacy list)
-      //   2. the local `personas` SQLite table (C-386b local-first)
-      //   3. mark it as the active persona
+      // Persist the persona to the same stores the game reads
       await this._persistPersona(persona);
 
       localStorage.setItem(`persona-${persona.id}`, JSON.stringify(persona));
@@ -684,12 +675,6 @@ class OnboardingCoordinatorViewModel
 
   // ── Private: Persona Persistence ──────────────────────────────────
 
-  /**
-   * Persists a persona to the stores the game boot resolves from, so the
-   * created character (not the default LPC sprite) appears in /game.
-   * Mirrors the persona-create flow: `aikami-characters` localStorage list
-   * plus the local `personas` SQLite table, then marks it active.
-   */
   private async _persistPersona(persona: PersonaData): Promise<void> {
     // 1. Legacy `aikami-characters` list (append or replace by id)
     try {
@@ -720,7 +705,6 @@ class OnboardingCoordinatorViewModel
 
   // ── Private: Ability Score Assignment ─────────────────────────────
 
-  /** Assigns standard array with the selected class's primary/secondary stats. */
   private _assignStandardArray(): void {
     const cls = this.selectedClass;
     if (!cls) {
@@ -746,10 +730,6 @@ class OnboardingCoordinatorViewModel
     this.abilityScores = scores;
   }
 
-  /**
-   * Assigns standard array scores only if the current scores are still
-   * at their default values (all 10s).
-   */
   private _assignStandardArrayIfDefault(): void {
     const allDefaults = Object.values(this.abilityScores).every((v) => v === 10);
     if (allDefaults) {
@@ -759,7 +739,6 @@ class OnboardingCoordinatorViewModel
 
   // ── Private: Draft Persistence ────────────────────────────────────
 
-  /** Saves the current draft state to localStorage. */
   private _saveDraft(): void {
     try {
       const draft: OnboardingDraft = {
@@ -783,7 +762,6 @@ class OnboardingCoordinatorViewModel
     }
   }
 
-  /** Recovers draft state from localStorage on mount. */
   private _recoverDraft(): void {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
@@ -805,7 +783,7 @@ class OnboardingCoordinatorViewModel
         return;
       }
 
-      this.mode = 'custom';
+      this.mode = 'manual_steps';
       this.step = draft.step;
       this.name = draft.name;
       this.raceId = draft.raceId;
@@ -829,7 +807,6 @@ class OnboardingCoordinatorViewModel
     }
   }
 
-  /** Clears the draft from localStorage. */
   private _clearDraft(): void {
     try {
       localStorage.removeItem(DRAFT_KEY);
@@ -840,7 +817,6 @@ class OnboardingCoordinatorViewModel
 
   // ── Private: LPC helpers ──────────────────────────────────────────
 
-  /** Builds a 1024-byte palette LUT from a 6-char hex color string. */
   private _buildPaletteLut(hexColor: string | undefined): Uint8Array {
     const palette = new Uint8Array(1024);
 
@@ -867,7 +843,6 @@ class OnboardingCoordinatorViewModel
     return palette;
   }
 
-  /** Ensures the LPC recipe is at the default if empty. */
   private _ensureDefaultRecipe(): void {
     if (Object.keys(this.lpcRecipe).length === 0) {
       this.lpcRecipe = { ...DEFAULT_LPC_RECIPE };
@@ -875,7 +850,7 @@ class OnboardingCoordinatorViewModel
   }
 }
 
-// ── Factory ─────────────────────────────────────────────────────────────
+// ── Factory ────────────────────────────────────────────────────────────
 
 export const getOnboardingCoordinatorViewModel = (
   options: OnboardingCoordinatorViewModelOptions,

@@ -49,13 +49,11 @@ class SetupViewModel
   override async initialize(): Promise<void> {
     await super.initialize();
 
-    // Initialize the onboarding coordinator (triggers draft recovery)
-    await this.onboardingViewModel.initialize();
-
-    // Auto-navigate to DM chat (default behavior).
-    // The DM chat lives at /personas/create (PersonaCreateView).
-    this.debug('SetupViewModel.initialize — auto-starting DM chat');
-    await this.onboardingViewModel.startSessionZero();
+    // The onboarding coordinator is initialized by its own
+    // BaseViewModelContainer in OnboardingCoordinatorView.
+    // Do NOT call initialize() manually here — it would race with
+    // the container's onMount and cause double initialization.
+    this.debug('SetupViewModel.initialize — ready on /setup');
   }
 }
 

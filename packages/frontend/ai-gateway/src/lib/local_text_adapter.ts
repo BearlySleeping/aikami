@@ -41,9 +41,7 @@ export const createLocalTextAdapter = (options: {
 
       try {
         // Preserve full message context for conversational text
-        const conversationText = messages
-          .map((m) => `${m.role}: ${m.content}`)
-          .join('\n');
+        const conversationText = messages.map((m) => `${m.role}: ${m.content}`).join('\n');
 
         // Build a micro-task from the full conversation context
         const microTask: MicroTask = {
