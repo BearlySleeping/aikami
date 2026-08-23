@@ -354,6 +354,7 @@
         "@aikami/logger": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
+        "@huggingface/transformers": "^4.2.0",
       },
     },
     "packages/frontend/services": {

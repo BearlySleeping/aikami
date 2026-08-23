@@ -7,10 +7,10 @@
 // Contract: C-236 Agent Pipeline System
 // Contract: C-239 Expression Emotion System
 
+import { localTaskPool } from '$lib/services/ai/local_task_pool_service.svelte.ts';
 import { textGenerationService } from '$services';
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
 import type { ExpressionOutput } from '../agent_schemas.ts';
-
 /**
  * Executes the expression evaluator post-agent.
  *
@@ -45,33 +45,53 @@ export const runExpressionAgent = async ({
       'Identify every named character in this response and determine their emotional expression.',
     ].join('\n');
 
-    const result = (await textGenerationService.extractStructure({
-      schema: {
-        type: 'object',
-        properties: {
-          characters: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                name: { type: 'string' },
-                expression: { type: 'string' },
+    // Try local task pool first, fall back to gateway
+    let result: ExpressionOutput;
+    let usedLocal = false;
+
+    try {
+      const taskResult = await localTaskPool.submit({
+        type: 'expression',
+        payload: {
+          prose: aiResponse.slice(0, 2000),
+          characters: extractCharacterNames(aiResponse),
+        },
+      });
+
+      if (taskResult.ok) {
+        result = JSON.parse(taskResult.output) as ExpressionOutput;
+        usedLocal = true;
+      } else {
+        throw new Error('Local task validation failed');
+      }
+    } catch {
+      // Fall back to gateway
+      result = (await textGenerationService.extractStructure({
+        schema: {
+          type: 'object',
+          properties: {
+            characters: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  expression: { type: 'string' },
+                },
+                required: ['name', 'expression'],
+                additionalProperties: false,
               },
-              required: ['name', 'expression'],
-              additionalProperties: false,
             },
           },
+          required: ['characters'],
+          additionalProperties: false,
         },
-        required: ['characters'],
-        additionalProperties: false,
-      },
-      schemaName: 'Expression',
-      prompt,
-      systemPrompt:
-        'Identify every named character and their emotional expression. Return JSON with characters array.',
-    })) as ExpressionOutput;
-
-    // extractStructure validates against the provided schema, so the cast is safe
+        schemaName: 'Expression',
+        prompt,
+        systemPrompt:
+          'Identify every named character and their emotional expression. Return JSON with characters array.',
+      })) as ExpressionOutput;
+    }
 
     return {
       agentId: config.id,
@@ -79,6 +99,7 @@ export const runExpressionAgent = async ({
       success: true,
       output: result,
       durationMs: Math.round(performance.now() - start),
+      metadata: { usedLocal },
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -90,4 +111,13 @@ export const runExpressionAgent = async ({
       durationMs: Math.round(performance.now() - start),
     };
   }
+};
+
+/**
+ * Extract character names from a text by finding capitalized words
+ * that are likely character names. This is a simple heuristic.
+ */
+const extractCharacterNames = (text: string): string[] => {
+  const words = text.match(/[A-Z][a-z]+/g) ?? [];
+  return [...new Set(words)].slice(0, 10);
 };

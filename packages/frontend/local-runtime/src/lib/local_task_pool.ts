@@ -34,12 +34,23 @@ export type MicroTaskResult = {
   type: MicroTask['type'];
   output: string;
   latencyMs: number;
+  /** Whether the output passed validation (false = fall back to gateway). */
+  ok: boolean;
+};
+
+export type ValidationFunctions = {
+  /** Strip markdown fences and extract JSON from a raw LLM response. */
+  sanitizeJsonResponse: (raw: string) => string;
+  /** Validate parsed JSON against a schema. Returns true if valid. */
+  validateAgainstSchema: (options: { schema: Record<string, unknown>; parsed: unknown }) => boolean;
 };
 
 export type LocalTaskPoolOptions = {
   bundle: LocalModelBundle;
   loader: EngineLoader;
   maxConcurrency?: number;
+  /** Optional validation functions for validate → repair → give-up loop. */
+  validation?: ValidationFunctions;
 };
 
 // ---------------------------------------------------------------------------
@@ -49,6 +60,7 @@ export type LocalTaskPoolOptions = {
 export class LocalTaskPool {
   private readonly _engine: LocalEngine;
   private readonly _maxConcurrency: number;
+  private readonly _validation: ValidationFunctions | null;
   private _activeCount = 0;
   private _queue: Array<{
     task: MicroTask;
@@ -61,6 +73,7 @@ export class LocalTaskPool {
   constructor(options: LocalTaskPoolOptions) {
     this._engine = new LocalEngine({ bundle: options.bundle, loader: options.loader });
     this._maxConcurrency = options.maxConcurrency ?? 2;
+    this._validation = options.validation ?? null;
   }
 
   // ── Public accessors ──────────────────────────────────────────────────────
@@ -176,6 +189,56 @@ export class LocalTaskPool {
     }
   }
 
+  /** Returns the expected output JSON schema for a given task type. */
+  private _getOutputSchema(type: MicroTask['type']): Record<string, unknown> {
+    switch (type) {
+      case 'expression':
+        return {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            expression: { type: 'string' },
+          },
+          required: ['name', 'expression'],
+          additionalProperties: false,
+        };
+      case 'battle-trigger':
+        return {
+          type: 'object',
+          properties: {
+            battle: { type: 'boolean' },
+            enemy: { type: 'string' },
+          },
+          required: ['battle', 'enemy'],
+          additionalProperties: false,
+        };
+      case 'relationship':
+        return {
+          type: 'object',
+          properties: {
+            change: { type: 'string', enum: ['improve', 'worsen', 'neutral'] },
+            magnitude: { type: 'number', minimum: 0, maximum: 10 },
+            reason: { type: 'string' },
+          },
+          required: ['change', 'magnitude', 'reason'],
+          additionalProperties: false,
+        };
+      case 'image-prompt':
+        return {
+          type: 'object',
+          properties: {
+            prompt: { type: 'string' },
+            negativePrompt: { type: 'string' },
+            style: { type: 'string' },
+          },
+          required: ['prompt'],
+          additionalProperties: false,
+        };
+      default:
+        return {};
+    }
+  }
+
   private async _executeTask(task: MicroTask): Promise<MicroTaskResult> {
     const start = performance.now();
 
@@ -184,11 +247,55 @@ export class LocalTaskPool {
     }
 
     const prompt = this._buildPrompt(task);
-    const output = await (this._engine.backend as TextEngineBackend).generate(prompt);
+    const rawOutput = await (this._engine.backend as TextEngineBackend).generate(prompt);
+
+    // Validate → repair → give-up loop
+    if (this._validation) {
+      const { sanitizeJsonResponse, validateAgainstSchema } = this._validation;
+      const schema = this._getOutputSchema(task.type);
+      let output = rawOutput;
+      let attempts = 0;
+      const maxAttempts = 2;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          const sanitized = sanitizeJsonResponse(output);
+          const parsed = JSON.parse(sanitized);
+          if (validateAgainstSchema({ schema, parsed })) {
+            return {
+              type: task.type,
+              output: sanitized,
+              latencyMs: Math.round(performance.now() - start),
+              ok: true,
+            };
+          }
+        } catch {
+          // Parse or validation failed — retry with repair prompt
+        }
+
+        if (attempts < maxAttempts) {
+          // Repair: ask the model to fix its output
+          const repairPrompt = `${prompt}\n\nYour previous response was not valid JSON. Please respond with ONLY valid JSON matching the expected format. Previous: ${rawOutput}`;
+          output = await (this._engine.backend as TextEngineBackend).generate(repairPrompt);
+        }
+      }
+
+      // Give up — return with ok: false
+      return {
+        type: task.type,
+        output: rawOutput,
+        latencyMs: Math.round(performance.now() - start),
+        ok: false,
+      };
+    }
+
+    // No validation configured — return raw output
     return {
       type: task.type,
-      output,
+      output: rawOutput,
       latencyMs: Math.round(performance.now() - start),
+      ok: true,
     };
   }
 

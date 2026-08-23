@@ -24,6 +24,7 @@ import {
   createAiProviderGateway,
   createDelegatingImageAdapter,
   createDelegatingVoiceAdapter,
+  createLocalTextAdapter,
   createOpenAiCompatibleTextAdapter,
   detectImageAvailability,
   detectTextAvailability,
@@ -35,6 +36,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
+import { localTaskPool } from '$lib/services/ai/local_task_pool_service.svelte.ts';
 import { configService } from '$lib/services/config/config_service.svelte.ts';
 import { resolveImageEngine } from '$lib/services/image/engine/image_engine_factory.svelte.ts';
 import {
@@ -126,10 +128,15 @@ class AiGatewayService
       },
     });
 
-    // One transport serves both offline (local) and byok (cloud) text modes.
-    registry.registerText({ mode: 'offline', adapter: textAdapter });
-    registry.registerText({ mode: 'byok', adapter: textAdapter });
+    // Register local text adapter for offline mode (C-427)
+    const localTextAdapter = createLocalTextAdapter({
+      taskPool: localTaskPool,
+      provider: 'local-qwen3',
+    });
+    registry.registerText({ mode: 'offline', adapter: localTextAdapter });
 
+    // One transport serves both offline (local) and byok (cloud) text modes.
+    registry.registerText({ mode: 'byok', adapter: textAdapter });
     registry.registerImage({
       mode: 'offline',
       adapter: createDelegatingImageAdapter({
