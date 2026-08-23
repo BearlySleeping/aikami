@@ -68,6 +68,7 @@ export * from './lib/game/status_effect.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/game/world_gen.ts';
 export * from './lib/local_ai/hardware_profile.ts';
+export * from './lib/local_ai/local_model_state.ts';
 export * from './lib/local_ai/model_manifest.ts';
 export * from './lib/local_ai/stack_backend.ts';
 export * from './lib/local_ai/stack_plan.ts';

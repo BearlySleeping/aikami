@@ -44,6 +44,7 @@ projects:
   frontend-services: "packages/frontend/services"
   frontend-utils: "packages/frontend/utils"
   frontend-ai-gateway: "packages/frontend/ai-gateway"
+  frontend-local-runtime: "packages/frontend/local-runtime"
   frontend-storage: "packages/frontend/storage"
   frontend-configs: "packages/frontend/configs"
   frontend-theme: "packages/frontend/theme"

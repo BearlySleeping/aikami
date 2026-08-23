@@ -293,6 +293,7 @@
       "name": "@aikami/frontend-ai-gateway",
       "dependencies": {
         "@aikami/constants": "workspace:*",
+        "@aikami/frontend-local-runtime": "workspace:*",
         "@aikami/logger": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
@@ -344,6 +345,15 @@
         "jsonchunk": "^0.1.0",
         "pixi.js": "8.20.0",
         "typebox": "1.3.16",
+      },
+    },
+    "packages/frontend/local-runtime": {
+      "name": "@aikami/frontend-local-runtime",
+      "dependencies": {
+        "@aikami/constants": "workspace:*",
+        "@aikami/logger": "workspace:*",
+        "@aikami/schemas": "workspace:*",
+        "@aikami/types": "workspace:*",
       },
     },
     "packages/frontend/services": {
@@ -506,6 +516,8 @@
     "@aikami/frontend-ai-gateway": ["@aikami/frontend-ai-gateway@workspace:packages/frontend/ai-gateway"],
 
     "@aikami/frontend-components": ["@aikami/frontend-components@workspace:packages/frontend/components"],
+
+    "@aikami/frontend-local-runtime": ["@aikami/frontend-local-runtime@workspace:packages/frontend/local-runtime"],
 
     "@aikami/frontend-services": ["@aikami/frontend-services@workspace:packages/frontend/services"],
 

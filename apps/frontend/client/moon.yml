@@ -25,6 +25,7 @@ dependsOn:
   - 'logger'
   - 'mocks'
   - 'utils'
+  - 'frontend-local-runtime'
 
 fileGroups:
   sources:

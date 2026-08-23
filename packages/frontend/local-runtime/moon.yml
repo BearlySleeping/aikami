@@ -1,16 +1,16 @@
-# packages/frontend/ai-gateway/moon.yml
+# packages/frontend/local-runtime/moon.yml
 $schema: 'https://moonrepo.dev/schemas/project.json'
 
 language: 'typescript'
 layer: 'library'
 tags:
-  - 'ai-gateway'
+  - 'local-runtime'
   - 'frontend'
   - 'library'
 
 project:
-  name: 'frontend-ai-gateway'
-  description: 'Unified AI provider gateway — mode-resolving dispatch for text/image/voice across offline/byok/service.'
+  name: 'frontend-local-runtime'
+  description: 'Modality-agnostic local model runtime — ModelAssetStore, LocalEngine, LocalTaskPool.'
   channel: '#frontend'
   owner: 'Frontend Team'
 
@@ -19,7 +19,6 @@ dependsOn:
   - 'schemas'
   - 'types'
   - 'logger'
-  - 'frontend-local-runtime'
 
 fileGroups:
   tests:

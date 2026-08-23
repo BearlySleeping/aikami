@@ -1,5 +1,5 @@
 {
-  "name": "@aikami/frontend-ai-gateway",
+  "name": "@aikami/frontend-local-runtime",
   "license": "MIT",
   "main": "src/index.ts",
   "scripts": {
@@ -13,7 +13,6 @@
     "@aikami/constants": "workspace:*",
     "@aikami/logger": "workspace:*",
     "@aikami/schemas": "workspace:*",
-    "@aikami/types": "workspace:*",
-    "@aikami/frontend-local-runtime": "workspace:*"
+    "@aikami/types": "workspace:*"
   }
 }

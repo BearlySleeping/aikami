@@ -3,6 +3,11 @@
 // Unit tests for the explicit voice-model download control (C-389 AC-4c):
 // size surfaced up front, progress, cancel, delete, checksum verification,
 // and idempotent join of concurrent downloads.
+//
+// Since C-427 the service delegates to ModelAssetStore. These tests verify
+// the delegation layer — the store's own logic is tested in the
+// @aikami/frontend/local-runtime test suite.
+
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // ---------------------------------------------------------------------------
@@ -90,21 +95,38 @@ const pinDigestBySize = (): void => {
 };
 
 const installFetchMock = (): ReturnType<typeof mock> => {
-  const fetchMock = mock(async (url: string | URL) => {
-    // Build the response buffer lazily, sized to the requested file.
-    return new Response(new Uint8Array(fileSizeForUrl(url)), { status: 200 });
-  });
+  const fetchMock = mock(
+    async (url: string | URL) => new Response(new Uint8Array(fileSizeForUrl(url)), { status: 200 }),
+  );
   // @ts-expect-error — replacing global fetch
   globalThis.fetch = fetchMock;
   return fetchMock;
 };
 
-const resetServiceState = async (): Promise<void> => {
-  const mod = await import('./voice_model_service.svelte.ts');
-  const svc = mod.voiceModelService as unknown as Record<string, unknown>;
-  svc.state = { status: 'not-downloaded', bytes: 0 };
-  svc._abortController = undefined;
-  svc._inflight = undefined;
+// ---------------------------------------------------------------------------
+// The service delegates to a module-level singleton ModelAssetStore.
+// To reset state between tests we re-import the module (clearing its
+// internal caches) and clear the Cache Storage polyfill.
+// ---------------------------------------------------------------------------
+
+const resetServiceModule = async (): Promise<void> => {
+  // Clear all cache stores
+  if ((globalThis as Record<string, unknown>).caches) {
+    const stores = new Map<string, MemoryCache>();
+    (globalThis as Record<string, unknown>).caches = {
+      open: async (name: string): Promise<MemoryCache> => {
+        let store = stores.get(name);
+        if (!store) {
+          store = new MemoryCache();
+          stores.set(name, store);
+        }
+        return store;
+      },
+    };
+  }
+  // Reset the service's in-memory state
+  const { voiceModelService } = await import('./voice_model_service.svelte.ts');
+  (voiceModelService as unknown as Record<string, unknown>)._reset();
 };
 
 describe('VoiceModelService (C-389 AC-4c)', () => {
@@ -126,14 +148,14 @@ describe('VoiceModelService (C-389 AC-4c)', () => {
   });
 
   test('checkStatus reports not-downloaded on a fresh install', async () => {
-    await resetServiceState();
+    await resetServiceModule();
     const { voiceModelService } = await import('./voice_model_service.svelte.ts');
     const state = await voiceModelService.checkStatus();
     expect(state.status).toBe('not-downloaded');
   });
 
   test('download() completes, verifies checksums, and reports ready', async () => {
-    await resetServiceState();
+    await resetServiceModule();
     const fetchMock = installFetchMock();
     pinDigestBySize();
 
@@ -146,7 +168,7 @@ describe('VoiceModelService (C-389 AC-4c)', () => {
   });
 
   test('a second download() call joins the in-flight download (idempotent)', async () => {
-    await resetServiceState();
+    await resetServiceModule();
     const fetchMock = installFetchMock();
     pinDigestBySize();
 
@@ -160,7 +182,7 @@ describe('VoiceModelService (C-389 AC-4c)', () => {
   });
 
   test('cancel() aborts the download and returns to not-downloaded', async () => {
-    await resetServiceState();
+    await resetServiceModule();
     const fetchMock = installFetchMock();
     let firstFetchResolved!: () => void;
     const firstFetchDone = new Promise<void>((resolve) => {
@@ -208,7 +230,7 @@ describe('VoiceModelService (C-389 AC-4c)', () => {
   });
 
   test('a size-matched body with an unknown checksum fails verification', async () => {
-    await resetServiceState();
+    await resetServiceModule();
     installFetchMock();
     // Force a non-matching hash for every body (overriding any digest mock
     // a previous test installed): a correctly-sized body whose checksum is
@@ -224,7 +246,7 @@ describe('VoiceModelService (C-389 AC-4c)', () => {
   });
 
   test('an oversized body fails size verification during streaming', async () => {
-    await resetServiceState();
+    await resetServiceModule();
     const fetchMock = installFetchMock();
     // First file arrives one byte larger than its manifest size — the size
     // guard must reject it while streaming, before any checksum step.
@@ -245,7 +267,7 @@ describe('VoiceModelService (C-389 AC-4c)', () => {
   });
 
   test('deleteModel() removes the cached model and returns to not-downloaded', async () => {
-    await resetServiceState();
+    await resetServiceModule();
     installFetchMock();
     pinDigestBySize();
 

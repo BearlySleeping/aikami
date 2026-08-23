@@ -135,6 +135,8 @@ const config = {
       '@aikami/frontend/theme/*': toPackagesPath('frontend/theme/src/lib/*'),
       '@aikami/frontend/ai-gateway': toPackagesPath('frontend/ai-gateway/src'),
       '@aikami/frontend/ai-gateway/*': toPackagesPath('frontend/ai-gateway/src/lib/*'),
+      '@aikami/frontend/local-runtime': toPackagesPath('frontend/local-runtime/src'),
+      '@aikami/frontend/local-runtime/*': toPackagesPath('frontend/local-runtime/src/lib/*'),
       '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
       '@aikami/frontend/engine/*': toPackagesPath('frontend/engine/src/*'),
       '@aikami/frontend/svelte-kit': toPackagesPath('frontend/svelte-kit/src'),

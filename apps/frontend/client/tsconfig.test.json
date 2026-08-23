@@ -27,6 +27,11 @@
         "../../../packages/frontend/ai-gateway/src/lib/*",
         "../../../packages/frontend/ai-gateway/src/*"
       ],
+      "@aikami/frontend/local-runtime": ["../../../packages/frontend/local-runtime/src/index.ts"],
+      "@aikami/frontend/local-runtime/*": [
+        "../../../packages/frontend/ai-gateway/src/lib/*",
+        "../../../packages/frontend/ai-gateway/src/*"
+      ],
       "@aikami/frontend/utils/*": [
         "../../../packages/frontend/utils/src/lib/*",
         "../../../packages/frontend/utils/src/*"
