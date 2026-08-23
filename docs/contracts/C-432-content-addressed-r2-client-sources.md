@@ -2,7 +2,7 @@
 id: C-432
 title: "Content-Addressed R2 Sources — Make the Client's Remote Origin Work"
 source: "user request 2026-08-23 — point the client at assets.bearlysleeping.com"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `packages/frontend/storage/src/lib/assets.ts`, `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts`, `apps/frontend/client/.env.*` |
 | **Priority** | P0 — the R2 fallback is wired end to end and produces 404s on every URL it writes. Smallest contract in the R2 track and a hard precondition for the rest. |
 | **Dependencies** | C-395 (published the bucket and the content-addressed layout — status `implemented`). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on the assets origin env var |
 | **Contract version** | 1.0.0 |
@@ -328,7 +328,7 @@ every boot write 12,700 rows of 404s. Neither half is independently useful.
 ## Implementation Sequence
 
 1. **Phase 1 (Data/Logic)**: Rewrite the key derivation in `addR2Sources`, add the stale-row repair, update the existing tests (AC-1, AC-2).
-2. **Phase 2 (Integration)**: Set `PUBLIC_ASSETS_BASE_URL` in `.env.example` and the mode env files; verify the boot path writes rows (AC-4, AC-5).
+2. **Phase 2 (Integration)**: Add `PUBLIC_ASSETS_BASE_URL` to the `masterSchema` in `packages/frontend/configs/src/lib/environment.ts` (as `Type.Optional(Type.String())`). Set the variable in `.env.example` and the mode env files; verify the boot path writes rows (AC-4, AC-5).
 3. **Phase 3 (Validation)**: `bun moon run frontend-storage:test`, `bun moon run client:test-unit`, `bun moon check`; boot and `curl -I` a written URL end to end (AC-3).
 
 ## Edge Cases & Gotchas
@@ -339,6 +339,7 @@ every boot write 12,700 rows of 404s. Neither half is independently useful.
 - **Do not fetch the catalog index.** It is a browse document for the hub. Reading it at boot would add a network dependency to the offline path for information the client already has.
 - **Tauri custom schemes.** The engine registers a custom-scheme URL resolver for `tauri://` and `file://`. Confirm an `https://` R2 URL passes through it untouched on desktop.
 - **Music and sprites are thin in the catalog.** The live index reports `music: 3` and `sprites: 2` against 11 MB of music on disk. That is C-433's problem; this contract must not assume full coverage, and a missing R2 row must simply fall back.
+- **`PUBLIC_ASSETS_BASE_URL` must be added to the `masterSchema` in `packages/frontend/configs/src/lib/environment.ts`.** The existing `publicEnv` object (`MasterEnv` type) does not include this variable — accessing `publicEnv.PUBLIC_ASSETS_BASE_URL` at `game_boot_service.svelte.ts:720` would be a TypeScript error without it. Add it as `Type.Optional(Type.String())` so an unset value remains `undefined` (falsy → clean no-op).
 
 ## Open Questions
 
