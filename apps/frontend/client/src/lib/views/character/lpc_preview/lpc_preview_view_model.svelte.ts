@@ -435,7 +435,7 @@ class LpcPreviewViewModel
           frame: new Rectangle(x, y, layout.pitch, layout.pitch),
         });
 
-        const anchor = getLpcSpriteAnchor(layout, assetId);
+        const anchor = getLpcSpriteAnchor(layout);
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
         // Anchor at the 64px logical frame origin. Universal 128px cells are

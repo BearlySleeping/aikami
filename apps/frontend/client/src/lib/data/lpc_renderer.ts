@@ -9,6 +9,7 @@
 //
 // Contract: C-372
 
+import { resolveLpcSheetGeometry } from '@aikami/frontend/engine';
 import { Rectangle, Sprite, Texture } from 'pixi.js';
 import type { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
 import { lpcStateSuffix } from '$lib/data/lpc_tags';
@@ -16,53 +17,28 @@ import { logger } from '$logger';
 
 // ── Sheet layout detection ────────────────────────────────────────────────
 
+// C-428: LpcSheetLayout and detectLpcSheetLayout are replaced by the shared
+// resolver in @aikami/frontend/engine. This file delegates to it.
+//
+// The old type had `scale: number` which could be 0.5 — the bug. The new
+// resolver always returns `scale: 1` and uses anchorOffset for positioning.
+//
+// Re-export the shared types for backward compatibility with existing callers.
+
 /**
- * Resolved layout of an LPC spritesheet.
- *
- * The Universal LPC Spritesheet Character Generator emits two cell sizes:
- *
- * - **Standard** sheets: 64×64 cells in a 9-col × 4-row grid (576×256) — the
- *   vast majority of the catalog (bodies, heads, torso, shields, swords…).
- * - **Universal** sheets: 128×128 cells in a 13-col × 4-row grid (1664×512) —
- *   emitted for some weapon walk cycles (bows, scimitars, spears, katanas).
- *   The drawn content is still ~64px; the cell is simply 2× padded.
- *
- * Renderers must sample a full cell (`pitch × pitch`) and scale the sprite by
- * {@link scale} so both families composite at the same 64px logical size.
+ * @deprecated Use the shared LpcSheetGeometry from @aikami/frontend/engine.
+ *   Re-exported here for backward compatibility.
  */
-export type LpcSheetLayout = {
-  /** Horizontal/vertical spacing between frames, in px (64 or 128). */
-  pitch: number;
-  /** Number of animation frames per row. */
-  columns: number;
-  /** Number of direction rows (4 for full sheets, 1 for single-row states). */
-  rows: number;
-  /** Scale factor normalizing a cell to the 64px logical frame size. */
-  scale: number;
-};
+export type LpcSheetLayout = import('@aikami/frontend/engine').LpcSheetGeometry;
 
 /**
  * Detects the cell layout of an LPC spritesheet.
  *
- * Falls back to the standard 64px grid for anything that does not match the
- * universal 13×4 @128px family (e.g. 576×256 walk sheets, 832×256 idle/shoot
- * sheets, 384×64 single-row hurt sheets).
+ * Delegates to the shared engine resolver. Returns the resolved geometry
+ * including pitch, columns, rows, scale (always 1), and anchorOffset.
  */
-export function detectLpcSheetLayout(sheet: { width: number; height: number }): LpcSheetLayout {
-  if (sheet.width % 128 === 0 && sheet.height % 128 === 0) {
-    const columns = sheet.width / 128;
-    const rows = sheet.height / 128;
-    if (columns >= 9 && columns <= 16 && rows === 4) {
-      return { pitch: 128, columns, rows, scale: 64 / 128 };
-    }
-  }
-  return {
-    pitch: 64,
-    columns: Math.max(1, Math.floor(sheet.width / 64)),
-    rows: Math.max(1, Math.floor(sheet.height / 64)),
-    scale: 1,
-  };
-}
+export const detectLpcSheetLayout = (sheet: { width: number; height: number }): LpcSheetLayout =>
+  resolveLpcSheetGeometry(sheet);
 
 // ── Resolver injection ────────────────────────────────────────────────────
 
@@ -153,45 +129,27 @@ const STATE_ASSET_ALIASES: Readonly<Record<string, Readonly<Record<string, strin
   'weapon/sword/rapier': { slash: 'weapon/sword/scimitar' },
 };
 
-/**
- * Per-asset anchor offsets for universal 128px-cell sheets.
- *
- * The universal weapon sheets place their drawing at a slightly different
- * position within the padded 128px cell than the bows, so the grip lands a
- * few pixels too high/left. The offset (applied on top of the -32/-32 base
- * anchor) aligns the sword grip with the character's hand.
- */
-const UNIVERSAL_ANCHOR_OVERRIDES: Readonly<Record<string, { x: number; y: number }>> = {
-  // Universal 128px sheets (walk+slash) used directly or via state aliases.
-  'weapon/sword/longsword_alt': { x: 4, y: 8 },
-  'weapon/sword/scimitar': { x: 4, y: 8 },
-  'weapon/sword/katana': { x: 4, y: 8 },
-  // Base assets whose *aliased* slash sheet is a universal 128px sheet — the
-  // override only applies to pitch-128 sheets, so their own 64px walk sheets
-  // keep the standard anchor.
-  'weapon/sword/saber': { x: 4, y: 8 },
-  'weapon/sword/longsword': { x: 4, y: 8 },
-  'weapon/sword/rapier': { x: 4, y: 8 },
-};
+// C-428: UNIVERSAL_ANCHOR_OVERRIDES deleted — these hand-tuned per-asset
+// offsets existed only to compensate for the wrong transform (scale: 0.5 +
+// anchor -32). With the fix (scale: 1, anchor -64), the oversize cells are
+// correctly centred and the overrides are unnecessary.
+//
+// If any sword still needs a nudge after this fix, that is a genuine
+// per-asset art offset — record it in Amendments with measurement proof.
 
 /**
- * Returns the sprite anchor (top-left, sprite-local px) for a sheet layout
- * and asset. Universal 128px sheets with a configured override are nudged so
- * the weapon grip aligns with the character's hand; everything else uses the
- * standard 64px frame anchor (-32, -32).
+ * Returns the sprite anchor (top-left, sprite-local px) for a sheet layout.
+ *
+ * Delegates to the shared resolver's anchorOffset. Oversize cells use -64,-64
+ * and standard cells use -32,-32 — both centre the logical 64px body region.
+ *
+ * @param layout - The resolved sheet geometry.
+ * @returns The anchor offset in sprite-local px.
  */
-export const getLpcSpriteAnchor = (
-  layout: LpcSheetLayout,
-  assetId: string,
-): { x: number; y: number } => {
-  if (layout.pitch === 128) {
-    const offset = UNIVERSAL_ANCHOR_OVERRIDES[assetId];
-    if (offset) {
-      return { x: -32 + offset.x, y: -32 + offset.y };
-    }
-  }
-  return { x: -32, y: -32 };
-};
+export const getLpcSpriteAnchor = (layout: LpcSheetLayout): { x: number; y: number } => ({
+  x: layout.anchorOffset.x,
+  y: layout.anchorOffset.y,
+});
 
 /**
  * Marks whether the asset manifest has finished loading.
@@ -441,13 +399,15 @@ export async function createLpcSprite(
   }
 
   const layout = detectLpcSheetLayout(sheet);
-  const anchor = getLpcSpriteAnchor(layout, assetId);
+  const anchor = getLpcSpriteAnchor(layout);
   const sprite = new Sprite(texture);
   sprite.eventMode = 'none';
-  // Anchor at the 64px logical frame origin — universal 128px cells keep the
-  // same anchor after scaling down so the weapon aligns with the character.
+  // Anchor at the cell's logical origin — oversize cells use -64,-64 so the
+  // centred 64px body region lands where a standard 64px cell would.
   sprite.x = anchor.x;
   sprite.y = anchor.y;
+  // C-428: scale is always 1. Oversize cells are drawn at native size;
+  // the anchor offset handles centring. No downscaling needed.
   sprite.scale.set(layout.scale, layout.scale);
   sprite.alpha = 1.0;
   sprite.zIndex = zIndex;

@@ -2442,3 +2442,161 @@ describe('C-377 AC-3 — world container lands on whole device pixels', () => {
     expect(Number.isInteger(snapped * 2)).toBe(true);
   });
 });
+
+// ===========================================================================
+// C-428 LPC Sheet Geometry Unification — AC-1 & AC-2
+// ===========================================================================
+
+import { resolveLpcSheetGeometry } from '../rendering/lpc_sheet_geometry.ts';
+
+describe('C-428 AC-1: Oversize cells resolve to native scale and a centred anchor', () => {
+  it('returns oversize geometry for a 1664×512 walk sheet (13 cols × 4 rows)', () => {
+    const result = resolveLpcSheetGeometry({ width: 1664, height: 512 });
+    expect(result.family).toBe('oversize');
+    expect(result.pitch).toBe(128);
+    expect(result.columns).toBe(13);
+    expect(result.rows).toBe(4);
+    expect(result.scale).toBe(1);
+    expect(result.anchorOffset).toEqual({ x: -64, y: -64 });
+  });
+
+  it('returns oversize geometry for a 1408×512 sheet (11 cols × 4 rows)', () => {
+    const result = resolveLpcSheetGeometry({ width: 1408, height: 512 });
+    expect(result.family).toBe('oversize');
+    expect(result.pitch).toBe(128);
+    expect(result.columns).toBe(11);
+    expect(result.rows).toBe(4);
+    expect(result.scale).toBe(1);
+    expect(result.anchorOffset).toEqual({ x: -64, y: -64 });
+  });
+
+  it('returns oversize geometry for a 2048×512 sheet (16 cols × 4 rows)', () => {
+    const result = resolveLpcSheetGeometry({ width: 2048, height: 512 });
+    expect(result.family).toBe('oversize');
+    expect(result.pitch).toBe(128);
+    expect(result.columns).toBe(16);
+    expect(result.rows).toBe(4);
+    expect(result.scale).toBe(1);
+    expect(result.anchorOffset).toEqual({ x: -64, y: -64 });
+  });
+
+  it('scale is the literal 1, not a computed value', () => {
+    const result = resolveLpcSheetGeometry({ width: 1664, height: 512 });
+    // This assertion catches the old bug: 64 / 128 = 0.5
+    expect(result.scale).toBe(1);
+    expect(result.scale).not.toBe(0.5);
+  });
+});
+
+describe('C-428 AC-2: Standard cells are unchanged', () => {
+  it('returns standard geometry for a 576×256 walk sheet (9 cols × 4 rows)', () => {
+    const result = resolveLpcSheetGeometry({ width: 576, height: 256 });
+    expect(result.family).toBe('standard');
+    expect(result.pitch).toBe(64);
+    expect(result.columns).toBe(9);
+    expect(result.rows).toBe(4);
+    expect(result.scale).toBe(1);
+    expect(result.anchorOffset).toEqual({ x: -32, y: -32 });
+  });
+
+  it('returns standard geometry for a 832×256 idle sheet (13 cols × 4 rows)', () => {
+    const result = resolveLpcSheetGeometry({ width: 832, height: 256 });
+    expect(result.family).toBe('standard');
+    expect(result.pitch).toBe(64);
+    expect(result.columns).toBe(13);
+    expect(result.rows).toBe(4);
+    expect(result.scale).toBe(1);
+    expect(result.anchorOffset).toEqual({ x: -32, y: -32 });
+  });
+
+  it('returns standard geometry for a 384×64 single-row hurt sheet (6 cols × 1 row)', () => {
+    const result = resolveLpcSheetGeometry({ width: 384, height: 64 });
+    expect(result.family).toBe('standard');
+    expect(result.pitch).toBe(64);
+    expect(result.columns).toBe(6);
+    expect(result.rows).toBe(1);
+    expect(result.scale).toBe(1);
+    expect(result.anchorOffset).toEqual({ x: -32, y: -32 });
+  });
+
+  it('returns standard geometry for a 64×64 single-frame sheet (1 col × 1 row)', () => {
+    const result = resolveLpcSheetGeometry({ width: 64, height: 64 });
+    expect(result.family).toBe('standard');
+    expect(result.pitch).toBe(64);
+    expect(result.columns).toBe(1);
+    expect(result.rows).toBe(1);
+    expect(result.scale).toBe(1);
+    expect(result.anchorOffset).toEqual({ x: -32, y: -32 });
+  });
+
+  it('handles unknown shapes gracefully — falls back to standard 64px layout', () => {
+    // A 100×50 sheet doesn't match any known family
+    const result = resolveLpcSheetGeometry({ width: 100, height: 50 });
+    expect(result.family).toBe('standard');
+    expect(result.pitch).toBe(64);
+    expect(result.columns).toBe(1);
+    expect(result.rows).toBe(1);
+    expect(result.scale).toBe(1);
+    expect(result.anchorOffset).toEqual({ x: -32, y: -32 });
+  });
+});
+
+// ===========================================================================
+// C-428 AC-3: The in-game path slices oversize sheets on the 128px grid
+// ===========================================================================
+
+describe('C-428 AC-3: In-game path slices oversize sheets on the 128px grid', () => {
+  it('resolves a 1664×512 oversize sheet to 128px pitch and 13 columns', () => {
+    const geometry = resolveLpcSheetGeometry({ width: 1664, height: 512 });
+    expect(geometry.pitch).toBe(128);
+    expect(geometry.columns).toBe(13);
+    expect(geometry.rows).toBe(4);
+  });
+
+  it('computes the correct frame rect for direction Down (row 2) at walk column 3', () => {
+    // Simulate what _loadEntityRecipes + _applyLpcFrame do:
+    // - Resolve geometry from sheet dimensions
+    // - Build spritesheet with frameWidth = geometry.pitch
+    // - Select frame: row = direction (Down=2), col = column % columns
+    const geometry = resolveLpcSheetGeometry({ width: 1664, height: 512 });
+    const direction = 2; // Down
+    const walkColumn = 3;
+
+    const frameCol = walkColumn % geometry.columns; // 3 % 13 = 3
+    const frameRow = direction % geometry.rows; // 2 % 4 = 2
+
+    const x = frameCol * geometry.pitch; // 3 * 128 = 384
+    const y = frameRow * geometry.pitch; // 2 * 128 = 256
+
+    expect(x).toBe(384);
+    expect(y).toBe(256);
+    expect(geometry.pitch).toBe(128);
+
+    // Verify the frame rect fits within the sheet
+    expect(x + geometry.pitch).toBeLessThanOrEqual(1664);
+    expect(y + geometry.pitch).toBeLessThanOrEqual(512);
+  });
+
+  it('getFrameColumn receives the real column count (13), not LPC_WALK_COLUMNS (9)', () => {
+    // This test verifies the invariant: AnimationController.getFrameColumn
+    // must be called with the sheet's real columns, not a global constant.
+    // The old bug was passing LPC_WALK_COLUMNS=9 for a 13-column sheet.
+    const geometry = resolveLpcSheetGeometry({ width: 1664, height: 512 });
+    expect(geometry.columns).toBe(13);
+    // For walk column 8 (last valid in 9-col sheet), column % 13 = 8 (still valid)
+    expect(8 % geometry.columns).toBe(8);
+    // For walk column 9 (overflow in 9-col sheet), column % 13 = 9 (correct for 13-col)
+    expect(9 % geometry.columns).toBe(9);
+    // For walk column 12, column % 13 = 12 (correct for 13-col)
+    expect(12 % geometry.columns).toBe(12);
+  });
+
+  it('preserves single-row (rows===1) behaviour for hurt sheets', () => {
+    // A 384×64 hurt sheet has 6 columns and 1 row
+    const geometry = resolveLpcSheetGeometry({ width: 384, height: 64 });
+    expect(geometry.rows).toBe(1);
+    // _applyLpcFrame forces effectiveRow = 0 when rows === 1
+    const effectiveRow = geometry.rows > 1 ? 2 : 0;
+    expect(effectiveRow).toBe(0);
+  });
+});

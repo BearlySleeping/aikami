@@ -29,7 +29,46 @@ const LpcSchema = Type.Object({
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });
 
+/** Schema for oversize weapon scale test — adds weaponScaleCorrect field. */
+const OversizeWeaponSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  characterVisible: Type.Boolean({
+    description: 'Whether a pixel-art character sprite is visible',
+  }),
+  layersVisible: Type.Boolean({
+    description: 'Whether multiple clothing/equipment layers are visible',
+  }),
+  colorsCorrect: Type.Boolean({
+    description: 'Whether colors match expected palette (no wrong tints)',
+  }),
+  weaponScaleCorrect: Type.Boolean({
+    description:
+      'Whether the sword blade is roughly as long as the character torso and the grip meets the hand',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
 // ── Prompt ───────────────────────────────────────────────────
+
+/** Prompt for oversize weapon scale test — C-428 AC-5. */
+const OVERSEIZE_WEAPON_PROMPT = [
+  'This is a close-up screenshot of an LPC (Liberated Pixel Cup) character from the Aikami game.',
+  'The character is rendered with PixiJS at high zoom on the /dev/lpc sandbox.',
+  'The character is holding a longsword (longsword_alt) in their right hand, facing down.',
+  '',
+  'EVALUATE:',
+  '- Is a pixel-art character clearly visible?',
+  '- Are the character layers composited correctly (body, head, hair, armor, etc.)?',
+  '- Are colors consistent with expected palette (no wrong tints, no missing colors)?',
+  "- Is the sword blade roughly as long as the character's torso?",
+  "- Does the sword grip meet the character's hand?",
+  '',
+  "CRITICAL: Score 90+ only if the blade is roughly as long as the character's torso",
+  "and the grip meets the character's hand. Score below 50 if the blade is",
+  'dagger-sized, floats detached from the hand, or is visibly cropped mid-blade.',
+  '',
+  'Return ONLY valid JSON matching the schema.',
+].join('\n');
 
 const LPC_PROMPT = [
   'This is a close-up screenshot of an LPC (Liberated Pixel Cup) character from the Aikami game.',
@@ -278,6 +317,32 @@ export default defineConfig({
         'Score 0-69: Clearly visible background bleed in the neck/chest region.',
       ].join('\n'),
       schema: LpcSchema,
+      canvasSelector: '#game-canvas',
+    },
+
+    // ── C-428 AC-5: Oversize Weapon Scale ────────────────────────
+    {
+      name: 'C-428 AC-5 — Oversize Weapon Scale (longsword_alt)',
+      searchParams: Object.fromEntries(
+        new URLSearchParams(
+          buildLpcUrl({
+            layers: [
+              { slotDefIndex: 0, variantIndex: 0 }, // body
+              { slotDefIndex: 1, variantIndex: 0 }, // head
+              { slotDefIndex: 2, variantIndex: 2 }, // torso
+              { slotDefIndex: 3, variantIndex: 0 }, // legs
+              { slotDefIndex: 4, variantIndex: 0 }, // feet
+              { slotDefIndex: 6, variantIndex: 4 }, // weapon: longsword_alt
+            ],
+            state: 2, // Walk
+            direction: 2, // Down
+            frame: 0,
+            zoom: 8,
+          }),
+        ),
+      ),
+      prompt: OVERSEIZE_WEAPON_PROMPT,
+      schema: OversizeWeaponSchema,
       canvasSelector: '#game-canvas',
     },
   ],

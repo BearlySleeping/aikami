@@ -32,8 +32,7 @@ const qwen3Loader = async (
     throw new Error('No model files available — local engine cannot initialize');
   }
   throw new Error(
-    'Local Qwen3 engine not yet wired to Web Worker. ' +
-      'Caller should use gateway fallback.',
+    'Local Qwen3 engine not yet wired to Web Worker. ' + 'Caller should use gateway fallback.',
   );
 };
 
