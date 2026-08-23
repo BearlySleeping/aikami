@@ -9,7 +9,6 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { questStateService } from '$services';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -174,11 +173,11 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// AC-1: Authored fallback when AI fails
+// AC-1: Provider failure surfaces an error (no authored fallback)
 // ---------------------------------------------------------------------------
 
-describe('AC-1: Authored fallback', () => {
-  test('returns authored turn when text generator throws', async () => {
+describe('AC-1: Provider failure surfaces an error', () => {
+  test('rejects when the text generator throws', async () => {
     const contentProvider = makeContentProvider();
     const textGenerator = makeTextGenerator({ error: new Error('connection refused') });
     npcDialogueService.configure({
@@ -188,22 +187,24 @@ describe('AC-1: Authored fallback', () => {
     });
 
     const controller = new AbortController();
-    const turn = await npcDialogueService.generateTurn({
-      npcId: 'village_elder',
-      npcName: 'Elder Thalia',
-      messages: [{ role: 'player', content: 'Hello' }],
-      signal: controller.signal,
-    });
+    await expect(
+      npcDialogueService.generateTurn({
+        npcId: 'village_elder',
+        npcName: 'Elder Thalia',
+        messages: [{ role: 'player', content: 'Hello' }],
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('connection refused');
 
-    expect(turn.source).toBe('authored');
-    expect(turn.narrative.length).toBeGreaterThan(0);
-    expect(turn.choices.length).toBeGreaterThanOrEqual(1);
-    expect(turn.choices.length).toBeLessThanOrEqual(4);
-    // No error text or *...* placeholder
-    expect(turn.narrative).not.toContain('*...*');
+    // The failure is recorded on turnState — never faked as authored.
+    expect(npcDialogueService.turnState.kind).toBe('failed');
+    if (npcDialogueService.turnState.kind === 'failed') {
+      expect(npcDialogueService.turnState.reason).toBe('provider_error');
+      expect(npcDialogueService.turnState.fallbackOffered).toBe(false);
+    }
   });
 
-  test('returns generic fallback for NPC without defaultDialogueKey', async () => {
+  test('rejects for an NPC without defaultDialogueKey', async () => {
     const contentProvider = makeContentProvider({
       npcs: { bob: { name: 'Bob' } },
     });
@@ -215,16 +216,14 @@ describe('AC-1: Authored fallback', () => {
     });
 
     const controller = new AbortController();
-    const turn = await npcDialogueService.generateTurn({
-      npcId: 'bob',
-      npcName: 'Bob',
-      messages: [],
-      signal: controller.signal,
-    });
-
-    expect(turn.source).toBe('authored');
-    expect(turn.narrative.length).toBeGreaterThan(0);
-    expect(turn.narrative).toContain('Bob');
+    await expect(
+      npcDialogueService.generateTurn({
+        npcId: 'bob',
+        npcName: 'Bob',
+        messages: [],
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('no capability');
   });
 });
 
@@ -799,80 +798,6 @@ describe('startDialogue', () => {
   });
 });
 
-describe('Quest-activation fallback (AI unavailable)', () => {
-  const originalGetOfferableQuests = (
-    questStateService as unknown as {
-      getOfferableQuests: (npcId: string) => Array<{ id: string; name: string }>;
-    }
-  ).getOfferableQuests;
-
-  afterEach(() => {
-    // Restore the preload-mocked questStateService behavior.
-    (
-      questStateService as unknown as {
-        getOfferableQuests: (npcId: string) => Array<{ id: string; name: string }>;
-      }
-    ).getOfferableQuests = originalGetOfferableQuests;
-  });
-
-  const stubOfferableQuests = (quests: Array<{ id: string; name: string }>): void => {
-    (
-      questStateService as unknown as {
-        getOfferableQuests: (npcId: string) => Array<{ id: string; name: string }>;
-      }
-    ).getOfferableQuests = () => quests;
-  };
-
-  const runFallbackAnalyze = (playerInput: string) => {
-    npcDialogueService.configure({
-      contentProvider: makeContentProvider(),
-      textGenerator: makeTextGenerator({ error: new Error('AI unavailable') }),
-      executors: makeExecutors(),
-    });
-    return npcDialogueService.analyzeIntent({
-      npcId: 'village_elder',
-      npcName: 'Elder Thalia',
-      messages: [{ role: 'player', content: playerInput }],
-      signal: new AbortController().signal,
-    });
-  };
-
-  test('accepts the sole offerable quest when the player clearly accepts', async () => {
-    stubOfferableQuests([{ id: 'fading_ward', name: 'The Fading Ward' }]);
-    const output = await runFallbackAnalyze('Consider it done, I accept the quest, elder.');
-    expect(output.questActivation).toEqual({ action: 'accept', questId: 'fading_ward' });
-  });
-
-  test('declines the sole offerable quest when the player clearly declines', async () => {
-    stubOfferableQuests([{ id: 'fading_ward', name: 'The Fading Ward' }]);
-    const output = await runFallbackAnalyze('No thanks, I cannot take on this quest.');
-    expect(output.questActivation).toEqual({ action: 'decline', questId: 'fading_ward' });
-  });
-
-  test('does not activate when the NPC has no offerable quest', async () => {
-    stubOfferableQuests([]);
-    const output = await runFallbackAnalyze('I accept the quest, elder.');
-    expect(output.questActivation).toBeUndefined();
-  });
-
-  test('does not activate when multiple quests are offerable (ambiguous)', async () => {
-    stubOfferableQuests([
-      { id: 'fading_ward', name: 'The Fading Ward' },
-      { id: 'second_quest', name: 'The Second Quest' },
-    ]);
-    const output = await runFallbackAnalyze('Consider it done, I accept the quest, elder.');
-    // Ambiguity guard: with more than one offerable quest the fallback must
-    // not guess which one the player means.
-    expect(output.questActivation).toBeUndefined();
-  });
-
-  test('does not activate on ordinary conversation about the quest', async () => {
-    stubOfferableQuests([{ id: 'fading_ward', name: 'The Fading Ward' }]);
-    const output = await runFallbackAnalyze('Tell me more about this quest.');
-    expect(output.questActivation).toBeUndefined();
-  });
-});
-
 // ---------------------------------------------------------------------------
 // C-401: two-call split + streaming + timeout + degrade (AC-1/4/5/6/7)
 // ---------------------------------------------------------------------------
@@ -978,7 +903,7 @@ describe('C-401: two-call narrative streaming', () => {
     expect(turn.source).toBe('ai');
   });
 
-  test('timeout reaches failed with reason timeout and fallbackOffered true (AC-4)', async () => {
+  test('timeout rejects with reason timeout and no fallback offered (AC-4)', async () => {
     const textGenerator = makeStreamingTextGenerator({ neverResolve: true });
     npcDialogueService.configure({
       contentProvider: makeContentProvider(),
@@ -988,23 +913,23 @@ describe('C-401: two-call narrative streaming', () => {
     });
 
     const controller = new AbortController();
-    const turn = await npcDialogueService.generateTurn({
-      npcId: 'village_elder',
-      npcName: 'Elder Thalia',
-      messages: [],
-      signal: controller.signal,
-    });
+    await expect(
+      npcDialogueService.generateTurn({
+        npcId: 'village_elder',
+        npcName: 'Elder Thalia',
+        messages: [],
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('timed out');
 
-    // Authored fallback is offered as the recovery
-    expect(turn.source).toBe('authored');
     expect(npcDialogueService.turnState.kind).toBe('failed');
     if (npcDialogueService.turnState.kind === 'failed') {
       expect(npcDialogueService.turnState.reason).toBe('timeout');
-      expect(npcDialogueService.turnState.fallbackOffered).toBe(true);
+      expect(npcDialogueService.turnState.fallbackOffered).toBe(false);
     }
   });
 
-  test('timeout after partial stream stops chunk delivery and fails the turn (AC-4)', async () => {
+  test('timeout after partial stream stops chunk delivery and rejects the turn (AC-4)', async () => {
     const delivered: string[] = [];
     const textGenerator = makeStreamingTextGenerator({
       chunks: ['The guard ', 'shifts, ', 'and speaks.'],
@@ -1018,24 +943,25 @@ describe('C-401: two-call narrative streaming', () => {
     });
 
     const controller = new AbortController();
-    const turn = await npcDialogueService.generateTurn({
-      npcId: 'village_elder',
-      npcName: 'Elder Thalia',
-      messages: [],
-      signal: controller.signal,
-      onChunk: (text) => delivered.push(text),
-    });
+    await expect(
+      npcDialogueService.generateTurn({
+        npcId: 'village_elder',
+        npcName: 'Elder Thalia',
+        messages: [],
+        signal: controller.signal,
+        onChunk: (text) => delivered.push(text),
+      }),
+    ).rejects.toThrow('timed out');
 
     // The two pre-stall chunks reached the caller, then delivery stopped.
     expect(delivered.join('')).toBe('The guard shifts, ');
 
-    // The turn fails as a timeout with the authored fallback offered; the
-    // failed turn state is not regressed by any late chunk.
-    expect(turn.source).toBe('authored');
+    // The turn fails as a timeout with no fallback; the failed turn state is
+    // not regressed by any late chunk.
     expect(npcDialogueService.turnState.kind).toBe('failed');
     if (npcDialogueService.turnState.kind === 'failed') {
       expect(npcDialogueService.turnState.reason).toBe('timeout');
-      expect(npcDialogueService.turnState.fallbackOffered).toBe(true);
+      expect(npcDialogueService.turnState.fallbackOffered).toBe(false);
     }
   });
 

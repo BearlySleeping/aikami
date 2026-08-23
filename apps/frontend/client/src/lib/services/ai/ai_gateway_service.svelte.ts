@@ -265,17 +265,13 @@ class AiGatewayService
 
   /** Reads the API key for the given provider from ConfigService. */
   private _getTextApiKey(provider: string): string | undefined {
-    // 1. Active text connection's apiKey (C-230 connections, set via capability screen)
-    const connections = configService.state.connections ?? [];
-    const defaultId = configService.state.defaultConnectionId;
-    const conn = defaultId
-      ? connections.find((c) => c.id === defaultId)
-      : connections.find((c) => (c.capability ?? 'text') === 'text' && c.provider === provider);
-    if (conn?.apiKey) {
-      return conn.apiKey;
-    }
-
-    return undefined;
+    // Resolve through ConfigService's capability-aware lookup. It prefers the
+    // default connection only when it ALSO matches this provider + text
+    // capability, otherwise it falls back to the first matching text
+    // connection. (The global defaultConnectionId can point at an image/voice
+    // connection after multi-capability setup — C-230 — so keying off it
+    // blindly returns the wrong/empty key and the provider 401s.)
+    return configService.getApiKey(provider, 'text');
   }
 
   /**

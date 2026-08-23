@@ -168,9 +168,12 @@ describe('GameBootService — AC-4 Cancellation', () => {
     resetService();
     const input = createMockInput();
 
-    // Start boot and cancel immediately
+    // Start boot and cancel immediately — the boot pipeline yields at its
+    // first await, giving the caller a chance to cancel before any stage
+    // completes. A setTimeout delay is unreliable because in the test
+    // environment async operations resolve as microtasks and the pipeline
+    // may finish before the timer fires.
     const bootPromise = gameBootService.boot(input);
-    await new Promise((r) => setTimeout(r, 5));
     gameBootService.cancelBoot();
 
     const result = await bootPromise;

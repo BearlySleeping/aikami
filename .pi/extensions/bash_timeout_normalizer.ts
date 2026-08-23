@@ -1,6 +1,7 @@
 /**
  * Bash Timeout Normalizer — enforces seconds-only convention for Bash tool timeouts,
- * injects non-interactive environment guards, and caps runaway timeouts.
+ * injects non-interactive environment guards, caps runaway timeouts, and makes
+ * `find -exec` terminators survive @hypabolic/pi-hypa's command rewriter.
  *
  * Pi's built-in Bash tool interprets `timeout` as SECONDS. However, the model is
  * frequently trained on millisecond-based APIs and may pass values like 120000
@@ -27,6 +28,74 @@ const DEFAULT_TIMEOUT_SECONDS = 60;
 
 /** Environment guard prefix injected before every command. */
 const ENV_GUARD = 'export CI=true FORCE_COLOR=1 GIT_TERMINAL_PROMPT=0 2>/dev/null; ';
+
+/**
+ * Rewrite an UNQUOTED `\;` to `';'`.
+ *
+ * 🔴 Works around a bug in `@hypabolic/pi-hypa`'s rewriter, which wraps every
+ * bash command as `hypa -c "<command>"`. Its splitter treats the `;` in `\;`
+ * as a command separator without honouring the backslash escape, and emits a
+ * stray `\"` in its place:
+ *
+ *   in   find . -exec grep -l "x" {} \; 2>/dev/null
+ *   out  hypa -c "find . -exec grep -l \"x\" {} \" ; 2>/dev/null
+ *                                                ^^^ opening quote never closed
+ *
+ * bash then rejects the whole command with `unexpected EOF while looking for
+ * matching '"'`. Because the mangling is deterministic, the model retries the
+ * identical command and storm-breaker kills the session at three failures —
+ * observed 2026-08-23, and in 24 of 28,814 stored bash calls across every
+ * model (16 of them on the healthy direct DeepSeek, so this is not a model
+ * fault). `';'` is exactly equivalent to `\;` in POSIX find, and survives the
+ * rewriter untouched.
+ *
+ * This extension is project-local, and pi loads `cwd/.pi/extensions/` BEFORE
+ * package extensions, so this runs before hypa reads the command.
+ *
+ * Only unquoted occurrences are rewritten: inside quotes `\;` is literal text
+ * (e.g. a grep pattern), and hypa handles those correctly already.
+ */
+export const quoteExecTerminators = (command: string): string => {
+  let out = '';
+  let quote: "'" | '"' | null = null;
+
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i] as string;
+
+    if (quote) {
+      out += ch;
+      if (ch === quote) {
+        quote = null;
+      } else if (quote === '"' && ch === '\\' && i + 1 < command.length) {
+        // Inside double quotes a backslash escapes the next character.
+        out += command[++i] as string;
+      }
+      continue;
+    }
+
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      out += ch;
+      continue;
+    }
+
+    if (ch === '\\' && command[i + 1] === ';') {
+      out += "';'";
+      i++;
+      continue;
+    }
+
+    if (ch === '\\' && i + 1 < command.length) {
+      // Preserve any other escape pair verbatim.
+      out += ch + (command[++i] as string);
+      continue;
+    }
+
+    out += ch;
+  }
+
+  return out;
+};
 
 export default function (pi: ExtensionAPI) {
   pi.on('tool_call', async (event) => {
@@ -58,11 +127,9 @@ export default function (pi: ExtensionAPI) {
     //   - Colour / progress queries (FORCE_COLOR=1)
     //   - Credential prompts (GIT_TERMINAL_PROMPT=0)
     if (typeof event.input?.command === 'string') {
-      const cmd = event.input.command;
+      const cmd = quoteExecTerminators(event.input.command);
       // Don't double-inject if already present
-      if (!cmd.startsWith('export CI=true')) {
-        event.input.command = ENV_GUARD + cmd;
-      }
+      event.input.command = cmd.startsWith('export CI=true') ? cmd : ENV_GUARD + cmd;
     }
   });
 }

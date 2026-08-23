@@ -205,6 +205,13 @@ export PI_CYCLE_THRESHOLD="${PI_CYCLE_THRESHOLD:-3}"
 # repeats of "```typescript"; every genuine collapse sits at 64+ and is
 # repeated prose. A threshold of 6 here would have killed 44 healthy sessions.
 export PI_THINK_REPETITION_THRESHOLD="${PI_THINK_REPETITION_THRESHOLD:-50}"
+# Growth, in bytes, between mid-stream collapse scans. `turn_end` fires only
+# once a turn COMPLETES, so before the mid-stream check existed a collapsing
+# generation ran unchecked until it exhausted maxTokens — on 2026-08-23 one
+# reached 298,477 characters and the user's Ctrl+C is what ended it, after
+# which the guard reported "x192" to an already-dead session. The scan is
+# throttled by growth because message_update fires per token.
+export PI_STREAM_SCAN_BYTES="${PI_STREAM_SCAN_BYTES:-8192}"
 
 # ── 5. Delegate secrets to Bun ─────────────────────────────────────────
 

@@ -155,7 +155,10 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   confirmAndEnter(): Promise<void>;
 
   // Session Zero
-  startSessionZero(): void;
+  startSessionZero(): Promise<void>;
+
+  // Mode switching
+  selectExistingCharacter(): Promise<void>;
 };
 
 // ── Options ────────────────────────────────────────────────────────────
@@ -512,9 +515,47 @@ class OnboardingCoordinatorViewModel
 
   // ── Session Zero ──────────────────────────────────────────────────
 
-  startSessionZero(): void {
-    this.debug('startSessionZero');
-    this.mode = 'session_zero';
+  /**
+   * Starts the DM chat experience by navigating to /personas/create
+   * where the PersonaCreateView (chat with DM) lives.
+   */
+  async startSessionZero(): Promise<void> {
+    this.debug('startSessionZero — navigating to PersonaCreateView');
+    this.info('startSessionZero', { mode: this.mode });
+
+    try {
+      this.mode = 'session_zero';
+      await routerService.goToRoute('personaCreate', {
+        pathParameters: undefined,
+        queryParameters: undefined,
+      });
+    } catch (error) {
+      this.error('startSessionZero:navigation-failed', error);
+      this.errorMessage =
+        error instanceof Error ? error.message : 'Failed to open DM chat. Please try again.';
+    }
+  }
+
+  // ── Mode Switching ─────────────────────────────────────────────────
+
+  /**
+   * Navigates to the persona creation route with onboarding=1,
+   * which shows the onboarding coordinator (starter selection / custom).
+   */
+  async selectExistingCharacter(): Promise<void> {
+    this.debug('selectExistingCharacter — navigating to character select');
+    this.info('selectExistingCharacter', { mode: this.mode });
+
+    try {
+      await routerService.goToRoute('personaCreate', {
+        pathParameters: undefined,
+        queryParameters: { onboarding: '1' },
+      });
+    } catch (error) {
+      this.error('selectExistingCharacter:navigation-failed', error);
+      this.errorMessage =
+        error instanceof Error ? error.message : 'Failed to navigate. Please try again.';
+    }
   }
 
   // ── Private: Persona Assembly ─────────────────────────────────────

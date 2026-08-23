@@ -45,6 +45,18 @@ class SetupViewModel
       className: 'OnboardingCoordinatorViewModel',
     });
   }
+
+  override async initialize(): Promise<void> {
+    await super.initialize();
+
+    // Initialize the onboarding coordinator (triggers draft recovery)
+    await this.onboardingViewModel.initialize();
+
+    // Auto-navigate to DM chat (default behavior).
+    // The DM chat lives at /personas/create (PersonaCreateView).
+    this.debug('SetupViewModel.initialize — auto-starting DM chat');
+    await this.onboardingViewModel.startSessionZero();
+  }
 }
 
 // ---------------------------------------------------------------------------

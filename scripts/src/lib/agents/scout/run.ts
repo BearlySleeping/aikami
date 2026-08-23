@@ -32,7 +32,7 @@ if (!env.PI_HARD_SPEND) {
 
 // Build argv array — Bun.spawn passes directly to process, no shell escaping issues
 const provider = process.env.SCOUT_PROVIDER ?? 'deepinfra';
-const model = process.env.SCOUT_MODEL ?? 'deepseek-ai/DeepSeek-V4-Flash-0731';
+const model = process.env.SCOUT_MODEL ?? 'deepseek-ai/DeepSeek-V4-Flash';
 const piArgs: string[] = [
   '--provider',
   provider,

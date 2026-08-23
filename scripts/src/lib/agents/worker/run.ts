@@ -33,7 +33,7 @@ if (!env.PI_HARD_SPEND) {
 
 // Build argv array
 const provider = process.env.WORKER_PROVIDER ?? 'deepinfra';
-const model = process.env.WORKER_MODEL ?? 'deepseek-ai/DeepSeek-V4-Flash-0731';
+const model = process.env.WORKER_MODEL ?? 'deepseek-ai/DeepSeek-V4-Flash';
 const piArgs: string[] = [
   '--provider',
   provider,

@@ -282,3 +282,121 @@ describe('cost guard sees reasoning blocks', () => {
     expect(calls.shutdown).toBe(1);
   });
 });
+
+/**
+ * Mid-stream detection.
+ *
+ * `turn_end` fires only once a turn is complete, so a collapsing generation
+ * ran unchecked until it exhausted maxTokens. On 2026-08-23 one reached
+ * 298,477 characters and the user's Ctrl+C is what ended it — the guard then
+ * reported "x192" to a session that was already dead.
+ */
+describe('cost guard mid-stream collapse detection', () => {
+  const streaming = (thinking: string) => ({
+    message: { role: 'assistant', content: [{ type: 'thinking', thinking }] },
+  });
+
+  test('aborts a collapsing generation while it is still streaming', async () => {
+    const { pi, calls, emit } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+    await emit('message_start', {});
+
+    // Grow the buffer the way a collapse does, one chunk at a time.
+    let thinking = '';
+    for (let i = 0; i < 400 && calls.abort === 0; i++) {
+      thinking += 'Actually, let me reconsider the whole thing. ';
+      await emit('message_update', streaming(thinking));
+    }
+
+    expect(calls.abort).toBe(1);
+    expect(calls.steer.some((m) => m.includes('REPETITION GUARD'))).toBe(true);
+    // Cut off within the first scan window — the real collapse reached 298,477.
+    expect(thinking.length).toBeLessThan(12000);
+  });
+
+  test('does not scan or fire on a healthy streaming message', async () => {
+    const { pi, calls, emit } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+    await emit('message_start', {});
+
+    // Genuinely varied prose — each sentence differs, as real reasoning does.
+    let thinking = '';
+    for (let i = 0; i < 400; i++) {
+      thinking += `The caller at index ${i} passes a ${i % 2 === 0 ? 'string' : 'number'} `;
+      thinking += `so the branch taken there resolves to case ${i * 7}. `;
+      await emit('message_update', streaming(thinking));
+    }
+
+    expect(thinking.length).toBeGreaterThan(30000);
+    expect(calls.abort).toBe(0);
+    expect(calls.shutdown).toBe(0);
+  });
+
+  test('tolerates code drafted inside a streaming reasoning block', async () => {
+    const { pi, calls, emit } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+    await emit('message_start', {});
+
+    let thinking = '';
+    for (let i = 0; i < 37; i++) {
+      thinking += '```typescript\nconst value = compute();\n```\n';
+      await emit('message_update', streaming(thinking));
+    }
+
+    expect(calls.abort).toBe(0);
+  });
+
+  test('ignores non-assistant messages', async () => {
+    const { pi, calls, emit } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('message_start', {});
+    await emit('message_update', {
+      message: { role: 'user', content: [{ type: 'text', text: 'x'.repeat(50000) }] },
+    });
+    expect(calls.abort).toBe(0);
+  });
+});
+
+describe('cost guard strike accounting across the stream boundary', () => {
+  const streaming = (thinking: string) => ({
+    message: { role: 'assistant', content: [{ type: 'thinking', thinking }] },
+  });
+
+  test('one collapse counts one strike, even though turn_end sees it again', async () => {
+    const { pi, calls, emit } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+    await emit('message_start', {});
+
+    let thinking = '';
+    for (let i = 0; i < 400 && calls.abort === 0; i++) {
+      thinking += 'Actually, let me reconsider the whole thing. ';
+      await emit('message_update', streaming(thinking));
+    }
+    expect(calls.abort).toBe(1);
+
+    // The aborted partial still arrives at turn_end. It must not be scored
+    // a second time, or the first collapse would halt instead of steering.
+    await emit('turn_end', {
+      message: { content: [{ type: 'thinking', thinking }], usage: { input: 10, output: 10 } },
+    });
+    expect(calls.shutdown).toBe(0);
+
+    // A second, separate collapse is what halts.
+    await emit('message_start', {});
+    let next = '';
+    for (let i = 0; i < 400 && calls.shutdown === 0; i++) {
+      next += 'Actually, let me reconsider the whole thing. ';
+      await emit('message_update', streaming(next));
+    }
+    expect(calls.shutdown).toBe(1);
+  });
+});
