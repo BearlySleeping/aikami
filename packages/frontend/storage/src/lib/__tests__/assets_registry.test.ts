@@ -146,7 +146,7 @@ describe('AssetRegistryRepository', () => {
     expect(sources[0]?.url).toBe('/game-data/music/exploration/forest.mp3');
   });
 
-  test('addR2Sources mirrors bundled paths as priority-1 R2 URLs', async () => {
+  test('addR2Sources writes content-addressed URLs from asset hash', async () => {
     await registry.seedFromManifest({ manifest: makeManifest(), hashes: makeHashes() });
 
     const added = await registry.addR2Sources('https://assets.bearlysleeping.com');
@@ -158,10 +158,12 @@ describe('AssetRegistryRepository', () => {
     expect(sources[0]?.priority).toBe(0);
     expect(sources[1]?.backend).toBe('r2');
     expect(sources[1]?.priority).toBe(1);
-    expect(sources[1]?.url).toBe('https://assets.bearlysleeping.com/music/exploration/forest.mp3');
+    // Content-addressed URL: assets/<hash[0:2]>/<hash>.<ext>
+    const expectedUrl = `https://assets.bearlysleeping.com/assets/${HASH_B.slice(0, 2)}/${HASH_B}.mp3`;
+    expect(sources[1]?.url).toBe(expectedUrl);
 
-    // Idempotent — second call is a cheap no-op.
-    expect(await registry.addR2Sources('https://assets.bearlysleeping.com')).toBe(0);
+    // Idempotent — second call writes the same rows (no-op upsert).
+    expect(await registry.addR2Sources('https://assets.bearlysleeping.com')).toBe(3);
   });
 
   test('re-seeding with extra asset adds r2 mirror for new asset only', async () => {
@@ -199,21 +201,66 @@ describe('AssetRegistryRepository', () => {
 
     await registry.seedFromManifest({ manifest: manifest2, hashes: hashes2 });
 
-    // Second addR2Sources should only add the new asset's mirror
+    // Second addR2Sources upserts all 4 assets (INSERT OR REPLACE is idempotent).
     const added2 = await registry.addR2Sources('https://assets.bearlysleeping.com');
-    expect(added2).toBe(1);
+    expect(added2).toBe(4);
 
     // New asset should have both bundled + r2 sources
     const newSources = await registry.listSources('sfx:ui:click');
     expect(newSources).toHaveLength(2);
     expect(newSources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
     expect(newSources[1]?.backend).toBe('r2');
+    const expectedNewUrl = `https://assets.bearlysleeping.com/assets/${HashD.slice(0, 2)}/${HashD}.wav`;
+    expect(newSources[1]?.url).toBe(expectedNewUrl);
 
     // Existing asset sources should remain unchanged (not duplicated)
     const existingSources = await registry.listSources('music:exploration:forest');
     expect(existingSources).toHaveLength(2);
     expect(existingSources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
     expect(existingSources[1]?.backend).toBe('r2');
+    const expectedExistingUrl = `https://assets.bearlysleeping.com/assets/${HASH_B.slice(0, 2)}/${HASH_B}.mp3`;
+    expect(existingSources[1]?.url).toBe(expectedExistingUrl);
+  });
+
+  // ── AC-2: Existing incorrect r2 rows are repaired ──────────────────
+
+  test('addR2Sources rewrites stale path-mirrored r2 rows to content-addressed URLs', async () => {
+    await registry.seedFromManifest({ manifest: makeManifest(), hashes: makeHashes() });
+
+    // Manually insert a stale (path-mirrored) r2 row to simulate a pre-C-432 install.
+    const staleUrl = 'https://assets.bearlysleeping.com/music/exploration/forest.mp3';
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
+            VALUES (?, 'r2', ?, 1)`,
+      args: ['music:exploration:forest', staleUrl],
+    });
+
+    // Confirm the stale row is there.
+    let sources = await registry.listSources('music:exploration:forest');
+    expect(sources).toHaveLength(2);
+    expect(sources[1]?.url).toBe(staleUrl);
+
+    // Run addR2Sources — it should rewrite the stale row.
+    const added = await registry.addR2Sources('https://assets.bearlysleeping.com');
+    // All 3 assets get upserted (stale + new for the other 2).
+    expect(added).toBe(3);
+
+    sources = await registry.listSources('music:exploration:forest');
+    expect(sources).toHaveLength(2);
+    const expectedUrl = `https://assets.bearlysleeping.com/assets/${HASH_B.slice(0, 2)}/${HASH_B}.mp3`;
+    expect(sources[1]?.url).toBe(expectedUrl);
+
+    // Second run is idempotent — same upsert, no data regression.
+    const added2 = await registry.addR2Sources('https://assets.bearlysleeping.com');
+    expect(added2).toBe(3);
+    sources = await registry.listSources('music:exploration:forest');
+    expect(sources[1]?.url).toBe(expectedUrl);
+  });
+
+  test('addR2Sources handles empty registry gracefully', async () => {
+    // No seed — empty assets and asset_sources tables.
+    const added = await registry.addR2Sources('https://assets.bearlysleeping.com');
+    expect(added).toBe(0);
   });
 
   test('meta.asset_registry_seeded is set to the manifest scannedAt', async () => {
