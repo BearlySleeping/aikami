@@ -1671,7 +1671,8 @@ export class NpcDialogueService
         this.warn('_analyzeIntent:call2-failed', {
           detail: error instanceof Error ? error.message : String(error),
         });
-        rawOutput = undefined;
+        // Propagate call-2 failure to public handler so it sets failed turn state
+        throw error;
       }
       this._checkAbort(options.signal);
 
@@ -1826,7 +1827,8 @@ export class NpcDialogueService
         this.warn('_resolveRoll:call2-failed', {
           detail: error instanceof Error ? error.message : String(error),
         });
-        rawOutput = undefined;
+        // Propagate call-2 failure to public handler so it sets failed turn state
+        throw error;
       }
       this._checkAbort(options.signal);
 

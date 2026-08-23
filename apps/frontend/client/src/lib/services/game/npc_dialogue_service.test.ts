@@ -225,6 +225,69 @@ describe('AC-1: Provider failure surfaces an error', () => {
       }),
     ).rejects.toThrow('no capability');
   });
+
+  test('analyzeIntent: call 1 succeeds, call 2 rejects — propagates error and sets failed turn state', async () => {
+    const textGenerator = makeStreamingTextGenerator({
+      chunks: ['The elder considers your words.'],
+      call2Error: new Error('envelope extraction failed'),
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const controller = new AbortController();
+    await expect(
+      npcDialogueService.analyzeIntent({
+        npcId: 'village_elder',
+        npcName: 'Elder Thalia',
+        messages: [{ role: 'player', content: 'I try to persuade you.' }],
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow('envelope extraction failed');
+
+    // Both the rejection AND the failed turn state must be present
+    expect(npcDialogueService.turnState.kind).toBe('failed');
+    if (npcDialogueService.turnState.kind === 'failed') {
+      expect(npcDialogueService.turnState.reason).toBe('provider_error');
+      expect(npcDialogueService.turnState.fallbackOffered).toBe(false);
+    }
+  });
+
+  test('resolveRoll: call 1 succeeds, call 2 rejects — propagates error and sets failed turn state', async () => {
+    const textGenerator = makeStreamingTextGenerator({
+      chunks: ['The elder watches as you roll.'],
+      call2Error: new Error('envelope extraction failed'),
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const controller = new AbortController();
+    await expect(
+      npcDialogueService.resolveRoll({
+        npcId: 'village_elder',
+        npcName: 'Elder Thalia',
+        messages: [],
+        signal: controller.signal,
+        checkType: 'persuasion',
+        difficultyClass: 12,
+        rollTotal: 15,
+        outcome: 'pass',
+        playerInput: 'I appeal to your honor.',
+      }),
+    ).rejects.toThrow('envelope extraction failed');
+
+    // Both the rejection AND the failed turn state must be present
+    expect(npcDialogueService.turnState.kind).toBe('failed');
+    if (npcDialogueService.turnState.kind === 'failed') {
+      expect(npcDialogueService.turnState.reason).toBe('provider_error');
+      expect(npcDialogueService.turnState.fallbackOffered).toBe(false);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

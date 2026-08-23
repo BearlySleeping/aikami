@@ -523,6 +523,13 @@ class OnboardingCoordinatorViewModel
     this.debug('startSessionZero — navigating to PersonaCreateView');
     this.info('startSessionZero', { mode: this.mode });
 
+    // Session Zero requires the text provider — when unavailable, preserve
+    // the manual onboarding path instead of routing into a provider-dependent flow.
+    if (!this.isTextProviderAvailable) {
+      this.warn('startSessionZero:no-text-provider — staying in manual onboarding');
+      return;
+    }
+
     try {
       this.mode = 'session_zero';
       await routerService.goToRoute('personaCreate', {
@@ -539,17 +546,17 @@ class OnboardingCoordinatorViewModel
   // ── Mode Switching ─────────────────────────────────────────────────
 
   /**
-   * Navigates to the persona creation route with onboarding=1,
-   * which shows the onboarding coordinator (starter selection / custom).
+   * Navigates to the persona list route, where the user can select an existing
+   * character to continue their campaign.
    */
   async selectExistingCharacter(): Promise<void> {
-    this.debug('selectExistingCharacter — navigating to character select');
+    this.debug('selectExistingCharacter — navigating to persona list');
     this.info('selectExistingCharacter', { mode: this.mode });
 
     try {
-      await routerService.goToRoute('personaCreate', {
+      await routerService.goToRoute('personas', {
         pathParameters: undefined,
-        queryParameters: { onboarding: '1' },
+        queryParameters: undefined,
       });
     } catch (error) {
       this.error('selectExistingCharacter:navigation-failed', error);

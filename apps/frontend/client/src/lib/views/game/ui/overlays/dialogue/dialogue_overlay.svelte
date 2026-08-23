@@ -188,6 +188,8 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           class="btn btn-ghost btn-xs"
           onclick={toggleFullscreen}
           title={isFullscreen ? 'Exit full view' : 'Full view'}
+          aria-label={isFullscreen ? 'Exit full view' : 'Enter full view'}
+          aria-pressed={isFullscreen}
         >
           {isFullscreen ? '⊡' : '⛶'}
         </button>

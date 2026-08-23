@@ -343,12 +343,17 @@ describe('cost guard mid-stream collapse detection', () => {
     await emit('before_agent_start', {});
     await emit('message_start', {});
 
+    // Accumulate code blocks until they exceed the scan window (8192 bytes by default)
+    // while still staying within the healthy-drafting threshold (37 repeats).
     let thinking = '';
+    const codeBlock = '```typescript\nconst value = compute();\n```\n';
     for (let i = 0; i < 37; i++) {
-      thinking += '```typescript\nconst value = compute();\n```\n';
+      thinking += codeBlock;
       await emit('message_update', streaming(thinking));
     }
 
+    // Verify we exceeded the scan window but stayed under the threshold
+    expect(thinking.length).toBeGreaterThan(8192);
     expect(calls.abort).toBe(0);
   });
 
@@ -356,10 +361,19 @@ describe('cost guard mid-stream collapse detection', () => {
     const { pi, calls, emit } = harness();
     costGuard(pi as never);
     await emit('session_start', {});
+    await emit('before_agent_start', {});
     await emit('message_start', {});
+
+    // Build a repeated-sentence payload that exceeds the scan window
+    const repeatedSentence = 'This is a user message that repeats. ';
+    const userText = repeatedSentence.repeat(300); // ~10,800 bytes, exceeds 8192
     await emit('message_update', {
-      message: { role: 'user', content: [{ type: 'text', text: 'x'.repeat(50000) }] },
+      message: { role: 'user', content: [{ type: 'text', text: userText }] },
     });
+
+    // The guard must NOT fire on non-assistant messages, even when they exceed
+    // the scan window and contain repetition. If the role guard is removed,
+    // this test will fail (abort would be 1).
     expect(calls.abort).toBe(0);
   });
 });

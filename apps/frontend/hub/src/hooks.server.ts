@@ -82,8 +82,14 @@ const isClientAuthPath = (pathname: string): boolean =>
 // entry and leaves the valid domain-scoped session intact.
 const SESSION_COOKIE_NAME = '__Secure-better-auth.session_token';
 
-const hasDuplicateSessionCookie = (cookieHeader: string): boolean =>
-  cookieHeader.split(`${SESSION_COOKIE_NAME}=`).length > 2;
+const hasDuplicateSessionCookie = (cookieHeader: string): boolean => {
+  // Match only at cookie-name boundaries: start of header or after "; "
+  // to avoid false positives from substring matches inside another cookie's value.
+  const escapedName = SESSION_COOKIE_NAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`(?:^|;\\s*)${escapedName}=`, 'g');
+  const matches = cookieHeader.match(pattern);
+  return (matches?.length ?? 0) > 1;
+};
 
 const expireHostScopedSessionCookie = (response: Response): void => {
   response.headers.append(
