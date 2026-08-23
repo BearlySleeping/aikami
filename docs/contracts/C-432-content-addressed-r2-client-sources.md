@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `packages/frontend/storage/src/lib/assets.ts`, `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts`, `apps/frontend/client/.env.*` |
 | **Priority** | P0 — the R2 fallback is wired end to end and produces 404s on every URL it writes. Smallest contract in the R2 track and a hard precondition for the rest. |
 | **Dependencies** | C-395 (published the bucket and the content-addressed layout — status `implemented`). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on the assets origin env var |
 | **Contract version** | 1.0.0 |
@@ -354,6 +354,43 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Execution Report
+
+### Summary
+Rewrote `addR2Sources` to derive content-addressed R2 URLs from the asset's SHA-256 hash (`assets/<hash[0:2]>/<hash>.<ext>`) instead of mirroring the bundled relative path. Added stale-row repair so pre-C-432 installs with broken path-mirrored URLs are corrected on boot. Added `PUBLIC_ASSETS_BASE_URL` to the environment schema and all mode env files (set to `https://assets.bearlysleeping.com` in staging/production, empty in emulator/testing). Updated all tests to assert the new URL format.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Content-addressed key derivation implemented in `addR2Sources` |
+| AC-2 | ✅ | Stale row repair: existing `r2` rows are rewritten via `INSERT OR REPLACE` |
+| AC-3 | ✅ | Hash verification is handled by existing `AssetManager.resolve` — no change needed |
+| AC-4 | ✅ | Unset `PUBLIC_ASSETS_BASE_URL` is a clean no-op; game boots without errors in emulator |
+| AC-5 | ✅ | Variable set in `.env.staging` and `.env.production`; boot path writes sources when set |
+
+### Files Created
+None.
+
+### Files Modified
+| File | Purpose |
+|---|---|
+| `packages/frontend/storage/src/lib/assets.ts` | Content-addressed key derivation in `addR2Sources`, stale-row repair, updated doc comment |
+| `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | Updated expected URLs, added AC-2 repair test, added empty-registry test |
+| `packages/frontend/configs/src/lib/environment.ts` | Added `PUBLIC_ASSETS_BASE_URL` to masterSchema and env builder |
+| `apps/frontend/client/.env.example` | Added `PUBLIC_ASSETS_BASE_URL` with doc comment |
+| `apps/frontend/client/.env.emulator` | Added `PUBLIC_ASSETS_BASE_URL=` (empty) |
+| `apps/frontend/client/.env.staging` | Added `PUBLIC_ASSETS_BASE_URL=https://assets.bearlysleeping.com` |
+| `apps/frontend/client/.env.production` | Added `PUBLIC_ASSETS_BASE_URL=https://assets.bearlysleeping.com` |
+| `apps/frontend/client/.env.testing` | Added `PUBLIC_ASSETS_BASE_URL=` (empty) |
+
+### Deviations from Spec
+None.
+
+### Test Results
+- Unit (storage): 50/50 PASS (0 failures)
+- Unit (client): 1949/1949 PASS (0 failures)
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ## Promotion Lifecycle
 
