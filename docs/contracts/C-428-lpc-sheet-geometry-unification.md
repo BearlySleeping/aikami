@@ -2,7 +2,7 @@
 id: C-428
 title: "LPC Sheet Geometry Unification — Oversize Cells and the Two Renderers"
 source: "user request 2026-08-23 — engine review; reproduced from asset bytes"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -374,3 +374,50 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Created a shared LPC sheet-geometry resolver (`resolveLpcSheetGeometry`) in the engine rendering module, fixing the oversize-cell bug where 128px cells were incorrectly downscaled to 64px (scale: 0.5) instead of being drawn at native scale with a centred anchor offset. Both the production game path (`game_world.ts`) and the dev/preview path (`lpc_renderer.ts`) now consume the shared module. The per-asset anchor overrides (`UNIVERSAL_ANCHOR_OVERRIDES`) that existed only to compensate for the wrong transform were deleted.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Oversize cells resolve to native scale (1) and centred anchor (-64,-64). 4 unit tests pass. |
+| AC-2 | ✅ | Standard cells unchanged — pitch 64, anchor -32,-32. 5 unit tests pass including single-row and unknown shapes. |
+| AC-3 | ✅ | Game path slices oversize sheets on 128px grid. 4 unit tests verify frame rect computation and column count. |
+| AC-4 | ✅ | Both renderers agree on all 8 shipped sheet shapes across all direction/column combos. 4 integration tests pass. |
+| AC-5 | ✅ | `UNIVERSAL_ANCHOR_OVERRIDES` deleted — only a comment noting its removal remains. Visual test case added to lpc.visual.ts. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/rendering/lpc_sheet_geometry.ts` | Shared sheet-geometry resolver — `resolveLpcSheetGeometry`, `LpcCellFamily`, `LpcSheetGeometry` types |
+| `apps/frontend/client/src/lib/data/lpc_renderer.test.ts` | Integration tests for AC-4 — verifies both renderers agree on all shipped sheet shapes |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/rendering/index.ts` | Added export of `resolveLpcSheetGeometry`, `LpcCellFamily`, `LpcSheetGeometry` |
+| `packages/frontend/engine/src/index.ts` | Added export of `resolveLpcSheetGeometry`, `LpcCellFamily`, `LpcSheetGeometry` |
+| `packages/frontend/engine/src/game_world.ts` | Removed `LPC_WALK_COLUMNS` global; `_loadEntityRecipes` and `_applyLpcFrame` now use `resolveLpcSheetGeometry` for pitch, columns, and cache key |
+| `packages/frontend/engine/src/__tests__/rendering.test.ts` | Added 13 new tests (AC-1: 4, AC-2: 5, AC-3: 4) |
+| `apps/frontend/client/src/lib/data/lpc_renderer.ts` | `detectLpcSheetLayout` and `getLpcSpriteAnchor` delegate to shared resolver; `UNIVERSAL_ANCHOR_OVERRIDES` deleted; `createLpcSprite` uses new anchor API |
+| `apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts` | Updated `getLpcSpriteAnchor` call to remove `assetId` parameter |
+| `apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.svelte.ts` | Updated `getLpcSpriteAnchor` call to remove `assetId` parameter |
+| `apps/e2e/src/visual/suites/lpc.visual.ts` | Added `OversizeWeaponSchema` and `oversize_weapon_scale` test case for AC-5 |
+
+### Deviations from Spec
+
+None. All ACs implemented as specified.
+
+### Test Results
+
+- Unit (engine): 1023 pass / 1025 total (2 pre-existing failures — CombatViewModel, unrelated)
+- Integration (client): 4 pass / 4 total (0 failures)
+- Visual: Test case added to lpc.visual.ts — evaluation requires AI Visual Runner with OpenRouter key
+- Baseline: 2 pre-existing failures, 0 new failures
