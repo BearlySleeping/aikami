@@ -22,12 +22,10 @@ type Asset = {
 
 const parseArgs = (): { repo: string; revision: string; files: string[] } => {
   const args = process.argv.slice(2);
-  const repo = args[args.indexOf('--repo') + 1] ?? '';
-  const revision = args[args.indexOf('--revision') + 1] ?? '';
-  const filesIdx = args.indexOf('--files');
-  const files = filesIdx >= 0 ? args.slice(filesIdx + 1) : [];
+  const repoIdx = args.indexOf('--repo');
+  const revIdx = args.indexOf('--revision');
 
-  if (!repo || !revision || files.length === 0) {
+  if (repoIdx < 0 || revIdx < 0) {
     console.error(
       'Usage: gen_model_bundle.ts --repo <repo> --revision <revision> --files <file1> <file2> ...',
     );
@@ -37,7 +35,27 @@ const parseArgs = (): { repo: string; revision: string; files: string[] } => {
     process.exit(1);
   }
 
-  return { repo, revision, files };
+  const repoVal = args[repoIdx + 1];
+  const revisionVal = args[revIdx + 1];
+
+  if (!repoVal || repoVal.startsWith('--')) {
+    console.error('Error: --repo flag requires a value');
+    process.exit(1);
+  }
+  if (!revisionVal || revisionVal.startsWith('--')) {
+    console.error('Error: --revision flag requires a value');
+    process.exit(1);
+  }
+
+  const filesIdx = args.indexOf('--files');
+  const files = filesIdx >= 0 ? args.slice(filesIdx + 1) : [];
+
+  if (files.length === 0) {
+    console.error('Error: --files flag requires at least one file path');
+    process.exit(1);
+  }
+
+  return { repo: repoVal, revision: revisionVal, files };
 };
 
 const downloadFile = async (url: string): Promise<Buffer> => {

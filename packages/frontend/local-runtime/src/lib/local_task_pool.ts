@@ -11,7 +11,7 @@ import type {
   ImagePromptInputSchema,
   RelationshipInputSchema,
 } from '@aikami/schemas';
-import type { EngineBackend } from '@aikami/types';
+import type { EngineBackend, LocalModelState } from '@aikami/types';
 import type { StaticDecode } from 'typebox';
 import { type EngineLoader, LocalEngine } from './local_engine.ts';
 
@@ -45,9 +45,15 @@ export type ValidationFunctions = {
   validateAgainstSchema: (options: { schema: Record<string, unknown>; parsed: unknown }) => boolean;
 };
 
+/** Loader whose result is guaranteed to be a TextEngineBackend. */
+export type TextEngineLoader = (
+  files: ReadonlyArray<{ path: string; data: ArrayBuffer }>,
+  signal: AbortSignal,
+) => Promise<TextEngineBackend>;
+
 export type LocalTaskPoolOptions = {
   bundle: LocalModelBundle;
-  loader: EngineLoader;
+  loader: TextEngineLoader;
   maxConcurrency?: number;
   /** Optional validation functions for validate → repair → give-up loop. */
   validation?: ValidationFunctions;
@@ -72,7 +78,11 @@ export class LocalTaskPool {
 
   constructor(options: LocalTaskPoolOptions) {
     this._engine = new LocalEngine({ bundle: options.bundle, loader: options.loader });
-    this._maxConcurrency = options.maxConcurrency ?? 2;
+    const mc = options.maxConcurrency ?? 2;
+    if (!Number.isFinite(mc) || mc <= 0 || !Number.isInteger(mc)) {
+      throw new Error(`Invalid maxConcurrency: must be a positive integer, got ${mc}`);
+    }
+    this._maxConcurrency = mc;
     this._validation = options.validation ?? null;
   }
 
@@ -100,7 +110,10 @@ export class LocalTaskPool {
    * Ensure the underlying engine is loaded. Safe to call multiple times.
    */
   async ensureLoaded(signal?: AbortSignal): Promise<void> {
-    await this._engine.load(signal);
+    const state = await this._engine.load(signal);
+    if (state.status !== 'ready') {
+      throw new Error(`Engine failed to load: ${state.status}`);
+    }
   }
 
   /**
@@ -247,7 +260,7 @@ export class LocalTaskPool {
     }
 
     const prompt = this._buildPrompt(task);
-    const rawOutput = await (this._engine.backend as TextEngineBackend).generate(prompt);
+    const rawOutput = await this._engine.backend.generate(prompt);
 
     // Validate → repair → give-up loop
     if (this._validation) {
@@ -277,7 +290,7 @@ export class LocalTaskPool {
         if (attempts < maxAttempts) {
           // Repair: ask the model to fix its output
           const repairPrompt = `${prompt}\n\nYour previous response was not valid JSON. Please respond with ONLY valid JSON matching the expected format. Previous: ${rawOutput}`;
-          output = await (this._engine.backend as TextEngineBackend).generate(repairPrompt);
+          output = await this._engine.backend.generate(repairPrompt);
         }
       }
 

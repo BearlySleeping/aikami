@@ -31,6 +31,8 @@ export class LocalEngine {
   private readonly _loader: EngineLoader;
   private _backend: EngineBackend | null = null;
   private _state: LocalModelState;
+  private _loadPromise: Promise<LocalModelState> | null = null;
+  private _loadGeneration = 0;
 
   constructor(options: LocalEngineOptions) {
     this._bundle = options.bundle;
@@ -67,34 +69,58 @@ export class LocalEngine {
       return this._state;
     }
 
+    // Serialize concurrent loads — only one loader invocation runs at a time
+    if (this._loadPromise) {
+      return await this._loadPromise;
+    }
+
+    const generation = ++this._loadGeneration;
     const ctrl = new AbortController();
     const effectiveSignal = signal ?? ctrl.signal;
 
-    try {
-      this._state = { status: 'loading' };
+    this._loadPromise = (async (): Promise<LocalModelState> => {
+      try {
+        this._state = { status: 'loading' };
 
-      const files = await this._readFromCache(effectiveSignal);
+        const files = await this._readFromCache(effectiveSignal);
 
-      if (effectiveSignal.aborted) {
-        this._state = { status: 'not-downloaded', bytes: this._totalBytes() };
+        if (effectiveSignal.aborted || generation !== this._loadGeneration) {
+          this._state = { status: 'not-downloaded', bytes: this._totalBytes() };
+          return this._state;
+        }
+
+        this._state = { status: 'loading' };
+        const backend = await this._loader(files, effectiveSignal);
+
+        // Stale or aborted loader — dispose and leave as not-downloaded
+        if (effectiveSignal.aborted || generation !== this._loadGeneration) {
+          try {
+            await backend.dispose();
+          } catch {}
+          this._state = { status: 'not-downloaded', bytes: this._totalBytes() };
+          return this._state;
+        }
+
+        this._backend = backend;
+        this._state = { status: 'ready' };
         return this._state;
+      } catch (error) {
+        if ((error as Error)?.name === 'AbortError' || effectiveSignal.aborted) {
+          this._state = { status: 'not-downloaded', bytes: this._totalBytes() };
+        } else {
+          const message =
+            error instanceof Error ? error.message : `Load failed for ${this._bundle.id}`;
+          this._state = { status: 'error', message, retryable: true };
+        }
+        return this._state;
+      } finally {
+        if (generation === this._loadGeneration) {
+          this._loadPromise = null;
+        }
       }
+    })();
 
-      this._state = { status: 'loading' };
-      this._backend = await this._loader(files, effectiveSignal);
-
-      this._state = { status: 'ready' };
-      return this._state;
-    } catch (error) {
-      if ((error as Error)?.name === 'AbortError' || effectiveSignal.aborted) {
-        this._state = { status: 'not-downloaded', bytes: this._totalBytes() };
-      } else {
-        const message =
-          error instanceof Error ? error.message : `Load failed for ${this._bundle.id}`;
-        this._state = { status: 'error', message, retryable: true };
-      }
-      return this._state;
-    }
+    return await this._loadPromise;
   }
 
   /**

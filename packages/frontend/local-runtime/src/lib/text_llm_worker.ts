@@ -36,6 +36,8 @@ type InitializeMessage = {
 
 type RunMessage = {
   action: 'run';
+  /** Request identity for matching out-of-order responses. */
+  requestId: string;
   /** Input prompt for text generation. */
   prompt: string;
   /** Maximum number of tokens to generate. */
@@ -54,12 +56,16 @@ type InitializeResponse = {
 
 type RunResponse = {
   type: 'complete';
+  /** Request identity matching the submitted RunMessage. */
+  requestId: string;
   /** Generated text output. */
   output: string;
 };
 
 type ErrorResponse = {
   type: 'error';
+  /** Request identity matching the submitted RunMessage, if applicable. */
+  requestId?: string;
   message: string;
 };
 
@@ -113,11 +119,12 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
 };
 
 const handleRun = async (message: RunMessage): Promise<void> => {
-  const { prompt, maxTokens = 128, temperature = 0.7 } = message;
+  const { prompt, requestId, maxTokens = 128, temperature = 0.7 } = message;
 
   if (!generator) {
     const response: ErrorResponse = {
       type: 'error',
+      requestId,
       message: 'Text generation pipeline not initialized. Call initialize first.',
     };
     self.postMessage(response);
@@ -127,6 +134,7 @@ const handleRun = async (message: RunMessage): Promise<void> => {
   if (!prompt.trim()) {
     const response: ErrorResponse = {
       type: 'error',
+      requestId,
       message: 'Empty prompt — nothing to generate.',
     };
     self.postMessage(response);
@@ -155,11 +163,11 @@ const handleRun = async (message: RunMessage): Promise<void> => {
       ? fullText.slice(prompt.length).trim()
       : fullText.trim();
 
-    const response: RunResponse = { type: 'complete', output };
+    const response: RunResponse = { type: 'complete', requestId, output };
     self.postMessage(response);
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : 'Text generation failed';
-    const response: ErrorResponse = { type: 'error', message: errMsg };
+    const response: ErrorResponse = { type: 'error', requestId, message: errMsg };
     self.postMessage(response);
   }
 };

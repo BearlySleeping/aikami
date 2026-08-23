@@ -34,8 +34,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Aria'],
       },
     },
-    expectedOutput: 'happy',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Aria","expression":"happy"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -45,8 +45,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Kael'],
       },
     },
-    expectedOutput: 'angry',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Kael","expression":"angry"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -56,8 +56,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Lyra'],
       },
     },
-    expectedOutput: 'sad',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Lyra","expression":"sad"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -67,8 +67,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Theron'],
       },
     },
-    expectedOutput: 'surprised',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Theron","expression":"surprised"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -78,8 +78,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Mira'],
       },
     },
-    expectedOutput: 'fearful',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Mira","expression":"fearful"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -90,8 +90,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Doran'],
       },
     },
-    expectedOutput: 'thoughtful',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Doran","expression":"thoughtful"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -102,8 +102,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Elena'],
       },
     },
-    expectedOutput: 'neutral',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Elena","expression":"neutral"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -114,8 +114,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['goblin'],
       },
     },
-    expectedOutput: 'disgusted',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"goblin","expression":"disgusted"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -125,8 +125,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Seraphina'],
       },
     },
-    expectedOutput: 'happy',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Seraphina","expression":"happy"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -137,8 +137,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['knight'],
       },
     },
-    expectedOutput: 'sad',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"knight","expression":"sad"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -149,8 +149,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Vex'],
       },
     },
-    expectedOutput: 'happy',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Vex","expression":"happy"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -161,8 +161,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['merchant'],
       },
     },
-    expectedOutput: 'angry',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"merchant","expression":"angry"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -173,8 +173,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Luna'],
       },
     },
-    expectedOutput: 'surprised',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Luna","expression":"surprised"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -184,8 +184,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['scout'],
       },
     },
-    expectedOutput: 'fearful',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"scout","expression":"fearful"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -196,8 +196,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Archmage Cinder'],
       },
     },
-    expectedOutput: 'thoughtful',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Archmage Cinder","expression":"thoughtful"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -207,8 +207,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['guard'],
       },
     },
-    expectedOutput: 'neutral',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"guard","expression":"neutral"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -218,8 +218,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Ivy'],
       },
     },
-    expectedOutput: 'disgusted',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Ivy","expression":"disgusted"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -230,8 +230,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Bram'],
       },
     },
-    expectedOutput: 'happy',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Bram","expression":"happy"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -242,8 +242,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['innkeeper'],
       },
     },
-    expectedOutput: 'neutral',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"innkeeper","expression":"neutral"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -254,8 +254,8 @@ export const EXPRESSION_SAMPLES: AccuracySample<'expression'>[] = [
         characters: ['Selene'],
       },
     },
-    expectedOutput: 'surprised',
-    matchMode: 'exact',
+    expectedOutput: '{"name":"Selene","expression":"surprised"}',
+    matchMode: 'substring',
   },
 ];
 
@@ -271,8 +271,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The bandits draw their swords and charge at the party with murderous intent.',
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"bandits"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -281,8 +281,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The king welcomes you to his throne room and offers you a seat by the fire.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -291,8 +291,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'A massive dragon descends from the sky, its eyes fixed on the village below.',
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"dragon"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -301,8 +301,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The merchant shows you his wares and asks if you would like to browse.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -311,8 +311,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: "An assassin leaps from the shadows, dagger aimed at the prince's throat.",
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"assassin"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -321,8 +321,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The healer tends to your wounds with gentle hands, humming a soft melody.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -331,8 +331,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'A pack of wolves encircles the camp, growling and snapping their jaws.',
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"Wolves"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -341,8 +341,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The librarian helps you find a rare book on ancient history.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -351,8 +351,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The rival adventuring party draws their weapons and blocks your path.',
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"rival party"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -361,8 +361,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The festival dancers twirl and spin in a colorful display of celebration.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -371,8 +371,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'A giant stone golem awakens and begins smashing through the temple walls.',
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"golem"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -381,8 +381,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The chef presents a beautifully plated dish and describes its ingredients.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -391,8 +391,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The necromancer raises his staff and the dead begin to rise from their graves.',
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"necromancer"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -401,8 +401,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The farmer thanks you for helping with the harvest and offers you a meal.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -411,8 +411,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'A volley of arrows rains down from the castle battlements as the siege begins.',
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"attackers"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -421,8 +421,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The minstrel strums his lute and begins a tale of heroes long past.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -431,8 +431,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The dark elf mage conjures a ball of crackling lightning in her palm.',
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"dark elf"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -441,8 +441,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The children play tag in the village square, laughing and shouting.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -451,8 +451,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'A horde of undead shambles toward the city gates, hungry for living flesh.',
       },
     },
-    expectedOutput: 'true',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":true,"enemy":"undead horde"}',
+    matchMode: 'substring',
   },
   {
     task: {
@@ -461,8 +461,8 @@ export const BATTLE_TRIGGER_SAMPLES: AccuracySample<'battle-trigger'>[] = [
         prose: 'The sage shares ancient wisdom about the stars and their alignment.',
       },
     },
-    expectedOutput: 'false',
-    matchMode: 'exact',
+    expectedOutput: '{"battle":false,"enemy":""}',
+    matchMode: 'substring',
   },
 ];
 

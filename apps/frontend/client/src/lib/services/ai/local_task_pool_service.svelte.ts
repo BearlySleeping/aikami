@@ -8,7 +8,6 @@
 import { QWEN3_BUNDLE } from '@aikami/constants';
 import { sanitizeJsonResponse, validateAgainstSchema } from '@aikami/frontend/ai-gateway';
 import { LocalTaskPool } from '@aikami/frontend/local-runtime';
-import { aiGatewayService } from './ai_gateway_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Engine loader for Qwen3
@@ -19,32 +18,23 @@ import { aiGatewayService } from './ai_gateway_service.svelte.ts';
  * text-generation pipeline. This is the EngineLoader passed to LocalEngine.
  */
 const qwen3Loader = async (
-  _files: ReadonlyArray<{ path: string; data: ArrayBuffer }>,
+  files: ReadonlyArray<{ path: string; data: ArrayBuffer }>,
   _signal: AbortSignal,
 ) => {
-  // In the browser, the actual pipeline is loaded via a Web Worker.
-  // For now, return a stub that delegates to the gateway as fallback.
-  // The full Web Worker integration (text_llm_worker.ts) will be wired
-  // when the worker is registered and the pipeline is initialized.
-  return {
-    kind: 'wasm' as const,
-    dispose: async () => {
-      // Cleanup worker resources
-    },
-    generate: async (prompt: string): Promise<string> => {
-      // Fall back to the gateway for actual generation
-      const result = await aiGatewayService.generateText({
-        messages: [{ role: 'user', content: prompt }],
-        resolution: {
-          capability: 'text',
-          mode: 'offline',
-          provider: 'local-qwen3',
-          model: 'Qwen/Qwen3-1B',
-        },
-      });
-      return result.text;
-    },
-  };
+  // The actual Web Worker pipeline (text_llm_worker.ts) is loaded
+  // from Cache Storage. For now, return a stub that fails promptly
+  // so the caller can use its non-local fallback.
+  //
+  // 🔴 Do NOT call aiGatewayService.generateText here — the local
+  // text adapter is registered for 'offline' mode and calling it
+  // would create a recursive loop: adapter → pool → loader → adapter.
+  if (files.length === 0) {
+    throw new Error('No model files available — local engine cannot initialize');
+  }
+  throw new Error(
+    'Local Qwen3 engine not yet wired to Web Worker. ' +
+      'Caller should use gateway fallback.',
+  );
 };
 
 // ---------------------------------------------------------------------------

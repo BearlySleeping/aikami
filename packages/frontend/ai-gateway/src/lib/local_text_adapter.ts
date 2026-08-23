@@ -40,14 +40,15 @@ export const createLocalTextAdapter = (options: {
       }
 
       try {
-        // Convert the last user message into a micro-task
-        const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
-        const prompt = lastUserMsg?.content ?? '';
+        // Preserve full message context for conversational text
+        const conversationText = messages
+          .map((m) => `${m.role}: ${m.content}`)
+          .join('\n');
 
-        // Build a micro-task from the prompt
+        // Build a micro-task from the full conversation context
         const microTask: MicroTask = {
           type: 'expression',
-          payload: { prose: prompt, characters: ['user'] },
+          payload: { prose: conversationText, characters: ['user'] },
         };
 
         const result = await raceWithAbort({
@@ -55,6 +56,17 @@ export const createLocalTextAdapter = (options: {
           signal,
           onAbort: cancelledError,
         });
+
+        if (!result.ok) {
+          // Signal gateway fallback — do not emit or return task output
+          throw createAiGatewayError({
+            code: 'failed-precondition',
+            capability: 'text',
+            mode: resolution.mode,
+            provider: resolution.provider,
+            message: 'Local task validation failed — fall back to gateway',
+          });
+        }
 
         if (onChunk) {
           onChunk(result.output);

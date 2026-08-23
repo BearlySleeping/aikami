@@ -17,7 +17,7 @@ export const TEST_KOKORO_BUNDLE: LocalModelBundle = {
   license: 'Apache-2.0',
   modality: 'voice',
   repo: 'k2-fsa/sherpa-onnx',
-  revision: 'main',
+  revision: 'f46687f7e41512228ae953af24a11b2640ea0f22',
   manifestVersion: 1,
   manifestKey: 'kokoro-82m-manifest',
   assets: [
@@ -58,7 +58,7 @@ export const TEST_QWEN3_BUNDLE: LocalModelBundle = {
   license: 'Apache-2.0',
   modality: 'text',
   repo: 'Qwen/Qwen3-1B',
-  revision: 'main',
+  revision: 'da1453100cf3ff33ef56d17983fc7a8648706db6',
   manifestVersion: 1,
   manifestKey: 'qwen3-1b-manifest',
   assets: [
@@ -161,7 +161,8 @@ export const uninstallCachePolyfill = (): void => {
 export const seedCache = async (bundle: LocalModelBundle): Promise<void> => {
   for (const asset of bundle.assets) {
     const cache = await caches.open(asset.cache);
-    await cache.put(asset.key, new Response(new Uint8Array(asset.bytes)));
+    // Write a small placeholder — cache presence is all that matters
+    await cache.put(asset.key, new Response(new Uint8Array(1)));
   }
 };
 
@@ -176,7 +177,10 @@ export const SIZE_TO_HASH: Record<number, string> = {
   522240: 'd583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b',
 };
 
+let _originalDigest: typeof crypto.subtle.digest | undefined;
+
 export const pinDigestBySize = (): void => {
+  _originalDigest ??= crypto.subtle.digest.bind(crypto.subtle);
   (crypto.subtle as unknown as Record<string, unknown>).digest = async (data: BufferSource) => {
     const size = (data as ArrayBuffer).byteLength;
     const hex =
@@ -187,4 +191,11 @@ export const pinDigestBySize = (): void => {
     }
     return Uint8Array.from(pairs.map((b) => Number.parseInt(b, 16)));
   };
+};
+
+export const unpinDigestBySize = (): void => {
+  if (_originalDigest) {
+    (crypto.subtle as unknown as Record<string, unknown>).digest = _originalDigest;
+    _originalDigest = undefined;
+  }
 };

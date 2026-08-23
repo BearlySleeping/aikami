@@ -409,7 +409,7 @@ class AgentPipelineService
   }
 }
 
-export type { AgentPipelineService };
+export { AgentPipelineService };
 
 /**
  * Shared singleton instance of the agent pipeline service.

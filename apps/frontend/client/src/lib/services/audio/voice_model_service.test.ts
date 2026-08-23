@@ -96,7 +96,15 @@ const pinDigestBySize = (): void => {
 
 const installFetchMock = (): ReturnType<typeof mock> => {
   const fetchMock = mock(
-    async (url: string | URL) => new Response(new Uint8Array(fileSizeForUrl(url)), { status: 200 }),
+    async (url: string | URL, init?: RequestInit) => {
+      // Honor abort signal — reject with AbortError when cancelled
+      if (init?.signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      // Defer by at least one tick so cancel() can run during transfer
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return new Response(new Uint8Array(fileSizeForUrl(url)), { status: 200 });
+    },
   );
   // @ts-expect-error — replacing global fetch
   globalThis.fetch = fetchMock;

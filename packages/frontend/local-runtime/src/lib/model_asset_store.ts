@@ -173,6 +173,9 @@ export class TauriAssetTransport implements AssetTransport {
       throw new Error(`Size mismatch for ${asset.path} after Rust download`);
     }
 
+    if (typeof caches === 'undefined') {
+      throw new Error('Cache Storage API not available');
+    }
     const cache = await caches.open(asset.cache);
     await cache.put(
       asset.key,
@@ -443,6 +446,9 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
     if (!bundle) {
       return;
     }
+    this._abortControllers.get(bundleId)?.abort();
+    this._abortControllers.delete(bundleId);
+    this._inflight.delete(bundleId);
     this._states[bundleId] = { status: 'not-downloaded', bytes: this.totalBytes(bundleId) };
   }
 
@@ -466,6 +472,9 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
       }
 
       this._states[bundleId] = { status: 'not-downloaded', bytes: this.totalBytes(bundleId) };
-    } catch (_error) {}
+    } catch (error) {
+      this._states[bundleId] = { status: 'error', message: 'Remove failed', retryable: true };
+      throw error;
+    }
   }
 }
