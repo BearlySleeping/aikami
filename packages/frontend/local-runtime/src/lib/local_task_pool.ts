@@ -11,9 +11,9 @@ import type {
   ImagePromptInputSchema,
   RelationshipInputSchema,
 } from '@aikami/schemas';
-import type { EngineBackend, LocalModelState } from '@aikami/types';
+import type { EngineBackend } from '@aikami/types';
 import type { StaticDecode } from 'typebox';
-import { type EngineLoader, LocalEngine } from './local_engine.ts';
+import { LocalEngine } from './local_engine.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -175,6 +175,14 @@ export class LocalTaskPool {
 
   // ── Private ───────────────────────────────────────────────────────────────
 
+  /** Safe cast — the pool's loader is typed as TextEngineLoader. */
+  private get _textBackend(): TextEngineBackend {
+    if (!this._engine.backend) {
+      throw new Error('Engine not loaded — call ensureLoaded() first');
+    }
+    return this._engine.backend as TextEngineBackend;
+  }
+
   private _processQueue(): void {
     while (this._activeCount < this._maxConcurrency && this._queue.length > 0) {
       const shifted = this._queue.shift();
@@ -255,12 +263,8 @@ export class LocalTaskPool {
   private async _executeTask(task: MicroTask): Promise<MicroTaskResult> {
     const start = performance.now();
 
-    if (!this._engine.backend) {
-      throw new Error('Engine not loaded — call ensureLoaded() first');
-    }
-
     const prompt = this._buildPrompt(task);
-    const rawOutput = await this._engine.backend.generate(prompt);
+    const rawOutput = await this._textBackend.generate(prompt);
 
     // Validate → repair → give-up loop
     if (this._validation) {
@@ -290,7 +294,7 @@ export class LocalTaskPool {
         if (attempts < maxAttempts) {
           // Repair: ask the model to fix its output
           const repairPrompt = `${prompt}\n\nYour previous response was not valid JSON. Please respond with ONLY valid JSON matching the expected format. Previous: ${rawOutput}`;
-          output = await this._engine.backend.generate(repairPrompt);
+          output = await this._textBackend.generate(repairPrompt);
         }
       }
 

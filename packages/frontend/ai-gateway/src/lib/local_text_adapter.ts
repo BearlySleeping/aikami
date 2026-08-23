@@ -60,7 +60,7 @@ export const createLocalTextAdapter = (options: {
         if (!result.ok) {
           // Signal gateway fallback — do not emit or return task output
           throw createAiGatewayError({
-            code: 'failed-precondition',
+            code: 'invalid_response',
             capability: 'text',
             mode: resolution.mode,
             provider: resolution.provider,
