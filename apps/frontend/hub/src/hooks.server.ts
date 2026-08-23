@@ -250,10 +250,21 @@ export const handle: Handle = async ({ event, resolve }) => {
         origin &&
         (isExtensionOrigin || isLoggingOrigin || isAskOriginMatch || isClientAuthOrigin)
       ) {
-        preflightHeaders.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        // GET is listed for the client-auth routes because get-session is a GET
+        // and the desktop client sends Authorization on it — a header that is
+        // not CORS-safelisted, so that GET now triggers a preflight where it
+        // previously sent none.
+        preflightHeaders.set(
+          'Access-Control-Allow-Methods',
+          isClientAuthOrigin ? 'GET, POST, OPTIONS' : 'POST, OPTIONS',
+        );
         preflightHeaders.set(
           'Access-Control-Allow-Headers',
-          isClientAuthOrigin ? 'Content-Type, Cookie' : 'Content-Type, Cookie, x-aikami-session',
+          // Authorization carries the desktop session token (Better Auth's
+          // bearer plugin) — the Tauri webview cannot use the session cookie.
+          isClientAuthOrigin
+            ? 'Content-Type, Cookie, Authorization'
+            : 'Content-Type, Cookie, x-aikami-session',
         );
         preflightHeaders.set('Access-Control-Allow-Origin', origin);
         // Better Auth authenticates via a session cookie, so the client-auth

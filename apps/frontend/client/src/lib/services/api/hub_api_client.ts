@@ -13,9 +13,12 @@
 // Auth is session-based (Better Auth cookie), so requests use
 // `credentials: 'include'`. App Check was removed (C-426).
 
+import { PORTS } from '@aikami/constants';
 import { getPublicMode } from '@aikami/frontend/configs';
 import type { AuthMessageData, AuthMessageResponse, Mode } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
+import { getDesktopSessionToken } from '$lib/services/auth/desktop_session_store';
+import { isTauri } from '$lib/views/utils/is_tauri';
 
 /** Hub base URL per deployment mode. Emulator/testing use the dev proxy. */
 // The base always points at the hub's `/api` root: the emulator proxy
@@ -29,8 +32,42 @@ const HUB_API_BASE: Record<Mode, string> = {
   production: 'https://hub.bearlysleeping.com/api',
 };
 
+/**
+ * Modes whose base is a *relative* path served by the Vite dev proxy.
+ * A packaged Tauri build has no dev server: its origin is `tauri://localhost`,
+ * so `/api/hub/...` resolves against the asset protocol and every auth call
+ * dies with WebKit's opaque `TypeError: Load failed`. Point those builds
+ * straight at the local hub instead — the hub already grants CORS to the Tauri
+ * webview origin on /api/auth/* (hub hooks.server.ts → isTauriWebviewOrigin).
+ *
+ * `tauri dev` / `preview --tauri-dev` are unaffected either way: they load from
+ * the dev server, so the proxy is there and the relative base already works.
+ */
+const PROXIED_MODES = ['emulator', 'testing'] as const satisfies readonly Mode[];
+
+const isProxiedMode = (mode: Mode): mode is (typeof PROXIED_MODES)[number] =>
+  (PROXIED_MODES as readonly Mode[]).includes(mode);
+
+/**
+ * Merge the desktop session token into a request's headers.
+ *
+ * The Tauri webview cannot hold the hub's session cookie (cross-site,
+ * SameSite=Lax — see desktop_session_store.ts), so it authenticates with
+ * `Authorization: Bearer <session token>` instead, resolved server-side by
+ * Better Auth's bearer plugin. Returns `base` untouched in the browser, where
+ * `credentials: 'include'` and the cookie do the job.
+ */
+export const hubAuthHeaders = (base: Record<string, string> = {}): Record<string, string> => {
+  const token = getDesktopSessionToken();
+  // biome-ignore lint/style/useNamingConvention: HTTP header name
+  return token ? { ...base, Authorization: `Bearer ${token}` } : base;
+};
+
 export const hubApiBase = (): string => {
   const mode = getPublicMode();
+  if (isProxiedMode(mode) && isTauri() && !window.location.origin.startsWith('http')) {
+    return `http://localhost:${PORTS[mode].hub}/api`;
+  }
   return HUB_API_BASE[mode] ?? '/api/hub';
 };
 
@@ -54,9 +91,7 @@ export const callHubAuthAction = async <T extends AuthMessageData['type']>(data:
   type: T;
   payload: AuthMessageData<T>['payload'];
 }): Promise<AuthMessageResponse<T>> => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers = hubAuthHeaders({ 'Content-Type': 'application/json' });
 
   const response = await fetch(`${hubApiBase()}/auth/action`, {
     method: 'POST',

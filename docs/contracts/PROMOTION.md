@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-08-21
+> Auto-generated: 2026-08-23
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 111 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 119 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -174,4 +174,12 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-394 | Server Data Plane Neon Drizzle | 👍 approved | v2 |
 | C-395 | R2 Asset Origin Publish Pipeline | 👍 approved | v2 |
 | C-396 | Hub Public Shell Catalog Browse | 👍 approved | v2 |
+| C-428 | Lpc Sheet Geometry Unification | 📝 draft | v1 |
+| C-429 | Lpc Sheet Coverage Audit | 📝 draft | v1 |
+| C-430 | Lpc Layer Model And Z Order | 📝 draft | v1 |
+| C-431 | Collect Lpc Behind Pass | 📝 draft | v1 |
+| C-432 | Content Addressed R2 Client Sources | 📝 draft | v1 |
+| C-433 | Catalog Coverage Maps Tilesets Packs | 📝 draft | v1 |
+| C-434 | Registry Backed Maps And Packs | 📝 draft | v1 |
+| C-435 | Debundle Game Data | 📝 draft | v1 |
 

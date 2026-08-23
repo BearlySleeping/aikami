@@ -38,12 +38,13 @@ const applyD1Migrations = async (): Promise<void> => {
   }
 };
 
-const post = (path: string, body: unknown, cookie?: string) =>
+const post = (path: string, body: unknown, cookie?: string, origin?: string) =>
   new Request(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       ...(cookie ? { cookie } : {}),
+      ...(origin ? { origin } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -138,5 +139,47 @@ describe('Better Auth against D1 (AC-2)', () => {
       }),
     );
     expect(res.status).toBe(422);
+  });
+});
+
+// The Tauri desktop client cannot OAuth-popup, so it starts the device-
+// authorization flow from inside its webview. That POST carries the webview's
+// own origin, which is not a *.bearlysleeping.com origin — until it was added
+// to trustedOrigins, Better Auth answered with a bare "Invalid origin" and
+// desktop Google sign-in was impossible in staging and production.
+//
+// 🔴 This asserts the resolved config, NOT the handler, and that is deliberate:
+// Better Auth force-disables the origin check whenever it detects a test
+// environment (create-context.mjs → `skipOriginCheck: … isTest() ? true`, and
+// `isTest()` is `nodeENV === 'test'`, captured at import). `bun test` sets
+// NODE_ENV=test, so ANY assertion driving auth.handler() with an Origin header
+// passes for every origin — including hostile ones — and proves nothing. The
+// real check runs only against a deployed hub.
+describe('Tauri webview origins are trusted (C-426 AC-5)', () => {
+  const secret = 'test-secret-that-is-long-enough-for-better-auth';
+  const tauriOrigins = ['tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost'];
+
+  test('production config keeps the subdomain wildcard AND trusts the webview', () => {
+    // Matches the deployed hub (better_auth.ts → deriveCookieDomain).
+    const prodAuth = createBetterAuth(drizzle(client), {
+      baseURL: 'https://hub.bearlysleeping.com',
+      secret,
+      cookieDomain: 'bearlysleeping.com',
+    });
+
+    expect(prodAuth.options.trustedOrigins).toEqual([
+      'https://*.bearlysleeping.com',
+      ...tauriOrigins,
+    ]);
+  });
+
+  test('explicit trustedOrigins are preserved, not replaced', () => {
+    const customAuth = createBetterAuth(drizzle(client), {
+      baseURL: 'https://hub.example.com',
+      secret,
+      trustedOrigins: ['https://app.example.com'],
+    });
+
+    expect(customAuth.options.trustedOrigins).toEqual(['https://app.example.com', ...tauriOrigins]);
   });
 });

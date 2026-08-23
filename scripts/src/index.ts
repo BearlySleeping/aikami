@@ -33,6 +33,10 @@ const SCRIPT_MAP: Record<string, string> = {
   validate_all: 'ops/validate_all.ts',
   validate: 'ops/validate_all.ts',
   logs: 'ops/logs.ts',
+  // AppImage bundling only works on a Debian-shaped filesystem (see the
+  // script header) — this runs it in an Ubuntu 22.04 container instead.
+  tauri_appimage: 'ops/tauri_appimage.ts',
+  'tauri:appimage': 'ops/tauri_appimage.ts',
 
   // Local machine setup (bun, git, direnv, jdk, chromium, tauri deps)
   setup: 'local_setup/index.ts',

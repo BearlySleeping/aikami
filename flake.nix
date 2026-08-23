@@ -115,6 +115,19 @@
           libayatana-appindicator
           google-cloud-sdk
           xdg-utils
+          # tauri-plugin-deep-link's register_all() shells out to
+          # `update-desktop-database` *before* xdg-mime — without it the
+          # aikami:// scheme is never registered and the device-sign-in
+          # redirect fails with "os error 2" (src-tauri/src/lib.rs setup()).
+          desktop-file-utils
+          # WebKitGTK plays media through GStreamer and resolves its elements
+          # (appsrc/appsink/autoaudiosink) from GST_PLUGIN_SYSTEM_PATH_1_0.
+          # Without these the webview logs a wall of GStreamer-CRITICAL
+          # assertions on every launch and has no audio.
+          gst_all_1.gstreamer
+          gst_all_1.gst-plugins-base
+          gst_all_1.gst-plugins-good
+          gst_all_1.gst-plugins-bad
         ];
 
         # nix-direnv location — used by .envrc on subsequent loads to
@@ -201,6 +214,23 @@
                       echo "⚠️  PixiJS DevTools not found — set PIXI_DEVTOOLS_PATH to unpacked extension"
                       echo "   https://github.com/pixijs/devtools/releases"
                     fi
+
+                    # TLS backend for the WebKitGTK webview. libsoup3 does HTTPS
+                    # through a GIO module (glib-networking's libgiognutls.so), which
+                    # it finds only via GIO_EXTRA_MODULES — NixOS sets that variable
+                    # system-wide but populates it with gvfs + dconf only. Listing
+                    # glib-networking in `packages` above is NOT enough: mkShell puts
+                    # it on PATH, not in the module search path. Without this, every
+                    # https request from the webview fails with WebKit's opaque
+                    # "TypeError: Load failed" — which looks exactly like a CSP or CORS
+                    # problem and is neither (auth_service.svelte.ts initialize()).
+                    # Only affects running the binary here; the released AppImage
+                    # carries its own gio modules via linuxdeploy-plugin-gtk.
+                    export GIO_EXTRA_MODULES="${pkgs.glib-networking}/lib/gio/modules''${GIO_EXTRA_MODULES:+:$GIO_EXTRA_MODULES}"
+
+                    # GStreamer element registry for the WebKitGTK webview (see the
+                    # gst_all_1 packages above).
+                    export GST_PLUGIN_SYSTEM_PATH_1_0="${pkgs.lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" (with pkgs.gst_all_1; [gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad])}"
 
                     # SSL CA certificates — needed by apps (like Zed git panel) for HTTPS
                     export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"

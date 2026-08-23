@@ -57,7 +57,6 @@ Monorepo: SvelteKit Client × SvelteKit Hub (SSR on Cloud Run) × Firebase backe
 - [Execution Contract: C-032 - LPC Spritesheet Shader and Pipeline Integration](contracts/archived/C-032-lpc-spritesheet-pipeline.md)
 - [Execution Contract: C-033 - LPC Multi-Layer UBO Batching and Reactive Buffer Pipeline](contracts/archived/C-033-lpc-ubo-batching.md)
 - [Contract: C-034 LPC Render Pipeline](contracts/archived/C-034-lpc-render-pipeline.md)
-- [C 035 ecs svelte sync](contracts/archived/C-035-ecs-svelte-sync.md)
 - [Contract: C-035 Viewport Layer Integration](contracts/archived/C-035-viewport-layer-integration.md)
 - [Contract: C-036 ECS Appearance Bridge](contracts/archived/C-036-ecs-appearance-bridge.md)
 - [Contract: C-037 LPC Render Demo](contracts/archived/C-037-lpc-render-demo.md)

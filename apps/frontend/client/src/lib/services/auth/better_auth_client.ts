@@ -23,7 +23,8 @@
 
 import type { CurrentUser, SignInProvider, SignInProviderName } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
-import { hubApiBase } from '../api/hub_api_client';
+import { hubApiBase, hubAuthHeaders } from '../api/hub_api_client';
+import { clearDesktopSessionToken, saveDesktopSessionToken } from './desktop_session_store';
 
 /** Better Auth's session user shape (the subset we consume). */
 export type BetterAuthSessionUser = {
@@ -97,7 +98,7 @@ const parseSession = async (response: Response): Promise<CurrentUser | undefined
 export const getBetterAuthSession = async (): Promise<CurrentUser | undefined> => {
   const response = await fetch(`${hubApiBase()}/auth/get-session`, {
     method: 'GET',
-    headers: { accept: 'application/json' },
+    headers: hubAuthHeaders({ accept: 'application/json' }),
     credentials: 'include',
   });
   if (!response.ok) {
@@ -116,7 +117,7 @@ export const signInWithEmailAndPassword = async (options: {
 }): Promise<CurrentUser> => {
   const response = await fetch(`${hubApiBase()}/auth/sign-in/email`, {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: hubAuthHeaders(jsonHeaders),
     credentials: 'include',
     body: JSON.stringify({ email: options.email, password: options.password }),
   });
@@ -138,7 +139,7 @@ export const signUpWithEmailAndPassword = async (options: {
 }): Promise<CurrentUser> => {
   const response = await fetch(`${hubApiBase()}/auth/sign-up/email`, {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: hubAuthHeaders(jsonHeaders),
     credentials: 'include',
     body: JSON.stringify({
       name: options.name,
@@ -160,13 +161,16 @@ export const signUpWithEmailAndPassword = async (options: {
 export const signOutBetterAuth = async (): Promise<void> => {
   const response = await fetch(`${hubApiBase()}/auth/sign-out`, {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: hubAuthHeaders(jsonHeaders),
     credentials: 'include',
     // Better Auth's /sign-out body schema is optional but the endpoint still
     // parses the body when Content-Type: application/json is sent — an empty
     // body fails with "Invalid JSON in request body". Send an empty object.
     body: '{}',
   });
+  // Drop the desktop token whatever the server said: leaving it on disk after a
+  // sign-out attempt would silently restore the session on the next launch.
+  await clearDesktopSessionToken();
   if (!response.ok) {
     throw await toAppErrorFromResponse(response);
   }
@@ -176,7 +180,7 @@ export const signOutBetterAuth = async (): Promise<void> => {
 export const sendPasswordResetEmail = async (email: string): Promise<void> => {
   const response = await fetch(`${hubApiBase()}/auth/forget-password`, {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: hubAuthHeaders(jsonHeaders),
     credentials: 'include',
     body: JSON.stringify({
       email,
@@ -202,7 +206,7 @@ export const socialSignInRedirect = async (provider: SignInProviderName): Promis
   const callbackURL = `${window.location.origin}/`;
   const response = await fetch(`${hubApiBase()}/auth/sign-in/social`, {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: hubAuthHeaders(jsonHeaders),
     // Cross-origin (client → hub): must send/receive cookies so the hub's
     // OAuth state cookie (Set-Cookie on this response) is stored — otherwise
     // the Google callback finds no state and fails with `state_mismatch`.
@@ -230,7 +234,7 @@ const DEVICE_CLIENT_ID = 'aikami-client';
 export const startDeviceHandoff = async (): Promise<DeviceHandoffStart> => {
   const response = await fetch(`${hubApiBase()}/auth/device/code`, {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: hubAuthHeaders(jsonHeaders),
     credentials: 'include',
     body: JSON.stringify({ client_id: DEVICE_CLIENT_ID }),
   });
@@ -269,7 +273,7 @@ export const pollDeviceHandoff = async (
 ): Promise<{ user: CurrentUser } | { slowDown: true } | undefined> => {
   const response = await fetch(`${hubApiBase()}/auth/device/token`, {
     method: 'POST',
-    headers: jsonHeaders,
+    headers: hubAuthHeaders(jsonHeaders),
     credentials: 'include',
     body: JSON.stringify({
       grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
@@ -298,33 +302,16 @@ export const pollDeviceHandoff = async (
   if (!response.ok) {
     throw await toAppErrorFromResponse(response);
   }
-  const body = (await response.json()) as { access_token?: string };
+  const body = (await response.json()) as { access_token?: string; expires_in?: number };
   if (!body.access_token) {
     throw toAppError({ errorType: 'unauthorized', errorMessage: 'Device authorization failed' });
   }
-  setSessionCookie(body.access_token);
+  // Persist BEFORE reading the session: getBetterAuthSession() authenticates
+  // with this token via hubAuthHeaders(), so the order is load-bearing.
+  await saveDesktopSessionToken({
+    token: body.access_token,
+    expiresInSeconds: body.expires_in,
+  });
   const user = await getBetterAuthSession();
   return user ? { user } : undefined;
-};
-
-/**
- * Store the Better Auth session token as the session cookie so subsequent
- * `credentials: 'include'` requests are authenticated. Uses the hub origin
- * for the cookie (hub.bearlysleeping.com or localhost) so it matches the
- * server-set session cookie, avoiding conflicts between client and hub
- * domain cookies in Tauri webviews.
- */
-const setSessionCookie = (token: string): void => {
-  // No-op outside a browser (e.g. unit tests) — the cookie is only meaningful
-  // in the Tauri webview / browser where `window.location` exists.
-  if (typeof window === 'undefined' || !window.location) {
-    return;
-  }
-  const hubBase = hubApiBase();
-  const isSecure = hubBase.startsWith('https://');
-  // Derive cookie name: __Secure- prefix required for Secure cookies per spec.
-  const cookieName = isSecure ? '__Secure-better-auth.session_token' : 'better-auth.session_token';
-  const secureAttr = isSecure ? 'Secure; ' : '';
-  // biome-ignore lint/suspicious/noDocumentCookie: adopting the Better Auth session cookie is the intended mechanism
-  document.cookie = `${cookieName}=${encodeURIComponent(token)}; Path=/; ${secureAttr}SameSite=Lax; Max-Age=2592000`;
 };

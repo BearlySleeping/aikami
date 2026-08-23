@@ -14,7 +14,7 @@
     "tauri": "tauri",
     "tauri:icon": "tauri icon ../../../assets/default.svg",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "bun scripts/tauri_build.ts",
     "tauri:run": "bun run ../../../scripts/src/lib/ops/run_tauri.ts",
     "dev:tauri": "bun run build:emulator && cd src-tauri && cargo build && ./target/debug/aikami",
     "deploy": "bun run scripts/deploy.ts",

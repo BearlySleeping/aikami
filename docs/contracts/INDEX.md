@@ -310,6 +310,38 @@ changed and why.
   — see C-424 Scope Boundaries) and the **`GuidedChip` type** from C-420
   v2.0.0 (would have made two overlapping choice primitives into three).
 
+## LPC + Asset Delivery Batch (C-428 … C-435)
+
+Two tracks from the 2026-08-23 engine review. They share no data model and no
+invariant — **the LPC track and the R2 track can run in parallel.** Within each
+track, order is a hard dependency chain.
+
+### Track A — LPC rendering (C-428 → C-431)
+
+| # | Contract | Name | Priority | Why here |
+|---|---|---|---|---|
+| A1 | C-428 | LPC sheet geometry unification — oversize cells, two renderers | P0 | Smallest and most visible. Every equipped weapon renders wrong today; C-431's new sheets are mostly oversize and need this first |
+| A2 | C-429 | LPC sheet coverage audit — direction + geometry gate | P1 | Cheap CI gate. Turns C-431's completion into a measured baseline diff instead of a claim |
+| A3 | C-430 | LPC layer model — variable slots, one direction-aware z-order | P1 | The structural defect behind the armour bug. Collapses five disagreeing z-order tables into one; a behind layer has nowhere to render without it |
+| A4 | C-431 | Collect the LPC `universal_behind` pass | P1 | The headline fix — weapons are invisible in three of four directions today. Needs A1 (geometry), A2 (measurement), A3 (`layerRole`) |
+
+### Track B — Asset delivery (C-432 → C-435)
+
+| # | Contract | Name | Priority | Why here |
+|---|---|---|---|---|
+| B1 | C-432 | Content-addressed R2 sources — make the client's origin work | P0 | `addR2Sources` writes path-mirrored URLs that all 404 against a content-addressed bucket, and the env var that gates it is unset. Nothing else in this track works until it does |
+| B2 | C-433 | Catalog coverage — maps, tilesets, audio, content packs | P1 | The bucket is missing maps, tilesets and packs entirely. Publisher-side only; runs in parallel with B1 |
+| B3 | C-434 | Registry-backed maps, tilesets and content packs | P1 | Maps and packs bypass the registry and fetch static paths directly. Needs B1 + B2 |
+| B4 | C-435 | De-bundle `game-data` — ship without 93 MB of assets | P2 | Biggest payoff, highest risk. Removes the fallback B1–B3 replace, so it goes last |
+
+**Sequencing rules:**
+- **C-428 before C-431.** Behind-pass sheets are predominantly 128px-cell; collecting them onto a broken 64px grid produces a second silent defect.
+- **C-430 before C-431.** `layerRole: 'behind' | 'front'` is what a behind sheet renders through. Collecting first yields inert files.
+- **C-429 before C-431.** Its committed baseline is how C-431 proves it closed the gap — a green audit against an unchanged baseline means nothing was fixed.
+- **C-432 first in Track B.** Both the key scheme and the unset `PUBLIC_ASSETS_BASE_URL` are dead; C-433 and C-434 assume a working remote fetch.
+- **C-435 last, and reversibly.** It removes bundled fallbacks. Remove categories one at a time, LPC last, and measure build size and boot time before starting.
+- **Explicitly deferred:** splitting `packages/frontend/engine` into `core`/`lpc`/`map`/`combat`. The seam that actually exists is runtime environment (headless sim vs pixi renderer vs node tooling), not feature domain — and none of the bugs above are caused by the current packaging. Re-evaluate after C-430 lands.
+
 ## Usage
 
 ```bash

@@ -14,6 +14,7 @@ import { d1 } from '@aikami/backend-database';
 import type { UserSessionData } from '@aikami/types';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { bearer } from 'better-auth/plugins/bearer';
 import { deviceAuthorization } from 'better-auth/plugins/device-authorization';
 
 const { users, sessions, accounts, verifications, deviceCodes } = d1;
@@ -47,6 +48,18 @@ export type BetterAuthEnv = {
 };
 
 /**
+ * Origins the Tauri desktop webview presents on its requests: `tauri://localhost`
+ * on Linux/macOS, `http(s)://tauri.localhost` on Windows. Listed explicitly
+ * rather than as a `localhost` wildcard so a plain browser on localhost gains
+ * nothing from it.
+ */
+const TAURI_WEBVIEW_ORIGINS = [
+  'tauri://localhost',
+  'http://tauri.localhost',
+  'https://tauri.localhost',
+] as const;
+
+/**
  * Create a Better Auth instance bound to the given Drizzle sqlite database.
  *
  * Email/password is enabled (Open Question 1 resolved: keep it) and Google
@@ -67,7 +80,16 @@ export const createBetterAuth = (db: Record<string, unknown>, env: BetterAuthEnv
     database: drizzleAdapter(db, { provider: 'sqlite', schema: betterAuthSchema }),
     baseURL: env.baseURL,
     secret: env.secret,
-    trustedOrigins: env.trustedOrigins ?? defaultTrustedOrigins,
+    // The desktop webview's origin is appended to every configuration, not just
+    // the defaults: the Tauri client exists in all deployments, and Better
+    // Auth's origin check rejects state-changing POSTs from an untrusted origin
+    // with a bare "Invalid origin". GET /get-session is NOT origin-checked, so
+    // omitting these fails in a confusing half-working way — the desktop app
+    // reads its session fine and only dies when it starts the device flow.
+    // Mirrors isTauriWebviewOrigin in @aikami/backend-svelte-kit, which grants
+    // the same origins CORS on /api/auth/* — both layers must agree or the
+    // request is rejected at one of them.
+    trustedOrigins: [...(env.trustedOrigins ?? defaultTrustedOrigins), ...TAURI_WEBVIEW_ORIGINS],
     // SSO across the client (`aikami.bearlysleeping.com`) and hub
     // (`hub.bearlysleeping.com`): scope the session cookie to the shared root
     // domain so both apps read the same session.
@@ -87,7 +109,15 @@ export const createBetterAuth = (db: Record<string, unknown>, env: BetterAuthEnv
     // C-426 AC-5: device-authorization flow for the Tauri desktop client (it
     // cannot OAuth-popup). The client requests a code, the user approves it on
     // the /link page, and the client polls for a session token.
-    plugins: [deviceAuthorization()],
+    //
+    // `bearer` is what makes that token usable. The desktop webview's origin is
+    // `tauri://localhost`, so every hub request from it is cross-SITE: the
+    // session cookie (SameSite=Lax, domain bearlysleeping.com) is never sent,
+    // and the webview cannot write a cookie for another domain either. Bearer
+    // lets the client present the same session token as an Authorization header
+    // instead. Browser clients are unaffected — the plugin only engages when an
+    // Authorization header is present, and falls back to cookies otherwise.
+    plugins: [deviceAuthorization(), bearer()],
     // Only configure Google OAuth when BOTH credentials are present — Better
     // Auth 1.7.1 treats a provider with empty-string credentials as configured
     // and throws CLIENT_ID_AND_SECRET_REQUIRED when the flow starts.

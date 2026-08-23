@@ -41,6 +41,7 @@ import {
   socialSignInRedirect,
   startDeviceHandoff,
 } from './better_auth_client';
+import { loadDesktopSessionToken } from './desktop_session_store';
 
 /**
  * Where the desktop app sends users to sign in — a normal page load of the
@@ -191,6 +192,10 @@ export class AuthService
    */
   private async _initializeBetterAuth(): Promise<CurrentUser | undefined> {
     try {
+      // Desktop only: bring the persisted bearer token into memory before the
+      // first hub request, or a signed-in desktop user looks signed out until
+      // they redo the whole browser handoff (desktop_session_store.ts).
+      await loadDesktopSessionToken();
       const user = await getBetterAuthSession();
       this.setCurrentUser(user);
       this.isAuthReady = true;

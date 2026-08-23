@@ -2,16 +2,16 @@
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | TODO.md — Phase 0 Foundation |
-| **Target** | `docs/TODO.md`, `docs/contracts/PROMOTION.md`, `.pi/extensions/contract_factory.ts`, `scripts/src/lib/ops/sync_contracts.ts` — canonical backlog + promotion matrix + auto-generation pipeline |
-| **Priority** | P0 — prevents more "completed but not playable" drift |
-| **Dependencies** | C-310 (completed), C-304 (completed) |
-| **Status** | implemented |
-| **Promotion** | integrated |
-| **Docs Impact** | Internal — no user-facing docs page |
-| **Contract version** | 2.0.0 |
+| Field                | Value                                                                                                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Source**           | TODO.md — Phase 0 Foundation                                                                                                                                                                   |
+| **Target**           | `docs/TODO.md`, `docs/contracts/PROMOTION.md`, `.pi/extensions/contract_factory.ts`, `scripts/src/lib/ops/sync_contracts.ts` — canonical backlog + promotion matrix + auto-generation pipeline |
+| **Priority**         | P0 — prevents more "completed but not playable" drift                                                                                                                                          |
+| **Dependencies**     | C-310 (completed), C-304 (completed)                                                                                                                                                           |
+| **Status**           | implemented                                                                                                                                                                                    |
+| **Promotion**        | integrated                                                                                                                                                                                     |
+| **Docs Impact**      | Internal — no user-facing docs page                                                                                                                                                            |
+| **Contract version** | 2.0.0                                                                                                                                                                                          |
 
 ## Problem & Baseline Evidence
 
@@ -20,23 +20,24 @@
 - **Reproduction**: Run `contract_scan_backlog`. Most `Already Generated` contracts show `[—]` (no promotion state). Open a random C-1XX contract — ~60% have no execution report.
 
 - **Existing implementation to reuse**:
-  - `.pi/extensions/contract_factory.ts` — Pi extension V2 with `contract_scan_backlog` and `contract_generate` tools
-  - `scripts/src/lib/ops/parse_backlog.ts` — canonical Bun backlog parser (single source of truth)
-  - `scripts/src/lib/ops/sync_contracts.ts` — auto-generates PROGRESS.md + PROMOTION.md
-  - `docs/contracts/TEMPLATE.md` — v2.0.0 contract template with Promotion field
-  - `docs/contracts/AUDIT_C-119_C-249.md` — completed audit of 112 contracts
+    - `.pi/extensions/contract_factory.ts` — Pi extension V2 with `contract_scan_backlog` and `contract_generate` tools
+    - `scripts/src/lib/ops/parse_backlog.ts` — canonical Bun backlog parser (single source of truth)
+    - `scripts/src/lib/ops/sync_contracts.ts` — auto-generates PROGRESS.md + PROMOTION.md
+    - `docs/contracts/TEMPLATE.md` — v2.0.0 contract template with Promotion field
+    - `docs/contracts/AUDIT_C-119_C-249.md` — completed audit of 112 contracts
 
 - **Known gaps**:
-  - 69 legacy contracts have no execution report at all (annotated with `<!-- audit: legacy — no execution report -->` but not yet archived or reopened)
-  - PROMOTION.md shows 122 "unassessed" contracts — these were completed pre-v2 and need promotion audits
-  - The contract scanner does not surface promotion state in a queryable way (only shows in scan output)
-  - No automated promotion audit or completeness score
+    - 69 legacy contracts have no execution report at all (annotated with `<!-- audit: legacy — no execution report -->` but not yet archived or reopened)
+    - PROMOTION.md shows 122 "unassessed" contracts — these were completed pre-v2 and need promotion audits
+    - The contract scanner does not surface promotion state in a queryable way (only shows in scan output)
+    - No automated promotion audit or completeness score
 
 - **Baseline tests**: `bun knowledge:sync` generates PROGRESS.md + PROMOTION.md successfully. `contract_scan_backlog` discovers all 53 TODO.md items.
 
 ## User Outcome
 
 After this contract, a developer can answer two questions from any contract file:
+
 1. **"Is this feature playable in production?"** — via the Promotion field (`sandbox` → `integrated` → `release_verified`)
 2. **"What test evidence exists?"** — via the Execution Report (AC status table + test results)
 
@@ -50,15 +51,15 @@ And the tooling enforces that `completed` and `legacy_completed` cannot coexist:
 
 ## Existing System & Reuse Map
 
-| Capability | Existing source | Reuse / modify / replace |
-|---|---|---|
-| Backlog parser (Bun) | `scripts/src/lib/ops/parse_backlog.ts` | Reuse — canonical |
-| Backlog parser (Node/Pi) | `.pi/extensions/contract_factory.ts` (inline copy) | Reuse — sync with canonical |
-| Contract scanner tool | `.pi/extensions/contract_factory.ts` → `contract_scan_backlog` | Modify — add promotion state to output |
-| Contract generator tool | `.pi/extensions/contract_factory.ts` → `contract_generate` | Reuse |
-| PROGRESS + PROMOTION sync | `scripts/src/lib/ops/sync_contracts.ts` | Reuse |
-| Audit data | `docs/contracts/AUDIT_C-119_C-249.md` | Reuse — report artifact, no code changes needed |
-| Contract template | `docs/contracts/TEMPLATE.md` (v2.0.0) | Reuse |
+| Capability                | Existing source                                                | Reuse / modify / replace                        |
+| ------------------------- | -------------------------------------------------------------- | ----------------------------------------------- |
+| Backlog parser (Bun)      | `scripts/src/lib/ops/parse_backlog.ts`                         | Reuse — canonical                               |
+| Backlog parser (Node/Pi)  | `.pi/extensions/contract_factory.ts` (inline copy)             | Reuse — sync with canonical                     |
+| Contract scanner tool     | `.pi/extensions/contract_factory.ts` → `contract_scan_backlog` | Modify — add promotion state to output          |
+| Contract generator tool   | `.pi/extensions/contract_factory.ts` → `contract_generate`     | Reuse                                           |
+| PROGRESS + PROMOTION sync | `scripts/src/lib/ops/sync_contracts.ts`                        | Reuse                                           |
+| Audit data                | `docs/contracts/AUDIT_C-119_C-249.md`                          | Reuse — report artifact, no code changes needed |
+| Contract template         | `docs/contracts/TEMPLATE.md` (v2.0.0)                          | Reuse                                           |
 
 ## Overview
 
@@ -87,7 +88,7 @@ For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Vi
 No new data models. Existing contract metadata fields are the source of truth:
 
 ```typescript
-type PromotionState = 'sandbox' | 'integrated' | 'release_verified';
+type PromotionState = "sandbox" | "integrated" | "release_verified";
 
 // **Promotion** metadata field in contract files:
 // | **Promotion** | sandbox |
@@ -95,7 +96,7 @@ type PromotionState = 'sandbox' | 'integrated' | 'release_verified';
 // | **Promotion** | release_verified |
 // | **Promotion** | — |  (unassessed — default)
 
-type ContractCompleteness = 'full' | 'partial' | 'missing';
+type ContractCompleteness = "full" | "partial" | "missing";
 // full: execution report + AC status table + evidence links
 // partial: execution report exists but AC status table missing
 // missing: no execution report (legacy pre-v2)
@@ -118,18 +119,18 @@ N/A — no persistent state changes. All dashboards are auto-generated from sour
 ## Scope Boundaries
 
 - **In Scope:**
-  - Ensure `contract_scan_backlog` output includes promotion state and completeness per item
-  - Ensure the legacy audit annotation (`<!-- audit: legacy — no execution report -->`) is present on all C-119–C-249 contracts missing execution reports
-  - Verify `bun knowledge:sync` correctly separates legacy_completed from verified/completed contracts
-  - Verify the Pi extension inline parser stays in sync with the canonical `parse_backlog.ts`
-  - Ensure PROMOTION.md accurately reflects `**Promotion**` metadata fields from contract files
+    - Ensure `contract_scan_backlog` output includes promotion state and completeness per item
+    - Ensure the legacy audit annotation (`<!-- audit: legacy — no execution report -->`) is present on all C-119–C-249 contracts missing execution reports
+    - Verify `bun knowledge:sync` correctly separates legacy_completed from verified/completed contracts
+    - Verify the Pi extension inline parser stays in sync with the canonical `parse_backlog.ts`
+    - Ensure PROMOTION.md accurately reflects `**Promotion**` metadata fields from contract files
 
 - **Out of Scope:**
-  - Archiving, deleting, or moving legacy contract files (separate cleanup contract)
-  - Writing execution reports for legacy contracts (impossible without original implementation context)
-  - Changing the TODO.md format or stable IDs
-  - Modifying the contract-implementer workflow or `/contract-implement` prompt
-  - Creating new Pi tools beyond the existing `contract_scan_backlog` and `contract_generate`
+    - Archiving, deleting, or moving legacy contract files (separate cleanup contract)
+    - Writing execution reports for legacy contracts (impossible without original implementation context)
+    - Changing the TODO.md format or stable IDs
+    - Modifying the contract-implementer workflow or `/contract-implement` prompt
+    - Creating new Pi tools beyond the existing `contract_scan_backlog` and `contract_generate`
 
 ## Contract Size & Split Rule
 
@@ -138,16 +139,19 @@ This contract stays as one unit — all work is within the existing scripts/Pi l
 ## Acceptance Criteria
 
 ### AC-1: Backlog scan surfaces promotion and completeness
+
 **Given** TODO.md contains items with existing contract files, some with promotion states set
 **When** `contract_scan_backlog` runs
 **Then** each generated item shows its promotion state (sandbox/integrated/release_verified/—) and whether an execution report exists
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-1 | Unit | `scripts/src/__tests__/contract_factory.test.ts` | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                | Production Path | Evidence                   |
+| ---- | ---------- | ------------------------------------------------ | --------------- | -------------------------- |
+| AC-1 | Unit       | `scripts/src/__tests__/contract_factory.test.ts` | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun run scripts/src/lib/ops/parse_backlog.ts`
 - Integration: Run `contract_scan_backlog` via Pi — verify all generated items show promotion icons
 - E2E / Visual:
@@ -155,20 +159,24 @@ This contract stays as one unit — all work is within the existing scripts/Pi l
     - **Visual**: N/A
 
 **Watch Points**:
+
 - The inline parser in the Pi extension must stay in sync with `parse_backlog.ts`
 - Promotion field extraction regex must handle both `**Promotion**` bold and plain text formats
 
 ### AC-2: Legacy contracts are consistently annotated
+
 **Given** The audit identified 69 C-119–C-249 contracts with no execution report
 **When** A grep audit runs: `grep -L "audit: legacy\|Execution Report" docs/contracts/C-*.md`
 **Then** Zero contracts in the C-119–C-249 range are missing both the audit annotation AND an execution report
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-2 | Unit | `scripts/src/__tests__/contract_audit.test.ts` | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                              | Production Path | Evidence                   |
+| ---- | ---------- | ---------------------------------------------- | --------------- | -------------------------- |
+| AC-2 | Unit       | `scripts/src/__tests__/contract_audit.test.ts` | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun run scripts/src/lib/ops/sync_contracts.ts`
 - Integration: `bash: grep -c "audit: legacy" docs/contracts/C-*.md | grep -v ":1$"` should return empty
 - E2E / Visual:
@@ -176,20 +184,24 @@ This contract stays as one unit — all work is within the existing scripts/Pi l
     - **Visual**: N/A
 
 **Watch Points**:
+
 - Some contracts in C-119–C-249 range DO have execution reports (C-132, C-181, C-190, etc.) — these should NOT get the legacy annotation
 - The annotation must be on line 2 (after the completion comment) for consistency
 
 ### AC-3: PROMOTION.md accurately reflects contract Promotion metadata
+
 **Given** A contract file has `**Promotion** | sandbox` in its metadata table
 **When** `bun knowledge:sync` runs
 **Then** That contract appears in the 🧪 Sandbox section of PROMOTION.md
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-3 | Integration | `docs/contracts/PROMOTION.md` | N/A | Filled during verification |
+
+| AC   | Test Level  | Required Artifact             | Production Path | Evidence                   |
+| ---- | ----------- | ----------------------------- | --------------- | -------------------------- |
+| AC-3 | Integration | `docs/contracts/PROMOTION.md` | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun knowledge:sync`
 - Integration: After sync, verify PROMOTION.md section counts match actual promotion field counts in contract files
 - E2E / Visual:
@@ -197,20 +209,24 @@ This contract stays as one unit — all work is within the existing scripts/Pi l
     - **Visual**: N/A
 
 **Watch Points**:
+
 - PROMOTION.md is auto-generated — NEVER hand-edit
 - Contracts with `**Promotion** | —` or missing the field must appear in "Unassessed" section
 
 ### AC-4: Pi extension inline parser stays in sync with canonical parser
+
 **Given** `scripts/src/lib/ops/parse_backlog.ts` and `.pi/extensions/contract_factory.ts` both parse TODO.md
 **When** A new TODO.md item is added with a valid `### C-XXX — Title` heading
 **Then** Both parsers produce identical `id`, `title`, and `phase` values
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-4 | Unit | `scripts/src/__tests__/parser_sync.test.ts` | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                           | Production Path | Evidence                   |
+| ---- | ---------- | ------------------------------------------- | --------------- | -------------------------- |
+| AC-4 | Unit       | `scripts/src/__tests__/parser_sync.test.ts` | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun run scripts/src/__tests__/parser_sync.test.ts`
 - Integration: Run both parsers against the current TODO.md, diff the id/title/phase output
 - E2E / Visual:
@@ -218,6 +234,7 @@ This contract stays as one unit — all work is within the existing scripts/Pi l
     - **Visual**: N/A
 
 **Watch Points**:
+
 - The regex patterns for heading matching must be identical between both files
 - Field name normalization (case sensitivity) must be consistent
 
@@ -250,8 +267,8 @@ All resolved:
 Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
-|---|---|---|---|
-| — | — | — | — |
+| ------- | ---- | ------ | ----------- |
+| —       | —    | —      | —           |
 
 ## Promotion Lifecycle
 
@@ -259,11 +276,11 @@ Changes to ACs or scope require a version bump and user approval.
 — → sandbox → integrated → release_verified
 ```
 
-| State | Meaning | Evidence Required |
-|---|---|---|
-| `—` | Not yet assessed — default for legacy or new contracts. | None |
-| `sandbox` | Feature works in a dev sandbox route (`(dev)/sandbox/...`). | Dev sandbox route exists |
-| `integrated` | Feature is wired into the production route and E2E tests pass. | Production route + E2E pass |
+| State              | Meaning                                                         | Evidence Required           |
+| ------------------ | --------------------------------------------------------------- | --------------------------- |
+| `—`                | Not yet assessed — default for legacy or new contracts.         | None                        |
+| `sandbox`          | Feature works in a dev sandbox route (`(dev)/sandbox/...`).     | Dev sandbox route exists    |
+| `integrated`       | Feature is wired into the production route and E2E tests pass.  | Production route + E2E pass |
 | `release_verified` | Feature has visual tests + all ACs verified. Ready for release. | Visual suite + verified ACs |
 
 ## Status Lifecycle
@@ -276,6 +293,7 @@ draft → superseded
 ```
 
 Rules:
+
 - `implemented`: implementer believes code is ready. Set by `/contract-implement`.
 - `verified`: independent verifier passed all mandatory ACs. Set by `/contract-verify`.
 - `completed`: merged and CI passed. Set manually after merge.
@@ -295,23 +313,23 @@ Verified and documented the planning + promotion truth pipeline. All four ACs ar
 
 ### AC Status
 
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | `contract_scan_backlog` already includes PromotionIcons (🧪/🔗/🚀) per item. Verified via scan output. |
-| AC-2 | ✅ | 87 contracts in C-119–C-249 range: 44 have `audit: legacy` annotation, 43 have execution reports. Zero missing both. |
-| AC-3 | ✅ | `bun knowledge:sync` generates PROMOTION.md correctly. Promotion extraction regex in `sync_contracts.ts` identical to Pi extension regex. 9 sandbox, 26 integrated, 2 release_verified. |
-| AC-4 | ✅ | Parser sync test at `scripts/src/lib/ops/parser_sync.test.ts` — 3/3 tests pass, 53 items verified id/title/phase match. |
+| AC   | Status | Notes                                                                                                                                                                                   |
+| ---- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC-1 | ✅     | `contract_scan_backlog` already includes PromotionIcons (🧪/🔗/🚀) per item. Verified via scan output.                                                                                  |
+| AC-2 | ✅     | 87 contracts in C-119–C-249 range: 44 have `audit: legacy` annotation, 43 have execution reports. Zero missing both.                                                                    |
+| AC-3 | ✅     | `bun knowledge:sync` generates PROMOTION.md correctly. Promotion extraction regex in `sync_contracts.ts` identical to Pi extension regex. 9 sandbox, 26 integrated, 2 release_verified. |
+| AC-4 | ✅     | Parser sync test at `scripts/src/lib/ops/parser_sync.test.ts` — 3/3 tests pass, 53 items verified id/title/phase match.                                                                 |
 
 ### Files Created
 
-| File | Purpose |
-|---|---|
+| File                                      | Purpose                                                                                              |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `scripts/src/lib/ops/parser_sync.test.ts` | AC-4: Unit test verifying Pi inline parser produces identical output to canonical `parse_backlog.ts` |
 
 ### Files Modified
 
-| File | Change |
-|---|---|
+| File                                                                   | Change                                                                    |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `docs/contracts/C-312-restore-planning-promotion-and-release-truth.md` | Filled contract spec from draft template; updated status to `implemented` |
 
 ### Deviations from Spec
@@ -323,5 +341,5 @@ None. All ACs satisfied as written. The promotion-completeness linkage ("complet
 - Unit: 3/3 pass (parser_sync.test.ts)
 - Typecheck: ✅ `scripts:typecheck` clean
 - Fix: ✅ `scripts:fix` clean
-- Knowledge sync: ✅ `bun knowledge:sync` — 159 active, 119 archived, 1 duplicate (C-035, pre-existing)
+- Knowledge sync: ✅ `bun knowledge:sync` — 159 active, 119 archived
 - Baseline: No pre-existing failures in scripts project
