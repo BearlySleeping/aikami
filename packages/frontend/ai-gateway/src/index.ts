@@ -42,6 +42,7 @@ export type {
   AiVoiceGenerationResult,
 } from './lib/gateway_types.ts';
 export { createDelegatingImageAdapter, raceWithAbort } from './lib/image_adapter.ts';
+export { createLocalTextAdapter } from './lib/local_text_adapter.ts';
 export { createModeResolver } from './lib/mode_resolver.ts';
 export {
   GATEWAY_FETCH_TIMEOUT_MS,

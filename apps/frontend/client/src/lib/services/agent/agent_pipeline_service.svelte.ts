@@ -19,16 +19,17 @@ import type {
   CustomAgentDefinition,
 } from '$types';
 import { agentRegistryService } from './agent_registry_service.svelte.ts';
+import { runBattleTriggerAgent } from './agents/battle_trigger_agent.ts';
 import { runCyoaAgent } from './agents/cyoa_agent.ts';
 import { runExpressionAgent } from './agents/expression_agent.ts';
 import { runMusicDjAgent } from './agents/music_dj_agent.ts';
 import { runNarrativeDirectorAgent } from './agents/narrative_director_agent.ts';
 import { runProseGuardianAgent } from './agents/prose_guardian_agent.ts';
 import { runQuestTrackerAgent } from './agents/quest_tracker_agent.ts';
+import { runRelationshipAgent } from './agents/relationship_agent.ts';
 import { runSchedulePlannerAgent } from './agents/schedule_planner_agent.ts';
 import { runWorldStateAgent } from './agents/world_state_agent.ts';
 import { BUILT_IN_AGENTS } from './built_in_agents.ts';
-import { customAgentToConfig, runCustomAgent } from './custom_agent_factory.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -133,8 +134,19 @@ const AGENT_RUNNERS: Record<
       config: opts.config,
       context: opts.context,
     }),
+  'battle-trigger': (opts) =>
+    runBattleTriggerAgent({
+      config: opts.config,
+      _context: opts.context,
+      aiResponse: opts.aiResponse ?? '',
+    }),
+  relationship: (opts) =>
+    runRelationshipAgent({
+      config: opts.config,
+      _context: opts.context,
+      aiResponse: opts.aiResponse ?? '',
+    }),
 };
-
 // ── Implementation ───────────────────────────────────────────────────────
 
 class AgentPipelineService
