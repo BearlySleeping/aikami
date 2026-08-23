@@ -2,7 +2,7 @@
 id: C-428
 title: "LPC Sheet Geometry Unification — Oversize Cells and the Two Renderers"
 source: "user request 2026-08-23 — engine review; reproduced from asset bytes"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `packages/frontend/engine/src/rendering/` (new shared sheet-geometry module), `packages/frontend/engine/src/game_world.ts`, `apps/frontend/client/src/lib/data/lpc_renderer.ts` |
 | **Priority** | P0 — every equipped weapon renders wrong in the production game path today. Smallest contract in the batch and the most visible fix. |
 | **Dependencies** | None. Blocks C-431 (which adds more oversize sheets). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 1.0.0 |
@@ -115,6 +115,8 @@ quarter-crop fragment or a knife.
 | Spritesheet slicing | `packages/frontend/engine/src/rendering/texture_manager.ts` `getOrCreateSpritesheet` | reuse — feed it real geometry |
 | In-game layer load + frame apply | `packages/frontend/engine/src/game_world.ts` `_loadEntityRecipes`, `_applyLpcFrame` | modify — consume the shared module |
 | Non-standard column playback | `packages/frontend/engine/src/rendering/animation_controller.ts` `getFrameColumn` | reuse unchanged |
+| CSS icon pitch detection | `apps/frontend/client/src/lib/data/lpc_icon_frame.ts` `getLpcIconCellPitch` / `getLpcGrid` | **known consumer — not updated in this contract** (CSS/DOM pipeline, not PixiJS); pitch logic mirrors the shared module and should be updated in a follow-up |
+| Svelte UI LPC renderer | `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte` line ~116 | **known consumer — not updated in this contract** (Svelte UI component, not the production game path); hard-coded `frameWidth: 64` should be replaced with the shared module in a follow-up |
 
 ## Overview
 
@@ -338,7 +340,7 @@ there is exactly one definition afterwards.
 
 1. **Phase 1 (Data/Logic)**: Add the geometry resolver to `packages/frontend/engine/src/rendering/` with unit tests (AC-1, AC-2). Export it from the engine barrel.
 2. **Phase 2 (Integration)**: Rewire `game_world.ts` `_loadEntityRecipes` and `_applyLpcFrame` (AC-3). Then delegate `lpc_renderer.ts` and delete `UNIVERSAL_ANCHOR_OVERRIDES` (AC-4, AC-5).
-3. **Phase 3 (Validation)**: `bun moon run engine:test`, `bun moon run client:test-unit`, `bun moon check`, then the `lpc.visual.ts` suite.
+3. **Phase 3 (Validation)**: `bun moon run engine:test`, `bun moon run client:test-unit`, `bun moon run :fix`, then the `lpc.visual.ts` suite.
 
 ## Edge Cases & Gotchas
 
@@ -347,6 +349,7 @@ there is exactly one definition afterwards.
 - **Frame-key format.** `_applyLpcFrame` builds `walk_${row}_${col}`. Keep the format stable; only the numbers it is derived from change.
 - **`rows === 1` special case.** `_applyLpcFrame` already forces `effectiveRow = 0` for single-row sheets. Preserve that behaviour through the resolver's `rows` field.
 - **Oversize sheets have trailing empty columns.** A 13-column oversize walk sheet uses only columns 0–8; 9–12 are blank. That is expected and correct — walk playback wraps at 9 via the animation state's frame count, not at the sheet's column count. Do not "fix" the blank columns.
+- **Additional consumers exist but are out of scope.** `lpc_icon_frame.ts` (`getLpcIconCellPitch`, `getLpcGrid`) and `lpc_character_renderer.svelte` (hard-coded `frameWidth: 64`) are known consumers of sheet geometry that this contract does not update. The shared module is designed to be importable by them in a follow-up; the contract only rewires the two PixiJS renderers (dev/preview and production game).
 
 ## Open Questions
 
