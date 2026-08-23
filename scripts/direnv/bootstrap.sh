@@ -133,6 +133,16 @@ export HYPA_PI_ASK_NON_INTERACTIVE="deny"
 
 # ── 4.5. pi-deepseek-optimized harness (cache module disabled) ─────────
 #
+# 🔴 The harness is NOT the cause of the session loops, despite arriving at
+# roughly the same time. Measured across all 285 stored sessions: the loop /
+# reasoning-collapse rate is 28% on the pre-migration `deepseek` provider
+# (61/221 sessions) and 34% after the move to `deepinfra` (21/62) — a
+# difference that is not significant (two-proportion z=0.97, p=0.33), and the
+# worst cases on record (2026-07-30, 08-03, 08-07, 08-09) predate the harness
+# install on 2026-08-21 by three weeks. Its only context-mutating module is
+# `cache`, which is disabled below anyway. The real gap was in cost_guard's
+# detectors; see section 4.6.
+#
 # The harness ships five modules. Four are keepers; its `cache` module is
 # not, and PI_HARNESS_CACHE_ENABLED=0 disables that module alone:
 #
@@ -180,6 +190,21 @@ export PI_REPETITION_GUARD="${PI_REPETITION_GUARD:-1}"
 # two that do hit 88 and 846 (the latter a contract implementer that ran
 # 6h19m on 2026-08-17). A threshold of 4 catches both with no false positives.
 export PI_LOOP_THRESHOLD="${PI_LOOP_THRESHOLD:-4}"
+# Completed A-B-A-B cycles before the guard steers (halts at 2x). The period-1
+# tracker above only counts CONSECUTIVE identical turns, so it is blind to an
+# alternation — and on 2026-08-23 the model responded to a period-1 steer by
+# alternating two calls instead, then ran that pair for 26 cycles (~12 min,
+# byte-identical arguments) until the run was interrupted by hand. Calibrated
+# over the same 285 sessions: healthy runs reach a period-2 match run of 2
+# (p99=1), the wedged ones reach 52, 86 and 844.
+export PI_CYCLE_THRESHOLD="${PI_CYCLE_THRESHOLD:-3}"
+# Repeats of one segment inside REASONING blocks before the collapse guard
+# trips. Deliberately far above PI_REPETITION_THRESHOLD (6, which applies to
+# text): the model drafts code in its reasoning and drafting repeats lines.
+# Measured over all 27,783 stored reasoning blocks, healthy turns reach 37
+# repeats of "```typescript"; every genuine collapse sits at 64+ and is
+# repeated prose. A threshold of 6 here would have killed 44 healthy sessions.
+export PI_THINK_REPETITION_THRESHOLD="${PI_THINK_REPETITION_THRESHOLD:-50}"
 
 # ── 5. Delegate secrets to Bun ─────────────────────────────────────────
 

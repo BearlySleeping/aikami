@@ -20,13 +20,18 @@
  *   PI_MAX_TURNS             — Max assistant turns per user prompt (default: 1000)
  *   PI_MAX_RUN_MINUTES       — Max minutes of one autonomous run (default: 240)
  *   PI_REPETITION_GUARD      — Enable repetition collapse detection (default: 1)
- *   PI_REPETITION_THRESHOLD  — Repeats of one segment before tripping (default: 6)
+ *   PI_REPETITION_THRESHOLD  — Repeats of one segment in TEXT before tripping (default: 6)
+ *   PI_THINK_REPETITION_THRESHOLD — Same, for reasoning blocks (default: 50)
+ *   PI_LOOP_THRESHOLD        — Identical turns before the loop guard steers (default: 4)
+ *   PI_CYCLE_THRESHOLD       — Completed A-B-A-B cycles before steering (default: 3)
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { ContractWorkerRole } from '../../scripts/src/lib/agents/contract_pipeline/types';
 import {
+  createCycleTracker,
   createLoopTracker,
+  DEFAULT_CYCLE_THRESHOLD,
   DEFAULT_LOOP_THRESHOLD,
   maxRepeatedSegment,
   turnSignature,
@@ -108,6 +113,31 @@ const _assistantText = (content: unknown): string => {
     .join('\n');
 };
 
+/**
+ * Flatten an assistant message's REASONING blocks into plain text.
+ *
+ * 🔴 On DeepSeek this is where all the narration lives: across the 285 stored
+ * sessions there are 27,783 `thinking` blocks against 18,113 `text` blocks,
+ * and every degenerate turn on record had `text` completely empty. A collapse
+ * check that reads only `text` therefore scores the worst turns zero — the
+ * 2026-08-23 session emitted 169,607 characters of reasoning repeating one
+ * sentence 177 times while `_assistantText` saw the empty string.
+ */
+const _assistantThinking = (content: unknown): string => {
+  if (!Array.isArray(content)) {
+    return '';
+  }
+  return content
+    .map((block) => {
+      const b = block as { type?: string; thinking?: string; text?: string } | undefined;
+      if (b?.type !== 'thinking' && b?.type !== 'reasoning') {
+        return '';
+      }
+      return b.thinking ?? b.text ?? '';
+    })
+    .join('\n');
+};
+
 /** Extract an assistant message's tool calls for loop-signature purposes. */
 const _toolCalls = (content: unknown): { name: string; arguments: unknown }[] => {
   if (!Array.isArray(content)) {
@@ -129,6 +159,7 @@ export default function (pi: ExtensionAPI) {
   let halted = false;
   let repetitionStrikes = 0;
   const loopTracker = createLoopTracker();
+  const cycleTracker = createCycleTracker();
 
   const softCap = _envNumber('PI_SOFT_SPEND', 10.0);
   const hardCap = _envNumber('PI_HARD_SPEND', 15.0);
@@ -136,7 +167,17 @@ export default function (pi: ExtensionAPI) {
   const maxRunMs = _envNumber('PI_MAX_RUN_MINUTES', 240) * 60_000;
   const repetitionGuard = _envBool('PI_REPETITION_GUARD', true);
   const repetitionThreshold = _envNumber('PI_REPETITION_THRESHOLD', 6);
+  // 🔴 Reasoning blocks need their OWN, far higher threshold. The model drafts
+  // code in them, and drafting legitimately repeats lines: measured over all
+  // 27,783 stored reasoning blocks, healthy turns reach 37 repeats of
+  // "```typescript" and 20 of an `if (…) {` line, while every genuine collapse
+  // sits at 64+ and is repeated PROSE ("actually, let me reconsider." x547).
+  // Reusing the text threshold of 6 here would have halted 44 healthy sessions
+  // — one of them at turn 36 of 406 — which is exactly the mistake the turn and
+  // time backstops below were already re-calibrated once to undo.
+  const thinkRepetitionThreshold = _envNumber('PI_THINK_REPETITION_THRESHOLD', 50);
   const loopThreshold = _envNumber('PI_LOOP_THRESHOLD', DEFAULT_LOOP_THRESHOLD);
+  const cycleThreshold = _envNumber('PI_CYCLE_THRESHOLD', DEFAULT_CYCLE_THRESHOLD);
 
   /**
    * Record a `blocked` stage result so the orchestrator sees a real outcome
@@ -209,6 +250,7 @@ export default function (pi: ExtensionAPI) {
     halted = false;
     repetitionStrikes = 0;
     loopTracker.reset();
+    cycleTracker.reset();
   });
 
   // ── Block new agent runs past hard cap ──────────────────────
@@ -219,6 +261,7 @@ export default function (pi: ExtensionAPI) {
     turnsSincePrompt = 0;
     runStartedAt = Date.now();
     loopTracker.reset();
+    cycleTracker.reset();
     // Re-arm: a fresh human prompt is a new run with a new budget, so a guard
     // that tripped on the previous run must be able to trip again on this one.
     halted = false;
@@ -236,7 +279,6 @@ export default function (pi: ExtensionAPI) {
     turnsSincePrompt += 1;
     const content = (event.message as { content?: unknown }).content;
 
-    // turn_end.message is the assistant response — it always has usage
     const message = event.message as {
       usage?: {
         input: number;
@@ -246,18 +288,21 @@ export default function (pi: ExtensionAPI) {
         cost?: { total?: number };
       };
     };
+
+    // ── Spend accounting is BEST-EFFORT and must not gate the guards ──────
+    //
+    // 🔴 This used to be `if (!usage?.input) return;` above everything else,
+    // which made a missing usage record silently disable loop, cycle and
+    // collapse detection for that turn. An aborted or interrupted turn
+    // reports no usage — and those are precisely the turns a wedged run
+    // produces. In the 2026-08-23 session both degenerate turns (#148 and
+    // the 169KB collapse at #172) carried `input: 0`, so every guard was
+    // skipped on the only two turns that mattered.
     const usage = message.usage;
-    if (!usage?.input) {
-      return;
-    }
-
     const pricing = ctx.model?.cost;
-    if (!pricing) {
-      return;
-    } // No pricing data — can't track cost
-
-    const turnCost = _computeTurnCost(usage, pricing);
-    sessionCost += turnCost;
+    if (usage?.input && pricing) {
+      sessionCost += _computeTurnCost(usage, pricing);
+    }
 
     // ── Hard cap: abort ───────────────────────────────────
     // Accounted before the repetition branches so repeated turns still update
@@ -275,12 +320,49 @@ export default function (pi: ExtensionAPI) {
     // Distinct from the collapse check below, which only sees inside a single
     // message. Both known cases here had EMPTY text and repeated only their
     // tool call, so text analysis alone scores them zero.
+    const thinking = repetitionGuard ? _assistantThinking(content) : '';
+
     if (repetitionGuard) {
       const signature = turnSignature({
         text: _assistantText(content),
         toolCalls: _toolCalls(content),
+        thinking,
       });
       const run = loopTracker.record(signature);
+
+      // ── Multi-step cycle: A B A B, which the run counter cannot see ──
+      //
+      // Checked BEFORE the period-1 branches because a steered period-1 loop
+      // degrades into one: on 2026-08-23 the loop guard steered at 4 repeats
+      // of a `read`, the model took "do something materially different"
+      // literally and started alternating two calls, and ran that pair for
+      // 26 cycles over 12 minutes with byte-identical arguments before the
+      // user gave up and interrupted it. `run` never exceeded 1 throughout.
+      const cycle = cycleTracker.record(signature);
+      if (cycle && cycle.cycles >= cycleThreshold * 2) {
+        await _halt(ctx, {
+          summary:
+            `Loop detected: ${cycle.period} actions repeating as a cycle, ` +
+            `${cycle.cycles} times over. Shutting down.`,
+          finding: `Agent repeated a ${cycle.period}-step cycle ${cycle.cycles} times without progressing.`,
+        });
+        return;
+      }
+      if (cycle && cycle.cycles === cycleThreshold) {
+        ctx.ui.notify(
+          `[COST GUARD] Cycle detected — ${cycle.period} actions repeating x${cycle.cycles}. Steering before halting.`,
+          'warning',
+        );
+        pi.sendUserMessage(
+          `[LOOP GUARD] You have repeated the same ${cycle.period}-step sequence of actions ` +
+            `${cycle.cycles} times, with identical arguments each time, and the results have not changed.\n\n` +
+            `Alternating between two actions is still a loop. Stop. Either state plainly that ` +
+            `you are stuck — what you have tried and what you need — or take an action whose ` +
+            `arguments differ from everything above.`,
+          { deliverAs: 'steer' },
+        );
+        return;
+      }
 
       if (run >= loopThreshold * 2) {
         await _halt(ctx, {
@@ -309,8 +391,14 @@ export default function (pi: ExtensionAPI) {
     // ── Repetition collapse: degenerate sampling, not a real loop ──
     if (repetitionGuard) {
       const text = _assistantText(content);
-      const { count, segment } = maxRepeatedSegment(text);
-      if (count >= repetitionThreshold) {
+      const inText = maxRepeatedSegment(text);
+      const inThinking = maxRepeatedSegment(thinking);
+      // Each stream is judged against its own threshold, then the worse one
+      // is reported — reasoning tolerates far more repetition than prose.
+      const tripped =
+        inText.count >= repetitionThreshold || inThinking.count >= thinkRepetitionThreshold;
+      const { count, segment } = inThinking.count > inText.count ? inThinking : inText;
+      if (tripped) {
         repetitionStrikes += 1;
         const preview = segment.slice(0, 60);
 

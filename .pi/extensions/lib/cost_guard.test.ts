@@ -13,6 +13,9 @@ import costGuard from '../cost_guard.ts';
 
 const ENV_KEYS = [
   'PI_MAX_TURNS',
+  'PI_THINK_REPETITION_THRESHOLD',
+  'PI_CYCLE_THRESHOLD',
+  'PI_LOOP_THRESHOLD',
   'PI_MAX_RUN_MINUTES',
   'PI_SOFT_SPEND',
   'PI_HARD_SPEND',
@@ -68,7 +71,20 @@ const harness = () => {
     },
   });
 
-  return { pi, calls, emit, turn };
+  /** A turn whose narration lives in `thinking` blocks, as DeepSeek emits. */
+  const thinkingTurn = (options: { thinking: string; command?: string; usage?: unknown }) => ({
+    message: {
+      content: [
+        { type: 'thinking', thinking: options.thinking },
+        ...(options.command
+          ? [{ type: 'toolCall', name: 'bash', arguments: { command: options.command } }]
+          : []),
+      ],
+      ...(options.usage === undefined ? { usage: { input: 10, output: 10 } } : {}),
+    },
+  });
+
+  return { pi, calls, emit, turn, thinkingTurn };
 };
 
 describe('cost guard halt behaviour', () => {
@@ -155,5 +171,114 @@ describe('cost guard halt behaviour', () => {
       await emit('turn_end', turn(`next-${i}`));
     }
     expect(calls.shutdown).toBe(2);
+  });
+});
+
+/**
+ * Blind spots found on 2026-08-23, when a session alternated two identical
+ * tool calls for 26 cycles and then emitted 169,607 characters of reasoning
+ * repeating one sentence 177 times — and the guard did not fire once, because
+ * every check it owns reads `text` blocks and counts only consecutive repeats.
+ */
+describe('cost guard sees reasoning blocks', () => {
+  test('halts on a repeating A-B-A-B cycle of tool calls', async () => {
+    const { pi, calls, emit } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    const a = {
+      message: {
+        content: [{ type: 'toolCall', name: 'bash', arguments: { c: 1 } }],
+        usage: { input: 10, output: 10 },
+      },
+    };
+    const b = {
+      message: {
+        content: [{ type: 'toolCall', name: 'read', arguments: { p: 'x' } }],
+        usage: { input: 10, output: 10 },
+      },
+    };
+    for (let i = 0; i < 40; i++) {
+      await emit('turn_end', i % 2 === 0 ? a : b);
+    }
+
+    expect(calls.steer.some((m) => m.includes('LOOP GUARD'))).toBe(true);
+    expect(calls.shutdown).toBe(1);
+    expect(calls.abort).toBe(1);
+  });
+
+  test('does not fire when the two alternating calls differ each time', async () => {
+    const { pi, calls, emit } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    for (let i = 0; i < 60; i++) {
+      await emit('turn_end', {
+        message: {
+          content: [
+            {
+              type: 'toolCall',
+              name: i % 2 === 0 ? 'bash' : 'read',
+              arguments: { step: i },
+            },
+          ],
+          usage: { input: 10, output: 10 },
+        },
+      });
+    }
+
+    expect(calls.shutdown).toBe(0);
+  });
+
+  test('detects repetition collapse inside thinking blocks', async () => {
+    const { pi, calls, emit, thinkingTurn } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    // The observed shape: empty text, one sentence repeated far past the
+    // reasoning threshold. Two strikes are required before halting.
+    const collapsed = 'Actually, let me reconsider the whole thing. '.repeat(60);
+    await emit('turn_end', thinkingTurn({ thinking: collapsed }));
+    expect(calls.steer.some((m) => m.includes('REPETITION GUARD'))).toBe(true);
+    expect(calls.shutdown).toBe(0);
+
+    await emit('turn_end', thinkingTurn({ thinking: collapsed }));
+    expect(calls.shutdown).toBe(1);
+  });
+
+  test('tolerates the code a healthy turn drafts in its reasoning', async () => {
+    // Measured over 27,783 stored reasoning blocks: healthy turns repeat
+    // "```typescript" up to 37 times while drafting. That must not trip.
+    const { pi, calls, emit, thinkingTurn } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    const drafting = '```typescript\nconst value = compute();\n```\n'.repeat(37);
+    for (let i = 0; i < 10; i++) {
+      await emit('turn_end', thinkingTurn({ thinking: drafting, command: `step-${i}` }));
+    }
+
+    expect(calls.shutdown).toBe(0);
+    expect(calls.steer).toHaveLength(0);
+  });
+
+  test('runs the guards on a turn that reports no usage', async () => {
+    // An aborted or interrupted turn carries no usage. The old `if
+    // (!usage?.input) return;` sat above every detector, so those turns —
+    // exactly the ones a wedged run produces — were never examined.
+    const { pi, calls, emit, thinkingTurn } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    const collapsed = 'Actually, let me reconsider the whole thing. '.repeat(60);
+    await emit('turn_end', thinkingTurn({ thinking: collapsed, usage: null }));
+    await emit('turn_end', thinkingTurn({ thinking: collapsed, usage: null }));
+
+    expect(calls.shutdown).toBe(1);
   });
 });

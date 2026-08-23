@@ -85,15 +85,26 @@ export const DEFAULT_LOOP_THRESHOLD = 4;
 export const turnSignature = (options: {
   text: string;
   toolCalls: readonly { name: string; arguments: unknown }[];
+  /**
+   * Reasoning-block narration, used ONLY as identity for a turn that makes no
+   * tool call. On DeepSeek every turn's narration lives in `thinking` blocks
+   * and `text` is empty, so without this a thinking-only turn hashes to '' —
+   * which does not merely fail to match, it RESETS the run and erases the
+   * loop evidence gathered so far. It is deliberately excluded when tool
+   * calls are present: identical arguments are the real loop signal, and
+   * folding in prose that varies run-to-run would mask that.
+   */
+  thinking?: string;
 }): string => {
   const text = options.text.trim().replace(/\s+/g, ' ').toLowerCase();
   const calls = options.toolCalls
     .map((call) => `${call.name}::${JSON.stringify(call.arguments ?? null)}`)
     .join('|');
 
-  // A turn with no tool call and only trivial text carries no signal.
   if (calls.length === 0 && text.length < MIN_SEGMENT_CHARS) {
-    return '';
+    const thinking = (options.thinking ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+    // A turn with neither a tool call nor any narration carries no signal.
+    return thinking.length < MIN_SEGMENT_CHARS ? '' : `##${thinking}`;
   }
   return `${calls}##${text}`;
 };
@@ -127,6 +138,104 @@ export const createLoopTracker = (): LoopTracker => {
     reset: () => {
       last = '';
       run = 0;
+    },
+  };
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// Multi-step cycles
+//
+// 🔴 A THIRD failure mode, and the one that got past everything above.
+// `createLoopTracker` counts CONSECUTIVE identical turns, so it only sees a
+// period-1 loop (A A A A). It is blind to a cycle:
+//
+//     bash(X) → read(Y) → bash(X) → read(Y) → …
+//
+// Observed 2026-08-23: after the period-1 guard steered at 4 repeats of one
+// `read`, the model obeyed the letter of the steer — "do something materially
+// different" — by alternating TWO actions instead of repeating one. It then
+// ran that pair for 26 cycles (turns 84→146, ~12 minutes) with byte-identical
+// tool arguments AND byte-identical reasoning each time, until the human
+// interrupted it. The period-1 tracker's run never exceeded 1 the whole way.
+//
+// Threshold calibration, measured over all 285 stored sessions with ≥10
+// assistant turns: healthy sessions reach a period-2 match run of at most 2
+// (p50=0, p99=1), while the wedged ones reach 52, 86 and 844. As with the
+// period-1 threshold the gap is enormous, so requiring 3 completed cycles
+// catches every observed case with no false positive against real history.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Longest cycle length considered. Period 1 is the loop tracker's job. */
+export const DEFAULT_MAX_CYCLE_PERIOD = 4;
+
+/** Completed cycle repeats before a cycle is treated as a loop. */
+export const DEFAULT_CYCLE_THRESHOLD = 3;
+
+/** How much signature history to retain — enough for the widest cycle check. */
+const historyLimit = (maxPeriod: number, threshold: number): number =>
+  maxPeriod * (threshold + 1) * 2;
+
+export type CycleHit = {
+  /** Length of the repeating cycle, ≥2. */
+  period: number;
+  /** How many times the cycle has completed back-to-back. */
+  cycles: number;
+};
+
+export type CycleTracker = {
+  /**
+   * Record a signature; returns the cycle it completes, or null.
+   *
+   * The SHORTEST qualifying period wins: an A B A B run also satisfies
+   * period 4, and reporting 2 describes what the agent is actually doing.
+   */
+  record: (signature: string) => CycleHit | null;
+  reset: () => void;
+};
+
+/** Track repeating multi-step cycles (period 2..maxPeriod) in turn signatures. */
+export const createCycleTracker = (options?: {
+  maxPeriod?: number;
+  threshold?: number;
+}): CycleTracker => {
+  const maxPeriod = options?.maxPeriod ?? DEFAULT_MAX_CYCLE_PERIOD;
+  const threshold = options?.threshold ?? DEFAULT_CYCLE_THRESHOLD;
+  const limit = historyLimit(maxPeriod, threshold);
+  let history: string[] = [];
+
+  return {
+    record: (signature) => {
+      // A signal-free turn breaks any cycle rather than extending it, for the
+      // same reason the loop tracker resets on one.
+      if (signature === '') {
+        history = [];
+        return null;
+      }
+
+      history.push(signature);
+      if (history.length > limit) {
+        history = history.slice(-limit);
+      }
+
+      for (let period = 2; period <= maxPeriod; period++) {
+        // Count how far back the sequence keeps matching itself `period` ago.
+        let matches = 0;
+        for (let i = history.length - 1; i - period >= 0; i--) {
+          if (history[i] !== history[i - period]) {
+            break;
+          }
+          matches++;
+        }
+        const cycles = Math.floor(matches / period);
+        if (cycles >= threshold) {
+          return { period, cycles };
+        }
+      }
+
+      return null;
+    },
+    reset: () => {
+      history = [];
     },
   };
 };
