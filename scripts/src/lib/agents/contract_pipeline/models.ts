@@ -5,7 +5,7 @@
 // `--model` + `--thinking` from these maps — never inherits the user's
 // default/last-used model.
 //
-// Defaults point at DeepSeek-V4-Flash-0731 served via DeepInfra (the
+// Defaults point at DeepSeek-V4-Flash served via DeepInfra (the
 // `pi-deepinfra` package). Override any tier or the thinking level with env
 // vars in `.env.local` (gitignored, never committed) — e.g. to fall back to
 // the direct `deepseek` provider or point at a different checkpoint:
@@ -30,12 +30,12 @@ const THINKING_LEVELS: readonly ThinkingLevel[] = [
 const isThinkingLevel = (value: string | undefined): value is ThinkingLevel =>
   value !== undefined && (THINKING_LEVELS as readonly string[]).includes(value);
 
-/** Default model per tier — DeepSeek-V4-Flash-0731 via DeepInfra (see `pi-deepinfra`). */
+/** Default model per tier — DeepSeek-V4-Flash via DeepInfra (see `pi-deepinfra`). */
 const DEFAULT_TIERS = {
   // The 0731 GA checkpoint is cheaper than v4-pro on every axis with near-identical
   // SWE-bench quality, so both tiers point at it. Override per tier below if needed.
-  pro: 'deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731',
-  flash: 'deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731',
+  pro: 'deepinfra/deepseek-ai/DeepSeek-V4-Flash',
+  flash: 'deepinfra/deepseek-ai/DeepSeek-V4-Flash',
   free: 'opencode/big-pickle',
 } as const satisfies Record<ModelTier, string>;
 

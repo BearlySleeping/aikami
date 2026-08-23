@@ -155,7 +155,10 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   confirmAndEnter(): Promise<void>;
 
   // Session Zero
-  startSessionZero(): void;
+  startSessionZero(): Promise<void>;
+
+  // Mode switching
+  selectExistingCharacter(): Promise<void>;
 };
 
 // ── Options ────────────────────────────────────────────────────────────
@@ -512,9 +515,54 @@ class OnboardingCoordinatorViewModel
 
   // ── Session Zero ──────────────────────────────────────────────────
 
-  startSessionZero(): void {
-    this.debug('startSessionZero');
-    this.mode = 'session_zero';
+  /**
+   * Starts the DM chat experience by navigating to /personas/create
+   * where the PersonaCreateView (chat with DM) lives.
+   */
+  async startSessionZero(): Promise<void> {
+    this.debug('startSessionZero — navigating to PersonaCreateView');
+    this.info('startSessionZero', { mode: this.mode });
+
+    // Session Zero requires the text provider — when unavailable, preserve
+    // the manual onboarding path instead of routing into a provider-dependent flow.
+    if (!this.isTextProviderAvailable) {
+      this.warn('startSessionZero:no-text-provider — staying in manual onboarding');
+      return;
+    }
+
+    try {
+      this.mode = 'session_zero';
+      await routerService.goToRoute('personaCreate', {
+        pathParameters: undefined,
+        queryParameters: undefined,
+      });
+    } catch (error) {
+      this.error('startSessionZero:navigation-failed', error);
+      this.errorMessage =
+        error instanceof Error ? error.message : 'Failed to open DM chat. Please try again.';
+    }
+  }
+
+  // ── Mode Switching ─────────────────────────────────────────────────
+
+  /**
+   * Navigates to the persona list route, where the user can select an existing
+   * character to continue their campaign.
+   */
+  async selectExistingCharacter(): Promise<void> {
+    this.debug('selectExistingCharacter — navigating to persona list');
+    this.info('selectExistingCharacter', { mode: this.mode });
+
+    try {
+      await routerService.goToRoute('personas', {
+        pathParameters: undefined,
+        queryParameters: undefined,
+      });
+    } catch (error) {
+      this.error('selectExistingCharacter:navigation-failed', error);
+      this.errorMessage =
+        error instanceof Error ? error.message : 'Failed to navigate. Please try again.';
+    }
   }
 
   // ── Private: Persona Assembly ─────────────────────────────────────

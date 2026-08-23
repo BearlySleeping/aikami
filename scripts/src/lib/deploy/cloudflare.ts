@@ -40,7 +40,7 @@ import {
   resolveCloudflareRoute,
   resolveCloudflareWorkerName,
 } from './deployment_config';
-import { isVerbose, run, setVerbose } from './utils'; // ── Cache/security headers (mirror of the old Firebase Hosting config) ──
+import { isVerbose, parseEnvKeys, run, setVerbose } from './utils'; // ── Cache/security headers (mirror of the old Firebase Hosting config) ──
 
 /**
  * Canonical cache + security headers, expressed as a Workers `_headers` file.
@@ -297,8 +297,18 @@ export function writeWranglerConfig(config: AppConfig, appRoot: string, mode: st
       }));
     }
     const vars = typeof cf.vars === 'function' ? cf.vars(mode) : cf.vars;
-    if (vars && Object.keys(vars).length > 0) {
-      json.vars = vars;
+    // Inject LOG_LEVEL from the mode's .env.{mode} so the SSR logger's
+    // `process.env.LOG_LEVEL` is set at runtime. The Worker only receives the
+    // vars declared here — .env.production is NOT otherwise injected into the
+    // Worker (it only feeds the Vite build), so without this the logger would
+    // silently default to INFO and DEBUG diagnostics would never surface.
+    const envVars = parseEnvKeys(join(appRoot, `.env.${mode}`));
+    const mergedVars = {
+      ...(vars ?? {}),
+      ...(envVars.LOG_LEVEL ? { LOG_LEVEL: envVars.LOG_LEVEL } : {}),
+    };
+    if (mergedVars && Object.keys(mergedVars).length > 0) {
+      json.vars = mergedVars;
     }
   }
 

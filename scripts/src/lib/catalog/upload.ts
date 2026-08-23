@@ -182,7 +182,14 @@ export const uploadAssets = async (options: {
 
   const existing = new Set(await client.listKeys(assetKeyPrefix));
 
-  const missing = items.filter((item) => !existing.has(item.key));
+  // Dedupe by key: objects are content-addressed, so every item sharing a key
+  // is byte-identical and one upload serves them all. Without this, duplicate
+  // keys (e.g. many LPC sheets whose first frame is identical → same thumbnail
+  // hash) would be PUT concurrently, tripping R2's per-object rate limit
+  // ("Reduce your concurrent request rate for the same object").
+  const missing = [...new Map(items.map((item) => [item.key, item])).values()].filter(
+    (item) => !existing.has(item.key),
+  );
   const skipped = items.length - missing.length;
 
   let uploaded = 0;

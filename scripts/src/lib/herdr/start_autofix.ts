@@ -5,7 +5,7 @@
 // request (`--only commit` or `commit` in `--only`) — the default pipeline
 // stops after validation and never mutates the repository.
 //
-// Model: deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731 by default — override with
+// Model: deepinfra/deepseek-ai/DeepSeek-V4-Flash by default — override with
 // AUTOFIX_MODEL in .env.local (gitignored) or --model.
 // Thinking: high (non-negotiable for reliable fixes)
 //
@@ -20,7 +20,7 @@
 //   bun autofix --only test,commit           # test:unit then commit (git-scoped; commit explicitly authorized)
 //   bun autofix --only test:e2e              # e2e tests only (starts client + hub)
 //   bun autofix --only test:all              # all tests including e2e
-//   bun autofix --model deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731 --thinking high
+//   bun autofix --model deepinfra/deepseek-ai/DeepSeek-V4-Flash --thinking high
 //   bun autofix --join                       # spawn + attach
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
@@ -77,7 +77,7 @@ const DEFAULT_STEPS: AutofixStep[] = ['fix', 'typecheck'];
 
 const PI_WORKSPACE = 'aikami-pi';
 const AUTOFIX_TAB = 'autofix';
-const DEFAULT_MODEL = process.env.AUTOFIX_MODEL ?? 'deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731';
+const DEFAULT_MODEL = process.env.AUTOFIX_MODEL ?? 'deepinfra/deepseek-ai/DeepSeek-V4-Flash';
 const DEFAULT_THINKING = process.env.AUTOFIX_THINKING ?? 'high';
 const CLIENT_PORT = 5274;
 const HUB_PORT = 5276;

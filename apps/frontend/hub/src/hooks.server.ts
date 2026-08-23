@@ -73,6 +73,31 @@ const isAskOrigin = (origin: string | null | undefined): origin is string =>
 const isClientAuthPath = (pathname: string): boolean =>
   pathname === '/api/auth' || pathname.startsWith('/api/auth/');
 
+// A cookie written with a `Domain=` attribute and one written without it are
+// separate entries in the browser jar. Enabling cross-subdomain cookies
+// could not overwrite the host-scoped session cookie an earlier deployment had
+// already set. Both are now sent on every request and better-call's cookie
+// parser keeps the first occurrence — the stale one — so every session lookup
+// fails. Expiring it without a `Domain` attribute targets only the host-scoped
+// entry and leaves the valid domain-scoped session intact.
+const SESSION_COOKIE_NAME = '__Secure-better-auth.session_token';
+
+const hasDuplicateSessionCookie = (cookieHeader: string): boolean => {
+  // Match only at cookie-name boundaries: start of header or after "; "
+  // to avoid false positives from substring matches inside another cookie's value.
+  const escapedName = SESSION_COOKIE_NAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`(?:^|;\\s*)${escapedName}=`, 'g');
+  const matches = cookieHeader.match(pattern);
+  return (matches?.length ?? 0) > 1;
+};
+
+const expireHostScopedSessionCookie = (response: Response): void => {
+  response.headers.append(
+    'set-cookie',
+    `${SESSION_COOKIE_NAME}=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Lax`,
+  );
+};
+
 // Register the SSR stdout sink once at module boot.
 // Logs are written to stdout/stderr (Cloud Run console).
 logger.addSink(new SSRLogSink(logContextStore));
@@ -125,6 +150,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   // TLocals extends CoreLocals, so all CoreLocals fields are writable.
   // The app's own app.d.ts declaration merges additional fields.
   const locals = event.locals;
+  const hasStaleSessionCookie = hasDuplicateSessionCookie(request.headers.get('cookie') ?? '');
 
   // ── 2. Auth: resolve user session from the Better Auth session cookie ──
   // The session cookie is set by Better Auth (mounted at /api/auth/*). The
@@ -142,11 +168,24 @@ export const handle: Handle = async ({ event, resolve }) => {
       if (session?.user) {
         userSession = toUserSessionData(session.user);
       }
+      // When a stale host-scoped session cookie exists alongside the valid
+      // domain-scoped one, expire the host-scoped entry so better-call's cookie
+      // parser picks up the correct token on the next request.
+      if (hasStaleSessionCookie) {
+        logger.info('hooks.server:expiring-stale-session-cookie', {
+          pathname: url.pathname,
+        });
+      }
     } catch (error) {
       // Failed session lookup (e.g. DB unavailable, corrupt token) leaves the
       // request unauthenticated rather than failing the entire page load.
       logger.error('hooks.server:getSession-failed', error);
     }
+  } else {
+    logger.warn('hooks.server:getSession-no-auth', {
+      pathname: url.pathname,
+      hasD1: !!platformEnv?.DB,
+    });
   }
   locals.userSession = userSession;
 
@@ -261,6 +300,10 @@ export const handle: Handle = async ({ event, resolve }) => {
       response.headers.set(key, value);
     }
 
+    if (hasStaleSessionCookie) {
+      expireHostScopedSessionCookie(response);
+    }
+
     return response;
   }
 
@@ -276,6 +319,10 @@ export const handle: Handle = async ({ event, resolve }) => {
   // Apply security headers to every SSR response (matching _headers in Workers deployments).
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
     response.headers.set(key, value);
+  }
+
+  if (hasStaleSessionCookie) {
+    expireHostScopedSessionCookie(response);
   }
 
   return response;

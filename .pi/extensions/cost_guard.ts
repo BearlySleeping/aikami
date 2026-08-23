@@ -24,6 +24,7 @@
  *   PI_THINK_REPETITION_THRESHOLD — Same, for reasoning blocks (default: 50)
  *   PI_LOOP_THRESHOLD        — Identical turns before the loop guard steers (default: 4)
  *   PI_CYCLE_THRESHOLD       — Completed A-B-A-B cycles before steering (default: 3)
+ *   PI_STREAM_SCAN_BYTES     — Growth between mid-stream collapse scans (default: 8192)
  */
 
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
@@ -178,6 +179,10 @@ export default function (pi: ExtensionAPI) {
   const thinkRepetitionThreshold = _envNumber('PI_THINK_REPETITION_THRESHOLD', 50);
   const loopThreshold = _envNumber('PI_LOOP_THRESHOLD', DEFAULT_LOOP_THRESHOLD);
   const cycleThreshold = _envNumber('PI_CYCLE_THRESHOLD', DEFAULT_CYCLE_THRESHOLD);
+  // How much a streaming message must GROW before it is re-scanned. Bounds the
+  // mid-stream check to O(size/step) scans instead of one per token. 8 KB is
+  // ~2k tokens: small enough to cut in early, large enough to stay cheap.
+  const streamScanBytes = _envNumber('PI_STREAM_SCAN_BYTES', 8192);
 
   /**
    * Record a `blocked` stage result so the orchestrator sees a real outcome
@@ -240,6 +245,95 @@ export default function (pi: ExtensionAPI) {
     ctx.abort();
     ctx.shutdown();
   };
+
+  /**
+   * Shared response to a detected repetition collapse: steer on the first
+   * strike, halt on the second.
+   *
+   * One collapsed generation can still recover once the model gets a fresh
+   * tool result; a second means it is wedged.
+   */
+  const _onCollapse = async (
+    ctx: ExtensionContext,
+    options: { count: number; segment: string; midStream: boolean },
+  ): Promise<void> => {
+    repetitionStrikes += 1;
+    const preview = options.segment.slice(0, 60);
+    const where = options.midStream ? ' mid-stream' : '';
+
+    if (repetitionStrikes >= 2) {
+      await _halt(ctx, {
+        summary: `Repetition collapse${where} (x${repetitionStrikes}): "${preview}" repeated ${options.count} times. Shutting down.`,
+        finding: 'Model output degenerated into repetition; stage abandoned.',
+      });
+      return;
+    }
+
+    ctx.ui.notify(
+      `[COST GUARD] Repetition detected${where} — "${preview}" x${options.count}. Steering once before halting.`,
+      'warning',
+    );
+    // 🔴 Mid-stream the generation is still running, and steering alone does
+    // not stop it — abort() is what cancels the in-flight turn. Without this
+    // the model keeps emitting until it exhausts maxTokens, which is exactly
+    // the wait that made the guard look like it "only fired on abort".
+    if (options.midStream) {
+      ctx.abort();
+    }
+    pi.sendUserMessage(
+      `[REPETITION GUARD] Your last message repeated the same sentence ${options.count} times ` +
+        `without making progress.\n\n` +
+        `Stop. Do not restate your intent again. Either take ONE concrete action with a ` +
+        `tool call, or state plainly that you are blocked and what you need to proceed.`,
+      { deliverAs: 'steer' },
+    );
+  };
+
+  // ── Mid-stream collapse detection ───────────────────────────────────
+  //
+  // 🔴 `turn_end` fires only once the turn is COMPLETE. A collapsing turn
+  // streams reasoning until it exhausts maxTokens, so every post-turn check
+  // is blind for as long as that takes — on 2026-08-23 a turn reached 298,477
+  // characters, and the user's own Ctrl+C is what ended it. The guard then
+  // dutifully reported "x192" to a session that was already dead. Reading the
+  // partial message as it streams is the only way to cut in before that.
+  //
+  // Throttled by growth, not by update count: `message_update` fires per
+  // token, and re-scanning the whole buffer each time would be quadratic.
+  let scannedAt = 0;
+  // Whether the message currently streaming already took a collapse strike.
+  // Without this the aborted partial reaches `turn_end`, is scored a second
+  // time, and the FIRST collapse halts the session instead of steering it.
+  let streamStruck = false;
+  pi.on('message_update', async (event, ctx) => {
+    if (!repetitionGuard || halted || streamStruck) {
+      return;
+    }
+    const partial = (event.message as { role?: string; content?: unknown } | undefined) ?? {};
+    if (partial.role !== 'assistant') {
+      return;
+    }
+    const thinking = _assistantThinking(partial.content);
+    const text = _assistantText(partial.content);
+    const size = thinking.length + text.length;
+    if (size < scannedAt + streamScanBytes) {
+      return;
+    }
+    scannedAt = size;
+
+    const inThinking = maxRepeatedSegment(thinking);
+    const inText = maxRepeatedSegment(text);
+    if (inThinking.count >= thinkRepetitionThreshold || inText.count >= repetitionThreshold) {
+      const worst = inThinking.count > inText.count ? inThinking : inText;
+      streamStruck = true;
+      await _onCollapse(ctx, { count: worst.count, segment: worst.segment, midStream: true });
+    }
+  });
+
+  pi.on('message_start', () => {
+    scannedAt = 0;
+    streamStruck = false;
+  });
 
   // ── Reset on session start ──────────────────────────────────
   pi.on('session_start', () => {
@@ -398,31 +492,8 @@ export default function (pi: ExtensionAPI) {
       const tripped =
         inText.count >= repetitionThreshold || inThinking.count >= thinkRepetitionThreshold;
       const { count, segment } = inThinking.count > inText.count ? inThinking : inText;
-      if (tripped) {
-        repetitionStrikes += 1;
-        const preview = segment.slice(0, 60);
-
-        // Two strikes: one collapsed generation may still recover when the
-        // model gets a fresh tool result, but a repeat means it is wedged.
-        if (repetitionStrikes >= 2) {
-          await _halt(ctx, {
-            summary: `Repetition collapse (x${repetitionStrikes}): "${preview}" repeated ${count} times. Shutting down.`,
-            finding: 'Model output degenerated into repetition; stage abandoned.',
-          });
-          return;
-        }
-
-        ctx.ui.notify(
-          `[COST GUARD] Repetition detected — "${preview}" x${count}. Steering once before halting.`,
-          'warning',
-        );
-        pi.sendUserMessage(
-          `[REPETITION GUARD] Your last message repeated the same sentence ${count} times ` +
-            `without making progress.\n\n` +
-            `Stop. Do not restate your intent again. Either take ONE concrete action with a ` +
-            `tool call, or state plainly that you are blocked and what you need to proceed.`,
-          { deliverAs: 'steer' },
-        );
+      if (tripped && !streamStruck) {
+        await _onCollapse(ctx, { count, segment, midStream: false });
         return;
       }
     }

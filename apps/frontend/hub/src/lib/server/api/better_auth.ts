@@ -20,6 +20,7 @@ import { createBetterAuth } from '@aikami/backend-auth/better-auth';
 import { d1 } from '@aikami/backend-database';
 import { drizzle } from 'drizzle-orm/d1';
 import { env } from '$env/dynamic/private';
+import { logger } from '$logger';
 
 type BetterAuthEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
@@ -31,9 +32,10 @@ let _auth: ReturnType<typeof createBetterAuth> | undefined;
 
 /** Inject the per-request Worker env (called by the catch-all route). */
 export const setBetterAuthEnv = (envValue: BetterAuthEnv | undefined): void => {
-  // Invalidate the cached instance only when the binding identity changes
-  // (e.g. test reset). Reuse the instance when the same binding is re-set.
-  if (_env !== envValue) {
+  // Callers pass a fresh object literal per request, so compare the binding
+  // itself — comparing the wrapper would rebuild the whole instance every
+  // request (2-3× per request = the `better-auth:instance-created` spam).
+  if (_env?.DB !== envValue?.DB) {
     _env = envValue;
     _auth = undefined;
   }
@@ -55,6 +57,7 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
       throw new Error('BETTER_AUTH_URL and BETTER_AUTH_SECRET are required in production');
     }
     const db = drizzle(_env.DB, { schema: d1 });
+    const cookieDomain = deriveCookieDomain();
     _auth = createBetterAuth(db, {
       baseURL: baseURL ?? 'http://localhost:5173',
       secret: secret ?? 'dev-secret-not-for-production',
@@ -62,7 +65,13 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
       googleClientSecret: env.GOOGLE_CLIENT_SECRET,
       // SSO: share the session cookie across the client (`aikami.`) and hub
       // (`hub.`) subdomains of the same root domain.
-      cookieDomain: deriveCookieDomain(),
+      cookieDomain,
+    });
+    logger.info('better-auth:instance-created', {
+      baseURL,
+      cookieDomain: cookieDomain ?? null,
+      googleConfigured: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+      hasSecret: !!secret,
     });
   }
   return _auth;

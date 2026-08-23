@@ -175,16 +175,6 @@ type TurnContext = {
 };
 
 // ---------------------------------------------------------------------------
-// Fallback turn record — generated when the gateway has no text capability
-// ---------------------------------------------------------------------------
-
-type FallbackTurnRecord = {
-  narrative: string;
-  command?: NpcDialogueCommand;
-  choices: NpcDialogueChoice[];
-};
-
-// ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
 
@@ -217,7 +207,8 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
     /**
      * Per-generation-call timeout in milliseconds. A provider that stalls
      * past this surfaces a `failed` turn state with `reason: 'timeout'` and
-     * the authored fallback is offered (AC-4). Default: {@link DEFAULT_DIALOGUE_TIMEOUT_MS}.
+     * the call rejects (the error is surfaced, never faked). Default:
+     * {@link DEFAULT_DIALOGUE_TIMEOUT_MS}.
      */
     timeoutMs?: number;
   }): void;
@@ -264,7 +255,8 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
    * @param options.gameStateFacts — read-only world facts (active quests, flags, etc.)
    *
    * @returns A {@link NpcDialogueTurn} validated turn (always has narrative + choices).
-   *   Set `source` to `'authored'` when no AI capability is available.
+   *   Rejects when the text provider fails — the error is surfaced, never
+   *   faked with authored dialogue.
    */
   generateTurn(options: {
     npcId: string;
@@ -323,8 +315,9 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
    * Projects NPC context + player context + recent history to the LLM
    * and determines whether a mechanical roll is needed.
    *
-   * @returns Validated {@link NpcIntentAnalysisOutput} — either from AI
-   *   or an authored/derived fallback when AI is unavailable.
+   * @returns Validated {@link NpcIntentAnalysisOutput}.
+   *   Rejects when the text provider fails — the error is surfaced, never
+   *   faked with an authored reply.
    */
   analyzeIntent(options: {
     npcId: string;
@@ -598,7 +591,7 @@ export class NpcDialogueService
         const message = error instanceof Error ? error.message : String(error);
 
         // AC-3: abort rejects — the ViewModel removes the placeholder and
-        // never writes a partial turn. Do NOT fall back to authored here.
+        // never writes a partial turn.
         if (this._isAbortError(error)) {
           this._setTurnStateIfCurrent(controller, {
             kind: 'failed',
@@ -609,9 +602,11 @@ export class NpcDialogueService
           throw error;
         }
 
-        // AC-4: a stalled provider (timeout) surfaces an actionable error
-        // and offers the authored fallback turn. Other provider failures
-        // keep the existing resilience behavior (authored fallback).
+        // Any provider failure (timeout or error) is surfaced to the player.
+        // We deliberately do NOT fall back to authored dialogue: the game is
+        // unplayable without the text provider, so a broken provider must be
+        // visible as an error rather than silently faked. Record the failure
+        // and rethrow so the ViewModel surfaces it.
         const timedOut = error instanceof DialogueTimeoutError;
         const cause = timedOut ? ('timeout' as const) : ('provider_error' as const);
         this._setTurnStateIfCurrent(controller, {
@@ -619,15 +614,8 @@ export class NpcDialogueService
           reason: cause,
           fallbackOffered: false,
         });
-        this.warn('generateTurn:fallback-activated', { cause, detail: message });
-
-        const authored = this._buildAuthoredTurn(turnCtx);
-        this._setTurnStateIfCurrent(controller, {
-          kind: 'failed',
-          reason: cause,
-          fallbackOffered: true,
-        });
-        return authored;
+        this.warn('generateTurn:failed', { cause, detail: message });
+        throw error;
       }
     } finally {
       if (this._activeAbortController === controller) {
@@ -768,19 +756,9 @@ export class NpcDialogueService
           reason: cause,
           fallbackOffered: false,
         });
-        this.warn('analyzeIntent:fallback', { cause, detail: message });
-        const lastPlayerInput =
-          [...options.messages].reverse().find((m) => m.role === 'player')?.content ?? '';
-        const fallback = this._deriveIntentFallback(options.npcName, allowedCommands, {
-          playerInput: lastPlayerInput,
-          npcId: options.npcId,
-        });
-        this._setTurnStateIfCurrent(controller, {
-          kind: 'failed',
-          reason: cause,
-          fallbackOffered: true,
-        });
-        return fallback;
+        // Surface the provider failure — never fake an authored reply.
+        this.warn('analyzeIntent:failed', { cause, detail: message });
+        throw error;
       }
     } finally {
       if (this._activeAbortController === controller) {
@@ -845,14 +823,9 @@ export class NpcDialogueService
           reason: cause,
           fallbackOffered: false,
         });
-        this.warn('resolveRoll:fallback', { cause, detail: message });
-        const fallback = this._deriveRollFallback(options.outcome, options.checkType);
-        this._setTurnStateIfCurrent(controller, {
-          kind: 'failed',
-          reason: cause,
-          fallbackOffered: true,
-        });
-        return fallback;
+        // Surface the provider failure — never fake a resolution.
+        this.warn('resolveRoll:failed', { cause, detail: message });
+        throw error;
       }
     } finally {
       if (this._activeAbortController === controller) {
@@ -1290,71 +1263,6 @@ export class NpcDialogueService
     });
   }
 
-  // ── Private: authored fallback path ───────────────────────────────────
-
-  /**
-   * Builds a fully authored turn from the content pack.
-   * Returns a turn even if the NPC has no authored dialogue (generic fallback).
-   */
-  private _buildAuthoredTurn(turnCtx: TurnContext): NpcDialogueTurn {
-    const { npcEntry, npcId, npcName, contextualDialogueKey, allowedCommands } = turnCtx;
-
-    // Resolve the authored dialogue key — three tiers:
-    // 1. Contextual (quest/encounter) dialogue key
-    // 2. NPC's defaultDialogueKey
-    // 3. Generic fallback line
-    let dialogueKey: string | undefined;
-    let narrative = '';
-
-    if (contextualDialogueKey) {
-      const contextual = this._contentProvider!.getDialogue(contextualDialogueKey);
-      if (contextual) {
-        dialogueKey = contextualDialogueKey;
-        narrative = contextual;
-      }
-    }
-
-    if (!narrative) {
-      const defaultKey = npcEntry?.defaultDialogueKey;
-      if (defaultKey) {
-        const defaultDialogue = this._contentProvider!.getDialogue(defaultKey);
-        if (defaultDialogue) {
-          dialogueKey = defaultKey;
-          narrative = defaultDialogue;
-        }
-      }
-    }
-
-    if (!narrative) {
-      // Last resort: generic authored line from persona
-      narrative = this._genericFallbackLine(npcName);
-    }
-
-    const fallbackRecord: FallbackTurnRecord = {
-      narrative,
-      choices: [],
-    };
-
-    // Derive choices from NPC capabilities + related dialogue keys
-    fallbackRecord.choices = this._deriveAuthoredChoices({
-      npcEntry,
-      npcId,
-      currentDialogueKey: dialogueKey,
-      allowedCommands,
-      npcName,
-    });
-
-    // Build the validated turn
-    const turn: NpcDialogueTurn = {
-      narrative: fallbackRecord.narrative,
-      command: fallbackRecord.command,
-      choices: fallbackRecord.choices,
-      source: 'authored',
-    };
-
-    return turn;
-  }
-
   // ── Private: context projection ───────────────────────────────────────
 
   /** Builds the full context projection for a dialogue turn. */
@@ -1627,63 +1535,6 @@ export class NpcDialogueService
     ];
   }
 
-  /** Derives choices for authored fallback branches. */
-  private _deriveAuthoredChoices(options: {
-    npcEntry: ReturnType<NpcDialogueContentProvider['getNpc']>;
-    npcId: string;
-    currentDialogueKey?: string;
-    allowedCommands: NpcDialogueCommandKind[];
-    npcName: string;
-  }): NpcDialogueChoice[] {
-    const { allowedCommands, npcName } = options;
-    const choices: NpcDialogueChoice[] = [];
-
-    // Priority: quest > trade > talk > leave (cap at 4, stable order)
-
-    // 1. Quest offers (if NPC has associated quest)
-    const quests = this._contentProvider!.getAllQuests();
-    if (quests.length > 0 && allowedCommands.includes('offerQuest')) {
-      // Filter to quests associated with this NPC (if offeredByNpcId is set),
-      // then filter to only offerable quests (not already active, completed, failed, or declined)
-      const npcId = options.npcId;
-      const offerableQuest = quests.find(
-        (q) =>
-          q &&
-          // If quest has offeredByNpcId, only match the active NPC
-          (!q.offeredByNpcId || q.offeredByNpcId === npcId) &&
-          questStateService.canAcceptQuest(q.id),
-      );
-      if (offerableQuest) {
-        choices.push({
-          id: 'quest',
-          label: `Ask about "${offerableQuest.name}"`,
-          command: { kind: 'offerQuest', questId: offerableQuest.id },
-        });
-      }
-    }
-
-    // 2. Trade (if vendor)
-    if (allowedCommands.includes('trade') && choices.length < 4) {
-      choices.push({
-        id: 'trade',
-        label: `Trade with ${npcName}`,
-        command: { kind: 'trade' },
-      });
-    }
-
-    // 3. Talk more
-    if (choices.length < 4) {
-      choices.push({ id: 'talk', label: `Ask ${npcName} more` });
-    }
-
-    // 4. Leave
-    if (choices.length < 4) {
-      choices.push({ id: 'leave', label: 'Leave' });
-    }
-
-    return choices;
-  }
-
   // ── Private: generic fallback ────────────────────────────────────────
 
   /** Generic fallback line when an NPC has no authored dialogue at all. */
@@ -1820,7 +1671,8 @@ export class NpcDialogueService
         this.warn('_analyzeIntent:call2-failed', {
           detail: error instanceof Error ? error.message : String(error),
         });
-        rawOutput = undefined;
+        // Propagate call-2 failure to public handler so it sets failed turn state
+        throw error;
       }
       this._checkAbort(options.signal);
 
@@ -1975,7 +1827,8 @@ export class NpcDialogueService
         this.warn('_resolveRoll:call2-failed', {
           detail: error instanceof Error ? error.message : String(error),
         });
-        rawOutput = undefined;
+        // Propagate call-2 failure to public handler so it sets failed turn state
+        throw error;
       }
       this._checkAbort(options.signal);
 
@@ -2113,151 +1966,6 @@ export class NpcDialogueService
     }
 
     return valid;
-  }
-
-  /**
-   * Derives suggestion chips from authored dialogue + NPC capabilities
-   * when AI is unavailable (fallback path).
-   */
-  private _deriveChips(options: {
-    npcName: string;
-    allowedCommands: NpcDialogueCommandKind[];
-  }): NpcSuggestionChip[] {
-    const { npcName, allowedCommands } = options;
-    const chips: NpcSuggestionChip[] = [];
-
-    // Derive chips from NPC capabilities
-    if (allowedCommands.includes('trade')) {
-      chips.push({
-        id: 'trade',
-        label: `Trade with ${npcName}`,
-        intentType: 'trade',
-        prefillText: `I'd like to see your wares.`,
-      });
-    }
-
-    if (allowedCommands.includes('offerQuest')) {
-      chips.push({
-        id: 'ask_quest',
-        label: 'Ask about work',
-        intentType: 'quest',
-        prefillText: `Do you have any work for me?`,
-      });
-    }
-
-    // Always add a talk chip
-    chips.push({
-      id: 'talk',
-      label: `Ask ${npcName} more`,
-      intentType: 'dialogue',
-      prefillText: `Tell me more.`,
-    });
-
-    // Always add a leave chip
-    if (chips.length < 4) {
-      chips.push({
-        id: 'leave',
-        label: 'Leave',
-        intentType: 'dialogue',
-        prefillText: `I must be going.`,
-      });
-    }
-
-    return chips.slice(0, 4);
-  }
-
-  /**
-   * Derives a fallback intent analysis output when AI is unavailable.
-   * Also derives a deterministic quest-activation tool call from the player's
-   * message so accepting/declining an offered quest works even without AI.
-   */
-  private _deriveIntentFallback(
-    npcName: string,
-    allowedCommands: NpcDialogueCommandKind[],
-    context?: { playerInput?: string; npcId?: string },
-  ): NpcIntentAnalysisOutput {
-    return {
-      requiresRoll: false,
-      checkType: undefined,
-      difficultyClass: undefined,
-      modifierSource: undefined,
-      npcResponse: this._genericFallbackLine(npcName),
-      suggestedChips: this._deriveChips({ npcName, allowedCommands }),
-      questActivation: this._deriveQuestActivationFallback(
-        context?.playerInput ?? '',
-        context?.npcId ?? '',
-      ),
-    };
-  }
-
-  /**
-   * Deterministic quest-activation fallback for when AI is unavailable.
-   * Only fires when this NPC has exactly one offerable quest and the player's
-   * message clearly accepts or declines it (quest-context phrases required), so
-   * ordinary chatter can never accidentally accept a quest.
-   */
-  private _deriveQuestActivationFallback(
-    playerInput: string,
-    npcId: string,
-  ): NpcQuestActivation | undefined {
-    const text = playerInput.trim().toLowerCase();
-    if (!text || !npcId) {
-      return undefined;
-    }
-    const offerable = questStateService.getOfferableQuests(npcId);
-    if (offerable.length !== 1) {
-      return undefined; // Ambiguous — require exactly one offerable quest.
-    }
-    const quest = offerable[0];
-    if (!quest) {
-      return undefined;
-    }
-
-    const questContext = /\b(quest|task|job|mission|errand|responsibility)\b/.test(text);
-    if (!questContext) {
-      return undefined;
-    }
-
-    // Negations — only explicit refusal phrases count, and they must occur
-    // near a quest-related word so ordinary help requests (e.g. "Can you
-    // help me?") are never treated as declines.
-    const refusalMatch = /\b(no thanks?|no thank you|i decline|i refuse)\b/.exec(text);
-    const questMatch = /\b(quest|task|job|mission|errand|responsibility)\b/.exec(text);
-    const negated =
-      !!refusalMatch &&
-      !!questMatch &&
-      Math.abs((refusalMatch.index ?? 0) - (questMatch.index ?? 0)) <= 60;
-    if (negated) {
-      return { action: 'decline', questId: quest.id };
-    }
-
-    const accepts =
-      /\b(accept|take|agree|will do|i'?ll do it|consider it done|count me in|sign me up|i'?m in|i will (help|do|take))\b/.test(
-        text,
-      );
-    if (accepts) {
-      return { action: 'accept', questId: quest.id };
-    }
-    return undefined;
-  }
-
-  /**
-   * Derives a fallback roll resolution output when call #2 fails.
-   */
-  private _deriveRollFallback(
-    outcome: 'pass' | 'fail',
-    checkType: string,
-  ): NpcRollResolutionOutput {
-    const narrative =
-      outcome === 'pass'
-        ? `*The attempt at ${checkType} succeeds.*`
-        : `*The attempt at ${checkType} falls short.*`;
-
-    return {
-      narrativeResult: narrative,
-      stateDeltas: [],
-      suggestedChips: [],
-    };
   }
 }
 

@@ -25,6 +25,13 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
+/** Whether the dialogue is expanded to full-view (hides avatars, maxes chat area). */
+let isFullscreen = $state(false);
+
+const toggleFullscreen = (): void => {
+  isFullscreen = !isFullscreen;
+};
+
 /** Map dialogue messages to the shared RichMessage row shape (C-424). */
 const richMessages = $derived(
   viewModel.messages.map((m) => ({
@@ -89,7 +96,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
   data-testid="dialogue-overlay"
 >
   <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161) -->
-  {#if viewModel.hasNpcScreenPosition}
+  {#if viewModel.hasNpcScreenPosition && !isFullscreen}
     {@const clampedX = Math.max(16, Math.min(viewModel.npcScreenX, typeof window !== 'undefined' ? window.innerWidth - 16 : 400))}
     {@const clampedY = Math.max(16, Math.min(viewModel.npcScreenY, typeof window !== 'undefined' ? window.innerHeight - 16 : 300))}
     <div
@@ -104,60 +111,66 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
   <GameDice dice={viewModel.diceState} />
 
   <!-- Avatar row — NPC left, Player + Party right -->
-  <div class="mx-auto mb-3 flex w-full max-w-2xl items-end justify-between px-2">
-    <!-- NPC Avatar -->
-    <div
-      class="{viewModel.highlightSpeaker === 'npc' ? 'scale-110' : ''} transition-transform duration-200"
-    >
+  {#if !isFullscreen}
+    <div class="mx-auto mb-3 flex w-full max-w-2xl items-end justify-between px-2">
+      <!-- NPC Avatar -->
       <div
-        class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'npc'
-          ? 'border-warning shadow-warning/30'
-          : 'border-base-content/10'}"
-      >
-        <img
-          src={viewModel.npcAvatarUrl}
-          alt={viewModel.npcName}
-          class="h-full w-full object-contain"
-          loading="lazy"
-        >
-      </div>
-    </div>
-
-    <!-- Right side: Player + Party members -->
-    <div class="flex items-end gap-2">
-      {#if viewModel.showPartyUi}
-        <div class="h-20 w-20 overflow-hidden border-2 border-info/30 shadow-lg">
-          <img
-            src="/assets/npc/gandalf/neutral.webp"
-            alt="Companion"
-            class="h-full w-full object-contain opacity-70"
-            loading="lazy"
-          >
-        </div>
-      {/if}
-      <div
-        class="{viewModel.highlightSpeaker === 'player' ? 'scale-110' : ''} transition-transform duration-200"
+        class="{viewModel.highlightSpeaker === 'npc' ? 'scale-110' : ''} transition-transform duration-200"
       >
         <div
-          class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'player'
-            ? 'border-primary shadow-primary/30'
-            : 'border-base-content/10'}"
+          class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'npc'
+          ? 'border-warning shadow-warning/30'
+          : 'border-base-content/10'}"
         >
           <img
-            src={viewModel.playerAvatarUrl}
-            alt="You"
+            src={viewModel.npcAvatarUrl}
+            alt={viewModel.npcName}
             class="h-full w-full object-contain"
             loading="lazy"
           >
         </div>
       </div>
+
+      <!-- Right side: Player + Party members -->
+      <div class="flex items-end gap-2">
+        {#if viewModel.showPartyUi}
+          <div class="h-20 w-20 overflow-hidden border-2 border-info/30 shadow-lg">
+            <img
+              src="/assets/npc/gandalf/neutral.webp"
+              alt="Companion"
+              class="h-full w-full object-contain opacity-70"
+              loading="lazy"
+            >
+          </div>
+        {/if}
+        <div
+          class="{viewModel.highlightSpeaker === 'player' ? 'scale-110' : ''} transition-transform duration-200"
+        >
+          <div
+            class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'player'
+            ? 'border-primary shadow-primary/30'
+            : 'border-base-content/10'}"
+          >
+            <img
+              src={viewModel.playerAvatarUrl}
+              alt="You"
+              class="h-full w-full object-contain"
+              loading="lazy"
+            >
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
+  {/if}
 
   <!-- Dialogue Box — glass card at bottom 45% of screen -->
   <div
-    class="mx-auto mb-6 flex w-full max-w-2xl flex-col rounded-2xl border border-base-content/10 bg-base-200/90 shadow-2xl backdrop-blur-md"
-    style="height: 45vh;"
+    class="mx-auto mb-6 flex w-full flex-col rounded-2xl border border-base-content/10 bg-base-200/90 shadow-2xl backdrop-blur-md"
+    class:max-w-2xl={!isFullscreen}
+    class:max-w-4xl={isFullscreen}
+    class:h-[45vh]={!isFullscreen}
+    class:h-[calc(100dvh-2rem)]={isFullscreen}
+    class:mx-2={isFullscreen}
   >
     <!-- Header: NPC name + address mode + End Chat -->
     <div
@@ -170,6 +183,16 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
         {/if}
       </div>
       <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs"
+          onclick={toggleFullscreen}
+          title={isFullscreen ? 'Exit full view' : 'Full view'}
+          aria-label={isFullscreen ? 'Exit full view' : 'Enter full view'}
+          aria-pressed={isFullscreen}
+        >
+          {isFullscreen ? '⊡' : '⛶'}
+        </button>
         <button
           type="button"
           class="btn btn-ghost btn-xs text-error"
