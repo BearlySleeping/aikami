@@ -2,7 +2,7 @@
 id: C-427
 title: "Local Model Runtime — generalize the Kokoro binding into a modality-agnostic local-model layer, and add a small local LLM for parallel micro-tasks"
 source: "Investigation 2026-08-23 — evaluation of Cactus-Compute/needle2 for agent micro-tasks"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -19,10 +19,10 @@ created_at: "2026-08-23"
 | Field | Value |
 |---|---|
 | **Source** | Request to bind `Cactus-Compute/needle2` the same way Kokoro is bound, and run agent micro-tasks (expression, image prompt, relationship, battle trigger) on it in parallel with chat. Benchmarking rejected needle2; the plumbing request stands and generalizes. |
-| **Target** | `apps/frontend/client/src/lib/services/audio/voice_model_service.svelte.ts` (452 lines, Kokoro-specific); `apps/frontend/client/src/lib/services/agent/agents/*.ts` |
+| **Target** | `apps/frontend/client/src/lib/services/audio/voice_model_service.svelte.ts` (540 lines, Kokoro-specific); `apps/frontend/client/src/lib/services/agent/agents/*.ts` |
 | **Priority** | P2 — infrastructure. Enables offline agent micro-tasks and removes the copy-paste tax on the second in-webview model. |
 | **Dependencies** | C-389 (voice model download), C-320 (AI gateway), C-236 (agent pipeline) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 1.0.0 |
@@ -33,7 +33,7 @@ Two separate problems, one contract.
 
 ### Problem 1 — the Kokoro binding is a one-off
 
-`voice_model_service.svelte.ts` is 452 lines. Roughly 400 of them are
+`voice_model_service.svelte.ts` is 540 lines. Roughly 480 of them are
 model-agnostic: pinned manifest → download (browser `fetch` or Tauri
 `invoke`) → SHA-256 + size verify → Cache Storage write → status/delete.
 Only the `MODEL_ID` / `VOICE_REPO` constants and the two cache-key helpers
@@ -172,7 +172,7 @@ bundle declaration, not a download service.
 | Schema validation | `validateAgainstSchema`, `enforceStrictSchema` (same file) | — |
 | Provider routing | `createAdapterRegistry` / `AiTextAdapter` (C-320) | — |
 | Hardware tiering | `@aikami/local-ai` `TIER_TABLE`, `recommend.ts` (C-391) | — |
-| Model state type | `VoiceModelState` in `@aikami/types` — generalize to `LocalModelState` | — |
+| Model state type | `VoiceModelState` in `apps/frontend/client/src/lib/types/voice_model.ts` — generalize to `LocalModelState` in `@aikami/types` | — |
 
 ## Architecture Directives
 
@@ -290,9 +290,10 @@ directly.
 
 ## State & Data Models
 
-`VoiceModelState` in `@aikami/types` is renamed `LocalModelState` and gains a
-`bundleId`. A type alias keeps `VoiceModelState` compiling through the
-migration. Bundle declarations live in
+`VoiceModelState` (currently client-local in
+`apps/frontend/client/src/lib/types/voice_model.ts`) is promoted to
+`@aikami/types` as `LocalModelState` and gains a `bundleId`. A type alias
+keeps `VoiceModelState` compiling through the migration. Bundle declarations live in
 `packages/shared/constants/src/lib/local_models.ts`; task declarations in
 `packages/shared/schemas/src/lib/local_ai/tasks.ts` — per the monorepo
 boundary rule, never in `apps/**`.
