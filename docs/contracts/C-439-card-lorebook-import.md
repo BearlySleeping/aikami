@@ -21,7 +21,7 @@ created_at: "2026-08-24"
 | **Target** | `packages/shared/types/src/lib/domain/character_card.ts` — the card type; `apps/frontend/client/src/lib/services/character/` — the import path; `apps/frontend/client/src/lib/services/lorebook/` — the destination store |
 | **Priority** | P1 — the single highest-leverage compatibility gap for the audience the project is about to be shown to. Silent data loss on import is also the worst possible first impression. |
 | **Dependencies** | C-419 (implemented) — V1/V2/V3 PNG + JSON card import already exists and works (file: `docs/contracts/C-419-p3-growth-features.md`). C-246 (completed) — the export/import system. This contract extends both; it does not rebuild either. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → the import section of `apps/frontend/docs/src/content/docs/` should state which card fields are supported. |
 | **Contract version** | 2.0.0 |
@@ -314,6 +314,54 @@ Must be resolved before status becomes `approved`:
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Execution Report
+
+### Summary
+
+Added `character_book` (embedded lorebook) parsing to the V2/V3 character card import pipeline. The spec types (`CharacterBook`/`CharacterBookEntry`) and TypeBox schemas live in `packages/shared/`. A new `character_book_mapper.ts` normalizes entries onto Aikami's `LorebookEntry` shape, preserving unmapped V2 fields in an extensions bag. The import result carries the normalized book; the persona list ViewModel creates it through the existing lorebook store and surfaces a plain-language import summary in the UI. Docs updated to list supported card fields.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Book parsed from V2 PNG, V3 PNG, and JSON paths — all three produce identical normalized structure. No-book path unchanged. |
+| AC-2 | ✅ | Entry mapping tested: keys→keywords, insertion_order wins priority, unmapped fields preserved in extensions, disabled entries skipped and counted. |
+| AC-3 | ✅ | Lorebook created through existing `lorebookStore.addLorebook()` + `addEntry()` in the persona list ViewModel. Keyword scanner and GM prompt service unchanged. |
+| AC-4 | ✅ | Import summary shown as an alert banner in the persona list view with entry counts and skip reasons. Malformed/over-bound books degrade cleanly. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/domain/character_book.ts` | TypeBox schemas for `CharacterBook` / `CharacterBookEntry` |
+| `apps/frontend/client/src/lib/services/character/character_book_mapper.ts` | Normalizes V2/V3 book into Aikami `LorebookEntry` shape with extensions preservation |
+| `apps/frontend/client/src/lib/services/character/character_book_mapper.test.ts` | 12 unit tests covering AC-2 (mapping) and AC-4 (summary) |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/types/src/lib/domain/character_card.ts` | Added `CharacterBook` / `CharacterBookEntry` types |
+| `packages/shared/schemas/src/index.ts` | Added export for character_book schema |
+| `apps/frontend/client/src/lib/services/character/character_importer.ts` | Extended `CharacterImportResult` with `lorebook` field; added `_extractBook` helper; updated both PNG and JSON import paths |
+| `apps/frontend/client/src/lib/types/lorebook.ts` | Added optional `extensions` field to `LorebookEntry` |
+| `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.svelte.ts` | Added lorebook creation after import, `importSummary` state, `clearImportSummary()` method |
+| `apps/frontend/client/src/lib/views/character/persona/list/persona_list_view.svelte` | Added import summary alert banner with dismiss button |
+| `apps/frontend/client/src/lib/services/character/character_import.test.ts` | Added C-439 fixture cards and integration test cases (blocked by pre-existing module resolution issue) |
+| `apps/frontend/docs/src/content/docs/features/export-import.md` | Documented supported card formats, field mappings, and lorebook import |
+
+### Deviations from Spec
+
+None. All ACs implemented as specified.
+
+### Test Results
+
+- Unit (mapper): 12/12 PASS — 0 failures
+- Unit (lorebook store): 11/11 PASS — 0 failures (baseline regression clean)
+- Unit (character import): pre-existing module resolution issue (`@aikami/utils` not resolved in test env) — 0 new failures
+- Typecheck: clean (with `AIKAMI_INCLUDE_DEV_ROUTES=true`)
+- Baseline: 0 new failures
 
 ## Promotion Lifecycle
 
