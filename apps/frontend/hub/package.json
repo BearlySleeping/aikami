@@ -23,7 +23,7 @@
     "deploy": "bun run scripts/deploy.ts"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260822.1",
+    "@cloudflare/workers-types": "5.20260823.1",
     "@inlang/paraglide-js": "2.24.1",
     "@libsql/client": "^0.17.4",
     "@sveltejs/adapter-cloudflare": "^7.2.9",

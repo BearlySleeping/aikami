@@ -47,7 +47,17 @@ import {
 import { APP_CONFIG } from '../deploy/deployment_config.ts';
 import { hasDirenv } from '../env/direnv_detect';
 import { reportInfraIssue } from '../ops/infra_report.ts';
-import { findWorkspace, herdrJson, killPort } from './session.ts';
+import {
+  CONTRACT_WORKSPACE_PREFIX,
+  findWorkspace,
+  getWorkspaceTabs,
+  herdr,
+  herdrJson,
+  KNOWN_SERVICES,
+  killPort,
+  SERVICE_DEFS,
+  TASK_WORKSPACE_PREFIX,
+} from './session.ts';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -132,12 +142,9 @@ export type PullRequestOptions = {
 
 // ── Constants ──────────────────────────────────────────────
 
-/**
- * Workspace label prefix for task worktrees. `parseWorkspaceName()`
- * in session.ts returns null for these, so listServices() correctly
- * ignores task workspaces in the dev-service listing.
- */
-export const TASK_WORKSPACE_PREFIX = 'aikami-task-';
+// TASK_WORKSPACE_PREFIX is declared in session.ts (beside
+// CONTRACT_WORKSPACE_PREFIX) and re-exported here for the existing importers.
+export { TASK_WORKSPACE_PREFIX };
 export const TASK_BRANCH_PREFIX = 'task/';
 
 /**
@@ -799,6 +806,46 @@ const assertManagedWorktreeTarget = (checkoutPath: string, repoRoot: string): vo
 };
 
 /**
+ * Stop everything the contract owns that would otherwise still be running
+ * INSIDE the checkout when we try to delete it.
+ *
+ * 🔴 This is the single biggest cause of "cannot delete worktree". Dev
+ * services started from an implementer/verifier/review tab run with their cwd
+ * inside the checkout (that is the point — they serve the branch's code), and
+ * a live vite keeps writing into `.svelte-kit`/`node_modules` while the
+ * removal is in flight. `git worktree remove` then reports the tree as
+ * modified and refuses, and herdr's own right-click "delete worktree" — which
+ * does not force — fails the same way. Killing the services first turns a
+ * flaky removal into a deterministic one.
+ *
+ * Best-effort throughout: this runs ahead of a removal that must proceed
+ * regardless, so nothing here throws.
+ */
+const stopServicesInCheckout = async (checkoutPath: string): Promise<void> => {
+  const contractId = checkoutPath.match(/(C-\d+|MIG-\d+)/i)?.[0]?.toUpperCase();
+  if (!contractId) {
+    return;
+  }
+  // One workspace per contract (CONTRACT_WORKSPACE_PREFIX) — closing its
+  // dev-service tabs kills the pane shells and, with them, the servers.
+  const workspaceId = await findWorkspace(`${CONTRACT_WORKSPACE_PREFIX}${contractId}`).catch(
+    () => null,
+  );
+  if (workspaceId) {
+    const serviceNames = new Set(KNOWN_SERVICES.map((service) => SERVICE_DEFS[service].name));
+    for (const tab of await getWorkspaceTabs(workspaceId).catch(() => [])) {
+      if (serviceNames.has(tab.label)) {
+        await herdr(['tab', 'close', tab.tab_id]).catch(() => {});
+      }
+    }
+  }
+  // Belt and braces: a server that outlived its pane still holds the port
+  // (and its cwd inside the checkout). killPort only kills our own dev-tool
+  // process names, never a bystander.
+  await killContractPorts(checkoutPath);
+};
+
+/**
  * Remove a worktree: herdr state + checkout together, then optionally the
  * local and/or remote branch. herdr `worktree remove` NEVER deletes the
  * branch — that is always a separate explicit git step here.
@@ -810,10 +857,25 @@ export const removeWorktree = async (
   ensureGitRepo(repoRoot);
 
   let workspaceId = options.workspaceId;
-  // If no workspace id given, resolve from the checkout path.
-  if (!workspaceId && options.checkoutPath) {
-    const entry = (await listWorktrees(repoRoot)).find((w) => w.path === options.checkoutPath);
-    workspaceId = entry?.openWorkspaceId;
+  let checkoutPath = options.checkoutPath;
+  // Resolve whichever of the pair the caller did not supply. Both matter:
+  // the workspace id drives herdr's own removal, and the checkout path is
+  // what every fallback below needs — without it, a failed herdr removal has
+  // nowhere to fall back TO and the orphan survives.
+  if (!(workspaceId && checkoutPath)) {
+    const worktrees = await listWorktrees(repoRoot).catch(() => []);
+    const entry = checkoutPath
+      ? worktrees.find((w) => w.path === checkoutPath)
+      : worktrees.find((w) => w.openWorkspaceId === workspaceId);
+    workspaceId = workspaceId ?? entry?.openWorkspaceId;
+    checkoutPath = checkoutPath ?? entry?.path;
+  }
+
+  // 🔴 Kill what is running inside the checkout BEFORE trying to delete it.
+  // See stopServicesInCheckout — a live dev server in there is what makes a
+  // removal fail (and then silently leave an orphan behind).
+  if (checkoutPath) {
+    await stopServicesInCheckout(checkoutPath).catch(() => {});
   }
 
   let checkoutRemoved = false;
@@ -829,11 +891,20 @@ export const removeWorktree = async (
     } else {
       reason = `herdr worktree remove returned no result for workspace ${workspaceId}`;
     }
-  } else if (options.checkoutPath) {
-    // herdr state is gone — fall back to raw git worktree remove.
+  }
+  // 🔴 Not `else if`. When a workspace id WAS known but herdr's removal
+  // failed, the old code stopped here and reported failure — no git fallback
+  // was ever attempted, so the checkout stayed on disk and `git worktree
+  // list` kept an entry for it forever. That is exactly how a repo
+  // accumulates a pile of dead `contract-task-c-NNN-*` worktrees: herdr's
+  // remove refuses a dirty tree (the common state after a run), and nothing
+  // downstream picked the job back up. Every path now falls through to the
+  // git-level removal below.
+  if (!checkoutRemoved && checkoutPath) {
     try {
-      runGit(`worktree remove '${options.checkoutPath}' --force`, { cwd: repoRoot });
+      runGit(`worktree remove '${checkoutPath}' --force`, { cwd: repoRoot });
       checkoutRemoved = true;
+      reason = undefined;
     } catch (gitErr: unknown) {
       try {
         // 🔴 Validate BEFORE the recursive delete. git worktree remove just
@@ -841,20 +912,21 @@ export const removeWorktree = async (
         // rmSync(checkoutPath) is this guard — without it, a checkoutPath
         // equal to repoRoot would recursively delete the entire repository
         // and a plain directory would be deleted as arbitrary user data.
-        assertManagedWorktreeTarget(options.checkoutPath, repoRoot);
+        assertManagedWorktreeTarget(checkoutPath, repoRoot);
         // 🔴 node:fs rmSync, not `execSync('rm -rf ...')` — the latter never
         // worked on Windows (no `rm` binary) and, independent of that, hand
         // POSIX-quoting a path for cmd.exe leaks the literal quote
         // characters into the argument instead of protecting it (F-02).
         // rmSync needs neither a shell nor an external binary, so there is
         // nothing to quote and nothing platform-specific to get wrong.
-        rmSync(options.checkoutPath, { recursive: true, force: true });
+        rmSync(checkoutPath, { recursive: true, force: true });
         checkoutRemoved = true;
+        reason = undefined;
         reportInfraIssue({
           component: 'worktree_remove',
           operation: 'git worktree remove (fell back to rmSync)',
           error: gitErr,
-          context: { checkoutPath: options.checkoutPath },
+          context: { checkoutPath },
           cwd: repoRoot,
         });
       } catch (rmErr: unknown) {
@@ -863,12 +935,31 @@ export const removeWorktree = async (
         reason = `git worktree remove failed (${g}); rm -rf failed (${r2})`;
       }
     }
-  } else {
+  }
+  if (!(checkoutRemoved || checkoutPath || workspaceId)) {
     reason = 'No workspace id or checkout path provided';
   }
 
-  if (checkoutRemoved && options.checkoutPath) {
-    await killContractPorts(options.checkoutPath);
+  if (checkoutRemoved && workspaceId) {
+    // Only herdr's own `worktree remove` closes the workspace as part of the
+    // removal. When we got here via the git/rmSync fallback the workspace is
+    // still open — on a checkout that no longer exists — so its tabs linger
+    // in the switcher as a dead entry the user then has to close by hand.
+    await herdr(['workspace', 'close', workspaceId]).catch(() => {});
+  }
+
+  if (checkoutRemoved && checkoutPath) {
+    // The directory is gone, but git still holds an administrative record of
+    // it under .git/worktrees/. Without this prune, `git worktree list` (and
+    // therefore `bun run workspace:cleanup`, and herdr's own worktree list)
+    // keeps reporting a checkout that no longer exists, and re-creating a
+    // worktree on the same branch fails with "already checked out".
+    try {
+      runGit('worktree prune', { cwd: repoRoot });
+    } catch {
+      // Best-effort — never fail a successful removal over bookkeeping.
+    }
+    await killContractPorts(checkoutPath);
   }
 
   let branchDeleted = !options.branch;

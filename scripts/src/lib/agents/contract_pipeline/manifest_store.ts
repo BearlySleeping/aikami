@@ -316,6 +316,45 @@ export const logPath = (options: { runId: string; cwd: string }): string =>
   join(runDirectory(options), 'pipeline.log');
 
 /** Append a timestamped line to the pipeline log. */
+/**
+ * Mirror this process's stdout/stderr into the run log, on top of whatever it
+ * already prints to its terminal.
+ *
+ * The orchestrator's own console output used to exist ONLY in its hosting
+ * herdr pane, while `pipeline.log` held just the `pipelineLog` milestones —
+ * which is why the workspace needed two tabs to show one pipeline (a
+ * `launcher` tab for the live process, a `pipeline` tab tailing the file).
+ * Now that the process's pane IS the `pipeline` tab, the file has to carry
+ * everything instead, or closing the workspace would take the only copy of
+ * the run's output with it.
+ *
+ * Idempotent — a second call on the same process is a no-op, so a resume path
+ * that re-enters the orchestrator cannot stack wrappers and double-write.
+ */
+let teeInstalled = false;
+export const teePipelineLog = (options: { runId: string; cwd: string }): void => {
+  if (teeInstalled) {
+    return;
+  }
+  teeInstalled = true;
+  const path = logPath(options);
+  mkdirSync(runDirectory(options), { recursive: true });
+  for (const stream of [process.stdout, process.stderr]) {
+    const original = stream.write.bind(stream);
+    type WriteArgs = Parameters<typeof original>;
+    stream.write = ((...args: WriteArgs): boolean => {
+      const [chunk] = args;
+      try {
+        writeFileSync(path, typeof chunk === 'string' ? chunk : Buffer.from(chunk), { flag: 'a' });
+      } catch {
+        // Never let logging break the pipeline — the terminal copy still goes
+        // out below.
+      }
+      return original(...args);
+    }) as typeof stream.write;
+  }
+};
+
 export const pipelineLog = (options: { runId: string; cwd: string; message: string }): void => {
   const path = logPath(options);
   mkdirSync(runDirectory(options), { recursive: true });

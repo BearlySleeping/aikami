@@ -9,6 +9,7 @@ import { getScriptsEnv } from '../../env/scripts_env';
 import { findBash, posixQuote } from '../../env/which';
 import {
   bashScriptForPane,
+  CONTRACT_WORKSPACE_PREFIX,
   detectPaneShell,
   ensureServer,
   findWorkspace,
@@ -35,6 +36,16 @@ type WorkspaceCreateResult = {
     workspace: { workspace_id: string };
     tab: { tab_id: string };
     root_pane: { pane_id: string };
+  };
+};
+
+type PaneMoveResult = {
+  result: {
+    move_result: {
+      /** The pane AFTER the move — its id differs from the pre-move one. */
+      pane: { pane_id: string };
+      previous_workspace_id?: string;
+    };
   };
 };
 
@@ -309,6 +320,16 @@ export type ContractHerdrAdapterInterface = {
  * orchestrator's lock staleness check must build the SAME label — extract it
  * here so the two can never drift.
  *
+ * 🔴 In worktree mode this is the SAME label `herdr/session.ts`'s
+ * `buildSessionName(emulator, contractId)` produces, and deliberately so:
+ * one contract = one workspace, holding the pipeline tabs, the agent tabs
+ * AND every dev service an agent starts. Both sides build it from the shared
+ * CONTRACT_WORKSPACE_PREFIX so they cannot drift apart.
+ *
+ * The mode is not in the worktree-mode label: contract-scoped dev services
+ * are emulator-only by construction (see `buildSessionName`), so there is
+ * never a second, differently-moded contract workspace to disambiguate from.
+ *
  * @param contractId - Contract ID (e.g. `C-372`), only used in worktree mode.
  * @param rootMode   - Whether the run executes on the root branch.
  */
@@ -317,7 +338,7 @@ export const buildWorkspaceLabel = (options: {
   rootMode?: boolean;
 }): string => {
   const mode = resolveAikamiMode();
-  return options.rootMode ? `aikami-${mode}` : `aikami-contract-${options.contractId}`;
+  return options.rootMode ? `aikami-${mode}` : `${CONTRACT_WORKSPACE_PREFIX}${options.contractId}`;
 };
 
 export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
@@ -333,6 +354,17 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   /** When true, use the standard aikami-{mode} workspace and skip
    *  git worktree provisioning. All stages run from the repo root. */
   private readonly _rootMode: boolean;
+  /** The herdr pane this orchestrator process is itself running in, when
+   *  `bun run contract` launched it into one (see `launchBackground`). It
+   *  becomes the `pipeline` tab — see {@link _installPipelinePane}.
+   *
+   *  🔴 Never defaulted from `HERDR_PANE_ID`. That env var is set in EVERY
+   *  herdr pane, including the user's own terminal — so a foreground
+   *  `bun run contract --no-background` typed into their working tab would
+   *  yank that tab out of their workspace and into the contract's. Only the
+   *  launcher, which created a pane specifically to host this process, is
+   *  allowed to say "this pane is yours". */
+  private readonly _hostPaneId: string;
   private _workspaceId = '';
   private _pipelinePaneId = '';
   private _workspacePath = '';
@@ -345,6 +377,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     headless?: boolean;
     interactiveWriter?: boolean;
     rootMode?: boolean;
+    /** Pane created by the launcher to host this process, if any — it becomes
+     *  the `pipeline` tab. Only the launcher may set this; see _hostPaneId. */
+    hostPaneId?: string;
   }) {
     this._repoRoot = options.repoRoot;
     this._runId = options.runId;
@@ -356,6 +391,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     this._headless = options.headless ?? process.env.CONTRACT_PIPELINE_HEADLESS !== '0';
     this._interactiveWriter = options.interactiveWriter ?? false;
     this._rootMode = options.rootMode ?? false;
+    this._hostPaneId = options.hostPaneId ?? '';
   }
 
   async initialize(): Promise<{ workspaceId: string; pipelinePaneId: string }> {
@@ -425,47 +461,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       const pipelinePane = pipelineTab
         ? panes?.result.panes.find((p) => p.tab_id === pipelineTab.tab_id)
         : undefined;
-      if (pipelinePane) {
-        this._workspaceId = existingWorkspaceId;
-        this._pipelinePaneId = pipelinePane.pane_id;
-        // Restart `tail -f` if it died (reboot, herdr restart).
-        const active = await isCommandRunning(pipelinePane.pane_id).catch(() => false);
-        if (!active) {
-          await runPaneCommand({
-            paneId: pipelinePane.pane_id,
-            command: await logTailCommand(
-              pipelinePane.pane_id,
-              logPath({ runId: this._runId, cwd: this._repoRoot }),
-            ),
-          });
-        }
-        if (!this._rootMode) {
-          await this._provisionHerdrWorktree(existingWorkspaceId);
-        }
-        return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
-      }
-      const recovered = await herdrJson<TabCreateResult>([
-        'tab',
-        'create',
-        '--workspace',
-        existingWorkspaceId,
-        '--cwd',
-        this._repoRoot,
-        '--label',
-        'pipeline',
-        '--no-focus',
-      ]);
-      if (!recovered?.result) {
-        throw new Error(`Failed to recover pipeline tab for ${this._runId}.`);
-      }
       this._workspaceId = existingWorkspaceId;
-      this._pipelinePaneId = recovered.result.root_pane.pane_id;
-      await runPaneCommand({
-        paneId: this._pipelinePaneId,
-        command: await logTailCommand(
-          this._pipelinePaneId,
-          logPath({ runId: this._runId, cwd: this._repoRoot }),
-        ),
+      await this._installPipelinePane({
+        workspaceId: existingWorkspaceId,
+        reuseTabId: pipelineTab?.tab_id,
+        reusePaneId: pipelinePane?.pane_id,
       });
       if (!this._rootMode) {
         await this._provisionHerdrWorktree(existingWorkspaceId);
@@ -488,14 +488,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         throw new Error(`Failed to create Herdr workspace for ${this._runId}.`);
       }
       this._workspaceId = result.result.workspace.workspace_id;
-      this._pipelinePaneId = result.result.root_pane.pane_id;
+      // Unhosted: the fresh root pane becomes the `tail -f` pipeline tab.
+      // Hosted: this process's own pane is moved in as `pipeline` and this
+      // root tab is closed — see _installPipelinePane.
       await runHerdr(['tab', 'rename', result.result.tab.tab_id, 'pipeline']);
-      await runPaneCommand({
-        paneId: this._pipelinePaneId,
-        command: await logTailCommand(
-          this._pipelinePaneId,
-          logPath({ runId: this._runId, cwd: this._repoRoot }),
-        ),
+      await this._installPipelinePane({
+        workspaceId: this._workspaceId,
+        reuseTabId: result.result.tab.tab_id,
+        reusePaneId: this._hostPaneId ? undefined : result.result.root_pane.pane_id,
       });
       return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
     }
@@ -523,6 +523,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
         ? `${baseBranchName}-${Date.now().toString(36).slice(-6)}`
         : baseBranchName;
 
+    // Retire earlier runs' checkouts for this contract before adding another.
+    await this._pruneAbandonedContractWorktrees(branch);
+
     const w = await createWorktree({
       slug: this._runId,
       branch,
@@ -541,16 +544,138 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     );
 
     // Rename the worktree's root tab by its real tab id (positional
-    // `${workspaceId}:1` selectors can drift).
-    await runHerdr(['tab', 'rename', w.tabId || `${this._workspaceId}:1`, 'pipeline']);
-    await runPaneCommand({
-      paneId: this._pipelinePaneId,
-      command: await logTailCommand(
-        this._pipelinePaneId,
-        logPath({ runId: this._runId, cwd: this._repoRoot }),
-      ),
+    // `${workspaceId}:1` selectors can drift). Hosted runs then move this
+    // process's own pane in as `pipeline` and close this tab instead.
+    const rootTabId = w.tabId || `${this._workspaceId}:1`;
+    await runHerdr(['tab', 'rename', rootTabId, 'pipeline']);
+    await this._installPipelinePane({
+      workspaceId: this._workspaceId,
+      reuseTabId: rootTabId,
+      reusePaneId: this._hostPaneId ? undefined : w.rootPaneId,
     });
     return { workspaceId: this._workspaceId, pipelinePaneId: this._pipelinePaneId };
+  }
+
+  /**
+   * Make the workspace's `pipeline` tab exist and point `_pipelinePaneId` at
+   * it. Two shapes, one tab either way:
+   *
+   *  - **Hosted** (the normal `bun run contract` launch). The orchestrator
+   *    process is itself running in a herdr pane — `launchBackground` put it
+   *    there so it would survive the launching terminal closing. That pane is
+   *    MOVED into the contract workspace and labelled `pipeline`, so the tab
+   *    you open is the live process, not a view of it.
+   *
+   *    🔴 This is what removed the second tab. Before, the hosted pane was
+   *    relocated as its own `launcher` tab while a separate `pipeline` tab ran
+   *    `tail -f` on the run log — two tabs for one pipeline, showing two
+   *    different halves of its output (console-only in one, `pipelineLog`
+   *    milestones in the other), and no single place to read the run. The log
+   *    file is no longer the poorer copy: `teePipelineLog` mirrors this
+   *    process's stdout/stderr into it, so the file is a superset and the tab
+   *    is the live view of it.
+   *
+   *  - **Unhosted** (`--no-background`, or a resume driven from a plain
+   *    terminal). There is no pane to adopt, so a tab is created running
+   *    `tail -f` on the run log, exactly as before.
+   *
+   * @param options.workspaceId - Contract workspace to install the tab into.
+   * @param options.reuseTabId - An existing `pipeline` tab: reused when
+   *   unhosted, retired when hosted (the adopted pane replaces it).
+   * @param options.reusePaneId - That tab's pane, if known.
+   */
+  private async _installPipelinePane(options: {
+    workspaceId: string;
+    reuseTabId?: string;
+    reusePaneId?: string;
+  }): Promise<void> {
+    const { workspaceId, reuseTabId, reusePaneId } = options;
+
+    if (this._hostPaneId) {
+      const moved = await herdrJson<PaneMoveResult>([
+        'pane',
+        'move',
+        this._hostPaneId,
+        '--new-tab',
+        '--workspace',
+        workspaceId,
+        '--label',
+        'pipeline',
+        '--no-focus',
+      ]);
+      // 🔴 The pane gets a NEW id on the far side of the move (ids are
+      // workspace-scoped: `w70:p1` becomes `w81:p2`), even though the PTY and
+      // the process inside it are the same. Reusing `_hostPaneId` here would
+      // leave every later `pane read` / `process-info` call pointing at an id
+      // that no longer resolves. Take the id herdr reports back.
+      const movedPaneId = moved?.result?.move_result?.pane?.pane_id;
+      if (movedPaneId) {
+        this._pipelinePaneId = movedPaneId;
+        // Retire whatever tab was going to be the pipeline view: a stale
+        // `tail -f` tab from a previous run, or the empty root tab herdr
+        // created with the workspace. Losing either is the point.
+        if (reuseTabId) {
+          await herdr(['tab', 'close', reuseTabId]).catch(() => {});
+        }
+        // The pane's previous workspace is the throwaway
+        // `aikami-launcher-<token>` one. `pane move` auto-closes a workspace
+        // it empties (confirmed against herdr 0.8.2, which reports it as
+        // `closed_workspace_id`), so this is a defensive second pass, not the
+        // primary cleanup — and it must never fire against the workspace we
+        // just moved INTO.
+        const vacated = moved.result.move_result.previous_workspace_id;
+        if (vacated && vacated !== workspaceId) {
+          await herdr(['workspace', 'close', vacated]).catch(() => {});
+        }
+        return;
+      }
+      // Never fail a run over tab cosmetics — fall through to the tail tab,
+      // which leaves the hosted pane where it is (its own workspace). The
+      // pipeline itself is unaffected either way.
+      console.warn(
+        '⚠️  Could not adopt the hosting pane as the pipeline tab — ' +
+          'falling back to a `tail -f` tab (the launcher pane stays in its own workspace).',
+      );
+    }
+
+    const command = async (paneId: string): Promise<string> =>
+      logTailCommand(paneId, logPath({ runId: this._runId, cwd: this._repoRoot }));
+
+    if (reusePaneId) {
+      // Restart `tail -f` if it died (reboot, herdr restart).
+      const active = await isCommandRunning(reusePaneId).catch(() => false);
+      this._pipelinePaneId = reusePaneId;
+      if (!active) {
+        await runPaneCommand({ paneId: reusePaneId, command: await command(reusePaneId) });
+      }
+      return;
+    }
+
+    if (reuseTabId) {
+      // A `pipeline` tab exists but has no pane (herdr state half-torn-down
+      // by a crash). Retire it rather than ending up with two tabs of the
+      // same name, only one of which shows anything.
+      await herdr(['tab', 'close', reuseTabId]).catch(() => {});
+    }
+    const created = await herdrJson<TabCreateResult>([
+      'tab',
+      'create',
+      '--workspace',
+      workspaceId,
+      '--cwd',
+      this._repoRoot,
+      '--label',
+      'pipeline',
+      '--no-focus',
+    ]);
+    if (!created?.result) {
+      throw new Error(`Failed to create the pipeline tab for ${this._runId}.`);
+    }
+    this._pipelinePaneId = created.result.root_pane.pane_id;
+    await runPaneCommand({
+      paneId: this._pipelinePaneId,
+      command: await command(this._pipelinePaneId),
+    });
   }
 
   getWorkspaceId(): string {
@@ -648,6 +773,62 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   }
 
   /** Base branch name for this run's worktree (no collision suffix). */
+
+  /**
+   * Remove checkouts left behind by EARLIER runs of this same contract.
+   *
+   * 🔴 The branch (and therefore the worktree) is per-RUN, not per-contract:
+   * `contract-task-c-428-<runToken>`. So every restart of a contract —
+   * `--fresh`, a crash-and-relaunch, a blocked run the user re-ran — provisions
+   * a brand new checkout, while the previous run's checkout stays on disk
+   * forever. The stale-workspace guard in `initialize()` only catches the case
+   * where the old run's herdr WORKSPACE is still open; once that was closed
+   * (herdr restart, user closed it, machine reboot) nothing looked at the
+   * checkout again. Measured on a real repo: seven dead
+   * `contract-task-c-*` worktrees across four contracts, none of them
+   * reachable by `workspace:cleanup --pr-merged`, because the merged PR was
+   * on the NEXT run's suffixed branch and these branches were never pushed
+   * at all.
+   *
+   * Only unambiguously dead checkouts are removed: no open herdr workspace
+   * (a concurrent run for the same contract must survive), no branch on
+   * origin, and no PR. Anything that fails those tests is reported and left
+   * alone — losing unpushed work to a housekeeping sweep would be far worse
+   * than leaving a directory behind.
+   */
+  private async _pruneAbandonedContractWorktrees(keepBranch: string): Promise<void> {
+    const contractId = extractContractId(this._contractId).toLowerCase();
+    const prefix = `contract-task-${contractId}-`;
+    const worktrees = await listWorktrees(this._repoRoot).catch(() => []);
+    for (const entry of worktrees) {
+      if (!entry.branch.startsWith(prefix) || entry.branch === keepBranch) {
+        continue;
+      }
+      if (entry.openWorkspaceId) {
+        // Another pipeline for this contract may be live in it.
+        continue;
+      }
+      if (remoteBranchExists({ branchName: entry.branch, repoRoot: this._repoRoot })) {
+        console.log(
+          `ℹ️  Keeping earlier checkout ${entry.branch} — it is still pushed to origin ` +
+            '(clean it up with `bun run workspace:cleanup` once its PR is settled).',
+        );
+        continue;
+      }
+      const result = await removeWorktree({
+        checkoutPath: entry.path,
+        repoRoot: this._repoRoot,
+        branch: entry.branch,
+        force: true,
+      });
+      console.log(
+        result.removed
+          ? `🧹 Removed abandoned checkout from an earlier ${this._contractId} run: ${entry.branch}`
+          : `⚠️  Could not remove abandoned checkout ${entry.branch}: ${result.reason ?? 'unknown'}`,
+      );
+    }
+  }
+
   private _baseContractBranch(): string {
     const contractId = extractContractId(this._contractId);
     const runToken = this._runId.replace(/^run-/, '').split('-')[0];

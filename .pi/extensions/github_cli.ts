@@ -53,6 +53,7 @@ import { Type } from 'typebox';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+import { commitContractContent } from '../../scripts/src/lib/agents/contract_pipeline/contract_sync';
 import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
 import { currentBranch, ensureGitHubRepo, resolvePrSelector, runGh } from './lib/gh.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
@@ -878,12 +879,26 @@ export default function (pi: ExtensionAPI) {
             return match ? Number(match[1]) : undefined;
           })();
 
-          // 🔗 Auto-write: if PR references a contract (C-XXX), update the contract's YAML frontmatter.
+          // 🔗 Auto-sync: if the PR references a contract (C-XXX), record
+          // pr_url/pr_number in the contract's YAML frontmatter.
+          //
+          // 🔴 Committed straight to `main` via commitContractContent — NEVER
+          // written to the checkout. The old implementation did a plain
+          // writeFileSync into `<cwd>/docs/contracts/...`, and every role
+          // except implementer/verifier runs with cwd = the ROOT checkout (see
+          // ContractHerdrAdapter._createWorkerTab). So opening a PR left the
+          // human's root checkout dirty on whatever unrelated branch they had
+          // checked out — an edit they never asked for, in the middle of their
+          // own work, which then had to be stashed or reverted by hand. The
+          // contract is main-owned metadata: it belongs on main, on its own
+          // commit, exactly like the authoring step already does.
+          //
           // Match from the TITLE or the head branch (e.g. contract/C-372,
           // contract-task-c-372-*). The BODY is prose — a PR can mention another
           // contract in its description (e.g. "ran C-372 to reproduce this") and
           // must NOT clobber that contract's pr_url.
           let contractUpdated: string | undefined;
+          let contractSyncNote: string | undefined;
           if (prNumber && prUrl) {
             const contractMatch =
               params.title.match(/\b(C-\d+|MIG-\d+)\b/i) ??
@@ -933,8 +948,22 @@ export default function (pi: ExtensionAPI) {
                       }
                       const updated = content.replace(yamlMatch[1], yaml);
                       if (updated !== content) {
-                        writeFileSync(contractPath, updated);
-                        contractUpdated = contractPath;
+                        // Plumbing commit onto main's tip + CAS push. Touches
+                        // neither this checkout's working tree nor its index,
+                        // so it is safe no matter what branch is checked out
+                        // here (root checkout mid-refactor, a linked contract
+                        // worktree, anything).
+                        const sync = commitContractContent({
+                          repoRoot: cwd,
+                          contractPath,
+                          content: updated,
+                          message: `docs(contracts): ${contractId} link PR #${prNumber}`,
+                        });
+                        if (sync.ok && sync.committed) {
+                          contractUpdated = contractPath;
+                        } else if (!sync.ok) {
+                          contractSyncNote = sync.message;
+                        }
                       }
                     }
                   }
@@ -955,7 +984,10 @@ export default function (pi: ExtensionAPI) {
                   `**Title:** ${params.title}`,
                   `**Branch:** ${params.headBranch} → ${base}`,
                   params.draft ? `**Draft:** yes` : '',
-                  contractUpdated ? `**Contract:** Updated \`${contractUpdated}\` with PR URL` : '',
+                  contractUpdated
+                    ? `**Contract:** \`${contractUpdated}\` linked to the PR and pushed to main`
+                    : '',
+                  contractSyncNote ? `⚠️ **Contract not linked:** ${contractSyncNote}` : '',
                   '',
                   `You can merge this PR with: \`gh_merge_pr("${prUrl}")\``,
                 ]

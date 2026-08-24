@@ -5,7 +5,9 @@
 // Used by all three paths: DM chat, manual creation, and preset selection.
 // Mirrors the TWEAK phase UI from PersonaCreateView.
 
+import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import { onDestroy } from 'svelte';
+import { LPC_ASSET_IDS_BY_SLOT } from '$lib/data/lpc_asset_catalog_generated';
 import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
 import {
   getLpcPreviewViewModel,
@@ -30,6 +32,7 @@ onDestroy(() => {
 });
 
 // Sync LPC recipes from the persona's lpcRecipe
+// Validates asset IDs against the catalog to prevent missing-asset errors.
 $effect(() => {
   const persona = personaCreationService.persona;
   if (persona?.appearance?.lpcRecipe) {
@@ -37,11 +40,19 @@ $effect(() => {
     const engineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'];
     const recipes = engineSlots
       .filter((slot) => recipe[slot])
-      .map((slot) => ({
-        slot,
-        assetId: recipe[slot],
-        hexPalette: new Uint8Array(1024),
-      }));
+      .map((slot) => {
+        const assetId = recipe[slot];
+        const validIds = LPC_ASSET_IDS_BY_SLOT[slot];
+        // Fall back to default if the asset ID is not in the catalog
+        const validId = validIds?.includes(assetId)
+          ? assetId
+          : DEFAULT_LPC_RECIPE[slot as keyof typeof DEFAULT_LPC_RECIPE];
+        return {
+          slot,
+          assetId: validId ?? assetId,
+          hexPalette: new Uint8Array(1024),
+        };
+      });
     previewVm.setRecipes(recipes);
   } else {
     previewVm.setRecipes([]);

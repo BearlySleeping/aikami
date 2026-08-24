@@ -23,6 +23,7 @@ import { contractPortOffset } from '../../packages/shared/constants/src/index.ts
 import { runGit, sanitizeBranchName } from '../../scripts/src/lib/agents/git_worktree';
 import {
   type AikamiMode,
+  buildSessionName,
   currentContractId,
   type DevService,
   findWorkspace,
@@ -283,18 +284,13 @@ export default function (pi: ExtensionAPI) {
     const env = process.env.AIKAMI_MODE as string | undefined;
     return env === 'staging' || env === 'production' ? env : 'emulator';
   })();
-  const workspaceLabel = (() => {
-    // In contract pipeline, scope the workspace to the contract so
-    // cleanup can terminate only that contract's services.
-    const contractPath = process.env.CONTRACT_PIPELINE_CONTRACT_PATH;
-    if (contractPath) {
-      const m = contractPath.match(/(C-\d+|MIG-\d+)/);
-      if (m?.[0]) {
-        return `aikami-${mode}-${m[0]}`;
-      }
-    }
-    return `aikami-${mode}`;
-  })();
+  // Inside a contract run this is the CONTRACT's own workspace
+  // (`aikami-contract-C-XXX`) — the very one holding this pi tab — so a
+  // service started from here becomes a tab next to the pipeline/implementer/
+  // verifier/review tabs instead of spawning a second, separately-orphaned
+  // `aikami-emulator-C-XXX` workspace. Single source of truth:
+  // buildSessionName in scripts/src/lib/herdr/session.ts.
+  const workspaceLabel = buildSessionName(mode, currentContractId());
 
   if (herdrEnv && ownPaneId) {
     // ───────────────────────────────────────────────────────────
@@ -805,7 +801,9 @@ export default function (pi: ExtensionAPI) {
     label: 'Herdr: Manage Dev Services',
     description:
       'Manage Aikami dev services (firebase, client, image, text, voice, preview-client, site, preview-site) via herdr. ' +
-      'Services survive pi restarts. Workspace naming: aikami-{mode}.',
+      'Services survive pi restarts. Inside a contract run they become tabs in that ' +
+      "contract's own workspace (aikami-contract-C-XXX), on contract-offset ports, " +
+      'running from the worktree checkout; otherwise aikami-{mode}.',
     parameters: Type.Object({
       action: Type.String({ enum: ['start', 'stop', 'restart', 'status', 'read', 'list'] }),
       service: Type.Optional(Type.String({ enum: [...KNOWN_SERVICES] })),

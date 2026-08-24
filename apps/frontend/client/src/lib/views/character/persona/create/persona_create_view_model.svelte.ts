@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts
 
-import { STARTER_KIT } from '@aikami/constants';
+import { DEFAULT_LPC_RECIPE, STARTER_KIT } from '@aikami/constants';
 import type { LpcLayerRecipe } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
@@ -13,7 +13,7 @@ import {
   CharacterExtractionSchema,
 } from '$lib/data/ai_prompts/character_extraction_schema';
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
-import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
+import { GENERATED_LPC_SLOTS, LPC_ASSET_IDS_BY_SLOT } from '$lib/data/lpc_asset_catalog_generated';
 import {
   aiSettingsService,
   authService,
@@ -744,10 +744,27 @@ export class PersonaCreateViewModel
         persona.equipment = extractedObj.equipment as string[];
       }
       if (extractedObj.lpcRecipe) {
-        this.lpcRecipe = extractedObj.lpcRecipe as Record<string, string>;
+        const rawRecipe = extractedObj.lpcRecipe as Record<string, string>;
+        // Validate each asset ID against the LPC catalog; replace invalid
+        // entries with defaults so the preview never shows missing assets.
+        const validatedRecipe: Record<string, string> = {};
+        for (const [slot, assetId] of Object.entries(rawRecipe)) {
+          const validIds = LPC_ASSET_IDS_BY_SLOT[slot];
+          if (validIds?.includes(assetId)) {
+            validatedRecipe[slot] = assetId;
+          } else {
+            // Fall back to default for this slot
+            const defaultId = DEFAULT_LPC_RECIPE[slot as keyof typeof DEFAULT_LPC_RECIPE];
+            if (defaultId) {
+              validatedRecipe[slot] = defaultId;
+            }
+            this.debug('_extractCharacter:invalid-lpc-asset', { slot, assetId, defaultId });
+          }
+        }
+        this.lpcRecipe = validatedRecipe;
         // Persist lpcRecipe on the persona so the game engine can use it.
         // Contract C-158
-        (persona.appearance as Record<string, unknown>).lpcRecipe = extractedObj.lpcRecipe;
+        (persona.appearance as Record<string, unknown>).lpcRecipe = validatedRecipe;
       }
 
       if (persona.name === 'Unnamed Adventurer' && persona.race && persona.class) {

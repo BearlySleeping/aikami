@@ -40,6 +40,7 @@ import {
   readManifest,
   releaseLock,
   runDirectory,
+  teePipelineLog,
   writeManifest,
 } from './manifest_store.ts';
 import { validatePostconditions } from './postconditions.ts';
@@ -566,6 +567,15 @@ const cleanupRunWorktree = async (options: {
       repoRoot: options.repoRoot,
       branch: keepRemoteBranch ? undefined : branchName,
       deleteRemoteBranch: !keepRemoteBranch,
+      // 🔴 force: the run is over and its work is on the PR branch — whatever
+      // is still uncommitted in the checkout is codegen and build residue
+      // (paraglide output, .svelte-kit, a `bun add` the implementer ran).
+      // Without this, herdr's non-forced removal refuses the dirty tree and
+      // the checkout is simply left behind: the reason a repo ends up with a
+      // pile of dead contract-task-* worktrees that later have to be pruned
+      // by hand. `keepAlive` above is what protects a run you still want to
+      // inspect; reaching here means cleanup was the decision.
+      force: true,
     });
     console.log(
       `\n🧹 Worktree cleaned${keepRemoteBranch ? ' (remote branch kept)' : ''}: ${branchName ?? 'unknown'}\n`,
@@ -627,7 +637,7 @@ const finalizeWorkspace = async (options: {
     console.log(`   Read the final summary in the ${tabDescription}, then close it when done.`);
     if (wsPath) {
       console.log(
-        `   Manual cleanup: bun run workspace:cleanup${stage === 'merged' ? ' --pr-merged' : ''}\n`,
+        `   Manual cleanup: bun run workspace:cleanup${stage === 'merged' ? ' --stale' : ''}\n`,
       );
     } else {
       // Root mode: no worktree — the contract branch stays checked out.
@@ -673,6 +683,11 @@ export const runContractPipeline = async (options: {
   /** When true, use the standard aikami-{mode} herdr workspace and
    *  skip git worktree provisioning. All stages run from the repo root. */
   rootMode?: boolean;
+  /** The herdr pane the launcher created to host this process. It becomes the
+   *  workspace's `pipeline` tab. Only ever set by the background child (see
+   *  launchBackground in contract_pipeline.ts) — never inferred from
+   *  HERDR_PANE_ID, which would steal the user's own terminal tab. */
+  hostPaneId?: string;
   onReady?: (manifest: RunManifest) => void;
   adapterFactory?: (opts: {
     repoRoot: string;
@@ -803,6 +818,12 @@ export const runContractPipeline = async (options: {
     return manifest;
   }
 
+  // 🔴 From here on, everything this process prints also lands in
+  // `pipeline.log`. The `pipeline` tab is now the orchestrator's own pane
+  // (not a `tail -f` view of the file), so without this the console half of
+  // the run's output would live only in a pane that dies with the workspace.
+  teePipelineLog({ runId: manifest.runId, cwd: options.repoRoot });
+
   // Workspace label MUST match ContractHerdrAdapter's — root mode uses the
   // standard aikami-{mode} workspace, worktree mode uses aikami-contract-{id}.
   // A mismatch would make checkWorkspaceAlive always return false in root
@@ -833,6 +854,7 @@ export const runContractPipeline = async (options: {
       contractId: manifest.contractId,
       interactiveWriter: options.interactiveWriter,
       rootMode,
+      hostPaneId: options.hostPaneId,
     });
 
   try {

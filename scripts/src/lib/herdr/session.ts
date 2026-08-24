@@ -2,7 +2,15 @@
 // Unified herdr workspace management for Aikami services.
 //
 // Architecture:
-//   One herdr workspace per mode:  aikami-{mode}
+//   Outside a contract run:  one herdr workspace per mode, aikami-{mode}.
+//   Inside a contract run (emulator only):  the services join THAT CONTRACT'S
+//     workspace, aikami-contract-C-XXX — the same workspace that owns the git
+//     worktree and hosts the pipeline/implementer/verifier/review tabs — and
+//     run from the worktree checkout on contract-offset ports. One contract =
+//     one workspace = one thing to delete. See CONTRACT_WORKSPACE_PREFIX.
+//   Staging/production services always stay in the shared aikami-{mode}
+//     workspace: they point at real remote infrastructure, are not
+//     port-offset, and must outlive any single contract.
 //   Each service is a herdr tab inside that workspace.
 //   Tabs are matched by name, not fixed indices.
 //   The herdr server handles persistence — panes survive client detach.
@@ -412,9 +420,50 @@ export const assertNoRunningServiceConflicts = (
 
 // ── Workspace naming ───────────────────────────────────────
 
-/** Build the workspace name for a given mode, optionally scoped to a contract. */
+/**
+ * Label prefix for a contract's herdr workspace.
+ *
+ * 🔴 ONE workspace per contract. The pipeline's own tabs (pipeline,
+ * implementer, verifier, review — see contract_pipeline/herdr_adapter.ts) and
+ * the dev-service tabs an agent starts from inside those tabs (client, hub,
+ * …) all live here, in the same workspace that owns the git worktree.
+ *
+ * Previously the two were split: the pipeline used `aikami-contract-C-428`
+ * while `herdr_session start client` from an implementer tab created a
+ * SECOND workspace, `aikami-emulator-C-428`. One contract, two workspaces —
+ * so "delete this contract's workspace" was never one action, the emulator
+ * half routinely outlived the contract half (its vite process still running
+ * with a cwd inside the worktree checkout, which is precisely what makes
+ * `git worktree remove` fail afterwards), and neither half's cleanup knew
+ * about the other. Merging them makes closing the workspace the single
+ * operation that stops everything the contract owns.
+ */
+export const CONTRACT_WORKSPACE_PREFIX = 'aikami-contract-';
+
+/**
+ * Workspace label prefix for `bun herdr:task` worktrees. Lives here beside
+ * CONTRACT_WORKSPACE_PREFIX (and not in worktree.ts, which imports FROM this
+ * module) so both agent-workspace prefixes are declared in one place and
+ * `stopAllSessions` can spare both without a circular import.
+ * `parseWorkspaceName()` returns null for these, so listServices() correctly
+ * ignores task workspaces in the dev-service listing.
+ */
+export const TASK_WORKSPACE_PREFIX = 'aikami-task-';
+
+/**
+ * Build the workspace name for a given mode, optionally scoped to a contract.
+ *
+ * Contract scoping applies to `emulator` ONLY. Emulator services are
+ * disposable, per-contract, and port-offset by contract id, so they belong in
+ * the contract's own (deletable) workspace. Staging and production services
+ * point at shared remote infrastructure, are not port-offset, and must
+ * outlive any single contract — they stay in the long-lived `aikami-staging`
+ * / `aikami-production` workspace, which no contract cleanup ever touches.
+ */
 export const buildSessionName = (mode: AikamiMode, contractId?: string): string =>
-  contractId ? `aikami-${mode}-${contractId}` : `aikami-${mode}`;
+  contractId && mode === 'emulator'
+    ? `${CONTRACT_WORKSPACE_PREFIX}${contractId}`
+    : `aikami-${mode}`;
 
 /** Extract a contract ID (e.g. `C-379`) from a contract file path, or undefined. */
 export const parseContractIdFromPath = (contractPath: string | undefined): string | undefined => {
@@ -428,29 +477,53 @@ export const parseContractIdFromPath = (contractPath: string | undefined): strin
 export const currentContractId = (): string | undefined =>
   parseContractIdFromPath(process.env.CONTRACT_PIPELINE_CONTRACT_PATH);
 
+/**
+ * The checkout a dev-service tab should run from.
+ *
+ * Inside a contract run that is the WORKTREE checkout, not the repo root:
+ * the point of starting `client` from an implementer/verifier/review tab is
+ * to exercise the code under implementation. `CONTRACT_PIPELINE_WORKSPACE_PATH`
+ * is set on every pipeline worker tab and is the only reliable anchor — the
+ * implementer and verifier tabs already have cwd inside the worktree, but the
+ * review/captain tab does not (it runs at the repo root, see
+ * ContractHerdrAdapter._createWorkerTab), and a service it started from there
+ * would silently test main instead of the branch.
+ */
+export const resolveServiceRoot = (projectRoot: string): string =>
+  process.env.CONTRACT_PIPELINE_WORKSPACE_PATH || projectRoot;
+
 /** Resolve the workspace name for a given mode in the current context. */
 export const resolveSessionName = (mode: AikamiMode): string =>
   buildSessionName(mode, currentContractId());
 
 /** Extract contract ID from a session name. Returns undefined if not contract-scoped. */
 export const contractIdFromSessionName = (name: string): string | undefined => {
-  // aikami-emulator-C-331 → C-331
-  // aikami-emulator → undefined
+  // aikami-contract-C-331 → C-331
+  // aikami-emulator       → undefined
+  if (name.startsWith(CONTRACT_WORKSPACE_PREFIX)) {
+    return name.slice(CONTRACT_WORKSPACE_PREFIX.length) || undefined;
+  }
+  // Legacy `aikami-{mode}-C-331` workspaces, still open from before the
+  // merge above. Read-only paths (listServices, port-offset derivation) must
+  // keep understanding them until the last one is closed.
   const parts = name.split('-');
-  // After 'aikami-{mode}', if there are more segments, the rest is the contract ID
   if (parts.length > 2) {
-    const contractParts = parts.slice(2);
-    return contractParts.join('-');
+    return parts.slice(2).join('-');
   }
   return undefined;
 };
 
 /** Parse a workspace name back to mode, or null if not an aikami workspace. */
 export const parseWorkspaceName = (name: string): AikamiMode | null => {
+  // Contract workspaces are emulator-only by construction (see
+  // buildSessionName) — the mode is not, and need not be, in the label.
+  if (name.startsWith(CONTRACT_WORKSPACE_PREFIX)) {
+    return 'emulator';
+  }
   if (name.startsWith('aikami-')) {
     const rest = name.slice(7);
     // Extract mode: 'emulator', 'staging', 'production'
-    // May be followed by -C-XXX (contract-scoped)
+    // May be followed by -C-XXX (legacy contract-scoped label)
     for (const mode of ['emulator', 'staging', 'production'] as const) {
       if (rest === mode || rest.startsWith(`${mode}-`)) {
         return mode;
@@ -1173,7 +1246,7 @@ type TabCreateResult = {
 };
 
 /** Get tabs (id + label) in a workspace. */
-const getWorkspaceTabs = async (
+export const getWorkspaceTabs = async (
   workspaceId: string,
 ): Promise<{ tab_id: string; label: string }[]> => {
   const r = await herdrJson<TabListResult>(['tab', 'list', '--workspace', workspaceId]);
@@ -1222,8 +1295,11 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     join: shouldJoin = false,
     wait = true,
     waitTimeoutMs = 120_000,
-    projectRoot = process.cwd(),
+    projectRoot: configuredRoot = process.cwd(),
   } = config;
+  // Inside a contract run this resolves to the worktree checkout, so the
+  // services under test are the branch's code, not main's.
+  const projectRoot = resolveServiceRoot(configuredRoot);
   const workspaceLabel = resolveSessionName(mode);
   const offset = contractPortOffset(currentContractId());
 
@@ -1594,14 +1670,43 @@ export const stopAllSessions = async (): Promise<void> => {
   }
 
   const aikamiWorkspaces = r.result.workspaces.filter((w) => w.label.startsWith('aikami-'));
+
+  // 🔴 A contract/task workspace is NOT ours to close: since the merge of the
+  // dev-service workspace into the contract workspace (see
+  // CONTRACT_WORKSPACE_PREFIX) it also hosts the pipeline, implementer,
+  // verifier and review tabs — closing it would kill a running pipeline
+  // mid-stage, which is emphatically not what `bun herdr:stop-all` means.
+  // Close only its dev-service tabs and leave the agents alone; use
+  // `bun run workspace:cleanup` to retire the contract itself.
+  const isAgentWorkspace = (label: string): boolean =>
+    label.startsWith(CONTRACT_WORKSPACE_PREFIX) || label.startsWith(TASK_WORKSPACE_PREFIX);
+  const serviceNames = new Set(KNOWN_SERVICES.map((s) => SERVICE_DEFS[s].name));
+
+  let closedWorkspaces = 0;
+  let closedTabs = 0;
   for (const ws of aikamiWorkspaces) {
-    await herdr(['workspace', 'close', ws.workspace_id]).catch(() => {});
+    if (!isAgentWorkspace(ws.label)) {
+      await herdr(['workspace', 'close', ws.workspace_id]).catch(() => {});
+      closedWorkspaces++;
+      continue;
+    }
+    for (const tab of await getWorkspaceTabs(ws.workspace_id)) {
+      if (serviceNames.has(tab.label)) {
+        await herdr(['tab', 'close', tab.tab_id]).catch(() => {});
+        closedTabs++;
+      }
+    }
   }
 
-  if (aikamiWorkspaces.length > 0) {
-    console.log(`✓ Stopped ${aikamiWorkspaces.length} aikami workspace(s)`);
-  } else {
+  if (closedWorkspaces === 0 && closedTabs === 0) {
     console.log('ℹ No aikami workspaces running');
+    return;
+  }
+  console.log(`✓ Stopped ${closedWorkspaces} aikami workspace(s)`);
+  if (closedTabs > 0) {
+    console.log(
+      `✓ Stopped ${closedTabs} dev-service tab(s) in contract/task workspaces (agents left running)`,
+    );
   }
 };
 

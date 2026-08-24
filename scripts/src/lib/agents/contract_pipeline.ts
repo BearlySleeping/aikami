@@ -866,31 +866,28 @@ const launchBackground = async (options: {
   };
   console.log(`Pipeline ${ready.runId ?? token} ready in ${ready.workspaceId ?? 'Herdr'}.`);
 
-  // 🔴 Relocate the launcher's hosting pane into the real contract workspace
-  // the child just created, then drop the now-empty temporary one. Grouping
-  // only — never fail an otherwise-successful launch over this.
-  // `pane move --new-tab --workspace` auto-closes the vacated source
-  // workspace (verified against herdr 0.8.0), so the explicit `workspace
-  // close` below is a defensive no-op, not the primary cleanup path.
+  // 🔴 The CHILD relocates this pane itself, as the contract workspace's
+  // `pipeline` tab (ContractHerdrAdapter._installPipelinePane) — it reads
+  // HERDR_PANE_ID from the pane env it was launched into. Doing it there
+  // rather than here is what collapsed the old `launcher` + `pipeline` tab
+  // pair into one: the child is the side that knows when the contract
+  // workspace exists and which pipeline tab the move should replace, so it
+  // can close the redundant one in the same step. This parent has no such
+  // ordering knowledge — it only learns the workspace id after the fact, by
+  // which point a second tab already existed.
+  //
+  // `pane move` auto-closes the workspace it empties (herdr 0.8.x), so this
+  // is a defensive sweep for the case where the child could not adopt the
+  // pane and left it here.
   if (ready.workspaceId && ready.workspaceId !== launcherWorkspaceId) {
-    try {
-      await herdr([
-        'pane',
-        'move',
-        launcherPaneId,
-        '--new-tab',
-        '--workspace',
-        ready.workspaceId,
-        '--label',
-        'launcher',
-        '--no-focus',
-      ]);
+    const stillHere = await herdrJson<{ result: { panes: { pane_id: string }[] } }>([
+      'pane',
+      'list',
+      '--workspace',
+      launcherWorkspaceId,
+    ]).catch(() => null);
+    if (stillHere?.result?.panes?.length === 0) {
       await herdr(['workspace', 'close', launcherWorkspaceId]).catch(() => {});
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `⚠️  Could not relocate launcher pane into ${ready.workspaceId}: ${msg.slice(0, 200)}`,
-      );
     }
   }
 
@@ -1102,6 +1099,11 @@ const main = async (): Promise<void> => {
     skipAuthoring: cli.skipAuthoring,
     critique: cli.critique,
     rootMode: cli.root,
+    // 🔴 Only the launcher-spawned child hands its pane over to become the
+    // `pipeline` tab. `--launcher-token` is the proof that this pane was
+    // created for this run: a foreground `bun run contract` typed into the
+    // user's own herdr tab has no token, so its tab is left where it is.
+    hostPaneId: cli.launcherToken ? process.env.HERDR_PANE_ID : undefined,
     onReady: cli.launcherToken
       ? (readyManifest) => {
           atomicWrite({

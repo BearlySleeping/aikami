@@ -9,14 +9,19 @@ import {
   assertNoPortConflicts,
   assertNoRunningServiceConflicts,
   buildServiceCommand,
+  buildSessionName,
+  CONTRACT_WORKSPACE_PREFIX,
+  contractIdFromSessionName,
   expandServices,
   isKillableProcess,
   isPortReady,
   KNOWN_SERVICES,
   normalizeService,
   parseHerdrStatus,
+  parseWorkspaceName,
   portsToCleanupForService,
   resolveReadyPort,
+  resolveServiceRoot,
   SERVICE_DEFS,
   serviceEnvArgs,
   wrapCommand,
@@ -389,5 +394,64 @@ describe('which', () => {
 
   it('returns null for a binary that does not exist', () => {
     expect(which('definitely-not-a-real-binary-xyz')).toBeNull();
+  });
+});
+
+describe('one workspace per contract', () => {
+  it('puts contract-scoped emulator services in the contract workspace', () => {
+    // The SAME label ContractHerdrAdapter.buildWorkspaceLabel produces, so a
+    // service started from an implementer/verifier/review tab becomes a tab
+    // next to them instead of a second `aikami-emulator-C-428` workspace.
+    expect(buildSessionName('emulator', 'C-428')).toBe(`${CONTRACT_WORKSPACE_PREFIX}C-428`);
+    expect(buildSessionName('emulator', 'MIG-7')).toBe(`${CONTRACT_WORKSPACE_PREFIX}MIG-7`);
+  });
+
+  it('keeps staging and production in the shared, long-lived workspace', () => {
+    // They point at real remote infrastructure and must outlive the contract
+    // whose cleanup deletes the contract workspace.
+    expect(buildSessionName('staging', 'C-428')).toBe('aikami-staging');
+    expect(buildSessionName('production', 'C-428')).toBe('aikami-production');
+  });
+
+  it('falls back to the mode workspace with no contract in scope', () => {
+    expect(buildSessionName('emulator')).toBe('aikami-emulator');
+  });
+
+  it('reads the contract id back out for port-offset derivation', () => {
+    expect(contractIdFromSessionName('aikami-contract-C-428')).toBe('C-428');
+    expect(contractIdFromSessionName('aikami-emulator')).toBeUndefined();
+    // Legacy `aikami-{mode}-C-XXX` workspaces still open from before the merge
+    // must keep resolving, or listServices would report their ports unshifted.
+    expect(contractIdFromSessionName('aikami-emulator-C-331')).toBe('C-331');
+  });
+
+  it('resolves a contract workspace to emulator mode', () => {
+    expect(parseWorkspaceName('aikami-contract-C-428')).toBe('emulator');
+    expect(parseWorkspaceName('aikami-staging')).toBe('staging');
+    // Task workspaces are not dev-service workspaces — listServices skips them.
+    expect(parseWorkspaceName('aikami-task-my-thing')).toBeNull();
+    expect(parseWorkspaceName('something-else')).toBeNull();
+  });
+});
+
+describe('resolveServiceRoot', () => {
+  const saved = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+  beforeEach(() => {
+    process.env.CONTRACT_PIPELINE_WORKSPACE_PATH = saved;
+    if (saved === undefined) {
+      delete process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+    }
+  });
+
+  it('uses the caller root outside a contract run', () => {
+    delete process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+    expect(resolveServiceRoot('/repo')).toBe('/repo');
+  });
+
+  it('serves the worktree checkout inside a contract run', () => {
+    // The review/captain tab has cwd = the repo root, so without this a
+    // service it started would silently serve main instead of the branch.
+    process.env.CONTRACT_PIPELINE_WORKSPACE_PATH = '/wt/contract-task-c-428';
+    expect(resolveServiceRoot('/repo')).toBe('/wt/contract-task-c-428');
   });
 });

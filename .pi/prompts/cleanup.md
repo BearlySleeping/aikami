@@ -57,23 +57,38 @@ Report the list back to the user: path, branch, `🔀 MERGED` status, `[herdr]` 
 
 **2. Clean the finished ones.**
 
-Only workspaces whose branch has a merged PR. This is the safe one and what you
-should run unless the user asked for more — it also deletes the merged remote
-branch, which the PR has already consumed:
+`--stale` is the default answer. It removes every worktree with provably
+nothing left to lose — no open herdr workspace, nothing on origin, no open PR —
+and reports a reason for each one it keeps:
 
 ```bash
-bun run workspace:cleanup --pr-merged
+bun run workspace:cleanup --stale
+```
+
+Prefer it over `--pr-merged`. `--pr-merged` asks GitHub whether *this* branch
+has a merged PR, which structurally misses the most common leftover: when a run
+restarts, the new run gets a suffixed branch, that branch gets the PR and the
+merge, and the first run's checkout is stranded on a branch that was never
+pushed and has no PR at all.
+
+A worktree with uncommitted changes that were never pushed is kept, with the
+change count in the reason. Re-run with `--force` to delete those too — do this
+only when the user has seen the list and said so:
+
+```bash
+bun run workspace:cleanup --stale --force
 ```
 
 Only if the user explicitly asked to clean **everything**, including branches
-with open or absent PRs (this does not delete remote branches):
+with open PRs (this does not delete remote branches):
 
 ```bash
 bun run workspace:cleanup --all
 ```
 
-Other forms: `--legacy` restricts to `.pi/workspaces/` checkouts, and a bare
-`<path>` cleans one specific worktree.
+Other forms: `--pr-merged` (merged-PR branches only, deletes the remote branch
+too), `--legacy` restricts to `.pi/workspaces/` checkouts, and a bare `<path>`
+cleans one specific worktree.
 
 **3. Report honestly.**
 
@@ -85,7 +100,7 @@ say so and give the finishing command:
 This tab's own workspace (<path>) was skipped — cleanup cannot remove the
 worktree it is running inside. Close this tab, then from the repo root:
 
-  bun run workspace:cleanup --pr-merged
+  bun run workspace:cleanup --stale
 ```
 
 **4. Check the root checkout is clean.**

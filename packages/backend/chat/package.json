@@ -15,7 +15,7 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "typebox": "1.3.16"
+    "typebox": "1.3.17"
   },
   "devDependencies": {
     "@aikami/mocks": "workspace:*"
