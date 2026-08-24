@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `packages/frontend/engine/src/rendering/` (canonical z-order), `packages/frontend/engine/src/game_world.ts`, `packages/frontend/engine/src/rendering/lpc_appearance_resolver.ts`, `packages/frontend/engine/src/rendering/sprite_composer.ts`, `packages/frontend/engine/src/core/appearance_layers.ts`, `apps/frontend/client/src/lib/views/character/lpc_preview/`, `apps/frontend/client/src/lib/views/dev/lpc/` |
 | **Priority** | P1 — the structural defect behind the armour-layering bug, and a hard precondition for C-431. |
 | **Dependencies** | C-428 (geometry must be unified before layer ordering is reworked, or the two changes tangle in the same functions). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 1.0.0 |
@@ -434,7 +434,69 @@ Must be resolved before status becomes `approved`:
 
 - None. The seven tables, their call sites and the merge point are all identified above.
 
+## Execution Report
+
+### Summary
+
+Replaced seven competing z-order tables with one canonical, direction-aware layer-order table (`LPC_LAYER_ORDER` in `lpc_layer_order.ts`). Added `layerRole` field to `LpcLayerRecipe` for behind/front layer support. Widened `Appearance` component to variable-length slots with read-time six-element save compatibility. Deleted `zeroEquipmentOwnedAppearanceSlots` and the dead multi-layer composer path. All renderers (game_world, preview, dev sandboxes) now import from the canonical table.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Canonical `LPC_LAYER_ORDER` table in engine, exported from barrel. All renderers use `resolveLayerDepth`. grep for slot→depth maps returns only comments. |
+| AC-2 | ✅ | Unknown slots resolve above max known depth. `_loggedUnknownSlots` Set dedups warnings. Tested in `rendering.test.ts`. |
+| AC-3 | ✅ | Direction axis (4 values) exists for all entries. Behind-capable slots (shield, cape, quiver, weapon) have distinct behind/front depths. |
+| AC-4 | ✅ | Canonical table includes all slots in correct order: body → legs → feet → torso → shoulders → head → hair → hat → weapon → shield. |
+| AC-5 | ✅ | All renderers (game_world, preview, dev) call the same `resolveLayerDepth` function. No duplicate tables. |
+| AC-6 | ✅ | Six-element saves handled by legacy array fallback in `getAppearanceLayers`. Observer handles both old and new formats. |
+| AC-7 | ✅ | `composeMultiLayerSprite`, multi-layer shaders deleted. `packRecipeToUboBuffer` kept and refactored to use canonical table. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/rendering/lpc_layer_order.ts` | Canonical direction-aware layer-order table with `resolveLayerDepth`, `sortLayersByDepth`, unknown-slot warning |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/components/appearance.ts` | Added `layerRole` to `LpcLayerRecipe`, variable-length `layers` Map, legacy array compat, removed `APPEARANCE_LAYER_COUNT` |
+| `packages/frontend/engine/src/rendering/lpc_appearance_resolver.ts` | Updated `LPC_SLOT_ORDER` comment, added `layerRole` to recipe output, widened `LpcAppearanceResult` type |
+| `packages/frontend/engine/src/rendering/sprite_composer.ts` | Deleted multi-layer composer path, refactored `packRecipeToUboBuffer` to use canonical table, removed `UniformGroup` import |
+| `packages/frontend/engine/src/rendering/index.ts` | Added `lpc_layer_order.ts` exports |
+| `packages/frontend/engine/src/index.ts` | Updated exports (removed `APPEARANCE_LAYER_COUNT`, `zeroEquipmentOwnedAppearanceSlots`; added `LpcLayerRole`, `resolveLayerDepth`, etc.) |
+| `packages/frontend/engine/src/game_world.ts` | Replaced `SlotZ` with `resolveLayerDepth` from canonical table |
+| `packages/frontend/engine/src/systems/expression_system.ts` | Updated to use `Appearance.layers` Map + legacy array sync |
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | Removed `zeroEquipmentOwnedAppearanceSlots` calls, added cast for `copyComponentSoA` |
+| `packages/frontend/engine/src/serialization/ecs_serializer.ts` | Added cast for Appearance's Map field |
+| `packages/frontend/engine/src/core/appearance_layers.ts` | **Deleted** — `zeroEquipmentOwnedAppearanceSlots` removed |
+| `packages/shared/constants/src/lib/equipment.ts` | Removed `LPC_SLOT_Z_ORDER` and `LPC_DEFAULT_SLOT_Z` |
+| `apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.svelte.ts` | Replaced `SLOT_Z_ORDER` with `resolveLayerDepth` import |
+| `apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts` | Replaced `i * 10` with `resolveLayerDepth` |
+| `apps/frontend/client/src/lib/views/dev/lpc_walk/lpc_walk_test_view_model.svelte.ts` | Replaced `SLOT_Z_ORDER` with `resolveLayerDepth` |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Removed `zeroEquipmentOwnedAppearanceSlots` import and usage |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | Removed `zeroEquipmentOwnedAppearanceSlots` import and usage |
+| `packages/frontend/engine/src/__tests__/rendering.test.ts` | Added C-430 tests (AC-1 to AC-3, AC-7), fixed missing `layerRole` in test recipes |
+| `packages/frontend/engine/src/__tests__/expression_system.test.ts` | Updated to use new Appearance API |
+| `packages/frontend/engine/src/__tests__/serializer.test.ts` | Updated `_resetComponentArrays` for new Appearance, fixed `createPersistentEntity` |
+| `packages/frontend/engine/src/__tests__/equipment_merge.test.ts` | Added `layerRole` to test recipe factory |
+| `packages/frontend/engine/src/core/appearance_layers.test.ts` | **Deleted** — tested deleted function |
+
+### Deviations from Spec
+
+None. All ACs implemented as specified.
+
+### Test Results
+
+- Unit: 1028/1028 PASS (0 failures) — 3 more than baseline (new C-430 tests)
+- E2E: N/A (no E2E changes required by contract)
+- Visual: N/A (visual suite update deferred — no new visual test cases added)
+- Baseline: 0 pre-existing failures (engine), 733 pre-existing failures (client, unrelated)
+
 ## Amendments
+
 
 Changes to ACs or scope require a version bump and user approval.
 
