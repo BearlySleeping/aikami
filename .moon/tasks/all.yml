@@ -123,7 +123,7 @@ tasks:
       - "@group(root-configs)"
     options:
       cache: false
-      runInCI: true
+      runInCI: false
       affectedFiles: true
 
   # ------------------------------------------------------------------

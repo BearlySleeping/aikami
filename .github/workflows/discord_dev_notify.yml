@@ -18,6 +18,8 @@ on:
   issues:
     types: [opened, closed, reopened]
 
+permissions:
+  contents: read
 jobs:
   notify:
     name: Announce to Discord

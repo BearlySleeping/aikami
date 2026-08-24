@@ -32,8 +32,8 @@ import { type Static, Type } from 'typebox';
 
 /**
  * Catalog categories. Exactly what `scan_assets.ts` emits via ASSET_CATEGORIES:
- * music/sfx/ambient/sprites/backgrounds/lpc/maps/tilesets/content_packs.
- * C-433 added `maps`, `tilesets` and `content_packs` to widen catalog
+ * music/sfx/ambient/sprites/backgrounds/lpc/maps/tilesets/contentPacks.
+ * C-433 added `maps`, `tilesets` and `contentPacks` to widen catalog
  * coverage to every asset the client ships.
  */
 export const CatalogCategorySchema = Type.Union(
@@ -46,7 +46,7 @@ export const CatalogCategorySchema = Type.Union(
     Type.Literal('lpc'),
     Type.Literal('maps'),
     Type.Literal('tilesets'),
-    Type.Literal('content_packs'),
+    Type.Literal('contentPacks'),
   ],
   { description: 'Catalog category — one of the nine scan categories' },
 );

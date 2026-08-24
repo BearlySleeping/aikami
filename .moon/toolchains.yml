@@ -1,7 +1,7 @@
 # .moon/toolchains.yml
 
 bun:
-  version: "latest"
+  version: "1.3.13"
 
 javascript:
   packageManager: "bun"

@@ -77,8 +77,8 @@ describe('CatalogAssetEntrySchema', () => {
     expect(Value.Check(CatalogAssetEntrySchema, entry)).toBe(false);
   });
 
-  test('rejects unknown category — maps/tilesets stay out of the catalog', () => {
-    const entry = { ...VALID_ENTRY, category: 'maps' };
+  test('rejects unknown category — only the nine known categories are valid', () => {
+    const entry = { ...VALID_ENTRY, category: 'unknown_category' };
     expect(Value.Check(CatalogAssetEntrySchema, entry)).toBe(false);
   });
 

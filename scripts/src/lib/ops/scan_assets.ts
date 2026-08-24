@@ -294,8 +294,8 @@ for (const { dir: rootDir, label } of SCAN_ROOTS) {
 
   console.log(`scan_assets: scanning ${label} at ${rootDir}`);
   // C-433: content-packs root uses a category override so all files get
-  // the 'content_packs' category regardless of their directory structure.
-  const categoryOverride = label === 'content-packs' ? 'content_packs' : undefined;
+  // the 'contentPacks' category regardless of their directory structure.
+  const categoryOverride = label === 'content-packs' ? 'contentPacks' : undefined;
   const { manifest, hashes } = await scanDir(rootDir, { categoryOverride });
 
   const manifestPath = join(rootDir, 'manifest.json');

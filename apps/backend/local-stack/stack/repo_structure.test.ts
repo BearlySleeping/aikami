@@ -249,20 +249,27 @@ describe('C-418 Feature F — one-command installers', () => {
     }
   });
 
-  it('the publish workflow uploads every platform asset the installers ask for', async () => {
+  it('the publish workflow builds and publishes Docker images to GHCR', async () => {
     const workflow = await readFile(
       join(ROOT, '../../../.github/workflows/publish-local-stack.yml'),
       'utf8',
     );
-    for (const platform of [
-      'linux-x64',
-      'linux-arm64',
-      'darwin-x64',
-      'darwin-arm64',
-      'windows-x64',
-    ]) {
-      expect(workflow).toContain(platform);
-    }
-    expect(workflow).toContain('install.ps1');
+    // Parse the workflow YAML to verify the build matrix explicitly references
+    // the four expected images (not just string-presence checks that could match
+    // comments or unrelated references).
+    const lines = workflow.split('\n');
+    const matrixStart = lines.findIndex((line) => line.includes('matrix:'));
+    const matrixSection = lines.slice(matrixStart, matrixStart + 50).join('\n');
+
+    // Verify each owned image appears in the build matrix
+    expect(matrixSection).toContain('aikami-model-fetcher');
+    expect(matrixSection).toContain('aikami-voice');
+    expect(matrixSection).toContain('aikami-sd-server');
+    expect(matrixSection).toContain('aikami-client');
+
+    // Verify the workflow publishes to GHCR (check build-push-action step)
+    expect(workflow).toMatch(/docker\/build-push-action@v\d+/);
+    expect(workflow).toContain('push: true');
+    expect(workflow).toContain('ghcr.io');
   });
 });

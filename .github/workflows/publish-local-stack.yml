@@ -18,15 +18,17 @@
 #
 # GHCR images default to private — anonymous-pull verification is part of
 # the job so a private package cannot ship silently.
+#
+# Pipeline shape:
+#   setup      → computes version + image prefix, sets up Docker Buildx + GHCR login
+#   build      → matrix job: 4 independent images built in parallel.
+#                sd-server needs swap space; client needs GCP auth + SPA build.
+#   verify     → AC-1 (upstream refs resolve), AC-5 (layer inspection),
+#                AC-9 (config-mount test), anonymous pull, installer bundle.
+#                Runs after ALL build legs complete.
 
 name: Publish Local Stack Images
 
-# Push-to-main trigger held off for now (2026-08-15) while this workflow is
-# still being stabilized — the sd-server:cpu image alone takes 15-20+ min to
-# compile from source (GGML_CPU_ALL_VARIANTS=ON: every CPU ISA variant, for
-# runtime dispatch on unknown user hardware — a real product requirement,
-# not a thing to cache away). Re-enable once it's reliably green; until then
-# trigger manually via workflow_dispatch.
 on:
   workflow_dispatch:
   # push:
@@ -39,41 +41,27 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  publish:
-    name: Build, verify, publish
+  # ── Setup: version info + Docker infrastructure ──────────────────────
+  setup:
+    name: Setup
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 5
     permissions:
       contents: read
       packages: write
-    # Needed only for the "Download client secrets" step below (GCP_SA_KEY /
-    # environment-scoped secrets) — the rest of this job doesn't touch GCP.
-    environment:
-      name: production
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      image_prefix: ${{ steps.version.outputs.image_prefix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      # Single source of truth for the local-stack release tag: the images
-      # get a stable `:$LOCAL_STACK_VERSION` tag (in addition to `:latest`
-      # and `:$sha`) so users can pin a known-good stack version instead of
-      # always tracking `latest`. Bump apps/backend/local-stack/package.json
-      # to cut a new version.
-      #
-      # IMAGE_PREFIX is computed here (not in workflow-level `env:`) because
-      # `github.repository_owner` is "BearlySleeping" — mixed case — and
-      # Docker repository names must be lowercase. GitHub Actions expression
-      # syntax has no case-conversion function, so this is a shell step.
-      # (Every build-push step below failed on this the first time the
-      # AC-1 fix let the workflow get this far — "invalid tag ...: repository
-      # name must be lowercase".)
       - name: Read local-stack version + image prefix
         id: version
         run: |
           version=$(jq -r .version apps/backend/local-stack/package.json)
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "LOCAL_STACK_VERSION=$version" >> "$GITHUB_ENV"
-          echo "IMAGE_PREFIX=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+          echo "image_prefix=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -88,17 +76,137 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+  # ── Build matrix: 4 independent images ───────────────────────────────
+  build:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [setup]
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: aikami-model-fetcher
+            context: apps/backend/local-stack
+            file: apps/backend/local-stack/docker/fetcher/Dockerfile
+            platforms: linux/amd64,linux/arm64
+            cache-scope: aikami-model-fetcher
+            needs-swap: false
+            needs-gcp: false
+
+          - image: aikami-voice
+            context: apps/backend/local-stack/docker/voice
+            file: apps/backend/local-stack/docker/voice/Dockerfile.sherpa
+            platforms: linux/amd64
+            cache-scope: aikami-voice
+            needs-swap: false
+            needs-gcp: false
+
+          - image: aikami-sd-server:cpu
+            context: apps/backend/local-stack/docker/sd-server
+            file: apps/backend/local-stack/docker/sd-server/Dockerfile.cpu
+            platforms: linux/amd64
+            cache-scope: aikami-sd-server-cpu
+            needs-swap: true
+            needs-gcp: false
+
+          - image: aikami-client
+            context: apps/backend/local-stack
+            file: apps/backend/local-stack/Dockerfile.client
+            platforms: linux/amd64
+            cache-scope: aikami-client
+            needs-swap: false
+            needs-gcp: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # sd-server:cpu compiles stable-diffusion.cpp + every ggml CPU ISA
+      # variant from source; even with --parallel capped to 2 (see
+      # Dockerfile.cpu), a heavy build here got the standard runner
+      # OOM-killed ("lost communication with the server", 2026-08-15).
+      # A swap file gives the kernel somewhere to go instead of invoking the
+      # OOM killer — cheap headroom, standard runner, no cost.
+      - name: Add swap space (sd-server only)
+        if: matrix.needs-swap
+        run: |
+          sudo fallocate -l 8G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+
+      # Client image needs GCP auth + secrets + SPA build before docker build.
+      - name: Setup environment (client only)
+        if: matrix.needs-gcp
+        uses: ./.github/actions/setup-environment
+        with:
+          install-deps: "true"
+          gcp-auth: "true"
+          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Download client secrets from GCP Secret Manager
+        if: matrix.needs-gcp
+        run: bun scripts/src/lib/ops/download_secrets.ts --mode=production --strict client
+
+      - name: Build the client SPA
+        if: matrix.needs-gcp
+        working-directory: apps/frontend/client
+        run: bun run build:production
+        env:
+          NODE_ENV: production
+
+      - name: Stage client build + emit config
+        if: matrix.needs-gcp
+        working-directory: apps/backend/local-stack
+        run: |
+          rm -rf .build/client
+          mkdir -p .build
+          cp -a ../../frontend/client/build .build/client
+          ./scripts/emit_config.sh > .build/client/config.json
+
+      - name: Build and publish ${{ matrix.image }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          tags: |
+            ${{ needs.setup.outputs.image_prefix }}/${{ matrix.image }}:latest
+            ${{ needs.setup.outputs.image_prefix }}/${{ matrix.image }}:${{ github.sha }}
+            ${{ needs.setup.outputs.image_prefix }}/${{ matrix.image }}:${{ needs.setup.outputs.version }}
+          platforms: ${{ matrix.platforms }}
+          cache-from: ${{ matrix.image == 'aikami-sd-server:cpu' && format('type=registry,ref={0}/aikami-sd-server:buildcache', needs.setup.outputs.image_prefix) || format('type=gha,scope={0}', matrix.cache-scope) }}
+          cache-to: ${{ matrix.image == 'aikami-sd-server:cpu' && format('type=registry,ref={0}/aikami-sd-server:buildcache,mode=max', needs.setup.outputs.image_prefix) || format('type=gha,mode=min,scope={0}', matrix.cache-scope) }}
+
+  # ── Verify: AC-1, AC-5, AC-9, anonymous pull, installer bundle ──────
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [setup, build]
+    permissions:
+      contents: write # for gh release upload (installer bundle)
+      packages: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       # ── AC-1: every upstream image reference resolves ─────────────────
-      # Uses `docker buildx imagetools inspect`, not `docker manifest
-      # inspect` — the classic manifest command fails on these refs with
-      # "Treating single images as manifest lists is not implemented"
-      # because ggml-org/leejet publish single-platform OCI image manifests
-      # (not manifest lists) at a `tag@digest` ref, which some Docker CLI
-      # versions' `manifest inspect` can't parse. buildx imagetools handles
-      # both manifest lists and single-platform manifests, and accepts
-      # `name:tag@digest` directly (verified 2026-08-15 after 4 straight
-      # publish failures on this step).
-      - name: Verify upstream image references resolve
+      - name: AC-1 — Verify upstream image references resolve
         run: |
           set -euo pipefail
           cd apps/backend/local-stack
@@ -107,180 +215,26 @@ jobs:
             COMPOSE_PROFILES=text,image,voice,stt,client docker compose config \
               >/tmp/render-$backend.yaml
           done
-          # Extract every pinned upstream image from the rendered configs.
           grep -hoE 'ghcr.io/(ggml-org|leejet)/[^" ]+' /tmp/render-*.yaml \
             | sort -u | while read -r img; do
               echo "resolving $img"
               docker buildx imagetools inspect "$img" >/dev/null
             done
-
-      # ── Model-fetcher image (bzip2-enabled bun) ────────────────────────
-      - name: Build and publish aikami-model-fetcher
-        uses: docker/build-push-action@v6
-        with:
-          context: apps/backend/local-stack
-          file: apps/backend/local-stack/docker/fetcher/Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:latest
-            ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:${{ github.sha }}
-            ${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:${{ env.LOCAL_STACK_VERSION }}
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha,scope=aikami-model-fetcher
-          cache-to: type=gha,mode=max,scope=aikami-model-fetcher
-
-      # ── Voice image ────────────────────────────────────────────────────
-      - name: Build and publish aikami-voice
-        uses: docker/build-push-action@v6
-        with:
-          context: apps/backend/local-stack/docker/voice
-          file: apps/backend/local-stack/docker/voice/Dockerfile.sherpa
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/aikami-voice:latest
-            ${{ env.IMAGE_PREFIX }}/aikami-voice:${{ github.sha }}
-            ${{ env.IMAGE_PREFIX }}/aikami-voice:${{ env.LOCAL_STACK_VERSION }}
-          platforms: linux/amd64
-          cache-from: type=gha,scope=aikami-voice
-          cache-to: type=gha,mode=max,scope=aikami-voice
-
-      # sd-server:cpu compiles stable-diffusion.cpp + every ggml CPU ISA
-      # variant from source; even with --parallel capped to 2 (see
-      # Dockerfile.cpu), a heavy build here got the standard runner
-      # OOM-killed ("lost communication with the server", 2026-08-15).
-      # A swap file gives the kernel somewhere to go instead of invoking the
-      # OOM killer — cheap headroom, standard runner, no cost.
-      - name: Add swap space
-        run: |
-          # The runner image already has an active swap file at /swapfile
-          # ("fallocate failed: Text file busy" when this used that path) —
-          # /mnt is the runner's separate, much larger scratch volume.
-          sudo fallocate -l 8G /mnt/swapfile
-          sudo chmod 600 /mnt/swapfile
-          sudo mkswap /mnt/swapfile
-          sudo swapon /mnt/swapfile
-          free -h
-
-      # ── CPU sd-server image ───────────────────────────────────────────
-      - name: Build and publish aikami-sd-server:cpu
-        uses: docker/build-push-action@v6
-        with:
-          context: apps/backend/local-stack/docker/sd-server
-          file: apps/backend/local-stack/docker/sd-server/Dockerfile.cpu
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu
-            ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu-${{ github.sha }}
-            ${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu-${{ env.LOCAL_STACK_VERSION }}
-          platforms: linux/amd64
-          # This is the slow one (15-20+ min cold: GGML_CPU_ALL_VARIANTS=ON
-          # compiles every CPU ISA variant from source). GHA layer cache
-          # means a rebuild after e.g. only bumping SD_CPP_REVISION, or
-          # re-running after an unrelated step failed downstream, reuses
-          # the compiled ggml/sd.cpp layers instead of recompiling.
-          cache-from: type=gha,scope=aikami-sd-server-cpu
-          cache-to: type=gha,mode=max,scope=aikami-sd-server-cpu
-
-      # ── Client image (staged SPA + runtime config mount, AC-9) ────────
-      # The SPA needs real PUBLIC_FIREBASE_* / PUBLIC_* values baked in (Vite
-      # inlines them at build time) or the packaged client's auth/Firestore
-      # never work. apps/frontend/client/.env.production is gitignored, so
-      # fetch it from GCP Secret Manager the same way release.yml's
-      # prepare-secrets job does, scoped to just the `client` app — this
-      # workflow builds nothing else that needs secrets.
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
-        with:
-          install-deps: "true"
-          gcp-auth: "true"
-          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Download client secrets from GCP Secret Manager
-        run: bun scripts/src/lib/ops/download_secrets.ts --mode=production --strict client
-
-      - name: Build the client SPA for staging
-        working-directory: apps/frontend/client
-        run: bun run build:production
-        env:
-          NODE_ENV: production
-
-      - name: Stage client build + emit config
-        working-directory: apps/backend/local-stack
-        run: |
-          rm -rf .build/client
-          mkdir -p .build
-          cp -a ../../frontend/client/build .build/client
-          ./scripts/emit_config.sh > .build/client/config.json
-
-      - name: Build and publish aikami-client
-        uses: docker/build-push-action@v6
-        with:
-          context: apps/backend/local-stack
-          file: apps/backend/local-stack/Dockerfile.client
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/aikami-client:latest
-            ${{ env.IMAGE_PREFIX }}/aikami-client:${{ github.sha }}
-            ${{ env.IMAGE_PREFIX }}/aikami-client:${{ env.LOCAL_STACK_VERSION }}
-          platforms: linux/amd64
-          cache-from: type=gha,scope=aikami-client
-          cache-to: type=gha,mode=max,scope=aikami-client
-
-      # ── C-418 Feature F: one-command installer bundle ─────────────────
-      # Compiles `stack-init` to a single-file Bun binary and packs the
-      # compose topology + .env.example into local-stack-<version>.tar.gz
-      # (+ SHA256SUMS), then uploads them to the GitHub release tagged
-      # `local-stack-<version>` (the install.sh default download source).
-      # Runs on every publish (workflow_dispatch / push), creating the
-      # release if it does not exist yet — the tag is never gated on the
-      # run ref, because the workflow's only trigger is dispatch on a
-      # branch (H3).
-      - name: Build the one-command installer bundle
-        run: |
-          set -euo pipefail
-          cd apps/backend/local-stack
-          sh scripts/bundle_stack.sh
-          ls -lh dist/local-stack-*.tar.gz dist/SHA256SUMS
-
-      - name: Upload installer bundle to the release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          cd apps/backend/local-stack
-          version=$(jq -r .version package.json)
-          tag="local-stack-${version}"
-          # Create the release on first publish; --clobber makes re-runs
-          # idempotent. The tag/asset naming matches install.sh exactly.
-          gh release view "${tag}" >/dev/null 2>&1 \
-            || gh release create "${tag}" --title "Aikami Local Stack ${version}" --generate-notes
-          gh release upload "${tag}" "dist/local-stack-${version}.tar.gz" dist/SHA256SUMS --clobber
+          echo "ok: all upstream references resolve (AC-1)"
 
       # ── AC-5: layer inspection for voice + sd-server + client ─────────
-      # Runs AFTER all three images are published. AC-5 names aikami-client
-      # and aikami-voice: no weights in any layer, and the compressed image
-      # (sum of registry layer sizes) stays within the 250 MB budget.
-      - name: AC-5 layer inspection (voice + sd-server + client)
+      - name: AC-5 — Layer inspection (voice + sd-server + client)
         run: |
           set -euo pipefail
-          cd apps/backend/local-stack
+          PREFIX="${{ needs.setup.outputs.image_prefix }}"
           for img in \
-            "${{ env.IMAGE_PREFIX }}/aikami-voice:latest" \
-            "${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu" \
-            "${{ env.IMAGE_PREFIX }}/aikami-client:latest"; do
+            "$PREFIX/aikami-voice:latest" \
+            "$PREFIX/aikami-sd-server:cpu" \
+            "$PREFIX/aikami-client:latest"; do
             docker pull "$img"
             echo "== $img layers =="
             size_bytes=$(docker image inspect "$img" --format '{{.Size}}')
             echo "uncompressed size: $(awk "BEGIN{printf \"%.1f\", $size_bytes/1048576}") MB"
-            # Compressed size = sum of the registry manifest's layer sizes.
-            # buildx imagetools, not `docker manifest inspect` — see the
-            # AC-1 step above for why. `--raw` on $img's tag returns a
-            # manifest INDEX, not a single image manifest — build-push-
-            # action@v6 attaches a provenance/SBOM attestation by default,
-            # even for single-platform builds, so `.layers` isn't at the
-            # top level. Resolve the real per-platform manifest (the one
-            # whose platform isn't the attestation's "unknown/unknown")
-            # and inspect that digest directly for its `.layers`.
             raw=$(docker buildx imagetools inspect "$img" --raw)
             manifest_digest=$(echo "$raw" \
               | jq -r '.manifests[] | select(.platform.architecture != "unknown") | .digest' \
@@ -294,26 +248,16 @@ jobs:
               exit 1
             fi
             echo "ok: $img within the 250 MB compressed budget (AC-5)"
-            # Weights must not be in any layer (AC-5). `find /` inside the
-            # container hits permission-denied dirs and can exit non-zero
-            # even with stderr suppressed — under set -e -o pipefail that
-            # non-zero `docker run` exit aborted this script right after
-            # printing "ok: no weight files" for the FIRST image, before
-            # ever reaching sd-server/client (found 2026-08-15, first time
-            # this step ran to completion). `; true` makes docker run's own
-            # exit status reflect only whether the container started, not
-            # find's traversal noise — the actual pass/fail still comes
-            # from the grep below.
             docker run --rm --entrypoint /bin/sh "$img" -c \
               'find / -type f \( -name "*.gguf" -o -name "*.safetensors" -o -name "*.onnx" -o -name "*.bin" -o -name "*.pt" \) 2>/dev/null; true' \
               | { grep -q . && { echo "FAIL: weight files found in image"; exit 1; } || echo "ok: no weight files"; }
           done
 
       # ── AC-9: two config mounts against one client image ──────────────
-      - name: AC-9 two-config-mount test
+      - name: AC-9 — Two-config-mount test
         run: |
           set -euo pipefail
-          img="${{ env.IMAGE_PREFIX }}/aikami-client:latest"
+          img="${{ needs.setup.outputs.image_prefix }}/aikami-client:latest"
           docker pull "$img"
           mkdir -p /tmp/cfg-a /tmp/cfg-b
           cat > /tmp/cfg-a/config.json <<'EOF'
@@ -346,10 +290,10 @@ jobs:
           trap - EXIT
 
       # ── AC-9b: no mount at all — the clone-free default path ───────────
-      - name: AC-9b default-generated config test
+      - name: AC-9b — Default-generated config test
         run: |
           set -euo pipefail
-          img="${{ env.IMAGE_PREFIX }}/aikami-client:latest"
+          img="${{ needs.setup.outputs.image_prefix }}/aikami-client:latest"
           cid_c=$(docker run -d -p 15274:5274 "$img")
           trap 'docker rm -f "$cid_c" >/dev/null 2>&1 || true' EXIT
           for i in $(seq 1 20); do
@@ -363,13 +307,34 @@ jobs:
       - name: Verify anonymous pull
         run: |
           set -euo pipefail
-          # Log out so the pull exercises the public path, not the token.
           docker logout ghcr.io
+          PREFIX="${{ needs.setup.outputs.image_prefix }}"
           for img in \
-            "${{ env.IMAGE_PREFIX }}/aikami-model-fetcher:latest" \
-            "${{ env.IMAGE_PREFIX }}/aikami-voice:latest" \
-            "${{ env.IMAGE_PREFIX }}/aikami-sd-server:cpu" \
-            "${{ env.IMAGE_PREFIX }}/aikami-client:latest"; do
+            "$PREFIX/aikami-model-fetcher:latest" \
+            "$PREFIX/aikami-voice:latest" \
+            "$PREFIX/aikami-sd-server:cpu" \
+            "$PREFIX/aikami-client:latest"; do
             echo "anonymous pull: $img"
             docker pull "$img" >/dev/null
           done
+          echo "ok: all images publicly pullable"
+
+      # ── C-418 Feature F: one-command installer bundle ─────────────────
+      - name: Build the one-command installer bundle
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+          sh scripts/bundle_stack.sh
+          ls -lh dist/local-stack-*.tar.gz dist/SHA256SUMS
+
+      - name: Upload installer bundle to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd apps/backend/local-stack
+          version=$(jq -r .version package.json)
+          tag="local-stack-${version}"
+          gh release view "${tag}" >/dev/null 2>&1 \
+            || gh release create "${tag}" --title "Aikami Local Stack ${version}" --generate-notes
+          gh release upload "${tag}" "dist/local-stack-${version}.tar.gz" dist/SHA256SUMS --clobber
