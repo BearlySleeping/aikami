@@ -2,7 +2,7 @@
 id: C-433
 title: "Catalog Coverage — Maps, Tilesets, Audio and Content Packs on R2"
 source: "user request 2026-08-23 — bucket is missing content-packs, maps and sprites"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `scripts/src/lib/ops/scan_assets.ts`, `scripts/src/lib/catalog/`, `packages/shared/constants/src/lib/game_assets.ts`, `packages/shared/schemas/src/lib/catalog/` |
 | **Priority** | P1 — C-434 and C-435 cannot route these categories through the registry until the bytes exist on the origin. |
 | **Dependencies** | C-395 (publish pipeline, status `implemented`). Independent of C-432 — one is publisher-side, the other client-side; they share no code path and can run in parallel. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on publishing categories |
 | **Contract version** | 1.0.0 |
@@ -64,7 +64,7 @@ created_at: "2026-08-23"
 - **Existing implementation to reuse** — this is a *taxonomy widening*, not a new pipeline:
   - `scripts/src/lib/ops/scan_assets.ts` already walks, tags (`category:subcategory:name:state`), sha256s and emits `manifest.json` + `asset_hashes.json`.
   - `scripts/src/lib/catalog/` already content-addresses, uploads idempotently by key, shards the index per category and gates on attribution (C-395).
-  - `packages/shared/schemas/src/lib/catalog/` already defines `CatalogAssetEntry`, `CatalogIndexRoot` and `CatalogIndexShard` — `category` is a plain `string`, so new categories need no schema change.
+  - `packages/shared/schemas/src/lib/catalog/` already defines `CatalogAssetEntry`, `CatalogIndexRoot` and `CatalogIndexShard` — `CatalogCategorySchema` is a `Type.Union` of literals that must be widened to include the new categories.
   - `ASSET_CATEGORIES` is the single declaration point for the taxonomy.
 
 - **Known gaps**: no category covers structured data files (`.jton`, `.json` maps, pack manifests); the C-395 exclusion of tilesets was a deliberate call that the user is now reversing; content packs are a *directory-structured* artifact (manifest plus maps plus sprites), not a flat file, and the current taxonomy has no notion of one.
@@ -96,7 +96,7 @@ C-435 possible, and what lets the hub eventually read the same origin.
 | Scan, tag, sha256, manifest + sidecar | `scripts/src/lib/ops/scan_assets.ts` | modify — widen roots and categories |
 | Category taxonomy | `packages/shared/constants/src/lib/game_assets.ts` `ASSET_CATEGORIES` | modify — add categories |
 | Content-address, upload, shard, publish | `scripts/src/lib/catalog/` | reuse unchanged |
-| Catalog schemas | `packages/shared/schemas/src/lib/catalog/` | reuse — `category` is already `string` |
+| Catalog schemas | `packages/shared/schemas/src/lib/catalog/` | modify — `CatalogCategorySchema` is a `Type.Union` of literals; add `maps`, `tilesets`, `content_packs` to the union |
 | Attribution gate | `scripts/src/lib/catalog/preflight.ts`, `lpc_credits.ts` | reuse — must cover new categories |
 | Pack manifest shape | `packages/shared/schemas/src/lib/game/pack_index.ts`, `static/content-packs/index.json` | reuse as reference |
 
@@ -178,8 +178,9 @@ content_packs: {
 },
 ```
 
-No catalog schema change: `CatalogAssetEntry.category` and
-`CatalogIndexRoot.categories[].id` are already `string`. New index shards appear
+**Schema change required**: `CatalogCategorySchema` in `catalog_index.ts` is a `Type.Union` of six literal strings (`music|sfx|ambient|sprites|backgrounds|lpc`). Add `maps`, `tilesets` and `content_packs` to the union — otherwise `Value.Check(CatalogIndexShardSchema, shard)` in `buildShardDocument()` will reject the new shards. `CatalogIndexRoot.categories[].id` is already `string` and needs no change.
+
+New index shards appear
 at `index/v1/maps.json`, `index/v1/tilesets.json`, `index/v1/content_packs.json`
 automatically.
 
@@ -312,6 +313,7 @@ its own AC, which is the constraint that matters.
 **Watch Points**:
 - `static/content-packs/` is outside the current scan root. The multi-root change is what makes this AC possible; verify the URL prefix is `/content-packs`, not `/game-data`.
 - `content-packs/index.json` is a pack registry, not a pack. Publish it, but do not treat it as a pack manifest.
+- **Pipeline multi-root support**: `config.ts` hardcodes `GAME_DATA_DIR` pointing to `static/game-data`. The pipeline's `loadCatalogEntries()` reads manifest/hashes/credits from a single directory, and `buildUploadItems()` resolves local paths against `gameDataDir`. Both must be widened to accept multiple scan roots so content-pack files (outside `game-data/`) can be uploaded and indexed alongside game-data assets.
 
 ### AC-4: The root index reflects the widened coverage
 **Given** a completed publish
@@ -337,6 +339,8 @@ its own AC, which is the constraint that matters.
 **When** the C-395 attribution preflight runs
 **Then** it passes with no unresolved tags, and every new asset carries licence and author data in its shard entry
 
+**Preflight exclusion must be removed**: `scripts/src/lib/catalog/preflight.ts` defines `EXCLUDED_PATH_PREFIXES = ['maps/', 'sprites/tilesets/']` and `isCatalogAssetPath()` filters these out of the catalog. This exclusion must be removed — otherwise maps and tilesets are silently skipped by `loadCatalogEntries()` and never published. The `catalog_entries.ts` `isCatalogAssetPath` call in `loadCatalogEntries()` must also be updated or removed.
+
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
@@ -350,6 +354,7 @@ its own AC, which is the constraint that matters.
 **Watch Points**:
 - First-party maps and pack content still need a declared licence. Add them to the committed project-licence declaration — the gate has no bypass and adding one would be a compliance regression.
 - Tilesets sourced from third parties need real upstream attribution, not a first-party default. Check provenance before declaring.
+- `entryToShardEntry()` in `index_generation.ts` casts `entry.category as CatalogCategory` — this cast passes at runtime but the subsequent `Value.Check()` fails for unknown categories unless the union is updated first.
 
 ### AC-6: The client is unchanged
 **Given** this contract merged
@@ -371,8 +376,8 @@ its own AC, which is the constraint that matters.
 
 ## Implementation Sequence
 
-1. **Phase 1 (Data/Logic)**: Add the three categories to `ASSET_CATEGORIES` and widen `scan_assets.ts` to multiple roots with directory-based category assignment. Unit tests for taxonomy and tagging.
-2. **Phase 2 (Integration)**: Declare attribution for the new files, run the preflight, run a full publish, verify the shards and root index (AC-1 to AC-5).
+1. **Phase 1 (Data/Logic)**: Add the three categories to `ASSET_CATEGORIES` and widen `scan_assets.ts` to multiple roots with directory-based category assignment. Update `CatalogCategorySchema` union in `packages/shared/schemas/src/lib/catalog/catalog_index.ts`. Unit tests for taxonomy and tagging.
+2. **Phase 2 (Integration)**: Remove `EXCLUDED_PATH_PREFIXES` from `scripts/src/lib/catalog/preflight.ts` and the `isCatalogAssetPath` filter from `catalog_entries.ts`. Widen `GAME_DATA_DIR` / `loadCatalogEntries()` / `buildUploadItems()` to support multiple scan roots. Declare attribution for the new files, run the preflight, run a full publish, verify the shards and root index (AC-1 to AC-5).
 3. **Phase 3 (Validation)**: `bun moon run scripts:test`, `bun moon check`, then confirm the client is untouched (AC-6).
 
 ## Edge Cases & Gotchas
@@ -383,6 +388,8 @@ its own AC, which is the constraint that matters.
 - **Do not include `static/ort`.** 76 MB of ONNX runtime is not game content.
 - **Music coverage is a red herring.** The catalog lists 3 music assets against 11 MB on disk because there are 3 large files. Coverage is already complete — do not "fix" it.
 - **Idempotency across a widened scan.** Re-running must not re-upload the 12,699 unchanged LPC objects. Verify the skip-by-key path still short-circuits.
+- **`preflight.ts` has a hard exclusion for maps and tilesets.** `EXCLUDED_PATH_PREFIXES = ['maps/', 'sprites/tilesets/']` in `preflight.ts` and the `isCatalogAssetPath` filter in `catalog_entries.ts` must be removed — otherwise the pipeline silently skips the very files this contract aims to publish.
+- **`CatalogCategorySchema` is a union, not a free string.** The TypeBox schema in `catalog_index.ts` uses `Type.Union([Type.Literal('music'), ...])`. Adding new categories requires updating this union, or `Value.Check()` validation in `buildShardDocument()` will reject the new shards.
 
 ## Open Questions
 
