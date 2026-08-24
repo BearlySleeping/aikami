@@ -254,11 +254,22 @@ describe('C-418 Feature F — one-command installers', () => {
       join(ROOT, '../../../.github/workflows/publish-local-stack.yml'),
       'utf8',
     );
-    expect(workflow).toContain('publish');
+    // Parse the workflow YAML to verify the build matrix explicitly references
+    // the four expected images (not just string-presence checks that could match
+    // comments or unrelated references).
+    const lines = workflow.split('\n');
+    const matrixStart = lines.findIndex((line) => line.includes('matrix:'));
+    const matrixSection = lines.slice(matrixStart, matrixStart + 50).join('\n');
+
+    // Verify each owned image appears in the build matrix
+    expect(matrixSection).toContain('aikami-model-fetcher');
+    expect(matrixSection).toContain('aikami-voice');
+    expect(matrixSection).toContain('aikami-sd-server');
+    expect(matrixSection).toContain('aikami-client');
+
+    // Verify the workflow publishes to GHCR (check build-push-action step)
+    expect(workflow).toMatch(/docker\/build-push-action@v\d+/);
+    expect(workflow).toContain('push: true');
     expect(workflow).toContain('ghcr.io');
-    expect(workflow).toContain('aikami-model-fetcher');
-    expect(workflow).toContain('aikami-voice');
-    expect(workflow).toContain('aikami-sd-server');
-    expect(workflow).toContain('aikami-client');
   });
 });
