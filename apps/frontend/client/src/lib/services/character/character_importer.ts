@@ -5,6 +5,7 @@ import { AIKAMI_PNG_CHUNK_KEYWORD } from '@aikami/constants';
 import type {
   AikamiCharacterCard,
   Character,
+  CharacterBook,
   CharacterCardV3,
   CharacterCardV3Asset,
 } from '@aikami/types';
@@ -12,10 +13,37 @@ import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
 import { isV1Card, isV2Card, isV3Card } from './character_validator.ts';
 import { extractTextChunks, isPng } from './png_utils.ts';
+import { normalizeCharacterBook, type NormalizedBook } from './character_book_mapper.ts';
 
 export type CharacterImportResult = {
   character: Character;
   avatarFile?: File;
+  /** Normalized lorebook data from the card's character_book, if present. */
+  lorebook?: NormalizedBook;
+};
+
+/**
+ * Extracts the character_book from card data, if present.
+ * Both V2 and V3 store the book at `data.character_book`.
+ */
+const _extractBook = (options: {
+  data: Record<string, unknown>;
+  characterName: string;
+}): NormalizedBook | undefined => {
+  const { data, characterName } = options;
+  const rawBook = data.character_book;
+  if (!rawBook || typeof rawBook !== 'object') {
+    return undefined;
+  }
+  try {
+    return normalizeCharacterBook({ book: rawBook as CharacterBook, characterName });
+  } catch {
+    logger.warn('character-importer', {
+      message: 'Failed to normalize character_book',
+      characterName,
+    });
+    return undefined;
+  }
 };
 
 /**
@@ -203,11 +231,38 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
     });
   }
 
+  // C-439: Extract the embedded lorebook (character_book) from the raw card JSON
+  let lorebook: NormalizedBook | undefined;
+  if (character) {
+    // Parse the raw chunk JSON to extract the book before normalization.
+    // The book lives in `data.character_book` in both V2 and V3 cards.
+    const rawChunkText = textChunks.ccv3 || textChunks.chara || '';
+    if (rawChunkText) {
+      try {
+        const binaryString = atob(rawChunkText);
+        const bytes = new Uint8Array([...binaryString].map((char) => char.charCodeAt(0)));
+        const decoded = new TextDecoder().decode(bytes);
+        const rawJson = JSON.parse(decoded);
+        const rawData = (rawJson as Record<string, unknown>).data as Record<string, unknown> | undefined;
+        if (rawData?.character_book) {
+          lorebook = _extractBook({
+            data: rawData,
+            characterName: character.name,
+          });
+        }
+      } catch {
+        logger.warn('character-importer', {
+          message: 'Failed to extract character_book from PNG chunk',
+        });
+      }
+    }
+  }
+
   const avatarFile = new File([file], `${file.name.replace('.png', '')}_avatar.png`, {
     type: 'image/png',
   });
 
-  return { character, avatarFile };
+  return { character, avatarFile, lorebook };
 };
 
 /**
@@ -278,5 +333,17 @@ export const importFromJson = async (options: { file: File }): Promise<Character
     avatarFile = await dataUriToFile({ dataUri: avatarDataUri, fileName: 'avatar.png' });
   }
 
-  return { character, avatarFile };
+  // C-439: Extract the embedded lorebook (character_book) from the raw card JSON
+  let lorebook: NormalizedBook | undefined;
+  if (character) {
+    const rawData = (json as Record<string, unknown>).data as Record<string, unknown> | undefined;
+    if (rawData?.character_book) {
+      lorebook = _extractBook({
+        data: rawData,
+        characterName: character.name,
+      });
+    }
+  }
+
+  return { character, avatarFile, lorebook };
 };

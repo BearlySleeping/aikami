@@ -35,6 +35,8 @@ export type LorebookEntry = {
   priority: number;
   /** When true, this entry is always included regardless of keyword match. */
   constant: boolean;
+  /** Preserved V2/V3 spec fields that have no direct Aikami equivalent. */
+  extensions?: Record<string, unknown>;
   /** ISO timestamp of creation. */
   createdAt: string;
   /** ISO timestamp of last update. */
