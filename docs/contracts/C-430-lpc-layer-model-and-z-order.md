@@ -2,7 +2,7 @@
 id: C-430
 title: "LPC Layer Model — Variable Slots, One Direction-Aware Z-Order"
 source: "user request 2026-08-23 — engine review; armour layering defect"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,14 +21,14 @@ created_at: "2026-08-23"
 | **Target** | `packages/frontend/engine/src/rendering/` (canonical z-order), `packages/frontend/engine/src/game_world.ts`, `packages/frontend/engine/src/rendering/lpc_appearance_resolver.ts`, `packages/frontend/engine/src/rendering/sprite_composer.ts`, `packages/frontend/engine/src/core/appearance_layers.ts`, `apps/frontend/client/src/lib/views/character/lpc_preview/`, `apps/frontend/client/src/lib/views/dev/lpc/` |
 | **Priority** | P1 — the structural defect behind the armour-layering bug, and a hard precondition for C-431. |
 | **Dependencies** | C-428 (geometry must be unified before layer ordering is reworked, or the two changes tangle in the same functions). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 1.0.0 |
 
 ## Problem & Baseline Evidence
 
-- **Current behavior — the z-order is defined five times and the definitions disagree**:
+- **Current behavior — the z-order is defined seven times and the definitions disagree**:
 
   | # | Location | Slots | Order |
   |---|---|---|---|
@@ -37,9 +37,12 @@ created_at: "2026-08-23"
   | 3 | `packages/frontend/engine/src/rendering/lpc_appearance_resolver.ts` `LPC_SLOT_ORDER` | 6 | body, hair, torso, legs, feet, head — doc-commented *"in render order"*, which it is not |
   | 4 | `apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.svelte.ts` `SLOT_Z_ORDER` | 12 | adds accessories, headAccessories |
   | 5 | `apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts` | — | `sprite.zIndex = i * 10` — pure array order |
+  | 6 | `packages/shared/constants/src/lib/equipment.ts` `LPC_SLOT_Z_ORDER` | 9 | body, legs, feet, torso, shoulders, head, hair, hat, weapon, shield |
+  | 7 | `apps/frontend/client/src/lib/views/dev/lpc_walk/lpc_walk_test_view_model.svelte.ts` `SLOT_Z_ORDER` | 6 | body, legs, feet, torso, head, hair |
 
   Only #1 is on the production game path. #4 governs the character-creation
-  preview. **A player therefore sees a different layer order in the preview than
+  preview. #6 in `@aikami/constants` is the canonical equipment-side table.
+  **A player therefore sees a different layer order in the preview than
   in the game.**
 
 - **Current behavior — unknown slots collapse to the back.** Every table
@@ -118,14 +121,17 @@ behind or in front of the character as their facing requires.
 | Six-slot base appearance | `packages/frontend/engine/src/components/appearance.ts` | modify — variable-length slot list |
 | Equipment-owned slot zeroing | `packages/frontend/engine/src/core/appearance_layers.ts` | **delete** — obsolete once slots are not scarce |
 | Appearance index resolution | `rendering/lpc_appearance_resolver.ts` | modify — keep conventions, widen slot set |
-| Dead multi-layer composer | `rendering/sprite_composer.ts` | **delete** the multi-layer path (see Scope) |
+| Dead multi-layer composer | `rendering/sprite_composer.ts` | **delete** `composeMultiLayerSprite`, multi-layer shader, `LPC_SLOT_Z_ORDER` |
+| UBO packing | `rendering/sprite_composer.ts` `packRecipeToUboBuffer` | modify — use canonical table instead of `LPC_SLOT_Z_ORDER` |
 | Preview z table | `lpc_preview/lpc_preview_view_model.svelte.ts` `SLOT_Z_ORDER` | replace — import the canonical table |
 | Dev route z assignment | `dev/lpc/lpc_view_model.svelte.ts` `i * 10` | replace — import the canonical table |
+| Dev walk test z table | `dev/lpc_walk/lpc_walk_test_view_model.svelte.ts` `SLOT_Z_ORDER` | replace — import the canonical table |
+| Constants z table | `packages/shared/constants/src/lib/equipment.ts` `LPC_SLOT_Z_ORDER` | **delete** — one of the seven competing tables |
 | Paperdoll slots | `game/equipment_service.svelte.ts`, `EQUIPMENT_SLOT_ORDER` | reuse unchanged |
 
 ## Overview
 
-Replace six fixed appearance layers and five disagreeing z-order tables with a
+Replace six fixed appearance layers and seven disagreeing z-order tables with a
 variable-length slot list and **one** canonical, direction-aware layer-order
 table that every renderer imports. Introduce an explicit `layerRole` of
 `'behind' | 'front'` so an item can occupy both sides of the body, and make an
@@ -147,7 +153,7 @@ snake_case filenames, `_` prefix for private members.
 ## Architecture Directives
 
 - **Exactly one z-order table in the repo.** After this contract, a `grep` for
-  a slot-name→number map must return one definition. All five current tables
+  a slot-name→number map must return one definition. All seven current tables
   collapse into it. This is the single measurable outcome of the contract.
 - **Z is a function of (slot, layerRole, direction).** Not of array position,
   not of slot name alone. The signature must take direction, even where the
@@ -249,11 +255,11 @@ old six-slot saves — see Migration.
 
 - **In Scope:**
   - Canonical direction-aware layer-order table in the engine, exported from the barrel.
-  - Deleting all five existing z-order definitions and repointing every caller.
+  - Deleting all seven existing z-order definitions and repointing every caller.
   - `layerRole: 'behind' | 'front'` on `LpcLayerRecipe` and through the merge.
   - Variable-length appearance slots replacing the six fixed `Appearance` fields, with read-time compatibility for six-element saves.
   - Deleting `zeroEquipmentOwnedAppearanceSlots` and `packages/frontend/engine/src/core/appearance_layers.ts`.
-  - Deleting the dead multi-layer path in `rendering/sprite_composer.ts` (`composeMultiLayerSprite`, `packRecipeToUboBuffer`, `LPC_SLOT_Z_ORDER`, the multi-layer shader) — it is never instantiated in the client, it calls `Number.parseInt` on slash-separated asset IDs producing `NaN`, and its shader discards the palette LUT for a single averaged tint. It is one of the five competing tables and must go with them.
+  - Deleting the dead multi-layer path in `rendering/sprite_composer.ts` (`composeMultiLayerSprite`, `LPC_SLOT_Z_ORDER`, the multi-layer shader) — `composeMultiLayerSprite` is never instantiated in the client, it calls `Number.parseInt` on slash-separated asset IDs producing `NaN`, and its shader discards the palette LUT for a single averaged tint. `LPC_SLOT_Z_ORDER` is one of the seven competing tables and must go with them. `packRecipeToUboBuffer` is **kept and refactored** to use the canonical table — it is live code used by `render_system.ts` and `render_worker.ts` for UBO packing.
   - Updating the preview and dev-route ViewModels to import the canonical table.
 - **Out of Scope:**
   - Sheet geometry — C-428.
@@ -268,7 +274,7 @@ old six-slot saves — see Migration.
 > 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
 **For this contract:** Not split, despite spanning engine and client. Leaving
-any of the five tables live is exactly the "two competing code paths left live"
+any of the seven tables live is exactly the "two competing code paths left live"
 condition — the contract's value is that only one definition survives, and that
 is only verifiable when all callers have moved. Removing the six-slot ceiling
 without removing the `?? 0` fallback would ship new slots that render
@@ -389,8 +395,8 @@ invisibly, which is worse than today.
 
 ### AC-7: The dead multi-layer composer path is gone
 **Given** the codebase after this contract
-**When** `composeMultiLayerSprite`, `packRecipeToUboBuffer` and `LPC_SLOT_Z_ORDER` are searched for
-**Then** no definition, reference or test of them remains, and no runtime behaviour changed
+**When** `composeMultiLayerSprite` and the multi-layer shader (`LPC_MULTI_LAYER_VERTEX_SHADER`, `LPC_MULTI_LAYER_FRAGMENT_SHADER`) are searched for
+**Then** no definition, reference or test of them remains, and no runtime behaviour changed. `LPC_SLOT_Z_ORDER` is also deleted (replaced by the canonical table), but `packRecipeToUboBuffer` is **kept** and refactored to use the canonical table.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -399,12 +405,13 @@ invisibly, which is worse than today.
 
 **Test Hooks**:
 - Moon Task: `bun moon run engine:test`, `bun moon check`
-- Integration: `grep -rn "composeMultiLayerSprite\|packRecipeToUboBuffer" apps packages` returns nothing.
+- Integration: `grep -rn "composeMultiLayerSprite\|LPC_MULTI_LAYER_VERTEX_SHADER\|LPC_MULTI_LAYER_FRAGMENT_SHADER" apps packages` returns nothing.
 - E2E / Visual: **Functional**: N/A. **Visual**: N/A.
 
 **Watch Points**:
-- `render_system.ts`, `render_worker.ts` and `game_world.ts` all *call* `packRecipeToUboBuffer`. Confirm each call site is genuinely dead before deleting; if any feeds a live UBO upload, keep that path and record the finding in Amendments.
-- Remove the barrel exports in `packages/frontend/engine/src/index.ts` too, or the deletion will not typecheck.
+- `packRecipeToUboBuffer` is live code used by `render_system.ts` and `render_worker.ts` — it is **kept** and refactored to use the canonical table instead of `LPC_SLOT_Z_ORDER`.
+- Remove the barrel exports for deleted symbols (`composeMultiLayerSprite`, multi-layer shader) in `packages/frontend/engine/src/index.ts` and `packages/frontend/engine/src/rendering/index.ts`, or the deletion will not typecheck.
+- `LPC_SLOT_Z_ORDER` in `packages/shared/constants/src/lib/equipment.ts` must also be deleted — it is one of the seven competing tables.
 
 ## Implementation Sequence
 
@@ -425,7 +432,7 @@ invisibly, which is worse than today.
 
 Must be resolved before status becomes `approved`:
 
-- None. The five tables, their call sites and the merge point are all identified above.
+- None. The seven tables, their call sites and the merge point are all identified above.
 
 ## Amendments
 
