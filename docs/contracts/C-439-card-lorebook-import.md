@@ -2,7 +2,7 @@
 id: C-439
 title: "Card Lorebook Import — stop silently dropping character_book on V2/V3 import"
 source: "user request 2026-08-24 — open-source readiness; SillyTavern/Marinara-Engine compatibility gap"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -20,8 +20,8 @@ created_at: "2026-08-24"
 | **Source** | User request (2026-08-24). Aikami is about to be shared with the SillyTavern and Marinara-Engine communities, whose cards routinely embed a lorebook that Aikami currently discards without telling anyone. |
 | **Target** | `packages/shared/types/src/lib/domain/character_card.ts` — the card type; `apps/frontend/client/src/lib/services/character/` — the import path; `apps/frontend/client/src/lib/services/lorebook/` — the destination store |
 | **Priority** | P1 — the single highest-leverage compatibility gap for the audience the project is about to be shown to. Silent data loss on import is also the worst possible first impression. |
-| **Dependencies** | C-419 (implemented) — V1/V2/V3 PNG + JSON card import already exists and works. C-246 — the export/import system. This contract extends both; it does not rebuild either. |
-| **Status** | draft |
+| **Dependencies** | C-419 (implemented) — V1/V2/V3 PNG + JSON card import already exists and works (file: `docs/contracts/C-419-p3-growth-features.md`). C-246 (completed) — the export/import system. This contract extends both; it does not rebuild either. |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → the import section of `apps/frontend/docs/src/content/docs/` should state which card fields are supported. |
 | **Contract version** | 2.0.0 |
@@ -99,6 +99,7 @@ The scope is deliberately narrow: **one field, end to end, honestly reported.**
 
 - **Normalize once, at the boundary.** PNG and JSON import must converge on a single normalized book shape before anything downstream sees it, mirroring how `assets` is handled today. Two parallel mappings will drift.
 - **The card type belongs in `packages/shared/types/`.** Extend `character_card.ts` there. Do not model the book inside `apps/`.
+- **Extend `CharacterImportResult`** — the type at `character_importer.ts:16` currently returns `{ character, avatarFile }`. Add the normalized book data so the ViewModel can create it through the lorebook store. This is the bridge.
 - 🔴 **`Lorebook` and `LorebookEntry` currently live in `apps/frontend/client/src/lib/types/lorebook.ts`**, which violates the repo's own boundary rule. Moving them to `packages/shared/types/` is **in scope only if** the import path needs them cross-boundary. If it doesn't, leave them and note it — do not turn this contract into a refactor.
 - **Lossy mapping must be explicit and one-way-safe.** Unmapped V2 fields (`insertion_order`, `selective`, `secondary_keys`, `case_sensitive`, `position`, per-entry `extensions`) go into the entry's extensions bag, preserved verbatim. Never silently discard a field the card author wrote.
 - **Never fail the character import because of the book.** A malformed, oversized, or unrecognized `character_book` must degrade to importing the character without it, plus a clear message. The character is the primary object; the book is an enhancement.
@@ -151,6 +152,9 @@ Mapping onto the existing `LorebookEntry`:
 
 A TypeBox schema for the book belongs in `packages/shared/schemas/`, with the
 type derived from it — matching how the rest of the card surface is validated.
+Note: an existing `LorebookSchema` / `LorebookEntrySchema` already lives at
+`packages/shared/schemas/src/lib/domain/lorebook.ts` (server-side shape). The new
+`CharacterBookSchema` is the V2/V3 spec shape and is distinct; do not conflate them.
 
 ## Quality Requirements
 
