@@ -35,6 +35,14 @@ export const BUNDLED_SOURCE_BACKEND = 'bundled' as const;
 /** Base URL prefix for bundled asset files served from static/game-data. */
 const BUNDLED_ASSET_BASE = '/game-data';
 
+/**
+ * R2 object key for an asset, matching the C-395 published layout.
+ * `hash` is the sha256 already stored on the assets row; `ext` includes
+ * the leading dot and is taken from the bundled source URL.
+ */
+const r2ObjectKey = (options: { hash: string; ext: string }): string =>
+  `assets/${options.hash.slice(0, 2)}/${options.hash}${options.ext}`;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -157,29 +165,33 @@ export class AssetRegistryRepository {
   }
 
   /**
-   * Adds an `r2` fallback download origin for every seeded asset
-   * (C-373 `asset_sources`): the R2 public download URL mirroring the
-   * bundled `/game-data/<path>` source. Idempotent — `INSERT OR REPLACE` on
+   * Adds (or repairs) an `r2` fallback download origin for every seeded
+   * asset (C-373 `asset_sources`): the content-addressed R2 public download
+   * URL derived from the asset's SHA-256 hash (C-395 layout:
+   * `assets/<hash[0:2]>/<hash>.<ext>`). Idempotent — `INSERT OR REPLACE` on
    * the (asset_id, backend) primary key.
    *
    * The AssetManager tries sources by priority: bundled (0) first, then the
-   * R2 mirror (1) when the bundled path is unavailable. Assets must be
-   * uploaded to the bucket under their manifest path (e.g.
-   * `music/exploration/Chainsmoker.mp3`, `lpc/body/bodies_male.walk.webp`)
-   * — see `scripts/src/lib/ops/upload_audio_assets.ts` / `upload_lpc_assets.ts`.
+   * R2 mirror (1) when the bundled path is unavailable. Assets are published
+   * to the bucket under content-addressed keys — see C-395 for the publish
+   * pipeline.
+   *
+   * Assets without a hash in the registry are skipped (never fabricate a
+   * URL). Existing `r2` rows with stale (path-mirrored) URLs are rewritten
+   * to the correct content-addressed URL on every boot.
    *
    * @param r2BaseUrl - R2 public base URL, e.g. `https://assets.bearlysleeping.com`.
    * @returns The number of source rows written.
    */
   async addR2Sources(r2BaseUrl: string): Promise<number> {
-    // Select only bundled assets lacking an r2 sibling so newly re-seeded
-    // assets receive mirrors and existing mirrors remain untouched.
+    // Select every seeded asset with its hash and bundled URL.
+    // Assets without a hash are skipped — never fabricate a URL.
     const result = await this._db.query({
-      sql: `SELECT asset_id, url FROM asset_sources
-            WHERE backend = ?
-            AND asset_id NOT IN (
-              SELECT asset_id FROM asset_sources WHERE backend = 'r2'
-            )`,
+      sql: `SELECT s.asset_id, s.url, a.hash
+            FROM asset_sources s
+            JOIN assets a ON a.id = s.asset_id
+            WHERE s.backend = ?
+            AND a.hash IS NOT NULL`,
       args: [BUNDLED_SOURCE_BACKEND],
     });
 
@@ -189,13 +201,17 @@ export class AssetRegistryRepository {
     for (const row of result.rows) {
       const assetId = row.asset_id as string;
       const bundledUrl = row.url as string;
-      const storagePath = bundledUrl.startsWith(`${BUNDLED_ASSET_BASE}/`)
-        ? bundledUrl.slice(`${BUNDLED_ASSET_BASE}/`.length)
-        : bundledUrl;
+      const hash = row.hash as string;
+
+      // Derive extension from the bundled URL (last segment after final dot).
+      const lastSegment = bundledUrl.split('.').pop();
+      const ext = lastSegment ? `.${lastSegment}` : '';
+      const r2Url = `${base}/${r2ObjectKey({ hash, ext })}`;
+
       queries.push({
         sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
               VALUES (?, 'r2', ?, 1)`,
-        args: [assetId, `${base}/${storagePath}`],
+        args: [assetId, r2Url],
       });
     }
 
