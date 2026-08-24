@@ -2,7 +2,7 @@
 id: C-440
 title: "CI tooling baseline — workflow linting, dependency automation, and AI review"
 source: "user request 2026-08-25 — CI/CD audit follow-up; adopt the third-party tooling the audit identified as high-leverage"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,10 +21,10 @@ created_at: "2026-08-25"
 | **Target** | `.github/` — a new workflow-lint job, a Renovate config, and the CodeRabbit app. No application code. |
 | **Priority** | P2 — nothing is broken today. This is leverage: it makes a whole class of defect impossible to reintroduce, at near-zero recurring cost. |
 | **Dependencies** | None. Independent of C-441. Complements C-438 (which restored the PR gate this contract now protects). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — `docs/guides/CI_CD.md` gains a short section on what each tool does and how to silence a false positive. |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 2.1.0 |
 
 ## Problem & Baseline Evidence
 
@@ -267,6 +267,72 @@ workflow-rewrite, and do **not** suppress findings to make it green.
 - Confirm CodeRabbit has no write access to repository contents and cannot read secrets.
 - If review volume is high enough to be ignored, tune it or drop the tool. A review nobody reads is worse than none — the same principle C-438 applied to the check itself.
 
+### AC-7: Docs are updated
+**Given** this contract is complete
+**When** `docs/guides/CI_CD.md` is read
+**Then** it contains a section covering all three tools: what each does, which
+checks are required vs advisory, and how to suppress a false positive.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-7 | Manual | rendered CI_CD.md section | N/A | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: N/A
+- Integration: read the file and confirm the section exists
+- E2E / Visual: N/A
+
+**Watch Points**:
+- The suppression guide must be concrete: file path, syntax, and an example.
+  "See the tool's docs" is not sufficient.
+
+### AC-8: Lint job finishes within budget
+**Given** the PR gate runs on a typical PR (workflow-only change)
+**When** the workflow-lint job completes
+**Then** its wall-clock time is under 60 seconds.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-8 | Integration | link to a PR run showing the job duration | N/A | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: N/A
+- Integration: examine the job run in a real PR; capture the duration from the
+  GitHub Actions log header
+- E2E / Visual: N/A
+
+**Watch Points**:
+- If the job exceeds 60s, split it into a separate parallel job so it does not
+  extend the critical path, as stated in Success Measures.
+- The gate's overall 10-minute warm budget from C-438 takes precedence over
+  this individual job budget.
+
+### AC-9: Third-party services never block a merge
+**Given** CodeRabbit is unavailable or Renovate has not yet run
+**When** a PR is submitted
+**Then** the only required check is the self-hosted `actionlint`/`zizmor` job.
+Neither CodeRabbit nor Renovate status may be marked as required in branch
+protection.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-9 | Manual | branch protection settings showing only the lint job as required | N/A | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: N/A
+- Integration: inspect the repo's branch protection rules via GitHub UI or API
+- E2E / Visual: N/A
+
+**Watch Points**:
+- 🔴 This AC is trivially violated by adding CodeRabbit as a required check
+  "because it's usually fast." The contract is explicit: only the self-hosted
+  job may be required.
+- Renovate PRs that fail (e.g. a broken bump) must not block other PRs —
+  Renovate's status is advisory.
+
 ## Implementation Sequence
 
 1. **Phase 1 (Baseline)**: run `actionlint` and `zizmor` locally against `.github/`. Record every finding verbatim. This list is the evidence for AC-3 and must exist before any fix.
@@ -286,14 +352,28 @@ workflow-rewrite, and do **not** suppress findings to make it green.
 - **Pinning actions to SHAs makes the diff unreadable without the tag comment.** Require the `# v4.1.2` trailing comment convention, and check that Renovate maintains it.
 - **These tools do not understand Moon.** The `runInCI: true` on four deploy tasks, and the missing `packages/**` build inputs, were both found by reading the moon graph — no linter here would have caught either. Do not let adopting them create a false sense of coverage.
 
-## Open Questions
+## Resolved Questions
 
-Must be resolved before status becomes `approved`:
+These were open during drafting and are answered here from the contract's own
+consistency and codebase evidence:
 
-- Are first-party `actions/*` exempt from SHA pinning, or pinned like everything else?
-- Does the lint job become a **required** status check immediately, or only after the Phase 1 baseline is resolved? (Recommended: required in Phase 3, not Phase 2.)
-- Renovate as the GitHub App, or self-hosted via a workflow? The App is less to maintain; the workflow keeps everything in-repo and uses free public-repo minutes.
-- Does syncpack + `pin_dependencies.ts` stay authoritative over `package.json`, with Renovate restricted to GitHub Actions and Docker digests only? That is the lowest-conflict option and may be the right scope.
+1. **First-party `actions/*` are exempt from SHA pinning.** AC-4 already says
+   "every non-`actions/*` reference" — the AC itself defines the scope.
+   `actions/checkout`, `actions/cache`, `actions/upload-artifact`, etc. stay
+   on tags. Document this choice in the CI_CD guide.
+
+2. **Required status check in Phase 3, not Phase 2.** The Implementation
+   Sequence already specifies this. The lint job runs advisory during Phase 2
+   while the baseline is resolved, then flips to required in Phase 3.
+
+3. **Renovate as the GitHub App** — less maintenance surface, no workflow
+   overhead, and the free tier covers public repos. The implementer may choose
+   the self-hosted workflow variant if the App's permissions model is
+   unacceptable; document whichever is chosen.
+
+4. **syncpack + `pin_dependencies.ts` stays authoritative over `package.json`.**
+   Renovate is restricted to GitHub Actions and Docker digests. This is the
+   lowest-conflict option and the Architecture Directives already assume it.
 
 ## Amendments
 
@@ -301,7 +381,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| — | — | — | — |
+| 2.1.0 | 2026-08-25 | Added AC-7 (docs), AC-8 (performance budget), AC-9 (third-party independence). Replaced Open Questions with Resolved Questions. | critic review |
 
 ## Promotion Lifecycle
 
