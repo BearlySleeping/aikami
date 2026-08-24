@@ -73,7 +73,7 @@ async function postToDiscord(webhookUrl: string, input: ActivityInput): Promise<
   const res = await fetch(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ embeds: [embed] }),
+    body: JSON.stringify({ embeds: [embed], allowed_mentions: { parse: [] } }),
     signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
   });
   if (!res.ok) {

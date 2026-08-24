@@ -71,6 +71,35 @@ describe('maxRepeatedSegment', () => {
     expect(result.count).toBeGreaterThanOrEqual(6); // PI_REPETITION_THRESHOLD default
   });
 
+  test('does not treat a repeated markdown list label as repetition', () => {
+    // Observed false positive (2026-08-24): an end-of-task summary listing ten
+    // DISTINCT edits to one file tripped the guard, because `:` was a sentence
+    // boundary and the shared "- **`release.yml`**:" label counted as its own
+    // segment ten times. Every actual claim in the message was unique.
+    const summary = [
+      '### Task 2: Dead jobs removed',
+      '- **`release.yml`**: Removed 4 dead jobs (~177 lines).',
+      '- **`release.yml`**: Added an `apps` workflow_dispatch input.',
+      '- **`release.yml`**: Added a `push: [main]` trigger with path filters.',
+      '- **`release.yml`**: Set DEPLOY_APPS dynamically in resolve-plan.',
+      '- **`release.yml`**: Removed dead outputs from resolve-plan.',
+      '- **`release.yml`**: Split the caches in the deploy-desktop job.',
+      '- **`release.yml`**: Dropped MOON_TOOLCHAIN_FORCE_GLOBALS from build-web.',
+      '- **`release.yml`**: Narrowed workflow permissions to contents: read.',
+      '- **`release.yml`**: Fixed shell interpolation in plan-matrix.',
+      '- **`release.yml`**: Added a notify-failure job.',
+    ].join('\n');
+
+    expect(maxRepeatedSegment(summary).count).toBeLessThan(6);
+  });
+
+  test('still detects a collapse whose repeated phrase ends in a colon', () => {
+    // Dropping `:` as a boundary must not weaken the real check: a collapsed
+    // model repeats the whole phrase, which newline splitting still catches.
+    const collapsed = Array.from({ length: 12 }, () => 'Let me check the DNS records:').join('\n');
+    expect(maxRepeatedSegment(collapsed).count).toBe(12);
+  });
+
   test('does not trip on healthy prose that reuses a phrase a few times', () => {
     // Verified against all 1318 non-collapsed assistant messages in the
     // 2026-08-20 session: the highest repeat count observed was 1.

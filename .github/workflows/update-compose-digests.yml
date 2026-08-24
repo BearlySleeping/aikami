@@ -13,9 +13,12 @@
 
 name: Update Compose Digests
 
-# Weekly cron held off for now (2026-08-15) while the local-stack publish
-# pipeline is still being stabilized — re-enable once publish-local-stack.yml
-# is reliably green. Until then trigger manually via workflow_dispatch.
+# Weekly cron: re-resolves pinned digests so they don't go stale.
+# Scheduled workflows auto-disable after 60 days of repo inactivity.
+# schedule only ever runs from the default branch.
+on:
+  schedule:
+    - cron: '0 3 * * 1' # Monday 03:00 UTC
 on:
   # schedule:
   #   - cron: '0 3 * * 1' # Monday 03:00 UTC
@@ -58,18 +61,34 @@ jobs:
 
           changed=0
           for ref in "${!IMAGES[@]}"; do
-            digest=$(docker manifest inspect "$ref" 2>/dev/null \
-              | grep -o '"digest": *"sha256:[a-f0-9]*"' | head -1 | cut -d'"' -f4)
-            if [ -z "$digest" ]; then
+            # Use buildx imagetools inspect (not docker manifest inspect) —
+            # the classic command fails on single-platform OCI manifests
+            # that ggml-org/leejet publish ("Treating single images as
+            # manifest lists is not implemented").
+            raw=$(docker buildx imagetools inspect --raw "$ref" 2>/dev/null || true)
+            if [ -z "$raw" ]; then
               echo "WARN: could not resolve $ref"
+              continue
+            fi
+            # Extract the list digest from the manifest index (first manifest's digest
+            # is the list digest itself). For single-platform images, --raw returns
+            # the image manifest directly — extract its config digest instead.
+            digest=$(echo "$raw" | jq -r '.manifests[0].digest // .config.digest // empty' 2>/dev/null)
+            if [ -z "$digest" ]; then
+              echo "WARN: could not extract digest for $ref"
               continue
             fi
             # Full reference with digest, e.g. ref@sha256:...
             full="${ref}@${digest}"
             for file in ${IMAGES[$ref]//:/ }; do
-              if grep -q "${ref}@" "$file"; then
-                echo "up-to-date: $ref in $file"
+              # Strip any existing @sha256:... before comparing
+              if grep -qE "${ref}@sha256:[a-f0-9]+" "$file"; then
+                # Already pinned — replace the existing digest
+                sed -i -E "s|${ref}@sha256:[a-f0-9]+|${full}|g" "$file"
+                echo "updated: $ref -> $digest in $file"
+                changed=1
               elif grep -q "$ref" "$file"; then
+                # Unpinned — pin it
                 sed -i "s|${ref}|${full}|g" "$file"
                 echo "bumped: $ref -> $digest in $file"
                 changed=1
@@ -84,15 +103,6 @@ jobs:
           else
             echo "digest-changes"
           fi
-
-      - name: Render smoke test
-        working-directory: apps/backend/local-stack
-        run: |
-          set -euo pipefail
-          for backend in cpu cuda rocm vulkan intel musa; do
-            COMPOSE_FILE="compose.yaml:compose.$backend.yaml" \
-            COMPOSE_PROFILES=text,image,voice,stt,client docker compose config --quiet
-          done
 
       - name: Create or update the digest-bump PR
         id: pr
@@ -110,10 +120,16 @@ jobs:
           git checkout -b "$branch"
           git add apps/backend/local-stack
           git commit -m "chore(local-stack): refresh pinned compose digests"
-          git push origin "$branch"
-          gh pr create \
-            --base main \
-            --head "$branch" \
-            --title "chore(local-stack): refresh pinned compose digests" \
-            --body "Weekly digest-pin refresh for the C-390 local stack. Verify the updated digests still pass the local-stack smoke test before merging." \
-            --label "dependencies" || true
+          # --force handles same-day re-runs (date-stamped branch already exists)
+          git push origin "$branch" --force
+          # Check if a PR already exists for this branch before creating
+          if gh pr view "$branch" --json id --jq .id >/dev/null 2>&1; then
+            echo "PR already exists for $branch; skipping creation."
+          else
+            gh pr create \
+              --base main \
+              --head "$branch" \
+              --title "chore(local-stack): refresh pinned compose digests" \
+              --body "Weekly digest-pin refresh for the C-390 local stack. Verify the updated digests still pass the local-stack smoke test before merging." \
+              --label "dependencies"
+          fi

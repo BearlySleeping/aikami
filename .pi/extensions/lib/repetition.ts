@@ -26,12 +26,22 @@ export const MIN_SEGMENT_CHARS = 12;
  * DNS."), so newline splitting alone would have missed it. Comparison is
  * case- and whitespace-insensitive, which keeps the check independent of
  * the particular wording the model latched onto.
+ *
+ * 🔴 `:` is deliberately NOT a boundary, unlike `.!?;`. A colon introduces
+ * what follows rather than closing a statement, so splitting on it turned
+ * every markdown list LABEL into its own segment. Observed false positive
+ * (2026-08-24): a legitimate end-of-task summary listing ten distinct edits
+ * to one file as "- **`release.yml`**: <different change each time>" scored
+ * 10 repeats of the label and tripped the guard, even though every actual
+ * claim in the message was unique. Splitting on `:` also cannot help the
+ * collapse case — a model stuck on one phrase repeats the whole phrase, so
+ * the newline and sentence boundaries already catch it.
  */
 export const maxRepeatedSegment = (text: string): { count: number; segment: string } => {
   const counts = new Map<string, number>();
   let best = { count: 0, segment: '' };
 
-  for (const raw of text.split(/(?<=[.!?;:])(?:\s+|(?=[A-Z]))|\n+/)) {
+  for (const raw of text.split(/(?<=[.!?;])(?:\s+|(?=[A-Z]))|\n+/)) {
     const segment = raw.trim().replace(/\s+/g, ' ').toLowerCase();
     if (segment.length < MIN_SEGMENT_CHARS) {
       continue;

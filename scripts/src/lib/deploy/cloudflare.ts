@@ -406,7 +406,7 @@ export async function deployCloudflareWorker(
     log(`🏗️  Building (mode: ${mode})...`);
     const modeFlag = ` -- --mode ${mode}`;
     const forceFlag = isForce ? ' --force' : '';
-    run(`bunx moon run ${appName}:build${forceFlag}${modeFlag}`, { cwd: rootDir });
+    run(`bun moon run ${appName}:build${forceFlag}${modeFlag}`, { cwd: rootDir });
 
     if (!existsSync(outputDir)) {
       throw new Error(

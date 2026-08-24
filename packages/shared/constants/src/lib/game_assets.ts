@@ -66,7 +66,7 @@ export type AssetCategoryDefinition = {
 /**
  * All supported asset categories with validation rules.
  *
- * C-433 added `maps`, `tilesets` and `content_packs` to widen catalog
+ * C-433 added `maps`, `tilesets` and `contentPacks` to widen catalog
  * coverage to every asset the client ships. Category assignment is by
  * containing directory, not by extension alone (`.json` is shared by maps,
  * tileset descriptors and pack manifests).
@@ -157,8 +157,8 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
   },
 
   // C-433: content-pack constituents — manifests, pack maps, pack sprites
-  content_packs: {
-    name: 'content_packs',
+  contentPacks: {
+    name: 'contentPacks',
     extensions: new Set(['.json', '.jton', '.webp', '.png']),
     defaultSubdirs: [],
   },

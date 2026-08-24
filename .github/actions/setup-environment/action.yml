@@ -18,7 +18,7 @@ inputs:
     default: "1.3.13"
 
   node:
-    description: 'Set to "true" to also install Node.js. Only jobs that shell out to Node-dependent tooling need this (Firebase Hosting/Functions today) — Cloud Run and desktop legs run entirely on Bun.'
+    description: 'Set to "true" to also install Node.js. Only jobs that shell out to Node-dependent tooling need this — Cloud Run and desktop legs run entirely on Bun.'
     required: false
     default: "false"
   node-version:
@@ -63,18 +63,30 @@ runs:
       with:
         node-version: ${{ inputs.node-version }}
 
-    # Covers both ~/.bun/install/cache and .moon/cache in one entry — they're
-    # always consumed together by anything that runs `bunx moon run ...`.
-    - name: 🧠 Restore Bun & Moon build cache
+    # Bun install cache: content-addressed by the lockfile. A hit means
+    # it's complete — no need for a rolling key.
+    - name: 🥟 Restore Bun dependency cache
       if: inputs.moon-cache == 'true'
       uses: actions/cache@v6
       with:
-        path: |
-          ~/.bun/install/cache
-          .moon/cache
-        key: ${{ runner.os }}-${{ runner.arch }}-build-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/moon.yml', '**/tsconfig.json') }}
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ hashFiles('**/bun.lock', '**/bun.lockb') }}
         restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-build-
+          ${{ runner.os }}-${{ runner.arch }}-bun-
+
+    # Moon build cache: uses a rolling key (SHA-based) so it's written
+    # fresh per run and restored from the most recent successful run.
+    # Scoped by workflow to avoid release-pipeline caches crowding out
+    # PR-gate caches (GitHub's 10 GB Actions cache is shared).
+    - name: 🌙 Restore Moon build cache
+      if: inputs.moon-cache == 'true'
+      uses: actions/cache@v6
+      with:
+        path: .moon/cache
+        key: ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-
+          ${{ runner.os }}-${{ runner.arch }}-moon-
 
     - name: 📦 Install dependencies
       if: inputs.install-deps == 'true'
@@ -91,6 +103,13 @@ runs:
       if: inputs.gcp-auth == 'true'
       uses: google-github-actions/setup-gcloud@v3
 
+    # Force moon to use the globally installed bun (from setup-bun) instead
+    # of provisioning its own via proto. Without this, moon's toolchain sees
+    # `bun: version: "latest"` in .moon/toolchains.yml and downloads a
+    # different bun than the pinned version above.
+    - name: 🌙 Force moon to use global tools
+      shell: bash
+      run: echo "MOON_TOOLCHAIN_FORCE_GLOBALS=true" >> "$GITHUB_ENV"
     - name: 🐳 Configure Docker for Artifact Registry
       if: inputs.docker-registry != ''
       shell: bash

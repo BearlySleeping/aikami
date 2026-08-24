@@ -3,7 +3,7 @@ name: Release
 # ── Config ──────────────────────────────────────────────────────────────
 # DEPLOY_APPS controls which apps this pipeline touches:
 #   "client-tauri"                      → desktop release only (default)
-#   "client client-tauri site firebase" → desktop + web + backend
+#   "client client-tauri site hub docs" → desktop + web
 #   "all"                                → everything in DEPLOYABLE_APPS
 #
 # Triggers:
@@ -15,10 +15,12 @@ name: Release
 #                          so desktop artifacts are attached to the
 #                          *workflow run* instead (Actions tab, 14-day
 #                          retention) — visible to the team, not the public.
+#   push: [main]         → auto-deploy docs and site (static Workers,
+#                          seconds to deploy). Gated by path filters.
 #
 # Pipeline shape:
 #   resolve-plan     → groups DEPLOY_APPS by serviceType (desktop,
-#                      cloudflare-worker, firebase-functions, docker-release)
+#                      cloudflare-worker)
 #                      so every job below
 #                      is gated at the JOB level (`if: needs.resolve-plan...`)
 #                      instead of skipping steps one at a time inside a
@@ -29,7 +31,7 @@ name: Release
 #                      need to burn Action minutes on every desktop release.
 #   prepare-secrets  → the ONE place that authenticates to GCP and downloads
 #                      Secret Manager secrets, for the UNION of every app in
-#                      scope this run (desktop + web + backend + docker).
+#                      scope this run (desktop + web).
 #                      Shared to every other job over Redis (env_share.ts) —
 #                      no job below this one re-authenticates to GCP just to
 #                      read secrets (they may still auth to GCP for their own
@@ -48,8 +50,7 @@ name: Release
 #   update-manifest  → (release: published only) merges each leg's updater
 #                      fragment into a single latest.json on the triggering
 #                      release.
-#   deploy-cloudflare / deploy-cloud-run-sveltekit / deploy-firebase-functions /
-#   deploy-docker-release
+#   deploy-cloudflare
 #                    → one dedicated job per service type, each running only
 #                      when resolve-plan found apps of that type. Each calls
 #                      the same local orchestrator (scripts/.../deploy/index.ts)
@@ -58,11 +59,19 @@ name: Release
 #                      given set of apps, so these jobs stay thin.
 # ────────────────────────────────────────────────────────────────────────
 env:
+  # Default: desktop only. Overridden per-event in resolve-plan.
   DEPLOY_APPS: "client-tauri"
 
 on:
   release:
     types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'apps/frontend/docs/**'
+      - 'apps/frontend/site/**'
+      - 'apps/frontend/hub/**'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       mode:
@@ -73,6 +82,11 @@ on:
         options:
           - production
           - staging
+      apps:
+        description: "Apps to deploy (space-separated). Default: client-tauri"
+        required: false
+        default: ""
+        type: string
       force:
         description: "Bypass Redis checksum cache (--force)"
         required: false
@@ -88,13 +102,12 @@ on:
         required: false
         type: string
         default: ""
-
 concurrency:
   group: deploy-${{ github.event.inputs.mode || 'production' }}
   cancel-in-progress: false
 
 permissions:
-  contents: write # required for `gh release upload` / `gh release download`
+  contents: read # elevated to write per-job where needed (update-manifest, deploy-desktop)
 
 jobs:
   # ── Resolve plan: group DEPLOY_APPS by serviceType ─────────────────
@@ -113,16 +126,34 @@ jobs:
       all_apps: ${{ steps.resolve.outputs.all_apps }}
       desktop_apps: ${{ steps.resolve.outputs.desktop_apps }}
       cloudflare_apps: ${{ steps.resolve.outputs.cloudflare_apps }}
-      cloud_run_sveltekit_apps: ${{ steps.resolve.outputs.cloud_run_sveltekit_apps }}
-      firebase_functions_apps: ${{ steps.resolve.outputs.firebase_functions_apps }}
-      docker_release_apps: ${{ steps.resolve.outputs.docker_release_apps }}
-      database_migration_apps: ${{ steps.resolve.outputs.database_migration_apps }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+
+      - name: Set DEPLOY_APPS for push events
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.event.after }}" | \
+            while read -r file; do
+              case "$file" in
+                apps/frontend/docs/*)   echo "docs" ;;
+                apps/frontend/site/*)   echo "site" ;;
+                apps/frontend/hub/*)    echo "hub" ;;
+                apps/frontend/client/*) echo "client" ;;
+              esac
+            done | sort -u | tr '\n' ' ' | sed 's/ $//')
+          if [ -n "$CHANGED" ]; then
+            echo "DEPLOY_APPS=$CHANGED" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set DEPLOY_APPS for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch' && inputs.apps != ''
+        shell: bash
+        run: echo "DEPLOY_APPS=${{ inputs.apps }}" >> "$GITHUB_ENV"
 
       - name: Resolve deploy plan
         id: resolve
@@ -237,13 +268,17 @@ jobs:
         shell: bash
         run: |
           bun scripts/src/lib/deploy/ci_planning.ts --mode="$MODE" --decide \
-            --checksum="${{ needs.plan-desktop.outputs.checksum }}" \
-            --version="${{ needs.plan-desktop.outputs.version }}" \
-            --cached-checksum="${{ needs.plan-desktop.outputs.cached_checksum }}" \
-            --cached-release-tag="${{ needs.plan-desktop.outputs.cached_release_tag }}" \
+            --checksum="$CHECKSUM" \
+            --version="$VERSION" \
+            --cached-checksum="$CACHED_CHECKSUM" \
+            --cached-release-tag="$CACHED_RELEASE_TAG" \
             --platforms="$PLATFORMS" --bundles="$BUNDLES" $FORCE_FLAG
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
+          CHECKSUM: ${{ needs.plan-desktop.outputs.checksum }}
+          VERSION: ${{ needs.plan-desktop.outputs.version }}
+          CACHED_CHECKSUM: ${{ needs.plan-desktop.outputs.cached_checksum }}
+          CACHED_RELEASE_TAG: ${{ needs.plan-desktop.outputs.cached_release_tag }}
           PLATFORMS: ${{ github.event.inputs.platforms }}
           BUNDLES: ${{ github.event.inputs.bundles }}
           FORCE_FLAG: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
@@ -286,12 +321,10 @@ jobs:
         shell: bash
         run: |
           MODE="${{ github.event.inputs.mode || 'production' }}"
-          bunx moon run client:build -- --mode "$MODE"
+          bun moon run client:build -- --mode "$MODE"
         env:
           PUBLIC_APP_VERSION: ${{ needs.plan-desktop.outputs.version }}
-          # moon's toolchain would otherwise try to provision its own bun via
-          # proto in CI — force global tools (same as pr-checks.yml).
-          MOON_TOOLCHAIN_FORCE_GLOBALS: "true"
+          # MOON_TOOLCHAIN_FORCE_GLOBALS is set by setup-environment composite action.
 
       - name: Upload shared web build
         uses: actions/upload-artifact@v7
@@ -386,16 +419,24 @@ jobs:
             curl wget file
 
       # build legs need @tauri-apps/cli, so they also run bun install below.
-      - name: Restore Bun & Moon build caches
+      - name: Restore Bun dependency cache
         if: matrix.action == 'build'
         uses: actions/cache@v6
         with:
-          path: |
-            ~/.bun/install/cache
-            .moon/cache
-          key: ${{ runner.os }}-${{ runner.arch }}-build-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/moon.yml', '**/tsconfig.json') }}
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ hashFiles('**/bun.lock', '**/bun.lockb') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-build-
+            ${{ runner.os }}-${{ runner.arch }}-bun-
+
+      - name: Restore Moon build cache
+        if: matrix.action == 'build'
+        uses: actions/cache@v6
+        with:
+          path: .moon/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-
+            ${{ runner.os }}-${{ runner.arch }}-moon-
 
       - name: Install dependencies
         if: matrix.action == 'build'
@@ -493,6 +534,8 @@ jobs:
   # still re-attaches artifacts to the new release and needs a manifest there
   # too, or clients would 404 on the newest release.
   update-manifest:
+    permissions:
+      contents: write # for gh release upload
     name: Generate Update Manifest
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -522,8 +565,9 @@ jobs:
         run: |
           bun scripts/src/lib/deploy/updater_manifest.ts --merge \
             --fragments-dir="updater-fragments-merged" \
-            --release-tag="${{ github.event.release.tag_name }}"
+            --release-tag="$RELEASE_TAG"
         env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Discord release announcement (release runs only) ────────────────
@@ -560,8 +604,9 @@ jobs:
 
       - name: Post release announcement to Discord
         shell: bash
-        run: bun scripts/src/lib/deploy/discord_notify.ts --tag="${{ github.event.release.tag_name }}"
+        run: bun scripts/src/lib/deploy/discord_notify.ts --tag="$RELEASE_TAG"
         env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Cloudflare Workers (client, site, docs) ────────────────────────
@@ -605,179 +650,39 @@ jobs:
           CI: "true"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
-  # ── Cloud Run (SvelteKit hub) ────────────────────────────────────────
-  deploy-cloud-run-sveltekit:
-    name: Cloud Run (SvelteKit)
+
+  # ── Failure notification ──────────────────────────────────────────────
+  # Posts to Discord when any deploy job fails. Uses `if: failure()` which
+  # evaluates to true when ANY job in the workflow has failed.
+  notify-failure:
+    name: ⚠️ Notify Deploy Failure
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [resolve-plan, prepare-secrets]
-    environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
-    if: needs.resolve-plan.outputs.cloud_run_sveltekit_apps != ''
+    timeout-minutes: 5
+    if: ${{ failure() }}
+    needs:
+      - resolve-plan
+      - prepare-secrets
+      - plan-desktop
+      - plan-matrix
+      - build-web
+      - deploy-desktop
+      - update-manifest
+      - notify-discord
+      - deploy-cloudflare
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
-        with:
-          moon-cache: "true"
-          install-deps: "true"
-          gcp-auth: "true"
-          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
-          docker-registry: europe-west1-docker.pkg.dev
 
-      - name: Restore env files from Redis
+      - name: Post failure notification to Discord
         shell: bash
         run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
+          bun scripts/src/lib/deploy/discord_notify.ts --failure \
+            --mode="$MODE" \
+            --run-id="$RUN_ID"
         env:
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
-
-      - name: Run Web Deploy Pipeline (Cloud Run)
-        shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
-          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG \
-            ${{ needs.resolve-plan.outputs.cloud_run_sveltekit_apps }}
-        env:
-          CI: "true"
-
-  # ── Firebase Functions ───────────────────────────────────────────────
-  deploy-firebase-functions:
-    name: Firebase Functions
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [resolve-plan, prepare-secrets]
-    environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
-    if: needs.resolve-plan.outputs.firebase_functions_apps != ''
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
-        with:
-          node: "true"
-          node-version: "24.x"
-          moon-cache: "true"
-          install-deps: "true"
-          gcp-auth: "true"
-          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Restore env files from Redis
-        shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
-        env:
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
-
-      - name: Run Web Deploy Pipeline (Firebase Functions)
-        shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
-          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG \
-            ${{ needs.resolve-plan.outputs.firebase_functions_apps }}
-        env:
-          CI: "true"
-
-  # ── Docker Release (image / text / voice services) ─────────────────
-  deploy-docker-release:
-    name: Docker Release
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [resolve-plan, prepare-secrets]
-    environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
-    if: needs.resolve-plan.outputs.docker_release_apps != ''
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      # No moon-cache: docker-release apps skip the moon build phase
-      # entirely in index.ts (needsDist === false) — restoring an unused
-      # cache here would just cost time for nothing.
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
-        with:
-          install-deps: "true"
-          gcp-auth: "true"
-          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
-          docker-registry: europe-west1-docker.pkg.dev
-
-      - name: Restore env files from Redis
-        shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
-        env:
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
-
-      - name: Run Web Deploy Pipeline (Docker Release)
-        shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          FORCE_FLAG="${{ github.event.inputs.force == 'true' && '--force' || '' }}"
-          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG \
-            ${{ needs.resolve-plan.outputs.docker_release_apps }}
-        env:
-          CI: "true"
-
-  # ── Database Migration (server data plane, C-394 AC-5) ──────────────
-  # One-shot migration job: applies pending server-plane migrations against
-  # NEON_DATABASE_URL_DIRECT (the DIRECT, unpooled endpoint — DDL under
-  # PgBouncer transaction pooling is where pooling breaks). Transactional,
-  # idempotent, and NEVER a side effect of deploying the hub — this job only
-  # runs when resolve-plan found the `database` app in DEPLOY_APPS.
-  deploy-database-migration:
-    name: Database Migration
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: [resolve-plan, prepare-secrets]
-    environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
-    if: needs.resolve-plan.outputs.database_migration_apps != ''
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
-        with:
-          install-deps: "true"
-          gcp-auth: "true"
-          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Restore env files from Redis
-        shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
-        env:
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
-
-      - name: Run Database Migration
-        shell: bash
-        run: |
-          MODE="${{ github.event.inputs.mode || 'production' }}"
-          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" \
-            ${{ needs.resolve-plan.outputs.database_migration_apps }}
-        env:
-          CI: "true"
+          MODE: ${{ github.event.inputs.mode || 'production' }}
+          RUN_ID: ${{ github.run_id }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

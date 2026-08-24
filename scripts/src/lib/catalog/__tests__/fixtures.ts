@@ -149,8 +149,14 @@ export const makeFixtureGameData = (): string => {
           hash: hPortrait,
           sizeBytes: Buffer.byteLength(portraitBytes),
         },
-        'sprites:tilesets:atlas.webp': { hash: hTileset, sizeBytes: Buffer.byteLength(tilesetBytes) },
-        'sprites:tilesets:atlas.json': { hash: hTilesetJson, sizeBytes: Buffer.byteLength(tilesetJsonBytes) },
+        'sprites:tilesets:atlas.webp': {
+          hash: hTileset,
+          sizeBytes: Buffer.byteLength(tilesetBytes),
+        },
+        'sprites:tilesets:atlas.json': {
+          hash: hTilesetJson,
+          sizeBytes: Buffer.byteLength(tilesetJsonBytes),
+        },
         'maps:sandbox_zone_a': { hash: hMap, sizeBytes: Buffer.byteLength(mapBytes) },
       },
     }),
@@ -253,7 +259,7 @@ export const makeFixtureContentPacks = (): string => {
       assets: {
         'index.json': {
           tag: 'index.json',
-          category: 'content_packs',
+          category: 'contentPacks',
           subcategory: '',
           name: 'index',
           path: 'index.json',
@@ -261,7 +267,7 @@ export const makeFixtureContentPacks = (): string => {
         },
         'emberwatch:manifest.json': {
           tag: 'emberwatch:manifest.json',
-          category: 'content_packs',
+          category: 'contentPacks',
           subcategory: 'emberwatch',
           name: 'manifest',
           path: 'emberwatch/manifest.json',
@@ -269,7 +275,7 @@ export const makeFixtureContentPacks = (): string => {
         },
         'emberwatch:maps:inn.json': {
           tag: 'emberwatch:maps:inn.json',
-          category: 'content_packs',
+          category: 'contentPacks',
           subcategory: 'emberwatch/maps',
           name: 'inn',
           path: 'emberwatch/maps/inn.json',
@@ -286,7 +292,10 @@ export const makeFixtureContentPacks = (): string => {
       scannedAt: '2026-08-15T00:00:00.000Z',
       hashes: {
         'index.json': { hash: hRegistry, sizeBytes: Buffer.byteLength('registry-bytes') },
-        'emberwatch:manifest.json': { hash: hManifest, sizeBytes: Buffer.byteLength(manifestBytes) },
+        'emberwatch:manifest.json': {
+          hash: hManifest,
+          sizeBytes: Buffer.byteLength(manifestBytes),
+        },
         'emberwatch:maps:inn.json': { hash: hInn, sizeBytes: Buffer.byteLength(innBytes) },
       },
     }),

@@ -5,6 +5,10 @@
 // artifacts are live on a GitHub Release. Read-only w.r.t. the release itself
 // (fetches title/notes via `gh release view`) — safe to re-run.
 //
+// Also supports --failure mode: posts a deploy-failure notification with the
+// workflow run URL so the team knows immediately when a production deploy
+// fails (see release.yml's notify-failure job).
+//
 // This is a webhook (message-posting only). For managing the server itself
 // (channels/roles) see ../discord/ — that uses a bot token instead, since a
 // webhook has no permission to touch server structure.
@@ -23,9 +27,9 @@
 // Usage (CLI):
 //   bun scripts/src/lib/deploy/discord_notify.ts --tag=v0.1.0
 //   bun scripts/src/lib/deploy/discord_notify.ts --tag=v0.1.0 --mode=staging
+//   bun scripts/src/lib/deploy/discord_notify.ts --failure --mode=production --run-id=12345
 //   env: DISCORD_RELEASES_WEBHOOK_URL (via scripts/.env.{mode}, loaded through
 //        scripts_env.ts's initScriptsEnv — works identically in CI and local)
-
 import { c, error, log, ok, parseCliArgs, warn } from '../cli_utils';
 import { initScriptsEnv } from '../env/scripts_env';
 
@@ -92,7 +96,7 @@ async function postToDiscord(options: {
   const res = await fetch(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ embeds: [embed] }),
+    body: JSON.stringify({ embeds: [embed], allowed_mentions: { parse: [] } }),
     signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
   });
   if (!res.ok) {
@@ -130,11 +134,60 @@ export async function notifyDiscordRelease(tag: string, mode = 'production'): Pr
   }
 }
 
+/**
+ * Post a deploy-failure notification to Discord. Used by release.yml's
+ * notify-failure job (if: failure()).
+ */
+export async function notifyDiscordFailure(mode: string, runId: string): Promise<void> {
+  initScriptsEnv(mode);
+
+  if (!process.env.DISCORD_RELEASES_WEBHOOK_URL) {
+    warn('DISCORD_RELEASES_WEBHOOK_URL not set — skipping failure notification.');
+    return;
+  }
+  const webhookUrl = process.env.DISCORD_RELEASES_WEBHOOK_URL;
+  const repo = process.env.GITHUB_REPOSITORY || 'BearlySleeping/aikami';
+  const runUrl = `https://github.com/${repo}/actions/runs/${runId}`;
+
+  const embed = {
+    title: `❌ Deploy failed (${mode})`,
+    url: runUrl,
+    description: `Workflow run [#${runId}](${runUrl}) failed. Check the Actions tab for details.`,
+    color: 0xdc2626,
+    footer: { text: 'Aikami Deploy' },
+    timestamp: new Date().toISOString(),
+  };
+
+  const res = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ embeds: [embed], allowed_mentions: { parse: [] } }),
+    signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    throw new Error(`Discord webhook POST failed: ${res.status} ${res.statusText}`);
+  }
+  ok(`Posted deploy failure notification for ${mode} to Discord.`);
+}
+
 async function main(): Promise<void> {
   const opts = parseCliArgs(Bun.argv.slice(2), {
     tag: { type: 'string' },
     mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
+    failure: { type: 'boolean' },
+    'run-id': { type: 'string' },
   });
+
+  if (opts.failure) {
+    const mode = opts.mode ?? 'production';
+    const runId = opts['run-id'] ?? process.env.RUN_ID ?? '';
+    if (!runId) {
+      error('--run-id (or RUN_ID) is required for failure notifications.');
+      process.exit(1);
+    }
+    await notifyDiscordFailure(mode, runId);
+    return;
+  }
 
   const tag = opts.tag ?? process.env.RELEASE_TAG ?? '';
   if (!tag) {
@@ -144,6 +197,7 @@ async function main(): Promise<void> {
 
   await notifyDiscordRelease(tag, opts.mode ?? 'production');
 }
+
 
 // Only run the CLI when invoked directly — notifyDiscordRelease() is also
 // imported by tauri_release.ts for the local-deploy path.

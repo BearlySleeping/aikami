@@ -249,20 +249,16 @@ describe('C-418 Feature F — one-command installers', () => {
     }
   });
 
-  it('the publish workflow uploads every platform asset the installers ask for', async () => {
+  it('the publish workflow builds and publishes Docker images to GHCR', async () => {
     const workflow = await readFile(
       join(ROOT, '../../../.github/workflows/publish-local-stack.yml'),
       'utf8',
     );
-    for (const platform of [
-      'linux-x64',
-      'linux-arm64',
-      'darwin-x64',
-      'darwin-arm64',
-      'windows-x64',
-    ]) {
-      expect(workflow).toContain(platform);
-    }
-    expect(workflow).toContain('install.ps1');
+    expect(workflow).toContain('publish');
+    expect(workflow).toContain('ghcr.io');
+    expect(workflow).toContain('aikami-model-fetcher');
+    expect(workflow).toContain('aikami-voice');
+    expect(workflow).toContain('aikami-sd-server');
+    expect(workflow).toContain('aikami-client');
   });
 });

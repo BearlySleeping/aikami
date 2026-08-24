@@ -346,7 +346,7 @@ describe('cost guard mid-stream collapse detection', () => {
     // Accumulate code blocks until they exceed the scan window (8192 bytes by default)
     // while still staying within the healthy-drafting threshold (37 repeats).
     let thinking = '';
-    const codeBlock = '```typescript\nconst value = compute();\n```\n';
+    const codeBlock = '```typescript\nconst value = compute(someLongParameterName, anotherLongParameterName);\nconst result = transform(value, { optionA: true, optionB: false, optionC: someDefaultValue });\nconst output = finalize(result, { format: \"json\", prettyPrint: true, validate: false });\n```\n';
     for (let i = 0; i < 37; i++) {
       thinking += codeBlock;
       await emit('message_update', streaming(thinking));

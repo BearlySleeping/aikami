@@ -128,7 +128,6 @@ describe('extension registration', () => {
     contract_stage: ['complete', 'review_decision', 'reconcile', 'log_failure'],
     browser: ['inspect', 'screenshot', 'console', 'network', 'lighthouse'],
     direnv: ['status', 'switch_mode', 'add_package', 'add_secret'],
-    firebase: ['query', 'deploy_functions', 'emulator'],
     code_rabbit: ['autofix', 'findings', 'wait'],
     bg: ['run', 'wait', 'status', 'list', 'kill'],
   };

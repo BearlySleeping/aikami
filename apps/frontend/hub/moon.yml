@@ -83,7 +83,7 @@ tasks:
       - '@group(deployment)'
     options:
       cache: false
-      runInCI: true
+      runInCI: false
 
   test:
     command: 'bun run test'
