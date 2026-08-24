@@ -770,15 +770,29 @@ export const ensureServer = async (): Promise<void> => {
     return;
   }
 
-  // Start the headless server
+  // Start the headless server.
+  //
+  // `detached` is load-bearing, not a nicety. Without it the server inherits
+  // this process's session and controlling terminal, so it dies with whatever
+  // pane or terminal happened to start it: herdr links `ctrlc` with the
+  // `termination` feature, whose handler catches SIGHUP/SIGINT/SIGTERM and
+  // takes the "user asked to quit" path — shutting down every pane, including
+  // every other contract worker. `unref()` alone does NOT do this; it only
+  // stops the child keeping OUR event loop alive. detached calls setsid(2),
+  // giving the server its own session with no controlling terminal.
+  //
+  // On Linux the supervised user unit (see ~/.dotfiles nixos config/home/
+  // herdr.nix) normally wins the race and this path is a fallback, but it is
+  // still the one that runs on machines without that unit.
   const proc = spawn('herdr', ['server'], {
     stdio: 'ignore',
     env: process.env,
+    detached: true,
     // Windows: hide the server's console window — without this it appears as
     // a stray popup, and closing that window kills the server mid-run.
     windowsHide: true,
   });
-  proc.unref(); // detach — don't keep parent event loop alive
+  proc.unref(); // don't keep the parent event loop alive
 
   // Wait for the server to come up
   for (let i = 0; i < 15; i++) {
