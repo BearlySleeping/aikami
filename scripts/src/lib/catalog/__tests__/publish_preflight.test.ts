@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { runCatalogPublish } from '../pipeline.ts';
 import { runAttributionPreflight } from '../preflight.ts';
-import { FakeR2Client, makeFixtureGameData } from './fixtures.ts';
+import { FakeR2Client, makeFixtureContentPacks, makeFixtureGameData } from './fixtures.ts';
 
 describe('attribution preflight (AC-4)', () => {
   let gameDataDir: string;
@@ -141,13 +141,47 @@ describe('attribution preflight (AC-4)', () => {
     expect(report.unresolvedTags).toContain('music:exploration:bgm_explore');
   });
 
-  test('tileset paths (sprites/tilesets) are excluded from the catalog entry list', () => {
+  // C-433: tilesets are now catalog assets (reversing C-395 exclusion).
+  test('tilesets and maps are now included in the catalog entry list (C-433)', () => {
     const { loadCatalogEntries } =
       require('../catalog_entries.ts') as typeof import('../catalog_entries.ts');
     const entries = loadCatalogEntries({ gameDataDir });
     const tags = entries.map((e) => e.tag);
     expect(tags).toContain('lpc:hat:magic:celestial_adult:thrust');
     expect(tags).toContain('music:exploration:bgm_explore');
-    expect(tags).not.toContain('sprites:tilesets:atlas');
+    // C-433: tilesets are now included.
+    expect(tags).toContain('sprites:tilesets:atlas.webp');
+    expect(tags).toContain('sprites:tilesets:atlas.json');
+    // C-433: maps are now included.
+    expect(tags).toContain('maps:sandbox_zone_a');
+  });
+
+  // C-433: content-packs loaded from a separate root.
+  test('content-packs are loaded from a separate root (C-433)', () => {
+    const { loadCatalogEntries } =
+      require('../catalog_entries.ts') as typeof import('../catalog_entries.ts');
+    const entries = loadCatalogEntries({ gameDataDir, contentPacksDir: makeFixtureContentPacks() });
+    const tags = entries.map((e) => e.tag);
+    expect(tags).toContain('index.json');
+    expect(tags).toContain('emberwatch:manifest.json');
+    expect(tags).toContain('emberwatch:maps:inn.json');
+  });
+
+  // C-433: new categories pass attribution preflight.
+  test('new categories pass attribution preflight when credits are declared (C-433)', () => {
+    const result = runAttributionPreflight({
+      entries: [
+        { tag: 'maps:sandbox_zone_a', path: 'maps/sandbox_zone_a.json' },
+        { tag: 'sprites:tilesets:atlas.webp', path: 'sprites/tilesets/atlas.webp' },
+        { tag: 'index.json', path: 'index.json' },
+      ],
+      creditsByTag: {
+        'maps:sandbox_zone_a': { licenses: ['MIT'], authors: ['Aikami Studio'] },
+        'sprites:tilesets:atlas.webp': { licenses: ['MIT'], authors: ['Aikami Studio'] },
+        'index.json': { licenses: ['MIT'], authors: ['Aikami Studio'] },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.unresolvedTags).toEqual([]);
   });
 });

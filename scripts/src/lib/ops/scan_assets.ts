@@ -1,11 +1,15 @@
 // scripts/src/lib/ops/scan_assets.ts
 //
-// CLI entry point: scans static/game-data/, generates manifest.json,
-// and ensures the default directory structure exists.
+// CLI entry point: scans static/game-data/ and static/content-packs/,
+// generates manifest.json + asset_hashes.json + asset_credits.json
+// for each root, and ensures the default directory structure exists.
+//
+// C-433: widened to multiple scan roots (game-data + content-packs) and
+// directory-based category assignment for tilesets (sprites/tilesets/ → tilesets).
 //
 // Usage: bun run scripts/src/lib/ops/scan_assets.ts
 //
-// Contract: C-243
+// Contract: C-243, C-433
 
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
@@ -13,22 +17,48 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { ASSET_CATEGORIES, splitStateSegments } from '@aikami/constants';
 import type { AssetEntry, AssetHashesFile, AssetManifest } from '@aikami/types';
+import { CONTENT_PACKS_DIR, GAME_DATA_DIR } from '../catalog/config.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const pathToTag = (relPath: string): string => {
+const pathToTag = (relPath: string, options?: { includeExt?: boolean }): string => {
+  if (options?.includeExt) {
+    // Include the extension in the tag to disambiguate same-name files
+    // with different extensions (e.g. tilesets atlas.webp vs atlas.json).
+    const ext = relPath.match(/\.[^.]+$/)?.[0] ?? '';
+    const withoutExt = relPath.slice(0, -ext.length);
+    return `${withoutExt.replace(/\//g, ':')}${ext}`;
+  }
   const withoutExt = relPath.replace(/\.[^.]+$/, '');
   return withoutExt.replace(/\//g, ':');
 };
 
+/**
+ * Determine the asset category from a relative path.
+ * Uses the first path segment by default, but overrides for special cases
+ * like `sprites/tilesets/` which should map to the `tilesets` category
+ * (C-433: directory-based category assignment).
+ */
+const categoryForPath = (relPath: string): string | undefined => {
+  // Check for tilesets override: sprites/tilesets/ → tilesets
+  if (relPath.startsWith('sprites/tilesets/')) {
+    return 'tilesets';
+  }
+  const pathSegments = relPath.split('/');
+  const categoryName = pathSegments[0];
+  return ASSET_CATEGORIES[categoryName] ? categoryName : undefined;
+};
+
 const scanDir = async (
   scanRootDir: string,
+  options?: { categoryOverride?: string },
 ): Promise<{
   manifest: AssetManifest;
   hashes: AssetHashesFile['hashes'];
 }> => {
+  const categoryOverride = options?.categoryOverride;
   const assets: AssetManifest['assets'] = {};
   const byCategory: AssetManifest['byCategory'] = {};
   // C-373: content-hash provenance — tag → { hash, sizeBytes } sidecar.
@@ -66,22 +96,25 @@ const scanDir = async (
       }
 
       const relPath = entryPath.replace(`${scanRootDir}/`, '');
-      const pathSegments = relPath.split('/');
-      const categoryName = pathSegments[0];
-      const categoryDef = ASSET_CATEGORIES[categoryName];
+      const categoryName = categoryOverride ?? categoryForPath(relPath);
 
-      if (!categoryDef) {
+      if (!categoryName) {
         continue;
       }
 
+      const categoryDef = ASSET_CATEGORIES[categoryName];
       const ext = extname(entryName).toLowerCase();
       if (!categoryDef.extensions.has(ext)) {
         continue;
       }
 
-      const tag = pathToTag(splitStateSegments(relPath, categoryName));
+      // C-433: include extension in tag for tilesets to disambiguate
+      // same-name files with different extensions (atlas.webp vs atlas.json).
+      const includeExt = categoryName === 'tilesets';
+      const tag = pathToTag(splitStateSegments(relPath, categoryName), { includeExt });
       const nameDotIdx = entryName.lastIndexOf('.');
       const name = nameDotIdx >= 0 ? entryName.slice(0, nameDotIdx) : entryName;
+      const pathSegments = relPath.split('/');
       const subcategory = pathSegments.length > 2 ? pathSegments.slice(1, -1).join('/') : '';
 
       if (!assets[tag]) {
@@ -229,36 +262,44 @@ const writeCreditsSidecar = async (creditRootDir: string): Promise<void> => {
 // Main
 // ---------------------------------------------------------------------------
 
-const rootDir = resolve(join(process.cwd(), 'apps/frontend/client/static/game-data'));
+const SCAN_ROOTS = [
+  { dir: GAME_DATA_DIR, label: 'game-data' },
+  { dir: CONTENT_PACKS_DIR, label: 'content-packs' },
+];
 
-// Ensure category directories exist
-for (const category of Object.values(ASSET_CATEGORIES)) {
-  const categoryDir = join(rootDir, category.name);
-  await mkdir(categoryDir, { recursive: true });
-  for (const subdir of category.defaultSubdirs) {
-    await mkdir(join(categoryDir, subdir), { recursive: true });
+for (const { dir: rootDir, label } of SCAN_ROOTS) {
+  // Ensure category directories exist (only for game-data root)
+  if (label === 'game-data') {
+    for (const category of Object.values(ASSET_CATEGORIES)) {
+      const categoryDir = join(rootDir, category.name);
+      await mkdir(categoryDir, { recursive: true });
+      for (const subdir of category.defaultSubdirs) {
+        await mkdir(join(categoryDir, subdir), { recursive: true });
+      }
+    }
   }
+
+  console.log(`scan_assets: scanning ${label} at ${rootDir}`);
+  // C-433: content-packs root uses a category override so all files get
+  // the 'content_packs' category regardless of their directory structure.
+  const categoryOverride = label === 'content-packs' ? 'content_packs' : undefined;
+  const { manifest, hashes } = await scanDir(rootDir, { categoryOverride });
+
+  const manifestPath = join(rootDir, 'manifest.json');
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+
+  // C-373: hash sidecar — tag → sha256 + sizeBytes.
+  const hashesPath = join(rootDir, 'asset_hashes.json');
+  const hashesFile: AssetHashesFile = {
+    scannedAt: manifest.scannedAt,
+    hashes,
+  };
+  await writeFile(hashesPath, JSON.stringify(hashesFile), 'utf-8');
+
+  // C-395 AC-4: merge attribution sources into asset_credits.json.
+  await writeCreditsSidecar(rootDir);
+
+  console.log(
+    `scan_assets: ${label} done — ${manifest.count} assets indexed, ${Object.keys(hashes).length} hashes emitted`,
+  );
 }
-
-console.log(`scan_assets: scanning ${rootDir}`);
-const { manifest, hashes } = await scanDir(rootDir);
-
-const manifestPath = join(rootDir, 'manifest.json');
-await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
-
-// C-373: hash sidecar — tag → sha256 + sizeBytes. Regenerated together with
-// manifest.json and committed; consumed by the boot seeder for registry seeds.
-const hashesPath = join(rootDir, 'asset_hashes.json');
-const hashesFile: AssetHashesFile = {
-  scannedAt: manifest.scannedAt,
-  hashes,
-};
-await writeFile(hashesPath, JSON.stringify(hashesFile), 'utf-8');
-
-// C-395 AC-4: merge lpc_credits.json + lpc_credits_supplement.json +
-// project_licenses.json into asset_credits.json for the publish pipeline.
-await writeCreditsSidecar(rootDir);
-
-console.log(
-  `scan_assets: done — ${manifest.count} assets indexed, ${Object.keys(hashes).length} hashes emitted`,
-);

@@ -22,13 +22,11 @@
 // Scope: EVERY catalog asset, not just `lpc:` — restricting the check to
 // LPC tags leaves a loophole where music, maps and sprites publish with
 // empty attribution and the run still reports success.
-
-/** Catalog asset paths that are NOT catalog content (contract Edge Cases). */
-const EXCLUDED_PATH_PREFIXES = ['maps/', 'sprites/tilesets/'];
-
-/** Whether an asset path belongs in the catalog. */
-export const isCatalogAssetPath = (path: string): boolean =>
-  !EXCLUDED_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+//
+// C-433: removed the EXCLUDED_PATH_PREFIXES exclusion for maps/ and
+// sprites/tilesets/ — these are now first-class catalog categories.
+// The isCatalogAssetPath filter has been removed; all scanned assets
+// participate in the catalog.
 
 /** A catalog asset as seen by the preflight. */
 type PreflightEntry = {

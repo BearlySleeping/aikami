@@ -8,17 +8,14 @@
 //                         merged from lpc_credits.json + supplement +
 //                         project_licenses.json by scan_assets.ts)
 //
-// The catalog publishes exactly what scan_assets emits (music/sfx/ambient/
-// sprites/backgrounds/lpc); `maps/` and `sprites/tilesets/` are dev-only
-// sandbox files and stay out (contract Edge Cases) — this exclusion lives
-// here, NOT in scan_assets (changing scan_assets would alter the client's
-// boot manifest, which this contract must not do).
+// C-433: widened to support multiple scan roots (game-data + content-packs).
+// The isCatalogAssetPath exclusion for maps/ and sprites/tilesets/ has been
+// removed — these are now first-class catalog categories.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AssetHashesFile, AssetManifest } from '@aikami/types';
-import { GAME_DATA_DIR } from './config.ts';
-import { isCatalogAssetPath } from './preflight.ts';
+import { CONTENT_PACKS_DIR, GAME_DATA_DIR } from './config.ts';
 
 /** One catalog asset — the union of manifest + hash + credit. */
 export type CatalogEntry = {
@@ -29,6 +26,8 @@ export type CatalogEntry = {
   subcategory?: string;
   ext: string;
   path: string;
+  /** Scan root directory for resolving the local file path (C-433 multi-root). */
+  rootDir: string;
   licenses: readonly string[];
   authors: readonly string[];
   sourceUrls: readonly string[];
@@ -62,49 +61,71 @@ const readJson = <T>(filePath: string, label: string): T => {
 };
 
 /**
- * Load the catalog entry list from the scan outputs in game-data.
+ * Load the catalog entry list from the scan outputs.
+ * Supports multiple scan roots (C-433): reads manifest/hashes/credits from
+ * each root and merges the entries. The game-data root is always loaded;
+ * content-packs root is loaded when its manifest exists.
  *
- * @param options.gameDataDir - Override for tests.
+ * @param options.gameDataDir - Override for tests (game-data root).
+ * @param options.contentPacksDir - Override for tests (content-packs root).
  */
-export const loadCatalogEntries = (options?: { gameDataDir?: string }): CatalogEntry[] => {
+export const loadCatalogEntries = (options?: {
+  gameDataDir?: string;
+  contentPacksDir?: string;
+}): CatalogEntry[] => {
   const gameDataDir = options?.gameDataDir ?? GAME_DATA_DIR;
-
-  const manifest = readJson<AssetManifest>(join(gameDataDir, 'manifest.json'), 'manifest.json');
-  const hashes = readJson<AssetHashesFile>(
-    join(gameDataDir, 'asset_hashes.json'),
-    'asset_hashes.json',
-  );
-  const credits = readJson<AssetCreditsFile>(
-    join(gameDataDir, 'asset_credits.json'),
-    'asset_credits.json',
-  );
+  const contentPacksDir = options?.contentPacksDir ?? CONTENT_PACKS_DIR;
 
   const entries: CatalogEntry[] = [];
-  for (const asset of Object.values(manifest.assets)) {
-    if (!isCatalogAssetPath(asset.path)) {
-      continue;
-    }
-    const hashEntry = hashes.hashes[asset.tag];
-    if (!hashEntry) {
-      throw new Error(
-        `Catalog entry ${asset.tag} has no hash in asset_hashes.json — run scan_assets first`,
+
+  // Load from game-data root.
+  const loadFromRoot = (rootDir: string, rootLabel: string): void => {
+    let manifest: AssetManifest;
+    try {
+      manifest = readJson<AssetManifest>(
+        join(rootDir, 'manifest.json'),
+        `${rootLabel} manifest.json`,
       );
+    } catch {
+      // Root may not have a manifest (e.g. content-packs before first scan).
+      return;
     }
-    const credit = credits.credits[asset.tag] ?? {};
-    entries.push({
-      tag: asset.tag,
-      hash: hashEntry.hash,
-      sizeBytes: hashEntry.sizeBytes,
-      category: asset.category,
-      subcategory: asset.subcategory || undefined,
-      ext: asset.ext,
-      path: asset.path,
-      licenses: credit.licenses ?? [],
-      authors: credit.authors ?? [],
-      sourceUrls: credit.sourceUrls ?? [],
-      licenseNote: credit.licenseNote,
-    });
-  }
+    const hashes = readJson<AssetHashesFile>(
+      join(rootDir, 'asset_hashes.json'),
+      `${rootLabel} asset_hashes.json`,
+    );
+    const credits = readJson<AssetCreditsFile>(
+      join(rootDir, 'asset_credits.json'),
+      `${rootLabel} asset_credits.json`,
+    );
+
+    for (const asset of Object.values(manifest.assets)) {
+      const hashEntry = hashes.hashes[asset.tag];
+      if (!hashEntry) {
+        throw new Error(
+          `Catalog entry ${asset.tag} has no hash in ${rootLabel} asset_hashes.json — run scan_assets first`,
+        );
+      }
+      const credit = credits.credits[asset.tag] ?? {};
+      entries.push({
+        tag: asset.tag,
+        hash: hashEntry.hash,
+        sizeBytes: hashEntry.sizeBytes,
+        category: asset.category,
+        subcategory: asset.subcategory || undefined,
+        ext: asset.ext,
+        path: asset.path,
+        rootDir,
+        licenses: credit.licenses ?? [],
+        authors: credit.authors ?? [],
+        sourceUrls: credit.sourceUrls ?? [],
+        licenseNote: credit.licenseNote,
+      });
+    }
+  };
+
+  loadFromRoot(gameDataDir, 'game-data');
+  loadFromRoot(contentPacksDir, 'content-packs');
 
   entries.sort((a, b) => a.tag.localeCompare(b.tag));
   return entries;

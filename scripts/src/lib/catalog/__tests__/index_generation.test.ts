@@ -24,6 +24,7 @@ const makeEntry = (options: {
   category: string;
   subcategory?: string;
   ext?: string;
+  rootDir?: string;
 }): CatalogEntry => ({
   tag: options.tag,
   hash: createHash('sha256').update(options.tag).digest('hex'),
@@ -32,6 +33,7 @@ const makeEntry = (options: {
   subcategory: options.subcategory,
   ext: options.ext ?? '.webp',
   path: `${options.category}/${options.tag}.webp`,
+  rootDir: options.rootDir ?? '/tmp/fake',
   licenses: ['OGA-BY 3.0', 'CC-BY-SA 3.0'],
   authors: ['bluecarrot16', 'Stephen Challener (Redshrike)'],
   sourceUrls: ['https://opengameart.org/content/lpc-character-bases'],
