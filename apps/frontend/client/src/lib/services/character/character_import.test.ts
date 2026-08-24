@@ -490,7 +490,7 @@ describe('character_book mapping — AC-2: entry mapping', () => {
       characterName: 'Test Char',
     });
     const ext = normalized.entries[0].extensions as Record<string, unknown>;
-    const mappedKeys = new Set(['keys', 'content', 'constant', 'insertion_order', 'priority']);
+    const mappedKeys = new Set(['keys', 'content', 'constant', 'insertion_order', 'priority', 'enabled', 'extensions']);
     for (const key of Object.keys(SAMPLE_BOOK_ENTRY)) {
       if (!mappedKeys.has(key)) {
         // Every unmapped key must be in extensions
