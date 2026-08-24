@@ -99,3 +99,18 @@ tasks:
     options:
       cache: false
       runInCI: true
+
+  # C-429 AC-5: LPC sheet coverage audit — deterministic alpha inspection.
+  # Runs on changes to the collector, the LPC asset tree, the baseline, or
+  # the geometry resolver. Exits non-zero on regressions.
+  audit-lpc-coverage:
+    command: 'bun run src/lib/ops/audit_lpc_coverage.ts'
+    inputs:
+      - 'src/lib/ops/audit_lpc_coverage.ts'
+      - 'apps/frontend/client/static/game-data/lpc/**/*'
+      - 'apps/frontend/client/static/game-data/lpc_coverage_baseline.json'
+      - 'apps/frontend/client/static/game-data/asset_hashes.json'
+      - '../../packages/frontend/engine/src/rendering/lpc_sheet_geometry.ts'
+    options:
+      cache: false
+      runInCI: true
