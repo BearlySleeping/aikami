@@ -167,6 +167,18 @@ describe('attribution preflight (AC-4)', () => {
     expect(tags).toContain('emberwatch:maps:inn.json');
   });
 
+  // Regression test: invalid game-data manifest must rethrow, not be silently skipped.
+  test('invalid game-data manifest throws error (regression)', () => {
+    const { mkdtempSync, writeFileSync } = require('node:fs') as typeof import('node:fs');
+    const { tmpdir } = require('node:os') as typeof import('node:os');
+    const invalidDir = mkdtempSync(join(tmpdir(), 'catalog-invalid-manifest-'));
+    writeFileSync(join(invalidDir, 'manifest.json'), 'invalid-json{');
+
+    const { loadCatalogEntries } =
+      require('../catalog_entries.ts') as typeof import('../catalog_entries.ts');
+    expect(() => loadCatalogEntries({ gameDataDir: invalidDir })).toThrow();
+  });
+
   // C-433: new categories pass attribution preflight.
   test('new categories pass attribution preflight when credits are declared (C-433)', () => {
     const result = runAttributionPreflight({

@@ -157,7 +157,7 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
   },
 
   // C-433: content-pack constituents — manifests, pack maps, pack sprites
-  contentPacks: {
+  content_packs: {
     name: 'content_packs',
     extensions: new Set(['.json', '.jton', '.webp', '.png']),
     defaultSubdirs: [],

@@ -86,8 +86,18 @@ export const loadCatalogEntries = (options?: {
         join(rootDir, 'manifest.json'),
         `${rootLabel} manifest.json`,
       );
-    } catch {
-      // Root may not have a manifest (e.g. content-packs before first scan).
+    } catch (error) {
+      // Only skip content-packs root when manifest is missing (before first scan).
+      // Rethrow all game-data manifest errors and non-missing-manifest failures.
+      if (rootLabel === 'game-data') {
+        throw error;
+      }
+      const isMissingFile =
+        error instanceof Error &&
+        (error.message.includes('ENOENT') || error.message.includes('no such file'));
+      if (!isMissingFile) {
+        throw error;
+      }
       return;
     }
     const hashes = readJson<AssetHashesFile>(

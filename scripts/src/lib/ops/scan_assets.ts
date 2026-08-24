@@ -96,6 +96,19 @@ const scanDir = async (
       }
 
       const relPath = entryPath.replace(`${scanRootDir}/`, '');
+
+      // Skip root-level manifest.json, asset_hashes.json, and asset_credits.json
+      // (these are scan output files, not catalog assets). Preserve scanning of
+      // files with those names in nested directories.
+      const isRootLevelMetaFile =
+        !relPath.includes('/') &&
+        (entryName === 'manifest.json' ||
+          entryName === 'asset_hashes.json' ||
+          entryName === 'asset_credits.json');
+      if (isRootLevelMetaFile) {
+        continue;
+      }
+
       const categoryName = categoryOverride ?? categoryForPath(relPath);
 
       if (!categoryName) {

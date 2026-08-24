@@ -149,9 +149,9 @@ export const makeFixtureGameData = (): string => {
           hash: hPortrait,
           sizeBytes: Buffer.byteLength(portraitBytes),
         },
-        'sprites:tilesets:atlas.webp': { hash: hTileset, sizeBytes: 13 },
-        'sprites:tilesets:atlas.json': { hash: hTilesetJson, sizeBytes: 17 },
-        'maps:sandbox_zone_a': { hash: hMap, sizeBytes: 8 },
+        'sprites:tilesets:atlas.webp': { hash: hTileset, sizeBytes: Buffer.byteLength(tilesetBytes) },
+        'sprites:tilesets:atlas.json': { hash: hTilesetJson, sizeBytes: Buffer.byteLength(tilesetJsonBytes) },
+        'maps:sandbox_zone_a': { hash: hMap, sizeBytes: Buffer.byteLength(mapBytes) },
       },
     }),
   );
@@ -285,9 +285,9 @@ export const makeFixtureContentPacks = (): string => {
     JSON.stringify({
       scannedAt: '2026-08-15T00:00:00.000Z',
       hashes: {
-        'index.json': { hash: hRegistry, sizeBytes: 14 },
-        'emberwatch:manifest.json': { hash: hManifest, sizeBytes: 19 },
-        'emberwatch:maps:inn.json': { hash: hInn, sizeBytes: 12 },
+        'index.json': { hash: hRegistry, sizeBytes: Buffer.byteLength('registry-bytes') },
+        'emberwatch:manifest.json': { hash: hManifest, sizeBytes: Buffer.byteLength(manifestBytes) },
+        'emberwatch:maps:inn.json': { hash: hInn, sizeBytes: Buffer.byteLength(innBytes) },
       },
     }),
   );
