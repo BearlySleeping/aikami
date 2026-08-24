@@ -1,0 +1,46 @@
+# .github/zizmor.yml
+# zizmor configuration — inline suppressions for findings that are
+# deliberately accepted. Each suppression has a rationale.
+#
+# See https://docs.zizmor.sh/configuration/ for full documentation.
+
+rules:
+  # ── unpinned-uses ──────────────────────────────────────────────────
+  # Third-party actions are pinned to SHAs by Renovate (AC-4 of C-440).
+  # First-party actions/* are exempt per the contract's Resolved Questions.
+  # The remaining unpinned references are either first-party (exempt) or
+  # will be pinned by Renovate's first run.
+  unpinned-uses:
+    ignore:
+      # actions/* are first-party and exempt from SHA pinning
+      - "setup-environment/action.yml:62"    # actions/setup-node@v6
+      - "setup-environment/action.yml:70"    # actions/cache@v6
+      - "setup-environment/action.yml:83"    # actions/cache@v6
+      - "setup-environment/action.yml:98"    # google-github-actions/auth@v3 — to be pinned by Renovate
+      - "setup-environment/action.yml:104"   # google-github-actions/setup-gcloud@v3 — to be pinned by Renovate
+      - "discord_dev_notify.yml:30"  # actions/checkout@v7
+      - "discord_dev_notify.yml:33"  # oven-sh/setup-bun@v2 — to be pinned by Renovate
+      - "pr-checks.yml:41"  # actions/checkout@v7
+      - "pr-checks.yml"     # reviewdog/action-actionlint — to be pinned by Renovate
+      - "publish-local-stack.yml"  # all actions in this file — to be pinned by Renovate
+      - "release.yml"       # all actions in this file — to be pinned by Renovate
+      - "update-compose-digests.yml:35"  # actions/checkout@v7
+
+  # ── cache-poisoning ────────────────────────────────────────────────
+  # The release workflow uses actions/cache and Swatinem/rust-cache for
+  # build performance. These caches are scoped by branch and workflow,
+  # and the release workflow only runs on trusted events (release publish,
+  # push to main, or manual workflow_dispatch). The risk of cache
+  # poisoning is low and the performance cost of disabling caching is high.
+  cache-poisoning:
+    ignore:
+      - "release.yml"
+
+  # ── artipacked ─────────────────────────────────────────────────────
+  # The discord_dev_notify workflow now sets persist-credentials: false
+  # on checkout. Any remaining artipacked findings are on workflows that
+  # need credentials for pushing (release.yml, update-compose-digests.yml).
+  artipacked:
+    ignore:
+      - "release.yml"  # needs credentials for gh release upload and git push
+      - "update-compose-digests.yml"  # needs credentials for git push

@@ -109,6 +109,106 @@ local and CI deploys cannot drift.
 
 ---
 
+## CI tooling
+
+Three tools were adopted under **C-440** to catch workflow defects before they
+reach production. They are deliberately ordered by value.
+
+### 1. actionlint + zizmor (required check)
+
+[actionlint](https://github.com/rhysd/actionlint) statically checks GitHub
+Actions workflow syntax and integrates with shellcheck to find shell defects in
+`run:` blocks. [zizmor](https://github.com/woodruffw/zizmor) finds security
+issues: template injection, unpinned actions, and over-broad permissions.
+
+- **Status**: required check on every PR.
+- **Where**: runs as the `workflow-lint` job in `.github/workflows/pr-checks.yml`.
+- **Pinned versions**: actionlint v1.7.7, zizmor v1.29.0.
+
+#### Suppressing a false positive
+
+**actionlint**: add an inline comment above the flagged line:
+
+```yaml
+# shellcheck disable=SC2086
+run: echo $UNQUOTED_VAR
+```
+
+**zizmor**: add an inline comment on the `run:` line or the `uses:` line:
+
+```yaml
+run: | # zizmor: ignore[template-injection] safe: event ref is GitHub-controlled
+  echo "${{ github.event.issue.title }}"
+```
+
+For broader suppressions, edit `.github/zizmor.yml` — each entry must have a
+rationale comment. See that file for examples.
+
+> ⚠️ **Do not blanket-suppress findings.** Every suppression must explain why
+> the finding is acceptable. A repo-wide ignore with no per-item rationale
+> is a failure of the CI tooling baseline.
+
+### 2. Renovate (advisory — opens PRs)
+
+[Renovate](https://docs.renovatebot.com/) automates dependency updates. It
+understands Bun workspaces and can pin GitHub Actions to commit SHAs.
+
+- **Status**: advisory. Opens PRs with the `dependencies` label. Never a
+  required check.
+- **Config**: `renovate.json` at the repository root.
+- **Scope**: GitHub Actions and Docker digests only. `package.json` updates
+  are handled by syncpack + `pin_dependencies.ts`.
+
+#### What Renovate will not touch
+
+| Package | Reason | See
+|---|---|---|
+| `@playwright/test` | Pinned to match Nix flake's browser cache | `scripts/src/lib/ops/pin_dependencies.ts` |
+| `typescript` | Pinned to 6.0.3 — vtsls does not support TS 7 | `scripts/src/lib/ops/pin_dependencies.ts` |
+| `@astrojs/starlight` | Ships raw .ts source files causing type errors | `scripts/src/lib/ops/pin_dependencies.ts` |
+| npm packages | syncpack + pin_dependencies.ts are authoritative | `renovate.json` `packageRules` |
+
+#### Bun version bumps
+
+Renovate updates `.bun-version` via a `regexManager`. The pre-commit hook
+(`verify_bun_version.ts`) confirms `.bun-version` and `.moon/toolchains.yml`
+are in sync. If Renovate opens a PR that bumps Bun, verify both files were
+updated before merging.
+
+### 3. CodeRabbit (advisory — PR comments only)
+
+[CodeRabbit](https://coderabbit.ai/) provides AI-powered code review on every
+PR. It is free for public repositories.
+
+- **Status**: advisory. Comments on PRs but never blocks a merge.
+- **Config**: `.coderabbit.yaml` at the repository root.
+- **Permissions**: read access + PR comments only. No `contents: write` or
+  secrets access.
+
+#### What CodeRabbit skips
+
+Generated and vendored files are excluded from review to reduce noise:
+
+- `.context/llms.txt`
+- `docs/contracts/PROGRESS.md`
+- LPC asset trees (`apps/frontend/client/src/lib/assets/lpc/`,
+  `apps/frontend/client/static/lpc/`)
+- Build outputs (`dist/`, `build/`, `.next/`, `coverage/`)
+- Lock files (`bun.lock`, `bun.lockb`)
+
+### Summary
+
+| Tool | Required? | What it catches |
+|---|---|---|
+| actionlint + zizmor | ✅ Required | Workflow syntax errors, shell defects, template injection, security issues |
+| Renovate | ❌ Advisory | Outdated dependencies, unpinned actions |
+| CodeRabbit | ❌ Advisory | Code quality, logic errors, security concerns |
+
+Only the self-hosted `actionlint`/`zizmor` job may be a required check.
+Third-party service outages must never block a merge.
+
+---
+
 ## Secrets
 
 Deploy-time secrets live in **GCP Secret Manager** and are pulled by

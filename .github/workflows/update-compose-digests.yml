@@ -17,9 +17,6 @@ name: Update Compose Digests
 # Scheduled workflows auto-disable after 60 days of repo inactivity.
 # schedule only ever runs from the default branch.
 on:
-  schedule:
-    - cron: '0 3 * * 1' # Monday 03:00 UTC
-on:
   # schedule:
   #   - cron: '0 3 * * 1' # Monday 03:00 UTC
   workflow_dispatch:

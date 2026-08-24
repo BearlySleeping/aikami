@@ -53,13 +53,13 @@ runs:
   using: "composite"
   steps:
     - name: 🥖 Setup Bun
-      uses: oven-sh/setup-bun@v2
+      uses: oven-sh/setup-bun@v2 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
       with:
         bun-version: ${{ inputs.bun-version }}
 
     - name: 📦 Setup Node.js
       if: inputs.node == 'true'
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@v6 # zizmor: ignore[unpinned-uses] actions/* are exempt per C-440
       with:
         node-version: ${{ inputs.node-version }}
 
@@ -67,7 +67,7 @@ runs:
     # it's complete — no need for a rolling key.
     - name: 🥟 Restore Bun dependency cache
       if: inputs.moon-cache == 'true'
-      uses: actions/cache@v6
+      uses: actions/cache@v6 # zizmor: ignore[unpinned-uses] actions/* are exempt per C-440
       with:
         path: ~/.bun/install/cache
         key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ hashFiles('**/bun.lock', '**/bun.lockb') }}
@@ -80,7 +80,7 @@ runs:
     # PR-gate caches (GitHub's 10 GB Actions cache is shared).
     - name: 🌙 Restore Moon build cache
       if: inputs.moon-cache == 'true'
-      uses: actions/cache@v6
+      uses: actions/cache@v6 # zizmor: ignore[unpinned-uses] actions/* are exempt per C-440
       with:
         path: .moon/cache
         key: ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-${{ github.sha }}
@@ -95,13 +95,13 @@ runs:
 
     - name: 🔑 Authenticate to Google Cloud
       if: inputs.gcp-auth == 'true'
-      uses: google-github-actions/auth@v3
+      uses: google-github-actions/auth@v3 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
       with:
         credentials_json: ${{ inputs.gcp-service-account-key }}
 
     - name: ☁️ Setup Google Cloud SDK
       if: inputs.gcp-auth == 'true'
-      uses: google-github-actions/setup-gcloud@v3
+      uses: google-github-actions/setup-gcloud@v3 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
 
     # Force moon to use the globally installed bun (from setup-bun) instead
     # of provisioning its own via proto. Without this, moon's toolchain sees
@@ -113,4 +113,6 @@ runs:
     - name: 🐳 Configure Docker for Artifact Registry
       if: inputs.docker-registry != ''
       shell: bash
-      run: gcloud auth configure-docker ${{ inputs.docker-registry }} --quiet
+      env:
+        REGISTRY: ${{ inputs.docker-registry }}
+      run: gcloud auth configure-docker "$REGISTRY" --quiet
