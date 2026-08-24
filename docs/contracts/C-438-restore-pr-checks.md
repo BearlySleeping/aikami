@@ -7,7 +7,8 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/182"
+  pr_number: 182
 created_at: "2026-08-24"
 ---
 
