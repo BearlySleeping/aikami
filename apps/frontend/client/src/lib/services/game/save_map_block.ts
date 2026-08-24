@@ -54,7 +54,10 @@ export const buildSaveMapBlock = async (): Promise<SaveMapBlock | undefined> => 
 export const getCurrentMapName = async (): Promise<string> => {
   try {
     const { loadContentPack } = await import('@aikami/frontend/engine');
-    const pack = await loadContentPack({ packId: gameEngineService.contentPackId });
+    const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+    const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+    const releaseUrl = (url: string) => assetManager.releaseUrl(url);
+    const pack = await loadContentPack({ packId: gameEngineService.contentPackId, resolveTag: assetTagResolver, releaseUrl });
     const entry = pack.manifest.maps[gameEngineService.currentMapId];
     return entry?.name ?? (gameEngineService.currentMapId || 'World');
   } catch {

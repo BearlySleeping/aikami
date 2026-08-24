@@ -128,7 +128,8 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       let defaultSpawnHash: number | undefined;
       try {
         const { loadContentPack, djb2Hash } = await import('@aikami/frontend/engine');
-        const pack = await loadContentPack({ packId: gameEngineService.contentPackId });
+        const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+        const pack = await loadContentPack({ packId: gameEngineService.contentPackId, resolveTag: assetTagResolver });
         mapUrl = pack.resolveMapUrl(event.targetMap);
         const targetEntry = pack.manifest.maps[event.targetMap];
         if (targetEntry?.defaultSpawnId) {
