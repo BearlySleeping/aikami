@@ -81,8 +81,8 @@ tasks:
     command: 'bun run src/lib/ops/guard_data_plane.ts'
     inputs:
       - 'src/lib/ops/guard_data_plane.ts'
-      - 'apps/frontend/hub/src/**/*'
-      - 'packages/backend/database/**/*'
+      - '/apps/frontend/hub/src/**/*'
+      - '/packages/backend/database/**/*'
     options:
       cache: false
       runInCI: true
@@ -94,8 +94,8 @@ tasks:
     command: 'bun run src/lib/ops/validate_content_appearance.ts'
     inputs:
       - 'src/lib/ops/validate_content_appearance.ts'
-      - 'apps/frontend/client/static/content-packs/**/*'
-      - 'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts'
+      - '/apps/frontend/client/static/content-packs/**/*'
+      - '/apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts'
     options:
       cache: false
       runInCI: true
@@ -107,10 +107,10 @@ tasks:
     command: 'bun run src/lib/ops/audit_lpc_coverage.ts'
     inputs:
       - 'src/lib/ops/audit_lpc_coverage.ts'
-      - 'apps/frontend/client/static/game-data/lpc/**/*'
-      - 'apps/frontend/client/static/game-data/lpc_coverage_baseline.json'
-      - 'apps/frontend/client/static/game-data/asset_hashes.json'
-      - '../../packages/frontend/engine/src/rendering/lpc_sheet_geometry.ts'
+      - '/apps/frontend/client/static/game-data/lpc/**/*'
+      - '/apps/frontend/client/static/game-data/lpc_coverage_baseline.json'
+      - '/apps/frontend/client/static/game-data/asset_hashes.json'
+      - '/packages/frontend/engine/src/rendering/lpc_sheet_geometry.ts'
     options:
       cache: false
       runInCI: true

@@ -272,15 +272,14 @@ Settings:
 
 GitHub Actions runs:
 
-- `moon ci` — Full typecheck + lint + test pipeline
-- Deploys run from `release.yml` on a published GitHub release
+- `pr-checks.yml` — On every PR targeting `main`: `moon ci --affected` for
+  lint, format, typecheck, and unit tests. Heavy suites (Tauri build, E2E)
+  excluded by default. Opt in via workflow_dispatch with `include-heavy=true`.
+- `release.yml` — Deploys on a published GitHub release or manual dispatch.
 
-🔴 **PR checks are currently DISABLED** — `pr-checks.yml` has `branches: [_]`,
-which matches nothing. Re-enabling it (with the Tauri build gated out) is
-tracked as C-438. Until then, run the gate locally: `bun run fix && bun moon
-run :validate && bun run test`.
+Run the gate locally before pushing: `bun run fix && bun moon run :validate && bun run test`.
 
-See `.github/workflows/` for details.
+See `.github/workflows/` and `docs/guides/CI_CD.md` for details.
 
 ---
 
