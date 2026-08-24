@@ -388,7 +388,8 @@ class GameEngineService
       let packConfig: PackConfig | undefined;
       try {
         const { loadContentPack } = await import('@aikami/frontend/engine');
-        const pack = await loadContentPack({ packId });
+        const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+        const pack = await loadContentPack({ packId, resolveTag: assetTagResolver });
         packConfig = this._buildPackConfig(pack.manifest, mapId);
       } catch (error) {
         this.error('loadMap:pack-config-failed', {
@@ -751,7 +752,8 @@ class GameEngineService
         '@aikami/frontend/engine'
       );
       this._clearContentPackCache = clearCacheFn;
-      const pack = await loadPack({ packId: this.contentPackId });
+      const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+      const pack = await loadPack({ packId: this.contentPackId, resolveTag: assetTagResolver });
       const { buildPropFrameResolver } = await import('./prop_frame_resolver');
       this._propFrameResolverHandle = await buildPropFrameResolver(pack.manifest);
 

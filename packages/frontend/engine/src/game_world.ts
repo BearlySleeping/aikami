@@ -13,6 +13,7 @@ import {
   extractTransitionZones,
   loadJtonMap,
   loadTilemap,
+  type AssetTagResolver,
 } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
@@ -206,6 +207,18 @@ export type GameWorldOptions = BaseEngineClassOptions & {
    * thread. Build via {@link projectLpcCatalog} from the generated catalog.
    */
   lpcCatalog?: readonly LpcSlotCatalog[];
+  /**
+   * Optional registry-backed tag resolver (C-434). When provided, map and
+   * tileset URLs are resolved through the asset registry — cached blob URL,
+   * origin URL, or bundled static path — instead of fetching static paths
+   * directly.
+   */
+  resolveTag?: AssetTagResolver;
+  /**
+   * Optional blob URL release function (C-434). Called after map/tileset
+   * bytes are parsed, to revoke refcounted blob URLs acquired via resolveTag.
+   */
+  releaseUrl?: (url: string) => void;
 };
 
 /**
@@ -292,6 +305,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Projected LPC slot catalog forwarded to the worker (C-400). */
   private readonly _lpcCatalog?: readonly LpcSlotCatalog[];
+
+  /** Registry-backed tag resolver (C-434). */
+  private readonly _resolveTag?: AssetTagResolver;
+  /** Blob URL release function (C-434). */
+  private readonly _releaseUrl?: (url: string) => void;
 
   /** Weather overlay quad for procedural rain/fog (C-213). */
   private _weatherOverlay: WeatherOverlay | undefined;
@@ -520,6 +538,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._textureManager = options.textureManager;
     this._propFrameResolver = options.propFrameResolver;
     this._lpcCatalog = options.lpcCatalog;
+    this._resolveTag = options.resolveTag;
+    this._releaseUrl = options.releaseUrl;
   }
 
   /**
@@ -2388,8 +2408,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // 4. Load and parse the new tilemap
       const isJton = mapUrl.endsWith('.jton');
       const tilemap = isJton
-        ? await loadJtonMap({ url: mapUrl })
-        : await loadTilemap({ url: mapUrl });
+        ? await loadJtonMap({ url: mapUrl, resolveTag: this._resolveTag, releaseUrl: this._releaseUrl })
+        : await loadTilemap({ url: mapUrl, resolveTag: this._resolveTag, releaseUrl: this._releaseUrl });
       // C-376 AC-1: derive the boolean grid from manifest walkability when a
       // pack config is available; fall back to the explicit collision layer
       // for packless maps (dev sandbox) or when manifest resolution failed.
@@ -2495,6 +2515,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           tilemap,
           terrainLayers,
           frameUvResolver,
+          resolveTag: this._resolveTag,
         });
         // C-378 AC-1: add each band container with its declared zIndex —
         // ground/decor below entities, overhead above every entity zIndex.

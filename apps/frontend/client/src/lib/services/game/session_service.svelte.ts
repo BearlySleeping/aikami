@@ -593,7 +593,8 @@ class SessionService
     if (mapBlock?.packId && mapBlock.mapId) {
       try {
         const { loadContentPack } = await import('@aikami/frontend/engine');
-        const pack = await loadContentPack({ packId: mapBlock.packId });
+        const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+        const pack = await loadContentPack({ packId: mapBlock.packId, resolveTag: assetTagResolver });
         forkMapName = pack.manifest.maps[mapBlock.mapId]?.name ?? mapBlock.mapId;
       } catch {
         forkMapName = mapBlock.mapId;

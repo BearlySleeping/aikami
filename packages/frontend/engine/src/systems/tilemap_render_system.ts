@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/systems/tilemap_render_system.ts
 
 import { Assets, Container, Texture, UniformGroup } from 'pixi.js';
+import type { AssetTagResolver } from '../assets/map_loader.ts';
 import { logger } from '$logger';
 import type { TerrainLayerEmission } from '../assets/autotile.ts';
 import type { TilemapBand, TilemapData, TilemapLayer } from '../assets/map_loader.ts';
@@ -68,6 +69,12 @@ export type TilemapRenderOptions = {
    * skipped so the baked ground fallback renders (never garbage UVs).
    */
   frameUvResolver?: FrameUvResolver;
+  /**
+   * C-434: optional registry-backed tag resolver for tileset images.
+   * When provided, tileset image paths are resolved through the asset
+   * registry before being loaded by PixiJS.
+   */
+  resolveTag?: AssetTagResolver;
 };
 
 export type { FrameUvResolver } from '../rendering/tilemap_chunk_renderer.ts';
@@ -153,11 +160,20 @@ export const renderTilemap = async (
     imageSet.add(tileset.image);
   }
 
+  // C-434: resolve tileset image paths through the registry when a resolver
+  // is provided. The resolved URL is used for loading; the original path
+  // stays as the texture cache key so Texture.from() resolves correctly.
+  const imageToResolvedUrl = new Map<string, string>();
+  for (const image of imageSet) {
+    const resolved = options.resolveTag ? options.resolveTag(image) ?? image : image;
+    imageToResolvedUrl.set(image, resolved);
+  }
+
   // Load all tileset textures.
   // Asset URLs are resolved by the global resolver (Assets.resolver.rootPath
   // handles custom-scheme/Tauri origins), so the raw path stays a valid cache
   // alias for Texture.from() below.
-  const loadPromises = [...imageSet].map((image) => Assets.load(image));
+  const loadPromises = [...imageSet].map((image) => Assets.load(imageToResolvedUrl.get(image) ?? image));
   await Promise.all(loadPromises);
 
   // Build a texture map keyed by image path

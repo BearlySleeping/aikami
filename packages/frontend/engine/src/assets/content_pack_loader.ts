@@ -20,6 +20,7 @@ import type {
 import { toAppError } from '@aikami/utils';
 import { Value } from 'typebox/value';
 import { logger } from '$logger';
+import type { AssetTagResolver } from './map_loader.ts';
 
 // ---------------------------------------------------------------------------
 // ContentPackLoaderInterface — the loaded pack accessor
@@ -87,12 +88,19 @@ class ContentPackLoader implements ContentPackLoaderInterface {
   readonly manifest: ContentPackManifest;
   readonly packId: string;
   private readonly _basePath: string;
+  private readonly _resolveTag?: AssetTagResolver;
   private _disposed = false;
 
-  constructor(manifest: ContentPackManifest, packId: string, basePath: string) {
+  constructor(
+    manifest: ContentPackManifest,
+    packId: string,
+    basePath: string,
+    resolveTag?: AssetTagResolver,
+  ) {
     this.packId = packId;
     this.manifest = manifest;
     this._basePath = basePath.replace(/\/+$/, ''); // strip trailing slash
+    this._resolveTag = resolveTag;
   }
 
   /** @inheritdoc */
@@ -111,7 +119,7 @@ class ContentPackLoader implements ContentPackLoaderInterface {
     // If the file path is absolute (starts with /), return it directly.
     // This supports referencing files outside the pack directory (e.g. shared assets).
     if (entry.file.startsWith('/')) {
-      return entry.file;
+      return this._resolveTag ? this._resolveTag(entry.file) ?? entry.file : entry.file;
     }
 
     const resolved = `${this._basePath}/${this.packId}/${entry.file}`;
@@ -130,7 +138,8 @@ class ContentPackLoader implements ContentPackLoaderInterface {
       });
     }
 
-    return resolved;
+    // C-434: resolve through the registry when a resolver is provided.
+    return this._resolveTag ? this._resolveTag(resolved) ?? resolved : resolved;
   }
 
   /** @inheritdoc */
@@ -271,6 +280,8 @@ let _contentPackCache = new Map<string, ContentPackLoaderInterface>();
  * @param options.packId - Content pack identifier (matches Campaign.contentPackId).
  * @param options.basePath - Base path to content-pack root (default: '/content-packs').
  * @param options.fetchFn - Optional fetch override for testing.
+ * @param options.resolveTag - Optional registry-backed tag resolver (C-434).
+ * @param options.releaseUrl - Optional blob URL release function (C-434).
  * @returns A {@link ContentPackLoaderInterface} for the loaded pack.
  * @throws If the manifest file is not found, or fails schema validation.
  */
@@ -278,8 +289,10 @@ export const loadContentPack = async (options: {
   packId: string;
   basePath?: string;
   fetchFn?: typeof fetch;
+  resolveTag?: AssetTagResolver;
+  releaseUrl?: (url: string) => void;
 }): Promise<ContentPackLoaderInterface> => {
-  const { packId, basePath = '/content-packs', fetchFn } = options;
+  const { packId, basePath = '/content-packs', fetchFn, resolveTag, releaseUrl } = options;
 
   // Cache check
   const cached = _contentPackCache.get(packId);
@@ -291,27 +304,83 @@ export const loadContentPack = async (options: {
   const fetchImpl = fetchFn ?? fetch;
   const manifestUrl = `${basePath}/${packId}/manifest.json`;
 
-  logger.debug('loadContentPack:fetching', { packId, manifestUrl });
+  // C-434: resolve the manifest URL through the asset registry when a
+  // resolver is provided.
+  const resolvedManifestUrl = resolveTag ? resolveTag(manifestUrl) ?? manifestUrl : manifestUrl;
+
+  logger.debug('loadContentPack:fetching', {
+    packId,
+    manifestUrl,
+    resolvedUrl: resolvedManifestUrl !== manifestUrl ? resolvedManifestUrl : undefined,
+  });
 
   // Fetch manifest
   let response: Response;
   try {
-    response = await fetchImpl(manifestUrl);
+    response = await fetchImpl(resolvedManifestUrl);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw toAppError({
-      errorType: 'not-found',
-      errorMessage: 'ContentPackLoader: failed to fetch manifest',
-      details: { packId, manifestUrl, cause: message },
-    });
+    // If the resolved URL differs from the original, try the original as
+    // fallback (bundled path).
+    if (resolvedManifestUrl !== manifestUrl) {
+      logger.debug('loadContentPack:registry-fallback', { packId, manifestUrl });
+      try {
+        response = await fetchImpl(manifestUrl);
+      } catch (fallbackError) {
+        const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        throw toAppError({
+          errorType: 'not-found',
+          errorMessage: 'ContentPackLoader: failed to fetch manifest',
+          details: { packId, manifestUrl, cause: message },
+        });
+      }
+    } else {
+      const message = error instanceof Error ? error.message : String(error);
+      throw toAppError({
+        errorType: 'not-found',
+        errorMessage: 'ContentPackLoader: failed to fetch manifest',
+        details: { packId, manifestUrl, cause: message },
+      });
+    }
   }
 
   if (!response.ok) {
-    throw toAppError({
-      errorType: 'not-found',
-      errorMessage: `ContentPackLoader: manifest not found (HTTP ${response.status})`,
-      details: { packId, manifestUrl, status: response.status },
-    });
+    // If the resolved URL differs from the original, try the original as
+    // fallback (bundled path).
+    if (resolvedManifestUrl !== manifestUrl) {
+      logger.debug('loadContentPack:registry-fallback', {
+        packId,
+        manifestUrl,
+        status: response.status,
+      });
+      try {
+        response = await fetchImpl(manifestUrl);
+      } catch {
+        throw toAppError({
+          errorType: 'not-found',
+          errorMessage: `ContentPackLoader: manifest not found (HTTP ${response.status})`,
+          details: { packId, manifestUrl, status: response.status },
+        });
+      }
+      if (!response.ok) {
+        throw toAppError({
+          errorType: 'not-found',
+          errorMessage: `ContentPackLoader: manifest not found (HTTP ${response.status})`,
+          details: { packId, manifestUrl, status: response.status },
+        });
+      }
+    } else {
+      throw toAppError({
+        errorType: 'not-found',
+        errorMessage: `ContentPackLoader: manifest not found (HTTP ${response.status})`,
+        details: { packId, manifestUrl, status: response.status },
+      });
+    }
+  }
+
+  // Release the blob URL after parsing — the data is now in memory and the
+  // URL is no longer needed.
+  if (releaseUrl && resolvedManifestUrl !== manifestUrl) {
+    releaseUrl(resolvedManifestUrl);
   }
 
   // Parse JSON
@@ -353,8 +422,8 @@ export const loadContentPack = async (options: {
     });
   }
 
-  // Create and cache loader
-  const loader = new ContentPackLoader(manifest, packId, basePath);
+  // Create and cache loader — pass resolveTag for constituent file resolution
+  const loader = new ContentPackLoader(manifest, packId, basePath, resolveTag);
   _contentPackCache.set(packId, loader);
 
   logger.debug('loadContentPack:loaded', {
@@ -364,6 +433,7 @@ export const loadContentPack = async (options: {
     npcCount: Object.keys(manifest.npcs).length,
     itemCount: Object.keys(manifest.items).length,
     dialogueCount: Object.keys(manifest.dialogues).length,
+    source: resolvedManifestUrl !== manifestUrl ? 'registry' : 'static',
   });
 
   return loader;

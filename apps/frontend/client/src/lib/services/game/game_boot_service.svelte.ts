@@ -122,6 +122,13 @@ class GameBootService
   private _gameWorld: GameWorld | undefined;
   private _clearContentPackCache: (() => void) | undefined;
 
+  /** Registry-backed tag resolver (C-434). */
+  private _resolveTag:
+    | ((tag: string) => string | null)
+    | undefined;
+  /** Blob URL release function (C-434). */
+  private _releaseUrl: ((url: string) => void) | undefined;
+
   /**
    * Content-pack prop frame resolver (C-375 AC-1) — built + preloaded in
    * the preload stage, passed into GameWorld at engine creation.
@@ -769,16 +776,26 @@ class GameBootService
     const t0 = performance.now();
 
     const { loadContentPack, clearContentPackCache } = await import('@aikami/frontend/engine');
+    const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+    const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
     // Check generation after async import
     if (generation !== this._bootGeneration) {
       return;
     }
 
+    // C-434: store the registry-backed tag resolver for GameWorld.
+    this._releaseUrl = (url: string) => assetManager.releaseUrl(url);
+    this._resolveTag = assetTagResolver;
+
     // AC-5: Clear stale pack cache before loading a new pack to prevent
     // asset/state leakage when switching between campaigns with different packs.
     clearContentPackCache();
 
-    const pack = await loadContentPack({ packId: input.contentPackId });
+    const pack = await loadContentPack({
+      packId: input.contentPackId,
+      resolveTag: this._resolveTag,
+      releaseUrl: this._releaseUrl,
+    });
     // Check generation after async load
     if (generation !== this._bootGeneration) {
       return;
@@ -891,6 +908,9 @@ class GameBootService
       // C-375 AC-1: deterministic prop frame resolution (spritesheet-based,
       // fallbackTile on miss) — never the global Texture.from cache.
       propFrameResolver: this._propFrameResolverHandle?.resolver,
+      // C-434: registry-backed tag resolver for maps and tilesets.
+      resolveTag: this._resolveTag,
+      releaseUrl: this._releaseUrl,
     });
 
     // Build player init data from resolved persona
@@ -985,7 +1005,7 @@ class GameBootService
         // reconstruct map-derived entities from a 4-component snapshot.
         this.bootProgress.detail = `Loading map: ${map.mapId}`;
         const { loadContentPack } = await import('@aikami/frontend/engine');
-        const pack = await loadContentPack({ packId: map.packId });
+        const pack = await loadContentPack({ packId: map.packId, resolveTag: this._resolveTag });
         const { worldStateService } = await import('./world_state_service.svelte');
         // Check generation after async imports
         if (generation !== this._bootGeneration) {
@@ -1094,7 +1114,7 @@ class GameBootService
     if (generation !== this._bootGeneration) {
       return;
     }
-    const pack = await loadContentPack({ packId });
+    const pack = await loadContentPack({ packId, resolveTag: this._resolveTag });
     // Check generation after async load
     if (generation !== this._bootGeneration) {
       return;
