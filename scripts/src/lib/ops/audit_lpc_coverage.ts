@@ -87,7 +87,7 @@ type LpcCoverageBaselineEntry = {
 
 /** The committed baseline document. */
 type LpcCoverageBaseline = {
-  schemaVersion: 1;
+  schemaVersion: number;
   generatedAt: string;
   /** Total sheets audited when this baseline was written. */
   auditedCount: number;
