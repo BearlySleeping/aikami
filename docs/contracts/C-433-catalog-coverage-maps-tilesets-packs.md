@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `scripts/src/lib/ops/scan_assets.ts`, `scripts/src/lib/catalog/`, `packages/shared/constants/src/lib/game_assets.ts`, `packages/shared/schemas/src/lib/catalog/` |
 | **Priority** | P1 — C-434 and C-435 cannot route these categories through the registry until the bytes exist on the origin. |
 | **Dependencies** | C-395 (publish pipeline, status `implemented`). Independent of C-432 — one is publisher-side, the other client-side; they share no code path and can run in parallel. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on publishing categories |
 | **Contract version** | 1.0.0 |
@@ -414,3 +414,50 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Widened the asset scan taxonomy and pipeline to cover maps, tilesets and content packs — the three categories that were missing from the published catalog. Added `maps`, `tilesets` and `content_packs` to `ASSET_CATEGORIES` and `CatalogCategorySchema`, removed the C-395 exclusion for `sprites/tilesets/`, added multi-root scanning support for `static/content-packs/`, and declared project-licence attribution for every newly covered file. All 369 existing tests pass with 0 new failures.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Maps scanned, hashed and published; `index/v1/maps.json` shard generated |
+| AC-2 | ✅ | Tilesets published with both atlas image and JSON descriptor; C-395 exclusion reversed |
+| AC-3 | ✅ | Content packs published from separate scan root; manifest and constituents in `index/v1/content_packs.json` |
+| AC-4 | ✅ | Root index `catalog.json` widened to 9 categories; `totalCount` sums shard counts |
+| AC-5 | ✅ | Attribution preflight passes for all new categories; `EXCLUDED_PATH_PREFIXES` and `isCatalogAssetPath` removed |
+| AC-6 | ✅ | No files under `apps/frontend/client/src/` touched |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| — | No new files; all changes were modifications to existing files |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/constants/src/lib/game_assets.ts` | Added `maps`, `tilesets`, `contentPacks` categories to `ASSET_CATEGORIES` |
+| `packages/shared/schemas/src/lib/catalog/catalog_index.ts` | Widened `CatalogCategorySchema` union to 9 literals |
+| `scripts/src/lib/ops/scan_assets.ts` | Multi-root scanning, `categoryForPath` for tilesets override, `categoryOverride` for content-packs root, extension-in-tag for tilesets |
+| `scripts/src/lib/catalog/preflight.ts` | Removed `EXCLUDED_PATH_PREFIXES` and `isCatalogAssetPath` |
+| `scripts/src/lib/catalog/catalog_entries.ts` | Multi-root `loadCatalogEntries`, `rootDir` field on `CatalogEntry` |
+| `scripts/src/lib/catalog/config.ts` | Added `CONTENT_PACKS_DIR`, `AssetScanRoot` type, `SCAN_ROOTS` |
+| `scripts/src/lib/catalog/pipeline.ts` | Widened `buildUploadItems` and `runCatalogPublish` for multi-root |
+| `scripts/src/lib/catalog/thumbnail_generation.ts` | Uses `entry.rootDir` instead of `gameDataDir` for source path resolution |
+| `scripts/src/lib/catalog/project_licenses.json` | Added 15 attribution entries for maps, tilesets, and content-pack files |
+| `scripts/src/lib/catalog/__tests__/fixtures.ts` | Added tileset/map files to game-data fixture; added `makeFixtureContentPacks` |
+| `scripts/src/lib/catalog/__tests__/publish.test.ts` | Updated expected counts (4→7), MIME type assertions, resume test |
+| `scripts/src/lib/catalog/__tests__/publish_preflight.test.ts` | Replaced tileset-exclusion test with inclusion tests; added content-packs and attribution tests |
+| `scripts/src/lib/catalog/__tests__/index_generation.test.ts` | Added `rootDir` to `makeEntry` helper |
+
+### Deviations from Spec
+- **Tileset tag collision**: `atlas.webp` and `atlas.json` would produce the same tag under the standard `pathToTag` scheme. Fixed by including the extension in the tag for tilesets (e.g., `sprites:tilesets:atlas.webp` and `sprites:tilesets:atlas.json`). This is documented in the project_licenses.json entries.
+- **Content-packs category assignment**: Content-pack files live under pack-name directories (e.g., `emberwatch/manifest.json`), so the first path segment is not the category name. Fixed by adding a `categoryOverride` parameter to `scanDir` for the content-packs root.
+
+### Test Results
+- Unit: 369/369 PASS (0 failures)
+- E2E: N/A (publisher-side only)
+- Visual: N/A (publisher-side only)
+- Baseline: 0 pre-existing failures, 0 new failures
