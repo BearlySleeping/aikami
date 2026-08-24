@@ -9,7 +9,7 @@ any more — `cloudbuild.yaml` is retired.
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `pr-checks.yml` | Pull request | Runs `moon ci` against the base branch — build, lint, test for everything the diff affects. Never deploys. |
+| `pr-checks.yml` | Pull request + workflow_dispatch | Runs `moon ci` against the base branch — lint, format, typecheck, and unit tests for everything the diff affects. Never deploys. Heavy suites (Tauri build, E2E) excluded by default; opt in via `workflow_dispatch` with `include-heavy=true`. |
 | `release.yml` | GitHub release published, or manual | The deploy pipeline. Builds and ships every app to its target. |
 | `publish-local-stack.yml` | Manual | Builds and pushes the local-stack Docker engine images. |
 | `update-compose-digests.yml` | Manual / scheduled | Pins `compose.yaml` image references to content digests. |
@@ -19,20 +19,12 @@ any more — `cloudbuild.yaml` is retired.
 
 ## PR checks
 
-> 🔴 **PR checks are currently disabled.** `pr-checks.yml` has
-> `branches: [_]`, a character class matching only a literal `_` — so it never
-> fires. The reason is cost: `moon ci` runs `:build` for affected projects, and
-> the client build compiles Tauri (Rust + full app bundle), which is expensive
-> on GitHub Actions free credits.
->
-> Re-enabling this — with the Tauri build gated out of the default CI graph —
-> is tracked as **C-438**. Until then, run the gate locally before pushing:
->
-> ```bash
-> bun run fix && bun moon run :validate && bun run test
-> ```
+The `pr-checks.yml` workflow runs on every pull request targeting `main`. It
+uses `moon ci --affected` to detect which projects the diff touches and runs
+only lint, format, typecheck, and unit tests for those projects. This keeps
+the default check cheap — typically under 10 minutes.
 
-When enabled, the job:
+The job:
 
 1. Checks out with full history (moon needs it to diff against the base)
 2. Installs Bun 1.3.13 and restores the Bun + Moon caches
@@ -41,6 +33,28 @@ When enabled, the job:
 
 Moon's affected-project detection means a docs-only PR does almost nothing and
 a change to `packages/shared/types` rebuilds most of the repo.
+
+### What is excluded from the default check
+
+The following expensive suites are excluded from the default `moon ci` graph
+via `runInCI: false` in their respective `moon.yml` files:
+
+| Suite | Reason | Where it still runs |
+| --- | --- | --- |
+| `client:tauri-build` | Compiles Rust + full desktop bundle — very expensive | `release.yml` (deploy pipeline) |
+| `e2e:*` (all E2E tasks) | Needs Playwright browsers + running dev server — slow and flaky under cold cache | On demand via opt-in |
+
+### Running heavy suites on demand
+
+Maintainers can trigger the full suite (including Tauri build and E2E tests)
+against any branch via GitHub's **Actions → PR Checks → Run workflow** with
+`include-heavy` set to `true`. The workflow runs the default check first, then
+the heavy suites as additional steps.
+
+This is useful for:
+- A PR that changes Rust code in `src-tauri/`
+- A PR that modifies game engine logic and needs E2E validation
+- A release preparation branch
 
 ---
 

@@ -38,21 +38,32 @@ tasks:
     command: 'echo "e2e has no build — use moon run e2e:test"'
   test:
     command: 'bun run test'
+    options:
+      # Excluded from default CI graph: needs Playwright browsers + running dev
+      # server — slow and flaky under cold cache. Run via workflow_dispatch
+      # with include-heavy=true, or locally with `bun run test`.
+      runInCI: false
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   test-client:
     command: 'bun run test:client'
+    options:
+      runInCI: false
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   test-game:
     command: 'bun run test:game'
+    options:
+      runInCI: false
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   release-gate:
     command: 'bun run test:release-gate'
+    options:
+      runInCI: false
     inputs:
       - '@group(tests)'
       - '@group(sources)'
@@ -60,25 +71,35 @@ tasks:
       - 'src/fixtures/engine_replay.ts'
   run-visual-tests:
     command: 'bun run src/visual/runner.ts'
+    options:
+      runInCI: false
     inputs:
       - '@group(sources)'
   lpc-smoke:
     command: 'bun run scripts/lpc_smoke.ts'
+    options:
+      runInCI: false
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   test-site:
     command: 'bun run test:site'
+    options:
+      runInCI: false
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   test-site-a11y:
     command: 'bun run test:site:a11y'
+    options:
+      runInCI: false
     inputs:
       - '@group(tests)'
       - '@group(sources)'
   test-site-visual:
     command: 'bun run test:site:visual'
+    options:
+      runInCI: false
     inputs:
       - '@group(tests)'
       - '@group(sources)'

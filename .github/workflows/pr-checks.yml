@@ -1,23 +1,27 @@
 name: PR Checks
 
 # Now that cloudbuild.yaml is retired, this workflow is the sole home for
-# PR validation. Runs `moon ci` against the base branch — build, lint,
-# test for everything affected by the PR's diff. Never deploys anything.
+# PR validation. Runs `moon ci` against the base branch — lint, format,
+# typecheck, and unit tests for everything affected by the PR's diff.
+# Never deploys anything.
+#
+# Expensive suites (Tauri desktop build, E2E/Playwright tests) are excluded
+# from the default graph via `runInCI: false` in their respective moon.yml
+# files. To run them on demand, use workflow_dispatch with include-heavy=true.
 on:
   pull_request:
-    # TODO(fix): `[_]` is a character class matching only a literal `_`, NOT
-    # "every branch" — it deliberately IGNORES all branches, i.e. PR checks
-    # are disabled for now. Rationale: `moon ci` runs `:build` for affected
-    # projects and the client build compiles Tauri (Rust + full app bundle),
-    # which is very expensive on GitHub Actions free credits. Once the Tauri
-    # build is moved out of `moon ci` (or gated behind a label/path filter),
-    # restore the filter, e.g. `branches: [main, staging]`.
-    branches: [_] #[main, staging]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      include-heavy:
+        description: 'Run heavy suites (Tauri build + E2E tests) in addition to the default check'
+        type: boolean
+        default: false
 
 concurrency:
   # Unlike the release workflow, it's safe (and desirable) to cancel a
   # stale in-progress check when a new commit lands on the same PR.
-  group: pr-checks-${{ github.event.pull_request.number }}
+  group: pr-checks-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -49,7 +53,17 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Run Moon CI
+      - name: Run Moon CI (default check)
         run: |
           export MOON_TOOLCHAIN_FORCE_GLOBALS=true
-          bun moon ci --base="origin/${{ github.event.pull_request.base.ref }}"
+          # For pull_request events, diff against the target branch.
+          # For workflow_dispatch, diff against main (no PR context).
+          BASE="origin/${{ github.event.pull_request.base.ref || 'main' }}"
+          bun moon ci --base="$BASE"
+
+      - name: Run heavy suites (Tauri build + E2E)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.include-heavy == 'true' }}
+        run: |
+          export MOON_TOOLCHAIN_FORCE_GLOBALS=true
+          bun moon run client:tauri-build
+          bun moon run e2e:test

@@ -97,6 +97,10 @@ tasks:
     command: 'bun run tauri:build'
     options:
       cache: false
+      # Excluded from default CI graph: compiles Rust + full desktop bundle,
+      # very expensive on GitHub Actions free credits. Runs in release.yml
+      # (the deploy pipeline) when a desktop release is published.
+      runInCI: false
     inputs:
       - '@group(sources)'
       - '@group(srcTauri)'
