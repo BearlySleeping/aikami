@@ -96,6 +96,10 @@
           direnv
           nix-direnv
 
+          # SOPS + age — encrypted secrets (C-441)
+          sops
+          age
+
           # Herdr — terminal-native agent multiplexer
           herdr-pkg
 

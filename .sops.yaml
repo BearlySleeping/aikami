@@ -1,0 +1,25 @@
+# .sops.yaml
+# SOPS configuration for Aikami secrets.
+# Maps encrypted file paths to age recipients.
+#
+# 🔴 TAURI_SIGNING_PRIVATE_KEY must NEVER be added here.
+# It lives in a GitHub Actions secret under separate custody.
+#
+# Adding a new recipient:
+#   1. Generate an age key: age-keygen -o ~/.age/new_key.txt
+#   2. Add the PUBLIC key (age1...) to .age/recipients.txt
+#   3. Add the public key to the creation_rules below
+#   4. Re-encrypt all files: sops updatekeys secrets/*.enc.env
+#   5. Share the PRIVATE key with the new recipient out of band
+#
+# Removing a recipient:
+#   1. Remove their public key from .age/recipients.txt
+#   2. Remove their public key from the creation_rules below
+#   3. Re-encrypt all files: sops updatekeys secrets/*.enc.env
+#   4. The removed recipient can no longer decrypt
+
+creation_rules:
+  - path_regex: secrets/.*\.enc\.env$
+    age: >-
+      age1<maintainer-pubkey>,
+      age1<ci-pubkey>

@@ -1,0 +1,14 @@
+# .age/recipients.txt
+# Public age keys authorized to decrypt Aikami secrets.
+# 🔴 Only PUBLIC keys go here. Private keys are NEVER committed.
+#
+# Format: age1<public-key-hex>  # <description>
+#
+# To add a recipient:
+#   1. Generate: age-keygen -o ~/.age/new_key.txt
+#   2. Share the PUBLIC key (age1...) with the maintainer
+#   3. The maintainer adds it here and re-encrypts all files
+#
+# Current recipients:
+# age1<maintainer-pubkey>  # Maintainer's age key
+# age1<ci-pubkey>          # CI/CD pipeline (GitHub Actions secret: SOPS_AGE_KEY)

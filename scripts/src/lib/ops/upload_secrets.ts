@@ -25,6 +25,11 @@ import {
   resolveEnvFile,
   resolveSecretName,
 } from '../deploy/deployment_config';
+import {
+  resolveBackend,
+  sopsEncrypt,
+  type SecretsBackend,
+} from './secrets_backend';
 
 const _filename = fileURLToPath(import.meta.url);
 const _scriptDir = dirname(_filename);
@@ -45,6 +50,8 @@ if (!mode) {
 }
 
 const shouldUpdate = !opts['dry-run'];
+
+const backend: SecretsBackend = resolveBackend();
 
 const GCP_PROJECT = MODE_PROJECT_MAP[mode as keyof typeof MODE_PROJECT_MAP];
 if (!GCP_PROJECT) {
@@ -172,7 +179,11 @@ if (projectNames.length === 0) {
   process.exit(1);
 }
 
-console.log(`☁️  GCP Project: ${GCP_PROJECT}`);
+if (backend === 'sops') {
+  console.log(`🔐 Backend: SOPS (secrets/${mode}.enc.env)`);
+} else {
+  console.log(`☁️  GCP Project: ${GCP_PROJECT}`);
+}
 console.log(`🍦 Mode: ${mode}`);
 if (keysFilter.size > 0) {
   console.log(`🔑 Keys: ${[...keysFilter].join(', ')} (filtered)`);
@@ -345,42 +356,61 @@ if (keysFilter.size > 0) {
   }
 }
 
-for (const { secretName, value } of deduped.values()) {
-  try {
-    const exists = await secretExists(secretName);
-    if (!exists) {
-      if (!shouldUpdate) {
-        console.log(`⏭️  Would create "${secretName}" (dry-run)`);
-        totalSkipped++;
+if (backend === 'sops') {
+  // SOPS backend: collect all unique values and encrypt to a single file
+  const allSecrets = new Map<string, string>();
+  for (const { secretName, value } of deduped.values()) {
+    allSecrets.set(secretName, value);
+  }
+
+  if (allSecrets.size === 0) {
+    console.log('\n⏭️  No secrets to encrypt.');
+  } else {
+    const written = await sopsEncrypt(mode, allSecrets);
+    if (written) {
+      console.log(`\n✅ Encrypted ${allSecrets.size} secret(s) to secrets/${mode}.enc.env`);
+    } else {
+      console.log(`\n⏭️  No changes — secrets/${mode}.enc.env is up to date.`);
+    }
+  }
+} else {
+  for (const { secretName, value } of deduped.values()) {
+    try {
+      const exists = await secretExists(secretName);
+      if (!exists) {
+        if (!shouldUpdate) {
+          console.log(`⏭️  Would create "${secretName}" (dry-run)`);
+          totalSkipped++;
+          continue;
+        }
+        await createSecret(secretName, value);
+        console.log(`✅ Created "${secretName}"`);
+        totalCreated++;
         continue;
       }
-      await createSecret(secretName, value);
-      console.log(`✅ Created "${secretName}"`);
-      totalCreated++;
-      continue;
-    }
 
-    const currentValue = await getSecretValue(secretName);
-    if (currentValue === value) {
-      console.log(`⏭️  Skipping "${secretName}" (already up to date)`);
-      totalUnchanged++;
-      continue;
-    }
+      const currentValue = await getSecretValue(secretName);
+      if (currentValue === value) {
+        console.log(`⏭️  Skipping "${secretName}" (already up to date)`);
+        totalUnchanged++;
+        continue;
+      }
 
-    if (shouldUpdate) {
-      await updateSecret(secretName, value);
-      console.log(`🔄 Updated "${secretName}" (value changed)`);
-      totalUpdated++;
-    } else {
-      console.log(`⏭️  Skipping "${secretName}" (value differs, run without --dry-run)`);
-      totalSkipped++;
+      if (shouldUpdate) {
+        await updateSecret(secretName, value);
+        console.log(`🔄 Updated "${secretName}" (value changed)`);
+        totalUpdated++;
+      } else {
+        console.log(`⏭️  Skipping "${secretName}" (value differs, run without --dry-run)`);
+        totalSkipped++;
+      }
+    } catch (err) {
+      console.error(`❌ Error processing "${secretName}":`, err instanceof Error ? err.message : err);
+      totalFailed++;
     }
-  } catch (err) {
-    console.error(`❌ Error processing "${secretName}":`, err instanceof Error ? err.message : err);
-    totalFailed++;
   }
-}
 
-console.log(
-  `\nDone! Created ${totalCreated}, updated ${totalUpdated}, unchanged ${totalUnchanged}, skipped ${totalSkipped}, failed ${totalFailed}.`,
-);
+  console.log(
+    `\nDone! Created ${totalCreated}, updated ${totalUpdated}, unchanged ${totalUnchanged}, skipped ${totalSkipped}, failed ${totalFailed}.`,
+  );
+}

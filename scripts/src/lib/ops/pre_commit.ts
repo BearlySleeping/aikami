@@ -5,10 +5,78 @@
 // In contract pipeline worktrees (CONTRACT_PIPELINE_WORKTREE=1), skips knowledge:sync.
 // Formatting and typechecking always run.
 
+import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { runStream } from '../cli_utils.ts';
 import { syncContracts } from './sync_contracts.ts';
+import { isSopsEncrypted, sopsEncPath } from './secrets_backend.ts';
 
 const isWorktree = !!process.env.CONTRACT_PIPELINE_WORKTREE;
+
+// ── Plaintext secret guard (AC-5) ─────────────────────────────────────
+// Reject commits that contain unencrypted .env.production / .env.staging
+// or secrets/*.enc.env files that are not actually encrypted.
+
+const ROOT_DIR = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+
+const PLAINTEXT_PATTERNS = [
+  '.env.production',
+  '.env.staging',
+];
+
+function checkPlaintextSecrets(): void {
+  try {
+    // Get staged files
+    const staged = execSync('git diff --cached --name-only', {
+      encoding: 'utf8',
+      cwd: ROOT_DIR,
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+
+    const violations: string[] = [];
+
+    for (const file of staged) {
+      // Check 1: plaintext env files for production/staging
+      for (const pattern of PLAINTEXT_PATTERNS) {
+        if (file.endsWith(pattern)) {
+          violations.push(
+            `🔴 Plaintext secret file staged: ${file}\n` +
+              `   Unencrypted .env.production/.env.staging must NEVER be committed.\n` +
+              `   Use 'sops --encrypt secrets/${pattern.replace('.env.', '')}.enc.env' instead.`,
+          );
+        }
+      }
+
+      // Check 2: secrets/*.enc.env that are not actually encrypted
+      if (file.startsWith('secrets/') && file.endsWith('.enc.env')) {
+        const fullPath = join(ROOT_DIR, file);
+        if (existsSync(fullPath) && !isSopsEncrypted(fullPath)) {
+          violations.push(
+            `🔴 File ${file} appears to be a plaintext env file at an encrypted path.\n` +
+              `   This means 'sops --encrypt' failed or was skipped.\n` +
+              `   Re-encrypt with: sops --encrypt ${file}`,
+          );
+        }
+      }
+    }
+
+    if (violations.length > 0) {
+      console.error('\n❌ PRE-COMMIT BLOCKED: Plaintext secrets detected\n');
+      for (const v of violations) {
+        console.error(v);
+        console.error('');
+      }
+      process.exit(1);
+    }
+  } catch {
+    // If git commands fail (e.g., not a git repo), skip the guard silently
+  }
+}
+
+checkPlaintextSecrets();
 
 const sh = async (cmd: string): Promise<void> => {
   const parts = cmd.split(' ').filter(Boolean);

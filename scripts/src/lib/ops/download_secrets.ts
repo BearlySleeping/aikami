@@ -37,6 +37,11 @@ import {
   resolveEnvFile,
   resolveSecretName,
 } from '../deploy/deployment_config';
+import {
+  resolveBackend,
+  sopsDecrypt,
+  type SecretsBackend,
+} from './secrets_backend';
 
 // Resolve paths relative to the repo root
 const _filename = fileURLToPath(import.meta.url);
@@ -429,13 +434,21 @@ let secrets = new Map<string, string>();
 if (isEmulator) {
   console.log(`   Skipping GSM (emulator mode) — using .env.example + fake local defaults\n`);
 } else {
-  await checkGcloudAvailable();
+  const backend: SecretsBackend = resolveBackend();
 
-  console.log(`   Fetching ${allGcmNames.size} unique secrets from GSM...`);
-  secrets = await batchFetch(allGcmNames);
+  if (backend === 'sops') {
+    console.log(`   Using SOPS backend — decrypting secrets/${mode}.enc.env`);
+    secrets = await sopsDecrypt(mode);
+  } else {
+    await checkGcloudAvailable();
+    console.log(`   Fetching ${allGcmNames.size} unique secrets from GSM...`);
+    secrets = await batchFetch(allGcmNames);
+  }
 }
 
-const missing = isEmulator ? 0 : allGcmNames.size - secrets.size;
+const backend = isEmulator ? 'gsm' : resolveBackend();
+const expectedCount = backend === 'sops' ? 0 : allGcmNames.size;
+const missing = isEmulator ? 0 : expectedCount - secrets.size;
 if (missing > 0) {
   const missingNames = [...allGcmNames].filter((n) => !secrets.has(n));
   // PUBLIC_ build-config keys are optional — blank is a valid value (log

@@ -36,14 +36,6 @@ inputs:
     required: false
     default: "false"
 
-  gcp-auth:
-    description: 'Set to "true" to authenticate to Google Cloud. Only needed by the single secrets job and by jobs that call gcloud/docker push directly at deploy time — NOT by every job (see prepare-secrets in release.yml).'
-    required: false
-    default: "false"
-  gcp-service-account-key:
-    description: "The GCP service account key JSON. Required if gcp-auth is true."
-    required: false
-
   docker-registry:
     description: 'Set to a registry host (e.g. "europe-west1-docker.pkg.dev") to run `gcloud auth configure-docker` against it. Empty = skip.'
     required: false
@@ -92,16 +84,6 @@ runs:
       if: inputs.install-deps == 'true'
       shell: bash
       run: bun install --frozen-lockfile
-
-    - name: 🔑 Authenticate to Google Cloud
-      if: inputs.gcp-auth == 'true'
-      uses: google-github-actions/auth@v3
-      with:
-        credentials_json: ${{ inputs.gcp-service-account-key }}
-
-    - name: ☁️ Setup Google Cloud SDK
-      if: inputs.gcp-auth == 'true'
-      uses: google-github-actions/setup-gcloud@v3
 
     # Force moon to use the globally installed bun (from setup-bun) instead
     # of provisioning its own via proto. Without this, moon's toolchain sees
