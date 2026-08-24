@@ -21,7 +21,7 @@ created_at: "2026-08-24"
 | **Target** | `.github/workflows/pr-checks.yml` and the `runInCI` surface across `.moon/tasks/all.yml` and per-project `moon.yml` files |
 | **Priority** | **P0** — this is the one item that blocks accepting contributions at all. Every other DX improvement assumes a merged PR was validated by something. |
 | **Dependencies** | None. Independent of C-436 and C-437. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — `docs/guides/CI_CD.md` and `.claude/CLAUDE.md` both carry a "PR checks are disabled / tracked as C-438" warning to remove. |
 | **Contract version** | 2.0.0 |
@@ -261,6 +261,47 @@ Must be resolved before status becomes `approved`:
 - Does `main` currently pass `bun moon ci` end to end? Phase 1 answers this, but the answer changes whether this contract can land alone.
 - Which opt-in mechanism for the heavy suites — a `run-e2e` label, `workflow_dispatch`, or a separate workflow keyed on paths?
 - Should `staging` be in the branch filter, or `main` only?
+
+## Execution Report
+
+### Summary
+
+Restored PR checks by fixing the branch filter (`[_]` → `[main]`), excluding expensive suites (Tauri build + all E2E tasks) from the default `moon ci` graph via `runInCI: false` with explanatory comments, and adding a `workflow_dispatch` opt-in path for maintainers to run heavy suites on demand. Updated both `docs/guides/CI_CD.md` and `.claude/CLAUDE.md` to remove the "PR checks are disabled" warnings and document the new state.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `branches: [_]` → `branches: [main]`. Config is correct; real PR verification is a manual step. |
+| AC-2 | ✅ | `client:tauri-build` and all `e2e:*` tasks excluded via `runInCI: false`. `client:build` (Vite) stays in CI. |
+| AC-3 | ✅ | Both suites excluded with explanatory comments citing cost and where they still run. |
+| AC-4 | ✅ | `workflow_dispatch` trigger added with `include-heavy` boolean input. Documented in CI_CD.md. |
+| AC-5 | ✅ | No C-438 warnings remain in `docs/` or `.claude/`. Grep verified. |
+
+### Files Created
+
+None — all changes were modifications to existing files.
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `.github/workflows/pr-checks.yml` | Fixed branch filter, removed TODO, added `workflow_dispatch` trigger with `include-heavy` input, added heavy suite step |
+| `apps/frontend/client/moon.yml` | Added `runInCI: false` to `tauri-build` with explanatory comment |
+| `apps/e2e/moon.yml` | Added `runInCI: false` to all 9 E2E tasks with explanatory comment on `test` |
+| `docs/guides/CI_CD.md` | Removed "PR checks disabled" warning, added excluded suites table and opt-in docs |
+| `.claude/CLAUDE.md` | Replaced C-438 warning with current state description |
+
+### Deviations from Spec
+
+None. All scope items implemented as specified.
+
+### Test Results
+
+- Unit: N/A — no source code changes
+- E2E: N/A — no source code changes
+- Visual: N/A — no source code changes
+- Baseline: 0 pre-existing failures, 0 new failures (no affected projects)
 
 ## Amendments
 
