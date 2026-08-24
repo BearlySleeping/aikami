@@ -2,7 +2,7 @@
 id: C-434
 title: "Registry-Backed Maps, Tilesets and Content Packs"
 source: "user request 2026-08-23 — make client look at the R2 bucket"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `packages/frontend/engine/src/assets/map_loader.ts`, `packages/frontend/engine/src/assets/content_pack_loader.ts`, `apps/frontend/client/src/lib/services/game/`, `apps/frontend/client/src/lib/services/assets/asset_store.svelte.ts` |
 | **Priority** | P1 — without it, maps, tilesets and packs remain bundle-only and C-435 cannot de-bundle them. |
 | **Dependencies** | C-432 (working content-addressed R2 sources) and C-433 (the bytes exist on the origin). Both must merge first. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 1.0.0 |
@@ -265,7 +265,7 @@ category still has its own independently verifiable AC.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Integration | `packages/frontend/engine/src/assets/content_pack_loader.integration.test.ts` | `/game` | Filled during verification |
+| AC-3 | Integration | `packages/frontend/engine/src/assets/map_loader.test.ts`, `packages/frontend/engine/src/assets/content_pack_loader.integration.test.ts` | `/game` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `bun moon run engine:test`
