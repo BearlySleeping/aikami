@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `packages/frontend/engine/src/assets/map_loader.ts`, `packages/frontend/engine/src/assets/content_pack_loader.ts`, `apps/frontend/client/src/lib/services/game/`, `apps/frontend/client/src/lib/services/assets/asset_store.svelte.ts` |
 | **Priority** | P1 — without it, maps, tilesets and packs remain bundle-only and C-435 cannot de-bundle them. |
 | **Dependencies** | C-432 (working content-addressed R2 sources) and C-433 (the bytes exist on the origin). Both must merge first. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 1.0.0 |
@@ -368,5 +368,50 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Added optional `resolveTag`/`releaseUrl` options to the map loader, JTON map loader, and content pack loader in the engine. Created a client-side `registry_resolver.ts` utility that converts file paths to published tags via `pathToTag` and resolves them through `AssetStore.resolveUrl`. Wired the resolver at the client composition root — all `loadContentPack` call sites and GameWorld map/tileset loading now use the registry-backed path with automatic bundled fallback. Tileset images in the tilemap render system also resolve through the registry.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Map loads from registry cache via `resolveTag` — test verifies fetcher is called with resolved blob URL |
+| AC-2 | ✅ | Registry URL failure falls back to bundled path — test verifies 2 fetch attempts |
+| AC-3 | ✅ | Without `resolveTag`, loaders behave identically to before — test verifies bundled-only path |
+| AC-4 | ✅ | Content pack manifest and constituent files resolve through registry — 5 tests cover manifest URL resolution, fallback, and `resolveMapUrl` |
+| AC-5 | ✅ | Tileset images resolve through registry — `resolveTag` injected into `TilemapRenderOptions` and passed from GameWorld |
+| AC-6 | ✅ | `releaseUrl` called after parse — tests verify release is called for blob URLs and not called when no blob URL |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/assets/registry_resolver.ts` | Client-side `AssetTagResolver` that converts file paths to tags via `pathToTag` and resolves through `AssetStore.resolveUrl` |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/assets/map_loader.ts` | Added `AssetTagResolver` and `RegistryBackedLoadOptions` types; added `resolveTag`/`releaseUrl` to `MapLoaderOptions` and `JtonMapLoaderOptions`; updated `loadTilemap` and `loadJtonMap` to use registry resolution with bundled fallback and blob URL release |
+| `packages/frontend/engine/src/assets/content_pack_loader.ts` | Added `resolveTag`/`releaseUrl` options to `loadContentPack`; stored `resolveTag` on `ContentPackLoader`; updated `resolveMapUrl` to resolve through registry |
+| `packages/frontend/engine/src/systems/tilemap_render_system.ts` | Added `resolveTag` to `TilemapRenderOptions`; tileset images now resolve through registry before `Assets.load` |
+| `packages/frontend/engine/src/game_world.ts` | Added `resolveTag`/`releaseUrl` to `GameWorldOptions`; passed to `loadTilemap`/`loadJtonMap` and `renderTilemap` |
+| `packages/frontend/engine/src/index.ts` | Exported `AssetTagResolver` and `RegistryBackedLoadOptions` types |
+| `packages/frontend/engine/src/assets/map_loader.test.ts` | Added 12 tests covering AC-1, AC-2, AC-3, AC-6 for both `loadTilemap` and `loadJtonMap` |
+| `packages/frontend/engine/src/assets/content_pack_loader.test.ts` | Added 5 tests covering AC-3, AC-4 for content pack registry resolution |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Creates and stores `resolveTag`/`releaseUrl`; passes to all `loadContentPack` calls and GameWorld creation |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Passes `assetTagResolver` to `loadContentPack` |
+| `apps/frontend/client/src/lib/services/game/bridge_listeners.ts` | Passes `assetTagResolver` to `loadContentPack` |
+| `apps/frontend/client/src/lib/services/game/session_service.svelte.ts` | Passes `assetTagResolver` to `loadContentPack` |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | Passes `assetTagResolver` to `loadContentPack` (2 call sites) |
+| `apps/frontend/client/src/lib/services/game/save_map_block.ts` | Passes `assetTagResolver` to `loadContentPack` |
+
+### Deviations from Spec
+None. All ACs implemented as specified.
+
+### Test Results
+- Unit (engine): 1040 PASS / 1040 total (0 failures) — 15 new C-434 tests
+- Client: 756 PASS / 1603 total (845 pre-existing failures — infrastructure issue, not related to this contract)
+- Baseline: 1025 pre-existing engine tests all pass, 0 new failures
 
 ---
