@@ -1,6 +1,7 @@
 // apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine';
+import { resolveLayerDepth } from '@aikami/frontend/engine';
 import { createPixiApp, LpcBatchManager } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
@@ -609,7 +610,13 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         sprite.y = anchor.y;
         sprite.scale.set(layout.scale, layout.scale);
         sprite.alpha = 1.0;
-        sprite.zIndex = i * 10;
+        // Z-order: use the canonical LPC_LAYER_ORDER table (C-430).
+        // Replaces the previous array-index-based ordering.
+        sprite.zIndex = resolveLayerDepth({
+          slot: recipeSlot,
+          layerRole: recipe.layerRole ?? 'front',
+          direction: 2,
+        });
 
         // Apply palette tint: per-layer override takes priority, else global
         const effectiveColor =

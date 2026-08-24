@@ -1,6 +1,16 @@
 // packages/frontend/engine/src/rendering/sprite_composer.ts
-import { Container, Filter, GlProgram, Graphics, Sprite, Texture, UniformGroup } from 'pixi.js';
+//
+// SpriteComposer — dynamic sprite layering with Zero-Branch LUT palette shader
+//
+// C-430: Removed the dead multi-layer composer path (composeMultiLayerSprite,
+// LPC_MULTI_LAYER_VERTEX_SHADER, LPC_MULTI_LAYER_FRAGMENT_SHADER). The
+// LPC_SLOT_Z_ORDER table is replaced by the canonical LPC_LAYER_ORDER from
+// lpc_layer_order.ts. packRecipeToUboBuffer is kept and refactored to use the
+// canonical table.
+
+import { Container, Filter, GlProgram, Graphics, Sprite, type Texture } from 'pixi.js';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
+import { LPC_LAYER_ORDER, resolveLayerDepth } from './lpc_layer_order.ts';
 import type { TextureManager } from './texture_manager.ts';
 
 // ---------------------------------------------------------------------------
@@ -122,28 +132,6 @@ const getLpcProgram = (): GlProgram => {
 const LPC_MAX_LAYERS = 8;
 
 /**
- * Z-depth ordering for LPC body slots (back-to-front).
- *
- * Lower values render first (behind), higher values render last (on top).
- * Body is at the back (0), hair and head accessories at the front (5–6).
- * Unsorted recipes slot into layer 0→7 in the UBO, which composites
- * back-to-front — so this z-order directly controls visual stacking.
- */
-const LPC_SLOT_Z_ORDER: Record<string, number> = {
-  body: 0,
-  legs: 1,
-  feet: 2,
-  torso: 3,
-  head: 4,
-  hair: 5,
-} as const;
-
-/**
- * Returns the z-depth for a slot name, defaulting to 0 for unknown slots.
- */
-const _getSlotZ = (slot: string): number => LPC_SLOT_Z_ORDER[slot] ?? 0;
-
-/**
  * Byte size of the std140 UBO buffer.
  *
  * Layout (std140, every field 16-byte aligned):
@@ -160,9 +148,8 @@ const LPC_UBO_FLOAT_COUNT = LPC_UBO_BYTE_SIZE / 4; // 64
  * Packs an array of {@link LpcLayerRecipe} entries into an std140-compliant
  * Float32Array suitable for upload as a uniform buffer object.
  *
- * Recipes are sorted by slot z-depth ({@link LPC_SLOT_Z_ORDER}) so that
- * back-to-front compositing produces correct visual layering: body behind
- * legs behind feet behind torso behind head behind hair.
+ * Recipes are sorted by depth from the canonical {@link LPC_LAYER_ORDER}
+ * table so that back-to-front compositing produces correct visual layering.
  *
  * The caller owns the returned buffer and must re-pack when recipes change.
  * Up to {@link LPC_MAX_LAYERS} recipes are processed; extras are ignored.
@@ -174,10 +161,10 @@ const LPC_UBO_FLOAT_COUNT = LPC_UBO_BYTE_SIZE / 4; // 64
 export const packRecipeToUboBuffer = (recipes: readonly LpcLayerRecipe[]): Float32Array => {
   const buffer = new Float32Array(LPC_UBO_FLOAT_COUNT);
 
-  // Sort by z-depth so layer 0 = body (back), layer 5 = hair (front)
+  // Sort by depth from the canonical table so layer 0 = back, layer 7 = front
   const sorted = [...recipes].sort((a, b) => {
-    const zA = _getSlotZ(a.slot);
-    const zB = _getSlotZ(b.slot);
+    const zA = resolveLayerDepth({ slot: a.slot, layerRole: a.layerRole ?? 'front', direction: 2 });
+    const zB = resolveLayerDepth({ slot: b.slot, layerRole: b.layerRole ?? 'front', direction: 2 });
     return zA - zB;
   });
 
@@ -214,181 +201,24 @@ export const packRecipeToUboBuffer = (recipes: readonly LpcLayerRecipe[]): Float
 };
 
 /**
- * GLSL ES 3.0 vertex shader for multi-layer LPC rendering.
- *
- * Same matrix chain as the single-layer zero-branch shader — passes
- * through position and UV for each layer sample.
- */
-const LPC_MULTI_LAYER_VERTEX_SHADER = /* glsl */ `#version 300 es
-
-precision highp float;
-
-// PixiJS v8 standard vertex attributes
-in vec2 aPosition;
-in vec2 aUV;
-
-// Custom instance attribute — batch pool slot index (C-034)
-in float aInstanceIndex;
-
-// PixiJS v8 uniform matrices
-uniform mat3 projectionMatrix;
-uniform mat3 translationMatrix;
-uniform mat3 uWorldTransformMatrix;
-
-// Outputs to fragment shader
-out vec2 vUV;
-out float vInstanceIndex;
-
-void main(void) {
-  mat3 mvp = projectionMatrix * translationMatrix * uWorldTransformMatrix;
-  gl_Position = vec4((mvp * vec3(aPosition, 1.0)).xy, 0.0, 1.0);
-  vUV = aUV;
-  vInstanceIndex = aInstanceIndex;
-}
-`;
-
-/**
- * GLSL ES 3.0 fragment shader for multi-layer LPC compositing with std140 UBO.
- *
- * Samples up to 8 grayscale layer textures, tints each via the UBO-supplied
- * `u_layer_tints` colour, and composites active layers in order (layer 0 = body
- * base, layer 7 = topmost hair/accessories) via back-to-front alpha blending.
- * Inactive layers (`u_active_layers[i] == 0.0`) are skipped at zero branch cost
- * (all fragments follow the same instruction path).
- *
- * Each grayscale texture's red channel provides the opacity mask; the UBO tint
- * supplies the RGB colour. Layers composite via the standard Porter-Duff
- * "over" operator in premultiplied-alpha form: `src + dst * (1.0 - src.a)`.
- */
-const LPC_MULTI_LAYER_FRAGMENT_SHADER = /* glsl */ `#version 300 es
-
-precision highp float;
-
-// Inputs from vertex shader
-in vec2 vUV;
-in float vInstanceIndex;
-
-// 8 grayscale layer textures (R channel = opacity mask)
-uniform sampler2D uTexture0;
-uniform sampler2D uTexture1;
-uniform sampler2D uTexture2;
-uniform sampler2D uTexture3;
-uniform sampler2D uTexture4;
-uniform sampler2D uTexture5;
-uniform sampler2D uTexture6;
-uniform sampler2D uTexture7;
-
-// std140 uniform block — see packRecipeToUboBuffer for JS layout
-layout(std140) uniform LpcCharacterData {
-    vec4 u_layer_tints[8];
-    float u_active_layers[8];
-};
-
-out vec4 outColor;
-
-void main(void) {
-  // Accumulated colour (premultiplied alpha) — initialised to transparent
-  vec4 result = vec4(0.0);
-
-  // Layer 0 — base (body): initialise result to first source
-  if (u_active_layers[0] > 0.5) {
-    float a = texture(uTexture0, vUV).r;
-    vec4 src = vec4(u_layer_tints[0].rgb * a, a);
-    result = src;
-  }
-
-  // Layer 1 — composite over previous result (over operator, premultiplied)
-  if (u_active_layers[1] > 0.5) {
-    float a = texture(uTexture1, vUV).r;
-    vec4 src = vec4(u_layer_tints[1].rgb * a, a);
-    result = src + result * (1.0 - src.a);
-  }
-
-  // Layer 2
-  if (u_active_layers[2] > 0.5) {
-    float a = texture(uTexture2, vUV).r;
-    vec4 src = vec4(u_layer_tints[2].rgb * a, a);
-    result = src + result * (1.0 - src.a);
-  }
-
-  // Layer 3
-  if (u_active_layers[3] > 0.5) {
-    float a = texture(uTexture3, vUV).r;
-    vec4 src = vec4(u_layer_tints[3].rgb * a, a);
-    result = src + result * (1.0 - src.a);
-  }
-
-  // Layer 4
-  if (u_active_layers[4] > 0.5) {
-    float a = texture(uTexture4, vUV).r;
-    vec4 src = vec4(u_layer_tints[4].rgb * a, a);
-    result = src + result * (1.0 - src.a);
-  }
-
-  // Layer 5
-  if (u_active_layers[5] > 0.5) {
-    float a = texture(uTexture5, vUV).r;
-    vec4 src = vec4(u_layer_tints[5].rgb * a, a);
-    result = src + result * (1.0 - src.a);
-  }
-
-  // Layer 6
-  if (u_active_layers[6] > 0.5) {
-    float a = texture(uTexture6, vUV).r;
-    vec4 src = vec4(u_layer_tints[6].rgb * a, a);
-    result = src + result * (1.0 - src.a);
-  }
-
-  // Layer 7 — topmost (hair, accessories)
-  if (u_active_layers[7] > 0.5) {
-    float a = texture(uTexture7, vUV).r;
-    vec4 src = vec4(u_layer_tints[7].rgb * a, a);
-    result = src + result * (1.0 - src.a);
-  }
-
-  outColor = result;
-}
-`;
-
-let _lpcMultiLayerProgram: GlProgram | undefined;
-
-/**
- * Lazy-initialized GlProgram for the LPC multi-layer UBO pipeline.
- *
- * Created once on first access and shared across all multi-layer
- * compositions. Lazy initialization avoids `document.createElement`
- * calls during module import in DOM-less test environments.
- *
- * @returns The cached GlProgram instance.
- */
-const getLpcMultiLayerProgram = (): GlProgram => {
-  if (!_lpcMultiLayerProgram) {
-    _lpcMultiLayerProgram = new GlProgram({
-      vertex: LPC_MULTI_LAYER_VERTEX_SHADER,
-      fragment: LPC_MULTI_LAYER_FRAGMENT_SHADER,
-      name: 'lpc-multi-layer-ubo',
-    });
-  }
-  return _lpcMultiLayerProgram;
-};
-
-/**
  * Explicit initialization gate for LPC shader programs.
  *
- * Eagerly compiles both the zero-branch LUT and multi-layer UBO
- * `GlProgram` instances. Must be called exclusively inside the
- * active renderer creation pipeline context (e.g., after PixiJS
- * `Application.init`) — never at module top-level.
+ * Eagerly compiles the zero-branch LUT `GlProgram` instance. Must be called
+ * exclusively inside the active renderer creation pipeline context (e.g.,
+ * after PixiJS `Application.init`) — never at module top-level.
  *
- * Headless environments (bun test, CI) skip this gate and defer
- * compilation to first use via the lazy getters, avoiding
- * `document.createElement` / WebGL context failures.
+ * Headless environments (bun test, CI) skip this gate and defer compilation
+ * to first use via the lazy getter, avoiding `document.createElement` /
+ * WebGL context failures.
  *
  * Idempotent — subsequent calls are no-ops after first init.
+ *
+ * C-430: Multi-layer shader init removed — the dead multi-layer composer path
+ * (composeMultiLayerSprite, LPC_MULTI_LAYER_VERTEX_SHADER,
+ * LPC_MULTI_LAYER_FRAGMENT_SHADER) has been deleted.
  */
 export const initLpcShaders = (): void => {
   getLpcProgram();
-  getLpcMultiLayerProgram();
 };
 
 // ---------------------------------------------------------------------------
@@ -465,6 +295,9 @@ const createPaletteFilter = (paletteTexture: Texture): Filter =>
  *
  * The class returns a placeholder container immediately, then asynchronously
  * replaces it with proper sprites. All palette textures use `NEAREST` scaling.
+ *
+ * C-430: The multi-layer composer path (composeMultiLayerSprite) has been
+ * removed. The dead shaders and z-order table have been deleted.
  */
 export class SpriteComposer {
   /** Texture cache used to fetch / cache individual layer textures. */
@@ -517,32 +350,6 @@ export class SpriteComposer {
     const filter = createPaletteFilter(paletteTexture);
     sprite.filters = [filter];
     return sprite;
-  }
-
-  /**
-   * Composes a multi-layer sprite using the UBO batched pipeline.
-   *
-   * Packs up to 8 character layout layers into a single GPU draw call
-   * via an std140 Uniform Buffer Object. Tint colours and activation
-   * flags are extracted from the {@link LpcLayerRecipe} array and
-   * uploaded once per structural change — not per frame.
-   *
-   * Returns a placeholder container immediately. When all grayscale
-   * textures resolve, the placeholder is replaced with a multi-layer
-   * filtered sprite that composites all active layers in one shader pass.
-   *
-   * @param options - Multi-layer composition options.
-   * @param options.recipes - Array of up to 8 LPC layer recipes.
-   * @returns A PixiJS `Container` with placeholder, replaced on load.
-   */
-  composeMultiLayerSprite(options: { recipes: readonly LpcLayerRecipe[] }): Container {
-    const { recipes } = options;
-    const container = new Container();
-    const placeholder = addPlaceholder(container);
-
-    this._loadAndComposeMultiLayer(container, placeholder, recipes);
-
-    return container;
   }
 
   /**
@@ -608,86 +415,6 @@ export class SpriteComposer {
   }
 
   /**
-   * Loads all grayscale sheets for the given recipes and replaces the
-   * placeholder with a multi-layer UBO-composited sprite.
-   *
-   * Each active recipe's grayscale texture is fetched via the texture
-   * manager and bound to one of the 8 sampler slots. The UBO buffer
-   * is packed from the tint colours extracted from each recipe's
-   * palette LUT, and uploaded once as a uniform block.
-   */
-  private async _loadAndComposeMultiLayer(
-    container: Container,
-    placeholder: Graphics,
-    recipes: readonly LpcLayerRecipe[],
-  ): Promise<void> {
-    // Sort by z-depth so texture[0] = body (back), texture[5] = hair (front)
-    const sortedRecipes = [...recipes].sort((a, b) => {
-      const zA = _getSlotZ(a.slot);
-      const zB = _getSlotZ(b.slot);
-      return zA - zB;
-    });
-
-    const activeRecipes = sortedRecipes.filter((r) => r?.assetId);
-
-    if (activeRecipes.length === 0) {
-      container.cacheAsTexture(true);
-      return;
-    }
-
-    try {
-      const texturePromises = activeRecipes
-        .slice(0, LPC_MAX_LAYERS)
-        .map((recipe) =>
-          this._textureManager.getGrayscaleSheet(Number.parseInt(recipe.assetId, 10)),
-        );
-      const textures = await Promise.all(texturePromises);
-
-      container.removeChild(placeholder);
-      placeholder.destroy();
-
-      const uboBuffer = packRecipeToUboBuffer(recipes);
-
-      // Build the resource map for all 8 texture slots
-      const samplerResources: Record<string, Texture['source']> = {};
-      for (let i = 0; i < LPC_MAX_LAYERS; i++) {
-        const tex = textures[i] ?? Texture.EMPTY;
-        samplerResources[`uTexture${i}`] = tex.source;
-      }
-
-      // Pack tint colours as 8 vec4s (32 floats) and active flags as 8 floats
-      // UniformGroup with ubo:true handles std140 packing automatically
-      const lpcUniforms = new UniformGroup(
-        {
-          // biome-ignore lint/style/useNamingConvention: GLSL uniform names
-          u_layer_tints: { value: new Float32Array(uboBuffer.buffer, 0, 32), type: 'vec4<f32>' },
-          // biome-ignore lint/style/useNamingConvention: GLSL uniform names
-          u_active_layers: { value: new Float32Array(uboBuffer.buffer, 32 * 4, 8), type: 'f32' },
-        },
-        { ubo: true },
-      );
-
-      const filter = new Filter({
-        glProgram: getLpcMultiLayerProgram(),
-        resources: {
-          lpcUniforms,
-          ...samplerResources,
-        },
-      });
-
-      // Create a single sprite covering all layers; the filter composites them
-      const baseTexture = textures[0] ?? Texture.WHITE;
-      const sprite = new Sprite(baseTexture);
-      sprite.filters = [filter];
-
-      container.addChild(sprite);
-      container.cacheAsTexture(true);
-    } catch {
-      container.cacheAsTexture(true);
-    }
-  }
-
-  /**
    * Loads a grayscale sheet and replaces the placeholder with a
    * palette-mapped sprite (LPC pipeline path).
    */
@@ -734,7 +461,7 @@ export class SpriteComposer {
    * - `instance`: `true` — marks it as per-instance (not per-vertex)
    * - `format`: `'float32'`
    *
-   * @param sprite - The PixiJS Sprite to attach the instance index to.
+   * @param sprite - The PixiJS Container to attach the instance index to.
    * @param instanceIndex - The batch pool slot index (0–63).
    */
   static setInstanceIndex(sprite: Container, instanceIndex: number): void {

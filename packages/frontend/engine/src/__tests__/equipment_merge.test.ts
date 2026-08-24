@@ -67,6 +67,7 @@ const recipe = (slot: string, assetId: string): LpcLayerRecipe => ({
   slot,
   assetId,
   hexPalette: new Uint8Array(1024),
+  layerRole: 'front',
 });
 
 // A default player base: body, hair, torso (cloth), legs, feet (boots), head.

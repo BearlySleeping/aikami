@@ -29,6 +29,7 @@ import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import type { LpcSlotCatalog } from './rendering/lpc_appearance_resolver.ts';
+import { resolveLayerDepth } from './rendering/lpc_layer_order.ts';
 import { resolveLpcSheetGeometry } from './rendering/lpc_sheet_geometry.ts';
 import { snapToDevicePixels } from './rendering/pixel_snap.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
@@ -3131,25 +3132,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.debug('lpc-loaded', { eid, layers: layerSprites.length });
     }
 
-    // Sort by z-depth so back-to-front rendering is correct:
-    // body behind legs behind feet behind torso behind head behind hair,
-    // with equipment (shoulders, hat, weapon, shield) layered on top.
-    // Promise.all may scramble the order, so we re-sort here.
-    const SlotZ: Record<string, number> = {
-      body: 0,
-      legs: 10,
-      feet: 20,
-      torso: 30,
-      shoulders: 40,
-      head: 50,
-      hair: 60,
-      hat: 70,
-      weapon: 80,
-      shield: 90,
-    } as const;
+    // Sort by depth from the canonical LPC_LAYER_ORDER table (C-430).
+    // This replaces the local SlotZ definition — the canonical table is
+    // the ONLY slot→depth mapping in the repo.
     layerSprites.sort((a, b) => {
-      const zA = SlotZ[a.recipe.slot] ?? 0;
-      const zB = SlotZ[b.recipe.slot] ?? 0;
+      const zA = resolveLayerDepth({
+        slot: a.recipe.slot,
+        layerRole: a.recipe.layerRole ?? 'front',
+        direction: 2, // default facing (down)
+      });
+      const zB = resolveLayerDepth({
+        slot: b.recipe.slot,
+        layerRole: b.recipe.layerRole ?? 'front',
+        direction: 2,
+      });
       return zA - zB;
     });
 

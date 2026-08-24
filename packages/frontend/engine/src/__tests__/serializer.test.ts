@@ -37,11 +37,13 @@ import {
 const _resetComponentArrays = (): void => {
   Position.x.length = 0;
   Position.y.length = 0;
+  Appearance.layers.clear();
   Appearance.layer0.length = 0;
   Appearance.layer1.length = 0;
   Appearance.layer2.length = 0;
   Appearance.layer3.length = 0;
   Appearance.layer4.length = 0;
+  Appearance.layer5.length = 0;
   CombatStats.health.length = 0;
   CombatStats.maxHealth.length = 0;
   CombatStats.initiative.length = 0;

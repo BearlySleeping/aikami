@@ -31,7 +31,10 @@ import { Visual } from '../components/visual.ts';
  */
 const PERSISTENT_COMPONENTS: Array<[string, Record<string, Array<unknown>>]> = [
   ['Position', Position],
-  ['Appearance', Appearance],
+  // C-430: Appearance has a Map field (layers) — cast to Record for
+  // serializer backward compat. The Map entries are skipped by
+  // _extractComponentSlice (source[eid] on a Map returns undefined).
+  ['Appearance', Appearance as unknown as Record<string, Array<unknown>>],
   ['CombatStats', CombatStats],
   ['Visual', Visual],
 ];

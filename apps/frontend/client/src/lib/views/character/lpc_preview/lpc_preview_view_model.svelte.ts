@@ -6,6 +6,7 @@
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine';
+import { resolveLayerDepth } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -30,22 +31,7 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-/** Canonical Aikami z-order offsets for each slot. */
-const SLOT_Z_ORDER: Record<string, number> = {
-  body: 0,
-  accessories: 5,
-  legs: 10,
-  feet: 20,
-  torso: 30,
-  shoulders: 40,
-  head: 50,
-  headAccessories: 55,
-  hair: 60,
-  hat: 70,
-  weapon: 80,
-  shield: 90,
-};
-const DEFAULT_Z_ORDER = 100;
+/** Default animation playback FPS. */
 
 /** Default animation playback FPS. */
 const DEFAULT_PLAYBACK_FPS = 12;
@@ -447,8 +433,13 @@ class LpcPreviewViewModel
         sprite.scale.set(layout.scale, layout.scale);
         sprite.alpha = 1.0;
 
-        // Z-order: use canonical slot mapping, fall back to index-based
-        const zIndex = SLOT_Z_ORDER[slotName] ?? DEFAULT_Z_ORDER + i;
+        // Z-order: use the canonical LPC_LAYER_ORDER table (C-430).
+        // This replaces the local SLOT_Z_ORDER definition.
+        const zIndex = resolveLayerDepth({
+          slot: slotName,
+          layerRole: 'front',
+          direction: 2, // default facing (down)
+        }) + i; // i ensures stable sort for layers at equal depth
         sprite.zIndex = zIndex;
 
         // Apply palette tint from LpcLayerRecipe.hexPalette

@@ -65,7 +65,8 @@ import { registerVisionVisibleObservers, VisionVisible } from '../components/vis
 import { registerVisualObservers, Visual } from '../components/visual.ts';
 import { registerZoneStatusObservers } from '../components/zone_status.ts';
 import { COMPONENT_STRIDE, FALLBACK_BUFFER_COUNT, MAX_ENTITIES } from '../config/memory_config.ts';
-import { zeroEquipmentOwnedAppearanceSlots } from '../core/appearance_layers.ts';
+// C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
+// replace the fixed six-slot ceiling. Equipment no longer borrows torso/feet.
 import { incrementEntityGeneration } from '../core/entity_reference.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
@@ -601,12 +602,8 @@ const _refreshPlayerAppearance = (eid: number): void => {
     layers[0] = DEFAULT_BODY_LAYER_ID;
   }
 
-  // C-417: torso (index 2) and feet (index 4) are equipment-owned — force
-  // them to zero in the emitted base layers so the main thread always
-  // renders gear from the equipment provider, never baked into the base
-  // appearance. This makes unequipping reveal the bare body even when a
-  // restored save captured a non-zeroed appearance (chainmail/boots).
-  zeroEquipmentOwnedAppearanceSlots(layers);
+  // C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
+  // replace the fixed six-slot ceiling. Equipment adds its own layers.
 
   workerBridge.emit({
     type: 'APPEARANCE_CHANGED',
@@ -1570,7 +1567,12 @@ self.onmessage = (event: MessageEvent): void => {
             // Copy persistent components from the temp entity to the player,
             // then discard the temp entity.
             copyComponentSoA(Position, restoredEid, playerEntityId);
-            copyComponentSoA(Appearance, restoredEid, playerEntityId);
+            // C-430: Appearance has a Map field — cast for copyComponentSoA compat
+            copyComponentSoA(
+              Appearance as unknown as Record<string, Array<unknown>>,
+              restoredEid,
+              playerEntityId,
+            );
             copyComponentSoA(CombatStats, restoredEid, playerEntityId);
             copyComponentSoA(Visual, restoredEid, playerEntityId);
             incrementEntityGeneration(restoredEid);
@@ -1793,9 +1795,7 @@ self.onmessage = (event: MessageEvent): void => {
               // render gear alongside the equipment provider. Other entities
               // are emitted as-is.
               const normalized: number[] = newEid === playerEntityId ? [...layers] : [...layers];
-              if (newEid === playerEntityId) {
-                zeroEquipmentOwnedAppearanceSlots(normalized);
-              }
+              // C-430: zeroEquipmentOwnedAppearanceSlots removed
               postMessage({
                 type: 'SYNC',
                 events: [

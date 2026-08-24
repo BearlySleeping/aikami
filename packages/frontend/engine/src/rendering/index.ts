@@ -7,6 +7,18 @@ export {
   LpcDirection,
   velocityToDirection,
 } from './animation_controller.ts';
+// C-430: composeMultiLayerSprite and multi-layer shaders removed — dead code.
+export {
+  getMaxKnownDepth,
+  LPC_LAYER_ORDER,
+  type LpcLayer,
+  type LpcLayerOrderEntry,
+  type LpcLayerRole,
+  type LpcSlot,
+  resetUnknownSlotWarnings,
+  resolveLayerDepth,
+  sortLayersByDepth,
+} from './lpc_layer_order.ts';
 export {
   type LpcCellFamily,
   type LpcSheetGeometry,
