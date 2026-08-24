@@ -249,8 +249,9 @@ export const runThumbnailPhase = async (options: {
   client: R2ClientLike;
   entries: readonly CatalogEntry[];
   gameDataDir: string;
+  contentPacksDir?: string;
 }): Promise<{ entries: CatalogEntry[]; report: ThumbnailPhaseReport }> => {
-  const { client, gameDataDir } = options;
+  const { client } = options;
 
   const fallbackTags: string[] = [];
   const decodeFailedTags: string[] = [];
@@ -268,7 +269,7 @@ export const runThumbnailPhase = async (options: {
 
   /** Generate + write one entry's thumbnail; never throws. */
   const generateOne = async (entry: CatalogEntry): Promise<void> => {
-    const sourcePath = join(gameDataDir, entry.path);
+    const sourcePath = join(entry.rootDir, entry.path);
     const state = entry.category === 'lpc' ? extractStateFromTag(entry.tag) : undefined;
     try {
       const thumbnail = await generateThumbnail({ sourcePath, category: entry.category, state });

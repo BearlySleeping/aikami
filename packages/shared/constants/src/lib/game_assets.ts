@@ -63,7 +63,14 @@ export type AssetCategoryDefinition = {
   stateExtensions?: readonly string[];
 };
 
-/** All supported asset categories with validation rules. */
+/**
+ * All supported asset categories with validation rules.
+ *
+ * C-433 added `maps`, `tilesets` and `content_packs` to widen catalog
+ * coverage to every asset the client ships. Category assignment is by
+ * containing directory, not by extension alone (`.json` is shared by maps,
+ * tileset descriptors and pack manifests).
+ */
 export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
   music: {
     name: 'music',
@@ -133,6 +140,27 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
       'hurt',
       'combat_idle',
     ],
+  },
+
+  // C-433: structured map data — Tiled JSON export and compact .jton form
+  maps: {
+    name: 'maps',
+    extensions: new Set(['.jton', '.json']),
+    defaultSubdirs: [],
+  },
+
+  // C-433: tileset atlases and descriptors — reverses the C-395 dev-only exclusion
+  tilesets: {
+    name: 'tilesets',
+    extensions: new Set(['.webp', '.png', '.json']),
+    defaultSubdirs: [],
+  },
+
+  // C-433: content-pack constituents — manifests, pack maps, pack sprites
+  content_packs: {
+    name: 'content_packs',
+    extensions: new Set(['.json', '.jton', '.webp', '.png']),
+    defaultSubdirs: [],
   },
 } as const satisfies Record<string, AssetCategoryDefinition>;
 

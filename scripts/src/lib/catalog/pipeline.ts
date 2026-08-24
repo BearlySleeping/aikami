@@ -25,6 +25,7 @@ import {
   ASSET_CACHE_CONTROL,
   ASSET_KEY_PREFIX,
   type CatalogConfig,
+  CONTENT_PACKS_DIR,
   GAME_DATA_DIR,
   INDEX_CACHE_CONTROL,
   INDEX_KEY_PREFIX,
@@ -41,6 +42,8 @@ export type CatalogPublishOptions = {
   client: R2ClientLike;
   /** Override game-data dir (tests). */
   gameDataDir?: string;
+  /** Override content-packs dir (tests). */
+  contentPacksDir?: string;
 };
 
 export type CatalogPublishReport = {
@@ -73,12 +76,20 @@ export type CatalogPublishReport = {
 export const buildUploadItems = (options: {
   entries: readonly CatalogEntry[];
   gameDataDir: string;
-}) =>
-  options.entries.map((entry) => ({
+  contentPacksDir?: string;
+}) => {
+  const rootDirs: Record<string, string> = {
+    [options.gameDataDir]: options.gameDataDir,
+  };
+  if (options.contentPacksDir) {
+    rootDirs[options.contentPacksDir] = options.contentPacksDir;
+  }
+  return options.entries.map((entry) => ({
     key: assetKey({ hash: entry.hash, ext: entry.ext }),
-    localPath: join(options.gameDataDir, entry.path),
+    localPath: join(entry.rootDir, entry.path),
     ext: entry.ext,
   }));
+};
 
 /**
  * Run the full catalog publish: preflight → upload → index → index upload.
@@ -86,11 +97,16 @@ export const buildUploadItems = (options: {
 export const runCatalogPublish = async (
   options: CatalogPublishOptions,
 ): Promise<CatalogPublishReport> => {
-  const { config, client, gameDataDir = GAME_DATA_DIR } = options;
+  const {
+    config,
+    client,
+    gameDataDir = GAME_DATA_DIR,
+    contentPacksDir = CONTENT_PACKS_DIR,
+  } = options;
   const startedAt = Date.now();
 
   // 1. Entries
-  const entries = loadCatalogEntries({ gameDataDir });
+  const entries = loadCatalogEntries({ gameDataDir, contentPacksDir });
 
   // 2. Preflight — hard gate before any upload.
   const creditsByTag = loadCreditsByTag(gameDataDir);
@@ -139,7 +155,7 @@ export const runCatalogPublish = async (
   // 3. Upload assets (idempotent by content-addressed key).
   const uploadReport = await uploadAssets({
     client,
-    items: buildUploadItems({ entries, gameDataDir }),
+    items: buildUploadItems({ entries, gameDataDir, contentPacksDir }),
     assetKeyPrefix: ASSET_KEY_PREFIX,
   });
 
@@ -177,7 +193,7 @@ export const runCatalogPublish = async (
   // A failed thumbnail upload DROPS that entry's thumbnailHash (the grid
   // shows a placeholder) rather than publishing a dangling reference — the
   // index stays internally consistent either way.
-  const thumbnailPhase = await runThumbnailPhase({ client, entries, gameDataDir });
+  const thumbnailPhase = await runThumbnailPhase({ client, entries, gameDataDir, contentPacksDir });
   const thumbnailFailedHashes = new Set(
     thumbnailPhase.report.failedKeys.map((key) => key.split('/').pop()?.split('.')[0] ?? ''),
   );

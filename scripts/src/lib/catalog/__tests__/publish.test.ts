@@ -38,7 +38,7 @@ describe('catalog publish pipeline (AC-1)', () => {
     const report = await runCatalogPublish({ config: config(), client, gameDataDir });
 
     expect(report.ok).toBe(true);
-    expect(report.uploaded).toBe(4); // tilesets excluded
+    expect(report.uploaded).toBe(7); // 4 original + 2 tilesets + 1 map
     expect(report.skipped).toBe(0);
     expect(report.failed).toBe(0);
     expect(report.unresolvedTags).toEqual([]);
@@ -48,18 +48,23 @@ describe('catalog publish pipeline (AC-1)', () => {
       if (key.startsWith('index/')) {
         continue;
       }
-      expect(key).toMatch(/^assets\/[0-9a-f]{2}\/[0-9a-f]{64}\.(webp|webm)$/);
+      expect(key).toMatch(/^assets\/[0-9a-f]{2}\/[0-9a-f]{64}\.(webp|webm|json)$/);
     }
   });
 
   test('asset keys are content-addressed and immutable (no overwrite by design)', async () => {
     await runCatalogPublish({ config: config(), client, gameDataDir });
     const assets = [...client.objects.keys()].filter((k) => k.startsWith('assets/'));
-    expect(assets).toHaveLength(4);
+    expect(assets).toHaveLength(7);
     // The thrust asset's key is derived from its sha256 — assert the exact
     // content-addressed key, not merely the absence of a source filename.
     const thrustHash = FIXTURE_HASHES.thrust;
     expect(assets).toContain(`assets/${thrustHash.slice(0, 2)}/${thrustHash}.webp`);
+    // C-433: tileset and map assets are content-addressed.
+    const tilesetHash = FIXTURE_HASHES.tileset;
+    expect(assets).toContain(`assets/${tilesetHash.slice(0, 2)}/${tilesetHash}.webp`);
+    const mapHash = FIXTURE_HASHES.map;
+    expect(assets).toContain(`assets/${mapHash.slice(0, 2)}/${mapHash}.json`);
   });
 
   test('applies correct MIME type and one-year immutable Cache-Control', async () => {
@@ -71,7 +76,12 @@ describe('catalog publish pipeline (AC-1)', () => {
     for (const [key, object] of assets) {
       expect(object.cacheControl).toBe('public, max-age=31536000, immutable');
       const ext = key.slice(key.lastIndexOf('.'));
-      expect(object.contentType).toBe(ext === '.webm' ? 'audio/webm' : 'image/webp');
+      const typeMap: Record<string, string> = {
+        '.webm': 'audio/webm',
+        '.webp': 'image/webp',
+        '.json': 'application/json',
+      };
+      expect(object.contentType).toBe(typeMap[ext] ?? 'application/octet-stream');
     }
   });
 
@@ -87,13 +97,13 @@ describe('catalog publish pipeline (AC-1)', () => {
 
   test('re-run skips every object (idempotent) and exits ok', async () => {
     const first = await runCatalogPublish({ config: config(), client, gameDataDir });
-    expect(first.uploaded).toBe(4);
+    expect(first.uploaded).toBe(7);
     const putCountAfterFirst = client.putCount;
 
     const second = await runCatalogPublish({ config: config(), client, gameDataDir });
     expect(second.ok).toBe(true);
     expect(second.uploaded).toBe(0);
-    expect(second.skipped).toBe(4);
+    expect(second.skipped).toBe(7);
     // Only the index objects were re-written on the second run: every shard
     // plus the root, exactly — no extra puts.
     expect(client.putCount - putCountAfterFirst).toBe(second.shardKeys.length + 1);
@@ -107,14 +117,15 @@ describe('catalog publish pipeline (AC-1)', () => {
     const first = await runCatalogPublish({ config: config(), client, gameDataDir });
     const assetKeys = [...client.objects.keys()].filter((k) => k.startsWith('assets/'));
     // Remove half the objects to simulate an interrupted run.
-    for (const key of assetKeys.slice(0, 2)) {
+    const halfCount = Math.floor(assetKeys.length / 2);
+    for (const key of assetKeys.slice(0, halfCount)) {
       client.objects.delete(key);
     }
 
     const resume = await runCatalogPublish({ config: config(), client, gameDataDir });
     expect(resume.ok).toBe(true);
-    expect(resume.uploaded).toBe(2);
-    expect(resume.skipped).toBe(2);
+    expect(resume.uploaded).toBe(halfCount);
+    expect(resume.skipped).toBe(assetKeys.length - halfCount);
     // Every referenced asset object exists (index written after uploads).
     for (const key of assetKeys) {
       expect(client.objects.has(key)).toBe(true);
@@ -144,7 +155,7 @@ describe('catalog publish pipeline (AC-1)', () => {
       path: 'music/combat/uncredited.webm',
       ext: '.webm',
     };
-    manifest.count = 6;
+    manifest.count = 8;
     const { readFileSync, writeFileSync: w } = require('node:fs') as typeof import('node:fs');
     w(manifestPath, JSON.stringify(manifest));
     // The fixture has no music/combat dir — create it with the file.

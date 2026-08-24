@@ -140,3 +140,22 @@ export const REPO_ROOT = resolve(import.meta.dirname, '../../../../');
 
 /** Bundled game-data directory that the publish pipeline reads. */
 export const GAME_DATA_DIR = resolve(REPO_ROOT, 'apps/frontend/client/static/game-data');
+
+/** Content-packs directory (C-433: outside the game-data tree). */
+export const CONTENT_PACKS_DIR = resolve(REPO_ROOT, 'apps/frontend/client/static/content-packs');
+
+/**
+ * All scan roots the publish pipeline reads from.
+ * C-433: widened from a single game-data dir to include content-packs.
+ */
+export type AssetScanRoot = {
+  /** Absolute path to walk. */
+  dir: string;
+  /** Public path prefix, e.g. "/game-data" or "/content-packs". */
+  urlPrefix: string;
+};
+
+export const SCAN_ROOTS: AssetScanRoot[] = [
+  { dir: GAME_DATA_DIR, urlPrefix: '/game-data' },
+  { dir: CONTENT_PACKS_DIR, urlPrefix: '/content-packs' },
+];

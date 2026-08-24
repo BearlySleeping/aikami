@@ -14,6 +14,8 @@ export const makeFixtureGameData = (): string => {
   mkdirSync(join(dir, 'music', 'exploration'), { recursive: true });
   mkdirSync(join(dir, 'lpc', 'hat', 'magic'), { recursive: true });
   mkdirSync(join(dir, 'sprites', 'combat'), { recursive: true });
+  mkdirSync(join(dir, 'sprites', 'tilesets'), { recursive: true });
+  mkdirSync(join(dir, 'maps'), { recursive: true });
 
   // Buffers the fixture files are written from — sizeBytes below is DERIVED
   // from these so the manifest never drifts from the actual file bytes.
@@ -21,8 +23,11 @@ export const makeFixtureGameData = (): string => {
   const idleBytes = 'lpc-idle-bytes';
   const musicBytes = 'music-bytes';
   const portraitBytes = 'portrait-bytes';
+  const tilesetBytes = 'tileset-bytes';
+  const tilesetJsonBytes = 'tileset-json-bytes';
+  const mapBytes = 'map-bytes';
 
-  // Two lpc assets + one music asset + one tileset (excluded from catalog).
+  // Two lpc assets + one music asset + one portrait + tilesets + maps.
   writeFileSync(
     join(dir, 'lpc', 'hat', 'magic', 'celestial_adult.thrust.webp'),
     Buffer.from(thrustBytes),
@@ -33,6 +38,11 @@ export const makeFixtureGameData = (): string => {
   );
   writeFileSync(join(dir, 'music', 'exploration', 'bgm_explore.webm'), Buffer.from(musicBytes));
   writeFileSync(join(dir, 'sprites', 'combat', 'enemy_portrait.webp'), Buffer.from(portraitBytes));
+  // C-433: tilesets are now catalog assets (reversing C-395 exclusion).
+  writeFileSync(join(dir, 'sprites', 'tilesets', 'atlas.webp'), Buffer.from(tilesetBytes));
+  writeFileSync(join(dir, 'sprites', 'tilesets', 'atlas.json'), Buffer.from(tilesetJsonBytes));
+  // C-433: maps are now catalog assets.
+  writeFileSync(join(dir, 'maps', 'sandbox_zone_a.json'), Buffer.from(mapBytes));
 
   const hashOf = (bytes: string): string => {
     // Deterministic 64-hex hash: sha256 of the content via crypto.
@@ -44,13 +54,15 @@ export const makeFixtureGameData = (): string => {
   const hIdle = hashOf(idleBytes);
   const hMusic = hashOf(musicBytes);
   const hPortrait = hashOf(portraitBytes);
-  const hTileset = hashOf('tileset-bytes');
+  const hTileset = hashOf(tilesetBytes);
+  const hTilesetJson = hashOf(tilesetJsonBytes);
+  const hMap = hashOf(mapBytes);
 
   writeFileSync(
     join(dir, 'manifest.json'),
     JSON.stringify({
       scannedAt: '2026-08-15T00:00:00.000Z',
-      count: 5,
+      count: 7,
       assets: {
         'lpc:hat:magic:celestial_adult:thrust': {
           tag: 'lpc:hat:magic:celestial_adult:thrust',
@@ -84,14 +96,32 @@ export const makeFixtureGameData = (): string => {
           path: 'sprites/combat/enemy_portrait.webp',
           ext: '.webp',
         },
-        // tilesets stay OUT of the catalog (contract Edge Cases)
-        'sprites:tilesets:atlas': {
-          tag: 'sprites:tilesets:atlas',
-          category: 'sprites',
+        // C-433: tilesets are now catalog assets (reversing C-395 exclusion).
+        // Tags include extension to disambiguate atlas.webp from atlas.json.
+        'sprites:tilesets:atlas.webp': {
+          tag: 'sprites:tilesets:atlas.webp',
+          category: 'tilesets',
           subcategory: 'tilesets',
           name: 'atlas',
           path: 'sprites/tilesets/atlas.webp',
           ext: '.webp',
+        },
+        'sprites:tilesets:atlas.json': {
+          tag: 'sprites:tilesets:atlas.json',
+          category: 'tilesets',
+          subcategory: 'tilesets',
+          name: 'atlas',
+          path: 'sprites/tilesets/atlas.json',
+          ext: '.json',
+        },
+        // C-433: maps are now catalog assets.
+        'maps:sandbox_zone_a': {
+          tag: 'maps:sandbox_zone_a',
+          category: 'maps',
+          subcategory: '',
+          name: 'sandbox_zone_a',
+          path: 'maps/sandbox_zone_a.json',
+          ext: '.json',
         },
       },
       byCategory: {},
@@ -119,7 +149,9 @@ export const makeFixtureGameData = (): string => {
           hash: hPortrait,
           sizeBytes: Buffer.byteLength(portraitBytes),
         },
-        'sprites:tilesets:atlas': { hash: hTileset, sizeBytes: 13 },
+        'sprites:tilesets:atlas.webp': { hash: hTileset, sizeBytes: Buffer.byteLength(tilesetBytes) },
+        'sprites:tilesets:atlas.json': { hash: hTilesetJson, sizeBytes: Buffer.byteLength(tilesetJsonBytes) },
+        'maps:sandbox_zone_a': { hash: hMap, sizeBytes: Buffer.byteLength(mapBytes) },
       },
     }),
   );
@@ -153,6 +185,25 @@ export const makeFixtureGameData = (): string => {
           sourceUrls: [],
           source: 'project',
         },
+        // C-433: tilesets and maps attribution.
+        'sprites:tilesets:atlas.webp': {
+          licenses: ['MIT'],
+          authors: ['Aikami Studio'],
+          sourceUrls: [],
+          source: 'project',
+        },
+        'sprites:tilesets:atlas.json': {
+          licenses: ['MIT'],
+          authors: ['Aikami Studio'],
+          sourceUrls: [],
+          source: 'project',
+        },
+        'maps:sandbox_zone_a': {
+          licenses: ['MIT'],
+          authors: ['Aikami Studio'],
+          sourceUrls: [],
+          source: 'project',
+        },
       },
     }),
   );
@@ -170,11 +221,115 @@ const hashOfFixture = (bytes: string): string => {
  * exported so tests can assert exact content-addressed keys derived from
  * them rather than re-hashing inline.
  */
+/**
+ * Create a fixture content-packs directory with a manifest and pack content.
+ * C-433: content-packs are scanned from a separate root.
+ */
+export const makeFixtureContentPacks = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'catalog-content-packs-'));
+  mkdirSync(join(dir, 'emberwatch', 'maps'), { recursive: true });
+
+  const manifestBytes = 'pack-manifest-bytes';
+  const innBytes = 'inn-map-bytes';
+
+  writeFileSync(join(dir, 'index.json'), Buffer.from('registry-bytes'));
+  writeFileSync(join(dir, 'emberwatch', 'manifest.json'), Buffer.from(manifestBytes));
+  writeFileSync(join(dir, 'emberwatch', 'maps', 'inn.json'), Buffer.from(innBytes));
+
+  const hashOf = (bytes: string): string => {
+    const { createHash } = require('node:crypto') as typeof import('node:crypto');
+    return createHash('sha256').update(bytes).digest('hex');
+  };
+
+  const hRegistry = hashOf('registry-bytes');
+  const hManifest = hashOf(manifestBytes);
+  const hInn = hashOf(innBytes);
+
+  writeFileSync(
+    join(dir, 'manifest.json'),
+    JSON.stringify({
+      scannedAt: '2026-08-15T00:00:00.000Z',
+      count: 3,
+      assets: {
+        'index.json': {
+          tag: 'index.json',
+          category: 'content_packs',
+          subcategory: '',
+          name: 'index',
+          path: 'index.json',
+          ext: '.json',
+        },
+        'emberwatch:manifest.json': {
+          tag: 'emberwatch:manifest.json',
+          category: 'content_packs',
+          subcategory: 'emberwatch',
+          name: 'manifest',
+          path: 'emberwatch/manifest.json',
+          ext: '.json',
+        },
+        'emberwatch:maps:inn.json': {
+          tag: 'emberwatch:maps:inn.json',
+          category: 'content_packs',
+          subcategory: 'emberwatch/maps',
+          name: 'inn',
+          path: 'emberwatch/maps/inn.json',
+          ext: '.json',
+        },
+      },
+      byCategory: {},
+    }),
+  );
+
+  writeFileSync(
+    join(dir, 'asset_hashes.json'),
+    JSON.stringify({
+      scannedAt: '2026-08-15T00:00:00.000Z',
+      hashes: {
+        'index.json': { hash: hRegistry, sizeBytes: Buffer.byteLength('registry-bytes') },
+        'emberwatch:manifest.json': { hash: hManifest, sizeBytes: Buffer.byteLength(manifestBytes) },
+        'emberwatch:maps:inn.json': { hash: hInn, sizeBytes: Buffer.byteLength(innBytes) },
+      },
+    }),
+  );
+
+  writeFileSync(
+    join(dir, 'asset_credits.json'),
+    JSON.stringify({
+      scannedAt: '2026-08-15T00:00:00.000Z',
+      credits: {
+        'index.json': {
+          licenses: ['MIT'],
+          authors: ['Aikami Studio'],
+          sourceUrls: [],
+          source: 'project',
+        },
+        'emberwatch:manifest.json': {
+          licenses: ['MIT'],
+          authors: ['Aikami Studio'],
+          sourceUrls: [],
+          source: 'project',
+        },
+        'emberwatch:maps:inn.json': {
+          licenses: ['MIT'],
+          authors: ['Aikami Studio'],
+          sourceUrls: [],
+          source: 'project',
+        },
+      },
+    }),
+  );
+
+  return dir;
+};
+
 export const FIXTURE_HASHES = {
   thrust: hashOfFixture('lpc-thrust-bytes'),
   idle: hashOfFixture('lpc-idle-bytes'),
   music: hashOfFixture('music-bytes'),
   portrait: hashOfFixture('portrait-bytes'),
+  tileset: hashOfFixture('tileset-bytes'),
+  tilesetJson: hashOfFixture('tileset-json-bytes'),
+  map: hashOfFixture('map-bytes'),
 } as const;
 
 /** In-memory fake R2 client for pipeline tests. */
