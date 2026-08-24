@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `scripts/src/lib/ops/` (new audit script), `apps/frontend/client/static/game-data/` (committed baseline), CI wiring |
 | **Priority** | P1 — cheap, and it is what makes C-431's completion objectively measurable rather than a claim. |
 | **Dependencies** | C-428 (shares the geometry definition — the audit imports the same resolver). Can be drafted in parallel, must merge after. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on running the audit |
 | **Contract version** | 1.0.0 |
@@ -340,6 +340,46 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Execution Report
+
+### Summary
+
+Built a deterministic LPC sheet coverage audit (`audit_lpc_coverage.ts`) that scans all 12,699 collected sheets, resolves geometry via the C-428 resolver, inspects alpha per cell using ImageMagick, and diffs against a committed baseline. Generated the first baseline with 4,182 known gaps (all attributed to C-431). Added moon task + CI wiring. Unit tests cover AC-1 through AC-4 with synthetic sheets.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Per-row frame coverage reported for all 12,699 sheets |
+| AC-2 | ✅ | New gap fails audit with tag + row names in output |
+| AC-3 | ✅ | Baselined gap (4,182 entries) passes cleanly |
+| AC-4 | ✅ | bg/fg pair union evaluated — tested with synthetic sheets |
+| AC-5 | ✅ | Moon task `audit-lpc-coverage` added to scripts/moon.yml |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `scripts/src/lib/ops/audit_lpc_coverage.ts` | Main audit script — alpha inspection, baseline diff, report |
+| `scripts/src/lib/ops/__tests__/audit_lpc_coverage.test.ts` | Unit tests for AC-1 through AC-4 with synthetic sheets |
+| `apps/frontend/client/static/game-data/lpc_coverage_baseline.json` | Committed baseline (4,182 known gaps, 818 KB) |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `scripts/moon.yml` | Added `audit-lpc-coverage` task with inputs covering the collector, LPC asset tree, baseline, hashes, and geometry resolver |
+
+### Deviations from Spec
+
+None. The implementation follows the contract as specified. The first baseline is large (4,182 gaps) as expected — that is the correct outcome, not a failure.
+
+### Test Results
+
+- Unit: 15/15 PASS (0 failures) — all AC-1 through AC-4 scenarios
+- Baseline: 367 pre-existing tests PASS, 0 new failures (382 total)
+- Integration: Full audit against real tree completes in ~3 min (under 5 min cold target), exits 0 with committed baseline
 
 ## Promotion Lifecycle
 
