@@ -7,6 +7,11 @@ export {
   LpcDirection,
   velocityToDirection,
 } from './animation_controller.ts';
+export {
+  type LpcCellFamily,
+  type LpcSheetGeometry,
+  resolveLpcSheetGeometry,
+} from './lpc_sheet_geometry.ts';
 export { initLpcShaders, packRecipeToUboBuffer, SpriteComposer } from './sprite_composer.ts';
 export { installNearestTextureDefault } from './texture_defaults.ts';
 export type { LpcAtlasData, TextureManagerConfig } from './texture_manager.ts';

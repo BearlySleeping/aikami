@@ -600,7 +600,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           frame: new Rectangle(x, y, layout.pitch, layout.pitch),
         });
 
-        const anchor = getLpcSpriteAnchor(layout, recipeAssetId);
+        const anchor = getLpcSpriteAnchor(layout);
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
         // Anchor at the 64px logical frame origin; universal 128px cells keep
