@@ -356,6 +356,11 @@ export {
   resetLpcFallbackWarnings,
   resolveLpcAppearance,
 } from './rendering/lpc_appearance_resolver.ts';
+export {
+  type LpcCellFamily,
+  type LpcSheetGeometry,
+  resolveLpcSheetGeometry,
+} from './rendering/lpc_sheet_geometry.ts';
 export type {
   CreatePropFrameResolverOptions,
   PropFrameResolverHandle,

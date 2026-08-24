@@ -29,6 +29,7 @@ import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import type { LpcSlotCatalog } from './rendering/lpc_appearance_resolver.ts';
+import { resolveLpcSheetGeometry } from './rendering/lpc_sheet_geometry.ts';
 import { snapToDevicePixels } from './rendering/pixel_snap.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
@@ -141,8 +142,8 @@ type NpcMetaEntry = {
 /** Frame width for the LPC walk spritesheet (64x64 per frame). */
 // const LPC_FRAME_SIZE = 64;
 
-/** Number of animation frame columns in the walk spritesheet. */
-const LPC_WALK_COLUMNS = 9;
+// C-428: LPC_WALK_COLUMNS removed — column count is now resolved per-sheet
+// via resolveLpcSheetGeometry(). The old global was wrong for oversize sheets.
 
 /** Callback invoked when the player presses the interact key. */
 type InteractRequestCallback = (npc: NpcMetaEntry) => void;
@@ -3065,23 +3066,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         const texture = await Assets.load(url);
         texture.source.scaleMode = 'nearest';
 
+        // C-428: resolve sheet geometry from actual dimensions
+        const geometry = resolveLpcSheetGeometry(texture);
+
         // C-168: Create a cached Spritesheet from the loaded texture
         // so _applyLpcFrame can use WebGPU-compatible UV sub-textures.
         let spritesheet: Spritesheet | undefined;
         if (this._textureManager) {
-          const columns = Math.floor(texture.width / 64);
-          const rows = Math.floor(texture.height / 64);
+          const columns = geometry.columns;
+          const rows = geometry.rows;
           if (columns > 0 && rows > 0) {
             spritesheet = await this._textureManager.getOrCreateSpritesheet({
               baseTexture: texture,
               layout: {
-                frameWidth: 64,
-                frameHeight: 64,
+                frameWidth: geometry.pitch,
+                frameHeight: geometry.pitch,
                 columns,
                 rows,
                 keyPrefix: stateStr,
               },
-              cacheKey: url,
+              cacheKey: `${url}::${geometry.pitch}`,
             });
           }
         }
@@ -3094,11 +3098,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
         const sprite = new Sprite(Texture.WHITE);
         sprite.eventMode = 'none';
-        // Anchor bottom-center (0.5, 1.0) — the entity position represents
-        // the character's feet. This aligns LPC sprites with the debug
-        // square and keeps the visual character above the collision point
-        // instead of offset 64×64 px to the bottom-right (default top-left anchor).
-        sprite.anchor.set(0.5, 1.0);
+        // C-428: Apply geometry-based anchor to center the 64px logical body region.
+        // The entity position represents the character's feet (bottom-center of the
+        // logical body). For standard 64px cells, this is (0.5, 1.0). For oversize
+        // 128px cells, the logical body is centered within the cell, so feet are at
+        // (64, 96) in sprite coordinates → anchor (0.5, 0.75).
+        const anchorX = 0.5; // Always horizontally centered
+        const anchorY = geometry.pitch === 64 ? 1.0 : 0.75; // Bottom of logical body
+        sprite.anchor.set(anchorX, anchorY);
 
         container.addChild(sprite);
         layerSprites.push({ sprite, recipe, texture, spritesheet });
@@ -3175,7 +3182,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     const direction = controller.direction;
-    const column = controller.getFrameColumn(LPC_WALK_COLUMNS);
     const row = direction as number; // Up=0, Left=1, Down=2, Right=3
 
     for (const layer of entry.layerSprites) {
@@ -3183,12 +3189,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         continue;
       }
 
+      // C-428: resolve sheet geometry from the loaded texture dimensions
+      const geometry = resolveLpcSheetGeometry(layer.texture);
+      const columns = geometry.columns;
+      const pitch = geometry.pitch;
+
+      // C-428: use the real per-sheet column count, not a global constant
+      const column = controller.getFrameColumn(columns);
+
       // C-168: prefer the parsed Spritesheet for WebGPU-safe UV lookups.
       // Fall back to getFrameAt when no spritesheet was created
-      // (e.g., dimensions don't align to the 64×64 grid).
+      // (e.g., dimensions don't align to the standard grid).
       if (layer.spritesheet) {
-        const columns = Math.floor(layer.texture.width / 64);
-        const rows = Math.floor(layer.texture.height / 64);
+        const rows = geometry.rows;
 
         let effectiveRow = row;
         if (rows === 1) {
@@ -3205,10 +3218,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       } else if (this._textureManager) {
         // Legacy fallback — manual frame slicing via Rectangle.
         // This path is kept for spritesheets that don't conform to
-        // the standard LPC 64×64 grid (e.g., odd-sized props).
-        const sheet = layer.texture;
-        const columns = Math.floor(sheet.width / 64);
-        const rows = Math.floor(sheet.height / 64);
+        // the standard LPC grid (e.g., odd-sized props).
+        const rows = geometry.rows;
 
         let effectiveRow = row;
         if (rows === 1) {
@@ -3219,8 +3230,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         const dynamicFrameIndex = effectiveRow * columns + frameCol;
 
         const frameTexture = this._textureManager.getFrameAt({
-          texture: sheet,
-          layout: { frameWidth: 64, frameHeight: 64, columns, rows },
+          texture: layer.texture,
+          layout: { frameWidth: pitch, frameHeight: pitch, columns, rows },
           frameIndex: dynamicFrameIndex,
         });
 
