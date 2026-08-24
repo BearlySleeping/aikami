@@ -7,9 +7,13 @@ name: PR Checks
 #
 # Expensive suites (Tauri desktop build, E2E/Playwright tests) are excluded
 # from the default graph via `runInCI: false` in their respective moon.yml
-# files. To run them on demand, use workflow_dispatch with include-heavy=true.
+# files. To run them on demand, use workflow_dispatch with include-heavy=true
+# or add the "run-heavy" label to a PR.
 on:
+  push:
+    branches: [main]
   pull_request:
+    types: [opened, synchronize, labeled]
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -40,15 +44,21 @@ jobs:
         with:
           bun-version: "1.3.13"
 
-      - name: Restore Bun & Moon build caches
+      - name: Restore Bun dependency cache
         uses: actions/cache@v5
         with:
-          path: |
-            ~/.bun/install/cache
-            .moon/cache
-          key: ${{ runner.os }}-${{ runner.arch }}-build-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/moon.yml', '**/tsconfig.json') }}
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ hashFiles('**/bun.lock', '**/bun.lockb') }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-build-
+            ${{ runner.os }}-${{ runner.arch }}-bun-
+
+      - name: Restore Moon build cache
+        uses: actions/cache@v5
+        with:
+          path: .moon/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-moon-${{ hashFiles('**/moon.yml', '**/tsconfig.json', '.moon/toolchain.yml', '.moon/tasks/all.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-moon-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -62,7 +72,7 @@ jobs:
           bun moon ci --base="$BASE"
 
       - name: Run heavy suites (Tauri build + E2E)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.include-heavy == 'true' }}
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.include-heavy) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-heavy')) }}
         run: |
           export MOON_TOOLCHAIN_FORCE_GLOBALS=true
           bun moon run client:tauri-build

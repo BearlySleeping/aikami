@@ -9,7 +9,7 @@ any more — `cloudbuild.yaml` is retired.
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `pr-checks.yml` | Pull request + workflow_dispatch | Runs `moon ci` against the base branch — lint, format, typecheck, and unit tests for everything the diff affects. Never deploys. Heavy suites (Tauri build, E2E) excluded by default; opt in via `workflow_dispatch` with `include-heavy=true`. |
+| `pr-checks.yml` | Pull request + workflow_dispatch | Runs `moon ci` against the base branch — lint, format, typecheck, and unit tests for everything the diff affects. Never deploys. Heavy suites (Tauri build, E2E) excluded by default; opt in via `workflow_dispatch` with `include-heavy=true` or the `run-heavy` label on a PR. |
 | `release.yml` | GitHub release published, or manual | The deploy pipeline. Builds and ships every app to its target. |
 | `publish-local-stack.yml` | Manual | Builds and pushes the local-stack Docker engine images. |
 | `update-compose-digests.yml` | Manual / scheduled | Pins `compose.yaml` image references to content digests. |
@@ -46,10 +46,18 @@ via `runInCI: false` in their respective `moon.yml` files:
 
 ### Running heavy suites on demand
 
-Maintainers can trigger the full suite (including Tauri build and E2E tests)
-against any branch via GitHub's **Actions → PR Checks → Run workflow** with
-`include-heavy` set to `true`. The workflow runs the default check first, then
-the heavy suites as additional steps.
+There are two ways to trigger the full suite (including Tauri build and E2E tests):
+
+**1. Label-based (for any PR, including forks):**
+A maintainer adds the `run-heavy` label to a PR. The workflow re-runs with the
+heavy suites enabled. This works for PRs from outside contributors (forks).
+
+**2. workflow_dispatch (for branches in the repo):**
+Go to GitHub's **Actions → PR Checks → Run workflow** with `include-heavy`
+set to `true`. This runs against the selected branch.
+
+In both cases, the workflow runs the default check first, then the heavy suites
+as additional steps.
 
 This is useful for:
 - A PR that changes Rust code in `src-tauri/`
