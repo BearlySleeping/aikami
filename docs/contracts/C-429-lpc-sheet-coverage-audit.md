@@ -2,7 +2,7 @@
 id: C-429
 title: "LPC Sheet Coverage Audit — Direction and Geometry Gate"
 source: "user request 2026-08-23 — engine review; missing-direction defect found by hand"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `scripts/src/lib/ops/` (new audit script), `apps/frontend/client/static/game-data/` (committed baseline), CI wiring |
 | **Priority** | P1 — cheap, and it is what makes C-431's completion objectively measurable rather than a claim. |
 | **Dependencies** | C-428 (shares the geometry definition — the audit imports the same resolver). Can be drafted in parallel, must merge after. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on running the audit |
 | **Contract version** | 1.0.0 |
