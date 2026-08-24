@@ -3066,12 +3066,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         const texture = await Assets.load(url);
         texture.source.scaleMode = 'nearest';
 
+        // C-428: resolve sheet geometry from actual dimensions
+        const geometry = resolveLpcSheetGeometry(texture);
+
         // C-168: Create a cached Spritesheet from the loaded texture
         // so _applyLpcFrame can use WebGPU-compatible UV sub-textures.
         let spritesheet: Spritesheet | undefined;
         if (this._textureManager) {
-          // C-428: resolve sheet geometry from actual dimensions
-          const geometry = resolveLpcSheetGeometry(texture);
           const columns = geometry.columns;
           const rows = geometry.rows;
           if (columns > 0 && rows > 0) {
@@ -3097,11 +3098,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
         const sprite = new Sprite(Texture.WHITE);
         sprite.eventMode = 'none';
-        // Anchor bottom-center (0.5, 1.0) — the entity position represents
-        // the character's feet. This aligns LPC sprites with the debug
-        // square and keeps the visual character above the collision point
-        // instead of offset 64×64 px to the bottom-right (default top-left anchor).
-        sprite.anchor.set(0.5, 1.0);
+        // C-428: Apply geometry-based anchor to center the 64px logical body region.
+        // The entity position represents the character's feet (bottom-center of the
+        // logical body). For standard 64px cells, this is (0.5, 1.0). For oversize
+        // 128px cells, the logical body is centered within the cell, so feet are at
+        // (64, 96) in sprite coordinates → anchor (0.5, 0.75).
+        const anchorX = 0.5; // Always horizontally centered
+        const anchorY = geometry.pitch === 64 ? 1.0 : 0.75; // Bottom of logical body
+        sprite.anchor.set(anchorX, anchorY);
 
         container.addChild(sprite);
         layerSprites.push({ sprite, recipe, texture, spritesheet });
