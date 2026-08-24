@@ -342,6 +342,30 @@ track, order is a hard dependency chain.
 - **C-435 last, and reversibly.** It removes bundled fallbacks. Remove categories one at a time, LPC last, and measure build size and boot time before starting.
 - **Explicitly deferred:** splitting `packages/frontend/engine` into `core`/`lpc`/`map`/`combat`. The seam that actually exists is runtime environment (headless sim vs pixi renderer vs node tooling), not feature domain — and none of the bugs above are caused by the current packaging. Re-evaluate after C-430 lands.
 
+## Open-Source Readiness Batch (C-436 … C-439)
+
+Prep work before the repo is shared with the SillyTavern, Marinara-Engine and
+LPC communities. Sourced from a 2026-08-24 audit of the contributor experience:
+the docs described a stack that had already been replaced, PR validation was
+silently disabled, and the hub's dev runtime was not the runtime it ships on.
+
+The documentation half of that audit is already landed (README, CONTRIBUTING,
+SECURITY, LICENSE-ASSETS, issue/PR templates, and a de-Firebase/de-Neon pass
+across `docs/`). These four contracts are the code half.
+
+| # | ID | Title | Priority | Why this order |
+|---|----|-------|----------|----------------|
+| 1 | C-438 | Restore PR checks — a cheap, reliable CI gate | **P0** | `pr-checks.yml` has `branches: [_]`, which matches nothing — no PR has ever been validated. Everything else assumes a merged PR was checked by something |
+| 2 | C-436 | Postgres/Neon decommission | P1 | Two parallel data planes in the tree, one of which cannot run in the deployed Worker at all. Executes the deferred C-426 AC-8 |
+| 3 | C-437 | Local Cloudflare dev plane — `wrangler dev` with D1 + R2 | P1 | The hub deploys as a Worker with bindings but dev-runs on Vite with none, so auth and catalog work is untestable without a Cloudflare account |
+| 4 | C-439 | Card lorebook import — stop dropping `character_book` | P1 | Highest-leverage compatibility gap for the audience being invited. Card import (C-419) is strong; the embedded lorebook is silently discarded |
+
+**Sequencing rules:**
+- **C-438 first, and alone if necessary.** It is the only P0 here and the only one that gates accepting contributions at all. It is also independent — it can land before either data-plane contract.
+- **C-436 and C-437 are independent of each other.** Either order works. C-437 is the better one to do first if outside contributors arrive before the decommission, since it unblocks them; C-436 is the better one first if the goal is reducing what a newcomer has to read.
+- **C-439 is independent of all three** and is the only one with direct player-visible value — reasonable to pull forward if the launch date moves in.
+- **C-436 is subtractive only.** If it uncovers work that isn't deletion, that's a separate contract. Same rule for C-438: if `moon ci` surfaces pre-existing failures, land the CI config and open a follow-up rather than absorbing the backlog.
+
 ## Usage
 
 ```bash

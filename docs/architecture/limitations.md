@@ -23,10 +23,10 @@ These are architectural constraints discovered during the PixiJS v8 + bitECS eng
 1. **Staging/production parity** — `aikami-staging` serves as the deployed staging project; production is `aikami-production`. Local development runs against emulators via direnv mode switching.
 2. **Pre-existing TS errors in schema tests** — `packages/shared/schemas` test files have 7 TypeScript errors (unused vars, strict null checks). Tests pass at runtime but `tsgo --noEmit` fails.
 3. **Client accessibility warnings** — svelte-check reports 7 errors + 9 warnings, mostly a11y violations in chat components.
-4. **Firebase config hardcoded** — `.env` template uses placeholder values; no automated Firebase project creation.
+4. **Cloud config is manual** — D1 database ids and R2 bucket names are filled into `wrangler.jsonc` by hand; there is no automated provisioning wizard.
 5. **No automated dependency updates** — Dependabot/Renovate not configured.
 6. **Turso local DB lifecycle** — the embedded libSQL store is initialized by `LocalDatabaseFactory` at boot; schema changes must remain compatible with existing local saves (migration strategy tracked under C-321).
-7. **No cross-origin isolation (no SharedArrayBuffer)** — the web client deliberately serves `COOP: same-origin-allow-popups` and **no COEP**, so cross-origin isolation is off everywhere. This is required for Firebase Auth popup sign-in (strict COOP severs the popup opener). All SAB-dependent code (engine zero-copy buffers, sqlite OPFS, Kokoro streaming pipeline) was removed; graceful fallbacks are in place. See [Cross-Origin Isolation — Gotchas & Lessons Learned](../gotchas/cross-origin-isolation.md).
+7. **No cross-origin isolation (no SharedArrayBuffer)** — the web client deliberately serves `COOP: same-origin-allow-popups` and **no COEP**, so cross-origin isolation is off everywhere. This is required for OAuth popup sign-in (strict COOP severs the popup opener). All SAB-dependent code (engine zero-copy buffers, sqlite OPFS, Kokoro streaming pipeline) was removed; graceful fallbacks are in place. See [Cross-Origin Isolation — Gotchas & Lessons Learned](../gotchas/cross-origin-isolation.md).
 
 ## Feature Gaps
 
@@ -78,7 +78,7 @@ Turso (libSQL) is the local source of truth (C-321). Rules:
 
 - All campaign/save/chat reads and writes go through the storage adapters in `packages/frontend/repositories` (`TursoStorageAdapter`, `LocalDatabaseFactory`) — never raw IndexedDB or direct Firestore calls for campaign data.
 - IndexedDB is reserved for session recovery and chat drafts only.
-- The game must boot, play, and save with zero network and no Firebase sign-in (directive #3).
+- The game must boot, play, and save with zero network and no sign-in (directive #3).
 
 ### PixiJS v8 WebGPU Shader Reflection Bug
 
@@ -95,11 +95,12 @@ fn mainVert(@location(0) aPosition: vec2f, @location(1) aUV: vec2f )
 All `.wgsl` shader files must have trailing whitespace before closing parentheses in attribute lists.
 A validation script (`scripts/src/lib/ops/validate_wgsl.ts`) enforces this at build time.
 
-### Data Connect GraphQL Field Naming
+### Data Connect GraphQL Field Naming *(historical)*
 
-SQL Connect (Firebase Data Connect) reserves the underscore character (`_`) in GraphQL field names for internal relationship compilers and helper queries. **GraphQL field names must use camelCase only.** Column-level names via `@col(name: "snake_case")` are unaffected — only the GraphQL schema type field names are restricted.
+> Firebase Data Connect was removed from the codebase in C-385. This entry is
+> kept because `scripts/src/lib/ops/validate_gql_fields.ts` still runs.
 
-A validation script (`scripts/src/lib/ops/validate_gql_fields.ts`) enforces this.
+SQL Connect reserved the underscore character (`_`) in GraphQL field names for internal relationship compilers and helper queries. **GraphQL field names must use camelCase only.** Column-level names via `@col(name: "snake_case")` were unaffected — only the GraphQL schema type field names were restricted.
 
 ### 2xx on Business Failures (Sync Queues)
 
@@ -107,10 +108,10 @@ If a future sync queue rejects server-side business validation (e.g. insufficien
 
 ### Cross-Origin Isolation (COOP/COEP) — Do Not Re-enable
 
-The web client must stay **non-cross-origin-isolated**: `COOP: same-origin-allow-popups` and **no COEP** (see `apps/frontend/client/firebase.json`). Rules:
+The web client must stay **non-cross-origin-isolated**: `COOP: same-origin-allow-popups` and **no COEP** (headers are set by the client Worker). Rules:
 
 - **Never set `Cross-Origin-Embedder-Policy: require-corp`** on the client — it provides zero isolation benefit without strict COOP and only blocks cross-origin subresources (e.g. Google avatar images).
-- **Never set `COOP: same-origin` (strict)** on the client — it severs `window.opener` on the cross-origin Firebase auth handler popup (`aikami-production.firebaseapp.com/__/auth/handler`), breaking Google sign-in with `auth/popup-closed-by-user`.
+- **Never set `COOP: same-origin` (strict)** on the client — it severs `window.opener` on the cross-origin OAuth handler popup, breaking Google sign-in.
 - **No header combination yields both popup sign-in and SharedArrayBuffer** — Chrome only grants `crossOriginIsolated` with strict `same-origin` COOP. If SharedArrayBuffer is ever needed again, sign-in must use the redirect flow (no popup).
 - **Do not reintroduce `SharedArrayBuffer` / `Atomics` / `crossOriginIsolated`-gated code** in the client or engine — it is dead weight that throws at runtime (`SharedArrayBuffer is not defined`) wherever isolation is off. The Tauri desktop build never had SAB either (WebKitGTK/WKWebView don't implement it).
 
@@ -136,9 +137,7 @@ Confirmed by a full walkthrough of the Emberwatch slice. Full analysis in
 
 - `packages/frontend/dataconnect` and `packages/frontend/firestore` are empty
   directories (0 `.ts` files) still referenced from 5 `tsconfig.json` files.
-  D-1 and D-2 call for their removal. → C-411
-- `apps/backend/firebase/src/controllers/scheduler/daily.ts` logs a hardcoded
-  object and returns. → C-411 / C-412
+  D-1 and D-2 call for their removal. → C-411 / C-436
 - The `appearanceLayers` builder is duplicated verbatim between
   `game_boot_service.svelte.ts:1327-1362` and
   `game_engine_service.svelte.ts:840-875`. → C-411
@@ -155,7 +154,7 @@ Confirmed by a full walkthrough of the Emberwatch slice. Full analysis in
 ## TODO (Nice to Have)
 
 1. Visual regression testing setup
-2. Automated Firebase project bootstrap in setup script
+2. Automated Cloudflare resource bootstrap (D1 + R2 provisioning) in the setup script
 3. Client Storybook integration
 4. API documentation generation
 5. Performance benchmarks

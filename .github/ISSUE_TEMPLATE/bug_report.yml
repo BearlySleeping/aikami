@@ -1,0 +1,82 @@
+name: 🐛 Bug report
+description: Something is broken or behaves unexpectedly.
+labels: ["fix"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Aikami is early — bugs are expected, and a good
+        report is genuinely useful.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did this happen?
+      options:
+        - Hosted client (aikami.bearlysleeping.com)
+        - Desktop app (Tauri release build)
+        - Local dev server (bun run dev)
+        - Local stack (Docker)
+        - Hub
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ai_mode
+    attributes:
+      label: AI mode
+      description: Skip if the bug has nothing to do with AI.
+      options:
+        - Not AI-related
+        - BYOK — cloud API key
+        - Local — Docker engines
+        - Custom OpenAI-compatible endpoint
+    validations:
+      required: false
+
+  - type: input
+    id: env
+    attributes:
+      label: OS and browser
+      placeholder: "Windows 11 / Firefox 130, or Arch Linux / desktop app"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output or logs
+      description: Browser devtools console, or terminal output. Paste as text, not a screenshot, if you can.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this isn't a duplicate.
+          required: true
+        - label: I redacted any API keys from the logs above.
+          required: true

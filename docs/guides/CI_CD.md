@@ -1,64 +1,105 @@
-# CI/CD Pipeline
+# CI/CD
 
-This document provides an overview of the CI/CD pipeline for the Aikami project. The pipeline is built on GitHub Actions and is designed to be fast, reliable, and secure.
+All automation lives in `.github/workflows/`. There is no Cloud Build pipeline
+any more — `cloudbuild.yaml` is retired.
+
+---
 
 ## Workflows
 
-The CI/CD pipeline is composed of several workflows, which are defined in the `.github/workflows` directory.
+| Workflow | Trigger | What it does |
+| --- | --- | --- |
+| `pr-checks.yml` | Pull request | Runs `moon ci` against the base branch — build, lint, test for everything the diff affects. Never deploys. |
+| `release.yml` | GitHub release published, or manual | The deploy pipeline. Builds and ships every app to its target. |
+| `publish-local-stack.yml` | Manual | Builds and pushes the local-stack Docker engine images. |
+| `update-compose-digests.yml` | Manual / scheduled | Pins `compose.yaml` image references to content digests. |
+| `discord_dev_notify.yml` | PR / issue events | Posts activity to Discord. |
 
--   `deploy.yml`: This workflow deploys the backend to Google Cloud Run and the frontend to Firebase Hosting.
--   `ci.yml`: This workflow runs on every push and pull request to the `main` and `develop` branches. It runs tests, linting, and formatting checks.
--   `generic-checks.yml`: This workflow runs on every push and pull request to the `main` and `develop` branches. It runs generic checks, such as checking for large files and spelling errors.
--   `pr-notifications.yml`: This workflow sends notifications when a pull request is opened or updated.
--   `publish-notifications.yml`: This workflow sends notifications when a new version is published.
--   `publish.yml`: This workflow publishes new versions of the packages to the npm registry.
--   `push-notifications.yml`: This workflow sends notifications when a push is made to the `main` or `develop` branches.
+---
 
-## Deployment
+## PR checks
 
-The `deploy.yml` workflow is the most important workflow in the CI/CD pipeline. It deploys the backend to Google Cloud Run and the frontend to Firebase Hosting.
+> 🔴 **PR checks are currently disabled.** `pr-checks.yml` has
+> `branches: [_]`, a character class matching only a literal `_` — so it never
+> fires. The reason is cost: `moon ci` runs `:build` for affected projects, and
+> the client build compiles Tauri (Rust + full app bundle), which is expensive
+> on GitHub Actions free credits.
+>
+> Re-enabling this — with the Tauri build gated out of the default CI graph —
+> is tracked as **C-438**. Until then, run the gate locally before pushing:
+>
+> ```bash
+> bun run fix && bun moon run :validate && bun run test
+> ```
 
-The workflow is triggered by a push to the `main` branch or a tag that starts with `v`. It can also be triggered manually.
+When enabled, the job:
 
-The workflow has the following jobs:
+1. Checks out with full history (moon needs it to diff against the base)
+2. Installs Bun 1.3.13 and restores the Bun + Moon caches
+3. `bun install --frozen-lockfile`
+4. `bun moon ci --base=origin/<base-branch>` with `MOON_TOOLCHAIN_FORCE_GLOBALS=true`
 
--   `determine-environment`: This job determines the environment to deploy to. If the workflow is triggered by a push to the `main` branch, the environment is `development`. If the workflow is triggered by a tag that starts with `v`, the environment is `production`. If the workflow is triggered manually, the environment is selected from a dropdown list.
--   `build-backend`: This job builds the backend Docker image and pushes it to Google Container Registry.
--   `build-frontend`: This job builds the frontend and uploads the build artifacts.
--   `deploy-backend`: This job deploys the backend to Google Cloud Run.
--   `deploy-frontend`: This job deploys the frontend to Firebase Hosting.
--   `integration-test`: This job runs integration tests against the development environment.
--   `rollback`: This job rolls back the backend to the previous revision if the deployment fails.
--   `notify`: This job sends a notification to a Slack channel to report the status of the deployment.
+Moon's affected-project detection means a docs-only PR does almost nothing and
+a change to `packages/shared/types` rebuilds most of the repo.
 
-### Environments
+---
 
-The CI/CD pipeline has two environments:
+## Release pipeline
 
--   **Development:** The development environment (`aikami-staging`) is used for testing and QA. It is deployed to on every push to the `main` branch.
--   **Production:** The production environment is the live environment that is used by end-users. It is deployed to when a new version is tagged.
+`release.yml` is the single deploy path. It fans out by **service type**, which
+each app declares in `scripts/src/lib/deploy/deployment_config.ts`:
 
-### Secrets
+| Service type | Target | Apps |
+| --- | --- | --- |
+| `cloudflare-worker` | Cloudflare Workers | client, hub, site, docs |
+| `tauri-release` | GitHub Releases | client desktop (Windows/macOS/Linux) |
+| `docker-release` | Artifact Registry | text, image, voice, worker |
+| `database-migration` | D1 migrations | database |
 
-The CI/CD pipeline uses a number of secrets to deploy the application. These secrets are stored in the GitHub repository and are injected into the workflow at runtime.
+Key jobs, in order:
 
--   `GCP_PROJECT_ID`: The ID of the Google Cloud project.
--   `GCP_SA_KEY`: The service account key for the Google Cloud project.
--   `FIREBASE_PROJECT_ID`: The ID of the Firebase project.
--   `FIREBASE_TOKEN`: The Firebase authentication token.
--   `PUBLIC_FIREBASE_API_KEY_PROD`: The Firebase API key for the production environment.
--   `PUBLIC_FIREBASE_AUTH_DOMAIN_PROD`: The Firebase auth domain for the production environment.
--   `PUBLIC_FIREBASE_PROJECT_ID_PROD`: The Firebase project ID for the production environment.
--   `PUBLIC_FIREBASE_STORAGE_BUCKET_PROD`: The Firebase storage bucket for the production environment.
--   `PUBLIC_FIREBASE_MESSAGING_SENDER_ID_PROD`: The Firebase messaging sender ID for the production environment.
--   `PUBLIC_FIREBASE_APP_ID_PROD`: The Firebase app ID for the production environment.
--   `PUBLIC_FIREBASE_MEASUREMENT_ID_PROD`: The Firebase measurement ID for the production environment.
--   `PUBLIC_API_BASE_URL_PROD`: The API base URL for the production environment.
--   `PUBLIC_FIREBASE_API_KEY_STAGING`: The Firebase API key for the staging environment.
--   `PUBLIC_FIREBASE_AUTH_DOMAIN_STAGING`: The Firebase auth domain for the staging environment.
---   `PUBLIC_FIREBASE_PROJECT_ID_STAGING`: The Firebase project ID for the staging environment.
--   `PUBLIC_FIREBASE_STORAGE_BUCKET_STAGING`: The Firebase storage bucket for the staging environment.
--   `PUBLIC_FIREBASE_MESSAGING_SENDER_ID_STAGING`: The Firebase messaging sender ID for the staging environment.
--   `PUBLIC_FIREBASE_APP_ID_STAGING`: The Firebase app ID for the staging environment.
--   `PUBLIC_FIREBASE_MEASUREMENT_ID_STAGING`: The Firebase measurement ID for the staging environment.
--   `PUBLIC_API_BASE_URL_STAGING`: The API base URL for the staging environment.
+- `resolve-plan` — decides what this release actually needs to deploy
+- `prepare-secrets` — pulls the deploy-time secret set from GCP Secret Manager
+- `plan-desktop` / `plan-matrix` — expands the per-platform build matrix
+- `build-web` — builds the web apps once, shared by the deploy jobs
+- `deploy-cloudflare` — `wrangler deploy` per Worker, with D1/R2 bindings
+- `deploy-desktop` — Tauri builds per platform, uploaded to the release
+- `deploy-docker-release` — engine images to Artifact Registry
+- `deploy-database-migration` — applies pending D1 migrations
+- `update-manifest` / `notify-discord` — publish the update manifest, announce
+
+> Some legacy jobs (`deploy-cloud-run-sveltekit`, `deploy-firebase-functions`)
+> still exist in the file but no app maps to them any more — the hub moved to a
+> Worker and Cloud Functions were removed. They're removed in **C-436**.
+
+---
+
+## Deploying by hand
+
+```bash
+bun run deploy                      # interactive
+bun run deploy --mode=staging       # a specific mode
+bun run deploy --mode=staging --dry-run
+```
+
+The script is the same `scripts/src/lib/deploy/` code the workflow calls, so
+local and CI deploys cannot drift.
+
+---
+
+## Secrets
+
+Deploy-time secrets live in **GCP Secret Manager** and are pulled by
+`prepare-secrets`. The mapping from env key to secret name is in
+`scripts/src/lib/deploy/deployment_config.ts`.
+
+```bash
+bun run download-secrets --mode staging      # needs gcloud auth
+bun run upload-secrets --mode staging
+```
+
+**Contributors never need any of this.** `bun run setup:env` generates a working
+local env with no cloud access at all.
+
+Cloudflare API tokens for `wrangler deploy` are stored as GitHub Actions
+secrets on the repository.

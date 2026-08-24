@@ -4,6 +4,8 @@
 
 ### The self-hosted AI RPG engine where every NPC thinks, remembers, and adapts.
 
+**Chat-first roleplay has no consequences. Aikami has a d20 — and a GM that can tell you no.**
+
 Open source · Offline-first · Bring your own key · No subscription
 
 [![License: MIT](https://img.shields.io/github/license/BearlySleeping/aikami?color=6d28d9)](LICENSE)
@@ -11,7 +13,7 @@ Open source · Offline-first · Bring your own key · No subscription
 [![Status](https://img.shields.io/badge/status-early%20development-orange)](#project-status)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/XuuhWvSxHH)
 
-**[🎮 Play](https://aikami.bearlysleeping.com)** · **[💬 Discord](https://discord.gg/XuuhWvSxHH)** · **[🐛 Issues](https://github.com/BearlySleeping/aikami/issues)**
+**[🎮 Play now](https://aikami.bearlysleeping.com)** · **[💬 Discord](https://discord.gg/XuuhWvSxHH)** · **[🤝 Contributing](CONTRIBUTING.md)** · **[🐛 Issues](https://github.com/BearlySleeping/aikami/issues)**
 
 </div>
 
@@ -23,18 +25,25 @@ Aikami fuses tabletop D&D mechanics with LLM-driven roleplay. NPCs are
 procedurally generated — archetype, personality, six-stat ability scores,
 backstory, expression pack — and an **AI Game Master** uses those stats to
 referee what you do: skill checks, persuasion, combat. Nothing is pre-scripted.
-Two players who start in the same tavern end up in different worlds.
+
+The difference from a chat frontend is **consequence**. When you tell the GM
+you want to bluff the guard, it doesn't improvise agreeably — it picks the
+check, rolls it against a real Wisdom score, and narrates the failure if you
+lose. Two players who start in the same tavern end up in different worlds
+because the dice actually decided something.
 
 It's **game-first, not chat-first**: you launch into a spatial 2D world
 rendered by PixiJS + bitECS, not a chatbot dashboard. The AI narrates;
 deterministic rules decide.
 
-- 🧠 **AI Game Master** — describe what you want to do in plain language; the GM picks the check, calls the roll, and decides how the world reacts
-- 📜 **Stats that matter** — STR/DEX/CON/INT/WIS/CHA, skills, and HP aren't cosmetic; a high-Wisdom guard *will* see through your bluff
-- 🎨 **Procedural LPC sprites** — characters are assembled from modular Liberated Pixel Cup layers, so the visual baseline needs no AI at all
-- 💾 **Offline-first** — campaigns, saves, and chat history live in a local Turso (libSQL) database; the game boots and plays with zero network
-- 🔑 **Vendor-agnostic AI** — run local models in Docker, bring your own cloud key, or (later) use managed hosting
-- 🖥️ **Cross-platform** — PWA in the browser, native desktop via Tauri v2 (Windows/macOS/Linux)
+| | |
+| --- | --- |
+| 🧠 **AI Game Master** | Describe what you want in plain language; the GM picks the check, calls the roll, and decides how the world reacts |
+| 📜 **Stats that matter** | STR/DEX/CON/INT/WIS/CHA, skills, and HP aren't cosmetic — a high-Wisdom guard *will* see through your bluff |
+| 🎨 **Procedural LPC sprites** | Characters assemble from modular Liberated Pixel Cup layers, so the visual baseline needs no AI at all |
+| 💾 **Offline-first** | Campaigns, saves, and chat history live in a local Turso (libSQL) database; the game boots and plays with zero network |
+| 🔑 **Vendor-agnostic AI** | Run local models in Docker, bring your own cloud key, or (later) use managed hosting |
+| 🖥️ **Cross-platform** | PWA in the browser, native desktop via Tauri v2 (Windows/macOS/Linux) |
 
 ---
 
@@ -48,26 +57,28 @@ memory and persistent world state are still being built. See the
 
 ---
 
-## Run it
+## Play it
 
-### Play in the browser
+### In the browser — nothing to install
 
-Nothing to install. Open the [hosted client](https://aikami.bearlysleeping.com),
-drop an Anthropic / OpenAI / Gemini key (or any OpenAI-compatible endpoint)
-into Settings, and play.
+Open the [hosted client](https://aikami.bearlysleeping.com), drop an Anthropic
+/ OpenAI / Gemini key (or any OpenAI-compatible endpoint) into Settings, and
+play. Your saves stay in your browser.
 
 ### Desktop app
 
+Grab a build from [Releases](https://github.com/BearlySleeping/aikami/releases),
+or build from source:
+
 ```bash
-# Prebuilt: https://github.com/BearlySleeping/aikami/releases
-bun install && bun tauri build   # or build from source
+bun install && bun tauri build
 ```
 
-Linux ships as an AppImage. If it won't launch, install `libfuse2`
-(`sudo apt install libfuse2` / `sudo dnf install fuse-libs`) — some newer
-distros drop it by default.
+> **Linux AppImage won't launch?** Install `libfuse2`
+> (`sudo apt install libfuse2` / `sudo dnf install fuse-libs`) — some newer
+> distros drop it by default.
 
-### Fully local, no API keys (Docker)
+### Fully local, no API keys — Docker
 
 A wizard detects your hardware, picks sane engine defaults, and writes `.env`;
 then one `docker compose up -d` starts everything, including a browser client
@@ -89,16 +100,54 @@ engines: `bun run stack init --yes --modalities text,image,voice`.
 > matrix, swapping in Ollama/ComfyUI, STT, model licensing, the
 > no-clone-needed install, and smoke tests.
 
-### Build from source
+---
+
+## Develop it
+
+**You need Bun. That's the whole hard requirement.**
 
 ```bash
 git clone https://github.com/BearlySleeping/aikami && cd aikami
-bun run setup       # checks bun, jdk, chromium, ...
-bun run setup:env   # generate .env.emulator files (no GCP access needed)
-bun run dev         # client dev server
+bun install
+bun run setup:env   # writes local .env files — no cloud account needed
+bun run dev         # client dev server → http://localhost:5173
 ```
 
-Full contributor setup: [Setup Guide](docs/intro/setup.md) ·
+`bun run setup` is an optional guided check of your machine (Bun, git, JDK,
+Chromium, Tauri deps) that prints copy-paste install commands for anything
+missing.
+
+**Docker is not required to contribute.** It's only for running the local AI
+engines in `apps/backend/local-stack/` — point the client at any cloud key
+instead and everything else works.
+
+### Tooling tiers — pick your depth
+
+| Tier | What you add | What it buys you |
+| --- | --- | --- |
+| **0 — required** | Bun | Everything builds, tests, lints, and runs. This is enough to ship a PR. |
+| **1 — recommended** | Nix + direnv | `direnv allow` and the whole toolchain (JDK, Chromium, Playwright, Tauri deps, Postgres) appears, pinned. No per-tool installs. |
+| **2 — optional** | [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) + [herdr](https://github.com/ogulcancelik/herdr) | How the maintainer works day to day: the contract pipeline, multi-pane dev sessions, autofix. |
+
+The repo is opinionated about tier 2 because that's how it gets built — but
+**nothing in the build, test, or review process requires it.** You will never
+be asked to install pi or herdr to get a PR merged.
+
+### Daily commands
+
+```bash
+bun run dev          # client dev server
+bun run test         # all tests
+bun run typecheck    # typecheck every project
+bun run fix          # auto-fix lint + format (Biome)
+bun moon run :validate   # the full gate CI runs
+```
+
+**Read [CONTRIBUTING.md](CONTRIBUTING.md) before your first PR** — it covers
+the conventions, what those `C-xxx` comments mean, and how to pick a first
+issue.
+
+Deeper: [Setup Guide](docs/intro/setup.md) ·
 [Developer Workflow](docs/guides/dev-workflow.md)
 
 ---
@@ -115,8 +164,8 @@ Text, image, and voice generation all flow through one abstraction —
 | **Service** *(planned)* | Managed pay-as-you-go hosting — no GPU, no Docker, no setup. |
 
 A text engine is required to play; image and voice are optional flourishes.
-Firebase (auth and optional cloud sync) sits on top and is **never** a boot
-dependency — your world plays and saves fine without ever signing in.
+Accounts and cloud sync are **never** a boot dependency — your world plays and
+saves fine without ever signing in.
 
 ---
 
@@ -133,16 +182,15 @@ the main thread.
 apps/
 ├── frontend/
 │   ├── client/       # Main PWA + Tauri desktop app (SvelteKit 2, Svelte 5)
-│   ├── hub/          # Community hub — assets, maps, mods, personas (Cloud Run)
+│   ├── hub/          # Community hub — assets, maps, mods, personas (Workers SSR)
 │   ├── site/         # Public landing page (Astro)
 │   └── docs/         # Documentation site (Astro)
 └── backend/
-    ├── firebase/     # Cloud Functions, auth triggers, security rules
     ├── local-stack/  # Publishable Docker topology — text/image/voice/stt + client
     ├── text/         # llama.cpp text engine
     ├── image/        # sd-server image engine
     ├── voice/        # sherpa-onnx/Kokoro voice + STT engine
-    └── worker/       # Background jobs
+    └── worker/       # Background jobs + Discord bot
 
 packages/
 ├── shared/     # types, schemas, constants, parser, logger, utils, mocks
@@ -167,10 +215,10 @@ Deeper: [Architecture](docs/architecture/architecture.md) ·
 | Frontend | SvelteKit 2 + Svelte 5 Runes · Tauri v2 |
 | Game | PixiJS v8 (WebGPU) + bitECS |
 | Local persistence | Turso (libSQL) — offline-first source of truth |
-| Cloud (optional) | Firebase (Auth, Storage, Functions) · Cloud Run · Neon Postgres |
+| Cloud (optional) | Cloudflare Workers · D1 · R2 · Better Auth |
 | AI | `AiProviderGateway` — local / BYOK / service |
 | Validation | TypeBox |
-| Testing | Playwright · Vitest · Blackbox runner |
+| Testing | Playwright · `bun test` · Blackbox runner |
 
 Full reference: [Tech Stack](docs/guides/STACK.md)
 
@@ -180,12 +228,13 @@ Full reference: [Tech Stack](docs/guides/STACK.md)
 
 | Resource | What it covers |
 | --- | --- |
+| [Contributing](CONTRIBUTING.md) | **Start here** — first PR, conventions, contract IDs |
 | [Setup Guide](docs/intro/setup.md) | Prerequisites, first-time setup, environment config |
-| [Developer Workflow](docs/guides/dev-workflow.md) | Daily commands, testing, emulators |
+| [Developer Workflow](docs/guides/dev-workflow.md) | Daily commands, testing, dev services |
 | [Architecture](docs/architecture/architecture.md) | System architecture and the engine boundary |
 | [Coding Standards](docs/guides/CODING_STANDARDS.md) | Conventions, including AI-agent coding rules |
 | [Local Stack](apps/backend/local-stack/README.md) | Docker engines, hardware backends, models |
-| [Database](docs/guides/database.md) | Local Postgres, Neon, migrations |
+| [Database](docs/guides/database.md) | Server data plane, D1, migrations |
 | [Feature Specs](docs/guides/FEATURES.md) | Personas, memory, lorebooks, world state |
 | [Client Roadmap](docs/guides/CLIENT_FEATURES.md) | Full DND/JRPG feature roadmap |
 
@@ -210,17 +259,23 @@ Contributions, ideas, and bug reports are genuinely welcome — a one-line fix
 or a proposal for something completely new. The project is early enough that
 direction is still up for discussion.
 
-- 🐛 **Bug?** [Open an issue](https://github.com/BearlySleeping/aikami/issues)
+- 🐛 **Bug?** [Open an issue](https://github.com/BearlySleeping/aikami/issues/new/choose)
 - 💡 **Idea?** Open an issue or drop it in [Discord](https://discord.gg/XuuhWvSxHH)
-- 🔧 **Code?** Fork it, skim [Coding Standards](docs/guides/CODING_STANDARDS.md), open a PR
+- 🔧 **Code?** Read [CONTRIBUTING.md](CONTRIBUTING.md), then look for
+  [`good first issue`](https://github.com/BearlySleeping/aikami/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22)
 
 ---
 
 ## License
 
-[MIT](LICENSE) — free and open source, forever. Self-hosting will always be an
-option; the planned managed tier is for people who'd rather not run their own
-AI, and will never be required.
+**Code** is [MIT](LICENSE) — free and open source, forever. Self-hosting will
+always be an option; the planned managed tier is for people who'd rather not
+run their own AI, and will never be required.
+
+**Bundled art and audio** carry their own licenses (CC-BY-SA, CC-BY, GPL, OGA-BY
+and others) — see **[LICENSE-ASSETS.md](LICENSE-ASSETS.md)** before
+redistributing. Attribution manifests ship with the app and are visible in-game
+under Credits.
 
 <div align="center">
 

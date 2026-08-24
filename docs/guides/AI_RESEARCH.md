@@ -1,6 +1,6 @@
 # AI Research Findings - April 2026
 
-> ⚠️ **Historical research record.** This document predates the July 2026 architecture decisions: **Turso (libSQL) is now the local source of truth (C-321)** and Firebase Data Connect / PowerSync were never adopted for the campaign store. It is retained as a research record only — do not use it as a source of truth for the current stack. See `docs/strategy/vision-and-directives.md` and `docs/architecture/architecture.md`.
+> ⚠️ **Historical research record.** This document predates the July 2026 architecture decisions: **Turso (libSQL) is now the local source of truth (C-321)** and Firebase Data Connect / PowerSync were never adopted for the campaign store. The server data plane has since moved to **Cloudflare D1** (C-426). It is retained as a research record only — do not use it as a source of truth for the current stack. See `docs/strategy/vision-and-directives.md` and `docs/architecture/architecture.md`.
 
 This document summarizes the findings from AI tool and technology research conducted in April 2026, including recommendations for optimizing the Aikami tech stack.
 

@@ -30,7 +30,7 @@ apps/
 │   │           ├── services/     # Client-side services (game, assets, ai)
 │   │           ├── assets/       # Asset loading
 │   │           └── utils/        # Client utilities
-│   ├── hub/                      # Community hub (SvelteKit SSR → Google Cloud Run / Bun)
+│   ├── hub/                      # Community hub (SvelteKit SSR → Cloudflare Worker)
 │   │   └── src/
 │   │       ├── routes/           # /login, /dashboard, /personas, /api/[...slugs]
 │   │       ├── lib/client/       # Client-side services
@@ -47,15 +47,11 @@ apps/
 ```
 apps/
 └── backend/
-    ├── firebase/                # Firebase backend (Cloud Functions, rules, Data Connect)
-    │   ├── src/
-    │   │   ├── controllers/     # API, callable, auth triggers, scheduler, firestore
-    │   │   └── rules/           # Security rules
-    │   └── dataconnect/         # Firebase Data Connect config (optional sync adapter)
     ├── local-stack/             # Publishable Docker topology — text/image/voice/stt + web (C-390)
     ├── image/                   # sd-server image engine (dev); ComfyUI as opt-in advanced alt
     ├── text/                    # llama.cpp text engine (dev); Ollama as opt-in advanced alt
-    └── voice/                   # sherpa-onnx/Kokoro voice + STT engine (dev)
+    ├── voice/                   # sherpa-onnx/Kokoro voice + STT engine (dev)
+    └── worker/                  # Background jobs + Discord bot (Docker)
 ```
 
 ## Packages
@@ -74,23 +70,22 @@ The `packages` directory contains the following shared packages:
 
 ### Backend Packages (`packages/backend/`)
 
-- `auth`: Firebase Authentication server-side helpers.
+- `auth`: Better Auth server-side configuration (D1-backed identity).
 - `chat`: Server-side AI — API handler, OpenAI/Gemini providers, rate limiter.
-- `configs`: Backend Firebase configuration.
-- `database`: **BaseDatabaseService** interface + backend repositories (Firestore/infra paths).
+- `configs`: Backend environment and service configuration.
+- `database`: Cloudflare D1 schema, Drizzle migrations, and server repositories.
 - `svelte-kit`: SvelteKit server-side hooks and API helpers.
 - `utils`: Server utilities (storage upload, etc.).
 
 ### Frontend Packages (`packages/frontend/`)
 
-- `configs`: Firebase client init, env validation, feature flags.
+- `configs`: Client env validation and feature flags.
 - `engine`: 🎮 PixiJS v8 + bitECS game engine — rendering, ECS systems, persistence (Turso), sync.
 - `ai-gateway`: **AiProviderGateway** — text/image/voice adapters with offline / BYOK / service modes.
-- `services`: Firebase client services (auth, functions, analytics, storage, FCM) + shared routing.
+- `services`: Client services (auth, storage, analytics, messaging) + shared routing.
 - `repositories`: Client-side data access layer (incl. `TursoStorageAdapter`, `LocalDatabaseFactory`).
 - `components`: Shared Svelte 5 UI components.
 - `utils`: Browser utilities.
-- `dataconnect`: Firebase Data Connect generated client (optional sync adapter).
 
 ## Path Aliases
 

@@ -1,108 +1,118 @@
-# Database — Local Postgres & the Server Data Plane
+# Database — The Server Data Plane
 
-Everything about the **server-side** relational database: how to run Postgres
-locally, and how the hub's catalog write model is structured, migrated, and
-deployed.
+Everything about the **server-side** relational database: what lives in it, how
+it's migrated, and how to work with it locally.
 
 > This is a contributor/operator document. It has nothing to do with player
 > data. Gameplay state — campaigns, saves, chat history — lives in Turso
-> (libSQL) **on the player's device** and never touches Postgres.
+> (libSQL) **on the player's device** and never touches the server database.
 
 ---
 
-## What Postgres is for
+## Three planes, one sentence each
 
-The hub's server-side write model lives in `packages/backend/database/`
-(Drizzle schema, generated migrations, pooled `pg` connection, catalog
-repositories).
+| Plane | Store | Owns |
+| --- | --- | --- |
+| **Player device** | Turso (libSQL) | Campaigns, saves, chat history. Source of truth. Works fully offline. |
+| **Server** | Cloudflare D1 | Identity (Better Auth), community packs, save-backup metadata. |
+| **Blobs** | Cloudflare R2 | Catalog assets, save backups. |
 
-Postgres is the **write** model. The static catalog index is a **derived read
-model** regenerated at publish time — nothing browses the catalog by querying
-Postgres at request time.
-
-Production runs on [Neon](https://neon.tech); local development runs a
-Nix-pinned Postgres of the same major version so the two speak the same wire
-protocol.
+If you're looking for where a campaign is stored, it's not here. See
+`packages/frontend/repositories`.
 
 ---
 
-## Local Postgres (dev)
+## What D1 holds
 
-Aikami pins **PostgreSQL 18** in the Nix devShell and runs it as a herdr dev
-service like any other. No Docker, no system Postgres, no sudo: the server
-runs as your OS user, binds to `127.0.0.1:5433` only (port 5432 is left free
-for your own system Postgres), and keeps all state in the gitignored
-`.postgres/` directory.
+The hub's server-side write model lives in `packages/backend/database/`:
+
+| File | What |
+| --- | --- |
+| `src/lib/d1_schema.ts` | The Drizzle schema (**sqlite** dialect) — the source of truth |
+| `drizzle.d1.config.ts` | Drizzle Kit config pointed at that schema |
+| `drizzle/` | Generated migrations. Never hand-edited. |
+| `src/lib/repositories/` | Query layer — nothing else touches the driver |
+
+Tables:
+
+- **`user`, `session`, `account`, `verification`** — Better Auth's identity tables (C-426 AC-1)
+- **`packs`, `pack_versions`** — the community catalog write model, `packs.owner_account_id` → `user.id`
+- **`account_backups`** — metadata for Turso saves backed up to R2 (C-426 AC-6/AC-7)
+
+D1 is the **write** model. The public catalog index is a **derived read model**
+regenerated at publish time — nothing browses the catalog by querying D1 at
+request time (invariant I-7).
+
+---
+
+## How the app reaches D1
+
+D1 is a **Worker binding**, not a connection string. `apps/frontend/hub/wrangler.jsonc`
+declares it:
+
+```jsonc
+"d1_databases": [{ "binding": "DB", "database_name": "aikami-hub", "database_id": "..." }],
+"r2_buckets":   [{ "binding": "SAVES_BUCKET", "bucket_name": "aikami-saves" }]
+```
+
+and the app reaches it through `platform.env.DB`, wrapped in Drizzle:
+
+```ts
+const db = drizzle(env.DB, { schema: d1 });
+```
+
+There is no `DATABASE_URL` to set, and no credential to leak. Server code must
+import the database package only from `src/lib/server/` in the hub — the I-1
+bundle guard enforces this.
+
+---
+
+## Local development
+
+`wrangler dev` provides D1 and R2 from miniflare, persisted under `.wrangler/`.
+No Cloudflare account and no network are involved.
 
 ```bash
-bun herdr:start postgres   # or: bun postgres:start (background)
-bun herdr:stop postgres    # or: bun postgres:stop
-bun postgres:status        # server state + connection details
-bun postgres:reset --yes   # delete all local data and re-initialise
-bun postgres:psql          # interactive psql
+bun run db:generate    # drizzle-kit generate → a timestamped SQL migration
+bun run db:migrate     # apply pending migrations locally
+bun run db:status      # how many migrations are applied
 ```
 
-Connection URL (database `aikami_dev` is created for you by `init`):
-
-```
-postgresql://localhost:5433/aikami_dev?sslmode=disable
-```
-
-Lifecycle script: `scripts/src/lib/postgres/lifecycle.ts`. If a previous run
-left a stale `postmaster.pid`, `start` clears it automatically.
-
-### Upgrading across a major version (17 → 18)
-
-Postgres refuses to start on a data directory initialised by a different
-major version. If you are coming from an older checkout:
-
-```bash
-bun postgres:stop
-bun postgres:reset --yes   # ⚠️ destroys ALL local Postgres data
-bun postgres:init
-bun db:migrate             # re-apply migrations
-```
-
----
-
-## Connection strings
-
-Two connection strings, both **server-side only**:
-
-| Variable                   | Purpose                                                                     | Emulator                                                 | Production (Neon)                                   |
-| -------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------------- |
-| `NEON_DATABASE_URL`        | Runtime (pooled)                                                            | `postgresql://localhost:5433/aikami_dev?sslmode=disable` | Pooled endpoint (`-pooler` host), `sslmode=require` |
-| `NEON_DATABASE_URL_DIRECT` | Migrations only (unpooled — DDL under PgBouncer transaction pooling breaks) | same as above (no pooler locally)                        | Direct endpoint                                     |
-
-They live in `apps/frontend/hub/.env.{emulator,production}` and reach Cloud
-Run as GSM secrets via the existing `buildSecretArgsFromEnvFile` path.
-
-The connection is created **lazily on first query** — a dead database never
-prevents the hub from booting. `GET /api/health/db` reports `unconfigured` /
-`unreachable` instead.
+> 🔧 **Known gap:** `bun moon run hub:dev` currently runs plain Vite, which does
+> **not** provide the `DB` / `SAVES_BUCKET` bindings — so auth and catalog
+> routes degrade locally. A `wrangler dev` dev service that provides them is
+> tracked as **C-437**.
 
 ---
 
 ## Migrations
 
-```bash
-bun run db:generate                        # drizzle-kit generate → timestamped SQL migration
-bun run db:migrate                         # apply pending migrations to LOCAL postgres (idempotent)
-bun run db:status                          # how many migrations are applied
-bun run db:migrate --mode=production       # apply to Neon via NEON_DATABASE_URL_DIRECT
-bun run deploy database --mode=production  # canonical deploy path: backup + apply
-```
-
 Migrations are **forward-only**, **generated** (never hand-edited),
-**transactional**, and are **never auto-applied on server boot**.
+**transactional**, and **never auto-applied on server boot**.
 
 Adding a table:
 
-1. Edit `packages/backend/database/src/lib/schema.ts`
+1. Edit `packages/backend/database/src/lib/d1_schema.ts`
 2. `bun run db:generate`
-3. Commit the generated SQL
-4. Apply locally (`bun run db:migrate`)
-5. Apply through the deploy pipeline (`bun run deploy database --mode=production`)
+3. Commit the generated SQL — it's reviewed like code
+4. Apply locally and verify
+5. Apply through the deploy pipeline (`bun run deploy database --mode=production`),
+   which runs `wrangler d1 migrations apply`
+
+---
+
+## Legacy: Neon Postgres
+
+Before C-426 the hub ran on Neon PostgreSQL 18 behind a pooled `pg.Pool`, with a
+Nix-pinned local Postgres for development. That path still exists —
+`src/lib/schema.ts` (pg dialect), `src/lib/connection.ts`, the `postgres` herdr
+service, `bun postgres:*` scripts — but **only for the C-426 rollback window**.
+
+**Do not build new work against it.** It carries no live traffic, `NEON_DATABASE_URL`
+should be left blank, and the hub degrades cleanly with no Postgres configured
+(`GET /api/health/db` reports `unconfigured`).
+
+Removal is tracked as **C-436**.
 
 ---
 
@@ -110,3 +120,4 @@ Adding a table:
 
 - [Developer Workflow](dev-workflow.md) — daily commands
 - [Data Layer Target Architecture](../architecture/data-layer-target-architecture.md)
+- `docs/contracts/C-426-cloudflare-native-identity-and-hosting.md`

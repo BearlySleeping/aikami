@@ -4,12 +4,12 @@
 
 ## What is Aikami?
 
-Aikami is a modern monorepo application platform with a web-native game engine. It provides a Progressive Web App (Client) with real-time features, a PixiJS v8 + bitECS 2D game engine, desktop export via Tauri v2, offline-first persistence via Turso (libSQL), local AI microservices, and a SvelteKit SSR Hub running on Cloud Run.
+Aikami is a modern monorepo application platform with a web-native game engine. It provides a Progressive Web App (Client) with real-time features, a PixiJS v8 + bitECS 2D game engine, desktop export via Tauri v2, offline-first persistence via Turso (libSQL), local AI microservices, and a SvelteKit SSR Hub running on Cloudflare Workers.
 
 - **SvelteKit Client + Tauri v2** — Cross-platform progressive web app exported as native desktop app
 - **PixiJS v8 + bitECS Game Engine** — WebGPU-accelerated 2D rendering with data-oriented ECS architecture
 - **Turso (libSQL) Offline-First** — Local-first persistence: campaigns, saves, and chat history live in an embedded SQLite-compatible store (C-321); cloud sync is an optional adapter, never a boot dependency
-- **SvelteKit Hub (SSR)** — Community hub on Google Cloud Run (Bun) for community assets, maps, mods, and managing your own characters/personas
+- **SvelteKit Hub (SSR)** — Community hub on Cloudflare Workers (D1 + R2, Better Auth) for community assets, maps, mods, and managing your own characters/personas
 - **Local AI Microservices** — llama.cpp (text), sd-server (image), sherpa-onnx/Kokoro (voice) via Docker/herdr (C-390); Ollama/ComfyUI as opt-in swaps
 - **Bun Runtime** — Fast JavaScript/TypeScript runtime
 - **Moon Monorepo** — Task orchestration and dependency management

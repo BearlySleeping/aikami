@@ -1,0 +1,59 @@
+name: 💡 Feature request
+description: Suggest something new, or a different direction.
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The project is early enough that direction is still up for discussion —
+        "have you considered doing this completely differently" is a valid issue.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation you're in, not the solution you have in mind. This is the part that's hard to reconstruct later.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or prior art
+      description: How do other tools (SillyTavern, Marinara Engine, KoboldAI, tabletop VTTs…) handle this? Links help a lot.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area?
+      multiple: true
+      options:
+        - AI Game Master / prompting
+        - Game engine / rendering
+        - Character creation & sprites
+        - Rules, dice, combat
+        - Memory, lorebooks, personas
+        - Import / export / compatibility
+        - UI & UX
+        - Desktop app (Tauri)
+        - Local stack / self-hosting
+        - Developer experience
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Would you like to build it?
+      options:
+        - label: I'd be interested in implementing this myself.
+          required: false

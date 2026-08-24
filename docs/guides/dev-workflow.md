@@ -19,7 +19,7 @@ anything missing.
 
 `bun run setup:env` (`download_secrets.ts --mode emulator`) writes each
 app's `.env.emulator` from `.env.example` plus safe fake values for the
-handful of keys required at runtime (Firebase API key, etc.) — the
+handful of keys required at runtime — the
 `demo-aikami-emulator` project isn't real, so no GCP/gcloud access is
 needed. Contributors without staging/production access still get a
 working local build this way; `bun run download-secrets --mode staging`
@@ -42,7 +42,7 @@ customized in `.env.emulator` — only fills in what's still missing.
 ```bash
 bun run dev              # Start Client dev server (http://localhost:5173)
 bun moon run hub:dev     # Start Hub dev server (apps/frontend/hub)
-bun run dev:all           # Start firebase + Client in herdr workspace
+bun run dev:all           # Start all dev services in a herdr workspace
 bun run typecheck         # Typecheck all 22 projects
 bun run fix               # Auto-fix lint/format issues (Biome)
 bun run lint              # Check lint/format without writing
@@ -53,38 +53,31 @@ bun run validate          # lint + format + typecheck
 
 ```bash
 bun run test              # Run all tests (unit + E2E via moon)
-bun run test:blackbox     # Full blackbox suite (schema → functions → Client Playwright)
+bun run test:blackbox     # Full blackbox suite (schema → API → Client Playwright)
 bun run test:blackbox client # Just Client tests
 bun run test:blackbox --no-emulator  # Skip emulator startup
 ```
 
 ## Database
 
-Local Postgres, Neon connection strings, and Drizzle migrations are covered in
-[Database](database.md).
+The server data plane is **Cloudflare D1**. Schema, migrations, and local
+workflow are covered in [Database](database.md).
 
 ```bash
-bun postgres:start   # local PG18 on 127.0.0.1:5433 (herdr service)
-bun run db:migrate   # apply pending migrations locally
-bun run db:status    # how many migrations are applied
+bun run db:generate   # generate a migration from the Drizzle schema
+bun run db:migrate    # apply pending migrations locally
+bun run db:status     # how many migrations are applied
 ```
 
-## Firebase Emulators
+> The legacy Postgres path (`bun postgres:start`, Neon connection strings) is
+> still present for the C-426 rollback window and is removed in **C-436**. New
+> work should target D1.
 
-```bash
-# Via firestack
-cd apps/backend/firebase
-bun run emulate
+## Local Cloudflare runtime
 
-# Or via the shared dev session
-bun run dev:all
-```
-
-Emulator ports:
-- Auth: 9099
-- Firestore: 8080
-- Functions: 5001
-- Storage: 9199
+The hub deploys as a Cloudflare Worker with D1 and R2 bindings. `bun moon run
+hub:dev` currently runs plain Vite, which does **not** provide those bindings —
+a local `wrangler dev` service that does is tracked as **C-437**.
 
 ## Adding a Feature
 
@@ -129,12 +122,12 @@ export class MyFeatureViewModelImpl implements MyFeatureViewModel { ... }
 
 ```
 packages/shared/schemas/src/lib/database/my-collection.ts   # TypeBox schema
-packages/backend/database/src/lib/my-collection.ts          # Server repo (Firestore/infra paths)
+packages/backend/database/src/lib/repositories/my_repo.ts   # Server repo (Cloudflare D1)
 packages/frontend/repositories/src/lib/my-collection.ts     # Client repo (TursoStorageAdapter)
 ```
 
 Campaign, save, and chat data lives in the local Turso (libSQL) store (C-321) via
-`packages/frontend/repositories` — never raw IndexedDB, and never Firestore for
+`packages/frontend/repositories` — never raw IndexedDB, and never a cloud store for
 campaign data.
 
 ### Common Aliases

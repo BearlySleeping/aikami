@@ -1,0 +1,46 @@
+name: 🛠️ Setup / DX problem
+description: The repo didn't build, run, or set up the way the docs said.
+labels: ["chore", "documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        These reports are disproportionately valuable — the maintainer's machine
+        is already configured, so setup breakage is close to invisible from the
+        inside. Thank you.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you run, and what happened?
+      description: The exact command and the error.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: doc
+    attributes:
+      label: Which doc were you following?
+      placeholder: "README 'Develop it', or docs/intro/setup.md"
+    validations:
+      required: false
+
+  - type: input
+    id: env
+    attributes:
+      label: OS, shell, Bun version
+      placeholder: "Windows 11 / Git Bash / bun 1.3.13"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Which tooling tier are you on?
+      options:
+        - "Tier 0 — just Bun"
+        - "Tier 1 — Nix + direnv"
+        - "Tier 2 — pi + herdr"
+    validations:
+      required: true

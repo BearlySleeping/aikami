@@ -20,13 +20,13 @@ This document details the primary technologies, frameworks, and services used in
 | **Game Rendering** | PixiJS v8 (WebGPU) | 2D rendering engine, imperative canvas |
 | **Game Logic** | bitECS | Entity Component System, data-oriented design |
 | Static Sites | Astro | Landing page, documentation |
-| **Hub (SSR)** | SvelteKit 2 + svelte-adapter-bun | Community hub on Google Cloud Run — assets, maps, mods, personas |
+| **Hub (SSR)** | SvelteKit 2 + `@sveltejs/adapter-cloudflare` | Community hub on Cloudflare Workers — assets, maps, mods, personas |
 | Styling | Tailwind CSS | Utility-first CSS |
-| Backend Functions | Firebase Cloud Functions v2 | Serverless API endpoints |
+| Backend API | Elysia + TypeBox, inside the hub Worker | Server API endpoints (`/api/*`) |
 | **Database (local-first)** | Turso (libSQL) | Embedded SQLite-compatible store — source of truth for campaigns, saves, chat (C-321) |
-| **Cloud Sync (optional)** | Firebase | Auth + optional backup/sync layer; never a boot dependency |
-| Authentication | Firebase Authentication | Email/password |
-| File Storage | Firebase Storage | User uploads, assets |
+| **Cloud Sync (optional)** | Cloudflare R2 | Save backup/restore; never a boot dependency |
+| Authentication | Better Auth (D1-backed) | Email/password + Google OAuth |
+| File Storage | Cloudflare R2 | Save backups, catalog assets |
 | **Local AI Microservices** | llama.cpp / sd-server / sherpa-onnx (Kokoro) | Docker/herdr services for text, image, and voice generation (C-390); Ollama/ComfyUI as opt-in swaps |
 | **Validation** | TypeBox | Runtime validation across API boundaries and persistence (unified; replaces Zod/Valibot) |
 | AI Framework | AiProviderGateway (C-320) | One wrapper, three modes: offline (local) / BYOK / service |
@@ -40,12 +40,12 @@ This document details the primary technologies, frameworks, and services used in
 │                       Aikami Platform                             │
 ├──────────────┬──────────────────────┬──────────────┬─────────────┤
 │ Client+Tauri │   Game Engine        │  Hub (SSR)   │ Site/Docs   │
-│ (SvelteKit 2)│ (PixiJS v8+bitECS)   │ (Cloud Run)  │ (Astro)     │
+│ (SvelteKit 2)│ (PixiJS v8+bitECS)   │ (CF Worker)  │ (Astro)     │
 ├──────────────┴──────────┬───────────┴──────────────┴─────────────┤
 │    Turso (libSQL) — local source of truth (C-321)                │
 ├─────────────────────────┴────────────────────────────────────────┤
-│      Firebase — auth, optional sync, infrastructure only         │
-│         Functions │ Auth │ Storage │ Firestore (infra)           │
+│  Cloudflare — Workers, D1, R2, Better Auth (optional, never boot) │
+│        Workers │ Better Auth │ D1 │ R2                        │
 ├──────────────────────────────────────────────────────────────────┤
 │        Local AI Microservices (Docker/herdr)                     │
 │    sd-server (image) │ llama.cpp (text) │ sherpa-onnx (voice)    │
@@ -63,7 +63,7 @@ This document details the primary technologies, frameworks, and services used in
 
 ## Migration Notes
 
-- **Firestore as campaign store** → Replaced by **Turso (libSQL)** as the local source of truth (C-321). Campaigns, saves, and chat history live in the embedded local database from day one; Firebase remains for auth, sync, and infrastructure only.
+- **Firestore as campaign store** → Replaced by **Turso (libSQL)** as the local source of truth (C-321). Campaigns, saves, and chat history live in the embedded local database from day one; the cloud handles auth, optional save backup, and the community catalog only.
 - **Data Connect / PowerSync / TanStack DB** → Never adopted for the campaign store. PowerSync/TanStack DB are explicitly deferred (Turso's embedded-replica sync is the default, C-357); Data Connect is revisited only if a dashboard/admin use case emerges.
 - **Genkit** → Replaced by vendor-agnostic **AiProviderGateway** (C-320) with offline (local llama.cpp/sd-server/sherpa-onnx, or Ollama/ComfyUI as opt-in swaps), BYOK, and service modes.
 - **Zod/Valibot** → Unified on **TypeBox** (tree-shakeable, used across shared schemas, types, and mocks).

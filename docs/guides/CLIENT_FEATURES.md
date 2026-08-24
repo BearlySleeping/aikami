@@ -13,7 +13,7 @@ Based on research of leading AI roleplay platforms (RisuAI, SillyTavern), this d
 
 ### Chat Interface
 - [ ] **Character Avatar Display** - Show character image in chat
-- [ ] **Chat History** - Persistent chat history with Firestore sync
+- [ ] **Chat History** - Persistent chat history with optional cloud sync
 - [ ] **Message Formatting** - Support for bold, italic, code blocks
 - [ ] **Timestamps** - Message timing display
 - [ ] **Typing Indicator** - Show when AI is generating response

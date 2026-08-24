@@ -1,44 +1,80 @@
 # Setup Guide
 
-Two very different kinds of "setup" exist in this repo — don't confuse them:
+**The short version:** you need Bun. Everything else is optional.
+
+```bash
+git clone https://github.com/BearlySleeping/aikami && cd aikami
+bun install
+bun run setup:env    # writes local .env files — no cloud account needed
+bun run dev          # → http://localhost:5173
+```
+
+If that worked, you're set up. The rest of this page is for when it didn't, or
+when you want the fuller toolchain.
+
+---
+
+## Three different "setups" — don't confuse them
 
 | Command | What it sets up | Who runs it |
 | --- | --- | --- |
-| `bun run setup` | **Local machine** — checks/installs bun, git, direnv, jdk, chromium, Tauri deps | Everyone (developers) |
-| `bun run project:setup` | **GCP cloud project** — APIs, IAM, secrets, Firebase Hosting, Artifact Registry | Maintainers (once per cloud project) |
+| `bun run setup` | **Your machine** — checks bun, git, direnv, JDK, Chromium, Tauri deps | Anyone, optional |
+| `bun run stack init` | **Local AI engines** (Docker) — text/image/voice | Only if you want local models |
+| `bun run project:setup` | **Cloud infrastructure** — GCP Secret Manager, IAM, Artifact Registry | Maintainers, once per project |
 
-This page is about **local machine setup**. For cloud infrastructure setup, see [Project Setup (GCP)](#project-setup-gcp) at the bottom or run `bun run project:setup`.
+This page is about the first one. For local AI engines see the
+[Local Stack README](../../apps/backend/local-stack/README.md). Cloud setup is
+at the [bottom](#cloud-project-setup-maintainers).
 
-Looking to run the AI engines themselves (text/image/voice, via Docker)? That's a third, separate thing — see [Local Stack README](../../apps/backend/local-stack/README.md) (`bun run stack init && docker compose up -d`).
+---
 
-## Quick Start
+## Tooling tiers
+
+You do not need all of this. Pick your depth:
+
+| Tier | Add | Buys you |
+| --- | --- | --- |
+| **0 — required** | Bun 1.3+ | Everything builds, tests, lints, runs. Enough to ship a PR. |
+| **1 — recommended** | Nix + direnv | The whole toolchain, pinned, with one command. |
+| **2 — optional** | pi + herdr | The maintainer's loop: contract pipeline, multi-pane dev sessions, autofix. |
+
+`bun run setup` checks all three tiers and prints install commands for what's
+missing. **Tier-2 lines are informational** — no PR review will ever ask you to
+install pi or herdr.
+
+---
+
+## Tier 0 — just Bun
 
 ```bash
-# Clone the repo
-git clone <repo-url> aikami
-cd aikami
-
-# Run the local setup script — a CLI guide that checks your machine
-bun run setup
+curl -fsSL https://bun.sh/install | bash    # Linux / macOS
+powershell -c "irm bun.sh/install.ps1 | iex" # Windows
 ```
 
-The local setup script will:
-1. Check essentials (Bun, git)
-2. Surface the recommended path: direnv + Nix flake (provides everything)
-3. Check agent tools (pi, herdr)
-4. Check emulator dependencies (JDK, Chromium) — needed for `bun run dev:all`
-5. Check Tauri build dependencies (Rust, webkit2gtk, …) — needed for `bun tauri build`
-6. Print copy-paste install commands for anything that's missing
+Then `bun install && bun run setup:env && bun run dev`.
 
-## Recommended path (direnv + Nix)
+`bun run setup:env` writes each app's `.env.emulator` from its `.env.example`,
+filling in safe fake values for anything required at runtime. The
+`demo-aikami-emulator` project isn't real, so **no cloud account or `gcloud`
+login is involved.** Re-running it never clobbers values you've customized — it
+only fills in what's still missing.
 
-The repo ships a `flake.nix` + `.envrc` that provides a deterministic dev
-shell (bun, jdk, chromium, playwright browsers, tauri deps, gcloud, herdr).
-With direnv + nix installed, entering the repo loads everything
-automatically — no per-tool installation needed:
+> ⚠️ **Not using the Nix flake?** The first `bun moon run ...` will otherwise
+> have moon download its own separate "latest" Bun via proto, alongside the one
+> you already installed. Set `MOON_TOOLCHAIN_FORCE_GLOBALS=true` in your shell
+> profile to make moon use yours. `flake.nix` sets this automatically, and CI
+> does the same.
+
+---
+
+## Tier 1 — Nix + direnv (recommended)
+
+The repo ships a `flake.nix` + `.envrc` providing a deterministic dev shell
+(bun, jdk, chromium, playwright browsers, tauri deps, postgres, gcloud, herdr).
+Entering the repo directory loads all of it — no per-tool installation:
 
 ```bash
-# One-time (the setup script prints the exact commands):
+# One-time (bun run setup prints the exact commands for your platform):
 curl -L https://nixos.org/nix/install | sh
 nix profile install nixpkgs#direnv nixpkgs#nix-direnv
 
@@ -46,77 +82,135 @@ nix profile install nixpkgs#direnv nixpkgs#nix-direnv
 direnv allow
 ```
 
-Not using direnv? That's fine — `bun run setup` falls back to per-tool
-checks and prints the install commands for your platform (apt / brew /
-winget). direnv is not something you install on its own; it's the umbrella
-that makes the other checks unnecessary.
+Not using direnv? Fine — `bun run setup` falls back to per-tool checks and
+prints install commands for apt / brew / winget.
 
-## Prerequisites
+---
 
-| Tool | Min Version | Install |
-| --- | --- | --- |
-| Bun | 1.x | `curl -fsSL https://bun.sh/install \| bash` |
-| git | any | https://git-scm.com |
-| JDK (emulator) | 17+ | `apt-get install openjdk-21-jdk` / `brew install openjdk` |
-| Chromium (emulator) | any | `apt-get install chromium` / `brew install --cask chromium` |
-| Rust (Tauri, Linux) | stable | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+## Tier 2 — pi + herdr (optional)
 
-Everything below is optional: nix, direnv (the recommended path), pi, herdr,
-gcloud.
+This is how the maintainer works, not a requirement.
 
-## Manual Setup
-
-If you prefer to set up manually:
+- **[pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)** — the coding agent that runs the contract pipeline (`bun run contract`)
+- **[herdr](https://github.com/ogulcancelik/herdr)** — multi-pane dev session manager (`bun run herdr:dev`)
 
 ```bash
-# 1. Install dependencies
+npm install -g @earendil-works/pi-coding-agent
+nix profile install github:ogulcancelik/herdr
+```
+
+Without them you use `bun run dev`, `bun moon run hub:dev`, etc. directly.
+Nothing is gated.
+
+---
+
+## Prerequisites by task
+
+| Task | Needs |
+| --- | --- |
+| Build, test, lint, run the client | **Bun only** |
+| Run E2E / visual tests | + JDK 17+, Chromium (or tier 1) |
+| Build the desktop app | + Rust stable, webkit2gtk (Linux) / MSVC Build Tools (Windows) |
+| Run local AI models | + Docker |
+| Deploy | + `wrangler`, cloud credentials (maintainers) |
+
+| Tool | Min | Install |
+| --- | --- | --- |
+| Bun | 1.3+ | `curl -fsSL https://bun.sh/install \| bash` |
+| git | any | https://git-scm.com |
+| JDK | 17+ | `apt install openjdk-21-jdk` / `brew install openjdk` |
+| Chromium | any | `apt install chromium` / `brew install --cask chromium` |
+| Rust | stable | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+
+---
+
+## Windows
+
+Supported and regularly used — the contract pipeline, the emulator, and Tauri
+builds all run there.
+
+```bash
+git config --global core.longpaths true
+```
+
+`bun run setup` additionally checks for Git Bash and directory-junction support
+and tells you if something's off. If you'd rather use the Nix devShell, run the
+repo under WSL.
+
+macOS is expected to work but is **not currently tested** — reports welcome via
+the [setup/DX issue template](https://github.com/BearlySleeping/aikami/issues/new/choose).
+
+---
+
+## Manual setup
+
+If you prefer to do it by hand:
+
+```bash
 bun install
 bun run moon sync
-
-# 2. Create .env from template
-cp .env.example .env
-# Edit .env with your Firebase project values
-
-# 3. Verify
+bun run setup:env      # or copy each apps/*/.env.example to .env.emulator yourself
 bun run typecheck
-bun run validate
+bun moon run :validate
 ```
 
-## Daily Development
+---
+
+## Daily development
 
 ```bash
-bun run dev        # Start Client dev server
-bun run dev:all    # Start all services (firebase + Client)
-bun run test       # Run tests
-bun run typecheck  # Typecheck all projects
-bun run fix        # Auto-fix lint/format issues
+bun run dev              # client dev server
+bun moon run hub:dev     # hub dev server
+bun run test             # all tests
+bun run typecheck        # typecheck all projects
+bun run fix              # auto-fix lint/format (Biome)
+bun moon run :validate   # the full gate
 ```
 
-## CI Mode
+See [Developer Workflow](../guides/dev-workflow.md) for the full command set.
 
-In CI environments (`CI=true`), the setup script runs non-interactively:
+---
+
+## CI mode
+
+In CI (`CI=true`) the setup script runs non-interactively:
 
 ```bash
 CI=true bun run setup
 ```
 
+---
+
 ## Troubleshooting
 
-- **Typecheck errors after setup**: Run `bun run fix` then try again
-- **Moon sync fails**: Delete `.moon/cache` and re-run `bun run moon sync`
-- **Firebase emulator issues**: Run `firebase emulators:start` manually
-- **Port conflicts**: Check if another instance of the dev server is running
+| Symptom | Fix |
+| --- | --- |
+| Typecheck errors right after setup | `bun run fix`, then retry |
+| Moon sync fails | `rm -rf .moon/cache && bun run moon sync` |
+| Moon downloads a second Bun | Set `MOON_TOOLCHAIN_FORCE_GLOBALS=true` |
+| Port already in use | Another dev server is running — `bun run herdr:stop`, or kill the port |
+| Windows path-length errors | `git config --global core.longpaths true` |
 
-## Project Setup (GCP)
+Still stuck? Open a
+[setup/DX issue](https://github.com/BearlySleeping/aikami/issues/new/choose) —
+those reports are disproportionately useful, because setup breakage is nearly
+invisible from an already-configured machine.
 
-Cloud infrastructure setup is a separate, maintainer-only flow. It enables
-GCP APIs, grants IAM roles, creates secrets, Firebase Hosting sites, and the
-Artifact Registry Docker repository:
+---
+
+## Cloud project setup (maintainers)
+
+Cloud infrastructure is a separate, maintainer-only flow. Application hosting
+runs on **Cloudflare Workers** (client, hub, site, docs) with **D1** and **R2**;
+`wrangler` handles those. GCP is still used for **Secret Manager** and
+**Artifact Registry** (the Docker engine images), which is what this wizard
+bootstraps:
 
 ```bash
-bun run project:setup                      # Full interactive wizard
-bun run project:setup --mode=staging       # Target a specific mode
-bun run project:setup --mode=staging --dry-run  # Check only, no changes
+bun run project:setup                            # full interactive wizard
+bun run project:setup --mode=staging             # target a specific mode
+bun run project:setup --mode=staging --dry-run   # check only, no changes
 ```
 
-Source: `scripts/src/lib/project_setup/`
+Contributors never need this. `bun run setup:env` gives you a working local
+build with zero cloud access.

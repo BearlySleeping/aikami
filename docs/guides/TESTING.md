@@ -7,10 +7,10 @@ Testing approach for the Aikami monorepo.
 ```
 ┌──────────────────────────────────┐
 │    Blackbox (E2E)                │  scripts/src/test_blackbox/
-│    Firebase + Client + Playwright  │
+│    Hub API + Client + Playwright │
 ├──────────────────────────────────┤
 │    Integration                   │  Per-app tests/
-│    Firestore rules, API routes   │
+│    D1 repositories, API routes   │
 ├──────────────────────────────────┤
 │    Unit                          │  Co-located *.test.ts
 │    Vitest, schema validation     │
@@ -21,7 +21,7 @@ Testing approach for the Aikami monorepo.
 
 **Location:** `src/**/*.test.ts` (co-located with source)
 
-**Runner:** Vitest (libraries), Bun test (scripts)
+**Runner:** `bun test` (Bun's built-in runner) across the monorepo
 
 **What's tested:**
 - TypeBox schema validation (packages/shared/schemas/src/lib/*.test.ts)
@@ -29,7 +29,7 @@ Testing approach for the Aikami monorepo.
 - Utility functions
 - AI response parsing
 
-**Coverage:** Partial — schemas package has 15+ test files, functions have 1.
+**Coverage:** Partial — the schemas package has 15+ test files; backend coverage is thinner.
 
 ```bash
 bun run test              # All unit tests via moon
@@ -40,15 +40,18 @@ bun run moon run schemas:test  # Just schemas
 
 **Location:** Per-project `tests/` directories
 
-**Firestore Rules Tests:**
+**Hub API tests:**
 ```bash
-cd apps/backend/firebase
-bun run test:rules
+bun test apps/frontend/hub/src/lib
 ```
+- Elysia route tests run against a mock D1 binding
+- Better Auth is exercised end-to-end through its real HTTP handler
+  (`packages/backend/auth/tests/better_auth.test.ts`)
 
-**Functions Tests:**
-- Controller unit tests in `apps/backend/firebase/tests/controllers.test.ts`
-- Auth triggers, callable functions, scheduled jobs
+**Database tests:**
+```bash
+bun test packages/backend/database/tests/
+```
 
 ## Blackbox (E2E) Tests
 
@@ -97,7 +100,7 @@ CI=true bun run test:blackbox
 | Unit (functions) | 1 test file | ⚠️ Minimal |
 | Unit (Client) | None | ❌ Missing |
 | Unit (game engine) | Some (string registry, etc.) | ⚠️ Partial — packages/frontend/engine |
-| Integration (Firestore rules) | Configured | ✅ Active |
+| Integration (hub API + D1) | Configured | ✅ Active |
 | Blackbox (schema-check) | Working | ✅ Active |
 | Blackbox (functions) | Health probe | ⚠️ Basic |
 | Blackbox (Client Playwright) | 8 spec files | ✅ Active |

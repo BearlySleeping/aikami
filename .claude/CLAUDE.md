@@ -37,8 +37,8 @@ moon check
 # Run dev server (frontend)
 moon run frontend:dev
 
-# Run backend locally (Firebase emulator)
-moon run backend:emulate
+# Run the hub (SSR) dev server
+moon run hub:dev
 
 # Run all tests
 bun test
@@ -54,12 +54,14 @@ bun test packages/backend/auth/tests/
 ```
 aikami/
 ├── apps/                    # Applications
-│   ├── backend/firebase/    # Cloud Functions (TypeScript)
-│   ├── backend/{text,voice,image}/  # Local microservices
+│   ├── backend/{text,voice,image}/  # Local AI microservices
+│   ├── backend/local-stack/ # Publishable Docker topology
+│   ├── backend/worker/      # Background jobs + Discord bot
 │   ├── frontend/
-│   │   ├── client/          # Tauri SPA (SvelteKit + Svelte 5)
-│   │   ├── docs/            # Marketing site (Astro)
-│   │   └── hub/             # Admin dashboard (SvelteKit)
+│   │   ├── client/          # Tauri SPA + PWA (SvelteKit + Svelte 5)
+│   │   ├── hub/             # Community hub, SSR → Cloudflare Worker
+│   │   ├── site/            # Public landing page (Astro)
+│   │   └── docs/            # Documentation site (Astro)
 │   └── e2e/                 # End-to-end tests (Playwright)
 │
 ├── packages/                # Shared libraries
@@ -99,7 +101,7 @@ aikami/
 2. **`backend-conventions`** — Backend: controller/service/repository layers, validation, testing
 3. **`svelte-conventions`** — Frontend: Views (logicless) + ViewModels, services, Runes, `.svelte.ts`
 4. **`aikami-ui`** — UI: Tailwind + DaisyUI conventions
-5. **`firestack`** — Functions: deployment, emulators, security rules
+5. **`testing`** — Test layout, `bun test`, blackbox and E2E suites
 
 All skills are in `.pi/skills/`. Load them via `/skill [name]` or read them directly.
 
@@ -108,7 +110,7 @@ All skills are in `.pi/skills/`. Load them via `/skill [name]` or read them dire
 - ✅ **Types, not interfaces**: `type User = {...}` not `interface User`
 - ✅ **Arrow functions only**: `const fn = () => {}` not `function fn() {}`
 - ✅ **Snake_case file names**: `user_service.ts` not `userService.ts`
-- ✅ **No direct Firestore SDK**: Go through `BaseDatabaseService`
+- ✅ **No direct DB driver access**: go through the repository layer
 - ✅ **Schemas in `packages/shared/schemas/`**: Never in `apps/**`
 - ✅ **Private members use `_` prefix**: `private readonly _db: Db`
 
@@ -179,6 +181,25 @@ touch packages/shared/[name]/package.json
 
 ---
 
+## Data Planes — Do Not Confuse
+
+| Plane | Store | Owns |
+|---|---|---|
+| **Player device** | Turso (libSQL) | Campaigns, saves, chat history. Source of truth. Works offline. |
+| **Server** | Cloudflare D1 | Identity (Better Auth), community packs, save-backup metadata. |
+| **Blobs** | Cloudflare R2 | Catalog assets, save backups. |
+
+The game must boot, play, and save with **no network and no sign-in**. Never
+make a cloud call a boot dependency.
+
+> Firebase, Firestore, Data Connect, Cloud Run, and Neon Postgres have been
+> removed or are being decommissioned. References survive in `docs/contracts/`
+> and older comments — that's history, not the target. The Postgres path in
+> `packages/backend/database` exists only for the C-426 rollback window and is
+> deleted in C-436.
+
+---
+
 ## Monorepo Boundaries
 
 **Types, schemas, and constants live in `packages/shared/`.**
@@ -194,7 +215,7 @@ touch packages/shared/[name]/package.json
 
 - ❌ Define a type in `apps/frontend/client/src/lib/types/`
 - ❌ Import from another app (e.g., `apps/frontend/hub/src/` into `apps/frontend/client/`)
-- ❌ Define a schema in `apps/backend/firebase/src/features/`
+- ❌ Define a schema anywhere under `apps/**`
 
 ---
 
@@ -210,7 +231,7 @@ Forbidden (will fail CI):
 
 Correct:
 
-- ✅ Client-side Firebase SDK (`getDoc`, `query`, etc.)
+- ✅ Client-side data access via repositories (Turso/libSQL)
 - ✅ Fetch to microservices (`/tts`, `/image`, `/transcribe`)
 - ✅ Browser APIs (localStorage, IndexedDB, Web Audio)
 - ✅ Tauri commands (`invoke('read_file')`)
@@ -252,9 +273,12 @@ Settings:
 GitHub Actions runs:
 
 - `moon ci` — Full typecheck + lint + test pipeline
-- Tests run on Node 18+, Bun 1.0+
-- PR checks require all tests to pass
-- Auto-publish to Firebase Functions on merge to `main`
+- Deploys run from `release.yml` on a published GitHub release
+
+🔴 **PR checks are currently DISABLED** — `pr-checks.yml` has `branches: [_]`,
+which matches nothing. Re-enabling it (with the Tauri build gated out) is
+tracked as C-438. Until then, run the gate locally: `bun run fix && bun moon
+run :validate && bun run test`.
 
 See `.github/workflows/` for details.
 
@@ -272,9 +296,9 @@ See `.github/workflows/` for details.
 **Problem**: "Cannot find module" when importing a type.  
 **Fix**: Use `import type { X } from "..."` (Biome enforces this).
 
-### Firebase Functions cold start
+### Worker cold start
 
-**Problem**: Functions are slow to initialize.  
+**Problem**: The hub Worker is slow to initialize.  
 **Fix**: Avoid `await import()` for lazy loading. Static `import` is faster.
 
 ### Test isolation
@@ -289,7 +313,7 @@ See `.github/workflows/` for details.
 - **Conventions**: `.pi/skills/aikami-conventions` (read first!)
 - **TypeScript**: [Handbook](https://www.typescriptlang.org/docs/)
 - **SvelteKit**: [Docs](https://kit.svelte.dev/)
-- **Firebase**: [Docs](https://firebase.google.com/docs)
+- **Cloudflare Workers**: [Docs](https://developers.cloudflare.com/workers/)
 - **PixiJS**: `.pi/generated-skills/pixijs/` (60+ skills)
 - **Tauri**: [Docs](https://tauri.app/docs/)
 

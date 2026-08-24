@@ -4,7 +4,7 @@ This document provides a high-level overview of the technical architecture of th
 
 ## Guiding Principles
 
-- **Offline-First:** Turso (libSQL) is the local source of truth (C-321) — campaigns, saves, and chat history work with zero network; Firebase auth/sync is an optional adapter, never a boot dependency
+- **Offline-First:** Turso (libSQL) is the local source of truth (C-321) — campaigns, saves, and chat history work with zero network; cloud auth/sync is an optional adapter, never a boot dependency
 - **Maintainability:** Moon monorepo with shared packages, strict TypeScript, Biome linting, vendor-agnostic service abstractions
 - **Performance:** Bun runtime, SvelteKit 2 with Svelte 5 runes, PixiJS v8 (WebGPU) + bitECS for the game engine, TypeBox for lightweight runtime validation
 
@@ -15,12 +15,12 @@ This document provides a high-level overview of the technical architecture of th
 │                       Aikami Platform                             │
 ├──────────────┬──────────────────────┬──────────────┬─────────────┤
 │ Client+Tauri │   Game Engine        │  Hub (SSR)   │ Site/Docs   │
-│ (SvelteKit 2)│ (PixiJS v8+bitECS)   │ (Cloud Run)  │ (Astro)     │
+│ (SvelteKit 2)│ (PixiJS v8+bitECS)   │ (CF Worker)  │ (Astro)     │
 ├──────────────┴──────────┬───────────┴──────────────┴─────────────┤
 │    Turso (libSQL) — local source of truth (C-321)                │
 ├─────────────────────────┴────────────────────────────────────────┤
-│      Firebase — auth, optional sync, infrastructure only         │
-│         Functions │ Auth │ Storage │ Firestore (infra)           │
+│  Cloudflare — Workers, D1, R2, Better Auth (optional, never boot) │
+│        Workers │ Better Auth │ D1 │ R2                        │
 ├──────────────────────────────────────────────────────────────────┤
 │        Local AI Microservices (Docker/herdr)                     │
 │   ComfyUI (image) │ Ollama (text) │ Kokoro (voice)               │
@@ -34,7 +34,7 @@ This document provides a high-level overview of the technical architecture of th
 ├──────────────────────────────────────────────────────────────────┤
 │             Frontend Packages (packages/frontend/)                │
 │  configs │ engine │ ai-gateway │ repositories │ services │ utils  │
-│  components │ dataconnect                                         │
+│  components                                                       │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -83,17 +83,17 @@ The game engine (PixiJS v8 + bitECS) runs inside the SvelteKit Client through a 
 
 ### Database: Turso (libSQL) — Local Source of Truth (C-321)
 
-Campaigns, saves, and chat history live in an embedded SQLite-compatible (libSQL/Turso) database on the device. Turso is the durable local repository from day one — not IndexedDB, not Firestore. This provides:
+Campaigns, saves, and chat history live in an embedded SQLite-compatible (libSQL/Turso) database on the device. Turso is the durable local repository from day one — not IndexedDB, not a cloud store. This provides:
 
 - **Offline-first**: All reads and writes hit the local database; the game plays with zero network connectivity.
 - **SQLite compatibility**: Standard SQL in a local store, with embedded-replica sync (C-357) as the default sync path when cloud sync is enabled.
 - **Database abstraction**: All client database access goes through the storage adapters in `packages/frontend/repositories` (`TursoStorageAdapter`, `LocalDatabaseFactory`) — never direct SDK calls.
-- **Firebase's role**: Auth and infrastructure only. Firebase/Storage sync is an optional adapter layered on top, never a boot dependency.
+- **The cloud's role**: Auth (Better Auth on D1) and infrastructure only. R2 save backup is an optional adapter layered on top, never a boot dependency.
 - **IndexedDB**: Used only for session recovery and chat drafts — not campaign data.
 
-### Optional Cloud Sync: Firebase
+### Optional Cloud Sync: Cloudflare R2
 
-When a user signs in, campaign data can sync through Firebase as a backup/restore channel (`firebase_sql_connect_sync` in `packages/frontend/engine`). Sync is optional: a campaign must create, play, and save without Firebase availability or sign-in (directive #3).
+When a user signs in, their local Turso save can be backed up to and restored from Cloudflare R2, authorized by the Better Auth session (C-426 AC-6/AC-7). Sync is optional: a campaign must create, play, and save with no network and no sign-in (directive #3).
 
 ### Validation: TypeBox
 
@@ -114,11 +114,12 @@ Runtime validation across the platform is unified on TypeBox (shared schemas, ty
 - Playwright tests for E2E
 - Exported to desktop via Tauri v2 as a native app (<5MB bundle)
 
-**Hub (SvelteKit 2 SSR, Cloud Run)**
-- Server-side rendered community hub at `apps/frontend/hub`, deployed to Google Cloud Run on the Bun runtime (distroless image)
+**Hub (SvelteKit 2 SSR, Cloudflare Worker)**
+- Server-side rendered community hub at `apps/frontend/hub`, deployed as a Cloudflare Worker via `@sveltejs/adapter-cloudflare` (C-426 AC-3)
 - Community assets, maps, mods, and managing your own characters/personas
-- Routes: `/login`, `/dashboard`, `/personas`, plus an API proxy (`/api/[...slugs]`) backed by Elysia
-- Firebase Hosting site `aikami-hub` rewrites to the Cloud Run service (region `europe-west3`)
+- Routes: `/login`, `/dashboard`, `/personas`, plus an API surface (`/api/[...slugs]`) backed by Elysia
+- Worker bindings: `DB` (Cloudflare D1) and `SAVES_BUCKET` (Cloudflare R2), declared in `apps/frontend/hub/wrangler.jsonc`
+- Custom domain `hub.bearlysleeping.com` routed directly to the Worker
 
 **Game Engine (PixiJS v8 + bitECS)**
 - Pure TypeScript, code-first game engine in `packages/frontend/engine` (extracted from the client by C-214)
@@ -136,28 +137,31 @@ Runtime validation across the platform is unified on TypeBox (shared schemas, ty
 
 ### 2. Backend Services
 
-**Firebase Cloud Functions** (in `apps/backend/firebase/`)
-- Auth triggers: `src/controllers/auth/`
-- Callable functions: `src/controllers/callable/`
-- API endpoints: `src/controllers/api/`
-- Scheduled: `src/controllers/scheduler/`
-- Firestore event triggers: `src/controllers/firestore/`
-- Security rules with tests
-- Emulator support via firestack
+**Hub API** (in `apps/frontend/hub/src/lib/server/api/`)
+- Elysia + TypeBox, mounted at `/api/*` through the SvelteKit catch-all route
+- Runs inside the hub Worker — there is no separate functions deployment
+- Catalog stats, save backup/restore, storage URLs, health, and the `/ask` widget
 
-**Firebase Auth**
-- Email/password authentication
-- Emulator auth for local development
-- Auth service in `packages/backend/auth/`
+**Background Worker** (in `apps/backend/worker/`)
+- Long-running Elysia service on Docker for jobs that outlive a Worker request
+- Hosts the Discord bot and the Discord Interactions Endpoint
+
+**Better Auth** (D1-backed)
+- Email/password + Google OAuth, mounted at `/api/auth/*` on the hub (C-426 AC-2/AC-4)
+- Identity tables (`user`, `session`, `account`, `verification`) live in Cloudflare D1
+- Shared configuration in `packages/backend/auth/`
+- Session cookie is scoped to the root domain so client and hub share sign-in
 
 **Database: Turso (libSQL)** — local source of truth (C-321)
 - Embedded SQLite-compatible store; campaigns, saves, and chat history live locally
 - Access through storage adapters in `packages/frontend/repositories` (e.g. `TursoStorageAdapter`)
-- Firebase/Data Connect are optional sync adapters — never a boot dependency
+- Cloud auth and save backup are optional adapters — never a boot dependency
 
-**Firestore (infrastructure only)**
-- Retained for auth tokens and infrastructure concerns, not campaign data
-- Campaign state lives in Turso (C-321); Firestore is not the world database
+**Cloudflare D1 (server data plane)**
+- The hub's relational store: identity, community packs, and save-backup metadata
+- Schema in `packages/backend/database/src/lib/d1_schema.ts` (Drizzle, sqlite dialect)
+- Migrations generated by `drizzle-kit` and applied with `wrangler d1 migrations apply`
+- Holds **no** campaign data — the world lives in Turso on the player's device (C-321)
 
 ### 3. Shared Packages
 
@@ -170,13 +174,13 @@ Runtime validation across the platform is unified on TypeBox (shared schemas, ty
 | `logger` | shared | Structured logging (browser, server) |
 | `utils` | shared | Error handling (AppError), country data, formatters |
 | `mocks` | shared | Test fixtures, MockAiService, MockDatabaseService, mock factories |
-| `backend/auth` | backend | Firebase Auth server helpers |
+| `backend/auth` | backend | Better Auth server configuration (D1) |
 | `backend/chat` | backend | Server-side AI: API handler, OpenAI/Gemini providers, rate limiter (C-056, C-320) |
-| `backend/configs` | backend | Backend Firebase config |
-| `backend/database` | backend | BaseDatabaseService interface + backend repositories (Firestore/infra paths) |
+| `backend/configs` | backend | Backend environment config |
+| `backend/database` | backend | D1 schema, migrations, and server repositories |
 | `backend/utils` | backend | Server utilities (storage upload, etc.) |
-| `frontend/configs` | frontend | Firebase client init, env validation, feature flags |
-| `frontend/services` | frontend | Firebase client services (auth, functions, analytics, storage, FCM) |
+| `frontend/configs` | frontend | Client env validation, feature flags |
+| `frontend/services` | frontend | Client services (auth, storage, analytics, messaging) |
 | `frontend/engine` | frontend | PixiJS v8 + bitECS game engine — rendering, ECS, persistence (Turso), sync |
 | `frontend/ai-gateway` | frontend | AiProviderGateway (C-320) — text/image/voice adapters, offline/BYOK/service modes |
 | `frontend/utils` | frontend | Browser utilities |
@@ -202,7 +206,7 @@ Runtime validation across the platform is unified on TypeBox (shared schemas, ty
 | **TypeBox** | Runtime validation (shared schemas, types, mocks) |
 | **Playwright** | Browser E2E testing |
 | **Vitest** | Unit testing for libraries |
-| **Firestack** | Firebase emulator, deploy, rules management |
+| **Wrangler** | Cloudflare Workers dev, deploy, D1/R2 management |
 | **Pi** | AI coding agent with project-specific skills |
 
 ## Development Flow
@@ -211,7 +215,7 @@ Runtime validation across the platform is unified on TypeBox (shared schemas, ty
 bun run setup            # Local machine setup guide
 bun run project:setup    # GCP project setup wizard (maintainers)
 bun run dev              # Client dev server
-bun run dev:all          # Firebase + Client (herdr workspace)
+bun run dev:all          # all dev services (herdr workspace)
 bun run typecheck        # Typecheck all projects
 bun run fix              # Auto-fix lint/format
 bun run validate         # lint + format + typecheck
@@ -224,7 +228,7 @@ bun run test:blackbox    # Full integration suite
 | Component | Status | Contract |
 |-----------|--------|----------|
 | Local Persistence | Turso (libSQL) as source of truth | C-321 ✅ |
-| Cloud Sync | Optional Firebase sync adapter (`firebase_sql_connect_sync`) | C-203 ✅ |
+| Cloud Sync | Optional R2 save backup/restore, Better Auth gated | C-426 ✅ |
 | AI Framework | AiProviderGateway — offline/BYOK/service modes | C-320 ✅ |
 | Game Engine | PixiJS v8 + bitECS in `packages/frontend/engine` | C-016 ✅ |
 | Desktop Export | Tauri v2 | C-013 ✅ |
