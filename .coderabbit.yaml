@@ -34,6 +34,12 @@ reviews:
         - "scripts/**"
         - "apps/**"
         - "packages/**"
+        - ".github/**"
+        - ".moon/**"
+        - ".context/**"
+        - ".claude/**"
+        - "docs/**"
+        - "*"
 
     path_instructions:
         - path: "**/*.test.ts"

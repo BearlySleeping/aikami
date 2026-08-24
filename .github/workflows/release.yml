@@ -68,10 +68,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/frontend/docs/**'
-      - 'apps/frontend/site/**'
-      - 'apps/frontend/hub/**'
-      - '.github/workflows/release.yml'
+      - "apps/frontend/docs/**"
+      - "apps/frontend/site/**"
+      - "apps/frontend/hub/**"
+      - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
       mode:
@@ -650,7 +650,6 @@ jobs:
           CI: "true"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
-
   # ── Failure notification ──────────────────────────────────────────────
   # Posts to Discord when any deploy job fails. Uses `if: failure()` which
   # evaluates to true when ANY job in the workflow has failed.
@@ -686,3 +685,4 @@ jobs:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           RUN_ID: ${{ github.run_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_RELEASES_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASES_WEBHOOK_URL }}
