@@ -118,8 +118,10 @@ class ContentPackLoader implements ContentPackLoaderInterface {
 
     // If the file path is absolute (starts with /), return it directly.
     // This supports referencing files outside the pack directory (e.g. shared assets).
+    // C-434: resolveMapUrl returns the logical path — let loadTilemap/loadJtonMap
+    // perform registry resolution internally.
     if (entry.file.startsWith('/')) {
-      return this._resolveTag ? this._resolveTag(entry.file) ?? entry.file : entry.file;
+      return entry.file;
     }
 
     const resolved = `${this._basePath}/${this.packId}/${entry.file}`;
@@ -138,8 +140,7 @@ class ContentPackLoader implements ContentPackLoaderInterface {
       });
     }
 
-    // C-434: resolve through the registry when a resolver is provided.
-    return this._resolveTag ? this._resolveTag(resolved) ?? resolved : resolved;
+    return resolved;
   }
 
   /** @inheritdoc */
@@ -377,12 +378,6 @@ export const loadContentPack = async (options: {
     }
   }
 
-  // Release the blob URL after parsing — the data is now in memory and the
-  // URL is no longer needed.
-  if (releaseUrl && resolvedManifestUrl !== manifestUrl) {
-    releaseUrl(resolvedManifestUrl);
-  }
-
   // Parse JSON
   let raw: unknown;
   try {
@@ -394,6 +389,12 @@ export const loadContentPack = async (options: {
       errorMessage: 'ContentPackLoader: manifest is not valid JSON',
       details: { packId, manifestUrl, cause: message },
     });
+  }
+
+  // Release the blob URL after parsing — the data is now in memory and the
+  // URL is no longer needed.
+  if (releaseUrl && resolvedManifestUrl !== manifestUrl) {
+    releaseUrl(resolvedManifestUrl);
   }
 
   // Validate schema

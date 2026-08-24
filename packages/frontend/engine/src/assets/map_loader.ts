@@ -268,12 +268,42 @@ export const loadTilemap = async (options: MapLoaderOptions): Promise<TilemapDat
   // provided — cache blob URL, origin URL, or bundled static path.
   const resolvedUrl = resolveTag ? resolveTag(url) ?? url : url;
   const fetcher = options.fetch ?? globalThis.fetch;
-  const response = await fetcher(resolvedUrl);
+
+  let response: Response;
+  try {
+    response = await fetcher(resolvedUrl);
+  } catch {
+    // Fetch rejected (network error, blob URL revoked, etc.) — release the
+    // resolved URL and fall back to the bundled path.
+    if (resolvedUrl !== url) {
+      releaseUrl?.(resolvedUrl);
+      logger.debug('loadTilemap:registry-fetch-failed', { url, resolvedUrl });
+      const fallbackResponse = await fetcher(url);
+      if (!fallbackResponse.ok) {
+        throw new Error(
+          `MapLoader: failed to fetch map at "${url}" (HTTP ${fallbackResponse.status})`,
+        );
+      }
+      const fallbackRaw = await fallbackResponse.json();
+      const fallbackData = _parseTilemap(fallbackRaw, url);
+      _mapCache.set(url, fallbackData);
+      logger.debug('loadTilemap:parsed-from-fallback', {
+        url,
+        width: fallbackData.width,
+        height: fallbackData.height,
+        layers: fallbackData.layers.length,
+        tilesets: fallbackData.tilesets.length,
+      });
+      return fallbackData;
+    }
+    throw new Error(`MapLoader: failed to fetch map at "${url}" (fetch rejected)`);
+  }
 
   if (!response.ok) {
     // If the resolved URL differs from the original, try the original as
     // fallback (bundled path).
     if (resolvedUrl !== url) {
+      releaseUrl?.(resolvedUrl);
       logger.debug('loadTilemap:registry-fallback', { url, resolvedUrl, status: response.status });
       const fallbackResponse = await fetcher(url);
       if (!fallbackResponse.ok) {
@@ -368,12 +398,43 @@ export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<Tilema
   // provided — cache blob URL, origin URL, or bundled static path.
   const resolvedUrl = resolveTag ? resolveTag(url) ?? url : url;
   const fetcher = options.fetch ?? globalThis.fetch;
-  const response = await fetcher(resolvedUrl);
+
+  let response: Response;
+  try {
+    response = await fetcher(resolvedUrl);
+  } catch {
+    // Fetch rejected (network error, blob URL revoked, etc.) — release the
+    // resolved URL and fall back to the bundled path.
+    if (resolvedUrl !== url) {
+      releaseUrl?.(resolvedUrl);
+      logger.debug('loadJtonMap:registry-fetch-failed', { url, resolvedUrl });
+      const fallbackResponse = await fetcher(url);
+      if (!fallbackResponse.ok) {
+        throw new Error(
+          `MapLoader: failed to fetch JTON map at "${url}" (HTTP ${fallbackResponse.status})`,
+        );
+      }
+      const fallbackSource = await fallbackResponse.text();
+      const fallbackParsed = parseJtonMap(fallbackSource, url);
+      const fallbackData = jtonToTilemapData(fallbackParsed);
+      _mapCache.set(url, fallbackData);
+      logger.debug('loadJtonMap:parsed-from-fallback', {
+        url,
+        width: fallbackData.width,
+        height: fallbackData.height,
+        layers: fallbackData.layers.length,
+        tilesets: fallbackData.tilesets.length,
+      });
+      return fallbackData;
+    }
+    throw new Error(`MapLoader: failed to fetch JTON map at "${url}" (fetch rejected)`);
+  }
 
   if (!response.ok) {
     // If the resolved URL differs from the original, try the original as
     // fallback (bundled path).
     if (resolvedUrl !== url) {
+      releaseUrl?.(resolvedUrl);
       logger.debug('loadJtonMap:registry-fallback', { url, resolvedUrl, status: response.status });
       const fallbackResponse = await fetcher(url);
       if (!fallbackResponse.ok) {

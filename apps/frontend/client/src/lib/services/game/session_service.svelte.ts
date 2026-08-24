@@ -594,7 +594,9 @@ class SessionService
       try {
         const { loadContentPack } = await import('@aikami/frontend/engine');
         const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
-        const pack = await loadContentPack({ packId: mapBlock.packId, resolveTag: assetTagResolver });
+        const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+        const releaseUrl = (url: string) => assetManager.releaseUrl(url);
+        const pack = await loadContentPack({ packId: mapBlock.packId, resolveTag: assetTagResolver, releaseUrl });
         forkMapName = pack.manifest.maps[mapBlock.mapId]?.name ?? mapBlock.mapId;
       } catch {
         forkMapName = mapBlock.mapId;

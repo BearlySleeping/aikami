@@ -75,6 +75,11 @@ export type TilemapRenderOptions = {
    * registry before being loaded by PixiJS.
    */
   resolveTag?: AssetTagResolver;
+  /**
+   * C-434: optional blob URL release function. Called after tileset
+   * images are loaded, to revoke refcounted blob URLs.
+   */
+  releaseUrl?: (url: string) => void;
 };
 
 export type { FrameUvResolver } from '../rendering/tilemap_chunk_renderer.ts';
@@ -149,7 +154,7 @@ export type TilemapRenderResult = {
 export const renderTilemap = async (
   options: TilemapRenderOptions,
 ): Promise<TilemapRenderResult> => {
-  const { tilemap, layerFilter, terrainLayers, frameUvResolver } = options;
+  const { tilemap, layerFilter, terrainLayers, frameUvResolver, releaseUrl } = options;
 
   const container = new Container();
   container.label = 'tilemap-chunks';
@@ -175,6 +180,16 @@ export const renderTilemap = async (
   // alias for Texture.from() below.
   const loadPromises = [...imageSet].map((image) => Assets.load(imageToResolvedUrl.get(image) ?? image));
   await Promise.all(loadPromises);
+
+  // Release resolved blob URLs after the textures are loaded — the data
+  // is now in PixiJS's texture cache and the blob URL is no longer needed.
+  if (releaseUrl) {
+    for (const [image, resolved] of imageToResolvedUrl) {
+      if (resolved !== image) {
+        releaseUrl(resolved);
+      }
+    }
+  }
 
   // Build a texture map keyed by image path
   const textureMap = new Map<string, Texture>();

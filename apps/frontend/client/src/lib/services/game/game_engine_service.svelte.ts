@@ -753,7 +753,9 @@ class GameEngineService
       );
       this._clearContentPackCache = clearCacheFn;
       const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
-      const pack = await loadPack({ packId: this.contentPackId, resolveTag: assetTagResolver });
+      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+      const releaseUrl = (url: string) => assetManager.releaseUrl(url);
+      const pack = await loadPack({ packId: this.contentPackId, resolveTag: assetTagResolver, releaseUrl });
       const { buildPropFrameResolver } = await import('./prop_frame_resolver');
       this._propFrameResolverHandle = await buildPropFrameResolver(pack.manifest);
 
@@ -770,6 +772,9 @@ class GameEngineService
         textureManager,
         // C-375 AC-1: deterministic prop frame resolution.
         propFrameResolver: this._propFrameResolverHandle?.resolver,
+        // C-434: registry-backed tag resolver for maps and tilesets.
+        resolveTag: assetTagResolver,
+        releaseUrl,
       });
 
       // Campaign data drives world initialization via the composition root.

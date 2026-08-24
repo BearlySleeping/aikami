@@ -26,20 +26,26 @@ import { assetStore } from './asset_store.svelte.ts';
  */
 export const createAssetTagResolver = (): AssetTagResolver => {
   return (filePath: string): string | null => {
-    // Convert the file path to a published tag (e.g. "maps/sandbox.json"
-    // → "maps:sandbox").
-    const tag = pathToTag(filePath);
+    try {
+      // Convert the file path to a published tag (e.g. "maps/sandbox.json"
+      // → "maps:sandbox").
+      const tag = pathToTag(filePath);
 
-    // Resolve through the asset store — cache blob URL, origin URL, or null.
-    const resolved = assetStore.resolveUrl(tag);
+      // Resolve through the asset store — cache blob URL, origin URL, or null.
+      const resolved = assetStore.resolveUrl(tag);
 
-    if (resolved) {
-      logger.debug('registryResolver:resolved', { filePath, tag, resolved });
-      return resolved;
+      if (resolved) {
+        logger.debug('registryResolver:resolved', { filePath, tag, resolved });
+        return resolved;
+      }
+
+      logger.debug('registryResolver:unresolved', { filePath, tag });
+      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn('registryResolver:error', { filePath, message });
+      return null;
     }
-
-    logger.debug('registryResolver:unresolved', { filePath, tag });
-    return null;
   };
 };
 

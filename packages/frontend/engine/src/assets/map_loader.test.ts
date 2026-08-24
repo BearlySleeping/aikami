@@ -1864,9 +1864,10 @@ describe('loadTilemap: registry-backed resolution (C-434)', () => {
       return null;
     }) as AssetTagResolver;
 
-    let callCount = 0;
+    const releaseUrl = mock((_url: string) => {});
+    let callUrls: string[] = [];
     const fetcher = mock((url: string) => {
-      callCount++;
+      callUrls.push(url);
       if (url === 'blob:mock-fail') {
         // Registry URL fails
         return Promise.resolve({ ok: false, status: 404 } as Response);
@@ -1882,11 +1883,47 @@ describe('loadTilemap: registry-backed resolution (C-434)', () => {
       url: 'test://map.json',
       fetch: fetcher,
       resolveTag,
+      releaseUrl,
     });
 
     expect(result.width).toBe(10);
     // Should have tried registry URL first, then bundled path
-    expect(callCount).toBe(2);
+    expect(callUrls).toEqual(['blob:mock-fail', 'test://map.json']);
+    // releaseUrl should be called for the failed blob URL
+    expect(releaseUrl).toHaveBeenCalledWith('blob:mock-fail');
+  });
+
+  it('falls back to bundled path when registry URL fetch rejects (AC-2 rejection)', async () => {
+    const resolveTag: AssetTagResolver = mock((tag: string) => {
+      if (tag === 'test://map.json') {
+        return 'blob:mock-reject';
+      }
+      return null;
+    }) as AssetTagResolver;
+
+    const releaseUrl = mock((_url: string) => {});
+    let callUrls: string[] = [];
+    const fetcher = mock((url: string) => {
+      callUrls.push(url);
+      if (url === 'blob:mock-reject') {
+        return Promise.reject(new Error('Network failure'));
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(testMapData),
+      } as Response);
+    }) as unknown as typeof fetch;
+
+    const result = await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+      resolveTag,
+      releaseUrl,
+    });
+
+    expect(result.width).toBe(10);
+    expect(callUrls).toEqual(['blob:mock-reject', 'test://map.json']);
+    expect(releaseUrl).toHaveBeenCalledWith('blob:mock-reject');
   });
 
   it('works without resolveTag — bundled-only path unchanged (AC-3)', async () => {
@@ -2059,12 +2096,12 @@ describe('loadJtonMap: registry-backed resolution (C-434)', () => {
 
     const releaseUrl = mock((_url: string) => {});
 
-    const fetcher = mock((_url: string) => {
-      return Promise.resolve({
+    const fetcher = mock((url: string) =>
+      Promise.resolve({
         ok: true,
         text: () => Promise.resolve(testJtonSource),
-      } as Response);
-    }) as unknown as typeof fetch;
+      } as Response),
+    ) as unknown as typeof fetch;
 
     await loadJtonMap({
       url: 'test://map.jton',

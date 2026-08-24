@@ -2516,6 +2516,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           terrainLayers,
           frameUvResolver,
           resolveTag: this._resolveTag,
+          releaseUrl: this._releaseUrl,
         });
         // C-378 AC-1: add each band container with its declared zIndex —
         // ground/decor below entities, overhead above every entity zIndex.
