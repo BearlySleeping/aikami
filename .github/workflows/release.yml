@@ -102,9 +102,22 @@ on:
         required: false
         type: string
         default: ""
+# Two independent queues, because the two trigger kinds want opposite
+# behaviour:
+#
+#   push to main  → a web deploy. Ten merges in an hour must NOT become a
+#                   multi-hour backlog of deploys that were already
+#                   superseded. Deploying an intermediate commit is pointless
+#                   when the next one lands seconds later, so cancel.
+#   release/manual → a real production cut, including desktop legs that
+#                   upload artifacts to a GitHub Release. Cancelling one
+#                   mid-upload leaves a half-published release, so never.
+#
+# Separate groups matter as much as the flag: with one shared group a routine
+# push would sit behind (or cancel) a desktop release cut.
 concurrency:
-  group: deploy-${{ github.event.inputs.mode || 'production' }}
-  cancel-in-progress: false
+  group: deploy-${{ github.event.inputs.mode || 'production' }}-${{ github.event_name == 'push' && 'web' || 'release' }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 permissions:
   contents: read # elevated to write per-job where needed (update-manifest, deploy-desktop)
@@ -428,15 +441,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-bun-
 
-      - name: Restore Moon build cache
-        if: matrix.action == 'build'
-        uses: actions/cache@v6
-        with:
-          path: .moon/cache
-          key: ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-
-            ${{ runner.os }}-${{ runner.arch }}-moon-
+      # No moon cache here on purpose. The desktop leg never invokes moon:
+      # ci_run.ts imports only cli_utils / tauri_release / cache, the web
+      # bundle arrives as a downloaded artifact (see "Download shared web
+      # build" below), and the Rust half is cached by Swatinem/rust-cache
+      # above. Restoring a moon cache would be pure overhead — and this leg
+      # is the worst place to pay it: it runs on three platforms, each
+      # getting its own cache entry out of the shared 10 GB repo budget.
 
       - name: Install dependencies
         if: matrix.action == 'build'

@@ -19,9 +19,6 @@ name: Update Compose Digests
 on:
   schedule:
     - cron: '0 3 * * 1' # Monday 03:00 UTC
-on:
-  # schedule:
-  #   - cron: '0 3 * * 1' # Monday 03:00 UTC
   workflow_dispatch:
 
 permissions:

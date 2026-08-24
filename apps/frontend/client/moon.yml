@@ -56,11 +56,20 @@ tasks:
     inputs:
       - '@group(sources)'
       - '@group(configs)'
+      # 🔴 Load-bearing. Vite bundles these workspace packages FROM SOURCE via
+      # TS path aliases — the emitted bundle contains their code, so their
+      # files are real build inputs. They were previously absent from the hash,
+      # which made the cache key lie: a stale cache once shipped old
+      # shared-code to prod, and `cache: false` was the correct response.
+      #
+      # Listing them here fixes the cause rather than the symptom, so caching
+      # is safe again. Do NOT narrow these globs to the packages currently in
+      # `dependsOn` — a new import would then be silently uncovered, which is
+      # the original bug. Over-inclusion only costs cache hit rate.
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
     options:
-      # 🔴 Never cache: bundles workspace packages FROM SOURCE via aliases;
-      # moon's cache key can't cover those files, and a stale cache shipped
-      # old shared-code to prod. Fresh build = few seconds, always correct.
-      cache: false
+      cache: true
       # C-418 Feature B decision (M5): staging builds intentionally SHIP the
       # (dev) sandbox routes (AC-2 excludes only production). Set
       # AIKAMI_INCLUDE_DEV_ROUTES=false to strip them from a staging build.

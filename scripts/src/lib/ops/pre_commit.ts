@@ -19,24 +19,28 @@ const sh = async (cmd: string): Promise<void> => {
   }
 };
 
-// 1. Fix formatting + lint on affected staged files
+// 1. Bun version must be declared identically in .bun-version and
+//    .moon/toolchains.yml — a drift silently breaks CI cache keys.
+await sh('bun run scripts/src/lib/ops/verify_bun_version.ts');
+
+// 2. Fix formatting + lint on affected staged files
 await sh('bun moon run :fix --affected --status=staged --concurrency 8');
 
-// 2. Typecheck affected projects
+// 3. Typecheck affected projects
 await sh('bun moon run :typecheck --affected --status=staged --concurrency 8');
 
 if (!isWorktree) {
-  // 3. Sync contract dashboard files (PROGRESS.md, PROMOTION.md)
+  // 4. Sync contract dashboard files (PROGRESS.md, PROMOTION.md)
   syncContracts();
 
-  // 4. Generate .context/llms.txt
+  // 5. Generate .context/llms.txt
   await sh('bun run scripts/src/lib/ops/generate_llms_txt.ts');
 
-  // 5. Stage files modified by sync
+  // 6. Stage files modified by sync
   await runStream(['sh', '-c', 'git add .context/llms.txt docs/contracts/ 2>/dev/null || true']);
 }
 
-// 6. Re-stage files that formatters may have modified
+// 7. Re-stage files that formatters may have modified
 await runStream([
   'sh',
   '-c',

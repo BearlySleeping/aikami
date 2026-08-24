@@ -45,6 +45,12 @@ tasks:
     inputs:
       - '@group(sources)'
       - '@group(configs)'
+      # 🔴 Load-bearing — see the same block in client/moon.yml. Starlight
+      # bundles these workspace packages FROM SOURCE via TS aliases, and this
+      # task is cached (moon's default), so without these globs the cache key
+      # lies: a change to a shared package would NOT invalidate built docs.
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
     outputs:
       - 'dist'
   preview:
