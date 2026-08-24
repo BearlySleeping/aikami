@@ -283,7 +283,12 @@ const inspectSheetAlpha = async (options: {
 
   // Validate count matches expected cells
   const expected = columns * rows;
-  if (values.length !== expected) {
+  if (values.length > expected) {
+    throw new Error(
+      `ImageMagick returned too many tiles: expected ${expected} (${columns}×${rows}), got ${values.length}`,
+    );
+  }
+  if (values.length < expected) {
     // Some cells may be blank trailing columns — pad with false
     while (values.length < expected) {
       values.push(false);
@@ -324,6 +329,9 @@ const buildBaselineLookup = (
 ): Map<string, LpcCoverageBaselineEntry> => {
   const lookup = new Map<string, LpcCoverageBaselineEntry>();
   for (const entry of baseline.entries) {
+    if (!entry.reason || entry.reason.trim().length === 0) {
+      throw new Error(`Baseline entry for "${entry.tag}" has an empty reason field`);
+    }
     lookup.set(entry.tag, entry);
   }
   return lookup;
@@ -351,6 +359,83 @@ const computePairedEmptyRows = (
     }
   }
   return result;
+};
+
+/**
+ * Classify sheet results into regressions, known gaps, and newly covered sheets.
+ */
+const classifySheets = (options: {
+  sheetResults: readonly SheetResult[];
+  baselineLookup: Map<string, LpcCoverageBaselineEntry> | null;
+}): {
+  regressions: RegressionEntry[];
+  knownGaps: KnownGapEntry[];
+  newlyCovered: string[];
+  failedCount: number;
+} => {
+  const { sheetResults, baselineLookup } = options;
+  const regressions: RegressionEntry[] = [];
+  const knownGaps: KnownGapEntry[] = [];
+  const newlyCovered: string[] = [];
+  let failedCount = 0;
+
+  for (const sr of sheetResults) {
+    // Check for processing errors first
+    if (sr.error && sr.error !== 'cached') {
+      failedCount++;
+      continue;
+    }
+
+    // Skip cached sheets from classification
+    if (sr.error === 'cached') {
+      continue;
+    }
+
+    const baselineEntry = baselineLookup?.get(sr.tag);
+    const pairedTag = baselineEntry?.pairedWith;
+    let effectiveEmptyRows = sr.emptyRows;
+
+    // Handle paired sheets
+    if (pairedTag) {
+      const pairedResult = sheetResults.find((s) => s.tag === pairedTag);
+      effectiveEmptyRows = computePairedEmptyRows(sr, pairedResult);
+    }
+
+    if (baselineEntry) {
+      // Known gap — check if it's still a gap
+      if (effectiveEmptyRows.length > 0) {
+        // Check if the gap has widened (new empty rows not in acceptedEmptyRows)
+        const newEmpty = effectiveEmptyRows.filter(
+          (r) => !baselineEntry.acceptedEmptyRows.includes(r),
+        );
+        if (newEmpty.length > 0) {
+          regressions.push({
+            tag: sr.tag,
+            emptyRows: effectiveEmptyRows,
+            baselineAccepted: baselineEntry.acceptedEmptyRows,
+          });
+        } else {
+          knownGaps.push({
+            tag: sr.tag,
+            emptyRows: effectiveEmptyRows,
+            reason: baselineEntry.reason,
+          });
+        }
+      } else if (baselineEntry.acceptedEmptyRows.length > 0) {
+        // Previously had a gap, now fully covered
+        newlyCovered.push(sr.tag);
+      }
+    } else if (effectiveEmptyRows.length > 0) {
+      // Not in baseline — any gap is a regression
+      regressions.push({
+        tag: sr.tag,
+        emptyRows: effectiveEmptyRows,
+        baselineAccepted: [],
+      });
+    }
+  }
+
+  return { regressions, knownGaps, newlyCovered, failedCount };
 };
 
 // ── Main audit logic ───────────────────────────────────────────────────
@@ -402,9 +487,9 @@ const audit = async (options: { force: boolean; generateBaseline: boolean }): Pr
     const relPath = relative(LPC_ASSETS_DIR, filePath);
     const tag = pathToTag(relPath);
 
-    // Check hash cache
+    // Check hash cache (skip only when not generating baseline)
     const currentHash = assetHashes.get(tag);
-    if (!force && currentHash) {
+    if (!force && !generateBaseline && currentHash) {
       const fileHash = await sha256File(filePath);
       if (fileHash === currentHash) {
         // File unchanged — skip inspection
@@ -419,6 +504,7 @@ const audit = async (options: { force: boolean; generateBaseline: boolean }): Pr
             framesPerRow: [],
           },
           emptyRows: [],
+          error: 'cached',
         };
       }
     }
@@ -524,55 +610,11 @@ const audit = async (options: { force: boolean; generateBaseline: boolean }): Pr
   console.log('');
   console.log(`⏱  Audit completed in ${elapsedMs}ms`);
 
-  // Build report
-  const regressions: RegressionEntry[] = [];
-  const knownGaps: KnownGapEntry[] = [];
-  const newlyCovered: string[] = [];
-
-  for (const sr of sheetResults) {
-    const baselineEntry = baselineLookup?.get(sr.tag);
-    const pairedTag = baselineEntry?.pairedWith;
-    let effectiveEmptyRows = sr.emptyRows;
-
-    // Handle paired sheets
-    if (pairedTag) {
-      const pairedResult = sheetResults.find((s) => s.tag === pairedTag);
-      effectiveEmptyRows = computePairedEmptyRows(sr, pairedResult);
-    }
-
-    if (baselineEntry) {
-      // Known gap — check if it's still a gap
-      if (effectiveEmptyRows.length > 0) {
-        // Check if the gap has widened (new empty rows not in acceptedEmptyRows)
-        const newEmpty = effectiveEmptyRows.filter(
-          (r) => !baselineEntry.acceptedEmptyRows.includes(r),
-        );
-        if (newEmpty.length > 0) {
-          regressions.push({
-            tag: sr.tag,
-            emptyRows: effectiveEmptyRows,
-            baselineAccepted: baselineEntry.acceptedEmptyRows,
-          });
-        } else {
-          knownGaps.push({
-            tag: sr.tag,
-            emptyRows: effectiveEmptyRows,
-            reason: baselineEntry.reason,
-          });
-        }
-      } else if (baselineEntry.acceptedEmptyRows.length > 0) {
-        // Previously had a gap, now fully covered
-        newlyCovered.push(sr.tag);
-      }
-    } else if (effectiveEmptyRows.length > 0) {
-      // Not in baseline — any gap is a regression
-      regressions.push({
-        tag: sr.tag,
-        emptyRows: effectiveEmptyRows,
-        baselineAccepted: [],
-      });
-    }
-  }
+  // Classify sheets
+  const { regressions, knownGaps, newlyCovered, failedCount } = classifySheets({
+    sheetResults,
+    baselineLookup,
+  });
 
   // Generate baseline if requested
   if (generateBaseline) {
@@ -658,7 +700,13 @@ const audit = async (options: { force: boolean; generateBaseline: boolean }): Pr
     }
   }
 
-  // Exit with non-zero on regressions
+  // Exit with non-zero on failures or regressions
+  if (failedCount > 0) {
+    console.log('');
+    console.log(`❌ ${failedCount} sheet(s) failed to process.`);
+    process.exit(1);
+  }
+
   if (report.regressionCount > 0) {
     console.log('');
     console.log(`❌ ${report.regressionCount} regression(s) detected.`);
@@ -675,6 +723,7 @@ const audit = async (options: { force: boolean; generateBaseline: boolean }): Pr
 export {
   type AuditReport,
   buildBaselineLookup,
+  classifySheets,
   computePairedEmptyRows,
   inspectSheetAlpha,
   type KnownGapEntry,

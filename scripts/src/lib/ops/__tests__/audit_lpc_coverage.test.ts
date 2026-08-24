@@ -102,6 +102,8 @@ const SHEETS = {
   shieldBg: join(TMP_LPC_DIR, 'shield/crusader_bg.walk.webp'),
   // FG sheet — all four rows filled
   shieldFg: join(TMP_LPC_DIR, 'shield/crusader_fg.walk.webp'),
+  // Empty sheet — no pixels at all (fully transparent)
+  emptySheet: join(TMP_LPC_DIR, 'test/empty.walk.webp'),
 };
 
 // ── Setup / Teardown ───────────────────────────────────────────────────
@@ -298,6 +300,15 @@ beforeAll(() => {
       [3, 8],
     ],
   });
+
+  // Empty sheet — no pixels at all (fully transparent)
+  createSyntheticSheet({
+    filePath: SHEETS.emptySheet,
+    width: 576,
+    height: 256,
+    cellPitch: 64,
+    filledCells: [],
+  });
 });
 
 afterAll(() => {
@@ -472,6 +483,46 @@ describe('AC-1: Per-row frame coverage', () => {
 
     expect(framesPerRow).toEqual([13, 13, 13, 13]);
   });
+
+  it('detects fully transparent rows (empty sheet with no pixels)', async () => {
+    const mod = await import('../audit_lpc_coverage.js');
+    const { resolveLpcSheetGeometry } = await import(
+      '../../../../../packages/frontend/engine/src/rendering/lpc_sheet_geometry.ts'
+    );
+
+    const proc = Bun.spawnSync(['magick', SHEETS.emptySheet, '-format', '%w %h', 'info:']);
+    const dims = proc.stdout.toString().trim().split(/\s+/);
+    const width = Number.parseInt(dims[0] ?? '', 10);
+    const height = Number.parseInt(dims[1] ?? '', 10);
+
+    const geometry = resolveLpcSheetGeometry({ width, height });
+    expect(geometry.pitch).toBe(64);
+    expect(geometry.columns).toBe(9);
+    expect(geometry.rows).toBe(4);
+
+    const alpha = await mod.inspectSheetAlpha({
+      filePath: SHEETS.emptySheet,
+      pitch: geometry.pitch,
+      columns: geometry.columns,
+      rows: geometry.rows,
+    });
+
+    expect(alpha.length).toBe(36); // 9 cols × 4 rows
+
+    const framesPerRow: number[] = [];
+    for (let row = 0; row < geometry.rows; row++) {
+      let count = 0;
+      for (let col = 0; col < geometry.columns; col++) {
+        const idx = row * geometry.columns + col;
+        if (alpha[idx]) {
+          count++;
+        }
+      }
+      framesPerRow.push(count);
+    }
+
+    expect(framesPerRow).toEqual([0, 0, 0, 0]); // All rows empty
+  });
 });
 
 // ── AC-2: New gap fails the audit ──────────────────────────────────────
@@ -496,18 +547,20 @@ describe('AC-2: New coverage gap fails the audit', () => {
 
     // Now simulate that onlyDown sheet replaces fullCoverage
     // (it has empty rows 0, 1, 3)
-    const sheetResult = {
-      tag: 'lpc:body:bodies_male:walk',
-      filePath: SHEETS.onlyDown,
-      coverage: {
+    const sheetResults = [
+      {
         tag: 'lpc:body:bodies_male:walk',
-        pitch: 64,
-        columns: 9,
-        rows: 4,
-        framesPerRow: [0, 0, 9, 0] as readonly number[],
+        filePath: SHEETS.onlyDown,
+        coverage: {
+          tag: 'lpc:body:bodies_male:walk',
+          pitch: 64,
+          columns: 9,
+          rows: 4,
+          framesPerRow: [0, 0, 9, 0] as readonly number[],
+        },
+        emptyRows: [0, 1, 3] as readonly number[],
       },
-      emptyRows: [0, 1, 3] as readonly number[],
-    };
+    ];
 
     // Build lookup
     const lookup = mod.buildBaselineLookup(baseline);
@@ -516,11 +569,17 @@ describe('AC-2: New coverage gap fails the audit', () => {
     expect(baselineEntry).toBeDefined();
     expect(baselineEntry?.acceptedEmptyRows).toEqual([]);
 
-    // Check regression: empty rows not in acceptedEmptyRows
-    const newEmpty = sheetResult.emptyRows.filter(
-      (r) => !baselineEntry?.acceptedEmptyRows.includes(r),
-    );
-    expect(newEmpty).toEqual([0, 1, 3]); // All three empty rows are regressions
+    // Use classifySheets to detect regression
+    const { regressions, knownGaps, newlyCovered } = mod.classifySheets({
+      sheetResults,
+      baselineLookup: lookup,
+    });
+
+    expect(regressions.length).toBe(1);
+    expect(regressions[0]?.tag).toBe('lpc:body:bodies_male:walk');
+    expect(regressions[0]?.emptyRows).toEqual([0, 1, 3]);
+    expect(knownGaps.length).toBe(0);
+    expect(newlyCovered.length).toBe(0);
   });
 
   it('names the tag and rows in the regression output', async () => {
@@ -540,17 +599,113 @@ describe('AC-2: New coverage gap fails the audit', () => {
       ],
     };
 
+    const sheetResults = [
+      {
+        tag: 'lpc:weapon:sword:longsword:walk',
+        filePath: SHEETS.onlyDown,
+        coverage: {
+          tag: 'lpc:weapon:sword:longsword:walk',
+          pitch: 64,
+          columns: 9,
+          rows: 4,
+          framesPerRow: [0, 0, 9, 0] as readonly number[],
+        },
+        emptyRows: [0, 1, 3] as readonly number[],
+      },
+    ];
+
     const lookup = mod.buildBaselineLookup(baseline);
-    const entry = lookup.get('lpc:weapon:sword:longsword:walk');
+
+    // Use classifySheets to detect regression
+    const { regressions } = mod.classifySheets({
+      sheetResults,
+      baselineLookup: lookup,
+    });
 
     // The regression should name the tag and the empty rows
-    expect(entry).toBeDefined();
-    expect(entry?.tag).toBe('lpc:weapon:sword:longsword:walk');
+    expect(regressions.length).toBe(1);
+    expect(regressions[0]?.tag).toBe('lpc:weapon:sword:longsword:walk');
+    expect(regressions[0]?.emptyRows).toEqual([0, 1, 3]);
+    expect(regressions[0]?.baselineAccepted).toEqual([]);
+  });
 
-    // The empty rows [0, 1, 3] should be reported
-    const emptyRows = [0, 1, 3];
-    const newEmpty = emptyRows.filter((r) => !entry?.acceptedEmptyRows.includes(r));
-    expect(newEmpty).toEqual([0, 1, 3]);
+  it('excludes cached sheets from classification', async () => {
+    const mod = await import('../audit_lpc_coverage.js');
+
+    const baseline = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      auditedCount: 1,
+      entries: [],
+    };
+
+    const sheetResults = [
+      {
+        tag: 'lpc:body:bodies_male:walk',
+        filePath: SHEETS.fullCoverage,
+        coverage: {
+          tag: 'lpc:body:bodies_male:walk',
+          pitch: 0,
+          columns: 0,
+          rows: 0,
+          framesPerRow: [] as readonly number[],
+        },
+        emptyRows: [] as readonly number[],
+        error: 'cached',
+      },
+    ];
+
+    const lookup = mod.buildBaselineLookup(baseline);
+
+    // Cached sheets should not be classified
+    const { regressions, knownGaps, newlyCovered } = mod.classifySheets({
+      sheetResults,
+      baselineLookup: lookup,
+    });
+
+    expect(regressions.length).toBe(0);
+    expect(knownGaps.length).toBe(0);
+    expect(newlyCovered.length).toBe(0);
+  });
+
+  it('counts errored sheets separately and does not classify them', async () => {
+    const mod = await import('../audit_lpc_coverage.js');
+
+    const baseline = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      auditedCount: 1,
+      entries: [],
+    };
+
+    const sheetResults = [
+      {
+        tag: 'lpc:body:bodies_male:walk',
+        filePath: SHEETS.fullCoverage,
+        coverage: {
+          tag: 'lpc:body:bodies_male:walk',
+          pitch: 0,
+          columns: 0,
+          rows: 0,
+          framesPerRow: [] as readonly number[],
+        },
+        emptyRows: [] as readonly number[],
+        error: 'ImageMagick failed',
+      },
+    ];
+
+    const lookup = mod.buildBaselineLookup(baseline);
+
+    // Errored sheets should be counted but not classified
+    const { regressions, knownGaps, newlyCovered, failedCount } = mod.classifySheets({
+      sheetResults,
+      baselineLookup: lookup,
+    });
+
+    expect(failedCount).toBe(1);
+    expect(regressions.length).toBe(0);
+    expect(knownGaps.length).toBe(0);
+    expect(newlyCovered.length).toBe(0);
   });
 });
 
@@ -581,40 +736,93 @@ describe('AC-3: Baselined gap does not fail', () => {
     expect(entry?.acceptedEmptyRows).toEqual([0, 1, 3]);
 
     // Simulate the same gaps exist
-    const sheetResult = {
-      tag: 'lpc:weapon:sword:longsword:walk',
-      filePath: SHEETS.onlyDown,
-      coverage: {
+    const sheetResults = [
+      {
         tag: 'lpc:weapon:sword:longsword:walk',
-        pitch: 64,
-        columns: 9,
-        rows: 4,
-        framesPerRow: [0, 0, 9, 0] as readonly number[],
+        filePath: SHEETS.onlyDown,
+        coverage: {
+          tag: 'lpc:weapon:sword:longsword:walk',
+          pitch: 64,
+          columns: 9,
+          rows: 4,
+          framesPerRow: [0, 0, 9, 0] as readonly number[],
+        },
+        emptyRows: [0, 1, 3] as readonly number[],
       },
-      emptyRows: [0, 1, 3] as readonly number[],
-    };
+    ];
 
-    // All empty rows are in acceptedEmptyRows → no regression
-    const newEmpty = sheetResult.emptyRows.filter((r) => !entry?.acceptedEmptyRows.includes(r));
-    expect(newEmpty).toEqual([]); // No regression
+    // Use classifySheets to check classification
+    const { regressions, knownGaps, newlyCovered } = mod.classifySheets({
+      sheetResults,
+      baselineLookup: lookup,
+    });
+
+    // All empty rows are in acceptedEmptyRows → no regression, but known gap
+    expect(regressions.length).toBe(0);
+    expect(knownGaps.length).toBe(1);
+    expect(knownGaps[0]?.tag).toBe('lpc:weapon:sword:longsword:walk');
+    expect(knownGaps[0]?.emptyRows).toEqual([0, 1, 3]);
+    expect(knownGaps[0]?.reason).toBe('C-431 — behind pass collection not yet implemented');
+    expect(newlyCovered.length).toBe(0);
   });
 
   it('requires a non-empty reason in the baseline entry', async () => {
-    // Valid entry with reason
-    const validEntry = {
-      tag: 'lpc:weapon:sword:longsword:walk',
-      acceptedEmptyRows: [0, 1, 3] as readonly number[],
-      reason: 'C-431 — behind pass collection not yet implemented',
-    };
-    expect(validEntry.reason.length).toBeGreaterThan(0);
+    const mod = await import('../audit_lpc_coverage.js');
 
-    // Reject empty reason
-    const invalidEntry = {
-      tag: 'lpc:weapon:sword:longsword:walk',
-      acceptedEmptyRows: [0, 1, 3] as readonly number[],
-      reason: '',
+    // Valid baseline with non-empty reason
+    const validBaseline = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      auditedCount: 1,
+      entries: [
+        {
+          tag: 'lpc:weapon:sword:longsword:walk',
+          acceptedEmptyRows: [0, 1, 3] as readonly number[],
+          reason: 'C-431 — behind pass collection not yet implemented',
+        },
+      ],
     };
-    expect(invalidEntry.reason.length).toBe(0);
+
+    // Should not throw
+    expect(() => mod.buildBaselineLookup(validBaseline)).not.toThrow();
+
+    // Invalid baseline with empty reason
+    const invalidBaseline = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      auditedCount: 1,
+      entries: [
+        {
+          tag: 'lpc:weapon:sword:longsword:walk',
+          acceptedEmptyRows: [0, 1, 3] as readonly number[],
+          reason: '',
+        },
+      ],
+    };
+
+    // Should throw
+    expect(() => mod.buildBaselineLookup(invalidBaseline)).toThrow(
+      'Baseline entry for "lpc:weapon:sword:longsword:walk" has an empty reason field',
+    );
+
+    // Invalid baseline with whitespace-only reason
+    const whitespaceBaseline = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      auditedCount: 1,
+      entries: [
+        {
+          tag: 'lpc:weapon:sword:longsword:walk',
+          acceptedEmptyRows: [0, 1, 3] as readonly number[],
+          reason: '   ',
+        },
+      ],
+    };
+
+    // Should throw
+    expect(() => mod.buildBaselineLookup(whitespaceBaseline)).toThrow(
+      'Baseline entry for "lpc:weapon:sword:longsword:walk" has an empty reason field',
+    );
   });
 });
 
