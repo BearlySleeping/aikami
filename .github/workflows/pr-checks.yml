@@ -49,7 +49,7 @@ jobs:
         uses: reviewdog/action-actionlint@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }} # Required for reviewdog to post comments
-          actionlint_flags: "-color"
+          actionlint_flags: "-color -shellcheck=shellcheck"
           fail_level: error
           filter_mode: nofilter
           reporter: github-pr-check

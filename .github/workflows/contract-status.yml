@@ -22,12 +22,12 @@
 name: Contract Status
 
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] — checks out main, not PR code; PR data is read-only env vars
     types: [closed]
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   # Serialize: every run of this job pushes to main. The push is already a
@@ -44,12 +44,14 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       # Full history: the script commits via plumbing onto origin/main's tip
       # and pushes. A shallow clone can have that push rejected outright
       # ("shallow update not allowed"), and 100 MB is a ~15s fetch.
       - name: Checkout main
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           fetch-depth: 0
