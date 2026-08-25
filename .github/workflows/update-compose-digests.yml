@@ -22,14 +22,17 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
 
 jobs:
   bump:
     name: Re-resolve pinned digests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write # needed to push the digest-bump branch
+      pull-requests: write # needed to create/update the digest-bump PR
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

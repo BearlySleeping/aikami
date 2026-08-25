@@ -1,8 +1,0 @@
-# apps/frontend/hub/.dockerignore
-# Keep the Cloud Run build context lean — only build/ + start.js are needed.
-node_modules
-.svelte-kit
-dist
-.git
-Dockerfile
-firebase.deploy.json
