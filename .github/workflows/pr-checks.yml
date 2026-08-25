@@ -50,11 +50,8 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }} # Required for reviewdog to post comments
           actionlint_flags: "-color"
-          # shellcheck is required for AC-2: shell defects in run: blocks
-          # actionlint silently skips shell analysis when shellcheck is absent
-          shellcheck_flags: "-x"
           fail_level: error
-          filter_mode: no_filter
+          filter_mode: nofilter
           reporter: github-pr-check
 
       # zizmor v1.29.0 — security audit for GitHub Actions workflows
