@@ -2,7 +2,7 @@
 id: C-431
 title: "Collect the LPC universal_behind Pass — Weapons Visible in All Four Directions"
 source: "user request 2026-08-23 — engine review; missing behind-pass root cause"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `scripts/src/lib/ops/collect_lpc_assets.ts`, `apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts`, `apps/frontend/client/static/game-data/lpc/`, `apps/frontend/client/src/lib/data/lpc_renderer.ts` |
 | **Priority** | P1 — the largest single visual defect in the character renderer. |
 | **Dependencies** | C-430 (a behind layer has nowhere to render without `layerRole`), C-429 (supplies the measurement that proves completion), C-428 (most behind sheets are oversize). All three must merge first. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on regenerating the LPC catalog |
 | **Contract version** | 1.0.0 |
@@ -160,7 +160,7 @@ Generated catalog entries — `apps/frontend/client/src/lib/data/lpc_asset_catal
 ```ts
 /** One collected LPC asset variant. Extends the existing generated shape. */
 type LpcCatalogVariant = {
-  /** Renderer asset ID, e.g. "weapon/sword/longsword". */
+  /** Renderer asset ID, e.g. "weapon/sword/longsword" or "weapon/sword/longsword/behind". */
   assetId: string;
   /** Human label, as today. */
   label: string;
@@ -175,12 +175,32 @@ type LpcCatalogVariant = {
    */
   pairedAssetId?: string;
 };
+
+> The existing `LpcSlotVariant` type in `lpc_asset_catalog.ts` also carries
+> `shapeType: LpcMockShapeType`. This field is retained — the new `layerRole`
+> and `pairedAssetId` are additive, not a replacement. The generated catalog
+> already contains `universal_behind` entries (e.g.
+> `weapon/blunt/mace/universal_behind`) from the current parser; these are
+> collected as foreground entries with `universal_behind` baked into the
+> assetId. This contract re-collects them with proper `layerRole: 'behind'`
+> and `pairedAssetId` linking, normalising the assetId to strip the
+> directory-derived suffix.
 ```
 
 Output filenames adopt one convention across both families — a behind sheet is
 emitted as `<assetId>.behind.<state>.webp` alongside `<assetId>.<state>.webp`.
 Existing shield `_bg`/`_fg` entries are normalised to it, which is a rename of
 generated output, not of upstream source.
+
+**URL resolution**: The behind entry carries `layerRole: 'behind'` but shares its
+`assetId` with the foreground entry. The URL resolver (`lpcTag` → manifest tag)
+must incorporate `layerRole` so that `lpc:weapon:sword:longsword:behind:walk`
+resolves to a different manifest entry than `lpc:weapon:sword:longsword:walk`.
+The simplest approach is to emit behind entries with an assetId that includes
+the role (e.g. `weapon/sword/longsword/behind`), producing distinct tags via
+the existing `lpcTag` convention. The `layerRole` field on the catalog entry is
+the renderer's source of truth — the URL resolver must never parse `_bg` or
+`behind` out of a filename.
 
 ## Quality Requirements
 
@@ -369,8 +389,9 @@ because leaving two conventions live is the "competing code paths" condition.
 
 - **Page offsets on upstream PNGs.** The generator's crops carry a virtual canvas (`832x1344`) with an offset. Convert with `+repage` awareness or the output is silently misaligned — and it will *look* fine facing down, which is the one direction that works today.
 - **Behind sheets are frequently oversize.** They depend on C-428 landing first, or they will be sliced on the wrong grid.
-- **`_mergeEquipmentRecipes` keying.** With behind and front sharing a slot name, a merge keyed on slot alone drops one of each pair. C-430 must key on `(slot, layerRole)`; verify it does before wiring.
+- **`_mergeEquipmentRecipes` keying.** With behind and front sharing a slot name, a merge keyed on slot alone drops one of each pair. C-430 must key on `(slot, layerRole)`; verify it does before wiring. Currently `_mergeEquipmentRecipes` at `game_world.ts:3046` keys on `slot` only — this must be updated to `(slot, layerRole)`.
 - **Bundle growth.** Roughly doubling the weapon/shield sheet count grows the bundled tree. Quantify it; C-433/C-435 address delivery.
+- **URL resolver unaware of layerRole.** The current `lpcTag`/`resolveLpcUrl` pipeline takes `(assetId, state)` and knows nothing about `layerRole`. If behind entries share the foreground's `assetId`, the URL resolver must be updated to incorporate `layerRole` into the manifest tag. See the filename convention note under State & Data Models.
 - **Do not chase `attack_*` here.** Those sheets have non-standard frame counts and layouts. Explicitly out of scope; leave the state-fallback chain covering them.
 - **Unpaired behind sheets.** If a behind pass exists with no foreground partner, report and skip. Emitting it standalone renders a detached weapon fragment.
 
