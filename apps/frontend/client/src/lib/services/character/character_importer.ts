@@ -5,6 +5,8 @@ import { AIKAMI_PNG_CHUNK_KEYWORD } from '@aikami/constants';
 import type {
   AikamiCharacterCard,
   Character,
+  CharacterBook,
+  CharacterBookEntry,
   CharacterCardV3,
   CharacterCardV3Asset,
 } from '@aikami/types';
@@ -12,10 +14,95 @@ import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
 import { isV1Card, isV2Card, isV3Card } from './character_validator.ts';
 import { extractTextChunks, isPng } from './png_utils.ts';
+import { normalizeCharacterBook, type NormalizedBook } from './character_book_mapper.ts';
 
 export type CharacterImportResult = {
   character: Character;
   avatarFile?: File;
+  /** Normalized lorebook data from the card's character_book, if present. */
+  lorebook?: NormalizedBook;
+};
+
+/**
+ * Extracts the character_book from card data, if present.
+ * Both V2 and V3 store the book at `data.character_book`.
+ */
+const _extractBook = (options: {
+  data: Record<string, unknown>;
+  characterName: string;
+}): NormalizedBook | undefined => {
+  const { data, characterName } = options;
+  const rawBook = data.character_book;
+  if (!rawBook || typeof rawBook !== 'object') {
+    return undefined;
+  }
+
+  // Validate that rawBook has the expected structure
+  const book = rawBook as Record<string, unknown>;
+
+  // Validate entries is an array
+  if (!Array.isArray(book.entries)) {
+    logger.warn('character-importer', {
+      message: 'character_book.entries is not an array',
+      characterName,
+    });
+    return undefined;
+  }
+
+  // Validate each entry has required fields and skip invalid ones
+  const validEntries = book.entries.filter((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      logger.warn('character-importer', {
+        message: `Entry at index ${index} is not an object`,
+        characterName,
+      });
+      return false;
+    }
+    const entryObj = entry as Record<string, unknown>;
+
+    // keys must be an array
+    if (!Array.isArray(entryObj.keys)) {
+      logger.warn('character-importer', {
+        message: `Entry at index ${index} has non-array keys`,
+        characterName,
+      });
+      return false;
+    }
+
+    // content must be a string
+    if (typeof entryObj.content !== 'string') {
+      logger.warn('character-importer', {
+        message: `Entry at index ${index} has non-string content`,
+        characterName,
+      });
+      return false;
+    }
+
+    return true;
+  });
+
+  // Create a validated book object with cleaned entries
+  const validatedBook: CharacterBook = {
+    name: typeof book.name === 'string' ? book.name : undefined,
+    description: typeof book.description === 'string' ? book.description : undefined,
+    scan_depth: typeof book.scan_depth === 'number' ? book.scan_depth : undefined,
+    token_budget: typeof book.token_budget === 'number' ? book.token_budget : undefined,
+    recursive_scanning: typeof book.recursive_scanning === 'boolean' ? book.recursive_scanning : undefined,
+    extensions: book.extensions && typeof book.extensions === 'object' && !Array.isArray(book.extensions)
+      ? (book.extensions as Record<string, unknown>)
+      : {},
+    entries: validEntries as CharacterBookEntry[],
+  };
+
+  try {
+    return normalizeCharacterBook({ book: validatedBook, characterName });
+  } catch {
+    logger.warn('character-importer', {
+      message: 'Failed to normalize character_book',
+      characterName,
+    });
+    return undefined;
+  }
 };
 
 /**
@@ -203,11 +290,61 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
     });
   }
 
+  // C-439: Extract the embedded lorebook (character_book) from the raw card JSON.
+  // Extract from the same chunk that successfully produced the character, so a
+  // malformed ccv3 falls back to valid chara containing a book.
+  let lorebook: NormalizedBook | undefined;
+  let successfulChunkKeyword: string | undefined;
+
+  if (character) {
+    // Determine which chunk produced the character
+    if (textChunks[AIKAMI_PNG_CHUNK_KEYWORD]) {
+      successfulChunkKeyword = AIKAMI_PNG_CHUNK_KEYWORD;
+    } else if (textChunks.ccv3) {
+      const parsedCcv3 = parseBase64Json({ base64: textChunks.ccv3 });
+      if (parsedCcv3) {
+        successfulChunkKeyword = 'ccv3';
+      }
+    }
+    if (!successfulChunkKeyword && textChunks.chara) {
+      const parsedChara = parseBase64Json({ base64: textChunks.chara });
+      if (parsedChara) {
+        successfulChunkKeyword = 'chara';
+      }
+    }
+    if (!successfulChunkKeyword && textChunks.cbar) {
+      successfulChunkKeyword = 'cbar';
+    }
+
+    // Parse the raw chunk JSON to extract the book before normalization.
+    // The book lives in `data.character_book` in both V2 and V3 cards.
+    const rawChunkText = successfulChunkKeyword ? textChunks[successfulChunkKeyword] : '';
+    if (rawChunkText && (successfulChunkKeyword === 'ccv3' || successfulChunkKeyword === 'chara')) {
+      try {
+        const binaryString = atob(rawChunkText);
+        const bytes = new Uint8Array([...binaryString].map((char) => char.charCodeAt(0)));
+        const decoded = new TextDecoder().decode(bytes);
+        const rawJson = JSON.parse(decoded);
+        const rawData = (rawJson as Record<string, unknown>).data as Record<string, unknown> | undefined;
+        if (rawData?.character_book) {
+          lorebook = _extractBook({
+            data: rawData,
+            characterName: character.name,
+          });
+        }
+      } catch {
+        logger.warn('character-importer', {
+          message: 'Failed to extract character_book from PNG chunk',
+        });
+      }
+    }
+  }
+
   const avatarFile = new File([file], `${file.name.replace('.png', '')}_avatar.png`, {
     type: 'image/png',
   });
 
-  return { character, avatarFile };
+  return { character, avatarFile, lorebook };
 };
 
 /**
@@ -278,5 +415,17 @@ export const importFromJson = async (options: { file: File }): Promise<Character
     avatarFile = await dataUriToFile({ dataUri: avatarDataUri, fileName: 'avatar.png' });
   }
 
-  return { character, avatarFile };
+  // C-439: Extract the embedded lorebook (character_book) from the raw card JSON
+  let lorebook: NormalizedBook | undefined;
+  if (character) {
+    const rawData = (json as Record<string, unknown>).data as Record<string, unknown> | undefined;
+    if (rawData?.character_book) {
+      lorebook = _extractBook({
+        data: rawData,
+        characterName: character.name,
+      });
+    }
+  }
+
+  return { character, avatarFile, lorebook };
 };
