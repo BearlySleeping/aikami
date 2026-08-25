@@ -42,6 +42,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # actionlint v1.7.7 — static analysis for GitHub Actions workflows
       # https://github.com/rhysd/actionlint

@@ -51,7 +51,7 @@ jobs:
       # and pushes. A shallow clone can have that push rejected outright
       # ("shallow update not allowed"), and 100 MB is a ~15s fetch.
       - name: Checkout main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 # zizmor: ignore[artipacked] — needs credentials to push status updates
         with:
           ref: main
           fetch-depth: 0
