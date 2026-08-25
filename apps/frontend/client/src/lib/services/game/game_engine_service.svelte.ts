@@ -792,12 +792,22 @@ class GameEngineService
       // Falls back to emberwatch sandbox zone A when no campaign is active.
       const startingMap = pack.getStartingMap();
 
-      // ── C-327 AC-3: Load onboarding hints from the content pack ──
+      // ── C-327 AC-3 / C-422 AC-4: Load onboarding hints from the content pack ──
       if (pack.manifest.onboarding) {
         const { onboardingHintService: svc } = await import('./onboarding_hint_service.svelte.ts');
+
+        // C-422 AC-4: Conditionally extend the onboarding arc behind a feature flag
+        const extendedArcEnabled =
+          typeof import.meta !== 'undefined' &&
+          import.meta.env?.PUBLIC_EXTENDED_ONBOARDING_ARC === '1';
+
+        const onboarding = extendedArcEnabled
+          ? this._extendOnboardingArc(pack.manifest.onboarding)
+          : pack.manifest.onboarding;
+
         svc.loadOnboarding({
           packId: this.contentPackId,
-          onboarding: pack.manifest.onboarding,
+          onboarding,
         });
       } else {
         // Clear stale hints from a previous pack that had onboarding
@@ -1031,6 +1041,42 @@ class GameEngineService
     this._resizeCleanup = (): void => {
       window.removeEventListener('resize', handleResize);
     };
+  }
+
+  /**
+   * Extends the base onboarding arc with gameplay-teaching steps (C-422 AC-4).
+   * Adds conversation, dice roll, and combat steps after the existing keybinding hints.
+   */
+  private _extendOnboardingArc(onboarding: {
+    steps: Array<Record<string, unknown>>;
+  }): { steps: Array<Record<string, unknown>> } {
+    const extendedSteps = [
+      ...onboarding.steps,
+      // Conversation step — completes when NPC dialogue opens
+      {
+        id: 'hint_conversation',
+        action: { kind: 'event', eventId: 'npc_dialogue_opened' },
+        text: 'Talk to an NPC to learn about the world — try speaking with Elder Thalia',
+        trigger: 'after_previous',
+      },
+      // Dice roll step — completes when a roll is resolved
+      {
+        id: 'hint_dice_roll',
+        action: { kind: 'event', eventId: 'dice_roll_resolved' },
+        text: 'Use /roll to test your luck and skills in conversations',
+        trigger: 'after_previous',
+      },
+      // Combat step — completes when a combat encounter ends in victory
+      {
+        id: 'hint_combat',
+        action: { kind: 'event', eventId: 'combat_ended' },
+        text: 'Win a combat encounter to prove your strength',
+        trigger: 'after_previous',
+        requiresModel: true,
+      },
+    ];
+
+    return { steps: extendedSteps };
   }
 }
 

@@ -12,6 +12,8 @@
 export const FEATURE_FLAG_KEYS = {
   /** QA/CI bypass: when '1', allows gameplay without a resolved text AI provider */
   qaBypassTextAi: 'PUBLIC_QA_BYPASS_TEXT_AI',
+  /** Extended onboarding arc: when '1', the Emberwatch manifest includes gameplay-teaching steps */
+  extendedOnboardingArc: 'PUBLIC_EXTENDED_ONBOARDING_ARC',
 } as const;
 
 export type FeatureFlagKey = (typeof FEATURE_FLAG_KEYS)[keyof typeof FEATURE_FLAG_KEYS];

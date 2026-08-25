@@ -4,7 +4,7 @@
 // marks them learned when the action is performed, persists learned
 // state per content pack in localStorage, supports replay/reset.
 //
-// Contract: C-327 AC-3, AC-4
+// Contract: C-327 AC-3, AC-4; C-422 AC-2 (progress, skip, onEventPerformed)
 
 import {
   BaseFrontendClass,
@@ -33,15 +33,23 @@ export type OnboardingHintServiceInterface = BaseFrontendClassInterface & {
   readonly hintVisible: boolean;
   /** Whether the onboarding is complete (all hints learned). */
   readonly isComplete: boolean;
+  /** Index of the current step (0-based), or -1 if none. */
+  readonly stepIndex: number;
+  /** Total number of steps in the loaded arc. */
+  readonly totalSteps: number;
 
   /** Loads the onboarding section for a content pack. */
   loadOnboarding(options: { packId: string; onboarding: OnboardingSection }): void;
   /** Called when the player performs an action (check for learned). */
   onActionPerformed(actionId: string): void;
+  /** Called when a gameplay event fires (check for learned). */
+  onEventPerformed(eventId: string): void;
   /** Called when interaction target changes (trigger near_interactable hints). */
   onInteractionTargetChanged(): void;
   /** Hides the current hint toast (called by ViewModel on dismiss). */
   dismissCurrentHint(): void;
+  /** Skips the entire onboarding arc — marks all steps as learned. */
+  skipOnboarding(): void;
   /** Resets learned state for the current pack (replay). */
   resetOnboarding(): void;
   /** Reloads from localStorage for the current pack. */
@@ -61,6 +69,19 @@ export class OnboardingHintService
   currentHint = $state<OnboardingHintStep | undefined>(undefined);
   hintVisible = $state<boolean>(false);
   isComplete = $state<boolean>(false);
+
+  /** @inheritdoc */
+  get stepIndex(): number {
+    if (!this.currentHint || this._steps.length === 0) {
+      return -1;
+    }
+    return this._steps.indexOf(this.currentHint);
+  }
+
+  /** @inheritdoc */
+  get totalSteps(): number {
+    return this._steps.length;
+  }
 
   private _packId = '';
   private _steps: OnboardingHintStep[] = [];
@@ -98,17 +119,21 @@ export class OnboardingHintService
   /**
    * Called when the player performs a given action.
    *
-   * Marks the matching hint as learned if it's currently active and
-   * advances to the next eligible hint.
+   * Marks matching input hints as learned and advances to the next
+   * eligible hint.
    */
   onActionPerformed(actionId: string): void {
     if (this.isComplete || this._steps.length === 0) {
       return;
     }
 
-    // Mark any hint teaching this action as learned
+    // Mark any input hint teaching this action as learned
     for (const step of this._steps) {
-      if (step.action === actionId && !this._learned[step.id]) {
+      if (
+        step.action.kind === 'input' &&
+        step.action.actionId === actionId &&
+        !this._learned[step.id]
+      ) {
         this._learned[step.id] = true;
         this.debug('hint-learned', { hintId: step.id, action: actionId });
       }
@@ -117,7 +142,48 @@ export class OnboardingHintService
     this._saveProgress();
 
     // If the current hint was just learned, dismiss it and advance
-    if (this.currentHint && this.currentHint.action === actionId) {
+    if (
+      this.currentHint &&
+      this.currentHint.action.kind === 'input' &&
+      this.currentHint.action.actionId === actionId
+    ) {
+      this.hintVisible = false;
+      this.currentHint = undefined;
+      this._enqueuePendingHints();
+    }
+  }
+
+  /**
+   * Called when a gameplay event fires.
+   *
+   * Marks matching event hints as learned and advances to the next
+   * eligible hint.
+   */
+  onEventPerformed(eventId: string): void {
+    if (this.isComplete || this._steps.length === 0) {
+      return;
+    }
+
+    // Mark any event hint listening for this event as learned
+    for (const step of this._steps) {
+      if (
+        step.action.kind === 'event' &&
+        step.action.eventId === eventId &&
+        !this._learned[step.id]
+      ) {
+        this._learned[step.id] = true;
+        this.debug('hint-learned', { hintId: step.id, eventId });
+      }
+    }
+
+    this._saveProgress();
+
+    // If the current hint was just learned, dismiss it and advance
+    if (
+      this.currentHint &&
+      this.currentHint.action.kind === 'event' &&
+      this.currentHint.action.eventId === eventId
+    ) {
       this.hintVisible = false;
       this.currentHint = undefined;
       this._enqueuePendingHints();
@@ -142,6 +208,26 @@ export class OnboardingHintService
     this.hintVisible = false;
     this.currentHint = undefined;
     this._enqueuePendingHints();
+  }
+
+  /**
+   * Skips the entire onboarding arc — marks all steps as learned.
+   * Persists completion so the arc is not shown again.
+   */
+  skipOnboarding(): void {
+    if (this._steps.length === 0) {
+      return;
+    }
+
+    for (const step of this._steps) {
+      this._learned[step.id] = true;
+    }
+
+    this.isComplete = true;
+    this.currentHint = undefined;
+    this.hintVisible = false;
+    this._saveProgress();
+    this.debug('onboarding-skipped', { packId: this._packId });
   }
 
   /** Resets learned state for the current pack (replay tutorial). */

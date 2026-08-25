@@ -95,12 +95,15 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
     reducedMotion={viewModel.reducedMotion}
   />
 
-  <!-- ── C-327 AC-3: Onboarding hint toast ── -->
+  <!-- ── C-327 AC-3 / C-422 AC-3: Onboarding hint toast with progress and skip ── -->
   <OnboardingHint
     text={viewModel.onboardingHintText}
     visible={viewModel.onboardingHintVisible}
+    stepIndex={viewModel.onboardingStepIndex}
+    totalSteps={viewModel.onboardingTotalSteps}
     reducedMotion={viewModel.reducedMotion}
     onDismiss={() => viewModel.dismissOnboardingHint()}
+    onSkip={() => viewModel.skipOnboardingHint()}
   />
 
   <!-- ── Optional Music Player overlay (toggle in Settings > Audio) ── -->

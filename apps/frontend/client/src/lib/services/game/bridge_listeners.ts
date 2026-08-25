@@ -57,6 +57,10 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     if (gameOverlayService.activeOverlay !== 'NONE') {
       return;
     }
+
+    // C-422 AC-4: Notify onboarding of conversation step completion
+    onboardingHintService.onEventPerformed('npc_dialogue_opened');
+
     npcDialogueService.startDialogue({
       npcData: {
         npcId: event.npcId,
@@ -201,6 +205,9 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   bridge.on('COMBAT_ENDED', (event) => {
     if (gameOverlayService.activeOverlay === 'COMBAT') {
       if (event.victory) {
+        // C-422 AC-4: Notify onboarding of combat step completion
+        onboardingHintService.onEventPerformed('combat_ended');
+
         // Emit ENCOUNTER_COMPLETED for quest tracking (C-330 AC-4)
         const encounterId = combatService.encounterId;
         if (encounterId) {
