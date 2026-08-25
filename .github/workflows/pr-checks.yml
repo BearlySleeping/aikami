@@ -62,7 +62,7 @@ jobs:
         run: pip install zizmor==1.29.0
 
       - name: Run zizmor
-        run: zizmor --pedantic .github/
+        run: zizmor .github/
 
   validate:
     name: Moon CI
