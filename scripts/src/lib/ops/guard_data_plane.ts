@@ -1,17 +1,18 @@
 // scripts/src/lib/ops/guard_data_plane.ts
 //
-// C-394 AC-4: structural guards for the server data plane's architectural
+// C-436: structural guards for the server data plane's architectural
 // invariants — enforced by CI, not by convention.
 //
-//   I-1  No database module, `pg`, `drizzle-orm` or NEON_DATABASE_URL
-//        reference may reach a client bundle. The built-bundle half is
-//        proven by `hub:build` + a grep of build/client (documented in the
-//        AC-4 evidence); this guard catches the SOURCE-level regressions
-//        that would otherwise ship: imports of @aikami/backend-database
-//        outside server-only code, or in any .svelte file.
+//   I-1  No database module or `drizzle-orm` reference may reach a client
+//        bundle. The built-bundle half is proven by `hub:build` + a grep of
+//        build/client (documented in the AC-4 evidence); this guard catches
+//        the SOURCE-level regressions that would otherwise ship: imports of
+//        @aikami/backend-database outside server-only code, or in any
+//        .svelte file.
 //
-//   I-9  No Neon-proprietary dependency: @neondatabase/serverless must not
-//        appear anywhere; drizzle-typebox must not be in the lockfile
+//   I-9  No Postgres/Neon dependencies may reappear: `pg`, `postgres`,
+//        and `@neondatabase/serverless` must not appear anywhere in
+//        workspace sources; drizzle-typebox must not be in the lockfile
 //        (peer-depends on the OLD scoped @sinclair/typebox); and
 //        @sinclair/typebox must never be added as a direct dependency.
 //
@@ -70,9 +71,7 @@ const HUB_SOURCE_EXTS = ['.ts', '.svelte'];
  */
 const FORBIDDEN_REF_PATTERNS: Array<{ label: string; re: RegExp }> = [
   { label: '@aikami/backend-database', re: /@aikami\/backend-database/ },
-  { label: 'pg', re: /(?:from\s+|require\(\s*)['"`]pg['"`]/ },
   { label: 'drizzle-orm', re: /(?:from\s+|require\(\s*)['"`]drizzle-orm['"`]/ },
-  { label: 'NEON_DATABASE_URL', re: /NEON_DATABASE_URL/ },
 ];
 
 const guardServerOnlyImports = (): void => {
@@ -110,7 +109,7 @@ const guardServerOnlyImports = (): void => {
   }
 };
 
-// ── I-9: no Neon-proprietary / duplicate-TypeBox dependencies ───────────
+// ── I-9: no Postgres/Neon / duplicate-TypeBox dependencies ───────────
 
 /** Every workspace source tree (apps, packages, scripts) and the source extensions to scan. */
 const WORKSPACE_TREES = [
@@ -121,18 +120,23 @@ const WORKSPACE_TREES = [
 const SOURCE_EXTS = ['.ts', '.tsx', '.svelte', '.js', '.mjs'];
 
 const guardNeonDependencies = (): void => {
-  // 1. @neondatabase/serverless anywhere in workspace sources (excluding
-  //    this guard's own source, which names the package in its docs).
+  // 1. pg, postgres, @neondatabase/serverless anywhere in workspace sources
+  //    (excluding this guard's own source, which names the packages in its docs).
   const sourceFiles = WORKSPACE_TREES.flatMap((tree) => walk(tree, SOURCE_EXTS)).filter(
     (file) => file !== fileURLToPath(import.meta.url),
   );
-  const neondbHits = sourceFiles.filter((file) =>
-    readFileSync(file, 'utf8').includes('@neondatabase/serverless'),
-  );
-  if (neondbHits.length > 0) {
-    fail(`I-9: @neondatabase/serverless referenced in ${neondbHits.length} file(s)`);
+  const pgHits = sourceFiles.filter((file) => {
+    const content = readFileSync(file, 'utf8');
+    return (
+      content.includes('@neondatabase/serverless') ||
+      /(?:from\s+|require\(\s*)['"`]pg['"`]/.test(content) ||
+      /(?:from\s+|require\(\s*)['"`]postgres['"`]/.test(content)
+    );
+  });
+  if (pgHits.length > 0) {
+    fail(`I-9: pg/postgres/@neondatabase/serverless referenced in ${pgHits.length} file(s)`);
   } else {
-    ok('I-9: no @neondatabase/serverless references');
+    ok('I-9: no pg/postgres/@neondatabase/serverless references');
   }
 
   // 2. drizzle-typebox must not be in the lockfile.

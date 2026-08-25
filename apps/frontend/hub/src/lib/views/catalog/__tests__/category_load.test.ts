@@ -8,7 +8,7 @@
 // and never the 7 MB client manifest. This is asserted against a local
 // fixture origin that records every requested path.
 //
-// I-8 enforcement (AC-2 watch point): with NEON_DATABASE_URL unset, the
+// I-8 enforcement (AC-2 watch point): with no D1 binding, the
 // awaited part of the load completes and the streamed stats promise resolves
 // to null — the page still renders completely, with stats absent.
 
@@ -111,15 +111,13 @@ afterAll(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Env mocking — CATALOG_ORIGIN_URL → fixture origin; NEON_DATABASE_URL unset
+// Env mocking — CATALOG_ORIGIN_URL → fixture origin
 // ---------------------------------------------------------------------------
 
-const setEnv = (options: { catalogOrigin?: string; neonUrl?: string }): void => {
+const setEnv = (options: { catalogOrigin?: string }): void => {
   const env: Record<string, string | undefined> = {
     // biome-ignore lint/style/useNamingConvention: env keys are SCREAMING_SNAKE_CASE literals by platform convention
     CATALOG_ORIGIN_URL: options.catalogOrigin,
-    // biome-ignore lint/style/useNamingConvention: env keys are SCREAMING_SNAKE_CASE literals by platform convention
-    NEON_DATABASE_URL: options.neonUrl,
   };
   mock.module('$env/dynamic/private', () => ({ env }));
 };
@@ -127,7 +125,7 @@ const setEnv = (options: { catalogOrigin?: string; neonUrl?: string }): void => 
 describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
   beforeEach(async () => {
     requestedPaths.length = 0;
-    setEnv({ catalogOrigin: origin?.url, neonUrl: undefined });
+    setEnv({ catalogOrigin: origin?.url });
     // Each test starts with an empty document cache — a stale cached
     // root/shard from a previous test (or its fixture server) must never
     // leak into the next one.
@@ -212,7 +210,7 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
     });
 
     try {
-      setEnv({ catalogOrigin: server.url.toString().replace(/\/$/, ''), neonUrl: undefined });
+      setEnv({ catalogOrigin: server.url.toString().replace(/\/$/, '') });
       const { getCategoryEntries } = await import('$lib/server/catalog/catalog_index.ts');
       const result = await getCategoryEntries('lpc');
       expect(result?.entries).toHaveLength(2);
@@ -227,7 +225,7 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
     } finally {
       server.stop(true);
       requestedPaths.length = 0;
-      setEnv({ catalogOrigin: origin?.url, neonUrl: undefined });
+      setEnv({ catalogOrigin: origin?.url });
     }
   });
 
@@ -238,14 +236,14 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
   });
 
   test('catalog index unreachable → typed error, load maps to explicit error state (never a 500)', async () => {
-    setEnv({ catalogOrigin: 'http://127.0.0.1:1', neonUrl: undefined });
+    setEnv({ catalogOrigin: 'http://127.0.0.1:1' });
     const { CatalogIndexUnavailableError, fetchRootIndex } = await import(
       '$lib/server/catalog/catalog_index.ts'
     );
     await expect(fetchRootIndex()).rejects.toBeInstanceOf(CatalogIndexUnavailableError);
   });
 
-  test('NEON_DATABASE_URL unset → the page data still carries entries and stats resolves to null', async () => {
+  test('no D1 binding → the page data still carries entries and stats resolves to null', async () => {
     const { load } = await import('../../../../routes/(public)/catalog/[category]/+page.server.ts');
     const setHeaders = mock(() => {});
     const depends = mock(() => {});

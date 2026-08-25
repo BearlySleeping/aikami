@@ -1,7 +1,8 @@
 // apps/frontend/hub/src/lib/server/api/catalog_stats.ts
 //
-// C-396 AC-4: GET /api/catalog/stats — streamed, Postgres-backed catalog
-// stats (placeholder aggregates; zero until C-398/C-399 write rows).
+// C-436 AC-3: GET /api/catalog/stats — streamed, D1-backed catalog stats
+// (placeholder aggregates; zero until C-398/C-399 write rows). Ported from
+// the pg.Pool + NEON_DATABASE_URL path (C-396 AC-4).
 //
 // This is the ONE data-plane query in the catalog render path, and it is
 // deliberately never awaited before first paint: the SSR loads return
@@ -15,46 +16,37 @@
 //   • Failures are logged at `warn` — expected and degraded, not exceptional
 //     (Observability requirement).
 //
-// The pool is created LAZILY on first query (connection.ts) — a database
-// outage cannot prevent the hub from booting or serving index-backed pages.
+// The D1 binding is injected per-request (see +server.ts) — a missing binding
+// degrades to null, never a 500 and never a boot failure.
 //
 // 🔴 I-1: this module lives under `src/lib/server/` — never import it from a
 // `.svelte` file or the client bundle.
 
-import {
-  type CatalogRepositories,
-  createCatalogRepositories,
-  getPool,
-  getPoolIfExists,
-} from '@aikami/backend-database';
-import type { AssetStats, CategoryStats } from '@aikami/schemas';
-import { env } from '$env/dynamic/private';
+import { packs } from '@aikami/backend-database';
+import { count, eq } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/d1';
 import { logger } from '$logger';
 
-/** Response to the browser — `null` means "unreachable/unconfigured". */
-export type CatalogStatsResponse = (CategoryStats | AssetStats) | null;
-
-let _repositories: CatalogRepositories | undefined;
-
-/**
- * In-process cache for the pack-count aggregate. The detail route is the
- * highest-fan-out page in the catalog and the value changes rarely — a short
- * TTL bounds Postgres round trips during traffic spikes/crawling (N8).
- */
-const STATS_CACHE_TTL_MS = 45_000;
-let _statsCache: { cachedAt: number; value: CategoryStats | AssetStats } | undefined;
-
-/** Lazily build the C-394 repositories over the shared pool. */
-const getRepositories = (): CatalogRepositories => {
-  if (!_repositories) {
-    const pool = getPool({ connectionString: env.NEON_DATABASE_URL ?? '' });
-    _repositories = createCatalogRepositories(pool);
-  }
-  return _repositories;
+type CatalogStatsEnv = {
+  // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+  DB: import('@cloudflare/workers-types').D1Database;
 };
 
+let _env: CatalogStatsEnv | undefined;
+
+/** Inject the per-request Worker env (called by the catch-all route). */
+export const setCatalogStatsEnv = (envValue: CatalogStatsEnv | undefined): void => {
+  _env = envValue;
+};
+
+/** The injected env, or undefined when D1 is unavailable. */
+export const getCatalogStatsEnv = (): CatalogStatsEnv | undefined => _env;
+
+/** Response to the browser — `null` means "unreachable/unconfigured". */
+export type CatalogStatsResponse = { packCount: number } | null;
+
 /**
- * Resolve the placeholder category/asset stats.
+ * Resolve the placeholder category/asset stats from D1.
  *
  * `category`/`tag` are accepted but not yet used for filtering — C-394's
  * packs table has no category or asset-tag column, so the aggregate is the
@@ -65,23 +57,21 @@ const getRepositories = (): CatalogRepositories => {
  * @returns `null` when the database is unconfigured or unreachable — never
  *   throws.
  */
-export const loadPackStats = async (): Promise<CategoryStats | AssetStats | null> => {
-  const connectionString = env.NEON_DATABASE_URL;
-  if (!connectionString) {
-    logger.warn('catalog:stats unconfigured (NEON_DATABASE_URL absent) — stats absent');
+export const loadPackStats = async (): Promise<{ packCount: number } | null> => {
+  const env = _env;
+  if (!env?.DB) {
+    logger.warn('catalog:stats unconfigured (DB binding absent) — stats absent');
     return null;
   }
 
   try {
-    const now = Date.now();
-    if (_statsCache && now - _statsCache.cachedAt < STATS_CACHE_TTL_MS) {
-      return _statsCache.value;
-    }
-    const repositories = getRepositories();
-    const packCount = await repositories.packs.countPublic();
-    const value = { packCount };
-    _statsCache = { cachedAt: Date.now(), value };
-    return value;
+    const db = drizzle(env.DB, { schema: { packs } });
+    const rows = await db
+      .select({ value: count() })
+      .from(packs)
+      .where(eq(packs.visibility, 'public'));
+    const packCount = rows[0]?.value ?? 0;
+    return { packCount };
   } catch (error) {
     // Expected and degraded — warn, never error (AC-4). Not cached: the
     // next request probes the database again once it recovers.
@@ -93,27 +83,14 @@ export const loadPackStats = async (): Promise<CategoryStats | AssetStats | null
 /**
  * Elysia handler for GET /api/catalog/stats.
  *
- * Responds 200 with `{ packCount }` when the database is reachable, and a
- * structured degraded response otherwise — the endpoint itself must not 500
- * (Quality Requirements: "Neither is a 500").
+ * Responds 200 with `{ packCount }` when the database is reachable, and
+ * `null` otherwise — the endpoint itself must not 500 (Quality Requirements:
+ * "Neither is a 500").
  */
 export const handleCatalogStats = async (): Promise<CatalogStatsResponse> => {
-  const connectionString = env.NEON_DATABASE_URL;
-  if (!connectionString) {
+  const env = _env;
+  if (!env?.DB) {
     return null;
   }
   return await loadPackStats();
-};
-
-/** Test hook: whether the repository layer has been built (lazy invariant). */
-export const hasStatsRepositories = (): boolean =>
-  getPoolIfExists() !== undefined && _repositories !== undefined;
-
-/**
- * Test hook: drop the cached repository layer so a later test builds a
- * fresh one over the (re-created) pool. Tests call this after closePool().
- */
-export const resetStatsRepositories = (): void => {
-  _repositories = undefined;
-  _statsCache = undefined;
 };

@@ -18,12 +18,10 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "pg": "^8.23.0"
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@libsql/client": "^0.17.4",
-    "@types/pg": "8.23.1",
     "drizzle-kit": "^0.31.10"
   }
 }

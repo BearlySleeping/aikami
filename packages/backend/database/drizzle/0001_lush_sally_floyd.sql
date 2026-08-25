@@ -1,2 +1,0 @@
-ALTER TABLE "pack_versions" ADD COLUMN "created_at" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
-CREATE INDEX "packs_owner_account_id_idx" ON "packs" USING btree ("owner_account_id");

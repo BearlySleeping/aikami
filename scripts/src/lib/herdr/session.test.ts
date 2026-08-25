@@ -176,34 +176,7 @@ describe('C-392 — dev engine services converge on the local stack', () => {
   });
 });
 
-describe('postgres herdr service (C-387)', () => {
-  it('registers postgres in SERVICE_DEFS', () => {
-    expect(SERVICE_DEFS.postgres.name).toBe('postgres');
-  });
 
-  it('exposes an emulator-only readyPort of 5433', () => {
-    expect(SERVICE_DEFS.postgres.readyPort?.('emulator')).toBe(5433);
-    expect(SERVICE_DEFS.postgres.readyPort?.('staging')).toBeUndefined();
-    expect(SERVICE_DEFS.postgres.readyPort?.('production')).toBeUndefined();
-  });
-
-  it('uses the raw-TCP readiness probe (postgres is not HTTP)', () => {
-    expect(SERVICE_DEFS.postgres.readyCheck).toBe('tcp');
-  });
-
-  it('accepts postgres as a service name', () => {
-    expect(normalizeService('postgres')).toBe('postgres');
-  });
-
-  it('does not add postgres to the all group (out of scope)', () => {
-    expect(ALL_SERVICES).not.toContain('postgres');
-    expect(expandServices(['all'])).not.toContain('postgres');
-  });
-
-  it('includes postgres among the known/listed services', () => {
-    expect(KNOWN_SERVICES).toContain('postgres');
-  });
-});
 
 describe('isKillableProcess', () => {
   it('allows killing our own dev-server process names', () => {

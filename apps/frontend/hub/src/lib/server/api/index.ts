@@ -23,8 +23,8 @@ import { AssetStatsSchema, CategoryStatsSchema } from '@aikami/schemas';
 import { Elysia, t } from 'elysia';
 import { handleAsk } from './ask.ts';
 import { getBetterAuth } from './better_auth.ts';
-import { handleCatalogStats } from './catalog_stats.ts';
-import { handleDbHealth } from './health_db.ts';
+import { getCatalogStatsEnv, handleCatalogStats } from './catalog_stats.ts';
+import { getHealthDbEnv, handleDbHealth } from './health_db.ts';
 import {
   getSaveBackupEnv,
   handleCreateBackup,
@@ -35,13 +35,11 @@ import { getStorageEnv, handleStorageUpload, handleStorageUrl } from './storage.
 
 // ─── Schemas (TypeBox) ───────────────────────────────────────────────
 
-// GET /api/health/db — database reachability + version (C-394 AC-1).
-// Unauthenticated on purpose; reports host only, never credentials.
+// GET /api/health/db — D1 binding reachability (C-436 AC-4).
+// Unauthenticated on purpose; reports only status and round-trip time.
 const dbHealthResponseSchema = t.Union([
   t.Object({
     status: t.Literal('ok'),
-    databaseVersion: t.String(),
-    host: t.String(),
     roundTripMs: t.Number(),
   }),
   t.Object({
@@ -49,7 +47,6 @@ const dbHealthResponseSchema = t.Union([
   }),
   t.Object({
     status: t.Literal('unreachable'),
-    host: t.Optional(t.String()),
   }),
 ]);
 
@@ -97,7 +94,13 @@ export const app = new Elysia({
   aot: false,
 })
   .mount('/auth', betterAuthHandler)
-  .get('/health/db', handleDbHealth, {
+  .get('/health/db', () => {
+    const env = getHealthDbEnv();
+    if (!env) {
+      return { status: 'unconfigured' };
+    }
+    return handleDbHealth();
+  }, {
     response: dbHealthResponseSchema,
   })
   // C-426 AC-6/AC-7: Turso save backup/restore to R2, session-gated.
@@ -154,7 +157,13 @@ export const app = new Elysia({
     }
     return handleStorageUrl(request, env);
   })
-  .get('/catalog/stats', handleCatalogStats, {
+  .get('/catalog/stats', () => {
+    const env = getCatalogStatsEnv();
+    if (!env) {
+      return null;
+    }
+    return handleCatalogStats();
+  }, {
     response: catalogStatsResponseSchema,
   })
   .post('/ask', handleAsk, {

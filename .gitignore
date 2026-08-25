@@ -111,8 +111,7 @@ pids/
 
 ## 🐘 Local PostgreSQL (C-387)
 # Data dir + sockets + logs for the Nix-provided dev server (lifecycle:
-# scripts/src/lib/postgres/lifecycle.ts). Reset with `bun postgres:reset --yes`.
-.postgres/
+# Removed in C-436 (Postgres decommission).
 
 # Pre-migration logical backups taken by the `database` deploy app (C-394 AC-5).
 # pg_dump output stored outside Neon — Neon Free history retention is 6 hours.
