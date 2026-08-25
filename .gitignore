@@ -250,6 +250,11 @@ apps/frontend/client/src-tauri/target/
 apps/frontend/client/src-tauri/gen/
 scripts/lpc/.lpc_manifest.json
 
+# Game data — everything is fetched on demand from R2 (C-435 follow-up).
+# The static/game-data/ directory is kept for tooling (seed generation,
+# catalog publishing) but no files are tracked in git.
+apps/frontend/client/static/game-data/
+
 # LPC assets — canonical source is Firebase Storage
 apps/backend/packages/
 # Swarm artifacts — ephemeral pipeline outputs

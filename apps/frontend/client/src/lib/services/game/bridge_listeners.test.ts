@@ -84,14 +84,27 @@ describe('setupBridgeListeners (AC-5)', () => {
 
     mockOnboardingHintService = {
       onInteractionTargetChanged: mock(() => {}),
+      onEventPerformed: mock(() => {}),
     };
 
-    // Mock createEngineBridge to return our mock bridge
-    mock.module('@aikami/frontend/engine', () => ({
+    const engineMock = () => ({
       createEngineBridge: mock(() => mockBridge),
       loadContentPack: mock(async () => ({
         resolveMapUrl: mock((mapId: string) => `/content-packs/emberwatch/maps/${mapId}.json`),
+        manifest: { maps: { inn: { defaultSpawnId: 'village_gate' } } },
       })),
+      djb2Hash: mock(() => 12345),
+    });
+    mock.module('@aikami/frontend/engine', engineMock);
+    // Also mock by resolved path (Bun workspace symlinks)
+    mock.module(
+      '/home/sonny/Development/Projects/passion/aikami/packages/frontend/engine/src/index.ts',
+      engineMock,
+    );
+    // Mock the registry resolver imported lazily inside ZONE_TRIGGERED handler
+    mock.module('$lib/services/assets/registry_resolver', () => ({
+      assetTagResolver: mock(() => 'resolved-tag'),
+      createAssetTagResolver: mock(() => mock(() => 'resolved-tag')),
     }));
 
     const mod = await import('./bridge_listeners');
@@ -261,14 +274,18 @@ describe('setupBridgeListeners (AC-5)', () => {
       onboardingHintService: mockOnboardingHintService as never,
     });
 
-    // Re-mock the engine module so loadContentPack rejects — the handler
-    // imports it lazily when the ZONE_TRIGGERED event fires.
-    mock.module('@aikami/frontend/engine', () => ({
+    const engineFailMock = () => ({
       createEngineBridge: mock(() => mockBridge),
       loadContentPack: mock(async () => {
         throw new Error('content pack unavailable');
       }),
-    }));
+      djb2Hash: mock(() => 12345),
+    });
+    mock.module('@aikami/frontend/engine', engineFailMock);
+    mock.module(
+      '/home/sonny/Development/Projects/passion/aikami/packages/frontend/engine/src/index.ts',
+      engineFailMock,
+    );
 
     const handler = bridgeListeners.get('ZONE_TRIGGERED');
     expect(handler).toBeDefined();

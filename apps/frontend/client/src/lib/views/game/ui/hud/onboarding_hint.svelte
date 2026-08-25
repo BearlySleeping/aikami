@@ -32,12 +32,7 @@ const { text, visible, stepIndex, totalSteps, reducedMotion, onDismiss, onSkip }
       {/if}
     </div>
     <div class="hint-actions">
-      <button
-        class="hint-skip"
-        onclick={() => onSkip()}
-        aria-label="Skip tutorial"
-        type="button"
-      >
+      <button class="hint-skip" onclick={() => onSkip()} aria-label="Skip tutorial" type="button">
         Skip
       </button>
       <button
@@ -109,7 +104,9 @@ const { text, visible, stepIndex, totalSteps, reducedMotion, onDismiss, onSkip }
   padding: 0.1875rem 0.5rem;
   border-radius: 0.25rem;
   line-height: 1.4;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .hint-skip:hover {

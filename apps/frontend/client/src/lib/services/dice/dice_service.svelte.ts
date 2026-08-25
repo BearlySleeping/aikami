@@ -182,11 +182,13 @@ class DiceService extends BaseFrontendClass<DiceServiceOptions> implements DiceS
     const total = sum + modifier;
 
     // C-422 AC-4: Notify onboarding of dice roll completion (fire-and-forget)
-    import('../game/onboarding_hint_service.svelte.ts').then((mod) => {
-      mod.onboardingHintService.onEventPerformed('dice_roll_resolved');
-    }).catch(() => {
-      // Non-critical — onboarding service may not be available
-    });
+    import('../game/onboarding_hint_service.svelte.ts')
+      .then((mod) => {
+        mod.onboardingHintService.onEventPerformed('dice_roll_resolved');
+      })
+      .catch(() => {
+        // Non-critical — onboarding service may not be available
+      });
 
     // Crit flags are meaningful only for a single d20.
     const isSingleD20 = options.count === 1 && options.sides === 20;

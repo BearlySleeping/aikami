@@ -4,7 +4,7 @@
 // Verifies the shipped `static/game-data/audio_tracks.json` validates
 // against the shared TypeBox schema, covers every mood previously mapped
 // in `on_emulate.ts`, degrades unknown moods to the documented fallback
-// track, and resolves URLs against the bundled game-data root.
+// track, and resolves URLs against the R2 origin.
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
@@ -23,17 +23,28 @@ import {
 /** Path to the shipped catalog relative to this test file. */
 const CATALOG_FILE = new URL('../../../../../static/game-data/audio_tracks.json', import.meta.url);
 
+const R2_BASE = 'https://assets.bearlysleeping.com';
+
+mock.module('@aikami/frontend/configs', () => ({
+  publicEnv: { PUBLIC_ASSETS_BASE_URL: R2_BASE },
+}));
+
 /**
  * Mock fetch serving the shipped catalog. Shared across tests so call
  * counts accumulate — the resolver must fetch exactly once per session.
  */
-const fetchMock = mock(() => {
-  const catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf-8')) as unknown;
-  const response = new Response(JSON.stringify(catalog), {
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-  });
-  return Promise.resolve(response);
+const fetchMock = mock((input: RequestInfo | URL) => {
+  const url = String(input);
+  if (url === `${R2_BASE}/seed/audio_tracks.json`) {
+    const catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf-8')) as unknown;
+    return Promise.resolve(
+      new Response(JSON.stringify(catalog), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  }
+  return Promise.resolve(new Response('not found', { status: 404 }));
 });
 
 /** Every mood previously seeded into Data Connect by `on_emulate.ts`. */
@@ -77,15 +88,15 @@ describe('AudioTrackCatalog — C-385 AC-3', () => {
     expect(tracks[0]?.id).toBe(FALLBACK_TRACK_ID);
   });
 
-  test('resolved URLs point into the bundled game-data root', async () => {
+  test('resolved URLs point to the R2 origin', async () => {
     const tracks = await getTracksByMood('epic');
     const first = tracks[0];
     if (!first) {
       throw new Error('expected at least one epic track');
     }
-    const url = resolveAudioTrackUrl(first);
-    expect(url.startsWith('/game-data/')).toBe(true);
-    expect(url.endsWith('.webm')).toBe(true);
+    const url = await resolveAudioTrackUrl(first);
+    expect(url).toContain(R2_BASE);
+    expect(url).not.toContain('/game-data/');
   });
 
   test('repeated mood lookups reuse the cached catalog — a single network fetch', async () => {

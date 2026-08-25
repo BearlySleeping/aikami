@@ -30,6 +30,8 @@ import {
   INDEX_CACHE_CONTROL,
   INDEX_KEY_PREFIX,
   ROOT_INDEX_KEY,
+  SEED_CACHE_CONTROL,
+  SEED_KEY_PREFIX,
 } from './config.ts';
 import { assetKey } from './content_address.ts';
 import { type GeneratedShard, generateCatalogIndex } from './index_generation.ts';
@@ -202,6 +204,42 @@ export const runCatalogPublish = async (
       ? { ...entry, thumbnailHash: undefined }
       : entry,
   );
+
+  // 3.75. Upload seed/metadata files (mutable, not content-addressed).
+  // These are published alongside the assets so the client can fetch the
+  // compact boot seed, offline-core declaration, credits, and audio metadata
+  // from the same R2 origin (C-435 follow-up: de-bundle everything from git).
+  const SEED_FILES = [
+    'asset_seed.json',
+    'offline_core.json',
+    'asset_credits.json',
+    'lpc_credits.json',
+    'lpc_credits_supplement.json',
+    'audio_tracks.json',
+  ] as const;
+  let seedUploaded = 0;
+  let seedFailed = 0;
+  for (const filename of SEED_FILES) {
+    const localPath = join(gameDataDir, filename);
+    try {
+      const body = readFileSync(localPath);
+      await client.putObject({
+        key: `${SEED_KEY_PREFIX}${filename}`,
+        body,
+        contentType: 'application/json',
+        cacheControl: SEED_CACHE_CONTROL,
+      });
+      seedUploaded++;
+      console.log(`  📄 seed: ${filename} (${(body.length / 1024).toFixed(1)} KB)`);
+    } catch (error) {
+      seedFailed++;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`  ⚠ seed: ${filename} skipped — ${message}`);
+    }
+  }
+  if (seedFailed > 0) {
+    console.warn(`⚠ ${seedFailed} seed file(s) skipped — continuing with index.`);
+  }
 
   // 4. Generate index.
   const { root, shards } = generateCatalogIndex({

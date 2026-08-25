@@ -14,6 +14,7 @@
 //
 // Contract: C-385 AC-3, C-151 AI Dynamic Music
 
+import { publicEnv } from '@aikami/frontend/configs';
 import {
   type AudioTrackCatalog,
   AudioTrackCatalogSchema,
@@ -26,11 +27,8 @@ import { logger } from '$logger';
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Static URL of the bundled catalog file (relative to the app root). */
-const CATALOG_URL = '/game-data/audio_tracks.json';
-
-/** Base URL for bundled game-data files served from `static/game-data/`. */
-const GAME_DATA_BASE = '/game-data';
+/** R2 key for the audio track catalog JSON. */
+const CATALOG_KEY = 'seed/audio_tracks.json';
 
 /**
  * Documented default fallback track id. Returned whenever a mood has no
@@ -80,7 +78,11 @@ let _fallbackEntry: AudioTrackEntry | undefined;
 const loadCatalog = async (): Promise<AudioTrackCatalog> => {
   if (!_catalogPromise) {
     _catalogPromise = (async (): Promise<AudioTrackCatalog> => {
-      const response = await fetch(CATALOG_URL);
+      const baseUrl = publicEnv.PUBLIC_ASSETS_BASE_URL;
+      if (!baseUrl) {
+        throw new Error('PUBLIC_ASSETS_BASE_URL is not configured — cannot load audio catalog.');
+      }
+      const response = await fetch(`${baseUrl}/${CATALOG_KEY}`);
       if (!response.ok) {
         throw new Error(`audio_track_catalog: fetch failed (${response.status})`);
       }
@@ -152,13 +154,34 @@ export const getTracksByMood = async (mood: string): Promise<readonly AudioTrack
 };
 
 /**
- * Resolves a catalog entry to a playable URL.
+ * Resolves a catalog entry to a playable URL via the asset store.
  *
- * Asset paths are relative to the game-data root and map directly to the
- * bundled static files under `static/game-data/` (served at `/game-data/`).
+ * Asset paths like `music/combat/bgm_combat.webm` are converted to asset tags
+ * (`music:combat:bgm_combat`) and resolved through the asset store, which
+ * returns the content-addressed R2 URL or a cached blob: URL.
  *
  * @param entry - A catalog track entry.
  * @returns The absolute URL for the track's audio file.
  */
-export const resolveAudioTrackUrl = (entry: AudioTrackEntry): string =>
-  `${GAME_DATA_BASE}/${entry.assetPath}`;
+export const resolveAudioTrackUrl = async (entry: AudioTrackEntry): Promise<string> => {
+  // Convert assetPath (e.g. "music/combat/bgm_combat.webm") to a tag
+  // (e.g. "music:combat:bgm_combat") by stripping the extension and
+  // replacing slashes with colons.
+  const dotIndex = entry.assetPath.lastIndexOf('.');
+  const tagBase = dotIndex >= 0 ? entry.assetPath.slice(0, dotIndex) : entry.assetPath;
+  const tag = tagBase.replace(/\//g, ':');
+
+  // Resolve through the asset store (returns cached blob: URL or R2 URL).
+  const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
+  const resolved = assetStore.resolveUrl(tag);
+  if (resolved) {
+    return resolved;
+  }
+
+  // Fallback: construct the R2 URL directly.
+  const baseUrl = publicEnv.PUBLIC_ASSETS_BASE_URL;
+  if (!baseUrl) {
+    return tag;
+  }
+  return `${baseUrl}/assets/${tag}`;
+};

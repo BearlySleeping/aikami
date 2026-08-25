@@ -60,11 +60,7 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
             <LoginView />
 
             <!-- How to Play / Replay Tutorial (C-422 AC-3) -->
-            <button
-              type="button"
-              class="btn btn-ghost"
-              onclick={() => viewModel.replayTutorial()}
-            >
+            <button type="button" class="btn btn-ghost" onclick={() => viewModel.replayTutorial()}>
               How to Play
             </button>
 

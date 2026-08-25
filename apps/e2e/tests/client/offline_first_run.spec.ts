@@ -54,7 +54,7 @@ test.describe('C-435 AC-3: Offline First Run', () => {
     expect(bodyText.length).toBeGreaterThan(0);
 
     // Verify the app is responsive (not crashed)
-    const html = await page.locator('html').getAttribute('style');
+    const _html = await page.locator('html').getAttribute('style');
     // Just checking the page didn't hard-crash
     expect(page.url()).toContain('/game');
   });

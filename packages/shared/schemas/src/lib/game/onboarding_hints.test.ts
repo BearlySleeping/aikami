@@ -6,9 +6,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import {
-  OnboardingHintStepSchema,
   normaliseLegacyStep,
   type OnboardingHintStep,
+  OnboardingHintStepSchema,
 } from './onboarding_hints.ts';
 
 // ---------------------------------------------------------------------------
@@ -17,10 +17,30 @@ import {
 
 const LEGACY_STEPS = [
   { id: 'hint_move', action: 'move_up', text: 'Use {key} to move', trigger: 'map_loaded' },
-  { id: 'hint_interact', action: 'interact', text: 'Press {key} to interact', trigger: 'near_interactable' },
-  { id: 'hint_quest_log', action: 'open_quest_log', text: 'Press {key} for quest log', trigger: 'after_previous' },
-  { id: 'hint_inventory', action: 'open_inventory', text: 'Press {key} for inventory', trigger: 'after_previous' },
-  { id: 'hint_pause', action: 'open_menu', text: 'Press {key} to pause', trigger: 'after_previous' },
+  {
+    id: 'hint_interact',
+    action: 'interact',
+    text: 'Press {key} to interact',
+    trigger: 'near_interactable',
+  },
+  {
+    id: 'hint_quest_log',
+    action: 'open_quest_log',
+    text: 'Press {key} for quest log',
+    trigger: 'after_previous',
+  },
+  {
+    id: 'hint_inventory',
+    action: 'open_inventory',
+    text: 'Press {key} for inventory',
+    trigger: 'after_previous',
+  },
+  {
+    id: 'hint_pause',
+    action: 'open_menu',
+    text: 'Press {key} to pause',
+    trigger: 'after_previous',
+  },
 ] as const;
 
 describe('OnboardingHintStepSchema', () => {
@@ -43,7 +63,12 @@ describe('OnboardingHintStepSchema', () => {
   });
 
   test('normaliseLegacyStep should convert bare string to kind:input', () => {
-    const normalised = normaliseLegacyStep({ id: 'test', action: 'interact', text: 'Test', trigger: 'map_loaded' });
+    const normalised = normaliseLegacyStep({
+      id: 'test',
+      action: 'interact',
+      text: 'Test',
+      trigger: 'map_loaded',
+    });
     expect(normalised.action).toEqual({ kind: 'input', actionId: 'interact' });
   });
 

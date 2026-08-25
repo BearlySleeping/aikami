@@ -13,4 +13,8 @@ export type LpcLayerRecipeValidated = Static<typeof LpcLayerRecipeSchema>;
 export type LpcRecipeArrayValidated = Static<typeof LpcRecipeArraySchema>;
 
 // Re-export constants for convenience
-export { LPC_DEFAULT_HEAD_ASSET_ID, REQUIRED_LPC_SLOTS } from '@aikami/schemas';
+export {
+  LPC_DEFAULT_BODY_ASSET_ID,
+  LPC_DEFAULT_HEAD_ASSET_ID,
+  REQUIRED_LPC_SLOTS,
+} from '@aikami/schemas';

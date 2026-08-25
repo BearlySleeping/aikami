@@ -152,27 +152,21 @@ function scoreEntry(p: { bodyType: string; anim: string; color: string }): numbe
  * Detect if a spritesheet-relative path contains the universal_behind directory.
  * These are behind-pass sheets that complement the foreground pass.
  */
-export const isBehindPath = (relPath: string): boolean => {
-  return (
-    relPath.includes(`/${UNIVERSAL_BEHIND_DIR}/`) || relPath.startsWith(`${UNIVERSAL_BEHIND_DIR}/`)
-  );
-};
+export const isBehindPath = (relPath: string): boolean =>
+  relPath.includes(`/${UNIVERSAL_BEHIND_DIR}/`) || relPath.startsWith(`${UNIVERSAL_BEHIND_DIR}/`);
 
 /**
  * Strip the `universal_behind/` segment from a spritesheet-relative path,
  * producing the equivalent foreground path.
  */
-export const stripBehindDir = (relPath: string): string => {
-  return relPath.replace(`/${UNIVERSAL_BEHIND_DIR}/`, '/');
-};
+export const stripBehindDir = (relPath: string): string =>
+  relPath.replace(`/${UNIVERSAL_BEHIND_DIR}/`, '/');
 
 /**
  * Derive the behind assetId from a foreground assetId.
  * E.g. "weapon/sword/longsword" → "weapon/sword/longsword/behind"
  */
-export const behindAssetId = (foregroundId: string): string => {
-  return `${foregroundId}/behind`;
-};
+export const behindAssetId = (foregroundId: string): string => `${foregroundId}/behind`;
 
 /**
  * Detect if a type string ends with a shield bg/fg suffix and normalise it.
@@ -527,7 +521,8 @@ if (creditsCsv.size === 0) {
   // the output tag is distinct from the foreground equivalent
   const fgStates = [...bestPerState.values()].map(({ parsed, path }) => {
     const shieldNorm = normaliseShieldType(parsed.type);
-    const isBehindShield = shieldNorm && parsed.slot === 'shield' && shieldNorm.layerRole === 'behind';
+    const isBehindShield =
+      shieldNorm && parsed.slot === 'shield' && shieldNorm.layerRole === 'behind';
 
     if (isBehindShield) {
       // Shield _bg: normalize the type and append "/behind"

@@ -43,9 +43,9 @@ describe('catalog publish pipeline (AC-1)', () => {
     expect(report.failed).toBe(0);
     expect(report.unresolvedTags).toEqual([]);
 
-    // Keys are assets/<sha[0:2]>/<sha>.<ext>
+    // Keys are assets/<sha[0:2]>/<sha>.<ext>; seed/ and index/ keys are separate.
     for (const key of [...client.objects.keys()]) {
-      if (key.startsWith('index/')) {
+      if (key.startsWith('index/') || key.startsWith('seed/')) {
         continue;
       }
       expect(key).toMatch(/^assets\/[0-9a-f]{2}\/[0-9a-f]{64}\.(webp|webm|json)$/);
@@ -104,9 +104,11 @@ describe('catalog publish pipeline (AC-1)', () => {
     expect(second.ok).toBe(true);
     expect(second.uploaded).toBe(0);
     expect(second.skipped).toBe(7);
-    // Only the index objects were re-written on the second run: every shard
-    // plus the root, exactly — no extra puts.
-    expect(client.putCount - putCountAfterFirst).toBe(second.shardKeys.length + 1);
+    // Only the index objects + seed files were re-written on the second run:
+    // every shard plus the root, plus any existing seed files.
+    // Seed files are mutable and uploaded on every run.
+    const seedFileCount = 1; // asset_credits.json exists in the fixture
+    expect(client.putCount - putCountAfterFirst).toBe(second.shardKeys.length + 1 + seedFileCount);
   });
 
   test('resumes after a partial run without corrupting the index', async () => {

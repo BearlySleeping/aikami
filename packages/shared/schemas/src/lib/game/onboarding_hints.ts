@@ -36,10 +36,7 @@ const TRIGGER_VALUES = ['map_loaded', 'near_interactable', 'after_previous'] as 
 /** Input action hint — teaches a keybinding. "{key}" is substituted. */
 export const InputActionSchema = Type.Object({
   kind: Type.Literal('input'),
-  actionId: Type.Union(
-    INPUT_ACTION_ID_VALUES.map((v) => Type.Literal(v)),
-    { description: 'Input action id the hint teaches' },
-  ),
+  actionId: Type.Enum(INPUT_ACTION_ID_VALUES, { description: 'Input action id the hint teaches' }),
 });
 
 export type InputAction = Static<typeof InputActionSchema>;
@@ -53,10 +50,10 @@ export const EventActionSchema = Type.Object({
 export type EventAction = Static<typeof EventActionSchema>;
 
 /** Discriminated action union. */
-export const OnboardingStepActionSchema = Type.Union(
-  [InputActionSchema, EventActionSchema],
-  { discriminator: 'kind', description: 'Step action — input keybinding or gameplay event' },
-);
+export const OnboardingStepActionSchema = Type.Union([InputActionSchema, EventActionSchema], {
+  discriminator: 'kind',
+  description: 'Step action — input keybinding or gameplay event',
+});
 
 export type OnboardingStepAction = Static<typeof OnboardingStepActionSchema>;
 
@@ -92,7 +89,9 @@ export const OnboardingHintStepSchema = Type.Object({
     { description: 'When the hint becomes eligible to show' },
   ),
   /** Step needs a configured model; skippable when none. */
-  requiresModel: Type.Optional(Type.Boolean({ description: 'Step requires a configured AI model' })),
+  requiresModel: Type.Optional(
+    Type.Boolean({ description: 'Step requires a configured AI model' }),
+  ),
 });
 
 export type OnboardingHintStep = Static<typeof OnboardingHintStepSchema>;

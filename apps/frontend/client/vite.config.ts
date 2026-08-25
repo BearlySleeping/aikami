@@ -50,7 +50,14 @@ export default defineConfig(({ mode }) => {
   // Expose the Vite mode to svelte.config.js (loaded later by the SvelteKit
   // plugin) so the dev-route build gate (C-418 Feature B) can exclude the
   // `(dev)` route group from production builds without a runtime check.
-  process.env.AIKAMI_BUILD_MODE = mode;
+  //
+  // `??=`, never `=`: SvelteKit probes this config via `load_config_from_vite`
+  // with its OWN default mode (production) before the real build mode is
+  // known. An unconditional assignment leaks 'production' into the env for the
+  // rest of the process, so a `--mode staging` build then demands the filtered
+  // routes copy that the gate correctly did not create, and dies. When the
+  // build runner has already exported the mode, that value is authoritative.
+  process.env.AIKAMI_BUILD_MODE ??= mode;
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.client || 5274);
   // Set by scripts/src/lib/herdr/session.ts for contract-scoped pipeline
   // runs so this app's Firebase Auth emulator proxy targets its own

@@ -1048,9 +1048,9 @@ class GameEngineService
    * Extends the base onboarding arc with gameplay-teaching steps (C-422 AC-4).
    * Adds conversation, dice roll, and combat steps after the existing keybinding hints.
    */
-  private _extendOnboardingArc(onboarding: {
+  private _extendOnboardingArc(onboarding: { steps: Array<Record<string, unknown>> }): {
     steps: Array<Record<string, unknown>>;
-  }): { steps: Array<Record<string, unknown>> } {
+  } {
     const extendedSteps = [
       ...onboarding.steps,
       // Conversation step — completes when NPC dialogue opens

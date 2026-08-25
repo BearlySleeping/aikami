@@ -7,6 +7,11 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import {
+  LPC_DEFAULT_BODY_ASSET_ID,
+  LPC_DEFAULT_HEAD_ASSET_ID,
+  REQUIRED_LPC_SLOTS,
+} from '@aikami/schemas';
 import { setContext } from 'svelte';
 import { page } from '$app/state';
 import {
@@ -16,9 +21,6 @@ import {
 import {
   ANIMATION_STATE_OPTIONS,
   DIRECTION_OPTIONS,
-  LPC_DEFAULT_BODY_ASSET_ID,
-  LPC_DEFAULT_HEAD_ASSET_ID,
-  REQUIRED_LPC_SLOTS,
   wireLpcUrlResolver,
 } from '$lib/data/lpc_asset_catalog';
 import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';

@@ -149,7 +149,7 @@ export {
 export type { TextIdentityData } from './components/text_identity.ts';
 export { registerTextIdentityObservers, TextIdentity } from './components/text_identity.ts';
 export type { TileVisualData } from './components/tile_visual.ts';
-export { MAX_TILES, registerTileVisualObservers, TileVisual } from './components/tile_visual.ts';
+export { registerTileVisualObservers, TileVisual } from './components/tile_visual.ts';
 export type { TransitionData } from './components/transition.ts';
 export { registerTransitionObservers, Transition } from './components/transition.ts';
 export type { TurnOrderData } from './components/turn_order.ts';
@@ -179,8 +179,6 @@ export {
   createEngineBuffer,
   FALLBACK_BUFFER_COUNT,
   MAX_ENTITIES,
-  MAX_REGISTRY_STRINGS,
-  REGISTRY_INITIAL_CAPACITY,
 } from './config/memory_config.ts';
 // EngineBridge (OOP contract — the sole UI↔Game boundary)
 export type { EngineBridge } from './engine_bridge.ts';
@@ -268,7 +266,6 @@ export type {
 export {
   buildTerrainGridForMap,
   clearMapCache,
-  DEFAULT_TILEMAP_BAND,
   djb2Hash,
   extractCollisionGrid,
   extractSpawnPointEntities,
@@ -277,7 +274,6 @@ export {
   loadJtonMap,
   loadTilemap,
   resolveGid,
-  TILED_FLIP_BITS,
   TILED_FLIP_D,
   TILED_FLIP_H,
   TILED_FLIP_MASK,

@@ -202,6 +202,75 @@ export const splitStateSegments = (relPath: string, categoryName: string): strin
   return `${withoutExt.slice(0, lastDot)}/${state}`;
 };
 
+/**
+ * Resolves a manifest tag back to its relative file path — the exact inverse
+ * of `pathToTag(splitStateSegments(relPath, category))`, which is how every
+ * tag in the catalog was produced.
+ *
+ * Tags are the only asset identity the compact boot seed (C-435) carries, so
+ * this is what turns a seed row back into a bundled URL or an R2 key. It must
+ * stay in lockstep with {@link splitStateSegments}.
+ *
+ * @example "sprites:tilesets:atlas" + ".webp" → "sprites/tilesets/atlas.webp"
+ * @example "lpc:body:bodies_male:walk" + ".webp" → "lpc/body/bodies_male.walk.webp"
+ * @param options - Tag and file extension (including the leading dot).
+ * @returns The relative path under the game-data root.
+ */
+export const tagToAssetPath = (options: { tag: string; ext: string }): string => {
+  const segments = options.tag.split(':');
+  const stateExtensions = ASSET_CATEGORIES[segments[0] ?? '']?.stateExtensions;
+  const state = segments.at(-1);
+
+  // Only rejoin when the category actually splits state tokens AND the
+  // trailing segment is a declared state — otherwise the tag never had a
+  // `.<state>` suffix and every segment is a real directory.
+  if (
+    stateExtensions &&
+    stateExtensions.length > 0 &&
+    state !== undefined &&
+    segments.length > 2 &&
+    stateExtensions.includes(state)
+  ) {
+    return `${segments.slice(0, -1).join('/')}.${state}${options.ext}`;
+  }
+
+  return `${segments.join('/')}${options.ext}`;
+};
+
+/**
+ * Object key for an asset in the published R2 bucket (C-395 layout:
+ * `assets/<hash[0:2]>/<hash><ext>`). The content hash *is* the identity, so
+ * the key never needs revalidating.
+ *
+ * @param options - SHA-256 content hash and extension (including the dot).
+ * @returns The bucket-relative object key.
+ */
+export const r2AssetKey = (options: { hash: string; ext: string }): string =>
+  `assets/${options.hash.slice(0, 2)}/${options.hash}${options.ext}`;
+
+/**
+ * Public download URL for an asset in the R2 bucket.
+ *
+ * @param options - Bucket base URL (trailing slash optional), hash, extension.
+ * @returns The absolute URL to fetch the asset from.
+ */
+export const r2AssetUrl = (options: { baseUrl: string; hash: string; ext: string }): string =>
+  `${options.baseUrl.replace(/\/$/, '')}/${r2AssetKey(options)}`;
+
+/**
+ * URL prefix the client serves bundled game data from (`static/game-data`).
+ * Shared so the registry, the asset store and the seed generator all agree on
+ * where a bundled relative path is mounted.
+ */
+export const BUNDLED_ASSET_BASE = '/game-data';
+
+/**
+ * `pack_id` given to assets that ship inside the client and must survive LRU
+ * eviction (C-435 offline core). Everything else is packed by category, so the
+ * eviction guard is a single pack id rather than "every bundled category".
+ */
+export const OFFLINE_CORE_PACK_ID = 'core';
+
 /** Default filename for the persisted manifest JSON. */
 export const MANIFEST_FILENAME = 'manifest.json';
 

@@ -14,7 +14,7 @@
 // background, so cached assets resolve with zero network traffic and
 // uncached assets degrade to the C-372 static-URL fallback.
 
-import { ASSET_CATEGORIES } from '@aikami/constants';
+import { OFFLINE_CORE_PACK_ID } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -33,15 +33,14 @@ import { TauriFSCacheBackend } from './tauri_fs_cache_backend.ts';
 
 /**
  * Packs that are never LRU-evicted under quota pressure (C-435).
- * After de-bundling, only the offline core packs are protected — everything
- * else is evictable. The offline core includes the default player body,
- * the starting map tileset, and boot UI assets.
+ *
+ * Exactly one: the offline core. `seedFromCompactSeed` packs every tag in the
+ * offline-core declaration as {@link OFFLINE_CORE_PACK_ID} and everything else
+ * by category, so the guard is a single pack id rather than a category list.
+ * Listing categories here would protect all 12,699 LPC assets and defeat LRU
+ * entirely — the opposite of what the contract asks for.
  */
-const _EVICTION_PROTECTED_PACKS = new Set<string>([
-  'lpc',      // Default player body (bodies_male, bangs, pants, head)
-  'sprites',  // Starting map tileset (emberwatch_tileset)
-  'maps',     // Starting map (emberwatch_start)
-]);
+const _EVICTION_PROTECTED_PACKS = new Set<string>([OFFLINE_CORE_PACK_ID]);
 
 // ---------------------------------------------------------------------------
 // Types

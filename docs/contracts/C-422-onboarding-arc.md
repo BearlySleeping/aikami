@@ -2,13 +2,13 @@
 id: C-422
 title: "Guided First-Session Onboarding Arc — widen the hint schema past keybindings, then teach the actual game"
 source: "UX review 2026-08-21, re-verified against code 2026-08-21"
-status: approved
+status: implemented
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/190"
-  pr_number: 190
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/190"
+    pr_number: 190
 created_at: "2026-08-21"
 ---
 
@@ -16,17 +16,17 @@ created_at: "2026-08-21"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | UX review 2026-08-21 — "empty-state is a dead end; onboarding needs a real arc". Re-verified: the arc already exists but the schema physically cannot express gameplay steps. That blocker is now AC-1. |
-| **Target** | `packages/shared/schemas/src/lib/game/onboarding_hints.ts`; `apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts`; `apps/frontend/client/src/lib/views/game/ui/hud/onboarding_hint.svelte`; `apps/frontend/client/static/content-packs/emberwatch/manifest.json`; `apps/frontend/client/src/lib/views/start/` |
-| **Priority** | P1 — first-session retention. Sequenced last of the P1s because it depends on the surfaces the others build. |
-| **Sequence** | **5 of 6** — needs C-420's starter chips (AC-4) and C-421's dice (a tutorial step teaches `/roll`) |
-| **Dependencies** | C-327 (landed — hint state machine); C-420 (starter chips, sequence 4); C-421 (working dice, sequence 2) |
-| **Status** | approved |
-| **Promotion** | `integrated` |
-| **Docs Impact** | user-facing → `apps/frontend/docs` if the tutorial is documented |
-| **Contract version** | 3.0.0 |
+| Field                | Value                                                                                                                                                                                                                                                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Source**           | UX review 2026-08-21 — "empty-state is a dead end; onboarding needs a real arc". Re-verified: the arc already exists but the schema physically cannot express gameplay steps. That blocker is now AC-1.                                                                                                                                |
+| **Target**           | `packages/shared/schemas/src/lib/game/onboarding_hints.ts`; `apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts`; `apps/frontend/client/src/lib/views/game/ui/hud/onboarding_hint.svelte`; `apps/frontend/client/static/content-packs/emberwatch/manifest.json`; `apps/frontend/client/src/lib/views/start/` |
+| **Priority**         | P1 — first-session retention. Sequenced last of the P1s because it depends on the surfaces the others build.                                                                                                                                                                                                                           |
+| **Sequence**         | **5 of 6** — needs C-420's starter chips (AC-4) and C-421's dice (a tutorial step teaches `/roll`)                                                                                                                                                                                                                                     |
+| **Dependencies**     | C-327 (landed — hint state machine); C-420 (starter chips, sequence 4); C-421 (working dice, sequence 2)                                                                                                                                                                                                                               |
+| **Status**           | approved                                                                                                                                                                                                                                                                                                                               |
+| **Promotion**        | `integrated`                                                                                                                                                                                                                                                                                                                           |
+| **Docs Impact**      | user-facing → `apps/frontend/docs` if the tutorial is documented                                                                                                                                                                                                                                                                       |
+| **Contract version** | 3.0.0                                                                                                                                                                                                                                                                                                                                  |
 
 ## Problem & Baseline Evidence
 
@@ -60,7 +60,7 @@ open_inventory, open_quest_log, open_character, open_menu
 You **cannot author** a step for "talk to an NPC", "roll a die", "win a fight",
 or "accept a quest" — the schema rejects it at validation. Every gameplay-
 teaching step this contract wants requires widening that union first. The
-existing arc is keybinding-shaped *because the schema permits nothing else.*
+existing arc is keybinding-shaped _because the schema permits nothing else._
 
 This is why AC-1 exists, and why it must land before any content work.
 
@@ -77,7 +77,7 @@ This is why AC-1 exists, and why it must land before any content work.
 - Nothing teaches conversation, dice, or combat.
 
 - **Reproduction**: fresh profile → drop an API key → open the game. Five
-  keybinding toasts fire in order. Nothing teaches what the game *is*.
+  keybinding toasts fire in order. Nothing teaches what the game _is_.
 - **Baseline tests**: `onboarding_hint_service` tests (C-327). Run before starting.
 
 ## User Outcome
@@ -99,16 +99,16 @@ again, but can replay it from the start or pause menu.
 
 ## Existing System & Reuse Map
 
-| Capability | Existing source | Reuse / modify / replace |
-|---|---|---|
-| Step schema | `schemas/.../onboarding_hints.ts:12-48` | **modify — widen `action` (AC-1)** |
-| Hint state machine | `services/game/onboarding_hint_service.svelte.ts` | modify — expose progress |
-| `{key}` templating | same service | reuse — keep for input steps |
-| HUD toast | `views/game/ui/hud/onboarding_hint.svelte` | modify — add progress + skip |
-| localStorage progress | `OnboardingProgress` (`:21-26`) | reuse — additive migration |
-| Authored steps | `content-packs/emberwatch/manifest.json` | modify — extend the arc |
-| Starter chips | C-420 AC-2 | reuse — the conversation step |
-| Dice | C-421 | reuse — the dice step |
+| Capability            | Existing source                                   | Reuse / modify / replace           |
+| --------------------- | ------------------------------------------------- | ---------------------------------- |
+| Step schema           | `schemas/.../onboarding_hints.ts:12-48`           | **modify — widen `action` (AC-1)** |
+| Hint state machine    | `services/game/onboarding_hint_service.svelte.ts` | modify — expose progress           |
+| `{key}` templating    | same service                                      | reuse — keep for input steps       |
+| HUD toast             | `views/game/ui/hud/onboarding_hint.svelte`        | modify — add progress + skip       |
+| localStorage progress | `OnboardingProgress` (`:21-26`)                   | reuse — additive migration         |
+| Authored steps        | `content-packs/emberwatch/manifest.json`          | modify — extend the arc            |
+| Starter chips         | C-420 AC-2                                        | reuse — the conversation step      |
+| Dice                  | C-421                                             | reuse — the dice step              |
 
 ## Overview
 
@@ -151,18 +151,16 @@ extended arc as content. Schema first, service second, UI third, content last.
 
 ```typescript
 /** Widened step action. Legacy bare-string `action` normalises to the input form. */
-type OnboardingStepAction =
-  | { kind: 'input'; actionId: InputActionId }
-  | { kind: 'event'; eventId: string };
+type OnboardingStepAction = { kind: "input"; actionId: InputActionId } | { kind: "event"; eventId: string };
 
 type OnboardingHintStep = {
-  id: string;
-  action: OnboardingStepAction;
-  /** "{key}" is substituted for input steps only. */
-  text: string;
-  trigger: 'map_loaded' | 'near_interactable' | 'after_previous';
-  /** Step needs a configured model; skippable when none. */
-  requiresModel?: boolean;
+	id: string;
+	action: OnboardingStepAction;
+	/** "{key}" is substituted for input steps only. */
+	text: string;
+	trigger: "map_loaded" | "near_interactable" | "after_previous";
+	/** Step needs a configured model; skippable when none. */
+	requiresModel?: boolean;
 };
 ```
 
@@ -214,7 +212,8 @@ backward-compatible, so reverting the UI leaves the original five hints working.
 > 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
 **Four independently-mergeable increments, in this order:**
-1. **Schema** — widen `action`, legacy normalisation, tests. *Blocks everything.*
+
+1. **Schema** — widen `action`, legacy normalisation, tests. _Blocks everything._
 2. **Service** — progress, `skipOnboarding`, `onEventPerformed`.
 3. **UI** — progress tracker, skip, replay entry points.
 4. **Content** — the extended Emberwatch arc.
@@ -229,11 +228,13 @@ backward-compatible, so reverting the UI leaves the original five hints working.
 bare string `action` — still parse unchanged and behave identically.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-1 | Unit | `onboarding_hints.test.ts` — both shapes; manifest-parse regression | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                                   | Production Path | Evidence                   |
+| ---- | ---------- | ------------------------------------------------------------------- | --------------- | -------------------------- |
+| AC-1 | Unit       | `onboarding_hints.test.ts` — both shapes; manifest-parse regression | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run schemas:test`, `moon run client:test-unit`
 - Integration: parse the live Emberwatch manifest in a test; assert five steps
   normalise to `kind: 'input'`. **A content edit to make this pass is a fail.**
@@ -247,11 +248,13 @@ advance on `onActionPerformed` (input) and `onEventPerformed` (event);
 completion persists and `isComplete` reports it.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-2 | Unit | `onboarding_hint_service.test.ts` (extended) | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                            | Production Path | Evidence                   |
+| ---- | ---------- | -------------------------------------------- | --------------- | -------------------------- |
+| AC-2 | Unit       | `onboarding_hint_service.test.ts` (extended) | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run client:test-unit`
 - Integration: advance a mixed input/event arc; assert index, persistence, skip.
 
@@ -264,11 +267,13 @@ completion, and Esc dismisses the current toast; a "How to play / Replay
 tutorial" entry exists in **both** the start menu and the pause menu.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
+
+| AC   | Test Level | Required Artifact                                   | Production Path | Evidence                   |
+| ---- | ---------- | --------------------------------------------------- | --------------- | -------------------------- |
 | AC-3 | Unit + E2E | `onboarding_hint.test.ts`; `onboarding_arc.spec.ts` | start + in-game | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run client:test-unit`, `moon run e2e:test-client`
 - Integration: walk the arc, skip mid-way, reload, assert it stays skipped,
   replay from the pause menu.
@@ -282,11 +287,13 @@ chips), **a dice roll** (using C-421), and **a combat encounter** — in 3–5
 minutes — with each gameplay step completing via a real emitted event.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-4 | E2E | `onboarding_arc.spec.ts` — full walkthrough | new-player journey | Filled during verification |
+
+| AC   | Test Level | Required Artifact                           | Production Path    | Evidence                   |
+| ---- | ---------- | ------------------------------------------- | ------------------ | -------------------------- |
+| AC-4 | E2E        | `onboarding_arc.spec.ts` — full walkthrough | new-player journey | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run e2e:test-client`
 - Integration: drive the whole arc end to end; assert every step completes from
   a real gameplay event, not a test-only hook. The E2E must enable the extended-arc
@@ -301,11 +308,13 @@ minutes — with each gameplay step completing via a real emitted event.
 without blocking the rest of the arc.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-5 | Unit | `onboarding_hint_service.test.ts` (no-model case) | onboarding | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                 | Production Path | Evidence                   |
+| ---- | ---------- | ------------------------------------------------- | --------------- | -------------------------- |
+| AC-5 | Unit       | `onboarding_hint_service.test.ts` (no-model case) | onboarding      | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run client:test-unit`
 - Integration: run the arc with no provider; assert it reaches completion.
 
@@ -367,10 +376,10 @@ Must be resolved before status becomes `approved`:
 
 Changes to ACs or scope require a version bump and user approval.
 
-| Version | Date | Change | Approved by |
-|---|---|---|---|
-| 2.0.0 | 2026-08-21 | Initial draft from UX review. | — |
-| 3.0.0 | 2026-08-21 | Re-verified against code. Corrected the premise: the arc is already linear — Emberwatch ships five ordered steps chained by `after_previous` — so "fragmentary hints, not an arc" was false. Surfaced the blocker the review missed and promoted it to AC-1: `OnboardingHintStepSchema.action` is a closed union of nine `InputActionId` values (`onboarding_hints.ts:12-21`), so no gameplay step can be authored at all; added a discriminated `action` shape with legacy normalisation so shipped content keeps parsing. Dropped `surface`, `title` and `requiresStepId` from the data model as unused. Added AC-4 (the arc must teach gameplay via real events) and AC-5. Added the arc-deadlock and pack-switch gotchas, Implementation Sequence, and lifecycle sections. Resequenced to 5 of 6, behind C-420 and C-421 whose surfaces it teaches. | review 2026-08-21 |
+| Version | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Approved by       |
+| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| 2.0.0   | 2026-08-21 | Initial draft from UX review.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | —                 |
+| 3.0.0   | 2026-08-21 | Re-verified against code. Corrected the premise: the arc is already linear — Emberwatch ships five ordered steps chained by `after_previous` — so "fragmentary hints, not an arc" was false. Surfaced the blocker the review missed and promoted it to AC-1: `OnboardingHintStepSchema.action` is a closed union of nine `InputActionId` values (`onboarding_hints.ts:12-21`), so no gameplay step can be authored at all; added a discriminated `action` shape with legacy normalisation so shipped content keeps parsing. Dropped `surface`, `title` and `requiresStepId` from the data model as unused. Added AC-4 (the arc must teach gameplay via real events) and AC-5. Added the arc-deadlock and pack-switch gotchas, Implementation Sequence, and lifecycle sections. Resequenced to 5 of 6, behind C-420 and C-421 whose surfaces it teaches. | review 2026-08-21 |
 
 ## Promotion Lifecycle
 

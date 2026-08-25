@@ -537,6 +537,7 @@ const _localServicesMock = () => ({
   npcService: _createServiceStub(),
   NpcService: class {},
   onboardingService: _createServiceStub(),
+  onboardingHintService: _createServiceStub(),
   personaService: _createServiceStub(),
   preferenceService: _createServiceStub(),
   // biome-ignore lint/complexity/noStaticOnlyClass: stub class for barrel mock
@@ -671,6 +672,8 @@ mock.module('$services', _localServicesMock);
 
 // ── Mock $logger alias required by game services ──────────────────────────
 
+// Must cover every method on BaseLoggerService — a missing one is a
+// TypeError at the call site, not a quiet no-op.
 mock.module('$logger', () => ({
   logger: {
     debug: mock(() => {}),
@@ -678,16 +681,17 @@ mock.module('$logger', () => ({
     log: mock(() => {}),
     warn: mock(() => {}),
     error: mock(() => {}),
+    spam: mock(() => {}),
   },
   __esModule: true,
 }));
 
-// ── Mock @aikami/utils required by campaign_service ───────────────────────
-
-mock.module('@aikami/utils', () => ({
-  toAppError: (err: unknown) => err,
-  __esModule: true,
-}));
+// ── @aikami/utils ─────────────────────────────────────────────────────────
+//
+// NOT mocked. A previous revision replaced the whole barrel with a single
+// `toAppError` stub, which erased `BaseClass` and every other export and broke
+// ~300 tests with "Export named 'BaseClass' not found". The real module loads
+// fine under Bun and already exports `toAppError`.
 
 // ── Mock SvelteKit virtual modules required by transitive dependencies ──────
 
