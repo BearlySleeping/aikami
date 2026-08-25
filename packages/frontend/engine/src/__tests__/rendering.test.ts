@@ -81,7 +81,7 @@ const createTestRecipe = (slot: string, assetId: string): LpcLayerRecipe => {
     palette[base + 2] = (i * 53) % 256; // B
     palette[base + 3] = 255; // A
   }
-  return { slot, assetId, hexPalette: palette };
+  return { slot, assetId, hexPalette: palette, layerRole: 'front' as const };
 };
 
 // ---------------------------------------------------------------------------
@@ -432,7 +432,12 @@ describe('C-038 LPC Texture Arrays — AC-1: Batch Routing & Sampler Assignment'
   it('assigns Texture.EMPTY for recipes with invalid assetId', async () => {
     const recipes = [
       createTestRecipe('body', '1'),
-      { slot: 'empty-slot', assetId: '', hexPalette: new Uint8Array(1024) },
+      {
+        slot: 'empty-slot',
+        assetId: '',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front' as const,
+      },
       createTestRecipe('torso', '3'),
     ];
 
@@ -445,7 +450,14 @@ describe('C-038 LPC Texture Arrays — AC-1: Batch Routing & Sampler Assignment'
   });
 
   it('assigns Texture.EMPTY for recipes with non-numeric assetId', async () => {
-    const recipes = [{ slot: 'bad', assetId: 'not-a-number', hexPalette: new Uint8Array(1024) }];
+    const recipes = [
+      {
+        slot: 'bad',
+        assetId: 'not-a-number',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front' as const,
+      },
+    ];
 
     const batch = await manager.getLayeredTextureBatch({ recipes });
 
@@ -2598,5 +2610,152 @@ describe('C-428 AC-3: In-game path slices oversize sheets on the 128px grid', ()
     // _applyLpcFrame forces effectiveRow = 0 when rows === 1
     const effectiveRow = geometry.rows > 1 ? 2 : 0;
     expect(effectiveRow).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-430: Canonical LPC layer-order table
+// ---------------------------------------------------------------------------
+
+describe('LPC_LAYER_ORDER — C-430', () => {
+  it('AC-1: provides a canonical z-order table with all known slots', () => {
+    const { LPC_LAYER_ORDER } = require('../rendering/lpc_layer_order.ts');
+    expect(LPC_LAYER_ORDER.length).toBeGreaterThan(10);
+
+    // All known slots have a front depth
+    for (const entry of LPC_LAYER_ORDER) {
+      expect(entry.depth.front).toBeDefined();
+      expect(entry.depth.front.length).toBe(4);
+      expect(entry.depth.behind).toBeDefined();
+      expect(entry.depth.behind.length).toBe(4);
+    }
+
+    // Verify known slots exist
+    const slots = LPC_LAYER_ORDER.map((e: { slot: string }) => e.slot);
+    expect(slots).toContain('body');
+    expect(slots).toContain('legs');
+    expect(slots).toContain('feet');
+    expect(slots).toContain('torso');
+    expect(slots).toContain('shoulders');
+    expect(slots).toContain('head');
+    expect(slots).toContain('hair');
+    expect(slots).toContain('hat');
+    expect(slots).toContain('weapon');
+    expect(slots).toContain('shield');
+  });
+
+  it('AC-1: resolveLayerDepth returns correct depth for known slots', () => {
+    const { resolveLayerDepth } = require('../rendering/lpc_layer_order.ts');
+
+    // body at depth 0
+    expect(resolveLayerDepth({ slot: 'body', layerRole: 'front', direction: 2 })).toBe(0);
+    // shield front at depth 80
+    expect(resolveLayerDepth({ slot: 'shield', layerRole: 'front', direction: 2 })).toBe(80);
+    // shield behind at depth -10 (behind body)
+    expect(resolveLayerDepth({ slot: 'shield', layerRole: 'behind', direction: 2 })).toBe(-10);
+  });
+
+  it('AC-2: unknown slot renders above every known slot and warns once', () => {
+    const {
+      resolveLayerDepth,
+      resetUnknownSlotWarnings,
+      LPC_LAYER_ORDER,
+    } = require('../rendering/lpc_layer_order.ts');
+    resetUnknownSlotWarnings();
+
+    const maxKnown = Math.max(
+      ...LPC_LAYER_ORDER.map((e: { depth: Record<string, readonly number[]> }) =>
+        Math.max(...e.depth.front, ...e.depth.behind),
+      ),
+    );
+
+    // Spy on logger.warn to verify deduplication
+    const { logger } = require('$logger');
+    let warnCallCount = 0;
+    const originalWarn = logger.warn;
+    logger.warn = (...args: unknown[]) => {
+      const firstArg = args[0];
+      if (typeof firstArg === 'string' && firstArg === 'lpc-layer-order:unknown-slot') {
+        warnCallCount++;
+      }
+      originalWarn.call(logger, ...args);
+    };
+
+    // Unknown slot should resolve above max known
+    const depth = resolveLayerDepth({ slot: 'unknown_slot_xyz', layerRole: 'front', direction: 2 });
+    expect(depth).toBeGreaterThan(maxKnown);
+    expect(warnCallCount).toBe(1);
+
+    // Second call with same slot should NOT warn again (dedup)
+    const depth2 = resolveLayerDepth({
+      slot: 'unknown_slot_xyz',
+      layerRole: 'front',
+      direction: 2,
+    });
+    expect(depth2).toBe(depth);
+    expect(warnCallCount).toBe(1); // Still 1, no additional warning
+
+    // Restore original warn
+    logger.warn = originalWarn;
+    resetUnknownSlotWarnings();
+  });
+
+  it('AC-3: z-order varies by direction for behind-capable slots', () => {
+    const { resolveLayerDepth } = require('../rendering/lpc_layer_order.ts');
+
+    // Shield behind: should be behind body (depth < 0) for all directions
+    expect(resolveLayerDepth({ slot: 'shield', layerRole: 'behind', direction: 0 })).toBe(-10);
+    expect(resolveLayerDepth({ slot: 'shield', layerRole: 'behind', direction: 1 })).toBe(-10);
+    expect(resolveLayerDepth({ slot: 'shield', layerRole: 'behind', direction: 2 })).toBe(-10);
+    expect(resolveLayerDepth({ slot: 'shield', layerRole: 'behind', direction: 3 })).toBe(-10);
+
+    // Shield front: should be at depth 80 for all directions
+    expect(resolveLayerDepth({ slot: 'shield', layerRole: 'front', direction: 0 })).toBe(80);
+    expect(resolveLayerDepth({ slot: 'shield', layerRole: 'front', direction: 2 })).toBe(80);
+
+    // Body behind vs front: both should be 0 (body doesn't vary by layerRole)
+    expect(resolveLayerDepth({ slot: 'body', layerRole: 'behind', direction: 2 })).toBe(0);
+    expect(resolveLayerDepth({ slot: 'body', layerRole: 'front', direction: 2 })).toBe(0);
+  });
+
+  it('AC-3: direction axis exists for all entries', () => {
+    const { LPC_LAYER_ORDER } = require('../rendering/lpc_layer_order.ts');
+
+    for (const entry of LPC_LAYER_ORDER) {
+      // Every entry has 4 direction values for both roles
+      expect(entry.depth.front.length).toBe(4);
+      expect(entry.depth.behind.length).toBe(4);
+    }
+  });
+
+  it('AC-7: composeMultiLayerSprite and multi-layer shaders are gone', () => {
+    const spriteComposer = require('../rendering/sprite_composer.ts');
+    expect((spriteComposer as Record<string, unknown>).composeMultiLayerSprite).toBeUndefined();
+    expect(
+      (spriteComposer as Record<string, unknown>).LPC_MULTI_LAYER_VERTEX_SHADER,
+    ).toBeUndefined();
+    expect(
+      (spriteComposer as Record<string, unknown>).LPC_MULTI_LAYER_FRAGMENT_SHADER,
+    ).toBeUndefined();
+    expect((spriteComposer as Record<string, unknown>).getLpcMultiLayerProgram).toBeUndefined();
+    // packRecipeToUboBuffer is kept
+    expect(typeof spriteComposer.packRecipeToUboBuffer).toBe('function');
+  });
+
+  it('sortLayersByDepth sorts layers in correct render order', () => {
+    const { sortLayersByDepth } = require('../rendering/lpc_layer_order.ts');
+
+    const layers = [
+      { slot: 'shield', layerRole: 'front' as const },
+      { slot: 'body', layerRole: 'front' as const },
+      { slot: 'hair', layerRole: 'front' as const },
+      { slot: 'legs', layerRole: 'front' as const },
+    ];
+
+    const sorted = sortLayersByDepth(layers, 2);
+    expect(sorted[0].slot).toBe('body');
+    expect(sorted[1].slot).toBe('legs');
+    expect(sorted[2].slot).toBe('hair');
+    expect(sorted[3].slot).toBe('shield');
   });
 });

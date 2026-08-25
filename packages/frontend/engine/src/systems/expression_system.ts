@@ -1,7 +1,12 @@
 // packages/frontend/engine/src/systems/expression_system.ts
 
 import type { World } from 'bitecs';
-import { Appearance, EXPRESSION_MAP, getAppearanceLayers } from '../components/appearance.ts';
+import {
+  Appearance,
+  EXPRESSION_MAP,
+  FACE_LAYER_INDEX,
+  getAppearanceLayers,
+} from '../components/appearance.ts';
 import { isSimulationActive } from '../components/engine_state.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 
@@ -54,8 +59,8 @@ export const enqueueMacro = (macro: QueuedMacro): void => {
  *
  * Runs each tick inside the worker's simulation loop. For each queued
  * macro with `name === 'anim'`, looks up the expression string in
- * {@link EXPRESSION_MAP} and updates `Appearance.layer1[eid]` (the
- * face layer) with the corresponding texture ID.
+ * {@link EXPRESSION_MAP} and updates the face layer (index 1 in the
+ * variable-length Appearance.layers Map) with the corresponding texture ID.
  *
  * When an expression change is applied, emits an `APPEARANCE_CHANGED`
  * event through the bridge so the main thread can invalidate the
@@ -100,7 +105,11 @@ export const updateExpressions = (world: World, bridge: EngineBridge): void => {
       continue;
     }
 
-    // Mutate SoA arrays directly
+    // Mutate the face layer (index 1) in the variable-length array
+    const currentLayers = [...getAppearanceLayers(eid)];
+    currentLayers[FACE_LAYER_INDEX] = textureId;
+    Appearance.layers.set(eid, currentLayers);
+    // Keep legacy arrays in sync for serializer backward compat
     Appearance.layer1[eid] = textureId;
 
     // Notify the main thread to invalidate the composed sprite

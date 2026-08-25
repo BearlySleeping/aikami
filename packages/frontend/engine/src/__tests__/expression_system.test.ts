@@ -6,6 +6,7 @@ import {
   Appearance,
   EXPRESSION_MAP,
   FACE_LAYER_INDEX,
+  getAppearanceLayers,
   registerAppearanceObservers,
 } from '../components/appearance.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
@@ -39,11 +40,7 @@ const collectBridgeEvents = (
 const spawnAppearanceEntity = (world: World): number => {
   const eid = addEntity(world);
   addComponent(world, eid, Appearance);
-  addComponent(
-    world,
-    eid,
-    set(Appearance, { layer0: 0, layer1: 0, layer2: 0, layer3: 0, layer4: 0 }),
-  );
+  addComponent(world, eid, set(Appearance, { layers: [0, 0, 0, 0, 0, 0] }));
   return eid;
 };
 
@@ -84,13 +81,13 @@ describe('ExpressionSystem — Appearance mutation', () => {
     clearMacroQueue();
   });
 
-  it('updates Appearance.layer1[eid] when macro name is "anim"', () => {
+  it('updates face layer when macro name is "anim"', () => {
     const eid = spawnAppearanceEntity(world);
 
     enqueueMacro({ name: 'anim', args: ['joy'], entityId: eid });
     updateExpressions(world, bridge);
 
-    expect(Appearance.layer1[eid]).toBe(EXPRESSION_MAP.joy);
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(EXPRESSION_MAP.joy);
   });
 
   it('updates to anger expression', () => {
@@ -99,7 +96,7 @@ describe('ExpressionSystem — Appearance mutation', () => {
     enqueueMacro({ name: 'anim', args: ['anger'], entityId: eid });
     updateExpressions(world, bridge);
 
-    expect(Appearance.layer1[eid]).toBe(EXPRESSION_MAP.anger);
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(EXPRESSION_MAP.anger);
   });
 
   it('updates to sadness expression', () => {
@@ -108,7 +105,7 @@ describe('ExpressionSystem — Appearance mutation', () => {
     enqueueMacro({ name: 'anim', args: ['sadness'], entityId: eid });
     updateExpressions(world, bridge);
 
-    expect(Appearance.layer1[eid]).toBe(EXPRESSION_MAP.sadness);
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(EXPRESSION_MAP.sadness);
   });
 
   it('can transition from one expression to another', () => {
@@ -117,12 +114,12 @@ describe('ExpressionSystem — Appearance mutation', () => {
     // Start joy
     enqueueMacro({ name: 'anim', args: ['joy'], entityId: eid });
     updateExpressions(world, bridge);
-    expect(Appearance.layer1[eid]).toBe(EXPRESSION_MAP.joy);
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(EXPRESSION_MAP.joy);
 
     // Transition to anger
     enqueueMacro({ name: 'anim', args: ['anger'], entityId: eid });
     updateExpressions(world, bridge);
-    expect(Appearance.layer1[eid]).toBe(EXPRESSION_MAP.anger);
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(EXPRESSION_MAP.anger);
   });
 
   it('emits APPEARANCE_CHANGED event on expression update', () => {
@@ -156,8 +153,8 @@ describe('ExpressionSystem — Appearance mutation', () => {
 
     updateExpressions(world, bridge);
 
-    expect(Appearance.layer1[eid1]).toBe(EXPRESSION_MAP.joy);
-    expect(Appearance.layer1[eid2]).toBe(EXPRESSION_MAP.anger);
+    expect(getAppearanceLayers(eid1)[FACE_LAYER_INDEX]).toBe(EXPRESSION_MAP.joy);
+    expect(getAppearanceLayers(eid2)[FACE_LAYER_INDEX]).toBe(EXPRESSION_MAP.anger);
     expect(events).toHaveLength(2);
   });
 
@@ -171,7 +168,7 @@ describe('ExpressionSystem — Appearance mutation', () => {
     updateExpressions(world, bridge);
 
     // All macros are processed in-order — last one wins
-    expect(Appearance.layer1[eid]).toBe(EXPRESSION_MAP.sadness);
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(EXPRESSION_MAP.sadness);
   });
 });
 
@@ -195,7 +192,7 @@ describe('ExpressionSystem — safety edge cases', () => {
     enqueueMacro({ name: 'trigger_anim', args: ['joy'], entityId: eid });
     updateExpressions(world, bridge);
 
-    expect(Appearance.layer1[eid]).toBe(0); // unchanged
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(0); // unchanged
   });
 
   it('ignores unrecognized expression names', () => {
@@ -204,7 +201,7 @@ describe('ExpressionSystem — safety edge cases', () => {
     enqueueMacro({ name: 'anim', args: ['nonexistent_expression'], entityId: eid });
     updateExpressions(world, bridge);
 
-    expect(Appearance.layer1[eid]).toBe(0); // unchanged
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(0); // unchanged
   });
 
   it('ignores macro with empty args array', () => {
@@ -213,7 +210,7 @@ describe('ExpressionSystem — safety edge cases', () => {
     enqueueMacro({ name: 'anim', args: [], entityId: eid });
     updateExpressions(world, bridge);
 
-    expect(Appearance.layer1[eid]).toBe(0); // unchanged
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(0); // unchanged
   });
 
   it('ignores macro with entityId 0', () => {
@@ -225,7 +222,7 @@ describe('ExpressionSystem — safety edge cases', () => {
     updateExpressions(world, bridge);
 
     // Entity 1 should be unaffected
-    expect(Appearance.layer1[eid]).toBe(0);
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(0);
   });
 
   it('ignores macro with negative entityId', () => {
@@ -234,7 +231,7 @@ describe('ExpressionSystem — safety edge cases', () => {
     enqueueMacro({ name: 'anim', args: ['joy'], entityId: -1 });
     updateExpressions(world, bridge);
 
-    expect(Appearance.layer1[eid]).toBe(0);
+    expect(getAppearanceLayers(eid)[FACE_LAYER_INDEX]).toBe(0);
   });
 
   it('safely handles undefined world', () => {
@@ -258,14 +255,14 @@ describe('ExpressionSystem — safety edge cases', () => {
     const eid = spawnAppearanceEntity(world);
 
     // Pre-set a non-zero layer value
-    Appearance.layer1[eid] = 5;
+    Appearance.layers.set(eid, [5, 0, 0, 0, 0, 0]);
 
     const { events } = collectBridgeEvents(bridge, 'APPEARANCE_CHANGED');
 
     // No macros enqueued — should be a no-op
     updateExpressions(world, bridge);
 
-    expect(Appearance.layer1[eid]).toBe(5); // unchanged
+    expect(getAppearanceLayers(eid)[0]).toBe(5); // unchanged
     expect(events).toHaveLength(0);
   });
 });

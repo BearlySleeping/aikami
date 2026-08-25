@@ -13,7 +13,6 @@ import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
 import {
   createLpcPipeline,
   projectLpcCatalog,
-  zeroEquipmentOwnedAppearanceSlots,
 } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
@@ -1339,9 +1338,8 @@ class GameBootService
       appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 1));
     }
 
-    // C-374: torso (index 2) and feet (index 4) are equipment-owned — forced
-    // out here so unequipping reveals the bare body (C-417 OQ-1 resolved).
-    zeroEquipmentOwnedAppearanceSlots(appearanceLayers);
+    // C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
+    // replace the fixed six-slot ceiling. Equipment adds its own layers.
     playerData.appearanceLayers = appearanceLayers;
 
     // Persist the effective recipe so the base outfit can be re-seeded after
