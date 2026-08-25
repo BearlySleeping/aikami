@@ -2,7 +2,7 @@
 id: C-437
 title: "Local Cloudflare Dev Plane — wrangler dev with D1 and R2 as a first-class dev service"
 source: "user request 2026-08-24 — open-source readiness; dev/prod runtime divergence on the hub"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-24"
 | **Target** | `scripts/src/lib/herdr/session.ts` — a new `hub-worker` dev service; `apps/frontend/hub/` — a `dev:worker` script and local D1/R2 state; `packages/backend/database/` — a local migration + seed path |
 | **Priority** | P1 — this is the C-392 dev/prod parity principle, unapplied to the hub. Today no contributor can work on auth, the catalog write path, or save backup without a Cloudflare account. |
 | **Dependencies** | C-426 (implemented) — the D1 schema, Better Auth, and `wrangler.jsonc` already exist. Independent of C-436; both may land in either order. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — `docs/guides/database.md` and `docs/guides/dev-workflow.md` carry "tracked as C-437" markers to replace with the real workflow. |
 | **Contract version** | 2.0.0 |
@@ -44,7 +44,7 @@ created_at: "2026-08-24"
   - `packages/backend/database/drizzle.d1.config.ts` — generates the migrations `wrangler d1 migrations apply --local` consumes.
   - `SERVICE_DEFS` / `PORTS` / `readyPort` in `session.ts` — the dev-service pattern to follow. The `postgres` entry is the closest analogue: an emulator-only service with a lifecycle script and a non-default readiness probe.
 
-- **Known gaps**: no local D1 seeding exists; no `.wrangler/` gitignore entry; `wrangler` is not in `flake.nix`; `apps/frontend/hub/moon.yml` has no task for a Worker dev run.
+- **Known gaps**: no local D1 seeding exists; `wrangler` is not in `flake.nix`; `apps/frontend/hub/moon.yml` has no task for a Worker dev run. (`.wrangler/` is already in `.gitignore` at line 138.)
 
 - **Baseline tests**: `bun test apps/frontend/hub/src/lib`, `bun test scripts/src/lib/herdr/session.test.ts`, `bun test packages/backend/auth/tests/`.
 
