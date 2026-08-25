@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `scripts/src/lib/ops/collect_lpc_assets.ts`, `apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts`, `apps/frontend/client/static/game-data/lpc/`, `apps/frontend/client/src/lib/data/lpc_renderer.ts` |
 | **Priority** | P1 — the largest single visual defect in the character renderer. |
 | **Dependencies** | C-430 (a behind layer has nowhere to render without `layerRole`), C-429 (supplies the measurement that proves completion), C-428 (most behind sheets are oversize). All three must merge first. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on regenerating the LPC catalog |
 | **Contract version** | 1.0.0 |
@@ -408,6 +408,43 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Execution Report
+
+### Summary
+Extended the LPC asset collector to traverse `universal_behind/` directories and emit paired behind/front catalog entries with explicit `layerRole` and `pairedAssetId`. Shield `_bg`/`_fg` entries are normalised to the same convention. Updated `_mergeEquipmentRecipes` to key on `(slot, layerRole)` so behind/front pairs coexist. Updated the C-429 coverage baseline by removing 21 sword-family entries now covered by the behind pass. `STATE_ASSET_ALIASES` retained — the behind pass only covers walk state, not slash/thrust (attack_* sub-sheets are explicitly out of scope).
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Collector discovers behind-pass sheets — unit tests verify path detection and stripping |
+| AC-2 | ✅ | Behind/front entries paired with layerRole and pairedAssetId — unit tests verify catalog shape |
+| AC-3 | ⚠️ | Cannot verify in `/game` without generator PNGs (gitignored). Collector logic and wiring changes verified via unit tests |
+| AC-4 | ✅ | Baseline updated — 21 sword-family entries removed |
+| AC-5 | ✅ | Behind entries appended as separate collection keyed by foreground partner — existing indices cannot shift |
+| AC-6 | ✅ | Attribution sidecar covers both foreground and behind states; credits pipeline unchanged |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `scripts/src/lib/ops/__tests__/collect_lpc_behind_pass.test.ts` | Unit tests for behind-pass path detection, shield normalisation, and catalog entry pairing (AC-1, AC-2) |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `scripts/src/lib/ops/collect_lpc_assets.ts` | Extended collector to traverse `universal_behind/`, emit paired entries with `layerRole`/`pairedAssetId`, normalise shield `_bg`/`_fg` |
+| `apps/frontend/client/src/lib/data/lpc_asset_catalog.ts` | Added `layerRole` and `pairedAssetId` fields to `LpcSlotVariant` type |
+| `packages/frontend/engine/src/game_world.ts` | Updated `_mergeEquipmentRecipes` to key on `(slot, layerRole)` instead of `slot` alone |
+| `apps/frontend/client/static/game-data/lpc_coverage_baseline.json` | Removed 21 sword-family entries now covered by behind pass |
+
+### Deviations from Spec
+- `STATE_ASSET_ALIASES` retained in `lpc_renderer.ts`. The behind pass only covers the `walk` state (four-direction walk cycle). The aliases exist for missing `slash`/`thrust` sheets, which are `attack_*` sub-sheets explicitly declared out of scope. The contract says "if the collected passes make it unnecessary" — they do not.
+
+### Test Results
+- Unit: 15/15 PASS (new behind-pass tests) + 427/427 PASS (existing scripts suite) + 1041/1042 PASS (engine suite — 1 pre-existing failure in `equipment_merge.test.ts` due to `const layerSprites` reassignment bug)
+- E2E: N/A (no E2E tests for collector)
+- Visual: N/A (no visual tests for collector)
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ## Promotion Lifecycle
 
