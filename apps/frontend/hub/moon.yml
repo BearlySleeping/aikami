@@ -41,10 +41,8 @@ fileGroups:
     - '.env.*'
     - '.env'
   deployment:
-    - 'Dockerfile'
-    - 'firebase.json'
     - 'scripts/deploy.ts'
-    - 'start.js'
+    - 'wrangler.jsonc'
 
 tasks:
   dev:
@@ -96,8 +94,21 @@ tasks:
     command: 'bun run test'
     inputs:
       - '@group(sources)'
+      # 🔴 Load-bearing, same reason as `build` above. The Worker boundary
+      # guard (src/lib/server/tests/worker_boundary.test.ts) walks the server
+      # import graph across workspace packages, so a `node:fs` landing in
+      # packages/backend/* must invalidate this task. Without these inputs
+      # Moon serves a cached pass and the guard silently stops guarding.
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
+      - '/packages/backend/*/src/**/*'
+      - 'svelte.config.js'
 
   test-unit:
     command: 'bun run test:unit'
     inputs:
       - '@group(sources)'
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
+      - '/packages/backend/*/src/**/*'
+      - 'svelte.config.js'

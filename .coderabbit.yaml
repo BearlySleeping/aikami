@@ -1,47 +1,196 @@
-# .coderabbit.yaml
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 # CodeRabbit AI PR review configuration.
 # See https://docs.coderabbit.ai/ for full documentation.
 #
 # CodeRabbit is advisory only — never a required check.
 # Only the self-hosted actionlint+zizmor job may block a merge.
+#
+# Tools are opt-out by default and only run when matching files change, so
+# this file lists enables and deliberate suppressions only — not the full
+# catalogue of languages we don't use.
 
 language: "en-US"
 early_access: false
-review:
-  show_link: true
+tone_instructions: "Be concise and direct. Focus on correctness, type safety, and architectural boundaries. Never comment on formatting or style — Biome owns those and runs in CI."
+
+reviews:
+  profile: assertive
+  # Advisory only (see header): CodeRabbit must never post a blocking
+  # "Request changes" review.
+  request_changes_workflow: false
   high_level_summary: true
   poem: false
-  auto_review:
-    enabled: true
-    drafts: false
-    base_branches:
-      - main
+  review_status: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: true
+
   path_filters:
-    # Exclude generated / vendored files from review
+    # Generated / vendored / reference material — not ours to review.
     - "!**/node_modules/**"
     - "!**/dist/**"
     - "!**/build/**"
-    - "!**/.next/**"
+    - "!**/.svelte-kit/**"
     - "!**/coverage/**"
-    - "!**/__pycache__/**"
-    - "!.context/llms.txt"
-    - "!docs/contracts/PROGRESS.md"
-    - "!apps/frontend/client/src/lib/assets/lpc/**"
-    - "!apps/frontend/client/static/lpc/**"
     - "!**/*.min.js"
     - "!**/*.min.css"
     - "!**/*.map"
     - "!**/*.lock"
     - "!**/*.lockb"
-    - "!**/pnpm-lock.yaml"
+    - "!bun.lock"
+    - "!examples/**"
+    - "!tmp/**"
+    - "!.context/llms.txt"
+    - "!docs/contracts/PROGRESS.md"
+    - "!apps/frontend/client/src/lib/assets/lpc/**"
+    - "!apps/frontend/client/static/lpc/**"
+    # Drizzle emits these; hand-review the schema, not the migration.
+    - "!packages/backend/database/drizzle*/**/*.sql"
+
   path_instructions:
+    # ── Runtime boundaries — the rules a reviewer can't infer from the file ──
+    - path: "apps/frontend/hub/src/**"
+      instructions: |
+        Cloudflare Worker (SSR SvelteKit) request path. `nodejs_compat` is on,
+        so the supported `node:*` subset is allowed, but flag anything the
+        Workers runtime cannot do at request time: filesystem access,
+        `child_process`, native addons, long-lived module-scope mutable state
+        shared across requests, or blocking sync I/O.
+        Data access is D1 (`env.DB`) and R2 (`env.SAVES_BUCKET`) via bindings —
+        never a direct network DB driver. Auth is Better Auth.
+        Firebase is decommissioned; flag any new usage.
+        Build-time files (vite.config, svelte.config, scripts/, tests) run
+        under Bun on a dev machine and are exempt from this rule.
+
+    - path: "apps/frontend/client/src/**"
+      instructions: |
+        Tauri v2 + SvelteKit static SPA. There is no server: `+server.ts`,
+        `+page.server.ts`, and `+layout.server.ts` are forbidden.
+        No `node:*` imports in this path — it ships to a browser/webview.
+        Local persistence is Turso (libSQL) through the repository layer;
+        never Cloudflare D1 directly, never a raw driver call from a component.
+
+    - path: "apps/backend/**"
+      instructions: |
+        Backend services running under Bun in containers. No browser APIs
+        (window, document, DOM). Enforce controller → service → repository
+        layering and `AppError` for error paths.
+
+    - path: "packages/shared/**"
+      instructions: |
+        Runs in browser, Worker, and Bun. Flag any import that binds this code
+        to one runtime — `node:*`, browser globals, or a server-only
+        dependency — and any new third-party dependency that isn't
+        runtime-neutral.
+
+    - path: "packages/frontend/**"
+      instructions: |
+        Browser/Tauri only. No `node:*` imports, no database or backend
+        service imports. Svelte 5 runes; View/ViewModel separation.
+
+    - path: "packages/backend/**"
+      instructions: |
+        Backend only. No browser APIs. `AppError` for error paths,
+        service/repository layering, DB access via repositories (D1, Turso).
+
+    # ── Patterns Biome and tsc cannot check ─────────────────────────────
     - path: "**/*.svelte"
-      instructions: "Review Svelte 5 components using runes ($state, $derived, $effect). Ensure logicless Views and proper ViewModel separation."
+      instructions: "Svelte 5 runes ($state, $derived, $effect). Views stay logicless — logic belongs in the ViewModel."
+
     - path: "**/*_view_model.svelte.ts"
-      instructions: "Review ViewModel files for proper state management with $state runes. No PixiJS or Firestore imports allowed."
-    - path: "**/*.ts"
-      instructions: "Review TypeScript for strict types, no `any`, no `interface` (use `type`), proper error handling with AppError."
+      instructions: "ViewModel state via $state runes. No PixiJS imports and no direct database/driver access — go through a service or repository."
+
+    - path: "**/*.test.ts"
+      instructions: "Tests should assert behaviour, not implementation. Flag tests that would pass vacuously (empty fixture globs, unasserted promises, assertions that can never fail)."
+
     - path: ".github/workflows/*.yml"
-      instructions: "Review GitHub Actions workflows for security best practices: pin actions to SHAs, avoid template injection in run blocks, set explicit permissions."
+      instructions: "Pin third-party actions to a full commit SHA, avoid ${{ }} interpolation inside run blocks, set explicit least-privilege `permissions`."
+
+    - path: "**/Dockerfile*"
+      instructions: "Multi-stage builds, pinned base image digests, no secrets in build args or layers, non-root runtime user."
+
+    - path: "scripts/**"
+      instructions: |
+        Bun CLI tooling. Flag hardcoded absolute paths, secrets in source, and
+        unchecked subprocess exit codes. Shell scripts: `set -euo pipefail`.
+
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+    ignore_title_keywords:
+      - "WIP"
+      - "wip"
+      - "DO NOT MERGE"
+      - "draft"
+
+  tools:
+    biome:
+      enabled: true
+    shellcheck:
+      enabled: true
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    markdownlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    hadolint:
+      enabled: true
+    # Dependency CVE scanning against bun.lock — pairs with Renovate.
+    osvScanner:
+      enabled: true
+
+    # Deliberate suppressions: files exist, review does not add value.
+    # Rust lives only in apps/frontend/client/src-tauri; `moon check` runs
+    # clippy there already. Flip to true to also get it in PR review.
+    clippy:
+      enabled: false
+    # Biome owns JS/TS linting; a second opinion is pure duplicate noise.
+    eslint:
+      enabled: false
+    oxc:
+      enabled: false
+
+  finishing_touches:
+    autofix:
+      enabled: true
+    fix_ci:
+      enabled: true
+    resolve_merge_conflict:
+      enabled: true
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+    simplify:
+      enabled: false
+
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: "Conventional commit prefix (feat:, fix:, chore:, refactor:, docs:) and under 72 characters."
+    description:
+      mode: warning
+    docstrings:
+      mode: "off"
+
 chat:
   auto_reply: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "AGENTS.md"
+      - ".claude/CLAUDE.md"
+      - ".pi/skills/**/SKILL.md"
+  learnings:
+    scope: local
+  web_search:
+    enabled: true
