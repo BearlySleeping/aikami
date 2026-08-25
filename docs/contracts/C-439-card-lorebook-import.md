@@ -2,7 +2,7 @@
 id: C-439
 title: "Card Lorebook Import — stop silently dropping character_book on V2/V3 import"
 source: "user request 2026-08-24 — open-source readiness; SillyTavern/Marinara-Engine compatibility gap"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
