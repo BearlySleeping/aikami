@@ -1,4 +1,3 @@
-// biome-ignore lint/style/useNamingConvention: Test fixtures match external character card spec (snake_case)
 // apps/frontend/client/src/lib/services/character/character_book_mapper.test.ts
 //
 // Unit tests for the character_book mapper (C-439).
@@ -14,13 +13,16 @@ const SAMPLE_ENTRY = {
   content: 'The Silver Flagon is a cozy inn known for its spiced mead.',
   extensions: { source: 'lyra_card' },
   enabled: true,
+  // biome-ignore lint/style/useNamingConvention: External character card spec uses snake_case
   insertion_order: 1,
+  // biome-ignore lint/style/useNamingConvention: External character card spec uses snake_case
   case_sensitive: false,
   name: 'Silver Flagon',
   priority: 5,
   id: 101,
   comment: 'A key location',
   selective: false,
+  // biome-ignore lint/style/useNamingConvention: External character card spec uses snake_case
   secondary_keys: ['Silver Flagon'],
   constant: false,
   position: 'before_char' as const,
@@ -31,6 +33,7 @@ const DISABLED_ENTRY = {
   content: 'This should not appear.',
   extensions: {},
   enabled: false,
+  // biome-ignore lint/style/useNamingConvention: External character card spec uses snake_case
   insertion_order: 2,
   constant: false,
 };
@@ -40,6 +43,7 @@ const CONSTANT_ENTRY = {
   content: 'Always present lore about the world.',
   extensions: {},
   enabled: true,
+  // biome-ignore lint/style/useNamingConvention: External character card spec uses snake_case
   insertion_order: 3,
   constant: true,
 };
@@ -116,7 +120,13 @@ describe('normalizeCharacterBook — AC-2: entry mapping', () => {
     // 'extensions' is merged into the target extensions bag (not lost)
     // 'enabled' is consumed by the skip/import decision
     const consumedKeys = new Set([
-      'keys', 'content', 'constant', 'insertion_order', 'priority', 'enabled', 'extensions',
+      'keys',
+      'content',
+      'constant',
+      'insertion_order',
+      'priority',
+      'enabled',
+      'extensions',
     ]);
     for (const key of Object.keys(SAMPLE_ENTRY)) {
       if (!consumedKeys.has(key)) {
@@ -145,6 +155,7 @@ describe('normalizeCharacterBook — AC-4: import summary', () => {
       content: `Entry ${i} content.`,
       extensions: {},
       enabled: true,
+      // biome-ignore lint/style/useNamingConvention: External character card spec uses snake_case
       insertion_order: i,
       constant: false,
     }));

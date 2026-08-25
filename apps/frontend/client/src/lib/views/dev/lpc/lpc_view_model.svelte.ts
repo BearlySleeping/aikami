@@ -1,8 +1,7 @@
 // apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine';
-import { resolveLayerDepth } from '@aikami/frontend/engine';
-import { createPixiApp, LpcBatchManager } from '@aikami/frontend/engine';
+import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

@@ -10,10 +10,7 @@
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
-import {
-  createLpcPipeline,
-  projectLpcCatalog,
-} from '@aikami/frontend/engine';
+import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -122,9 +119,7 @@ class GameBootService
   private _clearContentPackCache: (() => void) | undefined;
 
   /** Registry-backed tag resolver (C-434). */
-  private _resolveTag:
-    | ((tag: string) => string | null)
-    | undefined;
+  private _resolveTag: ((tag: string) => string | null) | undefined;
   /** Blob URL release function (C-434). */
   private _releaseUrl: ((url: string) => void) | undefined;
 

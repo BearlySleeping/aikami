@@ -16,10 +16,10 @@
 import { describe, expect, test } from 'bun:test';
 import { inferAbilityScores } from './ability_score_inference.ts';
 import { compileCardToNpc, compileCardToPersona } from './card_compiler.ts';
+import { normalizeCharacterBook } from './character_book_mapper.ts';
 import { importFromJson, importFromPng } from './character_importer.ts';
 import { isV2Card, isV3Card } from './character_validator.ts';
 import { createPlaceholderPngCard } from './png_writer.ts';
-import { normalizeCharacterBook } from './character_book_mapper.ts';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────
 
@@ -510,7 +510,15 @@ describe('character_book mapping — AC-2: entry mapping', () => {
       characterName: 'Test Char',
     });
     const ext = normalized.entries[0].extensions as Record<string, unknown>;
-    const mappedKeys = new Set(['keys', 'content', 'constant', 'insertion_order', 'priority', 'enabled', 'extensions']);
+    const mappedKeys = new Set([
+      'keys',
+      'content',
+      'constant',
+      'insertion_order',
+      'priority',
+      'enabled',
+      'extensions',
+    ]);
     for (const key of Object.keys(SAMPLE_BOOK_ENTRY)) {
       if (!mappedKeys.has(key)) {
         // Every unmapped key must be in extensions
@@ -573,7 +581,9 @@ describe('character_book import — AC-4: import summary', () => {
     // Start with a minimal PNG
     const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
     const ihdrData = new Uint8Array([0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0, 0]);
-    const idatData = new Uint8Array([0x78, 0x01, 0x01, 0x02, 0x00, 0xfd, 0xff, 0x00, 0xff, 0x00, 0x40, 0x00, 0x40]);
+    const idatData = new Uint8Array([
+      0x78, 0x01, 0x01, 0x02, 0x00, 0xfd, 0xff, 0x00, 0xff, 0x00, 0x40, 0x00, 0x40,
+    ]);
     const iendData = new Uint8Array(0);
 
     const buildPngChunk = (type: string, data: Uint8Array): Uint8Array => {
@@ -599,7 +609,7 @@ describe('character_book import — AC-4: import summary', () => {
     // Valid chara chunk with a book
     const charaChunk = buildTextChunk({
       keyword: 'chara',
-      text: btoa(JSON.stringify(V2_CARD_WITH_BOOK))
+      text: btoa(JSON.stringify(V2_CARD_WITH_BOOK)),
     });
 
     const chunks = [

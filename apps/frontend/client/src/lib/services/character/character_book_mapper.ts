@@ -150,7 +150,9 @@ export const normalizeCharacterBook = (options: {
 
     // Ensure content is a string
     if (typeof specEntry.content !== 'string') {
-      skippedReasons.push(`Entry "${specEntry.name || '(unnamed)'}" has non-string content and was skipped.`);
+      skippedReasons.push(
+        `Entry "${specEntry.name || '(unnamed)'}" has non-string content and was skipped.`,
+      );
       continue;
     }
 

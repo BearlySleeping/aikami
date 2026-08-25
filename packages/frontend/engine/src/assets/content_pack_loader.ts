@@ -88,19 +88,12 @@ class ContentPackLoader implements ContentPackLoaderInterface {
   readonly manifest: ContentPackManifest;
   readonly packId: string;
   private readonly _basePath: string;
-  private readonly _resolveTag?: AssetTagResolver;
   private _disposed = false;
 
-  constructor(
-    manifest: ContentPackManifest,
-    packId: string,
-    basePath: string,
-    resolveTag?: AssetTagResolver,
-  ) {
+  constructor(manifest: ContentPackManifest, packId: string, basePath: string) {
     this.packId = packId;
     this.manifest = manifest;
     this._basePath = basePath.replace(/\/+$/, ''); // strip trailing slash
-    this._resolveTag = resolveTag;
   }
 
   /** @inheritdoc */
@@ -307,7 +300,7 @@ export const loadContentPack = async (options: {
 
   // C-434: resolve the manifest URL through the asset registry when a
   // resolver is provided.
-  const resolvedManifestUrl = resolveTag ? resolveTag(manifestUrl) ?? manifestUrl : manifestUrl;
+  const resolvedManifestUrl = resolveTag ? (resolveTag(manifestUrl) ?? manifestUrl) : manifestUrl;
 
   logger.debug('loadContentPack:fetching', {
     packId,
@@ -327,7 +320,8 @@ export const loadContentPack = async (options: {
       try {
         response = await fetchImpl(manifestUrl);
       } catch (fallbackError) {
-        const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        const message =
+          fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
         throw toAppError({
           errorType: 'not-found',
           errorMessage: 'ContentPackLoader: failed to fetch manifest',
@@ -423,8 +417,8 @@ export const loadContentPack = async (options: {
     });
   }
 
-  // Create and cache loader — pass resolveTag for constituent file resolution
-  const loader = new ContentPackLoader(manifest, packId, basePath, resolveTag);
+  // Create and cache loader
+  const loader = new ContentPackLoader(manifest, packId, basePath);
   _contentPackCache.set(packId, loader);
 
   logger.debug('loadContentPack:loaded', {

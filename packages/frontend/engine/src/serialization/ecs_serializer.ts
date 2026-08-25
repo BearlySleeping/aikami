@@ -83,7 +83,10 @@ const _extractComponentSlice = (
 
   for (const field of Object.keys(component)) {
     // Skip the Map field itself (it's not enumerable anyway)
-    if (field === 'layers' && component === (Appearance as unknown as Record<string, Array<unknown>>)) {
+    if (
+      field === 'layers' &&
+      component === (Appearance as unknown as Record<string, Array<unknown>>)
+    ) {
       continue;
     }
     const source = component[field] as Array<unknown>;
@@ -152,7 +155,10 @@ const _restoreComponentSlice = (
 
   for (const field of Object.keys(slice)) {
     // Skip the serialized layers field for Appearance (already handled above)
-    if (field === 'layers' && component === (Appearance as unknown as Record<string, Array<unknown>>)) {
+    if (
+      field === 'layers' &&
+      component === (Appearance as unknown as Record<string, Array<unknown>>)
+    ) {
       continue;
     }
     const values = slice[field];

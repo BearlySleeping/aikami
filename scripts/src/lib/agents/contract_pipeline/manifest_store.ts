@@ -5,7 +5,9 @@ import {
   openSync,
   readFileSync,
   renameSync,
+  statSync,
   unlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -15,8 +17,33 @@ import { type ContractPipelineStage, isTerminalStage, type RunManifest } from '.
 const RUNS_DIR = '.pi/contract-runs';
 const _lockCleanups = new Map<
   string,
-  { cleanup: () => void; signalCleanup: () => void; terminationCleanup: () => void }
+  {
+    cleanup: () => void;
+    signalCleanup: () => void;
+    terminationCleanup: () => void;
+    heartbeat: ReturnType<typeof setInterval>;
+  }
 >();
+
+/**
+ * How often a live orchestrator touches its lock file.
+ *
+ * The lock's mtime is the pipeline's liveness signal: a leaked lock (pid dead,
+ * file still there) is the signature of EVERY hard kill, and a herdr restart
+ * SIGHUPs its panes — a signal `acquireLock` deliberately does not trap,
+ * because trapping it would mean releasing the lock on the one event we most
+ * want a trace of. So a stale lock cannot, by itself, tell "orphaned thirty
+ * seconds ago" from "abandoned two days ago", and `lastUpdated` cannot either
+ * — writeManifest only runs on stage transitions, so a run sitting in
+ * `implement` looks identical to one nobody has touched since Tuesday.
+ *
+ * The mtime closes that gap, and it is what makes auto-resume safe to run
+ * unattended: see resume_orphaned.ts, which refuses to resume anything whose
+ * heartbeat is older than a few minutes. Without it a scan of this repo today
+ * would have relaunched nine review-stage runs, the oldest two days old, all
+ * at once.
+ */
+export const LOCK_HEARTBEAT_MS = 30_000;
 
 type LockMetadata = {
   pid: number;
@@ -189,10 +216,38 @@ export const acquireLock = async (options: {
     process.exit(143);
   };
 
-  _lockCleanups.set(path, { cleanup, signalCleanup, terminationCleanup });
+  // Touch the lock while we live, so a reader can date the death. `unref` so
+  // the timer never holds the process open past its real work.
+  const heartbeat = setInterval(() => {
+    try {
+      const now = new Date();
+      utimesSync(path, now, now);
+    } catch {
+      // Lock removed underneath us (forced unlock, manual cleanup) — the
+      // process is exiting anyway; never let a heartbeat throw into the loop.
+    }
+  }, LOCK_HEARTBEAT_MS);
+  heartbeat.unref();
+
+  _lockCleanups.set(path, { cleanup, signalCleanup, terminationCleanup, heartbeat });
   process.once('exit', cleanup);
   process.once('SIGINT', signalCleanup);
   process.once('SIGTERM', terminationCleanup);
+};
+
+/**
+ * Age of a contract lock's heartbeat, in milliseconds, or undefined when there
+ * is no lock. See LOCK_HEARTBEAT_MS for why mtime and not `lastUpdated`.
+ */
+export const lockHeartbeatAgeMs = (options: {
+  contractId: string;
+  cwd: string;
+}): number | undefined => {
+  try {
+    return Date.now() - statSync(buildLockPath(options)).mtimeMs;
+  } catch {
+    return undefined;
+  }
 };
 
 /** Read the current lock metadata without acquiring. Returns undefined if no lock or invalid. */
@@ -209,6 +264,7 @@ export const releaseLock = (options: { contractId: string; cwd: string }): void 
   const path = buildLockPath(options);
   const handlers = _lockCleanups.get(path);
   if (handlers) {
+    clearInterval(handlers.heartbeat);
     process.removeListener('exit', handlers.cleanup);
     process.removeListener('SIGINT', handlers.signalCleanup);
     process.removeListener('SIGTERM', handlers.terminationCleanup);

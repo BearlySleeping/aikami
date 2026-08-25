@@ -12,9 +12,9 @@ import type {
 } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { logger } from '$logger';
+import { type NormalizedBook, normalizeCharacterBook } from './character_book_mapper.ts';
 import { isV1Card, isV2Card, isV3Card } from './character_validator.ts';
 import { extractTextChunks, isPng } from './png_utils.ts';
-import { normalizeCharacterBook, type NormalizedBook } from './character_book_mapper.ts';
 
 export type CharacterImportResult = {
   character: Character;
@@ -87,10 +87,12 @@ const _extractBook = (options: {
     description: typeof book.description === 'string' ? book.description : undefined,
     scan_depth: typeof book.scan_depth === 'number' ? book.scan_depth : undefined,
     token_budget: typeof book.token_budget === 'number' ? book.token_budget : undefined,
-    recursive_scanning: typeof book.recursive_scanning === 'boolean' ? book.recursive_scanning : undefined,
-    extensions: book.extensions && typeof book.extensions === 'object' && !Array.isArray(book.extensions)
-      ? (book.extensions as Record<string, unknown>)
-      : {},
+    recursive_scanning:
+      typeof book.recursive_scanning === 'boolean' ? book.recursive_scanning : undefined,
+    extensions:
+      book.extensions && typeof book.extensions === 'object' && !Array.isArray(book.extensions)
+        ? (book.extensions as Record<string, unknown>)
+        : {},
     entries: validEntries as CharacterBookEntry[],
   };
 
@@ -325,7 +327,9 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
         const bytes = new Uint8Array([...binaryString].map((char) => char.charCodeAt(0)));
         const decoded = new TextDecoder().decode(bytes);
         const rawJson = JSON.parse(decoded);
-        const rawData = (rawJson as Record<string, unknown>).data as Record<string, unknown> | undefined;
+        const rawData = (rawJson as Record<string, unknown>).data as
+          | Record<string, unknown>
+          | undefined;
         if (rawData?.character_book) {
           lorebook = _extractBook({
             data: rawData,

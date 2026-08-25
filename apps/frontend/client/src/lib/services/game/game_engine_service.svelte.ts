@@ -7,10 +7,7 @@ import type {
   GameWorld,
   InteractableStateMap,
 } from '@aikami/frontend/engine';
-import {
-  createLpcPipeline,
-  projectLpcCatalog,
-} from '@aikami/frontend/engine';
+import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -754,7 +751,11 @@ class GameEngineService
       const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
       const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
       const releaseUrl = (url: string) => assetManager.releaseUrl(url);
-      const pack = await loadPack({ packId: this.contentPackId, resolveTag: assetTagResolver, releaseUrl });
+      const pack = await loadPack({
+        packId: this.contentPackId,
+        resolveTag: assetTagResolver,
+        releaseUrl,
+      });
       const { buildPropFrameResolver } = await import('./prop_frame_resolver');
       this._propFrameResolverHandle = await buildPropFrameResolver(pack.manifest);
 

@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       include-heavy:
-        description: 'Run heavy suites (Tauri build + E2E tests) in addition to the default check'
+        description: "Run heavy suites (Tauri build + E2E tests) in addition to the default check"
         type: boolean
         default: false
 
@@ -38,6 +38,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      checks: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -45,8 +46,9 @@ jobs:
       # actionlint v1.7.7 — static analysis for GitHub Actions workflows
       # https://github.com/rhysd/actionlint
       - name: Run actionlint
-        uses: reviewdog/action-actionlint@v1.7.7
+        uses: reviewdog/action-actionlint@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }} # Required for reviewdog to post comments
           actionlint_flags: "-color"
           # shellcheck is required for AC-2: shell defects in run: blocks
           # actionlint silently skips shell analysis when shellcheck is absent

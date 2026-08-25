@@ -5,6 +5,7 @@ import type { Application, Spritesheet } from 'pixi.js';
 import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import {
+  type AssetTagResolver,
   buildCollisionGrid,
   buildTerrainGridForMap,
   extractCollisionGrid,
@@ -13,7 +14,6 @@ import {
   extractTransitionZones,
   loadJtonMap,
   loadTilemap,
-  type AssetTagResolver,
 } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
@@ -2409,8 +2409,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // 4. Load and parse the new tilemap
       const isJton = mapUrl.endsWith('.jton');
       const tilemap = isJton
-        ? await loadJtonMap({ url: mapUrl, resolveTag: this._resolveTag, releaseUrl: this._releaseUrl })
-        : await loadTilemap({ url: mapUrl, resolveTag: this._resolveTag, releaseUrl: this._releaseUrl });
+        ? await loadJtonMap({
+            url: mapUrl,
+            resolveTag: this._resolveTag,
+            releaseUrl: this._releaseUrl,
+          })
+        : await loadTilemap({
+            url: mapUrl,
+            resolveTag: this._resolveTag,
+            releaseUrl: this._releaseUrl,
+          });
       // C-376 AC-1: derive the boolean grid from manifest walkability when a
       // pack config is available; fall back to the explicit collision layer
       // for packless maps (dev sandbox) or when manifest resolution failed.
@@ -3072,7 +3080,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const { Assets } = await import('pixi.js');
     const stateStr = 'walk'; // default state for engine
 
-    const layerSprites: NonNullable<RenderEntry['layerSprites']> = [];
+    let layerSprites: NonNullable<RenderEntry['layerSprites']> = [];
     let texturesLoaded = false;
 
     // Map recipes to promises. We await them all below.

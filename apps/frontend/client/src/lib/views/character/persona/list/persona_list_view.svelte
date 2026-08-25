@@ -87,11 +87,7 @@ let fileInput = $state<HTMLInputElement>();
 
         <!-- C-439 AC-4: Import summary toast -->
         {#if viewModel.importSummary}
-          <div
-            class="alert alert-info shadow-lg mb-4"
-            role="alert"
-            data-testid="import-summary"
-          >
+          <div class="alert alert-info shadow-lg mb-4" role="alert" data-testid="import-summary">
             <div class="flex-1">
               <span class="text-sm">{viewModel.importSummary}</span>
             </div>
