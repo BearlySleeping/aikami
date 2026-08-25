@@ -2,7 +2,7 @@
 id: C-430
 title: "LPC Layer Model — Variable Slots, One Direction-Aware Z-Order"
 source: "user request 2026-08-23 — engine review; armour layering defect"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
