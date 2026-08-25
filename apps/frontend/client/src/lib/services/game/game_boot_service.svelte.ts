@@ -717,30 +717,6 @@ class GameBootService
         return;
       }
 
-      // 3. Seed the registry from the compact seed if not already seeded.
-      //    The compact seed contains every asset the registry needs — no
-      //    separate sidecar filtering required.
-      if (seed && !(await registry.isSeeded(seed.generatedAt))) {
-        const seedT0 = performance.now();
-        await registry.seedFromCompactSeed(seed, ({ chunk, totalChunks }) => {
-          if (generation === this._bootGeneration) {
-            this.bootProgress.detail = `Seeding assets… chunk ${chunk}/${totalChunks}`;
-          }
-        });
-        const seedElapsed = Math.round(performance.now() - seedT0);
-        this.debug('stage:initializing_asset_registry:seeded', {
-          elapsedMs: seedElapsed,
-          rowCount: seed.rows.length,
-        });
-      } else if (!seed) {
-        this.debug('stage:initializing_asset_registry:seed-skipped-no-seed');
-      } else {
-        this.debug('stage:initializing_asset_registry:already-seeded');
-      }
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
       // 4. Add R2 sources for de-bundled assets (priority 0 for remote
       //    assets, replacing the old bundled path). Offline-core assets
       //    keep their bundled priority-0 sources (C-435).

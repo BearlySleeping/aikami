@@ -469,4 +469,151 @@ describe('AssetRegistryRepository', () => {
     expect(stats.seeded).toBe(1200);
     expect(await registry.list()).toHaveLength(1200);
   });
+
+  // ── C-435: Compact seed seeding ─────────────────────────────────────
+
+  test('seedFromCompactSeed populates assets without asset_sources', async () => {
+    const seed = {
+      schemaVersion: 1 as const,
+      generatedAt: '2026-08-23T00:00:00.000Z',
+      originUrl: 'https://assets.example.com',
+      rows: [
+        { tag: 'sprites:generic-fantasy:hero', hash: HASH_A, sizeBytes: 1024, category: 'sprites', ext: '.png' },
+        { tag: 'music:exploration:forest', hash: HASH_B, sizeBytes: 2048, category: 'music', ext: '.mp3' },
+        { tag: 'lpc:body:bodies_male:walk', hash: HASH_C, sizeBytes: 4096, category: 'lpc', ext: '.webp' },
+      ],
+    };
+
+    const stats = await registry.seedFromCompactSeed(seed);
+
+    expect(stats.seeded).toBe(3);
+    expect(stats.updated).toBe(0);
+    expect(stats.unchanged).toBe(0);
+
+    // Assets are seeded
+    const hero = await registry.findById('sprites:generic-fantasy:hero');
+    expect(hero).toBeDefined();
+    expect(hero?.hash).toBe(HASH_A);
+    expect(hero?.sizeBytes).toBe(1024);
+    expect(hero?.version).toBe(1);
+
+    // No asset_sources rows are created by seedFromCompactSeed
+    const sources = await registry.listSources('sprites:generic-fantasy:hero');
+    expect(sources).toHaveLength(0);
+
+    // meta guard is set
+    expect(await registry.isSeeded(seed.generatedAt)).toBe(true);
+  });
+
+  test('seedFromCompactSeed is idempotent — re-seeding with same hashes is no-op', async () => {
+    const seed = {
+      schemaVersion: 1 as const,
+      generatedAt: '2026-08-23T00:00:00.000Z',
+      originUrl: 'https://assets.example.com',
+      rows: [
+        { tag: 'sprites:generic-fantasy:hero', hash: HASH_A, sizeBytes: 1024, category: 'sprites', ext: '.png' },
+      ],
+    };
+
+    await registry.seedFromCompactSeed(seed);
+    const stats = await registry.seedFromCompactSeed(seed);
+
+    expect(stats.seeded).toBe(0);
+    expect(stats.updated).toBe(0);
+    expect(stats.unchanged).toBe(1);
+    expect(stats.hashChanges).toHaveLength(0);
+
+    const hero = await registry.findById('sprites:generic-fantasy:hero');
+    expect(hero?.version).toBe(1);
+  });
+
+  test('seedFromCompactSeed bumps version on hash change', async () => {
+    const v1Seed = {
+      schemaVersion: 1 as const,
+      generatedAt: '2026-08-23T00:00:00.000Z',
+      originUrl: 'https://assets.example.com',
+      rows: [
+        { tag: 'sprites:generic-fantasy:hero', hash: HASH_A, sizeBytes: 1024, category: 'sprites', ext: '.png' },
+      ],
+    };
+    const v2Seed = {
+      ...v1Seed,
+      generatedAt: '2026-08-24T00:00:00.000Z',
+      rows: [
+        { tag: 'sprites:generic-fantasy:hero', hash: HASH_B, sizeBytes: 1100, category: 'sprites', ext: '.png' },
+      ],
+    };
+
+    await registry.seedFromCompactSeed(v1Seed);
+    const stats = await registry.seedFromCompactSeed(v2Seed);
+
+    expect(stats.updated).toBe(1);
+    expect(stats.hashChanges).toHaveLength(1);
+    expect(stats.hashChanges[0]).toEqual({
+      id: 'sprites:generic-fantasy:hero',
+      oldHash: HASH_A,
+      newHash: HASH_B,
+    });
+
+    const hero = await registry.findById('sprites:generic-fantasy:hero');
+    expect(hero?.version).toBe(2);
+    expect(hero?.sizeBytes).toBe(1100);
+  });
+
+  test('seedFromCompactSeed reports progress via callback', async () => {
+    // Create enough rows to span multiple chunks
+    const rows = [];
+    for (let i = 0; i < 1200; i++) {
+      const tag = `sprites:bulk:${i}`;
+      rows.push({ tag, hash: `${String(i).padStart(4, '0')}${'0'.repeat(60)}`, sizeBytes: 100, category: 'sprites', ext: '.png' });
+    }
+    const seed = {
+      schemaVersion: 1 as const,
+      generatedAt: '2026-08-23T00:00:00.000Z',
+      originUrl: 'https://assets.example.com',
+      rows,
+    };
+
+    const progressCalls: { chunk: number; totalChunks: number }[] = [];
+    await registry.seedFromCompactSeed(seed, (p) => { progressCalls.push(p); });
+
+    expect(progressCalls.length).toBeGreaterThan(0);
+    expect(progressCalls[0]?.totalChunks).toBe(3); // 1200 / 500 = 3 chunks
+    expect(progressCalls[progressCalls.length - 1]?.chunk).toBe(3);
+  });
+
+  // ── C-435: addBundledSources ────────────────────────────────────────
+
+  test('addBundledSources creates bundled priority-0 source rows', async () => {
+    // First seed the assets via compact seed
+    const seed = {
+      schemaVersion: 1 as const,
+      generatedAt: '2026-08-23T00:00:00.000Z',
+      originUrl: 'https://assets.example.com',
+      rows: [
+        { tag: 'sprites:generic-fantasy:hero', hash: HASH_A, sizeBytes: 1024, category: 'sprites', ext: '.png' },
+        { tag: 'lpc:body:bodies_male:walk', hash: HASH_C, sizeBytes: 4096, category: 'lpc', ext: '.webp' },
+      ],
+    };
+    await registry.seedFromCompactSeed(seed);
+
+    // Add bundled sources for a subset of tags
+    const added = await registry.addBundledSources(['sprites:generic-fantasy:hero']);
+    expect(added).toBe(1);
+
+    const sources = await registry.listSources('sprites:generic-fantasy:hero');
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.backend).toBe(BUNDLED_SOURCE_BACKEND);
+    expect(sources[0]?.priority).toBe(0);
+    expect(sources[0]?.url).toBe('/game-data/sprites/generic-fantasy/hero');
+
+    // Tag not in the bundled set has no sources
+    const lpcSources = await registry.listSources('lpc:body:bodies_male:walk');
+    expect(lpcSources).toHaveLength(0);
+  });
+
+  test('addBundledSources with empty tags returns 0', async () => {
+    const added = await registry.addBundledSources([]);
+    expect(added).toBe(0);
+  });
 });
