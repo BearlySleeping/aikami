@@ -103,6 +103,9 @@
           git-filter-repo
           gh
 
+          # Cloudflare wrangler CLI (C-437) — needed for local D1/R2 dev
+          wrangler
+
           # Chromium wrapped with PixiJS DevTools extension support
           chromium-pixi-devtools
           cargo

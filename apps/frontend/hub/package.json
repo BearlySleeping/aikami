@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev --mode emulator",
+    "dev:worker": "bun run ../../../scripts/src/lib/ops/run_hub_worker.ts",
     "dev:staging": "vite dev --mode staging",
     "dev:emulator": "vite dev --mode emulator",
     "dev:production": "vite dev --mode production",
@@ -13,6 +14,8 @@
     "build:production": "vite build --mode production",
     "preview": "vite preview",
     "preview-hub": "bun run ../../../scripts/src/lib/ops/preview_hub.ts",
+    "db:migrate:local": "bun run ../../../scripts/src/lib/ops/d1_migrate_local.ts",
+    "db:seed:local": "bun run ../../../scripts/src/lib/ops/d1_seed_local.ts",
     "check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "lint": "biome lint src",
     "format": "biome format src",
