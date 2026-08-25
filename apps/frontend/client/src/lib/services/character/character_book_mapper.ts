@@ -71,15 +71,33 @@ const _mapEntry = (options: {
   const extensions: Record<string, unknown> = {};
 
   // Preserve spec fields that don't map directly to Aikami's LorebookEntry
-  if (entry.case_sensitive !== undefined) extensions.case_sensitive = entry.case_sensitive;
-  if (entry.name !== undefined) extensions.name = entry.name;
-  if (entry.id !== undefined) extensions.id = entry.id;
-  if (entry.comment !== undefined) extensions.comment = entry.comment;
-  if (entry.selective !== undefined) extensions.selective = entry.selective;
-  if (entry.secondary_keys !== undefined) extensions.secondary_keys = entry.secondary_keys;
-  if (entry.position !== undefined) extensions.position = entry.position;
-  if (entry.insertion_order !== undefined) extensions.insertion_order = entry.insertion_order;
-  if (entry.priority !== undefined) extensions.spec_priority = entry.priority;
+  if (entry.case_sensitive !== undefined) {
+    extensions.case_sensitive = entry.case_sensitive;
+  }
+  if (entry.name !== undefined) {
+    extensions.name = entry.name;
+  }
+  if (entry.id !== undefined) {
+    extensions.id = entry.id;
+  }
+  if (entry.comment !== undefined) {
+    extensions.comment = entry.comment;
+  }
+  if (entry.selective !== undefined) {
+    extensions.selective = entry.selective;
+  }
+  if (entry.secondary_keys !== undefined) {
+    extensions.secondary_keys = entry.secondary_keys;
+  }
+  if (entry.position !== undefined) {
+    extensions.position = entry.position;
+  }
+  if (entry.insertion_order !== undefined) {
+    extensions.insertion_order = entry.insertion_order;
+  }
+  if (entry.priority !== undefined) {
+    extensions.spec_priority = entry.priority;
+  }
 
   // Preserve any vendor-specific extensions from the source
   if (entry.extensions && typeof entry.extensions === 'object') {

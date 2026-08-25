@@ -1,3 +1,4 @@
+// biome-ignore lint/style/useNamingConvention: Character card spec uses snake_case fields
 // packages/shared/schemas/src/lib/domain/character_book.ts
 //
 // TypeBox schemas for the V2/V3 character_book (embedded lorebook) field.

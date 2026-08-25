@@ -1,3 +1,4 @@
+// biome-ignore lint/style/useNamingConvention: Test fixtures match external character card spec (snake_case)
 // apps/frontend/client/src/lib/services/character/character_book_mapper.test.ts
 //
 // Unit tests for the character_book mapper (C-439).

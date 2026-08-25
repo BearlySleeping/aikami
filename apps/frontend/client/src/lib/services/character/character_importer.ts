@@ -6,6 +6,7 @@ import type {
   AikamiCharacterCard,
   Character,
   CharacterBook,
+  CharacterBookEntry,
   CharacterCardV3,
   CharacterCardV3Asset,
 } from '@aikami/types';
@@ -35,8 +36,66 @@ const _extractBook = (options: {
   if (!rawBook || typeof rawBook !== 'object') {
     return undefined;
   }
+
+  // Validate that rawBook has the expected structure
+  const book = rawBook as Record<string, unknown>;
+
+  // Validate entries is an array
+  if (!Array.isArray(book.entries)) {
+    logger.warn('character-importer', {
+      message: 'character_book.entries is not an array',
+      characterName,
+    });
+    return undefined;
+  }
+
+  // Validate each entry has required fields and skip invalid ones
+  const validEntries = book.entries.filter((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      logger.warn('character-importer', {
+        message: `Entry at index ${index} is not an object`,
+        characterName,
+      });
+      return false;
+    }
+    const entryObj = entry as Record<string, unknown>;
+
+    // keys must be an array
+    if (!Array.isArray(entryObj.keys)) {
+      logger.warn('character-importer', {
+        message: `Entry at index ${index} has non-array keys`,
+        characterName,
+      });
+      return false;
+    }
+
+    // content must be a string
+    if (typeof entryObj.content !== 'string') {
+      logger.warn('character-importer', {
+        message: `Entry at index ${index} has non-string content`,
+        characterName,
+      });
+      return false;
+    }
+
+    return true;
+  });
+
+  // Create a validated book object with cleaned entries
+  const validatedBook: CharacterBook = {
+    name: typeof book.name === 'string' ? book.name : undefined,
+    description: typeof book.description === 'string' ? book.description : undefined,
+    scan_depth: typeof book.scan_depth === 'number' ? book.scan_depth : undefined,
+    token_budget: typeof book.token_budget === 'number' ? book.token_budget : undefined,
+    recursive_scanning: typeof book.recursive_scanning === 'boolean' ? book.recursive_scanning : undefined,
+    extensions: book.extensions && typeof book.extensions === 'object' && !Array.isArray(book.extensions)
+      ? (book.extensions as Record<string, unknown>)
+      : {},
+    entries: validEntries as CharacterBookEntry[],
+  };
+
   try {
-    return normalizeCharacterBook({ book: rawBook as CharacterBook, characterName });
+    return normalizeCharacterBook({ book: validatedBook, characterName });
   } catch {
     logger.warn('character-importer', {
       message: 'Failed to normalize character_book',
@@ -231,13 +290,36 @@ export const importFromPng = async (options: { file: File }): Promise<CharacterI
     });
   }
 
-  // C-439: Extract the embedded lorebook (character_book) from the raw card JSON
+  // C-439: Extract the embedded lorebook (character_book) from the raw card JSON.
+  // Extract from the same chunk that successfully produced the character, so a
+  // malformed ccv3 falls back to valid chara containing a book.
   let lorebook: NormalizedBook | undefined;
+  let successfulChunkKeyword: string | undefined;
+
   if (character) {
+    // Determine which chunk produced the character
+    if (textChunks[AIKAMI_PNG_CHUNK_KEYWORD]) {
+      successfulChunkKeyword = AIKAMI_PNG_CHUNK_KEYWORD;
+    } else if (textChunks.ccv3) {
+      const parsedCcv3 = parseBase64Json({ base64: textChunks.ccv3 });
+      if (parsedCcv3) {
+        successfulChunkKeyword = 'ccv3';
+      }
+    }
+    if (!successfulChunkKeyword && textChunks.chara) {
+      const parsedChara = parseBase64Json({ base64: textChunks.chara });
+      if (parsedChara) {
+        successfulChunkKeyword = 'chara';
+      }
+    }
+    if (!successfulChunkKeyword && textChunks.cbar) {
+      successfulChunkKeyword = 'cbar';
+    }
+
     // Parse the raw chunk JSON to extract the book before normalization.
     // The book lives in `data.character_book` in both V2 and V3 cards.
-    const rawChunkText = textChunks.ccv3 || textChunks.chara || '';
-    if (rawChunkText) {
+    const rawChunkText = successfulChunkKeyword ? textChunks[successfulChunkKeyword] : '';
+    if (rawChunkText && (successfulChunkKeyword === 'ccv3' || successfulChunkKeyword === 'chara')) {
       try {
         const binaryString = atob(rawChunkText);
         const bytes = new Uint8Array([...binaryString].map((char) => char.charCodeAt(0)));

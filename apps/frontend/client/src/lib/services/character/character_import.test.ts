@@ -341,18 +341,26 @@ describe('character_book import — AC-1: parsing', () => {
   test('V2 PNG card with book parses and returns normalized lorebook', async () => {
     const result = await importFromPng({ file: pngFileFromCard(V2_CARD_WITH_BOOK, 'chara') });
     expect(result.lorebook).toBeDefined();
-    expect(result.lorebook!.name).toBe("Lyra's World");
-    expect(result.lorebook!.entries).toHaveLength(2); // 1 disabled skipped
-    expect(result.lorebook!.summary.total).toBe(3);
-    expect(result.lorebook!.summary.imported).toBe(2);
-    expect(result.lorebook!.summary.skipped).toBe(1);
+    const lorebook = result.lorebook;
+    if (!lorebook) {
+      throw new Error('Expected lorebook to be defined');
+    }
+    expect(lorebook.name).toBe("Lyra's World");
+    expect(lorebook.entries).toHaveLength(2); // 1 disabled skipped
+    expect(lorebook.summary.total).toBe(3);
+    expect(lorebook.summary.imported).toBe(2);
+    expect(lorebook.summary.skipped).toBe(1);
   });
 
   test('V3 PNG card with book parses and returns normalized lorebook', async () => {
     const result = await importFromPng({ file: pngFileFromCard(V3_CARD_WITH_BOOK, 'ccv3') });
     expect(result.lorebook).toBeDefined();
-    expect(result.lorebook!.entries).toHaveLength(2);
-    expect(result.lorebook!.summary.total).toBe(3);
+    const lorebook = result.lorebook;
+    if (!lorebook) {
+      throw new Error('Expected lorebook to be defined');
+    }
+    expect(lorebook.entries).toHaveLength(2);
+    expect(lorebook.summary.total).toBe(3);
   });
 
   test('JSON card with book parses and returns normalized lorebook', async () => {
@@ -361,8 +369,12 @@ describe('character_book import — AC-1: parsing', () => {
     });
     const result = await importFromJson({ file });
     expect(result.lorebook).toBeDefined();
-    expect(result.lorebook!.entries).toHaveLength(2);
-    expect(result.lorebook!.summary.total).toBe(3);
+    const lorebook = result.lorebook;
+    if (!lorebook) {
+      throw new Error('Expected lorebook to be defined');
+    }
+    expect(lorebook.entries).toHaveLength(2);
+    expect(lorebook.summary.total).toBe(3);
   });
 
   test('V2, V3, and JSON paths produce identical normalized book structure', async () => {
@@ -373,13 +385,21 @@ describe('character_book import — AC-1: parsing', () => {
     });
     const json = await importFromJson({ file });
 
+    const lorebookV2 = pngV2.lorebook;
+    const lorebookV3 = pngV3.lorebook;
+    const lorebookJson = json.lorebook;
+
+    if (!lorebookV2 || !lorebookV3 || !lorebookJson) {
+      throw new Error('Expected all lorebooks to be defined');
+    }
+
     // All three should have the same entry count and summary
-    expect(pngV2.lorebook!.summary).toEqual(pngV3.lorebook!.summary);
-    expect(pngV2.lorebook!.summary).toEqual(json.lorebook!.summary);
+    expect(lorebookV2.summary).toEqual(lorebookV3.summary);
+    expect(lorebookV2.summary).toEqual(lorebookJson.summary);
 
     // Entry content should match across all paths
-    expect(pngV2.lorebook!.entries[0].content).toBe(pngV3.lorebook!.entries[0].content);
-    expect(pngV2.lorebook!.entries[0].content).toBe(json.lorebook!.entries[0].content);
+    expect(lorebookV2.entries[0].content).toBe(lorebookV3.entries[0].content);
+    expect(lorebookV2.entries[0].content).toBe(lorebookJson.entries[0].content);
   });
 
   test('card with no character_book imports exactly as before (no lorebook)', async () => {
@@ -544,5 +564,74 @@ describe('character_book import — AC-4: import summary', () => {
     expect(normalized.summary.imported).toBe(200);
     expect(normalized.summary.skipped).toBe(50);
     expect(normalized.summary.skippedReasons[0]).toContain('exceeds the maximum');
+  });
+
+  test('malformed ccv3 chunk falls back to valid chara chunk with book', async () => {
+    // Create a PNG with both ccv3 (malformed) and chara (valid with book) chunks
+    const { buildTextChunk } = await import('./png_writer.ts');
+
+    // Start with a minimal PNG
+    const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const ihdrData = new Uint8Array([0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0, 0]);
+    const idatData = new Uint8Array([0x78, 0x01, 0x01, 0x02, 0x00, 0xfd, 0xff, 0x00, 0xff, 0x00, 0x40, 0x00, 0x40]);
+    const iendData = new Uint8Array(0);
+
+    const buildPngChunk = (type: string, data: Uint8Array): Uint8Array => {
+      const encoder = new TextEncoder();
+      const typeBytes = encoder.encode(type);
+      const lengthBytes = new Uint8Array(4);
+      new DataView(lengthBytes.buffer).setUint32(0, data.length);
+
+      // Simple CRC stub (not validated for this test)
+      const crcBytes = new Uint8Array([0, 0, 0, 0]);
+
+      const result = new Uint8Array(4 + typeBytes.length + data.length + 4);
+      result.set(lengthBytes, 0);
+      result.set(typeBytes, 4);
+      result.set(data, 8);
+      result.set(crcBytes, 8 + data.length);
+      return result;
+    };
+
+    // Malformed ccv3 chunk (invalid base64)
+    const ccv3Chunk = buildTextChunk({ keyword: 'ccv3', text: '###not-valid-base64###' });
+
+    // Valid chara chunk with a book
+    const charaChunk = buildTextChunk({
+      keyword: 'chara',
+      text: btoa(JSON.stringify(V2_CARD_WITH_BOOK))
+    });
+
+    const chunks = [
+      signature,
+      buildPngChunk('IHDR', ihdrData),
+      ccv3Chunk,
+      charaChunk,
+      buildPngChunk('IDAT', idatData),
+      buildPngChunk('IEND', iendData),
+    ];
+
+    const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+    const pngData = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      pngData.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const file = new File([pngData], 'card.png', { type: 'image/png' });
+    const result = await importFromPng({ file });
+
+    // Character should be imported from chara chunk
+    expect(result.character.name).toBe('Lyra Sunweaver');
+
+    // Lorebook should also come from the chara chunk (not the malformed ccv3)
+    expect(result.lorebook).toBeDefined();
+    const lorebook = result.lorebook;
+    if (!lorebook) {
+      throw new Error('Expected lorebook to be defined');
+    }
+    expect(lorebook.name).toBe("Lyra's World");
+    expect(lorebook.entries).toHaveLength(2);
   });
 });

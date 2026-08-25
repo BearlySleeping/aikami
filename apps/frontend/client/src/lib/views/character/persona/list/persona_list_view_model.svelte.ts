@@ -251,11 +251,13 @@ class PersonaListViewModel
 
       // C-439 AC-3: Create lorebook from imported card's character_book
       if (lorebook && lorebook.entries.length > 0) {
+        let lorebookId: string | undefined;
         try {
-          const lorebookId = lorebookStore.addLorebook({
+          lorebookId = lorebookStore.addLorebook({
             name: lorebook.name,
             description: lorebook.description,
           });
+          // Add all entries atomically - if any fails, roll back the lorebook
           for (const entry of lorebook.entries) {
             lorebookStore.addEntry({ lorebookId, entry });
           }
@@ -277,6 +279,14 @@ class PersonaListViewModel
             summary,
           });
         } catch (error) {
+          // Roll back the lorebook if it was created but entry insertion failed
+          if (lorebookId) {
+            try {
+              lorebookStore.deleteLorebook(lorebookId);
+            } catch (rollbackError) {
+              this.warn('handleFileImport:lorebook-rollback-failed', rollbackError);
+            }
+          }
           this.warn('handleFileImport:lorebook-creation-failed', error);
           this.importSummary = 'Character imported, but its lorebook could not be created.';
         }

@@ -74,6 +74,6 @@ After import, a summary banner shows how many entries were imported and how many
 
 ### Usage
 
-Drag a `.png` or `.json` file onto the character import dropzone on the **My Personas** screen. The importer detects the format automatically.
+On the **My Personas** screen, click the **Import Card** button and select a `.png` or `.json` file using the file picker. The importer detects the format automatically.
 
 Source: `apps/frontend/client/src/lib/services/character/` and `apps/frontend/client/src/lib/views/character/persona/list/`.
