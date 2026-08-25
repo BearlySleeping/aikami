@@ -22,7 +22,7 @@ created_at: "2026-08-02"
 | **Target** | `apps/frontend/client/src/lib/services/assets/` + LPC avatar loading services + manifest pipeline |
 | **Priority** | P0 — Broken LPC avatar rendering and audio decode errors in production deployments |
 | **Dependencies** | None (existing systems from C-243, C-325, C-370 are reused, not blocked on) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | Internal — none |
 | **Contract version** | 2.0.0 |

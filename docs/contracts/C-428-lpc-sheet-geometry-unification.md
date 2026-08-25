@@ -22,7 +22,7 @@ created_at: "2026-08-23"
 | **Target** | `packages/frontend/engine/src/rendering/` (new shared sheet-geometry module), `packages/frontend/engine/src/game_world.ts`, `apps/frontend/client/src/lib/data/lpc_renderer.ts` |
 | **Priority** | P0 — every equipped weapon renders wrong in the production game path today. Smallest contract in the batch and the most visible fix. |
 | **Dependencies** | None. Blocks C-431 (which adds more oversize sheets). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 1.0.0 |

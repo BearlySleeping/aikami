@@ -1,0 +1,75 @@
+# .github/workflows/contract-status.yml
+#
+# Post-merge contract status advance.
+#
+# The contract pipeline never advances the contract file past `approved`:
+# `orchestrator.ts`'s `checkStatusTransition` skips the implement stage on
+# purpose ("Status is tracked in the run manifest, not the contract file"),
+# and `.pi/prompts/contract-implement.md` only tells the agent to stamp the
+# `**Status**` row of the Metadata table — leaving the YAML frontmatter at
+# `approved` forever. This workflow closes both gaps, driven by the one event
+# that actually proves the work landed: the PR merging.
+#
+# It never regresses a status and never stamps `implemented` on a contract
+# with no Execution Report (which would fail `lint-contracts --contract`).
+# See scripts/src/lib/ops/mark_contract_implemented.ts for the full rules.
+#
+# `pull_request_target` (not `pull_request`) so the job has a write token on
+# PRs from forks. That trigger is only dangerous when a workflow checks out
+# and executes PR-authored code — this one checks out `main` and runs code
+# from `main`, and touches the PR solely as three read-only string inputs.
+
+name: Contract Status
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  # Serialize: every run of this job pushes to main. The push is already a
+  # compare-and-swap with a refetch-retry, so a race is safe either way —
+  # this just keeps two merges from interleaving in the logs.
+  #
+  # Never cancel-in-progress: a cancelled run silently drops a status update.
+  group: contract-status
+  cancel-in-progress: false
+
+jobs:
+  mark-implemented:
+    name: Advance merged contracts to implemented
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Full history: the script commits via plumbing onto origin/main's tip
+      # and pushes. A shallow clone can have that push rejected outright
+      # ("shallow update not allowed"), and 100 MB is a ~15s fetch.
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      # Every input defaults to "off" — this needs bun and nothing else. The
+      # script imports only node builtins and local .ts files, so there is no
+      # `bun install` and no moon cache to restore.
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+
+      # PR fields go through env, never `${{ }}` interpolated into the shell:
+      # a PR title is attacker-controlled text on a fork PR.
+      - name: Advance contract status
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          bun run scripts/src/lib/ops/mark_contract_implemented.ts \
+            --pr "$PR_NUMBER" \
+            --title "$PR_TITLE" \
+            --branch "$PR_BRANCH"

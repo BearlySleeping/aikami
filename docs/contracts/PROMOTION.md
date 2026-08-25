@@ -1,6 +1,6 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-08-24
+> Auto-generated: 2026-08-25
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
@@ -160,21 +160,21 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-345 | Add A Campaigncontent Pack Browser And A Second Adventure | 👍 approved | v2 |
 | C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 👍 approved | v2 |
 | C-371 | C 371 | 👍 approved | v2 |
-| C-383 | Data Exposure Hardening | 📝 draft | v2 |
+| C-383 | Data Exposure Hardening | 🏁 completed | v2 |
 | C-384 | Local Sqlite Migration Framework | 🛠️ implemented | v2 |
 | C-385 | Remove Data Connect | 🛠️ implemented | v2 |
 | C-386 | Firestore Removal Local First Client | 🛠️ implemented | v2 |
-| C-387 | Local Postgres Dev Environment | 👍 approved | v2 |
+| C-387 | Local Postgres Dev Environment | 🛠️ implemented | v2 |
 | C-388 | Image Engine Provider Abstraction | 👍 approved | v2 |
 | C-389 | Runtime Engine Config Offline Tts Tauri | 🛠️ implemented | v2 |
 | C-390 | Local Stack V2 Publishable Topology | 🛠️ implemented | v2 |
 | C-391 | Stack Init Hardware Detection Wizard | 🛠️ implemented | v2 |
 | C-392 | Converge Dev Engine Services With Stack | 👍 approved | v2 |
 | C-393 | Speech To Text Backend Service | 👍 approved | v2 |
-| C-394 | Server Data Plane Neon Drizzle | 👍 approved | v2 |
-| C-395 | R2 Asset Origin Publish Pipeline | 👍 approved | v2 |
-| C-396 | Hub Public Shell Catalog Browse | 👍 approved | v2 |
-| C-428 | Lpc Sheet Geometry Unification | 👍 approved | v1 |
+| C-394 | Server Data Plane Neon Drizzle | 🛠️ implemented | v2 |
+| C-395 | R2 Asset Origin Publish Pipeline | 🛠️ implemented | v2 |
+| C-396 | Hub Public Shell Catalog Browse | 🛠️ implemented | v2 |
+| C-428 | Lpc Sheet Geometry Unification | 🛠️ implemented | v1 |
 | C-429 | Lpc Sheet Coverage Audit | 🛠️ implemented | v1 |
 | C-430 | Lpc Layer Model And Z Order | 🛠️ implemented | v1 |
 | C-431 | Collect Lpc Behind Pass | 📝 draft | v1 |
@@ -186,6 +186,6 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-437 | Local Cloudflare Dev Plane | 📝 draft | v2 |
 | C-438 | Restore Pr Checks | 🛠️ implemented | v2 |
 | C-439 | Card Lorebook Import | 🛠️ implemented | v2 |
-| C-440 | Ci Tooling Baseline | 📝 draft | v2 |
-| C-441 | Sops Secrets Migration | 📝 draft | v2 |
+| C-440 | Ci Tooling Baseline | 🛠️ implemented | v2 |
+| C-441 | Sops Secrets Migration | 🛠️ implemented | v2 |
 

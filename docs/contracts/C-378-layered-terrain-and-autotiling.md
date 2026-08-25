@@ -22,7 +22,7 @@ created_at: "2026-08-11"
 | **Target** | `packages/shared/schemas/src/lib/game/content_pack.ts` — `terrains` block; `packages/frontend/engine/src/assets/` — terrain channel + autotiler; `packages/frontend/engine/src/rendering/` + `systems/tilemap_render_system.ts` — z-banded layer containers; `scripts/src/lib/ops/` — atlas packer with extrusion + map converter; `apps/frontend/client/static/content-packs/emberwatch/` — converted maps + terrain frames |
 | **Priority** | P0 for the roadmap — the current format cannot express a decor or overhead layer at all (one z-band, and every tile layer contributes collision), which blocks all map polish. It is also the format decision that determines whether LLM map generation is ever viable. |
 | **Dependencies** | **C-377** (hard — the chunk renderer must return an owned chunk array and a correctly-bound uniform group before layers multiply). C-375, C-376 (merged). |
-| **Status** | draft |
+| **Status** | implemented |
 | **Promotion** | `integrated` — the production `/game` route + `emberwatch.visual.ts` are the evidence |
 | **Docs Impact** | user-facing → new page in `apps/frontend/docs/src/content/docs/` documenting the terrain authoring format for content-pack creators |
 | **Contract version** | 2.0.0 |

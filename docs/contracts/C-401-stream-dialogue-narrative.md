@@ -2,7 +2,7 @@
 id: C-401
 title: "Stream Dialogue Narrative and Collapse the Two-Call Skill-Check Flow"
 source: "docs/strategy/mvp-assessment-2026-08-16.md §5.1 and §6.3 (MVP playthrough)"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-16"
 | **Target** | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts`, `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts`, and `dialogue_overlay.svelte` |
 | **Priority** | P0 — highest perceived-quality-per-hour change in the repository; blocks any gameplay video |
 | **Dependencies** | — (no hard dependencies; C-407 dialogue UI layout is a not-yet-drafted follow-up that lands in the same view) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |

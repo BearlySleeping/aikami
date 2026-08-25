@@ -23,7 +23,7 @@ created_at: "2026-08-21"
 | **Priority** | P1 — removes a live UX defect (two competing affordances) and fills the dead first-session chat |
 | **Sequence** | **4 of 6** — after C-424, so the chip surface is written once into `GuidedComposer` rather than twice |
 | **Dependencies** | C-245 (landed — CYOA); C-371 (landed — `NpcSuggestionChip` + intent chips); C-417 Feature 4 (landed — chip row wrapping); C-424 (`GuidedComposer`, sequence 3) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 3.0.0 |

@@ -22,7 +22,7 @@ completed_at: "2026-08-12"
 | **Target** | `apps/backend/firebase/src/rules/firestore.rules`, `apps/backend/firebase/src/rules/storage.rules`, `apps/backend/firebase/dataconnect/connector/queries.gql`, and the corresponding suites in `apps/backend/firebase/tests/` |
 | **Priority** | P0 — `personas` and `users` are readable by callers who do not own them, in production, today. Personas are the user's self-characterization in a companion product. |
 | **Dependencies** | None. Ships independently of every other contract in the sequence. |
-| **Status** | draft |
+| **Status** | completed |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |

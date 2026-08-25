@@ -2,7 +2,7 @@
 id: C-394
 title: "Server Data Plane: Neon PostgreSQL + Drizzle + the hub's catalog write model"
 source: "user request — hub community catalog; ADR amendments A-1, A-2, A-6"
-status: merged
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-15"
 | **Target** | New `packages/backend/database/` (Drizzle schema, migrations, repositories), `packages/shared/schemas/src/lib/catalog/` (TypeBox API boundary), `apps/frontend/hub/src/lib/server/`, `apps/frontend/hub/.env.*`, `flake.nix`, `scripts/src/lib/deploy/` |
 | **Priority** | P1 — every other hub contract (C-396, C-398, C-399) needs a server data plane, and none of them can be written against a database that does not exist. |
 | **Dependencies** | C-387 (local PostgreSQL dev environment — implemented, PR #137). This contract re-pins its major version 17 → 18; see AC-2. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer setup notes in the repo README (database URL, migration commands) |
 | **Contract version** | 2.1.0 |

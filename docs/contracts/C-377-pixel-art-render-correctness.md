@@ -22,7 +22,7 @@ created_at: "2026-08-11"
 | **Target** | `packages/frontend/engine/src/pixi_app.ts`, `rendering/tilemap_chunk_renderer.ts`, `systems/tilemap_render_system.ts`, `game_world.ts`, `systems/camera_system.ts` — pixel-art filtering, HiDPI, camera pixel snap, tilemap renderer repair, dead-shader removal |
 | **Priority** | P0 — the shipped tilemap renders through **linear filtering at 4× upscale** (blurry), the WebGPU shader path applies no transform (renders garbage), and frustum culling **permanently deletes chunks** that leave the viewport. All three are invisible today only because the maps are 20×20 and WebGPU is never selected. |
 | **Dependencies** | C-375 (merged, PR #122), C-376 (merged, PR #126) — same files, this contract builds on both. No contract blocks this one. |
-| **Status** | draft |
+| **Status** | implemented |
 | **Promotion** | `integrated` — the production `/game` route + the existing `emberwatch.visual.ts` suite are the evidence |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |

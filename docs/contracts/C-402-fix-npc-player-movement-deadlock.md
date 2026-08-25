@@ -22,7 +22,7 @@ created_at: "2026-08-16"
 | **Target** | `packages/frontend/engine/src/systems/` — collision masks, movement, GOAP movement execution |
 | **Priority** | P0 — soft-locks play; the player loses control with no recovery short of reload |
 | **Dependencies** | — |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |

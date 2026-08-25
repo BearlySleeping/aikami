@@ -2,7 +2,7 @@
 id: C-374
 title: "Hub: Move Persona Data from Firestore to Data Connect"
 source: "direct draft (user request)"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-07"
 | **Target** | `apps/frontend/hub` (persona data layer: client service, SSR load, moon config) + `apps/backend/firebase/dataconnect` (schema.gql + connector/queries.gql) + `packages/frontend/dataconnect` (regenerated SDK + wrapper exports) + `packages/shared/schemas` (regenerated row schema) |
 | **Priority** | P1 — the hub's only product-data feature (personas) is entirely Firestore-backed; this contract swaps that layer to Data Connect and removes the hub's Firestore dependency. It is also the first real consumer of the already-authored Data Connect schema, exercising the pipeline C-375+ Hub catalog work will build on |
 | **Dependencies** | None blocking. Reuses the Data Connect scaffold from C-014 (completed) and the already-authored `Persona` table in `apps/backend/firebase/dataconnect/schema/schema.gql`. Package deps: `@aikami/frontend-dataconnect`, `firebase@12.17.1` / `@firebase/data-connect@0.7.3` (verified: **no client-side transaction API** in this SDK version), `@aikami/frontend-configs` (Data Connect singleton + emulator wiring) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal → none (no user-facing docs; hub is a dashboard app) |
 | **Contract version** | 2.0.0 |

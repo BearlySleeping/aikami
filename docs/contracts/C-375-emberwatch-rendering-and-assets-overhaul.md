@@ -2,7 +2,7 @@
 id: C-375
 title: "Emberwatch Rendering & Asset Overhaul: Props, Depth Ordering, NPC Collision, Tileset & Maps"
 source: "direct_user_feature_request"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-05"
 | **Target** | `apps/frontend/client/static/content-packs/emberwatch/` (manifest + 3 maps), `apps/frontend/client/static/game-data/sprites/tilesets/` (atlas.webp + atlas.json), `packages/frontend/engine` (prop rendering, entity depth sort, NPC/prop collision, spatial-grid integration), `apps/frontend/client/src/lib/services/game/` (boot/engine wiring) |
 | **Priority** | P1 — the playable demo release gate (C-335) requires the flagship Emberwatch pack to render correctly: props visible, correct depth ordering, and blocked-by-NPC collision are core playability defects, not optional polish |
 | **Dependencies** | C-315 (content pack loader — **completed**), C-316 (authored Emberwatch demo — **verified**), C-173 (spatial hash grid collision — **completed**), C-370 (LPC body-layer fallback — **approved**), C-372 (manifest-driven LPC asset resolution — **implemented**), C-135/C-136/C-138 (map parsing / entity-prop spawner / transitions — legacy, built on by C-316), C-331 (demo inventory/equipment/loot/vendor — **approved**) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `sandbox` — |
 | **Docs Impact** | Internal — none |
 | **Contract version** | 2.0.0 |

@@ -22,7 +22,7 @@ created_at: "2026-08-17"
 | **Target** | `apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts`; `packages/frontend/engine/src/environment/environment_ubo.ts` + `packages/frontend/engine/src/systems/environment_system.ts`; `apps/frontend/client/src/lib/views/capability/`; `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte`; `apps/frontend/client/src/lib/views/character/persona/create/` |
 | **Priority** | P1 — MVP coherence and polish, sequenced after the P0 block (C-400/401/402/405) |
 | **Dependencies** | C-400 (landed — unified LPC resolver), C-401 (landed — streaming dialogue) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.1 |

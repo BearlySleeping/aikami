@@ -27,7 +27,7 @@ created_at: "2026-08-12"
 | **Target** | `flake.nix`, `scripts/src/lib/herdr/session.ts`, `packages/shared/constants/src/lib/development_ports.ts`, plus new database lifecycle scripts |
 | **Priority** | P2 — no consumer exists until the community catalog is built. Land this immediately before that work, not before. |
 | **Dependencies** | C-385 (Data Connect removed — it currently owns the local Postgres and port 5432). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer setup notes in the repo README |
 | **Contract version** | 2.1.0 |
