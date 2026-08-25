@@ -48,6 +48,14 @@ tasks:
     inputs:
       - '@group(sources)'
       - '@group(configs)'
+      # 🔴 Load-bearing — see the same block in client/moon.yml. Astro bundles
+      # these workspace packages FROM SOURCE via TS aliases. This task is
+      # cached (moon's default), so without these globs the cache key lies:
+      # a change to frontend-theme or constants would NOT invalidate a built
+      # site. Unlike client/hub this was never caught, because a stale
+      # marketing page fails quietly.
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
     outputs:
       - 'dist'
   preview:

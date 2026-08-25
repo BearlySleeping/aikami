@@ -13,9 +13,9 @@ description: "Bun (+ optional Node), optional GCP auth, optional Docker registry
 
 inputs:
   bun-version:
-    description: "Bun version to install."
+    description: 'Bun version to install. Leave empty (the default) to read `.bun-version` at the repo root — that file is the single source of truth, shared with proto/moon. Only set this to deliberately test a different version.'
     required: false
-    default: "1.3.13"
+    default: ""
 
   node:
     description: 'Set to "true" to also install Node.js. Only jobs that shell out to Node-dependent tooling need this — Cloud Run and desktop legs run entirely on Bun.'
@@ -52,10 +52,14 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # Version comes from `.bun-version` unless a caller overrides it. That
+    # same file is what proto (and therefore moon's bun toolchain) detects, so
+    # the runner's bun and moon's bun can never drift apart.
     - name: 🥖 Setup Bun
       uses: oven-sh/setup-bun@v2 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
       with:
         bun-version: ${{ inputs.bun-version }}
+        bun-version-file: ${{ inputs.bun-version == '' && '.bun-version' || '' }}
 
     - name: 📦 Setup Node.js
       if: inputs.node == 'true'
@@ -77,12 +81,26 @@ runs:
     # Moon build cache: uses a rolling key (SHA-based) so it's written
     # fresh per run and restored from the most recent successful run.
     # Scoped by workflow to avoid release-pipeline caches crowding out
-    # PR-gate caches (GitHub's 10 GB Actions cache is shared).
+    # PR-gate caches (GitHub's 10 GB Actions cache is shared repo-wide and
+    # LRU-evicted — an oversized entry here evicts the docker buildx caches).
+    #
+    # 🔴 Only `states` and `outputs` are cached, NOT all of `.moon/cache`.
+    # `.moon/cache/hashes` is 88% of the directory (458 MB of 523 MB locally,
+    # 2079 debug manifests — `client:tauri-build` alone writes a 2 MB manifest
+    # because it hashes 13,547 input files from `static/**`). Those manifests
+    # only feed `moon query hash` / `hash-diff` diagnostics. A cache HIT is
+    # decided by recomputing the hash from inputs and matching it against
+    # `states/<project>/<task>/lastRun.json` + `outputs/<hash>.tar.gz`.
+    # If that reading were ever wrong, the failure mode is a cache MISS
+    # (slower) — never a stale or incorrect result, because moon recomputes
+    # the hash from the real inputs on every run regardless.
     - name: 🌙 Restore Moon build cache
       if: inputs.moon-cache == 'true'
       uses: actions/cache@v6 # zizmor: ignore[unpinned-uses] actions/* are exempt per C-440
       with:
-        path: .moon/cache
+        path: |
+          .moon/cache/states
+          .moon/cache/outputs
         key: ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-${{ github.sha }}
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-
@@ -92,6 +110,19 @@ runs:
       if: inputs.install-deps == 'true'
       shell: bash
       run: bun install --frozen-lockfile
+
+    # Prune the RESTORED cache before this job adds to it. The moon cache key
+    # is rolling (SHA-based), so without this the entry grows monotonically
+    # run over run and eventually starts evicting other workflows' caches out
+    # of the shared 10 GB repo budget. Pruning here — rather than after the
+    # job — works because actions/cache saves in a post step, so whatever is
+    # on disk at the end is what gets stored.
+    #
+    # Never fatal: a stale-cache cleanup failing must not fail the build.
+    - name: 🧹 Prune stale moon cache entries
+      if: inputs.moon-cache == 'true' && inputs.install-deps == 'true'
+      shell: bash
+      run: bun moon clean --lifetime '7 days' || echo "moon clean failed — continuing with an unpruned cache"
 
     - name: 🔑 Authenticate to Google Cloud
       if: inputs.gcp-auth == 'true'

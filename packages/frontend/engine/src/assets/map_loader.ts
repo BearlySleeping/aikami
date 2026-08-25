@@ -218,12 +218,27 @@ export const DEFAULT_TILEMAP_BAND: TilemapBand = 'ground';
 /**
  * Options for loading a tilemap.
  */
+/**
+ * Resolves a published asset tag (e.g. "maps:sandbox_zone_a") to a URL the
+ * caller can fetch — a cached blob URL, an origin URL, or a bundled static
+ * path. Returns null when the tag is unknown, so the caller can fall back.
+ */
+export type AssetTagResolver = (tag: string) => string | null;
+
+/** Options both loaders gain, alongside their existing fields. */
+export type RegistryBackedLoadOptions = {
+  /** Injected by the client composition root; absent in tests and headless use. */
+  resolveTag?: AssetTagResolver;
+  /** Released after the fetched bytes are parsed, to revoke refcounted blob URLs. */
+  releaseUrl?: (url: string) => void;
+};
+
 export type MapLoaderOptions = {
   /** URL to the Tiled JSON file. */
   url: string;
   /** Optional fetch implementation (for testing / non-browser environments). */
   fetch?: typeof fetch;
-};
+} & RegistryBackedLoadOptions;
 
 /**
  * In-memory cache of parsed tilemap data, keyed by URL.
@@ -241,7 +256,7 @@ const _mapCache = new Map<string, TilemapData>();
  * @throws If the fetch fails, the JSON is invalid, or required fields are missing.
  */
 export const loadTilemap = async (options: MapLoaderOptions): Promise<TilemapData> => {
-  const { url } = options;
+  const { url, resolveTag, releaseUrl } = options;
 
   const cached = _mapCache.get(url);
   if (cached) {
@@ -249,14 +264,75 @@ export const loadTilemap = async (options: MapLoaderOptions): Promise<TilemapDat
     return cached;
   }
 
+  // C-434: resolve the URL through the asset registry when a resolver is
+  // provided — cache blob URL, origin URL, or bundled static path.
+  const resolvedUrl = resolveTag ? resolveTag(url) ?? url : url;
   const fetcher = options.fetch ?? globalThis.fetch;
-  const response = await fetcher(url);
+
+  let response: Response;
+  try {
+    response = await fetcher(resolvedUrl);
+  } catch {
+    // Fetch rejected (network error, blob URL revoked, etc.) — release the
+    // resolved URL and fall back to the bundled path.
+    if (resolvedUrl !== url) {
+      releaseUrl?.(resolvedUrl);
+      logger.debug('loadTilemap:registry-fetch-failed', { url, resolvedUrl });
+      const fallbackResponse = await fetcher(url);
+      if (!fallbackResponse.ok) {
+        throw new Error(
+          `MapLoader: failed to fetch map at "${url}" (HTTP ${fallbackResponse.status})`,
+        );
+      }
+      const fallbackRaw = await fallbackResponse.json();
+      const fallbackData = _parseTilemap(fallbackRaw, url);
+      _mapCache.set(url, fallbackData);
+      logger.debug('loadTilemap:parsed-from-fallback', {
+        url,
+        width: fallbackData.width,
+        height: fallbackData.height,
+        layers: fallbackData.layers.length,
+        tilesets: fallbackData.tilesets.length,
+      });
+      return fallbackData;
+    }
+    throw new Error(`MapLoader: failed to fetch map at "${url}" (fetch rejected)`);
+  }
 
   if (!response.ok) {
+    // If the resolved URL differs from the original, try the original as
+    // fallback (bundled path).
+    if (resolvedUrl !== url) {
+      releaseUrl?.(resolvedUrl);
+      logger.debug('loadTilemap:registry-fallback', { url, resolvedUrl, status: response.status });
+      const fallbackResponse = await fetcher(url);
+      if (!fallbackResponse.ok) {
+        throw new Error(
+          `MapLoader: failed to fetch map at "${url}" (HTTP ${fallbackResponse.status})`,
+        );
+      }
+      const fallbackRaw = await fallbackResponse.json();
+      const fallbackData = _parseTilemap(fallbackRaw, url);
+      _mapCache.set(url, fallbackData);
+      logger.debug('loadTilemap:parsed-from-fallback', {
+        url,
+        width: fallbackData.width,
+        height: fallbackData.height,
+        layers: fallbackData.layers.length,
+        tilesets: fallbackData.tilesets.length,
+      });
+      return fallbackData;
+    }
     throw new Error(`MapLoader: failed to fetch map at "${url}" (HTTP ${response.status})`);
   }
 
   const raw = await response.json();
+
+  // Release the blob URL after parsing — the data is now in memory and the
+  // URL is no longer needed.
+  if (releaseUrl && resolvedUrl !== url) {
+    releaseUrl(resolvedUrl);
+  }
 
   const data = _parseTilemap(raw, url);
   _mapCache.set(url, data);
@@ -267,6 +343,7 @@ export const loadTilemap = async (options: MapLoaderOptions): Promise<TilemapDat
     height: data.height,
     layers: data.layers.length,
     tilesets: data.tilesets.length,
+    source: resolvedUrl !== url ? 'registry' : 'static',
   });
 
   return data;
@@ -293,7 +370,7 @@ export type JtonMapLoaderOptions = {
   url: string;
   /** Optional fetch implementation (for testing / non-browser environments). */
   fetch?: typeof fetch;
-};
+} & RegistryBackedLoadOptions;
 
 /**
  * Fetches and parses a JTON (Zen Grid) tilemap from the given URL.
@@ -309,7 +386,7 @@ export type JtonMapLoaderOptions = {
  * @throws If the fetch fails, the JTON is invalid, or required fields are missing.
  */
 export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<TilemapData> => {
-  const { url } = options;
+  const { url, resolveTag, releaseUrl } = options;
 
   const cached = _mapCache.get(url);
   if (cached) {
@@ -317,14 +394,78 @@ export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<Tilema
     return cached;
   }
 
+  // C-434: resolve the URL through the asset registry when a resolver is
+  // provided — cache blob URL, origin URL, or bundled static path.
+  const resolvedUrl = resolveTag ? resolveTag(url) ?? url : url;
   const fetcher = options.fetch ?? globalThis.fetch;
-  const response = await fetcher(url);
+
+  let response: Response;
+  try {
+    response = await fetcher(resolvedUrl);
+  } catch {
+    // Fetch rejected (network error, blob URL revoked, etc.) — release the
+    // resolved URL and fall back to the bundled path.
+    if (resolvedUrl !== url) {
+      releaseUrl?.(resolvedUrl);
+      logger.debug('loadJtonMap:registry-fetch-failed', { url, resolvedUrl });
+      const fallbackResponse = await fetcher(url);
+      if (!fallbackResponse.ok) {
+        throw new Error(
+          `MapLoader: failed to fetch JTON map at "${url}" (HTTP ${fallbackResponse.status})`,
+        );
+      }
+      const fallbackSource = await fallbackResponse.text();
+      const fallbackParsed = parseJtonMap(fallbackSource, url);
+      const fallbackData = jtonToTilemapData(fallbackParsed);
+      _mapCache.set(url, fallbackData);
+      logger.debug('loadJtonMap:parsed-from-fallback', {
+        url,
+        width: fallbackData.width,
+        height: fallbackData.height,
+        layers: fallbackData.layers.length,
+        tilesets: fallbackData.tilesets.length,
+      });
+      return fallbackData;
+    }
+    throw new Error(`MapLoader: failed to fetch JTON map at "${url}" (fetch rejected)`);
+  }
 
   if (!response.ok) {
+    // If the resolved URL differs from the original, try the original as
+    // fallback (bundled path).
+    if (resolvedUrl !== url) {
+      releaseUrl?.(resolvedUrl);
+      logger.debug('loadJtonMap:registry-fallback', { url, resolvedUrl, status: response.status });
+      const fallbackResponse = await fetcher(url);
+      if (!fallbackResponse.ok) {
+        throw new Error(
+          `MapLoader: failed to fetch JTON map at "${url}" (HTTP ${fallbackResponse.status})`,
+        );
+      }
+      const fallbackSource = await fallbackResponse.text();
+      const fallbackParsed = parseJtonMap(fallbackSource, url);
+      const fallbackData = jtonToTilemapData(fallbackParsed);
+      _mapCache.set(url, fallbackData);
+      logger.debug('loadJtonMap:parsed-from-fallback', {
+        url,
+        width: fallbackData.width,
+        height: fallbackData.height,
+        layers: fallbackData.layers.length,
+        tilesets: fallbackData.tilesets.length,
+      });
+      return fallbackData;
+    }
     throw new Error(`MapLoader: failed to fetch JTON map at "${url}" (HTTP ${response.status})`);
   }
 
   const source = await response.text();
+
+  // Release the blob URL after parsing — the data is now in memory and the
+  // URL is no longer needed.
+  if (releaseUrl && resolvedUrl !== url) {
+    releaseUrl(resolvedUrl);
+  }
+
   const parsed = parseJtonMap(source, url);
 
   const data = jtonToTilemapData(parsed);
@@ -336,6 +477,7 @@ export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<Tilema
     height: data.height,
     layers: data.layers.length,
     tilesets: data.tilesets.length,
+    source: resolvedUrl !== url ? 'registry' : 'static',
   });
 
   return data;

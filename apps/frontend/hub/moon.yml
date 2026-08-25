@@ -58,14 +58,21 @@ tasks:
       - '@group(configs)'
       - '@group(deployment)'
       - '.env'
+      # 🔴 Load-bearing. The SvelteKit build bundles these workspace packages
+      # FROM SOURCE via TS aliases, so their files are real build inputs.
+      # They were previously absent from the hash — that is why a stale cache
+      # shipped /api/logs to prod after logger_browser.ts changed, and why
+      # `cache: false` was the correct response at the time.
+      #
+      # Listing them fixes the cause rather than the symptom. The hub also
+      # pulls backend packages (auth, database, project-ai), unlike the client.
+      # Do NOT narrow these globs to the current `dependsOn` set — a new import
+      # would then be silently uncovered, which is the original bug.
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
+      - '/packages/backend/*/src/**/*'
     options:
-      # 🔴 Never cache: the SvelteKit build bundles workspace packages
-      # FROM SOURCE via TS aliases, and moon's cache key can't cover those
-      # files (no package build tasks, no `..` globs). A stale cache shipped
-      # /api/logs to prod after logger_browser.ts changed — a fresh build
-      # every time is a few seconds and always correct. Deploys are already
-      # gated by their own checksum cache.
-      cache: false
+      cache: true
     outputs:
       - '.svelte-kit'
       - 'build'

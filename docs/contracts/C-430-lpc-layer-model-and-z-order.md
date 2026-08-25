@@ -2,12 +2,13 @@
 id: C-430
 title: "LPC Layer Model — Variable Slots, One Direction-Aware Z-Order"
 source: "user request 2026-08-23 — engine review; armour layering defect"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/186"
+  pr_number: 186
 created_at: "2026-08-23"
 ---
 

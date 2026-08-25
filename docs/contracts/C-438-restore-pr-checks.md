@@ -2,7 +2,7 @@
 id: C-438
 title: "Restore PR Checks — a cheap, reliable CI gate for outside contributions"
 source: "user request 2026-08-24 — open-source readiness; PR validation is currently disabled"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null

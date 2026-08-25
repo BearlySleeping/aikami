@@ -85,6 +85,7 @@ type CliArguments = {
   dryRun: boolean;
   fresh: boolean;
   noAttach: boolean;
+  join: boolean;
   ready: boolean;
   yolo: boolean;
   launcherToken?: string;
@@ -160,6 +161,7 @@ const parseArguments = (): CliArguments => {
     dryRun: args.includes('--dry-run'),
     fresh: args.includes('--fresh'),
     noAttach: args.includes('--no-attach'),
+    join: args.includes('--join'),
     ready: args.includes('--ready'),
     yolo: args.includes('--yolo'),
     root: args.includes('--root') || args.includes('-r'),
@@ -220,6 +222,8 @@ Options:
   --dry-run            Resolve and create the manifest without starting Herdr/Pi.
   --background         Internal/background mode; do not attach Herdr.
   --no-attach          Run pipeline in background without attaching to herdr.
+  --join               Attach to the herdr workspace even for critique/path-source runs
+                       (default: only auto-join for interactive writer sessions).
   --ready              Create PR as ready-for-review (skip draft); triggers CodeRabbit immediately.
   --yolo               Fully automated pipeline — no human in the review loop.
   -h, --help           Show this help.
@@ -733,6 +737,8 @@ const atomicWrite = (options: { path: string; value: unknown }): void => {
 
 const launchBackground = async (options: {
   noAttach: boolean;
+  /** When true, attach to the herdr workspace even for critique/path-source runs. */
+  join?: boolean;
   /** Resolved direct-draft contract ID (e.g. C-372) to forward to the child. */
   target?: string;
   /** Forward so the child keeps the writer stage interactive. */
@@ -891,10 +897,25 @@ const launchBackground = async (options: {
     }
   }
 
-  if (options.noAttach) {
-    console.log(
-      'Running detached — pipeline continues in background. Use herdr session attach default to view.',
-    );
+  // ── Auto-join decision ──
+  // By default, only auto-join for interactive writer sessions (prompt source,
+  // contract not yet created). For critique/path-source runs (existing contract),
+  // the user must pass --join to attach. --no-attach always overrides.
+  const shouldAutoJoin =
+    !options.noAttach &&
+    (options.join === true || options.interactiveWriter === true);
+
+  if (!shouldAutoJoin) {
+    if (!options.noAttach) {
+      console.log(
+        'Pipeline launched in background. Pass --join to attach to the herdr workspace,',
+        'or use: herdr session attach default',
+      );
+    } else {
+      console.log(
+        'Running detached — pipeline continues in background. Use herdr session attach default to view.',
+      );
+    }
     return;
   }
   if (ready.workspaceId) {
@@ -1080,6 +1101,7 @@ const main = async (): Promise<void> => {
   if (!cli.background && !cli.dryRun) {
     await launchBackground({
       noAttach: cli.noAttach,
+      join: cli.join,
       target: cli.target,
       interactiveWriter,
       source: cli.source,

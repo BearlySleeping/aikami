@@ -3,12 +3,13 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { PackConfig } from '@aikami/types';
 import { logger } from '$logger';
-import type { TilemapData } from './map_loader.ts';
+import type { AssetTagResolver, TilemapData } from './map_loader.ts';
 import {
   buildCollisionGrid,
   clearMapCache,
   extractCollisionGrid,
   extractSpawnPoints,
+  loadJtonMap,
   loadTilemap,
   resolveGid,
 } from './map_loader.ts';
@@ -1804,6 +1805,314 @@ describe('C-379 AC-9 — flip flags + GID convention + multi-tileset layers', ()
       expect(grid.filter(Boolean).length).toBe(1);
     }
   });
+
+// ---------------------------------------------------------------------------
+// C-434: Registry-backed resolution
+// ---------------------------------------------------------------------------
+
+describe('loadTilemap: registry-backed resolution (C-434)', () => {
+  const testMapData = createTestMap();
+
+  it('resolves URL through resolveTag when provided (AC-1)', async () => {
+    const resolveTag: AssetTagResolver = mock((tag: string) => {
+      if (tag === 'test://map.json') {
+        return 'blob:mock-abc123';
+      }
+      return null;
+    }) as AssetTagResolver;
+
+    const fetcher = mock((url: string) => {
+      if (url === 'blob:mock-abc123') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(testMapData),
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, status: 404 } as Response);
+    }) as unknown as typeof fetch;
+
+    const result = await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+      resolveTag,
+    });
+
+    expect(result.width).toBe(10);
+    // The fetcher should have been called with the resolved blob URL, not the original
+    expect(fetcher).toHaveBeenCalledWith('blob:mock-abc123');
+  });
+
+  it('falls back to original URL when resolveTag returns null (AC-2)', async () => {
+    const resolveTag: AssetTagResolver = mock((_tag: string) => null) as AssetTagResolver;
+    const fetcher = mockFetch(testMapData);
+
+    const result = await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+      resolveTag,
+    });
+
+    expect(result.width).toBe(10);
+    expect(fetcher).toHaveBeenCalledWith('test://map.json');
+  });
+
+  it('falls back to bundled path when registry URL fails (AC-2 fallback)', async () => {
+    const resolveTag: AssetTagResolver = mock((tag: string) => {
+      if (tag === 'test://map.json') {
+        return 'blob:mock-fail';
+      }
+      return null;
+    }) as AssetTagResolver;
+
+    const releaseUrl = mock((_url: string) => {});
+    let callUrls: string[] = [];
+    const fetcher = mock((url: string) => {
+      callUrls.push(url);
+      if (url === 'blob:mock-fail') {
+        // Registry URL fails
+        return Promise.resolve({ ok: false, status: 404 } as Response);
+      }
+      // Bundled path succeeds
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(testMapData),
+      } as Response);
+    }) as unknown as typeof fetch;
+
+    const result = await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+      resolveTag,
+      releaseUrl,
+    });
+
+    expect(result.width).toBe(10);
+    // Should have tried registry URL first, then bundled path
+    expect(callUrls).toEqual(['blob:mock-fail', 'test://map.json']);
+    // releaseUrl should be called for the failed blob URL
+    expect(releaseUrl).toHaveBeenCalledWith('blob:mock-fail');
+  });
+
+  it('falls back to bundled path when registry URL fetch rejects (AC-2 rejection)', async () => {
+    const resolveTag: AssetTagResolver = mock((tag: string) => {
+      if (tag === 'test://map.json') {
+        return 'blob:mock-reject';
+      }
+      return null;
+    }) as AssetTagResolver;
+
+    const releaseUrl = mock((_url: string) => {});
+    let callUrls: string[] = [];
+    const fetcher = mock((url: string) => {
+      callUrls.push(url);
+      if (url === 'blob:mock-reject') {
+        return Promise.reject(new Error('Network failure'));
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(testMapData),
+      } as Response);
+    }) as unknown as typeof fetch;
+
+    const result = await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+      resolveTag,
+      releaseUrl,
+    });
+
+    expect(result.width).toBe(10);
+    expect(callUrls).toEqual(['blob:mock-reject', 'test://map.json']);
+    expect(releaseUrl).toHaveBeenCalledWith('blob:mock-reject');
+  });
+
+  it('works without resolveTag — bundled-only path unchanged (AC-3)', async () => {
+    const fetcher = mockFetch(testMapData);
+
+    const result = await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+    });
+
+    expect(result.width).toBe(10);
+    expect(fetcher).toHaveBeenCalledWith('test://map.json');
+  });
+
+  it('calls releaseUrl after parsing when provided (AC-6)', async () => {
+    const resolveTag: AssetTagResolver = mock((tag: string) => {
+      if (tag === 'test://map.json') {
+        return 'blob:mock-release';
+      }
+      return null;
+    }) as AssetTagResolver;
+
+    const releaseUrl = mock((_url: string) => {});
+
+    const fetcher = mock((url: string) => {
+      if (url === 'blob:mock-release') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(testMapData),
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, status: 404 } as Response);
+    }) as unknown as typeof fetch;
+
+    await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+      resolveTag,
+      releaseUrl,
+    });
+
+    expect(releaseUrl).toHaveBeenCalledWith('blob:mock-release');
+  });
+
+  it('does not call releaseUrl when resolveTag returned null (no blob URL)', async () => {
+    const releaseUrl = mock((_url: string) => {});
+    const fetcher = mockFetch(testMapData);
+
+    await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+      resolveTag: () => null,
+      releaseUrl,
+    });
+
+    expect(releaseUrl).not.toHaveBeenCalled();
+  });
+
+  it('caches by original URL, not resolved URL', async () => {
+    let callCount = 0;
+    const resolveTag: AssetTagResolver = mock((tag: string) => {
+      if (tag === 'test://map.json') {
+        return 'blob:mock-cache';
+      }
+      return null;
+    }) as AssetTagResolver;
+
+    const fetcher = mock((_url: string) => {
+      callCount++;
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(testMapData),
+      } as Response);
+    }) as unknown as typeof fetch;
+
+    // First call — fetches via registry
+    const result1 = await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+      resolveTag,
+    });
+
+    // Second call — should hit cache (same original URL)
+    const result2 = await loadTilemap({
+      url: 'test://map.json',
+      fetch: fetcher,
+      resolveTag,
+    });
+
+    expect(result1).toBe(result2);
+    expect(callCount).toBe(1); // Only one fetch
+  });
+});
+
+describe('loadJtonMap: registry-backed resolution (C-434)', () => {
+  const testJtonSource = `:map: 5 4 32 32
+:tileset: test_ts 1 test.png 160 160 32 32 5 25
+:tiles: ground 1
+1,0,1 2,0,1 3,0,1 4,0,1 5,0,1
+1,1,1 2,1,1 3,1,1 4,1,1 5,1,1
+1,2,1 2,2,1 3,2,1 4,2,1 5,2,1
+1,3,1 2,3,1 3,3,1 4,3,1 5,3,1
+`;
+
+  it('resolves URL through resolveTag when provided', async () => {
+    const resolveTag: AssetTagResolver = mock((tag: string) => {
+      if (tag === 'test://map.jton') {
+        return 'blob:mock-jton';
+      }
+      return null;
+    }) as AssetTagResolver;
+
+    const fetcher = mock((url: string) => {
+      if (url === 'blob:mock-jton') {
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(testJtonSource),
+        } as Response);
+      }
+      return Promise.resolve({ ok: false, status: 404 } as Response);
+    }) as unknown as typeof fetch;
+
+    const result = await loadJtonMap({
+      url: 'test://map.jton',
+      fetch: fetcher,
+      resolveTag,
+    });
+
+    expect(result.width).toBe(5);
+    expect(fetcher).toHaveBeenCalledWith('blob:mock-jton');
+  });
+
+  it('falls back to bundled path when registry URL fails', async () => {
+    const resolveTag: AssetTagResolver = mock((tag: string) => {
+      if (tag === 'test://map.jton') {
+        return 'blob:mock-jton-fail';
+      }
+      return null;
+    }) as AssetTagResolver;
+
+    let callCount = 0;
+    const fetcher = mock((_url: string) => {
+      callCount++;
+      if (_url === 'blob:mock-jton-fail') {
+        return Promise.resolve({ ok: false, status: 404 } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve(testJtonSource),
+      } as Response);
+    }) as unknown as typeof fetch;
+
+    const result = await loadJtonMap({
+      url: 'test://map.jton',
+      fetch: fetcher,
+      resolveTag,
+    });
+
+    expect(result.width).toBe(5);
+    expect(callCount).toBe(2);
+  });
+
+  it('calls releaseUrl after parsing when provided', async () => {
+    const resolveTag: AssetTagResolver = mock((tag: string) => {
+      if (tag === 'test://map.jton') {
+        return 'blob:mock-jton-release';
+      }
+      return null;
+    }) as AssetTagResolver;
+
+    const releaseUrl = mock((_url: string) => {});
+
+    const fetcher = mock((url: string) =>
+      Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve(testJtonSource),
+      } as Response),
+    ) as unknown as typeof fetch;
+
+    await loadJtonMap({
+      url: 'test://map.jton',
+      fetch: fetcher,
+      resolveTag,
+      releaseUrl,
+    });
+
+    expect(releaseUrl).toHaveBeenCalledWith('blob:mock-jton-release');
+  });
+});
 
   it('resolveGid resolves local IDs for a tileset whose firstgid is not 1', () => {
     const tilesets = [
