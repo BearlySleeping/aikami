@@ -6,6 +6,10 @@
  * unique asset types per slot, picks the best representative PNG, writes a
  * manifest, and generates the TypeScript catalog.
  *
+ * C-431: Also traverses `universal_behind/` directories and emits paired
+ * behind/front catalog entries with explicit `layerRole` and `pairedAssetId`.
+ * Shield `_bg`/`_fg` entries are normalised to the same convention.
+ *
  * Phase 2 (parallel shell pipeline): Reads the manifest and converts PNGs to
  * WebP in parallel using ImageMagick via xargs -P.
  *
@@ -96,6 +100,13 @@ const PREFERRED_COLORS = [
 ];
 const BODY_TYPES = ['male', 'female', 'adult', 'child', 'teen', 'thin', 'muscular', 'pregnant'];
 
+/** Directory name for behind-pass sheets in the generator tree. */
+const UNIVERSAL_BEHIND_DIR = 'universal_behind';
+
+/** Suffixes that mark a shield variant as behind (bg) or front (fg). */
+const SHIELD_BG_SUFFIX = '_bg';
+const SHIELD_FG_SUFFIX = '_fg';
+
 // ── Types ─────────────────────────────────────────────────────────────────
 
 type AssetEntry = {
@@ -106,6 +117,17 @@ type AssetEntry = {
   sourcePath: string;
   outputRel: string;
   label: string;
+  /** C-431: layer role — 'behind' for behind-pass sheets, 'front' otherwise. */
+  layerRole: 'behind' | 'front';
+  /** C-431: when this is a behind sheet, the foreground partner's assetId. */
+  pairedAssetId?: string;
+};
+
+/** Internal parsed file info before grouping. */
+type FileEntry = {
+  parsed: NonNullable<ReturnType<typeof parseLpcSourcePath>>;
+  path: string;
+  isBehind: boolean;
 };
 
 // ── Parsing ───────────────────────────────────────────────────────────────
@@ -124,6 +146,48 @@ function scoreEntry(p: { bodyType: string; anim: string; color: string }): numbe
   return (
     (bi >= 0 ? 100 - bi * 10 : 50) + (ai >= 0 ? 100 - ai * 10 : 30) + (ci >= 0 ? 50 - ci * 5 : 20)
   );
+}
+
+/**
+ * Detect if a spritesheet-relative path contains the universal_behind directory.
+ * These are behind-pass sheets that complement the foreground pass.
+ */
+function isBehindPath(relPath: string): boolean {
+  return (
+    relPath.includes(`/${UNIVERSAL_BEHIND_DIR}/`) || relPath.startsWith(`${UNIVERSAL_BEHIND_DIR}/`)
+  );
+}
+
+/**
+ * Strip the `universal_behind/` segment from a spritesheet-relative path,
+ * producing the equivalent foreground path.
+ */
+function stripBehindDir(relPath: string): string {
+  return relPath.replace(`/${UNIVERSAL_BEHIND_DIR}/`, '/');
+}
+
+/**
+ * Derive the behind assetId from a foreground assetId.
+ * E.g. "weapon/sword/longsword" → "weapon/sword/longsword/behind"
+ */
+function behindAssetId(foregroundId: string): string {
+  return `${foregroundId}/behind`;
+}
+
+/**
+ * Detect if a type string ends with a shield bg/fg suffix and normalise it.
+ * Returns the normalised type and the layer role, or null if no normalisation needed.
+ */
+function normaliseShieldType(
+  type: string,
+): { normalType: string; layerRole: 'behind' | 'front' } | null {
+  if (type.endsWith(SHIELD_BG_SUFFIX)) {
+    return { normalType: type.slice(0, -SHIELD_BG_SUFFIX.length), layerRole: 'behind' };
+  }
+  if (type.endsWith(SHIELD_FG_SUFFIX)) {
+    return { normalType: type.slice(0, -SHIELD_FG_SUFFIX.length), layerRole: 'front' };
+  }
+  return null;
 }
 
 // ── Collect ────────────────────────────────────────────────────────────────
@@ -162,23 +226,58 @@ console.log('🔍 Walking spritesheets directory...');
 const allFiles = walkFiles(SPRITESHEETS_DIR, SOURCE_EXT);
 console.log(`   ${allFiles.length.toLocaleString()} total PNG files`);
 
-// Group by (slot, type, bodyType) key first, then pick best per state
-const bestPerState = new Map<string, { parsed: NonNullable<ParsedState>; path: string }>();
+// Separate foreground and behind files
+const fgFileEntries: FileEntry[] = [];
+const behindFileEntries: FileEntry[] = [];
 
 for (const file of allFiles) {
-  const p = parseLpcSourcePath(relative(SPRITESHEETS_DIR, file));
+  const relPath = relative(SPRITESHEETS_DIR, file);
+  const isBehind = isBehindPath(relPath);
+
+  // For behind files, parse the equivalent foreground path to get the correct
+  // slot/type/bodyType/anim (the behind dir is a structural convention, not a type)
+  const parsePath = isBehind ? stripBehindDir(relPath) : relPath;
+  const p = parseLpcSourcePath(parsePath);
   if (!p) {
     continue;
   }
-  // Key includes animation state: slot/type/bodyType/anim
-  const key = `${p.slot}/${p.type}/${p.bodyType}/${p.anim}`;
-  const existing = bestPerState.get(key);
-  if (!existing || scoreEntry(p) > scoreEntry(existing.parsed)) {
-    bestPerState.set(key, { parsed: p, path: file });
+
+  const entry: FileEntry = { parsed: p, path: file, isBehind };
+
+  if (isBehind) {
+    behindFileEntries.push(entry);
+  } else {
+    fgFileEntries.push(entry);
   }
 }
 
-// Pick best per group
+console.log(`   ${fgFileEntries.length} foreground, ${behindFileEntries.length} behind-pass files`);
+
+// Group by (slot, type, bodyType, anim) key, then pick best per state
+const bestPerState = new Map<string, { parsed: NonNullable<ParsedState>; path: string }>();
+
+for (const fe of fgFileEntries) {
+  const p = fe.parsed;
+  const key = `${p.slot}/${p.type}/${p.bodyType}/${p.anim}`;
+  const existing = bestPerState.get(key);
+  if (!existing || scoreEntry(p) > scoreEntry(existing.parsed)) {
+    bestPerState.set(key, { parsed: p, path: fe.path });
+  }
+}
+
+// Also pick best per state for behind files (separate key space)
+const bestBehindPerState = new Map<string, { parsed: NonNullable<ParsedState>; path: string }>();
+
+for (const fe of behindFileEntries) {
+  const p = fe.parsed;
+  const key = `${p.slot}/${p.type}/${p.bodyType}/${p.anim}`;
+  const existing = bestBehindPerState.get(key);
+  if (!existing || scoreEntry(p) > scoreEntry(existing.parsed)) {
+    bestBehindPerState.set(key, { parsed: p, path: fe.path });
+  }
+}
+
+// Pick best per group — foreground
 const assets: AssetEntry[] = [];
 // Map of asset key → all available states (for catalog + per-state webp generation)
 const assetStates = new Map<string, Set<string>>();
@@ -186,7 +285,22 @@ const assetStates = new Map<string, Set<string>>();
 for (const [_key, entry] of bestPerState) {
   const { slot, type, bodyType, anim } = entry.parsed;
   const btSuffix = bodyType !== 'default' ? `_${bodyType}` : '';
-  const assetKey = `${slot}/${type}${btSuffix}`;
+  const rawAssetKey = `${slot}/${type}${btSuffix}`;
+
+  // C-431: Normalise shield _bg/_fg types to produce unified asset keys.
+  // A shield like "crusader_bg" becomes "crusader" with layerRole 'behind'.
+  // A shield like "crusader_fg" becomes "crusader" with layerRole 'front'.
+  let assetKey = rawAssetKey;
+  let layerRole: 'behind' | 'front' = 'front';
+  let shieldNormalised = false;
+
+  const shieldNorm = normaliseShieldType(type);
+  if (shieldNorm && slot === 'shield') {
+    // Shield normalisation: strip _bg/_fg suffix from the type
+    assetKey = `${slot}/${shieldNorm.normalType}${btSuffix}`;
+    layerRole = shieldNorm.layerRole;
+    shieldNormalised = true;
+  }
 
   // Track available states
   if (!assetStates.has(assetKey)) {
@@ -200,18 +314,77 @@ for (const [_key, entry] of bestPerState) {
     continue;
   }
 
+  // Determine output path
+  // Shield _bg → behind output: shield/crusader/behind.walk.webp
+  // Shield _fg → front output: shield/crusader.walk.webp
+  // Normal (non-shield): weapon/sword/longsword.walk.webp
+  let outputRel: string;
+  if (shieldNormalised && shieldNorm) {
+    if (layerRole === 'behind') {
+      outputRel = `${slot}/${shieldNorm.normalType}${btSuffix}/behind.${anim}.webp`;
+    } else {
+      outputRel = `${slot}/${shieldNorm.normalType}${btSuffix}.${anim}.webp`;
+    }
+  } else {
+    outputRel = `${slot}/${type.split('/').join('/')}${btSuffix}.${anim}.webp`;
+  }
+
   assets.push({
     key: assetKey,
+    slot,
+    type: shieldNormalised && shieldNorm ? `${shieldNorm.normalType}` : type,
+    bodyType,
+    sourcePath: entry.path,
+    outputRel,
+    label: `${humanize(type)}${bodyType !== 'default' ? ` (${bodyType})` : ''}`,
+    layerRole,
+  });
+}
+
+// Pick best per group — behind pass (universal_behind/ directory)
+const behindAssets: AssetEntry[] = [];
+const behindAssetStates = new Map<string, Set<string>>();
+
+for (const [_key, entry] of bestBehindPerState) {
+  const { slot, type, bodyType, anim } = entry.parsed;
+  const btSuffix = bodyType !== 'default' ? `_${bodyType}` : '';
+  const fgAssetKey = `${slot}/${type}${btSuffix}`;
+  const behindKey = behindAssetId(fgAssetKey);
+
+  // Track available states
+  if (!behindAssetStates.has(behindKey)) {
+    behindAssetStates.set(behindKey, new Set());
+  }
+  behindAssetStates.get(behindKey)?.add(anim);
+
+  // Only create one catalog entry per behind asset key
+  const existing = behindAssets.find((a) => a.key === behindKey);
+  if (existing) {
+    continue;
+  }
+
+  behindAssets.push({
+    key: behindKey,
     slot,
     type,
     bodyType,
     sourcePath: entry.path,
-    outputRel: `${slot}/${type.split('/').join('/')}${btSuffix}.${anim}.webp`,
-    label: `${humanize(type)}${bodyType !== 'default' ? ` (${bodyType})` : ''}`,
+    outputRel: `${slot}/${type.split('/').join('/')}${btSuffix}/behind.${anim}.webp`,
+    label: `${humanize(type)}${bodyType !== 'default' ? ` (${bodyType})` : ''} (behind)`,
+    layerRole: 'behind',
+    pairedAssetId: fgAssetKey,
   });
 }
 
+// Merge foreground and behind assets, keeping existing sort
+assets.push(...behindAssets);
 assets.sort((a, b) => a.key.localeCompare(b.key));
+
+// Report behind-pass discovery
+console.log(`   ${behindAssets.length} behind-pass asset(s) discovered and paired`);
+for (const ba of behindAssets) {
+  console.log(`     → ${ba.key} (paired with ${ba.pairedAssetId})`);
+}
 
 const slots = new Set(assets.map((a) => a.slot));
 console.log(`✅ Found ${assets.length} unique asset types across ${slots.size} slots.`);
@@ -270,9 +443,16 @@ for (const [slot, entries] of sortedSlots) {
   const label = slot.charAt(0).toUpperCase() + slot.slice(1);
   lines.push(`  { slot: ${JSON.stringify(slot)}, label: ${JSON.stringify(label)}, variants: [`);
   for (const e of entries) {
-    lines.push(
-      `    { assetId: ${JSON.stringify(e.key)}, label: ${JSON.stringify(e.label)}, shapeType: 'default' as const },`,
-    );
+    const variantFields: string[] = [
+      `assetId: ${JSON.stringify(e.key)}`,
+      `label: ${JSON.stringify(e.label)}`,
+      `shapeType: 'default' as const`,
+      `layerRole: '${e.layerRole}' as const`,
+    ];
+    if (e.pairedAssetId) {
+      variantFields.push(`pairedAssetId: ${JSON.stringify(e.pairedAssetId)}`);
+    }
+    lines.push(`    { ${variantFields.join(', ')} },`);
   }
   lines.push('  ] },');
 }
@@ -327,8 +507,12 @@ if (creditsCsv.size === 0) {
   console.warn(`    Expected at: ${CREDITS_FILE}`);
   console.warn('    The vendored generator is gitignored (examples/); regenerate where it exists.');
 } else {
+  // Build sidecar from both foreground and behind states
+  const allStates = [...bestPerState.values(), ...bestBehindPerState.values()].map(
+    ({ parsed, path }) => ({ parsed, sourcePath: path }),
+  );
   const sidecar = buildLpcCreditsSidecar({
-    states: [...bestPerState.values()].map(({ parsed, path }) => ({ parsed, sourcePath: path })),
+    states: allStates,
     creditsCsv,
     spritesheetsDir: SPRITESHEETS_DIR,
   });
@@ -384,10 +568,34 @@ if (CONVERT) {
   const manifest: { src: string; dst: string }[] = [];
   let _totalStates = 0;
 
+  // Foreground states
   for (const [_stateKey, entry] of bestPerState) {
     const { slot, type, bodyType, anim } = entry.parsed;
     const btSuffix = bodyType !== 'default' ? `_${bodyType}` : '';
-    const relPath = `${slot}/${type.split('/').join('/')}${btSuffix}.${anim}.webp`;
+    const rawType = type;
+
+    // Check if this is a shield _bg/_fg that needs normalised output path
+    const shieldNorm = normaliseShieldType(type);
+    let relPath: string;
+    if (shieldNorm && slot === 'shield') {
+      if (shieldNorm.layerRole === 'behind') {
+        relPath = `${slot}/${shieldNorm.normalType}${btSuffix}/behind.${anim}.webp`;
+      } else {
+        relPath = `${slot}/${shieldNorm.normalType}${btSuffix}.${anim}.webp`;
+      }
+    } else {
+      relPath = `${slot}/${rawType.split('/').join('/')}${btSuffix}.${anim}.webp`;
+    }
+    const dst = join(OUTPUT_ASSETS_DIR, relPath);
+    manifest.push({ src: entry.path, dst });
+    _totalStates++;
+  }
+
+  // Behind states (universal_behind/)
+  for (const [_stateKey, entry] of bestBehindPerState) {
+    const { slot, type, bodyType, anim } = entry.parsed;
+    const btSuffix = bodyType !== 'default' ? `_${bodyType}` : '';
+    const relPath = `${slot}/${type.split('/').join('/')}${btSuffix}/behind.${anim}.webp`;
     const dst = join(OUTPUT_ASSETS_DIR, relPath);
     manifest.push({ src: entry.path, dst });
     _totalStates++;
