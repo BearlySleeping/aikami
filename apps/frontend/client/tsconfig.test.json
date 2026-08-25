@@ -10,7 +10,7 @@
       "$types/*": ["./src/lib/types/*"],
       "$router": ["../../../packages/frontend/services/src/lib/router/router-utils.ts"],
       "$router/*": ["../../../packages/frontend/services/src/lib/router/router-utils/*"],
-      "$logger": ["../../../packages/shared/logger/src/lib/svelte-kit.ts"],
+      "$logger": ["../../../packages/shared/logger/src/lib/svelte_kit.ts"],
       "$logger/*": ["../../../packages/shared/logger/src/*"],
       "$routes": ["./src/lib/constants/routes.ts"],
       "$routes/*": ["./src/lib/constants/routes/*"],

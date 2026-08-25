@@ -32,11 +32,16 @@ import { TauriFSCacheBackend } from './tauri_fs_cache_backend.ts';
 // ---------------------------------------------------------------------------
 
 /**
- * Packs that are never LRU-evicted under quota pressure. In v1 every bundled
- * category (manifest category → pack_id) seeds as the eviction-protected core
- * pack per C-373 Resolved Decisions; future optional packs become evictable.
+ * Packs that are never LRU-evicted under quota pressure (C-435).
+ * After de-bundling, only the offline core packs are protected — everything
+ * else is evictable. The offline core includes the default player body,
+ * the starting map tileset, and boot UI assets.
  */
-const _EVICTION_PROTECTED_PACKS = new Set<string>(Object.keys(ASSET_CATEGORIES));
+const _EVICTION_PROTECTED_PACKS = new Set<string>([
+  'lpc',      // Default player body (bodies_male, bangs, pants, head)
+  'sprites',  // Starting map tileset (emberwatch_tileset)
+  'maps',     // Starting map (emberwatch_start)
+]);
 
 // ---------------------------------------------------------------------------
 // Types
