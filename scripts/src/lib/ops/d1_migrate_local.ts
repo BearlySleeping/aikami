@@ -13,7 +13,7 @@
 import { resolve } from 'node:path';
 import { error, info, ok } from '../cli_utils.ts';
 
-const ROOT = resolve(import.meta.dirname, '../../..');
+const ROOT = resolve(import.meta.dirname, '../../../..');
 const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
 const DB_NAME = 'aikami-hub';
 

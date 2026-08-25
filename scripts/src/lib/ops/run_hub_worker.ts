@@ -21,7 +21,7 @@ import { resolve } from 'node:path';
 import { PORTS } from '@aikami/constants';
 import { c, error, info, ok } from '../cli_utils.ts';
 
-const ROOT = resolve(import.meta.dirname, '../../..');
+const ROOT = resolve(import.meta.dirname, '../../../..');
 const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
 const BUILD_ENTRY = resolve(HUB_DIR, 'build/_worker.js');
 const PORT = Number(process.env.PORT) || PORTS.emulator.hubWorker;
