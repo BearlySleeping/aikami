@@ -1,50 +1,47 @@
-# CodeRabbit AI Review Configuration
-# High-signal / low-noise settings optimized for the aikami monorepo.
-# Draft PRs are NOT reviewed — saves quota for human-promoted PRs only.
+# .coderabbit.yaml
+# CodeRabbit AI PR review configuration.
+# See https://docs.coderabbit.ai/ for full documentation.
+#
+# CodeRabbit is advisory only — never a required check.
+# Only the self-hosted actionlint+zizmor job may block a merge.
 
 language: "en-US"
-inheritance: true
-
-reviews:
-    profile: "chill"
-    request_changes_workflow: false
-    collapse_walkthrough: true
-    poem: false
-
-    # Auto_review must be under 'reviews'
-    auto_review:
-        enabled: true
-        drafts: false
-        auto_pause_after_reviewed_commits: 1
-
-    # Path_filters must be under 'reviews'
-    path_filters:
-        # Exclusions (Blocklist)
-        - "!dist/**"
-        - "!.pi/generated-skills/**"
-        - "!.moon/**"
-        - "!.context/**"
-        - "!docs/contracts/**"
-        - "!docs/PROMOTION.md"
-        - "!docs/PROGRESS.md"
-
-        # Inclusions (Allowlist)
-        - ".pi/**"
-        - "src/**"
-        - "scripts/**"
-        - "apps/**"
-        - "packages/**"
-        - ".github/**"
-        - ".moon/**"
-        - ".context/**"
-        - ".claude/**"
-        - "docs/**"
-        - "*"
-
-    path_instructions:
-        - path: "**/*.test.ts"
-          instructions: "Do not nitpick stylistic choices or formatting. ONLY flag missing edge cases, false-positive assertions, or improper mocking logic."
-        - path: "apps/frontend/**"
-          instructions: "Prioritize DaisyUI best practices, Tailwind conventions, SvelteKit ViewModel patterns, and evaluate performance optimization within the PixiJS render loops."
-        - path: ".pi/extensions/**"
-          instructions: "Validate Bun TypeScript runtime compatibility, ensure robust error handling around AI model/tool execution, and verify cost-guard safety constraints."
+early_access: false
+review:
+  show_link: true
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+  path_filters:
+    # Exclude generated / vendored files from review
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/.next/**"
+    - "!**/coverage/**"
+    - "!**/__pycache__/**"
+    - "!.context/llms.txt"
+    - "!docs/contracts/PROGRESS.md"
+    - "!apps/frontend/client/src/lib/assets/lpc/**"
+    - "!apps/frontend/client/static/lpc/**"
+    - "!**/*.min.js"
+    - "!**/*.min.css"
+    - "!**/*.map"
+    - "!**/*.lock"
+    - "!**/*.lockb"
+    - "!**/pnpm-lock.yaml"
+  path_instructions:
+    - path: "**/*.svelte"
+      instructions: "Review Svelte 5 components using runes ($state, $derived, $effect). Ensure logicless Views and proper ViewModel separation."
+    - path: "**/*_view_model.svelte.ts"
+      instructions: "Review ViewModel files for proper state management with $state runes. No PixiJS or Firestore imports allowed."
+    - path: "**/*.ts"
+      instructions: "Review TypeScript for strict types, no `any`, no `interface` (use `type`), proper error handling with AppError."
+    - path: ".github/workflows/*.yml"
+      instructions: "Review GitHub Actions workflows for security best practices: pin actions to SHAs, avoid template injection in run blocks, set explicit permissions."
+chat:
+  auto_reply: true
