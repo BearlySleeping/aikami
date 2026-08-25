@@ -58,6 +58,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Read local-stack version + image prefix
         id: version
@@ -126,6 +128,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # sd-server:cpu compiles stable-diffusion.cpp + every ggml CPU ISA
       # variant from source; even with --parallel capped to 2 (see
@@ -197,6 +201,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

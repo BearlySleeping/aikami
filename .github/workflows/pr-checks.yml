@@ -73,6 +73,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0 # moon needs history to diff against the base branch
+          persist-credentials: false
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
