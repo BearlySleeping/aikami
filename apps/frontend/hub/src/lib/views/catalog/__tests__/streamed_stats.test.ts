@@ -9,7 +9,7 @@
 // NEVER reject: an unhandled rejection in a streamed promise breaks the
 // response after headers are sent (AC-4 watch point).
 
-import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // Minimal fixture origin so the category load has an index to read.
 let origin: { url: string; stop: () => void } | undefined;

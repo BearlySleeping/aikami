@@ -1,4 +1,4 @@
-// packages/backend/database/src/lib/d1_schema.ts
+// packages/backend/database/src/lib/schema.ts
 //
 // C-426 AC-1: the Cloudflare D1 schema (Drizzle `sqlite` dialect).
 //
