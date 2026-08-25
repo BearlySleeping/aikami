@@ -6,7 +6,7 @@
 //
 // Contract: C-315 Define a Versioned Campaign Content Pack and Atomic Loader
 
-import { ContentPackManifestSchema } from '@aikami/schemas';
+import { ContentPackManifestSchema, normaliseLegacyStep } from '@aikami/schemas';
 import type {
   ContentPackCredits,
   ContentPackEncounterEntry,
@@ -395,6 +395,26 @@ export const loadContentPack = async (options: {
   // URL is no longer needed.
   if (releaseUrl && resolvedManifestUrl !== manifestUrl) {
     releaseUrl(resolvedManifestUrl);
+  }
+
+  // Normalize legacy onboarding steps before schema validation so bare-string
+  // actions (e.g. action: 'interact') are transformed to discriminated union
+  // shape ({ kind: 'input', actionId: 'interact' }) before TypeBox checks.
+  if (
+    raw &&
+    typeof raw === 'object' &&
+    'onboarding' in raw &&
+    raw.onboarding &&
+    typeof raw.onboarding === 'object' &&
+    'steps' in raw.onboarding &&
+    Array.isArray(raw.onboarding.steps)
+  ) {
+    raw.onboarding.steps = raw.onboarding.steps.map((step: unknown) => {
+      if (typeof step === 'object' && step !== null) {
+        return normaliseLegacyStep(step as Record<string, unknown>);
+      }
+      return step;
+    });
   }
 
   // Validate schema

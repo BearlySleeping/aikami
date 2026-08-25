@@ -400,4 +400,37 @@ describe('OnboardingHintService', () => {
 
     expect(() => service.onEventPerformed('combat_ended')).not.toThrow();
   });
+
+  // ── Regression: future event should not learn inactive hint ──
+
+  test('onEventPerformed should not learn future hints before they become active', () => {
+    service.loadOnboarding({ packId: 'mixed-pack', onboarding: MIXED_ONBOARDING });
+
+    // First hint is input (move_up) — it's active
+    expect(service.currentHint?.id).toBe('hint_move');
+
+    // Fire the combat_ended event BEFORE its step becomes active
+    // (combat hint is the third step, not yet eligible)
+    service.onEventPerformed('combat_ended');
+
+    // Current hint should still be 'hint_move' (unchanged)
+    expect(service.currentHint?.id).toBe('hint_move');
+    expect(service.hintVisible).toBe(true);
+
+    // Now advance to the dialogue hint
+    service.onActionPerformed('move_up');
+    expect(service.currentHint?.id).toBe('hint_dialogue');
+
+    // Fire the dialogue event to complete it
+    service.onEventPerformed('npc_dialogue_opened');
+
+    // Now the combat hint becomes active
+    expect(service.currentHint?.id).toBe('hint_combat');
+
+    // The combat event should still need to be fired (wasn't learned early)
+    service.onEventPerformed('combat_ended');
+
+    // Now it should be complete
+    expect(service.isComplete).toBe(true);
+  });
 });

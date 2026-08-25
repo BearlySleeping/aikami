@@ -156,34 +156,28 @@ export class OnboardingHintService
   /**
    * Called when a gameplay event fires.
    *
-   * Marks matching event hints as learned and advances to the next
-   * eligible hint.
+   * Marks the currently active hint as learned if its action kind is 'event'
+   * and eventId matches. Does NOT learn future or inactive matching event
+   * steps before they become active.
    */
   onEventPerformed(eventId: string): void {
     if (this.isComplete || this._steps.length === 0) {
       return;
     }
 
-    // Mark any event hint listening for this event as learned
-    for (const step of this._steps) {
-      if (
-        step.action.kind === 'event' &&
-        step.action.eventId === eventId &&
-        !this._learned[step.id]
-      ) {
-        this._learned[step.id] = true;
-        this.debug('hint-learned', { hintId: step.id, eventId });
-      }
-    }
-
-    this._saveProgress();
-
-    // If the current hint was just learned, dismiss it and advance
+    // Only mark the active currentHint as learned if it matches the event
     if (
       this.currentHint &&
       this.currentHint.action.kind === 'event' &&
-      this.currentHint.action.eventId === eventId
+      this.currentHint.action.eventId === eventId &&
+      !this._learned[this.currentHint.id]
     ) {
+      this._learned[this.currentHint.id] = true;
+      this.debug('hint-learned', { hintId: this.currentHint.id, eventId });
+
+      this._saveProgress();
+
+      // Dismiss the completed active hint and advance to the next eligible hint
       this.hintVisible = false;
       this.currentHint = undefined;
       this._enqueuePendingHints();
