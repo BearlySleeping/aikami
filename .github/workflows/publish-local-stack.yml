@@ -233,9 +233,10 @@ jobs:
 
       # ── AC-5: layer inspection for voice + sd-server + client ─────────
       - name: AC-5 — Layer inspection (voice + sd-server + client)
+        env:
+          PREFIX: ${{ needs.setup.outputs.image_prefix }}
         run: |
           set -euo pipefail
-          PREFIX="${{ needs.setup.outputs.image_prefix }}"
           for img in \
             "$PREFIX/aikami-voice:latest" \
             "$PREFIX/aikami-sd-server:cpu" \
@@ -264,9 +265,11 @@ jobs:
 
       # ── AC-9: two config mounts against one client image ──────────────
       - name: AC-9 — Two-config-mount test
+        env:
+          IMG: ${{ needs.setup.outputs.image_prefix }}/aikami-client:latest
         run: |
           set -euo pipefail
-          img="${{ needs.setup.outputs.image_prefix }}/aikami-client:latest"
+          img="$IMG"
           docker pull "$img"
           mkdir -p /tmp/cfg-a /tmp/cfg-b
           cat > /tmp/cfg-a/config.json <<'EOF'
@@ -300,9 +303,11 @@ jobs:
 
       # ── AC-9b: no mount at all — the clone-free default path ───────────
       - name: AC-9b — Default-generated config test
+        env:
+          IMG: ${{ needs.setup.outputs.image_prefix }}/aikami-client:latest
         run: |
           set -euo pipefail
-          img="${{ needs.setup.outputs.image_prefix }}/aikami-client:latest"
+          img="$IMG"
           cid_c=$(docker run -d -p 15274:5274 "$img")
           trap 'docker rm -f "$cid_c" >/dev/null 2>&1 || true' EXIT
           for i in $(seq 1 20); do
