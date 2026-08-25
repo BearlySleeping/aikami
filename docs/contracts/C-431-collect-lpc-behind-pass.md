@@ -2,7 +2,7 @@
 id: C-431
 title: "Collect the LPC universal_behind Pass — Weapons Visible in All Four Directions"
 source: "user request 2026-08-23 — engine review; missing behind-pass root cause"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
