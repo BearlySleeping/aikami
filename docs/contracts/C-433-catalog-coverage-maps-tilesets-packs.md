@@ -2,7 +2,7 @@
 id: C-433
 title: "Catalog Coverage — Maps, Tilesets, Audio and Content Packs on R2"
 source: "user request 2026-08-23 — bucket is missing content-packs, maps and sprites"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
