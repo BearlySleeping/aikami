@@ -2669,9 +2669,22 @@ describe('LPC_LAYER_ORDER — C-430', () => {
       ),
     );
 
+    // Spy on logger.warn to verify deduplication
+    const { logger } = require('$logger');
+    let warnCallCount = 0;
+    const originalWarn = logger.warn;
+    logger.warn = (...args: unknown[]) => {
+      const firstArg = args[0];
+      if (typeof firstArg === 'string' && firstArg === 'lpc-layer-order:unknown-slot') {
+        warnCallCount++;
+      }
+      originalWarn.call(logger, ...args);
+    };
+
     // Unknown slot should resolve above max known
     const depth = resolveLayerDepth({ slot: 'unknown_slot_xyz', layerRole: 'front', direction: 2 });
     expect(depth).toBeGreaterThan(maxKnown);
+    expect(warnCallCount).toBe(1);
 
     // Second call with same slot should NOT warn again (dedup)
     const depth2 = resolveLayerDepth({
@@ -2680,7 +2693,10 @@ describe('LPC_LAYER_ORDER — C-430', () => {
       direction: 2,
     });
     expect(depth2).toBe(depth);
+    expect(warnCallCount).toBe(1); // Still 1, no additional warning
 
+    // Restore original warn
+    logger.warn = originalWarn;
     resetUnknownSlotWarnings();
   });
 

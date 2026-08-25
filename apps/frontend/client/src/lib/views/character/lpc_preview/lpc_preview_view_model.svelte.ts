@@ -437,10 +437,12 @@ class LpcPreviewViewModel
         // This replaces the local SLOT_Z_ORDER definition.
         const zIndex = resolveLayerDepth({
           slot: slotName,
-          layerRole: 'front',
+          layerRole: recipe.layerRole ?? 'front',
           direction: 2, // default facing (down)
-        }) + i; // i ensures stable sort for layers at equal depth
+        });
         sprite.zIndex = zIndex;
+        // Store original index for stable sorting
+        (sprite as unknown as Record<string, unknown>)._originalIndex = i;
 
         // Apply palette tint from LpcLayerRecipe.hexPalette
         const tintColor = this._extractTintFromPalette(hexPalette);
@@ -470,8 +472,16 @@ class LpcPreviewViewModel
       // Only publish diagnostics once the render is confirmed current
       this.missingAssets = missingLayers;
 
-      // Sort by zIndex for correct render order
-      newChildren.sort((a, b) => a.zIndex - b.zIndex);
+      // Sort by zIndex for correct render order, using original index as tie-breaker
+      newChildren.sort((a, b) => {
+        if (a.zIndex !== b.zIndex) {
+          return a.zIndex - b.zIndex;
+        }
+        // Equal depth: preserve original recipe order
+        const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number;
+        const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number;
+        return aIdx - bIdx;
+      });
 
       this._destroyAllChildren();
 

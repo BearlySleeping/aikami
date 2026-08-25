@@ -617,6 +617,8 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           layerRole: recipe.layerRole ?? 'front',
           direction: 2,
         });
+        // Store original index for stable sorting
+        (sprite as unknown as Record<string, unknown>)._originalIndex = i;
 
         // Apply palette tint: per-layer override takes priority, else global
         const effectiveColor =
@@ -636,6 +638,17 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       await Promise.all(layerPromises);
 
       this._destroyAllSprites();
+
+      // Sort sprites by zIndex, using original index as tie-breaker for equal depths
+      newSprites.sort((a, b) => {
+        if (a.zIndex !== b.zIndex) {
+          return a.zIndex - b.zIndex;
+        }
+        // Equal depth: preserve original recipe order
+        const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number;
+        const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number;
+        return aIdx - bIdx;
+      });
 
       const container = new Container();
       container.eventMode = 'none';

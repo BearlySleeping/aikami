@@ -3135,19 +3135,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Sort by depth from the canonical LPC_LAYER_ORDER table (C-430).
     // This replaces the local SlotZ definition — the canonical table is
     // the ONLY slot→depth mapping in the repo.
-    layerSprites.sort((a, b) => {
+    // Preserve original recipe order when depths are equal (stable sort tie-breaker).
+    const spritesWithIndex = layerSprites.map((layer, index) => ({ layer, index }));
+    spritesWithIndex.sort((a, b) => {
       const zA = resolveLayerDepth({
-        slot: a.recipe.slot,
-        layerRole: a.recipe.layerRole ?? 'front',
+        slot: a.layer.recipe.slot,
+        layerRole: a.layer.recipe.layerRole ?? 'front',
         direction: 2, // default facing (down)
       });
       const zB = resolveLayerDepth({
-        slot: b.recipe.slot,
-        layerRole: b.recipe.layerRole ?? 'front',
+        slot: b.layer.recipe.slot,
+        layerRole: b.layer.recipe.layerRole ?? 'front',
         direction: 2,
       });
-      return zA - zB;
+      if (zA !== zB) {
+        return zA - zB;
+      }
+      // Equal depth: preserve original recipe order
+      return a.index - b.index;
     });
+    layerSprites = spritesWithIndex.map((item) => item.layer);
 
     // Re-add in correct order
     for (const { sprite } of layerSprites) {

@@ -28,6 +28,7 @@ import {
   getAppearanceLayers,
   type LpcLayerRecipe,
   registerAppearanceObservers,
+  setAppearanceLayers,
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { CollisionData, registerCollisionDataObservers } from '../components/collision_data.ts';
@@ -1567,12 +1568,10 @@ self.onmessage = (event: MessageEvent): void => {
             // Copy persistent components from the temp entity to the player,
             // then discard the temp entity.
             copyComponentSoA(Position, restoredEid, playerEntityId);
-            // C-430: Appearance has a Map field — cast for copyComponentSoA compat
-            copyComponentSoA(
-              Appearance as unknown as Record<string, Array<unknown>>,
-              restoredEid,
-              playerEntityId,
-            );
+            // C-430: Appearance has a Map field — use setAppearanceLayers to
+            // properly copy both the Map and legacy arrays
+            const restoredLayers = getAppearanceLayers(restoredEid);
+            setAppearanceLayers(world, playerEntityId, restoredLayers);
             copyComponentSoA(CombatStats, restoredEid, playerEntityId);
             copyComponentSoA(Visual, restoredEid, playerEntityId);
             incrementEntityGeneration(restoredEid);
