@@ -5,54 +5,12 @@
 // universal_behind/ sheets and emitting paired catalog entries.
 
 import { describe, expect, it } from 'bun:test';
-
-// ── Import helpers from the collector ────────────────────────────────────
-//
-// The collector script exports no module API, so we import the source file
-// and test its module-level functions by re-implementing the same logic here
-// (the functions are pure and deterministic).
-
-const UNIVERSAL_BEHIND_DIR = 'universal_behind';
-const SHIELD_BG_SUFFIX = '_bg';
-const SHIELD_FG_SUFFIX = '_fg';
-
-/**
- * Detect if a spritesheet-relative path contains the universal_behind directory.
- */
-function isBehindPath(relPath: string): boolean {
-  return (
-    relPath.includes(`/${UNIVERSAL_BEHIND_DIR}/`) || relPath.startsWith(`${UNIVERSAL_BEHIND_DIR}/`)
-  );
-}
-
-/**
- * Strip the `universal_behind/` segment from a spritesheet-relative path.
- */
-function stripBehindDir(relPath: string): string {
-  return relPath.replace(`/${UNIVERSAL_BEHIND_DIR}/`, '/');
-}
-
-/**
- * Derive the behind assetId from a foreground assetId.
- */
-function behindAssetId(foregroundId: string): string {
-  return `${foregroundId}/behind`;
-}
-
-/**
- * Detect if a type string ends with a shield bg/fg suffix and normalise it.
- */
-function normaliseShieldType(
-  type: string,
-): { normalType: string; layerRole: 'behind' | 'front' } | null {
-  if (type.endsWith(SHIELD_BG_SUFFIX)) {
-    return { normalType: type.slice(0, -SHIELD_BG_SUFFIX.length), layerRole: 'behind' };
-  }
-  if (type.endsWith(SHIELD_FG_SUFFIX)) {
-    return { normalType: type.slice(0, -SHIELD_FG_SUFFIX.length), layerRole: 'front' };
-  }
-  return null;
-}
+import {
+  behindAssetId,
+  isBehindPath,
+  normaliseShieldType,
+  stripBehindDir,
+} from '../collect_lpc_assets.ts';
 
 // ── AC-1: Behind-pass path detection ─────────────────────────────────────
 

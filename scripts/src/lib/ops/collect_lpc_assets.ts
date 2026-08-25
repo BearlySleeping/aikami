@@ -152,35 +152,35 @@ function scoreEntry(p: { bodyType: string; anim: string; color: string }): numbe
  * Detect if a spritesheet-relative path contains the universal_behind directory.
  * These are behind-pass sheets that complement the foreground pass.
  */
-function isBehindPath(relPath: string): boolean {
+export const isBehindPath = (relPath: string): boolean => {
   return (
     relPath.includes(`/${UNIVERSAL_BEHIND_DIR}/`) || relPath.startsWith(`${UNIVERSAL_BEHIND_DIR}/`)
   );
-}
+};
 
 /**
  * Strip the `universal_behind/` segment from a spritesheet-relative path,
  * producing the equivalent foreground path.
  */
-function stripBehindDir(relPath: string): string {
+export const stripBehindDir = (relPath: string): string => {
   return relPath.replace(`/${UNIVERSAL_BEHIND_DIR}/`, '/');
-}
+};
 
 /**
  * Derive the behind assetId from a foreground assetId.
  * E.g. "weapon/sword/longsword" → "weapon/sword/longsword/behind"
  */
-function behindAssetId(foregroundId: string): string {
+export const behindAssetId = (foregroundId: string): string => {
   return `${foregroundId}/behind`;
-}
+};
 
 /**
  * Detect if a type string ends with a shield bg/fg suffix and normalise it.
  * Returns the normalised type and the layer role, or null if no normalisation needed.
  */
-function normaliseShieldType(
+export const normaliseShieldType = (
   type: string,
-): { normalType: string; layerRole: 'behind' | 'front' } | null {
+): { normalType: string; layerRole: 'behind' | 'front' } | null => {
   if (type.endsWith(SHIELD_BG_SUFFIX)) {
     return { normalType: type.slice(0, -SHIELD_BG_SUFFIX.length), layerRole: 'behind' };
   }
@@ -188,7 +188,7 @@ function normaliseShieldType(
     return { normalType: type.slice(0, -SHIELD_FG_SUFFIX.length), layerRole: 'front' };
   }
   return null;
-}
+};
 
 // ── Collect ────────────────────────────────────────────────────────────────
 
@@ -297,7 +297,14 @@ for (const [_key, entry] of bestPerState) {
   const shieldNorm = normaliseShieldType(type);
   if (shieldNorm && slot === 'shield') {
     // Shield normalisation: strip _bg/_fg suffix from the type
-    assetKey = `${slot}/${shieldNorm.normalType}${btSuffix}`;
+    const normalizedBaseKey = `${slot}/${shieldNorm.normalType}${btSuffix}`;
+    if (shieldNorm.layerRole === 'behind') {
+      // _bg variants produce a distinct behind asset key
+      assetKey = behindAssetId(normalizedBaseKey);
+    } else {
+      // _fg variants use the base key
+      assetKey = normalizedBaseKey;
+    }
     layerRole = shieldNorm.layerRole;
     shieldNormalised = true;
   }
@@ -329,7 +336,7 @@ for (const [_key, entry] of bestPerState) {
     outputRel = `${slot}/${type.split('/').join('/')}${btSuffix}.${anim}.webp`;
   }
 
-  assets.push({
+  const assetEntry: AssetEntry = {
     key: assetKey,
     slot,
     type: shieldNormalised && shieldNorm ? `${shieldNorm.normalType}` : type,
@@ -338,7 +345,15 @@ for (const [_key, entry] of bestPerState) {
     outputRel,
     label: `${humanize(type)}${bodyType !== 'default' ? ` (${bodyType})` : ''}`,
     layerRole,
-  });
+  };
+
+  // Add pairedAssetId for behind entries (both shield _bg and universal_behind/)
+  if (layerRole === 'behind' && shieldNormalised && shieldNorm) {
+    // Shield _bg should pair with its _fg counterpart
+    assetEntry.pairedAssetId = `${slot}/${shieldNorm.normalType}${btSuffix}`;
+  }
+
+  assets.push(assetEntry);
 }
 
 // Pick best per group — behind pass (universal_behind/ directory)
@@ -508,9 +523,39 @@ if (creditsCsv.size === 0) {
   console.warn('    The vendored generator is gitignored (examples/); regenerate where it exists.');
 } else {
   // Build sidecar from both foreground and behind states
-  const allStates = [...bestPerState.values(), ...bestBehindPerState.values()].map(
-    ({ parsed, path }) => ({ parsed, sourcePath: path }),
-  );
+  // For behind states and shield _bg variants, append "/behind" to the type so
+  // the output tag is distinct from the foreground equivalent
+  const fgStates = [...bestPerState.values()].map(({ parsed, path }) => {
+    const shieldNorm = normaliseShieldType(parsed.type);
+    const isBehindShield = shieldNorm && parsed.slot === 'shield' && shieldNorm.layerRole === 'behind';
+
+    if (isBehindShield) {
+      // Shield _bg: normalize the type and append "/behind"
+      return {
+        parsed: {
+          ...parsed,
+          type: `${shieldNorm.normalType}/behind`,
+        },
+        sourcePath: path,
+      };
+    }
+
+    return {
+      parsed,
+      sourcePath: path,
+    };
+  });
+
+  const behindStates = [...bestBehindPerState.values()].map(({ parsed, path }) => ({
+    parsed: {
+      ...parsed,
+      type: `${parsed.type}/behind`,
+    },
+    sourcePath: path,
+  }));
+
+  const allStates = [...fgStates, ...behindStates];
+
   const sidecar = buildLpcCreditsSidecar({
     states: allStates,
     creditsCsv,
