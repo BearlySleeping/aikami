@@ -253,7 +253,9 @@ export {
 export { resolveNpcTexture, resolvePropTexture } from './assets/lpc_asset_catalog.ts';
 // Tilemap & collision (C-135)
 export type {
+  AssetTagResolver,
   ObjectLayer,
+  RegistryBackedLoadOptions,
   SpawnPoint,
   SpawnPointEntity,
   TilemapData,

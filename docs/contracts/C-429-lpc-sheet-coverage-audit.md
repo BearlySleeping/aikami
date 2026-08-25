@@ -2,7 +2,7 @@
 id: C-429
 title: "LPC Sheet Coverage Audit — Direction and Geometry Gate"
 source: "user request 2026-08-23 — engine review; missing-direction defect found by hand"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null

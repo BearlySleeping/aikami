@@ -1,6 +1,12 @@
 # .moon/toolchains.yml
 
 bun:
+  # 🔴 Keep in sync with `.bun-version` at the repo root — that file is the
+  # single source of truth and is what `oven-sh/setup-bun` reads in CI.
+  # Duplicated here (rather than omitted) because proto's auto-detection is
+  # not guaranteed to find `.bun-version` from moon's toolchain resolution,
+  # and a silent version drift between local and CI is exactly the failure
+  # this pin exists to prevent. `bun run verify-bun-version` asserts they match.
   version: "1.3.13"
 
 javascript:

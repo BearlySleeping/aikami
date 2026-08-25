@@ -257,7 +257,8 @@ export class GameCompositionRoot
 
     // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway
     const { loadContentPack, createEngineBridge } = await import('@aikami/frontend/engine');
-    const contentPack = await loadContentPack({ packId: contentPackId });
+    const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+    const contentPack = await loadContentPack({ packId: contentPackId, resolveTag: assetTagResolver });
 
     // ── C-331 AC-1: content pack is the single source of item truth ──
     inventoryService.configureCatalog({

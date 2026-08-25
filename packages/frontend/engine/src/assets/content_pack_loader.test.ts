@@ -683,6 +683,164 @@ describe('ContentPackLoader', () => {
 
   // ── C-316: dispose affects new accessors ──
 
+  // ── C-434: Registry-backed resolution ──
+
+  test('loadContentPack resolves manifest URL through resolveTag when provided (AC-4)', async () => {
+    const resolveTag = mock((tag: string) => {
+      if (tag === '/content-packs/test-pack/manifest.json') {
+        return 'blob:mock-pack-manifest';
+      }
+      return null;
+    });
+
+    const fetcher = mock((url: string) => {
+      if (url === 'blob:mock-pack-manifest') {
+        return new Response(JSON.stringify(validManifest), { status: 200 });
+      }
+      return new Response('Not Found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const loader = await loadContentPack({
+      packId: 'test-pack',
+      fetchFn: fetcher,
+      resolveTag,
+    });
+
+    expect(loader.packId).toBe('test-pack');
+    expect(fetcher).toHaveBeenCalledWith('blob:mock-pack-manifest');
+  });
+
+  test('loadContentPack falls back to bundled path when registry URL fails (AC-4 fallback)', async () => {
+    const resolveTag = mock((tag: string) => {
+      if (tag === '/content-packs/test-pack/manifest.json') {
+        return 'blob:mock-pack-fail';
+      }
+      return null;
+    });
+
+    let callCount = 0;
+    const fetcher = mock((url: string) => {
+      callCount++;
+      if (url === 'blob:mock-pack-fail') {
+        return new Response('Not Found', { status: 404 });
+      }
+      return new Response(JSON.stringify(validManifest), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const loader = await loadContentPack({
+      packId: 'test-pack',
+      fetchFn: fetcher,
+      resolveTag,
+    });
+
+    expect(loader.packId).toBe('test-pack');
+    expect(callCount).toBe(2); // Registry attempt + fallback
+  });
+
+  test('loadContentPack falls back to bundled path when registry URL fetch rejects (AC-4 rejection)', async () => {
+    const resolveTag = mock((tag: string) => {
+      if (tag === '/content-packs/test-pack/manifest.json') {
+        return 'blob:mock-pack-reject';
+      }
+      return null;
+    });
+
+    let callCount = 0;
+    const fetcher = mock((url: string) => {
+      callCount++;
+      if (url === 'blob:mock-pack-reject') {
+        return Promise.reject(new Error('Network failure'));
+      }
+      return Promise.resolve(new Response(JSON.stringify(validManifest), { status: 200 }));
+    }) as unknown as typeof fetch;
+
+    const loader = await loadContentPack({
+      packId: 'test-pack',
+      fetchFn: fetcher,
+      resolveTag,
+    });
+
+    expect(loader.packId).toBe('test-pack');
+    expect(callCount).toBe(2); // Registry rejection + fallback
+  });
+
+  test('loadContentPack calls releaseUrl after successful registry fetch', async () => {
+    const resolveTag = mock((tag: string) => {
+      if (tag === '/content-packs/test-pack/manifest.json') {
+        return 'blob:mock-pack-release';
+      }
+      return null;
+    });
+
+    const releaseUrl = mock((_url: string) => {});
+
+    const fetcher = mock((url: string) => {
+      if (url === 'blob:mock-pack-release') {
+        return Promise.resolve(new Response(JSON.stringify(validManifest), { status: 200 }));
+      }
+      return Promise.resolve(new Response('Not Found', { status: 404 }));
+    }) as unknown as typeof fetch;
+
+    const loader = await loadContentPack({
+      packId: 'test-pack',
+      fetchFn: fetcher,
+      resolveTag,
+      releaseUrl,
+    });
+
+    expect(loader.packId).toBe('test-pack');
+    expect(releaseUrl).toHaveBeenCalledWith('blob:mock-pack-release');
+  });
+
+  test('loadContentPack works without resolveTag — bundled-only path unchanged (AC-3)', async () => {
+    const { fetcher, getCallCount } = createFetchMock(validManifest);
+
+    const loader = await loadContentPack({
+      packId: 'test-pack',
+      fetchFn: fetcher as unknown as typeof fetch,
+    });
+
+    expect(loader.packId).toBe('test-pack');
+    expect(getCallCount()).toBe(1);
+  });
+
+  test('resolveMapUrl returns logical pack path (registry resolution deferred to loadTilemap/loadJtonMap)', async () => {
+    const resolveTag = mock((tag: string) => {
+      if (tag === '/content-packs/test-pack/maps/village.json') {
+        return 'blob:mock-village-map';
+      }
+      return null;
+    });
+
+    const { fetcher } = createFetchMock(validManifest);
+
+    const loader = await loadContentPack({
+      packId: 'test-pack',
+      fetchFn: fetcher as unknown as typeof fetch,
+      resolveTag,
+    });
+
+    const url = loader.resolveMapUrl('village');
+    // resolveMapUrl returns the logical pack path; loadTilemap/loadJtonMap
+    // perform registry resolution internally.
+    expect(url).toBe('/content-packs/test-pack/maps/village.json');
+  });
+
+  test('resolveMapUrl falls back to static path when resolveTag returns null', async () => {
+    const resolveTag = mock((_tag: string) => null);
+
+    const { fetcher } = createFetchMock(validManifest);
+
+    const loader = await loadContentPack({
+      packId: 'test-pack',
+      fetchFn: fetcher as unknown as typeof fetch,
+      resolveTag,
+    });
+
+    const url = loader.resolveMapUrl('village');
+    expect(url).toBe('/content-packs/test-pack/maps/village.json');
+  });
+
   test('dispose blocks getQuest, getEncounter, getAllQuests, getAllEncounters, getCredits', async () => {
     const manifestWithAll = {
       ...validManifest,

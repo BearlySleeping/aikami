@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-08-24)
 
-**193 active (0 without contract file), 119 archived, 0 duplicates**
+**195 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -191,16 +191,18 @@
 | C-427 | Local Model Runtime | 👍 approved | ❓ `integrated` | v1 |
 | C-428 | Lpc Sheet Geometry Unification | 👍 approved | — | v1 |
 | C-429 | Lpc Sheet Coverage Audit | 🛠️ implemented | — | v1 |
-| C-430 | Lpc Layer Model And Z Order | 📝 draft | — | v1 |
+| C-430 | Lpc Layer Model And Z Order | 🛠️ implemented | — | v1 |
 | C-431 | Collect Lpc Behind Pass | 📝 draft | — | v1 |
 | C-432 | Content Addressed R2 Client Sources | 🛠️ implemented | — | v1 |
 | C-433 | Catalog Coverage Maps Tilesets Packs | 🛠️ implemented | — | v1 |
-| C-434 | Registry Backed Maps And Packs | 📝 draft | — | v1 |
+| C-434 | Registry Backed Maps And Packs | 🛠️ implemented | — | v1 |
 | C-435 | Debundle Game Data | 📝 draft | — | v1 |
 | C-436 | Postgres Decommission | 📝 draft | — | v2 |
 | C-437 | Local Cloudflare Dev Plane | 📝 draft | — | v2 |
-| C-438 | Restore Pr Checks | 📝 draft | — | v2 |
-| C-439 | Card Lorebook Import | 📝 draft | — | v2 |
+| C-438 | Restore Pr Checks | 🛠️ implemented | — | v2 |
+| C-439 | Card Lorebook Import | 🛠️ implemented | — | v2 |
+| C-440 | Ci Tooling Baseline | 📝 draft | — | v2 |
+| C-441 | Sops Secrets Migration | 📝 draft | — | v2 |
 
 ---
 

@@ -388,7 +388,8 @@ class GameEngineService
       let packConfig: PackConfig | undefined;
       try {
         const { loadContentPack } = await import('@aikami/frontend/engine');
-        const pack = await loadContentPack({ packId });
+        const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+        const pack = await loadContentPack({ packId, resolveTag: assetTagResolver });
         packConfig = this._buildPackConfig(pack.manifest, mapId);
       } catch (error) {
         this.error('loadMap:pack-config-failed', {
@@ -751,7 +752,10 @@ class GameEngineService
         '@aikami/frontend/engine'
       );
       this._clearContentPackCache = clearCacheFn;
-      const pack = await loadPack({ packId: this.contentPackId });
+      const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+      const releaseUrl = (url: string) => assetManager.releaseUrl(url);
+      const pack = await loadPack({ packId: this.contentPackId, resolveTag: assetTagResolver, releaseUrl });
       const { buildPropFrameResolver } = await import('./prop_frame_resolver');
       this._propFrameResolverHandle = await buildPropFrameResolver(pack.manifest);
 
@@ -768,6 +772,9 @@ class GameEngineService
         textureManager,
         // C-375 AC-1: deterministic prop frame resolution.
         propFrameResolver: this._propFrameResolverHandle?.resolver,
+        // C-434: registry-backed tag resolver for maps and tilesets.
+        resolveTag: assetTagResolver,
+        releaseUrl,
       });
 
       // Campaign data drives world initialization via the composition root.
