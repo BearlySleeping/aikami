@@ -319,10 +319,11 @@ jobs:
 
       # ── Anonymous pull verification ────────────────────────────────────
       - name: Verify anonymous pull
+        env:
+          PREFIX: ${{ needs.setup.outputs.image_prefix }}
         run: |
           set -euo pipefail
           docker logout ghcr.io
-          PREFIX="${{ needs.setup.outputs.image_prefix }}"
           for img in \
             "$PREFIX/aikami-model-fetcher:latest" \
             "$PREFIX/aikami-voice:latest" \
