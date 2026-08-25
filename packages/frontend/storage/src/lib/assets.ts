@@ -13,6 +13,7 @@ import type {
   AssetHashesFile,
   AssetManifest,
   AssetRecord,
+  AssetSeedDocument,
   AssetSource,
   InstallStateRecord,
 } from '@aikami/types';
@@ -183,7 +184,7 @@ export class AssetRegistryRepository {
    * @param r2BaseUrl - R2 public base URL, e.g. `https://assets.bearlysleeping.com`.
    * @returns The number of source rows written.
    */
-  async addR2Sources(r2BaseUrl: string): Promise<number> {
+  async addR2Sources(r2BaseUrl: string, priority: number = 1): Promise<number> {
     // Select every seeded asset with its hash and bundled URL.
     // Assets without a hash are skipped — never fabricate a URL.
     const result = await this._db.query({
@@ -210,8 +211,8 @@ export class AssetRegistryRepository {
 
       queries.push({
         sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
-              VALUES (?, 'r2', ?, 1)`,
-        args: [assetId, r2Url],
+              VALUES (?, 'r2', ?, ?)`,
+        args: [assetId, r2Url, priority],
       });
     }
 
@@ -372,6 +373,104 @@ export class AssetRegistryRepository {
    * @param options - Manifest + hash sidecar.
    * @returns Per-action counters + hash-change list (cache eviction candidates).
    */
+  /**
+   * Seeds (or re-seeds) the registry from the compact boot seed document.
+   * Replaces the 20 MB manifest.json + asset_hashes.json with the ~1-2 MB
+   * asset_seed.json on the boot path (C-435).
+   *
+   * - One `assets` row per seed row.
+   * - No `asset_sources` rows are created here — callers must add sources
+   *   separately via {@link addBundledSources} or {@link addR2Sources}.
+   * - Upsert-by-id, chunked into {@link SEED_CHUNK_SIZE}-row transactions with
+   *   a yield between chunks so WASM SQLite never stalls.
+   * - `version` starts at 1 and increments when a re-seed observes a changed
+   *   hash; unchanged rows are not touched.
+   * - On success, records `meta.asset_registry_seeded = seed.generatedAt`.
+   *
+   * @param seed - The compact boot seed document.
+   * @param onProgress - Optional progress callback.
+   * @returns Per-action counters + hash-change list (cache eviction candidates).
+   */
+  async seedFromCompactSeed(
+    seed: AssetSeedDocument,
+    onProgress?: (progress: { chunk: number; totalChunks: number }) => void,
+  ): Promise<AssetSeedStats> {
+    const hashChanges: { id: string; oldHash: string; newHash: string }[] = [];
+    const stats: AssetSeedStats = {
+      seeded: 0,
+      updated: 0,
+      unchanged: 0,
+      skipped: 0,
+      hashChanges,
+    };
+
+    const t0 = performance.now();
+    const totalChunks = Math.ceil(seed.rows.length / SEED_CHUNK_SIZE);
+    let chunkStart = 0;
+
+    while (chunkStart < seed.rows.length) {
+      const chunk = seed.rows.slice(chunkStart, chunkStart + SEED_CHUNK_SIZE);
+      await this._seedCompactChunk(chunk, stats, hashChanges);
+      chunkStart += SEED_CHUNK_SIZE;
+
+      onProgress?.({ chunk: Math.ceil(chunkStart / SEED_CHUNK_SIZE), totalChunks });
+
+      if (chunkStart < seed.rows.length) {
+        // Yield between chunks — keeps the WASM main thread responsive.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
+    // Only mark seeded when every chunk committed.
+    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seed.generatedAt);
+
+    logger.debug('AssetRegistryRepository.seedFromCompactSeed:complete', {
+      ...stats,
+      chunks: totalChunks,
+      elapsedMs: Math.round(performance.now() - t0),
+    });
+    return stats;
+  }
+
+  /**
+   * Adds bundled priority-0 source rows for the given set of tags.
+   * Used by the offline core declaration — assets that stay bundled get a
+   * bundled source at priority 0 so they resolve from the local filesystem
+   * without network (C-435).
+   *
+   * @param tags - Tags to add bundled sources for.
+   * @returns The number of source rows written.
+   */
+  async addBundledSources(tags: readonly string[]): Promise<number> {
+    const queries: { sql: string; args: unknown[] }[] = [];
+
+    for (const tag of tags) {
+      // Derive a best-effort bundled path from the tag.
+      // Tags use colon-delimited category:subcategory:name format.
+      const path = tag.replace(/:/g, '/');
+      queries.push({
+        sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
+              VALUES (?, ?, ?, 0)`,
+        args: [tag, BUNDLED_SOURCE_BACKEND, `${BUNDLED_ASSET_BASE}/${path}`],
+      });
+    }
+
+    if (queries.length === 0) {
+      return 0;
+    }
+
+    for (let i = 0; i < queries.length; i += SEED_CHUNK_SIZE) {
+      const chunk = queries.slice(i, i + SEED_CHUNK_SIZE);
+      await this._db.transaction(chunk);
+
+      if (i + SEED_CHUNK_SIZE < queries.length) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
+    return queries.length;
+  }
+
   async seedFromManifest(options: {
     manifest: AssetManifest;
     hashes: AssetHashesFile;
@@ -422,6 +521,66 @@ export class AssetRegistryRepository {
   }
 
   /** Seeds one chunk of tags inside a single transaction. */
+  /** Seeds one chunk of compact seed rows inside a single transaction. */
+  private async _seedCompactChunk(
+    rows: readonly import('@aikami/types').AssetSeedRow[],
+    stats: AssetSeedStats,
+    hashChanges: { id: string; oldHash: string; newHash: string }[],
+  ): Promise<void> {
+    const tags = rows.map((r) => r.tag);
+
+    // Load existing rows for this chunk to compute version bumps.
+    const placeholders = tags.map(() => '?').join(', ');
+    const existingResult = await this._db.query({
+      sql: `SELECT id, hash, version FROM assets WHERE id IN (${placeholders})`,
+      args: [...tags],
+    });
+    const existingById = new Map<string, { hash: string; version: number }>();
+    for (const row of existingResult.rows) {
+      existingById.set(row.id as string, {
+        hash: row.hash as string,
+        version: row.version as number,
+      });
+    }
+
+    const queries: { sql: string; args: readonly unknown[] }[] = [];
+
+    for (const seedRow of rows) {
+      const existing = existingById.get(seedRow.tag);
+      let version: number;
+      if (existing) {
+        version = existing.hash === seedRow.hash ? existing.version : existing.version + 1;
+      } else {
+        version = 1;
+      }
+
+      if (existing && existing.hash === seedRow.hash) {
+        stats.unchanged += 1;
+      } else if (existing) {
+        stats.updated += 1;
+        hashChanges.push({ id: seedRow.tag, oldHash: existing.hash, newHash: seedRow.hash });
+      } else {
+        stats.seeded += 1;
+      }
+
+      queries.push({
+        sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json)
+              VALUES (?, ?, ?, ?, ?, ?, 'unknown', NULL, '[]')
+              ON CONFLICT(id) DO UPDATE SET
+                pack_id = excluded.pack_id,
+                category = excluded.category,
+                hash = excluded.hash,
+                version = excluded.version,
+                size_bytes = excluded.size_bytes`,
+        args: [seedRow.tag, seedRow.category, seedRow.category, seedRow.hash, version, seedRow.sizeBytes],
+      });
+    }
+
+    if (queries.length > 0) {
+      await this._db.transaction(queries);
+    }
+  }
+
   private async _seedChunk(options: {
     manifest: AssetManifest;
     hashes: AssetHashesFile;

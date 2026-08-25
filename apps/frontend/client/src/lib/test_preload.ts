@@ -669,6 +669,26 @@ mock.module(_LOCAL_SVC_PATH, _localServicesMock);
 // before testing mock.module for bare specifiers.
 mock.module('$services', _localServicesMock);
 
+// ── Mock $logger alias required by game services ──────────────────────────
+
+mock.module('$logger', () => ({
+  logger: {
+    debug: mock(() => {}),
+    info: mock(() => {}),
+    log: mock(() => {}),
+    warn: mock(() => {}),
+    error: mock(() => {}),
+  },
+  __esModule: true,
+}));
+
+// ── Mock @aikami/utils required by campaign_service ───────────────────────
+
+mock.module('@aikami/utils', () => ({
+  toAppError: (err: unknown) => err,
+  __esModule: true,
+}));
+
 // ── Mock SvelteKit virtual modules required by transitive dependencies ──────
 
 mock.module('$app/navigation', () => ({
