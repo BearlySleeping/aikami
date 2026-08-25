@@ -2,7 +2,7 @@
 id: C-435
 title: "De-bundle game-data — Ship the Client Without 93 MB of Assets"
 source: "user request 2026-08-23 — client reads from R2; realises C-395's stated goal"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `apps/frontend/client/static/game-data/`, `apps/frontend/client/static/content-packs/`, `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts`, `packages/frontend/storage/src/lib/assets.ts`, client build config |
 | **Priority** | P2 — the largest payoff in the batch, and the riskiest. Do it last, once every other asset class has a proven second source. |
 | **Dependencies** | C-432, C-433, C-434 — all must be merged and verified. This contract removes the fallback those three replace; doing it earlier bricks the client. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → note on first-run download in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
@@ -43,9 +43,8 @@ created_at: "2026-08-23"
   # 28K   maps
   du -sh apps/frontend/client/static/content-packs   # 88K
   ```
-  Roughly 106 MB of game data, plus a further 76 MB of `static/ort`. Every user
-  downloads all of it whether or not they load the content that uses it, and
-  every Tauri release carries it.
+  Roughly 106 MB of game data. Every user downloads all of it whether or not
+  they load the content that uses it, and every Tauri release carries it.
 
 - **The three JSON seed files are themselves a problem.** `manifest.json`
   (6.9 MB), `asset_credits.json` (6.1 MB), `lpc_credits.json` (5.4 MB) and
@@ -86,8 +85,8 @@ locally so the second run is fully offline.
 
 ## Success Measures
 
-- **Time/latency target**: client build under 20 MB excluding `static/ort`
-  (from ~106 MB). Cold boot to playable no slower than today on a warm CDN.
+- **Time/latency target**: client build under 20 MB (from ~106 MB). Cold boot
+  to playable no slower than today on a warm CDN.
   Second run fully offline with no network requests for cached content.
 - **Offline/degraded behavior**: **the defining risk of this contract.** A
   player who has completed a first run must be able to play offline
@@ -196,7 +195,7 @@ it is simply no longer parsed at startup.
 - **Accessibility/input**: the first-run progress UI needs an accessible
   progress role, a text alternative to any bar, and must not trap focus. It
   inherits the C-423 accessibility baseline.
-- **Performance budget**: build under 20 MB excluding `static/ort`. Boot to
+- **Performance budget**: build under 20 MB. Boot to
   playable no slower than today on a warm CDN. Boot JSON parsing reduced from
   ~20 MB to under 2 MB.
 - **Security/privacy**: SHA-256 verification before caching remains mandatory on
@@ -244,7 +243,7 @@ it is simply no longer parsed at startup.
   - A build-time flag restoring full bundling.
   - Migration of existing installs at boot.
 - **Out of Scope:**
-  - `static/ort` (76 MB ONNX runtime). Not game content; its delivery is a separate concern.
+  - `static/ort` (ONNX runtime). Not game content; its delivery is a separate concern.
   - The R2 key scheme (C-432), publishing (C-433) or loader wiring (C-434).
   - Selective or optional content packs beyond the existing core/evictable distinction.
   - Hub-side asset consumption.
@@ -268,9 +267,9 @@ splitting seed, warming and core apart from each other.
 
 ## Acceptance Criteria
 
-### AC-1: The client build drops below 20 MB excluding static/ort
+### AC-1: The client build drops below 20 MB
 **Given** a production build after this contract
-**When** its size is measured excluding `static/ort`
+**When** its size is measured
 **Then** it is under 20 MB, down from roughly 106 MB
 
 **Evidence Matrix**:
@@ -280,7 +279,7 @@ splitting seed, warming and core apart from each other.
 
 **Test Hooks**:
 - Moon Task: `bun moon run client:build`
-- Integration: `du -sh apps/frontend/client/build --exclude=ort` before and after.
+- Integration: `du -sh apps/frontend/client/build` before and after.
 - E2E / Visual: **Functional**: N/A. **Visual**: N/A.
 
 **Watch Points**:
@@ -332,6 +331,18 @@ splitting seed, warming and core apart from each other.
 **Given** a fresh install with network
 **When** warming starts and the app is closed partway, then reopened
 **Then** warming resumes from where it stopped rather than restarting, and progress is reported through the boot staging channel and surfaced in the UI
+
+**Implementation notes**:
+- Add a new `GameBootStage` value `warming_cache` to the union in
+  `apps/frontend/client/src/lib/types/game_boot.ts`, the `bootStageOrder`
+  array and the `bootStageLabels` record in `game_boot_service.svelte.ts`.
+- Report per-asset progress via the existing `detail` field on
+  `GameBootProgress` (e.g. `detail: "Warming cache — 342/12704 assets"`).
+- The compact seed document (see State & Data Models) is bundled in the
+  client at `static/game-data/asset_seed.json` and loaded synchronously at
+  boot — it replaces the 6.9 MB `manifest.json` and 1.7 MB `asset_hashes.json`
+  on the boot path. Credits JSON files are fetched on demand by the credits
+  screen, not parsed at startup.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -416,7 +427,9 @@ splitting seed, warming and core apart from each other.
 - **Cache eviction under quota.** A de-bundled client relies on the cache. If LRU eviction reaches core assets, the game breaks offline. Populate `_EVICTION_PROTECTED_PACKS` deliberately and test at quota.
 - **The credits screen is a real feature.** Moving 12 MB off the boot path must not break it.
 - **First-run warming competes with play.** A player who starts immediately will hit assets mid-warm. Prioritise on-demand fetches over the background pass, or the game stutters while warming saturates the connection.
-- **`static/ort` still dominates the download.** After this contract it is the largest remaining item. Out of scope, but expect it to be the next question asked.
+- **`static/ort` was removed in a prior contract.** After this contract the
+  game-data payload is under 20 MB; the remaining bulk is the ONNX runtime
+  which was already extracted as a separate delivery concern.
 
 ## Open Questions
 
