@@ -85,6 +85,23 @@ let fileInput = $state<HTMLInputElement>();
           >
         </div>
 
+        <!-- C-439 AC-4: Import summary toast -->
+        {#if viewModel.importSummary}
+          <div class="alert alert-info shadow-lg mb-4" role="alert" data-testid="import-summary">
+            <div class="flex-1">
+              <span class="text-sm">{viewModel.importSummary}</span>
+            </div>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              onclick={() => viewModel.clearImportSummary()}
+              aria-label="Dismiss import summary"
+            >
+              ✕
+            </button>
+          </div>
+        {/if}
+
         <!-- Empty State -->
         {#if viewModel.isEmpty}
           <div class="card bg-base-100 shadow">

@@ -6,7 +6,7 @@
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { LpcLayerRecipe } from '@aikami/frontend/engine';
-import { AnimationController, LpcDirection } from '@aikami/frontend/engine';
+import { AnimationController, LpcDirection, resolveLayerDepth } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -34,15 +34,7 @@ const DIRECTION_LABELS: Record<number, string> = {
   [LpcDirection.Right]: 'Right',
 };
 
-const SLOT_Z_ORDER: Record<string, number> = {
-  body: 0,
-  legs: 10,
-  feet: 20,
-  torso: 30,
-  head: 40,
-  hair: 50,
-};
-const DEFAULT_Z = 100;
+// C-430: SLOT_Z_ORDER removed — uses canonical LPC_LAYER_ORDER table.
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -330,7 +322,11 @@ class LpcWalkTestViewModel
         sprite.x = -FRAME_W / 2;
         sprite.y = -FRAME_H / 2;
         sprite.alpha = 1.0;
-        const zIndex = SLOT_Z_ORDER[recipe.slot] ?? DEFAULT_Z;
+        const zIndex = resolveLayerDepth({
+          slot: recipe.slot,
+          layerRole: recipe.layerRole ?? 'front',
+          direction: 2,
+        });
 
         this._spriteSheets.set(sprite, texture);
 

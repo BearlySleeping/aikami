@@ -37,6 +37,9 @@ on:
   #     - 'apps/backend/local-stack/**'
   #     - '.github/workflows/publish-local-stack.yml'
 
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
 
@@ -55,6 +58,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Read local-stack version + image prefix
         id: version
@@ -123,6 +128,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # sd-server:cpu compiles stable-diffusion.cpp + every ggml CPU ISA
       # variant from source; even with --parallel capped to 2 (see
@@ -197,6 +204,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -227,9 +236,10 @@ jobs:
 
       # ── AC-5: layer inspection for voice + sd-server + client ─────────
       - name: AC-5 — Layer inspection (voice + sd-server + client)
+        env:
+          PREFIX: ${{ needs.setup.outputs.image_prefix }}
         run: |
           set -euo pipefail
-          PREFIX="${{ needs.setup.outputs.image_prefix }}"
           for img in \
             "$PREFIX/aikami-voice:latest" \
             "$PREFIX/aikami-sd-server:cpu" \
@@ -258,9 +268,11 @@ jobs:
 
       # ── AC-9: two config mounts against one client image ──────────────
       - name: AC-9 — Two-config-mount test
+        env:
+          IMG: ${{ needs.setup.outputs.image_prefix }}/aikami-client:latest
         run: |
           set -euo pipefail
-          img="${{ needs.setup.outputs.image_prefix }}/aikami-client:latest"
+          img="$IMG"
           docker pull "$img"
           mkdir -p /tmp/cfg-a /tmp/cfg-b
           cat > /tmp/cfg-a/config.json <<'EOF'
@@ -294,9 +306,11 @@ jobs:
 
       # ── AC-9b: no mount at all — the clone-free default path ───────────
       - name: AC-9b — Default-generated config test
+        env:
+          IMG: ${{ needs.setup.outputs.image_prefix }}/aikami-client:latest
         run: |
           set -euo pipefail
-          img="${{ needs.setup.outputs.image_prefix }}/aikami-client:latest"
+          img="$IMG"
           cid_c=$(docker run -d -p 15274:5274 "$img")
           trap 'docker rm -f "$cid_c" >/dev/null 2>&1 || true' EXIT
           for i in $(seq 1 20); do
@@ -308,10 +322,11 @@ jobs:
 
       # ── Anonymous pull verification ────────────────────────────────────
       - name: Verify anonymous pull
+        env:
+          PREFIX: ${{ needs.setup.outputs.image_prefix }}
         run: |
           set -euo pipefail
           docker logout ghcr.io
-          PREFIX="${{ needs.setup.outputs.image_prefix }}"
           for img in \
             "$PREFIX/aikami-model-fetcher:latest" \
             "$PREFIX/aikami-voice:latest" \

@@ -2,7 +2,7 @@
 id: C-376
 title: "Emberwatch Solidity & Rendering Architecture Hardening"
 source: "prompt (direct draft) + external architecture review (claude CLI, pre-implementation)"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-10"
 | **Target** | `packages/frontend/engine/src/` — collision grid derivation, worker LOAD_MAP plumbing, depth ordering, dead-code removal; `packages/shared/schemas/` + `packages/shared/types/` — `PackConfigSchema`/`PackConfig`; `apps/frontend/client/src/lib/services/game/` — packConfig plumbing; `scripts/src/lib/ops/` — generator table derivation |
 | **Priority** | P1 — an armed correctness landmine (default `waterGids = Set([2])` blocks walkable grass), a mask-blind `isWalkable` bug, three sources of truth for solidity, and an O(n²) render path on the shipped C-375 core |
 | **Dependencies** | C-375 (merged via PR #122 — substrate, same files; contract file frontmatter still says `draft` but the metadata table says `approved` and the code is in HEAD); C-372 (implemented — mirror for packConfig posting); C-315, C-316, C-173, C-370, C-331 (completed/verified/approved — unchanged) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` — no dev sandbox required; the production `/game` route + E2E + visual suite are the evidence (C-375 gate re-run) |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |

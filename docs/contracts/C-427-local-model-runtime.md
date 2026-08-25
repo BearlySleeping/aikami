@@ -2,7 +2,7 @@
 id: C-427
 title: "Local Model Runtime — generalize the Kokoro binding into a modality-agnostic local-model layer, and add a small local LLM for parallel micro-tasks"
 source: "Investigation 2026-08-23 — evaluation of Cactus-Compute/needle2 for agent micro-tasks"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-23"
 | **Target** | `apps/frontend/client/src/lib/services/audio/voice_model_service.svelte.ts` (540 lines, Kokoro-specific); `apps/frontend/client/src/lib/services/agent/agents/*.ts` |
 | **Priority** | P2 — infrastructure. Enables offline agent micro-tasks and removes the copy-paste tax on the second in-webview model. |
 | **Dependencies** | C-389 (voice model download), C-320 (AI gateway), C-236 (agent pipeline) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 1.0.0 |

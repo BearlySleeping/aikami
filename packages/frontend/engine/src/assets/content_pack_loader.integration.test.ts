@@ -784,4 +784,50 @@ describe('ContentPackLoader — Emberwatch v2.0.0 Integration', () => {
     const allEncounters = loader.getAllEncounters();
     expect(allEncounters.length).toBe(1);
   });
+
+  // ── Legacy onboarding step normalisation ──
+
+  test('loads pack with legacy bare-string onboarding actions and normalizes them', async () => {
+    const legacyManifest = {
+      ...emberwatchManifest,
+      onboarding: {
+        steps: [
+          {
+            id: 'hint_move',
+            action: 'move_up', // legacy bare string
+            text: 'Press {key} to move up',
+            trigger: 'map_loaded',
+          },
+          {
+            id: 'hint_interact',
+            action: 'interact', // legacy bare string
+            text: 'Press {key} to interact',
+            trigger: 'after_previous',
+          },
+        ],
+      },
+    };
+
+    const fetcher = mock(async (url: string) => {
+      if (url === '/content-packs/legacy-pack/manifest.json') {
+        return new Response(JSON.stringify(legacyManifest), { status: 200 });
+      }
+      return new Response('Not Found', { status: 404 });
+    });
+
+    const loader = await loadContentPack({
+      packId: 'legacy-pack',
+      fetchFn: fetcher as unknown as typeof fetch,
+    });
+
+    expect(loader.manifest.onboarding).toBeDefined();
+    expect(loader.manifest.onboarding?.steps.length).toBe(2);
+
+    // Verify normalization: bare strings converted to discriminated union
+    const step0 = loader.manifest.onboarding?.steps[0];
+    expect(step0?.action).toEqual({ kind: 'input', actionId: 'move_up' });
+
+    const step1 = loader.manifest.onboarding?.steps[1];
+    expect(step1?.action).toEqual({ kind: 'input', actionId: 'interact' });
+  });
 });

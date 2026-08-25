@@ -17,7 +17,6 @@
 !apps/backend/local-stack/
 !apps/frontend/hub/
 !apps/frontend/hub/build/
-!apps/frontend/hub/start.js
 
 # Local model store is bind-mounted at runtime — never in a build context
 apps/backend/local-stack/models/

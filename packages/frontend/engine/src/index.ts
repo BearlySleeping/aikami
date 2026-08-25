@@ -16,7 +16,8 @@ export {
   type BaseEngineClassInterface,
   type BaseEngineClassOptions,
 } from './base_engine_class.ts';
-export { zeroEquipmentOwnedAppearanceSlots } from './core/appearance_layers.ts';
+// C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
+// replace the fixed six-slot ceiling. Equipment no longer borrows torso/feet.
 export {
   createSafeRef,
   EntityGeneration,
@@ -70,14 +71,15 @@ export {
 
 // ECS components
 
-export type { AppearanceData, LpcLayerRecipe } from './components/appearance.ts';
+export type { AppearanceData, LpcLayerRecipe, LpcLayerRole } from './components/appearance.ts';
 export {
-  APPEARANCE_LAYER_COUNT,
   Appearance,
+  DEFAULT_BODY_LAYER_ID,
   EXPRESSION_MAP,
   FACE_LAYER_INDEX,
   getAppearanceLayers,
   registerAppearanceObservers,
+  setAppearanceLayers,
 } from './components/appearance.ts';
 export { CameraFocus, registerCameraFocusObservers } from './components/camera_focus.ts';
 export type { ChunkDataPayload } from './components/chunk_data.ts';
@@ -358,6 +360,17 @@ export {
   resetLpcFallbackWarnings,
   resolveLpcAppearance,
 } from './rendering/lpc_appearance_resolver.ts';
+// LPC layer order (C-430) — canonical direction-aware z-order table
+export {
+  getMaxKnownDepth,
+  LPC_LAYER_ORDER,
+  type LpcLayer,
+  type LpcLayerOrderEntry,
+  type LpcSlot,
+  resetUnknownSlotWarnings,
+  resolveLayerDepth,
+  sortLayersByDepth,
+} from './rendering/lpc_layer_order.ts';
 export {
   type LpcCellFamily,
   type LpcSheetGeometry,

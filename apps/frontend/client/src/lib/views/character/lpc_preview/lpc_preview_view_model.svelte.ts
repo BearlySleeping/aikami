@@ -6,6 +6,7 @@
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine';
+import { resolveLayerDepth } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -30,22 +31,7 @@ import {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-/** Canonical Aikami z-order offsets for each slot. */
-const SLOT_Z_ORDER: Record<string, number> = {
-  body: 0,
-  accessories: 5,
-  legs: 10,
-  feet: 20,
-  torso: 30,
-  shoulders: 40,
-  head: 50,
-  headAccessories: 55,
-  hair: 60,
-  hat: 70,
-  weapon: 80,
-  shield: 90,
-};
-const DEFAULT_Z_ORDER = 100;
+/** Default animation playback FPS. */
 
 /** Default animation playback FPS. */
 const DEFAULT_PLAYBACK_FPS = 12;
@@ -447,9 +433,16 @@ class LpcPreviewViewModel
         sprite.scale.set(layout.scale, layout.scale);
         sprite.alpha = 1.0;
 
-        // Z-order: use canonical slot mapping, fall back to index-based
-        const zIndex = SLOT_Z_ORDER[slotName] ?? DEFAULT_Z_ORDER + i;
+        // Z-order: use the canonical LPC_LAYER_ORDER table (C-430).
+        // This replaces the local SLOT_Z_ORDER definition.
+        const zIndex = resolveLayerDepth({
+          slot: slotName,
+          layerRole: recipe.layerRole ?? 'front',
+          direction: 2, // default facing (down)
+        });
         sprite.zIndex = zIndex;
+        // Store original index for stable sorting
+        (sprite as unknown as Record<string, unknown>)._originalIndex = i;
 
         // Apply palette tint from LpcLayerRecipe.hexPalette
         const tintColor = this._extractTintFromPalette(hexPalette);
@@ -479,8 +472,16 @@ class LpcPreviewViewModel
       // Only publish diagnostics once the render is confirmed current
       this.missingAssets = missingLayers;
 
-      // Sort by zIndex for correct render order
-      newChildren.sort((a, b) => a.zIndex - b.zIndex);
+      // Sort by zIndex for correct render order, using original index as tie-breaker
+      newChildren.sort((a, b) => {
+        if (a.zIndex !== b.zIndex) {
+          return a.zIndex - b.zIndex;
+        }
+        // Equal depth: preserve original recipe order
+        const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number;
+        const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number;
+        return aIdx - bIdx;
+      });
 
       this._destroyAllChildren();
 

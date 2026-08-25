@@ -8,11 +8,11 @@ Run these commands at the start to identify the files:
 git diff --name-only
 git diff --name-only --cached
 ```
-Current git-scoped files: .pi/bun.lock, .pi/extensions/chrome_devtools.ts, .pi/extensions/firebase_tools.ts, .pi/extensions/lib/process_runner.ts, .pi/runners/convention_gate.ts, .pi/runners/test_healer.ts, docs/contracts/C-400-unify-lpc-appearance-resolution.md, scripts/src/lib/agents/contract_pipeline.ts, scripts/src/lib/agents/contract_pipeline/contract_sync.ts, scripts/src/lib/agents/contract_pipeline/git_state.ts, scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts, scripts/src/lib/agents/contract_pipeline/orchestrator.ts, scripts/src/lib/agents/git_worktree.ts, scripts/src/lib/deploy/utils.ts, scripts/src/lib/env/check.ts, scripts/src/lib/env/direnv_detect.ts, scripts/src/lib/env/scripts_env.ts, scripts/src/lib/env/secrets.ts, scripts/src/lib/herdr/cli.ts, scripts/src/lib/herdr/join.ts, scripts/src/lib/herdr/session.test.ts, scripts/src/lib/herdr/session.ts, scripts/src/lib/herdr/start_autofix.ts, scripts/src/lib/herdr/start_pi.ts, scripts/src/lib/herdr/task.ts, scripts/src/lib/herdr/worktree.ts, scripts/src/lib/ops/dev_all.ts, scripts/src/lib/ops/preview_hub.ts, scripts/src/lib/ops/preview_site.ts, scripts/src/lib/test_blackbox/run.ts, scripts/src/lib/env/mode.ts
+Current git-scoped files: apps/frontend/client/src/lib/services/assets/registry_resolver.ts, apps/frontend/client/src/lib/services/character/character_book_mapper.test.ts, apps/frontend/client/src/lib/services/character/character_book_mapper.ts, apps/frontend/client/src/lib/services/character/character_import.test.ts, apps/frontend/client/src/lib/services/character/character_importer.ts, apps/frontend/client/src/lib/services/game/bridge_listeners.ts, apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts, apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts, apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts, apps/frontend/client/src/lib/services/game/save_map_block.ts, apps/frontend/client/src/lib/services/game/session_service.svelte.ts, apps/frontend/client/src/lib/views/character/persona/list/persona_list_view.svelte, apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts, docs/contracts/C-432-content-addressed-r2-client-sources.md, docs/contracts/C-441-sops-secrets-migration.md, package.json, packages/frontend/engine/src/assets/content_pack_loader.ts, packages/frontend/engine/src/assets/map_loader.test.ts, packages/frontend/engine/src/assets/map_loader.ts, packages/frontend/engine/src/game_world.ts, packages/frontend/engine/src/serialization/ecs_serializer.ts, packages/frontend/engine/src/systems/tilemap_render_system.ts, packages/shared/schemas/src/lib/domain/character_book.ts, scripts/src/lib/agents/contract_pipeline/manifest_store.ts
 
 # WORKFLOW
 ## STEP 1: `bun run fix` (git-scoped)
-1. Run: `bunx biome check --write <the git-scoped files listed above> --error-on-warnings --no-errors-on-unmatched` — the command receives ONLY the git-scoped files, so biome cannot process anything outside that set. Files biome ignores (e.g. docs/*.md) are skipped, not lint targets.
+1. Run: `bunx biome check --write 'apps/frontend/client/src/lib/services/assets/registry_resolver.ts' 'apps/frontend/client/src/lib/services/character/character_book_mapper.test.ts' 'apps/frontend/client/src/lib/services/character/character_book_mapper.ts' 'apps/frontend/client/src/lib/services/character/character_import.test.ts' 'apps/frontend/client/src/lib/services/character/character_importer.ts' 'apps/frontend/client/src/lib/services/game/bridge_listeners.ts' 'apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts' 'apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts' 'apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts' 'apps/frontend/client/src/lib/services/game/save_map_block.ts' 'apps/frontend/client/src/lib/services/game/session_service.svelte.ts' 'apps/frontend/client/src/lib/views/character/persona/list/persona_list_view.svelte' 'apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts' 'docs/contracts/C-432-content-addressed-r2-client-sources.md' 'docs/contracts/C-441-sops-secrets-migration.md' 'package.json' 'packages/frontend/engine/src/assets/content_pack_loader.ts' 'packages/frontend/engine/src/assets/map_loader.test.ts' 'packages/frontend/engine/src/assets/map_loader.ts' 'packages/frontend/engine/src/game_world.ts' 'packages/frontend/engine/src/serialization/ecs_serializer.ts' 'packages/frontend/engine/src/systems/tilemap_render_system.ts' 'packages/shared/schemas/src/lib/domain/character_book.ts' 'scripts/src/lib/agents/contract_pipeline/manifest_store.ts' --error-on-warnings --no-errors-on-unmatched` — the command receives ONLY the git-scoped files above, so biome cannot process anything outside that set. Files biome ignores (e.g. docs/*.md) are skipped, not lint targets.
 2. Fix errors and warnings at the source. Prefer minimal, mechanical edits.
 3. 🔴 **CIRCUIT BREAKER**: If you cannot fix an error after **5 attempts**, use an escape hatch (see rules below).
 4. Do not proceed until the fix command outputs zero errors AND zero warnings.
@@ -23,7 +23,24 @@ Current git-scoped files: .pi/bun.lock, .pi/extensions/chrome_devtools.ts, .pi/e
 3. 🔴 **CIRCUIT BREAKER**: If you cannot fix a type error after **5 attempts**, use an escape hatch (see rules below).
 4. Do not proceed until the typecheck command passes cleanly.
 
-## STEP 3: Validate and stop
+## STEP 3: `bun run test`
+Run the tests using: `bun run test` on git-scoped files.
+**Service Verification:**
+The script pre-started the client dev server. Verify they are accessible:
+```bash
+curl -s http://localhost:5274/ | wc -c    # should show >10000
+```
+If connection is refused, wait 10s and retry (max 3 times). If still refused, run `herdr_session start <service>`.
+🔴 **CRITICAL TEST RULES:**
+1. **First**, assume your `fix` or `typecheck` edits broke the source code.
+   - Run `git diff` to see what changed.
+   - Revert or fix the **source code** (not the test).
+2. **Only if the test is provably wrong**, edit it:
+   - Example: The test expects an old API response format.
+   - **Justify every test edit** with a comment (e.g., `// Updated mock for new API`).
+3. **Never** edit a test just to "make it pass" without understanding why.
+4. Do not proceed until tests pass.
+## STEP 4: Validate and stop
 1. 🔴 **VALIDATION GATE**: Run `bun moon run :validate` on all affected projects. Do not proceed until it passes cleanly.
 2. Run `git status --porcelain=v1 --untracked-files=all` and confirm every modified path is in the git-scoped set above (plus this prompt file). If any out-of-scope or protected file changed, STOP and report it — do NOT revert it (destructive git is forbidden); fix the underlying issue in source instead.
 3. 🔴 **STOP**: Do NOT stage, commit, or push. Repository mutations require explicit caller authorization (`bun autofix --only commit`, or `commit` in `--only`). Report a final diff summary instead.
@@ -39,7 +56,7 @@ Current git-scoped files: .pi/bun.lock, .pi/extensions/chrome_devtools.ts, .pi/e
 - **No Human Intervention**: Do NOT ask questions. If you are entirely blocked, explain why and stop.
 - **Forbidden Paths**: Do NOT modify node_modules/, config files (moon.yml, biome.json, biome.jsonc, tsconfig*.json, lint_rules.json), or examples/. Within .pi/, ONLY the git-scoped .pi files listed above and this prompt file (`.pi/autofix/system_prompt.md`) may be modified — every other .pi/ path is protected.
 - **🔴 BRANCH SAFETY — NEVER `git push` alone**: Always use `git push origin HEAD`. Plain `git push` may target the wrong branch if the local branch tracks a different remote branch (e.g. `origin/main` instead of the current feature branch). `git push origin HEAD` ALWAYS pushes to the current branch. If you see an upstream mismatch error, do NOT fall back to `git push origin HEAD:main` — push to the CURRENT branch.
-- **Baseline snapshot**: The pre-run working tree is saved at a per-run snapshot directory under `~/.herdr/autofix-snapshots/<timestamp>/` — `start_autofix.ts` injects the exact path at runtime. It contains tracked.patch (all modifications vs HEAD) plus copies of untracked files. If you think you destroyed something, tell the user to run `bun run autofix:restore <timestamp>`.
+- **Baseline snapshot**: The pre-run working tree is saved at `/home/sonny/.herdr/autofix-snapshots/2026-08-25T12-33-22-099Z`. It contains tracked.patch (all modifications vs HEAD) plus copies of untracked files. If you think you destroyed something, tell the user to run `bun run autofix:restore <timestamp>`.
 - **NO `as`, `any`, or `unknown`**: Never use type assertions or `any`/`unknown`.
 
 ## LINTER & ERROR RESOLUTION — FIX, NEVER SUPPRESS

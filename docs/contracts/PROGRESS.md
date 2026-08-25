@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-08-24)
+## Status Summary (Auto-generated: 2026-08-25)
 
 **195 active (0 without contract file), 119 archived, 0 duplicates**
 
@@ -150,46 +150,46 @@
 | C-345 | Add A Campaigncontent Pack Browser And A Second Adventure | 👍 approved | — | v2 |
 | C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 👍 approved | — | v2 |
 | C-371 | C 371 | 👍 approved | — | v2 |
-| C-372 | Fix P0 Lpc Asset Resolution And Unify Resolver | 👍 approved | ❓ `integrated` | v2 |
+| C-372 | Fix P0 Lpc Asset Resolution And Unify Resolver | 🛠️ implemented | ❓ `integrated` | v2 |
 | C-373 | Turso Asset Registry Opfs Cache | 🛠️ implemented | ❓ `integrated` | v2 |
-| C-374 | Hub Firestore To Dataconnect | 👍 approved | ❓ `integrated` | v2 |
-| C-375 | Emberwatch Rendering And Assets Overhaul | 👍 approved | ❓ `sandbox` — | v2 |
-| C-376 | Emberwatch Solidity Rendering Architecture Hardening | 👍 approved | ❓ `integrated` — no dev sandbox required; the production `/game` route + E2E + visual suite are the evidence (C-375 gate re-run) | v2 |
-| C-377 | Pixel Art Render Correctness | 📝 draft | ❓ `integrated` — the production `/game` route + the existing `emberwatch.visual.ts` suite are the evidence | v2 |
-| C-378 | Layered Terrain And Autotiling | 📝 draft | ❓ `integrated` — the production `/game` route + `emberwatch.visual.ts` are the evidence | v2 |
-| C-379 | Collision And Movement Unification | 👍 approved | ❓ `integrated` — `/game` route, `collision_e2e.spec.ts`, `emergent_world.visual.ts` | v2 |
+| C-374 | Hub Firestore To Dataconnect | 🛠️ implemented | ❓ `integrated` | v2 |
+| C-375 | Emberwatch Rendering And Assets Overhaul | 🛠️ implemented | ❓ `sandbox` — | v2 |
+| C-376 | Emberwatch Solidity Rendering Architecture Hardening | 🛠️ implemented | ❓ `integrated` — no dev sandbox required; the production `/game` route + E2E + visual suite are the evidence (C-375 gate re-run) | v2 |
+| C-377 | Pixel Art Render Correctness | 🛠️ implemented | ❓ `integrated` — the production `/game` route + the existing `emberwatch.visual.ts` suite are the evidence | v2 |
+| C-378 | Layered Terrain And Autotiling | 🛠️ implemented | ❓ `integrated` — the production `/game` route + `emberwatch.visual.ts` are the evidence | v2 |
+| C-379 | Collision And Movement Unification | 🛠️ implemented | ❓ `integrated` — `/game` route, `collision_e2e.spec.ts`, `emergent_world.visual.ts` | v2 |
 | C-380 | Frame Pacing And Click To Move | 📝 draft | ❓ `integrated` — `/game` route + a new Playwright spec | v2 |
 | C-381 | Content Pipeline Hardening | 📝 draft | ❓ `integrated` — `/game` boot path + hub upload gate | v2 |
-| C-383 | Data Exposure Hardening | 📝 draft | — | v2 |
+| C-383 | Data Exposure Hardening | 🏁 completed | — | v2 |
 | C-384 | Local Sqlite Migration Framework | 🛠️ implemented | — | v2 |
 | C-385 | Remove Data Connect | 🛠️ implemented | — | v2 |
 | C-386 | Firestore Removal Local First Client | 🛠️ implemented | — | v2 |
-| C-387 | Local Postgres Dev Environment | 👍 approved | — | v2 |
+| C-387 | Local Postgres Dev Environment | 🛠️ implemented | — | v2 |
 | C-388 | Image Engine Provider Abstraction | 👍 approved | — | v2 |
 | C-389 | Runtime Engine Config Offline Tts Tauri | 🛠️ implemented | — | v2 |
 | C-390 | Local Stack V2 Publishable Topology | 🛠️ implemented | — | v2 |
 | C-391 | Stack Init Hardware Detection Wizard | 🛠️ implemented | — | v2 |
 | C-392 | Converge Dev Engine Services With Stack | 👍 approved | — | v2 |
 | C-393 | Speech To Text Backend Service | 👍 approved | — | v2 |
-| C-394 | Server Data Plane Neon Drizzle | 👍 approved | — | v2 |
-| C-395 | R2 Asset Origin Publish Pipeline | 👍 approved | — | v2 |
-| C-396 | Hub Public Shell Catalog Browse | 👍 approved | — | v2 |
-| C-400 | Unify Lpc Appearance Resolution | ❓ approved (PR #151 merged) | ❓ `—` | v2 |
-| C-401 | Stream Dialogue Narrative | 👍 approved | ❓ `—` | v2 |
-| C-402 | Fix Npc Player Movement Deadlock | 👍 approved | ❓ `—` | v2 |
+| C-394 | Server Data Plane Neon Drizzle | 🛠️ implemented | — | v2 |
+| C-395 | R2 Asset Origin Publish Pipeline | 🛠️ implemented | — | v2 |
+| C-396 | Hub Public Shell Catalog Browse | 🛠️ implemented | — | v2 |
+| C-400 | Unify Lpc Appearance Resolution | 🛠️ implemented | ❓ `—` | v2 |
+| C-401 | Stream Dialogue Narrative | 🛠️ implemented | ❓ `—` | v2 |
+| C-402 | Fix Npc Player Movement Deadlock | 🛠️ implemented | ❓ `—` | v2 |
 | C-405 | Cut Worldgen From Critical Path | 🛠️ implemented | ❓ `—` | v2 |
-| C-417 | P1 Polish Batch | 👍 approved | ❓ `—` | v2 |
+| C-417 | P1 Polish Batch | 🛠️ implemented | ❓ `—` | v2 |
 | C-418 | P2 Cleanup And Infrastructure | 👍 approved | ❓ `—` | v2 |
 | C-419 | P3 Growth Features | 🛠️ implemented | ❓ `—` | v2 |
-| C-420 | Guided Choice Chips | 👍 approved | ❓ `integrated` | v2 |
-| C-421 | Dice Cards | 👍 approved | ❓ `integrated` | v2 |
+| C-420 | Guided Choice Chips | 🛠️ implemented | ❓ `integrated` | v2 |
+| C-421 | Dice Cards | 🛠️ implemented | ❓ `integrated` | v2 |
 | C-422 | Onboarding Arc | 👍 approved | ❓ `integrated` | v2 |
 | C-423 | Design North Star | 🛠️ implemented | ❓ `integrated` | v2 |
 | C-424 | Unified Message Surfaces | 🛠️ implemented | ❓ `integrated` | v2 |
-| C-425 | Viewmodel Decomposition | 👍 approved | ❓ `integrated` | v2 |
+| C-425 | Viewmodel Decomposition | 🛠️ implemented | ❓ `integrated` | v2 |
 | C-426 | Cloudflare Native Identity And Hosting | 🛠️ implemented | ❓ `sandbox` | v1 |
-| C-427 | Local Model Runtime | 👍 approved | ❓ `integrated` | v1 |
-| C-428 | Lpc Sheet Geometry Unification | 👍 approved | — | v1 |
+| C-427 | Local Model Runtime | 🛠️ implemented | ❓ `integrated` | v1 |
+| C-428 | Lpc Sheet Geometry Unification | 🛠️ implemented | — | v1 |
 | C-429 | Lpc Sheet Coverage Audit | 🛠️ implemented | — | v1 |
 | C-430 | Lpc Layer Model And Z Order | 🛠️ implemented | — | v1 |
 | C-431 | Collect Lpc Behind Pass | 📝 draft | — | v1 |
@@ -201,8 +201,8 @@
 | C-437 | Local Cloudflare Dev Plane | 📝 draft | — | v2 |
 | C-438 | Restore Pr Checks | 🛠️ implemented | — | v2 |
 | C-439 | Card Lorebook Import | 🛠️ implemented | — | v2 |
-| C-440 | Ci Tooling Baseline | 📝 draft | — | v2 |
-| C-441 | Sops Secrets Migration | 📝 draft | — | v2 |
+| C-440 | Ci Tooling Baseline | 🛠️ implemented | — | v2 |
+| C-441 | Sops Secrets Migration | 🛠️ implemented | — | v2 |
 
 ---
 

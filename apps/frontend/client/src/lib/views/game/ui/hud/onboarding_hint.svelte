@@ -1,18 +1,22 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/ui/hud/onboarding_hint.svelte
 //
-// Non-modal onboarding hint toast — shows tutorial hints contextually.
+// Non-modal onboarding hint toast — shows tutorial hints contextually
+// with step progress and skip affordance.
 // Dismisses when the taught action is performed or the player clicks dismiss.
-// Contract: C-327 AC-3
+// Contract: C-327 AC-3; C-422 AC-3 (progress + skip)
 
 type Props = {
   text: string | undefined;
   visible: boolean;
+  stepIndex: number;
+  totalSteps: number;
   reducedMotion: boolean;
   onDismiss(): void;
+  onSkip(): void;
 };
 
-const { text, visible, reducedMotion, onDismiss }: Props = $props();
+const { text, visible, stepIndex, totalSteps, reducedMotion, onDismiss, onSkip }: Props = $props();
 </script>
 
 {#if visible && text}
@@ -21,15 +25,30 @@ const { text, visible, reducedMotion, onDismiss }: Props = $props();
     role="status"
     aria-live="polite"
   >
-    <span class="hint-text">{text}</span>
-    <button
-      class="hint-dismiss"
-      onclick={() => onDismiss()}
-      aria-label="Dismiss hint"
-      type="button"
-    >
-      ✕
-    </button>
+    <div class="hint-content">
+      <span class="hint-text">{text}</span>
+      {#if totalSteps > 0}
+        <span class="hint-progress">Step {stepIndex + 1} of {totalSteps}</span>
+      {/if}
+    </div>
+    <div class="hint-actions">
+      <button
+        class="hint-skip"
+        onclick={() => onSkip()}
+        aria-label="Skip tutorial"
+        type="button"
+      >
+        Skip
+      </button>
+      <button
+        class="hint-dismiss"
+        onclick={() => onDismiss()}
+        aria-label="Dismiss hint"
+        type="button"
+      >
+        ✕
+      </button>
+    </div>
   </div>
 {/if}
 
@@ -48,7 +67,7 @@ const { text, visible, reducedMotion, onDismiss }: Props = $props();
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  max-width: 24rem;
+  max-width: 28rem;
   pointer-events: auto;
   z-index: 101;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
@@ -58,9 +77,49 @@ const { text, visible, reducedMotion, onDismiss }: Props = $props();
   animation: hint-slide-in 0.3s ease-out;
 }
 
-.hint-text {
+.hint-content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.hint-text {
   line-height: 1.4;
+}
+
+.hint-progress {
+  font-size: 0.6875rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.2;
+}
+
+.hint-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.hint-skip {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 0.25rem;
+  line-height: 1.4;
+  transition: background 0.15s, color 0.15s;
+}
+
+.hint-skip:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.hint-skip:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 1px;
 }
 
 .hint-dismiss {

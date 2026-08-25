@@ -60,6 +60,38 @@ export type CharacterCardV3 = {
   data: Character & { assets?: CharacterCardV3Asset[] };
 };
 
+/**
+ * V2/V3 embedded lorebook (character_book). Spec field names are snake_case.
+ * See https://github.com/malfoyslastname/character-card-spec-v2
+ */
+export type CharacterBook = {
+  name?: string;
+  description?: string;
+  scan_depth?: number;
+  token_budget?: number;
+  recursive_scanning?: boolean;
+  extensions: Record<string, unknown>;
+  entries: CharacterBookEntry[];
+};
+
+/** A single entry within a V2/V3 character_book. */
+export type CharacterBookEntry = {
+  keys: string[];
+  content: string;
+  extensions: Record<string, unknown>;
+  enabled: boolean;
+  insertion_order: number;
+  case_sensitive?: boolean;
+  name?: string;
+  priority?: number;
+  id?: number;
+  comment?: string;
+  selective?: boolean;
+  secondary_keys?: string[];
+  constant?: boolean;
+  position?: 'before_char' | 'after_char';
+};
+
 /** V1 character card (subset of Character fields). */
 export type CharacterCardV1 = {
   name: string;

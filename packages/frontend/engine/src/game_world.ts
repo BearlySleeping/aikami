@@ -5,6 +5,7 @@ import type { Application, Spritesheet } from 'pixi.js';
 import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import {
+  type AssetTagResolver,
   buildCollisionGrid,
   buildTerrainGridForMap,
   extractCollisionGrid,
@@ -13,7 +14,6 @@ import {
   extractTransitionZones,
   loadJtonMap,
   loadTilemap,
-  type AssetTagResolver,
 } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
@@ -30,6 +30,7 @@ import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import type { LpcSlotCatalog } from './rendering/lpc_appearance_resolver.ts';
+import { resolveLayerDepth } from './rendering/lpc_layer_order.ts';
 import { resolveLpcSheetGeometry } from './rendering/lpc_sheet_geometry.ts';
 import { snapToDevicePixels } from './rendering/pixel_snap.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
@@ -2408,8 +2409,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // 4. Load and parse the new tilemap
       const isJton = mapUrl.endsWith('.jton');
       const tilemap = isJton
-        ? await loadJtonMap({ url: mapUrl, resolveTag: this._resolveTag, releaseUrl: this._releaseUrl })
-        : await loadTilemap({ url: mapUrl, resolveTag: this._resolveTag, releaseUrl: this._releaseUrl });
+        ? await loadJtonMap({
+            url: mapUrl,
+            resolveTag: this._resolveTag,
+            releaseUrl: this._releaseUrl,
+          })
+        : await loadTilemap({
+            url: mapUrl,
+            resolveTag: this._resolveTag,
+            releaseUrl: this._releaseUrl,
+          });
       // C-376 AC-1: derive the boolean grid from manifest walkability when a
       // pack config is available; fall back to the explicit collision layer
       // for packless maps (dev sandbox) or when manifest resolution failed.
@@ -3042,7 +3051,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   ): LpcLayerRecipe[] {
     const merged = [...baseRecipes];
     for (const equipmentRecipe of equipmentRecipes) {
-      const overlapIndex = merged.findIndex((r) => r.slot === equipmentRecipe.slot);
+      // C-431: key on (slot, layerRole) so behind and front entries for the same
+      // slot coexist (e.g. weapon behind + weapon front).
+      const overlapIndex = merged.findIndex(
+        (r) => r.slot === equipmentRecipe.slot && r.layerRole === equipmentRecipe.layerRole,
+      );
       if (overlapIndex >= 0) {
         merged[overlapIndex] = equipmentRecipe;
       } else {
@@ -3071,7 +3084,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const { Assets } = await import('pixi.js');
     const stateStr = 'walk'; // default state for engine
 
-    const layerSprites: NonNullable<RenderEntry['layerSprites']> = [];
+    let layerSprites: NonNullable<RenderEntry['layerSprites']> = [];
     let texturesLoaded = false;
 
     // Map recipes to promises. We await them all below.
@@ -3153,27 +3166,29 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this.debug('lpc-loaded', { eid, layers: layerSprites.length });
     }
 
-    // Sort by z-depth so back-to-front rendering is correct:
-    // body behind legs behind feet behind torso behind head behind hair,
-    // with equipment (shoulders, hat, weapon, shield) layered on top.
-    // Promise.all may scramble the order, so we re-sort here.
-    const SlotZ: Record<string, number> = {
-      body: 0,
-      legs: 10,
-      feet: 20,
-      torso: 30,
-      shoulders: 40,
-      head: 50,
-      hair: 60,
-      hat: 70,
-      weapon: 80,
-      shield: 90,
-    } as const;
-    layerSprites.sort((a, b) => {
-      const zA = SlotZ[a.recipe.slot] ?? 0;
-      const zB = SlotZ[b.recipe.slot] ?? 0;
-      return zA - zB;
+    // Sort by depth from the canonical LPC_LAYER_ORDER table (C-430).
+    // This replaces the local SlotZ definition — the canonical table is
+    // the ONLY slot→depth mapping in the repo.
+    // Preserve original recipe order when depths are equal (stable sort tie-breaker).
+    const spritesWithIndex = layerSprites.map((layer, index) => ({ layer, index }));
+    spritesWithIndex.sort((a, b) => {
+      const zA = resolveLayerDepth({
+        slot: a.layer.recipe.slot,
+        layerRole: a.layer.recipe.layerRole ?? 'front',
+        direction: 2, // default facing (down)
+      });
+      const zB = resolveLayerDepth({
+        slot: b.layer.recipe.slot,
+        layerRole: b.layer.recipe.layerRole ?? 'front',
+        direction: 2,
+      });
+      if (zA !== zB) {
+        return zA - zB;
+      }
+      // Equal depth: preserve original recipe order
+      return a.index - b.index;
     });
+    layerSprites = spritesWithIndex.map((item) => item.layer);
 
     // Re-add in correct order
     for (const { sprite } of layerSprites) {

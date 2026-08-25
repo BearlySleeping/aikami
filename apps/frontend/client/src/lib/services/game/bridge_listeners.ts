@@ -57,6 +57,10 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     if (gameOverlayService.activeOverlay !== 'NONE') {
       return;
     }
+
+    // C-422 AC-4: Notify onboarding of conversation step completion
+    onboardingHintService.onEventPerformed('npc_dialogue_opened');
+
     npcDialogueService.startDialogue({
       npcData: {
         npcId: event.npcId,
@@ -129,7 +133,10 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       try {
         const { loadContentPack, djb2Hash } = await import('@aikami/frontend/engine');
         const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
-        const pack = await loadContentPack({ packId: gameEngineService.contentPackId, resolveTag: assetTagResolver });
+        const pack = await loadContentPack({
+          packId: gameEngineService.contentPackId,
+          resolveTag: assetTagResolver,
+        });
         mapUrl = pack.resolveMapUrl(event.targetMap);
         const targetEntry = pack.manifest.maps[event.targetMap];
         if (targetEntry?.defaultSpawnId) {
@@ -201,6 +208,9 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   bridge.on('COMBAT_ENDED', (event) => {
     if (gameOverlayService.activeOverlay === 'COMBAT') {
       if (event.victory) {
+        // C-422 AC-4: Notify onboarding of combat step completion
+        onboardingHintService.onEventPerformed('combat_ended');
+
         // Emit ENCOUNTER_COMPLETED for quest tracking (C-330 AC-4)
         const encounterId = combatService.encounterId;
         if (encounterId) {

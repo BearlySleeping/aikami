@@ -87,42 +87,107 @@ const harness = () => {
   return { pi, calls, emit, turn, thinkingTurn };
 };
 
-describe('cost guard halt behaviour', () => {
-  test('halts exactly once even though the cap stays exceeded', async () => {
-    process.env.PI_MAX_TURNS = '3';
+/**
+ * Who gets ended, and who gets steered.
+ *
+ * 🔴 A trip only ENDS the session when nobody is watching. A headless
+ * pipeline worker leaves a `blocked` stage result and shuts down, because the
+ * orchestrator is waiting on that file. An interactive session gets the
+ * in-flight turn cancelled and a steer, and keeps running — every detector
+ * here has produced a false positive at some point, and being wrong must not
+ * cost a human their session. See `_isUnattended` in cost_guard.ts.
+ */
+describe('cost guard escalation depends on who is watching', () => {
+  /** Mark this process as a headless contract-pipeline worker. */
+  const unattended = () => {
+    process.env.CONTRACT_PIPELINE_ROLE = 'implementer';
+    process.env.CONTRACT_PIPELINE_RESULT_PATH = '/dev/null';
+  };
+
+  /** Repeat one identical turn until the loop guard escalates (threshold x2). */
+  const wedge = async (
+    emit: (event: string, payload: unknown) => Promise<void>,
+    turn: (command: string) => unknown,
+    times = 20,
+  ) => {
+    for (let i = 0; i < times; i++) {
+      await emit('turn_end', turn('identical-cmd'));
+    }
+  };
+
+  test('never shuts down an interactive session', async () => {
     const { pi, calls, emit, turn } = harness();
     costGuard(pi as never);
     await emit('session_start', {});
     await emit('before_agent_start', {});
 
-    // Well past both the soft (3) and hard (4.5) turn thresholds.
-    for (let i = 0; i < 40; i++) {
-      await emit('turn_end', turn(`cmd-${i}`));
-    }
+    await wedge(emit, turn);
 
-    const shutdownNotices = calls.notify.filter((n) => n.includes('Shutting down'));
-    expect(shutdownNotices).toHaveLength(1);
-    expect(calls.shutdown).toBe(1);
+    expect(calls.shutdown).toBe(0);
   });
 
-  test('aborts the agent loop, not just shutdown', async () => {
-    // shutdown() asks pi to exit but does not cancel the running turn; without
-    // abort() the session simply continued to the next turn.
-    process.env.PI_MAX_TURNS = '3';
+  test('cancels the in-flight turn and steers instead', async () => {
+    // abort() stops a runaway generation; shutdown() takes the session away.
+    // Interactive mode is entitled to the first and never uses the second.
     const { pi, calls, emit, turn } = harness();
     costGuard(pi as never);
     await emit('session_start', {});
     await emit('before_agent_start', {});
 
-    for (let i = 0; i < 20; i++) {
-      await emit('turn_end', turn(`cmd-${i}`));
-    }
+    await wedge(emit, turn);
 
     expect(calls.abort).toBe(1);
-    expect(calls.shutdown).toBe(1);
+    expect(calls.steer.some((m) => m.includes('LOOP GUARD'))).toBe(true);
+    expect(calls.steer.some((m) => m.includes('Make no further tool calls'))).toBe(true);
   });
 
-  test('wraps up before halting rather than killing outright', async () => {
+  test('shuts down an unattended pipeline worker', async () => {
+    unattended();
+    const { pi, calls, emit, turn } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    await wedge(emit, turn);
+
+    expect(calls.shutdown).toBe(1);
+    expect(calls.abort).toBe(1);
+  });
+
+  test('escalates exactly once even though the loop keeps running', async () => {
+    // The latch. Without it the trip condition is still true next turn, so the
+    // guard re-fired every turn forever while the session carried on.
+    unattended();
+    const { pi, calls, emit, turn } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    await wedge(emit, turn, 40);
+
+    expect(calls.shutdown).toBe(1);
+    expect(calls.notify.filter((n) => n.includes('Loop detected'))).toHaveLength(2);
+  });
+
+  test('a new user prompt re-arms the guard', async () => {
+    unattended();
+    const { pi, calls, emit, turn } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    await wedge(emit, turn);
+    expect(calls.shutdown).toBe(1);
+
+    // A fresh prompt is a new run with a new budget, so a later trip counts.
+    await emit('before_agent_start', {});
+    await wedge(emit, turn);
+    expect(calls.shutdown).toBe(2);
+  });
+});
+
+describe('cost guard run budget', () => {
+  test('steers a wrap-up at the turn budget rather than killing the run', async () => {
     process.env.PI_MAX_TURNS = '4';
     const { pi, calls, emit, turn } = harness();
     costGuard(pi as never);
@@ -132,9 +197,33 @@ describe('cost guard halt behaviour', () => {
     for (let i = 0; i < 4; i++) {
       await emit('turn_end', turn(`cmd-${i}`));
     }
-    // At the soft threshold: steered, still alive.
+
     expect(calls.steer.some((m) => m.includes('RUN BUDGET'))).toBe(true);
     expect(calls.shutdown).toBe(0);
+  });
+
+  test('the turn budget never escalates past that steer', async () => {
+    // 🔴 Regression for removed dead code. There used to be a halt tier at
+    // 1.5x the budget. Measured over all 1065 stored runs it would have fired
+    // on exactly one — a run the loop guard already catches at 8 identical
+    // turns — so it could only ever misfire. Even an unattended worker now
+    // rides the turn budget out.
+    process.env.PI_MAX_TURNS = '3';
+    process.env.CONTRACT_PIPELINE_ROLE = 'implementer';
+    process.env.CONTRACT_PIPELINE_RESULT_PATH = '/dev/null';
+    const { pi, calls, emit, turn } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    // Varied commands, so only the turn budget is in play — not the loop guard.
+    for (let i = 0; i < 60; i++) {
+      await emit('turn_end', turn(`cmd-${i}`));
+    }
+
+    expect(calls.steer.filter((m) => m.includes('RUN BUDGET'))).toHaveLength(1);
+    expect(calls.shutdown).toBe(0);
+    expect(calls.abort).toBe(0);
   });
 
   test('does not fire on a long but healthy run below the cap', async () => {
@@ -153,24 +242,29 @@ describe('cost guard halt behaviour', () => {
     expect(calls.abort).toBe(0);
   });
 
-  test('a new user prompt clears the turn budget and the halt latch', async () => {
-    process.env.PI_MAX_TURNS = '3';
-    const { pi, calls, emit, turn } = harness();
+  test('the spend and turn-budget warnings do not suppress each other', async () => {
+    // 🔴 They shared one `hasSoftWarned` flag, so whichever fired first
+    // silently disabled the other for the rest of the session.
+    process.env.PI_MAX_TURNS = '2';
+    process.env.PI_SOFT_SPEND = '0.01';
+    const { pi, calls, emit } = harness();
     costGuard(pi as never);
     await emit('session_start', {});
     await emit('before_agent_start', {});
 
-    for (let i = 0; i < 20; i++) {
-      await emit('turn_end', turn(`cmd-${i}`));
+    // Each turn carries a real cost, so both conditions come true.
+    const costly = (command: string) => ({
+      message: {
+        content: [{ type: 'toolCall', name: 'bash', arguments: { command } }],
+        usage: { input: 10, output: 10, cost: { total: 0.02 } },
+      },
+    });
+    for (let i = 0; i < 6; i++) {
+      await emit('turn_end', costly(`cmd-${i}`));
     }
-    expect(calls.shutdown).toBe(1);
 
-    // A fresh prompt is a new run: budget resets, and a later trip can halt again.
-    await emit('before_agent_start', {});
-    for (let i = 0; i < 20; i++) {
-      await emit('turn_end', turn(`next-${i}`));
-    }
-    expect(calls.shutdown).toBe(2);
+    expect(calls.steer.some((m) => m.includes('RUN BUDGET'))).toBe(true);
+    expect(calls.steer.some((m) => m.includes('BUDGET SOFT LIMIT'))).toBe(true);
   });
 });
 
@@ -181,7 +275,7 @@ describe('cost guard halt behaviour', () => {
  * every check it owns reads `text` blocks and counts only consecutive repeats.
  */
 describe('cost guard sees reasoning blocks', () => {
-  test('halts on a repeating A-B-A-B cycle of tool calls', async () => {
+  test('escalates on a repeating A-B-A-B cycle of tool calls', async () => {
     const { pi, calls, emit } = harness();
     costGuard(pi as never);
     await emit('session_start', {});
@@ -204,8 +298,9 @@ describe('cost guard sees reasoning blocks', () => {
     }
 
     expect(calls.steer.some((m) => m.includes('LOOP GUARD'))).toBe(true);
-    expect(calls.shutdown).toBe(1);
+    // Interactive: the turn is cancelled, the session survives.
     expect(calls.abort).toBe(1);
+    expect(calls.shutdown).toBe(0);
   });
 
   test('does not fire when the two alternating calls differ each time', async () => {
@@ -239,14 +334,16 @@ describe('cost guard sees reasoning blocks', () => {
     await emit('before_agent_start', {});
 
     // The observed shape: empty text, one sentence repeated far past the
-    // reasoning threshold. Two strikes are required before halting.
+    // reasoning threshold. Two strikes are required before escalating.
     const collapsed = 'Actually, let me reconsider the whole thing. '.repeat(60);
     await emit('turn_end', thinkingTurn({ thinking: collapsed }));
     expect(calls.steer.some((m) => m.includes('REPETITION GUARD'))).toBe(true);
-    expect(calls.shutdown).toBe(0);
+    expect(calls.abort).toBe(0);
 
     await emit('turn_end', thinkingTurn({ thinking: collapsed }));
-    expect(calls.shutdown).toBe(1);
+    expect(calls.abort).toBe(1);
+    expect(calls.steer.some((m) => m.includes('Second collapse this run'))).toBe(true);
+    expect(calls.shutdown).toBe(0);
   });
 
   test('tolerates the code a healthy turn drafts in its reasoning', async () => {
@@ -279,7 +376,9 @@ describe('cost guard sees reasoning blocks', () => {
     await emit('turn_end', thinkingTurn({ thinking: collapsed, usage: null }));
     await emit('turn_end', thinkingTurn({ thinking: collapsed, usage: null }));
 
-    expect(calls.shutdown).toBe(1);
+    // Both turns were examined: strike one steered, strike two escalated.
+    expect(calls.steer.some((m) => m.includes('Second collapse this run'))).toBe(true);
+    expect(calls.abort).toBe(1);
   });
 });
 
@@ -346,7 +445,8 @@ describe('cost guard mid-stream collapse detection', () => {
     // Accumulate code blocks until they exceed the scan window (8192 bytes by default)
     // while still staying within the healthy-drafting threshold (37 repeats).
     let thinking = '';
-    const codeBlock = '```typescript\nconst value = compute(someLongParameterName, anotherLongParameterName);\nconst result = transform(value, { optionA: true, optionB: false, optionC: someDefaultValue });\nconst output = finalize(result, { format: \"json\", prettyPrint: true, validate: false });\n```\n';
+    const codeBlock =
+      '```typescript\nconst value = compute(someLongParameterName, anotherLongParameterName);\nconst result = transform(value, { optionA: true, optionB: false, optionC: someDefaultValue });\nconst output = finalize(result, { format: "json", prettyPrint: true, validate: false });\n```\n';
     for (let i = 0; i < 37; i++) {
       thinking += codeBlock;
       await emit('message_update', streaming(thinking));
@@ -402,15 +502,18 @@ describe('cost guard strike accounting across the stream boundary', () => {
     await emit('turn_end', {
       message: { content: [{ type: 'thinking', thinking }], usage: { input: 10, output: 10 } },
     });
-    expect(calls.shutdown).toBe(0);
+    expect(calls.abort).toBe(1);
+    expect(calls.steer.some((m) => m.includes('Second collapse this run'))).toBe(false);
 
-    // A second, separate collapse is what halts.
+    // A second, separate collapse is what escalates.
     await emit('message_start', {});
     let next = '';
-    for (let i = 0; i < 400 && calls.shutdown === 0; i++) {
+    for (let i = 0; i < 400 && calls.abort < 2; i++) {
       next += 'Actually, let me reconsider the whole thing. ';
       await emit('message_update', streaming(next));
     }
-    expect(calls.shutdown).toBe(1);
+    expect(calls.abort).toBe(2);
+    expect(calls.steer.some((m) => m.includes('Second collapse this run'))).toBe(true);
+    expect(calls.shutdown).toBe(0);
   });
 });

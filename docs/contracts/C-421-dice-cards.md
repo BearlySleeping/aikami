@@ -23,7 +23,7 @@ created_at: "2026-08-21"
 | **Priority** | P1 — the single biggest "this is a real TTRPG, not a chat wrapper" win in the batch |
 | **Sequence** | **2 of 6** — after C-423 (inherits its a11y baseline); before the surface unification in C-424 |
 | **Dependencies** | C-148 (landed — combat dice / `GameDice`); C-231 (landed — rich chat streaming); C-234 (landed — `dice_notation.ts`); C-371/C-401 (landed — two-call dialogue pipeline); C-423 (a11y baseline) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 4.0.0 |

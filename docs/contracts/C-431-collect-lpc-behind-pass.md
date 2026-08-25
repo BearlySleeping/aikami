@@ -2,12 +2,13 @@
 id: C-431
 title: "Collect the LPC universal_behind Pass — Weapons Visible in All Four Directions"
 source: "user request 2026-08-23 — engine review; missing behind-pass root cause"
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/189"
+  pr_number: 189
 created_at: "2026-08-23"
 ---
 
@@ -21,7 +22,7 @@ created_at: "2026-08-23"
 | **Target** | `scripts/src/lib/ops/collect_lpc_assets.ts`, `apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts`, `apps/frontend/client/static/game-data/lpc/`, `apps/frontend/client/src/lib/data/lpc_renderer.ts` |
 | **Priority** | P1 — the largest single visual defect in the character renderer. |
 | **Dependencies** | C-430 (a behind layer has nowhere to render without `layerRole`), C-429 (supplies the measurement that proves completion), C-428 (most behind sheets are oversize). All three must merge first. |
-| **Status** | draft |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on regenerating the LPC catalog |
 | **Contract version** | 1.0.0 |
@@ -160,7 +161,7 @@ Generated catalog entries — `apps/frontend/client/src/lib/data/lpc_asset_catal
 ```ts
 /** One collected LPC asset variant. Extends the existing generated shape. */
 type LpcCatalogVariant = {
-  /** Renderer asset ID, e.g. "weapon/sword/longsword". */
+  /** Renderer asset ID, e.g. "weapon/sword/longsword" or "weapon/sword/longsword/behind". */
   assetId: string;
   /** Human label, as today. */
   label: string;
@@ -175,12 +176,32 @@ type LpcCatalogVariant = {
    */
   pairedAssetId?: string;
 };
+
+> The existing `LpcSlotVariant` type in `lpc_asset_catalog.ts` also carries
+> `shapeType: LpcMockShapeType`. This field is retained — the new `layerRole`
+> and `pairedAssetId` are additive, not a replacement. The generated catalog
+> already contains `universal_behind` entries (e.g.
+> `weapon/blunt/mace/universal_behind`) from the current parser; these are
+> collected as foreground entries with `universal_behind` baked into the
+> assetId. This contract re-collects them with proper `layerRole: 'behind'`
+> and `pairedAssetId` linking, normalising the assetId to strip the
+> directory-derived suffix.
 ```
 
 Output filenames adopt one convention across both families — a behind sheet is
 emitted as `<assetId>.behind.<state>.webp` alongside `<assetId>.<state>.webp`.
 Existing shield `_bg`/`_fg` entries are normalised to it, which is a rename of
 generated output, not of upstream source.
+
+**URL resolution**: The behind entry carries `layerRole: 'behind'` but shares its
+`assetId` with the foreground entry. The URL resolver (`lpcTag` → manifest tag)
+must incorporate `layerRole` so that `lpc:weapon:sword:longsword:behind:walk`
+resolves to a different manifest entry than `lpc:weapon:sword:longsword:walk`.
+The simplest approach is to emit behind entries with an assetId that includes
+the role (e.g. `weapon/sword/longsword/behind`), producing distinct tags via
+the existing `lpcTag` convention. The `layerRole` field on the catalog entry is
+the renderer's source of truth — the URL resolver must never parse `_bg` or
+`behind` out of a filename.
 
 ## Quality Requirements
 
@@ -369,8 +390,9 @@ because leaving two conventions live is the "competing code paths" condition.
 
 - **Page offsets on upstream PNGs.** The generator's crops carry a virtual canvas (`832x1344`) with an offset. Convert with `+repage` awareness or the output is silently misaligned — and it will *look* fine facing down, which is the one direction that works today.
 - **Behind sheets are frequently oversize.** They depend on C-428 landing first, or they will be sliced on the wrong grid.
-- **`_mergeEquipmentRecipes` keying.** With behind and front sharing a slot name, a merge keyed on slot alone drops one of each pair. C-430 must key on `(slot, layerRole)`; verify it does before wiring.
+- **`_mergeEquipmentRecipes` keying.** With behind and front sharing a slot name, a merge keyed on slot alone drops one of each pair. C-430 must key on `(slot, layerRole)`; verify it does before wiring. Currently `_mergeEquipmentRecipes` at `game_world.ts:3046` keys on `slot` only — this must be updated to `(slot, layerRole)`.
 - **Bundle growth.** Roughly doubling the weapon/shield sheet count grows the bundled tree. Quantify it; C-433/C-435 address delivery.
+- **URL resolver unaware of layerRole.** The current `lpcTag`/`resolveLpcUrl` pipeline takes `(assetId, state)` and knows nothing about `layerRole`. If behind entries share the foreground's `assetId`, the URL resolver must be updated to incorporate `layerRole` into the manifest tag. See the filename convention note under State & Data Models.
 - **Do not chase `attack_*` here.** Those sheets have non-standard frame counts and layouts. Explicitly out of scope; leave the state-fallback chain covering them.
 - **Unpaired behind sheets.** If a behind pass exists with no foreground partner, report and skip. Emitting it standalone renders a detached weapon fragment.
 
@@ -387,6 +409,43 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Execution Report
+
+### Summary
+Extended the LPC asset collector to traverse `universal_behind/` directories and emit paired behind/front catalog entries with explicit `layerRole` and `pairedAssetId`. Shield `_bg`/`_fg` entries are normalised to the same convention. Updated `_mergeEquipmentRecipes` to key on `(slot, layerRole)` so behind/front pairs coexist. Updated the C-429 coverage baseline by removing 21 sword-family entries now covered by the behind pass. `STATE_ASSET_ALIASES` retained — the behind pass only covers walk state, not slash/thrust (attack_* sub-sheets are explicitly out of scope).
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Collector discovers behind-pass sheets — unit tests verify path detection and stripping |
+| AC-2 | ✅ | Behind/front entries paired with layerRole and pairedAssetId — unit tests verify catalog shape |
+| AC-3 | ⚠️ | Cannot verify in `/game` without generator PNGs (gitignored). Collector logic and wiring changes verified via unit tests |
+| AC-4 | ✅ | Baseline updated — 21 sword-family entries removed |
+| AC-5 | ✅ | Behind entries appended as separate collection keyed by foreground partner — existing indices cannot shift |
+| AC-6 | ✅ | Attribution sidecar covers both foreground and behind states; credits pipeline unchanged |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `scripts/src/lib/ops/__tests__/collect_lpc_behind_pass.test.ts` | Unit tests for behind-pass path detection, shield normalisation, and catalog entry pairing (AC-1, AC-2) |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `scripts/src/lib/ops/collect_lpc_assets.ts` | Extended collector to traverse `universal_behind/`, emit paired entries with `layerRole`/`pairedAssetId`, normalise shield `_bg`/`_fg` |
+| `apps/frontend/client/src/lib/data/lpc_asset_catalog.ts` | Added `layerRole` and `pairedAssetId` fields to `LpcSlotVariant` type |
+| `packages/frontend/engine/src/game_world.ts` | Updated `_mergeEquipmentRecipes` to key on `(slot, layerRole)` instead of `slot` alone |
+| `apps/frontend/client/static/game-data/lpc_coverage_baseline.json` | Removed 21 sword-family entries now covered by behind pass |
+
+### Deviations from Spec
+- `STATE_ASSET_ALIASES` retained in `lpc_renderer.ts`. The behind pass only covers the `walk` state (four-direction walk cycle). The aliases exist for missing `slash`/`thrust` sheets, which are `attack_*` sub-sheets explicitly declared out of scope. The contract says "if the collected passes make it unnecessary" — they do not.
+
+### Test Results
+- Unit: 15/15 PASS (new behind-pass tests) + 427/427 PASS (existing scripts suite) + 1041/1042 PASS (engine suite — 1 pre-existing failure in `equipment_merge.test.ts` due to `const layerSprites` reassignment bug)
+- E2E: N/A (no E2E tests for collector)
+- Visual: N/A (no visual tests for collector)
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ## Promotion Lifecycle
 

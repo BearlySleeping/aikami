@@ -37,11 +37,13 @@ import {
 const _resetComponentArrays = (): void => {
   Position.x.length = 0;
   Position.y.length = 0;
+  Appearance.layers.clear();
   Appearance.layer0.length = 0;
   Appearance.layer1.length = 0;
   Appearance.layer2.length = 0;
   Appearance.layer3.length = 0;
   Appearance.layer4.length = 0;
+  Appearance.layer5.length = 0;
   CombatStats.health.length = 0;
   CombatStats.maxHealth.length = 0;
   CombatStats.initiative.length = 0;
@@ -843,5 +845,48 @@ describe('AC-3: serializePlayer produces player-scoped snapshot', () => {
     // not just SoA values — previously every entity received every component)
     expect(hasComponent(restored, restoredEid, CombatStats)).toBe(false);
     expect(hasComponent(restored, restoredEid, Position)).toBe(true);
+  });
+
+  it('round-trips Appearance with more than 6 layers (C-430 variable-length layers)', () => {
+    const { setAppearanceLayers, getAppearanceLayers } = require('../components/appearance.ts');
+
+    // Create entity with 10 layers (beyond the legacy 6-slot limit)
+    const eid = addEntity(world);
+    addComponent(world, eid, set(Position, { x: 100, y: 200 }));
+    addComponent(world, eid, Appearance);
+
+    const tenLayers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    setAppearanceLayers(world, eid, tenLayers);
+
+    // Verify the layers were set in the Map
+    const readBack = getAppearanceLayers(eid);
+    expect(readBack).toEqual(tenLayers);
+
+    // Serialize
+    const payload = serializeWorld(world);
+    const snapshot = JSON.parse(payload);
+
+    // The layers field should be serialized as JSON string
+    expect(snapshot.components.Appearance.layers).toBeDefined();
+    expect(snapshot.components.Appearance.layers[0]).toBe(JSON.stringify(tenLayers));
+
+    // Deserialize into a fresh world
+    const restored = createTestWorld();
+    const eidMap = deserializeWorld(restored, payload);
+
+    const restoredEid = [...eidMap.values()][0];
+
+    // Verify all 10 layers were restored
+    const restoredLayers = getAppearanceLayers(restoredEid);
+    expect(restoredLayers).toEqual(tenLayers);
+
+    // Verify both Map and legacy arrays were populated correctly
+    expect(Appearance.layers.get(restoredEid)).toEqual(tenLayers);
+    expect(Appearance.layer0[restoredEid]).toBe(1);
+    expect(Appearance.layer1[restoredEid]).toBe(2);
+    expect(Appearance.layer2[restoredEid]).toBe(3);
+    expect(Appearance.layer3[restoredEid]).toBe(4);
+    expect(Appearance.layer4[restoredEid]).toBe(5);
+    expect(Appearance.layer5[restoredEid]).toBe(6);
   });
 });

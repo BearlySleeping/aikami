@@ -18,6 +18,8 @@ declare module '$env/static/public' {
   export const PUBLIC_VOICE_URL: string;
   /** Public base URL for the R2 assets bucket (e.g. https://assets.bearlysleeping.com). */
   export const PUBLIC_ASSETS_BASE_URL: string;
+  /** Build-time flag: when 'true', restores full asset bundling (C-435 AC-7). */
+  export const PUBLIC_FULL_BUNDLE: string;
   export const PUBLIC_LOG_LEVEL: LogLevel;
   export const PUBLIC_MODE: Mode;
 }

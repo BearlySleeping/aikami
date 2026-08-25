@@ -2,13 +2,13 @@
 id: C-441
 title: "SOPS secrets migration — retire GCP Secret Manager and the Redis env relay"
 source: "user request 2026-08-25 — GCP Secret Manager is the project's most expensive service; CI/CD audit identified the relay it forces as the largest simplification available"
-status: implemented
+status: approved
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/188"
-  pr_number: 188
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/188"
+    pr_number: 188
 created_at: "2026-08-25"
 ---
 
@@ -16,40 +16,40 @@ created_at: "2026-08-25"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | User request (2026-08-25). GCP Secret Manager is the single largest line on the project's cloud bill, and is now the *only* remaining GCP dependency in CI after the Firebase/Cloud Run decommission. |
-| **Target** | `scripts/src/lib/ops/download_secrets.ts`, `upload_secrets.ts`, `env_share.ts`, `.github/workflows/release.yml` (the `prepare-secrets` job), `.github/actions/setup-environment/action.yml` (the `gcp-auth` inputs), and a new `secrets/` tree |
-| **Priority** | P2 — cost and simplification, not correctness. Nothing is broken. Sequence it after the measurement in Phase 1 confirms it is worth doing at all. |
-| **Dependencies** | None hard. Overlaps C-436 (Postgres decommission removes `NEON_DATABASE_URL*` from the key set) — land C-436 first if both are queued, so this contract migrates fewer keys. |
-| **Status** | implemented |
-| **Promotion** | — |
-| **Docs Impact** | internal — `docs/guides/CI_CD.md` and `CONTRIBUTING.md` both describe the current `download-secrets` flow and must be rewritten. |
-| **Contract version** | 2.0.0 |
+| Field                | Value                                                                                                                                                                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Source**           | User request (2026-08-25). GCP Secret Manager is the single largest line on the project's cloud bill, and is now the _only_ remaining GCP dependency in CI after the Firebase/Cloud Run decommission.                                          |
+| **Target**           | `scripts/src/lib/ops/download_secrets.ts`, `upload_secrets.ts`, `env_share.ts`, `.github/workflows/release.yml` (the `prepare-secrets` job), `.github/actions/setup-environment/action.yml` (the `gcp-auth` inputs), and a new `secrets/` tree |
+| **Priority**         | P2 — cost and simplification, not correctness. Nothing is broken. Sequence it after the measurement in Phase 1 confirms it is worth doing at all.                                                                                              |
+| **Dependencies**     | None hard. Overlaps C-436 (Postgres decommission removes `NEON_DATABASE_URL*` from the key set) — land C-436 first if both are queued, so this contract migrates fewer keys.                                                                   |
+| **Status**           | implemented                                                                                                                                                                                                                                    |
+| **Promotion**        | —                                                                                                                                                                                                                                              |
+| **Docs Impact**      | internal — `docs/guides/CI_CD.md` and `CONTRIBUTING.md` both describe the current `download-secrets` flow and must be rewritten.                                                                                                               |
+| **Contract version** | 2.0.0                                                                                                                                                                                                                                          |
 
 ## Problem & Baseline Evidence
 
 - **Current behavior**: secrets live in GCP Secret Manager across two projects (production / staging). CI reaches them through a three-hop relay:
 
-  ```
-  GCP Secret Manager → prepare-secrets job → Upstash Redis (per-run key, 4h TTL) → every downstream job
-  ```
+    ```
+    GCP Secret Manager → prepare-secrets job → Upstash Redis (per-run key, 4h TTL) → every downstream job
+    ```
 
-  `env_share.ts` exists solely because the repo is public, so `.env` content may not ride in downloadable workflow artifacts. Its header documents a second reason: per-job `gcloud` fetches spawned concurrent processes that collided on gcloud's token cache and failed under Windows file locking.
+    `env_share.ts` exists solely because the repo is public, so `.env` content may not ride in downloadable workflow artifacts. Its header documents a second reason: per-job `gcloud` fetches spawned concurrent processes that collided on gcloud's token cache and failed under Windows file locking.
 
 - **The relay is now the only thing GCP is used for in CI.** After the Firebase/Cloud Run/docker-release jobs were deleted, `prepare-secrets` is the sole remaining `gcp-auth: "true"` consumer in the release pipeline. The dependency is being maintained for one purpose.
 
 - **Cost driver, unmeasured.** GCP Secret Manager bills per **active secret version**, not per secret. `upload_secrets.ts` adds a version on every run and nothing destroys old ones. The bill is therefore a function of upload frequency, not of secret count — which is very likely why it is the most expensive service. **This has not been measured**, and Phase 1 exists to measure it before anything is migrated.
 
 - **The key set is smaller than it looks.** 39 distinct non-`PUBLIC_` keys across `.env.example` files, but:
-  - ~12 are not secrets at all (`MODE`, `LOG_LEVEL`, `CATALOG_ORIGIN_URL`, `DIST_ORIGIN_URL`, `BETTER_AUTH_URL`, `OPENROUTER_MODEL`, `APP_ID`, `DISCORD_APP_ID`, `DISCORD_GUILD_ID`, bucket names and endpoints)
-  - **12 are R2 credentials** — three buckets × `ACCESS_KEY_ID` / `SECRET_ACCESS_KEY` / `TOKEN` / `ENDPOINT`. This is the single largest block and the most compressible.
-  - 2 (`NEON_DATABASE_URL`, `NEON_DATABASE_URL_DIRECT`) are deleted by C-436.
+    - ~12 are not secrets at all (`MODE`, `LOG_LEVEL`, `CATALOG_ORIGIN_URL`, `DIST_ORIGIN_URL`, `BETTER_AUTH_URL`, `OPENROUTER_MODEL`, `APP_ID`, `DISCORD_APP_ID`, `DISCORD_GUILD_ID`, bucket names and endpoints)
+    - **12 are R2 credentials** — three buckets × `ACCESS_KEY_ID` / `SECRET_ACCESS_KEY` / `TOKEN` / `ENDPOINT`. This is the single largest block and the most compressible.
+    - 2 (`NEON_DATABASE_URL`, `NEON_DATABASE_URL_DIRECT`) are deleted by C-436.
 
 - **Reproduction**:
-  1. `grep -n "prepare-secrets" -A 30 .github/workflows/release.yml` — the relay.
-  2. `sed -n '1,30p' scripts/src/lib/ops/env_share.ts` — the recorded rationale.
-  3. `gcloud secrets list --format='value(name)' --project=<prod> | wc -l`, then sum `gcloud secrets versions list <name> --filter='state=ENABLED'` across them — the actual cost driver.
+    1. `grep -n "prepare-secrets" -A 30 .github/workflows/release.yml` — the relay.
+    2. `sed -n '1,30p' scripts/src/lib/ops/env_share.ts` — the recorded rationale.
+    3. `gcloud secrets list --format='value(name)' --project=<prod> | wc -l`, then sum `gcloud secrets versions list <name> --filter='state=ENABLED'` across them — the actual cost driver.
 
 - **Existing implementation to reuse**: `download_secrets.ts` and `upload_secrets.ts` already own the round-trip and the `.env.example`-driven key discovery. Their **interface is the thing to preserve**; only the storage backend changes. `resolveSecretName` / `PROJECT_ENV_CONFIG` in `deployment_config.ts` encode per-app key mapping that stays valid.
 
@@ -72,16 +72,16 @@ no 4-hour TTL window.
 
 ## Existing System & Reuse Map
 
-| Capability | Existing source | Reuse / modify / replace |
-|---|---|---|
-| Key discovery from `.env.example` | `download_secrets.ts` | **reuse** — unchanged logic |
-| CLI surface (`--mode`, `--strict`, `--keys`, app positionals) | `download_secrets.ts` | **reuse** — the interface is a hard compatibility requirement |
-| Secret storage backend | GCP Secret Manager via `gcloud` | **replace** — SOPS + age |
-| Cross-job env sharing | `env_share.ts` + Upstash Redis | **delete** — no longer needed |
-| One-time secret fetch job | `release.yml` → `prepare-secrets` | **delete** |
-| GCP auth in CI | `setup-environment` → `gcp-auth`, `gcp-service-account-key` | **delete** if no consumer remains |
-| Emulator fallback values | `EMULATOR_ENV_OVERRIDES` | **reuse** — untouched |
-| Pre-commit safety | `scripts/src/lib/ops/pre_commit.ts` | **modify** — add a plaintext-secret guard |
+| Capability                                                    | Existing source                                             | Reuse / modify / replace                                      |
+| ------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
+| Key discovery from `.env.example`                             | `download_secrets.ts`                                       | **reuse** — unchanged logic                                   |
+| CLI surface (`--mode`, `--strict`, `--keys`, app positionals) | `download_secrets.ts`                                       | **reuse** — the interface is a hard compatibility requirement |
+| Secret storage backend                                        | GCP Secret Manager via `gcloud`                             | **replace** — SOPS + age                                      |
+| Cross-job env sharing                                         | `env_share.ts` + Upstash Redis                              | **delete** — no longer needed                                 |
+| One-time secret fetch job                                     | `release.yml` → `prepare-secrets`                           | **delete**                                                    |
+| GCP auth in CI                                                | `setup-environment` → `gcp-auth`, `gcp-service-account-key` | **delete** if no consumer remains                             |
+| Emulator fallback values                                      | `EMULATOR_ENV_OVERRIDES`                                    | **reuse** — untouched                                         |
+| Pre-commit safety                                             | `scripts/src/lib/ops/pre_commit.ts`                         | **modify** — add a plaintext-secret guard                     |
 
 ## Overview
 
@@ -101,7 +101,7 @@ development is a requirement, not a preference.
 ## Design Reference
 
 - `scripts/src/lib/ops/download_secrets.ts` — the interface to preserve, including the `--mode emulator` short-circuit.
-- `scripts/src/lib/ops/env_share.ts` — read its header before deleting it. It records *why* the relay exists (public repo, concurrent-gcloud Windows file locks); the replacement must not reintroduce either problem.
+- `scripts/src/lib/ops/env_share.ts` — read its header before deleting it. It records _why_ the relay exists (public repo, concurrent-gcloud Windows file locks); the replacement must not reintroduce either problem.
 - `scripts/src/lib/deploy/deployment_config.ts` — `MODE_PROJECT_MAP`, `PROJECT_ENV_CONFIG`, `resolveSecretName`, `resolveEnvFile`. The mode→file mapping survives; the mode→GCP-project mapping does not.
 - C-426 — specifies `wrangler secret put` for the hub's Google client secret. This contract's runtime-secret decision (Open Question 3) may supersede that; if it does, amend C-426 rather than leaving two contradictory records.
 
@@ -130,7 +130,7 @@ secrets/
 ```
 
 SOPS `dotenv` format keeps keys readable and values encrypted, so a diff shows
-*which* secret changed without revealing anything:
+_which_ secret changed without revealing anything:
 
 ```
 BETTER_AUTH_SECRET=ENC[AES256_GCM,data:...,iv:...,tag:...,type:str]
@@ -141,10 +141,10 @@ OPENROUTER_API_KEY=ENC[AES256_GCM,data:...,iv:...,tag:...,type:str]
 
 ```yaml
 creation_rules:
-  - path_regex: secrets/.*\.enc\.env$
-    age: >-
-      age1<maintainer-pubkey>,
-      age1<ci-pubkey>
+    - path_regex: secrets/.*\.enc\.env$
+      age: >-
+          age1<maintainer-pubkey>,
+          age1<ci-pubkey>
 ```
 
 No application-level types or schemas change. The generated `.env.<mode>` files
@@ -164,12 +164,12 @@ keep their existing shape exactly.
 
 - **Old data compatibility**: the generated `.env.<mode>` files are byte-identical in shape. Nothing downstream can tell the difference — that is the correctness criterion.
 - **Migration**:
-  1. Export every secret from GSM to plaintext locally (never committed, never logged).
-  2. Encrypt into `secrets/<mode>.enc.env`.
-  3. Diff hashes against the Phase 1 fixture — every key present, every value identical.
-  4. Add `SOPS_AGE_KEY` to GitHub secrets; switch CI; run one full release in **staging**.
-  5. Only then delete `prepare-secrets` and `env_share.ts`.
-  6. Leave GSM populated but unused for one release cycle; destroy it afterwards.
+    1. Export every secret from GSM to plaintext locally (never committed, never logged).
+    2. Encrypt into `secrets/<mode>.enc.env`.
+    3. Diff hashes against the Phase 1 fixture — every key present, every value identical.
+    4. Add `SOPS_AGE_KEY` to GitHub secrets; switch CI; run one full release in **staging**.
+    5. Only then delete `prepare-secrets` and `env_share.ts`.
+    6. Leave GSM populated but unused for one release cycle; destroy it afterwards.
 - **Rollback**: until step 6, GSM is intact and reverting is a git revert plus re-adding `GCP_SA_KEY`. After step 6, rollback means repopulating GSM from the decrypted SOPS files — possible, but no longer cheap. **Step 6 is the point of no return; do not take it in the same PR as steps 1–5.**
 - **Feature flag or kill switch**: an env var (`AIKAMI_SECRETS_BACKEND=gsm|sops`) selecting the backend during the overlap window, defaulting to `gsm` until staging has proven the new path.
 - **Failure recovery**: if decryption fails in CI, the job must fail loudly with "SOPS_AGE_KEY missing or wrong recipient" — never fall through to a partially-populated `.env` file. A half-written env file that lets a deploy proceed with missing keys is the worst outcome available here.
@@ -177,19 +177,19 @@ keep their existing shape exactly.
 ## Scope Boundaries
 
 - **In Scope:**
-  - Phase 1 measurement of the actual GSM cost driver (this gates everything else)
-  - Collapsing the 12 R2 credential entries into one scoped token, if the measurement shows it matters
-  - SOPS + age backend behind the existing `download_secrets.ts` / `upload_secrets.ts` interface
-  - `secrets/*.enc.env`, `.sops.yaml`, recipient management, and key-rotation documentation
-  - Deleting `prepare-secrets`, `env_share.ts`, the Upstash dependency, and the `gcp-auth` inputs if unused
-  - A pre-commit guard against committing plaintext secrets
-  - Rewriting the secrets sections of `docs/guides/CI_CD.md` and `CONTRIBUTING.md`
+    - Phase 1 measurement of the actual GSM cost driver (this gates everything else)
+    - Collapsing the 12 R2 credential entries into one scoped token, if the measurement shows it matters
+    - SOPS + age backend behind the existing `download_secrets.ts` / `upload_secrets.ts` interface
+    - `secrets/*.enc.env`, `.sops.yaml`, recipient management, and key-rotation documentation
+    - Deleting `prepare-secrets`, `env_share.ts`, the Upstash dependency, and the `gcp-auth` inputs if unused
+    - A pre-commit guard against committing plaintext secrets
+    - Rewriting the secrets sections of `docs/guides/CI_CD.md` and `CONTRIBUTING.md`
 - **Out of Scope:**
-  - Moving the hub's **runtime** secrets to Cloudflare Secrets Store — related and worth doing, but a separate concern with a separate failure mode (see Open Question 3)
-  - Deleting the GCP project itself, or the free-tier worker VM
-  - Any change to which secrets exist or what they are used for
-  - Rotating secret values as part of the migration — rotate before or after, never during, or a failed diff becomes unattributable
-  - C-440's tooling
+    - Moving the hub's **runtime** secrets to Cloudflare Secrets Store — related and worth doing, but a separate concern with a separate failure mode (see Open Question 3)
+    - Deleting the GCP project itself, or the free-tier worker VM
+    - Any change to which secrets exist or what they are used for
+    - Rotating secret values as part of the migration — rotate before or after, never during, or a failed diff becomes unattributable
+    - C-440's tooling
 
 ## Contract Size & Split Rule
 
@@ -204,21 +204,22 @@ the new path.
 ## Acceptance Criteria
 
 ### AC-1: The cost driver is measured before anything is migrated
+
 **Given** the GCP projects as they stand
 **When** active secret versions are counted per project
 **Then** the number is recorded in this contract, alongside what the bill would be after destroying stale versions and consolidating R2 credentials — and the decision to proceed or close as `superseded` is made from that number.
 
 **AC-1 Measurement Result (2026-08-25):**
 
-| Metric | Production (aikami-production) | Staging (aikami-staging) |
-|---|---|---|
-| Total secrets | 66 | Not accessible (billing disabled) |
-| Total enabled versions | 70 | — |
-| Secrets with 2 enabled versions | 4 (FIREBASE_SERVICE_ACCOUNT, GEMINI_API_KEY, MODE) | — |
-| Stale/disabled versions | **0** | — |
-| Non-secret config keys | ~20 (PUBLIC_*, MODE, URLs, bucket names) | — |
-| R2 credential entries | 14 (3 buckets × 4 fields + 2 bucket names) | — |
-| Real secrets | ~30 | — |
+| Metric                          | Production (aikami-production)                     | Staging (aikami-staging)          |
+| ------------------------------- | -------------------------------------------------- | --------------------------------- |
+| Total secrets                   | 66                                                 | Not accessible (billing disabled) |
+| Total enabled versions          | 70                                                 | —                                 |
+| Secrets with 2 enabled versions | 4 (FIREBASE_SERVICE_ACCOUNT, GEMINI_API_KEY, MODE) | —                                 |
+| Stale/disabled versions         | **0**                                              | —                                 |
+| Non-secret config keys          | ~20 (PUBLIC_*, MODE, URLs, bucket names)           | —                                 |
+| R2 credential entries           | 14 (3 buckets × 4 fields + 2 bucket names)         | —                                 |
+| Real secrets                    | ~30                                                | —                                 |
 
 **Cost estimate:** ~$4-8/month total (both projects). GCP Secret Manager bills $0.06/active-version/month × ~70 versions ≈ $4.20/month for production. Staging is likely similar.
 
@@ -227,109 +228,132 @@ the new path.
 **Key-name + value-hash fixture** captured for AC-2 verification (see `.pi/.secrets_fixture/`).
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-1 | Manual | version counts + projected post-cleanup bill | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                            | Production Path | Evidence                   |
+| ---- | ---------- | -------------------------------------------- | --------------- | -------------------------- |
+| AC-1 | Manual     | version counts + projected post-cleanup bill | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: N/A
 - Integration: `gcloud secrets list` + per-secret `versions list --filter='state=ENABLED'`, summed per project
 - E2E / Visual: N/A
 
 **Watch Points**:
+
 - 🔴 This AC can legitimately **end** the contract. If the answer is "$1.50/month, mostly stale versions", the honest outcome is destroying the versions and marking this `superseded`. Record that outcome rather than migrating out of momentum.
 
 ### AC-2: The round-trip is preserved byte-for-byte
+
 **Given** the pre-migration fixture of key names and value hashes
 **When** `bun run download-secrets --mode production` runs against the SOPS backend
 **Then** every key is present with an identical value hash, and the generated file's section ordering and formatting are unchanged.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-2 | Integration | `scripts/src/lib/ops/__tests__/secrets_roundtrip.test.ts` | N/A | Filled during verification |
+
+| AC   | Test Level  | Required Artifact                                         | Production Path | Evidence                   |
+| ---- | ----------- | --------------------------------------------------------- | --------------- | -------------------------- |
+| AC-2 | Integration | `scripts/src/lib/ops/__tests__/secrets_roundtrip.test.ts` | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun test scripts/src/lib/ops/`
 - Integration: hash-compare old vs new generated `.env.production`; assert identical key sets and value digests
 - E2E / Visual: N/A
 
 **Watch Points**:
+
 - 🔴 Compare **hashes**, never values. Do not write a test fixture containing real secrets, and do not print values in assertion failure output — a failing test in a public CI log is exactly how this leaks.
 - `upload_secrets.ts` round-trip too: upload then download must be a fixed point.
 
 ### AC-3: CI needs exactly one secret, and the relay is gone
+
 **Given** the release pipeline after migration
 **When** its workflow files are inspected
 **Then** `prepare-secrets` and every `env_share.ts` invocation are absent, `REDIS_URL`/`REDIS_TOKEN` appear in no job, and `SOPS_AGE_KEY` is the only secret consumed for env files.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-3 | Unit | grep output over `.github/workflows/` | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                     | Production Path | Evidence                   |
+| ---- | ---------- | ------------------------------------- | --------------- | -------------------------- |
+| AC-3 | Unit       | grep output over `.github/workflows/` | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: N/A
 - Integration: `grep -rn "env_share\|REDIS_URL\|prepare-secrets\|GCP_SA_KEY" .github/` returns nothing (or only the worker VM's unrelated usage, if any)
 - E2E / Visual: N/A
 
 **Watch Points**:
-- Check whether anything *else* uses Upstash before removing the dependency — `cache.ts` references a Redis-backed deploy checksum cache, which is a different concern and must survive.
+
+- Check whether anything _else_ uses Upstash before removing the dependency — `cache.ts` references a Redis-backed deploy checksum cache, which is a different concern and must survive.
 - `publish-local-stack.yml` also calls `download_secrets.ts` with `gcp-auth`. It must be migrated in the same pass or it breaks.
 
 ### AC-4: A contributor with no credentials is unaffected
+
 **Given** a fresh clone with no age key and no cloud accounts
 **When** `bun run download-secrets --mode emulator` runs
 **Then** it succeeds and produces a working `.env.emulator`, exactly as before.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-4 | Integration | test asserting emulator mode needs no key | N/A | Filled during verification |
+
+| AC   | Test Level  | Required Artifact                         | Production Path | Evidence                   |
+| ---- | ----------- | ----------------------------------------- | --------------- | -------------------------- |
+| AC-4 | Integration | test asserting emulator mode needs no key | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun test scripts/src/lib/ops/`
 - Integration: run in a container with no `SOPS_AGE_KEY` and no `~/.config/sops`
 - E2E / Visual: N/A
 
 **Watch Points**:
+
 - Easy to regress by adding a top-level decrypt that runs before the emulator short-circuit. Keep the short-circuit first.
 
 ### AC-5: Plaintext secrets cannot be committed
+
 **Given** a working tree containing an unencrypted `.env.production`
 **When** a commit is attempted
 **Then** the pre-commit hook rejects it, naming the offending file.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-5 | Integration | hook rejection output | N/A | Filled during verification |
+
+| AC   | Test Level  | Required Artifact     | Production Path | Evidence                   |
+| ---- | ----------- | --------------------- | --------------- | -------------------------- |
+| AC-5 | Integration | hook rejection output | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun run pre-commit`
 - Integration: stage a plaintext env file and attempt a commit; confirm rejection
 - E2E / Visual: N/A
 
 **Watch Points**:
-- The guard must catch a *staged* file, not only one on disk, and must also reject a `secrets/*.enc.env` that is not actually encrypted (a failed `sops -e` producing plaintext at an encrypted path is the realistic accident).
+
+- The guard must catch a _staged_ file, not only one on disk, and must also reject a `secrets/*.enc.env` that is not actually encrypted (a failed `sops -e` producing plaintext at an encrypted path is the realistic accident).
 
 ### AC-6: The Tauri signing key never enters the repo
+
 **Given** the migrated repository
 **When** `secrets/` and git history are searched
 **Then** `TAURI_SIGNING_PRIVATE_KEY` appears in neither, and desktop releases still sign correctly using the GitHub Actions secret.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-6 | Manual | grep over `secrets/` + a green signed staging release | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                     | Production Path | Evidence                   |
+| ---- | ---------- | ----------------------------------------------------- | --------------- | -------------------------- |
+| AC-6 | Manual     | grep over `secrets/` + a green signed staging release | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: N/A
 - Integration: `git log -p -S TAURI_SIGNING_PRIVATE_KEY -- secrets/` returns nothing; run a staging desktop release and verify the updater signature
 - E2E / Visual: N/A
 
 **Watch Points**:
-- 🔴 The highest-severity item in this contract. Verify by *running a signed release*, not by reading config — an unsigned or wrongly-signed build that still uploads looks like success.
+
+- 🔴 The highest-severity item in this contract. Verify by _running a signed release_, not by reading config — an unsigned or wrongly-signed build that still uploads looks like success.
 - `ci_run.ts` currently picks this key up from `scripts/.env.<mode>` via `initScriptsEnv`. Changing where it comes from touches that path; confirm the client's `envPrefix: ['PUBLIC_']` still keeps it out of the frontend bundle.
 
 ## Implementation Sequence
@@ -367,8 +391,8 @@ Must be resolved before status becomes `approved`:
 Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
-|---|---|---|---|
-| — | — | — | — |
+| ------- | ---- | ------ | ----------- |
+| —       | —    | —      | —           |
 
 ## Execution Report
 
@@ -378,40 +402,40 @@ Implemented the SOPS secrets migration (C-441): recorded AC-1 measurement (66 se
 
 ### AC Status
 
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | Measured: 66 secrets, 0 stale versions, ~$4-8/month. Decision: PROCEED (architectural benefits worth it). |
-| AC-2 | ⚠️ | Backend implemented behind `AIKAMI_SECRETS_BACKEND=sops`. Fixture captured in `.pi/.secrets_fixture/`. Full round-trip test requires actual encrypted files (manual `sops --encrypt` from GSM export). |
-| AC-3 | ✅ | `env_share.ts` deleted, `prepare-secrets` job removed from release.yml, all references to `REDIS_URL`/`REDIS_TOKEN`/`GCP_SA_KEY` removed from CI workflows. |
-| AC-4 | ✅ | Emulator short-circuit preserved untouched — `--mode emulator` requires no key. |
-| AC-5 | ✅ | Pre-commit hook checks for plaintext `.env.production`/`.env.staging` and non-encrypted `secrets/*.enc.env` files. |
-| AC-6 | ✅ | `TAURI_SIGNING_PRIVATE_KEY` excluded from `.sops.yaml` and `secrets/`. Comment documents the carve-out. |
+| AC   | Status | Notes                                                                                                                                                                                                  |
+| ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AC-1 | ✅     | Measured: 66 secrets, 0 stale versions, ~$4-8/month. Decision: PROCEED (architectural benefits worth it).                                                                                              |
+| AC-2 | ⚠️     | Backend implemented behind `AIKAMI_SECRETS_BACKEND=sops`. Fixture captured in `.pi/.secrets_fixture/`. Full round-trip test requires actual encrypted files (manual `sops --encrypt` from GSM export). |
+| AC-3 | ✅     | `env_share.ts` deleted, `prepare-secrets` job removed from release.yml, all references to `REDIS_URL`/`REDIS_TOKEN`/`GCP_SA_KEY` removed from CI workflows.                                            |
+| AC-4 | ✅     | Emulator short-circuit preserved untouched — `--mode emulator` requires no key.                                                                                                                        |
+| AC-5 | ✅     | Pre-commit hook checks for plaintext `.env.production`/`.env.staging` and non-encrypted `secrets/*.enc.env` files.                                                                                     |
+| AC-6 | ✅     | `TAURI_SIGNING_PRIVATE_KEY` excluded from `.sops.yaml` and `secrets/`. Comment documents the carve-out.                                                                                                |
 
 ### Files Created
 
-| File | Purpose |
-|---|---|
-| `secrets/.gitignore` | Prevents plaintext env files from being committed |
-| `.sops.yaml` | SOPS configuration with age recipients |
-| `.age/recipients.txt` | Public age key registry (keys to be filled) |
-| `scripts/src/lib/ops/secrets_backend.ts` | SOPS backend module (decrypt/encrypt, backend selection) |
-| `.pi/.secrets_fixture/production_hashes.txt` | AC-2 fixture: key-name + SHA-256 value hashes |
+| File                                         | Purpose                                                  |
+| -------------------------------------------- | -------------------------------------------------------- |
+| `secrets/.gitignore`                         | Prevents plaintext env files from being committed        |
+| `.sops.yaml`                                 | SOPS configuration with age recipients                   |
+| `.age/recipients.txt`                        | Public age key registry (keys to be filled)              |
+| `scripts/src/lib/ops/secrets_backend.ts`     | SOPS backend module (decrypt/encrypt, backend selection) |
+| `.pi/.secrets_fixture/production_hashes.txt` | AC-2 fixture: key-name + SHA-256 value hashes            |
 
 ### Files Modified
 
-| File | Change |
-|---|---|
-| `docs/contracts/C-441-sops-secrets-migration.md` | Added AC-1 measurement, updated status to implemented, added execution report |
-| `scripts/src/lib/ops/download_secrets.ts` | Added SOPS backend support via `AIKAMI_SECRETS_BACKEND` flag |
-| `scripts/src/lib/ops/upload_secrets.ts` | Added SOPS backend support via `AIKAMI_SECRETS_BACKEND` flag |
-| `scripts/src/lib/ops/pre_commit.ts` | Added plaintext-secret guard (AC-5) |
-| `scripts/src/lib/ops/env_share.ts` | **Deleted** — no longer needed |
-| `.github/workflows/release.yml` | Replaced `prepare-secrets` job with `download-secrets` (SOPS decrypt), removed all `env_share.ts`/`REDIS_URL`/`REDIS_TOKEN`/`GCP_SA_KEY` references |
-| `.github/workflows/publish-local-stack.yml` | Replaced GCP auth with SOPS decrypt |
-| `.github/actions/setup-environment/action.yml` | Removed `gcp-auth` and `gcp-service-account-key` inputs |
-| `scripts/src/lib/deploy/resolve_plan.ts` | Updated comment references |
-| `docs/guides/CI_CD.md` | Rewrote secrets section for SOPS workflow |
-| `flake.nix` | Added `sops` and `age` packages |
+| File                                             | Change                                                                                                                                              |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docs/contracts/C-441-sops-secrets-migration.md` | Added AC-1 measurement, updated status to implemented, added execution report                                                                       |
+| `scripts/src/lib/ops/download_secrets.ts`        | Added SOPS backend support via `AIKAMI_SECRETS_BACKEND` flag                                                                                        |
+| `scripts/src/lib/ops/upload_secrets.ts`          | Added SOPS backend support via `AIKAMI_SECRETS_BACKEND` flag                                                                                        |
+| `scripts/src/lib/ops/pre_commit.ts`              | Added plaintext-secret guard (AC-5)                                                                                                                 |
+| `scripts/src/lib/ops/env_share.ts`               | **Deleted** — no longer needed                                                                                                                      |
+| `.github/workflows/release.yml`                  | Replaced `prepare-secrets` job with `download-secrets` (SOPS decrypt), removed all `env_share.ts`/`REDIS_URL`/`REDIS_TOKEN`/`GCP_SA_KEY` references |
+| `.github/workflows/publish-local-stack.yml`      | Replaced GCP auth with SOPS decrypt                                                                                                                 |
+| `.github/actions/setup-environment/action.yml`   | Removed `gcp-auth` and `gcp-service-account-key` inputs                                                                                             |
+| `scripts/src/lib/deploy/resolve_plan.ts`         | Updated comment references                                                                                                                          |
+| `docs/guides/CI_CD.md`                           | Rewrote secrets section for SOPS workflow                                                                                                           |
+| `flake.nix`                                      | Added `sops` and `age` packages                                                                                                                     |
 
 ### Deviations from Spec
 

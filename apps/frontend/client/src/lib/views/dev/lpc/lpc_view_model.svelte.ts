@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine';
-import { createPixiApp, LpcBatchManager } from '@aikami/frontend/engine';
+import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -609,7 +609,15 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         sprite.y = anchor.y;
         sprite.scale.set(layout.scale, layout.scale);
         sprite.alpha = 1.0;
-        sprite.zIndex = i * 10;
+        // Z-order: use the canonical LPC_LAYER_ORDER table (C-430).
+        // Replaces the previous array-index-based ordering.
+        sprite.zIndex = resolveLayerDepth({
+          slot: recipeSlot,
+          layerRole: recipe.layerRole ?? 'front',
+          direction: 2,
+        });
+        // Store original index for stable sorting
+        (sprite as unknown as Record<string, unknown>)._originalIndex = i;
 
         // Apply palette tint: per-layer override takes priority, else global
         const effectiveColor =
@@ -629,6 +637,17 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       await Promise.all(layerPromises);
 
       this._destroyAllSprites();
+
+      // Sort sprites by zIndex, using original index as tie-breaker for equal depths
+      newSprites.sort((a, b) => {
+        if (a.zIndex !== b.zIndex) {
+          return a.zIndex - b.zIndex;
+        }
+        // Equal depth: preserve original recipe order
+        const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number;
+        const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number;
+        return aIdx - bIdx;
+      });
 
       const container = new Container();
       container.eventMode = 'none';

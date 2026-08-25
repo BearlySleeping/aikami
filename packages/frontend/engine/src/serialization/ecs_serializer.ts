@@ -31,7 +31,10 @@ import { Visual } from '../components/visual.ts';
  */
 const PERSISTENT_COMPONENTS: Array<[string, Record<string, Array<unknown>>]> = [
   ['Position', Position],
-  ['Appearance', Appearance],
+  // C-430: Appearance has a Map field (layers) — cast to Record for
+  // serializer backward compat. The Map entries are skipped by
+  // _extractComponentSlice (source[eid] on a Map returns undefined).
+  ['Appearance', Appearance as unknown as Record<string, Array<unknown>>],
   ['CombatStats', CombatStats],
   ['Visual', Visual],
 ];
@@ -64,7 +67,28 @@ const _extractComponentSlice = (
 ): ComponentSlice => {
   const slice: ComponentSlice = {};
 
+  // Special handling for Appearance.layers Map field
+  if (component === (Appearance as unknown as Record<string, Array<unknown>>)) {
+    const layersMap = Appearance.layers;
+    const layersValues: Array<string | undefined> = [];
+    for (const eid of eids) {
+      const layers = layersMap.get(eid);
+      // Serialize as JSON string to preserve array length beyond 6 slots
+      layersValues.push(layers !== undefined ? JSON.stringify(layers) : undefined);
+    }
+    if (layersValues.some((v) => v !== undefined)) {
+      slice.layers = layersValues;
+    }
+  }
+
   for (const field of Object.keys(component)) {
+    // Skip the Map field itself (it's not enumerable anyway)
+    if (
+      field === 'layers' &&
+      component === (Appearance as unknown as Record<string, Array<unknown>>)
+    ) {
+      continue;
+    }
     const source = component[field] as Array<unknown>;
     const values: Array<number | string | boolean | undefined> = [];
 
@@ -103,12 +127,40 @@ const _extractComponentSlice = (
  * @param slice - The slice data extracted during serialization.
  */
 const _restoreComponentSlice = (
-  _world: World,
+  world: World,
   component: Record<string, Array<unknown>>,
   eids: number[],
   slice: ComponentSlice,
 ): void => {
+  // Special handling for Appearance.layers Map field
+  if (component === (Appearance as unknown as Record<string, Array<unknown>>)) {
+    const layersValues = slice.layers;
+    if (layersValues) {
+      for (let i = 0; i < eids.length; i++) {
+        const eid = eids[i];
+        const value = layersValues[i];
+        if (value !== undefined && value !== null && typeof value === 'string') {
+          try {
+            const layers = JSON.parse(value) as readonly number[];
+            // Use setAppearanceLayers to populate both Map and legacy arrays
+            const { setAppearanceLayers } = require('../components/appearance.ts');
+            setAppearanceLayers(world, eid, layers);
+          } catch {
+            // Malformed JSON — skip this entity's layers
+          }
+        }
+      }
+    }
+  }
+
   for (const field of Object.keys(slice)) {
+    // Skip the serialized layers field for Appearance (already handled above)
+    if (
+      field === 'layers' &&
+      component === (Appearance as unknown as Record<string, Array<unknown>>)
+    ) {
+      continue;
+    }
     const values = slice[field];
     if (!values) {
       continue;

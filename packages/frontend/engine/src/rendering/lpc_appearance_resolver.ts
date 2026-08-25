@@ -62,12 +62,13 @@ export type LpcSlotResolution =
     }
   | { readonly kind: 'empty' };
 
-/** The resolver result: always six entries, never fewer. */
+/** The resolver result: one entry per slot in LPC_SLOT_ORDER. */
 export type LpcAppearanceResult = {
   readonly recipes: readonly {
     readonly slot: LpcSlotName;
     readonly assetId: string;
     readonly hexPalette: Uint8Array;
+    readonly layerRole: 'front' | 'behind';
   }[];
   readonly resolutions: Readonly<Record<LpcSlotName, LpcSlotResolution>>;
 };
@@ -90,6 +91,9 @@ export type ResolveLpcAppearanceOptions = {
  * Default per-slot fallback assets — every one exists in the generated LPC
  * catalog (verified 2026-08-16). The head fallback points at a real
  * `head/heads/` asset (head slot variants also include ears/faces).
+ *
+ * These are the six legacy base slots (body, hair, torso, legs, feet, head).
+ * Equipment layers are merged on top by the caller and use their own fallbacks.
  */
 export const DEFAULT_LPC_SLOT_FALLBACKS: LpcSlotFallbacks = {
   body: 'body/bodies_male',
@@ -100,7 +104,12 @@ export const DEFAULT_LPC_SLOT_FALLBACKS: LpcSlotFallbacks = {
   head: 'head/heads/human_male',
 };
 
-/** Engine slot order — matches the render z-order and the six layer slots. */
+/**
+ * Engine slot index order — the position of each slot in a six-element layer
+ * array. This is NOT a render z-order; it is the positional index mapping
+ * for legacy six-slot appearance arrays. The canonical render z-order is
+ * defined in LPC_LAYER_ORDER (see lpc_layer_order.ts).
+ */
 export const LPC_SLOT_ORDER: readonly LpcSlotName[] = [
   'body',
   'hair',
@@ -166,7 +175,12 @@ export const resolveLpcAppearance = (options: ResolveLpcAppearanceOptions): LpcA
 
     // Index 0 means intentionally empty — no fallback, no warning.
     if (rawId === 0) {
-      mutableRecipes.push({ slot, assetId: '', hexPalette: new Uint8Array(1024) });
+      mutableRecipes.push({
+        slot,
+        assetId: '',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front',
+      });
       resolutions[slot] = { kind: 'empty' };
       continue;
     }
@@ -176,14 +190,24 @@ export const resolveLpcAppearance = (options: ResolveLpcAppearanceOptions): LpcA
     const variant = slotDef?.variants[effectiveIdx];
 
     if (variant) {
-      mutableRecipes.push({ slot, assetId: variant.assetId, hexPalette: new Uint8Array(1024) });
+      mutableRecipes.push({
+        slot,
+        assetId: variant.assetId,
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front',
+      });
       resolutions[slot] = { kind: 'resolved', assetId: variant.assetId };
       continue;
     }
 
     // Unresolvable non-zero index → declared fallback + logged warning.
     const fallbackAsset = fallbacks[slot] ?? '';
-    mutableRecipes.push({ slot, assetId: fallbackAsset, hexPalette: new Uint8Array(1024) });
+    mutableRecipes.push({
+      slot,
+      assetId: fallbackAsset,
+      hexPalette: new Uint8Array(1024),
+      layerRole: 'front',
+    });
     resolutions[slot] = {
       kind: 'fallback',
       assetId: fallbackAsset,

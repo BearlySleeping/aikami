@@ -114,10 +114,10 @@ export default defineConfig(({ mode }) => {
       // Vite 8 — use the current option directly.
       rolldownOptions: {
         // Rewrite bare Node builtins (e.g. `crypto`, `util`) to their `node:`
-        // prefixed form in the output. svelte-adapter-bun's rolldown pass only
-        // externalizes `/^node:/` specifiers, so bare builtins left in the SSR
-        // output would produce UNRESOLVED_IMPORT warnings. bun resolves the
-        // `node:` form natively at runtime, so behavior is unchanged.
+        // prefixed form in the output. Only `/^node:/` specifiers are
+        // externalized, so bare builtins left in the SSR output would produce
+        // UNRESOLVED_IMPORT warnings. The `node:` form is what workerd
+        // resolves under `nodejs_compat`, so behavior is unchanged.
         output: {
           paths: {
             crypto: 'node:crypto',

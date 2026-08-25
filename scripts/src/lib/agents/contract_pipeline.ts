@@ -902,8 +902,7 @@ const launchBackground = async (options: {
   // contract not yet created). For critique/path-source runs (existing contract),
   // the user must pass --join to attach. --no-attach always overrides.
   const shouldAutoJoin =
-    !options.noAttach &&
-    (options.join === true || options.interactiveWriter === true);
+    !options.noAttach && (options.join === true || options.interactiveWriter === true);
 
   if (!shouldAutoJoin) {
     if (!options.noAttach) {

@@ -2,7 +2,7 @@
 id: C-425
 title: "ViewModel Decomposition — split the two oversized ViewModels into focused sub-services"
 source: "Split out of C-424 v3.0.0 (2026-08-21) — structural refactor separated from user-facing surface work"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-08-21"
 | **Priority** | P2 — maintainability only. Real, but no player ever sees it. |
 | **Sequence** | **6 of 6** — last, and deliberately so. Do this after C-424 has already removed duplicated message-layer code from both ViewModels; decomposing first would mean decomposing code that is about to be deleted. |
 | **Dependencies** | C-424 (sequence 3) must be fully landed |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |

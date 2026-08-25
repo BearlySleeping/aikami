@@ -9,6 +9,7 @@ export type GameBootStage =
   | 'loading_campaign'
   | 'validating_save'
   | 'initializing_asset_registry'
+  | 'warming_cache'
   | 'preloading_content'
   | 'creating_engine'
   | 'hydrating_snapshot'

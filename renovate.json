@@ -1,0 +1,79 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":disableDependencyDashboard"
+  ],
+  "labels": ["dependencies"],
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Renovate Dependency Dashboard",
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "schedule": ["before 9am on Monday"],
+  "timezone": "Europe/London",
+
+  "bun": {
+    "enabled": true
+  },
+
+  "lockFileMaintenance": {
+    "enabled": false
+  },
+
+  "vulnerabilityAlerts": {
+    "enabled": true
+  },
+
+  "packageRules": [
+    {
+      "description": "Pin GitHub Actions to commit SHAs with version comment",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true,
+      "pinDigestCommits": true
+    },
+    {
+      "description": "First-party actions/* are exempt from SHA pinning — GitHub maintains them",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["actions/*"],
+      "pinDigests": false
+    },
+    {
+      "description": "Do not bump @playwright/test — pinned to match Nix flake's browser cache. See scripts/src/lib/ops/pin_dependencies.ts",
+      "matchPackageNames": ["@playwright/test"],
+      "enabled": false
+    },
+    {
+      "description": "Do not bump typescript — pinned to 6.0.3 because vtsls does not support TS 7 yet. See scripts/src/lib/ops/pin_dependencies.ts",
+      "matchPackageNames": ["typescript"],
+      "enabled": false
+    },
+    {
+      "description": "Do not bump @astrojs/starlight — ships raw .ts source files causing type errors. See scripts/src/lib/ops/pin_dependencies.ts",
+      "matchPackageNames": ["@astrojs/starlight"],
+      "enabled": false
+    },
+    {
+      "description": "syncpack + pin_dependencies.ts are authoritative over package.json. Renovate must not fight them",
+      "matchManagers": ["npm"],
+      "enabled": false
+    }
+  ],
+
+  "regexManagers": [
+    {
+      "description": "Update .bun-version and .moon/toolchains.yml together when Bun is bumped",
+      "fileMatch": ["^\\.bun-version$", "^\\.moon/toolchains\\.yml$"],
+      "matchStrings": [
+        "^(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*$",
+        "bun:\\s*\\n(?:\\s+#.*\\n)*\\s+version:\\s*[\"'](?<currentValue>\\d+\\.\\d+\\.\\d+)[\"']"
+      ],
+      "depNameTemplate": "oven-sh/bun",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver"
+    }
+  ],
+
+  "github-actions": {
+    "pinDigests": true
+  }
+}

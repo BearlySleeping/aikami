@@ -266,7 +266,7 @@ export const loadTilemap = async (options: MapLoaderOptions): Promise<TilemapDat
 
   // C-434: resolve the URL through the asset registry when a resolver is
   // provided — cache blob URL, origin URL, or bundled static path.
-  const resolvedUrl = resolveTag ? resolveTag(url) ?? url : url;
+  const resolvedUrl = resolveTag ? (resolveTag(url) ?? url) : url;
   const fetcher = options.fetch ?? globalThis.fetch;
 
   let response: Response;
@@ -396,7 +396,7 @@ export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<Tilema
 
   // C-434: resolve the URL through the asset registry when a resolver is
   // provided — cache blob URL, origin URL, or bundled static path.
-  const resolvedUrl = resolveTag ? resolveTag(url) ?? url : url;
+  const resolvedUrl = resolveTag ? (resolveTag(url) ?? url) : url;
   const fetcher = options.fetch ?? globalThis.fetch;
 
   let response: Response;

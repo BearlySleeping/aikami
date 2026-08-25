@@ -78,6 +78,7 @@
     "contract": "bun run scripts/src/lib/agents/contract_pipeline.ts",
     "contract:pipeline": "bun run scripts/src/lib/agents/contract_pipeline.ts",
     "stack": "bun run --cwd apps/backend/local-stack init --",
+    "contract:resume-orphaned": "bun run scripts/src/lib/agents/resume_orphaned_contracts.ts",
     "contract:generate": "bun run scripts/src/lib/agents/contract_generator.ts",
     "validate:wgsl": "bun run scripts/src/lib/ops/validate_wgsl.ts",
     "validate:gql": "bun run scripts/src/lib/ops/validate_gql_fields.ts",

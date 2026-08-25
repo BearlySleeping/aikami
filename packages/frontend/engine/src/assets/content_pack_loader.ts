@@ -6,7 +6,7 @@
 //
 // Contract: C-315 Define a Versioned Campaign Content Pack and Atomic Loader
 
-import { ContentPackManifestSchema } from '@aikami/schemas';
+import { ContentPackManifestSchema, normaliseLegacyStep } from '@aikami/schemas';
 import type {
   ContentPackCredits,
   ContentPackEncounterEntry,
@@ -88,19 +88,12 @@ class ContentPackLoader implements ContentPackLoaderInterface {
   readonly manifest: ContentPackManifest;
   readonly packId: string;
   private readonly _basePath: string;
-  private readonly _resolveTag?: AssetTagResolver;
   private _disposed = false;
 
-  constructor(
-    manifest: ContentPackManifest,
-    packId: string,
-    basePath: string,
-    resolveTag?: AssetTagResolver,
-  ) {
+  constructor(manifest: ContentPackManifest, packId: string, basePath: string) {
     this.packId = packId;
     this.manifest = manifest;
     this._basePath = basePath.replace(/\/+$/, ''); // strip trailing slash
-    this._resolveTag = resolveTag;
   }
 
   /** @inheritdoc */
@@ -307,7 +300,7 @@ export const loadContentPack = async (options: {
 
   // C-434: resolve the manifest URL through the asset registry when a
   // resolver is provided.
-  const resolvedManifestUrl = resolveTag ? resolveTag(manifestUrl) ?? manifestUrl : manifestUrl;
+  const resolvedManifestUrl = resolveTag ? (resolveTag(manifestUrl) ?? manifestUrl) : manifestUrl;
 
   logger.debug('loadContentPack:fetching', {
     packId,
@@ -327,7 +320,8 @@ export const loadContentPack = async (options: {
       try {
         response = await fetchImpl(manifestUrl);
       } catch (fallbackError) {
-        const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        const message =
+          fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
         throw toAppError({
           errorType: 'not-found',
           errorMessage: 'ContentPackLoader: failed to fetch manifest',
@@ -397,6 +391,26 @@ export const loadContentPack = async (options: {
     releaseUrl(resolvedManifestUrl);
   }
 
+  // Normalize legacy onboarding steps before schema validation so bare-string
+  // actions (e.g. action: 'interact') are transformed to discriminated union
+  // shape ({ kind: 'input', actionId: 'interact' }) before TypeBox checks.
+  if (
+    raw &&
+    typeof raw === 'object' &&
+    'onboarding' in raw &&
+    raw.onboarding &&
+    typeof raw.onboarding === 'object' &&
+    'steps' in raw.onboarding &&
+    Array.isArray(raw.onboarding.steps)
+  ) {
+    raw.onboarding.steps = raw.onboarding.steps.map((step: unknown) => {
+      if (typeof step === 'object' && step !== null) {
+        return normaliseLegacyStep(step as Record<string, unknown>);
+      }
+      return step;
+    });
+  }
+
   // Validate schema
   if (!Value.Check(ContentPackManifestSchema, raw)) {
     const errors = [...Value.Errors(ContentPackManifestSchema, raw)];
@@ -423,8 +437,8 @@ export const loadContentPack = async (options: {
     });
   }
 
-  // Create and cache loader — pass resolveTag for constituent file resolution
-  const loader = new ContentPackLoader(manifest, packId, basePath, resolveTag);
+  // Create and cache loader
+  const loader = new ContentPackLoader(manifest, packId, basePath);
   _contentPackCache.set(packId, loader);
 
   logger.debug('loadContentPack:loaded', {

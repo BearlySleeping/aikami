@@ -2,13 +2,13 @@
 id: C-432
 title: "Content-Addressed R2 Sources — Make the Client's Remote Origin Work"
 source: "user request 2026-08-23 — point the client at assets.bearlysleeping.com"
-status: approved
+status: implemented
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/178"
-  pr_number: 178
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/178"
+    pr_number: 178
 created_at: "2026-08-23"
 ---
 
@@ -16,16 +16,16 @@ created_at: "2026-08-23"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | User request (2026-08-23): *"we already have a R2 bucket https://assets.bearlysleeping.com that has all the lpc assets… We should make client look at the R2 bucket as well."* |
-| **Target** | `packages/frontend/storage/src/lib/assets.ts`, `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts`, `apps/frontend/client/.env.*` |
-| **Priority** | P0 — the R2 fallback is wired end to end and produces 404s on every URL it writes. Smallest contract in the R2 track and a hard precondition for the rest. |
-| **Dependencies** | C-395 (published the bucket and the content-addressed layout — status `implemented`). |
-| **Status** | implemented |
-| **Promotion** | — |
-| **Docs Impact** | internal → developer note on the assets origin env var |
-| **Contract version** | 1.0.0 |
+| Field                | Value                                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Source**           | User request (2026-08-23): _"we already have a R2 bucket https://assets.bearlysleeping.com that has all the lpc assets… We should make client look at the R2 bucket as well."_ |
+| **Target**           | `packages/frontend/storage/src/lib/assets.ts`, `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts`, `apps/frontend/client/.env.*`                         |
+| **Priority**         | P0 — the R2 fallback is wired end to end and produces 404s on every URL it writes. Smallest contract in the R2 track and a hard precondition for the rest.                     |
+| **Dependencies**     | C-395 (published the bucket and the content-addressed layout — status `implemented`).                                                                                          |
+| **Status**           | implemented                                                                                                                                                                    |
+| **Promotion**        | —                                                                                                                                                                              |
+| **Docs Impact**      | internal → developer note on the assets origin env var                                                                                                                         |
+| **Contract version** | 1.0.0                                                                                                                                                                          |
 
 ## Problem & Baseline Evidence
 
@@ -34,23 +34,27 @@ created_at: "2026-08-23"
   (`packages/frontend/storage/src/lib/assets.ts:174`) writes priority-1
   `asset_sources` rows by **mirroring the bundled relative path** onto the R2
   base URL:
-  ```ts
-  args: [assetId, `${base}/${storagePath}`],   // → https://assets.bearlysleeping.com/lpc/body/bodies_male.walk.webp
-  ```
-  Its doc comment states *"Assets must be uploaded to the bucket under their
-  manifest path."* **They are not.** C-395 publishes content-addressed keys:
-  `assets/<sha256[0:2]>/<sha256>.<ext>`. Every URL this function writes 404s.
+
+    ```ts
+    args: [assetId, `${base}/${storagePath}`],   // → https://assets.bearlysleeping.com/lpc/body/bodies_male.walk.webp
+    ```
+
+    Its doc comment states _"Assets must be uploaded to the bucket under their
+    manifest path."_ **They are not.** C-395 publishes content-addressed keys:
+    `assets/<sha256[0:2]>/<sha256>.<ext>`. Every URL this function writes 404s.
 
 - **Reproduction** — verified live against the production bucket 2026-08-23:
-  ```bash
-  H=d03f92f9ef31d17f4ef9ddbaaa965c8fa48482de70df61b43cbe9ae825ea7698   # lpc:body:bodies_male:walk
-  curl -s -o /dev/null -w "%{http_code} %{size_download}\n" \
-    "https://assets.bearlysleeping.com/assets/${H:0:2}/$H.webp"        # → 200 16182
-  curl -s -o /dev/null -w "%{http_code}\n" \
-    "https://assets.bearlysleeping.com/lpc/body/bodies_male.walk.webp"  # → 404
-  curl -s "https://assets.bearlysleeping.com/index/v1/catalog.json"     # → 200, totalCount 12704
-  ```
-  The 16182-byte response matches `asset_hashes.json` exactly for that tag.
+
+    ```bash
+    H=d03f92f9ef31d17f4ef9ddbaaa965c8fa48482de70df61b43cbe9ae825ea7698   # lpc:body:bodies_male:walk
+    curl -s -o /dev/null -w "%{http_code} %{size_download}\n" \
+      "https://assets.bearlysleeping.com/assets/${H:0:2}/$H.webp"        # → 200 16182
+    curl -s -o /dev/null -w "%{http_code}\n" \
+      "https://assets.bearlysleeping.com/lpc/body/bodies_male.walk.webp"  # → 404
+    curl -s "https://assets.bearlysleeping.com/index/v1/catalog.json"     # → 200, totalCount 12704
+    ```
+
+    The 16182-byte response matches `asset_hashes.json` exactly for that tag.
 
 - **Current behavior — the code path never even runs.**
   `game_boot_service.svelte.ts:720` reads `publicEnv.PUBLIC_ASSETS_BASE_URL` and
@@ -60,17 +64,17 @@ created_at: "2026-08-23"
 
 - **Existing implementation to reuse** — everything except the key derivation
   already works:
-  - `AssetManager.resolve` (`apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts` ~line 448)
-    already lists sources by priority, fetches each in turn, **verifies SHA-256
-    against the registry hash before caching or serving**, discards on mismatch
-    and continues to the next source, caches to OPFS or Tauri FS, handles quota
-    with LRU eviction, and hands back refcounted blob URLs.
-  - `assets.hash` in the registry **is** the sha256 that forms the R2 key. The
-    correct URL is derivable from data already in the row — no network call and
-    no extra index fetch.
-  - `assets.bearlysleeping.com/index/v1/catalog.json` is live and current.
-  - `AssetStore.resolveUrl` already prefers a cached blob URL, warms in the
-    background and falls back to the bundled static path.
+    - `AssetManager.resolve` (`apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts` ~line 448)
+      already lists sources by priority, fetches each in turn, **verifies SHA-256
+      against the registry hash before caching or serving**, discards on mismatch
+      and continues to the next source, caches to OPFS or Tauri FS, handles quota
+      with LRU eviction, and hands back refcounted blob URLs.
+    - `assets.hash` in the registry **is** the sha256 that forms the R2 key. The
+      correct URL is derivable from data already in the row — no network call and
+      no extra index fetch.
+    - `assets.bearlysleeping.com/index/v1/catalog.json` is live and current.
+    - `AssetStore.resolveUrl` already prefers a cached blob URL, warms in the
+      background and falls back to the bundled static path.
 
 - **Known gaps**: the key scheme, the unset env var, and the stale doc comment
   pointing at `upload_lpc_assets.ts` as the uploader.
@@ -98,14 +102,14 @@ locally — instead of the silent 404 the fallback produces today.
 
 ## Existing System & Reuse Map
 
-| Capability | Existing source | Reuse / modify / replace |
-|---|---|---|
-| Source priority + fetch + sha256 verify + cache | `asset_manager.svelte.ts` `resolve` | reuse unchanged |
-| R2 source row writer | `packages/frontend/storage/src/lib/assets.ts` `addR2Sources` | modify — content-addressed key derivation |
-| Registry hash per asset | `assets.hash` column, seeded from `asset_hashes.json` | reuse — it is the R2 key |
-| Boot-time wiring | `game_boot_service.svelte.ts:720` | reuse — set the env var it already reads |
-| Published bucket + layout | C-395 | reuse unchanged |
-| Existing `addR2Sources` tests | `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | modify — they assert the broken URL |
+| Capability                                      | Existing source                                                       | Reuse / modify / replace                  |
+| ----------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------- |
+| Source priority + fetch + sha256 verify + cache | `asset_manager.svelte.ts` `resolve`                                   | reuse unchanged                           |
+| R2 source row writer                            | `packages/frontend/storage/src/lib/assets.ts` `addR2Sources`          | modify — content-addressed key derivation |
+| Registry hash per asset                         | `assets.hash` column, seeded from `asset_hashes.json`                 | reuse — it is the R2 key                  |
+| Boot-time wiring                                | `game_boot_service.svelte.ts:720`                                     | reuse — set the env var it already reads  |
+| Published bucket + layout                       | C-395                                                                 | reuse unchanged                           |
+| Existing `addR2Sources` tests                   | `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | modify — they assert the broken URL       |
 
 ## Overview
 
@@ -161,8 +165,7 @@ Key derivation:
  * `hash` is the sha256 already stored on the assets row; `ext` includes
  * the leading dot and is taken from the bundled source URL.
  */
-const r2ObjectKey = (options: { hash: string; ext: string }): string =>
-  `assets/${options.hash.slice(0, 2)}/${options.hash}${options.ext}`;
+const r2ObjectKey = (options: { hash: string; ext: string }): string => `assets/${options.hash.slice(0, 2)}/${options.hash}${options.ext}`;
 ```
 
 Environment — `apps/frontend/client/.env.*` and `.env.example`:
@@ -210,18 +213,18 @@ PUBLIC_ASSETS_BASE_URL=https://assets.bearlysleeping.com
 ## Scope Boundaries
 
 - **In Scope:**
-  - Content-addressed key derivation in `addR2Sources`.
-  - Repair of existing incorrect `r2` rows on boot.
-  - Setting `PUBLIC_ASSETS_BASE_URL` across `.env.example` and the relevant mode env files.
-  - Updating the `addR2Sources` tests that assert the path-mirrored URL.
-  - Correcting the stale doc comment.
+    - Content-addressed key derivation in `addR2Sources`.
+    - Repair of existing incorrect `r2` rows on boot.
+    - Setting `PUBLIC_ASSETS_BASE_URL` across `.env.example` and the relevant mode env files.
+    - Updating the `addR2Sources` tests that assert the path-mirrored URL.
+    - Correcting the stale doc comment.
 - **Out of Scope:**
-  - Publishing new asset categories to the bucket — C-433.
-  - Routing maps or content packs through the registry — C-434.
-  - Removing bundled assets or changing source priority — C-435.
-  - Any change to `AssetManager.resolve`, the cache backends, or eviction.
-  - The catalog index (`index/v1/*.json`) — the client does not read it and must not start to here.
-  - Hub-side asset access.
+    - Publishing new asset categories to the bucket — C-433.
+    - Routing maps or content packs through the registry — C-434.
+    - Removing bundled assets or changing source priority — C-435.
+    - Any change to `AssetManager.resolve`, the cache backends, or eviction.
+    - The catalog index (`index/v1/*.json`) — the client does not read it and must not start to here.
+    - Hub-side asset access.
 
 ## Contract Size & Split Rule
 
@@ -234,95 +237,115 @@ every boot write 12,700 rows of 404s. Neither half is independently useful.
 ## Acceptance Criteria
 
 ### AC-1: R2 source URLs are content-addressed
+
 **Given** a seeded asset with hash `d03f92f9ef31d17f4ef9ddbaaa965c8fa48482de70df61b43cbe9ae825ea7698` and a bundled source URL ending `.webp`
 **When** `addR2Sources('https://assets.bearlysleeping.com')` runs
 **Then** the written priority-1 row's URL is `https://assets.bearlysleeping.com/assets/d0/d03f92f9ef31d17f4ef9ddbaaa965c8fa48482de70df61b43cbe9ae825ea7698.webp`
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-1 | Unit | `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | `/game` | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                                     | Production Path | Evidence                   |
+| ---- | ---------- | --------------------------------------------------------------------- | --------------- | -------------------------- |
+| AC-1 | Unit       | `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | `/game`         | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run frontend-storage:test`
 - Integration: `curl -I` the URL the test produces; expect HTTP 200.
 - E2E / Visual: **Functional**: N/A. **Visual**: N/A.
 
 **Watch Points**:
+
 - The existing test at line 149 asserts the broken scheme. Update it — do not add a second passing test beside a wrong one.
 - The extension must come from the bundled URL, not be assumed `.webp`; the catalog also holds `.mp3`, `.png` and `.json`.
 
 ### AC-2: Existing incorrect r2 rows are repaired
+
 **Given** a registry already containing a priority-1 `r2` row with a path-mirrored URL
 **When** `addR2Sources` runs again
 **Then** that row is rewritten to the content-addressed URL
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-2 | Unit | `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | `/game` | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                                     | Production Path | Evidence                   |
+| ---- | ---------- | --------------------------------------------------------------------- | --------------- | -------------------------- |
+| AC-2 | Unit       | `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | `/game`         | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run frontend-storage:test`
 - Integration: seed a registry with an old-format row, re-run, confirm the URL changed.
 - E2E / Visual: **Functional**: N/A. **Visual**: N/A.
 
 **Watch Points**:
-- The current implementation *skips* assets that already have an `r2` sibling — under that behaviour existing installs stay broken forever. This AC is specifically about not preserving that skip for stale rows.
+
+- The current implementation _skips_ assets that already have an `r2` sibling — under that behaviour existing installs stay broken forever. This AC is specifically about not preserving that skip for stale rows.
 - Idempotency must survive: a second run over already-correct rows should write nothing new.
 
 ### AC-3: An asset missing from the bundle is fetched from R2 and verified
+
 **Given** a client whose bundled copy of an asset is unavailable and whose registry has a correct R2 source row
 **When** the asset is resolved
 **Then** it is fetched from R2, its SHA-256 matches the registry hash, it is cached, and a blob URL is returned
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-3 | Integration | `apps/frontend/client/src/lib/services/assets/asset_manager.test.ts` | `/game` | Filled during verification |
+
+| AC   | Test Level  | Required Artifact                                                    | Production Path | Evidence                   |
+| ---- | ----------- | -------------------------------------------------------------------- | --------------- | -------------------------- |
+| AC-3 | Integration | `apps/frontend/client/src/lib/services/assets/asset_manager.test.ts` | `/game`         | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run client:test-unit`
 - Integration: with a stubbed fetch returning the real bytes for the R2 URL and a failure for the bundled path, confirm resolution succeeds and caches.
 - E2E / Visual: **Functional**: N/A. **Visual**: N/A.
 
 **Watch Points**:
+
 - Assert the hash check actually runs — a test that stubs fetch with wrong bytes must fail resolution, not succeed.
 
 ### AC-4: An unset origin is a clean no-op
+
 **Given** `PUBLIC_ASSETS_BASE_URL` is unset or empty
 **When** the client boots
 **Then** no `r2` rows are written, no error is logged, and every asset resolves from bundled sources exactly as before
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-4 | Unit | `apps/frontend/client/src/lib/services/game/game_boot_service.test.ts` | `/game` | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                                      | Production Path | Evidence                   |
+| ---- | ---------- | ---------------------------------------------------------------------- | --------------- | -------------------------- |
+| AC-4 | Unit       | `apps/frontend/client/src/lib/services/game/game_boot_service.test.ts` | `/game`         | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run client:test-unit`
 - Integration: boot with the variable unset; confirm boot completes and the game renders.
 - E2E / Visual: **Functional**: N/A. **Visual**: N/A.
 
 **Watch Points**:
+
 - This is the kill switch. It must work without a code change, and the existing try/catch around the boot block must stay non-fatal.
 
 ### AC-5: The origin is configured and boot writes sources
+
 **Given** `PUBLIC_ASSETS_BASE_URL=https://assets.bearlysleeping.com`
 **When** the client boots against a freshly seeded registry
 **Then** `addR2Sources` reports a non-zero count and a spot-checked row's URL returns HTTP 200
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-5 | Integration | `apps/frontend/client/.env.example` + boot debug output | `/game` | Filled during verification |
+
+| AC   | Test Level  | Required Artifact                                       | Production Path | Evidence                   |
+| ---- | ----------- | ------------------------------------------------------- | --------------- | -------------------------- |
+| AC-5 | Integration | `apps/frontend/client/.env.example` + boot debug output | `/game`         | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `bun moon run client:test-unit`
 - Integration: boot the client, read the `stage:initializing_asset_registry:storage-sources` debug line, `curl -I` one of the written URLs.
 - E2E / Visual: **Functional**: N/A. **Visual**: N/A.
 
 **Watch Points**:
+
 - Set the variable in `.env.example` as well as the mode env files, or a fresh clone silently runs bundled-only.
 - Confirm the Tauri build surfaces the variable; a `PUBLIC_`-prefixed value must be inlined at build time for the desktop target too.
 
@@ -353,42 +376,48 @@ Must be resolved before status becomes `approved`:
 Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
-|---|---|---|---|
-| — | — | — | — |
+| ------- | ---- | ------ | ----------- |
+| —       | —    | —      | —           |
 
 ## Execution Report
 
 ### Summary
+
 Rewrote `addR2Sources` to derive content-addressed R2 URLs from the asset's SHA-256 hash (`assets/<hash[0:2]>/<hash>.<ext>`) instead of mirroring the bundled relative path. Added stale-row repair so pre-C-432 installs with broken path-mirrored URLs are corrected on boot. Added `PUBLIC_ASSETS_BASE_URL` to the environment schema and all mode env files (set to `https://assets.bearlysleeping.com` in staging/production, empty in emulator/testing). Updated all tests to assert the new URL format.
 
 ### AC Status
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | Content-addressed key derivation implemented in `addR2Sources` |
-| AC-2 | ✅ | Stale row repair: existing `r2` rows are rewritten via `INSERT OR REPLACE` |
-| AC-3 | ✅ | Hash verification is handled by existing `AssetManager.resolve` — no change needed |
-| AC-4 | ✅ | Unset `PUBLIC_ASSETS_BASE_URL` is a clean no-op; game boots without errors in emulator |
-| AC-5 | ✅ | Variable set in `.env.staging` and `.env.production`; boot path writes sources when set |
+
+| AC   | Status | Notes                                                                                   |
+| ---- | ------ | --------------------------------------------------------------------------------------- |
+| AC-1 | ✅     | Content-addressed key derivation implemented in `addR2Sources`                          |
+| AC-2 | ✅     | Stale row repair: existing `r2` rows are rewritten via `INSERT OR REPLACE`              |
+| AC-3 | ✅     | Hash verification is handled by existing `AssetManager.resolve` — no change needed      |
+| AC-4 | ✅     | Unset `PUBLIC_ASSETS_BASE_URL` is a clean no-op; game boots without errors in emulator  |
+| AC-5 | ✅     | Variable set in `.env.staging` and `.env.production`; boot path writes sources when set |
 
 ### Files Created
+
 None.
 
 ### Files Modified
-| File | Purpose |
-|---|---|
-| `packages/frontend/storage/src/lib/assets.ts` | Content-addressed key derivation in `addR2Sources`, stale-row repair, updated doc comment |
-| `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | Updated expected URLs, added AC-2 repair test, added empty-registry test |
-| `packages/frontend/configs/src/lib/environment.ts` | Added `PUBLIC_ASSETS_BASE_URL` to masterSchema and env builder |
-| `apps/frontend/client/.env.example` | Added `PUBLIC_ASSETS_BASE_URL` with doc comment |
-| `apps/frontend/client/.env.emulator` | Added `PUBLIC_ASSETS_BASE_URL=` (empty) |
-| `apps/frontend/client/.env.staging` | Added `PUBLIC_ASSETS_BASE_URL=https://assets.bearlysleeping.com` |
-| `apps/frontend/client/.env.production` | Added `PUBLIC_ASSETS_BASE_URL=https://assets.bearlysleeping.com` |
-| `apps/frontend/client/.env.testing` | Added `PUBLIC_ASSETS_BASE_URL=` (empty) |
+
+| File                                                                  | Purpose                                                                                   |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `packages/frontend/storage/src/lib/assets.ts`                         | Content-addressed key derivation in `addR2Sources`, stale-row repair, updated doc comment |
+| `packages/frontend/storage/src/lib/__tests__/assets_registry.test.ts` | Updated expected URLs, added AC-2 repair test, added empty-registry test                  |
+| `packages/frontend/configs/src/lib/environment.ts`                    | Added `PUBLIC_ASSETS_BASE_URL` to masterSchema and env builder                            |
+| `apps/frontend/client/.env.example`                                   | Added `PUBLIC_ASSETS_BASE_URL` with doc comment                                           |
+| `apps/frontend/client/.env.emulator`                                  | Added `PUBLIC_ASSETS_BASE_URL=` (empty)                                                   |
+| `apps/frontend/client/.env.staging`                                   | Added `PUBLIC_ASSETS_BASE_URL=https://assets.bearlysleeping.com`                          |
+| `apps/frontend/client/.env.production`                                | Added `PUBLIC_ASSETS_BASE_URL=https://assets.bearlysleeping.com`                          |
+| `apps/frontend/client/.env.testing`                                   | Added `PUBLIC_ASSETS_BASE_URL=` (empty)                                                   |
 
 ### Deviations from Spec
+
 None.
 
 ### Test Results
+
 - Unit (storage): 50/50 PASS (0 failures)
 - Unit (client): 1949/1949 PASS (0 failures)
 - Baseline: 0 pre-existing failures, 0 new failures

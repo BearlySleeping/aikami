@@ -22,7 +22,7 @@ created_at: "2026-08-15"
 | **Target** | `apps/frontend/hub/src/routes/`, `apps/frontend/hub/src/lib/views/catalog/`, `apps/frontend/hub/src/lib/types/data.ts`, `apps/frontend/hub/src/lib/constants/routes.ts`, `scripts/src/lib/catalog/` (thumbnail-generation phase added to the existing C-395 publish pipeline), `packages/shared/schemas/src/lib/catalog/catalog_index.ts` (`thumbnailHash` field), `packages/shared/schemas/src/lib/catalog/catalog_stats.ts` (new stats schemas) |
 | **Priority** | P1 — this is the hub's reason to exist. C-394 and C-395 are both plumbing for it. |
 | **Dependencies** | C-395 (the catalog index must exist to browse). This contract also extends C-395's already-merged publish pipeline (`scripts/src/lib/catalog/`) with thumbnail generation — see Open Question 2 — without reopening the C-395 contract document or changing its status. C-394 only for the streamed stats in AC-4 — the browse pages work without it. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → a page in `apps/frontend/docs/src/content/docs/` describing the catalog |
 | **Contract version** | 2.1.0 |

@@ -198,7 +198,6 @@ async function main(): Promise<void> {
   await notifyDiscordRelease(tag, opts.mode ?? 'production');
 }
 
-
 // Only run the CLI when invoked directly — notifyDiscordRelease() is also
 // imported by tauri_release.ts for the local-deploy path.
 if (import.meta.main) {

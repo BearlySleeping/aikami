@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       include-heavy:
-        description: 'Run heavy suites (Tauri build + E2E tests) in addition to the default check'
+        description: "Run heavy suites (Tauri build + E2E tests) in addition to the default check"
         type: boolean
         default: false
 
@@ -32,6 +32,38 @@ permissions:
   contents: read
 
 jobs:
+  workflow-lint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # actionlint v1.7.7 — static analysis for GitHub Actions workflows
+      # https://github.com/rhysd/actionlint
+      - name: Run actionlint
+        uses: reviewdog/action-actionlint@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }} # Required for reviewdog to post comments
+          actionlint_flags: "-color -shellcheck=shellcheck"
+          fail_level: error
+          filter_mode: nofilter
+          reporter: github-pr-check
+
+      # zizmor v1.29.0 — security audit for GitHub Actions workflows
+      # https://github.com/woodruffw/zizmor
+      - name: Install zizmor
+        run: pip install zizmor==1.29.0
+
+      - name: Run zizmor
+        run: zizmor .github/
+
   validate:
     name: Moon CI
     runs-on: ubuntu-latest
@@ -41,6 +73,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0 # moon needs history to diff against the base branch
+          persist-credentials: false
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
@@ -52,11 +85,12 @@ jobs:
       # re-triggers the workflow; only run-heavy should re-run the full gate).
       - name: Run Moon CI (default check)
         if: ${{ github.event.action != 'labeled' || contains(github.event.pull_request.labels.*.name, 'run-heavy') }}
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref || 'main' }}
         run: |
           # For pull_request events, diff against the target branch.
           # For workflow_dispatch, diff against main (no PR context).
-          BASE="origin/${{ github.event.pull_request.base.ref || 'main' }}"
-          bun moon ci --base="$BASE"
+          bun moon ci --base="origin/$BASE_REF"
 
       - name: Run heavy suites (Tauri build + E2E)
         if: ${{ (github.event_name == 'workflow_dispatch' && inputs.include-heavy) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-heavy')) }}

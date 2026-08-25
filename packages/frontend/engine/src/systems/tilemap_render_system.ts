@@ -1,10 +1,14 @@
 // packages/frontend/engine/src/systems/tilemap_render_system.ts
 
 import { Assets, Container, Texture, UniformGroup } from 'pixi.js';
-import type { AssetTagResolver } from '../assets/map_loader.ts';
 import { logger } from '$logger';
 import type { TerrainLayerEmission } from '../assets/autotile.ts';
-import type { TilemapBand, TilemapData, TilemapLayer } from '../assets/map_loader.ts';
+import type {
+  AssetTagResolver,
+  TilemapBand,
+  TilemapData,
+  TilemapLayer,
+} from '../assets/map_loader.ts';
 import { resolveGid } from '../assets/map_loader.ts';
 import { WORLD_Z_BANDS } from '../rendering/layer_bands.ts';
 import {
@@ -170,7 +174,7 @@ export const renderTilemap = async (
   // stays as the texture cache key so Texture.from() resolves correctly.
   const imageToResolvedUrl = new Map<string, string>();
   for (const image of imageSet) {
-    const resolved = options.resolveTag ? options.resolveTag(image) ?? image : image;
+    const resolved = options.resolveTag ? (options.resolveTag(image) ?? image) : image;
     imageToResolvedUrl.set(image, resolved);
   }
 
@@ -178,7 +182,9 @@ export const renderTilemap = async (
   // Asset URLs are resolved by the global resolver (Assets.resolver.rootPath
   // handles custom-scheme/Tauri origins), so the raw path stays a valid cache
   // alias for Texture.from() below.
-  const loadPromises = [...imageSet].map((image) => Assets.load(imageToResolvedUrl.get(image) ?? image));
+  const loadPromises = [...imageSet].map((image) =>
+    Assets.load(imageToResolvedUrl.get(image) ?? image),
+  );
   await Promise.all(loadPromises);
 
   // Release resolved blob URLs after the textures are loaded — the data

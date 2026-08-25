@@ -154,3 +154,94 @@ export type AssetHashesFile = {
   /** Tag → hash provenance (all keys must exist in the manifest). */
   hashes: Record<string, AssetHashEntry>;
 };
+
+// ---------------------------------------------------------------------------
+// Compact Boot Seed (C-435)
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal per-asset seed row — everything the registry needs, nothing more.
+ * Replaces the 6.9 MB manifest.json + 1.7 MB asset_hashes.json on the boot path.
+ */
+export type AssetSeedRow = {
+  /** Manifest tag, e.g. "lpc:body:bodies_male:walk". */
+  tag: string;
+  /** sha256 — also the R2 object key. */
+  hash: string;
+  /** File size in bytes. */
+  sizeBytes: number;
+  /** Category, e.g. "lpc", "sprites", "music". */
+  category: string;
+  /** File extension including the dot, for R2 key construction. */
+  ext: string;
+};
+
+/**
+ * The compact seed document, replacing manifest.json + asset_hashes.json at boot.
+ * Bundled in the client at static/game-data/asset_seed.json (~1-2 MB instead of ~20 MB).
+ */
+export type AssetSeedDocument = {
+  schemaVersion: 1;
+  /** ISO timestamp when the seed was generated. */
+  generatedAt: string;
+  /** Origin the hashes resolve against. */
+  originUrl: string;
+  /** Seed rows — every asset the registry needs to know about. */
+  rows: readonly AssetSeedRow[];
+};
+
+/**
+ * Assets that stay bundled and must never be evicted.
+ * Declares which tags are bundled in the client with a bundled priority-0 source.
+ */
+export type OfflineCoreDeclaration = {
+  schemaVersion: 1;
+  /** Tags bundled in the client and seeded with a bundled priority-0 source. */
+  tags: readonly string[];
+  /** Why each group is core — starting map, default body, boot UI. */
+  rationale: Readonly<Record<string, string>>;
+};
+
+// ---------------------------------------------------------------------------
+// Compact JSON format (C-435) — short keys for smaller file size
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact JSON row format used in asset_seed.json.
+ * Short keys save ~13% file size vs the full typed format.
+ * t=tag, h=hash, s=sizeBytes, c=category, e=ext
+ */
+export type CompactSeedRow = {
+  t: string;
+  h: string;
+  s: number;
+  c: string;
+  e: string;
+};
+
+/**
+ * Compact JSON document format used in asset_seed.json.
+ * sv=schemaVersion, g=generatedAt, o=originUrl, r=rows
+ */
+export type CompactSeedDocument = {
+  sv: 1;
+  g: string;
+  o: string;
+  r: readonly CompactSeedRow[];
+};
+
+/**
+ * Parses a compact seed document (from asset_seed.json) into the typed format.
+ */
+export const parseAssetSeed = (compact: CompactSeedDocument): AssetSeedDocument => ({
+  schemaVersion: compact.sv,
+  generatedAt: compact.g,
+  originUrl: compact.o,
+  rows: compact.r.map((row) => ({
+    tag: row.t,
+    hash: row.h,
+    sizeBytes: row.s,
+    category: row.c,
+    ext: row.e,
+  })),
+});

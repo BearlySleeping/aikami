@@ -20,6 +20,7 @@ export * from './lib/core/core.ts';
 export * from './lib/domain/appearance.ts';
 export * from './lib/domain/branch.ts';
 export * from './lib/domain/character.ts';
+export * from './lib/domain/character_book.ts';
 export * from './lib/domain/chat.ts';
 export * from './lib/domain/chat_link.ts';
 export * from './lib/domain/config.ts';

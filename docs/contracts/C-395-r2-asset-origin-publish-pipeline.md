@@ -22,7 +22,7 @@ created_at: "2026-08-15"
 | **Target** | `scripts/src/lib/ops/{scan_assets,upload_assets,upload_lpc_assets}.ts`, new publish pipeline under `scripts/src/lib/catalog/`, `packages/shared/schemas/src/lib/catalog/` |
 | **Priority** | P1 — C-396 (browse) and C-397 (client on-demand assets) both read the index this contract produces. Nothing user-facing ships without it. |
 | **Dependencies** | None. Runs in parallel with C-394 — this is the immutable plane, that is the mutable one, and they share no data model. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer notes on publishing assets |
 | **Contract version** | 2.4.0 |

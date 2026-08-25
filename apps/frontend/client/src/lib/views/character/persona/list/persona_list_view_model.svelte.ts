@@ -21,6 +21,7 @@ import {
   equipmentService,
   gameModeService,
   inventoryService,
+  lorebookStore,
   personaService,
   playerStateService,
   routerService,
@@ -53,6 +54,12 @@ export type PersonaListViewModelInterface = BaseViewModelInterface & {
 
   /** Whether a card import is in flight. */
   readonly isImporting: boolean;
+
+  /** Import summary message (C-439 AC-4). */
+  readonly importSummary: string | undefined;
+
+  /** Clears the import summary after it has been read. */
+  clearImportSummary(): void;
 
   /** Selects a persona and navigates to /game to start playing. */
   selectPersona(options: { id: string }): Promise<void>;
@@ -88,6 +95,7 @@ class PersonaListViewModel
   personas: SavedPersona[] = $state([]);
   isLoading = $state(false);
   isImporting = $state(false);
+  importSummary: string | undefined = $state();
 
   get isEmpty(): boolean {
     return this.personas.length === 0;
@@ -211,7 +219,7 @@ class PersonaListViewModel
 
     try {
       // Reuse the shared card parser (V1/V2/V3/RisuAI/Aikami) — C-419 AC-1/2.
-      const { character, avatarFile } = await this._extractCharacter({ file });
+      const { character, avatarFile, lorebook } = await this._extractCharacter({ file });
 
       // Compile into PersonaSheetSchema fields, inferring ability scores.
       const sheet = compileCardToPersona({ character });
@@ -241,6 +249,51 @@ class PersonaListViewModel
       await personaService.updatePersona(personaId, persona);
       await this._loadFromLocalTable();
 
+      // C-439 AC-3: Create lorebook from imported card's character_book
+      if (lorebook && lorebook.entries.length > 0) {
+        let lorebookId: string | undefined;
+        try {
+          lorebookId = lorebookStore.addLorebook({
+            name: lorebook.name,
+            description: lorebook.description,
+          });
+          // Add all entries atomically - if any fails, roll back the lorebook
+          for (const entry of lorebook.entries) {
+            lorebookStore.addEntry({ lorebookId, entry });
+          }
+          // C-439 AC-4: Surface import summary
+          const { summary } = lorebook;
+          const parts: string[] = [];
+          parts.push(`${summary.imported} of ${summary.total} lore entries imported`);
+          if (summary.skipped > 0) {
+            parts.push(`${summary.skipped} skipped`);
+            for (const reason of summary.skippedReasons) {
+              parts.push(reason);
+            }
+          }
+          this.importSummary = parts.join(' — ');
+          this.info('handleFileImport:lorebook-created', {
+            lorebookId,
+            name: lorebook.name,
+            entries: lorebook.entries.length,
+            summary,
+          });
+        } catch (error) {
+          // Roll back the lorebook if it was created but entry insertion failed
+          if (lorebookId) {
+            try {
+              lorebookStore.deleteLorebook(lorebookId);
+            } catch (rollbackError) {
+              this.warn('handleFileImport:lorebook-rollback-failed', rollbackError);
+            }
+          }
+          this.warn('handleFileImport:lorebook-creation-failed', error);
+          this.importSummary = 'Character imported, but its lorebook could not be created.';
+        }
+      } else if (lorebook && lorebook.entries.length === 0) {
+        this.importSummary = 'Character imported. The card had no importable lore entries.';
+      }
+
       this.info('handleFileImport', {
         personaId,
         name: sheet.name,
@@ -253,6 +306,11 @@ class PersonaListViewModel
       this.isImporting = false;
       target.value = '';
     }
+  }
+
+  /** @inheritdoc */
+  clearImportSummary(): void {
+    this.importSummary = undefined;
   }
 
   // ── Private helpers ───────────────────────────────────────────────────

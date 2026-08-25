@@ -2,7 +2,7 @@
 id: C-440
 title: "CI tooling baseline — workflow linting, dependency automation, and AI review"
 source: "user request 2026-08-25 — CI/CD audit follow-up; adopt the third-party tooling the audit identified as high-leverage"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null

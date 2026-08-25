@@ -160,11 +160,31 @@ export HYPA_PI_ASK_NON_INTERACTIVE="deny"
 #   * sortTools is redundant — pi-cache-optimizer already owns prompt and
 #     payload stability, and measured cache hit rate is ~97-98%.
 #
-# Storm-breaker, hashlines, and plan mode stay ON; they are the modules
-# that actually earn their keep. Rewind stays OFF (harness default).
+# Hashlines and plan mode stay ON; they are the modules that actually earn
+# their keep. Rewind stays OFF (harness default).
+#
+# 🔴 Storm-breaker is OFF as of 2026-08-25: it keys on the tool NAME and
+# ignores the arguments, so N consecutive failures of the same tool trip it
+# even when every call targeted something different. Measured over all 334
+# stored sessions with >=10 assistant turns:
+#
+#     3+ consecutive failures of the same tool NAME  — 39 sessions (12%)
+#     3+ consecutive failures of the same name+ARGS  —  2 sessions (0.6%)
+#
+# So at threshold 3 roughly 95% of its trips are not repeats at all, they are
+# ordinary exploration. The case that forced this (2026-08-25): a review agent
+# verifying findings against the tree read three DIFFERENT paths, each of
+# which legitimately did not exist. That non-existence WAS the answer it was
+# sent to find; storm-breaker read three ENOENTs as a storm and called
+# abort(), destroying the result mid-verification.
+#
+# Nothing is lost by disabling it. cost_guard's loop and cycle trackers cover
+# the real failure and key on JSON.stringify(arguments), so three reads of
+# three different paths never match — and unlike storm-breaker they steer
+# first and only halt on a second strike. Re-enabling is one env var, but the
+# harness module cannot be made argument-aware from here.
 export PI_HARNESS_CACHE_ENABLED="0"
-export PI_HARNESS_STORMBREAKER_ENABLED="1"
-export PI_HARNESS_STORMBREAKER_THRESHOLD="3"
+export PI_HARNESS_STORMBREAKER_ENABLED="0"
 export PI_HARNESS_HASHLINES_ENABLED="1"
 export PI_HARNESS_PLANMODE_ENABLED="1"
 
