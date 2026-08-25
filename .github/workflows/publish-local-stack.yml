@@ -37,6 +37,9 @@ on:
   #     - 'apps/backend/local-stack/**'
   #     - '.github/workflows/publish-local-stack.yml'
 
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
 
