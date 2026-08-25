@@ -2,7 +2,7 @@
 id: C-434
 title: "Registry-Backed Maps, Tilesets and Content Packs"
 source: "user request 2026-08-23 — make client look at the R2 bucket"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
