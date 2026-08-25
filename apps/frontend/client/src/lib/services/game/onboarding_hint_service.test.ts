@@ -2,7 +2,8 @@
 // biome-ignore-all lint/style/useNamingConvention: trigger field names match OnboardingHintStepSchema
 //
 // Unit tests for OnboardingHintService — hint state machine, persistence,
-// reset/replay, trigger-based hint sequencing (C-327 AC-3, AC-4).
+// reset/replay, trigger-based hint sequencing, progress, skip, events.
+// Contract: C-327 AC-3, AC-4; C-422 AC-2, AC-5
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
@@ -12,19 +13,19 @@ const BASIC_ONBOARDING = {
   steps: [
     {
       id: 'hint_move',
-      action: 'move_up',
+      action: { kind: 'input' as const, actionId: 'move_up' as const },
       text: 'Press {key} to move up',
       trigger: 'map_loaded' as const,
     },
     {
       id: 'hint_interact',
-      action: 'interact',
+      action: { kind: 'input' as const, actionId: 'interact' as const },
       text: 'Press {key} to interact with objects and people',
       trigger: 'after_previous' as const,
     },
     {
       id: 'hint_inventory',
-      action: 'open_inventory',
+      action: { kind: 'input' as const, actionId: 'open_inventory' as const },
       text: 'Press {key} to open your inventory',
       trigger: 'after_previous' as const,
     },
@@ -35,15 +36,38 @@ const NEAR_INTERACTABLE_ONBOARDING = {
   steps: [
     {
       id: 'hint_move',
-      action: 'move_up',
+      action: { kind: 'input' as const, actionId: 'move_up' as const },
       text: 'Move up',
       trigger: 'map_loaded' as const,
     },
     {
       id: 'hint_near',
-      action: 'interact',
+      action: { kind: 'input' as const, actionId: 'interact' as const },
       text: 'Interact with nearby objects',
       trigger: 'near_interactable' as const,
+    },
+  ],
+};
+
+const MIXED_ONBOARDING = {
+  steps: [
+    {
+      id: 'hint_move',
+      action: { kind: 'input' as const, actionId: 'move_up' as const },
+      text: 'Press {key} to move up',
+      trigger: 'map_loaded' as const,
+    },
+    {
+      id: 'hint_dialogue',
+      action: { kind: 'event' as const, eventId: 'npc_dialogue_opened' },
+      text: 'Talk to an NPC to learn more',
+      trigger: 'after_previous' as const,
+    },
+    {
+      id: 'hint_combat',
+      action: { kind: 'event' as const, eventId: 'combat_ended' },
+      text: 'Win a combat encounter',
+      trigger: 'after_previous' as const,
     },
   ],
 };
@@ -79,7 +103,7 @@ describe('OnboardingHintService', () => {
   test('should set currentHint to first map_loaded hint on load', () => {
     expect(service.currentHint).toBeDefined();
     expect(service.currentHint?.id).toBe('hint_move');
-    expect(service.currentHint?.action).toBe('move_up');
+    expect(service.currentHint?.action).toEqual({ kind: 'input', actionId: 'move_up' });
     expect(service.hintVisible).toBe(true);
   });
 
@@ -262,5 +286,151 @@ describe('OnboardingHintService', () => {
     expect(() =>
       service.loadOnboarding({ packId: 'empty-pack', onboarding: { steps: [] } }),
     ).not.toThrow();
+  });
+
+  // ── stepIndex / totalSteps (C-422 AC-2) ──
+
+  test('should expose stepIndex and totalSteps', () => {
+    expect(service.totalSteps).toBe(3);
+    expect(service.stepIndex).toBe(0); // hint_move is at index 0
+
+    service.onActionPerformed('move_up');
+    expect(service.stepIndex).toBe(1); // hint_interact is at index 1
+
+    service.onActionPerformed('interact');
+    expect(service.stepIndex).toBe(2); // hint_inventory is at index 2
+  });
+
+  test('stepIndex should be -1 when no hint is active', () => {
+    service.loadOnboarding({ packId: 'empty-pack', onboarding: { steps: [] } });
+    expect(service.stepIndex).toBe(-1);
+  });
+
+  test('totalSteps should be 0 for empty onboarding', () => {
+    service.loadOnboarding({ packId: 'empty-pack', onboarding: { steps: [] } });
+    expect(service.totalSteps).toBe(0);
+  });
+
+  // ── skipOnboarding (C-422 AC-2) ──
+
+  test('skipOnboarding should mark all steps as learned and complete', () => {
+    expect(service.isComplete).toBe(false);
+
+    service.skipOnboarding();
+
+    expect(service.isComplete).toBe(true);
+    expect(service.currentHint).toBeUndefined();
+    expect(service.hintVisible).toBe(false);
+
+    // Should persist
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      throw new Error('localStorage value was undefined');
+    }
+    const progress = JSON.parse(raw);
+    expect(progress.learned.hint_move).toBe(true);
+    expect(progress.learned.hint_interact).toBe(true);
+    expect(progress.learned.hint_inventory).toBe(true);
+    expect(typeof progress.completedAt).toBe('number');
+  });
+
+  test('skipOnboarding should be idempotent', () => {
+    service.skipOnboarding();
+    expect(service.isComplete).toBe(true);
+
+    // Should not throw on second call
+    expect(() => service.skipOnboarding()).not.toThrow();
+    expect(service.isComplete).toBe(true);
+  });
+
+  // ── onEventPerformed (C-422 AC-2) ──
+
+  test('onEventPerformed should advance through event steps', () => {
+    service.loadOnboarding({ packId: 'mixed-pack', onboarding: MIXED_ONBOARDING });
+
+    // First hint is input (move_up)
+    expect(service.currentHint?.id).toBe('hint_move');
+    expect(service.currentHint?.action).toEqual({ kind: 'input', actionId: 'move_up' });
+
+    // Learn it
+    service.onActionPerformed('move_up');
+
+    // Second hint is event (npc_dialogue_opened)
+    expect(service.currentHint?.id).toBe('hint_dialogue');
+    expect(service.currentHint?.action).toEqual({ kind: 'event', eventId: 'npc_dialogue_opened' });
+
+    // Fire the event
+    service.onEventPerformed('npc_dialogue_opened');
+
+    // Third hint is event (combat_ended)
+    expect(service.currentHint?.id).toBe('hint_combat');
+
+    // Fire the event
+    service.onEventPerformed('combat_ended');
+
+    expect(service.isComplete).toBe(true);
+  });
+
+  test('onEventPerformed should not affect input hints', () => {
+    service.loadOnboarding({ packId: 'mixed-pack', onboarding: MIXED_ONBOARDING });
+
+    // Current hint is input — firing an unrelated event should do nothing
+    service.onEventPerformed('combat_ended');
+    expect(service.currentHint?.id).toBe('hint_move');
+  });
+
+  test('onActionPerformed should not affect event hints', () => {
+    service.loadOnboarding({ packId: 'mixed-pack', onboarding: MIXED_ONBOARDING });
+
+    // Advance past the first input hint
+    service.onActionPerformed('move_up');
+
+    // Now on event hint — performing an action should do nothing
+    service.onActionPerformed('interact');
+    expect(service.currentHint?.id).toBe('hint_dialogue');
+  });
+
+  test('onEventPerformed should be no-op after completion', () => {
+    service.loadOnboarding({ packId: 'mixed-pack', onboarding: MIXED_ONBOARDING });
+
+    service.onActionPerformed('move_up');
+    service.onEventPerformed('npc_dialogue_opened');
+    service.onEventPerformed('combat_ended');
+    expect(service.isComplete).toBe(true);
+
+    expect(() => service.onEventPerformed('combat_ended')).not.toThrow();
+  });
+
+  // ── Regression: future event should not learn inactive hint ──
+
+  test('onEventPerformed should not learn future hints before they become active', () => {
+    service.loadOnboarding({ packId: 'mixed-pack', onboarding: MIXED_ONBOARDING });
+
+    // First hint is input (move_up) — it's active
+    expect(service.currentHint?.id).toBe('hint_move');
+
+    // Fire the combat_ended event BEFORE its step becomes active
+    // (combat hint is the third step, not yet eligible)
+    service.onEventPerformed('combat_ended');
+
+    // Current hint should still be 'hint_move' (unchanged)
+    expect(service.currentHint?.id).toBe('hint_move');
+    expect(service.hintVisible).toBe(true);
+
+    // Now advance to the dialogue hint
+    service.onActionPerformed('move_up');
+    expect(service.currentHint?.id).toBe('hint_dialogue');
+
+    // Fire the dialogue event to complete it
+    service.onEventPerformed('npc_dialogue_opened');
+
+    // Now the combat hint becomes active
+    expect(service.currentHint?.id).toBe('hint_combat');
+
+    // The combat event should still need to be fired (wasn't learned early)
+    service.onEventPerformed('combat_ended');
+
+    // Now it should be complete
+    expect(service.isComplete).toBe(true);
   });
 });

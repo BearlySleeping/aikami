@@ -59,6 +59,15 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
             <!-- Sign In / Sign Out (shared auth control) -->
             <LoginView />
 
+            <!-- How to Play / Replay Tutorial (C-422 AC-3) -->
+            <button
+              type="button"
+              class="btn btn-ghost"
+              onclick={() => viewModel.replayTutorial()}
+            >
+              How to Play
+            </button>
+
             <!-- Options -->
             <button type="button" class="btn btn-ghost" onclick={() => viewModel.goToOptions()}>
               Options

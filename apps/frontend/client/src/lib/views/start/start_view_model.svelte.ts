@@ -20,6 +20,7 @@ import {
   gameOverlayService,
   gameSaveService,
   inventoryService,
+  onboardingHintService,
   packRegistryService,
   personaService,
   playerStateService,
@@ -104,6 +105,9 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** C-405 AC-4: Navigates to the world-generation preview (Advanced entry). */
   startWorldGeneration(): Promise<void>;
+
+  /** C-422 AC-3: Navigates to the game with a fresh onboarding arc (replay tutorial). */
+  replayTutorial(): Promise<void>;
 
   // ── Pack Browser (C-345) ──
 
@@ -191,6 +195,17 @@ class StartViewModel
   async startWorldGeneration(): Promise<void> {
     await routerService.goToRoute('worldgen', {
       queryParameters: undefined,
+      pathParameters: undefined,
+    });
+  }
+
+  /** @inheritdoc */
+  async replayTutorial(): Promise<void> {
+    // Reset onboarding progress and navigate to game with a fresh arc
+    onboardingHintService.resetOnboarding();
+
+    await routerService.goToRoute('game', {
+      queryParameters: { tutorial: '1' },
       pathParameters: undefined,
     });
   }

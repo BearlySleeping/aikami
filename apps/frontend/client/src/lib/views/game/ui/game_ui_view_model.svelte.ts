@@ -7,6 +7,7 @@ import {
 } from '@aikami/frontend/services';
 import {
   type AutoSaveStatus,
+  aiSettingsService,
   chatService,
   combatService,
   type DialogueNpcData,
@@ -147,6 +148,10 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly onboardingHintText: string | undefined;
   /** Whether the onboarding hint toast is visible. */
   readonly onboardingHintVisible: boolean;
+  /** Index of the current onboarding step (0-based), or -1 if none. */
+  readonly onboardingStepIndex: number;
+  /** Total number of onboarding steps in the loaded arc. */
+  readonly onboardingTotalSteps: number;
   /** Whether the user prefers reduced motion (AC-5). */
   readonly reducedMotion: boolean;
 
@@ -157,6 +162,8 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   respawnPlayer(): Promise<void>;
   loadLastSave(): Promise<void>;
   dismissOnboardingHint(): void;
+  /** Skips the entire onboarding arc (C-422 AC-3). */
+  skipOnboardingHint(): void;
 };
 
 class GameUIViewModel
@@ -205,17 +212,45 @@ class GameUIViewModel
     if (!hint) {
       return undefined;
     }
-    // Replace {key} placeholder with the current binding label
-    const keyLabel = inputActionService.actionDisplayLabel(hint.action);
-    return hint.text.replaceAll('{key}', keyLabel);
+
+    // C-422 AC-5: Check if this step requires a model but none is configured
+    if (hint.requiresModel && !this._hasTextProvider()) {
+      return 'This step needs an AI model — configure one in Settings, or skip this step.';
+    }
+
+    // Replace {key} placeholder with the current binding label (input steps only)
+    if (hint.action.kind === 'input') {
+      const keyLabel = inputActionService.actionDisplayLabel(hint.action.actionId);
+      return hint.text.replaceAll('{key}', keyLabel);
+    }
+    // Event steps have no keybinding — return text as-is
+    return hint.text;
   }
 
   get onboardingHintVisible(): boolean {
     return onboardingHintService.hintVisible;
   }
 
+  /** @inheritdoc */
+  get onboardingStepIndex(): number {
+    return onboardingHintService.stepIndex;
+  }
+
+  /** @inheritdoc */
+  get onboardingTotalSteps(): number {
+    return onboardingHintService.totalSteps;
+  }
+
   /** Detects prefers-reduced-motion via matchMedia (C-327 AC-5). */
   reducedMotion = $state<boolean>(false);
+
+  /**
+   * Returns whether a text AI provider is configured (C-422 AC-5).
+   * Used to show a graceful message when a step requires a model.
+   */
+  private _hasTextProvider(): boolean {
+    return !!(aiSettingsService.textProvider?.apiKey || aiSettingsService.textProvider?.endpoint);
+  }
 
   private _reducedMotionQuery: MediaQueryList | undefined;
 
@@ -577,6 +612,11 @@ class GameUIViewModel
   /** Dismisses the current onboarding hint (C-327 AC-3). */
   dismissOnboardingHint(): void {
     onboardingHintService.dismissCurrentHint();
+  }
+
+  /** Skips the entire onboarding arc (C-422 AC-3). */
+  skipOnboardingHint(): void {
+    onboardingHintService.skipOnboarding();
   }
 
   // ── Media query cleanup (C-327 AC-5) ──
