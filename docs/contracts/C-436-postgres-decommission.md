@@ -2,7 +2,7 @@
 id: C-436
 title: "Postgres/Neon Decommission — retire the legacy data plane and the dead cloud surface"
 source: "user request 2026-08-24 — open-source readiness; completes C-426 AC-8"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-24"
 | **Target** | `packages/backend/database/` — collapse two schemas into one; `apps/frontend/hub/src/lib/server/api/` — port the two remaining `pg` callers to D1; `scripts/src/lib/` — drop the Postgres/Neon deploy and lifecycle paths |
 | **Priority** | P1 — the repo currently ships two parallel data planes, one of which **cannot run in the deployed Worker at all**. This is the single largest source of "which one is real?" confusion for a new contributor. |
 | **Dependencies** | C-426 (implemented, AC-1…AC-7) — the D1 schema, Better Auth, and the Worker deploy already exist. This contract only removes what they replaced. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — `docs/guides/database.md` and `docs/guides/CI_CD.md` already describe the target state and carry "removed in C-436" markers to delete. |
 | **Contract version** | 2.0.0 |
@@ -106,7 +106,7 @@ modes, which are the part most easily broken by a mechanical port.
 - **Bindings, not connection strings.** No server module may read a database URL from the environment. The only way to a database handle is a Worker binding passed in by the caller. Do not introduce a module-level singleton keyed on `env` — Workers reuse isolates across requests with different `env` objects.
 - **Preserve every degradation path.** `catalog_stats.ts` and `health_db.ts` each carry an explicit, commented contract about what happens when the database is unreachable. Those comments are the spec; port them along with the code and keep them accurate.
 - **The guard survives, retargeted.** `guard_data_plane.ts`'s I-1 (no database module in a client bundle) is still exactly right — keep it. I-9 currently bans Neon-proprietary dependencies; retarget it to ban `pg`, `postgres`, and `@neondatabase/serverless` from reappearing anywhere.
-- **Delete dead workflow jobs.** `.github/workflows/release.yml` still defines `deploy-cloud-run-sveltekit` and `deploy-firebase-functions`. No entry in `deployment_config.ts` maps to either service type. Remove the jobs and any now-unreferenced secrets they consumed.
+- **Delete dead workflow jobs.** `.github/workflows/release.yml` previously defined `deploy-cloud-run-sveltekit` and `deploy-firebase-functions` (removed by C-426). Verify no residual references to these job names exist in workflow configs or `deployment_config.ts`. Remove any now-unreferenced secrets they consumed.
 
 ## State & Data Models
 
@@ -148,8 +148,8 @@ account_backups                           // Turso save-backup metadata
   - Delete `scripts/src/lib/postgres/`, the `postgres:*` root scripts, and the `postgres` entry in `DevService` / `SERVICE_DEFS` / `KNOWN_SERVICES`
   - Remove PostgreSQL from `flake.nix` and `.postgres/` from `.gitignore`
   - Retarget `guard_data_plane.ts` I-9
-  - Delete `deploy-cloud-run-sveltekit` and `deploy-firebase-functions` jobs from `release.yml`
-  - Delete `packages/shared/types/src/lib/api/firestore.ts`, `apps/frontend/hub/firebase.json`, and `.moon/task-templates/firebase-functions.yml` if nothing references them
+  - Verify `deploy-cloud-run-sveltekit` and `deploy-firebase-functions` jobs are absent from `release.yml` (removed by C-426); remove any residual references
+  - Delete `packages/shared/types/src/lib/api/firestore.ts` (grep for remaining consumers first — see Edge Cases), and `.moon/task-templates/firebase-functions.yml` if nothing references them (note: `apps/frontend/hub/firebase.json` does not exist; no action needed)
   - Update `docs/guides/database.md`, `docs/guides/dev-workflow.md`, `docs/guides/CI_CD.md` to drop their "removed in C-436" markers
 - **Out of Scope:**
   - Any change to the D1 schema's shape
@@ -266,7 +266,7 @@ else as pure deletion.
 ### AC-6: Environment and deploy surface cleaned
 **Given** the deploy configuration
 **When** the repo is searched for the retired environment keys
-**Then** `NEON_DATABASE_URL` and `NEON_DATABASE_URL_DIRECT` appear nowhere outside `docs/contracts/`; `release.yml` no longer defines `deploy-cloud-run-sveltekit` or `deploy-firebase-functions`; `scripts/src/lib/deploy/database_migration.ts` applies D1 migrations only; and `bun run deploy --dry-run` succeeds for every mode.
+**Then** `NEON_DATABASE_URL` and `NEON_DATABASE_URL_DIRECT` appear nowhere outside `docs/contracts/`; `release.yml` has no residual references to `deploy-cloud-run-sveltekit` or `deploy-firebase-functions`; `scripts/src/lib/deploy/database_migration.ts` applies D1 migrations only; and `bun run deploy --dry-run` succeeds for every mode.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
