@@ -62,12 +62,14 @@
   "regexManagers": [
     {
       "description": "Update .bun-version and .moon/toolchains.yml together when Bun is bumped",
-      "fileMatch": ["^\\.bun-version$"],
-      "matchStrings": ["(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "fileMatch": ["^\\.bun-version$", "^\\.moon/toolchains\\.yml$"],
+      "matchStrings": [
+        "^(?<currentValue>\\d+\\.\\d+\\.\\d+)\\s*$",
+        "bun:\\s*\\n(?:\\s+#.*\\n)*\\s+version:\\s*[\"'](?<currentValue>\\d+\\.\\d+\\.\\d+)[\"']"
+      ],
       "depNameTemplate": "oven-sh/bun",
       "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver",
-      "autoReplaceStringTemplate": "{{newValue}}"
+      "versioningTemplate": "semver"
     }
   ],
 
