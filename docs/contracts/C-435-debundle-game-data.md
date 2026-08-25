@@ -21,7 +21,7 @@ created_at: "2026-08-23"
 | **Target** | `apps/frontend/client/static/game-data/`, `apps/frontend/client/static/content-packs/`, `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts`, `packages/frontend/storage/src/lib/assets.ts`, client build config |
 | **Priority** | P2 — the largest payoff in the batch, and the riskiest. Do it last, once every other asset class has a proven second source. |
 | **Dependencies** | C-432, C-433, C-434 — all must be merged and verified. This contract removes the fallback those three replace; doing it earlier bricks the client. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → note on first-run download in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
