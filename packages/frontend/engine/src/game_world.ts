@@ -3051,7 +3051,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   ): LpcLayerRecipe[] {
     const merged = [...baseRecipes];
     for (const equipmentRecipe of equipmentRecipes) {
-      const overlapIndex = merged.findIndex((r) => r.slot === equipmentRecipe.slot);
+      // C-431: key on (slot, layerRole) so behind and front entries for the same
+      // slot coexist (e.g. weapon behind + weapon front).
+      const overlapIndex = merged.findIndex(
+        (r) => r.slot === equipmentRecipe.slot && r.layerRole === equipmentRecipe.layerRole,
+      );
       if (overlapIndex >= 0) {
         merged[overlapIndex] = equipmentRecipe;
       } else {

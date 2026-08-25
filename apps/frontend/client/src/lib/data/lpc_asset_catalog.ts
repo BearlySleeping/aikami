@@ -46,6 +46,16 @@ export type LpcSlotVariant = {
   assetId: string;
   label: string;
   shapeType: LpcMockShapeType;
+  /**
+   * Which side of the body this sheet draws on. 'front' when the upstream
+   * asset has no behind pass — the overwhelming majority.
+   */
+  layerRole: 'behind' | 'front';
+  /**
+   * The complementary variant's assetId, when this sheet is half of a
+   * bg/fg pair. Absent for standalone sheets.
+   */
+  pairedAssetId?: string;
 };
 
 /** Describes an LPC character slot with its available variant options. */
