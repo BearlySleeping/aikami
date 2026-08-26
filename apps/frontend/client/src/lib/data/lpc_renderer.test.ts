@@ -147,6 +147,18 @@ describe('C-428 AC-4: Both renderers agree on every shipped LPC sheet shape', ()
     mock.module('$logger', () => ({
       logger: { debug: () => {}, warn: () => {}, info: () => {}, error: () => {} },
     }));
+    mock.module('@aikami/frontend/engine/content', () => ({
+      resolveLpcSheetGeometry: (sheet: { width: number; height: number }) => {
+        const pitch = sheet.width >= 1000 ? 128 : 64;
+        return {
+          pitch,
+          columns: Math.floor(sheet.width / pitch),
+          rows: Math.floor(sheet.height / pitch),
+          scale: 1,
+          anchorOffset: pitch === 128 ? { x: -64, y: -64 } : { x: -32, y: -32 },
+        };
+      },
+    }));
 
     engine = await import('@aikami/frontend/engine');
     client = await import('./lpc_renderer');

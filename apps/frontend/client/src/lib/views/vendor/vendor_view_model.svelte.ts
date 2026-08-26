@@ -8,9 +8,10 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { LpcAnimationState } from '@aikami/lpc';
+import { LpcAnimationState, lpcTag } from '@aikami/lpc';
 import type { ItemDefinition } from '@aikami/types';
-import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
+import type { AssetResolver } from '@aikami/types';
 import { gameOverlayService, vendorService } from '$services';
 import type { VendorSessionOptions as _VendorSessionOptions } from '$types';
 
@@ -58,18 +59,25 @@ export type VendorViewModelInterface = BaseViewModelInterface & {
   getItemArtUrl(itemId: string): string | undefined;
 };
 
-export type VendorViewModelOptions = BaseViewModelOptions & _VendorSessionOptions;
+export type VendorViewModelOptions = BaseViewModelOptions & _VendorSessionOptions & {
+  /** Optional resolver override for testing. Defaults to createRegistryAssetResolver(). */
+  resolver?: AssetResolver;
+};
 
 class VendorViewModel
   extends BaseViewModel<VendorViewModelOptions>
   implements VendorViewModelInterface
 {
+  /** Instance-scoped resolver. Defaults to createRegistryAssetResolver(). */
+  private readonly _resolver: AssetResolver;
+
   /** C-419 AC-3: UI flag — the haggle panel collapses until the player
    * explicitly expands it or a conversation starts. */
   hagglePanelExpanded = $state(false);
 
   constructor(options: VendorViewModelOptions) {
     super(options);
+    this._resolver = options.resolver ?? createRegistryAssetResolver();
     vendorService.startSession({
       vendorId: options.vendorId,
       vendorName: options.vendorName,
@@ -129,7 +137,8 @@ class VendorViewModel
     if (!lpcAssetId) {
       return undefined;
     }
-    return getLpcAssetPath('', lpcAssetId, LpcAnimationState.Walk) ?? undefined;
+    const tag = lpcTag(lpcAssetId, LpcAnimationState.Walk);
+    return this._resolver.resolve(tag) ?? undefined;
   }
 
   /** Item ID awaiting sell confirmation (C-331 AC-3). */

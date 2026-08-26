@@ -23,9 +23,9 @@ import {
   ANIMATION_STATE_OPTIONS,
   DIRECTION_OPTIONS,
   getLpcCatalog,
-  wireLpcUrlResolver,
 } from '$lib/data/lpc_asset_catalog';
-import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
+import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from '$lib/data/lpc_renderer';
+import type { LpcRenderer } from '$lib/data/lpc_renderer';
 import {
   type LpcUrlState,
   lpcStateToSearchParams,
@@ -209,6 +209,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   private _layerSprites: Sprite[] = [];
   private _gridGraphics: Container | undefined;
   private _tickAccumulator = 0;
+  private _lpcRenderer: LpcRenderer | undefined;
   private _isApplyingUrlState = false;
   private _pushUrlTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -518,7 +519,10 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     }
 
     const promise = (async () => {
-      const texture = await loadLpcSheet(assetId, state);
+      if (!this._lpcRenderer) {
+        return Texture.EMPTY;
+      }
+      const texture = await this._lpcRenderer.loadSheet(assetId, state);
       // Only cache successful textures — transient EMPTY must be retried on a
       // later call (the renderer only permanently caches genuinely unmapped
       // assets once the manifest is loaded).
@@ -896,7 +900,12 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   override async initialize(): Promise<void> {
     // Ensure the manifest-backed LPC URL resolver is wired and the manifest
     // is loaded before any layer lookup (idempotent).
-    await wireLpcUrlResolver();
+    const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
+    await assetStore.fetchManifest();
+
+    // Create LPC renderer with the registry resolver
+    const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
+    this._lpcRenderer = createLpcRenderer({ resolver: createRegistryAssetResolver() });
 
     // The constructor's `allSlots` snapshot was almost certainly taken before
     // the catalog fetch above resolved (assetStore.seed was still null) —

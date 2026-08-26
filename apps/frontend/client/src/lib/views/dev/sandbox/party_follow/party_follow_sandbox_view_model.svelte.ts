@@ -15,7 +15,13 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { LpcAnimationState } from '@aikami/lpc';
-import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
+
+const _registryResolver = createRegistryAssetResolver();
+
+/** Adapter for assetUrlResolver: reads the assetId argument, ignores slot and state. */
+const _assetUrlAdapter = (_slot: string, assetId: string, _state: LpcAnimationState): string | null =>
+  _registryResolver.resolve(assetId);
 
 // ---------------------------------------------------------------------------
 // Lazily-resolved ECS worker constructor (SSR-safe dynamic import)
@@ -180,8 +186,7 @@ class PartyFollowSandboxViewModel
         workerFactory: () => new workerCtor(),
         recipeResolver: (layerIds) =>
           layerIds.map((id) => SandboxRecipes[id]).filter(Boolean) as LpcLayerRecipe[],
-        assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
+        assetUrlResolver: _assetUrlAdapter,
         textureManager: this._textureManager,
       };
 
