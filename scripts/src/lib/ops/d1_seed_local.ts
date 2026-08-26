@@ -28,7 +28,7 @@ const HUB_WORKER_URL = `http://127.0.0.1:${HUB_WORKER_PORT}`;
 // ── Seed data ───────────────────────────────────────────────
 // Must be obviously fake so it can never be mistaken for production data.
 const DEV_USER = { name: 'Dev User', email: 'dev@localhost', password: 'dev-password-123' };
-const DEV_PACK = { name: 'Dev Test Pack', description: 'A local dev pack for testing' };
+const DEV_PACK = { name: 'Dev Test Pack', slug: 'dev-test-pack', description: 'A local dev pack for testing' };
 
 // ── Helpers ─────────────────────────────────────────────────
 const wrangler = async (args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
@@ -74,11 +74,22 @@ const checkHubWorkerRunning = async (): Promise<void> => {
 };
 
 const seedExists = async (): Promise<boolean> => {
-  const { stdout, exitCode } = await d1Exec("SELECT COUNT(*) as cnt FROM user WHERE email = 'dev@localhost'");
-  if (exitCode !== 0) {
+  // Check user exists
+  const { stdout: userCheck, exitCode: userExit } = await d1Exec(
+    "SELECT COUNT(*) as cnt FROM user WHERE email = 'dev@localhost'",
+  );
+  if (userExit !== 0) {
     return false; // Table may not exist yet
   }
-  return stdout.includes('"cnt":1') || stdout.includes('cnt|1') || stdout.includes('1');
+  const userExists = userCheck.includes('"cnt":1') || userCheck.includes('cnt|1') || userCheck.includes('1');
+  if (!userExists) return false;
+
+  // Check pack version exists (ensures full seed, not just user)
+  const { stdout: pvCheck, exitCode: pvExit } = await d1Exec(
+    `SELECT COUNT(*) as cnt FROM pack_versions pv JOIN packs p ON p.id = pv.pack_id WHERE p.slug = '${DEV_PACK.slug}'`,
+  );
+  if (pvExit !== 0) return false;
+  return pvCheck.includes('"cnt":1') || pvCheck.includes('cnt|1') || pvCheck.includes('1');
 };
 
 const createDevUser = async (): Promise<void> => {
@@ -124,32 +135,37 @@ const createDevPack = async (): Promise<void> => {
     process.exit(1);
   }
 
-  // Check if pack already exists (idempotent)
-  const { stdout: packCheck } = await d1Exec(
-    `SELECT COUNT(*) as cnt FROM packs WHERE name = '${DEV_PACK.name}'`,
+  // Check if pack already exists (idempotent) — query by slug
+  const { stdout: packCheck, exitCode: packCheckExit } = await d1Exec(
+    `SELECT COUNT(*) as cnt FROM packs WHERE slug = '${DEV_PACK.slug}'`,
   );
+  if (packCheckExit !== 0) {
+    error('Failed to query packs table');
+    process.exit(1);
+  }
   if (packCheck.includes('"cnt":1') || packCheck.includes('cnt|1') || packCheck.includes('1')) {
-    ok(`Dev pack already exists: ${DEV_PACK.name} (idempotent)`);
+    ok(`Dev pack already exists: ${DEV_PACK.slug} (idempotent)`);
     return;
   }
 
-  // Insert the pack
+  // Insert the pack — D1 schema: id, slug, owner_account_id, visibility, created_at, updated_at
   const now = Date.now();
   const packId = crypto.randomUUID();
   const { exitCode: packExit } = await d1Exec(
-    `INSERT INTO packs (id, name, description, author_id, created_at, updated_at) ` +
-    `VALUES ('${packId}', '${DEV_PACK.name}', '${DEV_PACK.description}', '${userId}', ${now}, ${now})`,
+    `INSERT INTO packs (id, slug, owner_account_id, visibility, created_at, updated_at) ` +
+    `VALUES ('${packId}', '${DEV_PACK.slug}', '${userId}', 'draft', ${now}, ${now})`,
   );
   if (packExit !== 0) {
     error('Failed to create dev pack');
     process.exit(1);
   }
 
-  // Insert a pack version
+  // Insert a pack version — D1 schema: id, pack_id, version (text), manifest_hash, created_at
   const versionId = crypto.randomUUID();
+  const fakeManifestHash = '0000000000000000000000000000000000000000000000000000000000000000';
   const { exitCode: versionExit } = await d1Exec(
-    `INSERT INTO pack_versions (id, pack_id, version, created_at) ` +
-    `VALUES ('${versionId}', '${packId}', 1, ${now})`,
+    `INSERT INTO pack_versions (id, pack_id, version, manifest_hash, created_at) ` +
+    `VALUES ('${versionId}', '${packId}', '1', '${fakeManifestHash}', ${now})`,
   );
   if (versionExit !== 0) {
     error('Failed to create dev pack version');
