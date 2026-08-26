@@ -176,8 +176,6 @@ describe('C-392 — dev engine services converge on the local stack', () => {
   });
 });
 
-
-
 describe('hub-worker herdr service (C-437)', () => {
   it('registers hub-worker in SERVICE_DEFS', () => {
     expect(SERVICE_DEFS['hub-worker'].name).toBe('hub-worker');

@@ -28,10 +28,16 @@ const HUB_WORKER_URL = `http://127.0.0.1:${HUB_WORKER_PORT}`;
 // ── Seed data ───────────────────────────────────────────────
 // Must be obviously fake so it can never be mistaken for production data.
 const DEV_USER = { name: 'Dev User', email: 'dev@localhost', password: 'dev-password-123' };
-const DEV_PACK = { name: 'Dev Test Pack', slug: 'dev-test-pack', description: 'A local dev pack for testing' };
+const DEV_PACK = {
+  name: 'Dev Test Pack',
+  slug: 'dev-test-pack',
+  description: 'A local dev pack for testing',
+};
 
 // ── Helpers ─────────────────────────────────────────────────
-const wrangler = async (args: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+const wrangler = async (
+  args: string[],
+): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
   const proc = Bun.spawn(['bunx', 'wrangler', ...args], {
     cwd: HUB_DIR,
     stdout: 'pipe',
@@ -43,7 +49,9 @@ const wrangler = async (args: string[]): Promise<{ stdout: string; stderr: strin
   return { stdout, stderr, exitCode };
 };
 
-const d1Exec = async (command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
+const d1Exec = async (
+  command: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> =>
   wrangler(['d1', 'execute', DB_NAME, '--local', '--command', command, '--yes']);
 
 const checkLocalMode = (): void => {
@@ -81,14 +89,19 @@ const seedExists = async (): Promise<boolean> => {
   if (userExit !== 0) {
     return false; // Table may not exist yet
   }
-  const userExists = userCheck.includes('"cnt":1') || userCheck.includes('cnt|1') || userCheck.includes('1');
-  if (!userExists) return false;
+  const userExists =
+    userCheck.includes('"cnt":1') || userCheck.includes('cnt|1') || userCheck.includes('1');
+  if (!userExists) {
+    return false;
+  }
 
   // Check pack version exists (ensures full seed, not just user)
   const { stdout: pvCheck, exitCode: pvExit } = await d1Exec(
     `SELECT COUNT(*) as cnt FROM pack_versions pv JOIN packs p ON p.id = pv.pack_id WHERE p.slug = '${DEV_PACK.slug}'`,
   );
-  if (pvExit !== 0) return false;
+  if (pvExit !== 0) {
+    return false;
+  }
   return pvCheck.includes('"cnt":1') || pvCheck.includes('cnt|1') || pvCheck.includes('1');
 };
 
@@ -120,7 +133,9 @@ const createDevPack = async (): Promise<void> => {
   info('Creating dev pack...');
 
   // Get the dev user's ID
-  const { stdout, exitCode } = await d1Exec("SELECT id FROM user WHERE email = 'dev@localhost' LIMIT 1");
+  const { stdout, exitCode } = await d1Exec(
+    "SELECT id FROM user WHERE email = 'dev@localhost' LIMIT 1",
+  );
   if (exitCode !== 0 || !stdout) {
     error('Could not find dev user in database');
     process.exit(1);
@@ -128,7 +143,9 @@ const createDevPack = async (): Promise<void> => {
 
   // Parse the user ID from wrangler's table output
   // Format: id|... or {"id":"..."}
-  const userIdMatch = stdout.match(/(?:id\|([^\s]+)|"id":"([^"]+))/) || stdout.match(/id[^a-zA-Z0-9]*([a-zA-Z0-9-]+)/);
+  const userIdMatch =
+    stdout.match(/(?:id\|([^\s]+)|"id":"([^"]+))/) ||
+    stdout.match(/id[^a-zA-Z0-9]*([a-zA-Z0-9-]+)/);
   const userId = userIdMatch?.[1] || userIdMatch?.[2];
   if (!userId) {
     error(`Could not parse user ID from output: ${stdout}`);
@@ -153,7 +170,7 @@ const createDevPack = async (): Promise<void> => {
   const packId = crypto.randomUUID();
   const { exitCode: packExit } = await d1Exec(
     `INSERT INTO packs (id, slug, owner_account_id, visibility, created_at, updated_at) ` +
-    `VALUES ('${packId}', '${DEV_PACK.slug}', '${userId}', 'draft', ${now}, ${now})`,
+      `VALUES ('${packId}', '${DEV_PACK.slug}', '${userId}', 'draft', ${now}, ${now})`,
   );
   if (packExit !== 0) {
     error('Failed to create dev pack');
@@ -165,7 +182,7 @@ const createDevPack = async (): Promise<void> => {
   const fakeManifestHash = '0000000000000000000000000000000000000000000000000000000000000000';
   const { exitCode: versionExit } = await d1Exec(
     `INSERT INTO pack_versions (id, pack_id, version, manifest_hash, created_at) ` +
-    `VALUES ('${versionId}', '${packId}', '1', '${fakeManifestHash}', ${now})`,
+      `VALUES ('${versionId}', '${packId}', '1', '${fakeManifestHash}', ${now})`,
   );
   if (versionExit !== 0) {
     error('Failed to create dev pack version');

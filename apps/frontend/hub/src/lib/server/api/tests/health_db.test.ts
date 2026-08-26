@@ -6,13 +6,13 @@
 // (unconfigured), and throwing D1 (unreachable). Verifies the response
 // never contains a credential, connection string, or internal identifier.
 
-import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 // ── Mock D1 helpers ─────────────────────────────────────────────────────
 
 const createMockD1 = (shouldThrow: boolean = false): unknown => {
-  const prepareStatement = (sql: string) => ({
-    bind: (...params: unknown[]) => ({
+  const prepareStatement = (_sql: string) => ({
+    bind: (..._params: unknown[]) => ({
       all: async () => {
         if (shouldThrow) {
           throw new Error('D1 query failed');
@@ -46,7 +46,12 @@ const createMockD1 = (shouldThrow: boolean = false): unknown => {
   };
 };
 
-let setHealthDbEnv: (env: { DB: unknown } | undefined) => void;
+type TestHealthDbEnv = {
+  // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+  DB: unknown;
+};
+
+let setHealthDbEnv: (env: TestHealthDbEnv | undefined) => void;
 
 beforeAll(async () => {
   const mod = await import('../health_db.ts');
@@ -66,6 +71,7 @@ describe('DB health — C-436 AC-4 (D1 binding)', () => {
   });
 
   test('healthy D1 → { status: ok, roundTripMs }', async () => {
+    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
     setHealthDbEnv({ DB: createMockD1(false) });
     const { handleDbHealth } = await import('../health_db.ts');
     const result = await handleDbHealth();
@@ -75,6 +81,7 @@ describe('DB health — C-436 AC-4 (D1 binding)', () => {
   });
 
   test('throwing D1 → { status: unreachable }', async () => {
+    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
     setHealthDbEnv({ DB: createMockD1(true) });
     const { handleDbHealth } = await import('../health_db.ts');
     const result = await handleDbHealth();
@@ -82,6 +89,7 @@ describe('DB health — C-436 AC-4 (D1 binding)', () => {
   });
 
   test('response never contains a credential or connection string', async () => {
+    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
     setHealthDbEnv({ DB: createMockD1(false) });
     const { handleDbHealth } = await import('../health_db.ts');
     const result = await handleDbHealth();

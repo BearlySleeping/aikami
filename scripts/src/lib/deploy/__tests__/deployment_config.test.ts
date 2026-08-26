@@ -4,11 +4,7 @@
 // `database-migration` service type and its secrets resolve unprefixed.
 
 import { describe, expect, test } from 'bun:test';
-import {
-  ALL_SERVICE_TYPES,
-  APP_CONFIG,
-  DEPLOYABLE_APPS,
-} from '../deployment_config.ts';
+import { ALL_SERVICE_TYPES, APP_CONFIG, DEPLOYABLE_APPS } from '../deployment_config.ts';
 
 describe('database app registration (AC-5)', () => {
   test('database-migration is a registered service type', () => {

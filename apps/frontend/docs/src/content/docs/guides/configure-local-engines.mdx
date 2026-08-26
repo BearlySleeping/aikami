@@ -16,7 +16,7 @@ The app resolves engine settings in this order (first match wins):
 2. **Tauri app config directory** — the desktop app writes a default
    `config.json` on first run and reads it from there.
 3. **`GET ./config.json`** — a file served beside `index.html` by whatever
-   hosts the app (nginx container, `bun` static server, Firebase Hosting).
+   hosts the app (nginx container, `bun` static server, Cloudflare Pages).
 4. **Compile-time `PUBLIC_*` defaults** — dev server only.
 5. **No engine URL** — engine-dependent features report unavailable, and the
    rest of the app works normally.

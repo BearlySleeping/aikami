@@ -366,6 +366,54 @@ across `docs/`). These four contracts are the code half.
 - **C-439 is independent of all three** and is the only one with direct player-visible value — reasonable to pull forward if the launch date moves in.
 - **C-436 is subtractive only.** If it uncovers work that isn't deletion, that's a separate contract. Same rule for C-438: if `moon ci` surfaces pre-existing failures, land the CI config and open a follow-up rather than absorbing the backlog.
 
+## Asset Source-of-Truth Batch (C-442 … C-448)
+
+One LPC domain model, one set of preview surfaces, and content that lives on the
+origin rather than in the bundle. Source: user request 2026-08-26 — *"I would
+like to have a single source of truth. Like one place for both hub, client dev,
+and client actual game."*
+
+### Track A — Foundations (strictly sequential)
+
+| ID | Title | Priority | Why |
+|----|-------|----------|-----|
+| C-442 | LPC core package — one catalog, derived from the published index | **P0** | `lpc_asset_catalog_generated.ts` is committed **empty** at HEAD, so character creation, onboarding, the AI character prompt, and every sandbox resolve against zero assets. Live break |
+| C-443 | Engine subpath entrypoints — sim / render / content, enforced | P1 | The single barrel is the documented reason `lpc_models.ts` hand-copies engine enums. Removing the reason prevents recurrence |
+| C-444 | Asset resolution seam — resolver as parameter, two implementations | P1 | `setLpcUrlResolver` is a module-level singleton; one process can have exactly one resolution strategy. Blocks every hub preview |
+
+### Track B — Surfaces (follow Track A)
+
+| ID | Title | Priority | Why |
+|----|-------|----------|-----|
+| C-445 | Shared preview package — one set of asset preview surfaces | P1 | Where "one place for hub and client dev" actually lands. Without it, C-446/C-447 duplicate the client's dev tooling |
+| C-446 | Hub catalog asset previews — LPC, tilesets, maps and props | P2 | The hub detail page renders a static thumbnail; a single frame cannot show a composed character, a tile grid, or a map |
+| C-447 | Hub walkable map sandbox — collision, z-order, render ordering | P2 | The only surface that validates a map end to end, and it is currently compiled out of production builds |
+
+### Track C — Independent
+
+| ID | Title | Priority | Why |
+|----|-------|----------|-----|
+| C-448 | De-bundle content packs — move emberwatch out of `static/` | P1 | emberwatch is published to R2 **and** still bundled; the loader prefers the bundled path, so the R2 path is never exercised. Also corrects a CLAUDE.md invariant the code already contradicts |
+
+**Sequencing rules:**
+- **C-442 first, and alone if necessary.** It is the only P0 and it fixes a
+  live break. Everything else in Track A and B assumes one LPC domain model.
+- **Track A is strictly ordered: C-442 → C-443 → C-444.** Each removes the
+  reason the next one's duplication exists. Reordering recreates the mirrors.
+- **Track B follows Track A in order**, but C-446 and C-447 are independently
+  mergeable once C-445 lands — either can ship without the other.
+- **C-448 is independent of everything else** and can run in parallel from day
+  one. It is the only contract in the batch with no dependency on C-442.
+- **Two things are explicitly rejected in this batch**, and the reasoning lives
+  in the contracts rather than here: splitting the engine into three packages
+  (C-443, Problem & Baseline Evidence), and extracting maps/tilesets/props into
+  their own package — they have exactly one implementation each and already sit
+  behind injectable seams.
+- **Decisions taken 2026-08-26**: the LPC catalog is derived at runtime from the
+  published index with no committed snapshot (C-442); first run requires network
+  and every later run is fully offline, with the CLAUDE.md invariant amended to
+  match (C-448); hub preview and sandbox routes are `(public)` (C-446, C-447).
+
 ## Usage
 
 ```bash

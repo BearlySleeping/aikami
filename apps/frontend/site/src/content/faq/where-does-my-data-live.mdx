@@ -4,11 +4,15 @@ category: "privacy"
 order: 1
 ---
 
-Primarily on your machine. Game data is stored locally by platform (Turso/libSQL for
-desktop, IndexedDB for web), with the local database as the source of truth for gameplay.
+On your machine. Campaigns, saves, and chat history are stored in a local database —
+Turso (libSQL) on desktop, IndexedDB in the browser — and that local copy is the
+source of truth for gameplay, not a server-side one.
 
-Firebase is layered on top for auth and optional cloud sync/backup — if you sign in and
-opt into sync, save copies go to Firebase Storage and some data (like NPC chat messages)
-may be stored in Firestore for cross-device delivery. Your world plays and saves fine
-without ever signing in; Firebase is not a boot dependency for gameplay availability,
-though Firebase App and App Check initialize eagerly.
+There is a server side, but it holds very little. Cloudflare D1 stores account
+identity and community content-pack metadata; Cloudflare R2 stores the public asset
+catalog and, if you opt in, encrypted save backups. None of it is required to play:
+your world boots, plays, and saves without an account.
+
+Aikami downloads its art library on first launch, so that one startup needs a
+connection — but that's public game art, not your data, and nothing about your
+campaign is sent anywhere unless you deliberately sign in and turn on backups.

@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-08-25
+> Auto-generated: 2026-08-26
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 125 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 129 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -177,15 +177,19 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-428 | Lpc Sheet Geometry Unification | 🛠️ implemented | v1 |
 | C-429 | Lpc Sheet Coverage Audit | 🛠️ implemented | v1 |
 | C-430 | Lpc Layer Model And Z Order | 🛠️ implemented | v1 |
-| C-431 | Collect Lpc Behind Pass | 📝 draft | v1 |
+| C-431 | Collect Lpc Behind Pass | 🛠️ implemented | v1 |
 | C-432 | Content Addressed R2 Client Sources | 🛠️ implemented | v1 |
 | C-433 | Catalog Coverage Maps Tilesets Packs | 🛠️ implemented | v1 |
 | C-434 | Registry Backed Maps And Packs | 🛠️ implemented | v1 |
-| C-435 | Debundle Game Data | 📝 draft | v1 |
-| C-436 | Postgres Decommission | 📝 draft | v2 |
-| C-437 | Local Cloudflare Dev Plane | 📝 draft | v2 |
+| C-435 | Debundle Game Data | 🛠️ implemented | v1 |
+| C-436 | Postgres Decommission | 🛠️ implemented | v2 |
+| C-437 | Local Cloudflare Dev Plane | 🛠️ implemented | v2 |
 | C-438 | Restore Pr Checks | 🛠️ implemented | v2 |
 | C-439 | Card Lorebook Import | 🛠️ implemented | v2 |
 | C-440 | Ci Tooling Baseline | 🛠️ implemented | v2 |
 | C-441 | Sops Secrets Migration | 🛠️ implemented | v2 |
+| C-442 | Lpc Core Package Runtime Catalog | 📝 draft | v1 |
+| C-443 | Engine Subpath Entrypoints | 📝 draft | v1 |
+| C-444 | Asset Resolver Seam | 📝 draft | v1 |
+| C-448 | Debundle Content Packs | 📝 draft | v1 |
 

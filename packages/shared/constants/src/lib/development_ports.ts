@@ -91,7 +91,6 @@ export const FIXED_PORTS = {
   stt: 8087,
   image: 8188,
   text: 11434,
-
 } as const;
 
 export const EMULATOR_PORTS = {

@@ -1,0 +1,82 @@
+name: Workflow Lint
+
+# Static analysis + security audit for the GitHub Actions config itself
+# (actionlint + zizmor). Split out of pr-checks.yml so it can be gated on
+# `paths` — the vast majority of PRs never touch `.github/`, and this job
+# was costing ~30s of runner time on every one of them for a guaranteed pass.
+#
+# `paths` is a workflow-level filter, which is why this cannot live as a job
+# inside pr-checks.yml. Safe because `main` has no required status checks; if
+# any are ever added, do NOT add "Workflow Lint" to them — a path-skipped
+# workflow reports nothing and would leave the check pending forever.
+on:
+  push:
+    branches: [main]
+    paths: [".github/**"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+    paths: [".github/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: workflow-lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep in sync with the pinned release downloaded below.
+  ZIZMOR_VERSION: 1.29.0
+
+jobs:
+  lint:
+    name: actionlint + zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      checks: write # reviewdog posts the actionlint results as a check run
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # zizmor is a single static binary — download the pinned release
+      # directly. `pip install zizmor` costs ~9s of dependency resolution
+      # for the same artifact.
+      - name: Install zizmor
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # avoids anonymous rate limits
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          gh release download "v${ZIZMOR_VERSION}" \
+            --repo zizmorcore/zizmor \
+            --pattern 'zizmor-x86_64-unknown-linux-gnu.tar.gz' \
+            --output - | tar -xz -C "$RUNNER_TEMP/bin" zizmor
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/zizmor" --version
+
+      # actionlint v1.7.7 — static analysis for GitHub Actions workflows
+      # https://github.com/rhysd/actionlint
+      - name: Run actionlint
+        uses: reviewdog/action-actionlint@v1 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }} # Required for reviewdog to post comments
+          actionlint_flags: "-color -shellcheck=shellcheck"
+          fail_level: error
+          filter_mode: nofilter
+          reporter: github-pr-check
+
+      # zizmor — security audit for GitHub Actions workflows
+      # Config (and the rationale for every suppression) lives in
+      # .github/zizmor.yml. https://github.com/zizmorcore/zizmor
+      #
+      # Runs even when actionlint failed: both are cheap, and reporting every
+      # workflow problem in one pass beats a second round-trip.
+      - name: Run zizmor
+        if: ${{ !cancelled() }}
+        run: zizmor --no-progress .github/

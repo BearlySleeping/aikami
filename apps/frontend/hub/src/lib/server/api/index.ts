@@ -94,15 +94,19 @@ export const app = new Elysia({
   aot: false,
 })
   .mount('/auth', betterAuthHandler)
-  .get('/health/db', () => {
-    const env = getHealthDbEnv();
-    if (!env) {
-      return { status: 'unconfigured' };
-    }
-    return handleDbHealth();
-  }, {
-    response: dbHealthResponseSchema,
-  })
+  .get(
+    '/health/db',
+    () => {
+      const env = getHealthDbEnv();
+      if (!env) {
+        return { status: 'unconfigured' };
+      }
+      return handleDbHealth();
+    },
+    {
+      response: dbHealthResponseSchema,
+    },
+  )
   // C-426 AC-6/AC-7: Turso save backup/restore to R2, session-gated.
   // 503 when the hub is not yet on a Worker with the SAVES_BUCKET binding.
   .post('/saves/backup', ({ request }) => {
@@ -157,15 +161,19 @@ export const app = new Elysia({
     }
     return handleStorageUrl(request, env);
   })
-  .get('/catalog/stats', () => {
-    const env = getCatalogStatsEnv();
-    if (!env) {
-      return null;
-    }
-    return handleCatalogStats();
-  }, {
-    response: catalogStatsResponseSchema,
-  })
+  .get(
+    '/catalog/stats',
+    () => {
+      const env = getCatalogStatsEnv();
+      if (!env) {
+        return null;
+      }
+      return handleCatalogStats();
+    },
+    {
+      response: catalogStatsResponseSchema,
+    },
+  )
   .post('/ask', handleAsk, {
     body: askRequestSchema,
     response: askResponseSchema,

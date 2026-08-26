@@ -1,0 +1,140 @@
+{
+  "scannedAt": "2026-08-26T09:59:45.595Z",
+  "credits": {
+    "music:exploration:bgm_explore": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch exploration theme, committed in-repo as part of the game-data bundle and licensed under the repo's MIT license.",
+      "source": "project"
+    },
+    "music:exploration:Chainsmoker": {
+      "licenses": ["MIT"],
+      "authors": [
+        "Aikami Studio (theme credited as 'Chainsmoker — Exploration Theme' in the Emberwatch pack credits)"
+      ],
+      "sourceUrls": [],
+      "licenseNote": "Bundled demo music track. Original theme credit 'Chainsmoker' comes from the Emberwatch content-pack credits block; the track ships in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "music:combat:bgm_combat": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch combat theme, committed in-repo as part of the game-data bundle and licensed under the repo's MIT license.",
+      "source": "project"
+    },
+    "sprites:combat:enemy_portrait": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch enemy portrait, committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "sprites:combat:player_portrait": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch player portrait, committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "maps:sandbox_zone_a": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch sandbox map (JSON), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "maps:sandbox_zone_b": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch sandbox map (JSON), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "maps:debug_map": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored debug map (.jton), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "maps:sandbox_combat": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored Emberwatch sandbox combat map (JSON), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "maps:sandbox_textured": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored textured sandbox map (.jton), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "tilesets:debug_tiles.png": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored debug tileset (PNG), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "tilesets:example_tiles.webp": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored example tileset (WebP), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "tilesets:atlas.webp": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored tileset atlas (WebP), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "tilesets:atlas.json": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored tileset atlas descriptor (JSON), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "index.json": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Content-pack registry index, committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "emberwatch:manifest.json": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Emberwatch content-pack manifest, committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "emberwatch:maps:inn.json": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Emberwatch content-pack map (Inn), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "emberwatch:maps:merchant_shop.json": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Emberwatch content-pack map (Merchant Shop), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "emberwatch:maps:village.json": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Emberwatch content-pack map (Village), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    }
+  }
+}

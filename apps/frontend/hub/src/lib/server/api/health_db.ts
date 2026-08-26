@@ -43,9 +43,7 @@ export type DbHealthOk = {
   roundTripMs: number;
 };
 
-export type DbHealthDegraded =
-  | { status: 'unconfigured' }
-  | { status: 'unreachable' };
+export type DbHealthDegraded = { status: 'unconfigured' } | { status: 'unreachable' };
 
 export type DbHealthResponse = DbHealthOk | DbHealthDegraded;
 

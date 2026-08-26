@@ -17,7 +17,16 @@
 // the request body.
 
 import { createBetterAuth } from '@aikami/backend-auth/better-auth';
-import { users, sessions, accounts, verifications, deviceCodes, packs, packVersions, accountBackups } from '@aikami/backend-database';
+import {
+  accountBackups,
+  accounts,
+  deviceCodes,
+  packs,
+  packVersions,
+  sessions,
+  users,
+  verifications,
+} from '@aikami/backend-database';
 import { drizzle } from 'drizzle-orm/d1';
 import { env } from '$env/dynamic/private';
 import { logger } from '$logger';
@@ -56,7 +65,18 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
     if (isProduction && (!baseURL || !secret)) {
       throw new Error('BETTER_AUTH_URL and BETTER_AUTH_SECRET are required in production');
     }
-    const db = drizzle(_env.DB, { schema: { users, sessions, accounts, verifications, deviceCodes, packs, packVersions, accountBackups } });
+    const db = drizzle(_env.DB, {
+      schema: {
+        users,
+        sessions,
+        accounts,
+        verifications,
+        deviceCodes,
+        packs,
+        packVersions,
+        accountBackups,
+      },
+    });
     const cookieDomain = deriveCookieDomain();
     _auth = createBetterAuth(db, {
       baseURL: baseURL ?? 'http://localhost:5173',

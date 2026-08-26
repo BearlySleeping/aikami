@@ -10,7 +10,7 @@
 // Google client secret is a Wrangler secret, never an env file (the Worker
 // runtime does not read `.env` at request time).
 
-import { users, sessions, accounts, verifications, deviceCodes } from '@aikami/backend-database';
+import { accounts, deviceCodes, sessions, users, verifications } from '@aikami/backend-database';
 import type { UserSessionData } from '@aikami/types';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';

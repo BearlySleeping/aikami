@@ -17,7 +17,7 @@ as `/dashboard` keep their guard and redirect to `/login`.
 The catalog renders from the **static index** published by the
 [publish pipeline](./publishing-catalog-assets.md) (C-395), never from a
 database. Each category page fetches only its own shard of the index, so a
-cold page load never waits on Postgres; optional stats (pack counts) stream
+cold page load never waits on the database; optional stats (pack counts) stream
 in after first paint and degrade to "stats unavailable" when the database is
 unreachable.
 

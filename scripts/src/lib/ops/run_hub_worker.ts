@@ -76,7 +76,7 @@ if (code !== 0) {
   error(`hub-worker exited with code ${code}`);
   info('Common issues:');
   info('  • Build is stale — rebuild with `bun moon run hub:build`');
-  info('  • Port conflict — check `bun herdr:list` for other services on :' + String(PORT));
+  info(`  • Port conflict — check \`bun herdr:list\` for other services on :${String(PORT)}`);
   info('  • Missing wrangler — run `bun install` in the repo root');
   process.exit(code);
 }

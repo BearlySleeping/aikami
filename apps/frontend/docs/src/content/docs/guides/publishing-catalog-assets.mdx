@@ -3,11 +3,12 @@ title: Publishing Assets to the Catalog Origin
 description: Developer notes on publishing the bundled asset library to the R2 catalog origin — the content-addressed publish pipeline, the attribution gate, and the catalog index.
 ---
 
-The game-data asset library (LPC sprites, music, sfx, sprites, backgrounds) is
-bundled into the client, but the same library is also published to a CDN
-origin for on-demand consumption (browse and download). This page documents
-how that publish pipeline works and how to run it. It is an internal/ops
-guide — the client itself is unchanged by this pipeline.
+The asset library (LPC sprites, music, sfx, sprites, backgrounds, maps,
+tilesets, and content packs) is published to a CDN origin and fetched on
+demand. Since the client no longer bundles game data, **this pipeline is what
+puts the bytes where the game and the hub can read them** — a publish is a
+prerequisite for a working build, not an optional mirror. This page documents
+how it works and how to run it.
 
 ## What gets published
 
@@ -29,8 +30,15 @@ The three attribution sources:
 3. `project_licenses.json` — the committed project-owned declaration for
    non-LPC assets (`scripts/src/lib/catalog/`).
 
-`maps/` and `sprites/tilesets/` are dev-only sandbox files and are **not**
-catalog content — they are excluded from the catalog.
+The pipeline scans two roots: `static/game-data/` and the content-pack
+sources. Maps, tilesets, and content packs are full catalog categories — the
+earlier "dev-only sandbox files" exclusion was removed once the client began
+resolving them through the registry.
+
+Alongside the content-addressed assets, the pipeline publishes a small set of
+mutable **seed files** under `seed/` — the compact boot seed, the offline-core
+declaration, credits, and audio metadata. The client fetches these at boot to
+build its local asset registry.
 
 ## Running a publish
 
@@ -58,12 +66,15 @@ Environment (`scripts/.env.*`, fetched from Secret Manager by
 `download_secrets.ts`):
 
 ```
-CLOUD_FLARE_BUCKET_ACCESS_KEY_ID
-CLOUD_FLARE_BUCKET_SECRET_ACCESS_KEY
-CLOUD_FLARE_BUCKET_ENDPOINT
+CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID
+CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY
+CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT
 CATALOG_ORIGIN_URL   # public origin, injected — never hardcoded
 CATALOG_BUCKET       # optional, defaults to aikami-catalog
 ```
+
+These credentials belong to the publish pipeline alone. The hub never writes to
+R2, so they must never appear in the hub's environment.
 
 ## Regenerating attribution sidecars
 

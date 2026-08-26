@@ -7,13 +7,13 @@
 // logged at warn). Verifies the streamed-promise hazard is handled:
 // loadPackStats() never rejects.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 
 // ── Mock D1 helpers ─────────────────────────────────────────────────────
 
 const createMockD1 = (shouldThrow: boolean = false): unknown => {
-  const prepareStatement = (sql: string) => ({
-    bind: (...params: unknown[]) => ({
+  const prepareStatement = (_sql: string) => ({
+    bind: (..._params: unknown[]) => ({
       all: async () => {
         if (shouldThrow) {
           throw new Error('D1 query failed');
@@ -48,7 +48,12 @@ const createMockD1 = (shouldThrow: boolean = false): unknown => {
   };
 };
 
-let setCatalogStatsEnv: (env: { DB: unknown } | undefined) => void;
+type TestCatalogStatsEnv = {
+  // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+  DB: unknown;
+};
+
+let setCatalogStatsEnv: (env: TestCatalogStatsEnv | undefined) => void;
 
 beforeAll(async () => {
   const mod = await import('../catalog_stats.ts');
@@ -70,12 +75,14 @@ describe('catalog stats — C-436 AC-3 (D1, degradation intact)', () => {
   });
 
   test('throwing D1 binding → resolves null, never rejects', async () => {
+    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
     setCatalogStatsEnv({ DB: createMockD1(true) });
     const { loadPackStats } = await import('../catalog_stats.ts');
     await expect(loadPackStats()).resolves.toBeNull();
   });
 
   test('healthy D1 binding → returns packCount shape', async () => {
+    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
     setCatalogStatsEnv({ DB: createMockD1(false) });
     const { loadPackStats } = await import('../catalog_stats.ts');
     const stats = await loadPackStats();
@@ -88,6 +95,7 @@ describe('catalog stats — C-436 AC-3 (D1, degradation intact)', () => {
   });
 
   test('handleCatalogStats returns stats when binding present', async () => {
+    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
     setCatalogStatsEnv({ DB: createMockD1(false) });
     const { handleCatalogStats } = await import('../catalog_stats.ts');
     const stats = await handleCatalogStats();

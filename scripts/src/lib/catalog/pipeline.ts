@@ -74,6 +74,64 @@ export type CatalogPublishReport = {
   elapsedMs: number;
 };
 
+/** Filenames published under `seed/` alongside the content-addressed assets. */
+const SEED_FILES = [
+  'asset_seed.json',
+  'offline_core.json',
+  'asset_credits.json',
+  'lpc_credits.json',
+  'lpc_credits_supplement.json',
+  'audio_tracks.json',
+] as const;
+
+export type SeedPublishReport = {
+  uploaded: number;
+  failed: number;
+};
+
+/**
+ * Publish the seed/metadata files (mutable, not content-addressed) so the
+ * client can fetch the compact boot seed, offline-core declaration, credits,
+ * and audio metadata from the R2 origin (C-435 follow-up).
+ *
+ * Standalone from the rest of the catalog pipeline on purpose: since C-435
+ * de-bundled the raw asset library out of this repo, `manifest.json` /
+ * `asset_hashes.json` no longer exist here, so `loadCatalogEntries` can't
+ * run — but the seed files these six lines read DO still live in
+ * `game-data/` and can be republished on their own, without touching the
+ * content-addressed assets or the catalog index.
+ */
+export const runSeedPublish = async (options: {
+  client: R2ClientLike;
+  gameDataDir?: string;
+}): Promise<SeedPublishReport> => {
+  const { client, gameDataDir = GAME_DATA_DIR } = options;
+  let uploaded = 0;
+  let failed = 0;
+  for (const filename of SEED_FILES) {
+    const localPath = join(gameDataDir, filename);
+    try {
+      const body = readFileSync(localPath);
+      await client.putObject({
+        key: `${SEED_KEY_PREFIX}${filename}`,
+        body,
+        contentType: 'application/json',
+        cacheControl: SEED_CACHE_CONTROL,
+      });
+      uploaded++;
+      console.log(`  📄 seed: ${filename} (${(body.length / 1024).toFixed(1)} KB)`);
+    } catch (error) {
+      failed++;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`  ⚠ seed: ${filename} skipped — ${message}`);
+    }
+  }
+  if (failed > 0) {
+    console.warn(`⚠ ${failed} seed file(s) skipped.`);
+  }
+  return { uploaded, failed };
+};
+
 /** Build the list of upload items from catalog entries. */
 export const buildUploadItems = (options: {
   entries: readonly CatalogEntry[];
@@ -209,37 +267,7 @@ export const runCatalogPublish = async (
   // These are published alongside the assets so the client can fetch the
   // compact boot seed, offline-core declaration, credits, and audio metadata
   // from the same R2 origin (C-435 follow-up: de-bundle everything from git).
-  const SEED_FILES = [
-    'asset_seed.json',
-    'offline_core.json',
-    'asset_credits.json',
-    'lpc_credits.json',
-    'lpc_credits_supplement.json',
-    'audio_tracks.json',
-  ] as const;
-  let seedUploaded = 0;
-  let seedFailed = 0;
-  for (const filename of SEED_FILES) {
-    const localPath = join(gameDataDir, filename);
-    try {
-      const body = readFileSync(localPath);
-      await client.putObject({
-        key: `${SEED_KEY_PREFIX}${filename}`,
-        body,
-        contentType: 'application/json',
-        cacheControl: SEED_CACHE_CONTROL,
-      });
-      seedUploaded++;
-      console.log(`  📄 seed: ${filename} (${(body.length / 1024).toFixed(1)} KB)`);
-    } catch (error) {
-      seedFailed++;
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`  ⚠ seed: ${filename} skipped — ${message}`);
-    }
-  }
-  if (seedFailed > 0) {
-    console.warn(`⚠ ${seedFailed} seed file(s) skipped — continuing with index.`);
-  }
+  await runSeedPublish({ client, gameDataDir });
 
   // 4. Generate index.
   const { root, shards } = generateCatalogIndex({

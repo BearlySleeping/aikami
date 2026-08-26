@@ -40,6 +40,13 @@ is never a boot dependency. Your campaigns, saves, and chat history live in a lo
 (libSQL) database by default. Your world plays and saves fine without ever signing in;
 signing in just gets you continuity across devices if you want it.
 
+> **Update (2026-08-26):** the hosted layer described above has since moved off
+> Firebase to Cloudflare — D1 for account identity, R2 for the asset catalog and
+> optional save backups. The principle is unchanged: it sits on top, and it is never
+> required to boot or play. One detail did change — the client no longer bundles its
+> art library, so the very first launch downloads it once before going fully offline.
+> See [Does Aikami work offline?](/faq/) for the current behaviour.
+
 ## Why this is a philosophy, not a phase
 
 Aikami is [MIT licensed](https://github.com/BearlySleeping/aikami/blob/main/LICENSE) —
