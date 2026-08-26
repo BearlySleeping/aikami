@@ -123,6 +123,8 @@ const config = {
       '@aikami/backend/utils/*': toPackagesPath('backend/utils/src/lib/*'),
       '@aikami/backend/configs/*': toPackagesPath('backend/configs/src/lib/*'),
 
+      '@aikami/lpc': toPackagesPath('shared/lpc/src'),
+      '@aikami/lpc/*': toPackagesPath('shared/lpc/src/lib/*'),
       '@aikami/constants': toPackagesPath('shared/constants/src'),
       '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
       '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib'),

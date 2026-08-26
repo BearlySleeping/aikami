@@ -11,8 +11,8 @@
 
 import { resolveLpcSheetGeometry } from '@aikami/frontend/engine';
 import { Rectangle, Sprite, Texture } from 'pixi.js';
-import type { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
-import { lpcStateSuffix } from '$lib/data/lpc_tags';
+import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
+import { lpcStateSuffix } from '@aikami/lpc';
 import { logger } from '$logger';
 
 // ── Sheet layout detection ────────────────────────────────────────────────

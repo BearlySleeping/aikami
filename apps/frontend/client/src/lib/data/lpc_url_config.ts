@@ -18,7 +18,7 @@
  * @module lpc_url_config
  */
 
-import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 
 // ---------------------------------------------------------------------------
 // Types

@@ -1,7 +1,6 @@
 // apps/frontend/client/src/lib/data/lpc_asset_catalog.ts
-import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { LpcAnimationState, LpcDirection, lpcTag } from '@aikami/lpc';
 import { setLpcManifestReady, setLpcUrlResolver } from '$lib/data/lpc_renderer';
-import { lpcTag } from '$lib/data/lpc_tags';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
 
 // ---------------------------------------------------------------------------
