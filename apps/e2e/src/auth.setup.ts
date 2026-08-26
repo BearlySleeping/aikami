@@ -66,7 +66,7 @@ setup('authenticate test users for all workers', async ({ browser }) => {
   try {
     cookie = await signInCookie(TEST_EMAIL);
     console.log('[auth.setup] Session cookie obtained');
-  } catch (error) {
+  } catch (_error) {
     // Hub may not have D1 bindings in emulator — create minimal auth states
     // so tests that don't need auth can still run.
     console.log('[auth.setup] Hub auth unavailable, creating minimal auth states');

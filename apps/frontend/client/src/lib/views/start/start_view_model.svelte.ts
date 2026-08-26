@@ -12,6 +12,10 @@ import {
 } from '@aikami/frontend/services';
 import type { PackIndexEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
+import {
+  type AssetPrefetchPhase,
+  assetPrefetchService,
+} from '$lib/services/assets/asset_prefetch_service.svelte';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import {
   campaignService,
@@ -131,6 +135,17 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** Confirms pack selection and starts a new campaign with the selected pack. */
   confirmPackSelection(): Promise<void>;
+
+  // ── Background asset download (C-448) ──
+
+  /** Current phase of the shared asset-download pipeline. */
+  readonly downloadPhase: AssetPrefetchPhase;
+
+  /** Download progress as a 0-1 fraction, or undefined when not in progress. */
+  readonly downloadProgressFraction: number | undefined;
+
+  /** Human-readable label for the current download phase, or undefined when idle/ready. */
+  readonly downloadLabel: string | undefined;
 };
 
 // ---------------------------------------------------------------------------
@@ -176,6 +191,39 @@ class StartViewModel
   /** @inheritdoc */
   get isTauri(): boolean {
     return isTauri();
+  }
+
+  /** @inheritdoc */
+  get downloadPhase(): AssetPrefetchPhase {
+    return assetPrefetchService.phase;
+  }
+
+  /** @inheritdoc */
+  get downloadProgressFraction(): number | undefined {
+    const progress =
+      assetPrefetchService.phase === 'prefetching-core'
+        ? assetPrefetchService.coreProgress
+        : assetPrefetchService.warmProgress;
+    if (!progress || progress.total === 0) {
+      return undefined;
+    }
+    return progress.done / progress.total;
+  }
+
+  /** @inheritdoc */
+  get downloadLabel(): string | undefined {
+    switch (assetPrefetchService.phase) {
+      case 'preparing':
+        return 'Preparing assets…';
+      case 'prefetching-core':
+        return 'Downloading starter content…';
+      case 'warming':
+        return 'Downloading game assets in the background…';
+      case 'degraded':
+        return assetPrefetchService.error ?? 'Asset download paused — check your connection.';
+      default:
+        return undefined;
+    }
   }
 
   /** @inheritdoc */
@@ -244,6 +292,14 @@ class StartViewModel
   /** @inheritdoc */
   override async initialize(): Promise<void> {
     this.debug('initialize');
+
+    // C-448: start (or observe) the background asset download as soon as the
+    // start menu mounts — the game is unplayable without the offline core,
+    // so there's no reason to wait for "New Game" to begin fetching it.
+    // Fire-and-forget: this ViewModel only reads the shared service's
+    // reactive progress, never awaits it (a slow/offline connection must
+    // never block the start menu from rendering).
+    assetPrefetchService.ensureStarted();
 
     // Check for existing campaigns
     try {

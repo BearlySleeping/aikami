@@ -687,7 +687,7 @@ describe('ContentPackLoader', () => {
 
   test('loadContentPack resolves manifest URL through resolveTag when provided (AC-4)', async () => {
     const resolveTag = mock((tag: string) => {
-      if (tag === '/content-packs/test-pack/manifest.json') {
+      if (tag === '/test-pack/manifest.json') {
         return 'blob:mock-pack-manifest';
       }
       return null;
@@ -712,7 +712,7 @@ describe('ContentPackLoader', () => {
 
   test('loadContentPack throws when registry URL fails — no bundled fallback (C-448 AC-3)', async () => {
     const resolveTag = mock((tag: string) => {
-      if (tag === '/content-packs/test-pack/manifest.json') {
+      if (tag === '/test-pack/manifest.json') {
         return 'blob:mock-pack-fail';
       }
       return null;
@@ -740,7 +740,7 @@ describe('ContentPackLoader', () => {
 
   test('loadContentPack throws when registry URL fetch rejects — no bundled fallback (C-448 AC-3)', async () => {
     const resolveTag = mock((tag: string) => {
-      if (tag === '/content-packs/test-pack/manifest.json') {
+      if (tag === '/test-pack/manifest.json') {
         return 'blob:mock-pack-reject';
       }
       return null;
@@ -768,7 +768,7 @@ describe('ContentPackLoader', () => {
 
   test('loadContentPack calls releaseUrl after successful registry fetch', async () => {
     const resolveTag = mock((tag: string) => {
-      if (tag === '/content-packs/test-pack/manifest.json') {
+      if (tag === '/test-pack/manifest.json') {
         return 'blob:mock-pack-release';
       }
       return null;
@@ -808,7 +808,7 @@ describe('ContentPackLoader', () => {
 
   test('resolveMapUrl returns logical pack path (registry resolution deferred to loadTilemap/loadJtonMap)', async () => {
     const resolveTag = mock((tag: string) => {
-      if (tag === '/content-packs/test-pack/maps/village.json') {
+      if (tag === '/test-pack/maps/village.json') {
         return 'blob:mock-village-map';
       }
       return null;
@@ -825,7 +825,7 @@ describe('ContentPackLoader', () => {
     const url = loader.resolveMapUrl('village');
     // resolveMapUrl returns the logical pack path; loadTilemap/loadJtonMap
     // perform registry resolution internally.
-    expect(url).toBe('/content-packs/test-pack/maps/village.json');
+    expect(url).toBe('/test-pack/maps/village.json');
   });
 
   test('resolveMapUrl falls back to static path when resolveTag returns null', async () => {
@@ -840,7 +840,7 @@ describe('ContentPackLoader', () => {
     });
 
     const url = loader.resolveMapUrl('village');
-    expect(url).toBe('/content-packs/test-pack/maps/village.json');
+    expect(url).toBe('/test-pack/maps/village.json');
   });
 
   test('dispose blocks getQuest, getEncounter, getAllQuests, getAllEncounters, getCredits', async () => {

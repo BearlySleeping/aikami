@@ -176,16 +176,16 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
     try {
       await authService.completeDeviceHandoff({ code: this._code, uid: authService.uid });
 
-      // Paint the success state BEFORE the best-effort deep-link navigation —
-      // assigning an unregistered `aikami://` scheme can blank the tab, and
-      // the desktop app's poll loop is the guaranteed fallback either way.
       this.status = 'linked';
       try {
         sessionStorage.removeItem(CODE_STORAGE_KEY);
       } catch (error) {
         this.debug('_completeLink:sessionStorage-clear-failed', { error: String(error) });
       }
-      this._tryDeepLinkRedirect(this._code);
+      // The desktop app's poll loop is the guaranteed fallback — no automatic
+      // deep-link redirect here (Firefox blocks custom protocol navigation from
+      // HTTPS origins with a Security Error). The "Open Desktop App" link in the
+      // view lets the user trigger it manually via a user gesture.
     } catch (error) {
       this.status = 'error';
       this.errorMessage = error instanceof Error ? error.message : 'Failed to link device';
@@ -198,20 +198,6 @@ class LinkViewModel extends BaseViewModel<LinkViewModelOptions> implements LinkV
       }
       this._linkStarted = false;
       this.debug('_completeLink:error', { error: String(error) });
-    }
-  }
-
-  /**
-   * Best-effort instant handoff — most OSes will route this to the desktop
-   * app if it registered the `aikami://` scheme (see src-tauri's deep-link
-   * plugin config). If nothing handles it, this silently does nothing; the
-   * desktop app's poll loop is the guaranteed fallback either way.
-   */
-  private _tryDeepLinkRedirect(code: string): void {
-    try {
-      window.location.href = `aikami://auth-callback?code=${encodeURIComponent(code)}`;
-    } catch (error) {
-      this.debug('_tryDeepLinkRedirect:error', { error: String(error) });
     }
   }
 }

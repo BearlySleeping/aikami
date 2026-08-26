@@ -61,6 +61,21 @@ export type ContractStageResult = {
   evidence: string[];
   contractHash: string;
   diffHash: string;
+  /**
+   * Set ONLY when a supervisor wrote this result on the worker's behalf
+   * (cost guard trip, orchestrator hard timeout) rather than the worker
+   * calling `contract_stage_complete` itself.
+   *
+   * 🔴 A guard-written result is a GUESS about a session the guard could not
+   * see the end of. On 2026-08-26 the C-442 verifier was halted by the loop
+   * guard at 13:57:10, and the very same session wrote its real `passed`
+   * result — all 7 ACs verified — into the same file 60 seconds later. The
+   * orchestrator had already consumed the guess and gone terminal, throwing
+   * away a completed verification. `runStage` now treats this marker as
+   * "provisional": it waits out a settle window and adopts the worker's own
+   * result if one lands. See GUARD_SETTLE_MS in stage_runner.ts.
+   */
+  haltedBy?: 'cost_guard' | 'hard_timeout';
 };
 
 /**
@@ -174,6 +189,13 @@ export type RunManifest = {
   /** herdr-native worktree: branch checked out in the worktree. */
   worktreeBranch?: string;
   blockedReason?: string;
+  /**
+   * How many times a worker-reported `blocked`/`failed` has been escalated to
+   * the review captain instead of ending the run. Bounded by
+   * MAX_BLOCKED_ESCALATIONS so a captain that keeps sending work back into a
+   * stage that keeps blocking still terminates.
+   */
+  blockedEscalations?: number;
   /** Number of autofix cycles attempted during YOLO review. Used for circuit breaker. */
   autofixCycles: number;
   /** When true, contract-authoring stages (writer + critique) were skipped.

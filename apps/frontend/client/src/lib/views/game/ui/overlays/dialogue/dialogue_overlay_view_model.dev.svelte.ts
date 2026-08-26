@@ -12,6 +12,7 @@
 //   - autoGenerateImage: auto-generate scene images on skill check resolution
 //   - generatedImageUrl: latest generated image URL (shown in inspector)
 
+import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import { NPC_SPRITE_EXPRESSIONS } from '$lib/data/npc_sprite_expressions';
 import { diceService, imageGenerationService, ttsService } from '$services';
 import type { ExpressionId } from '$types';
@@ -234,14 +235,18 @@ export class DialogueDevViewModel
     return NPC_SPRITE_EXPRESSIONS[this._npcSpriteName] ?? ['neutral'];
   }
 
-  /** Override: returns expression-specific sprite URL. */
+  /** Override: returns expression-specific sprite URL via the asset store. */
   get npcAvatarUrl(): string {
-    return `/assets/npc/${this._npcSpriteName}/${this.npcExpression}.webp`;
+    return resolveNpcAvatarUrl({
+      npcId: this._npcSpriteName,
+      personaId: this.mockNpcPreset,
+      expression: this.npcExpression,
+    });
   }
 
-  /** Override: default player avatar (aragon neutral as placeholder fighter). */
+  /** Override: default player avatar via the asset store. */
   get playerAvatarUrl(): string {
-    return '/assets/npc/aragon/neutral.webp';
+    return resolvePlayerAvatarUrl({});
   }
 
   constructor(options: DialogueDevViewModelOptions) {

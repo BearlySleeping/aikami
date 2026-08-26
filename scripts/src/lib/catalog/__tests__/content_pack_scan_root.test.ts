@@ -40,8 +40,8 @@ describe('ContentPackScanRoot (C-448 AC-2)', () => {
       hashes: Record<string, { hash: string; sizeBytes: number }>;
     };
 
-    expect(hashes.hashes['index']).toBeDefined();
-    expect(hashes.hashes['index'].hash).toBeTruthy();
+    expect(hashes.hashes.index).toBeDefined();
+    expect(hashes.hashes.index.hash).toBeTruthy();
     expect(hashes.hashes['emberwatch:manifest']).toBeDefined();
     expect(hashes.hashes['emberwatch:manifest'].hash).toBeTruthy();
     expect(hashes.hashes['emberwatch:maps:village']).toBeDefined();

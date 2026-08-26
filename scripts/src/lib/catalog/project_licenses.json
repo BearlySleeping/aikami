@@ -34,6 +34,73 @@
       "licenseNote": "Project-authored Emberwatch player portrait, committed in-repo under the repo's MIT license."
     },
 
+    "portraits:npc:aragon:neutral": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Aragon neutral), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:aragon:happy": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Aragon happy), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:aragon:sad": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Aragon sad), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:aragon:angry": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Aragon angry), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:gandalf:neutral": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Gandalf neutral), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:gandalf:happy": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Gandalf happy), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:gandalf:sad": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Gandalf sad), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:gandalf:angry": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Gandalf angry), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:orc:neutral": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Orc neutral), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:troll:neutral": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Troll neutral), committed in-repo under the repo's MIT license."
+    },
+    "portraits:npc:placeholder": {
+      "licenses": ["MIT"],
+      "authors": ["Aikami Studio"],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored placeholder portrait SVG, committed in-repo under the repo's MIT license."
+    },
+
     "maps:sandbox_zone_a": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
@@ -65,56 +132,56 @@
       "licenseNote": "Project-authored textured sandbox map (.jton), committed in-repo under the repo's MIT license."
     },
 
-    "tilesets:debug_tiles.png": {
+    "sprites:tilesets:debug_tiles.png": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored debug tileset (PNG), committed in-repo under the repo's MIT license."
     },
-    "tilesets:example_tiles.webp": {
+    "sprites:tilesets:example_tiles.webp": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored example tileset (WebP), committed in-repo under the repo's MIT license."
     },
-    "tilesets:atlas.webp": {
+    "sprites:tilesets:atlas.webp": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored tileset atlas (WebP), committed in-repo under the repo's MIT license."
     },
-    "tilesets:atlas.json": {
+    "sprites:tilesets:atlas.json": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Project-authored tileset atlas descriptor (JSON), committed in-repo under the repo's MIT license."
     },
 
-    "index.json": {
+    "index": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Content-pack registry index, committed in-repo under the repo's MIT license."
     },
-    "emberwatch:manifest.json": {
+    "emberwatch:manifest": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Emberwatch content-pack manifest, committed in-repo under the repo's MIT license."
     },
-    "emberwatch:maps:inn.json": {
+    "emberwatch:maps:inn": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Emberwatch content-pack map (Inn), committed in-repo under the repo's MIT license."
     },
-    "emberwatch:maps:merchant_shop.json": {
+    "emberwatch:maps:merchant_shop": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
       "sourceUrls": [],
       "licenseNote": "Emberwatch content-pack map (Merchant Shop), committed in-repo under the repo's MIT license."
     },
-    "emberwatch:maps:village.json": {
+    "emberwatch:maps:village": {
       "licenses": ["MIT"],
       "authors": ["Aikami Studio"],
       "sourceUrls": [],

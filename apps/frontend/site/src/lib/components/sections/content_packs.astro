@@ -3,11 +3,11 @@
 /**
  * Content Packs & the Hub — worlds are shareable, structured data, not a
  * single fixed demo. Example cards are built from the real content-pack
- * manifests shipped with the client (apps/frontend/client/static/content-packs),
+ * manifests in the repo's content-pack sources (content/packs),
  * so names and descriptions stay in sync with the actual game data.
  */
 import { hubUrl } from '$data/site_content';
-import emberwatchManifest from '../../../../../client/static/content-packs/emberwatch/manifest.json';
+import emberwatchManifest from '../../../../../../../content/packs/emberwatch/manifest.json';
 
 type PackCard = {
   name: string;

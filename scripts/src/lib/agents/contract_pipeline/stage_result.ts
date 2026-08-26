@@ -5,6 +5,14 @@ import type { ContractStageResult, ContractWorkerRole, StageUsage } from './type
 
 const WORKER_ROLES: readonly ContractWorkerRole[] = ['writer', 'critic', 'implementer', 'verifier'];
 const RESULT_STATUSES = ['passed', 'changes_requested', 'blocked', 'failed'] as const;
+const HALT_SOURCES = ['cost_guard', 'hard_timeout'] as const;
+
+/**
+ * True when a supervisor (cost guard / hard timeout) wrote this result on the
+ * worker's behalf, so it is a provisional guess rather than the worker's own
+ * verdict. See the `haltedBy` doc comment in types.ts.
+ */
+export const isGuardHalt = (result: ContractStageResult): boolean => result.haltedBy !== undefined;
 
 /** Validate an unknown value as a stage result for an exact attempt. */
 export const validateStageResult = (options: {
@@ -32,7 +40,12 @@ export const validateStageResult = (options: {
     !Array.isArray(value.evidence) ||
     !value.evidence.every((item) => typeof item === 'string') ||
     typeof value.contractHash !== 'string' ||
-    typeof value.diffHash !== 'string'
+    typeof value.diffHash !== 'string' ||
+    // Optional, but when present it must be one of the known supervisors —
+    // an unrecognised value would silently make a real worker result look
+    // provisional (or vice versa) to runStage's settle window.
+    (value.haltedBy !== undefined &&
+      !HALT_SOURCES.includes(value.haltedBy as (typeof HALT_SOURCES)[number]))
   ) {
     return undefined;
   }

@@ -3,7 +3,7 @@
 import { existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { feedbackMessage, loadRolePrompt } from './prompt_loader.ts';
-import { readStageResult, writeStageResult } from './stage_result.ts';
+import { isGuardHalt, readStageResult, writeStageResult } from './stage_result.ts';
 import type {
   ContractPipelineStage,
   ContractStageResult,
@@ -32,6 +32,80 @@ const DEAD_CHECK_GRACE_MS = 5 * 1000;
 const MAX_RELAUNCHES = 2;
 /** Slow-poll interval after idle timeout (longer to avoid herdr spam). */
 const SLOW_POLL_MS = 30_000;
+
+/**
+ * How long a supervisor-written (`haltedBy`) result stays PROVISIONAL before
+ * the orchestrator acts on it.
+ *
+ * 🔴 A guard halt is written from inside the worker session at the moment a
+ * detector trips — but `ctx.shutdown()` does not cancel the agent loop that
+ * is already mid-flight, so the worker very often finishes anyway and writes
+ * its own real verdict over the guess seconds later.
+ *
+ * C-442 (2026-08-26) is the case this exists for: the loop guard halted the
+ * verifier at 13:57:10 with `blocked — the same turn repeated 10 times`, the
+ * orchestrator consumed it instantly and went terminal, and at 13:58 the same
+ * session wrote `passed` with all 7 ACs verified into the very same file.
+ * A completed verification was discarded on a 50-second race.
+ *
+ * Three minutes of waiting on a run that is otherwise about to be thrown away
+ * is the cheapest insurance in the pipeline.
+ */
+export const GUARD_SETTLE_MS: number = Number(process.env.CONTRACT_GUARD_SETTLE_MS) || 3 * 60_000;
+
+/** Re-read interval while waiting out {@link GUARD_SETTLE_MS}. */
+const GUARD_SETTLE_POLL_MS = 5_000;
+
+/**
+ * Wait out the settle window on a provisional guard result, adopting the
+ * worker's own verdict if it lands.
+ *
+ * Returns the provisional result unchanged when nothing better arrives, so
+ * the caller's control flow is identical either way.
+ */
+const settleGuardResult = async (options: {
+  provisional: ContractStageResult;
+  resultPath: string;
+  runId: string;
+  role: ContractWorkerRole;
+  attempt: number;
+  settleMs?: number;
+}): Promise<ContractStageResult> => {
+  const settleMs = options.settleMs ?? GUARD_SETTLE_MS;
+  if (settleMs <= 0) {
+    return options.provisional;
+  }
+  console.warn(
+    `⏸️  ${options.role} was halted by ${options.provisional.haltedBy} ` +
+      `("${options.provisional.summary.slice(0, 120)}"). Treating as provisional and ` +
+      `waiting up to ${settleMs < 1000 ? `${settleMs}ms` : `${Math.round(settleMs / 1000)}s`} ` +
+      `for the worker's own verdict…`,
+  );
+  // Scaled so a short test window is not swallowed by a single long sleep.
+  const pollMs = Math.max(25, Math.min(GUARD_SETTLE_POLL_MS, Math.floor(settleMs / 10)));
+  const deadline = Date.now() + settleMs;
+  while (Date.now() < deadline) {
+    await sleep(pollMs);
+    const current = readStageResult({
+      resultPath: options.resultPath,
+      runId: options.runId,
+      role: options.role,
+      attempt: options.attempt,
+    });
+    if (current && !isGuardHalt(current)) {
+      console.log(
+        `✅ ${options.role} finished after the halt — adopting its own result (${current.status}) ` +
+          `over the ${options.provisional.haltedBy} guess.`,
+      );
+      return current;
+    }
+  }
+  console.warn(
+    `⛔ ${options.role} produced no verdict within the settle window — the ` +
+      `${options.provisional.haltedBy} halt stands.`,
+  );
+  return options.provisional;
+};
 
 /** Return the worker role for a model-driven stage. */
 export const roleForStage = (stage: ContractPipelineStage): ContractWorkerRole => {
@@ -62,6 +136,8 @@ export const runStage = async (options: {
   idleTimeoutMs: number;
   hardTimeoutMs: number;
   pollIntervalMs?: number;
+  /** Override the provisional-result settle window. Tests pass 0. */
+  guardSettleMs?: number;
   feedback?: string;
   /**
    * Status the orchestrator ALREADY recorded in the run manifest for attempt
@@ -202,6 +278,17 @@ export const runStage = async (options: {
       attempt: options.attempt,
     });
     if (result) {
+      if (isGuardHalt(result)) {
+        const settled = await settleGuardResult({
+          provisional: result,
+          resultPath,
+          runId: options.runId,
+          role,
+          attempt: options.attempt,
+          settleMs: options.guardSettleMs,
+        });
+        return { result: settled, paneId };
+      }
       return { result, paneId };
     }
 
@@ -357,6 +444,7 @@ export const runStage = async (options: {
     evidence: [],
     contractHash: '',
     diffHash: '',
+    haltedBy: 'hard_timeout',
   };
   writeStageResult({ resultPath, result: blockedResult });
   return { result: blockedResult, paneId };

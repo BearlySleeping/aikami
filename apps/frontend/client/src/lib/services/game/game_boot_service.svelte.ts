@@ -16,9 +16,9 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { AssetSeedDocument, Campaign, PersonaData } from '@aikami/types';
+import type { Campaign, PersonaData } from '@aikami/types';
 import { authService, equipmentService } from '$services';
-import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage, PrefetchResult } from '$types';
+import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { personaService } from '../persona/persona_service.svelte';
@@ -39,12 +39,6 @@ const bootStageOrder: readonly GameBootStage[] = [
 
 /** Maximum time a single boot stage may take before timing out (ms). */
 const STAGE_TIMEOUT_MS = 30_000;
-
-/**
- * Concurrent fetches in the background warming pass. Deliberately small: the
- * player's on-demand asset loads share the same connection and must win.
- */
-const WARM_CONCURRENCY = 8;
 
 /** Stage labels for the loading UI — displayed during each stage. */
 const bootStageLabels: Record<GameBootStage, string> = {
@@ -664,93 +658,38 @@ class GameBootService
   }
 
   /**
-   * Stage: open the shared local DB, seed the asset registry from the
-   * compact boot seed (asset_seed.json), init the platform cache backend,
-   * and reconcile install state (C-373 AC-1/AC-3, C-435 AC-5/AC-6).
-   * Never blocks boot — any failure degrades to online mode and seeding
-   * retries on the next boot.
+   * Stage: ensure the shared {@link assetPrefetchService} has opened the
+   * local DB, seeded the asset registry, and initialized the cache backend
+   * (C-373 AC-1/AC-3, C-435 AC-5/AC-6). Delegated so the start-menu screen
+   * and the boot pipeline share one registry-init pass instead of each
+   * running their own (C-448 background downloading). Never blocks boot —
+   * any failure degrades to online mode and seeding retries on the next boot.
    */
   private async _stageInitializeAssetRegistry(generation: number): Promise<void> {
     const t0 = performance.now();
 
     try {
-      // 1. Open the shared DB (runs C-384 schema migrations) + registry
-      const { publicEnv } = await import('@aikami/frontend/configs');
-      const { getLocalDatabase, AssetRegistryRepository } = await import(
-        '@aikami/frontend/storage'
+      const { assetPrefetchService } = await import(
+        '$lib/services/assets/asset_prefetch_service.svelte'
       );
-      const db = await getLocalDatabase();
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-      const registry = new AssetRegistryRepository(db);
-
-      // 2. Load the catalog once through the asset store: the compact boot
-      //    seed (~1.8 MB, replacing 20 MB of manifest.json + asset_hashes.json)
-      //    plus the offline-core declaration (C-435 AC-5). The store memoizes
-      //    it, so the warming stage below reuses this parse rather than
-      //    re-fetching and re-parsing the seed.
-      const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
-      await assetStore.fetchManifest();
+      const { seed } = await assetPrefetchService.ensureRegistryReady({
+        onSeedProgress: ({ chunk, totalChunks }) => {
+          if (generation === this._bootGeneration) {
+            this.bootProgress.detail = `Seeding assets… chunk ${chunk}/${totalChunks}`;
+          }
+        },
+      });
       if (generation !== this._bootGeneration) {
         return;
       }
 
-      const seed = assetStore.seed;
       if (!seed) {
         // No usable catalog — everything is de-bundled, so without the seed
         // no asset can resolve. On a fresh install (no cached rows) this is
         // fatal; on an upgrade the prior session's cache still serves.
         this.warn('stage:initializing_asset_registry:no-seed', {
-          error: assetStore.error,
           hint: 'Set PUBLIC_ASSETS_BASE_URL or check network connectivity.',
         });
-      } else if (await registry.isSeeded(seed.generatedAt)) {
-        this.debug('stage:initializing_asset_registry:already-seeded');
-      } else {
-        // 3. Seed assets AND their sources in one pass. Sources must be derived
-        //    here because `ext` lives only in the seed document — the assets
-        //    table does not persist it, so nothing downstream could rebuild an
-        //    R2 key afterwards.
-        const seedT0 = performance.now();
-        await registry.seedFromCompactSeed({
-          seed,
-          r2BaseUrl: publicEnv.PUBLIC_ASSETS_BASE_URL,
-          bundledTags: [...assetStore.coreTags],
-          onProgress: ({ chunk, totalChunks }) => {
-            if (generation === this._bootGeneration) {
-              this.bootProgress.detail = `Seeding assets… chunk ${chunk}/${totalChunks}`;
-            }
-          },
-        });
-        this.debug('stage:initializing_asset_registry:seeded', {
-          elapsedMs: Math.round(performance.now() - seedT0),
-          rowCount: seed.rows.length,
-          coreTags: assetStore.coreTags.size,
-          hasR2Origin: Boolean(publicEnv.PUBLIC_ASSETS_BASE_URL),
-        });
-      }
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      // 4. Platform cache backend (OPFS / Tauri FS) + persistence request.
-      const { createPlatformCacheBackend, assetManager } = await import(
-        '$lib/services/assets/asset_manager.svelte'
-      );
-      const backend = createPlatformCacheBackend();
-      await backend.init();
-      await backend.requestPersistence();
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      // 5. Initialize the manager (pre-registers cached binaries) + reconcile
-      //    interrupted downloads and stale-hash evictions.
-      await assetManager.initialize({ registry, backend });
-      await assetManager.reconcile();
-      if (generation !== this._bootGeneration) {
-        return;
       }
 
       const elapsed = performance.now() - t0;
@@ -764,103 +703,37 @@ class GameBootService
   }
 
   /**
-   * Stage: prefetch the starter content pack tags declared in offline_core.json.
-   * On a fresh install (no cached rows) this is the first network fetch and
-   * must show visible progress. On an upgrade, already-cached tags are skipped.
-   * On a fresh install with no network, this fails with an actionable message.
-   *
-   * C-448: replaces the old "bundled in the client" assumption with an explicit
-   * first-run prefetch that downloads the pack index, manifest, and maps.
+   * Stage: prefetch the starter content pack tags declared in offline_core.json,
+   * via the shared {@link assetPrefetchService} (C-448 background downloading —
+   * the start-menu screen may already have this in flight or finished, in
+   * which case this resolves immediately). On a fresh install with no
+   * network, this fails with an actionable message.
    */
   private _stagePrefetchStarterContent = async (generation: number): Promise<void> => {
     const t0 = performance.now();
 
-    const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
-    const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
-    // Check generation after async import
+    const { assetPrefetchService } = await import(
+      '$lib/services/assets/asset_prefetch_service.svelte'
+    );
     if (generation !== this._bootGeneration) {
       return;
     }
 
-    // Ensure the catalog is loaded so we have the offline-core tags
-    await assetStore.fetchManifest();
-    if (generation !== this._bootGeneration) {
-      return;
-    }
-
-    const coreTags = [...assetStore.coreTags];
-    if (coreTags.length === 0) {
-      // Check if any starter content is locally available
-      // If nothing is cached and we have no coreTags, this is a first-run without connectivity
-      const hasAnyCache = (await assetManager.hasAnyCachedContent?.()) ?? false;
-      if (!hasAnyCache) {
-        const message =
-          'Aikami needs to download starter content the first time you play. ' +
-          'Connect to the internet and try again.';
-        this.warn('stage:prefetching_starter_content:no-core-tags-no-cache');
-        throw new Error(message);
+    const result = await assetPrefetchService.prefetchCore((progress) => {
+      if (generation === this._bootGeneration) {
+        this.bootProgress.detail = `Downloading starter content — ${progress.done}/${progress.total}`;
       }
+    });
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+
+    const elapsed = performance.now() - t0;
+
+    if (result.requested === 0) {
       this.debug('stage:prefetching_starter_content:no-core-tags');
       return;
     }
-
-    this.debug('stage:prefetching_starter_content:starting', {
-      tagCount: coreTags.length,
-      tags: coreTags,
-    });
-
-    // Use mutable local counters during the loop
-    let fetched = 0;
-    let alreadyCached = 0;
-    const failedTags: string[] = [];
-
-    for (let i = 0; i < coreTags.length; i++) {
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      const tag = coreTags[i];
-      if (!tag) {
-        continue;
-      }
-
-      // Report progress through the boot UI
-      this.bootProgress.detail = `Downloading starter content — ${i + 1}/${coreTags.length}`;
-
-      // Check if already cached via the asset manager
-      const cachedUrl = assetManager.acquireUrl(tag);
-      if (cachedUrl) {
-        alreadyCached += 1;
-        continue;
-      }
-
-      try {
-        // Attempt to warm (fetch + cache) the tag
-        const url = await assetManager.warm(tag);
-        if (url !== null) {
-          fetched += 1;
-        } else {
-          failedTags.push(tag);
-        }
-      } catch {
-        failedTags.push(tag);
-      }
-    }
-
-    // Check generation after the loop
-    if (generation !== this._bootGeneration) {
-      return;
-    }
-
-    // Construct the final readonly PrefetchResult after processing
-    const result: PrefetchResult = {
-      requested: coreTags.length,
-      fetched,
-      alreadyCached,
-      failedTags,
-    };
-
-    const elapsed = performance.now() - t0;
 
     if (result.failedTags.length > 0 && result.fetched === 0 && result.alreadyCached === 0) {
       // Fresh install with no network — all tags failed
@@ -892,8 +765,9 @@ class GameBootService
   };
 
   /**
-   * Stage: kick off the resumable first-run warming pass and return
-   * immediately (C-435 AC-4).
+   * Stage: kick off the shared resumable warming pass ({@link
+   * assetPrefetchService.warmRemaining}) and return immediately (C-435 AC-4).
+   * A no-op if the start-menu screen already started it (C-448).
    *
    * The pass itself must NOT block the pipeline. Every boot stage is bounded
    * by {@link STAGE_TIMEOUT_MS}, and a fresh profile has ~90 MB of de-bundled
@@ -904,102 +778,22 @@ class GameBootService
    *
    * So: start it, report progress through the same `bootProgress` channel, and
    * let the player into the game on the bundled offline core while it runs.
-   * Cancellation is by boot generation, exactly like every other stage.
    */
   private async _stageWarmingCache(generation: number): Promise<void> {
-    const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
-    const seed = assetStore.seed;
-    if (!seed) {
-      this.warn('stage:warming_cache:no-seed');
-      return;
-    }
+    const { assetPrefetchService } = await import(
+      '$lib/services/assets/asset_prefetch_service.svelte'
+    );
     if (generation !== this._bootGeneration) {
       return;
     }
 
-    // Deliberately not awaited — see the doc comment above.
-    void this._warmCacheInBackground(seed, generation);
-  }
-
-  /**
-   * Background warming pass: fetches every not-yet-cached asset and caches it
-   * locally, a few at a time so on-demand loads are not starved.
-   *
-   * Resumable by construction — install state is the progress record, so a
-   * session that stops partway simply has fewer assets left next boot.
-   */
-  private async _warmCacheInBackground(seed: AssetSeedDocument, generation: number): Promise<void> {
-    const t0 = performance.now();
-
-    try {
-      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
-      const { getLocalDatabase, AssetRegistryRepository } = await import(
-        '@aikami/frontend/storage'
-      );
-      if (generation !== this._bootGeneration) {
-        return;
+    // Deliberately not awaited — see the doc comment above. Memoized on the
+    // service, so this is a no-op if a warm pass is already running.
+    assetPrefetchService.warmRemaining((progress) => {
+      if (generation === this._bootGeneration) {
+        this.bootProgress.detail = `Downloading game assets — ${progress.done}/${progress.total}`;
       }
-
-      const registry = new AssetRegistryRepository(await getLocalDatabase());
-      const installStates = await registry.listInstallStates();
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      // Only `cached` counts as done. `downloading` rows are interrupted
-      // downloads that reconcile() has already reset — treating them as
-      // complete would silently skip them forever.
-      const cachedTags = new Set(
-        installStates.filter((state) => state.status === 'cached').map((state) => state.assetId),
-      );
-      const toWarm = seed.rows.filter((row) => !cachedTags.has(row.tag));
-
-      if (toWarm.length === 0) {
-        this.debug('stage:warming_cache:all-cached');
-        return;
-      }
-
-      this.debug('stage:warming_cache:starting', {
-        total: seed.rows.length,
-        toWarm: toWarm.length,
-      });
-
-      let warmed = 0;
-      let failed = 0;
-
-      // A small window keeps bandwidth available for whatever the player is
-      // actually looking at, which the contract requires to take priority.
-      const runWorker = async (): Promise<void> => {
-        for (;;) {
-          const row = toWarm[cursor++];
-          if (!row || generation !== this._bootGeneration) {
-            return;
-          }
-          try {
-            await assetManager.warm(row.tag);
-            warmed += 1;
-          } catch {
-            failed += 1;
-          }
-          if (generation === this._bootGeneration) {
-            this.bootProgress.detail = `Downloading game assets — ${warmed}/${toWarm.length}`;
-          }
-        }
-      };
-
-      let cursor = 0;
-      await Promise.all(Array.from({ length: WARM_CONCURRENCY }, runWorker));
-
-      this.debug('stage:warming_cache:complete', {
-        elapsedMs: Math.round(performance.now() - t0),
-        warmed,
-        failed,
-        total: toWarm.length,
-      });
-    } catch (error) {
-      // Non-fatal: the game is playable with the bundled offline core.
-      this.warn('stage:warming_cache:degraded', { error: String(error) });
-    }
+    });
   }
 
   /** Stage: preload content pack manifest + asset bundles. */

@@ -5,13 +5,35 @@
     "emberwatch:manifest",
     "emberwatch:maps:inn",
     "emberwatch:maps:merchant_shop",
-    "emberwatch:maps:village"
+    "emberwatch:maps:village",
+    "portraits:npc:aragon:neutral",
+    "portraits:npc:aragon:happy",
+    "portraits:npc:aragon:sad",
+    "portraits:npc:aragon:angry",
+    "portraits:npc:gandalf:neutral",
+    "portraits:npc:gandalf:happy",
+    "portraits:npc:gandalf:sad",
+    "portraits:npc:gandalf:angry",
+    "portraits:npc:orc:neutral",
+    "portraits:npc:troll:neutral",
+    "portraits:npc:placeholder"
   ],
   "rationale": {
     "index": "Pack index — lists available content packs; fetched first before any pack-specific prefetch",
     "emberwatch:manifest": "Emberwatch pack manifest (25 KB) — campaign definition, maps, NPCs, items, quests, dialogues",
     "emberwatch:maps:inn": "The Guttering Candle Inn map — Rollo encounter, quest progression",
     "emberwatch:maps:merchant_shop": "Mara's Provisions merchant shop map",
-    "emberwatch:maps:village": "Emberwatch Village starting map — player spawn, first interactions"
+    "emberwatch:maps:village": "Emberwatch Village starting map — player spawn, first interactions",
+    "portraits:npc:aragon:neutral": "NPC portrait — Aragon (neutral)",
+    "portraits:npc:aragon:happy": "NPC portrait — Aragon (happy)",
+    "portraits:npc:aragon:sad": "NPC portrait — Aragon (sad)",
+    "portraits:npc:aragon:angry": "NPC portrait — Aragon (angry)",
+    "portraits:npc:gandalf:neutral": "NPC portrait — Gandalf (neutral)",
+    "portraits:npc:gandalf:happy": "NPC portrait — Gandalf (happy)",
+    "portraits:npc:gandalf:sad": "NPC portrait — Gandalf (sad)",
+    "portraits:npc:gandalf:angry": "NPC portrait — Gandalf (angry)",
+    "portraits:npc:orc:neutral": "NPC portrait — Orc (neutral)",
+    "portraits:npc:troll:neutral": "NPC portrait — Troll (neutral)",
+    "portraits:npc:placeholder": "Placeholder portrait SVG — fallback when no portrait is configured"
   }
 }
