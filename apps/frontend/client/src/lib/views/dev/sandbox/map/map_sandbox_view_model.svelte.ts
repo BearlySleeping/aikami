@@ -19,6 +19,10 @@ import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset
 
 const _registryResolver = createRegistryAssetResolver();
 
+/** Adapter for assetUrlResolver: reads the assetId argument, ignores slot and state. */
+const _assetUrlAdapter = (_slot: string, assetId: string, _state: LpcAnimationState): string | null =>
+  _registryResolver.resolve(assetId);
+
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;
 
@@ -223,8 +227,7 @@ class MapSandboxViewModel
         bridge: this._engineBridge,
         textureManager: tm,
         recipeResolver: sandboxRecipeResolver,
-        assetUrlResolver: (slot, assetId, state) =>
-          _registryResolver.resolve(assetId),
+        assetUrlResolver: _assetUrlAdapter,
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);

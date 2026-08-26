@@ -13,7 +13,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { ContentPackManifest, PackConfig, PersonaData } from '@aikami/types';
+import type { AssetResolver, ContentPackManifest, PackConfig, PersonaData } from '@aikami/types';
 import { logger } from '$logger';
 import { audioContextManager, equipmentService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
@@ -952,7 +952,7 @@ class GameEngineService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    resolver: import('@aikami/types').AssetResolver,
+    resolver: AssetResolver,
   ) {
     // C-400: single source of truth — the engine's shared createLpcPipeline
     // (projected catalog + pure resolver + asset URL resolver). The

@@ -75,7 +75,10 @@ describe('AC-4: RegistryAssetResolver preserves acquire/warm/fallback ordering',
     expect(resolver.kind).toBe('registry');
   });
 
-  test('release is a no-op that does not throw', () => {
-    expect(() => resolver.release('blob:http://localhost/cached-asset')).not.toThrow();
+  test('release delegates to assetManager.releaseUrl', async () => {
+    const { assetManager } = await import('../asset_manager.svelte');
+    const cachedUrl = 'blob:http://localhost/cached-asset';
+    resolver.release(cachedUrl);
+    expect(assetManager.releaseUrl).toHaveBeenCalledWith(cachedUrl);
   });
 });

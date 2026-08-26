@@ -19,6 +19,10 @@ import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset
 
 const _registryResolver = createRegistryAssetResolver();
 
+/** Adapter for assetUrlResolver: reads the assetId argument, ignores slot and state. */
+const _assetUrlAdapter = (_slot: string, assetId: string, _state: LpcAnimationState): string | null =>
+  _registryResolver.resolve(assetId);
+
 // ---------------------------------------------------------------------------
 // Lazily-resolved ECS worker constructor (SSR-safe dynamic import)
 // ---------------------------------------------------------------------------
@@ -111,8 +115,7 @@ class EnvironmentSandboxViewModel
         bridge: this._bridge,
         workerFactory: () => new workerCtor(),
         recipeResolver: sandboxRecipeResolver,
-        assetUrlResolver: (_slot: string, assetId: string, _state: string): string | null =>
-          _registryResolver.resolve(assetId),
+        assetUrlResolver: _assetUrlAdapter,
         textureManager: this._textureManager,
       };
 

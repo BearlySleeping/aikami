@@ -14,6 +14,13 @@ import {
 } from '@aikami/frontend/services';
 import type { LpcAnimationState } from '@aikami/lpc';
 import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
+
+const _registryResolver = createRegistryAssetResolver();
+
+/** Adapter for assetUrlResolver: reads the assetId argument, ignores slot and state. */
+const _assetUrlAdapter = (_slot: string, assetId: string, _state: LpcAnimationState): string | null =>
+  _registryResolver.resolve(assetId);
+
 import { textGenerationService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
@@ -70,7 +77,6 @@ class SandboxViewModel
   private _dialogEndCleanup: (() => void) | undefined;
   private _readyCleanup: (() => void) | undefined;
   private _activeStreamAbortController: AbortController | undefined;
-  private _registryResolver = createRegistryAssetResolver();
 
   /**
    * Initializes the game engine, creating the Web Worker simulation and
@@ -150,8 +156,7 @@ class SandboxViewModel
         bridge: this._engineBridge,
         textureManager: tm,
         recipeResolver: sandboxRecipeResolver,
-        assetUrlResolver: (slot, assetId, state) =>
-          this._registryResolver.resolve(assetId),
+        assetUrlResolver: _assetUrlAdapter,
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);

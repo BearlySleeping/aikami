@@ -44,16 +44,18 @@ describe('AC-1: No module-level resolver state remains', () => {
     // The new API
     expect(typeof mod.createLpcRenderer).toBe('function');
     // The old API must not exist
-    expect((mod as any).setLpcUrlResolver).toBeUndefined();
-    expect((mod as any).setLpcManifestReady).toBeUndefined();
-    expect((mod as any).clearLpcCaches).toBeUndefined();
+    const modRecord = mod as unknown as Record<string, unknown>;
+    expect(modRecord.setLpcUrlResolver).toBeUndefined();
+    expect(modRecord.setLpcManifestReady).toBeUndefined();
+    expect(modRecord.clearLpcCaches).toBeUndefined();
   });
 
   test('lpc_asset_catalog no longer exports wireLpcUrlResolver or getLpcAssetPath', async () => {
     const mod = await import('../lpc_asset_catalog');
     // The old wiring functions must not exist
-    expect((mod as any).wireLpcUrlResolver).toBeUndefined();
-    expect((mod as any).getLpcAssetPath).toBeUndefined();
+    const modRecord = mod as unknown as Record<string, unknown>;
+    expect(modRecord.wireLpcUrlResolver).toBeUndefined();
+    expect(modRecord.getLpcAssetPath).toBeUndefined();
   });
 
   test('createLpcRenderer returns an object with the expected shape', async () => {

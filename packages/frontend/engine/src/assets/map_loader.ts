@@ -260,7 +260,13 @@ const _mapCache = new Map<string, TilemapData>();
  * @throws If the fetch fails, the JSON is invalid, or required fields are missing.
  */
 export const loadTilemap = async (options: MapLoaderOptions): Promise<TilemapData> => {
-  const { url, resolveTag, releaseUrl } = options;
+  const { url, resolveTag } = options;
+
+  // Derive releaseUrl from resolveTag.release for object-shaped resolvers,
+  // or use the explicit releaseUrl parameter for legacy function resolvers.
+  const releaseUrl =
+    options.releaseUrl ??
+    (resolveTag && typeof resolveTag === 'object' ? resolveTag.release : undefined);
 
   const cached = _mapCache.get(url);
   if (cached) {
@@ -392,7 +398,13 @@ export type JtonMapLoaderOptions = {
  * @throws If the fetch fails, the JTON is invalid, or required fields are missing.
  */
 export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<TilemapData> => {
-  const { url, resolveTag, releaseUrl } = options;
+  const { url, resolveTag } = options;
+
+  // Derive releaseUrl from resolveTag.release for object-shaped resolvers,
+  // or use the explicit releaseUrl parameter for legacy function resolvers.
+  const releaseUrl =
+    options.releaseUrl ??
+    (resolveTag && typeof resolveTag === 'object' ? resolveTag.release : undefined);
 
   const cached = _mapCache.get(url);
   if (cached) {

@@ -35,7 +35,7 @@ let onCloseCalled = false;
 
 const createViewModel = (options?: {
   vendorInventory?: string;
-  resolver?: import('@aikami/types').AssetResolver;
+  resolver?: AssetResolver;
 }): ReturnType<typeof getVendorViewModel> => {
   onCloseCalled = false;
   // Reset vendor service state between tests

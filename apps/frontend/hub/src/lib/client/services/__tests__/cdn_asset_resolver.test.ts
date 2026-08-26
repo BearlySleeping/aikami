@@ -9,6 +9,7 @@
 // returns null, and release is a no-op that does not throw.
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { CatalogAssetEntry } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
 
 const MOCK_ENTRIES = [
@@ -22,7 +23,7 @@ const MOCK_ENTRIES = [
     hash: 'cd78ef90ab1234567890abcdef1234567890abcdef1234567890abcdef123456',
     ext: '.webp',
   },
-] as const;
+] as const satisfies readonly CatalogAssetEntry[];
 
 describe('AC-3: CDN AssetResolver builds correct content-addressed URLs', () => {
   let resolver: AssetResolver;
@@ -35,7 +36,7 @@ describe('AC-3: CDN AssetResolver builds correct content-addressed URLs', () => 
     const mod = await import('../cdn_asset_resolver');
     resolver = mod.createCdnAssetResolver({
       originUrl: 'https://assets.example.com',
-      entries: MOCK_ENTRIES as unknown as readonly import('@aikami/schemas').CatalogAssetEntry[],
+      entries: MOCK_ENTRIES,
     });
   });
 
@@ -46,11 +47,11 @@ describe('AC-3: CDN AssetResolver builds correct content-addressed URLs', () => 
     );
   });
 
-  test('trailing slash on origin produces no double slash', () => {
-    const mod = require('../cdn_asset_resolver');
+  test('trailing slash on origin produces no double slash', async () => {
+    const mod = await import('../cdn_asset_resolver');
     const resolverWithSlash = mod.createCdnAssetResolver({
       originUrl: 'https://assets.example.com/',
-      entries: MOCK_ENTRIES as unknown as readonly import('@aikami/schemas').CatalogAssetEntry[],
+      entries: MOCK_ENTRIES,
     });
     const url = resolverWithSlash.resolve('lpc:body:bodies_male:walk');
     expect(url).toBe(

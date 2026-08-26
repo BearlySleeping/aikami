@@ -8,7 +8,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { LpcAnimationState } from '@aikami/lpc';
+import { LpcAnimationState, lpcTag } from '@aikami/lpc';
 import type { ItemDefinition } from '@aikami/types';
 import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
 import type { AssetResolver } from '@aikami/types';
@@ -137,7 +137,8 @@ class VendorViewModel
     if (!lpcAssetId) {
       return undefined;
     }
-    return this._resolver.resolve(lpcAssetId) ?? undefined;
+    const tag = lpcTag(lpcAssetId, LpcAnimationState.Walk);
+    return this._resolver.resolve(tag) ?? undefined;
   }
 
   /** Item ID awaiting sell confirmation (C-331 AC-3). */

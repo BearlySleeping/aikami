@@ -300,7 +300,13 @@ export const loadContentPack = async (options: {
   resolveTag?: AssetResolver | ((tag: string) => string | null);
   releaseUrl?: (url: string) => void;
 }): Promise<ContentPackLoaderInterface> => {
-  const { packId, basePath = '', fetchFn, resolveTag, releaseUrl } = options;
+  const { packId, basePath = '', fetchFn, resolveTag } = options;
+
+  // Derive releaseUrl from resolveTag.release for object-shaped resolvers,
+  // or use the explicit releaseUrl parameter for legacy function resolvers.
+  const releaseUrl =
+    options.releaseUrl ??
+    (resolveTag && typeof resolveTag === 'object' ? resolveTag.release : undefined);
 
   // Cache check
   const cached = _contentPackCache.get(packId);

@@ -18,7 +18,7 @@
 
 import { resolveLpcSheetGeometry } from '@aikami/frontend/engine/content';
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
-import { lpcStateSuffix } from '@aikami/lpc';
+import { lpcStateSuffix, lpcTag } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';
 import { Rectangle, Sprite, Texture } from 'pixi.js';
 import { logger } from '$logger';
@@ -158,7 +158,10 @@ export const createLpcRenderer = (options: { resolver: AssetResolver }): LpcRend
   const _sheetCache = new Map<string, Texture>();
   const _sheetPromises = new Map<string, Promise<Texture>>();
   const _frameCache = new Map<string, Texture>();
-  let _manifestReady = false;
+  // The resolver is injected at construction and should be ready immediately.
+  // The asset catalog is already loaded by the time createLpcRenderer is called,
+  // so we mark the manifest ready to enable fallback chains and clear cached EMPTY entries.
+  let _manifestReady = true;
 
   logger.debug('lpcRenderer:created', { kind: resolver.kind });
 
@@ -199,7 +202,8 @@ export const createLpcRenderer = (options: { resolver: AssetResolver }): LpcRend
    * Low-level sheet loader for a concrete filename suffix.
    */
   const _loadSheetBySuffix = async (assetId: string, stateSuffix: string): Promise<Texture> => {
-    const url = resolver.resolve(assetId);
+    const tag = lpcTag(assetId, stateSuffix);
+    const url = resolver.resolve(tag);
     if (!url) {
       if (!_manifestReady) {
         // Manifest not loaded yet — treat as transient, do not cache EMPTY.

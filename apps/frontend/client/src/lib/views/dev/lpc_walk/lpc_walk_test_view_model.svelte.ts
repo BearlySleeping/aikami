@@ -126,6 +126,9 @@ class LpcWalkTestViewModel
   override async initialize(): Promise<void> {
     // Ensure the manifest-backed LPC URL resolver is wired and the manifest
     // is loaded before any layer lookup (idempotent).
+    const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
+    await assetStore.fetchManifest();
+
     // Create LPC renderer with the registry resolver
     const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
     this._lpcRenderer = createLpcRenderer({ resolver: createRegistryAssetResolver() });
@@ -404,6 +407,10 @@ class LpcWalkTestViewModel
     const cached = this._sheetCache.get(cacheKey);
     if (cached) {
       return cached;
+    }
+
+    if (!this._lpcRenderer) {
+      return null;
     }
 
     try {

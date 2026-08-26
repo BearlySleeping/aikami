@@ -519,6 +519,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     }
 
     const promise = (async () => {
+      if (!this._lpcRenderer) {
+        return Texture.EMPTY;
+      }
       const texture = await this._lpcRenderer.loadSheet(assetId, state);
       // Only cache successful textures — transient EMPTY must be retried on a
       // later call (the renderer only permanently caches genuinely unmapped
@@ -897,6 +900,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   override async initialize(): Promise<void> {
     // Ensure the manifest-backed LPC URL resolver is wired and the manifest
     // is loaded before any layer lookup (idempotent).
+    const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
+    await assetStore.fetchManifest();
+
     // Create LPC renderer with the registry resolver
     const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
     this._lpcRenderer = createLpcRenderer({ resolver: createRegistryAssetResolver() });

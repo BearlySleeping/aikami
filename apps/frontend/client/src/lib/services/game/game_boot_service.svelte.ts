@@ -16,7 +16,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { Campaign, PersonaData } from '@aikami/types';
+import type { AssetResolver, Campaign, PersonaData } from '@aikami/types';
 import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
@@ -1249,7 +1249,7 @@ class GameBootService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    resolver: import('@aikami/types').AssetResolver,
+    resolver: AssetResolver,
   ) {
     // C-400: single source of truth — the engine's shared createLpcPipeline
     // (projected catalog + pure resolver + asset URL resolver). This is the
