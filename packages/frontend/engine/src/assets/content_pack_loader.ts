@@ -275,8 +275,18 @@ let _contentPackCache = new Map<string, ContentPackLoaderInterface>();
  * resolved through the registry (R2) — there is no bundled copy to fall back
  * to. If the resolver returns null or the fetch fails, an AppError is thrown.
  *
+ * The default `basePath` is empty — NOT '/content-packs' — because the
+ * catalog seed's tags for content-pack assets are relative to `content/packs/`
+ * (e.g. `emberwatch:manifest`, `emberwatch:maps:village`; see
+ * generate_asset_seed.ts). `assetTagResolver` derives its lookup tag from
+ * this same path via `pathToTag`, so a non-empty basePath segment (like the
+ * pre-C-448 `/content-packs` bundled-fallback prefix) corrupts the tag —
+ * `content-packs:emberwatch:manifest` never matches a seed row, silently
+ * forcing every content-pack fetch through the (now nonexistent) local
+ * fallback path.
+ *
  * @param options.packId - Content pack identifier (matches Campaign.contentPackId).
- * @param options.basePath - Base path to content-pack root (default: '/content-packs').
+ * @param options.basePath - Base path to content-pack root (default: '').
  * @param options.fetchFn - Optional fetch override for testing.
  * @param options.resolveTag - Optional registry-backed tag resolver (C-434).
  * @param options.releaseUrl - Optional blob URL release function (C-434).
@@ -290,7 +300,7 @@ export const loadContentPack = async (options: {
   resolveTag?: AssetTagResolver;
   releaseUrl?: (url: string) => void;
 }): Promise<ContentPackLoaderInterface> => {
-  const { packId, basePath = '/content-packs', fetchFn, resolveTag, releaseUrl } = options;
+  const { packId, basePath = '', fetchFn, resolveTag, releaseUrl } = options;
 
   // Cache check
   const cached = _contentPackCache.get(packId);

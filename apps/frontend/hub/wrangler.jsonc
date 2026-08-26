@@ -13,6 +13,10 @@
 // `database_id` / `bucket_name` are provisioned separately (wrangler d1
 // create / r2 bucket create) and filled in by the deploy pipeline or a
 // maintainer before the first deploy.
+//
+// `migrations_dir` points wrangler at the Drizzle-generated migration SQL
+// in packages/backend/database/drizzle-d1 (the schema source of truth) so
+// `wrangler d1 migrations apply` works without a local copy under this app.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "aikami-hub",
@@ -27,7 +31,8 @@
     {
       "binding": "DB",
       "database_name": "aikami-hub",
-      "database_id": "bf77e365-058f-408f-871c-4a0567c9aa10"
+      "database_id": "bf77e365-058f-408f-871c-4a0567c9aa10",
+      "migrations_dir": "../../../packages/backend/database/drizzle-d1"
     }
   ],
   "r2_buckets": [

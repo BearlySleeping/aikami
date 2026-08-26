@@ -197,3 +197,74 @@ describe('runStage retry safeguard', () => {
     // confirmed non-working — longer than bun's default 5s per-test timeout.
   }, 30_000);
 });
+
+describe('runStage guard-halt settle window', () => {
+  /** Result a supervisor writes on the worker's behalf. */
+  const guardResult = (attempt: number): ContractStageResult => ({
+    ...resultFor(attempt, 'blocked'),
+    summary: 'Loop detected: the same turn repeated 10 times.',
+    findings: ['Agent repeated an identical turn 10 times without progressing.'],
+    haltedBy: 'cost_guard',
+  });
+
+  it("adopts the worker's own verdict when it lands inside the window", async () => {
+    // 🔴 C-442: the cost guard wrote `blocked` at 13:57:10 and the very same
+    // verifier session wrote `passed` over it at 13:58. The orchestrator had
+    // already gone terminal on the guess.
+    const resultPath = join(runDirectory, 'stages', 'implement-1.json');
+    const outcome = await runStage({
+      repoRoot,
+      runDirectory,
+      runId: RUN_ID,
+      stage: 'implement',
+      attempt: 1,
+      contractPath: 'docs/contracts/C-999-test.md',
+      idleTimeoutMs: 60_000,
+      hardTimeoutMs: 60_000,
+      pollIntervalMs: 5,
+      guardSettleMs: 2_000,
+      launchWorker: async () => {
+        // Guard trips first…
+        writeStageResult({ resultPath, result: guardResult(1) });
+        // …and the worker finishes anyway, a beat later.
+        setTimeout(() => {
+          writeStageResult({ resultPath, result: resultFor(1, 'passed') });
+        }, 200);
+        return { paneId: 'pane-test' };
+      },
+      checkAgentWorking: async () => true,
+    });
+    expect(outcome.result.status).toBe('passed');
+    expect(outcome.result.haltedBy).toBeUndefined();
+  });
+
+  it('lets the halt stand when no worker verdict arrives', async () => {
+    const resultPath = join(runDirectory, 'stages', 'implement-1.json');
+    const outcome = await runStage({
+      repoRoot,
+      runDirectory,
+      runId: RUN_ID,
+      stage: 'implement',
+      attempt: 1,
+      contractPath: 'docs/contracts/C-999-test.md',
+      idleTimeoutMs: 60_000,
+      hardTimeoutMs: 60_000,
+      pollIntervalMs: 5,
+      guardSettleMs: 300,
+      launchWorker: async () => {
+        writeStageResult({ resultPath, result: guardResult(1) });
+        return { paneId: 'pane-test' };
+      },
+      checkAgentWorking: async () => true,
+    });
+    expect(outcome.result.status).toBe('blocked');
+    expect(outcome.result.haltedBy).toBe('cost_guard');
+  });
+
+  it('does not stall a normal worker result', async () => {
+    const started = Date.now();
+    const { outcome } = await run({ attempt: 1 });
+    expect(outcome.result.status).toBe('passed');
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+});

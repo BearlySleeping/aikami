@@ -8,6 +8,14 @@
 //   • Uses `wrangler d1 migrations apply DB` (local or remote).
 //   • Never auto-applied on server boot and never a side effect of
 //     deploying the hub — this app is independently invocable.
+//
+// Runs from apps/frontend/hub — that's where the D1 binding (wrangler.jsonc)
+// lives. `migrations_dir` on that binding points wrangler at the migration
+// SQL in packages/backend/database/drizzle-d1 (the schema source of truth).
+//
+// Invoked via `bunx wrangler`, not a bare `wrangler` — bunx resolves the
+// version pinned in scripts/package.json, so this can't drift onto whatever
+// `wrangler` happens to be on $PATH (e.g. a global install).
 
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -20,7 +28,7 @@ export const deployDatabaseMigration = async (options: {
   rootDir: string;
 }): Promise<{ applied: number }> => {
   const { mode } = options;
-  const dbDir = resolve(import.meta.dir, '../../../../packages/backend/database');
+  const dbDir = resolve(import.meta.dir, '../../../../apps/frontend/hub');
 
   const isLocal = mode === 'emulator';
   const args = ['d1', 'migrations', 'apply', 'DB'];
@@ -34,7 +42,7 @@ export const deployDatabaseMigration = async (options: {
   console.log(`🗄  applying D1 migrations (${isLocal ? 'local' : 'remote'})...`);
 
   try {
-    const output = execFileSync('wrangler', args, {
+    const output = execFileSync('bunx', ['wrangler', ...args], {
       cwd: dbDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 120_000,

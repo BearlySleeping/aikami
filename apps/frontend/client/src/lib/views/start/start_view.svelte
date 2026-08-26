@@ -34,6 +34,22 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
           <h1 class="text-5xl font-bold mb-2">Aikami</h1>
           <p class="text-base-content/60 mb-8">A living world, powered by AI</p>
 
+          <!-- C-448: background asset download indicator -->
+          {#if viewModel.downloadLabel}
+            <div class="w-64 mx-auto mb-6 text-left" data-testid="download-indicator">
+              <p class="text-xs text-base-content/60 mb-1">{viewModel.downloadLabel}</p>
+              {#if viewModel.downloadProgressFraction !== undefined}
+                <progress
+                  class="progress progress-primary w-full"
+                  value={viewModel.downloadProgressFraction}
+                  max="1"
+                ></progress>
+              {:else}
+                <progress class="progress progress-primary w-full"></progress>
+              {/if}
+            </div>
+          {/if}
+
           <!-- Menu Buttons -->
           <div class="flex flex-col gap-3 w-64 mx-auto">
             <!-- Continue (only shown when saves exist) -->

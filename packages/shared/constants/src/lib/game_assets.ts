@@ -162,6 +162,13 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
     extensions: new Set(['.json', '.jton', '.webp', '.png']),
     defaultSubdirs: [],
   },
+
+  // NPC/player portrait sprites — pre-generated WebP busts grouped by character
+  portraits: {
+    name: 'portraits',
+    extensions: new Set(['.webp', '.svg']),
+    defaultSubdirs: [],
+  },
 } as const satisfies Record<string, AssetCategoryDefinition>;
 
 // ---------------------------------------------------------------------------
@@ -220,6 +227,14 @@ export const tagToAssetPath = (options: { tag: string; ext: string }): string =>
   const segments = options.tag.split(':');
   const stateExtensions = ASSET_CATEGORIES[segments[0] ?? '']?.stateExtensions;
   const state = segments.at(-1);
+
+  // When the tag already includes the extension in its last segment
+  // (e.g. "sprites:tilesets:atlas.webp" with ext ".webp"), don't add it again.
+  const lastSegment = segments.at(-1) ?? '';
+  const normalizedExt = options.ext.startsWith('.') ? options.ext : `.${options.ext}`;
+  if (lastSegment.endsWith(normalizedExt)) {
+    return segments.join('/');
+  }
 
   // Only rejoin when the category actually splits state tokens AND the
   // trailing segment is a declared state — otherwise the tag never had a

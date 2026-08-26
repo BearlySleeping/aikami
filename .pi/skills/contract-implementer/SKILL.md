@@ -12,6 +12,12 @@ description: >-
 
 The authoritative phase-by-phase flow lives in the `/contract-implement` prompt (`.pi/prompts/contract-implement.md`). This skill carries the supporting reference material.
 
+> 🔵 **Writing contracts rather than implementing one?** Load
+> `contract-calibration` first. It decides *whether* something needs a contract
+> and how heavy it should be — the answer is often "just do it" or "write a
+> prompt", especially when the user asks for contracts covering several things
+> at once.
+
 For the complete pipeline user guide (source modes, CLI options, workflows), see:
 📄 **`docs/guides/contract-pipeline.md`**
 

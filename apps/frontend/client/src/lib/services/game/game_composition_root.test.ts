@@ -119,7 +119,7 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
       } else {
         url = input.url;
       }
-      if (url.endsWith('/content-packs/emberwatch/manifest.json')) {
+      if (url.endsWith('/emberwatch/manifest.json')) {
         return Promise.resolve({
           ok: true,
           status: 200,

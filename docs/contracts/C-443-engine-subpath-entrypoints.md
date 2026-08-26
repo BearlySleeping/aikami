@@ -29,16 +29,18 @@ created_at: "2026-08-26"
 ## Problem & Baseline Evidence
 
 - **Current behavior**: `packages/frontend/engine/src/index.ts` is a single
-  ~450-line barrel that unconditionally re-exports ECS components, systems,
+  ~564-line barrel that unconditionally re-exports ECS components, systems,
   math, GOAP, asset loaders, Pixi rendering, and the Pixi application. There is
   no `exports` field in `packages/frontend/engine/package.json` — only
   `"main": "src/index.ts"`.
 
 - **Consequence, in the codebase's own words.**
-  `apps/frontend/client/src/lib/data/lpc_models.ts` header:
+  `apps/frontend/client/src/lib/data/lpc_renderer.ts` header:
   > *"We define them locally to avoid statically importing the full engine
   > bundle (which triggers INEFFECTIVE_DYNAMIC_IMPORT warnings in Vite/Rollup).
   > The engine is lazily loaded only when the game canvas is actually needed."*
+  (The original `lpc_models.ts` was renamed in a prior contract; the problem
+  persists in `lpc_renderer.ts`.)
 
   Importing a two-value numeric enum requires pulling a module graph containing
   `pixi.js`, `bitecs`, and `@tursodatabase/database`. The barrel itself carries
@@ -138,8 +140,8 @@ wrong side of the line.
   | Subpath | Contains | Forbidden imports |
   |---|---|---|
   | `./sim` | `components/`, `systems/` minus render systems, `math/`, `core/`, `config/`, `serialization/`, `state/` | `pixi.js` |
-  | `./content` | `assets/` minus Pixi resolvers, `entities/` | `pixi.js`, `node:*` |
-  | `./render` | `rendering/`, `systems/render_system.ts`, `systems/tilemap_render_system.ts`, `pixi_app.ts`, `assets/custom_scheme_url_resolver.ts`, `assets/manifest_atlas_resolver.ts`, `environment/` | `node:*` |
+  | `./content` | `assets/` minus Pixi resolvers, `entities/`, `rendering/lpc_appearance_resolver.ts` | `pixi.js`, `node:*` |
+  | `./render` | `rendering/`, `systems/render_system.ts`, `systems/render_worker.ts`, `systems/tilemap_render_system.ts`, `pixi_app.ts`, `assets/custom_scheme_url_resolver.ts`, `assets/manifest_atlas_resolver.ts`, `environment/` | `node:*` |
   | `./node` | `assets/asset_manifest_node.ts`, `persistence/turso_registry_hydration.ts` | — |
   | `./worker` | `worker/ecs_worker.ts`, `worker/ecs_worker_bootstrap.ts` | `pixi.js` |
   | `.` | union of `sim` + `render` + `content` | — |
@@ -358,12 +360,20 @@ them by deep path now import `@aikami/frontend/engine/node`.
 - **`environment/environment_ubo.ts`** is named like sim code but produces a
   GPU uniform buffer. Classify by what it imports and who consumes it, not by
   its directory.
-- **`systems/` is not homogeneous.** Most are sim; `render_system.ts` and
-  `tilemap_render_system.ts` are render. Do not move the whole directory.
+- **`systems/` is not homogeneous.** Most are sim; `render_system.ts`,
+  `render_worker.ts`, and `tilemap_render_system.ts` are render. Do not move
+  the whole directory.
 - **`INEFFECTIVE_DYNAMIC_IMPORT` is silenced** in
   `apps/frontend/client/vite.config.ts` (~line 163). Once C-442 and this
   contract land, re-enable it for the engine specifically and see whether it
   still fires. If it does, the boundary is incomplete.
+- **The worker imports render-side modules.** `ecs_worker.ts` imports
+  `LpcBatchManager` from `systems/render_worker.ts` (a `./render` module) and
+  `resolveLpcAppearance` from `rendering/lpc_appearance_resolver.ts` (moved to
+  `./content` per the membership table above). AC-3 requires the worker to
+  import only from `./sim` and `./content` — if `LpcBatchManager` cannot be
+  cleanly separated from `render_worker.ts`, either move it to `./content` or
+  relax AC-3 to allow `./render` for the worker. Classify in Phase 1.
 - **Do not gold-plate the split.** If a module is ambiguous, put it on the root
   barrel and move on. The goal is that `./sim` and `./content` are provably
   clean — not that every module found a perfect home.

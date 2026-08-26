@@ -27,9 +27,12 @@ import { assetStore } from './asset_store.svelte.ts';
 export const createAssetTagResolver = (): AssetTagResolver => {
   return (filePath: string): string | null => {
     try {
+      // Strip leading slash so absolute paths like "/content-packs/..."
+      // produce the same tag as their relative counterpart (no leading colon).
+      const normalized = filePath.startsWith('/') ? filePath.slice(1) : filePath;
       // Convert the file path to a published tag (e.g. "maps/sandbox.json"
       // → "maps:sandbox").
-      const tag = pathToTag(filePath);
+      const tag = pathToTag(normalized);
 
       // Resolve through the asset store — cache blob URL, origin URL, or null.
       const resolved = assetStore.resolveUrl(tag);

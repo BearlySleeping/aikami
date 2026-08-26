@@ -24,10 +24,7 @@ import { buildCollisionGrid, type TilemapData } from '../assets/map_loader.ts';
 // Fixture paths — the actual committed static content.
 // ---------------------------------------------------------------------------
 
-const CONTENT_PACKS_ROOT = join(
-  import.meta.dir,
-  '../../../../../content/packs',
-);
+const CONTENT_PACKS_ROOT = join(import.meta.dir, '../../../../../content/packs');
 
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf-8')) as T;
 

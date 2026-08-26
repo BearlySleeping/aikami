@@ -38,7 +38,12 @@ describe('catalog publish pipeline (AC-1)', () => {
   });
 
   test('uploads every catalog asset under a content-addressed key', async () => {
-    const report = await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    const report = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
 
     expect(report.ok).toBe(true);
     expect(report.uploaded).toBe(7); // 4 original + 2 tilesets + 1 map
@@ -99,11 +104,21 @@ describe('catalog publish pipeline (AC-1)', () => {
   });
 
   test('re-run skips every object (idempotent) and exits ok', async () => {
-    const first = await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    const first = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
     expect(first.uploaded).toBe(7);
     const putCountAfterFirst = client.putCount;
 
-    const second = await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    const second = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
     expect(second.ok).toBe(true);
     expect(second.uploaded).toBe(0);
     expect(second.skipped).toBe(7);
@@ -119,7 +134,12 @@ describe('catalog publish pipeline (AC-1)', () => {
     const hThrust = [...client.objects.keys()];
     void hThrust;
     // Simulate a partial run: pre-populate the bucket with 2 of the 4 assets.
-    const first = await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    const first = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
     const assetKeys = [...client.objects.keys()].filter((k) => k.startsWith('assets/'));
     // Remove half the objects to simulate an interrupted run.
     const halfCount = Math.floor(assetKeys.length / 2);
@@ -127,7 +147,12 @@ describe('catalog publish pipeline (AC-1)', () => {
       client.objects.delete(key);
     }
 
-    const resume = await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    const resume = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
     expect(resume.ok).toBe(true);
     expect(resume.uploaded).toBe(halfCount);
     expect(resume.skipped).toBe(assetKeys.length - halfCount);
@@ -140,7 +165,12 @@ describe('catalog publish pipeline (AC-1)', () => {
 
   test('writes the index only after every asset upload succeeds', async () => {
     client.failOnKey = 'assets/';
-    const report = await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    const report = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
     // All asset uploads fail → run fails.
     expect(report.ok).toBe(false);
     expect(report.failed).toBeGreaterThan(0);
@@ -171,7 +201,12 @@ describe('catalog publish pipeline (AC-1)', () => {
     hashes.hashes['music:combat:uncredited'] = { hash: 'a'.repeat(64), sizeBytes: 1 };
     w(hashesPath, JSON.stringify(hashes));
 
-    const report = await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    const report = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
 
     expect(report.ok).toBe(false);
     expect(report.unresolvedTags).toContain('music:combat:uncredited');

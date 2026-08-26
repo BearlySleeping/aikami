@@ -47,7 +47,12 @@ import { validatePostconditions } from './postconditions.ts';
 import { loadReviewPrompt, type ReviewProfile } from './prompt_loader.ts';
 import { chimeOnFirstResponse } from './review_alarm.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
-import { MAX_VERIFY_LOOPS, resolveNextStage, transition } from './state_machine.ts';
+import {
+  MAX_BLOCKED_ESCALATIONS,
+  MAX_VERIFY_LOOPS,
+  resolveNextStage,
+  transition,
+} from './state_machine.ts';
 import type {
   ContractPipelineStage,
   ContractReviewDecision,
@@ -400,13 +405,26 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
   } else {
     lines.push('Reason: Pipeline blocked — no reason recorded.');
   }
-  lines.push('');
-  const lastVerify = [...manifest.attempts]
-    .reverse()
-    .find((a) => a.stage === 'verify' && a.result?.findings?.length);
-  if (lastVerify?.result?.findings?.length) {
-    lines.push('Last verifier findings:');
-    for (const f of lastVerify.result.findings) {
+  // 🔴 A supervisor-written verdict is NOT the worker's own conclusion. Say
+  // so plainly — the C-442 banner read like the verifier had found 10 real
+  // defects when in fact a detector had killed a session that then passed.
+  const halted = [...manifest.attempts].reverse().find((a) => a.result?.haltedBy)?.result;
+  if (halted?.haltedBy) {
+    lines.push(
+      `⚠️  This verdict was written by the ${halted.haltedBy} supervisor, not by the`,
+      `    ${halted.stage} itself — the worker never produced its own result within the`,
+      `    settle window. Treat the stage as UNFINISHED, not as failed on the merits.`,
+      '',
+    );
+  }
+
+  // Findings from the LAST stage that produced any — previously hard-coded to
+  // `verify`, so a run blocked in `implement` or `critique` printed the stale
+  // findings of an older verify attempt (or nothing at all).
+  const lastWithFindings = [...manifest.attempts].reverse().find((a) => a.result?.findings?.length);
+  if (lastWithFindings?.result?.findings?.length) {
+    lines.push(`Last ${lastWithFindings.result.stage} findings:`);
+    for (const f of lastWithFindings.result.findings) {
       lines.push(`  ${severityIcon(f)} ${f}`);
     }
     lines.push('');
@@ -416,7 +434,10 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
   );
   if (impl.length > 0) {
     const all = [...new Set(impl.flatMap((a) => a.result?.filesTouched ?? []))].sort();
-    lines.push('Files needing fixes:');
+    // Not a defect list: this is everything the implementer reported touching.
+    // Labelling it "files needing fixes" sent people hunting for bugs in files
+    // that were simply edited.
+    lines.push('Files this run touched (context, not a defect list):');
     for (const f of all.slice(0, 10)) {
       lines.push(`  📄 ${f}`);
     }
@@ -425,11 +446,18 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
     }
     lines.push('');
   }
+  if (manifest.worktreeCheckoutPath) {
+    lines.push('Work in progress is preserved at:', `  ${manifest.worktreeCheckoutPath}`);
+    if (manifest.worktreeBranch) {
+      lines.push(`  branch: ${manifest.worktreeBranch}`);
+    }
+    lines.push('');
+  }
   lines.push(
     'Next steps:',
-    `  1. Fix the issues above manually in the codebase`,
-    `  2. Run:  bun contract ${manifest.contractId} --fresh`,
-    `  3. Or reset the contract status to 'implemented' and re-run without --fresh`,
+    `  1. Inspect the worktree above — the implementer's work is still there`,
+    `  2. Resume this run:  bun contract --resume ${manifest.runId}`,
+    `  3. Or start over:    bun contract ${manifest.contractId} --fresh`,
     '',
     hr,
     '',
@@ -1188,12 +1216,14 @@ export const runContractPipeline = async (options: {
           currentStage: stage,
           verdict: result,
           verifyLoops: manifest.verifyLoops,
+          blockedEscalations: manifest.blockedEscalations,
         });
         const exhausted =
           stage === 'verify' &&
           result.status === 'changes_requested' &&
           next.verifyLoops >= MAX_VERIFY_LOOPS;
         manifest.verifyLoops = next.verifyLoops;
+        manifest.blockedEscalations = next.blockedEscalations;
 
         // 🔴 When verifier loop is exhausted, always go to review — never block.
         // - YOLO: force reconcile + YOLO review (Captain creates PR, autofix, merges).
@@ -1226,6 +1256,26 @@ export const runContractPipeline = async (options: {
           }
           manifest = transition({ manifest, next: 'review' });
         } else {
+          // 🔴 A blocked/failed worker verdict now escalates to the review
+          // captain instead of ending the run silently (see resolveNextStage).
+          // `blockedReason` is what turns that into a BLOCKED review — the
+          // captain is briefed with the failure instead of being handed a
+          // clean "please review this PR" it cannot make sense of.
+          if (next.escalated) {
+            manifest.blockedReason = `${stage} stage ${result.status}: ${result.summary}`;
+            const haltNote = result.haltedBy
+              ? ` (halted by ${result.haltedBy}, worker never produced its own verdict)`
+              : '';
+            console.warn(
+              `\n⚠️  ${stage} reported ${result.status}${haltNote} — escalating to review ` +
+                `(${next.blockedEscalations}/${MAX_BLOCKED_ESCALATIONS}) rather than ending the run.\n`,
+            );
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `${stage}-${attempt} ${result.status}${haltNote} — escalated to review.`,
+            });
+          }
           manifest = transition({ manifest, next: next.next });
           if (manifest.currentStage === 'blocked') {
             manifest.blockedReason = result.summary;
@@ -1689,6 +1739,11 @@ export const runContractPipeline = async (options: {
       const s = formatBlockedSummary(manifest);
       pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: s });
       console.log(s);
+      // 🔴 A blocked run used to end in total silence: no chime, no pane, just
+      // a banner in a background tab nobody was looking at. Every OTHER
+      // terminal outcome makes a sound (the review chime, the crash chime), so
+      // the one outcome that actually needs a human was the only silent one.
+      playError();
       const infraNotes = formatInfraNotesForPrompt(
         summarizeInfraIssues(readInfraIssuesForRun(options.repoRoot, manifest.runId)),
       );

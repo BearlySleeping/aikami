@@ -43,6 +43,7 @@ const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
 const GAME_DATA_DIR = join(REPO_ROOT, 'apps/frontend/client/static/game-data');
 const SEED_PATH = join(GAME_DATA_DIR, 'asset_seed.json');
 const OFFLINE_CORE_PATH = join(GAME_DATA_DIR, 'offline_core.json');
+const CONTENT_PACKS_DIR = join(REPO_ROOT, 'content/packs');
 
 // ---------------------------------------------------------------------------
 // Generation
@@ -117,11 +118,19 @@ const validateOfflineCore = async (options: {
       problems.push(`${tag}: declared offline-core but absent from the seed`);
       continue;
     }
-    const path = join(GAME_DATA_DIR, tagToAssetPath({ tag, ext: row.e }));
+    // Check both game-data and content-packs directories
+    const gameDataPath = join(GAME_DATA_DIR, tagToAssetPath({ tag, ext: row.e }));
+    const contentPacksPath = join(CONTENT_PACKS_DIR, tagToAssetPath({ tag, ext: row.e }));
     try {
-      await readFile(path);
+      await readFile(gameDataPath);
     } catch {
-      problems.push(`${tag}: declared offline-core but not bundled at ${path}`);
+      try {
+        await readFile(contentPacksPath);
+      } catch {
+        problems.push(
+          `${tag}: declared offline-core but not bundled at ${gameDataPath} or ${contentPacksPath}`,
+        );
+      }
     }
   }
 
@@ -161,6 +170,28 @@ if (values.write) {
       `⚠ Skipped ${skipped.length} tag(s) with no hash entry, e.g. ${skipped.slice(0, 3).join(', ')}`,
     );
   }
+
+  // Also load content-pack tags so offline-core tags (emberwatch:*) resolve
+  const contentPacksManifestPath = join(CONTENT_PACKS_DIR, 'manifest.json');
+  const contentPacksHashesPath = join(CONTENT_PACKS_DIR, 'asset_hashes.json');
+  try {
+    const cpManifest = await readJson<AssetManifest>(contentPacksManifestPath);
+    const cpHashes = await readJson<AssetHashesFile>(contentPacksHashesPath);
+    const { rows: cpRows, skipped: cpSkipped } = buildRows({
+      manifest: cpManifest,
+      hashes: cpHashes,
+    });
+    rows.push(...cpRows);
+    if (cpSkipped.length > 0) {
+      log.warn(
+        `⚠ Content-packs skipped ${cpSkipped.length} tag(s) with no hash entry, e.g. ${cpSkipped.slice(0, 3).join(', ')}`,
+      );
+    }
+  } catch {
+    log.warn('⚠ Content-packs manifest not found — skipping content-pack tags in seed');
+  }
+
+  rows.sort((a, b) => a.t.localeCompare(b.t));
 
   seed = {
     sv: 1,

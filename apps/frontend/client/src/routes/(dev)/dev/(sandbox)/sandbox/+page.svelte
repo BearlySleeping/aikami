@@ -213,7 +213,7 @@ const devActions = [
       // emits MAP_ENTERED (advancing quests), and the player can walk up
       // to Rollo. Works before OR after accepting the quest.
       await canvasVm.loadMap({
-        mapUrl: '/content-packs/emberwatch/maps/inn.json',
+        mapUrl: '/emberwatch/maps/inn.json',
         targetX: 256,
         targetY: 320,
         defeatedEnemies: [...(worldStateService.defeatedEnemies as string[])],
@@ -224,7 +224,7 @@ const devActions = [
     label: '🏘️ Back to Village (Map)',
     onClick: async () => {
       await canvasVm.loadMap({
-        mapUrl: '/content-packs/emberwatch/maps/village.json',
+        mapUrl: '/emberwatch/maps/village.json',
         targetX: 320,
         targetY: 576,
         defeatedEnemies: [...(worldStateService.defeatedEnemies as string[])],

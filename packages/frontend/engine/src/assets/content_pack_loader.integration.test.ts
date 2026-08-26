@@ -372,12 +372,13 @@ const emberwatchManifest = {
 };
 
 // ---------------------------------------------------------------------------
-// Fetch mock: only responds to /content-packs/emberwatch/manifest.json
+// Fetch mock: only responds to /emberwatch/manifest.json (the default
+// basePath is empty — see content_pack_loader.ts's loadContentPack doc).
 // ---------------------------------------------------------------------------
 
 const createEmberwatchFetch = () =>
   mock(async (url: string) => {
-    if (url === '/content-packs/emberwatch/manifest.json') {
+    if (url === '/emberwatch/manifest.json') {
       return new Response(JSON.stringify(emberwatchManifest), { status: 200 });
     }
     return new Response('Not Found', { status: 404 });
@@ -809,7 +810,7 @@ describe('ContentPackLoader — Emberwatch v2.0.0 Integration', () => {
     };
 
     const fetcher = mock(async (url: string) => {
-      if (url === '/content-packs/legacy-pack/manifest.json') {
+      if (url === '/legacy-pack/manifest.json') {
         return new Response(JSON.stringify(legacyManifest), { status: 200 });
       }
       return new Response('Not Found', { status: 404 });

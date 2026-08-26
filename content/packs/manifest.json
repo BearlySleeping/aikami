@@ -1,5 +1,5 @@
 {
-  "scannedAt": "2026-08-26T09:59:45.595Z",
+  "scannedAt": "2026-08-26T14:59:28.568Z",
   "count": 5,
   "assets": {
     "index": {
@@ -93,6 +93,7 @@
         "path": "index.json",
         "ext": ".json"
       }
-    ]
+    ],
+    "portraits": []
   }
 }
