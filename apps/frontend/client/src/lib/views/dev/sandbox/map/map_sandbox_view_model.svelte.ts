@@ -15,7 +15,9 @@ import {
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
 import type { LpcAnimationState } from '@aikami/lpc';
-import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
+
+const _registryResolver = createRegistryAssetResolver();
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;
@@ -222,7 +224,7 @@ class MapSandboxViewModel
         textureManager: tm,
         recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
+          _registryResolver.resolve(assetId),
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);

@@ -726,19 +726,14 @@ class GameEngineService
       const { GameWorld: EngineGameWorld, TextureManager } = await import(
         '@aikami/frontend/engine'
       );
-      const { getLpcAssetPath, wireLpcUrlResolver } = await import('$lib/data/lpc_asset_catalog');
-      // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
-      // is loaded before the engine boots (idempotent — catalog module scope
-      // also wires it).
-      await wireLpcUrlResolver();
+      const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
+      const registryResolver = createRegistryAssetResolver();
       const { getLpcCatalog } = await import('$lib/data/lpc_asset_catalog');
       const lpcCatalog = getLpcCatalog();
 
       const textureManager = new TextureManager();
 
-      const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
-        getLpcAssetPath(slot, assetId, state as unknown as number),
-      );
+      const pipeline = this._buildLpcPipeline(lpcCatalog.slots, registryResolver);
 
       const playerData = this._buildPlayerData();
 
@@ -957,7 +952,7 @@ class GameEngineService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    getLpcAssetPath: (_slot: string, assetId: string, state: string) => string | null,
+    resolver: import('@aikami/types').AssetResolver,
   ) {
     // C-400: single source of truth — the engine's shared createLpcPipeline
     // (projected catalog + pure resolver + asset URL resolver). The
@@ -966,7 +961,8 @@ class GameEngineService
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
       catalog: projectLpcCatalog(generatedLpcSlots),
-      getLpcAssetPath,
+      getLpcAssetPath: (_slot: string, assetId: string, _state: string): string | null =>
+        resolver.resolve(assetId),
     });
   }
 

@@ -1,17 +1,25 @@
 // apps/frontend/client/src/lib/data/lpc_renderer.ts
-// Single source of truth for LPC texture loading and frame extraction.
-// Used by: LPC dev page, sandbox, game engine, character creation preview.
 //
-// All asset URLs resolve through an injected manifest resolver
-// (setLpcUrlResolver) — the canonical static base is /game-data/lpc/
-// served from the regenerated manifest. No Firebase Storage runtime origin,
-// no /src/lib/assets/ dev-directory references.
+// LPC texture loading and frame extraction — instance-scoped, resolver-injected.
 //
-// Contract: C-372
+// Before C-444 this was a module-level singleton with global caches and a
+// global setter (`setLpcUrlResolver`). Now it is created via
+// `createLpcRenderer({ resolver })` and each instance owns its own caches.
+//
+// Two instances with different resolvers never share texture state.
+//
+// ## PixiJS Assets global cache note
+// PixiJS's own `Assets.load()` is a global cache. Two renderers with different
+// resolvers can still collide inside PixiJS's asset cache if they pass the
+// same URL string. They will not, because the URLs differ by construction —
+// but if a future resolver returns identical URLs, AC-2 must be re-examined.
+//
+// Contract: C-372, C-444
 
 import { resolveLpcSheetGeometry } from '@aikami/frontend/engine/content';
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { lpcStateSuffix } from '@aikami/lpc';
+import type { AssetResolver } from '@aikami/types';
 import { Rectangle, Sprite, Texture } from 'pixi.js';
 import { logger } from '$logger';
 
@@ -40,52 +48,59 @@ export type LpcSheetLayout = import('@aikami/frontend/engine').LpcSheetGeometry;
 export const detectLpcSheetLayout = (sheet: { width: number; height: number }): LpcSheetLayout =>
   resolveLpcSheetGeometry(sheet);
 
-// ── Resolver injection ────────────────────────────────────────────────────
+// ── LPC renderer type ─────────────────────────────────────────────────────
 
 /**
- * Resolves an LPC assetId + animation state to a static URL, or null when
- * unmapped. The state may be a raw filename suffix (e.g. "idle") for the
- * state-fallback path, which does not map to an `LpcAnimationState` value.
- */
-export type LpcUrlResolver = (assetId: string, state: LpcAnimationState | string) => string | null;
-
-let _urlResolver: LpcUrlResolver | null = null;
-
-/**
- * Injects the manifest-backed URL resolver for LPC assets.
+ * Instance-scoped LPC renderer. Created via `createLpcRenderer({ resolver })`.
  *
- * Wired once at bootstrap (game boot/engine services) and by each
- * LPC-rendering ViewModel. Replaces the old Firebase Storage /
- * `/src/lib/assets/` resolution strategies.
- *
- * @param resolver - Function mapping (assetId, state) → static URL or null.
+ * Each instance owns its own sheet, frame, and promise caches. Two instances
+ * with different resolvers never share texture state.
  */
-export const setLpcUrlResolver = (resolver: LpcUrlResolver): void => {
-  _urlResolver = resolver;
+export type LpcRenderer = {
+  /**
+   * Loads a spritesheet for a given asset and animation state.
+   * Caches results. Falls back to Texture.EMPTY on failure or unmapped asset.
+   */
+  loadSheet(assetId: string, state: LpcAnimationState): Promise<Texture>;
+
+  /**
+   * Extracts a single frame from a spritesheet texture.
+   * Caches extracted frames per instance.
+   */
+  extractFrame(sheet: Texture, frame: number, direction: LpcDirection): Texture | null;
+
+  /**
+   * Full pipeline: load sheet + extract frame. Returns a ready-to-use Texture.
+   */
+  getFrameTexture(
+    assetId: string,
+    state: LpcAnimationState,
+    frame: number,
+    direction: LpcDirection,
+  ): Promise<Texture | null>;
+
+  /**
+   * Creates a PixiJS Sprite for an LPC layer.
+   * Returns null if the asset can't be loaded.
+   */
+  createSprite(
+    assetId: string,
+    state: LpcAnimationState,
+    frame: number,
+    direction: LpcDirection,
+    zIndex: number,
+  ): Promise<Sprite | null>;
+
+  /**
+   * Clears all instance caches (useful for testing or memory pressure).
+   */
+  clearCaches(): void;
+
+  /** The resolver this renderer was created with. */
+  readonly resolver: AssetResolver;
 };
 
-/**
- * Resolves an LPC asset URL through the injected resolver.
- *
- * @param assetId - Renderer asset ID (e.g. "body/bodies_male").
- * @param state - Animation state value.
- * @returns The static URL, or null when unmapped / no resolver wired.
- */
-const resolveLpcUrl = (assetId: string, state: LpcAnimationState | string): string | null => {
-  if (_urlResolver) {
-    return _urlResolver(assetId, state);
-  }
-  logger.warn('lpcRenderer:noUrlResolver', { assetId });
-  return null;
-};
-
-// ── Caches ─────────────────────────────────────────────────────────────────
-
-const _sheetCache = new Map<string, Texture>();
-const _sheetPromises = new Map<string, Promise<Texture>>();
-const _frameCache = new Map<string, Texture>();
-
-let _manifestReady = false;
+// ── Per-state fallback chains ─────────────────────────────────────────────
 
 /**
  * Per-state fallback suffix chains tried when the requested state's sheet is
@@ -93,14 +108,6 @@ let _manifestReady = false;
  *
  * The chain ends with `walk` because every weapon/armour asset ships a walk
  * sheet — so a layer degrades to its walk pose instead of vanishing.
- *
- * Context:
- * - Some shield front layers (e.g. `shield/scutum_trim_fg`) only ship `idle`,
- *   so a missing `walk` falls back to a static idle frame.
- * - Most swords (`weapon/sword/saber`, `longsword`, `rapier`) only ship
- *   `walk` + `hurt` at the top level (their slash/thrust lives in non-standard
- *   `attack_*` sub-sheets), so a missing `slash`/`thrust`/`spellcast`/`shoot`
- *   falls back to `walk` and the weapon stays visible.
  */
 const STATE_FALLBACK_CHAINS: Record<string, readonly string[]> = {
   slash: ['idle', 'walk'],
@@ -116,12 +123,6 @@ const DEFAULT_STATE_FALLBACKS: readonly string[] = ['idle', 'walk'];
 /**
  * State-aware asset aliases: when an asset lacks a sheet for a state, render
  * the same state from a sibling asset instead.
- *
- * Some swords (`weapon/sword/saber`, `longsword`, `rapier`) only ship
- * `walk` + `hurt` sheets — their slash animation exists only as malformed
- * `attack_*` sub-sheets. Sibling assets (`scimitar`, `longsword_alt`) have
- * clean walk+slash sheets, so we alias the missing slash state to them. The
- * base asset's own walk sheet (all four directions) is still used for walk.
  */
 const STATE_ASSET_ALIASES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'weapon/sword/longsword': { slash: 'weapon/sword/longsword_alt' },
@@ -129,304 +130,269 @@ const STATE_ASSET_ALIASES: Readonly<Record<string, Readonly<Record<string, strin
   'weapon/sword/rapier': { slash: 'weapon/sword/scimitar' },
 };
 
-// C-428: UNIVERSAL_ANCHOR_OVERRIDES deleted — these hand-tuned per-asset
-// offsets existed only to compensate for the wrong transform (scale: 0.5 +
-// anchor -32). With the fix (scale: 1, anchor -64), the oversize cells are
-// correctly centred and the overrides are unnecessary.
-//
-// If any sword still needs a nudge after this fix, that is a genuine
-// per-asset art offset — record it in Amendments with measurement proof.
+// ── Anchor helper ─────────────────────────────────────────────────────────
 
 /**
  * Returns the sprite anchor (top-left, sprite-local px) for a sheet layout.
  *
  * Delegates to the shared resolver's anchorOffset. Oversize cells use -64,-64
  * and standard cells use -32,-32 — both centre the logical 64px body region.
- *
- * @param layout - The resolved sheet geometry.
- * @returns The anchor offset in sprite-local px.
  */
 export const getLpcSpriteAnchor = (layout: LpcSheetLayout): { x: number; y: number } => ({
   x: layout.anchorOffset.x,
   y: layout.anchorOffset.y,
 });
 
+// ── createLpcRenderer ─────────────────────────────────────────────────────
+
 /**
- * Marks whether the asset manifest has finished loading.
+ * Creates an instance-scoped LPC renderer.
  *
- * Until this is true, an unresolvable URL is treated as *transient* (the
- * manifest may simply not have loaded yet) and is NOT cached, so a later
- * call after the manifest resolves can retry. Once true, a null resolution
- * is a genuinely unmapped asset and is cached as Texture.EMPTY (fallback).
- *
- * @param ready - Whether the manifest is loaded.
+ * @param options.resolver - The AssetResolver to use for URL resolution.
+ * @returns An LpcRenderer instance with its own caches.
  */
-export const setLpcManifestReady = (ready: boolean): void => {
-  _manifestReady = ready;
-  if (ready) {
-    // Drop any Texture.EMPTY entries cached while the manifest was loading,
-    // so a later render attempt resolves them properly.
-    for (const [key, texture] of _sheetCache) {
-      if (texture === Texture.EMPTY) {
-        _sheetCache.delete(key);
+export const createLpcRenderer = (options: { resolver: AssetResolver }): LpcRenderer => {
+  const { resolver } = options;
+
+  // Instance-scoped caches
+  const _sheetCache = new Map<string, Texture>();
+  const _sheetPromises = new Map<string, Promise<Texture>>();
+  const _frameCache = new Map<string, Texture>();
+  let _manifestReady = false;
+
+  logger.debug('lpcRenderer:created', { kind: resolver.kind });
+
+  /**
+   * Marks whether the asset manifest has finished loading.
+   *
+   * Until this is true, an unresolvable URL is treated as *transient* (the
+   * manifest may simply not have loaded yet) and is NOT cached, so a later
+   * call after the manifest resolves can retry. Once true, a null resolution
+   * is a genuinely unmapped asset and is cached as Texture.EMPTY (fallback).
+   */
+  const _setManifestReady = (ready: boolean): void => {
+    _manifestReady = ready;
+    if (ready) {
+      // Drop any Texture.EMPTY entries cached while the manifest was loading,
+      // so a later render attempt resolves them properly.
+      for (const [key, texture] of _sheetCache) {
+        if (texture === Texture.EMPTY) {
+          _sheetCache.delete(key);
+        }
       }
     }
-  }
-};
+  };
 
-// ── Public API ─────────────────────────────────────────────────────────────
+  /**
+   * Resolves an LPC asset URL through the injected resolver.
+   */
+  const _resolveUrl = (assetId: string, state: LpcAnimationState | string): string | null => {
+    const url = resolver.resolve(assetId);
+    if (!url) {
+      logger.warn('lpcRenderer:unresolvable', { assetId, state: String(state) });
+      return null;
+    }
+    return url;
+  };
 
-/**
- * Loads a webp spritesheet for a given asset and animation state.
- * Caches results. Falls back to Texture.EMPTY on failure or unmapped asset.
- *
- * Negative results are only cached once the manifest has loaded (so a
- * not-yet-loaded manifest can retry later); transient Assets.load failures
- * are not cached and retry on subsequent calls. Successful textures are
- * cached permanently.
- */
-/**
- * Low-level sheet loader for a concrete filename suffix.
- *
- * Returns `Texture.EMPTY` on unmapped or failed loads. EMPTY results are only
- * cached by the caller once the manifest is ready (a not-yet-loaded manifest
- * is transient and must be retried).
- */
-async function loadSheetBySuffix(assetId: string, stateSuffix: string): Promise<Texture> {
-  const url = resolveLpcUrl(assetId, stateSuffix);
-  if (!url) {
-    if (!_manifestReady) {
-      // Manifest not loaded yet — treat as transient, do not cache EMPTY.
-      logger.debug('lpcRenderer:manifestNotReady', { assetId, stateSuffix });
+  /**
+   * Low-level sheet loader for a concrete filename suffix.
+   */
+  const _loadSheetBySuffix = async (assetId: string, stateSuffix: string): Promise<Texture> => {
+    const url = resolver.resolve(assetId);
+    if (!url) {
+      if (!_manifestReady) {
+        // Manifest not loaded yet — treat as transient, do not cache EMPTY.
+        logger.debug('lpcRenderer:manifestNotReady', { assetId, stateSuffix });
+        return Texture.EMPTY;
+      }
+      logger.warn('lpcRenderer:unmapped', { assetId, stateSuffix });
       return Texture.EMPTY;
     }
-    logger.warn('lpcRenderer:unmapped', { assetId, stateSuffix });
-    return Texture.EMPTY;
-  }
-  try {
-    const { Assets } = await import('pixi.js');
-    const texture = await Assets.load(url);
-    texture.source.scaleMode = 'nearest';
-    return texture;
-  } catch (err) {
-    logger.warn('lpcRenderer:loadFailed', { assetId, stateSuffix, url, error: String(err) });
-    // Transient failure — do not permanently cache EMPTY; a later call retries.
-    return Texture.EMPTY;
-  }
-}
+    try {
+      const { Assets } = await import('pixi.js');
+      const texture = await Assets.load(url);
+      texture.source.scaleMode = 'nearest';
+      return texture;
+    } catch (err) {
+      logger.warn('lpcRenderer:loadFailed', { assetId, stateSuffix, url, error: String(err) });
+      // Transient failure — do not permanently cache EMPTY; a later call retries.
+      return Texture.EMPTY;
+    }
+  };
 
-export async function loadLpcSheet(assetId: string, state: LpcAnimationState): Promise<Texture> {
-  const stateSuffix = lpcStateSuffix(state);
-  const key = `${assetId}.${stateSuffix}`;
+  const loadSheet = async (assetId: string, state: LpcAnimationState): Promise<Texture> => {
+    const stateSuffix = lpcStateSuffix(state);
+    const key = `${assetId}.${stateSuffix}`;
 
-  const cached = _sheetCache.get(key);
-  if (cached) {
-    return cached;
-  }
-
-  const pending = _sheetPromises.get(key);
-  if (pending) {
-    return pending;
-  }
-
-  const promise = (async () => {
-    const primary = await loadSheetBySuffix(assetId, stateSuffix);
-    if (primary !== Texture.EMPTY) {
-      _sheetCache.set(key, primary);
-      return primary;
+    const cached = _sheetCache.get(key);
+    if (cached) {
+      return cached;
     }
 
-    // State-aware asset alias: when this asset has no sheet for the state,
-    // render the same state from a configured sibling asset (e.g. the saber's
-    // slash comes from the scimitar's slash sheet). Only attempted once the
-    // manifest is loaded (permanent unmapped, not transient).
-    if (_manifestReady) {
-      const aliasAssetId = STATE_ASSET_ALIASES[assetId]?.[stateSuffix];
-      if (aliasAssetId && aliasAssetId !== assetId) {
-        const aliasSheet = await loadSheetBySuffix(aliasAssetId, stateSuffix);
-        if (aliasSheet !== Texture.EMPTY) {
-          logger.warn('lpcRenderer:stateAssetAlias', {
-            assetId,
-            requested: stateSuffix,
-            alias: aliasAssetId,
-          });
-          _sheetCache.set(key, aliasSheet);
-          return aliasSheet;
+    const pending = _sheetPromises.get(key);
+    if (pending) {
+      return pending;
+    }
+
+    const promise = (async () => {
+      const primary = await _loadSheetBySuffix(assetId, stateSuffix);
+      if (primary !== Texture.EMPTY) {
+        _sheetCache.set(key, primary);
+        return primary;
+      }
+
+      // State-aware asset alias: when this asset has no sheet for the state,
+      // render the same state from a configured sibling asset.
+      if (_manifestReady) {
+        const aliasAssetId = STATE_ASSET_ALIASES[assetId]?.[stateSuffix];
+        if (aliasAssetId && aliasAssetId !== assetId) {
+          const aliasSheet = await _loadSheetBySuffix(aliasAssetId, stateSuffix);
+          if (aliasSheet !== Texture.EMPTY) {
+            logger.warn('lpcRenderer:stateAssetAlias', {
+              assetId,
+              requested: stateSuffix,
+              alias: aliasAssetId,
+            });
+            _sheetCache.set(key, aliasSheet);
+            return aliasSheet;
+          }
         }
       }
-    }
 
-    // State fallback: when the requested state's sheet is missing and the
-    // manifest is loaded (permanent unmapped, not transient), walk the
-    // per-state fallback chain (idle → walk) so the layer degrades to a
-    // static or walk pose instead of vanishing (e.g. `slash` on a saber,
-    // `walk` on a shield front layer).
-    if (_manifestReady && stateSuffix !== 'idle') {
-      const chain = STATE_FALLBACK_CHAINS[stateSuffix] ?? DEFAULT_STATE_FALLBACKS;
-      for (const fallbackSuffix of chain) {
-        if (fallbackSuffix === stateSuffix) {
-          continue;
-        }
-        const fallback = await loadSheetBySuffix(assetId, fallbackSuffix);
-        if (fallback !== Texture.EMPTY) {
-          logger.warn('lpcRenderer:stateFallback', {
-            assetId,
-            requested: stateSuffix,
-            fallback: fallbackSuffix,
-          });
-          // Cache the successful fallback against the requested key so
-          // subsequent calls resolve in one hop (the manifest is static).
-          _sheetCache.set(key, fallback);
-          return fallback;
+      // State fallback: when the requested state's sheet is missing and the
+      // manifest is loaded, walk the per-state fallback chain.
+      if (_manifestReady && stateSuffix !== 'idle') {
+        const chain = STATE_FALLBACK_CHAINS[stateSuffix] ?? DEFAULT_STATE_FALLBACKS;
+        for (const fallbackSuffix of chain) {
+          if (fallbackSuffix === stateSuffix) {
+            continue;
+          }
+          const fallback = await _loadSheetBySuffix(assetId, fallbackSuffix);
+          if (fallback !== Texture.EMPTY) {
+            logger.warn('lpcRenderer:stateFallback', {
+              assetId,
+              requested: stateSuffix,
+              fallback: fallbackSuffix,
+            });
+            _sheetCache.set(key, fallback);
+            return fallback;
+          }
         }
       }
+
+      // Genuinely missing everywhere — cache EMPTY only once the manifest is
+      // loaded so a later manifest revision can still resolve it.
+      if (_manifestReady) {
+        _sheetCache.set(key, Texture.EMPTY);
+      }
+      return Texture.EMPTY;
+    })();
+
+    _sheetPromises.set(key, promise);
+    void promise.finally(() => {
+      _sheetPromises.delete(key);
+    });
+    return promise;
+  };
+
+  const extractFrame = (sheet: Texture, frame: number, direction: LpcDirection): Texture | null => {
+    if (sheet === Texture.EMPTY) {
+      return null;
     }
 
-    // Genuinely missing everywhere — cache EMPTY only once the manifest is
-    // loaded so a later manifest revision can still resolve it.
-    if (_manifestReady) {
-      _sheetCache.set(key, Texture.EMPTY);
+    const layout = detectLpcSheetLayout(sheet);
+
+    const col = frame % layout.columns;
+    const row = layout.rows > 1 ? direction % layout.rows : 0;
+    const x = col * layout.pitch;
+    const y = row * layout.pitch;
+
+    if (x + layout.pitch > sheet.width || y + layout.pitch > sheet.height) {
+      return null;
     }
-    return Texture.EMPTY;
-  })();
 
-  _sheetPromises.set(key, promise);
-  void promise.finally(() => {
-    // Release the in-flight entry once settled so failed/transient loads
-    // can retry on a later call (successful results hit _sheetCache first).
-    _sheetPromises.delete(key);
-  });
-  return promise;
-}
+    const cacheKey = `${sheet.uid}:${col}:${row}:${layout.pitch}`;
+    const cached = _frameCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
 
-/**
- * Extracts a single frame from a spritesheet texture.
- *
- * Auto-detects the sheet layout (standard 64px vs universal 128px cells) so
- * both families resolve to the correct cell.
- *
- * @param sheet    - The full spritesheet texture
- * @param frame    - Animation frame index (column)
- * @param direction - Facing direction (row)
- * @returns The extracted cell texture, or null when out of bounds / empty.
- */
-export function extractLpcFrame(
-  sheet: Texture,
-  frame: number,
-  direction: LpcDirection,
-): Texture | null {
-  if (sheet === Texture.EMPTY) {
-    return null;
-  }
+    const result = new Texture({
+      source: sheet.source,
+      frame: new Rectangle(x, y, layout.pitch, layout.pitch),
+    });
+    _frameCache.set(cacheKey, result);
+    return result;
+  };
 
-  const layout = detectLpcSheetLayout(sheet);
+  const getFrameTexture = async (
+    assetId: string,
+    state: LpcAnimationState,
+    frame: number,
+    direction: LpcDirection,
+  ): Promise<Texture | null> => {
+    const stateSuffix = lpcStateSuffix(state);
+    const frameKey = `${assetId}.${stateSuffix}:${frame}:${direction}`;
 
-  const col = frame % layout.columns;
-  const row = layout.rows > 1 ? direction % layout.rows : 0;
-  const x = col * layout.pitch;
-  const y = row * layout.pitch;
+    const cached = _frameCache.get(frameKey);
+    if (cached) {
+      return cached;
+    }
 
-  if (x + layout.pitch > sheet.width || y + layout.pitch > sheet.height) {
-    return null;
-  }
+    const sheet = await loadSheet(assetId, state);
+    if (!sheet || sheet === Texture.EMPTY) {
+      return null;
+    }
 
-  const cacheKey = `${sheet.uid}:${col}:${row}:${layout.pitch}`;
-  const cached = _frameCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
+    const result = extractFrame(sheet, frame, direction);
+    if (result) {
+      _frameCache.set(frameKey, result);
+    }
+    return result;
+  };
 
-  const result = new Texture({
-    source: sheet.source,
-    frame: new Rectangle(x, y, layout.pitch, layout.pitch),
-  });
-  _frameCache.set(cacheKey, result);
-  return result;
-}
+  const createSprite = async (
+    assetId: string,
+    state: LpcAnimationState,
+    frame: number,
+    direction: LpcDirection,
+    zIndex: number,
+  ): Promise<Sprite | null> => {
+    const sheet = await loadSheet(assetId, state);
+    if (!sheet || sheet === Texture.EMPTY) {
+      return null;
+    }
 
-/**
- * Full pipeline: load sheet + extract frame. Returns a ready-to-use Texture.
- * Caches both the sheet and the extracted frame.
- */
-export async function getLpcFrameTexture(
-  assetId: string,
-  state: LpcAnimationState,
-  frame: number,
-  direction: LpcDirection,
-): Promise<Texture | null> {
-  const stateSuffix = lpcStateSuffix(state);
-  const frameKey = `${assetId}.${stateSuffix}:${frame}:${direction}`;
+    const texture = extractFrame(sheet, frame, direction);
+    if (!texture) {
+      return null;
+    }
 
-  const cached = _frameCache.get(frameKey);
-  if (cached) {
-    return cached;
-  }
+    const layout = detectLpcSheetLayout(sheet);
+    const anchor = getLpcSpriteAnchor(layout);
+    const sprite = new Sprite(texture);
+    sprite.eventMode = 'none';
+    sprite.x = anchor.x;
+    sprite.y = anchor.y;
+    sprite.scale.set(layout.scale, layout.scale);
+    sprite.alpha = 1.0;
+    sprite.zIndex = zIndex;
+    return sprite;
+  };
 
-  const sheet = await loadLpcSheet(assetId, state);
-  if (!sheet || sheet === Texture.EMPTY) {
-    return null;
-  }
+  const clearCaches = (): void => {
+    _sheetCache.clear();
+    _sheetPromises.clear();
+    _frameCache.clear();
+  };
 
-  const result = extractLpcFrame(sheet, frame, direction);
-  if (result) {
-    _frameCache.set(frameKey, result);
-  }
-  return result;
-}
-
-/**
- * Creates a PixiJS Sprite for an LPC layer.
- * Returns null if the asset can't be loaded.
- *
- * Universal (128px-cell) sheets are scaled down so the sprite matches the
- * 64px logical frame size of standard sheets.
- */
-export async function createLpcSprite(
-  assetId: string,
-  state: LpcAnimationState,
-  frame: number,
-  direction: LpcDirection,
-  zIndex: number,
-): Promise<Sprite | null> {
-  const sheet = await loadLpcSheet(assetId, state);
-  if (!sheet || sheet === Texture.EMPTY) {
-    return null;
-  }
-
-  const texture = extractLpcFrame(sheet, frame, direction);
-  if (!texture) {
-    return null;
-  }
-
-  const layout = detectLpcSheetLayout(sheet);
-  const anchor = getLpcSpriteAnchor(layout);
-  const sprite = new Sprite(texture);
-  sprite.eventMode = 'none';
-  // Anchor at the cell's logical origin — oversize cells use -64,-64 so the
-  // centred 64px body region lands where a standard 64px cell would.
-  sprite.x = anchor.x;
-  sprite.y = anchor.y;
-  // C-428: scale is always 1. Oversize cells are drawn at native size;
-  // the anchor offset handles centring. No downscaling needed.
-  sprite.scale.set(layout.scale, layout.scale);
-  sprite.alpha = 1.0;
-  sprite.zIndex = zIndex;
-  return sprite;
-}
-
-/**
- * Resolves the static URL for an LPC asset via the injected manifest resolver.
- *
- * Returns null when the asset is not present in the manifest — callers must
- * degrade gracefully (default sprite or layer omission). Never fabricates URLs.
- */
-export function getLpcAssetPath(assetId: string, state: LpcAnimationState): string | null {
-  return resolveLpcUrl(assetId, state);
-}
-
-/** Clears all caches (useful for testing or memory pressure). */
-export function clearLpcCaches(): void {
-  _sheetCache.clear();
-  _sheetPromises.clear();
-  _frameCache.clear();
-}
+  return {
+    loadSheet,
+    extractFrame,
+    getFrameTexture,
+    createSprite,
+    clearCaches,
+    resolver,
+  };
+};

@@ -1,6 +1,6 @@
 // packages/frontend/engine/src/assets/map_loader.ts
 
-import type { PackConfig } from '@aikami/types';
+import type { AssetResolver, PackConfig } from '@aikami/types';
 import { logger } from '$logger';
 import type { CollisionGrid } from '../systems/collision_system.ts';
 import {
@@ -223,12 +223,16 @@ export const DEFAULT_TILEMAP_BAND: TilemapBand = 'ground';
  * caller can fetch — a cached blob URL, an origin URL, or a bundled static
  * path. Returns null when the tag is unknown, so the caller can fall back.
  */
-export type AssetTagResolver = (tag: string) => string | null;
+/**
+ * @deprecated Use `AssetResolver['resolve']` from @aikami/types instead.
+ *   Kept as an alias so C-434 call sites keep compiling unchanged.
+ */
+export type AssetTagResolver = AssetResolver['resolve'];
 
 /** Options both loaders gain, alongside their existing fields. */
 export type RegistryBackedLoadOptions = {
   /** Injected by the client composition root; absent in tests and headless use. */
-  resolveTag?: AssetTagResolver;
+  resolveTag?: AssetResolver | AssetTagResolver;
   /** Released after the fetched bytes are parsed, to revoke refcounted blob URLs. */
   releaseUrl?: (url: string) => void;
 };
@@ -266,7 +270,9 @@ export const loadTilemap = async (options: MapLoaderOptions): Promise<TilemapDat
 
   // C-434: resolve the URL through the asset registry when a resolver is
   // provided — cache blob URL, origin URL, or bundled static path.
-  const resolvedUrl = resolveTag ? (resolveTag(url) ?? url) : url;
+  const resolvedUrl = resolveTag
+    ? ((typeof resolveTag === 'function' ? resolveTag(url) : resolveTag.resolve(url)) ?? url)
+    : url;
   const fetcher = options.fetch ?? globalThis.fetch;
 
   let response: Response;
@@ -396,7 +402,9 @@ export const loadJtonMap = async (options: JtonMapLoaderOptions): Promise<Tilema
 
   // C-434: resolve the URL through the asset registry when a resolver is
   // provided — cache blob URL, origin URL, or bundled static path.
-  const resolvedUrl = resolveTag ? (resolveTag(url) ?? url) : url;
+  const resolvedUrl = resolveTag
+    ? ((typeof resolveTag === 'function' ? resolveTag(url) : resolveTag.resolve(url)) ?? url)
+    : url;
   const fetcher = options.fetch ?? globalThis.fetch;
 
   let response: Response;

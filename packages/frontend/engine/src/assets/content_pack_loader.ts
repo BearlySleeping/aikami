@@ -8,6 +8,7 @@
 
 import { ContentPackManifestSchema, normaliseLegacyStep } from '@aikami/schemas';
 import type {
+  AssetResolver,
   ContentPackCredits,
   ContentPackEncounterEntry,
   ContentPackItemEntry,
@@ -20,7 +21,6 @@ import type {
 import { toAppError } from '@aikami/utils';
 import { Value } from 'typebox/value';
 import { logger } from '$logger';
-import type { AssetTagResolver } from './map_loader.ts';
 
 // ---------------------------------------------------------------------------
 // ContentPackLoaderInterface — the loaded pack accessor
@@ -297,7 +297,7 @@ export const loadContentPack = async (options: {
   packId: string;
   basePath?: string;
   fetchFn?: typeof fetch;
-  resolveTag?: AssetTagResolver;
+  resolveTag?: AssetResolver | ((tag: string) => string | null);
   releaseUrl?: (url: string) => void;
 }): Promise<ContentPackLoaderInterface> => {
   const { packId, basePath = '', fetchFn, resolveTag, releaseUrl } = options;
@@ -314,7 +314,11 @@ export const loadContentPack = async (options: {
 
   // C-434: resolve the manifest URL through the asset registry when a
   // resolver is provided.
-  const resolvedManifestUrl = resolveTag ? (resolveTag(manifestUrl) ?? manifestUrl) : manifestUrl;
+  const resolvedManifestUrl = resolveTag
+    ? ((typeof resolveTag === 'function'
+        ? resolveTag(manifestUrl)
+        : resolveTag.resolve(manifestUrl)) ?? manifestUrl)
+    : manifestUrl;
 
   logger.debug('loadContentPack:fetching', {
     packId,

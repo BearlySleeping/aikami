@@ -15,7 +15,9 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { LpcAnimationState } from '@aikami/lpc';
-import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
+
+const _registryResolver = createRegistryAssetResolver();
 import { playSfxByName } from '$lib/services/audio/audio_asset_resolver';
 import {
   CombatDevViewModel,
@@ -191,7 +193,7 @@ class CombatSandboxViewModel
         workerFactory: () => new workerCtor(),
         recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
+          _registryResolver.resolve(assetId),
         textureManager: this._textureManager,
       };
 

@@ -10,7 +10,9 @@ import {
 } from '@aikami/frontend/services';
 import { LpcAnimationState } from '@aikami/lpc';
 import type { ItemDefinition } from '@aikami/types';
-import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
+
+const _registryResolver = createRegistryAssetResolver();
 import { gameOverlayService, vendorService } from '$services';
 import type { VendorSessionOptions as _VendorSessionOptions } from '$types';
 
@@ -129,7 +131,7 @@ class VendorViewModel
     if (!lpcAssetId) {
       return undefined;
     }
-    return getLpcAssetPath('', lpcAssetId, LpcAnimationState.Walk) ?? undefined;
+    return _registryResolver.resolve(lpcAssetId) ?? undefined;
   }
 
   /** Item ID awaiting sell confirmation (C-331 AC-3). */
