@@ -48,6 +48,16 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
                 <progress class="progress progress-primary w-full"></progress>
               {/if}
             </div>
+          {:else if viewModel.canDownloadAllAssets}
+            <div class="w-64 mx-auto mb-6 text-center">
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                onclick={() => viewModel.downloadAllAssets()}
+              >
+                Download all assets for offline play
+              </button>
+            </div>
           {/if}
 
           <!-- Menu Buttons -->

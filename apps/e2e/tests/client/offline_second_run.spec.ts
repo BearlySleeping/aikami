@@ -32,7 +32,8 @@ test.describe('C-448 AC-5: Offline Second Run', () => {
     const canvas = page.locator('#game-canvas-container canvas');
     await expect(canvas).toBeAttached({ timeout: 60000 });
 
-    // Wait a bit more for warming cache to make progress
+    // Wait a bit more for on-demand asset fetches (map, sprites) to settle —
+    // full-catalog warming is opt-in only and not exercised by this test.
     await page.waitForTimeout(5000);
 
     // ── Phase 2: Reload with network blocked ──

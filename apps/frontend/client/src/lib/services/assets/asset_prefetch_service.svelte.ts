@@ -1,11 +1,14 @@
 // apps/frontend/client/src/lib/services/assets/asset_prefetch_service.svelte.ts
 //
 // AssetPrefetchService — single shared owner of the "download the game's
-// content" pipeline: opens the asset registry, prefetches the tags required
-// to play (offline core), then warms the rest of the catalog in the
-// background. Both the start-menu screen and the /game boot pipeline call
-// into this same singleton, so a download already running is never started
-// twice — every stage is memoized here rather than duplicated per caller.
+// content" pipeline: opens the asset registry and prefetches the tags
+// required to play (offline core). Warming the rest of the catalog is opt-in
+// only — {@link AssetPrefetchServiceInterface.warmRemaining} must be called
+// explicitly (e.g. a "download all for offline" action) — the pipeline never
+// starts it on its own. Both the start-menu screen and the /game boot
+// pipeline call into this same singleton, so a download already running is
+// never started twice — every stage is memoized here rather than duplicated
+// per caller.
 //
 // Contract: C-448 (background downloading, start-menu entry point)
 
@@ -49,11 +52,15 @@ export type AssetPrefetchServiceInterface = {
   /** Set when the pipeline degraded (network/storage failure) — non-fatal. */
   readonly error: string | undefined;
 
+  /** Whether {@link warmRemaining} has been triggered this session. */
+  readonly warmStarted: boolean;
+
   /**
-   * Starts the full pipeline (registry init → core prefetch → background
-   * warm) if it hasn't started yet this session. Fire-and-forget — safe to
-   * call from multiple mount points (start menu, boot pipeline); later calls
-   * observe the same run via the reactive fields above.
+   * Starts the required-to-play pipeline (registry init → core prefetch) if
+   * it hasn't started yet this session. Fire-and-forget — safe to call from
+   * multiple mount points (start menu, boot pipeline); later calls observe
+   * the same run via the reactive fields above. Does NOT start warming the
+   * rest of the catalog — call {@link warmRemaining} explicitly for that.
    */
   ensureStarted(): void;
 
@@ -78,9 +85,10 @@ export type AssetPrefetchServiceInterface = {
   ): Promise<CorePrefetchResult>;
 
   /**
-   * Starts warming every not-yet-cached catalog tag in the background.
-   * Fire-and-forget and memoized — calling it again while a warm pass is
-   * already running is a no-op; the existing pass keeps going.
+   * Starts warming every not-yet-cached catalog tag in the background. This
+   * is the only entry point for a full-catalog download — nothing calls it
+   * automatically. Fire-and-forget and memoized — calling it again while a
+   * warm pass is already running (or after one finished) is a no-op.
    */
   warmRemaining(onProgress?: (progress: { done: number; total: number }) => void): void;
 };
@@ -94,6 +102,11 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
   private _registryReadyPromise: Promise<RegistryHandle> | undefined;
   private _corePrefetchPromise: Promise<CorePrefetchResult> | undefined;
   private _warmStarted = false;
+
+  /** @inheritdoc */
+  get warmStarted(): boolean {
+    return this._warmStarted;
+  }
 
   ensureStarted(): void {
     void this._runPipeline();
@@ -119,9 +132,9 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
         return;
       }
 
-      this.warmRemaining((progress) => {
-        this.warmProgress = progress;
-      });
+      // Required-to-play content is in. Warming the rest of the catalog is
+      // opt-in only — see warmRemaining, called explicitly by the caller.
+      this.phase = 'ready';
     } catch (err) {
       this.phase = 'degraded';
       this.error = err instanceof Error ? err.message : String(err);
@@ -269,6 +282,7 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
       let warmed = 0;
       let failed = 0;
       let cursor = 0;
+      this.warmProgress = { done: 0, total: toWarm.length };
 
       const runWorker = async (): Promise<void> => {
         for (;;) {
@@ -282,7 +296,9 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
           } catch {
             failed += 1;
           }
-          onProgress?.({ done: warmed + failed, total: toWarm.length });
+          const progress = { done: warmed + failed, total: toWarm.length };
+          this.warmProgress = progress;
+          onProgress?.(progress);
         }
       };
 

@@ -3,8 +3,8 @@
 // ViewModel for the LPC preview component — host-agnostic, no SvelteKit deps.
 // Manages layer selection, animation state, palette overrides, and PixiJS rendering.
 
-import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '@aikami/frontend/engine';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

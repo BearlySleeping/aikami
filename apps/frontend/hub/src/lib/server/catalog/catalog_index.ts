@@ -34,7 +34,7 @@ import {
 } from '@aikami/schemas';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
-import { env } from '$env/dynamic/private';
+import { CATALOG_ORIGIN_URL } from '$app/env/private';
 import { logger } from '$logger';
 import { resolveAssetUrl, resolveThumbnailUrl } from '$utils/catalog.ts';
 
@@ -43,7 +43,7 @@ import { resolveAssetUrl, resolveThumbnailUrl } from '$utils/catalog.ts';
 // ---------------------------------------------------------------------------
 
 /** Origin base URL for the catalog index (injected, never hardcoded). */
-export const catalogOriginUrl = (): string => env.CATALOG_ORIGIN_URL ?? '';
+export const catalogOriginUrl = (): string => CATALOG_ORIGIN_URL ?? '';
 
 /**
  * In-process document cache TTL. Matches the CDN's index cache-control

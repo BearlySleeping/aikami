@@ -19,14 +19,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { LpcAnimationState } from '@aikami/lpc';
-import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
-
-const _registryResolver = createRegistryAssetResolver();
-
-/** Adapter for assetUrlResolver: reads the assetId argument, ignores slot and state. */
-const _assetUrlAdapter = (_slot: string, assetId: string, _state: LpcAnimationState): string | null =>
-  _registryResolver.resolve(assetId);
-
+import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
 import { gameModeService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
@@ -264,7 +257,8 @@ class CameraSandboxViewModel
           layerIds
             .map((id, idx) => (id > 0 ? SandboxRecipes[idx] : null))
             .filter(Boolean) as LpcLayerRecipe[],
-        assetUrlResolver: _assetUrlAdapter,
+        assetUrlResolver: (slot, assetId, state) =>
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GW.create(worldOptions);

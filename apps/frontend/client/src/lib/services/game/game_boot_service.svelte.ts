@@ -16,7 +16,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { AssetResolver, Campaign, PersonaData } from '@aikami/types';
+import type { Campaign, PersonaData } from '@aikami/types';
 import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
@@ -47,7 +47,7 @@ const bootStageLabels: Record<GameBootStage, string> = {
   validating_save: 'Validating save...',
   initializing_asset_registry: 'Preparing assets...',
   prefetching_starter_content: 'Downloading starter content...',
-  warming_cache: 'Starting asset download...',
+  warming_cache: 'Finalizing...',
   preloading_content: 'Loading content pack...',
   creating_engine: 'Starting game engine...',
   hydrating_snapshot: 'Restoring world...',
@@ -765,35 +765,15 @@ class GameBootService
   };
 
   /**
-   * Stage: kick off the shared resumable warming pass ({@link
-   * assetPrefetchService.warmRemaining}) and return immediately (C-435 AC-4).
-   * A no-op if the start-menu screen already started it (C-448).
-   *
-   * The pass itself must NOT block the pipeline. Every boot stage is bounded
-   * by {@link STAGE_TIMEOUT_MS}, and a fresh profile has ~90 MB of de-bundled
-   * assets to fetch — awaiting that here fails the boot by timeout every time,
-   * on every connection. The contract is also explicit that on-demand fetches
-   * take priority over the background pass, which an awaited stage cannot
-   * honour.
-   *
-   * So: start it, report progress through the same `bootProgress` channel, and
-   * let the player into the game on the bundled offline core while it runs.
+   * Stage: deliberate no-op, kept in the pipeline for stage-numbering
+   * stability. Full-catalog warming ({@link
+   * assetPrefetchService.warmRemaining}) is opt-in only — a player action
+   * (e.g. "download all for offline") must trigger it explicitly. Boot never
+   * starts it on its own: on-demand, per-asset fetches already cover
+   * whatever the player encounters while playing on the offline core.
    */
-  private async _stageWarmingCache(generation: number): Promise<void> {
-    const { assetPrefetchService } = await import(
-      '$lib/services/assets/asset_prefetch_service.svelte'
-    );
-    if (generation !== this._bootGeneration) {
-      return;
-    }
-
-    // Deliberately not awaited — see the doc comment above. Memoized on the
-    // service, so this is a no-op if a warm pass is already running.
-    assetPrefetchService.warmRemaining((progress) => {
-      if (generation === this._bootGeneration) {
-        this.bootProgress.detail = `Downloading game assets — ${progress.done}/${progress.total}`;
-      }
-    });
+  private async _stageWarmingCache(_generation: number): Promise<void> {
+    return;
   }
 
   /** Stage: preload content pack manifest + asset bundles. */
@@ -902,8 +882,11 @@ class GameBootService
     const textureManager = new TextureManager();
 
     // Build LPC pipeline
-    const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
-    const registryResolver = createRegistryAssetResolver();
+    const { getLpcAssetPath, wireLpcUrlResolver } = await import('$lib/data/lpc_asset_catalog');
+    // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
+    // is loaded before the engine boots (idempotent — catalog module scope
+    // also wires it).
+    await wireLpcUrlResolver();
     const { getLpcCatalog } = await import('$lib/data/lpc_asset_catalog');
     const lpcCatalog = getLpcCatalog();
     // Check generation after async imports
@@ -911,7 +894,9 @@ class GameBootService
       return;
     }
 
-    const pipeline = this._buildLpcPipeline(lpcCatalog.slots, registryResolver);
+    const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
+      getLpcAssetPath(slot, assetId, state as unknown as number),
+    );
 
     this._gameWorld = (EngineGameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
       className: 'GameWorld',
@@ -1249,7 +1234,7 @@ class GameBootService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    resolver: AssetResolver,
+    getLpcAssetPath: (_slot: string, assetId: string, state: string) => string | null,
   ) {
     // C-400: single source of truth — the engine's shared createLpcPipeline
     // (projected catalog + pure resolver + asset URL resolver). This is the
@@ -1258,8 +1243,7 @@ class GameBootService
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
       catalog: projectLpcCatalog(generatedLpcSlots),
-      getLpcAssetPath: (_slot: string, assetId: string, _state: string): string | null =>
-        resolver.resolve(assetId),
+      getLpcAssetPath,
     });
   }
 

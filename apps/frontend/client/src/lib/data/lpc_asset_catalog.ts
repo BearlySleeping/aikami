@@ -1,13 +1,14 @@
 // apps/frontend/client/src/lib/data/lpc_asset_catalog.ts
 
 import type { LpcCatalog } from '@aikami/lpc';
-import { buildLpcCatalog, LpcAnimationState, LpcDirection } from '@aikami/lpc';
+import { buildLpcCatalog, LpcAnimationState, LpcDirection, lpcTag } from '@aikami/lpc';
+import { setLpcManifestReady, setLpcUrlResolver } from '$lib/data/lpc_renderer';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
 
 // ---------------------------------------------------------------------------
 // LPC Asset Catalog — types for slot definitions and variants.
-// Actual slot data is generated in lpc_asset_catalog_generated.ts from
-// the Universal LPC Spritesheet Character Generator.
+// Actual slot data is derived at runtime from the asset store's seed rows
+// via buildLpcCatalog (see getLpcCatalog below) — not a generated file.
 // ---------------------------------------------------------------------------
 
 /** Shape type for procedural mock sheet generation. */
@@ -74,6 +75,8 @@ export const DIRECTION_OPTIONS: readonly { value: LpcDirection; label: string }[
   { value: LpcDirection.Right, label: 'Right' },
 ];
 
+import { getLpcAssetPath as _getLpcAssetPath } from '$lib/data/lpc_renderer';
+
 // ---------------------------------------------------------------------------
 // Catalog builder — memoised on assetStore seed reference
 // ---------------------------------------------------------------------------
@@ -112,3 +115,49 @@ export const getLpcCatalogPrompt = (catalog: LpcCatalog): string => {
   );
   return parts.join('\n');
 };
+
+// ── Manifest wiring ────────────────────────────────────────────────────────
+
+let _manifestLoadPromise: Promise<void> | null = null;
+
+/**
+ * Wires the manifest-backed LPC URL resolver into the shared renderer and
+ * ensures the asset manifest is loaded before returning.
+ *
+ * Idempotent and deduped — safe to call from every bootstrap / ViewModel
+ * wiring point: the resolver is registered once, and concurrent callers
+ * share a single in-flight manifest fetch. Await this before rendering or
+ * resolving LPC assets so `resolveUrl` never sees a not-yet-loaded manifest
+ * (which would otherwise permanently cache `Texture.EMPTY`).
+ */
+export const wireLpcUrlResolver = async (): Promise<void> => {
+  setLpcUrlResolver((assetId, state) => assetStore.resolveUrl(lpcTag(assetId, state)));
+  if (assetStore.manifest) {
+    setLpcManifestReady(true);
+    return;
+  }
+  if (!_manifestLoadPromise) {
+    _manifestLoadPromise = assetStore.fetchManifest().finally(() => {
+      _manifestLoadPromise = null;
+    });
+  }
+  await _manifestLoadPromise;
+  // Mark the renderer manifest-ready so unmapped lookups can be cached and
+  // transient not-ready results are retried against the loaded manifest.
+  setLpcManifestReady(Boolean(assetStore.manifest));
+};
+
+// Wire once at module scope — every consumer of getLpcAssetPath imports this
+// module, so the resolver is registered before any layer lookup happens.
+// The manifest fetch itself is awaited at each call site via wireLpcUrlResolver().
+void wireLpcUrlResolver();
+
+/**
+ * Asset path resolver for the sandbox/game engine.
+ * Delegates to the shared LPC renderer.
+ */
+export const getLpcAssetPath = (
+  _slot: string,
+  assetId: string,
+  state: LpcAnimationState,
+): string | null => _getLpcAssetPath(assetId, state);

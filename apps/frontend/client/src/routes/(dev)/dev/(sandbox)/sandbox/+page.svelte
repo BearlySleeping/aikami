@@ -3,7 +3,7 @@ import type { QuestData } from '@aikami/frontend/engine/sim';
 // apps/frontend/client/src/routes/(dev)/dev/sandbox/+page.svelte
 // Extends /game — reuses the same GameView + GameViewModel infrastructure,
 // but seeds localStorage with a mock persona so a character loads instantly.
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
 import GameView from '$lib/views/game/game_view.svelte';
 import { getGameViewModel } from '$lib/views/game/game_view_model.svelte';
