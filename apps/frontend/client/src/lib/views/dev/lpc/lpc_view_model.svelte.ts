@@ -105,7 +105,7 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
   readonly canvasHeight: number;
   readonly entityX: number;
   readonly entityY: number;
-  readonly allSlots: typeof _getSlots();
+  readonly allSlots: ReturnType<typeof _getSlots>;
   readonly animationStateOptions: typeof ANIMATION_STATE_OPTIONS;
   readonly directionOptions: typeof DIRECTION_OPTIONS;
 

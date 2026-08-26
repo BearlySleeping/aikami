@@ -5,7 +5,7 @@ import type { LpcCatalog, LpcSlotDefinition, LpcSlotVariant } from './slot_model
 
 /**
  * Folds published catalog entries into the LPC slot catalog.
- * Pure, deterministic, and safe to call with an empty array.
+ * Deterministic, and safe to call with an empty array.
  *
  * Slot derivation is driven by the tag structure, not by a hard-coded list:
  * an entry with tag `lpc:<slot>:<...path>:<state>` contributes `<slot>` and
@@ -100,10 +100,10 @@ export const buildLpcCatalog = (options: {
       variantMap.set(assetId, variant);
     }
 
-    // Add state if not already present
+    // Add state if not already present (sorted for determinism)
     if (!variant.states.includes(state)) {
       // Use spread to create new array (immutable pattern)
-      variant = { ...variant, states: [...variant.states, state] };
+      variant = { ...variant, states: [...variant.states, state].sort() };
       variantMap.set(assetId, variant);
     }
   }
@@ -137,7 +137,7 @@ export const buildLpcCatalog = (options: {
     assetIdsBySlot[slot] = sortedAssetIds;
   }
 
-  logger.info('buildLpcCatalog:complete', {
+  logger.debug('buildLpcCatalog:complete', {
     slotCount: slots.length,
     variantCount: allAssetIds.length,
     entryCount: entries.length,

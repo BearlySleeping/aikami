@@ -3,7 +3,9 @@
 // AC-5: The duplicates are gone.
 
 import { describe, expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const REPO_ROOT = resolve(import.meta.dir, '../../../..');
 
 describe('no duplicate LPC files', () => {
   const deletedFiles = [
@@ -14,8 +16,10 @@ describe('no duplicate LPC files', () => {
   ];
 
   for (const filePath of deletedFiles) {
-    test(`${filePath} does not exist`, () => {
-      expect(existsSync(filePath)).toBe(false);
+    test(`${filePath} does not exist`, async () => {
+      const fullPath = resolve(REPO_ROOT, filePath);
+      const exists = await Bun.file(fullPath).exists();
+      expect(exists).toBe(false);
     });
   }
 });

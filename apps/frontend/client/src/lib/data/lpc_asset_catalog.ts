@@ -97,7 +97,7 @@ export const getLpcCatalog = (): LpcCatalog => {
     _lastSeed = seed.rows;
     _cachedCatalog = buildLpcCatalog({ entries: seed.rows });
   }
-  return _cachedCatalog!;
+  return _cachedCatalog ?? { slots: [], assetIdsBySlot: {}, allAssetIds: [] };
 };
 
 /**

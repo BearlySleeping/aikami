@@ -29,8 +29,10 @@ describe('empty catalog never crashes', () => {
     // Should return 6 recipes (one per slot)
     expect(result.recipes.length).toBe(6);
     // All should use fallbacks since catalog is empty
-    for (const recipe of result.recipes) {
-      expect(recipe.assetId).not.toBe('');
+    for (let index = 0; index < result.recipes.length; index++) {
+      const recipe = result.recipes[index];
+      const slotName = LPC_SLOT_ORDER[index];
+      expect(recipe.assetId).toBe(DEFAULT_LPC_SLOT_FALLBACKS[slotName]);
     }
   });
 

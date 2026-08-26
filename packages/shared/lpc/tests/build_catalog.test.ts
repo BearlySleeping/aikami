@@ -35,8 +35,8 @@ describe('buildLpcCatalog', () => {
     expect(bodySlot!.variants[0].assetId).toBe('body/bodies_female');
     expect(bodySlot!.variants[1].assetId).toBe('body/bodies_male');
 
-    // bodies_male should have 2 states (insertion order preserved)
-    expect(bodySlot!.variants[1].states).toEqual(['walk', 'slash']);
+    // bodies_male should have 2 states (sorted alphabetically)
+    expect(bodySlot!.variants[1].states).toEqual(['slash', 'walk']);
 
     // hair slot
     const hairSlot = result.slots.find((s) => s.slot === 'hair');
@@ -45,8 +45,8 @@ describe('buildLpcCatalog', () => {
     expect(hairSlot!.variants[0].assetId).toBe('hair/bangs_adult');
     expect(hairSlot!.variants[1].assetId).toBe('hair/mohawk');
 
-    // bangs_adult should have 2 states (insertion order preserved)
-    expect(hairSlot!.variants[0].states).toEqual(['walk', 'slash']);
+    // bangs_adult should have 2 states (sorted alphabetically)
+    expect(hairSlot!.variants[0].states).toEqual(['slash', 'walk']);
 
     // allAssetIds should have 4 unique entries
     expect(result.allAssetIds.length).toBe(4);
@@ -117,5 +117,8 @@ describe('buildLpcCatalog', () => {
 
     expect(result1.slots.map((s) => s.slot)).toEqual(result2.slots.map((s) => s.slot));
     expect(result1.allAssetIds).toEqual(result2.allAssetIds);
+    expect(result1.assetIdsBySlot).toEqual(result2.assetIdsBySlot);
+    // Verify complete slot structures match (including variant states)
+    expect(JSON.stringify(result1.slots)).toBe(JSON.stringify(result2.slots));
   });
 });

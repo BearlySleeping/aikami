@@ -7,4 +7,5 @@ export { resolveLpcSheetGeometry, type LpcSheetGeometry, type LpcCellFamily } fr
 export { LPC_LAYER_ORDER, resolveLayerDepth, resetUnknownSlotWarnings, sortLayersByDepth, getMaxKnownDepth, type LpcLayer, type LpcLayerOrderEntry, type LpcSlot } from './lib/layer_order.ts';
 // LpcLayerRole is defined in slot_model.ts; layer_order.ts imports it from there.
 export { resolveLpcAppearance, resetLpcFallbackWarnings, projectLpcCatalog, LPC_SLOT_ORDER, DEFAULT_LPC_SLOT_FALLBACKS, type LpcAppearanceResult, type LpcLayerRecipe, type LpcSlotName, type LpcSlotCatalog, type LpcSlotFallbacks, type LpcSlotResolution, type ResolveLpcAppearanceOptions } from './lib/appearance.ts';
+export { LEGACY_INDEX_REMAP } from './lib/legacy_remap.ts';
 export type { LpcCatalog, LpcSlotDefinition, LpcSlotVariant, LpcLayerRole } from './lib/slot_model.ts';

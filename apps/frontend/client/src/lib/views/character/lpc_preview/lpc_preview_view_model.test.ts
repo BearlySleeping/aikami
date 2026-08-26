@@ -119,8 +119,8 @@ mock.module('@aikami/lpc', () => ({
     Down: 2,
     Right: 3,
   },
-  lpcStateSuffix: () => 'walk',
-  lpcTag: () => 'lpc:test:walk',
+  lpcStateSuffix: (state: string) => state,
+  lpcTag: (assetId: string, state: string) => `lpc:${assetId}:${state}`,
 }));
 
 // C-372: the preview VM now resolves sheets through the manifest-aware
