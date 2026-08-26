@@ -182,6 +182,20 @@ class LpcPreviewViewModel
     if (options.initialState) {
       this._applyPreviewState(options.initialState);
     }
+
+    // Auto-add default required slots when no layers are configured,
+    // so the preview renders a character immediately on first visit.
+    // Uses REQUIRED_LPC_SLOTS (head, body, torso) to match the set that
+    // triggers error banners in the recipes getter.
+    if (this.activeLayers.length === 0 && this.allSlots.length > 0) {
+      const defaults = REQUIRED_LPC_SLOTS
+        .map((slot) => this.allSlots.findIndex((s) => s.slot === slot))
+        .filter((slotDefIndex) => slotDefIndex >= 0)
+        .map((slotDefIndex) => ({ slotDefIndex, variantIndex: 0 }));
+      if (defaults.length > 0) {
+        this.activeLayers = defaults;
+      }
+    }
   }
 
   // ── Canvas setter ───────────────────────────────────────────────────
