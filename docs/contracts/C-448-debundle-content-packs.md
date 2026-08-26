@@ -2,7 +2,7 @@
 id: C-448
 title: "De-bundle Content Packs — Move emberwatch Out of static/ and Tell the Truth About Offline"
 source: "user request 2026-08-26 — emberwatch should not be in static but in the r2 bucket"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-26"
 | **Target** | `apps/frontend/client/static/content-packs/`, `content/packs/` (new), `scripts/src/lib/catalog/config.ts`, `packages/frontend/engine/src/assets/content_pack_loader.ts`, `.claude/CLAUDE.md` |
 | **Priority** | P1 — finishes C-435 for the one directory it missed, and corrects a project invariant that is currently false. |
 | **Dependencies** | C-433, C-434, C-435 (all `implemented`). Independent of C-442 through C-447 — can run in parallel. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → first-run download note in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
@@ -494,6 +494,16 @@ the game boots with no network on a fresh install.
 - **The offline invariant amendment is not optional.** Shipping the code change
   while leaving CLAUDE.md claiming cold-offline boot means the next contract
   written against that document starts from a false premise.
+- **Hardcoded paths to `static/content-packs/` exist in 6+ files.** After the
+  `git mv`, these will point at a nonexistent directory. Update them all:
+  `scripts/src/lib/ops/validate_content_appearance.ts` (line 31),
+  `scripts/src/lib/ops/validate_content_appearance.test.ts` (line 29),
+  `packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts` (line 29),
+  `scripts/src/lib/ops/generate_emberwatch_maps.ts` (lines 522, 705),
+  `scripts/src/lib/ops/generate_emberwatch_tables.ts` (line 48),
+  `scripts/src/lib/ops/generate_emberwatch_derivation.test.ts` (line 28).
+  Files that import `CONTENT_PACKS_DIR` from `config.ts` (`scan_assets.ts`,
+  `catalog_entries.ts`, `pipeline.ts`) update automatically.
 
 ## Open Questions
 
