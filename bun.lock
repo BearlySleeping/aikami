@@ -12,7 +12,7 @@
         "@google-cloud/firestore": "^9.0.0",
         "@google-cloud/secret-manager": "^7.0.0",
         "@moonrepo/cli": "2.5.3",
-        "@types/bun": "1.4.0",
+        "@types/bun": "^1.4.0",
         "@types/node": "26.3.0",
         "@typescript/native-preview": "7.0.0-dev.20260707.2",
         "syncpack": "15.3.3",
@@ -71,6 +71,7 @@
         "@aikami/frontend/engine": "workspace:*",
         "@aikami/frontend/theme": "workspace:*",
         "@aikami/logger": "workspace:*",
+        "@aikami/lpc": "workspace:*",
         "@aikami/mocks": "workspace:*",
         "@aikami/parser": "workspace:*",
         "@aikami/schemas": "workspace:*",
@@ -324,6 +325,7 @@
         "@aikami/frontend-utils": "workspace:*",
         "@aikami/frontend/configs": "workspace:*",
         "@aikami/logger": "workspace:*",
+        "@aikami/lpc": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
         "@aikami/utils": "workspace:*",
@@ -408,6 +410,12 @@
       "devDependencies": {
         "@types/node": "26.3.0",
         "vite": "8.2.2",
+      },
+    },
+    "packages/shared/lpc": {
+      "name": "@aikami/lpc",
+      "dependencies": {
+        "@aikami/schemas": "workspace:*",
       },
     },
     "packages/shared/mocks": {
@@ -526,6 +534,8 @@
     "@aikami/local-stack": ["@aikami/local-stack@workspace:apps/backend/local-stack"],
 
     "@aikami/logger": ["@aikami/logger@workspace:packages/shared/logger"],
+
+    "@aikami/lpc": ["@aikami/lpc@workspace:packages/shared/lpc"],
 
     "@aikami/mocks": ["@aikami/mocks@workspace:packages/shared/mocks"],
 

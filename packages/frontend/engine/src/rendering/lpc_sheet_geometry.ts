@@ -4,5 +4,5 @@
 // This file is kept as a backward-compat re-export hub for engine-internal
 // imports. New code should import from @aikami/lpc directly.
 
-export { resolveLpcSheetGeometry } from '@aikami/lpc';
 export type { LpcCellFamily, LpcSheetGeometry } from '@aikami/lpc';
+export { resolveLpcSheetGeometry } from '@aikami/lpc';

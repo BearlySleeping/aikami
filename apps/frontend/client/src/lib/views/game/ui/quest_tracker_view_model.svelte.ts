@@ -4,7 +4,7 @@
 // incomplete objective as a compact 1-2 line display.
 // Contract: C-329 Integrate the Demo Quest from Offer Through Reward
 
-import type { QuestData } from '@aikami/frontend/engine';
+import type { QuestData } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

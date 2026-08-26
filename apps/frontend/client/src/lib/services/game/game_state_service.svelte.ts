@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts
 
-import type { QuestData } from '@aikami/frontend/engine';
+import type { QuestData } from '@aikami/frontend/engine/sim';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

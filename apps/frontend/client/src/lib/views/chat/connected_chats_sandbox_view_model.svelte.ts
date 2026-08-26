@@ -8,7 +8,7 @@
 //
 // Contract: C-244 Connected Chats Cross-Mode Bridge
 
-import { parseBridgeTags } from '@aikami/frontend/engine';
+import { parseBridgeTags } from '@aikami/frontend/engine/sim';
 import type { NpcData } from '@aikami/types';
 import { type ChatMessage, chatService, connectedChatsService } from '$services';
 import { ChatViewModel, type ChatViewModelOptions } from './chat_view_model.svelte.ts';

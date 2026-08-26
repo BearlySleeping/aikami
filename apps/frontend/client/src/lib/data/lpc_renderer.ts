@@ -9,7 +9,7 @@
 //
 // Contract: C-372
 
-import { resolveLpcSheetGeometry } from '@aikami/frontend/engine';
+import { resolveLpcSheetGeometry } from '@aikami/frontend/engine/content';
 import { Rectangle, Sprite, Texture } from 'pixi.js';
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { lpcStateSuffix } from '@aikami/lpc';

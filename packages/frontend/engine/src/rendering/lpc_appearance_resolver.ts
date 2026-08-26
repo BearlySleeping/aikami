@@ -7,17 +7,18 @@
 // now live in @aikami/lpc. Only createLpcPipeline remains here because it
 // builds a client-side pipeline that couples to the engine's recipe type.
 
+import type { LpcLayerRecipe } from '@aikami/lpc';
 import {
-  resolveLpcAppearance,
   DEFAULT_LPC_SLOT_FALLBACKS,
   LPC_SLOT_ORDER,
-  projectLpcCatalog,
-  resetLpcFallbackWarnings,
   type LpcSlotCatalog,
   type LpcSlotName,
+  projectLpcCatalog,
+  resetLpcFallbackWarnings,
+  resolveLpcAppearance,
 } from '@aikami/lpc';
-import type { LpcLayerRecipe } from '@aikami/lpc';
 
+export type { LpcSlotCatalog, LpcSlotName };
 // Re-export moved symbols for backward compatibility with test imports.
 export {
   DEFAULT_LPC_SLOT_FALLBACKS,
@@ -26,7 +27,6 @@ export {
   resetLpcFallbackWarnings,
   resolveLpcAppearance,
 };
-export type { LpcSlotCatalog, LpcSlotName };
 
 /** Options for {@link createLpcPipeline}. */
 export type CreateLpcPipelineOptions = {

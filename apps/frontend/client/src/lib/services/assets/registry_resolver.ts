@@ -8,8 +8,8 @@
 // composition root, exactly as it already supplies assetUrlResolver and
 // propFrameResolver to GameWorld.
 
-import type { AssetTagResolver } from '@aikami/frontend/engine';
-import { pathToTag } from '@aikami/frontend/engine';
+import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
+import { pathToTag } from '@aikami/frontend/engine/sim';
 import { logger } from '$logger';
 import { assetStore } from './asset_store.svelte.ts';
 

@@ -7,7 +7,7 @@
 // Contract: C-314 Establish a Production Game Composition Root and Split God Services
 // Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven (campaign wiring)
 
-import type { GameCommand } from '@aikami/frontend/engine';
+import type { GameCommand } from '@aikami/frontend/engine/sim';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

@@ -9,7 +9,7 @@
 // current equipment whenever the equipment slots change.
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
-import type { LpcLayerRecipe } from '@aikami/frontend/engine';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import type { BaseViewModelOptions } from '@aikami/frontend/services';
 import { equipmentService, inventoryService } from '$services';
 import {
