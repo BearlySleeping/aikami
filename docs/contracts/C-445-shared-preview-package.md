@@ -2,7 +2,7 @@
 id: C-445
 title: "Shared Preview Package — One Set of Asset Preview Surfaces"
 source: "user request 2026-08-26 — one place for hub, client dev, and the actual game"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,8 @@ created_at: "2026-08-26"
 | **Target** | `packages/frontend/preview/` (new), `apps/frontend/client/src/lib/views/dev/lpc/`, `apps/frontend/client/src/lib/data/lpc_renderer.ts` |
 | **Priority** | P1 — this is where "one place for hub and client dev" actually lands. Without it, C-446 and C-447 duplicate the client's dev tooling in the hub. |
 | **Dependencies** | C-442, C-443, C-444. All must merge first. |
-| **Status** | draft |
+| **⚠️ Dependency Note** | C-444 PR #199 was merged but its code changes are not on the current `HEAD` (lost during SvelteKit 3 migration merge). The `AssetResolver` type and `createLpcRenderer({ resolver })` shape do not exist in the working tree. The implementer must cherry-pick or re-implement C-444's changes before starting this contract. |
+| **Status** | approved |
 | **Promotion** | `sandbox` |
 | **Docs Impact** | internal → none |
 | **Contract version** | 1.0.0 |
@@ -294,7 +295,7 @@ dependency on either app.
 | AC-1 | Unit | `packages/frontend/preview/src/lib/__tests__/host_agnostic.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run preview:test`
+- Moon Task: `moon run frontend-preview:test`
 
 **Watch Points**:
 - `logger` is the one permitted cross-cutting import, via the `$logger` path
@@ -316,7 +317,7 @@ source rectangle.
 | AC-2 | Visual | `apps/e2e/src/visual/suites/preview_lpc.visual.ts` | `/dev/lpc` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run preview:test`
+- Moon Task: `moon run frontend-preview:test`
 - E2E / Visual:
   - **Functional**: N/A.
   - **Visual**: `apps/e2e/src/visual/suites/preview_lpc.visual.ts` using
@@ -346,7 +347,7 @@ overlay aligns to tile boundaries, and hovering a tile reports its index.
 | AC-3 | Visual | `apps/e2e/src/visual/suites/preview_tileset.visual.ts` | `/dev/lpc` (host route) | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run preview:test`
+- Moon Task: `moon run frontend-preview:test`
 - E2E / Visual:
   - **Functional**: N/A.
   - **Visual**: cases `tileset-grid-on`, `tileset-grid-off`. AI criteria:
@@ -372,7 +373,7 @@ coloured by their `WORLD_Z_BANDS` band.
 | AC-4 | Visual | `apps/e2e/src/visual/suites/preview_map.visual.ts` | `/dev/sandbox/map` | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run preview:test`
+- Moon Task: `moon run frontend-preview:test`
 - E2E / Visual:
   - **Functional**: N/A.
   - **Visual**: cases `map-plain`, `map-collision`, `map-zbands`. AI criteria:
@@ -390,16 +391,18 @@ coloured by their `WORLD_Z_BANDS` band.
 
 ### AC-5: Client dev routes are wrappers, with no duplicate view model
 **Given** the merged branch
-**When** `apps/frontend/client/src/routes/(dev)/dev/lpc/+page.svelte` and
-`.../sandbox/map/+page.svelte` are read
+**When** `apps/frontend/client/src/routes/(dev)/dev/lpc/+page.svelte`,
+`apps/frontend/client/src/routes/(dev)/dev/lpc-walk/+page.svelte`, and
+`apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/map/+page.svelte` are read
 **Then** each imports its component from `@aikami/frontend/preview`, and
-`apps/frontend/client/src/lib/views/dev/lpc/` and
-`apps/frontend/client/src/lib/views/dev/lpc_walk/` no longer exist.
+`apps/frontend/client/src/lib/views/dev/lpc/`,
+`apps/frontend/client/src/lib/views/dev/lpc_walk/`, and
+`apps/frontend/client/src/lib/views/dev/sandbox/map/` no longer exist.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Integration | `moon check` + directory listing in the PR | `/dev/lpc`, `/dev/sandbox/map` | Filled during verification |
+| AC-5 | Integration | `moon check` + directory listing in the PR | `/dev/lpc`, `/dev/lpc-walk`, `/dev/sandbox/map` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon check`, `moon run client:build`
@@ -423,7 +426,7 @@ URL acquired has been released, and the frame-texture cache is empty.
 | AC-6 | Unit | `packages/frontend/preview/src/lib/__tests__/lifecycle.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run preview:test`
+- Moon Task: `moon run frontend-preview:test`
 
 **Watch Points**:
 - The hub will mount and unmount these on every client-side navigation. A leak
@@ -434,7 +437,8 @@ URL acquired has been released, and the frame-texture cache is empty.
 ## Implementation Sequence
 
 1. **Phase 1 (Package)** — scaffold `packages/frontend/preview` from
-   `packages/frontend/components`. Two entrypoints. Wire `@aikami/frontend/theme`.
+   `packages/frontend/components`. Register `frontend-preview` in `.moon/workspace.yml`.
+   Two entrypoints. Wire `@aikami/frontend/theme`.
 2. **Phase 2 (Move LPC)** — move the renderer, the preview UI, the walk preview,
    icon framing, and URL state. Strip client-only imports; add props. Write
    AC-1, AC-2, AC-6 tests.
@@ -443,7 +447,7 @@ URL acquired has been released, and the frame-texture cache is empty.
 4. **Phase 4 (WalkSandbox)** — generalise the client's map sandbox view model
    into `WalkSandbox` on the `./sandbox` entrypoint. Keep the existing debug
    overlays and query-parameter behaviour.
-5. **Phase 5 (Rewire client)** — rewrite the two `(dev)` routes as wrappers,
+5. **Phase 5 (Rewire client)** — rewrite the three `(dev)` routes (`/dev/lpc`, `/dev/lpc-walk`, `/dev/sandbox/map`) as wrappers,
    delete the moved view models. Write the AC-5 check.
 6. **Phase 6 (Validation)** — `bun run fix && bun moon run :validate && bun run test`,
    then the visual suites.
@@ -466,6 +470,12 @@ URL acquired has been released, and the frame-texture cache is empty.
   point** — a hub catalog page would then pull `GameWorld`, `bitecs`, and the
   worker for a still image. Keep the two entrypoints strictly separate and
   assert it in AC-1's test.
+- **`/dev/lpc-preview` is NOT rewired** — it uses `LpcPreviewView` from
+  `$lib/views/character/lpc_preview/` (a production character preview, not a dev
+  sandbox). However, it imports `createLpcRenderer` from `$lib/data/lpc_renderer.ts`
+  which is moved to `@aikami/frontend/preview`. The implementer must update its
+  import path to `@aikami/frontend/preview` or keep a re-export shim in the old
+  location.
 
 ## Open Questions
 
