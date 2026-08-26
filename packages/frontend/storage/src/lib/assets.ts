@@ -31,8 +31,15 @@ export const ASSET_REGISTRY_SEEDED_KEY = 'asset_registry_seeded';
  * the seed document's own `generatedAt`. A client shipping a source-derivation
  * fix must re-derive rows even against a seed it has already ingested, so the
  * idempotency guard is keyed on both.
+ *
+ * r3: forces one re-seed pass on every existing install to overwrite any
+ * `r2`-labeled source row that still points at the legacy Firebase Storage
+ * origin (pre-R2-migration deploys wrote those under the same backend name,
+ * so the normal upsert alone won't touch a tag no longer present in the
+ * current seed — {@link AssetRegistryRepository._pruneStaleSources} catches
+ * those).
  */
-const SEED_DERIVATION_REVISION = 2;
+const SEED_DERIVATION_REVISION = 3;
 
 /** Idempotency fingerprint for a seed document under the current derivation. */
 const seedFingerprint = (generatedAt: string): string =>
@@ -363,10 +370,12 @@ export class AssetRegistryRepository {
       }
     }
 
-    // Drop bundled rows for anything outside the core. A registry seeded before
-    // C-435 has a priority-0 bundled row for every asset; those files no longer
-    // ship, so leaving them makes every fetch try a 404 first.
-    const staleBundled = await this._pruneBundledSources(bundled);
+    // Drop stale rows: 'bundled' rows from a pre-C-435 registry (those files
+    // no longer ship), and any row still pointing at the pre-R2 Firebase
+    // Storage origin regardless of backend label (a pre-migration deploy could
+    // write that URL under the 'r2' name). Left alone, either makes every
+    // fetch try a dead source first.
+    const stalePruned = await this._pruneStaleSources();
 
     // Only mark seeded when every chunk committed.
     await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seedFingerprint(seed.generatedAt));
@@ -375,7 +384,7 @@ export class AssetRegistryRepository {
       ...stats,
       chunks: totalChunks,
       bundledTags: bundled.size,
-      staleBundledPruned: staleBundled,
+      stalePruned,
       hasR2Origin: r2Base !== undefined,
       elapsedMs: Math.round(performance.now() - t0),
     });
@@ -383,20 +392,21 @@ export class AssetRegistryRepository {
   }
 
   /**
-   * Deletes `bundled` source rows for every asset outside the offline core.
+   * Prunes stale `asset_sources` rows: every `bundled` row (nothing is bundled
+   * in the client anymore, C-435 follow-up) and every row whose URL still
+   * points at the legacy Firebase Storage origin, whatever backend it was
+   * filed under. The latter guards against pre-R2-migration deploys that
+   * wrote Firebase Storage URLs under the `r2` backend name — the normal
+   * upsert only overwrites a tag that's still in the current seed, so a
+   * removed/renamed tag's stale row would otherwise never get touched.
    *
-   * @param bundled - Tags that legitimately keep a bundled source.
    * @returns The number of rows deleted.
    */
-  /**
-   * Prunes ALL stale bundled source rows. Nothing is bundled in the client
-   * anymore (C-435 follow-up), so every `bundled` source from a pre-C-435
-   * registry is removed regardless of the offline-core declaration.
-   */
-  private async _pruneBundledSources(_bundled: ReadonlySet<string>): Promise<number> {
+  private async _pruneStaleSources(): Promise<number> {
+    const staleUrlPattern = '%firebasestorage.googleapis.com%';
     const before = await this._db.query({
-      sql: `SELECT COUNT(*) AS n FROM asset_sources WHERE backend = ?`,
-      args: [BUNDLED_SOURCE_BACKEND],
+      sql: `SELECT COUNT(*) AS n FROM asset_sources WHERE backend = ? OR url LIKE ?`,
+      args: [BUNDLED_SOURCE_BACKEND, staleUrlPattern],
     });
     const count = Number(before.rows[0]?.n ?? 0);
     if (count === 0) {
@@ -404,8 +414,8 @@ export class AssetRegistryRepository {
     }
 
     await this._db.execute({
-      sql: `DELETE FROM asset_sources WHERE backend = ?`,
-      args: [BUNDLED_SOURCE_BACKEND],
+      sql: `DELETE FROM asset_sources WHERE backend = ? OR url LIKE ?`,
+      args: [BUNDLED_SOURCE_BACKEND, staleUrlPattern],
     });
     return count;
   }

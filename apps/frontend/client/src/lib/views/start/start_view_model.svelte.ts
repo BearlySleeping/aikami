@@ -146,6 +146,17 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** Human-readable label for the current download phase, or undefined when idle/ready. */
   readonly downloadLabel: string | undefined;
+
+  /**
+   * Whether to offer the explicit "download everything for offline" action.
+   * True once the required-to-play core is ready and the player hasn't
+   * already started a full-catalog download — the catalog is otherwise only
+   * fetched on demand as assets are actually needed.
+   */
+  readonly canDownloadAllAssets: boolean;
+
+  /** Starts downloading every remaining catalog asset for offline play. */
+  downloadAllAssets(): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -218,12 +229,22 @@ class StartViewModel
       case 'prefetching-core':
         return 'Downloading starter content…';
       case 'warming':
-        return 'Downloading game assets in the background…';
+        return 'Downloading all assets for offline play…';
       case 'degraded':
         return assetPrefetchService.error ?? 'Asset download paused — check your connection.';
       default:
         return undefined;
     }
+  }
+
+  /** @inheritdoc */
+  get canDownloadAllAssets(): boolean {
+    return assetPrefetchService.phase === 'ready' && !assetPrefetchService.warmStarted;
+  }
+
+  /** @inheritdoc */
+  downloadAllAssets(): void {
+    assetPrefetchService.warmRemaining();
   }
 
   /** @inheritdoc */
@@ -293,12 +314,13 @@ class StartViewModel
   override async initialize(): Promise<void> {
     this.debug('initialize');
 
-    // C-448: start (or observe) the background asset download as soon as the
-    // start menu mounts — the game is unplayable without the offline core,
-    // so there's no reason to wait for "New Game" to begin fetching it.
-    // Fire-and-forget: this ViewModel only reads the shared service's
-    // reactive progress, never awaits it (a slow/offline connection must
-    // never block the start menu from rendering).
+    // C-448: start (or observe) the required-to-play (offline-core) download
+    // as soon as the start menu mounts — the game is unplayable without it,
+    // so there's no reason to wait for "New Game" to begin fetching it. This
+    // does NOT download the rest of the catalog — that's opt-in only via
+    // downloadAllAssets(). Fire-and-forget: this ViewModel only reads the
+    // shared service's reactive progress, never awaits it (a slow/offline
+    // connection must never block the start menu from rendering).
     assetPrefetchService.ensureStarted();
 
     // Check for existing campaigns

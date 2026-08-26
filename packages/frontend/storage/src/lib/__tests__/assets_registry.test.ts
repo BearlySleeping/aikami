@@ -56,6 +56,15 @@ const BODY_WALK: AssetSeedRow = {
   ext: '.webp',
 };
 
+/** A tag later dropped from the catalog — used to simulate an orphaned stale row. */
+const LEGACY: AssetSeedRow = {
+  tag: 'lpc:body:bodies_muscular:jump',
+  hash: 'd'.repeat(64),
+  sizeBytes: 512,
+  category: 'lpc',
+  ext: '.webp',
+};
+
 const makeSeed = (
   rows: readonly AssetSeedRow[] = [HERO, FOREST, BODY_WALK],
   overrides?: Partial<AssetSeedDocument>,
@@ -199,6 +208,29 @@ describe('AssetRegistryRepository', () => {
     const forestSources = await registry.listSources(FOREST.tag);
     expect(forestSources).toHaveLength(1);
     expect(forestSources[0]?.backend).toBe('r2');
+  });
+
+  test('stale Firebase Storage URLs are pruned even when filed under the r2 backend', async () => {
+    // Simulate a pre-R2-migration deploy that wrote a Firebase Storage URL
+    // under the 'r2' backend name for a tag later dropped from the catalog —
+    // the normal upsert never touches it since it only walks current rows.
+    await registry.seedFromCompactSeed({
+      seed: makeSeed([HERO, FOREST, BODY_WALK, LEGACY]),
+      r2BaseUrl: R2_BASE,
+    });
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
+            VALUES (?, 'r2', ?, 0)`,
+      args: [
+        LEGACY.tag,
+        'https://firebasestorage.googleapis.com/v0/b/aikami-production.firebasestorage.app/o/lpc%2Fbody%2Fbodies_muscular.jump.webp?alt=media',
+      ],
+    });
+
+    // The current catalog no longer includes LEGACY.
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+
+    expect(await registry.listSources(LEGACY.tag)).toHaveLength(0);
   });
 
   test('no R2 origin writes no sources at all', async () => {
