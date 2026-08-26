@@ -19,12 +19,13 @@ import {
 import { commitAll, pushBranch, remoteBranchExists, runGit } from '../git_worktree.ts';
 import { playError } from './alarm.ts';
 import { resolveContract } from './contract_resolver.ts';
-import { readContractStatus, withUpdatedStatus } from './contract_status.ts';
+import { parseContractStatus, readContractStatus, withUpdatedStatus } from './contract_status.ts';
 import {
   commitContractContent,
   currentBranch,
   isolateContractInWorktree,
   pullContractFromWorktree,
+  readMainContent,
 } from './contract_sync.ts';
 import { captureGitState, currentCommit } from './git_state.ts';
 import {
@@ -60,6 +61,7 @@ import type {
   ReconciliationResult,
   ReviewDecision,
   RunManifest,
+  StageRunOutcome,
 } from './types.ts';
 import {
   isTerminalStage,
@@ -214,6 +216,65 @@ const enforceStageStatus = (options: {
     return options.result;
   }
   return options.result;
+};
+
+/**
+ * Fast-fail the one hard precondition the implementer's own Phase 0 checks
+ * before doing ANY other work: "Confirm status is `approved`. If `draft`,
+ * stop." (`.pi/prompts/contract-implement.md` step 9).
+ *
+ * 🔴 Every other Phase 0 step — auditing dev services, running baseline
+ * tests, reading PROGRESS.md, `moon_detect_affected` — happens BEFORE that
+ * check, so a draft contract still burns the full preflight (often 10+
+ * minutes of real agent time) before the worker ever reaches step 9 and
+ * reports back. C-443 (2026-08-26) hit exactly this, twice in the same
+ * run — the second time on an escalation the review captain had already
+ * spent its one shot trying to fix. The orchestrator can answer "is this
+ * contract approved" in milliseconds; there is no reason to pay for a full
+ * worker session to learn the same thing.
+ *
+ * Reads the AUTHORITATIVE status — `main`'s committed content, not
+ * repoRoot's on-disk mirror (see `readMainContent`'s doc comment for why
+ * that distinction matters: it's the same gap that made `isolateContractInWorktree`
+ * seed a stale copy in the first place). Returns undefined (proceed
+ * normally) whenever the contract is on main at all — this is a narrow
+ * short-circuit for the one condition Phase 0 treats as a hard stop, not a
+ * general re-implementation of the preflight.
+ */
+export const checkImplementPrecondition = (options: {
+  repoRoot: string;
+  contractPath: string;
+  runId: string;
+  attempt: number;
+}): ContractStageResult | undefined => {
+  const mainContent = readMainContent({
+    repoRoot: options.repoRoot,
+    contractPath: options.contractPath,
+  });
+  // Not on `main` yet at all — nothing to fast-fail on; let the worker run
+  // and report its own findings.
+  if (mainContent === undefined) {
+    return undefined;
+  }
+  const status = parseContractStatus(mainContent);
+  if (status !== 'draft') {
+    return undefined;
+  }
+  return {
+    runId: options.runId,
+    stage: 'implementer',
+    attempt: options.attempt,
+    status: 'blocked',
+    summary: 'Contract is still in `draft` status — implementation cannot begin (Phase 0 step 9).',
+    findings: [
+      'Contract status is `draft`, not `approved`, on `main`.',
+      'The critique stage either has not run yet or has not stamped the contract approved.',
+    ],
+    filesTouched: [],
+    evidence: [],
+    contractHash: '',
+    diffHash: '',
+  };
 };
 
 const readReviewDecision = (path: string, runId: string): ContractReviewDecision | undefined => {
@@ -978,32 +1039,55 @@ export const runContractPipeline = async (options: {
 
         const interactiveStage =
           !!options.interactiveWriter && stage === 'write_contract' && attempt === 1;
-        const outcome = await runStage({
-          repoRoot: options.repoRoot,
-          runDirectory: runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
-          runId: manifest.runId,
-          stage,
-          attempt,
-          contractPath: manifest.contractPath,
-          // The interactive writer legitimately sits idle while waiting for the
-          // user to describe their feature — don't nudge it or time it out
-          // early. Only the hard wall-clock cap bounds the wait.
-          idleTimeoutMs: interactiveStage
-            ? (STAGE_HARD_CAPS.write_contract ?? IDLE_TIMEOUT_MS)
-            : IDLE_TIMEOUT_MS,
-          hardTimeoutMs: STAGE_HARD_CAPS[stage] ?? 8 * 60 * 60 * 1000,
-          feedback,
-          // Lets runStage tell a late-finishing worker (adopt) apart from a
-          // deliberate new round after verifier/review feedback (must re-run).
-          // See the RETRY SAFEGUARD comment in stage_runner.ts.
-          previousAttemptRecordedStatus: manifest.attempts.find(
-            (a) => a.stage === stage && a.attempt === attempt - 1,
-          )?.result?.status,
-          interactiveWriter: interactiveStage,
-          launchWorker: (req) => adapter.launchWorker(req),
-          checkAgentWorking: (pid) => adapter.isWorkerActive(pid),
-          nudgeWorker: interactiveStage ? undefined : (opts) => adapter.nudgeWorker(opts),
-        });
+        // 🔴 Fast-fail BEFORE spawning a worker at all — see the doc comment
+        // on checkImplementPrecondition. A draft contract is knowable in
+        // milliseconds; there is no reason to pay for a full implementer
+        // preflight (dev-service audit, baseline tests, PROGRESS.md) to
+        // discover the same thing at Phase 0 step 9.
+        const precondition =
+          stage === 'implement'
+            ? checkImplementPrecondition({
+                repoRoot: options.repoRoot,
+                contractPath: manifest.contractPath,
+                runId: manifest.runId,
+                attempt,
+              })
+            : undefined;
+        const outcome: StageRunOutcome = precondition
+          ? { result: precondition, paneId: 'precondition-skipped' }
+          : await runStage({
+              repoRoot: options.repoRoot,
+              runDirectory: runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
+              runId: manifest.runId,
+              stage,
+              attempt,
+              contractPath: manifest.contractPath,
+              // The interactive writer legitimately sits idle while waiting for the
+              // user to describe their feature — don't nudge it or time it out
+              // early. Only the hard wall-clock cap bounds the wait.
+              idleTimeoutMs: interactiveStage
+                ? (STAGE_HARD_CAPS.write_contract ?? IDLE_TIMEOUT_MS)
+                : IDLE_TIMEOUT_MS,
+              hardTimeoutMs: STAGE_HARD_CAPS[stage] ?? 8 * 60 * 60 * 1000,
+              feedback,
+              // Lets runStage tell a late-finishing worker (adopt) apart from a
+              // deliberate new round after verifier/review feedback (must re-run).
+              // See the RETRY SAFEGUARD comment in stage_runner.ts.
+              previousAttemptRecordedStatus: manifest.attempts.find(
+                (a) => a.stage === stage && a.attempt === attempt - 1,
+              )?.result?.status,
+              interactiveWriter: interactiveStage,
+              launchWorker: (req) => adapter.launchWorker(req),
+              checkAgentWorking: (pid) => adapter.isWorkerActive(pid),
+              nudgeWorker: interactiveStage ? undefined : (opts) => adapter.nudgeWorker(opts),
+            });
+        if (precondition) {
+          pipelineLog({
+            runId: manifest.runId,
+            cwd: options.repoRoot,
+            message: `${stage}-${attempt}: skipped (precondition failed) — ${precondition.summary}`,
+          });
+        }
         const after = captureGitState(cwdForGit);
 
         // Direct-draft placeholder rename: the writer creates the real contract

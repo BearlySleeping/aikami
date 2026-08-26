@@ -1,13 +1,21 @@
 // scripts/src/lib/agents/contract_pipeline/contract_status.ts
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
+/**
+ * Extracts the metadata-table status from contract markdown. Pure — split out
+ * so a caller holding content from somewhere other than disk (e.g. `git show
+ * main:path`, see `contract_sync.ts`'s `readMainContent`) can parse it without
+ * a round-trip through the filesystem.
+ */
+export const parseContractStatus = (content: string): string =>
+  content.match(/\|\s*\*\*Status\*\*\s*\|\s*([^|\s]+)\s*\|/)?.[1]?.trim() ?? 'draft';
+
 /** Read the contract metadata status. Returns 'draft' when the file does not exist yet. */
 export const readContractStatus = (contractPath: string): string => {
   if (!existsSync(contractPath)) {
     return 'draft';
   }
-  const content = readFileSync(contractPath, 'utf-8');
-  return content.match(/\|\s*\*\*Status\*\*\s*\|\s*([^|\s]+)\s*\|/)?.[1]?.trim() ?? 'draft';
+  return parseContractStatus(readFileSync(contractPath, 'utf-8'));
 };
 
 /**

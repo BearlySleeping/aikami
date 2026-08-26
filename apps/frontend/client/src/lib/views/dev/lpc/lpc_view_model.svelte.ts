@@ -7,6 +7,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { LpcAnimationState, LpcDirection, lpcStateSuffix } from '@aikami/lpc';
 import {
   LPC_DEFAULT_BODY_ASSET_ID,
   LPC_DEFAULT_HEAD_ASSET_ID,
@@ -21,12 +22,10 @@ import {
 import {
   ANIMATION_STATE_OPTIONS,
   DIRECTION_OPTIONS,
+  getLpcCatalog,
   wireLpcUrlResolver,
 } from '$lib/data/lpc_asset_catalog';
-import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
-import { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
-import { lpcStateSuffix } from '@aikami/lpc';
 import {
   type LpcUrlState,
   lpcStateToSearchParams,
@@ -136,7 +135,11 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   readonly canvasHeight = CanvasHeight;
   readonly entityX = EntityX;
   readonly entityY = EntityY;
-  readonly allSlots = _getSlots();
+  // $state (not a plain field): `_getSlots()` reads `assetStore.seed`, which
+  // is still null at construction time (the catalog fetch is async — see
+  // wireLpcUrlResolver). A plain field would freeze on the empty catalog
+  // forever; this gets refreshed once loading completes in initialize().
+  allSlots = $state<ReturnType<typeof _getSlots>>(_getSlots());
   readonly animationStateOptions = ANIMATION_STATE_OPTIONS as typeof ANIMATION_STATE_OPTIONS;
   readonly directionOptions = DIRECTION_OPTIONS as typeof DIRECTION_OPTIONS;
 
@@ -894,6 +897,12 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     // Ensure the manifest-backed LPC URL resolver is wired and the manifest
     // is loaded before any layer lookup (idempotent).
     await wireLpcUrlResolver();
+
+    // The constructor's `allSlots` snapshot was almost certainly taken before
+    // the catalog fetch above resolved (assetStore.seed was still null) —
+    // refresh it now that loading is guaranteed complete, so the Slot/Isolate
+    // dropdowns actually have options.
+    this.allSlots = _getSlots();
 
     // Register $effect blocks via registerEffectRoot.
     // PixiJS init is deferred to a reactive $effect that fires when

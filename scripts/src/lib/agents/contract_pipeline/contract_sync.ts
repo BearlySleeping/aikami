@@ -153,12 +153,31 @@ export const isolateContractInWorktree = (options: {
   if (!worktreePath) {
     return { ok: true, message: 'No worktree — contract isolation not needed.', committed: false };
   }
-  if (!existsSync(contractPath)) {
-    return { ok: true, message: 'Contract file does not exist yet.', committed: false };
-  }
 
   const relPath = gitRelPath(repoRoot, contractPath);
   const worktreeCopy = join(worktreePath, relPath);
+
+  // 🔴 Seed from `main` the ref, NOT from repoRoot's on-disk working-tree
+  // file. `commitContentToMain` (used by both the critique auto-approve
+  // stamp and `pullContractFromWorktree`) commits straight to the git ref
+  // and only refreshes repoRoot's working copy as a BEST-EFFORT courtesy
+  // (`refreshWorkingCopyIfSafe`, silently swallowed on failure) — it exists
+  // so `git status` looks clean, not as something a caller may depend on for
+  // correctness. C-443 (2026-08-26) hit exactly that gap: the critique stage
+  // committed `approved` to main, but the implementer's very next stage read
+  // a worktree copy seeded from repoRoot's disk file — which the courtesy
+  // refresh had not (yet, or at all) caught up — and blocked on a contract
+  // that had, provably, already been approved on `main`. A full implementer
+  // session (and after escalation, a second one) was spent discovering that.
+  // Reading `main` directly here removes the dependency on that refresh ever
+  // succeeding. Falls back to disk only when the path isn't on `main` yet
+  // (a brand new contract that hasn't been committed there at all).
+  const mainContent = readMainContent({ repoRoot, contractPath });
+  const seedContent =
+    mainContent ?? (existsSync(contractPath) ? readFileSync(contractPath, 'utf-8') : undefined);
+  if (seedContent === undefined) {
+    return { ok: true, message: 'Contract file does not exist yet.', committed: false };
+  }
 
   try {
     // The skip-worktree bit makes git ignore writes to the path, so it must be
@@ -171,7 +190,7 @@ export const isolateContractInWorktree = (options: {
     }
 
     mkdirSync(dirname(worktreeCopy), { recursive: true });
-    writeFileSync(worktreeCopy, readFileSync(contractPath));
+    writeFileSync(worktreeCopy, seedContent);
     runGit(`update-index --skip-worktree '${relPath}'`, { cwd: worktreePath });
 
     return {
@@ -236,6 +255,23 @@ const readContentAt = (options: {
     return undefined;
   }
 };
+
+/**
+ * Reads a contract as committed on `main` (preferring `origin/main`, see
+ * {@link readMainRef}) — the one authoritative source for "what does the
+ * contract actually say right now", independent of whatever repoRoot's
+ * working tree happens to hold. Returns undefined when the path isn't on
+ * `main` yet (a contract that has never been committed there).
+ */
+export const readMainContent = (options: {
+  repoRoot: string;
+  contractPath: string;
+}): string | undefined =>
+  readContentAt({
+    repoRoot: options.repoRoot,
+    ref: readMainRef(options.repoRoot),
+    relPath: gitRelPath(options.repoRoot, options.contractPath),
+  });
 
 /**
  * Resyncs repoRoot's index and working tree for `relPath` after
