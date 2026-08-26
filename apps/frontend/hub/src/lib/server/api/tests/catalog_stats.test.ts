@@ -1,0 +1,96 @@
+// apps/frontend/hub/src/lib/server/api/tests/catalog_stats.test.ts
+//
+// C-436 AC-3: catalog stats served from D1, degradation intact.
+//
+// Tests three states of the D1 binding: healthy (returns packCount),
+// throwing (returns null, logged at warn), and absent (returns null,
+// logged at warn). Verifies the streamed-promise hazard is handled:
+// loadPackStats() never rejects.
+
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+
+// ── Mock D1 helpers ─────────────────────────────────────────────────────
+
+const createMockD1 = (shouldThrow: boolean = false): unknown => {
+  const prepareStatement = (sql: string) => ({
+    bind: (...params: unknown[]) => ({
+      all: async () => {
+        if (shouldThrow) {
+          throw new Error('D1 query failed');
+        }
+        return { results: [{ 'count(*)': 0 }] };
+      },
+      first: async () => {
+        if (shouldThrow) {
+          throw new Error('D1 query failed');
+        }
+        return { 'count(*)': 0 };
+      },
+      run: async () => {
+        if (shouldThrow) {
+          throw new Error('D1 query failed');
+        }
+        return { meta: {} };
+      },
+      raw: async () => {
+        if (shouldThrow) {
+          throw new Error('D1 query failed');
+        }
+        return [[0]];
+      },
+    }),
+  });
+  return {
+    prepare: prepareStatement,
+    exec: async (_sql: string) => {},
+    batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
+      statements.map(() => ({ results: [{ 'count(*)': 0 }] })),
+  };
+};
+
+let setCatalogStatsEnv: (env: { DB: unknown } | undefined) => void;
+
+beforeAll(async () => {
+  const mod = await import('../catalog_stats.ts');
+  setCatalogStatsEnv = mod.setCatalogStatsEnv;
+});
+
+afterAll(() => {
+  setCatalogStatsEnv(undefined);
+});
+
+beforeEach(() => {
+  setCatalogStatsEnv(undefined);
+});
+
+describe('catalog stats — C-436 AC-3 (D1, degradation intact)', () => {
+  test('unconfigured (DB binding absent) → resolves null, never rejects', async () => {
+    const { loadPackStats } = await import('../catalog_stats.ts');
+    await expect(loadPackStats()).resolves.toBeNull();
+  });
+
+  test('throwing D1 binding → resolves null, never rejects', async () => {
+    setCatalogStatsEnv({ DB: createMockD1(true) });
+    const { loadPackStats } = await import('../catalog_stats.ts');
+    await expect(loadPackStats()).resolves.toBeNull();
+  });
+
+  test('healthy D1 binding → returns packCount shape', async () => {
+    setCatalogStatsEnv({ DB: createMockD1(false) });
+    const { loadPackStats } = await import('../catalog_stats.ts');
+    const stats = await loadPackStats();
+    expect(stats).toEqual(expect.objectContaining({ packCount: expect.any(Number) }));
+  });
+
+  test('handleCatalogStats returns null when binding absent', async () => {
+    const { handleCatalogStats } = await import('../catalog_stats.ts');
+    await expect(handleCatalogStats()).resolves.toBeNull();
+  });
+
+  test('handleCatalogStats returns stats when binding present', async () => {
+    setCatalogStatsEnv({ DB: createMockD1(false) });
+    const { handleCatalogStats } = await import('../catalog_stats.ts');
+    const stats = await handleCatalogStats();
+    expect(stats).toEqual(expect.objectContaining({ packCount: expect.any(Number) }));
+  });
+});

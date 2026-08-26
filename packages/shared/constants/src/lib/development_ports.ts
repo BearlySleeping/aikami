@@ -91,9 +91,7 @@ export const FIXED_PORTS = {
   stt: 8087,
   image: 8188,
   text: 11434,
-  // Local PostgreSQL (C-387). Emulator-only — there is no local Postgres in
-  // staging/production. 5432 is left free for a developer's system Postgres.
-  postgres: 5433,
+
 } as const;
 
 export const EMULATOR_PORTS = {

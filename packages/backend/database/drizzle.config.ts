@@ -1,21 +1,19 @@
 // packages/backend/database/drizzle.config.ts
 //
-// C-394: Drizzle Kit config — Drizzle owns DDL (D-9).
+// C-436: Drizzle Kit config for the Cloudflare D1 schema (sqlite dialect).
+// The Postgres config (drizzle.config.ts, pg-core) was removed in C-436.
 //
-// `drizzle-kit generate` reads this schema and emits timestamped SQL
-// migrations into ./drizzle. Migrations are forward-only and generated,
-// never hand-edited; a migration applied to production is immutable.
-//
-// `drizzle-kit migrate` is NOT the deploy path — applying migrations is an
-// explicit step wired through the `database` deploy app (AC-5) so it can use
-// the DIRECT endpoint. This config is for generation (and ad-hoc local use).
+// `drizzle-kit generate` reads the sqlite dialect schema and emits
+// timestamped SQL migrations into ./drizzle-d1. Migrations are forward-only
+// and generated, never hand-edited; they are applied via
+// `wrangler d1 migrations apply DB` (local or remote).
 
 import { defineConfig } from 'drizzle-kit';
 
 export default defineConfig({
-  dialect: 'postgresql',
+  dialect: 'sqlite',
   schema: './src/lib/schema.ts',
-  out: './drizzle',
+  out: './drizzle-d1',
   // Explicit — never auto-push or pull against a live database.
   strict: true,
   verbose: true,

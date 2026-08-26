@@ -19,6 +19,8 @@
 
 import { app } from '$lib/server/api';
 import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
+import { setCatalogStatsEnv } from '$lib/server/api/catalog_stats.ts';
+import { setHealthDbEnv } from '$lib/server/api/health_db.ts';
 import { setSaveBackupEnv } from '$lib/server/api/save_backup.ts';
 import { setStorageEnv } from '$lib/server/api/storage.ts';
 
@@ -33,6 +35,10 @@ export const fallback: RequestHandler = async ({ request, platform }) => {
   const env = platform?.env;
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setBetterAuthEnv(env ? { DB: env.DB } : undefined);
+  // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
+  setCatalogStatsEnv(env ? { DB: env.DB } : undefined);
+  // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
+  setHealthDbEnv(env ? { DB: env.DB } : undefined);
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setSaveBackupEnv(env ? { DB: env.DB, SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names

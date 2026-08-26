@@ -69,9 +69,8 @@ bun run db:migrate    # apply pending migrations locally
 bun run db:status     # how many migrations are applied
 ```
 
-> The legacy Postgres path (`bun postgres:start`, Neon connection strings) is
-> still present for the C-426 rollback window and is removed in **C-436**. New
-> work should target D1.
+> The legacy Postgres path (`bun postgres:start`, Neon connection strings) was
+> removed in **C-436**. The hub now uses Cloudflare D1 exclusively.
 
 ## Local Cloudflare runtime
 
