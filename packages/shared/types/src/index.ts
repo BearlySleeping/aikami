@@ -42,6 +42,7 @@ export * from './lib/export/export.ts';
 export * from './lib/form/auth.ts';
 export * from './lib/game/agent.ts';
 export * from './lib/game/agent.ts';
+export * from './lib/game/asset_resolver.ts';
 export * from './lib/game/bridge_tags.ts';
 export * from './lib/game/campaign.ts';
 export * from './lib/game/catalog_index.ts';

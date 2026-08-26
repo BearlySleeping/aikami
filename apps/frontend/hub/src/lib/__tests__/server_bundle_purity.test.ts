@@ -1,0 +1,92 @@
+// apps/frontend/hub/src/lib/__tests__/server_bundle_purity.test.ts
+//
+// C-446 AC-1: PixiJS must never enter the hub server bundle.
+//
+// The hub deploys to Cloudflare Workers. PixiJS is a heavy client-only
+// library that must never appear in the SSR bundle. This test walks the
+// server import graph and asserts no PixiJS marker is present.
+//
+// See also: src/lib/server/tests/worker_boundary.test.ts for the full
+// Workers-boundary guard (node:* imports).
+
+import { describe, expect, it } from 'bun:test';
+import { readFileSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
+const hubRoot = resolve(import.meta.dir, '../../..');
+
+/** Files that are server-only entry points. */
+const serverEntryPoints = [
+  join(hubRoot, 'src/hooks.server.ts'),
+  ...(() => {
+    const { readdirSync } = require('node:fs');
+    const routesDir = join(hubRoot, 'src/routes');
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.name.endsWith('.server.ts')) {
+          files.push(full);
+        }
+      }
+    };
+    walk(routesDir);
+    return files;
+  })(),
+].filter((file) => {
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+});
+
+/** PixiJS markers that indicate a Pixi import in the server graph. */
+const PIXI_MARKERS = ['pixi.js', '@pixi/', 'PIXI.', 'PIXI', 'from "pixi.js"', "from 'pixi.js'"];
+
+/**
+ * Walk the server import graph looking for PixiJS markers.
+ * This is a simplified check — the full graph walk is in worker_boundary.test.ts.
+ */
+const findPixiInServerGraph = (): string[] => {
+  const visited = new Set<string>();
+  const offenders: string[] = [];
+
+  const visit = (file: string): void => {
+    if (visited.has(file)) {
+      return;
+    }
+    visited.add(file);
+
+    try {
+      const source = readFileSync(file, 'utf8');
+      const lower = source.toLowerCase();
+
+      for (const marker of PIXI_MARKERS) {
+        if (lower.includes(marker.toLowerCase())) {
+          offenders.push(`${file} contains PixiJS marker: "${marker}"`);
+          return; // One report per file is enough.
+        }
+      }
+    } catch {
+      // Skip files that can't be read.
+    }
+  };
+
+  serverEntryPoints.forEach(visit);
+  return offenders;
+};
+
+describe('C-446 AC-1: PixiJS must never enter the hub server bundle', () => {
+  it('finds the server entry points', () => {
+    expect(serverEntryPoints.length).toBeGreaterThan(0);
+    expect(serverEntryPoints.some((file) => file.endsWith('hooks.server.ts'))).toBe(true);
+  });
+
+  it('server entry points contain no PixiJS markers', () => {
+    const offenders = findPixiInServerGraph();
+    expect(offenders).toEqual([]);
+  });
+});

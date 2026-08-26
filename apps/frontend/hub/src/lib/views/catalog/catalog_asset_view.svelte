@@ -1,6 +1,13 @@
 <script lang="ts">
+import type { ComponentType } from 'svelte';
 // apps/frontend/hub/src/lib/views/catalog/catalog_asset_view.svelte
 // Asset detail page (C-396 AC-3): preview, size, license, attribution.
+//
+// C-446: adds a client-only preview island over the thumbnail. The preview
+// is dynamically imported inside onMount so PixiJS never enters the server
+// bundle. The thumbnail remains visible underneath and is hidden only after
+// the canvas has painted its first frame.
+import { onMount } from 'svelte';
 import BaseViewModelContainer from '$components/base_view_model_container.svelte';
 import type { CatalogAssetViewModelInterface } from './catalog_asset_view_model.svelte.ts';
 
@@ -11,6 +18,86 @@ const formatLicense = (license: string): string => {
   const trimmed = license.trim();
   return trimmed.toLowerCase() === 'unknown' ? 'Unknown' : trimmed;
 };
+
+// ── C-446: Preview island state ─────────────────────────────────────────
+let PreviewComponent = $state<ComponentType | undefined>(undefined);
+let previewProps = $state<Record<string, unknown>>({});
+
+onMount(async () => {
+  const kind = viewModel.previewKind;
+  if (kind === 'none') {
+    return;
+  }
+
+  try {
+    const resolver = await viewModel.ensureResolverBuilt();
+    if (!resolver) {
+      viewModel.setPreviewError('Preview resolver unavailable.');
+      return;
+    }
+
+    const tag = viewModel.entry.tag;
+
+    switch (kind) {
+      case 'lpc': {
+        const mod = await import('@aikami/frontend/preview');
+        const { decodeLpcPreviewState, encodeLpcPreviewState } = mod;
+        const initialParams = new URLSearchParams(window.location.search);
+        const initialState = decodeLpcPreviewState(initialParams);
+
+        PreviewComponent = mod.default as ComponentType;
+        previewProps = {
+          resolver,
+          allSlots: [],
+          initialState,
+          width: 320,
+          height: 320,
+          zoom: 2,
+          controls: true,
+          onStateChange: (state: unknown) => {
+            const params = encodeLpcPreviewState(
+              state as Parameters<typeof encodeLpcPreviewState>[0],
+            );
+            const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+            window.history.replaceState(null, '', newUrl);
+          },
+        };
+        break;
+      }
+      case 'tileset': {
+        const { default: TilesetPreview } = await import('@aikami/frontend/preview');
+        PreviewComponent = TilesetPreview as ComponentType;
+        previewProps = { resolver, tag, width: 320, height: 320, zoom: 1 };
+        break;
+      }
+      case 'map': {
+        const { default: MapPreview } = await import('@aikami/frontend/preview');
+        PreviewComponent = MapPreview as ComponentType;
+        previewProps = { resolver, mapTag: tag, width: 320, height: 320, zoom: 1 };
+        break;
+      }
+      case 'prop': {
+        const { default: PropPreview } = await import('@aikami/frontend/preview');
+        PreviewComponent = PropPreview as ComponentType;
+        previewProps = { resolver, tag, width: 320, height: 320, zoom: 2 };
+        break;
+      }
+      case 'pack': {
+        // Pack preview: show a simple placeholder
+        // Full pack contents listing in Phase 3.
+        PreviewComponent = undefined;
+        previewProps = {};
+        viewModel.setPreviewMounted();
+        return;
+      }
+    }
+
+    viewModel.setPreviewMounted();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    viewModel.setPreviewError(`Preview failed to load: ${message}`);
+  }
+});
 </script>
 
 <BaseViewModelContainer
@@ -42,13 +129,15 @@ const formatLicense = (license: string): string => {
   <div class="grid gap-6 md:grid-cols-[minmax(0,320px)_1fr]">
     <!-- Preview -->
     <div
-      class="flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30"
+      class="relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30"
     >
       {#if viewModel.previewUrl}
+        <!-- Server-rendered thumbnail — always visible; hidden by preview canvas -->
         <img
           src={viewModel.previewUrl}
           alt={`Preview of ${viewModel.displayName}`}
           class="h-full w-full object-contain"
+          class:hidden={viewModel.previewMounted}
           data-testid="catalog-asset-preview"
         >
       {:else}
@@ -72,6 +161,25 @@ const formatLicense = (license: string): string => {
             />
           </svg>
           <p class="text-sm">Preview unavailable</p>
+        </div>
+      {/if}
+
+      <!-- C-446: Client-only preview island — mounted over the thumbnail -->
+      {#if PreviewComponent && viewModel.previewKind !== 'none'}
+        <div class="absolute inset-0 z-10" data-testid="catalog-asset-preview-island">
+          <PreviewComponent {...previewProps} />
+        </div>
+      {/if}
+
+      <!-- C-446: Preview error notice — shown when the island fails -->
+      {#if viewModel.previewError}
+        <div
+          class="absolute bottom-2 left-2 right-2 z-20 rounded bg-error/90 px-3 py-2 text-xs text-error-content"
+          role="alert"
+          aria-live="polite"
+          data-testid="catalog-asset-preview-error"
+        >
+          ⚠️ {viewModel.previewError}
         </div>
       {/if}
     </div>

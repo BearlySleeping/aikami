@@ -49,6 +49,7 @@
     "@aikami/backend-database": "workspace:*",
     "@aikami/backend-project-ai": "workspace:*",
     "@aikami/constants": "workspace:*",
+    "@aikami/frontend/preview": "workspace:*",
     "@aikami/frontend/theme": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",

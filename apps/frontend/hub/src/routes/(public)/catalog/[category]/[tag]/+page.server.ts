@@ -2,17 +2,19 @@
 //
 // Asset detail page (C-396 AC-3): preview, license, attribution.
 //
-// Only the single requested entry is shipped to the client — the shard is
-// fetched server-side and the one matching entry selected. Preview URLs come
-// from the pipeline-generated thumbnail (`thumbnailHash`); entries that
-// predate the thumbnail republish get `previewUrl: undefined` and the view
-// says the preview is unavailable (never the raw multi-frame sheet).
+// Fetches the full category shard server-side, selects the one matching entry,
+// and passes the full entries list to the client so the preview resolver can
+// resolve tags without a second index fetch (C-446).
+//
+// Preview URLs come from the pipeline-generated thumbnail (`thumbnailHash`);
+// entries that predate the thumbnail republish get `previewUrl: undefined`
+// and the view says the preview is unavailable (never the raw multi-frame sheet).
 import { error } from '@sveltejs/kit';
 import { catalogCategoryLabel } from '$lib/constants/catalog_labels.ts';
 import { loadPackStats } from '$lib/server/api/catalog_stats.ts';
 import {
   CatalogIndexUnavailableError,
-  getAssetEntry,
+  getCategoryEntries,
   resolveThumbnailUrl,
 } from '$lib/server/catalog/catalog_index.ts';
 import type { CatalogAssetPageData } from '$types';
@@ -21,9 +23,9 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
   depends('catalog:pack');
 
-  let found: Awaited<ReturnType<typeof getAssetEntry>>;
+  let categoryData: Awaited<ReturnType<typeof getCategoryEntries>>;
   try {
-    found = await getAssetEntry(params.category, params.tag);
+    categoryData = await getCategoryEntries(params.category);
   } catch (cause) {
     if (cause instanceof CatalogIndexUnavailableError) {
       // Index outage → an explicit 503 with a fixed user-facing message,
@@ -33,6 +35,11 @@ export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
     }
     throw cause;
   }
+  if (!categoryData) {
+    error(404, `Category "${params.category}" was not found.`);
+  }
+
+  const found = categoryData.entries.find((candidate) => candidate.tag === params.tag);
   if (!found) {
     error(404, `Asset "${params.tag}" was not found in category "${params.category}".`);
   }
@@ -42,8 +49,10 @@ export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
   return {
     category: params.category,
     categoryLabel: catalogCategoryLabel(params.category),
-    entry: found.entry,
-    previewUrl: resolveThumbnailUrl(found.originUrl, found.entry),
+    entry: found,
+    entries: categoryData.entries,
+    originUrl: categoryData.originUrl,
+    previewUrl: resolveThumbnailUrl(categoryData.originUrl, found),
     stats: loadPackStats().catch(() => null),
   } satisfies CatalogAssetPageData;
 };
