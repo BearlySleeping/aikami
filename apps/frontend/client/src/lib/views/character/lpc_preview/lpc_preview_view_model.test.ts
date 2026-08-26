@@ -61,6 +61,35 @@ mock.module('@aikami/frontend/engine', () => ({
   },
 }));
 
+mock.module('@aikami/frontend/engine/content', () => ({
+  resolveLayerDepth: (_options: { slot: string; layerRole: string; direction: number }) => {
+    const depths: Record<string, number> = {
+      body: 0,
+      legs: 10,
+      feet: 20,
+      torso: 30,
+      belt: 35,
+      arms: 36,
+      shoulders: 40,
+      head: 50,
+      eyes: 51,
+      ears: 52,
+      nose: 53,
+      facial_hair: 54,
+      hair: 60,
+      hat: 70,
+      shield: 80,
+      cape: 60,
+      quiver: 70,
+      weapon: 80,
+      accessories: 75,
+      headAccessories: 76,
+      accessory: 77,
+    };
+    return depths[_options.slot] ?? 100;
+  },
+}));
+
 mock.module('@aikami/frontend/services', () => ({
   BaseFrontendClass: class {
     _options: { className: string };
@@ -136,7 +165,14 @@ mock.module('$logger', () => ({
 }));
 
 mock.module('$lib/data/lpc_renderer', () => ({
-  loadLpcSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+  createLpcRenderer: (options: { resolver: { resolve: (tag: string) => string | null; release: (url: string) => void; kind: string } }) => ({
+    loadSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+    extractFrame: () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+    getFrameTexture: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+    createSprite: async () => null,
+    clearCaches: () => {},
+    resolver: options.resolver,
+  }),
   detectLpcSheetLayout: (sheet: { width: number; height: number }) => ({
     pitch: 64,
     columns: Math.max(1, Math.floor(sheet.width / 64)),
@@ -144,11 +180,9 @@ mock.module('$lib/data/lpc_renderer', () => ({
     scale: 1,
   }),
   getLpcSpriteAnchor: () => ({ x: -32, y: -32 }),
-  setLpcUrlResolver: () => {},
 }));
 
 mock.module('$lib/data/lpc_asset_catalog', () => ({
-  wireLpcUrlResolver: () => {},
   getLpcAssetPath: () => '/game-data/lpc/test.walk.webp',
   ANIMATION_STATE_OPTIONS: [
     { value: 8, label: 'Walk' },
