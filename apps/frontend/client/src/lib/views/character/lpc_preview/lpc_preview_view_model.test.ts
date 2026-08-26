@@ -32,33 +32,41 @@ effectPolyfill.root = (fn: () => void) => {
 
 // ── Mocks ─────────────────────────────────────────────────────────────
 
+const mockResolveLayerDepth = (
+  _options: { slot: string; layerRole: string; direction: number },
+) => {
+  const depths: Record<string, number> = {
+    body: 0,
+    legs: 10,
+    feet: 20,
+    torso: 30,
+    belt: 35,
+    arms: 36,
+    shoulders: 40,
+    head: 50,
+    eyes: 51,
+    ears: 52,
+    nose: 53,
+    facial_hair: 54,
+    hair: 60,
+    hat: 70,
+    shield: 80,
+    cape: 60,
+    quiver: 70,
+    weapon: 80,
+    accessories: 75,
+    headAccessories: 76,
+    accessory: 77,
+  };
+  return depths[_options.slot] ?? 100;
+};
+
 mock.module('@aikami/frontend/engine', () => ({
-  resolveLayerDepth: (_options: { slot: string; layerRole: string; direction: number }) => {
-    const depths: Record<string, number> = {
-      body: 0,
-      legs: 10,
-      feet: 20,
-      torso: 30,
-      belt: 35,
-      arms: 36,
-      shoulders: 40,
-      head: 50,
-      eyes: 51,
-      ears: 52,
-      nose: 53,
-      facial_hair: 54,
-      hair: 60,
-      hat: 70,
-      shield: 80,
-      cape: 60,
-      quiver: 70,
-      weapon: 80,
-      accessories: 75,
-      headAccessories: 76,
-      accessory: 77,
-    };
-    return depths[_options.slot] ?? 100;
-  },
+  resolveLayerDepth: mockResolveLayerDepth,
+}));
+
+mock.module('@aikami/frontend/engine/content', () => ({
+  resolveLayerDepth: mockResolveLayerDepth,
 }));
 
 mock.module('@aikami/frontend/services', () => ({
