@@ -22,7 +22,7 @@ created_at: "2026-08-24"
 | **Target** | `scripts/src/lib/herdr/session.ts` — a new `hub-worker` dev service; `apps/frontend/hub/` — a `dev:worker` script and local D1/R2 state; `packages/backend/database/` — a local migration + seed path |
 | **Priority** | P1 — this is the C-392 dev/prod parity principle, unapplied to the hub. Today no contributor can work on auth, the catalog write path, or save backup without a Cloudflare account. |
 | **Dependencies** | C-426 (implemented) — the D1 schema, Better Auth, and `wrangler.jsonc` already exist. Independent of C-436; both may land in either order. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — `docs/guides/database.md` and `docs/guides/dev-workflow.md` carry "tracked as C-437" markers to replace with the real workflow. |
 | **Contract version** | 2.0.0 |

@@ -78,6 +78,7 @@ import { findBash, posixQuote } from '../env/which';
 export type DevService =
   | 'client'
   | 'hub'
+  | 'hub-worker'
   | 'voice'
   | 'image'
   | 'text'
@@ -156,6 +157,20 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     command: (mode) => `bun run dev -- --mode ${mode}`,
     cwd: (root) => resolve(root, 'apps/frontend/hub'),
     readyPort: (mode) => PORTS[mode].hub,
+  },
+  // C-437: wrangler dev --local — the real Workers runtime with D1 and R2
+  // bindings, unlike the Vite `hub` service above which provides neither.
+  // Build the hub first (`bun moon run hub:build`), then start this service.
+  // Mutually exclusive with `hub` via port contention (both represent the
+  // same logical app on different ports).
+  'hub-worker': {
+    name: 'hub-worker',
+    command: (mode) =>
+      mode === 'emulator'
+        ? 'bun run dev:worker'
+        : 'echo "hub-worker is an emulator-only service — use wrangler deploy for staging/production"',
+    cwd: (root) => resolve(root, 'apps/frontend/hub'),
+    readyPort: (mode) => (mode === 'emulator' ? PORTS[mode].hubWorker : undefined),
   },
   // C-392: the voice/image/text dev engines delegate to the C-390
   // local-stack compose topology (apps/backend/local-stack/compose.yaml) via
@@ -269,6 +284,7 @@ export const KNOWN_SERVICES: DevService[] = [
   'postgres',
   'text-ollama',
   'image-comfyui',
+  'hub-worker',
 ];
 
 /** Map a workspace tab label back to a known service key, or undefined. */
@@ -283,7 +299,7 @@ const serviceFromTabLabel = (label: string): DevService | undefined => {
  *  voice/image/text stay on shared base ports (heavy singleton backends);
  *  the C-392 advanced engines (text-ollama, image-comfyui) stay on the same
  *  shared base ports as their modality. */
-const OFFSET_AWARE_SERVICES = new Set<DevService>(['client', 'hub', 'site']);
+const OFFSET_AWARE_SERVICES = new Set<DevService>(['client', 'hub', 'hub-worker', 'site']);
 
 /** Resolve a service's ready port, shifted by a contract's port offset
  *  when that service is offset-aware. */
