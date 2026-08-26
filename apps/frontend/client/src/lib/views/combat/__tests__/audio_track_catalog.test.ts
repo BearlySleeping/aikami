@@ -26,7 +26,10 @@ const CATALOG_FILE = new URL('../../../../../static/game-data/audio_tracks.json'
 const R2_BASE = 'https://assets.bearlysleeping.com';
 
 mock.module('@aikami/frontend/configs', () => ({
-  publicEnv: { PUBLIC_ASSETS_BASE_URL: R2_BASE },
+  publicEnv: {
+    // biome-ignore lint/style/useNamingConvention: SvelteKit public env var convention
+    PUBLIC_ASSETS_BASE_URL: R2_BASE,
+  },
 }));
 
 /**

@@ -35,14 +35,14 @@ test.describe('C-435 AC-3: Offline First Run', () => {
     // Wait for either the boot progress UI or an error/offline message
     // The boot pipeline should still show progress stages
     const progressBar = page.locator('progress.progress-primary');
-    const offlineMessage = page.locator('text=connection', { hasText: true });
-    const networkMessage = page.locator('text=network', { hasText: true });
-    const errorMessage = page.locator('text=offline', { hasText: true });
+    const offlineMessage = page.locator('text=connection');
+    const networkMessage = page.locator('text=network');
+    const errorMessage = page.locator('text=offline');
 
     // The app should be responsive — either showing boot progress or an offline message
     await expect(
       Promise.race([
-        progressBar.isAttached(),
+        progressBar.count().then((c) => c > 0),
         offlineMessage.isVisible().catch(() => false),
         networkMessage.isVisible().catch(() => false),
         errorMessage.isVisible().catch(() => false),
@@ -54,8 +54,6 @@ test.describe('C-435 AC-3: Offline First Run', () => {
     expect(bodyText.length).toBeGreaterThan(0);
 
     // Verify the app is responsive (not crashed)
-    const _html = await page.locator('html').getAttribute('style');
-    // Just checking the page didn't hard-crash
     expect(page.url()).toContain('/game');
   });
 });

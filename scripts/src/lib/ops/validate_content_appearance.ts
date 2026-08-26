@@ -72,7 +72,7 @@ export const parseGeneratedCatalog = (source: string): CatalogSlot[] => {
   // Collect all slot declaration offsets first, then slice blocks between
   // consecutive slot declarations.
   const slotOffsets: Array<{ name: string; index: number }> = [];
-  const slotPattern = /slot:\s*'([^']+)'/g;
+  const slotPattern = /slot:\s*['"]([^'"]+)['"]/g;
   while (true) {
     const slotMatch = slotPattern.exec(source);
     if (slotMatch === null) {
@@ -91,7 +91,7 @@ export const parseGeneratedCatalog = (source: string): CatalogSlot[] => {
     const block = source.slice(start, end);
 
     const variants: string[] = [];
-    const assetPattern = /assetId:\s*'([^']+)'/g;
+    const assetPattern = /assetId:\s*['"]([^'"]+)['"]/g;
     while (true) {
       const assetMatch = assetPattern.exec(block);
       if (assetMatch === null) {
