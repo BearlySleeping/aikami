@@ -30,7 +30,7 @@
     "@inlang/paraglide-js": "2.24.1",
     "@libsql/client": "^0.17.4",
     "@sveltejs/adapter-cloudflare": "^7.2.9",
-    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/kit": "^3.0.0-next",
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.3.0",
