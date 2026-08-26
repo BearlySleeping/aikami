@@ -260,6 +260,13 @@ export default defineConfig(({ mode }) => {
   return {
     plugins,
 
+    define: {
+      // Ensure PUBLIC_APP_ID and PUBLIC_MODE are always available at runtime.
+      // The configs package (@aikami/frontend/configs) requires these.
+      'import.meta.env.PUBLIC_APP_ID': JSON.stringify(process.env.PUBLIC_APP_ID || 'client'),
+      'import.meta.env.PUBLIC_MODE': JSON.stringify(process.env.PUBLIC_MODE || mode),
+    },
+
     envPrefix: ['PUBLIC_'],
 
     customLogger: {
