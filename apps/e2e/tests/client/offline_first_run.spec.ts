@@ -1,16 +1,15 @@
 // apps/e2e/tests/client/offline_first_run.spec.ts
 //
-// E2E test for AC-3: A first run with no network degrades clearly.
+// E2E test for C-448 AC-6: A first run with no network degrades clearly.
 // Given a fresh install with no network, when the client is launched,
-// then it boots using the bundled offline core, shows an actionable message
-// explaining that content requires a connection, and never presents a blank
-// screen or a silent hang.
+// then it shows the named message about needing to download starter content,
+// does not hang, and does not show a blank screen.
 //
-// Contract: C-435 De-bundle game-data
+// Contract: C-448 De-bundle Content Packs
 
 import { expect, test } from '@playwright/test';
 
-test.describe('C-435 AC-3: Offline First Run', () => {
+test.describe('C-448 AC-6: Offline First Run', () => {
   test('should show actionable message when launched with no network on fresh install', async ({
     page,
     context,

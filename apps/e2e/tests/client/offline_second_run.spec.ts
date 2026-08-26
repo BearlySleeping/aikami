@@ -1,15 +1,15 @@
 // apps/e2e/tests/client/offline_second_run.spec.ts
 //
-// E2E test for AC-2: A second run is fully offline.
-// Given a client that has completed a first run and warmed its cache,
-// when it is launched with no network, then it boots to a playable state,
-// loads a map, renders the character, and makes zero network requests.
+// E2E test for C-448 AC-5: A second run is fully offline.
+// Given an install that has completed a first run, when the network is
+// blocked entirely and the game boots, then it reaches playable state with
+// zero outbound network requests, and the pack loads from the cache.
 //
-// Contract: C-435 De-bundle game-data
+// Contract: C-448 De-bundle Content Packs
 
 import { expect, test } from '@playwright/test';
 
-test.describe('C-435 AC-2: Offline Second Run', () => {
+test.describe('C-448 AC-5: Offline Second Run', () => {
   test('should boot to playable state with zero network requests after cache is warmed', async ({
     page,
     context,
