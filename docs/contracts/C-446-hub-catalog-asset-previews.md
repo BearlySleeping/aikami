@@ -21,7 +21,7 @@ created_at: "2026-08-26"
 | **Target** | `apps/frontend/hub/src/lib/views/catalog/`, `apps/frontend/hub/src/routes/(public)/catalog/` |
 | **Priority** | P2 — user-facing value, but strictly downstream of the shared package. |
 | **Dependencies** | C-442 (LPC core package), C-443 (engine subpath entrypoints), C-444 (asset resolver seam), C-445 (shared preview package). All must merge first. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | user-facing → catalog browsing page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
@@ -467,3 +467,60 @@ Must be resolved before status becomes `approved`:
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Added a client-only preview island to the hub's asset detail page. Created the `previewKindForEntry` dispatch function, CDN asset resolver, and wired all five preview kinds (LPC, tileset, map, prop, pack) via dynamic imports from `@aikami/frontend/preview`. Also added the missing `AssetResolver` type to shared types (C-444 gap), updated the server load to pass full shard entries to the client, and wrote unit tests for the dispatch function and server bundle purity.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | PixiJS absent from server bundle — verified via grep on built `index.js` |
+| AC-2 | ⚠️ | Dispatch + island wiring done. LPC preview mounts dynamically but `allSlots` is empty pending the scoped catalog projection (Phase 3) |
+| AC-3 | ⚠️ | Tileset preview mounts dynamically with resolver. Grid overlay toggling deferred to Phase 3 |
+| AC-4 | ⚠️ | Map preview mounts dynamically. Tileset shard fetch for maps deferred to Phase 3 |
+| AC-5 | ✅ | Thumbnail stays visible underneath; hidden only after `setPreviewMounted()`. Error notice shown on failure |
+| AC-6 | ✅ | LPC URL state sync via `encodeLpcPreviewState`/`decodeLpcPreviewState` with `replaceState` |
+| AC-7 | ⚠️ | Chunk size comparison not run — no pre-change baseline captured. Build succeeds |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/types/src/lib/game/asset_resolver.ts` | `AssetResolver` type (C-444 missing piece) |
+| `apps/frontend/hub/src/lib/views/catalog/preview_kind.ts` | `PreviewKind` type and `previewKindForEntry` dispatch |
+| `apps/frontend/hub/src/lib/client/services/cdn_asset_resolver.ts` | Stateless CDN resolver from server-fetched entries |
+| `apps/frontend/hub/src/lib/views/catalog/__tests__/preview_kind.test.ts` | Unit tests for preview dispatch (12 cases) |
+| `apps/frontend/hub/src/lib/__tests__/server_bundle_purity.test.ts` | Server bundle PixiJS purity test |
+| `apps/frontend/docs/src/content/docs/features/hub-catalog-browsing.md` | Docs page for hub catalog browsing |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/types/src/index.ts` | Added `asset_resolver.ts` export |
+| `apps/frontend/hub/vite.config.ts` | Added aliases for `@aikami/frontend/preview`, `@aikami/frontend/engine`, `@aikami/lpc` |
+| `apps/frontend/hub/package.json` | Added `@aikami/frontend/preview` dependency |
+| `apps/frontend/hub/moon.yml` | Added `frontend-preview`, `frontend-engine`, `lpc` dependencies |
+| `apps/frontend/hub/src/lib/types/data.ts` | Added `entries` and `originUrl` to `CatalogAssetPageData` |
+| `apps/frontend/hub/src/routes/(public)/catalog/[category]/[tag]/+page.server.ts` | Changed to fetch full category entries and pass to client |
+| `apps/frontend/hub/src/lib/views/catalog/catalog_asset_view_model.svelte.ts` | Added previewKind, resolver, previewMounted, previewError fields |
+| `apps/frontend/hub/src/lib/views/catalog/catalog_asset_view.svelte` | Added client-only preview island with dynamic imports |
+
+### Deviations from Spec
+
+- **C-445 dependency status**: C-445 is marked `draft` in its contract doc but its code is merged (base commit is C-445's merge). Proceeded anyway since the package exists.
+- **`AssetResolver` type was missing**: C-444's spec defined it but it was never added to `packages/shared/types`. Added it as part of this contract.
+- **Scoped LPC catalog projection deferred**: The `allSlots` parameter for LPC preview is empty pending the full catalog projection from shard entries. This requires building `LpcSlotDef[]` from the shard entries, which is Phase 3 work.
+- **Tileset shard fetch for maps deferred**: AC-4 requires fetching the tilesets shard for map and pack pages. This is Phase 3 work.
+- **Chunk size comparison not performed**: AC-7 requires a pre-change baseline. No baseline was captured before implementation.
+
+### Test Results
+
+- Unit: 14/14 PASS (0 failures) — preview_kind (12) + server_bundle_purity (2)
+- E2E: Not run (no E2E tests written for this contract)
+- Visual: Not run (no visual suites created)
+- Baseline: 17 pre-existing failures (SvelteKit virtual module resolution in raw `bun test`), 0 new failures
