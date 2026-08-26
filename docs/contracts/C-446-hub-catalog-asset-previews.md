@@ -479,9 +479,9 @@ Added a client-only preview island to the hub's asset detail page. Created the `
 | AC | Status | Notes |
 |---|---|---|
 | AC-1 | ✅ | PixiJS absent from server bundle — verified via grep on built `index.js` |
-| AC-2 | ⚠️ | Dispatch + island wiring done. LPC preview mounts dynamically but `allSlots` is empty pending the scoped catalog projection (Phase 3) |
-| AC-3 | ⚠️ | Tileset preview mounts dynamically with resolver. Grid overlay toggling deferred to Phase 3 |
-| AC-4 | ⚠️ | Map preview mounts dynamically. Tileset shard fetch for maps deferred to Phase 3 |
+| AC-2 | ✅ | LPC preview mounts with scoped `allSlots` built from shard entries via `ensureLpcSlotsBuilt()` |
+| AC-3 | ✅ | Tileset preview mounts with grid overlay toggle button (`showTilesetGrid` state) |
+| AC-4 | ✅ | Map/pack pages fetch tilesets shard in server load (documented exception to shard rule) |
 | AC-5 | ✅ | Thumbnail stays visible underneath; hidden only after `setPreviewMounted()`. Error notice shown on failure |
 | AC-6 | ✅ | LPC URL state sync via `encodeLpcPreviewState`/`decodeLpcPreviewState` with `replaceState` |
 | AC-7 | ⚠️ | Chunk size comparison not run — no pre-change baseline captured. Build succeeds |
@@ -495,6 +495,11 @@ Added a client-only preview island to the hub's asset detail page. Created the `
 | `apps/frontend/hub/src/lib/client/services/cdn_asset_resolver.ts` | Stateless CDN resolver from server-fetched entries |
 | `apps/frontend/hub/src/lib/views/catalog/__tests__/preview_kind.test.ts` | Unit tests for preview dispatch (12 cases) |
 | `apps/frontend/hub/src/lib/__tests__/server_bundle_purity.test.ts` | Server bundle PixiJS purity test |
+| `apps/e2e/src/visual/suites/hub_lpc_preview.visual.ts` | Visual test for LPC preview (AC-2) |
+| `apps/e2e/src/visual/suites/hub_tileset_preview.visual.ts` | Visual test for tileset preview (AC-3) |
+| `apps/e2e/src/visual/suites/hub_map_preview.visual.ts` | Visual test for map preview (AC-4) |
+| `apps/e2e/tests/hub/catalog_preview.spec.ts` | E2E test for preview island + URL sync (AC-2, AC-6) |
+| `apps/e2e/tests/hub/catalog_preview_degraded.spec.ts` | E2E test for degraded path (AC-5) |
 | `apps/frontend/docs/src/content/docs/features/hub-catalog-browsing.md` | Docs page for hub catalog browsing |
 
 ### Files Modified
@@ -506,21 +511,19 @@ Added a client-only preview island to the hub's asset detail page. Created the `
 | `apps/frontend/hub/package.json` | Added `@aikami/frontend/preview` dependency |
 | `apps/frontend/hub/moon.yml` | Added `frontend-preview`, `frontend-engine`, `lpc` dependencies |
 | `apps/frontend/hub/src/lib/types/data.ts` | Added `entries` and `originUrl` to `CatalogAssetPageData` |
-| `apps/frontend/hub/src/routes/(public)/catalog/[category]/[tag]/+page.server.ts` | Changed to fetch full category entries and pass to client |
-| `apps/frontend/hub/src/lib/views/catalog/catalog_asset_view_model.svelte.ts` | Added previewKind, resolver, previewMounted, previewError fields |
-| `apps/frontend/hub/src/lib/views/catalog/catalog_asset_view.svelte` | Added client-only preview island with dynamic imports |
+| `apps/frontend/hub/src/routes/(public)/catalog/[category]/[tag]/+page.server.ts` | Changed to fetch full category entries + tilesets shard for maps/packs |
+| `apps/frontend/hub/src/lib/views/catalog/catalog_asset_view_model.svelte.ts` | Added previewKind, resolver, lpcSlots, previewMounted, previewError, ensureLpcSlotsBuilt |
+| `apps/frontend/hub/src/lib/views/catalog/catalog_asset_view.svelte` | Added client-only preview island with dynamic imports, grid toggle |
 
 ### Deviations from Spec
 
 - **C-445 dependency status**: C-445 is marked `draft` in its contract doc but its code is merged (base commit is C-445's merge). Proceeded anyway since the package exists.
 - **`AssetResolver` type was missing**: C-444's spec defined it but it was never added to `packages/shared/types`. Added it as part of this contract.
-- **Scoped LPC catalog projection deferred**: The `allSlots` parameter for LPC preview is empty pending the full catalog projection from shard entries. This requires building `LpcSlotDef[]` from the shard entries, which is Phase 3 work.
-- **Tileset shard fetch for maps deferred**: AC-4 requires fetching the tilesets shard for map and pack pages. This is Phase 3 work.
 - **Chunk size comparison not performed**: AC-7 requires a pre-change baseline. No baseline was captured before implementation.
 
 ### Test Results
 
 - Unit: 14/14 PASS (0 failures) — preview_kind (12) + server_bundle_purity (2)
-- E2E: Not run (no E2E tests written for this contract)
-- Visual: Not run (no visual suites created)
+- E2E: 3 test files created (not run — require hub dev server)
+- Visual: 3 visual suites created (not run — require hub dev server + OpenRouter)
 - Baseline: 17 pre-existing failures (SvelteKit virtual module resolution in raw `bun test`), 0 new failures
