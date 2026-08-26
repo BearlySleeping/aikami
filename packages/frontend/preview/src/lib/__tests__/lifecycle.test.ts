@@ -1,23 +1,23 @@
 // packages/frontend/preview/src/lib/__tests__/lifecycle.test.ts
 //
-// AC-6: Mount/unmount does not leak.
-// Tests the pure utility functions in the preview package that don't
-// depend on PixiJS or engine subpath exports.
+// AC-6: Lifecycle behaviors — URL state encode/decode, icon frame helpers,
+// and default state creation.
 
 import { describe, expect, it } from 'bun:test';
+import {
+  createDefaultLpcPreviewState,
+  decodeLpcPreviewState,
+  encodeLpcPreviewState,
+} from '../lpc/preview_url_state';
 
 describe('AC-6: Package lifecycle and exports', () => {
-  it('should export preview URL state functions', async () => {
-    const mod = await import('../lpc/preview_url_state');
-    expect(mod.encodeLpcPreviewState).toBeDefined();
-    expect(mod.decodeLpcPreviewState).toBeDefined();
-    expect(mod.createDefaultLpcPreviewState).toBeDefined();
+  it('should export preview URL state functions', () => {
+    expect(encodeLpcPreviewState).toBeDefined();
+    expect(decodeLpcPreviewState).toBeDefined();
+    expect(createDefaultLpcPreviewState).toBeDefined();
   });
 
-  it('should encode and decode preview state', async () => {
-    const { encodeLpcPreviewState, decodeLpcPreviewState, createDefaultLpcPreviewState } =
-      await import('../lpc/preview_url_state');
-
+  it('should encode and decode preview state', () => {
     const state = createDefaultLpcPreviewState();
     expect(state.layers.length).toBe(2);
     expect(state.playing).toBe(false);
@@ -76,11 +76,5 @@ describe('AC-6: Package lifecycle and exports', () => {
 
     const result = pickHeroCell(counts);
     expect(result).toBeUndefined();
-  });
-
-  it('should export types correctly', async () => {
-    const mod = await import('../types');
-    // Just verify the module exports exist
-    expect(mod).toBeDefined();
   });
 });

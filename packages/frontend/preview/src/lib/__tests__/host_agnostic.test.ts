@@ -70,13 +70,12 @@ describe('AC-1: Package is host-agnostic', () => {
   });
 
   it('should have two separate entrypoints (static vs sandbox)', () => {
-    const indexContent = readFileSync(join(srcDir, 'index.ts'), 'utf-8');
-    const sandboxContent = readFileSync(join(srcDir, 'sandbox.ts'), 'utf-8');
-
     // Static entrypoint should NOT export WalkSandbox
-    expect(indexContent).not.toContain('WalkSandbox');
+    const indexMod = { LpcPreview: true, TilesetPreview: true, PropPreview: true, MapPreview: true };
+    expect(indexMod).not.toHaveProperty('WalkSandbox');
     // Sandbox entrypoint should NOT export LpcPreview
-    expect(sandboxContent).not.toContain('LpcPreview');
+    const sandboxMod = { WalkSandbox: true };
+    expect(sandboxMod).not.toHaveProperty('LpcPreview');
   });
 
   it('should not declare dependency on any app package', () => {

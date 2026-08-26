@@ -6,10 +6,11 @@
 // Contract: C-372, C-444, C-445
 
 import { resolveLpcSheetGeometry } from '@aikami/frontend/engine/content';
+import type { LpcSheetGeometry } from '@aikami/frontend/engine';
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { lpcStateSuffix, lpcTag } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';
-import { Rectangle, Sprite, Texture } from 'pixi.js';
+import { Assets, Rectangle, Sprite, Texture } from 'pixi.js';
 
 // ── Sheet layout detection ────────────────────────────────────────────────
 
@@ -20,7 +21,7 @@ import { Rectangle, Sprite, Texture } from 'pixi.js';
  * @deprecated Use the shared LpcSheetGeometry from @aikami/frontend/engine.
  *   Re-exported here for backward compatibility.
  */
-export type LpcSheetLayout = import('@aikami/frontend/engine').LpcSheetGeometry;
+export type LpcSheetLayout = LpcSheetGeometry;
 
 /**
  * Detects the cell layout of an LPC spritesheet.
@@ -103,49 +104,34 @@ export const getLpcSpriteAnchor = (layout: LpcSheetLayout): { x: number; y: numb
  * @param options.resolver - The AssetResolver to use for URL resolution.
  * @returns An LpcRenderer instance with its own caches.
  */
-export const createLpcRenderer = (options: { resolver: AssetResolver }): LpcRenderer => {
-  const { resolver } = options;
+export type CreateLpcRendererOptions = {
+  resolver: AssetResolver;
+  /** Optional error handler for asset loading failures. */
+  onError?: (error: unknown) => void;
+};
+
+export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRenderer => {
+  const { resolver, onError } = options;
 
   // Instance-scoped caches
   const _sheetCache = new Map<string, Texture>();
   const _sheetPromises = new Map<string, Promise<Texture>>();
   const _frameCache = new Map<string, Texture>();
-  let _manifestReady = true;
-
-  const _setManifestReady = (ready: boolean): void => {
-    _manifestReady = ready;
-    if (ready) {
-      for (const [key, texture] of _sheetCache) {
-        if (texture === Texture.EMPTY) {
-          _sheetCache.delete(key);
-        }
-      }
-    }
-  };
-
-  const _resolveUrl = (assetId: string, state: LpcAnimationState | string): string | null => {
-    const url = resolver.resolve(assetId);
-    if (!url) {
-      return null;
-    }
-    return url;
-  };
 
   const _loadSheetBySuffix = async (assetId: string, stateSuffix: string): Promise<Texture> => {
     const tag = lpcTag(assetId, stateSuffix);
     const url = resolver.resolve(tag);
     if (!url) {
-      if (!_manifestReady) {
-        return Texture.EMPTY;
-      }
       return Texture.EMPTY;
     }
     try {
-      const { Assets } = await import('pixi.js');
       const texture = await Assets.load(url);
       texture.source.scaleMode = 'nearest';
       return texture;
-    } catch {
+    } catch (err) {
+      if (onError) {
+        onError(err);
+      }
       return Texture.EMPTY;
     }
   };
@@ -171,18 +157,16 @@ export const createLpcRenderer = (options: { resolver: AssetResolver }): LpcRend
         return primary;
       }
 
-      if (_manifestReady) {
-        const aliasAssetId = STATE_ASSET_ALIASES[assetId]?.[stateSuffix];
-        if (aliasAssetId && aliasAssetId !== assetId) {
-          const aliasSheet = await _loadSheetBySuffix(aliasAssetId, stateSuffix);
-          if (aliasSheet !== Texture.EMPTY) {
-            _sheetCache.set(key, aliasSheet);
-            return aliasSheet;
-          }
+      const aliasAssetId = STATE_ASSET_ALIASES[assetId]?.[stateSuffix];
+      if (aliasAssetId && aliasAssetId !== assetId) {
+        const aliasSheet = await _loadSheetBySuffix(aliasAssetId, stateSuffix);
+        if (aliasSheet !== Texture.EMPTY) {
+          _sheetCache.set(key, aliasSheet);
+          return aliasSheet;
         }
       }
 
-      if (_manifestReady && stateSuffix !== 'idle') {
+      if (stateSuffix !== 'idle') {
         const chain = STATE_FALLBACK_CHAINS[stateSuffix] ?? DEFAULT_STATE_FALLBACKS;
         for (const fallbackSuffix of chain) {
           if (fallbackSuffix === stateSuffix) {
@@ -196,9 +180,7 @@ export const createLpcRenderer = (options: { resolver: AssetResolver }): LpcRend
         }
       }
 
-      if (_manifestReady) {
-        _sheetCache.set(key, Texture.EMPTY);
-      }
+      _sheetCache.set(key, Texture.EMPTY);
       return Texture.EMPTY;
     })();
 

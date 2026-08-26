@@ -150,7 +150,7 @@ export const decodeLpcPreviewState = (params: URLSearchParams): LpcPreviewState 
     const variantIndex = Number.parseInt(parts[1] ?? '', 10);
 
     if (Number.isNaN(slotDefIndex) || Number.isNaN(variantIndex)) {
-      continue;
+      break;
     }
 
     state.layers.push({ slotDefIndex, variantIndex });
@@ -213,6 +213,7 @@ export const decodeLpcPreviewState = (params: URLSearchParams): LpcPreviewState 
 export const createDefaultLpcPreviewState = (): LpcPreviewState => {
   return {
     ...DEFAULT_LPC_URL_STATE,
+    paletteOverrides: new Map(),
     layers: [
       { slotDefIndex: 0, variantIndex: 0 },
       { slotDefIndex: 2, variantIndex: 0 },

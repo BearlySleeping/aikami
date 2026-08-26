@@ -8,10 +8,12 @@ export { default as TilesetPreview } from './lib/tileset/tileset_preview.svelte'
 export { default as PropPreview } from './lib/prop/prop_preview.svelte';
 export { default as MapPreview } from './lib/map/map_preview.svelte';
 
-export { createLpcRenderer, type LpcRenderer } from './lib/lpc/lpc_renderer';
+export { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor, type LpcRenderer, type LpcSheetLayout } from './lib/lpc/lpc_renderer';
 export {
   encodeLpcPreviewState,
   decodeLpcPreviewState,
   type LpcPreviewState,
 } from './lib/lpc/preview_url_state';
 export type { PreviewProps } from './lib/types';
+export type { LpcSlotDef } from '@aikami/lpc';
+export type { LpcPreviewViewModelInterface } from './lib/lpc/lpc_preview_view_model.svelte';

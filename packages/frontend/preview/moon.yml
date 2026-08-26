@@ -14,36 +14,9 @@ project:
   channel: '#frontend'
   owner: 'Frontend Team'
 
-fileGroups:
-  sources:
-    - 'src/**/*'
-  configs:
-    - 'package.json'
-    - 'tsconfig.json'
-  tests:
-    - 'src/**/__tests__/**/*'
-
 tasks:
   test:
     command: 'bun test'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  lint:
-    command: 'bun run lint'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  typecheck:
-    command: 'bun run typecheck'
-    inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-
-  fix:
-    command: 'bun run fix'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
