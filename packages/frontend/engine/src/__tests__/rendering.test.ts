@@ -2655,12 +2655,10 @@ describe('LPC_LAYER_ORDER — C-430', () => {
     expect(resolveLayerDepth({ slot: 'shield', layerRole: 'behind', direction: 2 })).toBe(-10);
   });
 
-  it('AC-2: unknown slot renders above every known slot and warns once', () => {
-    const {
-      resolveLayerDepth,
-      resetUnknownSlotWarnings,
-      LPC_LAYER_ORDER,
-    } = require('../rendering/lpc_layer_order.ts');
+  it('AC-2: unknown slot renders above every known slot and warns once', async () => {
+    const { resolveLayerDepth, resetUnknownSlotWarnings, LPC_LAYER_ORDER } = await import(
+      '../rendering/lpc_layer_order.ts'
+    );
     resetUnknownSlotWarnings();
 
     const maxKnown = Math.max(
@@ -2670,7 +2668,8 @@ describe('LPC_LAYER_ORDER — C-430', () => {
     );
 
     // Spy on logger.warn to verify deduplication
-    const { logger } = require('$logger');
+    // Import the basic logger (same module that @aikami/lpc uses via its own $logger alias)
+    const { logger } = await import('../../../../shared/logger/src/index.ts');
     let warnCallCount = 0;
     const originalWarn = logger.warn;
     logger.warn = (...args: unknown[]) => {

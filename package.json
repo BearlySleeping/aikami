@@ -54,7 +54,6 @@
     "discord:sync": "bun run scripts/src/lib/discord/index.ts sync --apply",
     "discord:commands:sync": "bun run scripts/src/lib/discord/index.ts commands:sync",
     "discord:endpoint:sync": "bun run scripts/src/lib/discord/index.ts endpoint:sync",
-
     "db:generate": "bun run --cwd packages/backend/database db:generate",
     "db:migrate": "bun run scripts/src/lib/database/migrate.ts",
     "db:status": "bun run scripts/src/lib/database/migrate.ts --status",

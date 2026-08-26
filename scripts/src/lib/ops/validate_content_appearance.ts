@@ -28,7 +28,7 @@ import { join, resolve } from 'node:path';
 import process from 'node:process';
 
 const REPO_ROOT = resolve(import.meta.dir, '../../../..');
-const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'apps/frontend/client/static/content-packs');
+const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'content/packs');
 // Catalog is now derived at runtime via buildLpcCatalog from @aikami/lpc.
 // The old GENERATED_CATALOG path (lpc_asset_catalog_generated.ts) is removed.
 

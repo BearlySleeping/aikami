@@ -115,12 +115,18 @@ export const buildLpcCatalog = (options: {
   const allAssetIds: string[] = [];
 
   for (const slot of slotNames) {
-    const variantMap = slotMap.get(slot)!;
+    const variantMap = slotMap.get(slot);
+    if (!variantMap) {
+      continue;
+    }
     const sortedAssetIds = [...variantMap.keys()].sort();
     const variants: LpcSlotVariant[] = [];
 
     for (const assetId of sortedAssetIds) {
-      const variant = variantMap.get(assetId)!;
+      const variant = variantMap.get(assetId);
+      if (!variant) {
+        continue;
+      }
       variants.push(variant);
       allAssetIds.push(assetId);
     }

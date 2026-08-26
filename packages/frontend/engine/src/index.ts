@@ -71,8 +71,8 @@ export {
 
 // ECS components
 
-export type { AppearanceData } from './components/appearance.ts';
 export type { LpcLayerRecipe, LpcLayerRole } from '@aikami/lpc';
+export type { AppearanceData } from './components/appearance.ts';
 export {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
@@ -203,6 +203,38 @@ export {
 
 // Rendering
 
+export type {
+  LpcAppearanceResult,
+  LpcSlotCatalog,
+  LpcSlotFallbacks,
+  LpcSlotName,
+  LpcSlotResolution,
+  ResolveLpcAppearanceOptions,
+} from '@aikami/lpc';
+// LPC layer order (C-430) — canonical direction-aware z-order table
+export {
+  DEFAULT_LPC_SLOT_FALLBACKS,
+  getLpcFrameIndex,
+  getLpcStateRow,
+  getMaxKnownDepth,
+  LPC_LAYER_ORDER,
+  LPC_SLOT_ORDER,
+  LpcAnimationState,
+  type LpcCellFamily,
+  LpcDirection,
+  type LpcLayer,
+  type LpcLayerOrderEntry,
+  type LpcSheetGeometry,
+  type LpcSlot,
+  projectLpcCatalog,
+  resetLpcFallbackWarnings,
+  resetUnknownSlotWarnings,
+  resolveLayerDepth,
+  resolveLpcAppearance,
+  resolveLpcSheetGeometry,
+  sortLayersByDepth,
+  velocityToDirection,
+} from '@aikami/lpc';
 // Asset Manifest (C-243)
 //
 // Node-only filesystem operations (ensureAssetDirs / buildManifest /
@@ -323,16 +355,7 @@ export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pix
 export { createPixiApp } from './pixi_app.ts';
 export type { PixiInitOptions } from './pixi_init_options.ts';
 export { isE2ETestMode, resolvePixiInitOptions } from './pixi_init_options.ts';
-export {
-  AnimationController,
-} from './rendering/animation_controller.ts';
-export {
-  getLpcFrameIndex,
-  getLpcStateRow,
-  LpcAnimationState,
-  LpcDirection,
-  velocityToDirection,
-} from '@aikami/lpc';
+export { AnimationController } from './rendering/animation_controller.ts';
 // Layer bands (C-376 AC-4)
 export type { WorldZBand } from './rendering/layer_bands.ts';
 export {
@@ -340,45 +363,10 @@ export {
   MIN_ENTITY_Y,
   WORLD_Z_BANDS,
 } from './rendering/layer_bands.ts';
-export type {
-  CreateLpcPipelineOptions,
-} from './rendering/lpc_appearance_resolver.ts';
-export type {
-  LpcAppearanceResult,
-  LpcSlotCatalog,
-  LpcSlotFallbacks,
-  LpcSlotName,
-  LpcSlotResolution,
-  ResolveLpcAppearanceOptions,
-} from '@aikami/lpc';
+export type { CreateLpcPipelineOptions } from './rendering/lpc_appearance_resolver.ts';
 // LPC appearance resolver (C-400) — unified worker/client resolution
 // + shared client pipeline builder (deduped from both game services)
-export {
-  createLpcPipeline,
-} from './rendering/lpc_appearance_resolver.ts';
-export {
-  DEFAULT_LPC_SLOT_FALLBACKS,
-  LPC_SLOT_ORDER,
-  projectLpcCatalog,
-  resetLpcFallbackWarnings,
-  resolveLpcAppearance,
-} from '@aikami/lpc';
-// LPC layer order (C-430) — canonical direction-aware z-order table
-export {
-  getMaxKnownDepth,
-  LPC_LAYER_ORDER,
-  type LpcLayer,
-  type LpcLayerOrderEntry,
-  type LpcSlot,
-  resetUnknownSlotWarnings,
-  resolveLayerDepth,
-  sortLayersByDepth,
-} from '@aikami/lpc';
-export {
-  type LpcCellFamily,
-  type LpcSheetGeometry,
-  resolveLpcSheetGeometry,
-} from '@aikami/lpc';
+export { createLpcPipeline } from './rendering/lpc_appearance_resolver.ts';
 export type {
   CreatePropFrameResolverOptions,
   PropFrameResolverHandle,

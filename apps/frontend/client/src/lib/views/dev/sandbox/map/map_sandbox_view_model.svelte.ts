@@ -14,8 +14,8 @@ import {
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
-import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
 import type { LpcAnimationState } from '@aikami/lpc';
+import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;

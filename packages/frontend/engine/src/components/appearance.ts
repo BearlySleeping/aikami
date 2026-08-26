@@ -25,9 +25,9 @@
 //   indices resolve to the slot's fallback asset and log a `warn` once per
 //   entity per slot.
 
+import type { LpcLayerRecipe, LpcLayerRole } from '@aikami/lpc';
 import type { World } from 'bitecs';
 import { observe, onGet, onSet } from 'bitecs';
-import type { LpcLayerRecipe, LpcLayerRole } from '@aikami/lpc';
 
 // ---------------------------------------------------------------------------
 // Constants

@@ -31,22 +31,22 @@ describe('buildLpcCatalog', () => {
     // body slot
     const bodySlot = result.slots.find((s) => s.slot === 'body');
     expect(bodySlot).toBeDefined();
-    expect(bodySlot!.variants.length).toBe(2); // bodies_male, bodies_female
-    expect(bodySlot!.variants[0].assetId).toBe('body/bodies_female');
-    expect(bodySlot!.variants[1].assetId).toBe('body/bodies_male');
+    expect(bodySlot?.variants.length).toBe(2); // bodies_male, bodies_female
+    expect(bodySlot?.variants[0].assetId).toBe('body/bodies_female');
+    expect(bodySlot?.variants[1].assetId).toBe('body/bodies_male');
 
     // bodies_male should have 2 states (sorted alphabetically)
-    expect(bodySlot!.variants[1].states).toEqual(['slash', 'walk']);
+    expect(bodySlot?.variants[1].states).toEqual(['slash', 'walk']);
 
     // hair slot
     const hairSlot = result.slots.find((s) => s.slot === 'hair');
     expect(hairSlot).toBeDefined();
-    expect(hairSlot!.variants.length).toBe(2);
-    expect(hairSlot!.variants[0].assetId).toBe('hair/bangs_adult');
-    expect(hairSlot!.variants[1].assetId).toBe('hair/mohawk');
+    expect(hairSlot?.variants.length).toBe(2);
+    expect(hairSlot?.variants[0].assetId).toBe('hair/bangs_adult');
+    expect(hairSlot?.variants[1].assetId).toBe('hair/mohawk');
 
     // bangs_adult should have 2 states (sorted alphabetically)
-    expect(hairSlot!.variants[0].states).toEqual(['slash', 'walk']);
+    expect(hairSlot?.variants[0].states).toEqual(['slash', 'walk']);
 
     // allAssetIds should have 4 unique entries
     expect(result.allAssetIds.length).toBe(4);
@@ -58,8 +58,8 @@ describe('buildLpcCatalog', () => {
     ]);
 
     // assetIdsBySlot
-    expect(result.assetIdsBySlot['body']).toEqual(['body/bodies_female', 'body/bodies_male']);
-    expect(result.assetIdsBySlot['hair']).toEqual(['hair/bangs_adult', 'hair/mohawk']);
+    expect(result.assetIdsBySlot.body).toEqual(['body/bodies_female', 'body/bodies_male']);
+    expect(result.assetIdsBySlot.hair).toEqual(['hair/bangs_adult', 'hair/mohawk']);
   });
 
   test('skips unparseable tags with debug log', () => {
@@ -85,15 +85,15 @@ describe('buildLpcCatalog', () => {
     const shieldSlot = result.slots.find((s) => s.slot === 'shield');
     expect(shieldSlot).toBeDefined();
 
-    const bgVariant = shieldSlot!.variants.find((v) => v.assetId === 'shield/bg_buckler');
+    const bgVariant = shieldSlot?.variants.find((v) => v.assetId === 'shield/bg_buckler');
     expect(bgVariant).toBeDefined();
-    expect(bgVariant!.layerRole).toBe('behind');
-    expect(bgVariant!.pairedAssetId).toBe('shield/fg_buckler');
+    expect(bgVariant?.layerRole).toBe('behind');
+    expect(bgVariant?.pairedAssetId).toBe('shield/fg_buckler');
 
-    const fgVariant = shieldSlot!.variants.find((v) => v.assetId === 'shield/fg_buckler');
+    const fgVariant = shieldSlot?.variants.find((v) => v.assetId === 'shield/fg_buckler');
     expect(fgVariant).toBeDefined();
-    expect(fgVariant!.layerRole).toBe('front');
-    expect(fgVariant!.pairedAssetId).toBe('shield/bg_buckler');
+    expect(fgVariant?.layerRole).toBe('front');
+    expect(fgVariant?.pairedAssetId).toBe('shield/bg_buckler');
   });
 
   test('ordering is lexicographic and deterministic', () => {

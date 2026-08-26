@@ -14,15 +14,15 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { buildLpcCatalog } from '../src/lib/build_catalog.ts';
 
-interface LegacySlot {
+type LegacySlot = {
   slot: string;
   label: string;
   assetIds: string[];
-}
+};
 
-interface LegacyCatalog {
+type LegacyCatalog = {
   slots: LegacySlot[];
-}
+};
 
 describe('legacy order compatibility', () => {
   let legacyCatalog: LegacyCatalog;
@@ -49,7 +49,7 @@ describe('legacy order compatibility', () => {
     for (const legacySlot of legacyCatalog.slots) {
       const derivedSlot = result.slots.find((s) => s.slot === legacySlot.slot);
       expect(derivedSlot).toBeDefined();
-      expect(derivedSlot!.variants.length).toBe(legacySlot.assetIds.length);
+      expect(derivedSlot?.variants.length).toBe(legacySlot.assetIds.length);
     }
   });
 
@@ -61,7 +61,7 @@ describe('legacy order compatibility', () => {
       const derivedSlot = result.slots.find((s) => s.slot === legacySlot.slot);
       expect(derivedSlot).toBeDefined();
 
-      const derivedAssetIds = derivedSlot!.variants.map((v) => v.assetId).sort();
+      const derivedAssetIds = derivedSlot?.variants.map((v) => v.assetId).sort();
       const legacyAssetIds = [...legacySlot.assetIds].sort();
       expect(derivedAssetIds).toEqual(legacyAssetIds);
     }
@@ -76,7 +76,7 @@ describe('legacy order compatibility', () => {
       const derivedSlot = result.slots.find((s) => s.slot === legacySlot.slot);
       expect(derivedSlot).toBeDefined();
 
-      const derivedAssetIds = derivedSlot!.variants.map((v) => v.assetId);
+      const derivedAssetIds = derivedSlot?.variants.map((v) => v.assetId);
       if (JSON.stringify(derivedAssetIds) !== JSON.stringify(legacySlot.assetIds)) {
         mismatchedSlots.push(legacySlot.slot);
       }
@@ -84,15 +84,8 @@ describe('legacy order compatibility', () => {
 
     // Report mismatched slots
     if (mismatchedSlots.length > 0) {
-      console.log(
-        `\n⚠️  ${mismatchedSlots.length} slots have ordering differences between legacy and derived catalogs:`,
-      );
-      for (const slot of mismatchedSlots) {
-        console.log(`   - ${slot}`);
+      for (const _slot of mismatchedSlots) {
       }
-      console.log(
-        'These slots need a remap table for save compatibility. See Deviation in Execution Report.',
-      );
     }
 
     // This test documents the state — it does NOT fail on mismatch.

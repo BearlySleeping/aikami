@@ -43,7 +43,10 @@ const _getLpcVariantMap = (): Map<string, string[]> => {
   const catalog = getLpcCatalog();
   const map = new Map<string, string[]>();
   for (const slot of catalog.slots) {
-    map.set(slot.slot, slot.variants.map((v) => v.assetId));
+    map.set(
+      slot.slot,
+      slot.variants.map((v) => v.assetId),
+    );
   }
   return map;
 };

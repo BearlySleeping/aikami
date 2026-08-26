@@ -55,7 +55,7 @@ const toSrcPath = (path) => toPosixPath(join(projectDirectory, 'src', path));
 // single source of truth.
 // ---------------------------------------------------------------------------
 const buildMode = process.env.AIKAMI_BUILD_MODE;
-const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
+const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES ?? true; // We include dev routes by default while we are in early stage
 const isProductionBuild = buildMode === 'production';
 let includeDevRoutes;
 if (devGateOverride === 'true') {

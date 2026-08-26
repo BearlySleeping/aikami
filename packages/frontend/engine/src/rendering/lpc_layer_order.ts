@@ -4,6 +4,7 @@
 // This file is kept as a backward-compat re-export hub for engine-internal
 // imports. New code should import from @aikami/lpc directly.
 
+export type { LpcLayer, LpcLayerOrderEntry, LpcLayerRole, LpcSlot } from '@aikami/lpc';
 export {
   getMaxKnownDepth,
   LPC_LAYER_ORDER,
@@ -11,5 +12,3 @@ export {
   resolveLayerDepth,
   sortLayersByDepth,
 } from '@aikami/lpc';
-
-export type { LpcLayer, LpcLayerOrderEntry, LpcLayerRole, LpcSlot } from '@aikami/lpc';

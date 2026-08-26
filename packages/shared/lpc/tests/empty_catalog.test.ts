@@ -3,8 +3,13 @@
 // AC-4: The empty catalog never crashes a consumer.
 
 import { describe, expect, test } from 'bun:test';
+import {
+  DEFAULT_LPC_SLOT_FALLBACKS,
+  LPC_SLOT_ORDER,
+  projectLpcCatalog,
+  resolveLpcAppearance,
+} from '../src/lib/appearance.ts';
 import { buildLpcCatalog } from '../src/lib/build_catalog.ts';
-import { resolveLpcAppearance, projectLpcCatalog, DEFAULT_LPC_SLOT_FALLBACKS, LPC_SLOT_ORDER } from '../src/lib/appearance.ts';
 
 describe('empty catalog never crashes', () => {
   test('buildLpcCatalog with empty entries returns empty catalog without throwing', () => {

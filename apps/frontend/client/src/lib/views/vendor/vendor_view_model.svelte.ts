@@ -8,9 +8,9 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { LpcAnimationState } from '@aikami/lpc';
 import type { ItemDefinition } from '@aikami/types';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import { LpcAnimationState } from '@aikami/lpc';
 import { gameOverlayService, vendorService } from '$services';
 import type { VendorSessionOptions as _VendorSessionOptions } from '$types';
 

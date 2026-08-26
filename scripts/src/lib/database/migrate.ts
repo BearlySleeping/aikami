@@ -22,10 +22,7 @@ import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const DB_DIR = resolve(import.meta.dir, '../../../../apps/frontend/hub');
-const MIGRATIONS_DIR = resolve(
-  import.meta.dir,
-  '../../../../packages/backend/database/drizzle-d1',
-);
+const MIGRATIONS_DIR = resolve(import.meta.dir, '../../../../packages/backend/database/drizzle-d1');
 
 const countTotalMigrations = (): number =>
   readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).length;
