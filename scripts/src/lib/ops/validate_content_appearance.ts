@@ -4,7 +4,7 @@
  *
  * C-400 AC-5 — build-time content validator for NPC appearance indices.
  *
- * Walks every content pack under `apps/frontend/client/static/content-packs/*`
+ * Walks every content pack under `content/packs/*`
  * and validates each NPC's `appearanceLayers` against the generated LPC
  * catalog (derived at runtime via `buildLpcCatalog` from `@aikami/lpc`):
  *

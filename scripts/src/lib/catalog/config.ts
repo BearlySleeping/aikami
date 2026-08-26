@@ -153,7 +153,7 @@ export const REPO_ROOT = resolve(import.meta.dirname, '../../../../');
 export const GAME_DATA_DIR = resolve(REPO_ROOT, 'apps/frontend/client/static/game-data');
 
 /** Content-packs directory (C-433: outside the game-data tree). */
-export const CONTENT_PACKS_DIR = resolve(REPO_ROOT, 'apps/frontend/client/static/content-packs');
+export const CONTENT_PACKS_DIR = resolve(REPO_ROOT, 'content/packs');
 
 /**
  * All scan roots the publish pipeline reads from.

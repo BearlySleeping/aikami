@@ -45,7 +45,7 @@ export const CORNER16_FRAMES = 16;
 
 const MANIFEST_PATH = join(
   dirname(fileURLToPath(import.meta.url)),
-  '../../../../apps/frontend/client/static/content-packs/emberwatch/manifest.json',
+  '../../../../content/packs/emberwatch/manifest.json',
 );
 
 let _cachedManifestTiles: Record<string, { name: string; frame: string }> | undefined;

@@ -191,12 +191,17 @@ export type AssetSeedDocument = {
 };
 
 /**
- * Assets that stay bundled and must never be evicted.
- * Declares which tags are bundled in the client with a bundled priority-0 source.
+ * Tags the client prefetches and pins on first run (C-448).
+ *
+ * Before C-448 this declared tags *bundled inside the client*. Nothing has
+ * been bundled since C-435 de-bundled game-data, so the name described a
+ * guarantee the build did not provide. It now declares the first-run
+ * prefetch set: fetched once over the network, verified by hash, and pinned
+ * in the OPFS / Tauri FS cache so every later run is fully offline.
  */
 export type OfflineCoreDeclaration = {
   schemaVersion: 1;
-  /** Tags bundled in the client and seeded with a bundled priority-0 source. */
+  /** Tags the client prefetches and pins on first run. */
   tags: readonly string[];
   /** Why each group is core — starting map, default body, boot UI. */
   rationale: Readonly<Record<string, string>>;

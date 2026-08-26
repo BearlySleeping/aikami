@@ -10,7 +10,7 @@ import { clearContentPackCache, loadContentPack } from './content_pack_loader.ts
 
 // ---------------------------------------------------------------------------
 // Emberwatch v2.0.0 authored manifest (matches
-// apps/frontend/client/static/content-packs/emberwatch/manifest.json)
+// content/packs/emberwatch/manifest.json)
 // ---------------------------------------------------------------------------
 
 const emberwatchManifest = {

@@ -26,7 +26,7 @@ const LEGACY_FIXTURE = join(
   REPO_ROOT,
   'packages/shared/lpc/tests/__fixtures__/legacy_catalog_order.json',
 );
-const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'apps/frontend/client/static/content-packs');
+const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'content/packs');
 
 const CATALOG = loadCatalog();
 

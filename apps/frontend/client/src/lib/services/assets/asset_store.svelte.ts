@@ -34,8 +34,11 @@ import { assetManager } from './asset_manager.svelte.ts';
 const SEED_KEY = 'seed/asset_seed.json';
 
 /**
- * R2 key for the offline-core declaration — the tags bundled in the client.
- * Also fetched from the configured origin.
+ * R2 key for the offline-core declaration — the tags the client prefetches
+ * and pins on first run (C-448). Before C-448 this declared tags *bundled
+ * inside the client*; it now declares the first-run prefetch set: fetched
+ * once over the network, verified by hash, and pinned in the OPFS / Tauri
+ * FS cache so every later run is fully offline.
  */
 const OFFLINE_CORE_KEY = 'seed/offline_core.json';
 
