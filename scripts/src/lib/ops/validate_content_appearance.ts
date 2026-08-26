@@ -4,7 +4,7 @@
  *
  * C-400 AC-5 — build-time content validator for NPC appearance indices.
  *
- * Walks every content pack under `apps/frontend/client/static/content-packs/*`
+ * Walks every content pack under `content/packs/*`
  * and validates each NPC's `appearanceLayers` against the generated LPC
  * catalog (`lpc_asset_catalog_generated.ts`):
  *
@@ -28,7 +28,7 @@ import { join, resolve } from 'node:path';
 import process from 'node:process';
 
 const REPO_ROOT = resolve(import.meta.dir, '../../../..');
-const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'apps/frontend/client/static/content-packs');
+const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'content/packs');
 const GENERATED_CATALOG = join(
   REPO_ROOT,
   'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts',

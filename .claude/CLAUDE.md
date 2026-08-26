@@ -189,8 +189,10 @@ touch packages/shared/[name]/package.json
 | **Server** | Cloudflare D1 | Identity (Better Auth), community packs, save-backup metadata. |
 | **Blobs** | Cloudflare R2 | Catalog assets, save backups. |
 
-The game must boot, play, and save with **no network and no sign-in**. Never
-make a cloud call a boot dependency.
+The game must boot, play, and save with **no sign-in**. The first run requires
+network to download starter content (pack index, manifest, maps); every
+subsequent run is fully offline from the OPFS / Tauri FS cache. Never make a
+cloud call a boot dependency for sign-in.
 
 > Firebase, Firestore, Data Connect, Cloud Run, and Neon Postgres have been
 > removed or are being decommissioned. References survive in `docs/contracts/`

@@ -9,6 +9,7 @@ export type GameBootStage =
   | 'loading_campaign'
   | 'validating_save'
   | 'initializing_asset_registry'
+  | 'prefetching_starter_content'
   | 'warming_cache'
   | 'preloading_content'
   | 'creating_engine'
@@ -17,6 +18,14 @@ export type GameBootStage =
   | 'ready'
   | 'failed'
   | 'cancelled';
+
+/** Result of the prefetch stage — how many tags were fetched vs cached. */
+export type PrefetchResult = {
+  readonly requested: number;
+  readonly fetched: number;
+  readonly alreadyCached: number;
+  readonly failedTags: readonly string[];
+};
 
 /** Reactive boot progress exposed to the ViewModel layer. */
 export type GameBootProgress = {
@@ -42,4 +51,6 @@ export type GameBootInput = {
   pendingSavePayload?: string;
   canvas: HTMLCanvasElement;
   rendererPreference?: 'webgpu' | 'webgl';
+  /** Tags to prefetch on first run (from offline_core.json). */
+  prefetchTags?: readonly string[];
 };

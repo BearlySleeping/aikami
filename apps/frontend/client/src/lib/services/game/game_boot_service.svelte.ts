@@ -18,7 +18,7 @@ import {
 } from '@aikami/frontend/services';
 import type { AssetSeedDocument, Campaign, PersonaData } from '@aikami/types';
 import { authService, equipmentService } from '$services';
-import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
+import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage, PrefetchResult } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { personaService } from '../persona/persona_service.svelte';
@@ -29,6 +29,7 @@ const bootStageOrder: readonly GameBootStage[] = [
   'loading_campaign',
   'validating_save',
   'initializing_asset_registry',
+  'prefetching_starter_content',
   'warming_cache',
   'preloading_content',
   'creating_engine',
@@ -51,6 +52,7 @@ const bootStageLabels: Record<GameBootStage, string> = {
   loading_campaign: 'Loading campaign...',
   validating_save: 'Validating save...',
   initializing_asset_registry: 'Preparing assets...',
+  prefetching_starter_content: 'Downloading starter content...',
   warming_cache: 'Starting asset download...',
   preloading_content: 'Loading content pack...',
   creating_engine: 'Starting game engine...',
@@ -389,6 +391,9 @@ class GameBootService
         break;
       case 'initializing_asset_registry':
         await this._stageInitializeAssetRegistry(generation);
+        break;
+      case 'prefetching_starter_content':
+        await this._stagePrefetchStarterContent(generation);
         break;
       case 'warming_cache':
         await this._stageWarmingCache(generation);
@@ -755,6 +760,118 @@ class GameBootService
     } catch (error) {
       // Non-fatal: continue in online mode; seeding retries on next boot.
       this.warn('stage:initializing_asset_registry:degraded', { error: String(error) });
+    }
+  }
+
+  /**
+   * Stage: prefetch the starter content pack tags declared in offline_core.json.
+   * On a fresh install (no cached rows) this is the first network fetch and
+   * must show visible progress. On an upgrade, already-cached tags are skipped.
+   * On a fresh install with no network, this fails with an actionable message.
+   *
+   * C-448: replaces the old "bundled in the client" assumption with an explicit
+   * first-run prefetch that downloads the pack index, manifest, and maps.
+   */
+  private async _stagePrefetchStarterContent(generation: number): Promise<void> {
+    const t0 = performance.now();
+
+    const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
+    const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+    // Check generation after async import
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+
+    // Ensure the catalog is loaded so we have the offline-core tags
+    await assetStore.fetchManifest();
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+
+    const coreTags = [...assetStore.coreTags];
+    if (coreTags.length === 0) {
+      this.debug('stage:prefetching_starter_content:no-core-tags');
+      return;
+    }
+
+    this.debug('stage:prefetching_starter_content:starting', {
+      tagCount: coreTags.length,
+      tags: coreTags,
+    });
+
+    const result: PrefetchResult = {
+      requested: coreTags.length,
+      fetched: 0,
+      alreadyCached: 0,
+      failedTags: [],
+    };
+
+    for (let i = 0; i < coreTags.length; i++) {
+      if (generation !== this._bootGeneration) {
+        return;
+      }
+
+      const tag = coreTags[i];
+      if (!tag) {
+        continue;
+      }
+
+      // Report progress through the boot UI
+      this.bootProgress.detail = `Downloading starter content — ${i + 1}/${coreTags.length}`;
+
+      // Check if already cached via the asset manager
+      const cachedUrl = assetManager.acquireUrl(tag);
+      if (cachedUrl) {
+        result.alreadyCached += 1;
+        continue;
+      }
+
+      try {
+        // Attempt to warm (fetch + cache) the tag
+        const url = await assetManager.warm(tag);
+        if (url !== null) {
+          result.fetched += 1;
+        } else {
+          result.failedTags = [...result.failedTags, tag];
+        }
+      } catch {
+        result.failedTags = [...result.failedTags, tag];
+      }
+    }
+
+    // Check generation after the loop
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+
+    const elapsed = performance.now() - t0;
+
+    if (result.failedTags.length > 0 && result.fetched === 0 && result.alreadyCached === 0) {
+      // Fresh install with no network — all tags failed
+      const message =
+        'Aikami needs to download starter content the first time you play. ' +
+        'Connect to the internet and try again.';
+      this.warn('stage:prefetching_starter_content:all-failed', {
+        failedTags: result.failedTags,
+        elapsedMs: Math.round(elapsed),
+      });
+      throw new Error(message);
+    }
+
+    if (result.failedTags.length > 0) {
+      // Partial failure — some tags failed but we have enough to proceed
+      this.warn('stage:prefetching_starter_content:partial-failure', {
+        failedTags: result.failedTags,
+        fetched: result.fetched,
+        alreadyCached: result.alreadyCached,
+        elapsedMs: Math.round(elapsed),
+      });
+    } else {
+      this.debug('stage:prefetching_starter_content:complete', {
+        fetched: result.fetched,
+        alreadyCached: result.alreadyCached,
+        elapsedMs: Math.round(elapsed),
+      });
     }
   }
 

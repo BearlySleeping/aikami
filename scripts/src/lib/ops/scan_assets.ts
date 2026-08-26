@@ -1,6 +1,6 @@
 // scripts/src/lib/ops/scan_assets.ts
 //
-// CLI entry point: scans static/game-data/ and static/content-packs/,
+// CLI entry point: scans static/game-data/ and content/packs/,
 // generates manifest.json + asset_hashes.json + asset_credits.json
 // for each root, and ensures the default directory structure exists.
 //

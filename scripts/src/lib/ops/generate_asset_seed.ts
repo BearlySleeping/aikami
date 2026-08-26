@@ -4,7 +4,8 @@
 //
 //   static/game-data/asset_seed.json    every catalog asset — tag, hash, size,
 //                                       category, ext (short keys, ~1.8 MB)
-//   static/game-data/offline_core.json  the subset bundled in the client
+//   static/game-data/offline_core.json  the tag set the client prefetches and
+//                                       pins on first run (C-448)
 //
 // The seed replaced manifest.json + asset_hashes.json on the boot path, but
 // landed as a hand-written artifact with no way to reproduce or verify it.

@@ -30,7 +30,7 @@ const DEFAULT_EXPRESSION = 'neutral' as const;
  * Known NPC id → portrait sprite folder.
  *
  * Kept in sync with the emberwatch content-pack spawn points
- * (static/content-packs/emberwatch/maps/*.json). When a dedicated per-NPC
+ * (content/packs/emberwatch/maps/*.json). When a dedicated per-NPC
  * portrait is generated, add its sprite folder here (or carry
  * `avatarSprite` on the NPC spawn data and read it from there).
  */

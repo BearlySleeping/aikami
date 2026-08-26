@@ -26,7 +26,7 @@ const GENERATED_CATALOG = join(
   REPO_ROOT,
   'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts',
 );
-const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'apps/frontend/client/static/content-packs');
+const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'content/packs');
 
 const CATALOG = loadCatalog();
 
