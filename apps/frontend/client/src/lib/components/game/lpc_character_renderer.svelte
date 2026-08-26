@@ -1,5 +1,6 @@
 <script lang="ts">
-import type { LpcBatchManager, LpcLayerRecipe, TextureManager } from '@aikami/frontend/engine';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
+import type { LpcBatchManager, TextureManager } from '@aikami/frontend/engine/render';
 // apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte
 //
 // C-168: LPC character sprite component with async Spritesheet-based

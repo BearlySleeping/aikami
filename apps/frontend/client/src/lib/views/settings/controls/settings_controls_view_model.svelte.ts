@@ -3,7 +3,7 @@
 // SettingsControlsViewModel — keybinding configuration persisted to
 // localStorage. Actions are game-level controls (move, interact, menu).
 
-import { DEFAULT_KEYBINDINGS, KEYBINDING_STORAGE_KEY } from '@aikami/frontend/engine';
+import { DEFAULT_KEYBINDINGS, KEYBINDING_STORAGE_KEY } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

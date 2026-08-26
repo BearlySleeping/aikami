@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { QuestData } from '@aikami/frontend/engine';
+import type { QuestData } from '@aikami/frontend/engine/sim';
 // apps/frontend/client/src/routes/(dev)/dev/sandbox/+page.svelte
 // Extends /game — reuses the same GameView + GameViewModel infrastructure,
 // but seeds localStorage with a mock persona so a character loads instantly.

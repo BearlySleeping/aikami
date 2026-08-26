@@ -54,7 +54,6 @@
     "discord:sync": "bun run scripts/src/lib/discord/index.ts sync --apply",
     "discord:commands:sync": "bun run scripts/src/lib/discord/index.ts commands:sync",
     "discord:endpoint:sync": "bun run scripts/src/lib/discord/index.ts endpoint:sync",
-
     "db:generate": "bun run --cwd packages/backend/database db:generate",
     "db:migrate": "bun run scripts/src/lib/database/migrate.ts",
     "db:status": "bun run scripts/src/lib/database/migrate.ts --status",
@@ -94,7 +93,7 @@
     "@google-cloud/firestore": "^9.0.0",
     "@google-cloud/secret-manager": "^7.0.0",
     "@moonrepo/cli": "2.5.3",
-    "@types/bun": "1.4.0",
+    "@types/bun": "^1.4.0",
     "@types/node": "26.3.0",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "syncpack": "15.3.3",

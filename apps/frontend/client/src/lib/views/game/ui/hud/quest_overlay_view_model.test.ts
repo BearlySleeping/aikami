@@ -5,7 +5,7 @@
 // mutable array the tests drive directly.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { QuestData } from '@aikami/frontend/engine';
+import type { QuestData } from '@aikami/frontend/engine/sim';
 import { questOverlayService, questStateService } from '$services';
 import {
   getQuestOverlayViewModel,
