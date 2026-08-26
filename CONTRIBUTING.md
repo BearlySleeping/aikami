@@ -25,6 +25,11 @@ bun run test
 **Bun is the only hard requirement.** No Docker, no cloud account, no
 Cloudflare login, no agent tooling.
 
+> **Hub dev:** `bun moon run hub:dev` runs Vite (fast HMR, no D1/R2 bindings).
+> For auth, catalog, or save-backup work, use `bun moon run hub:dev-worker`
+> which runs the real Workers runtime with local D1 and R2.
+> See [docs/guides/dev-workflow.md](docs/guides/dev-workflow.md#local-cloudflare-runtime).
+
 ---
 
 ## What you actually need

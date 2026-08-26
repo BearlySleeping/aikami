@@ -75,9 +75,55 @@ bun run db:status     # how many migrations are applied
 
 ## Local Cloudflare runtime
 
-The hub deploys as a Cloudflare Worker with D1 and R2 bindings. `bun moon run
-hub:dev` currently runs plain Vite, which does **not** provide those bindings —
-a local `wrangler dev` service that does is tracked as **C-437**.
+The hub deploys as a Cloudflare Worker with D1 and R2 bindings. Two dev
+commands are available:
+
+| Command | Runtime | Bindings | Best for |
+|---------|---------|----------|----------|
+| `bun moon run hub:dev` | Vite (HMR) | None | UI-only work, fast iteration |
+| `bun moon run hub:dev-worker` | `wrangler dev --local` | D1 + R2 | Auth, catalog, save-backup work |
+
+### hub-worker (wrangler dev --local)
+
+Build the hub first, then start the worker:
+
+```bash
+bun moon run hub:build
+bun herdr:start hub-worker
+```
+
+This runs the hub on the real Workers runtime with D1 and R2 served by
+Miniflare from local state under `.wrangler/`. No Cloudflare credentials are
+needed — `--local` is asserted explicitly.
+
+#### First-time setup
+
+```bash
+# Apply D1 migrations to the local SQLite database
+bun moon run hub:db-migrate-local
+
+# Seed with dev data (one user, one pack)
+bun moon run hub:db-seed-local
+```
+
+The seed creates one dev account:
+- Email: `dev@localhost`
+- Password: `dev-password-123`
+
+#### Resetting local state
+
+```bash
+rm -rf apps/frontend/hub/.wrangler
+bun moon run hub:db-migrate-local
+bun moon run hub:db-seed-local
+```
+
+#### When to use which
+
+- **Use `hub` (Vite)** for UI changes, layout, and most frontend work — HMR is
+  faster and no build step is needed.
+- **Use `hub-worker` (wrangler)** when your change touches a D1 or R2 binding:
+  auth (sign-in, sign-up), the catalog write path, or save backup/restore.
 
 ## Adding a Feature
 

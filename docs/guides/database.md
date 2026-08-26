@@ -78,10 +78,11 @@ bun run db:migrate     # apply pending migrations locally
 bun run db:status      # how many migrations are applied
 ```
 
-> 🔧 **Known gap:** `bun moon run hub:dev` currently runs plain Vite, which does
-> **not** provide the `DB` / `SAVES_BUCKET` bindings — so auth and catalog
-> routes degrade locally. A `wrangler dev` dev service that provides them is
-> tracked as **C-437**.
+> 🔧 **Local D1 bindings:** `bun moon run hub:dev` (Vite) does **not** provide
+> the `DB` / `SAVES_BUCKET` bindings. Use `bun moon run hub:dev-worker`
+> (wrangler dev --local) when your work touches auth, the catalog, or save
+> backups. See [dev-workflow.md](dev-workflow.md#hub-worker-wrangler-dev---local)
+> for setup instructions.
 
 ---
 

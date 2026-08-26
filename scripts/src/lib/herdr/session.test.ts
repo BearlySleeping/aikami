@@ -205,6 +205,54 @@ describe('postgres herdr service (C-387)', () => {
   });
 });
 
+describe('hub-worker herdr service (C-437)', () => {
+  it('registers hub-worker in SERVICE_DEFS', () => {
+    expect(SERVICE_DEFS['hub-worker'].name).toBe('hub-worker');
+  });
+
+  it('exposes an emulator-only readyPort', () => {
+    expect(SERVICE_DEFS['hub-worker'].readyPort?.('emulator')).toBe(5278);
+    expect(SERVICE_DEFS['hub-worker'].readyPort?.('staging')).toBeUndefined();
+    expect(SERVICE_DEFS['hub-worker'].readyPort?.('production')).toBeUndefined();
+  });
+
+  it('runs dev:worker in emulator mode', () => {
+    const cmd = SERVICE_DEFS['hub-worker'].command('emulator');
+    expect(cmd).toBe('bun run dev:worker');
+  });
+
+  it('is a no-op in staging/production', () => {
+    const cmd = SERVICE_DEFS['hub-worker'].command('staging');
+    expect(cmd).toContain('emulator-only');
+    const prodCmd = SERVICE_DEFS['hub-worker'].command('production');
+    expect(prodCmd).toContain('emulator-only');
+  });
+
+  it('accepts hub-worker as a service name', () => {
+    expect(normalizeService('hub-worker')).toBe('hub-worker');
+  });
+
+  it('does not add hub-worker to the all group (opt-in only)', () => {
+    expect(ALL_SERVICES).not.toContain('hub-worker');
+    expect(expandServices(['all'])).not.toContain('hub-worker');
+  });
+
+  it('includes hub-worker among the known/listed services', () => {
+    expect(KNOWN_SERVICES).toContain('hub-worker');
+  });
+
+  it('hub-worker is offset-aware (shifts with contract offset)', () => {
+    const offset = 66;
+    expect(resolveReadyPort('hub-worker', 'emulator', offset)).toBe(5278 + offset);
+  });
+
+  it('hub-worker and hub have different ports (no port conflict)', () => {
+    // Both represent the same logical app but on different ports.
+    // assertNoPortConflicts must not throw for the pair.
+    expect(() => assertNoPortConflicts(['hub', 'hub-worker'], 'emulator', 0)).not.toThrow();
+  });
+});
+
 describe('isKillableProcess', () => {
   it('allows killing our own dev-server process names', () => {
     expect(isKillableProcess('node')).toBe(true);
