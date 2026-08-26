@@ -22,6 +22,7 @@ const formatLicense = (license: string): string => {
 // ── C-446: Preview island state ─────────────────────────────────────────
 let PreviewComponent = $state<ComponentType | undefined>(undefined);
 let previewProps = $state<Record<string, unknown>>({});
+let showTilesetGrid = $state(false);
 
 onMount(async () => {
   const kind = viewModel.previewKind;
@@ -45,10 +46,13 @@ onMount(async () => {
         const initialParams = new URLSearchParams(window.location.search);
         const initialState = decodeLpcPreviewState(initialParams);
 
+        // Build scoped LPC slots from shard entries
+        const allSlots = await viewModel.ensureLpcSlotsBuilt();
+
         PreviewComponent = mod.default as ComponentType;
         previewProps = {
           resolver,
-          allSlots: [],
+          allSlots,
           initialState,
           width: 320,
           height: 320,
@@ -67,7 +71,14 @@ onMount(async () => {
       case 'tileset': {
         const { default: TilesetPreview } = await import('@aikami/frontend/preview');
         PreviewComponent = TilesetPreview as ComponentType;
-        previewProps = { resolver, tag, width: 320, height: 320, zoom: 1 };
+        previewProps = {
+          resolver,
+          tag,
+          width: 320,
+          height: 320,
+          zoom: 1,
+          showGrid: showTilesetGrid,
+        };
         break;
       }
       case 'map': {
@@ -169,6 +180,18 @@ onMount(async () => {
         <div class="absolute inset-0 z-10" data-testid="catalog-asset-preview-island">
           <PreviewComponent {...previewProps} />
         </div>
+      {/if}
+
+      <!-- C-446: Tileset grid toggle -->
+      {#if viewModel.previewKind === 'tileset' && PreviewComponent}
+        <button
+          type="button"
+          class="absolute bottom-2 right-2 z-20 rounded bg-base-200/80 px-2 py-1 text-xs text-base-content transition-colors hover:bg-base-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          onclick={() => { showTilesetGrid = !showTilesetGrid; }}
+          data-testid="catalog-tileset-grid-toggle"
+        >
+          {showTilesetGrid ? 'Hide Grid' : 'Show Grid'}
+        </button>
       {/if}
 
       <!-- C-446: Preview error notice — shown when the island fails -->

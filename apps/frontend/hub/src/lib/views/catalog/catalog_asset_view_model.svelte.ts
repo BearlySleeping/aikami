@@ -16,6 +16,15 @@ import type { AssetStats, CatalogAssetPageData } from '$types';
 import { formatBytes } from '$utils/catalog.ts';
 import { type PreviewKind, previewKindForEntry } from './preview_kind.ts';
 
+// ── LPC slot definition (mirrors LpcSlotDef from @aikami/frontend/preview) ──
+// Used to build a scoped catalog from shard entries for the LPC preview.
+
+type LpcSlotDef = {
+  slot: string;
+  label: string;
+  variants: Array<{ label: string; assetId: string }>;
+};
+
 export type CatalogAssetViewModelOptions = BaseViewModelOptions & {
   data: CatalogAssetPageData;
 };
@@ -42,6 +51,8 @@ export type CatalogAssetViewModelInterface = BaseViewModelInterface & {
   readonly previewKind: PreviewKind;
   /** Built in the browser from entries the server load already fetched. */
   readonly resolver: AssetResolver | undefined;
+  /** Scoped LPC slot definitions built from shard entries. */
+  readonly lpcSlots: readonly LpcSlotDef[];
   /** True once the preview island has painted; hides the thumbnail. */
   readonly previewMounted: boolean;
   /** Set when the island failed; the thumbnail stays and a notice shows. */
@@ -50,6 +61,8 @@ export type CatalogAssetViewModelInterface = BaseViewModelInterface & {
   setPreviewMounted(): void;
   /** Record a preview mount error. */
   setPreviewError(message: string): void;
+  /** Ensure the LPC slot definitions are built (lazy, client-side). */
+  ensureLpcSlotsBuilt(): Promise<readonly LpcSlotDef[]>;
 
   goToCategory(): Promise<void>;
   goToLanding(): Promise<void>;
@@ -72,6 +85,8 @@ class CatalogAssetViewModel
   private readonly _dataOriginUrl: string;
   private _resolver: AssetResolver | undefined = undefined;
   private _resolverBuilt = false;
+  private _lpcSlots: readonly LpcSlotDef[] = [];
+  private _lpcSlotsBuilt = false;
   private _previewMounted = $state(false);
   private _previewError = $state<string | undefined>(undefined);
 
@@ -166,6 +181,10 @@ class CatalogAssetViewModel
     return this._previewError;
   }
 
+  get lpcSlots(): readonly LpcSlotDef[] {
+    return this._lpcSlots;
+  }
+
   /** Called by the preview island after successful mount. */
   setPreviewMounted(): void {
     this._previewMounted = true;
@@ -201,6 +220,83 @@ class CatalogAssetViewModel
       this._resolver = undefined;
     }
     return this._resolver;
+  }
+
+  /**
+   * Build scoped LPC slot definitions from shard entries.
+   * Called from the preview island's onMount (client-side only).
+   * Groups entries by slot name and creates LpcSlotDef objects.
+   */
+  async ensureLpcSlotsBuilt(): Promise<readonly LpcSlotDef[]> {
+    if (this._lpcSlotsBuilt) {
+      return this._lpcSlots;
+    }
+    this._lpcSlotsBuilt = true;
+
+    if (this._dataEntries.length === 0) {
+      return [];
+    }
+
+    // Group LPC entries by slot (second segment of the tag)
+    const slotMap = new Map<string, Map<string, string>>();
+
+    for (const entry of this._dataEntries) {
+      if (entry.category !== 'lpc') {
+        continue;
+      }
+
+      const parts = entry.tag.split(':');
+      if (parts.length < 4) {
+        continue;
+      }
+
+      const slotName = parts[1] ?? '';
+      // assetId is the fourth segment (e.g., "celestial_adult" from "lpc:hat:magic:celestial_adult:thrust")
+      const assetId = parts[3] ?? '';
+      // subcategory is the third segment (e.g., "magic")
+      const subcategory = parts[2] ?? '';
+
+      if (!slotName || !assetId) {
+        continue;
+      }
+
+      if (!slotMap.has(slotName)) {
+        slotMap.set(slotName, new Map());
+      }
+
+      const variantMap = slotMap.get(slotName);
+      if (variantMap && !variantMap.has(assetId)) {
+        // Use subcategory + assetId as the label for disambiguation
+        const label = subcategory ? `${subcategory}:${assetId}` : assetId;
+        variantMap.set(
+          assetId,
+          label.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        );
+      }
+    }
+
+    // Build LpcSlotDef array, sorted by slot name
+    const slots: LpcSlotDef[] = [];
+    const sortedSlotNames = [...slotMap.keys()].sort();
+
+    for (const slotName of sortedSlotNames) {
+      const variantMap = slotMap.get(slotName);
+      if (!variantMap) {
+        continue;
+      }
+      const variants = [...variantMap.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([assetId, label]) => ({ label, assetId }));
+
+      slots.push({
+        slot: slotName,
+        label: slotName.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        variants,
+      });
+    }
+
+    this._lpcSlots = slots;
+    return slots;
   }
 
   async goToCategory(): Promise<void> {
