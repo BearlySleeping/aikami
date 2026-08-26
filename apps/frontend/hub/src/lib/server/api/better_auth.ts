@@ -28,7 +28,13 @@ import {
   verifications,
 } from '@aikami/backend-database';
 import { drizzle } from 'drizzle-orm/d1';
-import { BETTER_AUTH_URL, BETTER_AUTH_SECRET, BETTER_AUTH_COOKIE_DOMAIN, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from '$app/env/private';
+import {
+  BETTER_AUTH_COOKIE_DOMAIN,
+  BETTER_AUTH_SECRET,
+  BETTER_AUTH_URL,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+} from '$app/env/private';
 import { logger } from '$logger';
 
 type BetterAuthEnv = {

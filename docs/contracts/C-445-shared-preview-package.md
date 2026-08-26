@@ -2,13 +2,13 @@
 id: C-445
 title: "Shared Preview Package — One Set of Asset Preview Surfaces"
 source: "user request 2026-08-26 — one place for hub, client dev, and the actual game"
-status: draft
+status: implemented
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/200"
-  pr_number: 200
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/200"
+    pr_number: 200
 created_at: "2026-08-26"
 ---
 
@@ -16,31 +16,32 @@ created_at: "2026-08-26"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | User request (2026-08-26): *"I want to add lpc rendering preview in hub so people can check assets, same with map and tileset and props… I would like to have a single source of truth."* |
-| **Target** | `packages/frontend/preview/` (new), `apps/frontend/client/src/lib/views/dev/lpc/`, `apps/frontend/client/src/lib/data/lpc_renderer.ts` |
-| **Priority** | P1 — this is where "one place for hub and client dev" actually lands. Without it, C-446 and C-447 duplicate the client's dev tooling in the hub. |
-| **Dependencies** | C-442, C-443, C-444. All must merge first. |
-| **Status** | draft |
-| **Promotion** | `sandbox` |
-| **Docs Impact** | internal → none |
-| **Contract version** | 1.0.0 |
+| Field                | Value                                                                                                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Source**           | User request (2026-08-26): _"I want to add lpc rendering preview in hub so people can check assets, same with map and tileset and props… I would like to have a single source of truth."_ |
+| **Target**           | `packages/frontend/preview/` (new), `apps/frontend/client/src/lib/views/dev/lpc/`, `apps/frontend/client/src/lib/data/lpc_renderer.ts`                                                    |
+| **Priority**         | P1 — this is where "one place for hub and client dev" actually lands. Without it, C-446 and C-447 duplicate the client's dev tooling in the hub.                                          |
+| **Dependencies**     | C-442, C-443, C-444. All must merge first.                                                                                                                                                |
+| **Status**           | draft                                                                                                                                                                                     |
+| **Promotion**        | `sandbox`                                                                                                                                                                                 |
+| **Docs Impact**      | internal → none                                                                                                                                                                           |
+| **Contract version** | 1.0.0                                                                                                                                                                                     |
 
 ## Problem & Baseline Evidence
 
 - **Current behavior**: every asset preview surface lives inside
   `apps/frontend/client/src/lib/views/dev/`, unreachable from the hub by the
-  monorepo's own boundary rule (*"Never import from another app"*, CLAUDE.md).
+  monorepo's own boundary rule (_"Never import from another app"_, CLAUDE.md).
   Measured 2026-08-26:
-  ```
-  views/dev/lpc/lpc_view_model.svelte.ts        1036 lines
-  views/dev/lpc/lpc_view.svelte                  471
-  views/dev/lpc/lpc_pixi_facade.ts
-  views/dev/lpc_walk/lpc_walk_test_view_model     473
-  views/dev/lpc_inventory/…
-  views/dev/sandbox/map/map_sandbox_view_model    413
-  ```
+
+    ```
+    views/dev/lpc/lpc_view_model.svelte.ts        1036 lines
+    views/dev/lpc/lpc_view.svelte                  471
+    views/dev/lpc/lpc_pixi_facade.ts
+    views/dev/lpc_walk/lpc_walk_test_view_model     473
+    views/dev/lpc_inventory/…
+    views/dev/sandbox/map/map_sandbox_view_model    413
+    ```
 
 - **The routes are already thin — the extraction target is obvious.**
   `apps/frontend/client/src/routes/(dev)/dev/lpc/+page.svelte` is 11 lines;
@@ -92,17 +93,17 @@ renderer the game uses, not a lookalike.
 
 ## Existing System & Reuse Map
 
-| Capability | Existing source | Reuse / modify / replace |
-|---|---|---|
-| LPC texture pipeline | `client/src/lib/data/lpc_renderer.ts` | **modify** — move into the package as `createLpcRenderer` (shape from C-444) |
-| LPC preview UI | `client/src/lib/views/dev/lpc/lpc_view.svelte` + view model | **modify** — move, drop client-only imports, take a resolver prop |
-| Pixi facade | `client/src/lib/views/dev/lpc/lpc_pixi_facade.ts` | **modify** — move |
-| URL state serialisation | `client/src/lib/data/lpc_url_config.ts` | **modify** — move; becomes the shareable preview link format |
-| Walk preview | `client/src/lib/views/dev/lpc_walk/` | **modify** — move |
-| Icon framing | `client/src/lib/data/lpc_icon_frame.ts` | **modify** — move |
-| Map sandbox | `client/src/lib/views/dev/sandbox/map/` | **modify** — move; the engine-mounting parts become `WalkSandbox` |
-| Tileset / prop preview | — | **new** — no equivalent exists today |
-| View model base | `@aikami/frontend/services` `BaseViewModel` | **reuse** — both apps already use it |
+| Capability              | Existing source                                             | Reuse / modify / replace                                                     |
+| ----------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| LPC texture pipeline    | `client/src/lib/data/lpc_renderer.ts`                       | **modify** — move into the package as `createLpcRenderer` (shape from C-444) |
+| LPC preview UI          | `client/src/lib/views/dev/lpc/lpc_view.svelte` + view model | **modify** — move, drop client-only imports, take a resolver prop            |
+| Pixi facade             | `client/src/lib/views/dev/lpc/lpc_pixi_facade.ts`           | **modify** — move                                                            |
+| URL state serialisation | `client/src/lib/data/lpc_url_config.ts`                     | **modify** — move; becomes the shareable preview link format                 |
+| Walk preview            | `client/src/lib/views/dev/lpc_walk/`                        | **modify** — move                                                            |
+| Icon framing            | `client/src/lib/data/lpc_icon_frame.ts`                     | **modify** — move                                                            |
+| Map sandbox             | `client/src/lib/views/dev/sandbox/map/`                     | **modify** — move; the engine-mounting parts become `WalkSandbox`            |
+| Tileset / prop preview  | —                                                           | **new** — no equivalent exists today                                         |
+| View model base         | `@aikami/frontend/services` `BaseViewModel`                 | **reuse** — both apps already use it                                         |
 
 ## Overview
 
@@ -136,7 +137,7 @@ its `+page.svelte` files already are.
   `$lib/*` alias, or anything from `apps/**`.
 - **No SvelteKit dependency.** The package must be mountable from a plain
   component tree. Routing, page data, and URL mutation stay in the host app;
-  the package exposes URL *serialisation* (pure functions) but never touches
+  the package exposes URL _serialisation_ (pure functions) but never touches
   `history` or `$app/navigation`.
 - Pixi is imported only inside `onMount`-guarded code paths so a host can render
   the component tree during SSR without a canvas. Components render a
@@ -155,61 +156,59 @@ its `+page.svelte` files already are.
 
 ```ts
 // packages/frontend/preview/src/index.ts — static previews
-export { default as LpcPreview } from './lib/lpc/lpc_preview.svelte';
-export { default as TilesetPreview } from './lib/tileset/tileset_preview.svelte';
-export { default as PropPreview } from './lib/prop/prop_preview.svelte';
-export { default as MapPreview } from './lib/map/map_preview.svelte';
-export { createLpcRenderer, type LpcRenderer } from './lib/lpc/lpc_renderer.ts';
-export { encodeLpcPreviewState, decodeLpcPreviewState,
-         type LpcPreviewState } from './lib/lpc/preview_url_state.ts';
-export type { PreviewProps } from './lib/types.ts';
+export { default as LpcPreview } from "./lib/lpc/lpc_preview.svelte";
+export { default as TilesetPreview } from "./lib/tileset/tileset_preview.svelte";
+export { default as PropPreview } from "./lib/prop/prop_preview.svelte";
+export { default as MapPreview } from "./lib/map/map_preview.svelte";
+export { createLpcRenderer, type LpcRenderer } from "./lib/lpc/lpc_renderer.ts";
+export { encodeLpcPreviewState, decodeLpcPreviewState, type LpcPreviewState } from "./lib/lpc/preview_url_state.ts";
+export type { PreviewProps } from "./lib/types.ts";
 
 // packages/frontend/preview/src/sandbox.ts — engine-mounting preview
-export { default as WalkSandbox } from './lib/sandbox/walk_sandbox.svelte';
-export { getWalkSandboxViewModel,
-         type WalkSandboxViewModelInterface } from './lib/sandbox/walk_sandbox_view_model.svelte.ts';
+export { default as WalkSandbox } from "./lib/sandbox/walk_sandbox.svelte";
+export { getWalkSandboxViewModel, type WalkSandboxViewModelInterface } from "./lib/sandbox/walk_sandbox_view_model.svelte.ts";
 ```
 
 ```ts
 // packages/frontend/preview/src/lib/types.ts
-import type { AssetResolver } from '@aikami/types';
-import type { LpcCatalog } from '@aikami/lpc';
+import type { AssetResolver } from "@aikami/types";
+import type { LpcCatalog } from "@aikami/lpc";
 
 /** Every preview component takes at least this. */
 export type PreviewProps = {
-  /** Host-supplied resolution strategy (registry, cdn, or fixture). */
-  readonly resolver: AssetResolver;
-  /** Rendered size in CSS pixels. */
-  readonly width?: number;
-  readonly height?: number;
-  /** Integer upscale factor for pixel art. Defaults to 2. */
-  readonly zoom?: number;
+	/** Host-supplied resolution strategy (registry, cdn, or fixture). */
+	readonly resolver: AssetResolver;
+	/** Rendered size in CSS pixels. */
+	readonly width?: number;
+	readonly height?: number;
+	/** Integer upscale factor for pixel art. Defaults to 2. */
+	readonly zoom?: number;
 };
 
 export type LpcPreviewProps = PreviewProps & {
-  readonly catalog: LpcCatalog;
-  /** Initial selection; the component owns changes after mount. */
-  readonly initialState?: LpcPreviewState;
-  /** Fired whenever the selection changes, so hosts can sync a URL. */
-  readonly onStateChange?: (state: LpcPreviewState) => void;
-  /** Hide the control panel for embedded / thumbnail use. */
-  readonly controls?: boolean;
+	readonly catalog: LpcCatalog;
+	/** Initial selection; the component owns changes after mount. */
+	readonly initialState?: LpcPreviewState;
+	/** Fired whenever the selection changes, so hosts can sync a URL. */
+	readonly onStateChange?: (state: LpcPreviewState) => void;
+	/** Hide the control panel for embedded / thumbnail use. */
+	readonly controls?: boolean;
 };
 
 export type TilesetPreviewProps = PreviewProps & {
-  readonly tag: string;
-  /** Tile size in source pixels. Defaults to 32. */
-  readonly tileSize?: number;
-  /** Draw the tile grid overlay. */
-  readonly showGrid?: boolean;
+	readonly tag: string;
+	/** Tile size in source pixels. Defaults to 32. */
+	readonly tileSize?: number;
+	/** Draw the tile grid overlay. */
+	readonly showGrid?: boolean;
 };
 
 export type MapPreviewProps = PreviewProps & {
-  readonly mapTag: string;
-  /** Overlay the collision grid returned by extractCollisionGrid. */
-  readonly showCollision?: boolean;
-  /** Colour entities by their WORLD_Z_BANDS band. */
-  readonly showZBands?: boolean;
+	readonly mapTag: string;
+	/** Overlay the collision grid returned by extractCollisionGrid. */
+	readonly showCollision?: boolean;
+	/** Colour entities by their WORLD_Z_BANDS band. */
+	readonly showZBands?: boolean;
 };
 ```
 
@@ -251,24 +250,24 @@ export type MapPreviewProps = PreviewProps & {
 ## Scope Boundaries
 
 - **In Scope:**
-  - New package `packages/frontend/preview` with two entrypoints
-    (`.` and `./sandbox`).
-  - Moving the LPC Pixi pipeline, LPC preview UI, walk preview, icon framing,
-    and URL state serialisation into it.
-  - New `TilesetPreview`, `PropPreview`, `MapPreview` components.
-  - `WalkSandbox` generalised from the client's map sandbox view model.
-  - Rewriting the client `(dev)` routes as wrappers; deleting the moved
-    view models.
-  - A visual suite covering each component against a fixture resolver.
+    - New package `packages/frontend/preview` with two entrypoints
+      (`.` and `./sandbox`).
+    - Moving the LPC Pixi pipeline, LPC preview UI, walk preview, icon framing,
+      and URL state serialisation into it.
+    - New `TilesetPreview`, `PropPreview`, `MapPreview` components.
+    - `WalkSandbox` generalised from the client's map sandbox view model.
+    - Rewriting the client `(dev)` routes as wrappers; deleting the moved
+      view models.
+    - A visual suite covering each component against a fixture resolver.
 - **Out of Scope:**
-  - Any hub route or hub wiring — C-446, C-447.
-  - The non-preview dev routes (`text`, `voice`, `image`, `audio`, `save_load`,
-    `settings`, `config`, `session`, `world_gen`, `export`, `autonomous`,
-    `combat`, `camera`, `environment`, `party_follow`, `expression`,
-    `character_sheet`, `lpc_ai`, `lpc_inventory`). They stay in the client.
-    Only asset-preview surfaces move.
-  - Changing what the previews render. Feature parity with today's dev pages is
-    the bar; new controls are follow-up work.
+    - Any hub route or hub wiring — C-446, C-447.
+    - The non-preview dev routes (`text`, `voice`, `image`, `audio`, `save_load`,
+      `settings`, `config`, `session`, `world_gen`, `export`, `autonomous`,
+      `combat`, `camera`, `environment`, `party_follow`, `expression`,
+      `character_sheet`, `lpc_ai`, `lpc_inventory`). They stay in the client.
+      Only asset-preview surfaces move.
+    - Changing what the previews render. Feature parity with today's dev pages is
+      the bar; new controls are follow-up work.
 
 ## Contract Size & Split Rule
 
@@ -283,6 +282,7 @@ the visual suite; splitting them would triple the setup cost for one feature.
 ## Acceptance Criteria
 
 ### AC-1: The package is host-agnostic
+
 **Given** `packages/frontend/preview`
 **When** its source is searched
 **Then** no module imports from `apps/**`, `$app/*`, `$lib/*`, `$services`, or
@@ -290,20 +290,24 @@ any Svelte store defined outside the package, and `package.json` declares no
 dependency on either app.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-1 | Unit | `packages/frontend/preview/src/lib/__tests__/host_agnostic.test.ts` | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                                   | Production Path | Evidence                   |
+| ---- | ---------- | ------------------------------------------------------------------- | --------------- | -------------------------- |
+| AC-1 | Unit       | `packages/frontend/preview/src/lib/__tests__/host_agnostic.test.ts` | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run preview:test`
 
 **Watch Points**:
+
 - `logger` is the one permitted cross-cutting import, via the `$logger` path
   mapping. Everything else must arrive as a prop.
 
 ---
 
 ### AC-2: LPC preview renders from a fixture resolver
+
 **Given** `LpcPreview` mounted with a `kind: 'fixture'` resolver and a catalog
 built by `buildLpcCatalog` over fixture entries
 **When** the component mounts
@@ -312,49 +316,56 @@ changing direction changes the sheet row, and stepping the frame advances the
 source rectangle.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-2 | Visual | `apps/e2e/src/visual/suites/preview_lpc.visual.ts` | `/dev/lpc` | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                  | Production Path | Evidence                   |
+| ---- | ---------- | -------------------------------------------------- | --------------- | -------------------------- |
+| AC-2 | Visual     | `apps/e2e/src/visual/suites/preview_lpc.visual.ts` | `/dev/lpc`      | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run preview:test`
 - E2E / Visual:
-  - **Functional**: N/A.
-  - **Visual**: `apps/e2e/src/visual/suites/preview_lpc.visual.ts` using
-    `defineConfig` + `export default`. Cases: `lpc-front-idle`
-    (`/dev/lpc`, no params), `lpc-side-walk` (`?dir=1&state=8&frame=2`),
-    `lpc-layered` (a params string selecting hair + torso + legs + feet).
-    AI criteria: *"Score 90+: a single coherent LPC humanoid character is
-    visible with correctly stacked layers — hair above head, torso above body,
-    no layer offset by more than one pixel, no z-fighting or double-drawn
-    limbs, facing the direction named in the case."*
+    - **Functional**: N/A.
+    - **Visual**: `apps/e2e/src/visual/suites/preview_lpc.visual.ts` using
+      `defineConfig` + `export default`. Cases: `lpc-front-idle`
+      (`/dev/lpc`, no params), `lpc-side-walk` (`?dir=1&state=8&frame=2`),
+      `lpc-layered` (a params string selecting hair + torso + legs + feet).
+      AI criteria: _"Score 90+: a single coherent LPC humanoid character is
+      visible with correctly stacked layers — hair above head, torso above body,
+      no layer offset by more than one pixel, no z-fighting or double-drawn
+      limbs, facing the direction named in the case."_
 
 **Watch Points**:
+
 - Layer z-order is direction-dependent (`LPC_LAYER_ORDER`, C-430). The `up`
   direction is where wrong ordering shows first — include it.
 
 ---
 
 ### AC-3: Tileset preview shows a correct grid
+
 **Given** `TilesetPreview` with a tileset tag and `tileSize: 32`
 **When** it mounts with `showGrid: true`
 **Then** the atlas renders at integer scale with no bilinear smoothing, the grid
 overlay aligns to tile boundaries, and hovering a tile reports its index.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-3 | Visual | `apps/e2e/src/visual/suites/preview_tileset.visual.ts` | `/dev/lpc` (host route) | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                      | Production Path         | Evidence                   |
+| ---- | ---------- | ------------------------------------------------------ | ----------------------- | -------------------------- |
+| AC-3 | Visual     | `apps/e2e/src/visual/suites/preview_tileset.visual.ts` | `/dev/lpc` (host route) | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run preview:test`
 - E2E / Visual:
-  - **Functional**: N/A.
-  - **Visual**: cases `tileset-grid-on`, `tileset-grid-off`. AI criteria:
-    *"Score 90+: pixel art renders crisply with no blur; grid lines, when
-    present, align exactly to tile edges with no half-tile at any border."*
+    - **Functional**: N/A.
+    - **Visual**: cases `tileset-grid-on`, `tileset-grid-off`. AI criteria:
+      _"Score 90+: pixel art renders crisply with no blur; grid lines, when
+      present, align exactly to tile edges with no half-tile at any border."_
 
 **Watch Points**:
+
 - `installNearestTextureDefault` from the engine must be called before any
   texture loads, or every preview is blurry. It is a global Pixi default —
   call it once from the package's renderer factory.
@@ -362,26 +373,30 @@ overlay aligns to tile boundaries, and hovering a tile reports its index.
 ---
 
 ### AC-4: Map preview renders tiles, collision, and z-bands
+
 **Given** `MapPreview` with a `.jton` map tag
 **When** it mounts with `showCollision` and `showZBands` enabled
 **Then** tile layers render in order, blocked cells are tinted, and entities are
 coloured by their `WORLD_Z_BANDS` band.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-4 | Visual | `apps/e2e/src/visual/suites/preview_map.visual.ts` | `/dev/sandbox/map` | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                  | Production Path    | Evidence                   |
+| ---- | ---------- | -------------------------------------------------- | ------------------ | -------------------------- |
+| AC-4 | Visual     | `apps/e2e/src/visual/suites/preview_map.visual.ts` | `/dev/sandbox/map` | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run preview:test`
 - E2E / Visual:
-  - **Functional**: N/A.
-  - **Visual**: cases `map-plain`, `map-collision`, `map-zbands`. AI criteria:
-    *"Score 90+: a coherent tilemap with no gaps or misaligned tiles; collision
-    tint, when enabled, covers solid features such as walls and water and not
-    open floor."*
+    - **Functional**: N/A.
+    - **Visual**: cases `map-plain`, `map-collision`, `map-zbands`. AI criteria:
+      _"Score 90+: a coherent tilemap with no gaps or misaligned tiles; collision
+      tint, when enabled, covers solid features such as walls and water and not
+      open floor."_
 
 **Watch Points**:
+
 - Reuse `loadJtonMap`, `extractCollisionGrid`, `buildTilemapChunks` from
   `@aikami/frontend/engine/content` and `/render`. Do not write a second
   tilemap renderer for previews — that is the exact mistake this contract
@@ -390,6 +405,7 @@ coloured by their `WORLD_Z_BANDS` band.
 ---
 
 ### AC-5: Client dev routes are wrappers, with no duplicate view model
+
 **Given** the merged branch
 **When** `apps/frontend/client/src/routes/(dev)/dev/lpc/+page.svelte` and
 `.../sandbox/map/+page.svelte` are read
@@ -398,14 +414,17 @@ coloured by their `WORLD_Z_BANDS` band.
 `apps/frontend/client/src/lib/views/dev/lpc_walk/` no longer exist.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
+
+| AC   | Test Level  | Required Artifact                          | Production Path                | Evidence                   |
+| ---- | ----------- | ------------------------------------------ | ------------------------------ | -------------------------- |
 | AC-5 | Integration | `moon check` + directory listing in the PR | `/dev/lpc`, `/dev/sandbox/map` | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon check`, `moon run client:build`
 
 **Watch Points**:
+
 - The client dev routes must still supply the **registry** resolver, so they
   keep exercising the cached/offline path. If they silently switch to the CDN
   resolver, the dev routes stop testing what the game does.
@@ -413,20 +432,24 @@ coloured by their `WORLD_Z_BANDS` band.
 ---
 
 ### AC-6: Mount/unmount does not leak
+
 **Given** any preview component
 **When** it is mounted and unmounted 20 times
 **Then** the WebGL context count returns to its starting value, every resolver
 URL acquired has been released, and the frame-texture cache is empty.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-6 | Unit | `packages/frontend/preview/src/lib/__tests__/lifecycle.test.ts` | N/A | Filled during verification |
+
+| AC   | Test Level | Required Artifact                                               | Production Path | Evidence                   |
+| ---- | ---------- | --------------------------------------------------------------- | --------------- | -------------------------- |
+| AC-6 | Unit       | `packages/frontend/preview/src/lib/__tests__/lifecycle.test.ts` | N/A             | Filled during verification |
 
 **Test Hooks**:
+
 - Moon Task: `moon run preview:test`
 
 **Watch Points**:
+
 - The hub will mount and unmount these on every client-side navigation. A leak
   that is invisible on a dev page you load once is fatal on a browse-heavy site.
 - Assert release counts against a counting `kind: 'fixture'` resolver — do not
@@ -477,8 +500,8 @@ Must be resolved before status becomes `approved`:
 ## Amendments
 
 | Version | Date | Change | Approved by |
-|---|---|---|---|
-| — | — | — | — |
+| ------- | ---- | ------ | ----------- |
+| —       | —    | —      | —           |
 
 ## Promotion Lifecycle
 

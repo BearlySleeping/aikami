@@ -14,18 +14,15 @@ type Props = {
 
 let { entry, previewUrl, onSelect }: Props = $props();
 
-const displayName = assetDisplayName(entry);
+const displayName = $derived(assetDisplayName(entry));
 
-let licenseBadge = $state('');
-if (hasNoLicense(entry)) {
-  licenseBadge = 'Unknown';
-} else if (entry.licenses.length === 1) {
-  licenseBadge = entry.licenses[0];
-} else {
-  licenseBadge = `${entry.licenses[0]} +${entry.licenses.length - 1}`;
-}
+const licenseBadge = $derived(
+  hasNoLicense(entry) ? 'Unknown' :
+  entry.licenses.length === 1 ? entry.licenses[0] :
+  `${entry.licenses[0]} +${entry.licenses.length - 1}`
+);
 
-const isUnknown = hasNoLicense(entry);
+const isUnknown = $derived(hasNoLicense(entry));
 </script>
 
 <button

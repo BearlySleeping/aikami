@@ -86,16 +86,15 @@ const toSrcPath = (path: string) => toPosixPath(join(projectDirectory, 'src', pa
 // the (dev) sandbox routes from test/QA builds (M4). The vite mode is the
 // single source of truth.
 // ---------------------------------------------------------------------------
-const buildMode = process.env.AIKAMI_BUILD_MODE;
 const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
-const isProductionBuild = buildMode === 'production';
 let includeDevRoutes: boolean;
 if (devGateOverride === 'true') {
   includeDevRoutes = true;
 } else if (devGateOverride === 'false') {
   includeDevRoutes = false;
 } else {
-  includeDevRoutes = !isProductionBuild;
+  // TODO: remove the default 'true' once we want to try hard production
+  includeDevRoutes = true; //process.env.AIKAMI_BUILD_MODE === 'production';
 }
 
 const FILTERED_ROUTES_DIR = join(projectDirectory, '.svelte-kit', 'routes-prod');

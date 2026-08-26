@@ -60,7 +60,7 @@ describe('AC-6: Package lifecycle and exports', () => {
       [0, 0, 0],
     ];
 
-    const result = pickHeroCell(counts);
+    const result = pickHeroCell({ counts });
     expect(result).toBeDefined();
     expect(result?.col).toBe(1);
     expect(result?.row).toBe(1);
@@ -74,7 +74,7 @@ describe('AC-6: Package lifecycle and exports', () => {
       [0, 0],
     ];
 
-    const result = pickHeroCell(counts);
+    const result = pickHeroCell({ counts });
     expect(result).toBeUndefined();
   });
 });

@@ -3,15 +3,25 @@
   //
   // Dev route — wraps the shared WalkSandbox component.
   // Supplies the registry resolver for asset resolution.
+  // Uses a dedicated ViewModel for resolver/manifest loading.
 
-  import { onMount } from 'svelte';
   import { WalkSandbox } from '@aikami/frontend/preview/sandbox';
+  import {
+    getLpcWalkViewModel,
+    type LpcWalkViewModelInterface,
+  } from './lpc_walk_view_model.svelte';
 
-  let resolver: import('@aikami/types').AssetResolver | undefined = $state(undefined);
+  let viewModel = $state<LpcWalkViewModelInterface | undefined>(undefined);
 
-  onMount(async () => {
-    const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
-    resolver = createRegistryAssetResolver();
+  $effect(() => {
+    const vm = getLpcWalkViewModel({ className: 'LpcWalk' });
+    viewModel = vm;
+    void vm.initialize();
+    return () => {
+      void vm.dispose().catch((err: unknown) => {
+        console.error('LpcWalk route dispose failed:', err);
+      });
+    };
   });
 </script>
 
@@ -19,8 +29,8 @@
   <title>LPC Walk Sandbox</title>
 </svelte:head>
 
-{#if resolver}
-  <WalkSandbox {resolver} />
+{#if viewModel?.resolver && !viewModel?.loading}
+  <WalkSandbox resolver={viewModel.resolver} />
 {:else}
   <div class="flex items-center justify-center h-64 text-base-content/40">
     Loading walk sandbox...

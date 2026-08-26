@@ -17,10 +17,10 @@ import {
   REQUIRED_LPC_SLOTS,
 } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
-import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
+import { Application, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
 import type { LpcRenderer } from './lpc_renderer';
-import { decodeLpcPreviewState, encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';
+import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -30,6 +30,14 @@ const CanvasHeight = 540;
 const EntityX = CanvasWidth / 2;
 const EntityY = CanvasHeight / 2 - 32;
 
+// ── Template constants exposed via the interface ──────────────────────────
+
+// LpcAnimationState/LpcDirection are plain `as const` objects (no reverse
+// string mapping like a real TS enum), so Object.values already yields only
+// their numeric literal values — no filter needed.
+export const ANIMATION_STATE_OPTIONS = Object.values(LpcAnimationState);
+export const DIRECTION_OPTIONS = Object.values(LpcDirection);
+
 // ── Types ─────────────────────────────────────────────────────────────────
 
 export type ActiveLayerConfig = {
@@ -38,7 +46,7 @@ export type ActiveLayerConfig = {
 };
 
 export type LpcPreviewViewModelInterface = BaseViewModelInterface & {
-  canvasElement: HTMLCanvasElement | undefined;
+  readonly canvasElement: HTMLCanvasElement | undefined;
   setCanvasElement(canvas: HTMLCanvasElement): void;
 
   readonly animationState: LpcAnimationState;
@@ -72,6 +80,10 @@ export type LpcPreviewViewModelInterface = BaseViewModelInterface & {
   readonly allSlots: LpcSlotDef[];
   readonly statusBanner: { message: string; level: 'info' | 'warn' | 'error' } | undefined;
 
+  // Template logic exposed for the view
+  readonly animationStateOptions: readonly number[];
+  readonly directionOptions: readonly number[];
+
   togglePlayback(): void;
   stepNext(): void;
   stepPrev(): void;
@@ -103,28 +115,46 @@ export type LpcPreviewViewModelOptions = BaseViewModelOptions & {
   allSlots: LpcSlotDef[];
   initialState?: LpcPreviewState;
   onStateChange?: (state: LpcPreviewState) => void;
+  zoom?: number;
 };
 
 class LpcPreviewViewModel
   extends BaseViewModel<LpcPreviewViewModelOptions>
   implements LpcPreviewViewModelInterface
 {
+  // ── Private internals (before public for convention) ─────────────────
+
+  private readonly _resolver: AssetResolver;
+  private readonly _onStateChange?: (state: LpcPreviewState) => void;
+  private _sheetTextureCache = new Map<string, Texture>();
+  private _sheetTexturePromises = new Map<string, Promise<Texture>>();
+  private _characterContainer: Container | undefined;
+  private _layerSprites: Sprite[] = [];
+  private _gridGraphics: Container | undefined;
+  private _tickAccumulator = 0;
+  private _lpcRenderer: LpcRenderer | undefined;
+  /** Generation counter to serialise async _renderCharacter updates. */
+  private _renderGeneration = 0;
+
+  // ── Public reactive state ──────────────────────────────────────────
+
   readonly maxLayers = MaxLayers;
   readonly canvasWidth = CanvasWidth;
   readonly canvasHeight = CanvasHeight;
   readonly entityX = EntityX;
   readonly entityY = EntityY;
 
+  readonly animationStateOptions = ANIMATION_STATE_OPTIONS;
+  readonly directionOptions = DIRECTION_OPTIONS;
+
   allSlots = $state<LpcSlotDef[]>([]);
-  private readonly _resolver: AssetResolver;
-  private readonly _onStateChange?: (state: LpcPreviewState) => void;
 
   // ── PixiJS infrastructure ────────────────────────────────────────────
 
   readonly batchManager = new LpcBatchManager({ maxInstances: 8 });
   readonly stageContainer: Container;
   canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
-  pixiApp = $state<import('pixi.js').Application | undefined>(undefined);
+  pixiApp = $state<Application | undefined>(undefined);
 
   // ── Status ───────────────────────────────────────────────────────────
 
@@ -161,21 +191,12 @@ class LpcPreviewViewModel
   compositionFailed = $state(false);
   zoom = $state(1);
 
-  // ── Private internals ───────────────────────────────────────────────
-
-  private _sheetTextureCache = new Map<string, Texture>();
-  private _sheetTexturePromises = new Map<string, Promise<Texture>>();
-  private _characterContainer: Container | undefined;
-  private _layerSprites: Sprite[] = [];
-  private _gridGraphics: Container | undefined;
-  private _tickAccumulator = 0;
-  private _lpcRenderer: LpcRenderer | undefined;
-
   constructor(options: LpcPreviewViewModelOptions) {
     super(options);
     this._resolver = options.resolver;
     this._onStateChange = options.onStateChange;
     this.allSlots = options.allSlots;
+    this.zoom = options.zoom ?? 1;
     this.stageContainer = new Container();
     this.stageContainer.label = 'lpc-preview-stage';
 
@@ -464,6 +485,10 @@ class LpcPreviewViewModel
   // ── Rendering ───────────────────────────────────────────────────────
 
   private async _renderCharacter(): Promise<void> {
+    // Increment generation to invalidate any in-flight renders
+    this._renderGeneration++;
+    const thisGeneration = this._renderGeneration;
+
     const currentRecipes = this.recipes;
     const currentFrame = this.animationFrame;
     const currentZoom = this.zoom;
@@ -547,6 +572,16 @@ class LpcPreviewViewModel
       });
 
       await Promise.all(layerPromises);
+
+      // Check if this render is stale
+      if (thisGeneration !== this._renderGeneration) {
+        // Stale render — destroy newly created children and abort
+        for (const sprite of newSprites) {
+          sprite.destroy();
+        }
+        return;
+      }
+
       this._destroyAllSprites();
 
       newSprites.sort((a, b) => {
@@ -658,19 +693,29 @@ class LpcPreviewViewModel
   // ── State serialisation ─────────────────────────────────────────────
 
   getStateParams(): URLSearchParams {
-    const state: LpcPreviewState = {
+    return encodeLpcPreviewState(this._buildPreviewState());
+  }
+
+  private _buildPreviewState(): LpcPreviewState {
+    return {
       layers: this.activeLayers.map((layer) => ({
         slotDefIndex: layer.slotDefIndex,
         variantIndex: layer.variantIndex,
       })),
-      paletteOverrides: new Map(),
+      paletteOverrides: new Map(
+        Object.entries(this.layerOverrides)
+          .filter(([, enabled]) => enabled)
+          .map(([key]) => {
+            const idx = Number(key);
+            return [key, this.paletteColors[idx] ?? ''] as const;
+          }),
+      ),
       state: this.animationState,
       direction: this.facingDirection,
       frame: this.animationFrame,
       playing: this.isPlaying,
       zoom: this.zoom,
     };
-    return encodeLpcPreviewState(state);
   }
 
   private _applyPreviewState(state: LpcPreviewState): void {
@@ -686,6 +731,16 @@ class LpcPreviewViewModel
     this.animationFrame = state.frame;
     this.isPlaying = state.playing;
     this.zoom = state.zoom;
+
+    // Restore palette overrides
+    if (state.paletteOverrides && state.paletteOverrides.size > 0) {
+      for (const [idx, color] of state.paletteOverrides) {
+        this.layerOverrides = { ...this.layerOverrides, [idx]: true };
+        if (color) {
+          this.paletteColors = { ...this.paletteColors, [idx]: color };
+        }
+      }
+    }
   }
 
   // ── Initialize / Dispose ────────────────────────────────────────────
@@ -731,21 +786,6 @@ class LpcPreviewViewModel
     });
 
     return await super.initialize();
-  }
-
-  private _buildPreviewState(): LpcPreviewState {
-    return {
-      layers: this.activeLayers.map((layer) => ({
-        slotDefIndex: layer.slotDefIndex,
-        variantIndex: layer.variantIndex,
-      })),
-      paletteOverrides: new Map(),
-      state: this.animationState,
-      direction: this.facingDirection,
-      frame: this.animationFrame,
-      playing: this.isPlaying,
-      zoom: this.zoom,
-    };
   }
 
   private async _initPixiApp(): Promise<void> {
@@ -819,6 +859,8 @@ class LpcPreviewViewModel
     return await super.dispose();
   }
 }
+
+// ── Factory ────────────────────────────────────────────────────────────────
 
 export const getLpcPreviewViewModel = (
   options: LpcPreviewViewModelOptions,

@@ -1,10 +1,13 @@
 <script lang="ts">
   // packages/frontend/preview/src/lib/prop/prop_preview.svelte
   //
-  // Prop preview component — renders a single prop sprite.
-  // Reuses engine loaders for texture resolution.
+  // Prop preview component — pure wrapper. All logic lives in the ViewModel.
+  // Renders a single prop sprite.
 
-  import { onMount } from 'svelte';
+  import {
+    getPropPreviewViewModel,
+    type PropPreviewViewModelInterface,
+  } from './prop_preview_view_model.svelte';
   import type { AssetResolver } from '@aikami/types';
 
   type Props = {
@@ -24,48 +27,35 @@
   }: Props = $props();
 
   let canvasEl: HTMLCanvasElement | undefined = $state(undefined);
-  let error = $state<string | undefined>(undefined);
+  let viewModel = $state<PropPreviewViewModelInterface | undefined>(undefined);
 
-  onMount(async () => {
-    if (!canvasEl) return;
+  $effect(() => {
+    const vm = getPropPreviewViewModel({
+      className: 'PropPreview',
+      resolver,
+      tag,
+      width,
+      height,
+      zoom,
+    });
+    viewModel = vm;
+    void vm.initialize();
+    return () => {
+      void vm.dispose();
+    };
+  });
 
-    try {
-      const url = resolver.resolve(tag);
-      if (!url) {
-        error = `Cannot resolve prop: ${tag}`;
-        return;
-      }
-
-      const img = new Image();
-      img.onload = () => {
-        if (!canvasEl) return;
-        const ctx = canvasEl.getContext('2d');
-        if (!ctx) return;
-
-        ctx.imageSmoothingEnabled = false;
-        ctx.clearRect(0, 0, width, height);
-
-        // Center the sprite
-        const drawW = img.width * zoom;
-        const drawH = img.height * zoom;
-        const dx = (width - drawW) / 2;
-        const dy = (height - drawH) / 2;
-        ctx.drawImage(img, dx, dy, drawW, drawH);
-      };
-      img.onerror = () => {
-        error = `Failed to load prop: ${tag}`;
-      };
-      img.src = url;
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
+  $effect(() => {
+    if (canvasEl && viewModel) {
+      viewModel.setCanvasElement(canvasEl);
     }
   });
 </script>
 
 <div class="flex flex-col gap-2">
-  {#if error}
+  {#if viewModel?.error}
     <div class="bg-error/10 border border-error text-error px-3 py-2 rounded text-xs">
-      ⚠️ {error}
+      ⚠️ {viewModel.error}
     </div>
   {:else}
     <canvas

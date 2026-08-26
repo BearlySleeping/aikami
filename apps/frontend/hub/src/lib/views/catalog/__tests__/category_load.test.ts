@@ -115,11 +115,11 @@ afterAll(() => {
 // ---------------------------------------------------------------------------
 
 const setEnv = (options: { catalogOrigin?: string }): void => {
-  const env: Record<string, string | undefined> = {
+  mock.module('$app/env/private', () => ({
     // biome-ignore lint/style/useNamingConvention: env keys are SCREAMING_SNAKE_CASE literals by platform convention
     CATALOG_ORIGIN_URL: options.catalogOrigin,
-  };
-  mock.module('$env/dynamic/private', () => ({ env }));
+    __esModule: true,
+  }));
 };
 
 describe('category load — C-396 AC-2 (static index, no Postgres)', () => {

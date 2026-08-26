@@ -124,7 +124,8 @@ const filesUnder = (directory: string, predicate: (file: string) => boolean): st
 type Alias = { prefix: string; base: string; wildcard: boolean };
 
 const svelteAliases = (): Alias[] => {
-  const source = readFileSync(join(hubRoot, 'svelte.config.js'), 'utf8');
+  // Hub uses SvelteKit 3 config embedded in vite.config.ts (no svelte.config.js)
+  const source = readFileSync(join(hubRoot, 'vite.config.ts'), 'utf8');
   const pattern = /'?([$@][\w/*.-]+)'?:\s*to(Src|Packages)Path\('([^']+)'\)/g;
   return [...source.matchAll(pattern)].map(([, key, kind, value]) => {
     const root = kind === 'Src' ? join(hubRoot, 'src') : packagesDirectory;
