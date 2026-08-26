@@ -21,10 +21,95 @@ created_at: "2026-08-26"
 | **Target** | `packages/frontend/engine/package.json`, `packages/frontend/engine/src/index.ts`, new `src/sim.ts` / `src/render.ts` / `src/content.ts` barrels |
 | **Priority** | P1 — the single barrel is the documented reason duplicate code exists in the client. Removing the reason prevents recurrence. |
 | **Dependencies** | C-442 (deletes the mirrors this contract makes unnecessary). C-442 must merge first. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → developer note on importing from the engine |
 | **Contract version** | 1.0.0 |
+
+## Execution Report
+
+### Summary
+
+Created four sub-barrels (`sim`, `render`, `content`, `node`) with an `exports` map in `package.json`. Rewrote the root barrel as a union of `sim + render + content` plus `GameWorld`/`EngineBridge`. Wrote a module-graph boundary test that proves `./sim` and `./content` are Pixi-free. Repointed 30+ client imports to the narrowest sufficient subpath. Deleted the two "intentionally NOT re-exported" workaround comments — those modules now live on the declared `./node` subpath.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Boundary test walks module graph from `sim.ts` and `content.ts`; both pass with zero PixiJS value imports |
+| AC-2 | ✅ | Root barrel is union of all three sub-barrels; all existing imports still resolve |
+| AC-3 | ⚠️ | Worker imports `LpcBatchManager` from `render_worker.ts` (a `./render` module). Relaxed per contract Edge Cases section — `render_worker.ts` is explicitly pixi-free, so the built worker chunk contains no PixiJS |
+| AC-4 | ✅ | Client imports repointed to narrowest subpath where possible; files needing `EngineBridge`/`GameWorld` stay on root barrel |
+| AC-5 | ✅ | Both "intentionally NOT re-exported" comments deleted; `asset_manifest_node.ts` and `turso_registry_hydration.ts` exported from `./node` |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/sim.ts` | Simulation sub-barrel — pure ECS, math, GOAP, systems (no PixiJS) |
+| `packages/frontend/engine/src/render.ts` | Render sub-barrel — PixiJS rendering, GPU, environment UBO |
+| `packages/frontend/engine/src/content.ts` | Content sub-barrel — assets, entities, LPC resolution (no PixiJS) |
+| `packages/frontend/engine/src/node.ts` | Node sub-barrel — filesystem I/O, Turso hydration |
+| `packages/frontend/engine/src/__tests__/entrypoint_boundary.test.ts` | Module-graph boundary enforcement test |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/frontend/engine/package.json` | Added `exports` map with `./sim`, `./render`, `./content`, `./node`, `./worker`, `./package.json` |
+| `packages/frontend/engine/src/index.ts` | Rewritten as union of `sim + render + content` plus `GameWorld`/`EngineBridge` |
+| `apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte` | Split import to `./sim` + `./render` |
+| `apps/frontend/client/src/lib/views/game/simulation/simulation_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/game/ui/quest_tracker_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/game/ui/hud/quest_overlay_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/game/ui/hud/quest_overlay_view_model.test.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/quest/quest_view_model.dev.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/quest/quest_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts` | Repointed `parseBridgeTags` to `./sim` |
+| `apps/frontend/client/src/lib/views/chat/connected_chats_sandbox_view_model.svelte.ts` | Repointed `parseBridgeTags` to `./sim` |
+| `apps/frontend/client/src/lib/views/settings/controls/settings_controls_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/game/canvas/game_canvas_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.svelte.ts` | Repointed `resolveLayerDepth` to `./content` |
+| `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts` | Repointed `LpcLayerRecipe` to `./sim` |
+| `apps/frontend/client/src/lib/views/dev/lpc_inventory/lpc_inventory_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/dev/lpc_ai/lpc_ai_test_view_model.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/views/dev/lpc_walk/lpc_walk_test_view_model.svelte.ts` | Repointed `LpcLayerRecipe` to `./sim` |
+| `apps/frontend/client/src/lib/services/game/input_action_service.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/services/game/game_mode_service.svelte.ts` | Repointed `setEngineGameMode` to `./sim` |
+| `apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Repointed `GameCommand` to `./sim` |
+| `apps/frontend/client/src/lib/services/game/inventory_service.svelte.ts` | Repointed `GameCommand` to `./sim` |
+| `apps/frontend/client/src/lib/services/game/quest_service.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/services/game/world_state_service.svelte.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/services/game/game_state_facts.test.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/services/game/quest_state_service.test.ts` | Repointed `ContentPackLoaderInterface` to `./sim` |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Repointed `createLpcPipeline`/`projectLpcCatalog` to `./content` |
+| `apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts` | Repointed `createLpcPipeline`/`projectLpcCatalog` to `./content` |
+| `apps/frontend/client/src/lib/services/game/prop_frame_resolver.ts` | Repointed to `./render` |
+| `apps/frontend/client/src/lib/services/assets/registry_resolver.ts` | Repointed to `./sim` |
+| `apps/frontend/client/src/lib/data/lpc_renderer.ts` | Repointed `resolveLpcSheetGeometry` to `./content` |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/+page.svelte` | Repointed to `./sim` |
+
+### Deviations from Spec
+
+- **AC-3 relaxed**: The worker (`ecs_worker.ts`) imports `LpcBatchManager` from `render_worker.ts`, which is classified under `./render`. Per the contract's Edge Cases section, this is an accepted relaxation — `render_worker.ts` is explicitly pixi-free, so the built worker chunk contains no PixiJS. The boundary test does not check `./worker` for this reason.
+
+### Test Results
+
+- Unit: 1027/1029 pass (2 pre-existing failures: LPC_LAYER_ORDER unknown slot, emberwatch atlas.json missing)
+- Boundary: 2/2 pass (sim + content are Pixi-free)
+- Baseline: 2 pre-existing failures, 0 new failures
+- Typecheck: Engine passes clean; client has 121 pre-existing errors (none related to engine imports)
+- Biome: Clean
+
+### Suggested Commit Message
+
+```
+feat(engine): add subpath entrypoints — sim / render / content / node (C-443)
+```
 
 ## Problem & Baseline Evidence
 
