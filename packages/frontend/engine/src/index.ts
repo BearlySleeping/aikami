@@ -5,7 +5,10 @@
 //
 // Subpath entrypoints:
 //   @aikami/frontend/engine/sim      — pure ECS, math, GOAP (no PixiJS)
-//   @aikami/frontend/engine/content   — assets, entities, LPC (no PixiJS)
+//                                       ECS-facing LPC types (LpcLayerRecipe, LpcLayerRole)
+//   @aikami/frontend/engine/content   — LPC catalog and resolution APIs
+//                                       (resolveLpcAppearance, projectLpcCatalog, etc.)
+//                                       Entity factories, appearance logic
 //   @aikami/frontend/engine/render    — PixiJS rendering, GPU
 //   @aikami/frontend/engine/node      — filesystem I/O, Turso hydration
 //   @aikami/frontend/engine/worker    — Web Worker entrypoint

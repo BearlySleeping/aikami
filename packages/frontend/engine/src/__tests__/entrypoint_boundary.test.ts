@@ -54,7 +54,12 @@ const RENDER_BARREL = resolve(ENGINE_SRC, 'render.ts');
  *   import './side_effect.ts';
  *   export { x } from './foo.ts';
  *   export type { x } from './foo.ts';
+ *   export { type X, y } from './foo.ts';  (mixed type/value re-exports)
  *   export * from './foo.ts';
+ *
+ * Mixed type/value re-exports are treated as value imports because they contain
+ * at least one value export — the traversal must follow them to discover
+ * transitive dependencies.
  */
 function extractImports(source: string): string[] {
   const imports: string[] = [];
@@ -205,6 +210,73 @@ describe('engine entrypoint boundaries', () => {
           );
         }
       });
+
+      it('does not reach node.ts or its dependencies', () => {
+        const visited = new Set<string>();
+        const files = walkGraph(boundary.entry, visited);
+
+        const nodeEntry = resolve(ENGINE_SRC, 'node.ts');
+        const nodeDeps = walkGraph(nodeEntry, new Set());
+
+        for (const nodeFile of nodeDeps) {
+          if (files.includes(nodeFile)) {
+            const relPath = relative(ENGINE_SRC, nodeFile);
+            throw new Error(
+              `${boundary.name} transitively imports Node-only module ${relPath}.\n` +
+                `Node-only code (node.ts and its dependencies) must not be reachable from browser entrypoints.`,
+            );
+          }
+        }
+      });
     });
   }
+
+  describe('extractImports helper', () => {
+    it('extracts mixed type/value re-exports', () => {
+      const source = `
+        export { type Foo, bar } from './mixed.ts';
+        export { baz } from './value_only.ts';
+        export type { Qux } from './type_only.ts';
+      `;
+      const imports = extractImports(source);
+      // Mixed type/value re-exports must be discovered (they contain values)
+      if (!imports.includes('./mixed.ts')) {
+        throw new Error('extractImports failed to discover mixed type/value re-export');
+      }
+      if (!imports.includes('./value_only.ts')) {
+        throw new Error('extractImports failed to discover value-only re-export');
+      }
+      if (!imports.includes('./type_only.ts')) {
+        throw new Error('extractImports failed to discover type-only re-export');
+      }
+    });
+
+    it('extracts aliased re-exports', () => {
+      const source = `
+        export { foo as bar } from './aliased.ts';
+        export * as namespace from './namespace.ts';
+      `;
+      const imports = extractImports(source);
+      if (!imports.includes('./aliased.ts')) {
+        throw new Error('extractImports failed to discover aliased re-export');
+      }
+      if (!imports.includes('./namespace.ts')) {
+        throw new Error('extractImports failed to discover namespace re-export');
+      }
+    });
+
+    it('extracts multiline re-exports', () => {
+      const source = `
+        export {
+          type Foo,
+          bar,
+          baz
+        } from './multiline.ts';
+      `;
+      const imports = extractImports(source);
+      if (!imports.includes('./multiline.ts')) {
+        throw new Error('extractImports failed to discover multiline re-export');
+      }
+    });
+  });
 });
