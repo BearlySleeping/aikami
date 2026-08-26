@@ -82,6 +82,15 @@ function forceExternalPlugin(): PluginOption {
 }
 
 export default defineConfig(({ mode }) => {
+  // src/env.ts declares PUBLIC_APP_ID/PUBLIC_MODE as required+static via
+  // SvelteKit's defineEnvVars — that reads Vite's resolved `env`, not our
+  // `define` block below (define only affects the client bundle; the SSR
+  // build's explicit-env codegen sources values from here instead). Without
+  // a .env file (see .env.example), the value baked into the Worker build is
+  // '' and every request 500s. PUBLIC_APP_ID never varies; PUBLIC_MODE
+  // mirrors the resolved build mode — both safe to default when unset.
+  process.env.PUBLIC_APP_ID ??= 'hub';
+  process.env.PUBLIC_MODE ??= mode;
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.hub || 5276);
 
   const plugins: PluginOption[] = [
@@ -162,6 +171,13 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins,
+
+    define: {
+      // Ensure PUBLIC_APP_ID and PUBLIC_MODE are always available at runtime.
+      // The configs package (@aikami/frontend/configs) requires these.
+      'import.meta.env.PUBLIC_APP_ID': JSON.stringify(process.env.PUBLIC_APP_ID || 'hub'),
+      'import.meta.env.PUBLIC_MODE': JSON.stringify(process.env.PUBLIC_MODE || mode),
+    },
 
     envPrefix: ['PUBLIC_'],
 

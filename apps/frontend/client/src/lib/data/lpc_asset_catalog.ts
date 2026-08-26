@@ -7,8 +7,8 @@ import { assetStore } from '$lib/services/assets/asset_store.svelte';
 
 // ---------------------------------------------------------------------------
 // LPC Asset Catalog — types for slot definitions and variants.
-// Actual slot data is generated in lpc_asset_catalog_generated.ts from
-// the Universal LPC Spritesheet Character Generator.
+// Actual slot data is derived at runtime from the asset store's seed rows
+// via buildLpcCatalog (see getLpcCatalog below) — not a generated file.
 // ---------------------------------------------------------------------------
 
 /** Shape type for procedural mock sheet generation. */

@@ -89,7 +89,7 @@ const toSrcPath = (path: string) => toPosixPath(join(projectDirectory, 'src', pa
 const buildMode = process.env.AIKAMI_BUILD_MODE;
 const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
 const isProductionBuild = buildMode === 'production';
-let includeDevRoutes;
+let includeDevRoutes: boolean;
 if (devGateOverride === 'true') {
   includeDevRoutes = true;
 } else if (devGateOverride === 'false') {
@@ -148,6 +148,12 @@ export default defineConfig(({ mode }) => {
       prerender: {
         handleUnseenRoutes: 'ignore',
       },
+      // app.html registers src/service-worker.js manually, deferred to the
+      // `load` event to avoid forcing layout before stylesheets are ready —
+      // don't also auto-register it (SvelteKit's default) on top of that.
+      serviceWorker: {
+        register: false,
+      },
       alias: {
         $appCss: toSrcPath('app.css'),
         '$components/*': toSrcPath('lib/components/*'),
@@ -192,8 +198,6 @@ export default defineConfig(({ mode }) => {
         '@aikami/frontend/local-runtime/*': toPackagesPath('frontend/local-runtime/src/lib/*'),
         '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
         '@aikami/frontend/engine/*': toPackagesPath('frontend/engine/src/*'),
-        '@aikami/frontend/svelte-kit': toPackagesPath('frontend/svelte-kit/src'),
-        '@aikami/frontend-svelte-kit/*': toPackagesPath('frontend/svelte-kit/src/lib/*'),
 
         '@aikami/frontend/test': toPackagesPath('frontend/test/src'),
         '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
@@ -286,7 +290,8 @@ export default defineConfig(({ mode }) => {
     },
 
     build: {
-      emptyOutDir: true,
+      // build.emptyOutDir is set unconditionally by SvelteKit (a value here
+      // is ignored, with a build-time warning) — do not set it.
       // The app bundles a game engine (PixiJS), Firebase, and a large services
       // layer. Measured budget (staging build, 2026-08): largest JS chunk
       // ~596 kB raw / ~150 kB gzip (services + engine), plus the kokoro TTS
