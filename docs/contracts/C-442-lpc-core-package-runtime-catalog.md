@@ -2,7 +2,7 @@
 id: C-442
 title: "LPC Core Package — One Catalog, Derived From the Published Index"
 source: "user request 2026-08-26 — single source of truth for LPC across hub, client dev, and the game"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-26"
 | **Target** | `packages/shared/lpc/` (new), `apps/frontend/client/src/lib/data/lpc_*`, `packages/frontend/engine/src/rendering/lpc_*`, `scripts/src/lib/ops/collect_lpc_assets.ts` |
 | **Priority** | P0 — the committed LPC catalog is empty at HEAD, so character creation, onboarding, the AI character prompt, and every sandbox resolve against zero assets. This is a live break, not a refactor. |
 | **Dependencies** | C-395 (published catalog index), C-400 (unified appearance resolver), C-433 (categories), C-435 (de-bundle). All `implemented`. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 1.0.0 |
@@ -62,6 +62,11 @@ created_at: "2026-08-26"
   | `views/dev/lpc/lpc_view_model.svelte.ts` | 40 |
   | `views/dev/lpc_ai/lpc_ai_test_view_model.svelte.ts` | 58 |
   | `views/dev/sandbox/shared/lpc_sandbox_resolver.ts` | 13, 42 |
+
+  **Cascading imports**: deleting `lpc_models.ts` and `lpc_tags.ts` also breaks
+  ~7 additional files that import from them directly (sandbox ViewModels,
+  `lpc_character_renderer.svelte`, `lpc_animation_debug_controller.ts`,
+  `asset_store.test.ts`). All must be updated to import from `@aikami/lpc`.
 
 - **Four LPC implementations exist, and they have drifted:**
   1. `apps/frontend/client/src/lib/data/lpc_models.ts` — hand-copied mirrors of
@@ -126,6 +131,9 @@ directory that no longer ships.
 | Tag mapping | `apps/frontend/client/src/lib/data/lpc_tags.ts` | **modify** — move to `@aikami/lpc` |
 | Enum mirrors | `apps/frontend/client/src/lib/data/lpc_models.ts` | **replace** — delete, import from `@aikami/lpc` |
 | Generated slot catalog | `apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts` | **replace** — delete, derive at runtime |
+| Client catalog facade | `apps/frontend/client/src/lib/data/lpc_asset_catalog.ts` | **modify** — update imports from `lpc_models`/`lpc_tags` to `@aikami/lpc`; keep client-specific wiring (`getLpcAssetPath`, `wireLpcUrlResolver`) |
+| URL config | `apps/frontend/client/src/lib/data/lpc_url_config.ts` | **modify** — update `LpcAnimationState`/`LpcDirection` import from `lpc_models` to `@aikami/lpc` |
+| Renderer imports | `apps/frontend/client/src/lib/data/lpc_renderer.ts` | **modify** — update `LpcAnimationState`/`LpcDirection`/`lpcStateSuffix` imports from `lpc_models`/`lpc_tags` to `@aikami/lpc` |
 | Sandbox resolver | `views/dev/sandbox/shared/lpc_sandbox_resolver.ts` | **replace** — delete, call `resolveLpcAppearance` |
 | Catalog index entries | `packages/shared/schemas/src/lib/catalog/catalog_index.ts` | **reuse** unchanged |
 | Tag ↔ path helpers | `packages/shared/constants/src/lib/game_assets.ts` | **reuse** unchanged |
@@ -145,7 +153,8 @@ TypeScript.
 
 - Package scaffolding: copy the shape of `packages/shared/parser/`
   (`package.json`, `tsconfig.json`, `moon.yml`). Note its `$logger` path
-  mapping — `@aikami/lpc` needs the same one.
+  mapping — `@aikami/lpc` needs the same one. Tests go in `tests/` at root
+  (matching the parser pattern), not in `src/lib/__tests__/`.
 - Purity discipline: `packages/frontend/engine/src/assets/asset_manifest.ts`
   documents the "node-only code is NOT re-exported from the barrel" pattern.
   `@aikami/lpc` takes the stronger position: **no** impure code may enter it.
@@ -153,6 +162,15 @@ TypeScript.
   `lpc_appearance_resolver.ts` header — 1-indexed layer values, index `0` means
   intentionally empty, every slot has a declared fallback, no head override.
   Move that docblock with the code.
+- Type consolidation: `LpcLayerRole` is currently defined in three places
+  (`lpc_layer_order.ts`, `components/appearance.ts`, and the new `slot_model.ts`).
+  Define it once in `slot_model.ts`; `lpc_layer_order.ts` imports it from there.
+  The engine barrel re-exports from `@aikami/lpc`.
+- Enum vs const object: `LpcAnimationState` is a TypeScript `enum` in
+  `animation_controller.ts`. Since `@aikami/lpc` is a pure package, convert
+  it to a `const` object (matching the pattern already used in
+  `lpc_models.ts`). TypeScript `enum`s are not forbidden but a `const` object
+  avoids the dual nature (value+type) and is more portable.
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
@@ -237,11 +255,15 @@ export { LpcAnimationState, LpcDirection, getLpcStateRow, getLpcFrameIndex,
 export { lpcTag, lpcStateSuffix, type LpcTag } from './lib/tags.ts';
 export { resolveLpcSheetGeometry, type LpcSheetGeometry,
          type LpcCellFamily } from './lib/sheet_geometry.ts';
-export { LPC_LAYER_ORDER, resolveLayerDepth, sortLayersByDepth,
-         getMaxKnownDepth, type LpcLayer, type LpcSlot } from './lib/layer_order.ts';
-export { resolveLpcAppearance, projectLpcCatalog, LPC_SLOT_ORDER,
-         DEFAULT_LPC_SLOT_FALLBACKS, type LpcLayerRecipe, type LpcSlotName,
-         type LpcSlotCatalog, type LpcSlotFallbacks } from './lib/appearance.ts';
+export { LPC_LAYER_ORDER, resolveLayerDepth, resetUnknownSlotWarnings,
+         sortLayersByDepth, getMaxKnownDepth, type LpcLayer,
+         type LpcLayerOrderEntry, type LpcSlot } from './lib/layer_order.ts';
+// LpcLayerRole is defined in slot_model.ts; layer_order.ts imports it from there.
+export { resolveLpcAppearance, resetLpcFallbackWarnings, projectLpcCatalog,
+         LPC_SLOT_ORDER, DEFAULT_LPC_SLOT_FALLBACKS,
+         type LpcAppearanceResult, type LpcLayerRecipe, type LpcSlotName,
+         type LpcSlotCatalog, type LpcSlotFallbacks, type LpcSlotResolution,
+         type ResolveLpcAppearanceOptions } from './lib/appearance.ts';
 export type { LpcCatalog, LpcSlotDefinition, LpcSlotVariant,
               LpcLayerRole } from './lib/slot_model.ts';
 ```
@@ -273,7 +295,7 @@ export type { LpcCatalog, LpcSlotDefinition, LpcSlotVariant,
   git show <sha>:apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts
   ```
   and commit it as a **test fixture only** at
-  `packages/shared/lpc/src/lib/__fixtures__/legacy_catalog_order.json`. A test
+  `packages/shared/lpc/tests/__fixtures__/legacy_catalog_order.json`. A test
   asserts the derived order matches the legacy order for every slot. Where it
   cannot match, the contract adds an explicit remap table rather than accepting
   the drift.
@@ -292,16 +314,26 @@ export type { LpcCatalog, LpcSlotDefinition, LpcSlotVariant,
 - **In Scope:**
   - New package `packages/shared/lpc` with `package.json`, `tsconfig.json`,
     `moon.yml`, `src/index.ts`, `src/lib/*`, and tests.
+  - Register `lpc: "packages/shared/lpc"` in `.moon/workspace.yml`.
   - Move (not copy) the four pure engine modules listed in the Reuse Map.
   - New `buildLpcCatalog`.
   - Delete `lpc_models.ts`, `lpc_tags.ts`, `lpc_asset_catalog_generated.ts`,
     `lpc_sandbox_resolver.ts`.
-  - Repoint all nine consumers.
+  - Modify `lpc_asset_catalog.ts`, `lpc_url_config.ts`, `lpc_renderer.ts`,
+  `lpc_character_renderer.svelte`, `lpc_animation_debug_controller.ts`,
+  and all sandbox/character/vendor ViewModels to import from `@aikami/lpc`
+  instead of deleted `lpc_models.ts`/`lpc_tags.ts`.
+  - Repoint all consumers of the generated catalog and the deleted files.
   - Stop `collect_lpc_assets.ts` from emitting TypeScript.
   - Legacy-order fixture test.
 - **Out of Scope:**
   - `lpc_renderer.ts` — the Pixi texture pipeline. It stays where it is and
     keeps working; C-445 folds it into the preview package.
+    **However**, `lpc_renderer.ts` imports `LpcAnimationState`/`LpcDirection`
+    from `lpc_models.ts` and `lpcStateSuffix` from `lpc_tags.ts` — both
+    deleted by this contract. These imports must be updated to `@aikami/lpc`
+    as part of Phase 2 (consumer repointing), even though the renderer
+    itself is out of scope for the larger refactor.
   - Engine subpath exports — C-443.
   - Turning `setLpcUrlResolver` into a parameter — C-444.
   - Any hub route or component.
@@ -327,7 +359,7 @@ Pixi renderer is deliberately excluded because it *is* independently mergeable.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit | `packages/shared/lpc/src/lib/__tests__/purity.test.ts` | N/A | Filled during verification |
+| AC-1 | Unit | `packages/shared/lpc/tests/purity.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run lpc:test`
@@ -354,7 +386,7 @@ exactly once.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Unit | `packages/shared/lpc/src/lib/__tests__/build_catalog.test.ts` | N/A | Filled during verification |
+| AC-2 | Unit | `packages/shared/lpc/tests/build_catalog.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run lpc:test`
@@ -376,7 +408,7 @@ identical, so a saved 1-indexed variant number resolves to the same asset.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Unit | `packages/shared/lpc/src/lib/__tests__/legacy_order.test.ts` | N/A | Filled during verification |
+| AC-3 | Unit | `packages/shared/lpc/tests/legacy_order.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run lpc:test`
@@ -398,7 +430,7 @@ thrown or logged at `error`.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-4 | Unit | `packages/shared/lpc/src/lib/__tests__/empty_catalog.test.ts` | N/A | Filled during verification |
+| AC-4 | Unit | `packages/shared/lpc/tests/empty_catalog.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run lpc:test`, `moon run client:test`
@@ -422,7 +454,7 @@ thrown or logged at `error`.
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Unit | `packages/shared/lpc/src/lib/__tests__/no_duplicates.test.ts` | N/A | Filled during verification |
+| AC-5 | Unit | `packages/shared/lpc/tests/no_duplicates.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon check`
@@ -451,8 +483,10 @@ and does **not** write any file under `apps/frontend/client/src/`.
 - Moon Task: `moon run scripts:test`
 
 **Watch Points**:
-- `scripts/src/lib/ops/validate_content_appearance.ts:52` references the
-  generated file in a comment. Update it to describe `buildLpcCatalog`.
+- `scripts/src/lib/ops/validate_content_appearance.ts` references the
+  generated file path in a comment (line 9) and in the `GENERATED_CATALOG`
+  constant (line 34). Update both to describe `buildLpcCatalog` and remove
+  the hard-coded path.
 
 ---
 
@@ -486,9 +520,11 @@ shows a composed character rather than a blank canvas.
    `slot_model.ts`, `build_catalog.ts`, `tags.ts`, `animation.ts`. Write AC-1,
    AC-2, AC-3, AC-4 tests. The engine re-exports everything it moved, so the
    engine still typechecks unchanged.
-2. **Phase 2 (Consumers)** — repoint the nine consumers. Client call sites now
-   build the catalog from `assetStore` entries once and pass it down. Delete the
-   four duplicate files. Write the AC-5 test.
+2. **Phase 2 (Consumers)** — repoint all consumers. Client call sites now
+   build the catalog from `assetStore` entries once and pass it down. Update
+   every file that imports from `lpc_models.ts` or `lpc_tags.ts` (~16 files)
+   to import from `@aikami/lpc` instead. Delete the four duplicate files.
+   Write the AC-5 test.
 3. **Phase 3 (Collector)** — strip TypeScript emission from
    `collect_lpc_assets.ts`. Write the AC-6 test. Update the stale comment in
    `validate_content_appearance.ts`.
@@ -518,6 +554,10 @@ shows a composed character rather than a blank canvas.
   `lpc_appearance_resolver.ts` and builds a client-side pipeline. If it touches
   Pixi or a store, leave it in the engine and move only the pure resolver
   alongside it.
+- **`resetLpcFallbackWarnings` moves with the resolver.** The module-level
+  `_loggedFallbackKeys` Set and its reset function are part of the pure
+  resolver — they move to `@aikami/lpc` alongside `resolveLpcAppearance`.
+  The engine barrel re-exports it.
 
 ## Open Questions
 
