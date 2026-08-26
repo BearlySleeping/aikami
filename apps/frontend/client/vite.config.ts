@@ -136,6 +136,9 @@ export default defineConfig(({ mode }) => {
     tailwindcss(),
     sveltekit({
       // SvelteKit 3: configuration moved from svelte.config.js to here
+      experimental: {
+        explicitEnvironmentVariables: true,
+      },
       preprocess: [vitePreprocess()],
       files: {
         routes: routesDir,

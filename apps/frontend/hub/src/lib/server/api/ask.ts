@@ -24,7 +24,7 @@
 import { getClientIp } from '@aikami/backend/svelte-kit/hooks_helpers';
 import { askProjectAi } from '@aikami/backend-project-ai';
 import { tryReserve } from '@aikami/utils';
-import { env } from '$env/dynamic/private';
+import { OPENROUTER_API_KEY, OPENROUTER_MODEL } from '$app/env/private';
 import { logger } from '$logger';
 
 const ASK_COOLDOWN_MS = 15 * 1000;
@@ -42,8 +42,8 @@ export const handleAsk = async ({
   request: Request;
   set: { status?: number | string };
 }): Promise<AskResponse> => {
-  const apiKey = env.OPENROUTER_API_KEY;
-  const model = env.OPENROUTER_MODEL;
+  const apiKey = OPENROUTER_API_KEY;
+  const model = OPENROUTER_MODEL;
   if (!apiKey || !model) {
     logger.debug('/api/ask: unconfigured (OPENROUTER_API_KEY/OPENROUTER_MODEL absent)');
     return { error: 'unconfigured' };
