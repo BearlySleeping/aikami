@@ -79,6 +79,13 @@ const viteEnv = { ...process.env };
 if (mode) {
   viteEnv.AIKAMI_BUILD_MODE = mode;
 }
+// Ensure required PUBLIC_* env vars are set for the configs package
+if (!viteEnv.PUBLIC_APP_ID) {
+  viteEnv.PUBLIC_APP_ID = 'client';
+}
+if (!viteEnv.PUBLIC_MODE) {
+  viteEnv.PUBLIC_MODE = mode ?? 'production';
+}
 run('vite build', 'bunx', ['vite', 'build', ...modeArgs, ...passthrough], { env: viteEnv });
 
 // 3. Guard the emitted chunk graph. A static-import cycle between chunks
