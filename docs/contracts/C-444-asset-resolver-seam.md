@@ -2,7 +2,7 @@
 id: C-444
 title: "Asset Resolution Seam — Resolver as Parameter, Two Implementations"
 source: "user request 2026-08-26 — one source for hub, client dev, and the game"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-26"
 | **Target** | `apps/frontend/client/src/lib/data/lpc_renderer.ts`, `packages/frontend/engine/src/assets/map_loader.ts`, `packages/frontend/engine/src/assets/content_pack_loader.ts`, `packages/shared/types/src/lib/game/`, new hub resolver |
 | **Priority** | P1 — a module-level singleton resolver cannot serve two consumers in one bundle. Every downstream preview contract is blocked on this. |
 | **Dependencies** | C-442 (LPC core package), C-443 (engine subpaths). Both must merge first. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 1.0.0 |
