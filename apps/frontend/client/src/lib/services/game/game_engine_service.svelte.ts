@@ -731,13 +731,12 @@ class GameEngineService
       // is loaded before the engine boots (idempotent — catalog module scope
       // also wires it).
       await wireLpcUrlResolver();
-      const { GENERATED_LPC_SLOTS: generatedLpcSlots } = await import(
-        '$lib/data/lpc_asset_catalog_generated'
-      );
+      const { getLpcCatalog } = await import('$lib/data/lpc_asset_catalog');
+      const lpcCatalog = getLpcCatalog();
 
       const textureManager = new TextureManager();
 
-      const pipeline = this._buildLpcPipeline(generatedLpcSlots, (slot, assetId, state) =>
+      const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
         getLpcAssetPath(slot, assetId, state as unknown as number),
       );
 

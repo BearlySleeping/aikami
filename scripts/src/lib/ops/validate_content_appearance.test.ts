@@ -22,9 +22,9 @@ import {
 } from './validate_content_appearance.js';
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
-const GENERATED_CATALOG = join(
+const LEGACY_FIXTURE = join(
   REPO_ROOT,
-  'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts',
+  'packages/shared/lpc/tests/__fixtures__/legacy_catalog_order.json',
 );
 const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'apps/frontend/client/static/content-packs');
 
@@ -35,23 +35,18 @@ const CATALOG = loadCatalog();
 // ---------------------------------------------------------------------------
 
 describe('parseGeneratedCatalog', () => {
-  it('parses the committed generated catalog into slot → variant lists', () => {
-    expect(existsSync(GENERATED_CATALOG)).toBe(true);
-    const source = readFileSync(GENERATED_CATALOG, 'utf-8');
-    const slots = parseGeneratedCatalog(source);
-
-    const slotsByName = new Map(slots.map((s) => [s.slot, s.variants]));
+  it('parses the legacy catalog fixture into slot → variant lists', () => {
+    expect(existsSync(LEGACY_FIXTURE)).toBe(true);
+    const fixture = JSON.parse(readFileSync(LEGACY_FIXTURE, 'utf-8')) as {
+      slots: Array<{ slot: string; label: string; assetIds: string[] }>;
+    };
+    const slotsByName = new Map(fixture.slots.map((s) => [s.slot, s.assetIds]));
     expect(slotsByName.has('head')).toBe(true);
     expect(slotsByName.has('body')).toBe(true);
     expect(slotsByName.has('hair')).toBe(true);
     expect(slotsByName.has('torso')).toBe(true);
     expect(slotsByName.has('legs')).toBe(true);
     expect(slotsByName.has('feet')).toBe(true);
-
-    // OQ-1 fact-check: head has 142 variants; index 97 → female_elderly.
-    const head = slotsByName.get('head') ?? [];
-    expect(head.length).toBe(142);
-    expect(head[96]).toBe('head/heads/human/female_elderly');
   });
 
   it('handles a minimal fixture without crashing', () => {

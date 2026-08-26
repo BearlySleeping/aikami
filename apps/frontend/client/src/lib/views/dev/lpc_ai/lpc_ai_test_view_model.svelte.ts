@@ -10,7 +10,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
+import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ export type LpcAiTestViewModelOptions = BaseViewModelOptions & {};
 /** Builds lookup: assetId → { slot, variantIndex } from generated catalog. */
 const _buildAssetLookup = (): Map<string, { slot: string; variantIndex: number }> => {
   const lookup = new Map<string, { slot: string; variantIndex: number }>();
-  for (const slotDef of GENERATED_LPC_SLOTS) {
+  for (const slotDef of getLpcCatalog().slots) {
     for (let vIdx = 0; vIdx < slotDef.variants.length; vIdx++) {
       const variant = slotDef.variants[vIdx];
       if (variant) {

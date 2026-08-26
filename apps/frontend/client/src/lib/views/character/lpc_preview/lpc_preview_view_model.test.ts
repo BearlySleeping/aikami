@@ -104,7 +104,7 @@ mock.module('@aikami/frontend/services', () => ({
   dialogService: {},
 }));
 
-mock.module('$lib/data/lpc_models', () => ({
+mock.module('@aikami/lpc', () => ({
   LpcAnimationState: {
     Spellcast: 0,
     Thrust: 4,
@@ -119,6 +119,8 @@ mock.module('$lib/data/lpc_models', () => ({
     Down: 2,
     Right: 3,
   },
+  lpcStateSuffix: () => 'walk',
+  lpcTag: () => 'lpc:test:walk',
 }));
 
 // C-372: the preview VM now resolves sheets through the manifest-aware
@@ -133,10 +135,7 @@ mock.module('$logger', () => ({
   },
 }));
 
-mock.module('$lib/data/lpc_tags', () => ({
-  lpcStateSuffix: () => 'walk',
-  lpcTag: () => 'lpc:test:walk',
-}));
+
 
 mock.module('$lib/data/lpc_renderer', () => ({
   loadLpcSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),

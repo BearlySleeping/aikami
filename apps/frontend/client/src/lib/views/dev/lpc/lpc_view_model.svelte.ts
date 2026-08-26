@@ -23,10 +23,10 @@ import {
   DIRECTION_OPTIONS,
   wireLpcUrlResolver,
 } from '$lib/data/lpc_asset_catalog';
-import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
-import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
+import { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
-import { lpcStateSuffix } from '$lib/data/lpc_tags';
+import { lpcStateSuffix } from '@aikami/lpc';
 import {
   type LpcUrlState,
   lpcStateToSearchParams,
@@ -37,7 +37,7 @@ import type { Application } from './lpc_pixi_facade';
 import { Container, Graphics, Sprite, Texture } from './lpc_pixi_facade';
 
 // Use the generated catalog directly — all slots with verified webp assets.
-const FILTERED_LPC_SLOTS = GENERATED_LPC_SLOTS;
+const _getSlots = () => getLpcCatalog().slots;
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -105,7 +105,7 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
   readonly canvasHeight: number;
   readonly entityX: number;
   readonly entityY: number;
-  readonly allSlots: typeof FILTERED_LPC_SLOTS;
+  readonly allSlots: typeof _getSlots();
   readonly animationStateOptions: typeof ANIMATION_STATE_OPTIONS;
   readonly directionOptions: typeof DIRECTION_OPTIONS;
 
@@ -136,7 +136,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   readonly canvasHeight = CanvasHeight;
   readonly entityX = EntityX;
   readonly entityY = EntityY;
-  readonly allSlots = FILTERED_LPC_SLOTS;
+  readonly allSlots = _getSlots();
   readonly animationStateOptions = ANIMATION_STATE_OPTIONS as typeof ANIMATION_STATE_OPTIONS;
   readonly directionOptions = DIRECTION_OPTIONS as typeof DIRECTION_OPTIONS;
 
@@ -286,14 +286,14 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
     const usedSlotKeys = new Set(
       this.activeLayers.map((l) => {
-        const def = FILTERED_LPC_SLOTS[l.slotDefIndex];
+        const def = _getSlots()[l.slotDefIndex];
         return def?.slot;
       }),
     );
 
-    const unusedIndex = FILTERED_LPC_SLOTS.findIndex((s) => !usedSlotKeys.has(s.slot));
+    const unusedIndex = _getSlots().findIndex((s) => !usedSlotKeys.has(s.slot));
     const slotDefIndex =
-      unusedIndex >= 0 ? unusedIndex : this.activeLayers.length % FILTERED_LPC_SLOTS.length;
+      unusedIndex >= 0 ? unusedIndex : this.activeLayers.length % _getSlots().length;
 
     this.activeLayers = [...this.activeLayers, { slotDefIndex, variantIndex: 0 }];
   }
@@ -369,7 +369,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         continue;
       }
 
-      const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
+      const slotDef = _getSlots()[layer.slotDefIndex];
       if (!slotDef) {
         continue;
       }
@@ -765,9 +765,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   }
 
   private _createDefaultLayers(): ActiveLayerConfig[] {
-    const bodyIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'body');
-    const torsoIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'torso');
-    const headIdx = FILTERED_LPC_SLOTS.findIndex((s) => s.slot === 'head');
+    const bodyIdx = _getSlots().findIndex((s) => s.slot === 'body');
+    const torsoIdx = _getSlots().findIndex((s) => s.slot === 'torso');
+    const headIdx = _getSlots().findIndex((s) => s.slot === 'head');
     const layers: ActiveLayerConfig[] = [];
     if (bodyIdx >= 0) {
       layers.push({ slotDefIndex: bodyIdx, variantIndex: 0 });
@@ -842,7 +842,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     if (typeof window !== 'undefined') {
       (window as unknown as Record<string, unknown>).__lpc_debug_active_recipes =
         this.activeLayers.map((layer, i) => {
-          const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
+          const slotDef = _getSlots()[layer.slotDefIndex];
           const variant = slotDef?.variants[layer.variantIndex];
           return {
             index: i,
@@ -859,13 +859,13 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       (window as unknown as Record<string, unknown>).__lpc_lab_current_frame = this.animationFrame;
       (window as unknown as Record<string, unknown>).__lpc_lab_active_slots = this.activeLayers.map(
         (l) => {
-          const def = FILTERED_LPC_SLOTS[l.slotDefIndex];
+          const def = _getSlots()[l.slotDefIndex];
           return def?.slot ?? 'unknown';
         },
       );
       (window as unknown as Record<string, unknown>).__lpc_workbench_active_layers =
         this.activeLayers.map((layer) => {
-          const slotDef = FILTERED_LPC_SLOTS[layer.slotDefIndex];
+          const slotDef = _getSlots()[layer.slotDefIndex];
           const variant = slotDef?.variants[layer.variantIndex];
           return {
             slot: slotDef?.slot ?? 'unknown',

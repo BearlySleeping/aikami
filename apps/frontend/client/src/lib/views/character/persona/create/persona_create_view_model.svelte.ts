@@ -9,7 +9,7 @@ import {
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
 import {
-  CHARACTER_EXTRACTION_SYSTEM_PROMPT,
+  buildCharacterExtractionPrompt,
   CharacterExtractionSchema,
 } from '$lib/data/ai_prompts/character_extraction_schema';
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
@@ -244,11 +244,11 @@ export class PersonaCreateViewModel
     let layerIdx = 0;
     for (const [slotName, assetId] of Object.entries(this.lpcRecipe)) {
       // Use the slot ordering from the generated catalog
-      const slotIdx = _LPC_SLOT_INDEX.get(slotName);
+      const slotIdx = _getLpcSlotIndex().get(slotName);
       if (slotIdx === undefined) {
         continue;
       }
-      const variants = _LPC_VARIANT_MAP.get(slotName);
+      const variants = _getLpcVariantMap().get(slotName);
       const vIdx = variants?.indexOf(assetId) ?? -1;
       if (vIdx < 0) {
         continue;
@@ -677,7 +677,7 @@ export class PersonaCreateViewModel
         schema: CharacterExtractionSchema as unknown as Record<string, unknown>,
         schemaName: 'CharacterExtraction',
         prompt: compiledHistory,
-        systemPrompt: CHARACTER_EXTRACTION_SYSTEM_PROMPT,
+        systemPrompt: buildCharacterExtractionPrompt(getLpcCatalog()),
       });
 
       if (!extracted) {

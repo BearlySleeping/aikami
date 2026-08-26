@@ -33,8 +33,7 @@ mock.module('@aikami/frontend/configs', () => ({
   publicEnv: { PUBLIC_ASSETS_BASE_URL: R2_BASE },
 }));
 
-import { LpcAnimationState } from '$lib/data/lpc_models';
-import { lpcTag } from '$lib/data/lpc_tags';
+import { LpcAnimationState, lpcTag } from '@aikami/lpc';
 import { assetStore } from './asset_store.svelte';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────

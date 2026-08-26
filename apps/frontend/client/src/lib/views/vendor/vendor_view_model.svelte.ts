@@ -10,7 +10,7 @@ import {
 } from '@aikami/frontend/services';
 import type { ItemDefinition } from '@aikami/types';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import { LpcAnimationState } from '$lib/data/lpc_models';
+import { LpcAnimationState } from '@aikami/lpc';
 import { gameOverlayService, vendorService } from '$services';
 import type { VendorSessionOptions as _VendorSessionOptions } from '$types';
 

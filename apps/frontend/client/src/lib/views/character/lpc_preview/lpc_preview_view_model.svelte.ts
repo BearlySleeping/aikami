@@ -17,9 +17,9 @@ import {
   DIRECTION_OPTIONS,
   wireLpcUrlResolver,
 } from '$lib/data/lpc_asset_catalog';
-import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
-import { lpcStateSuffix } from '$lib/data/lpc_tags';
+import { lpcStateSuffix } from '@aikami/lpc';
 import {
   Application,
   Container,

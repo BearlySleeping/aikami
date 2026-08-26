@@ -6,7 +6,7 @@
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
 import { onDestroy } from 'svelte';
-import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
+import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
 import {
   getLpcPreviewViewModel,
@@ -55,7 +55,7 @@ $effect(() => {
  * Returns available variants for a given LPC slot from the generated catalog.
  */
 const getSlotVariants = (slotName: string): Array<{ assetId: string; label: string }> => {
-  const slotDef = GENERATED_LPC_SLOTS.find((s) => s.slot === slotName);
+  const slotDef = getLpcCatalog().slots.find((s) => s.slot === slotName);
   if (!slotDef) {
     return [];
   }
