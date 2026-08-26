@@ -22,7 +22,7 @@ created_at: "2026-08-26"
 | **Target** | `apps/frontend/client/static/content-packs/`, `content/packs/` (new), `scripts/src/lib/catalog/config.ts`, `packages/frontend/engine/src/assets/content_pack_loader.ts`, `.claude/CLAUDE.md` |
 | **Priority** | P1 — finishes C-435 for the one directory it missed, and corrects a project invariant that is currently false. |
 | **Dependencies** | C-433, C-434, C-435 (all `implemented`). Independent of C-442 through C-447 — can run in parallel. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → first-run download note in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
