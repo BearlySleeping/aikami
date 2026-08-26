@@ -2,7 +2,7 @@
 id: C-442
 title: "LPC Core Package — One Catalog, Derived From the Published Index"
 source: "user request 2026-08-26 — single source of truth for LPC across hub, client dev, and the game"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
