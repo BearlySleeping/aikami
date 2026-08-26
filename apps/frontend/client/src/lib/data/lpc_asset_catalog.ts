@@ -1,6 +1,7 @@
 // apps/frontend/client/src/lib/data/lpc_asset_catalog.ts
-import { LpcAnimationState, LpcDirection, lpcTag, buildLpcCatalog } from '@aikami/lpc';
+
 import type { LpcCatalog } from '@aikami/lpc';
+import { buildLpcCatalog, LpcAnimationState, LpcDirection, lpcTag } from '@aikami/lpc';
 import { setLpcManifestReady, setLpcUrlResolver } from '$lib/data/lpc_renderer';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
 
@@ -109,7 +110,9 @@ export const getLpcCatalogPrompt = (catalog: LpcCatalog): string => {
   for (const [slot, ids] of Object.entries(catalog.assetIdsBySlot)) {
     parts.push(`  ${slot}: ${ids.join(', ')}`);
   }
-  parts.push('\nWhen generating a character appearance, return a JSON object: {"lpcRecipe": {"head": "head/heads/human_male", ...}}');
+  parts.push(
+    '\nWhen generating a character appearance, return a JSON object: {"lpcRecipe": {"head": "head/heads/human_male", ...}}',
+  );
   return parts.join('\n');
 };
 

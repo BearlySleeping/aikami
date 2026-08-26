@@ -37,24 +37,20 @@ type Navigation =
  *   and the URL is root-relative, you need to prepend the base path if you want
  *   to navigate within the app.
  * @param {Object} [opts] Options related to the navigation
- * @param {boolean} [opts.replaceState] If `true`, will replace the current
- *   `history` entry rather than creating a new one with `pushState`
- * @param {boolean} [opts.noscroll] If `true`, the browser will maintain its
- *   scroll position rather than scrolling to the top of the page after
- *   navigation
- * @param {boolean} [opts.keepfocus] If `true`, the currently focused element
- *   will retain focus after navigation. Otherwise, focus will be reset to the
- *   body
- * @param {unknown} [opts.state] An optional object that will be available on
- *   the `$page.state` store
+ * @param {boolean} [opts.replace] If `true`, replaces the current history entry rather than creating a new one.
+ * @param {boolean} [opts.reset] If `true`, resets scroll position and focus after navigation. Default `true`.
+ * @param {boolean} [opts.shallow] If `true`, updates the URL and `page.state` without navigating.
+ * @param {unknown} [opts.state] An optional object that will be available on the `$page.state` store
  * @returns {Promise<void>}
  */
 type GoTo = (
   url: string | URL,
   opts?: {
+    replace?: boolean;
+    /** @deprecated Use `replace` instead. */
     replaceState?: boolean;
-    noscroll?: boolean;
-    keepfocus?: boolean;
+    reset?: boolean;
+    shallow?: boolean;
     state?: App.PageState | undefined;
   },
 ) => Promise<void>;

@@ -32,14 +32,12 @@ export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
       // Index outage → an explicit 503 with a fixed user-facing message,
       // never a 500 and never internal URL details (Quality Requirements:
       // "Neither is a 500").
-      throw error(503, {
-        message: 'The catalog index is unavailable. Please try again in a moment.',
-      });
+      throw error(503, 'The catalog index is unavailable. Please try again in a moment.');
     }
     throw cause;
   }
   if (!categoryData) {
-    error(404, { message: `Category "${params.category}" was not found in the catalog.` });
+    error(404, `Category "${params.category}" was not found in the catalog.`);
   }
 
   // setHeaders MUST be called before returning the streamed promise — once

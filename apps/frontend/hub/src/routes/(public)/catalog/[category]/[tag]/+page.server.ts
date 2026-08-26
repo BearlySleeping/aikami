@@ -29,16 +29,12 @@ export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
       // Index outage → an explicit 503 with a fixed user-facing message,
       // never a 500 and never internal URL details (Quality Requirements:
       // "Neither is a 500").
-      throw error(503, {
-        message: 'The catalog index is unavailable. Please try again in a moment.',
-      });
+      throw error(503, 'The catalog index is unavailable. Please try again in a moment.');
     }
     throw cause;
   }
   if (!found) {
-    error(404, {
-      message: `Asset "${params.tag}" was not found in category "${params.category}".`,
-    });
+    error(404, `Asset "${params.tag}" was not found in category "${params.category}".`);
   }
 
   setHeaders({ 'cache-control': 'public, max-age=60' });

@@ -12,14 +12,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { LpcAnimationState, LpcDirection, lpcStateSuffix } from '@aikami/lpc';
 import {
   ANIMATION_STATE_OPTIONS,
   DIRECTION_OPTIONS,
   wireLpcUrlResolver,
 } from '$lib/data/lpc_asset_catalog';
-import { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
-import { lpcStateSuffix } from '@aikami/lpc';
 import {
   Application,
   Container,

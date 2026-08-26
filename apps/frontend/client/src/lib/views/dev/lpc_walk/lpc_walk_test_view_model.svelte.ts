@@ -12,9 +12,9 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { LpcAnimationState } from '@aikami/lpc';
 import { Application, Container, Rectangle, Sprite, Texture } from 'pixi.js';
 import { wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
-import { LpcAnimationState } from '@aikami/lpc';
 import { loadLpcSheet } from '$lib/data/lpc_renderer';
 
 // ── Constants ────────────────────────────────────────────────────────────

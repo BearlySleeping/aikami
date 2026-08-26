@@ -11,8 +11,8 @@
 //   - LpcViewModel (dev/lpc character layer debugger)
 //   - LpcPreviewViewModel (character preview / inventory sandbox)
 
-import type { ANIMATION_STATE_OPTIONS, DIRECTION_OPTIONS } from '$lib/data/lpc_asset_catalog';
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
+import type { ANIMATION_STATE_OPTIONS, DIRECTION_OPTIONS } from '$lib/data/lpc_asset_catalog';
 
 export type LpcAnimationStateOption = (typeof ANIMATION_STATE_OPTIONS)[number];
 export type LpcDirectionOption = (typeof DIRECTION_OPTIONS)[number];

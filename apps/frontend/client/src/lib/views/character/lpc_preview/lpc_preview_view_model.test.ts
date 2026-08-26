@@ -135,8 +135,6 @@ mock.module('$logger', () => ({
   },
 }));
 
-
-
 mock.module('$lib/data/lpc_renderer', () => ({
   loadLpcSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
   detectLpcSheetLayout: (sheet: { width: number; height: number }) => ({
