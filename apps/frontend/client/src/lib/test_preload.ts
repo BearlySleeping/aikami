@@ -899,6 +899,138 @@ mock.module('@aikami/frontend/storage', () => ({
   __esModule: true,
 }));
 
+// ── @aikami/frontend/preview mock ────────────────────────────────────────
+// The preview package depends on @aikami/frontend/engine and pixi.js which
+// cannot be resolved in bun test. These mocks provide the exports needed
+// by the re-export shims in src/lib/data/.
+
+mock.module('@aikami/frontend/preview', () => ({
+  createLpcRenderer: mock(() => ({
+    loadSheet: mock(async () => ({})),
+    extractFrame: mock(() => null),
+    getFrameTexture: mock(async () => null),
+    createSprite: mock(async () => null),
+    clearCaches: mock(() => {}),
+    resolver: { resolve: mock(() => null) },
+  })),
+  detectLpcSheetLayout: mock((sheet: { width: number; height: number }) => {
+    const pitch = sheet.width >= 1000 ? 128 : 64;
+    return {
+      pitch,
+      columns: Math.floor(sheet.width / pitch),
+      rows: Math.floor(sheet.height / pitch),
+      scale: 1,
+      anchorOffset: pitch === 128 ? { x: -64, y: -64 } : { x: -32, y: -32 },
+    };
+  }),
+  getLpcSpriteAnchor: mock((layout: { anchorOffset: { x: number; y: number } }) => ({
+    x: layout.anchorOffset.x,
+    y: layout.anchorOffset.y,
+  })),
+  getLpcIconCellPitch: mock((sheet: { width: number; height: number }) => {
+    if (sheet.width % 128 === 0 && sheet.height % 128 === 0) {
+      const columns = sheet.width / 128;
+      const rows = sheet.height / 128;
+      if (columns >= 9 && columns <= 16 && rows === 4) {
+        return 128;
+      }
+    }
+    return 64;
+  }),
+  getLpcGrid: mock((sheet: { width: number; height: number }) => {
+    const pitch = (() => {
+      if (sheet.width % 128 === 0 && sheet.height % 128 === 0) {
+        const columns = sheet.width / 128;
+        const rows = sheet.height / 128;
+        if (columns >= 9 && columns <= 16 && rows === 4) {
+          return 128;
+        }
+      }
+      return 64;
+    })();
+    return {
+      cols: Math.max(1, Math.floor(sheet.width / pitch)),
+      rows: Math.max(1, Math.floor(sheet.height / pitch)),
+    };
+  }),
+  getLpcIconBackgroundSize: mock((sheet: { width: number; height: number }) => {
+    const pitch = (() => {
+      if (sheet.width % 128 === 0 && sheet.height % 128 === 0) {
+        const columns = sheet.width / 128;
+        const rows = sheet.height / 128;
+        if (columns >= 9 && columns <= 16 && rows === 4) {
+          return 128;
+        }
+      }
+      return 64;
+    })();
+    const cols = Math.max(1, Math.floor(sheet.width / pitch));
+    const rows = Math.max(1, Math.floor(sheet.height / pitch));
+    return `${cols * 100}% ${rows * 100}%`;
+  }),
+  getLpcIconBackgroundPosition: mock((col: number, row: number, cols: number, rows: number) => {
+    const x = cols <= 1 ? 0 : (col / (cols - 1)) * 100;
+    const y = rows <= 1 ? 0 : (row / (rows - 1)) * 100;
+    const roundPct = (v: number) => String(Math.round(v * 100) / 100);
+    return `${roundPct(x)}% ${roundPct(y)}%`;
+  }),
+  pickHeroCell: mock((counts: number[][], minContent = 10) => {
+    let best: { col: number; row: number } | undefined;
+    let bestCount = 0;
+    for (let row = 0; row < counts.length; row++) {
+      const rowCounts = counts[row] ?? [];
+      for (let col = 0; col < rowCounts.length; col++) {
+        const count = rowCounts[col] ?? 0;
+        if (count > bestCount) {
+          bestCount = count;
+          best = { col, row };
+        }
+      }
+    }
+    return best !== undefined && bestCount >= minContent ? best : undefined;
+  }),
+  encodeLpcPreviewState: mock((state: { layers: Array<{ slotDefIndex: number; variantIndex: number }> }) => {
+    const params = new URLSearchParams();
+    for (let i = 0; i < state.layers.length; i++) {
+      const layer = state.layers[i];
+      if (layer) params.set(`l${i}`, `${layer.slotDefIndex}:${layer.variantIndex}`);
+    }
+    return params;
+  }),
+  decodeLpcPreviewState: mock((params: URLSearchParams) => {
+    const layers: Array<{ slotDefIndex: number; variantIndex: number }> = [];
+    for (let i = 0; ; i++) {
+      const raw = params.get(`l${i}`);
+      if (raw === null) break;
+      const parts = raw.split(':');
+      const slotDefIndex = Number.parseInt(parts[0] ?? '', 10);
+      const variantIndex = Number.parseInt(parts[1] ?? '', 10);
+      if (!Number.isNaN(slotDefIndex) && !Number.isNaN(variantIndex)) {
+        layers.push({ slotDefIndex, variantIndex });
+      }
+    }
+    return {
+      layers,
+      paletteOverrides: new Map(),
+      state: 0,
+      direction: 0,
+      frame: 0,
+      playing: false,
+      zoom: 1,
+    };
+  }),
+  createDefaultLpcPreviewState: mock(() => ({
+    layers: [{ slotDefIndex: 0, variantIndex: 0 }, { slotDefIndex: 2, variantIndex: 0 }],
+    paletteOverrides: new Map(),
+    state: 0,
+    direction: 0,
+    frame: 0,
+    playing: false,
+    zoom: 1,
+  })),
+  __esModule: true,
+}));
+
 // ── Browser localStorage polyfill (Bun test env lacks it) ──
 
 const _localStore = new Map<string, string>();
