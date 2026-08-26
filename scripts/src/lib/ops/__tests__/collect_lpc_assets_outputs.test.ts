@@ -16,10 +16,6 @@ describe('collect_lpc_assets outputs', () => {
 
   test('credits files still exist', () => {
     // The collector should still produce credits files
-    const creditsPath = 'apps/frontend/client/static/game-data/lpc/lpc_credits.json';
-    const creditsSupplementPath =
-      'apps/frontend/client/static/game-data/lpc/lpc_credits_supplement.json';
-
     // These may or may not exist depending on whether the collector has been run
     // in this environment. We check that the collector code no longer references
     // the TypeScript output path.
