@@ -21,6 +21,39 @@ test.describe('C-448 AC-7: Upgrade No Re-download', () => {
     // Wait a moment for cache to settle
     await page.waitForTimeout(3000);
 
+    // Track content requests and bytes transferred during the second boot
+    const contentRequests: string[] = [];
+    let bytesTransferred = 0;
+
+    page.on('request', (request) => {
+      const url = request.url();
+      // Track requests to content packs or pack assets (excluding localhost/bundled assets)
+      if (
+        url.includes('/content-packs/') ||
+        (url.startsWith('http') && !url.includes('localhost'))
+      ) {
+        contentRequests.push(url);
+      }
+    });
+
+    page.on('response', (response) => {
+      const url = response.url();
+      if (
+        url.includes('/content-packs/') ||
+        (url.startsWith('http') && !url.includes('localhost'))
+      ) {
+        // Attempt to track body size if available
+        response
+          .body()
+          .then((buffer) => {
+            bytesTransferred += buffer.length;
+          })
+          .catch(() => {
+            // Ignore errors for responses that don't have bodies
+          });
+      }
+    });
+
     // Reload (simulating an upgrade)
     await page.reload();
 
@@ -29,7 +62,14 @@ test.describe('C-448 AC-7: Upgrade No Re-download', () => {
     await expect(canvasAfter).toBeAttached({ timeout: 60000 });
 
     // The game should reach playable state
-    const playerHud = page.locator('.bg-base-200\\/80');
+    const playerHud = page.getByTestId('player-hud');
     await expect(playerHud).toBeVisible({ timeout: 30000 });
+
+    // Wait a moment for any late requests
+    await page.waitForTimeout(3000);
+
+    // Assert zero content requests and zero bytes transferred
+    expect(contentRequests.length).toBe(0);
+    expect(bytesTransferred).toBe(0);
   });
 });

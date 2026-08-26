@@ -35,6 +35,7 @@ const barColor = $derived.by(() => {
     aria-label="Player HP"
   >
     <div
+      data-testid="player-hud"
       class="flex items-center gap-2 rounded-full bg-base-200/80 px-3 py-1.5 backdrop-blur-sm shadow-md border border-base-300/50"
     >
       <!-- Heart icon -->

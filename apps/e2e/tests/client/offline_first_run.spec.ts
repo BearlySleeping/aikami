@@ -28,29 +28,15 @@ test.describe('C-448 AC-6: Offline First Run', () => {
     // Navigate to game with network blocked
     await page.goto('/game');
 
-    // The app should not show a blank screen or infinite spinner.
-    // It should show a meaningful message about connectivity.
+    // The app should show the actionable first-run connectivity error message
+    const starterContentMessage = page.locator(
+      'text=Aikami needs to download starter content the first time you play',
+    );
+    await expect(starterContentMessage).toBeVisible({ timeout: 30000 });
 
-    // Wait for either the boot progress UI or an error/offline message
-    // The boot pipeline should still show progress stages
-    const progressBar = page.locator('progress.progress-primary');
-    const offlineMessage = page.locator('text=connection');
-    const networkMessage = page.locator('text=network');
-    const errorMessage = page.locator('text=offline');
-
-    // The app should be responsive — either showing boot progress or an offline message
-    await expect(
-      Promise.race([
-        progressBar.count().then((c) => c > 0),
-        offlineMessage.isVisible().catch(() => false),
-        networkMessage.isVisible().catch(() => false),
-        errorMessage.isVisible().catch(() => false),
-      ]),
-    ).resolves.toBe(true);
-
-    // The page should not be blank — there should be some UI rendered
-    const bodyText = await page.locator('body').innerText();
-    expect(bodyText.length).toBeGreaterThan(0);
+    // The message should instruct the user to connect to the internet
+    const connectMessage = page.locator('text=Connect to the internet and try again');
+    await expect(connectMessage).toBeVisible({ timeout: 5000 });
 
     // Verify the app is responsive (not crashed)
     expect(page.url()).toContain('/game');

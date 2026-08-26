@@ -36,6 +36,15 @@ test.describe('C-448 AC-5: Offline Second Run', () => {
     await page.waitForTimeout(5000);
 
     // ── Phase 2: Reload with network blocked ──
+    // Track content requests during the second boot
+    const offlineRequests: string[] = [];
+    page.on('request', (request) => {
+      const url = request.url();
+      if (url.startsWith('http') && !url.includes('localhost') && !url.startsWith('data:')) {
+        offlineRequests.push(url);
+      }
+    });
+
     // Block all network requests via route interception
     await context.route('**/*', (route) => {
       // Allow data: and blob: URIs (local assets)
@@ -55,18 +64,8 @@ test.describe('C-448 AC-5: Offline Second Run', () => {
     await expect(canvasAfter).toBeAttached({ timeout: 60000 });
 
     // Assert the player HUD is visible
-    const playerHud = page.locator('.bg-base-200\\/80');
+    const playerHud = page.getByTestId('player-hud');
     await expect(playerHud).toBeVisible({ timeout: 30000 });
-
-    // Assert zero network requests were made (all assets served from cache)
-    // We check that no outbound HTTP requests were attempted
-    const offlineRequests: string[] = [];
-    page.on('request', (request) => {
-      const url = request.url();
-      if (url.startsWith('http') && !url.includes('localhost') && !url.startsWith('data:')) {
-        offlineRequests.push(url);
-      }
-    });
 
     // Wait a moment for any late requests
     await page.waitForTimeout(3000);

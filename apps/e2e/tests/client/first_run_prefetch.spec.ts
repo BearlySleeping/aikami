@@ -16,6 +16,7 @@ test.describe('C-448 AC-4: First Run Prefetch', () => {
     context,
   }) => {
     // Clear any existing cache to simulate a fresh install
+    await context.clearCookies();
     await page.goto('/game');
 
     // The boot UI should show the prefetching_starter_content stage
@@ -28,7 +29,7 @@ test.describe('C-448 AC-4: First Run Prefetch', () => {
     await expect(canvas).toBeAttached({ timeout: 60000 });
 
     // The game should reach a playable state
-    const playerHud = page.locator('.bg-base-200\\/80');
+    const playerHud = page.getByTestId('player-hud');
     await expect(playerHud).toBeVisible({ timeout: 30000 });
   });
 });

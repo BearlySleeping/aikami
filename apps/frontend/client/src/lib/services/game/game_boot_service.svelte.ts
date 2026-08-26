@@ -772,7 +772,7 @@ class GameBootService
    * C-448: replaces the old "bundled in the client" assumption with an explicit
    * first-run prefetch that downloads the pack index, manifest, and maps.
    */
-  private async _stagePrefetchStarterContent(generation: number): Promise<void> {
+  private _stagePrefetchStarterContent = async (generation: number): Promise<void> => {
     const t0 = performance.now();
 
     const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
@@ -790,6 +790,16 @@ class GameBootService
 
     const coreTags = [...assetStore.coreTags];
     if (coreTags.length === 0) {
+      // Check if any starter content is locally available
+      // If nothing is cached and we have no coreTags, this is a first-run without connectivity
+      const hasAnyCache = (await assetManager.hasAnyCachedContent?.()) ?? false;
+      if (!hasAnyCache) {
+        const message =
+          'Aikami needs to download starter content the first time you play. ' +
+          'Connect to the internet and try again.';
+        this.warn('stage:prefetching_starter_content:no-core-tags-no-cache');
+        throw new Error(message);
+      }
       this.debug('stage:prefetching_starter_content:no-core-tags');
       return;
     }
@@ -799,12 +809,10 @@ class GameBootService
       tags: coreTags,
     });
 
-    const result: PrefetchResult = {
-      requested: coreTags.length,
-      fetched: 0,
-      alreadyCached: 0,
-      failedTags: [],
-    };
+    // Use mutable local counters during the loop
+    let fetched = 0;
+    let alreadyCached = 0;
+    const failedTags: string[] = [];
 
     for (let i = 0; i < coreTags.length; i++) {
       if (generation !== this._bootGeneration) {
@@ -822,7 +830,7 @@ class GameBootService
       // Check if already cached via the asset manager
       const cachedUrl = assetManager.acquireUrl(tag);
       if (cachedUrl) {
-        result.alreadyCached += 1;
+        alreadyCached += 1;
         continue;
       }
 
@@ -830,12 +838,12 @@ class GameBootService
         // Attempt to warm (fetch + cache) the tag
         const url = await assetManager.warm(tag);
         if (url !== null) {
-          result.fetched += 1;
+          fetched += 1;
         } else {
-          result.failedTags = [...result.failedTags, tag];
+          failedTags.push(tag);
         }
       } catch {
-        result.failedTags = [...result.failedTags, tag];
+        failedTags.push(tag);
       }
     }
 
@@ -843,6 +851,14 @@ class GameBootService
     if (generation !== this._bootGeneration) {
       return;
     }
+
+    // Construct the final readonly PrefetchResult after processing
+    const result: PrefetchResult = {
+      requested: coreTags.length,
+      fetched,
+      alreadyCached,
+      failedTags,
+    };
 
     const elapsed = performance.now() - t0;
 
@@ -873,7 +889,7 @@ class GameBootService
         elapsedMs: Math.round(elapsed),
       });
     }
-  }
+  };
 
   /**
    * Stage: kick off the resumable first-run warming pass and return

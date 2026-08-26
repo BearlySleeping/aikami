@@ -732,6 +732,10 @@ describe('ContentPackLoader', () => {
         resolveTag,
       }),
     ).rejects.toThrow();
+
+    // Assert fetcher was called exactly once with the registry blob URL
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith('blob:mock-pack-fail');
   });
 
   test('loadContentPack throws when registry URL fetch rejects — no bundled fallback (C-448 AC-3)', async () => {
@@ -756,6 +760,10 @@ describe('ContentPackLoader', () => {
         resolveTag,
       }),
     ).rejects.toThrow();
+
+    // Assert fetcher was called exactly once with the registry blob URL and never with a bundled fallback URL
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith('blob:mock-pack-reject');
   });
 
   test('loadContentPack calls releaseUrl after successful registry fetch', async () => {
