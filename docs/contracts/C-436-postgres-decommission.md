@@ -2,7 +2,7 @@
 id: C-436
 title: "Postgres/Neon Decommission — retire the legacy data plane and the dead cloud surface"
 source: "user request 2026-08-24 — open-source readiness; completes C-426 AC-8"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
