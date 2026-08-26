@@ -15,6 +15,7 @@
     "@aikami/constants": "workspace:*",
     "@aikami/frontend-utils": "workspace:*",
     "@aikami/logger": "workspace:*",
+    "@aikami/lpc": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",

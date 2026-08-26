@@ -9,7 +9,7 @@
 
 import { AbilityScoresSchema, AlignmentSchema, ClassSchema, RaceSchema } from '@aikami/schemas';
 import Type from 'typebox';
-import { getLpcCatalogPrompt } from '$lib/data/lpc_asset_catalog_generated';
+import { getLpcCatalogPrompt } from '$lib/data/lpc_asset_catalog';
 
 // ---------------------------------------------------------------------------
 // Strict extraction schema — requires essential fields
@@ -82,7 +82,7 @@ export type ExtractedCharacter = Type.Static<typeof CharacterExtractionSchema>;
  * System prompt for the extraction phase. Emphasises that core fields
  * are REQUIRED and must be derived from the conversation.
  */
-export const CHARACTER_EXTRACTION_SYSTEM_PROMPT =
+export const buildCharacterExtractionPrompt = (catalog: import('@aikami/lpc').LpcCatalog): string =>
   `You are a Dungeon Master finalizing a character creation session.
 
 Review the conversation history and extract the final character persona as a strictly-typed JSON object.
@@ -90,7 +90,7 @@ Review the conversation history and extract the final character persona as a str
 ## LPC Sprite Generation
 Below is a catalog of available LPC (Liberated Pixel Cup) sprite components. After extracting the character data, also populate the optional **lpcRecipe** field with a mapping from slot name → asset ID for the slots that best match the character's appearance.
 
-${getLpcCatalogPrompt()}
+${getLpcCatalogPrompt(catalog)}
 
 ## CRITICAL — Required Fields
 These fields MUST be populated with content from the conversation. If a field's value was NOT explicitly discussed, creatively infer a reasonable value based on the character's concept, species, and class. NEVER leave these empty:

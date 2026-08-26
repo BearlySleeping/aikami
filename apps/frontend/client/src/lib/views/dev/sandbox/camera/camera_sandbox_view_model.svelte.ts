@@ -19,7 +19,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import type { LpcAnimationState } from '$lib/data/lpc_models';
+import type { LpcAnimationState } from '@aikami/lpc';
 import { gameModeService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */

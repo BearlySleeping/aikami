@@ -1,12 +1,10 @@
-// apps/frontend/client/src/lib/data/lpc_tags.ts
+// packages/shared/lpc/src/lib/tags.ts
 //
 // Pure helpers mapping LPC renderer assetIds + animation states to
 // canonical manifest tags. Kept free of PixiJS/service imports so it is
 // unit-testable in isolation.
-//
-// Contract: C-372
 
-import { LpcAnimationState } from '$lib/data/lpc_models';
+import { LpcAnimationState } from './animation.ts';
 
 // ── State mapping ──────────────────────────────────────────────────────────
 

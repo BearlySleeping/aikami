@@ -63,6 +63,7 @@
     "@aikami/frontend/engine": "workspace:*",
     "@aikami/frontend/theme": "workspace:*",
     "@aikami/logger": "workspace:*",
+    "@aikami/lpc": "workspace:*",
     "@aikami/mocks": "workspace:*",
     "@aikami/parser": "workspace:*",
     "@aikami/schemas": "workspace:*",

@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/data/lpc_asset_catalog.ts
-import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import { LpcAnimationState, LpcDirection, lpcTag, buildLpcCatalog } from '@aikami/lpc';
+import type { LpcCatalog } from '@aikami/lpc';
 import { setLpcManifestReady, setLpcUrlResolver } from '$lib/data/lpc_renderer';
-import { lpcTag } from '$lib/data/lpc_tags';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
 
 // ---------------------------------------------------------------------------
@@ -75,6 +75,43 @@ export const DIRECTION_OPTIONS: readonly { value: LpcDirection; label: string }[
 ];
 
 import { getLpcAssetPath as _getLpcAssetPath } from '$lib/data/lpc_renderer';
+
+// ---------------------------------------------------------------------------
+// Catalog builder — memoised on assetStore seed reference
+// ---------------------------------------------------------------------------
+
+let _lastSeed: object | null = null;
+let _cachedCatalog: LpcCatalog | null = null;
+
+/**
+ * Builds the LPC catalog from the asset store's seed rows.
+ * Memoised on the seed array reference — repeated calls are O(1).
+ * Returns an empty catalog if the seed is not yet loaded.
+ */
+export const getLpcCatalog = (): LpcCatalog => {
+  const seed = assetStore.seed;
+  if (!seed) {
+    return { slots: [], assetIdsBySlot: {}, allAssetIds: [] };
+  }
+  if (_lastSeed !== seed.rows) {
+    _lastSeed = seed.rows;
+    _cachedCatalog = buildLpcCatalog({ entries: seed.rows });
+  }
+  return _cachedCatalog ?? { slots: [], assetIdsBySlot: {}, allAssetIds: [] };
+};
+
+/**
+ * Builds an AI prompt string from the LPC catalog.
+ * Must be called after the catalog is built (not at module scope).
+ */
+export const getLpcCatalogPrompt = (catalog: LpcCatalog): string => {
+  const parts: string[] = ['Available LPC sprite components (asset IDs by slot):'];
+  for (const [slot, ids] of Object.entries(catalog.assetIdsBySlot)) {
+    parts.push(`  ${slot}: ${ids.join(', ')}`);
+  }
+  parts.push('\nWhen generating a character appearance, return a JSON object: {"lpcRecipe": {"head": "head/heads/human_male", ...}}');
+  return parts.join('\n');
+};
 
 // ── Manifest wiring ────────────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@ import type { LpcBatchManager, LpcLayerRecipe, TextureManager } from '@aikami/fr
 // biome-ignore lint/correctness/noUnusedImports: Spritesheet type used in Svelte template
 import { Assets, Sprite, type Spritesheet, Texture } from 'pixi.js';
 import { getContext, onDestroy } from 'svelte';
-import type { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
+import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { LPC_BATCH_MANAGER_KEY, LPC_STAGE_CONTAINER_KEY } from './lpc_context_keys.ts';
 
 type Props = {

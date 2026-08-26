@@ -71,7 +71,8 @@ export {
 
 // ECS components
 
-export type { AppearanceData, LpcLayerRecipe, LpcLayerRole } from './components/appearance.ts';
+export type { AppearanceData } from './components/appearance.ts';
+export type { LpcLayerRecipe, LpcLayerRole } from '@aikami/lpc';
 export {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
@@ -324,12 +325,14 @@ export type { PixiInitOptions } from './pixi_init_options.ts';
 export { isE2ETestMode, resolvePixiInitOptions } from './pixi_init_options.ts';
 export {
   AnimationController,
+} from './rendering/animation_controller.ts';
+export {
   getLpcFrameIndex,
   getLpcStateRow,
   LpcAnimationState,
   LpcDirection,
   velocityToDirection,
-} from './rendering/animation_controller.ts';
+} from '@aikami/lpc';
 // Layer bands (C-376 AC-4)
 export type { WorldZBand } from './rendering/layer_bands.ts';
 export {
@@ -339,23 +342,27 @@ export {
 } from './rendering/layer_bands.ts';
 export type {
   CreateLpcPipelineOptions,
+} from './rendering/lpc_appearance_resolver.ts';
+export type {
   LpcAppearanceResult,
   LpcSlotCatalog,
   LpcSlotFallbacks,
   LpcSlotName,
   LpcSlotResolution,
   ResolveLpcAppearanceOptions,
-} from './rendering/lpc_appearance_resolver.ts';
+} from '@aikami/lpc';
 // LPC appearance resolver (C-400) — unified worker/client resolution
 // + shared client pipeline builder (deduped from both game services)
 export {
   createLpcPipeline,
+} from './rendering/lpc_appearance_resolver.ts';
+export {
   DEFAULT_LPC_SLOT_FALLBACKS,
   LPC_SLOT_ORDER,
   projectLpcCatalog,
   resetLpcFallbackWarnings,
   resolveLpcAppearance,
-} from './rendering/lpc_appearance_resolver.ts';
+} from '@aikami/lpc';
 // LPC layer order (C-430) — canonical direction-aware z-order table
 export {
   getMaxKnownDepth,
@@ -366,12 +373,12 @@ export {
   resetUnknownSlotWarnings,
   resolveLayerDepth,
   sortLayersByDepth,
-} from './rendering/lpc_layer_order.ts';
+} from '@aikami/lpc';
 export {
   type LpcCellFamily,
   type LpcSheetGeometry,
   resolveLpcSheetGeometry,
-} from './rendering/lpc_sheet_geometry.ts';
+} from '@aikami/lpc';
 export type {
   CreatePropFrameResolverOptions,
   PropFrameResolverHandle,

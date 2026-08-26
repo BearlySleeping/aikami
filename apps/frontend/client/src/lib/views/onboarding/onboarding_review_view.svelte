@@ -7,7 +7,7 @@
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import { onDestroy } from 'svelte';
-import { LPC_ASSET_IDS_BY_SLOT } from '$lib/data/lpc_asset_catalog_generated';
+import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
 import {
   getLpcPreviewViewModel,
@@ -42,7 +42,7 @@ $effect(() => {
       .filter((slot) => recipe[slot])
       .map((slot) => {
         const assetId = recipe[slot];
-        const validIds = LPC_ASSET_IDS_BY_SLOT[slot];
+        const validIds = getLpcCatalog().assetIdsBySlot[slot];
         // Fall back to default if the asset ID is not in the catalog
         const validId = validIds?.includes(assetId)
           ? assetId

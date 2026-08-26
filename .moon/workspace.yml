@@ -28,6 +28,7 @@ projects:
   utils: "packages/shared/utils"
   mocks: "packages/shared/mocks"
   local-ai: "packages/shared/local-ai"
+  lpc: "packages/shared/lpc"
 
   # Backend Packages
   backend-chat: "packages/backend/chat"

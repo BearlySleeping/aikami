@@ -137,7 +137,10 @@ describe('C-428 AC-4: Both renderers agree on every shipped LPC sheet shape', ()
 
   beforeEach(async () => {
     // Mock dependencies that lpc_renderer.ts imports
-    mock.module('$lib/data/lpc_tags', () => ({
+    // Preserve all real exports, override only the helpers that need isolation
+    const actualLpc = await import('@aikami/lpc');
+    mock.module('@aikami/lpc', () => ({
+      ...actualLpc,
       lpcStateSuffix: (state: string) => state,
       lpcTag: () => 'lpc:test',
     }));

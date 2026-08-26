@@ -1113,15 +1113,14 @@ class GameBootService
     // is loaded before the engine boots (idempotent — catalog module scope
     // also wires it).
     await wireLpcUrlResolver();
-    const { GENERATED_LPC_SLOTS: generatedLpcSlots } = await import(
-      '$lib/data/lpc_asset_catalog_generated'
-    );
+    const { getLpcCatalog } = await import('$lib/data/lpc_asset_catalog');
+    const lpcCatalog = getLpcCatalog();
     // Check generation after async imports
     if (generation !== this._bootGeneration) {
       return;
     }
 
-    const pipeline = this._buildLpcPipeline(generatedLpcSlots, (slot, assetId, state) =>
+    const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
       getLpcAssetPath(slot, assetId, state as unknown as number),
     );
 

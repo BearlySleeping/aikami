@@ -1,0 +1,30 @@
+# packages/shared/lpc/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'lpc'
+  - 'shared'
+  - 'library'
+
+project:
+  name: 'lpc'
+  description: 'LPC domain model — slot definitions, animation state, tag mapping, sheet geometry, layer z-order, and appearance resolution.'
+  channel: '#general'
+  owner: 'Core Team'
+
+dependsOn:
+  - 'schemas'
+
+fileGroups:
+  tests:
+    - 'tests/**/*'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
