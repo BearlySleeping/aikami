@@ -7,7 +7,7 @@ import type {
   GameWorld,
   InteractableStateMap,
 } from '@aikami/frontend/engine';
-import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine';
+import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine/content';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

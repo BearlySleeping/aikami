@@ -6,7 +6,7 @@ import {
   Position,
   type StreamingOrchestratorOptions,
   StreamingOrchestratorService,
-} from '@aikami/frontend/engine';
+} from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

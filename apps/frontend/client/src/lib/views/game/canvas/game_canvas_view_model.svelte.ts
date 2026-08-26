@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/game/canvas/game_canvas_view_model.svelte.ts
 
-import type { GameCommand } from '@aikami/frontend/engine';
+import type { GameCommand } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

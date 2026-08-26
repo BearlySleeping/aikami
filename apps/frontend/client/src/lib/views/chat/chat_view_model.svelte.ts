@@ -8,7 +8,7 @@ import {
   type SlashCommandEntry,
 } from '@aikami/constants';
 import type { EngineBridge } from '@aikami/frontend/engine';
-import { parseBridgeTags } from '@aikami/frontend/engine';
+import { parseBridgeTags } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

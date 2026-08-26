@@ -5,8 +5,8 @@
 // tint support, and missing-asset fallback.
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
-import type { LpcLayerRecipe } from '@aikami/frontend/engine';
-import { resolveLayerDepth } from '@aikami/frontend/engine';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
+import { resolveLayerDepth } from '@aikami/frontend/engine/content';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
