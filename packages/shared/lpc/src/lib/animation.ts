@@ -1,6 +1,7 @@
 // packages/shared/lpc/src/lib/animation.ts
 //
 // LPC Animation — velocity-to-frame index computation
+// biome-ignore-all lint/style/useNamingConvention: PascalCase enum-like constants by convention
 //
 // Pure functions that map velocity vectors to LPC spritesheet frame
 // indices. Zero side effects. No GPU or TextureManager coupling — the caller

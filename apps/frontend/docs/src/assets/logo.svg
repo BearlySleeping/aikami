@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 557 641">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 557 641" role="img" aria-label="Aikami logo">
+  <title>Aikami</title>
   <defs>
     <linearGradient id="grad" gradientUnits="userSpaceOnUse" x1="10" y1="0" x2="546" y2="0">
       <stop offset="0" stop-color="#ca37e3" />

@@ -8,7 +8,7 @@
 // line reflects the selected mode.
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import type { QuestData } from '@aikami/frontend/engine';
+import type { QuestData } from '@aikami/frontend/engine/sim';
 import { buildGameStateFacts } from './game_state_facts';
 import { questStateService } from './quest_state_service.svelte';
 

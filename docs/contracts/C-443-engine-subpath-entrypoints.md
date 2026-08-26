@@ -2,7 +2,7 @@
 id: C-443
 title: "Engine Subpath Entrypoints — sim / render / content, Enforced"
 source: "user request 2026-08-26 — should we split up engine into engine-sim, engine-render, engine-content?"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null

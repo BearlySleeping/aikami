@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts
 
 import { DEFAULT_LPC_RECIPE, STARTER_KIT } from '@aikami/constants';
-import type { LpcLayerRecipe } from '@aikami/frontend/engine';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

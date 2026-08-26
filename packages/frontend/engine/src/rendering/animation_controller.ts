@@ -9,21 +9,15 @@
 // textures.
 
 import {
+  getLpcFrameIndex,
+  getLpcStateRow,
   LpcAnimationState,
   LpcDirection,
   velocityToDirection,
-  getLpcFrameIndex,
-  getLpcStateRow,
 } from '@aikami/lpc';
 
 // Re-export moved symbols for backward compatibility with engine-internal imports.
-export {
-  getLpcFrameIndex,
-  getLpcStateRow,
-  LpcAnimationState,
-  LpcDirection,
-  velocityToDirection,
-};
+export { getLpcFrameIndex, getLpcStateRow, LpcAnimationState, LpcDirection, velocityToDirection };
 
 // ---------------------------------------------------------------------------
 // AnimationController — main-thread per-entity animation state machine

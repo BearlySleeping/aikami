@@ -2,7 +2,7 @@
 //
 // Quest log domain service — owns quest state and visibility.
 
-import type { QuestData } from '@aikami/frontend/engine';
+import type { QuestData } from '@aikami/frontend/engine/sim';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

@@ -10,7 +10,7 @@
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
-import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine';
+import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine/content';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

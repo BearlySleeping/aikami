@@ -4,7 +4,7 @@
 // validate assets against the generated catalog, and preview the character
 // with diagnostic feedback for missing/wrong asset IDs.
 
-import type { LpcLayerRecipe } from '@aikami/frontend/engine';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

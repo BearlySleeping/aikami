@@ -6,8 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 
 describe('collect_lpc_assets outputs', () => {
-  const deletedCatalogPath =
-    'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts';
+  const deletedCatalogPath = 'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts';
 
   test('does not write TypeScript catalog file', () => {
     // The generated catalog file should not exist

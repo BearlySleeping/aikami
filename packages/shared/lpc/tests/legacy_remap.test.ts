@@ -7,15 +7,15 @@ import { readFileSync } from 'node:fs';
 import { buildLpcCatalog } from '../src/lib/build_catalog.ts';
 import { LEGACY_INDEX_REMAP } from '../src/lib/legacy_remap.ts';
 
-interface LegacySlot {
+type LegacySlot = {
   slot: string;
   label: string;
   assetIds: string[];
-}
+};
 
-interface LegacyCatalog {
+type LegacyCatalog = {
   slots: LegacySlot[];
-}
+};
 
 describe('legacy remap table', () => {
   let legacyCatalog: LegacyCatalog;
@@ -41,7 +41,9 @@ describe('legacy remap table', () => {
 
     const mismatchedSlots = legacyCatalog.slots.filter((legacySlot) => {
       const derivedSlot = result.slots.find((s) => s.slot === legacySlot.slot);
-      if (!derivedSlot) return false;
+      if (!derivedSlot) {
+        return false;
+      }
       const derivedAssetIds = derivedSlot.variants.map((v) => v.assetId);
       return JSON.stringify(derivedAssetIds) !== JSON.stringify(legacySlot.assetIds);
     });
@@ -64,7 +66,9 @@ describe('legacy remap table', () => {
 
     for (const legacySlot of legacyCatalog.slots) {
       const derivedSlot = result.slots.find((s) => s.slot === legacySlot.slot);
-      if (!derivedSlot) continue;
+      if (!derivedSlot) {
+        continue;
+      }
 
       const remap = LEGACY_INDEX_REMAP[legacySlot.slot];
       if (!remap) {
@@ -93,7 +97,7 @@ describe('legacy remap table', () => {
   });
 
   test('remap table has no duplicate target indices per slot', () => {
-    for (const [slot, remap] of Object.entries(LEGACY_INDEX_REMAP)) {
+    for (const [_slot, remap] of Object.entries(LEGACY_INDEX_REMAP)) {
       const targets = Object.values(remap);
       const uniqueTargets = new Set(targets);
       expect(uniqueTargets.size).toBe(targets.length);

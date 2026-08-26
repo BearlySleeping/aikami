@@ -6,7 +6,7 @@
 // Contract: C-143 Quest Log Sync
 // Contract: C-339 Quest Graph, Journal, Objectives
 
-import type { QuestData, QuestJournalEntry } from '@aikami/frontend/engine';
+import type { QuestData, QuestJournalEntry } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
