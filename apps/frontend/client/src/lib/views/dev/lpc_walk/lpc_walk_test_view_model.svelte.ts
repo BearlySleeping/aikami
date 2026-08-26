@@ -14,8 +14,8 @@ import {
 } from '@aikami/frontend/services';
 import { LpcAnimationState } from '@aikami/lpc';
 import { Application, Container, Rectangle, Sprite, Texture } from 'pixi.js';
-import { createLpcRenderer } from '$lib/data/lpc_renderer';
-import type { LpcRenderer } from '$lib/data/lpc_renderer';
+import { wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
+import { loadLpcSheet } from '$lib/data/lpc_renderer';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -94,7 +94,6 @@ class LpcWalkTestViewModel
   private _sheetCache = new Map<string, Texture>();
   private _spriteSheets = new Map<Sprite, Texture>();
   private _onKeyDownBound = this._onKeyDown.bind(this);
-  private _lpcRenderer: LpcRenderer | undefined;
   private _onKeyUpBound = this._onKeyUp.bind(this);
   private _currentDirection: LpcDirection = LpcDirection.Down;
   private _tickLocal = 0;
@@ -126,12 +125,7 @@ class LpcWalkTestViewModel
   override async initialize(): Promise<void> {
     // Ensure the manifest-backed LPC URL resolver is wired and the manifest
     // is loaded before any layer lookup (idempotent).
-    const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
-    await assetStore.fetchManifest();
-
-    // Create LPC renderer with the registry resolver
-    const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
-    this._lpcRenderer = createLpcRenderer({ resolver: createRegistryAssetResolver() });
+    await wireLpcUrlResolver();
 
     this.registerEffectRoot(() => {
       $effect(() => {
@@ -409,12 +403,8 @@ class LpcWalkTestViewModel
       return cached;
     }
 
-    if (!this._lpcRenderer) {
-      return null;
-    }
-
     try {
-      const texture = await this._lpcRenderer.loadSheet(assetId, LpcAnimationState.Walk);
+      const texture = await loadLpcSheet(assetId, LpcAnimationState.Walk);
       if (texture === Texture.EMPTY) {
         return null;
       }

@@ -16,9 +16,9 @@ import { LpcAnimationState, LpcDirection, lpcStateSuffix } from '@aikami/lpc';
 import {
   ANIMATION_STATE_OPTIONS,
   DIRECTION_OPTIONS,
+  wireLpcUrlResolver,
 } from '$lib/data/lpc_asset_catalog';
-import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from '$lib/data/lpc_renderer';
-import type { LpcRenderer } from '$lib/data/lpc_renderer';
+import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
 import {
   Application,
   Container,
@@ -147,7 +147,6 @@ class LpcPreviewViewModel
   private _backgroundColor: number;
   private _isInitialized = false;
   private _renderGeneration = 0;
-  private _lpcRenderer: LpcRenderer | undefined;
 
   constructor(options: LpcPreviewViewModelOptions) {
     super(options);
@@ -249,9 +248,7 @@ class LpcPreviewViewModel
   override async initialize(): Promise<void> {
     // Ensure the manifest-backed LPC URL resolver is wired and the manifest
     // is loaded before any layer lookup (idempotent).
-    // Create LPC renderer with the registry resolver
-    const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
-    this._lpcRenderer = createLpcRenderer({ resolver: createRegistryAssetResolver() });
+    await wireLpcUrlResolver();
 
     this.registerEffectRoot(() => {
       // Reactively initialize PixiJS when canvasElement becomes available
@@ -541,7 +538,7 @@ class LpcPreviewViewModel
     }
 
     const promise = (async () => {
-      const texture = await this._lpcRenderer.loadSheet(assetId, state);
+      const texture = await loadLpcSheet(assetId, state);
       // Only cache successful textures — transient EMPTY must be retried on a
       // later call (the renderer only permanently caches genuinely unmapped
       // assets once the manifest is loaded).

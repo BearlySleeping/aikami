@@ -16,7 +16,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { AssetResolver, Campaign, PersonaData } from '@aikami/types';
+import type { Campaign, PersonaData } from '@aikami/types';
 import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
@@ -902,8 +902,11 @@ class GameBootService
     const textureManager = new TextureManager();
 
     // Build LPC pipeline
-    const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
-    const registryResolver = createRegistryAssetResolver();
+    const { getLpcAssetPath, wireLpcUrlResolver } = await import('$lib/data/lpc_asset_catalog');
+    // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
+    // is loaded before the engine boots (idempotent — catalog module scope
+    // also wires it).
+    await wireLpcUrlResolver();
     const { getLpcCatalog } = await import('$lib/data/lpc_asset_catalog');
     const lpcCatalog = getLpcCatalog();
     // Check generation after async imports
@@ -911,7 +914,9 @@ class GameBootService
       return;
     }
 
-    const pipeline = this._buildLpcPipeline(lpcCatalog.slots, registryResolver);
+    const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
+      getLpcAssetPath(slot, assetId, state as unknown as number),
+    );
 
     this._gameWorld = (EngineGameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
       className: 'GameWorld',
@@ -1249,7 +1254,7 @@ class GameBootService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    resolver: AssetResolver,
+    getLpcAssetPath: (_slot: string, assetId: string, state: string) => string | null,
   ) {
     // C-400: single source of truth — the engine's shared createLpcPipeline
     // (projected catalog + pure resolver + asset URL resolver). This is the
@@ -1258,8 +1263,7 @@ class GameBootService
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
       catalog: projectLpcCatalog(generatedLpcSlots),
-      getLpcAssetPath: (_slot: string, assetId: string, _state: string): string | null =>
-        resolver.resolve(assetId),
+      getLpcAssetPath,
     });
   }
 
