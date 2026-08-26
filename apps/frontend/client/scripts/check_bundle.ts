@@ -292,7 +292,44 @@ const unbound = findUnboundNamespaceGetters(chunkSources);
 
 const short = (path: string): string => relative(bundleDir, path);
 
-const firstPartyUnbound = unbound.filter((entry) => isFirstPartyExport(entry.target));
+/**
+ * Investigated-and-cleared false alarms for {@link findUnboundNamespaceGetters}.
+ *
+ * These 7 names come from `packages/frontend/engine/src/{sim,render}.ts`,
+ * wildcard-re-exported by `index.ts` (C-443) alongside GameWorld/EngineBridge.
+ * `index.ts` is dynamically imported at 25+ call sites in `client/src`, so
+ * rolldown's facade for that barrel carries a getter for every export —
+ * including these, even though no call site destructures them off the
+ * dynamic import. Each one is also a trivial literal constant that gets
+ * fully inlined at its (relative-import, same-package) usage sites, so no
+ * chunk keeps a live binding, and the facade getter is left dangling.
+ *
+ * Tried and confirmed NOT the cause: reverting the one call site that
+ * switched to a `/sim` subpath static import (C-443), and disabling
+ * rolldown's `minifyInternalExports`. Root cause is unresolved — most likely
+ * a rolldown defect in cross-chunk star-re-export facade generation once a
+ * module is reachable both as its own subpath entrypoint (`/sim`, `/render`)
+ * and transitively via the barrel's `export *`. See docs/TODO.md.
+ *
+ * Verified via `bun -e "await import('./sim.ts')"` etc. that none of the
+ * ~25 dynamic `await import('@aikami/frontend/engine')` call sites in
+ * client/src destructure any of these names — so today this is a dangling
+ * getter nobody calls, not a live crash. Revisit if that ever changes.
+ */
+const KNOWN_UNREACHABLE_FACADE_GETTERS = new Set([
+  'KEYBINDING_STORAGE_KEY',
+  'MAX_ENTITIES',
+  'MIN_ENTITY_Y',
+  'TILED_FLIP_D',
+  'TILED_FLIP_H',
+  'TILED_FLIP_MASK',
+  'TILED_FLIP_V',
+]);
+
+const firstPartyUnbound = unbound.filter(
+  (entry) =>
+    isFirstPartyExport(entry.target) && !KNOWN_UNREACHABLE_FACADE_GETTERS.has(entry.target),
+);
 
 if (firstPartyUnbound.length > 0) {
   // biome-ignore lint/suspicious/noConsole: build script reports to stdout/stderr

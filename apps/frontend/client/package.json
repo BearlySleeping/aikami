@@ -34,8 +34,8 @@
   "devDependencies": {
     "@inlang/paraglide-js": "2.24.1",
     "@playwright/test": "1.62.1",
-    "@sveltejs/adapter-static": "^3.0.10",
-    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/adapter-static": "^4.0.0-next.0",
+    "@sveltejs/kit": "^3.0.0-next.13",
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@tailwindcss/vite": "4.3.3",
     "@tauri-apps/cli": "^2",

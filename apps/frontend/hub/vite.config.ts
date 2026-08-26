@@ -1,10 +1,12 @@
 // apps/frontend/hub/vite.config.ts
 import { builtinModules } from 'node:module';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import type { Mode } from '@aikami/types';
+import adapter from '@sveltejs/adapter-cloudflare';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { createLogger, defineConfig, type PluginOption } from 'vite';
@@ -13,6 +15,20 @@ import { PORTS } from '../../../packages/shared/constants/src/index.ts';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
+const packagesDirectory = resolve(projectDirectory, '../../../packages');
+
+/**
+ * Convert a path to use forward slashes.
+ *
+ * SvelteKit's tsconfig generator strips a trailing `/*` from alias values by
+ * checking `value.endsWith('/*')` (literal forward slash). `node:path`'s
+ * `join()` emits backslashes on Windows, so that check silently fails there
+ * and SvelteKit appends its own `/*`, producing a broken `**\/*\/*` pattern.
+ * Keeping alias values posix-style avoids that on every platform.
+ */
+const toPosixPath = (path: string) => path.split('\\').join('/');
+const toPackagesPath = (path: string) => toPosixPath(join(packagesDirectory, path));
+const toSrcPath = (path: string) => toPosixPath(join(projectDirectory, 'src', path));
 
 // Set by scripts/src/lib/herdr/session.ts for contract-scoped pipeline runs
 // so this app's dev server targets its own per-contract emulator instance,
@@ -66,12 +82,76 @@ function forceExternalPlugin(): PluginOption {
 }
 
 export default defineConfig(({ mode }) => {
+  // src/env.ts declares PUBLIC_APP_ID/PUBLIC_MODE as required+static via
+  // SvelteKit's defineEnvVars — that reads Vite's resolved `env`, not our
+  // `define` block below (define only affects the client bundle; the SSR
+  // build's explicit-env codegen sources values from here instead). Without
+  // a .env file (see .env.example), the value baked into the Worker build is
+  // '' and every request 500s. PUBLIC_APP_ID never varies; PUBLIC_MODE
+  // mirrors the resolved build mode — both safe to default when unset.
+  process.env.PUBLIC_APP_ID ??= 'hub';
+  process.env.PUBLIC_MODE ??= mode;
   const port = Number(process.env.PORT || PORTS[mode as Mode]?.hub || 5276);
 
   const plugins: PluginOption[] = [
     forceExternalPlugin(),
     tailwindcss(),
-    sveltekit() as PluginOption,
+    sveltekit({
+      // SvelteKit 3: configuration moved from svelte.config.js to here
+      experimental: {
+        explicitEnvironmentVariables: true,
+      },
+      preprocess: [vitePreprocess()],
+      compilerOptions: {
+        warningFilter: (warning: { code: string }) => warning.code !== 'state_referenced_locally',
+      },
+      adapter: adapter({
+        out: 'build',
+      }),
+      alias: {
+        $components: toSrcPath('lib/components'),
+        '$components/*': toSrcPath('lib/components/*'),
+        $lib: toPackagesPath('lib'),
+        '$lib/*': toSrcPath('lib/*'),
+        $logger: toPackagesPath('shared/logger/src/lib/svelte_kit.ts'),
+        $loggerServer: toPackagesPath('shared/logger/src/lib/log_context_backend.ts'),
+        '$logger/*': toPackagesPath('shared/logger/src/*'),
+        $router: toPackagesPath('frontend/services/src/lib/router/router_utils'),
+        $routes: toSrcPath('lib/constants/routes'),
+        $services: toSrcPath('lib/client/services'),
+        '$services/*': toSrcPath('lib/client/services/*'),
+        $types: toSrcPath('lib/types'),
+        $utils: toSrcPath('lib/utils'),
+        '$views/*': toSrcPath('lib/views/*'),
+
+        '@aikami/backend/svelte-kit/*': toPackagesPath('backend/svelte-kit/src/lib/*'),
+        '@aikami/backend/auth': toPackagesPath('backend/auth/src'),
+        '@aikami/backend/auth/*': toPackagesPath('backend/auth/src/lib/*'),
+        '@aikami/backend/utils/*': toPackagesPath('backend/utils/src/lib/*'),
+        '@aikami/backend/configs/*': toPackagesPath('backend/configs/src/lib/*'),
+
+        '@aikami/constants': toPackagesPath('shared/constants/src'),
+        '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
+        '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib'),
+        '@aikami/logger': toPackagesPath('shared/logger/src'),
+
+        '@aikami/frontend/components': toPackagesPath('frontend/components/src'),
+        '@aikami/frontend/components/*': toPackagesPath('frontend/components/src/lib/*'),
+
+        '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
+        '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
+        '@aikami/frontend/theme': toPackagesPath('frontend/theme/src'),
+        '@aikami/frontend/theme/*': toPackagesPath('frontend/theme/src/lib/*'),
+        '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
+        '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
+        '@aikami/frontend/storage': toPackagesPath('frontend/storage/src'),
+        '@aikami/frontend/storage/*': toPackagesPath('frontend/storage/src/lib'),
+
+        '@aikami/schemas': toPackagesPath('shared/schemas/src'),
+        '@aikami/types': toPackagesPath('shared/types/src'),
+        '@aikami/utils': toPackagesPath('shared/utils/src'),
+      },
+    }) as PluginOption,
   ];
 
   if (mode === 'development' && process.env.DEBUG === '1') {
@@ -91,6 +171,14 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins,
+
+    define: {
+      // Ensure PUBLIC_APP_ID and PUBLIC_MODE are always available at runtime.
+      // The configs package (@aikami/frontend/configs) requires these.
+      'import.meta.env.PUBLIC_APP_ID': JSON.stringify(process.env.PUBLIC_APP_ID || 'hub'),
+      'import.meta.env.PUBLIC_MODE': JSON.stringify(process.env.PUBLIC_MODE || mode),
+    },
+
     envPrefix: ['PUBLIC_'],
 
     customLogger: {

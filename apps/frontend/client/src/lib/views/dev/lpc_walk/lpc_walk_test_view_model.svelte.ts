@@ -5,8 +5,8 @@
 // No ECS/bitECS dependency — pure animation controller + PixiJS rendering.
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
-import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import { AnimationController, LpcDirection, resolveLayerDepth } from '@aikami/frontend/engine';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

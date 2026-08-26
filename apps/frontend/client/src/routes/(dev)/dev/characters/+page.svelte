@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { PersonaData } from '@aikami/types';
 // apps/frontend/client/src/routes/(dev)/dev/characters/+page.svelte
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { routerService } from '$services';
 
 type SavedCharacter = {

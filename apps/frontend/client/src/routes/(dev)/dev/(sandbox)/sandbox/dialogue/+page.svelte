@@ -13,7 +13,7 @@
 
 import { NpcIntentAnalysisOutputSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import {
   buildIntentAnalysisSystemPrompt,
   recoverIntentAnalysisOutput,
