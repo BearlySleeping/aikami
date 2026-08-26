@@ -2,7 +2,7 @@
 id: C-446
 title: "Hub Catalog Asset Previews — LPC, Tilesets, Maps and Props"
 source: "user request 2026-08-26 — lpc rendering preview in hub so people can check assets"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -20,8 +20,8 @@ created_at: "2026-08-26"
 | **Source** | User request (2026-08-26): *"i want to add lpc rendering preview in hub so people can check assets, same with map and tileset and props."* |
 | **Target** | `apps/frontend/hub/src/lib/views/catalog/`, `apps/frontend/hub/src/routes/(public)/catalog/` |
 | **Priority** | P2 — user-facing value, but strictly downstream of the shared package. |
-| **Dependencies** | C-442, C-443, C-444, C-445. All must merge first. |
-| **Status** | draft |
+| **Dependencies** | C-442 (LPC core package), C-443 (engine subpath entrypoints), C-444 (asset resolver seam), C-445 (shared preview package). All must merge first. |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | user-facing → catalog browsing page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
@@ -103,7 +103,7 @@ all rendered by the same code the game runs, and shareable as a URL.
 | Asset detail view model | `hub/src/lib/views/catalog/catalog_asset_view_model.svelte.ts` | **modify** — gains resolver + catalog derivation |
 | Category grid | `hub/src/lib/views/catalog/category_view.svelte` | **reuse** — thumbnails stay; no live previews in a grid |
 | Preview components | `@aikami/frontend/preview` (C-445) | **reuse** |
-| CDN resolver | `hub/src/lib/client/services/cdn_asset_resolver.ts` (C-444) | **reuse** |
+| CDN resolver | `hub/src/lib/client/services/cdn_asset_resolver.ts` (C-444) | **recreate** — C-444 created this file but it was deleted in a later commit (`e9c59559`). The implementer must recreate `createCdnAssetResolver` from the C-444 spec. |
 | Display helpers | `hub/src/lib/utils/catalog.ts` | **reuse** unchanged |
 
 ## Overview
