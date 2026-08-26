@@ -49,6 +49,7 @@ projects:
   frontend-storage: "packages/frontend/storage"
   frontend-configs: "packages/frontend/configs"
   frontend-theme: "packages/frontend/theme"
+  frontend-preview: "packages/frontend/preview"
 
 vcs:
   provider: "github"

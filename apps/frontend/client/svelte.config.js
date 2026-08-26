@@ -131,6 +131,9 @@ const config = {
       '@aikami/frontend/components': toPackagesPath('frontend/components/src'),
       '@aikami/frontend/components/*': toPackagesPath('frontend/components/src/lib/*'),
 
+      '@aikami/frontend/preview': toPackagesPath('frontend/preview/src'),
+      '@aikami/frontend/preview/*': toPackagesPath('frontend/preview/src/*'),
+
       '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
       '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
       '@aikami/frontend/theme': toPackagesPath('frontend/theme/src'),
