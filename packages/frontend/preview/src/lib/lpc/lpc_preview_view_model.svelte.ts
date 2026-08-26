@@ -1,4 +1,7 @@
-// apps/frontend/client/src/lib/views/dev/lpc/lpc_view_model.svelte.ts
+// packages/frontend/preview/src/lib/lpc/lpc_preview_view_model.svelte.ts
+//
+// ViewModel for the LPC preview component — host-agnostic, no SvelteKit deps.
+// Manages layer selection, animation state, palette overrides, and PixiJS rendering.
 
 import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '@aikami/frontend/engine';
 import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
@@ -13,30 +16,11 @@ import {
   LPC_DEFAULT_HEAD_ASSET_ID,
   REQUIRED_LPC_SLOTS,
 } from '@aikami/schemas';
-import { setContext } from 'svelte';
-import { page } from '$app/state';
-import {
-  LPC_BATCH_MANAGER_KEY,
-  LPC_STAGE_CONTAINER_KEY,
-} from '$lib/components/game/lpc_context_keys';
-import {
-  ANIMATION_STATE_OPTIONS,
-  DIRECTION_OPTIONS,
-  getLpcCatalog,
-  wireLpcUrlResolver,
-} from '$lib/data/lpc_asset_catalog';
-import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
-import {
-  type LpcUrlState,
-  lpcStateToSearchParams,
-  searchParamsToLpcState,
-} from '$lib/data/lpc_url_config';
-import { routerService } from '$services';
-import type { Application } from './lpc_pixi_facade';
-import { Container, Graphics, Sprite, Texture } from './lpc_pixi_facade';
-
-// Use the generated catalog directly — all slots with verified webp assets.
-const _getSlots = () => getLpcCatalog().slots;
+import type { AssetResolver } from '@aikami/types';
+import { Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
+import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
+import type { LpcRenderer } from './lpc_renderer';
+import { decodeLpcPreviewState, encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -48,23 +32,14 @@ const EntityY = CanvasHeight / 2 - 32;
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-/** Active layer configuration. */
 export type ActiveLayerConfig = {
   slotDefIndex: number;
   variantIndex: number;
 };
 
-export type LpcViewModelInterface = BaseViewModelInterface & {
-  readonly isFullscreen: boolean;
+export type LpcPreviewViewModelInterface = BaseViewModelInterface & {
   canvasElement: HTMLCanvasElement | undefined;
   setCanvasElement(canvas: HTMLCanvasElement): void;
-  provideSvelteContext(): void;
-
-  readonly batchManager: LpcBatchManager;
-  readonly stageContainer: Container;
-
-  readonly pixiApp: Application | undefined;
-  readonly statusBanner: { message: string; level: 'info' | 'warn' | 'error' } | undefined;
 
   readonly animationState: LpcAnimationState;
   readonly facingDirection: LpcDirection;
@@ -77,25 +52,15 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
 
   readonly activeLayers: ActiveLayerConfig[];
   readonly recipes: readonly LpcLayerRecipe[];
-  /** Per-layer palette color (hex string, e.g. "#ff0000"). */
   readonly paletteColors: Record<number, string>;
   setLayerColor(layerIndex: number, hexColor: string): void;
-  /** Global tint applied to all layers without an override. */
   readonly globalTint: string;
   setGlobalTint(hexColor: string): void;
-  /** Which layers are overriding the global tint. */
   readonly layerOverrides: Record<number, boolean>;
   toggleLayerOverride(layerIndex: number): void;
 
   readonly fps: number;
   readonly frameDurationMs: number;
-  readonly totalFrames: number;
-  readonly structuralHashes: number;
-  readonly batchUpdates: number;
-  readonly activeInstances: number;
-  readonly poolSize: number;
-  readonly tickerFrame: number;
-  readonly frameBudgetPercent: string;
   readonly compositionFailed: boolean;
   readonly zoom: number;
 
@@ -104,9 +69,8 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
   readonly canvasHeight: number;
   readonly entityX: number;
   readonly entityY: number;
-  readonly allSlots: ReturnType<typeof _getSlots>;
-  readonly animationStateOptions: typeof ANIMATION_STATE_OPTIONS;
-  readonly directionOptions: typeof DIRECTION_OPTIONS;
+  readonly allSlots: LpcSlotDef[];
+  readonly statusBanner: { message: string; level: 'info' | 'warn' | 'error' } | undefined;
 
   togglePlayback(): void;
   stepNext(): void;
@@ -123,39 +87,48 @@ export type LpcViewModelInterface = BaseViewModelInterface & {
   setShowGridOverlay(show: boolean): void;
   setIsolateLayerIndex(index: number): void;
   setZoom(zoom: number): void;
+
+  /** Serialises current state to URLSearchParams. */
+  getStateParams(): URLSearchParams;
 };
 
-export type LpcViewModelOptions = BaseViewModelOptions & {};
+export type LpcSlotDef = {
+  slot: string;
+  label: string;
+  variants: Array<{ label: string; assetId: string }>;
+};
 
-class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcViewModelInterface {
-  // ── Constants (exposed) ──────────────────────────────────────────────
+export type LpcPreviewViewModelOptions = BaseViewModelOptions & {
+  resolver: AssetResolver;
+  allSlots: LpcSlotDef[];
+  initialState?: LpcPreviewState;
+  onStateChange?: (state: LpcPreviewState) => void;
+};
 
+class LpcPreviewViewModel
+  extends BaseViewModel<LpcPreviewViewModelOptions>
+  implements LpcPreviewViewModelInterface
+{
   readonly maxLayers = MaxLayers;
   readonly canvasWidth = CanvasWidth;
   readonly canvasHeight = CanvasHeight;
   readonly entityX = EntityX;
   readonly entityY = EntityY;
-  // $state (not a plain field): `_getSlots()` reads `assetStore.seed`, which
-  // is still null at construction time (the catalog fetch is async — see
-  // wireLpcUrlResolver). A plain field would freeze on the empty catalog
-  // forever; this gets refreshed once loading completes in initialize().
-  allSlots = $state<ReturnType<typeof _getSlots>>(_getSlots());
-  readonly animationStateOptions = ANIMATION_STATE_OPTIONS as typeof ANIMATION_STATE_OPTIONS;
-  readonly directionOptions = DIRECTION_OPTIONS as typeof DIRECTION_OPTIONS;
+
+  allSlots = $state<LpcSlotDef[]>([]);
+  private readonly _resolver: AssetResolver;
+  private readonly _onStateChange?: (state: LpcPreviewState) => void;
 
   // ── PixiJS infrastructure ────────────────────────────────────────────
 
   readonly batchManager = new LpcBatchManager({ maxInstances: 8 });
   readonly stageContainer: Container;
-
   canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
-  pixiApp = $state<Application | undefined>(undefined);
+  pixiApp = $state<import('pixi.js').Application | undefined>(undefined);
 
   // ── Status ───────────────────────────────────────────────────────────
 
-  statusBanner = $state<{ message: string; level: 'info' | 'warn' | 'error' } | undefined>(
-    undefined,
-  );
+  statusBanner = $state<{ message: string; level: 'info' | 'warn' | 'error' } | undefined>(undefined);
 
   // ── Animation ────────────────────────────────────────────────────────
 
@@ -177,67 +150,44 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   // ── Palette colors ─────────────────────────────────────────────────
 
-  /** Global tint applied to all layers without a per-layer override. */
   globalTint = $state('');
-  /** Per-layer hex color overrides (key = layer index, value = "#rrggbb"). */
   paletteColors = $state<Record<number, string>>({});
-  /** Which layers override the global tint (key = layer index). */
   layerOverrides = $state<Record<number, boolean>>({});
 
   // ── Telemetry ───────────────────────────────────────────────────────
 
   fps = $state(0);
   frameDurationMs = $state(0);
-  totalFrames = $state(0);
-  structuralHashes = $state(0);
-  batchUpdates = $state(0);
-  activeInstances = $state(0);
-  poolSize = $state(8);
-  tickerFrame = $state(0);
   compositionFailed = $state(false);
-
-  // ── Zoom ────────────────────────────────────────────────────────────
-
   zoom = $state(1);
 
   // ── Private internals ───────────────────────────────────────────────
 
   private _sheetTextureCache = new Map<string, Texture>();
   private _sheetTexturePromises = new Map<string, Promise<Texture>>();
-
   private _characterContainer: Container | undefined;
   private _layerSprites: Sprite[] = [];
   private _gridGraphics: Container | undefined;
   private _tickAccumulator = 0;
-  private _isApplyingUrlState = false;
-  private _pushUrlTimer: ReturnType<typeof setTimeout> | undefined;
+  private _lpcRenderer: LpcRenderer | undefined;
 
-  // ── Derived ─────────────────────────────────────────────────────────
+  constructor(options: LpcPreviewViewModelOptions) {
+    super(options);
+    this._resolver = options.resolver;
+    this._onStateChange = options.onStateChange;
+    this.allSlots = options.allSlots;
+    this.stageContainer = new Container();
+    this.stageContainer.label = 'lpc-preview-stage';
 
-  get frameBudgetPercent(): string {
-    return this.frameDurationMs > 0 ? ((this.frameDurationMs / 16.6) * 100).toFixed(1) : '0.0';
-  }
-
-  get isFullscreen(): boolean {
-    return page.url.searchParams.has('fullscreen');
+    if (options.initialState) {
+      this._applyPreviewState(options.initialState);
+    }
   }
 
   // ── Canvas setter ───────────────────────────────────────────────────
 
   setCanvasElement(canvas: HTMLCanvasElement): void {
     this.canvasElement = canvas;
-  }
-
-  // ── Svelte context ─────────────────────────────────────────────────
-
-  /**
-   * Provides LPC batch manager and stage container to child components
-   * via Svelte's context API. Must be called during component initialization
-   * (from the view's `<script>` block).
-   */
-  provideSvelteContext(): void {
-    setContext(LPC_BATCH_MANAGER_KEY, this.batchManager);
-    setContext(LPC_STAGE_CONTAINER_KEY, this.stageContainer);
   }
 
   // ── Playback ────────────────────────────────────────────────────────
@@ -269,7 +219,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
   private _setStatus(message: string, level: 'info' | 'warn' | 'error'): void {
     this.statusBanner = { message, level };
-
     if (level === 'info') {
       setTimeout(() => {
         if (this.statusBanner?.message === message) {
@@ -289,14 +238,14 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
     const usedSlotKeys = new Set(
       this.activeLayers.map((l) => {
-        const def = _getSlots()[l.slotDefIndex];
+        const def = this.allSlots[l.slotDefIndex];
         return def?.slot;
       }),
     );
 
-    const unusedIndex = _getSlots().findIndex((s) => !usedSlotKeys.has(s.slot));
+    const unusedIndex = this.allSlots.findIndex((s) => !usedSlotKeys.has(s.slot));
     const slotDefIndex =
-      unusedIndex >= 0 ? unusedIndex : this.activeLayers.length % _getSlots().length;
+      unusedIndex >= 0 ? unusedIndex : this.activeLayers.length % this.allSlots.length;
 
     this.activeLayers = [...this.activeLayers, { slotDefIndex, variantIndex: 0 }];
   }
@@ -328,30 +277,14 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     });
   }
 
-  /**
-   * Sets the palette tint color for a layer.
-   *
-   * @param layerIndex - The index in the active layers array.
-   * @param hexColor - CSS hex color string (e.g. "#ff0000").
-   */
   setLayerColor(layerIndex: number, hexColor: string): void {
     this.paletteColors = { ...this.paletteColors, [layerIndex]: hexColor };
   }
 
-  /**
-   * Sets the global tint applied to all layers without a per-layer override.
-   *
-   * @param hexColor - CSS hex color string, or empty string to clear.
-   */
   setGlobalTint(hexColor: string): void {
     this.globalTint = hexColor;
   }
 
-  /**
-   * Toggles whether a layer uses its own color or falls back to global tint.
-   *
-   * @param layerIndex - The index in the active layers array.
-   */
   toggleLayerOverride(layerIndex: number): void {
     const current = this.layerOverrides[layerIndex] ?? false;
     this.layerOverrides = { ...this.layerOverrides, [layerIndex]: !current };
@@ -372,7 +305,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         continue;
       }
 
-      const slotDef = _getSlots()[layer.slotDefIndex];
+      const slotDef = this.allSlots[layer.slotDefIndex];
       if (!slotDef) {
         continue;
       }
@@ -385,7 +318,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       const hexColor =
         this.layerOverrides[i] && this.paletteColors[i] ? this.paletteColors[i] : this.globalTint;
       if (hexColor) {
-        // Parse #RRGGBB → RGBA bytes, fill all 256 palette entries
         const r = Number.parseInt(hexColor.slice(1, 3), 16);
         const g = Number.parseInt(hexColor.slice(3, 5), 16);
         const b = Number.parseInt(hexColor.slice(5, 7), 16);
@@ -407,10 +339,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       });
     }
 
-    // ── C-370: body layer fallback ────────────────────────────────
-    // If no body layer is present in the recipe list, inject the default
-    // body asset unconditionally. This ensures neck continuity when
-    // characters wear torso garments without an explicit body layer.
+    // Body layer fallback
     const hasBody = result.some((r) => r.slot === 'body');
     if (!hasBody && result.length > 0) {
       result.unshift({
@@ -420,13 +349,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       });
     }
 
-    // ── Required slot validation ───────────────────────────────────
-    // Head, body, and torso are mandatory for a valid character render.
-    // Head has a texture-level fallback (default head spritesheet).
-    // Body and torso produce hard validation errors via TypeBox.
+    // Required slot validation
     if (result.length > 0) {
       const presentSlots = new Set(result.map((r) => r.slot));
-
       for (const required of REQUIRED_LPC_SLOTS) {
         if (!presentSlots.has(required)) {
           if (required === 'head') {
@@ -449,6 +374,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
     return result;
   }
+
   // ── Animation setters ───────────────────────────────────────────────
 
   setAnimationState(state: LpcAnimationState): void {
@@ -518,10 +444,10 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     }
 
     const promise = (async () => {
-      const texture = await loadLpcSheet(assetId, state);
-      // Only cache successful textures — transient EMPTY must be retried on a
-      // later call (the renderer only permanently caches genuinely unmapped
-      // assets once the manifest is loaded).
+      if (!this._lpcRenderer) {
+        return Texture.EMPTY;
+      }
+      const texture = await this._lpcRenderer.loadSheet(assetId, state);
       if (texture !== Texture.EMPTY) {
         this._sheetTextureCache.set(cacheKey, texture);
       }
@@ -530,7 +456,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
     this._sheetTexturePromises.set(cacheKey, promise);
     void promise.finally(() => {
-      // Release the in-flight entry once settled so EMPTY results can retry.
       this._sheetTexturePromises.delete(cacheKey);
     });
     return promise;
@@ -557,19 +482,11 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           return;
         }
 
-        // Resolve texture slot and assetId from the recipe entry directly.
-        // This works for both activeLayers-derived recipes and injected
-        // recipes (e.g. body fallback) that don't map to an active layer.
-        // activeLayers is only used for per-layer palette settings below.
         const recipeSlot = recipe.slot;
         const recipeAssetId = recipe.assetId;
 
-        // Load webp spritesheet for the current animation state
         let texture = await this._loadSheetTexture(recipeSlot, recipeAssetId, currentState);
 
-        // Head fallback: if the configured head spritesheet fails to load,
-        // retry with the default human male head. The character still renders
-        // with the intended palette tint — only the spritesheet geometry changes.
         if (
           (!texture || texture === Texture.EMPTY) &&
           recipeSlot === 'head' &&
@@ -586,10 +503,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           return;
         }
 
-        // Extract frame from spritesheet (auto-detects standard 64px vs
-        // universal 128px cell layouts — e.g. bow walk sheets).
         const layout = detectLpcSheetLayout(texture);
-
         const col = currentFrame % layout.columns;
         const row = layout.rows > 1 ? currentDirection % layout.rows : 0;
         const x = col * layout.pitch;
@@ -599,7 +513,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
           return;
         }
 
-        const { Rectangle } = await import('./lpc_pixi_facade');
         const frameTexture = new Texture({
           source: texture.source,
           frame: new Rectangle(x, y, layout.pitch, layout.pitch),
@@ -608,23 +521,17 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         const anchor = getLpcSpriteAnchor(layout);
         const sprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
-        // Anchor at the 64px logical frame origin; universal 128px cells keep
-        // the same anchor after scaling so the weapon lands in the hand.
         sprite.x = anchor.x;
         sprite.y = anchor.y;
         sprite.scale.set(layout.scale, layout.scale);
         sprite.alpha = 1.0;
-        // Z-order: use the canonical LPC_LAYER_ORDER table (C-430).
-        // Replaces the previous array-index-based ordering.
         sprite.zIndex = resolveLayerDepth({
           slot: recipeSlot,
           layerRole: recipe.layerRole ?? 'front',
           direction: 2,
         });
-        // Store original index for stable sorting
         (sprite as unknown as Record<string, unknown>)._originalIndex = i;
 
-        // Apply palette tint: per-layer override takes priority, else global
         const effectiveColor =
           this.layerOverrides[i] && this.paletteColors[i] ? this.paletteColors[i] : this.globalTint;
         if (effectiveColor) {
@@ -640,15 +547,12 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       });
 
       await Promise.all(layerPromises);
-
       this._destroyAllSprites();
 
-      // Sort sprites by zIndex, using original index as tie-breaker for equal depths
       newSprites.sort((a, b) => {
         if (a.zIndex !== b.zIndex) {
           return a.zIndex - b.zIndex;
         }
-        // Equal depth: preserve original recipe order
         const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number;
         const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number;
         return aIdx - bIdx;
@@ -672,14 +576,9 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
       this.compositionFailed = false;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.error('lpcDebugger.composeFailed', { error: message });
-
-      // Graceful degradation: drop any partial composite and let the status
-      // banner + compositionFailed chip surface the failure. No loud magenta
-      // square covering the viewport.
+      this.error('lpcPreview.composeFailed', { error: message });
       this._destroyAllSprites();
       this.compositionFailed = true;
-
       this._setStatus(`Composition failed: ${message}`, 'error');
     }
   }
@@ -743,8 +642,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     gfx.stroke({ color: 0x4444ff, width: 1, alpha: 0.18 });
     gfx.eventMode = 'none';
 
-    // Nest the grid inside a container so it scales + positions
-    // with the same zoom/center as the character.
     const gridContainer = new Container();
     gridContainer.eventMode = 'none';
     gridContainer.scale.set(this.zoom, this.zoom);
@@ -758,158 +655,43 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     this._gridGraphics = gridContainer;
   }
 
-  // ── URL sync (state ↔ URL) ──────────────────────────────────────────
+  // ── State serialisation ─────────────────────────────────────────────
 
-  private _urlStateToActiveLayers(urlState: LpcUrlState): ActiveLayerConfig[] {
-    return urlState.layers.map((entry) => ({
-      slotDefIndex: entry.slotDefIndex,
-      variantIndex: entry.variantIndex,
-    }));
+  getStateParams(): URLSearchParams {
+    const state: LpcPreviewState = {
+      layers: this.activeLayers.map((layer) => ({
+        slotDefIndex: layer.slotDefIndex,
+        variantIndex: layer.variantIndex,
+      })),
+      paletteOverrides: new Map(),
+      state: this.animationState,
+      direction: this.facingDirection,
+      frame: this.animationFrame,
+      playing: this.isPlaying,
+      zoom: this.zoom,
+    };
+    return encodeLpcPreviewState(state);
   }
 
-  private _createDefaultLayers(): ActiveLayerConfig[] {
-    const bodyIdx = _getSlots().findIndex((s) => s.slot === 'body');
-    const torsoIdx = _getSlots().findIndex((s) => s.slot === 'torso');
-    const headIdx = _getSlots().findIndex((s) => s.slot === 'head');
-    const layers: ActiveLayerConfig[] = [];
-    if (bodyIdx >= 0) {
-      layers.push({ slotDefIndex: bodyIdx, variantIndex: 0 });
+  private _applyPreviewState(state: LpcPreviewState): void {
+    if (state.layers.length > 0) {
+      this.activeLayers = state.layers.map((entry) => ({
+        slotDefIndex: entry.slotDefIndex,
+        variantIndex: entry.variantIndex,
+      }));
     }
-    if (torsoIdx >= 0) {
-      layers.push({ slotDefIndex: torsoIdx, variantIndex: 0 });
-    }
-    if (headIdx >= 0) {
-      layers.push({ slotDefIndex: headIdx, variantIndex: 0 });
-    }
-    return layers.length > 0 ? layers : [{ slotDefIndex: 0, variantIndex: 0 }];
-  }
-
-  private _applyUrlParamsToState(): void {
-    this._isApplyingUrlState = true;
-
-    const currentParams = page.url.searchParams;
-    const urlState = searchParamsToLpcState(currentParams);
-
-    if (urlState.layers.length > 0) {
-      this.activeLayers = this._urlStateToActiveLayers(urlState);
-    } else {
-      this.activeLayers = this._createDefaultLayers();
-    }
-
-    this.animationState = urlState.state;
-    this._updateMaxFrame(urlState.state);
-    this.facingDirection = urlState.direction;
-    this.animationFrame = urlState.frame;
-    this.isPlaying = urlState.playing;
-    this.zoom = urlState.zoom;
-
-    this._isApplyingUrlState = false;
-  }
-
-  private _pushStateToUrl(): void {
-    if (this._isApplyingUrlState) {
-      return;
-    }
-
-    if (this._pushUrlTimer !== undefined) {
-      clearTimeout(this._pushUrlTimer);
-    }
-
-    this._pushUrlTimer = setTimeout(() => {
-      this._pushUrlTimer = undefined;
-
-      const urlState: LpcUrlState = {
-        layers: this.activeLayers.map((layer) => ({
-          slotDefIndex: layer.slotDefIndex,
-          variantIndex: layer.variantIndex,
-        })),
-        paletteOverrides: new Map(),
-        state: this.animationState,
-        direction: this.facingDirection,
-        frame: this.animationFrame,
-        playing: this.isPlaying,
-        zoom: this.zoom,
-      };
-
-      const params = lpcStateToSearchParams(urlState);
-      const newUrl = `${page.url.pathname}?${params.toString()}`;
-
-      this._isApplyingUrlState = true;
-      void routerService.goToHref(newUrl).finally(() => {
-        this._isApplyingUrlState = false;
-      });
-    }, 100);
-  }
-
-  private _exposeTestHooks(): void {
-    if (typeof window !== 'undefined') {
-      (window as unknown as Record<string, unknown>).__lpc_debug_active_recipes =
-        this.activeLayers.map((layer, i) => {
-          const slotDef = _getSlots()[layer.slotDefIndex];
-          const variant = slotDef?.variants[layer.variantIndex];
-          return {
-            index: i,
-            slot: slotDef?.slot ?? 'unknown',
-            assetId: variant?.assetId ?? '',
-            variantLabel: variant?.label ?? '',
-          };
-        });
-      (window as unknown as Record<string, unknown>).__lpc_active_instances =
-        this.batchManager.activeInstances;
-      (window as unknown as Record<string, unknown>).__lpc_structural_hashes =
-        this.batchManager.structuralHashesIssued;
-      (window as unknown as Record<string, unknown>).__lpc_lab_play_state = this.isPlaying;
-      (window as unknown as Record<string, unknown>).__lpc_lab_current_frame = this.animationFrame;
-      (window as unknown as Record<string, unknown>).__lpc_lab_active_slots = this.activeLayers.map(
-        (l) => {
-          const def = _getSlots()[l.slotDefIndex];
-          return def?.slot ?? 'unknown';
-        },
-      );
-      (window as unknown as Record<string, unknown>).__lpc_workbench_active_layers =
-        this.activeLayers.map((layer) => {
-          const slotDef = _getSlots()[layer.slotDefIndex];
-          const variant = slotDef?.variants[layer.variantIndex];
-          return {
-            slot: slotDef?.slot ?? 'unknown',
-            variant: variant?.label ?? '',
-            assetId: variant?.assetId ?? '',
-          };
-        });
-      (window as unknown as Record<string, unknown>).__lpc_workbench_mock_cache_size = 0;
-    }
+    this.animationState = state.state;
+    this._updateMaxFrame(state.state);
+    this.facingDirection = state.direction;
+    this.animationFrame = state.frame;
+    this.isPlaying = state.playing;
+    this.zoom = state.zoom;
   }
 
   // ── Initialize / Dispose ────────────────────────────────────────────
 
-  constructor(options: LpcViewModelOptions) {
-    super(options);
-
-    this.stageContainer = new Container();
-    this.stageContainer.label = 'lpc-character-stage';
-
-    // Provide Svelte context to child LpcCharacterRenderer component.
-    // Called in constructor so setContext runs during component init.
-    this.provideSvelteContext();
-  }
-
   override async initialize(): Promise<void> {
-    // Ensure the manifest-backed LPC URL resolver is wired and the manifest
-    // is loaded before any layer lookup (idempotent).
-    await wireLpcUrlResolver();
-
-    // The constructor's `allSlots` snapshot was almost certainly taken before
-    // the catalog fetch above resolved (assetStore.seed was still null) —
-    // refresh it now that loading is guaranteed complete, so the Slot/Isolate
-    // dropdowns actually have options.
-    this.allSlots = _getSlots();
-
-    // Register $effect blocks via registerEffectRoot.
-    // PixiJS init is deferred to a reactive $effect that fires when
-    // canvasElement becomes available (after bind:this propagates).
-    // We do NOT react to page.url.searchParams anymore to prevent infinite
-    // loops where the URL state fights the local ticker state.
-    // Instead, we only push our state to the URL.
+    this._lpcRenderer = createLpcRenderer({ resolver: this._resolver });
 
     this.registerEffectRoot(() => {
       $effect(() => {
@@ -917,6 +699,7 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         void this.zoom;
         this._updateGridOverlay();
       });
+
       $effect(() => {
         void this.activeLayers.map((l) => `${l.slotDefIndex}:${l.variantIndex}`).join(',');
         void this.animationState;
@@ -925,25 +708,21 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         void this.isPlaying;
         void this.zoom;
 
-        if (this.pixiApp && !this._isApplyingUrlState) {
-          this._pushStateToUrl();
+        if (this.pixiApp) {
+          const state = this._buildPreviewState();
+          this._onStateChange?.(state);
         }
       });
+
       $effect(() => {
         void this.recipes;
         void this.animationFrame;
         void this.zoom;
         void this.animationState;
         void this.facingDirection;
-
         this._renderCharacter();
       });
-      $effect(() => {
-        this._exposeTestHooks();
-      });
 
-      // PixiJS init — fires reactively when canvasElement becomes available.
-      // This avoids the timing race between bind:this propagation and onMount.
       $effect(() => {
         if (this.canvasElement && !this.pixiApp) {
           void this._initPixiApp();
@@ -954,13 +733,21 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
     return await super.initialize();
   }
 
-  /**
-   * Creates the PixiJS application and attaches it to the canvas.
-   *
-   * Called reactively by a $effect when canvasElement becomes available.
-   * Registers WebGL context loss listeners, per-frame telemetry ticker,
-   * and playback ticker logic.
-   */
+  private _buildPreviewState(): LpcPreviewState {
+    return {
+      layers: this.activeLayers.map((layer) => ({
+        slotDefIndex: layer.slotDefIndex,
+        variantIndex: layer.variantIndex,
+      })),
+      paletteOverrides: new Map(),
+      state: this.animationState,
+      direction: this.facingDirection,
+      frame: this.animationFrame,
+      playing: this.isPlaying,
+      zoom: this.zoom,
+    };
+  }
+
   private async _initPixiApp(): Promise<void> {
     if (!this.canvasElement) {
       return;
@@ -979,10 +766,10 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
 
       const canvas = this.pixiApp.renderer.canvas as HTMLCanvasElement;
       canvas.addEventListener('webglcontextlost', (event: Event) => {
-        this.error('lpcViewModel.webglContextLost', { event: String(event) });
+        this.error('lpcPreview.webglContextLost', { event: String(event) });
       });
       canvas.addEventListener('webglcontextrestored', () => {
-        this.warn('lpcViewModel.webglContextRestored');
+        this.warn('lpcPreview.webglContextRestored');
       });
 
       const app = result.app;
@@ -990,11 +777,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         const delta = app.ticker.deltaMS;
         this.fps = result.debug.fps;
         this.frameDurationMs = result.debug.frameDurationMs;
-        this.totalFrames = result.debug.totalFrames;
-        this.structuralHashes = this.batchManager.structuralHashesIssued;
-        this.batchUpdates = this.batchManager.batchUpdatesPerformed;
-        this.activeInstances = this.batchManager.activeInstances;
-        this.tickerFrame += 1;
 
         if (this.isPlaying) {
           const frameInterval = 1000 / this.playbackFps;
@@ -1007,23 +789,20 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
         }
       });
 
-      this._applyUrlParamsToState();
-      this._setStatus('LPC debugger initialized.', 'info');
+      this._setStatus('LPC preview initialized.', 'info');
 
-      // Signal to Playwright visual tests that PixiJS is ready
       if (typeof window !== 'undefined') {
         (window as unknown as Record<string, unknown>).__PIXI_LOADED__ = true;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.error('lpcViewModel.initFailed', { error: message });
+      this.error('lpcPreview.initFailed', { error: message });
       this._setStatus(`Initialization failed: ${message}`, 'error');
     }
   }
 
   override async dispose(): Promise<void> {
     this._destroyAllSprites();
-
     this._sheetTextureCache.clear();
     this._sheetTexturePromises.clear();
 
@@ -1041,5 +820,6 @@ class LpcViewModel extends BaseViewModel<LpcViewModelOptions> implements LpcView
   }
 }
 
-export const getLpcViewModel = (options: LpcViewModelOptions): LpcViewModelInterface =>
-  new LpcViewModel(options);
+export const getLpcPreviewViewModel = (
+  options: LpcPreviewViewModelOptions,
+): LpcPreviewViewModelInterface => LpcPreviewViewModel.create(options);

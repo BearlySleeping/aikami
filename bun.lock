@@ -346,6 +346,27 @@
         "@huggingface/transformers": "^4.2.0",
       },
     },
+    "packages/frontend/preview": {
+      "name": "@aikami/frontend/preview",
+      "version": "0.0.1",
+      "dependencies": {
+        "@aikami/constants": "workspace:*",
+        "@aikami/frontend-services": "workspace:*",
+        "@aikami/frontend/engine": "workspace:*",
+        "@aikami/lpc": "workspace:*",
+        "@aikami/schemas": "workspace:*",
+        "@aikami/types": "workspace:*",
+        "@aikami/utils": "workspace:*",
+        "pixi.js": "8.20.0",
+      },
+      "devDependencies": {
+        "svelte": "5.56.10",
+        "vite": "8.2.2",
+      },
+      "peerDependencies": {
+        "svelte": "^5.0.0",
+      },
+    },
     "packages/frontend/services": {
       "name": "@aikami/frontend-services",
       "dependencies": {
@@ -522,6 +543,8 @@
     "@aikami/frontend/configs": ["@aikami/frontend/configs@workspace:packages/frontend/configs"],
 
     "@aikami/frontend/engine": ["@aikami/frontend/engine@workspace:packages/frontend/engine"],
+
+    "@aikami/frontend/preview": ["@aikami/frontend/preview@workspace:packages/frontend/preview"],
 
     "@aikami/frontend/theme": ["@aikami/frontend/theme@workspace:packages/frontend/theme"],
 

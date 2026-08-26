@@ -1,17 +1,28 @@
 <script lang="ts">
-// apps/frontend/client/src/routes/(dev)/dev/lpc-walk/+page.svelte
-//
-// Dev sandbox — isolated LPC walk animation tester.
-// WASD-driven character movement with live animation debug overlay.
-// Designed to diagnose the "gliding" bug where walk animation
-// freezes while the character moves.
+  // apps/frontend/client/src/routes/(dev)/dev/lpc-walk/+page.svelte
+  //
+  // Dev route — wraps the shared WalkSandbox component.
+  // Supplies the registry resolver for asset resolution.
 
-import LpcWalkTestView from '$views/dev/lpc_walk/lpc_walk_test_view.svelte';
-import { getLpcWalkTestViewModel } from '$views/dev/lpc_walk/lpc_walk_test_view_model.svelte';
+  import { onMount } from 'svelte';
+  import { WalkSandbox } from '@aikami/frontend/preview/sandbox';
 
-const viewModel = getLpcWalkTestViewModel({
-  className: 'LpcWalkTestViewModel',
-});
+  let resolver: import('@aikami/types').AssetResolver | undefined = $state(undefined);
+
+  onMount(async () => {
+    const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
+    resolver = createRegistryAssetResolver();
+  });
 </script>
 
-<LpcWalkTestView {viewModel} />
+<svelte:head>
+  <title>LPC Walk Sandbox</title>
+</svelte:head>
+
+{#if resolver}
+  <WalkSandbox {resolver} />
+{:else}
+  <div class="flex items-center justify-center h-64 text-base-content/40">
+    Loading walk sandbox...
+  </div>
+{/if}

@@ -899,6 +899,59 @@ mock.module('@aikami/frontend/storage', () => ({
   __esModule: true,
 }));
 
+// ── @aikami/frontend/preview mock ────────────────────────────────────────
+// The preview package depends on @aikami/frontend/engine and pixi.js which
+// cannot be resolved in bun test. Only createLpcRenderer (which depends on
+// pixi.js) is stubbed; pure helpers are re-exported from their real implementations
+// via direct module imports to avoid pixi.js dependency.
+
+import {
+  getLpcIconCellPitch,
+  getLpcGrid,
+  getLpcIconBackgroundSize,
+  getLpcIconBackgroundPosition,
+  pickHeroCell,
+} from '../../../../../packages/frontend/preview/src/lib/lpc/lpc_icon_frame.ts';
+import {
+  encodeLpcPreviewState,
+  decodeLpcPreviewState,
+  createDefaultLpcPreviewState,
+} from '../../../../../packages/frontend/preview/src/lib/lpc/preview_url_state.ts';
+
+mock.module('@aikami/frontend/preview', () => ({
+  createLpcRenderer: mock(() => ({
+    loadSheet: mock(async () => ({})),
+    extractFrame: mock(() => null),
+    getFrameTexture: mock(async () => null),
+    createSprite: mock(async () => null),
+    clearCaches: mock(() => {}),
+    resolver: { resolve: mock(() => null) },
+  })),
+  detectLpcSheetLayout: mock((sheet: { width: number; height: number }) => {
+    const pitch = sheet.width >= 1000 ? 128 : 64;
+    return {
+      pitch,
+      columns: Math.floor(sheet.width / pitch),
+      rows: Math.floor(sheet.height / pitch),
+      scale: 1,
+      anchorOffset: pitch === 128 ? { x: -64, y: -64 } : { x: -32, y: -32 },
+    };
+  }),
+  getLpcSpriteAnchor: mock((layout: { anchorOffset: { x: number; y: number } }) => ({
+    x: layout.anchorOffset.x,
+    y: layout.anchorOffset.y,
+  })),
+  getLpcIconCellPitch,
+  getLpcGrid,
+  getLpcIconBackgroundSize,
+  getLpcIconBackgroundPosition,
+  pickHeroCell,
+  encodeLpcPreviewState,
+  decodeLpcPreviewState,
+  createDefaultLpcPreviewState,
+  __esModule: true,
+}));
+
 // ── Browser localStorage polyfill (Bun test env lacks it) ──
 
 const _localStore = new Map<string, string>();

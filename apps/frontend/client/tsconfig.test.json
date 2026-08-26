@@ -36,6 +36,11 @@
         "../../../packages/frontend/utils/src/lib/*",
         "../../../packages/frontend/utils/src/*"
       ],
+      "@aikami/frontend/preview": ["../../../packages/frontend/preview/src/index.ts"],
+      "@aikami/frontend/preview/*": [
+        "../../../packages/frontend/preview/src/lib/*",
+        "../../../packages/frontend/preview/src/*"
+      ],
       "@aikami/frontend/storage": ["../../../packages/frontend/storage/src/index.ts"],
       "@aikami/frontend/storage/*": [
         "../../../packages/frontend/storage/src/lib/*",

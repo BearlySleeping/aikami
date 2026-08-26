@@ -87,6 +87,7 @@
     "onnxruntime-web": "1.29.0",
     "pixi.js": "8.20.0",
     "png-chunks-extract": "1.0.0",
-    "text-encoding": "0.7.0"
+    "text-encoding": "0.7.0",
+    "@aikami/frontend/preview": "workspace:*"
   }
 }

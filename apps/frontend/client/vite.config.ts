@@ -199,6 +199,9 @@ export default defineConfig(({ mode }) => {
         '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
         '@aikami/frontend/engine/*': toPackagesPath('frontend/engine/src/*'),
 
+        '@aikami/frontend/preview': toPackagesPath('frontend/preview/src'),
+        '@aikami/frontend/preview/*': toPackagesPath('frontend/preview/src/*'),
+
         '@aikami/frontend/test': toPackagesPath('frontend/test/src'),
         '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
         '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),

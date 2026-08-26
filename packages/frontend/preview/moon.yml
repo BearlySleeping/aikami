@@ -1,0 +1,22 @@
+# packages/frontend/preview/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'preview'
+  - 'shared'
+  - 'library'
+
+project:
+  name: 'frontend-preview'
+  description: 'Shared asset preview components for Aikami — LPC, tileset, prop, map, and walk sandbox.'
+  channel: '#frontend'
+  owner: 'Frontend Team'
+
+tasks:
+  test:
+    command: 'bun test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
