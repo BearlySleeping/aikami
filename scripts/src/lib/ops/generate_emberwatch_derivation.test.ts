@@ -25,7 +25,7 @@ import {
 const REPO_ROOT = join(import.meta.dir, '../../../..');
 const MANIFEST_PATH = join(
   REPO_ROOT,
-  'apps/frontend/client/static/content-packs/emberwatch/manifest.json',
+  'content/packs/emberwatch/manifest.json',
 );
 
 /** Reads the committed emberwatch manifest tiles. */

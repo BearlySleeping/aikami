@@ -119,7 +119,7 @@ const _boundUniformGroup = (chunk: TilemapChunk): import('pixi.js').UniformGroup
 
 const VILLAGE_MAP_PATH = join(
   import.meta.dir,
-  '../../../../../apps/frontend/client/static/content-packs/emberwatch/maps/village.json',
+  '../../../../../content/packs/emberwatch/maps/village.json',
 );
 
 const _loadVillageTilemap = async (): Promise<Awaited<ReturnType<typeof loadTilemap>>> => {

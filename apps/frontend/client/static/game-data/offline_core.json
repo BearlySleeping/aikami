@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "tags": [
+    "index",
+    "emberwatch:manifest",
+    "emberwatch:maps:inn",
+    "emberwatch:maps:merchant_shop",
+    "emberwatch:maps:village"
+  ],
+  "rationale": {
+    "index": "Pack index — lists available content packs; fetched first before any pack-specific prefetch",
+    "emberwatch:manifest": "Emberwatch pack manifest (25 KB) — campaign definition, maps, NPCs, items, quests, dialogues",
+    "emberwatch:maps:inn": "The Guttering Candle Inn map — Rollo encounter, quest progression",
+    "emberwatch:maps:merchant_shop": "Mara's Provisions merchant shop map",
+    "emberwatch:maps:village": "Emberwatch Village starting map — player spawn, first interactions"
+  }
+}

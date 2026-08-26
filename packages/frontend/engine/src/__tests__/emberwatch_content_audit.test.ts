@@ -2,7 +2,7 @@
 //
 // C-375 AC-4 + AC-5 + C-376 AC-6 — per-pack static content integrity audit.
 //
-// Walks every pack under `static/content-packs/*` and validates
+// Walks every pack under `content/packs/*` and validates
 // manifest ↔ atlas ↔ maps consistency generically:
 //   - every map spawn `frame` exists in the pack's atlas
 //   - every manifest `tiles[x].frame` / `props[y].frame` exists + fallbackTile exists
@@ -26,7 +26,7 @@ import { buildCollisionGrid, type TilemapData } from '../assets/map_loader.ts';
 
 const CONTENT_PACKS_ROOT = join(
   import.meta.dir,
-  '../../../../../apps/frontend/client/static/content-packs',
+  '../../../../../content/packs',
 );
 
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf-8')) as T;
@@ -174,7 +174,7 @@ const terrainMaskFrameNames = (terrain: { name?: string; frameBase?: string }): 
   return names;
 };
 
-/** Discovers every pack directory under static/content-packs/*. */
+/** Discovers every pack directory under content/packs/*. */
 const listPackDirs = (): string[] => {
   const entries = readdirSync(CONTENT_PACKS_ROOT, { withFileTypes: true });
   return entries
