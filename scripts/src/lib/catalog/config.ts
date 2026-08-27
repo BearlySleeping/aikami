@@ -41,8 +41,19 @@ export const ROOT_INDEX_KEY = `${INDEX_KEY_PREFIX}catalog.json`;
 /** One-year immutable cache for asset bytes. */
 export const ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
+/** Short cache for seed/metadata JSON files (mutable, refreshed on publish). */
+export const SEED_CACHE_CONTROL = 'public, max-age=300';
+
 /** Short cache for the index (AC-3: 60s or less). */
 export const INDEX_CACHE_CONTROL = 'public, max-age=60';
+
+/**
+ * Seed/metadata object key prefix (mutable, short cache).
+ * Published alongside content-addressed assets so the client can fetch the
+ * compact boot seed, offline-core declaration, credits, and audio metadata
+ * from the same origin (C-435 follow-up).
+ */
+export const SEED_KEY_PREFIX = 'seed/';
 
 // ---------------------------------------------------------------------------
 // MIME types — the existing maps in @aikami/constants are the source of truth
@@ -142,7 +153,7 @@ export const REPO_ROOT = resolve(import.meta.dirname, '../../../../');
 export const GAME_DATA_DIR = resolve(REPO_ROOT, 'apps/frontend/client/static/game-data');
 
 /** Content-packs directory (C-433: outside the game-data tree). */
-export const CONTENT_PACKS_DIR = resolve(REPO_ROOT, 'apps/frontend/client/static/content-packs');
+export const CONTENT_PACKS_DIR = resolve(REPO_ROOT, 'content/packs');
 
 /**
  * All scan roots the publish pipeline reads from.

@@ -6,7 +6,7 @@
 //
 // Contract: C-243
 
-import { MAX_TAG_LIST_LENGTH } from '@aikami/constants';
+import { MAX_TAG_LIST_LENGTH, tagToAssetPath } from '@aikami/constants';
 import type { AssetManifest, AssetTreeNode } from '@aikami/types';
 
 // ---------------------------------------------------------------------------
@@ -34,11 +34,16 @@ export const pathToTag = (relPath: string): string => {
 /**
  * Resolves a manifest tag back to a file path, given the original extension.
  *
+ * Delegates to {@link tagToAssetPath}, which is the exact inverse of the
+ * `pathToTag(splitStateSegments(...))` pipeline used to build the tag. A plain
+ * `:` → `/` swap is NOT that inverse: for categories with `stateExtensions`
+ * (LPC) the trailing state token is a filename suffix, not a directory.
+ *
  * @param tag - Manifest tag (e.g. "sprites:generic-fantasy:elf-male")
  * @param ext  - File extension including dot (e.g. ".png")
  * @returns The relative file path (e.g. "sprites/generic-fantasy/elf-male.png")
  */
-export const tagToPath = (tag: string, ext: string): string => `${tag.replace(/:/g, '/')}${ext}`;
+export const tagToPath = (tag: string, ext: string): string => tagToAssetPath({ tag, ext });
 
 // ---------------------------------------------------------------------------
 // sanitizeAssetFilename — clean user-provided filenames

@@ -1,15 +1,17 @@
 <script lang="ts">
-import type { LpcBatchManager, LpcLayerRecipe, TextureManager } from '@aikami/frontend/engine';
 // apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte
 //
 // C-168: LPC character sprite component with async Spritesheet-based
 // texture loading. Shows an invisible placeholder while textures load
 // via Assets.load() + Spritesheet.parse(), then swaps in the correctly
 // cropped frame once the GPU texture is ready.
+
+import type { LpcBatchManager, TextureManager } from '@aikami/frontend/engine/render';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
+import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 // biome-ignore lint/correctness/noUnusedImports: Spritesheet type used in Svelte template
 import { Assets, Sprite, type Spritesheet, Texture } from 'pixi.js';
 import { getContext, onDestroy } from 'svelte';
-import type { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
 import { LPC_BATCH_MANAGER_KEY, LPC_STAGE_CONTAINER_KEY } from './lpc_context_keys.ts';
 
 type Props = {

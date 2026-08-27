@@ -1,0 +1,38 @@
+{
+  "name": "@aikami/frontend/preview",
+  "license": "MIT",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./sandbox": "./src/sandbox.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "scripts": {
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test",
+    "fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@aikami/frontend/engine": "workspace:*",
+    "@aikami/frontend-services": "workspace:*",
+    "@aikami/constants": "workspace:*",
+    "@aikami/lpc": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@aikami/utils": "workspace:*",
+    "pixi.js": "8.20.0"
+  },
+  "devDependencies": {
+    "svelte": "5.56.10",
+    "vite": "8.2.2"
+  }
+}

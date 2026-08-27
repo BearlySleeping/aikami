@@ -11,7 +11,7 @@
 // character render (see game_world equipmentRecipeProvider).
 
 import { EQUIPMENT_SLOT_ORDER } from '@aikami/constants';
-import type { GameCommand, LpcLayerRecipe } from '@aikami/frontend/engine';
+import type { GameCommand, LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

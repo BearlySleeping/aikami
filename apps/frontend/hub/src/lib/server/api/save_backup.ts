@@ -15,7 +15,7 @@
 // Worker-native equivalent of a presigned URL: the object is never public or
 // guessable, and every request is authenticated.
 
-import { d1 } from '@aikami/backend-database';
+import { accountBackups } from '@aikami/backend-database';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { getBetterAuth } from './better_auth.ts';
@@ -126,11 +126,11 @@ export const handleCreateBackup = async (
   }
 
   // Storage-quota guard: cap the number of backups per account.
-  const db = drizzle(env.DB, { schema: d1 });
+  const db = drizzle(env.DB, { schema: { accountBackups } });
   const existing = await db
-    .select({ id: d1.accountBackups.id })
-    .from(d1.accountBackups)
-    .where(eq(d1.accountBackups.accountId, accountId));
+    .select({ id: accountBackups.id })
+    .from(accountBackups)
+    .where(eq(accountBackups.accountId, accountId));
   if (existing.length >= MAX_BACKUPS_PER_ACCOUNT) {
     return new Response(JSON.stringify({ error: 'quota_exceeded' }), {
       status: 429,
@@ -151,7 +151,7 @@ export const handleCreateBackup = async (
   const checksumSha256 = await sha256Hex(bytes);
   try {
     const row = await db
-      .insert(d1.accountBackups)
+      .insert(accountBackups)
       .values({
         id: backupId,
         accountId,
@@ -188,12 +188,12 @@ export const handleListBackups = async (
     return unauthorized();
   }
 
-  const db = drizzle(env.DB, { schema: d1 });
+  const db = drizzle(env.DB, { schema: { accountBackups } });
   const rows = await db
     .select()
-    .from(d1.accountBackups)
-    .where(eq(d1.accountBackups.accountId, accountId))
-    .orderBy(d1.accountBackups.createdAt);
+    .from(accountBackups)
+    .where(eq(accountBackups.accountId, accountId))
+    .orderBy(accountBackups.createdAt);
 
   return new Response(
     JSON.stringify(
@@ -225,8 +225,8 @@ export const handleGetBackup = async (
     return unauthorized();
   }
 
-  const db = drizzle(env.DB, { schema: d1 });
-  const rows = await db.select().from(d1.accountBackups).where(eq(d1.accountBackups.id, backupId));
+  const db = drizzle(env.DB, { schema: { accountBackups } });
+  const rows = await db.select().from(accountBackups).where(eq(accountBackups.id, backupId));
 
   const row = rows[0];
   if (!row || row.accountId !== accountId) {

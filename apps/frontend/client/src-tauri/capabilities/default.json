@@ -7,6 +7,11 @@
     "core:default",
     "opener:default",
     "fs:default",
+    "fs:allow-exists",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-remove",
+    "fs:allow-mkdir",
     "dialog:default",
     "http:default",
     "log:default",
@@ -19,12 +24,17 @@
         { "url": "http://localhost:11434/**" },
         { "url": "http://localhost:8188/**" },
         { "url": "http://localhost:8089/**" },
-        { "url": "http://localhost:6006/**" }
+        { "url": "http://localhost:6006/**" },
+        { "url": "http://localhost:5276/**" },
+        { "url": "http://localhost:5278/**" },
+        { "url": "https://hub.bearlysleeping.com/**" },
+        { "url": "https://hub.stg.bearlysleeping.com/**" },
+        { "url": "https://assets.bearlysleeping.com/**" }
       ]
     },
     {
       "identifier": "fs:allow-mkdir",
-      "allow": [{ "path": "$APPDATA/aikami-assets/**" }]
+      "allow": [{ "path": "$APPDATA/aikami-assets" }, { "path": "$APPDATA/aikami-assets/**" }]
     },
     {
       "identifier": "fs:allow-write-file",
@@ -35,16 +45,28 @@
       "allow": [{ "path": "$APPDATA/aikami-assets/**" }]
     },
     {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "$APPDATA/session.json" }]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "$APPDATA/session.json" }]
+    },
+    {
       "identifier": "fs:allow-read-dir",
-      "allow": [{ "path": "$APPDATA/aikami-assets/**" }]
+      "allow": [{ "path": "$APPDATA/aikami-assets" }, { "path": "$APPDATA/aikami-assets/**" }]
     },
     {
       "identifier": "fs:allow-exists",
-      "allow": [{ "path": "$APPDATA/aikami-assets/**" }]
+      "allow": [
+        { "path": "$APPDATA/aikami-assets" },
+        { "path": "$APPDATA/aikami-assets/**" },
+        { "path": "$APPDATA/session.json" }
+      ]
     },
     {
       "identifier": "fs:allow-remove",
-      "allow": [{ "path": "$APPDATA/aikami-assets/**" }]
+      "allow": [{ "path": "$APPDATA/aikami-assets/**" }, { "path": "$APPDATA/session.json" }]
     }
   ]
 }

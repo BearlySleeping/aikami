@@ -1448,7 +1448,7 @@ export class CombatViewModel
         return;
       }
 
-      const url = resolveAudioTrackUrl(selected);
+      const url = await resolveAudioTrackUrl(selected);
 
       this.debug('_transitionBgmByMood: crossfading', {
         mood,

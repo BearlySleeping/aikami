@@ -322,7 +322,7 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
   },
   /**
    * Server-data-plane migrations (C-394 AC-5). Not a service — this app
-   * runs `applyMigrations` against NEON_DATABASE_URL_DIRECT (the DIRECT,
+   * runs `wrangler d1 migrations apply` against the D1 database (C-436).
    * unpooled endpoint — DDL under PgBouncer transaction pooling breaks).
    *
    * The AppConfig hosting fields (shortName, imageName, customDomains …)

@@ -1,7 +1,7 @@
 // packages/shared/schemas/src/lib/game/pack_index.ts
 //
 // Content pack registry index — validates the pre-authored index.json that
-// lists all installed content packs at static/content-packs/.
+// lists all installed content packs at content/packs/.
 // Contract: C-345 Add a Campaign/Content-Pack Browser and a Second Adventure
 
 import Type, { type Static } from 'typebox';

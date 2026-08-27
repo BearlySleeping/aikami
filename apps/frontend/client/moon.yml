@@ -26,6 +26,7 @@ dependsOn:
   - 'mocks'
   - 'utils'
   - 'frontend-local-runtime'
+  - 'frontend-preview'
 
 fileGroups:
   sources:
@@ -56,6 +57,12 @@ tasks:
     inputs:
       - '@group(sources)'
       - '@group(configs)'
+      # Build-step scripts: the runner, the dev-route gate and the post-build
+      # chunk-cycle guard all run as part of `bun run build`, so they are
+      # build inputs.
+      - 'scripts/build_client.ts'
+      - 'scripts/gate_dev_routes.ts'
+      - 'scripts/check_bundle.ts'
       # 🔴 Load-bearing. Vite bundles these workspace packages FROM SOURCE via
       # TS path aliases — the emitted bundle contains their code, so their
       # files are real build inputs. They were previously absent from the hash,
@@ -103,7 +110,7 @@ tasks:
     command: 'bun run tauri:dev'
     preset: 'server'
   tauri-build:
-    command: 'bun run tauri:build'
+    command: 'bun run build:tauri'
     options:
       cache: false
       # Excluded from default CI graph: compiles Rust + full desktop bundle,

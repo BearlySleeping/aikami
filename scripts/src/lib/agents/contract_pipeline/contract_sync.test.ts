@@ -169,8 +169,38 @@ describe('isolateContractInWorktree', () => {
 
   it('seeds the worktree with the root contract content', () => {
     writeFileSync(contractPath, `${CONTRACT_BODY}\n| **Status** | approved |\n`);
+    commitContractToMain({ repoRoot: root, contractPath, message: 'docs: approve' });
     isolateContractInWorktree({ repoRoot: root, worktreePath: worktree, contractPath });
     expect(readFileSync(join(worktree, CONTRACT_REL), 'utf-8')).toContain('approved');
+  });
+
+  it('seeds from `main`, not from a stale on-disk mirror — the C-443 regression', () => {
+    // 🔴 C-443 (2026-08-26): the critique stage committed `approved` straight
+    // to `main`, repoRoot's on-disk working copy fell out of sync with it
+    // (the courtesy refresh — see `refreshWorkingCopyIfSafe` — is
+    // best-effort and was not enough in that run), and the implementer's
+    // very next stage isolated a worktree copy read off that stale disk
+    // file — blocking, reporting `draft`, on a contract that was by then
+    // provably `approved` on `main`. Reproduce the desync directly, however
+    // it happens: commit `approved` properly (ref + disk both agree), then
+    // desync ONLY the disk copy back to `draft` without touching the ref —
+    // the exact shape of the gap, regardless of its original cause.
+    writeFileSync(contractPath, `${CONTRACT_BODY}\n| **Status** | approved |\n`);
+    commitContractToMain({ repoRoot: root, contractPath, message: 'docs: approve' });
+    writeFileSync(contractPath, `${CONTRACT_BODY}\n| **Status** | draft |\n`);
+    expect(readFileSync(contractPath, 'utf-8')).toContain('status: draft');
+
+    isolateContractInWorktree({ repoRoot: root, worktreePath: worktree, contractPath });
+    expect(readFileSync(join(worktree, CONTRACT_REL), 'utf-8')).toContain('approved');
+  });
+
+  it('falls back to disk for a contract not yet committed to main', () => {
+    const freshPath = join(root, 'docs/contracts/C-998-fresh.md');
+    writeFileSync(freshPath, 'brand new, uncommitted\n');
+    isolateContractInWorktree({ repoRoot: root, worktreePath: worktree, contractPath: freshPath });
+    expect(readFileSync(join(worktree, 'docs/contracts/C-998-fresh.md'), 'utf-8')).toBe(
+      'brand new, uncommitted\n',
+    );
   });
 
   it('no-ops without a worktree', () => {

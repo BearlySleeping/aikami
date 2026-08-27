@@ -57,7 +57,7 @@ const ZONE_TERMS = [Position, Transition];
 
 const parseMap = async (name: string): Promise<TilemapData> => {
   clearMapCache();
-  const rel = `apps/frontend/client/static/content-packs/emberwatch/maps/${name}.json`;
+  const rel = `content/packs/emberwatch/maps/${name}.json`;
   const candidates = [
     resolve(process.cwd(), rel),
     resolve(import.meta.dir, `../../../../../${rel}`),

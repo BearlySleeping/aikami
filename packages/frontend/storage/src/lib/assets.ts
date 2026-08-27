@@ -3,17 +3,16 @@
 // C-373: AssetRegistryRepository — Turso-backed asset registry over the
 // shared LocalDatabaseInterface. Owns the `assets`, `asset_sources`, and
 // `install_state` tables (created by schema migration v1, C-384) and
-// provides batched, idempotent seeding from the bootstrap manifest + hash
-// sidecar.
+// provides batched, idempotent seeding from the compact boot seed (C-435).
 //
 // The registry is metadata-only: raw binaries never touch SQLite rows.
 // Cache backends (OPFS / Tauri FS) are managed by the client AssetManager.
 
+import { OFFLINE_CORE_PACK_ID, r2AssetUrl } from '@aikami/constants';
 import type {
-  AssetHashesFile,
-  AssetManifest,
   AssetRecord,
   AssetSeedDocument,
+  AssetSeedRow,
   AssetSource,
   InstallStateRecord,
 } from '@aikami/types';
@@ -24,31 +23,39 @@ import type { LocalDatabaseInterface, QueryResultRow } from './storage_adapter.t
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Meta key recording the manifest `scannedAt` the registry was last seeded with. */
+/** Meta key recording the seed fingerprint the registry was last seeded with. */
 export const ASSET_REGISTRY_SEEDED_KEY = 'asset_registry_seeded';
+
+/**
+ * Bumped whenever the *derivation* of `asset_sources` changes, independently of
+ * the seed document's own `generatedAt`. A client shipping a source-derivation
+ * fix must re-derive rows even against a seed it has already ingested, so the
+ * idempotency guard is keyed on both.
+ *
+ * r3: forces one re-seed pass on every existing install to overwrite any
+ * `r2`-labeled source row that still points at the legacy Firebase Storage
+ * origin (pre-R2-migration deploys wrote those under the same backend name,
+ * so the normal upsert alone won't touch a tag no longer present in the
+ * current seed — {@link AssetRegistryRepository._pruneStaleSources} catches
+ * those).
+ */
+const SEED_DERIVATION_REVISION = 3;
+
+/** Idempotency fingerprint for a seed document under the current derivation. */
+const seedFingerprint = (generatedAt: string): string =>
+  `${generatedAt}#r${SEED_DERIVATION_REVISION}`;
 
 /** Rows per seeding transaction — large single transactions stall WASM SQLite. */
 export const SEED_CHUNK_SIZE = 500;
 
-/** Backend identifier for the bundled static manifest source. */
+/** Backend identifier for assets that ship inside the client. */
 export const BUNDLED_SOURCE_BACKEND = 'bundled' as const;
-
-/** Base URL prefix for bundled asset files served from static/game-data. */
-const BUNDLED_ASSET_BASE = '/game-data';
-
-/**
- * R2 object key for an asset, matching the C-395 published layout.
- * `hash` is the sha256 already stored on the assets row; `ext` includes
- * the leading dot and is taken from the bundled source URL.
- */
-const r2ObjectKey = (options: { hash: string; ext: string }): string =>
-  `assets/${options.hash.slice(0, 2)}/${options.hash}${options.ext}`;
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** Outcome counters from a single {@link AssetRegistryRepository.seedFromManifest} run. */
+/** Outcome counters from a single {@link AssetRegistryRepository.seedFromCompactSeed} run. */
 export type AssetSeedStats = {
   /** New asset rows inserted. */
   seeded: number;
@@ -56,7 +63,7 @@ export type AssetSeedStats = {
   updated: number;
   /** Existing rows already current — no write needed. */
   unchanged: number;
-  /** Manifest tags skipped because the sidecar has no hash entry for them. */
+  /** Seed rows skipped as unusable. Always 0 for the compact seed. */
   skipped: number;
   /** Assets whose authoritative hash advanced — cache invalidation candidates. */
   hashChanges: readonly { id: string; oldHash: string; newHash: string }[];
@@ -68,9 +75,9 @@ export type AssetSeedStats = {
 
 /**
  * Local registry of asset metadata + install state, persisted in the shared
- * Turso/libSQL database. Seeded idempotently from `manifest.json` and the
- * `asset_hashes.json` sidecar; queried by the client AssetManager to resolve
- * asset binaries through the local cache before falling back to network.
+ * Turso/libSQL database. Seeded idempotently from the compact boot seed
+ * (`asset_seed.json`); queried by the client AssetManager to resolve asset
+ * binaries through the local cache before falling back to network.
  *
  * Plain class (no BaseClass dependency in this package) — instantiate with
  * {@link createAssetRegistryRepository} or `new AssetRegistryRepository(db)`.
@@ -163,75 +170,6 @@ export class AssetRegistryRepository {
       args: [assetId],
     });
     return result.rows.map(_rowToAssetSource);
-  }
-
-  /**
-   * Adds (or repairs) an `r2` fallback download origin for every seeded
-   * asset (C-373 `asset_sources`): the content-addressed R2 public download
-   * URL derived from the asset's SHA-256 hash (C-395 layout:
-   * `assets/<hash[0:2]>/<hash>.<ext>`). Idempotent — `INSERT OR REPLACE` on
-   * the (asset_id, backend) primary key.
-   *
-   * The AssetManager tries sources by priority: bundled (0) first, then the
-   * R2 mirror (1) when the bundled path is unavailable. Assets are published
-   * to the bucket under content-addressed keys — see C-395 for the publish
-   * pipeline.
-   *
-   * Assets without a hash in the registry are skipped (never fabricate a
-   * URL). Existing `r2` rows with stale (path-mirrored) URLs are rewritten
-   * to the correct content-addressed URL on every boot.
-   *
-   * @param r2BaseUrl - R2 public base URL, e.g. `https://assets.bearlysleeping.com`.
-   * @returns The number of source rows written.
-   */
-  async addR2Sources(r2BaseUrl: string, priority: number = 1): Promise<number> {
-    // Select every seeded asset with its hash and bundled URL.
-    // Assets without a hash are skipped — never fabricate a URL.
-    const result = await this._db.query({
-      sql: `SELECT s.asset_id, s.url, a.hash
-            FROM asset_sources s
-            JOIN assets a ON a.id = s.asset_id
-            WHERE s.backend = ?
-            AND a.hash IS NOT NULL`,
-      args: [BUNDLED_SOURCE_BACKEND],
-    });
-
-    const base = r2BaseUrl.replace(/\/$/, '');
-    const queries: { sql: string; args: unknown[] }[] = [];
-
-    for (const row of result.rows) {
-      const assetId = row.asset_id as string;
-      const bundledUrl = row.url as string;
-      const hash = row.hash as string;
-
-      // Derive extension from the bundled URL (last segment after final dot).
-      const lastSegment = bundledUrl.split('.').pop();
-      const ext = lastSegment ? `.${lastSegment}` : '';
-      const r2Url = `${base}/${r2ObjectKey({ hash, ext })}`;
-
-      queries.push({
-        sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
-              VALUES (?, 'r2', ?, ?)`,
-        args: [assetId, r2Url, priority],
-      });
-    }
-
-    if (queries.length === 0) {
-      return 0;
-    }
-
-    // Chunked like seeding — a single large transaction stalls WASM SQLite.
-    for (let i = 0; i < queries.length; i += SEED_CHUNK_SIZE) {
-      const chunk = queries.slice(i, i + SEED_CHUNK_SIZE);
-      await this._db.transaction(chunk);
-
-      // Yield between chunks to keep the WASM main thread responsive,
-      // matching seedFromManifest's inter-chunk yielding behavior.
-      if (i + SEED_CHUNK_SIZE < queries.length) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-    }
-    return queries.length;
   }
 
   // ── Install state ────────────────────────────────────────────────────
@@ -346,55 +284,66 @@ export class AssetRegistryRepository {
   }
 
   /**
-   * Whether the registry has already been seeded with the given manifest
-   * revision. Idempotency guard keyed off `meta.asset_registry_seeded`.
+   * Whether the registry is already seeded from this seed document *under the
+   * current source derivation*. Idempotency guard keyed off
+   * `meta.asset_registry_seeded`.
+   *
+   * The fingerprint includes {@link SEED_DERIVATION_REVISION}, so a client that
+   * ships a fix to how `asset_sources` rows are built re-seeds once even though
+   * the seed document itself is unchanged.
+   *
+   * @param generatedAt - `generatedAt` of the seed document about to be applied.
    */
-  async isSeeded(scannedAt: string): Promise<boolean> {
+  async isSeeded(generatedAt: string): Promise<boolean> {
     const seeded = await this.getMeta(ASSET_REGISTRY_SEEDED_KEY);
-    return seeded === scannedAt;
+    return seeded === seedFingerprint(generatedAt);
   }
 
   // ── Seeding ──────────────────────────────────────────────────────────
 
   /**
-   * Seeds (or re-seeds) the registry from the bootstrap manifest + sidecar.
+   * Seeds (or re-seeds) the registry from the compact boot seed document —
+   * `assets` rows *and* their `asset_sources` rows, in one pass (C-435).
    *
-   * - One `assets` row per manifest tag that has a sidecar hash entry.
-   * - One `asset_sources` row per asset — `backend='bundled'`, priority 0,
-   *   URL derived from the manifest entry path (`/game-data/<path>`).
-   * - Tags missing from the sidecar are skipped — never seeded (`assets.hash`
-   *   is NOT NULL and must never be fabricated).
-   * - Upsert-by-id, chunked into {@link SEED_CHUNK_SIZE}-row transactions with
-   *   a yield between chunks so WASM SQLite never stalls.
-   * - `version` starts at 1 and increments when a re-seed observes a changed
-   *   hash; unchanged rows are not touched.
-   * - On success, records `meta.asset_registry_seeded = manifest.scannedAt`.
+   * Sources are derived here rather than in a follow-up pass because the
+   * compact seed is the only place `ext` exists: the `assets` table does not
+   * store it, so nothing downstream can rebuild an R2 key once the document
+   * is gone.
    *
-   * @param options - Manifest + hash sidecar.
+   * Every asset gets an `r2` source at priority 0 — nothing is bundled in the
+   * client anymore (C-435 follow-up). Tags in `bundledTags` get `pack_id =
+   * 'core'` so LRU eviction skips them; all other assets are packed by
+   * category and may be evicted under quota pressure.
+   *
+   * Stale `bundled` source rows from a pre-C-435 registry are dropped (they
+   * point at files no longer shipped, and at priority 0 they would 404 ahead
+   * of the working source).
+   *
+   * Upsert-by-id, chunked into {@link SEED_CHUNK_SIZE}-row transactions with a
+   * yield between chunks so WASM SQLite never stalls. `version` starts at 1 and
+   * increments when a re-seed observes a changed hash; unchanged rows are not
+   * touched. On success, records the seed fingerprint in
+   * `meta.asset_registry_seeded`.
+   *
+   * @param options - Seed document, publish origin, offline-core tags, progress.
    * @returns Per-action counters + hash-change list (cache eviction candidates).
    */
-  /**
-   * Seeds (or re-seeds) the registry from the compact boot seed document.
-   * Replaces the 20 MB manifest.json + asset_hashes.json with the ~1-2 MB
-   * asset_seed.json on the boot path (C-435).
-   *
-   * - One `assets` row per seed row.
-   * - No `asset_sources` rows are created here — callers must add sources
-   *   separately via {@link addBundledSources} or {@link addR2Sources}.
-   * - Upsert-by-id, chunked into {@link SEED_CHUNK_SIZE}-row transactions with
-   *   a yield between chunks so WASM SQLite never stalls.
-   * - `version` starts at 1 and increments when a re-seed observes a changed
-   *   hash; unchanged rows are not touched.
-   * - On success, records `meta.asset_registry_seeded = seed.generatedAt`.
-   *
-   * @param seed - The compact boot seed document.
-   * @param onProgress - Optional progress callback.
-   * @returns Per-action counters + hash-change list (cache eviction candidates).
-   */
-  async seedFromCompactSeed(
-    seed: AssetSeedDocument,
-    onProgress?: (progress: { chunk: number; totalChunks: number }) => void,
-  ): Promise<AssetSeedStats> {
+  async seedFromCompactSeed(options: {
+    /** The compact boot seed document. */
+    seed: AssetSeedDocument;
+    /**
+     * R2 public base URL, e.g. `https://assets.bearlysleeping.com`. When
+     * omitted no remote sources are written — only bundled assets resolve.
+     */
+    r2BaseUrl?: string;
+    /** Tags that ship inside the client (the offline-core declaration). */
+    bundledTags?: readonly string[];
+    onProgress?: (progress: { chunk: number; totalChunks: number }) => void;
+  }): Promise<AssetSeedStats> {
+    const { seed, r2BaseUrl, bundledTags = [], onProgress } = options;
+    const bundled = new Set(bundledTags);
+    const r2Base = r2BaseUrl?.replace(/\/$/, '');
+
     const hashChanges: { id: string; oldHash: string; newHash: string }[] = [];
     const stats: AssetSeedStats = {
       seeded: 0,
@@ -410,7 +359,7 @@ export class AssetRegistryRepository {
 
     while (chunkStart < seed.rows.length) {
       const chunk = seed.rows.slice(chunkStart, chunkStart + SEED_CHUNK_SIZE);
-      await this._seedCompactChunk(chunk, stats, hashChanges);
+      await this._seedCompactChunk({ rows: chunk, bundled, r2Base, stats, hashChanges });
       chunkStart += SEED_CHUNK_SIZE;
 
       onProgress?.({ chunk: Math.ceil(chunkStart / SEED_CHUNK_SIZE), totalChunks });
@@ -421,113 +370,71 @@ export class AssetRegistryRepository {
       }
     }
 
+    // Drop stale rows: 'bundled' rows from a pre-C-435 registry (those files
+    // no longer ship), and any row still pointing at the pre-R2 Firebase
+    // Storage origin regardless of backend label (a pre-migration deploy could
+    // write that URL under the 'r2' name). Left alone, either makes every
+    // fetch try a dead source first.
+    const stalePruned = await this._pruneStaleSources();
+
     // Only mark seeded when every chunk committed.
-    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seed.generatedAt);
+    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seedFingerprint(seed.generatedAt));
 
     logger.debug('AssetRegistryRepository.seedFromCompactSeed:complete', {
       ...stats,
       chunks: totalChunks,
+      bundledTags: bundled.size,
+      stalePruned,
+      hasR2Origin: r2Base !== undefined,
       elapsedMs: Math.round(performance.now() - t0),
     });
     return stats;
   }
 
   /**
-   * Adds bundled priority-0 source rows for the given set of tags.
-   * Used by the offline core declaration — assets that stay bundled get a
-   * bundled source at priority 0 so they resolve from the local filesystem
-   * without network (C-435).
+   * Prunes stale `asset_sources` rows: every `bundled` row (nothing is bundled
+   * in the client anymore, C-435 follow-up) and every row whose URL still
+   * points at the legacy Firebase Storage origin, whatever backend it was
+   * filed under. The latter guards against pre-R2-migration deploys that
+   * wrote Firebase Storage URLs under the `r2` backend name — the normal
+   * upsert only overwrites a tag that's still in the current seed, so a
+   * removed/renamed tag's stale row would otherwise never get touched.
    *
-   * @param tags - Tags to add bundled sources for.
-   * @returns The number of source rows written.
+   * @returns The number of rows deleted.
    */
-  async addBundledSources(tags: readonly string[]): Promise<number> {
-    const queries: { sql: string; args: unknown[] }[] = [];
-
-    for (const tag of tags) {
-      // Derive a best-effort bundled path from the tag.
-      // Tags use colon-delimited category:subcategory:name format.
-      const path = tag.replace(/:/g, '/');
-      queries.push({
-        sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
-              VALUES (?, ?, ?, 0)`,
-        args: [tag, BUNDLED_SOURCE_BACKEND, `${BUNDLED_ASSET_BASE}/${path}`],
-      });
-    }
-
-    if (queries.length === 0) {
+  private async _pruneStaleSources(): Promise<number> {
+    const staleUrlPattern = '%firebasestorage.googleapis.com%';
+    const before = await this._db.query({
+      sql: `SELECT COUNT(*) AS n FROM asset_sources WHERE backend = ? OR url LIKE ?`,
+      args: [BUNDLED_SOURCE_BACKEND, staleUrlPattern],
+    });
+    const count = Number(before.rows[0]?.n ?? 0);
+    if (count === 0) {
       return 0;
     }
 
-    for (let i = 0; i < queries.length; i += SEED_CHUNK_SIZE) {
-      const chunk = queries.slice(i, i + SEED_CHUNK_SIZE);
-      await this._db.transaction(chunk);
-
-      if (i + SEED_CHUNK_SIZE < queries.length) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-    }
-
-    return queries.length;
-  }
-
-  async seedFromManifest(options: {
-    manifest: AssetManifest;
-    hashes: AssetHashesFile;
-    onProgress?: (progress: { chunk: number; totalChunks: number }) => void;
-  }): Promise<AssetSeedStats> {
-    const { manifest, hashes, onProgress } = options;
-
-    // Tags without a sidecar hash entry are skipped — never seeded.
-    const seedableTags = Object.keys(manifest.assets).filter(
-      (tag) => hashes.hashes[tag] !== undefined,
-    );
-
-    const hashChanges: { id: string; oldHash: string; newHash: string }[] = [];
-    const stats: AssetSeedStats = {
-      seeded: 0,
-      updated: 0,
-      unchanged: 0,
-      skipped: Object.keys(manifest.assets).length - seedableTags.length,
-      hashChanges,
-    };
-
-    const t0 = performance.now();
-    let chunkStart = 0;
-    const totalChunks = Math.ceil(seedableTags.length / SEED_CHUNK_SIZE);
-
-    while (chunkStart < seedableTags.length) {
-      const chunk = seedableTags.slice(chunkStart, chunkStart + SEED_CHUNK_SIZE);
-      await this._seedChunk({ manifest, hashes, tags: chunk, stats, hashChanges });
-      chunkStart += SEED_CHUNK_SIZE;
-
-      onProgress?.({ chunk: Math.ceil(chunkStart / SEED_CHUNK_SIZE), totalChunks });
-
-      if (chunkStart < seedableTags.length) {
-        // Yield between chunks — keeps the WASM main thread responsive.
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-    }
-
-    // Only mark seeded when every chunk committed.
-    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, manifest.scannedAt);
-
-    logger.debug('AssetRegistryRepository.seedFromManifest:complete', {
-      ...stats,
-      chunks: totalChunks,
-      elapsedMs: Math.round(performance.now() - t0),
+    await this._db.execute({
+      sql: `DELETE FROM asset_sources WHERE backend = ? OR url LIKE ?`,
+      args: [BUNDLED_SOURCE_BACKEND, staleUrlPattern],
     });
-    return stats;
+    return count;
   }
 
-  /** Seeds one chunk of tags inside a single transaction. */
-  /** Seeds one chunk of compact seed rows inside a single transaction. */
-  private async _seedCompactChunk(
-    rows: readonly import('@aikami/types').AssetSeedRow[],
-    stats: AssetSeedStats,
-    hashChanges: { id: string; oldHash: string; newHash: string }[],
-  ): Promise<void> {
-    const tags = rows.map((r) => r.tag);
+  /**
+   * Seeds one chunk of compact seed rows — `assets` upsert plus the asset's
+   * `asset_sources` rows — inside a single transaction.
+   */
+  private async _seedCompactChunk(options: {
+    rows: readonly AssetSeedRow[];
+    /** Tags in the offline core (bundled priority 0, never LRU-evicted). */
+    bundled: ReadonlySet<string>;
+    /** Trailing-slash-stripped R2 base URL, or undefined when no origin is set. */
+    r2Base: string | undefined;
+    stats: AssetSeedStats;
+    hashChanges: { id: string; oldHash: string; newHash: string }[];
+  }): Promise<void> {
+    const { rows, bundled, r2Base, stats, hashChanges } = options;
+    const tags = rows.map((row) => row.tag);
 
     // Load existing rows for this chunk to compute version bumps.
     const placeholders = tags.map(() => '?').join(', ');
@@ -563,72 +470,7 @@ export class AssetRegistryRepository {
         stats.seeded += 1;
       }
 
-      queries.push({
-        sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json)
-              VALUES (?, ?, ?, ?, ?, ?, 'unknown', NULL, '[]')
-              ON CONFLICT(id) DO UPDATE SET
-                pack_id = excluded.pack_id,
-                category = excluded.category,
-                hash = excluded.hash,
-                version = excluded.version,
-                size_bytes = excluded.size_bytes`,
-        args: [seedRow.tag, seedRow.category, seedRow.category, seedRow.hash, version, seedRow.sizeBytes],
-      });
-    }
-
-    if (queries.length > 0) {
-      await this._db.transaction(queries);
-    }
-  }
-
-  private async _seedChunk(options: {
-    manifest: AssetManifest;
-    hashes: AssetHashesFile;
-    tags: readonly string[];
-    stats: AssetSeedStats;
-    hashChanges: { id: string; oldHash: string; newHash: string }[];
-  }): Promise<void> {
-    const { manifest, hashes, tags, stats, hashChanges } = options;
-
-    // Load existing rows for this chunk to compute version bumps.
-    const placeholders = tags.map(() => '?').join(', ');
-    const existingResult = await this._db.query({
-      sql: `SELECT id, hash, version FROM assets WHERE id IN (${placeholders})`,
-      args: [...tags],
-    });
-    const existingById = new Map<string, { hash: string; version: number }>();
-    for (const row of existingResult.rows) {
-      existingById.set(row.id as string, {
-        hash: row.hash as string,
-        version: row.version as number,
-      });
-    }
-
-    const queries: { sql: string; args: readonly unknown[] }[] = [];
-
-    for (const tag of tags) {
-      const entry = manifest.assets[tag];
-      const hashEntry = hashes.hashes[tag];
-      if (!entry || !hashEntry) {
-        continue;
-      }
-
-      const existing = existingById.get(tag);
-      let version: number;
-      if (existing) {
-        version = existing.hash === hashEntry.hash ? existing.version : existing.version + 1;
-      } else {
-        version = 1;
-      }
-
-      if (existing && existing.hash === hashEntry.hash) {
-        stats.unchanged += 1;
-      } else if (existing) {
-        stats.updated += 1;
-        hashChanges.push({ id: tag, oldHash: existing.hash, newHash: hashEntry.hash });
-      } else {
-        stats.seeded += 1;
-      }
+      const isCore = bundled.has(seedRow.tag);
 
       queries.push({
         sql: `INSERT INTO assets (id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json)
@@ -639,14 +481,27 @@ export class AssetRegistryRepository {
                 hash = excluded.hash,
                 version = excluded.version,
                 size_bytes = excluded.size_bytes`,
-        args: [tag, entry.category, entry.category, hashEntry.hash, version, hashEntry.sizeBytes],
+        args: [
+          seedRow.tag,
+          isCore ? OFFLINE_CORE_PACK_ID : seedRow.category,
+          seedRow.category,
+          seedRow.hash,
+          version,
+          seedRow.sizeBytes,
+        ],
       });
 
-      queries.push({
-        sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
-              VALUES (?, ?, ?, 0)`,
-        args: [tag, BUNDLED_SOURCE_BACKEND, `${BUNDLED_ASSET_BASE}/${entry.path}`],
-      });
+      if (r2Base !== undefined) {
+        const url = r2AssetUrl({ baseUrl: r2Base, hash: seedRow.hash, ext: seedRow.ext });
+        queries.push({
+          sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority)
+                VALUES (?, 'r2', ?, 0)`,
+          // Every asset now resolves from R2 at priority 0 — nothing is bundled
+          // in the client anymore (C-435 follow-up). The offline core (pack_id
+          // 'core') is still eviction-protected in the local cache.
+          args: [seedRow.tag, url],
+        });
+      }
     }
 
     if (queries.length > 0) {

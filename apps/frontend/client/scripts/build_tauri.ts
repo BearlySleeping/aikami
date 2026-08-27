@@ -24,6 +24,14 @@
  * Env comes from .env.{mode} — generate first with download-secrets
  * (bun run scripts/src/lib/ops/download_secrets.ts --mode <mode>).
  * --dry-run prints the commands without running them.
+ *
+ * This is also what `bun moon run client:tauri-build` runs (moon.yml → the
+ * `build:tauri` script below). It replaced a `tauri build` CLI wrapper that
+ * always produced a release binary (+ OS installer bundles via Tauri's own
+ * bundler, which doesn't run here — see tauri_appimage.ts for a real
+ * AppImage). Default mode with no `--mode`/`TAURI_BUILD_MODE` is `emulator`,
+ * i.e. a DEBUG binary — pass `--mode production` (or set `TAURI_BUILD_MODE`)
+ * for a release build.
  */
 
 import { type SpawnSyncOptions, spawnSync } from 'node:child_process';
@@ -102,6 +110,11 @@ logger.info(
 
 // 1. Web bundle — vite loads .env.{mode} for the selected mode.
 run('vite build', 'bunx', ['vite', 'build', '--mode', mode], { cwd: CLIENT_DIR });
+
+// 1b. Guard the emitted chunk graph. A static-import cycle between chunks
+//     breaks module evaluation order and only shows up at runtime — the
+//     desktop bundle needs the same gate the web builds get.
+run('check bundle cycles', 'bun', ['scripts/check_bundle.ts'], { cwd: CLIENT_DIR });
 
 // 2. Rust binary — skipped in --web-only mode (the tauri CLI runs cargo itself).
 if (!webOnly) {

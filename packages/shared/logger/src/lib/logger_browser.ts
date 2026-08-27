@@ -33,6 +33,25 @@ export class HttpLogSink implements LogSink {
   private _buffer: LogEntry[] = [];
   private _flushTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /**
+   * Whether the current origin can actually reach the ingestion endpoint.
+   *
+   * Tauri serves the app from `tauri://localhost`, an origin the hub's CORS
+   * allowlist (`*.bearlysleeping.com`) will never match — every flush there
+   * fails preflight and logs two console errors of its own, drowning the
+   * real output. The desktop app already forwards console to the Rust
+   * logger via tauri-plugin-log, so the HTTP sink has nothing to add.
+   */
+  private static _canReachEndpoint(): boolean {
+    const protocol = (globalThis as { location?: { protocol?: string } }).location?.protocol;
+    // No location at all (Bun test, some worker contexts) — leave the
+    // existing `typeof fetch` guard in charge rather than silently opting out.
+    if (protocol === undefined) {
+      return true;
+    }
+    return protocol === 'http:' || protocol === 'https:';
+  }
+
   /** Messages matching this pattern are excluded from /api/internal_logging (render spam). */
   private readonly _excludePattern =
     /^\d{2}:\d{2} \[GameWorld\] (render|position_changed|pause|resume|setInputLocked)$/;
@@ -43,6 +62,9 @@ export class HttpLogSink implements LogSink {
     }
     // External logging disabled — don't buffer or schedule endpoint flushes.
     if (!HttpLogSink.externalLoggingEnabled) {
+      return;
+    }
+    if (!HttpLogSink._canReachEndpoint()) {
       return;
     }
     // Drop noisy per-frame render logs — they flood /api/internal_logging at 60fps

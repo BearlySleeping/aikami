@@ -12,8 +12,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { LpcAnimationState } from '@aikami/lpc';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import type { LpcAnimationState } from '$lib/data/lpc_models';
 import { textGenerationService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */

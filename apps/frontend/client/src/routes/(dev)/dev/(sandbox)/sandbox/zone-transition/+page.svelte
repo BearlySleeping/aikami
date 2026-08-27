@@ -11,7 +11,7 @@
 //
 // Also verifies save/load captures player position and inventory correctly.
 
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import GameCanvasView from '$lib/views/game/canvas/game_canvas_view.svelte';
 import { getGameCanvasViewModel } from '$lib/views/game/canvas/game_canvas_view_model.svelte';
 import GameUIView from '$lib/views/game/ui/game_ui_view.svelte';

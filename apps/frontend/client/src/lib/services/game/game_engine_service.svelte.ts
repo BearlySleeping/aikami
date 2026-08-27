@@ -7,7 +7,7 @@ import type {
   GameWorld,
   InteractableStateMap,
 } from '@aikami/frontend/engine';
-import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine';
+import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine/content';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -731,13 +731,12 @@ class GameEngineService
       // is loaded before the engine boots (idempotent — catalog module scope
       // also wires it).
       await wireLpcUrlResolver();
-      const { GENERATED_LPC_SLOTS: generatedLpcSlots } = await import(
-        '$lib/data/lpc_asset_catalog_generated'
-      );
+      const { getLpcCatalog } = await import('$lib/data/lpc_asset_catalog');
+      const lpcCatalog = getLpcCatalog();
 
       const textureManager = new TextureManager();
 
-      const pipeline = this._buildLpcPipeline(generatedLpcSlots, (slot, assetId, state) =>
+      const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
         getLpcAssetPath(slot, assetId, state as unknown as number),
       );
 
@@ -1048,9 +1047,9 @@ class GameEngineService
    * Extends the base onboarding arc with gameplay-teaching steps (C-422 AC-4).
    * Adds conversation, dice roll, and combat steps after the existing keybinding hints.
    */
-  private _extendOnboardingArc(onboarding: {
+  private _extendOnboardingArc(onboarding: { steps: Array<Record<string, unknown>> }): {
     steps: Array<Record<string, unknown>>;
-  }): { steps: Array<Record<string, unknown>> } {
+  } {
     const extendedSteps = [
       ...onboarding.steps,
       // Conversation step — completes when NPC dialogue opens

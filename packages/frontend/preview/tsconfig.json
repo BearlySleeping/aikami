@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "checkJs": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "rootDir": "../../..",
+    "types": ["vite/client", "bun", "node"],
+    "paths": {
+      "@aikami/frontend/engine/content": ["../../frontend/engine/src/content.ts"],
+      "@aikami/frontend/engine": ["../../frontend/engine/src"],
+      "@aikami/frontend/engine/sim": ["../../frontend/engine/src/sim.ts"],
+      "@aikami/frontend/services": ["../../frontend/services/src"],
+      "@aikami/frontend/configs": ["../configs/src"],
+      "@aikami/frontend/utils": ["../utils/src"],
+      "@aikami/lpc": ["../../shared/lpc/src"],
+      "@aikami/types": ["../../shared/types/src"],
+      "@aikami/utils": ["../../shared/utils/src"],
+      "@aikami/constants": ["../../shared/constants/src"],
+      "@aikami/schemas": ["../../shared/schemas/src"],
+      "@aikami/mocks": ["../../shared/mocks/src"],
+      "$logger": ["../../shared/logger/src/lib/logger_browser.ts"],
+      "$router": ["../../frontend/services/src/index.ts"],
+      "$router/*": ["../../frontend/services/src/*"],
+      "$routes": ["../../../apps/frontend/client/src/lib/constants/routes"],
+      "$routes/*": ["../../../apps/frontend/client/src/lib/constants/routes"]
+    }
+  },
+  "include": ["src/**/*.d.ts", "src/**/*.ts", "src/**/*.js", "src/**/*.svelte"]
+}

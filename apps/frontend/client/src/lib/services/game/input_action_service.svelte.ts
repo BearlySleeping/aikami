@@ -16,7 +16,11 @@ import {
   type InputDevice,
   keyToDisplayLabel,
 } from '@aikami/constants';
-import { buildKeyToAction, DEFAULT_KEYBINDINGS, loadKeybindings } from '@aikami/frontend/engine';
+import {
+  buildKeyToAction,
+  DEFAULT_KEYBINDINGS,
+  loadKeybindings,
+} from '@aikami/frontend/engine/sim';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

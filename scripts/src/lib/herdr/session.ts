@@ -23,7 +23,6 @@
 //     text            → bun run dev
 //     text-ollama     → bun run dev:ollama (opt-in advanced, :11434)
 //     image-comfyui   → bun run dev:comfyui (opt-in advanced, :8188)
-//     postgres        → bun run scripts/src/lib/postgres/lifecycle.ts start --foreground
 //     preview-client  → bun run scripts/src/lib/ops/preview_client.ts
 //     preview-hub     → bun run scripts/src/lib/ops/preview_hub.ts
 //     tauri           → bun run scripts/src/lib/ops/run_tauri.ts (launches an
@@ -78,12 +77,12 @@ import { findBash, posixQuote } from '../env/which';
 export type DevService =
   | 'client'
   | 'hub'
+  | 'hub-worker'
   | 'voice'
   | 'image'
   | 'text'
   | 'text-ollama'
   | 'image-comfyui'
-  | 'postgres'
   | 'preview-client'
   | 'site'
   | 'preview-site'
@@ -101,7 +100,7 @@ export type ServiceDef = {
   command: (mode: AikamiMode) => string;
   cwd: (root: string) => string;
   readyPort?: (mode: AikamiMode) => number | undefined;
-  /** Readiness probe for readyPort — 'http' by default; raw-TCP services (postgres) use 'tcp'. */
+  /** Readiness probe for readyPort — 'http' by default; raw-TCP services use 'tcp'. */
   readyCheck?: ReadyCheck;
 };
 
@@ -157,6 +156,20 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/frontend/hub'),
     readyPort: (mode) => PORTS[mode].hub,
   },
+  // C-437: wrangler dev --local — the real Workers runtime with D1 and R2
+  // bindings, unlike the Vite `hub` service above which provides neither.
+  // Build the hub first (`bun moon run hub:build`), then start this service.
+  // Mutually exclusive with `hub` via port contention (both represent the
+  // same logical app on different ports).
+  'hub-worker': {
+    name: 'hub-worker',
+    command: (mode) =>
+      mode === 'emulator'
+        ? 'bun run dev:worker'
+        : 'echo "hub-worker is an emulator-only service — use wrangler deploy for staging/production"',
+    cwd: (root) => resolve(root, 'apps/frontend/hub'),
+    readyPort: (mode) => (mode === 'emulator' ? PORTS[mode].hubWorker : undefined),
+  },
   // C-392: the voice/image/text dev engines delegate to the C-390
   // local-stack compose topology (apps/backend/local-stack/compose.yaml) via
   // each project's scripts/start.ts — the same file the published stack
@@ -196,23 +209,7 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/image'),
     readyPort: (mode) => PORTS[mode].image,
   },
-  // Local PostgreSQL (C-387) — a real engine matching production, Nix-provided.
-  // Runs the lifecycle script in foreground mode so the pane stays alive and
-  // doubles as the log viewer. Emulator-only: no local Postgres exists in
-  // staging/production, so readyPort returns undefined there.
-  postgres: {
-    name: 'postgres',
-    command: (mode) =>
-      mode === 'emulator'
-        ? 'bun run scripts/src/lib/postgres/lifecycle.ts start --foreground'
-        : 'echo "postgres is an emulator-only service — no local Postgres in this mode"',
-    cwd: (root) => root,
-    readyPort: (mode) => (mode === 'emulator' ? PORTS.emulator.postgres : undefined),
-    // PostgreSQL speaks the wire protocol, not HTTP — the generic fetch()
-    // probe would never pass (and would spam "invalid length of startup
-    // packet" into the server log). Probe with a raw TCP connect instead.
-    readyCheck: 'tcp',
-  },
+
   'preview-client': {
     name: 'preview-client',
     command: () => 'bun run scripts/src/lib/ops/preview_client.ts',
@@ -260,15 +257,15 @@ export const ALL_SERVICES: DevService[] = [
 
 /**
  * All valid service names — superset of ALL_SERVICES. Used for CLI validation
- * and `herdr:list`. postgres (C-387) and the C-392 advanced engines
+ * and `herdr:list`. The C-392 advanced engines
  * (text-ollama, image-comfyui) are fully manageable even though they are NOT
  * in the `all` group.
  */
 export const KNOWN_SERVICES: DevService[] = [
   ...ALL_SERVICES,
-  'postgres',
   'text-ollama',
   'image-comfyui',
+  'hub-worker',
 ];
 
 /** Map a workspace tab label back to a known service key, or undefined. */
@@ -283,7 +280,7 @@ const serviceFromTabLabel = (label: string): DevService | undefined => {
  *  voice/image/text stay on shared base ports (heavy singleton backends);
  *  the C-392 advanced engines (text-ollama, image-comfyui) stay on the same
  *  shared base ports as their modality. */
-const OFFSET_AWARE_SERVICES = new Set<DevService>(['client', 'hub', 'site']);
+const OFFSET_AWARE_SERVICES = new Set<DevService>(['client', 'hub', 'hub-worker', 'site']);
 
 /** Resolve a service's ready port, shifted by a contract's port offset
  *  when that service is offset-aware. */
@@ -857,7 +854,7 @@ export const isPortReady = async (port: number, check: ReadyCheck = 'http'): Pro
 
 /**
  * Raw TCP connect probe for non-HTTP services (e.g. PostgreSQL). Binds to
- * 127.0.0.1 explicitly — that is where the postgres listener is configured.
+ * 127.0.0.1 explicitly.
  */
 const tcpConnectReady = (port: number, host = '127.0.0.1'): Promise<boolean> =>
   new Promise((resolveTcp) => {

@@ -6,20 +6,31 @@ declare module '*?worker&type=module' {
   export default WorkerConstructor;
 }
 
-declare module '$env/static/private' {
-  export const GEMINI_API_KEY: string;
-  export const MODE: Mode;
-  export const LOG_LEVEL: Mode;
-  export const GMAIL_CLIENT_ID: string;
-  export const GMAIL_CLIENT_SECRET: string;
-}
-declare module '$env/static/public' {
-  /** Base URL for the voice/TTS microservice (Kokoro container). */
-  export const PUBLIC_VOICE_URL: string;
-  /** Public base URL for the R2 assets bucket (e.g. https://assets.bearlysleeping.com). */
-  export const PUBLIC_ASSETS_BASE_URL: string;
-  /** Build-time flag: when 'true', restores full asset bundling (C-435 AC-7). */
-  export const PUBLIC_FULL_BUNDLE: string;
-  export const PUBLIC_LOG_LEVEL: LogLevel;
+declare module '$app/env/public' {
+  /** Unique app identifier, e.g. "client" or "client-tauri". */
+  export const PUBLIC_APP_ID: string;
+  /** Runtime mode: "emulator" | "staging" | "production" | "testing". */
   export const PUBLIC_MODE: Mode;
+  /** Minimum log level to emit (DEBUG | INFO | WARN | ERROR). */
+  export const PUBLIC_LOG_LEVEL: LogLevel;
+  /** Public base URL for the R2 assets bucket. */
+  export const PUBLIC_ASSETS_BASE_URL: string | undefined;
+  /** URL of the voice/TTS microservice (Kokoro container). */
+  export const PUBLIC_VOICE_URL: string | undefined;
+  /** URL of the image generation microservice. */
+  export const PUBLIC_IMAGE_URL: string | undefined;
+  /** Base URL for Ollama (local LLM). */
+  export const PUBLIC_OLLAMA_BASE_URL: string | undefined;
+  /** Image engine selection: "auto" | "sdcpp" | "comfyui". */
+  export const PUBLIC_IMAGE_ENGINE: string | undefined;
+  /** Custom ONNX Runtime WebAssembly URL override. */
+  export const PUBLIC_ORT_WASM_URL: string | undefined;
+  /** Default OpenRouter model for persona creation. */
+  export const PUBLIC_OPENROUTER_MODEL: string | undefined;
+  /** Bypass the AI gate (dev-only). */
+  export const PUBLIC_AI_GATE_BYPASS: string | undefined;
+  /** Emulator port offset for contract-scoped pipeline runs. */
+  export const PUBLIC_EMULATOR_PORT_OFFSET: string | undefined;
+  /** Build version string (injected at build time). */
+  export const APP_VERSION: string | undefined;
 }

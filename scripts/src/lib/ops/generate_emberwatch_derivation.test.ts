@@ -23,10 +23,7 @@ import {
 } from './generate_emberwatch_tables.ts';
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
-const MANIFEST_PATH = join(
-  REPO_ROOT,
-  'apps/frontend/client/static/content-packs/emberwatch/manifest.json',
-);
+const MANIFEST_PATH = join(REPO_ROOT, 'content/packs/emberwatch/manifest.json');
 
 /** Reads the committed emberwatch manifest tiles. */
 const readManifestTilesFromDisk = (): Record<string, { name?: string; frame?: string }> => {

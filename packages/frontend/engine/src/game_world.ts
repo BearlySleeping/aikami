@@ -26,7 +26,14 @@ import {
 } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
-import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
+import {
+  createPixiApp,
+  DEFAULT_HEIGHT,
+  DEFAULT_WIDTH,
+  type PixiAppInstance,
+  type PixiAppOptions,
+} from './pixi_app.ts';
+import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import type { LpcSlotCatalog } from './rendering/lpc_appearance_resolver.ts';
@@ -407,6 +414,22 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _lastCheckedTickCount = 0;
   /** Number of consecutive heartbeat cycles with no tickCount progress. */
   private _staleTickCycles = 0;
+  /**
+   * N-buffer transfer accounting, for diagnosing a stalled simulation.
+   *
+   * The worker only increments tickCount *after* it secures a writable
+   * buffer, so a tickCount frozen at exactly FALLBACK_BUFFER_COUNT means
+   * every buffer was transferred to this thread and none came back — a
+   * recycle-path failure, not a dead tick timer. These counters tell the
+   * two apart in the stall warning instead of requiring a re-run.
+   */
+  private _lastWritableBufferCount = -1;
+  /** SYNC messages carrying a transferred buffer. */
+  private _syncWithBufferCount = 0;
+  /** SYNC messages with no buffer (events only) — these never recycle. */
+  private _syncWithoutBufferCount = 0;
+  /** Buffers posted back to the worker via RECYCLE_BUFFER. */
+  private _recycledBufferCount = 0;
 
   /** PixiJS ticker callback reference for teardown. */
   private _tickerCallback: (() => void) | undefined;
@@ -563,12 +586,69 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // resizeTo: window ensures the canvas fills the viewport immediately
     // instead of waiting for the parent element's CSS layout to resolve.
     // Without this PixiJS may init at 0×0 when the $effect fires before
-    // layout is calculated.
+    // layout is calculated. Defaulted here, but NOT forced: a caller that
+    // explicitly passes `resizeTo` (own property, even `undefined`) opts
+    // out entirely and drives resize() itself — Tauri on WebKitGTK is known
+    // to report garbage from window.innerWidth/innerHeight/devicePixelRatio
+    // on some hosts, which Pixi's resizeTo:window watcher multiplies into
+    // an oversized canvas (silently refused — blank screen, no error). The
+    // client sources real dimensions from Tauri's native window API instead.
+    //
+    // The default is additionally gated on the window actually reporting
+    // usable metrics. Pixi's resizeTo watcher calls renderer.resize() with
+    // window.innerWidth/innerHeight *directly*, bypassing the sanitizing in
+    // resolvePixiInitOptions — so on a host that reports garbage, honouring
+    // resizeTo:window would undo a correctly sized init a frame later. This
+    // check is deliberately platform-agnostic rather than keyed on an
+    // isTauri() probe, which can be wrong or race the webview's injection.
+    const hasUsableWindowMetrics =
+      typeof window !== 'undefined' &&
+      sanitizeCanvasDimension(window.innerWidth, 0) > 0 &&
+      sanitizeCanvasDimension(window.innerHeight, 0) > 0;
+    if (!hasUsableWindowMetrics) {
+      this.warn('[GameWorld] initialize:unusable-window-metrics', {
+        innerWidth: typeof window !== 'undefined' ? window.innerWidth : undefined,
+        innerHeight: typeof window !== 'undefined' ? window.innerHeight : undefined,
+        devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio : undefined,
+      });
+    }
+    const defaultResizeTo = hasUsableWindowMetrics ? window : undefined;
+    const resizeTo = Object.hasOwn(options, 'resizeTo') ? options.resizeTo : defaultResizeTo;
     const pixiInstance: PixiAppInstance = await createPixiApp({
       ...options,
-      resizeTo: window,
+      resizeTo,
     });
     this._app = pixiInstance.app;
+
+    // Diagnostic for the WebKitGTK blank-canvas class of bug: WebKit refuses
+    // an oversized backing-store allocation *silently*, leaving the canvas at
+    // its 300x150 default and rendering every frame into nothing. Comparing
+    // the allocated backing store against what the renderer asked for is the
+    // only way to notice — nothing throws.
+    const { resolution } = this._app.renderer;
+    const expectedWidth = Math.round(this._app.renderer.width * resolution);
+    const expectedHeight = Math.round(this._app.renderer.height * resolution);
+    if (canvas.width !== expectedWidth || canvas.height !== expectedHeight) {
+      this.error('[GameWorld] initialize:canvas-allocation-refused', {
+        requestedWidth: options.width,
+        requestedHeight: options.height,
+        expectedWidth,
+        expectedHeight,
+        actualWidth: canvas.width,
+        actualHeight: canvas.height,
+        resolution,
+        devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio : undefined,
+        innerWidth: typeof window !== 'undefined' ? window.innerWidth : undefined,
+        innerHeight: typeof window !== 'undefined' ? window.innerHeight : undefined,
+        resizeTo: resizeTo === undefined ? 'none' : 'window',
+      });
+    } else {
+      this.debug('[GameWorld] initialize:canvas-allocated', {
+        width: canvas.width,
+        height: canvas.height,
+        resolution,
+      });
+    }
 
     // ---- 1a. Build the world container with camera transform ----------
     this._worldContainer = new Container();
@@ -708,8 +788,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * correct world-to-screen ratio.
    */
   resize(width: number, height: number): void {
+    // Resize callers measure the DOM, which lies on some WebKitGTK hosts
+    // (negative innerWidth, billions-scale clientWidth). Passing that
+    // through wraps to a multi-gigapixel backing store the platform
+    // refuses, blanking a canvas that was rendering fine a frame earlier.
+    const safeWidth = sanitizeCanvasDimension(width, this._app?.renderer.width ?? DEFAULT_WIDTH);
+    const safeHeight = sanitizeCanvasDimension(
+      height,
+      this._app?.renderer.height ?? DEFAULT_HEIGHT,
+    );
+
     if (this._app) {
-      this._app.renderer.resize(width, height);
+      this._app.renderer.resize(safeWidth, safeHeight);
     }
 
     // Notify the worker so the camera system updates its screen dimensions
@@ -717,8 +807,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     if (this._worker) {
       this._worker.postMessage({
         type: 'SET_SCREEN_SIZE',
-        width,
-        height,
+        width: safeWidth,
+        height: safeHeight,
         scale: this._worldContainer?.scale.x ?? 4,
       });
     }
@@ -1182,6 +1272,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // on every portal transition (C-378).
     const newBuffer = message.buffer as ArrayBuffer | undefined;
     if (newBuffer) {
+      this._syncWithBufferCount++;
       // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
       // FIFO shift from a ring buffer that has no relation to what the
       // worker actually owns. After INITIALIZE_ENGINE with transferables,
@@ -1190,15 +1281,21 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
       if (outgoing && outgoing.byteLength > 0 && this._worker) {
         this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: outgoing }, [outgoing]);
+        this._recycledBufferCount++;
       }
 
       this._activeRenderView = new Float32Array(newBuffer);
+    } else {
+      this._syncWithoutBufferCount++;
     }
 
     // ── C-332: Extract tickCount for semantic heartbeat ──
     const ack = message.ack as { tickCount?: number; writableBufferCount?: number } | undefined;
     if (typeof ack?.tickCount === 'number') {
       this._lastKnownTickCount = ack.tickCount;
+    }
+    if (typeof ack?.writableBufferCount === 'number') {
+      this._lastWritableBufferCount = ack.writableBufferCount;
     }
 
     // C-379 AC-2: forward the player's vision mask onto the debug bridge
@@ -1770,6 +1867,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           this.warn('[GameWorld] WARN: Simulation stalled — tickCount unchanged for 3 heartbeats', {
             tickCount: currentTick,
             staleCycles: this._staleTickCycles,
+            // writableBufferCount 0 => the worker is still ticking but has
+            // no buffer to write into (recycle path broken). Non-zero =>
+            // the worker has a buffer and simply is not ticking.
+            writableBufferCount: this._lastWritableBufferCount,
+            syncWithBuffer: this._syncWithBufferCount,
+            syncWithoutBuffer: this._syncWithoutBufferCount,
+            recycled: this._recycledBufferCount,
           });
           // Escalate: send RESET_TICK_LOOP to the worker
           this._postToWorker({ type: 'RESET_TICK_LOOP' });

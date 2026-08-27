@@ -83,6 +83,7 @@ export const OFFSETTABLE_PORTS = {
   client: 5274,
   site: 5280,
   hub: 5276,
+  hubWorker: 5278,
 } as const;
 
 export const FIXED_PORTS = {
@@ -90,9 +91,6 @@ export const FIXED_PORTS = {
   stt: 8087,
   image: 8188,
   text: 11434,
-  // Local PostgreSQL (C-387). Emulator-only — there is no local Postgres in
-  // staging/production. 5432 is left free for a developer's system Postgres.
-  postgres: 5433,
 } as const;
 
 export const EMULATOR_PORTS = {
@@ -104,6 +102,7 @@ export const STAGING_PORTS = {
   client: 5273,
   site: 5281,
   hub: 5275,
+  hubWorker: 5283,
   voice: 8088,
   stt: 8086,
   image: 8187,
@@ -114,6 +113,7 @@ export const PRODUCTION_PORTS = {
   client: 5277,
   site: 5282,
   hub: 5279,
+  hubWorker: 5284,
   voice: 8092,
   stt: 8090,
   image: 8193,

@@ -8,7 +8,10 @@
 // (game_boot_service) and the sandbox path (game_engine_service), mirroring
 // C-372's wireLpcUrlResolver discipline.
 
-import { createPropFrameResolver, type PropFrameResolverHandle } from '@aikami/frontend/engine';
+import {
+  createPropFrameResolver,
+  type PropFrameResolverHandle,
+} from '@aikami/frontend/engine/render';
 import { logger } from '$logger';
 
 /** Minimal manifest shape needed to build the resolver. */

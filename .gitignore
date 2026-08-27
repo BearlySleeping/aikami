@@ -111,8 +111,7 @@ pids/
 
 ## 🐘 Local PostgreSQL (C-387)
 # Data dir + sockets + logs for the Nix-provided dev server (lifecycle:
-# scripts/src/lib/postgres/lifecycle.ts). Reset with `bun postgres:reset --yes`.
-.postgres/
+# Removed in C-436 (Postgres decommission).
 
 # Pre-migration logical backups taken by the `database` deploy app (C-394 AC-5).
 # pg_dump output stored outside Neon — Neon Free history retention is 6 hours.
@@ -249,6 +248,11 @@ examples
 apps/frontend/client/src-tauri/target/
 apps/frontend/client/src-tauri/gen/
 scripts/lpc/.lpc_manifest.json
+
+# Game data — everything is fetched on demand from R2 (C-435 follow-up).
+# The static/game-data/ directory is kept for tooling (seed generation,
+# catalog publishing) but no files are tracked in git.
+apps/frontend/client/static/game-data/
 
 # LPC assets — canonical source is Firebase Storage
 apps/backend/packages/

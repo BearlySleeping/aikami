@@ -537,6 +537,7 @@ const _localServicesMock = () => ({
   npcService: _createServiceStub(),
   NpcService: class {},
   onboardingService: _createServiceStub(),
+  onboardingHintService: _createServiceStub(),
   personaService: _createServiceStub(),
   preferenceService: _createServiceStub(),
   // biome-ignore lint/complexity/noStaticOnlyClass: stub class for barrel mock
@@ -671,6 +672,8 @@ mock.module('$services', _localServicesMock);
 
 // ── Mock $logger alias required by game services ──────────────────────────
 
+// Must cover every method on BaseLoggerService — a missing one is a
+// TypeError at the call site, not a quiet no-op.
 mock.module('$logger', () => ({
   logger: {
     debug: mock(() => {}),
@@ -678,16 +681,17 @@ mock.module('$logger', () => ({
     log: mock(() => {}),
     warn: mock(() => {}),
     error: mock(() => {}),
+    spam: mock(() => {}),
   },
   __esModule: true,
 }));
 
-// ── Mock @aikami/utils required by campaign_service ───────────────────────
-
-mock.module('@aikami/utils', () => ({
-  toAppError: (err: unknown) => err,
-  __esModule: true,
-}));
+// ── @aikami/utils ─────────────────────────────────────────────────────────
+//
+// NOT mocked. A previous revision replaced the whole barrel with a single
+// `toAppError` stub, which erased `BaseClass` and every other export and broke
+// ~300 tests with "Export named 'BaseClass' not found". The real module loads
+// fine under Bun and already exports `toAppError`.
 
 // ── Mock SvelteKit virtual modules required by transitive dependencies ──────
 
@@ -892,6 +896,59 @@ mock.module('@aikami/frontend/storage', () => ({
   resetLocalDatabase: mock(() => {
     _fakeDbTables.clear();
   }),
+  __esModule: true,
+}));
+
+// ── @aikami/frontend/preview mock ────────────────────────────────────────
+// The preview package depends on @aikami/frontend/engine and pixi.js which
+// cannot be resolved in bun test. Only createLpcRenderer (which depends on
+// pixi.js) is stubbed; pure helpers are re-exported from their real implementations
+// via direct module imports to avoid pixi.js dependency.
+
+import {
+  getLpcGrid,
+  getLpcIconBackgroundPosition,
+  getLpcIconBackgroundSize,
+  getLpcIconCellPitch,
+  pickHeroCell,
+} from '../../../../../packages/frontend/preview/src/lib/lpc/lpc_icon_frame.ts';
+import {
+  createDefaultLpcPreviewState,
+  decodeLpcPreviewState,
+  encodeLpcPreviewState,
+} from '../../../../../packages/frontend/preview/src/lib/lpc/preview_url_state.ts';
+
+mock.module('@aikami/frontend/preview', () => ({
+  createLpcRenderer: mock(() => ({
+    loadSheet: mock(async () => ({})),
+    extractFrame: mock(() => null),
+    getFrameTexture: mock(async () => null),
+    createSprite: mock(async () => null),
+    clearCaches: mock(() => {}),
+    resolver: { resolve: mock(() => null) },
+  })),
+  detectLpcSheetLayout: mock((sheet: { width: number; height: number }) => {
+    const pitch = sheet.width >= 1000 ? 128 : 64;
+    return {
+      pitch,
+      columns: Math.floor(sheet.width / pitch),
+      rows: Math.floor(sheet.height / pitch),
+      scale: 1,
+      anchorOffset: pitch === 128 ? { x: -64, y: -64 } : { x: -32, y: -32 },
+    };
+  }),
+  getLpcSpriteAnchor: mock((layout: { anchorOffset: { x: number; y: number } }) => ({
+    x: layout.anchorOffset.x,
+    y: layout.anchorOffset.y,
+  })),
+  getLpcIconCellPitch,
+  getLpcGrid,
+  getLpcIconBackgroundSize,
+  getLpcIconBackgroundPosition,
+  pickHeroCell,
+  encodeLpcPreviewState,
+  decodeLpcPreviewState,
+  createDefaultLpcPreviewState,
   __esModule: true,
 }));
 

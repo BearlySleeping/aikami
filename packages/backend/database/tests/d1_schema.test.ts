@@ -25,7 +25,7 @@ import {
   sessions,
   users,
   verifications,
-} from '../src/lib/d1_schema.ts';
+} from '../src/lib/schema.ts';
 
 // ── In-memory libsql database ───────────────────────────────────────────
 

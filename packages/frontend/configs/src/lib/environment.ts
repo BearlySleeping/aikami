@@ -30,8 +30,8 @@ const masterSchema = Type.Object({
   PUBLIC_LOG_PERSIST_LEVEL: Type.Optional(Type.String()),
   PUBLIC_VOICE_URL: Type.Optional(Type.String()),
   PUBLIC_ASSETS_BASE_URL: Type.Optional(Type.String()),
-  PUBLIC_FULL_BUNDLE: Type.Optional(Type.String()),
   PUBLIC_QA_BYPASS_TEXT_AI: Type.Optional(Type.String()),
+  PUBLIC_ERUDA_ENABLED: Type.Optional(Type.String()),
   APP_VERSION: Type.Optional(Type.String()),
 });
 
@@ -81,8 +81,8 @@ const validateEnv = (): MasterEnv => {
     PUBLIC_LOG_PERSIST_LEVEL: rawEnv.PUBLIC_LOG_PERSIST_LEVEL,
     PUBLIC_VOICE_URL: rawEnv.PUBLIC_VOICE_URL,
     PUBLIC_ASSETS_BASE_URL: rawEnv.PUBLIC_ASSETS_BASE_URL,
-    PUBLIC_FULL_BUNDLE: rawEnv.PUBLIC_FULL_BUNDLE,
     PUBLIC_QA_BYPASS_TEXT_AI: rawEnv.PUBLIC_QA_BYPASS_TEXT_AI,
+    PUBLIC_ERUDA_ENABLED: rawEnv.PUBLIC_ERUDA_ENABLED,
     APP_VERSION: rawEnv.APP_VERSION,
   };
 

@@ -48,8 +48,9 @@ sudo dnf install fuse-libs
 
 ## Option 3 — Docker (fully local, zero cloud)
 
-Everything runs on your own hardware — no internet required after the first
-pull. The default engines are llama.cpp (text), sd-server (image), and
+Everything runs on your own hardware. After the first pull — and the
+client's one-time asset download, see below — no internet is required. The
+default engines are llama.cpp (text), sd-server (image), and
 sherpa-onnx/Kokoro (voice); Ollama and ComfyUI are supported as opt-in
 drop-in swaps.
 
@@ -103,9 +104,9 @@ git clone https://github.com/BearlySleeping/aikami
 cd aikami
 
 bun run setup       # local machine setup (checks bun, jdk, chromium, ...)
-bun run setup:env   # generate .env.emulator files (no GCP access needed)
+bun run setup:env   # fetch .env.emulator secrets
 bun run dev         # client dev server
-bun run dev:all     # client + Firebase emulators
+bun run dev:all     # client + local Cloudflare dev plane (D1 + R2 via wrangler)
 ```
 
 Aikami is a Bun + [Moon](https://moonrepo.dev) monorepo. See
@@ -116,8 +117,33 @@ before opening a PR.
 
 However you install it, campaigns, saves, and chat history live in a local
 Turso (libSQL) database on your machine — that's the source of truth, not a
-server-side copy. Firebase (auth and optional cloud sync) layers on top and is
-never a boot dependency: the game plays and saves fine without ever signing in.
+server-side copy. Cloudflare D1 holds account identity and community pack
+metadata, and Cloudflare R2 holds the published asset catalog and optional save
+backups. Signing in is never a boot dependency: the game plays and saves fine
+without an account.
+
+## First run downloads the art
+
+Aikami ships **without** its sprite, map, and audio library — that's why the
+desktop bundle is small. The first time you launch it, the client downloads the
+starter content it needs from the asset catalog, verifies each file's SHA-256,
+and pins it in a local cache (the Tauri native disk cache on desktop, OPFS in
+the browser).
+
+You'll see a download stage in the boot progress while this happens. After that
+first run the game plays **completely offline** — no catalog fetch, no account,
+no network of any kind.
+
+If you launch for the very first time with no connection, Aikami tells you it
+needs to download starter content rather than hanging or showing an empty
+world. Connect once, and you're set.
+
+:::tip[Planning an offline session?]
+Launch the app once while you still have a connection. Everything after that
+first successful launch works on a plane, in a basement, or behind an
+air-gapped firewall — see [Asset Management](/features/asset-management/) for
+how the cache works.
+:::
 
 ## Starting a campaign
 

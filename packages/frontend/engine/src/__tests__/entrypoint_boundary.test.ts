@@ -1,0 +1,305 @@
+// packages/frontend/engine/src/__tests__/entrypoint_boundary.test.ts
+//
+// Module-boundary enforcement test.
+//
+// Walks the transitive import graph from each sub-barrel and asserts that
+// forbidden modules are never reachable via value imports. `import type` is
+// allowed (it is erased at compile time).
+
+import { describe, it } from 'bun:test';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, relative, resolve } from 'node:path';
+
+// ---------------------------------------------------------------------------
+// Configuration
+// ---------------------------------------------------------------------------
+
+const ENGINE_SRC = resolve(import.meta.dirname, '..');
+
+/** Entrypoints and their forbidden import patterns. */
+const BOUNDARIES: Array<{
+  name: string;
+  entry: string;
+  forbidden: RegExp[];
+}> = [
+  {
+    name: './sim',
+    entry: resolve(ENGINE_SRC, 'sim.ts'),
+    forbidden: [/from\s+['"]pixi\.js['"]/],
+  },
+  {
+    name: './content',
+    entry: resolve(ENGINE_SRC, 'content.ts'),
+    forbidden: [/from\s+['"]pixi\.js['"]/],
+  },
+  // NOTE: ./worker is NOT checked here because ecs_worker.ts imports
+  // LpcBatchManager from render_worker.ts (a ./render module). The
+  // render_worker.ts file is explicitly pixi-free, so the built worker
+  // chunk contains no PixiJS even though it resolves through ./render.
+  // See C-443 Edge Cases & Gotchas for the rationale.
+];
+
+/** File patterns that are NOT checked for pixi.js (they're the render barrel). */
+const RENDER_BARREL = resolve(ENGINE_SRC, 'render.ts');
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract all static import paths from a source file.
+ * Handles:
+ *   import { x } from './foo.ts';
+ *   import type { x } from './foo.ts';
+ *   import './side_effect.ts';
+ *   export { x } from './foo.ts';
+ *   export type { x } from './foo.ts';
+ *   export { type X, y } from './foo.ts';  (mixed type/value re-exports)
+ *   export * from './foo.ts';
+ *
+ * Mixed type/value re-exports are treated as value imports because they contain
+ * at least one value export — the traversal must follow them to discover
+ * transitive dependencies.
+ */
+function extractImports(source: string): string[] {
+  const imports: string[] = [];
+  // Every import/export form that names a module puts the path in a
+  // `from '...'` clause, regardless of what precedes it (named, default,
+  // `* as x`, bare `*`, mixed type/value, multiline) — so match on that
+  // clause directly instead of trying to enumerate the clauses that can
+  // precede it.
+  const fromRe = /from\s+['"]([^'"]+)['"]/g;
+  for (let match = fromRe.exec(source); match !== null; match = fromRe.exec(source)) {
+    if (match[1].startsWith('.')) {
+      imports.push(match[1]);
+    }
+  }
+  // Side-effect-only imports (`import './foo.ts';`) have no `from` clause.
+  const sideEffectRe = /import\s+['"]([^'"]+)['"]/g;
+  for (let match = sideEffectRe.exec(source); match !== null; match = sideEffectRe.exec(source)) {
+    if (match[1].startsWith('.')) {
+      imports.push(match[1]);
+    }
+  }
+  return imports;
+}
+
+/**
+ * Check if an import statement is a type-only import.
+ * `import type { X } from 'pixi.js'` is allowed.
+ * `import { X } from 'pixi.js'` is forbidden.
+ */
+function isTypeOnlyImport(source: string, importPath: string): boolean {
+  // Find the specific import statement for this path
+  const lines = source.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.includes(`from '${importPath}'`) || trimmed.includes(`from "${importPath}"`)) {
+      // Check if it starts with `import type` or `export type`
+      if (trimmed.startsWith('import type') || trimmed.startsWith('export type')) {
+        return true;
+      }
+      // Check for inline `type` keyword before each named import
+      // e.g. `import { type Foo, type Bar } from 'pixi.js'`
+      if (trimmed.includes('import {') || trimmed.includes('export {')) {
+        // Extract the content between { }
+        const braceContent = trimmed.match(/\{([^}]*)\}/);
+        if (braceContent) {
+          const names = braceContent[1].split(',').map((n) => n.trim());
+          // If ALL imports are prefixed with `type`, it's type-only
+          const allType = names.every((n) => n.startsWith('type '));
+          if (allType) {
+            return true;
+          }
+          // If SOME are not prefixed with `type`, it's a value import
+          return false;
+        }
+      }
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Walk the transitive import graph from an entry file, collecting all
+ * reachable local module paths.
+ */
+function walkGraph(entryPath: string, visited: Set<string> = new Set()): string[] {
+  const resolved = resolve(entryPath);
+  if (visited.has(resolved)) {
+    return [];
+  }
+  if (!existsSync(resolved)) {
+    return [];
+  }
+  visited.add(resolved);
+
+  const source = readFileSync(resolved, 'utf-8');
+  const imports = extractImports(source);
+  const result: string[] = [resolved];
+
+  for (const imp of imports) {
+    // Resolve relative imports
+    const baseDir = dirname(resolved);
+    // Try with .ts extension
+    let resolvedPath = resolve(baseDir, imp);
+    if (!existsSync(resolvedPath)) {
+      // Try adding .ts
+      if (!resolvedPath.endsWith('.ts')) {
+        resolvedPath += '.ts';
+      }
+      if (!existsSync(resolvedPath)) {
+        // Try index.ts
+        const dir = resolvedPath.replace(/\.ts$/, '');
+        const indexPath = resolve(dir, 'index.ts');
+        if (existsSync(indexPath)) {
+          resolvedPath = indexPath;
+        } else {
+          continue; // Skip non-resolvable imports (external packages)
+        }
+      }
+    }
+    result.push(...walkGraph(resolvedPath, visited));
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe('engine entrypoint boundaries', () => {
+  for (const boundary of BOUNDARIES) {
+    describe(`${boundary.name}`, () => {
+      it('contains no forbidden imports', () => {
+        const visited = new Set<string>();
+        const files = walkGraph(boundary.entry, visited);
+
+        const violations: Array<{ file: string; line: string }> = [];
+
+        for (const file of files) {
+          // Skip the render barrel itself
+          if (file === RENDER_BARREL) {
+            continue;
+          }
+
+          const source = readFileSync(file, 'utf-8');
+          const lines = source.split('\n');
+
+          for (const pattern of boundary.forbidden) {
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+              if (pattern.test(line)) {
+                // Check if this is a type-only import (allowed)
+                const importPath = line.match(/from\s+['"]([^'"]+)['"]/)?.[1];
+                if (importPath && isTypeOnlyImport(source, importPath)) {
+                  continue; // type-only imports are allowed
+                }
+                const relPath = relative(ENGINE_SRC, file);
+                violations.push({
+                  file: relPath,
+                  line: `${i + 1}: ${line.trim()}`,
+                });
+              }
+            }
+          }
+        }
+
+        if (violations.length > 0) {
+          const detail = violations.map((v) => `  ${v.file}:${v.line}`).join('\n');
+          throw new Error(
+            `${boundary.name} imports pixi.js (or other forbidden module) in:\n${detail}\n\n` +
+              `Import chain hint: check which module in the transitive graph pulls in pixi.js.`,
+          );
+        }
+      });
+
+      it('does not reach node.ts or its dependencies', () => {
+        // Files reachable from node.ts may also be reachable from a browser
+        // entrypoint via a shared, browser-safe utility (e.g. sim.ts and
+        // asset_manifest_node.ts both import pure helpers from
+        // asset_manifest.ts) — that overlap is fine. What must never happen
+        // is a browser entrypoint statically importing node:*/DB-driver
+        // code. node.ts's own actual Node-only I/O lives behind dynamic
+        // `await import(...)` (see asset_manifest_node.ts, C-243), which
+        // this same static regex correctly does not chase — so check the
+        // boundary's graph directly for forbidden static imports instead of
+        // diffing against node.ts's transitive closure.
+        const visited = new Set<string>();
+        const files = walkGraph(boundary.entry, visited);
+
+        const nodeOnlyPattern = /from\s+['"](?:node:|@tursodatabase\/database)/;
+        for (const file of files) {
+          const source = readFileSync(file, 'utf-8');
+          const lines = source.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!nodeOnlyPattern.test(line)) {
+              continue;
+            }
+            const importPath = line.match(/from\s+['"]([^'"]+)['"]/)?.[1];
+            if (importPath && isTypeOnlyImport(source, importPath)) {
+              continue;
+            }
+            const relPath = relative(ENGINE_SRC, file);
+            throw new Error(
+              `${boundary.name} statically imports Node-only module in ${relPath}:${i + 1}.\n` +
+                `Node-only code must stay behind a dynamic import() so it never reaches the browser bundle.`,
+            );
+          }
+        }
+      });
+    });
+  }
+
+  describe('extractImports helper', () => {
+    it('extracts mixed type/value re-exports', () => {
+      const source = `
+        export { type Foo, bar } from './mixed.ts';
+        export { baz } from './value_only.ts';
+        export type { Qux } from './type_only.ts';
+      `;
+      const imports = extractImports(source);
+      // Mixed type/value re-exports must be discovered (they contain values)
+      if (!imports.includes('./mixed.ts')) {
+        throw new Error('extractImports failed to discover mixed type/value re-export');
+      }
+      if (!imports.includes('./value_only.ts')) {
+        throw new Error('extractImports failed to discover value-only re-export');
+      }
+      if (!imports.includes('./type_only.ts')) {
+        throw new Error('extractImports failed to discover type-only re-export');
+      }
+    });
+
+    it('extracts aliased re-exports', () => {
+      const source = `
+        export { foo as bar } from './aliased.ts';
+        export * as namespace from './namespace.ts';
+      `;
+      const imports = extractImports(source);
+      if (!imports.includes('./aliased.ts')) {
+        throw new Error('extractImports failed to discover aliased re-export');
+      }
+      if (!imports.includes('./namespace.ts')) {
+        throw new Error('extractImports failed to discover namespace re-export');
+      }
+    });
+
+    it('extracts multiline re-exports', () => {
+      const source = `
+        export {
+          type Foo,
+          bar,
+          baz
+        } from './multiline.ts';
+      `;
+      const imports = extractImports(source);
+      if (!imports.includes('./multiline.ts')) {
+        throw new Error('extractImports failed to discover multiline re-export');
+      }
+    });
+  });
+});

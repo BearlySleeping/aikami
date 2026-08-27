@@ -1,83 +1,78 @@
 // scripts/src/lib/database/migrate.ts
 //
-// C-394: developer-facing migration command for the server data plane.
+// C-436: developer-facing migration command for the D1 data plane.
 //
-//   bun run db:migrate               → apply pending migrations to LOCAL postgres
-//   bun run db:migrate --mode=production  → apply pending migrations to Neon
-//                                          (NEON_DATABASE_URL_DIRECT from the hub's
-//                                          .env.production — the DIRECT endpoint;
-//                                          DDL under the pooled endpoint breaks)
+//   bun run db:migrate               → apply pending migrations to LOCAL D1
+//   bun run db:migrate --remote      → apply pending migrations to remote D1
 //   bun run db:status                → print how many migrations are applied
 //
-// The hub's `dev` script runs with --mode emulator, so the emulator URL below
-// is the local C-387 PostgreSQL — one value serves both NEON_DATABASE_URL and
-// NEON_DATABASE_URL_DIRECT there.
+// Uses `wrangler d1 migrations apply` under the hood. The Postgres/Neon
+// migration path was removed in C-436.
 //
-// 🔴 This is the DEVELOPER command. The production DEPLOY path is the
-// `database` app in scripts/src/lib/deploy/index.ts (AC-5), which runs the
-// same applyMigrations against NEON_DATABASE_URL_DIRECT as an explicit deploy
-// step — never as a side effect of deploying the hub.
+// Runs from apps/frontend/hub — that's where the D1 binding (wrangler.jsonc)
+// lives. `migrations_dir` on that binding points wrangler at the migration
+// SQL in packages/backend/database/drizzle-d1 (the schema source of truth).
+//
+// Invoked via `bunx wrangler`, not a bare `wrangler` — bunx resolves the
+// version pinned in scripts/package.json, so this can't drift onto whatever
+// `wrangler` happens to be on $PATH (e.g. a global install).
 
+import { execFileSync } from 'node:child_process';
+import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import {
-  applyMigrations,
-  assertDirectEndpoint,
-  countAppliedMigrations,
-} from '../../../../packages/backend/database/src/lib/migrate.ts';
-import { parseEnvKeys } from '../deploy/utils.ts';
 
-const HUB_ENV_DIR = resolve(import.meta.dir, '../../../../apps/frontend/hub');
+const DB_DIR = resolve(import.meta.dir, '../../../../apps/frontend/hub');
+const MIGRATIONS_DIR = resolve(import.meta.dir, '../../../../packages/backend/database/drizzle-d1');
 
-/** Local C-387 PostgreSQL — no pooler, so one URL serves both roles. */
-const LOCAL_CONNECTION_URL = 'postgresql://localhost:5433/aikami_dev?sslmode=disable';
+const countTotalMigrations = (): number =>
+  readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).length;
 
-/**
- * Resolve the DIRECT migration connection string for a mode.
- * - emulator → local postgres
- * - production → NEON_DATABASE_URL_DIRECT from the hub's .env.production
- * Anything else (staging is on hold, D-10) is an explicit error.
- */
-const resolveDirectUrl = (mode: string): string => {
-  if (mode === 'emulator') {
-    return LOCAL_CONNECTION_URL;
-  }
-  if (mode === 'production') {
-    const vars = parseEnvKeys(resolve(HUB_ENV_DIR, '.env.production'));
-    const direct = vars.NEON_DATABASE_URL_DIRECT;
-    if (!direct) {
-      throw new Error(
-        'NEON_DATABASE_URL_DIRECT is not set in apps/frontend/hub/.env.production — ' +
-          'migrations must run through the DIRECT (unpooled) endpoint.',
-      );
-    }
-    return direct;
-  }
-  throw new Error(
-    `Unsupported mode "${mode}" for db:migrate. Staging is not configured (D-10) — ` +
-      'use emulator (local postgres) or production (Neon).',
-  );
-};
+// `wrangler d1 migrations list` prints "No migrations to apply!" when nothing
+// is pending, or a table with one `│ NNNN_name.sql │`-style row per pending
+// migration otherwise — count those rows rather than the old `[x]`/`Applied `
+// patterns, which never matched this wrangler version's table output (hence
+// `db:status` always reporting 0 applied).
+const countPendingMigrations = (outputStr: string): number =>
+  (outputStr.match(/\.sql\s+│/g) ?? []).length;
 
 const main = async (): Promise<void> => {
   const args = Bun.argv.slice(2);
-  const modeFlag = args.find((arg) => arg.startsWith('--mode='));
-  const mode = modeFlag?.split('=')[1] ?? 'emulator';
+  const isRemote = args.includes('--remote');
   const isStatus = args.includes('--status');
 
-  const connectionString = resolveDirectUrl(mode);
-  // Shared guard: the migration path refuses a pooled endpoint before any
-  // count/apply work (DDL under PgBouncer transaction pooling breaks).
-  assertDirectEndpoint(connectionString);
-  if (isStatus) {
-    const applied = await countAppliedMigrations({ connectionString });
-    console.log(`db:status ${mode} — ${applied} migration(s) applied`);
-    return;
+  const wranglerArgs = ['d1', 'migrations', isStatus ? 'list' : 'apply', 'DB'];
+
+  if (!isRemote) {
+    wranglerArgs.push('--local');
   }
-  const applied = await applyMigrations({ connectionString });
-  console.log(`db:migrate ${mode} — ${applied} migration(s) applied`);
+
+  try {
+    const output = execFileSync('bunx', ['wrangler', ...wranglerArgs], {
+      cwd: DB_DIR,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 120_000,
+    });
+    const outputStr = output.toString();
+    console.log(outputStr);
+
+    const total = countTotalMigrations();
+    // `apply` throws on failure (caught below), so reaching here means
+    // nothing is left pending regardless of migration mode.
+    const pending = isStatus ? countPendingMigrations(outputStr) : 0;
+    const applied = total - pending;
+    const label = isStatus ? 'db:status' : 'db:migrate';
+
+    console.log(
+      `${label} ${isRemote ? 'remote' : 'local'} — ${applied}/${total} migration(s) applied${
+        pending > 0 ? `, ${pending} pending` : ''
+      }`,
+    );
+  } catch (error) {
+    const stderr = (error as { stderr?: Buffer }).stderr?.toString().trim();
+    const stdout = (error as { stdout?: Buffer }).stdout?.toString().trim();
+    console.error(`db:migrate failed: ${stderr || stdout || (error as Error).message}`);
+    process.exit(1);
+  }
 };
 
-main().catch((error: unknown) => {
-  console.error(`db:migrate failed: ${(error as Error).message}`);
-  process.exit(1);
-});
+main();

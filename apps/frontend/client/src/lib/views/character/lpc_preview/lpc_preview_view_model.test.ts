@@ -32,7 +32,44 @@ effectPolyfill.root = (fn: () => void) => {
 
 // ── Mocks ─────────────────────────────────────────────────────────────
 
-mock.module('@aikami/frontend/engine', () => ({}));
+const mockResolveLayerDepth = (_options: {
+  slot: string;
+  layerRole: string;
+  direction: number;
+}) => {
+  const depths: Record<string, number> = {
+    body: 0,
+    legs: 10,
+    feet: 20,
+    torso: 30,
+    belt: 35,
+    arms: 36,
+    shoulders: 40,
+    head: 50,
+    eyes: 51,
+    ears: 52,
+    nose: 53,
+    facial_hair: 54,
+    hair: 60,
+    hat: 70,
+    shield: 80,
+    cape: 60,
+    quiver: 70,
+    weapon: 80,
+    accessories: 75,
+    headAccessories: 76,
+    accessory: 77,
+  };
+  return depths[_options.slot] ?? 100;
+};
+
+mock.module('@aikami/frontend/engine', () => ({
+  resolveLayerDepth: mockResolveLayerDepth,
+}));
+
+mock.module('@aikami/frontend/engine/content', () => ({
+  resolveLayerDepth: mockResolveLayerDepth,
+}));
 
 mock.module('@aikami/frontend/services', () => ({
   BaseFrontendClass: class {
@@ -77,7 +114,7 @@ mock.module('@aikami/frontend/services', () => ({
   dialogService: {},
 }));
 
-mock.module('$lib/data/lpc_models', () => ({
+mock.module('@aikami/lpc', () => ({
   LpcAnimationState: {
     Spellcast: 0,
     Thrust: 4,
@@ -92,6 +129,8 @@ mock.module('$lib/data/lpc_models', () => ({
     Down: 2,
     Right: 3,
   },
+  lpcStateSuffix: (state: string) => state,
+  lpcTag: (assetId: string, state: string) => `lpc:${assetId}:${state}`,
 }));
 
 // C-372: the preview VM now resolves sheets through the manifest-aware
@@ -106,13 +145,14 @@ mock.module('$logger', () => ({
   },
 }));
 
-mock.module('$lib/data/lpc_tags', () => ({
-  lpcStateSuffix: () => 'walk',
-  lpcTag: () => 'lpc:test:walk',
-}));
-
 mock.module('$lib/data/lpc_renderer', () => ({
-  loadLpcSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+  createLpcRenderer: () => ({
+    loadSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+    extractFrame: () => null,
+    getFrameTexture: async () => null,
+    createSprite: async () => null,
+    clearCaches: () => {},
+  }),
   detectLpcSheetLayout: (sheet: { width: number; height: number }) => ({
     pitch: 64,
     columns: Math.max(1, Math.floor(sheet.width / 64)),
@@ -120,12 +160,12 @@ mock.module('$lib/data/lpc_renderer', () => ({
     scale: 1,
   }),
   getLpcSpriteAnchor: () => ({ x: -32, y: -32 }),
-  setLpcUrlResolver: () => {},
 }));
 
 mock.module('$lib/data/lpc_asset_catalog', () => ({
   wireLpcUrlResolver: () => {},
   getLpcAssetPath: () => '/game-data/lpc/test.walk.webp',
+  lpcAssetResolver: { resolve: () => null, release: () => {}, kind: 'fixture' },
   ANIMATION_STATE_OPTIONS: [
     { value: 8, label: 'Walk' },
     { value: 0, label: 'Spellcast' },

@@ -20,6 +20,9 @@ dependsOn:
   - 'frontend-configs'
   - 'frontend-storage'
   - 'frontend-theme'
+  - 'frontend-engine'
+  - 'frontend-preview'
+  - 'lpc'
   - 'schemas'
   - 'types'
   - 'constants'
@@ -48,6 +51,22 @@ tasks:
   dev:
     command: 'bun run dev'
     preset: 'server'
+
+  dev-worker:
+    command: 'bun run dev:worker'
+    preset: 'server'
+    options:
+      cache: false
+
+  db-migrate-local:
+    command: 'bun run db:migrate:local'
+    options:
+      cache: false
+
+  db-seed-local:
+    command: 'bun run db:seed:local'
+    options:
+      cache: false
 
   build:
     command: 'bun run build'

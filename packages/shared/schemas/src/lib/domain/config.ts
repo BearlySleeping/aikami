@@ -19,7 +19,7 @@ const _gameDifficultyUnion = Type.Union([
 export const ConfigSchema = Composite(
   CoreSchema,
   Type.Object({
-    uid: Type.String({ description: 'User ID — matches the document ID and Firebase Auth uid' }),
+    uid: Type.String({ description: 'User ID — matches the Better Auth session user id' }),
     theme: Type.Optional(
       Object.assign(_themeUnion, { description: 'UI theme preference', default: 'system' }),
     ),

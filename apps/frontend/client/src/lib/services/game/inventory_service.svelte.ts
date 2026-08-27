@@ -11,7 +11,7 @@
 // lossy INVENTORY_UPDATED full-array listener), and save/load persistence.
 
 import { MAX_INVENTORY_SLOTS } from '@aikami/constants';
-import type { GameCommand } from '@aikami/frontend/engine';
+import type { GameCommand } from '@aikami/frontend/engine/sim';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,

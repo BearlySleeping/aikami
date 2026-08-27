@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts
 
 import { DEFAULT_LPC_RECIPE, STARTER_KIT } from '@aikami/constants';
-import type { LpcLayerRecipe } from '@aikami/frontend/engine';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -9,11 +9,11 @@ import {
 } from '@aikami/frontend/services';
 import type { PersonaData } from '@aikami/types';
 import {
-  CHARACTER_EXTRACTION_SYSTEM_PROMPT,
+  buildCharacterExtractionPrompt,
   CharacterExtractionSchema,
 } from '$lib/data/ai_prompts/character_extraction_schema';
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
-import { GENERATED_LPC_SLOTS, LPC_ASSET_IDS_BY_SLOT } from '$lib/data/lpc_asset_catalog_generated';
+import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 import {
   aiSettingsService,
   authService,
@@ -29,17 +29,27 @@ import {
   worldStateService,
 } from '$services';
 
-// LPC Slot → index lookup (built at module init)
-const _LPC_SLOT_INDEX = new Map<string, number>();
-const _LPC_VARIANT_MAP = new Map<string, string[]>();
-for (let i = 0; i < GENERATED_LPC_SLOTS.length; i++) {
-  const slot = GENERATED_LPC_SLOTS[i];
-  _LPC_SLOT_INDEX.set(slot.slot, i);
-  _LPC_VARIANT_MAP.set(
-    slot.slot,
-    slot.variants.map((v) => v.assetId),
-  );
-}
+// LPC Slot → index lookup (built from catalog)
+const _getLpcSlotIndex = (): Map<string, number> => {
+  const catalog = getLpcCatalog();
+  const map = new Map<string, number>();
+  for (let i = 0; i < catalog.slots.length; i++) {
+    map.set(catalog.slots[i].slot, i);
+  }
+  return map;
+};
+
+const _getLpcVariantMap = (): Map<string, string[]> => {
+  const catalog = getLpcCatalog();
+  const map = new Map<string, string[]>();
+  for (const slot of catalog.slots) {
+    map.set(
+      slot.slot,
+      slot.variants.map((v) => v.assetId),
+    );
+  }
+  return map;
+};
 
 /**
  * Engine slot priority order (C-417 AC-6) — mirrors the onboarding
@@ -244,11 +254,11 @@ export class PersonaCreateViewModel
     let layerIdx = 0;
     for (const [slotName, assetId] of Object.entries(this.lpcRecipe)) {
       // Use the slot ordering from the generated catalog
-      const slotIdx = _LPC_SLOT_INDEX.get(slotName);
+      const slotIdx = _getLpcSlotIndex().get(slotName);
       if (slotIdx === undefined) {
         continue;
       }
-      const variants = _LPC_VARIANT_MAP.get(slotName);
+      const variants = _getLpcVariantMap().get(slotName);
       const vIdx = variants?.indexOf(assetId) ?? -1;
       if (vIdx < 0) {
         continue;
@@ -677,7 +687,7 @@ export class PersonaCreateViewModel
         schema: CharacterExtractionSchema as unknown as Record<string, unknown>,
         schemaName: 'CharacterExtraction',
         prompt: compiledHistory,
-        systemPrompt: CHARACTER_EXTRACTION_SYSTEM_PROMPT,
+        systemPrompt: buildCharacterExtractionPrompt(getLpcCatalog()),
       });
 
       if (!extracted) {
@@ -749,7 +759,7 @@ export class PersonaCreateViewModel
         // entries with defaults so the preview never shows missing assets.
         const validatedRecipe: Record<string, string> = {};
         for (const [slot, assetId] of Object.entries(rawRecipe)) {
-          const validIds = LPC_ASSET_IDS_BY_SLOT[slot];
+          const validIds = getLpcCatalog().assetIdsBySlot[slot];
           if (validIds?.includes(assetId)) {
             validatedRecipe[slot] = assetId;
           } else {

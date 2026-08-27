@@ -10,7 +10,7 @@ tags:
 
 project:
   name: 'backend-database'
-  description: 'Server data plane — Drizzle schema, migrations, pooled pg connection and catalog repositories (C-394).'
+  description: 'Server data plane — D1 (sqlite) Drizzle schema and migrations (C-436).'
   channel: '#backend'
   owner: 'Backend Team'
 
@@ -29,7 +29,7 @@ fileGroups:
     - 'tsconfig.json'
     - 'drizzle.config.ts'
   migrations:
-    - 'drizzle/**/*'
+    - 'drizzle-d1/**/*'
   tests:
     - 'tests/**/*'
 

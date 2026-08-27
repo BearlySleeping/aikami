@@ -12,6 +12,10 @@ import {
 } from '@aikami/frontend/services';
 import type { PackIndexEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
+import {
+  type AssetPrefetchPhase,
+  assetPrefetchService,
+} from '$lib/services/assets/asset_prefetch_service.svelte';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import {
   campaignService,
@@ -131,6 +135,28 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** Confirms pack selection and starts a new campaign with the selected pack. */
   confirmPackSelection(): Promise<void>;
+
+  // ── Background asset download (C-448) ──
+
+  /** Current phase of the shared asset-download pipeline. */
+  readonly downloadPhase: AssetPrefetchPhase;
+
+  /** Download progress as a 0-1 fraction, or undefined when not in progress. */
+  readonly downloadProgressFraction: number | undefined;
+
+  /** Human-readable label for the current download phase, or undefined when idle/ready. */
+  readonly downloadLabel: string | undefined;
+
+  /**
+   * Whether to offer the explicit "download everything for offline" action.
+   * True once the required-to-play core is ready and the player hasn't
+   * already started a full-catalog download — the catalog is otherwise only
+   * fetched on demand as assets are actually needed.
+   */
+  readonly canDownloadAllAssets: boolean;
+
+  /** Starts downloading every remaining catalog asset for offline play. */
+  downloadAllAssets(): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -176,6 +202,49 @@ class StartViewModel
   /** @inheritdoc */
   get isTauri(): boolean {
     return isTauri();
+  }
+
+  /** @inheritdoc */
+  get downloadPhase(): AssetPrefetchPhase {
+    return assetPrefetchService.phase;
+  }
+
+  /** @inheritdoc */
+  get downloadProgressFraction(): number | undefined {
+    const progress =
+      assetPrefetchService.phase === 'prefetching-core'
+        ? assetPrefetchService.coreProgress
+        : assetPrefetchService.warmProgress;
+    if (!progress || progress.total === 0) {
+      return undefined;
+    }
+    return progress.done / progress.total;
+  }
+
+  /** @inheritdoc */
+  get downloadLabel(): string | undefined {
+    switch (assetPrefetchService.phase) {
+      case 'preparing':
+        return 'Preparing assets…';
+      case 'prefetching-core':
+        return 'Downloading starter content…';
+      case 'warming':
+        return 'Downloading all assets for offline play…';
+      case 'degraded':
+        return assetPrefetchService.error ?? 'Asset download paused — check your connection.';
+      default:
+        return undefined;
+    }
+  }
+
+  /** @inheritdoc */
+  get canDownloadAllAssets(): boolean {
+    return assetPrefetchService.phase === 'ready' && !assetPrefetchService.warmStarted;
+  }
+
+  /** @inheritdoc */
+  downloadAllAssets(): void {
+    assetPrefetchService.warmRemaining();
   }
 
   /** @inheritdoc */
@@ -244,6 +313,15 @@ class StartViewModel
   /** @inheritdoc */
   override async initialize(): Promise<void> {
     this.debug('initialize');
+
+    // C-448: start (or observe) the required-to-play (offline-core) download
+    // as soon as the start menu mounts — the game is unplayable without it,
+    // so there's no reason to wait for "New Game" to begin fetching it. This
+    // does NOT download the rest of the catalog — that's opt-in only via
+    // downloadAllAssets(). Fire-and-forget: this ViewModel only reads the
+    // shared service's reactive progress, never awaits it (a slow/offline
+    // connection must never block the start menu from rendering).
+    assetPrefetchService.ensureStarted();
 
     // Check for existing campaigns
     try {

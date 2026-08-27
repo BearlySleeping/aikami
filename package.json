@@ -54,16 +54,10 @@
     "discord:sync": "bun run scripts/src/lib/discord/index.ts sync --apply",
     "discord:commands:sync": "bun run scripts/src/lib/discord/index.ts commands:sync",
     "discord:endpoint:sync": "bun run scripts/src/lib/discord/index.ts endpoint:sync",
-    "postgres:init": "bun run scripts/src/lib/postgres/lifecycle.ts init",
-    "postgres:start": "bun run scripts/src/lib/postgres/lifecycle.ts start",
-    "postgres:stop": "bun run scripts/src/lib/postgres/lifecycle.ts stop",
-    "postgres:reset": "bun run scripts/src/lib/postgres/lifecycle.ts reset",
-    "postgres:psql": "bun run scripts/src/lib/postgres/lifecycle.ts psql",
-    "postgres:status": "bun run scripts/src/lib/postgres/lifecycle.ts status",
     "db:generate": "bun run --cwd packages/backend/database db:generate",
     "db:migrate": "bun run scripts/src/lib/database/migrate.ts",
     "db:status": "bun run scripts/src/lib/database/migrate.ts --status",
-    "db:migrate:production": "NEON_DATABASE_URL_DIRECT=$NEON_DATABASE_URL_DIRECT bun run db:migrate --mode=production",
+    "db:migrate:remote": "bun run scripts/src/lib/database/migrate.ts --remote",
     "clean": "rm -rf node_modules",
     "clean:all": "rm -rf node_modules .svelte-kit dist build .moon",
     "update:llm": "bunx @fission-ai/openspec update && bunx skills add pbakaus/impeccable",
@@ -98,15 +92,15 @@
     "@biomejs/biome": "2.5.10",
     "@google-cloud/firestore": "^9.0.0",
     "@google-cloud/secret-manager": "^7.0.0",
-    "@moonrepo/cli": "2.5.2",
-    "@types/bun": "1.4.0",
-    "@types/node": "26.2.0",
+    "@moonrepo/cli": "2.5.3",
+    "@types/bun": "^1.4.0",
+    "@types/node": "26.3.0",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "syncpack": "15.3.3",
     "typescript": "6.0.3"
   },
   "dependencies": {
-    "typebox": "1.3.17"
+    "typebox": "1.3.19"
   },
   "overrides": {},
   "trustedDependencies": [

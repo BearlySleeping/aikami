@@ -19,6 +19,9 @@ export const REQUIRED_LPC_SLOTS = ['head', 'body', 'torso'] as const;
 /** Default head asset ID used as a fallback when the head texture fails to load. */
 export const LPC_DEFAULT_HEAD_ASSET_ID = 'head/heads/human_male';
 
+/** Default body asset ID used as a fallback when the body layer is missing. */
+export const LPC_DEFAULT_BODY_ASSET_ID = 'body/bodies/male/light';
+
 // ---------------------------------------------------------------------------
 // Single Layer Recipe
 // ---------------------------------------------------------------------------

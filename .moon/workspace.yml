@@ -28,6 +28,7 @@ projects:
   utils: "packages/shared/utils"
   mocks: "packages/shared/mocks"
   local-ai: "packages/shared/local-ai"
+  lpc: "packages/shared/lpc"
 
   # Backend Packages
   backend-chat: "packages/backend/chat"
@@ -48,6 +49,7 @@ projects:
   frontend-storage: "packages/frontend/storage"
   frontend-configs: "packages/frontend/configs"
   frontend-theme: "packages/frontend/theme"
+  frontend-preview: "packages/frontend/preview"
 
 vcs:
   provider: "github"

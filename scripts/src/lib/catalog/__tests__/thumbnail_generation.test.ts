@@ -390,6 +390,7 @@ describe('pipeline integration — thumbnailHash lands in the republished index 
     const { FakeR2Client } = await import('./fixtures.ts');
     const { runCatalogPublish } = await import('../pipeline.ts');
     const client = new FakeR2Client();
+    const contentPacksDir = mkdtempSync(join(tmpdir(), 'catalog-thumb-empty-packs-'));
     const report = await runCatalogPublish({
       config: {
         accessKeyId: 'test',
@@ -400,6 +401,7 @@ describe('pipeline integration — thumbnailHash lands in the republished index 
       },
       client,
       gameDataDir: dir,
+      contentPacksDir,
     });
 
     expect(report.ok).toBe(true);

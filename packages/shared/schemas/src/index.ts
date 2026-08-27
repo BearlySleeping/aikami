@@ -75,3 +75,4 @@ export * from './lib/media/music.ts';
 export * from './lib/parser/parser.ts';
 export * from './lib/project/project.ts';
 export * from './lib/runtime/runtime_engine_config.ts';
+export * from './lib/visual/visual_test.ts';

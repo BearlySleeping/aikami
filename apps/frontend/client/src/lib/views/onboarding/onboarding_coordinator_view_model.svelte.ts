@@ -28,7 +28,7 @@ import {
   SPECIES_OPTIONS,
   STARTER_HEROES,
 } from '@aikami/constants';
-import type { LpcLayerRecipe } from '@aikami/frontend/engine';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

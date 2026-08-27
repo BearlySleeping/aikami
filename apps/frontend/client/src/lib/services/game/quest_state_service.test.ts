@@ -6,7 +6,7 @@
 // Contract: C-329 Integrate the Demo Quest from Offer Through Reward
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { ContentPackLoaderInterface } from '@aikami/frontend/engine';
+import type { ContentPackLoaderInterface } from '@aikami/frontend/engine/sim';
 import type { ContentPackQuestEntry } from '@aikami/types';
 import { inventoryService } from './inventory_service.svelte';
 import { playerStateService } from './player_state_service.svelte';

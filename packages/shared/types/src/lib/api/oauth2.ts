@@ -108,9 +108,7 @@ export type CoreOAuthMessageTypes = {
       code: string;
       redirectURI: string;
     },
-    OAuthExecuteData & {
-      customFirebaseSignInToken?: string;
-    },
+    OAuthExecuteData,
   ];
   disconnect: [undefined, undefined];
 };

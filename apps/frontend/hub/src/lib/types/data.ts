@@ -86,6 +86,14 @@ export type CatalogAssetPageData = {
   categoryLabel: string;
   entry: CatalogAssetEntry;
   /**
+   * Full entries from the category shard (C-446). Used by the client-side
+   * preview resolver to resolve tags without a second index fetch.
+   * For map and pack pages, this also includes the tilesets shard entries.
+   */
+  entries: readonly CatalogAssetEntry[];
+  /** CDN origin URL — used by the client-side resolver. */
+  originUrl: string;
+  /**
    * Resolved CDN URL for the preview — the single-frame thumbnail from the
    * pipeline (AC-5), NOT the raw multi-frame sheet. `undefined` when the
    * entry predates the thumbnail republish; the view must say the preview is
@@ -94,4 +102,24 @@ export type CatalogAssetPageData = {
   previewUrl: string | undefined;
   /** Streamed — null when the stats endpoint is unreachable/unconfigured. */
   stats: Promise<AssetStats | null>;
+};
+
+// ---------------------------------------------------------------------------
+// Walk sandbox — map validation page
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk sandbox page data (C-447).
+ *
+ * The server load validates the map tag against the catalog index and 404s
+ * on miss. Tileset entries are fetched so the CDN resolver can resolve
+ * tileset references without a second index fetch.
+ */
+export type SandboxPageData = {
+  /** Validated map entry from the catalog index. */
+  readonly entry: CatalogAssetEntry;
+  /** Tileset entries the map references — needed by the resolver. */
+  readonly tilesetEntries: readonly CatalogAssetEntry[];
+  /** Injected origin; never hardcoded. */
+  readonly originUrl: string;
 };

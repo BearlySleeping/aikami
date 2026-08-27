@@ -4,11 +4,23 @@ category: "gameplay"
 order: 1
 ---
 
-Yes, if you're running local AI. Campaigns, saves, and chat history live in a local Turso
-(libSQL) database, and the game boots and plays with no network connection. Run the full
-Docker stack — llama.cpp for text, sd-server for images, sherpa-onnx/Kokoro for voice —
-and nothing needs to leave your machine after the initial pull.
+Yes — after the first launch.
 
-If you're using BYOK with a cloud provider instead, you obviously need a connection to
-reach that provider. Your **saves** are still local either way; cloud sync via Firebase is
-optional and never a boot dependency.
+Aikami ships without its art library, which is what keeps the download small. The
+first time you open it, the client fetches the sprites, maps, and audio it needs and
+pins them in a local cache, verifying each file as it goes. You'll see that download
+in the startup progress. **Every launch after that plays with no network connection
+at all** — that includes the native desktop app.
+
+Campaigns, saves, and chat history live in a local Turso (libSQL) database on your
+machine and never require a connection. Signing in is optional and is never needed to
+boot or play.
+
+For a fully offline setup, run local AI too — the Docker stack (llama.cpp for text,
+sd-server for images, sherpa-onnx/Kokoro for voice) means nothing leaves your machine
+once the images and models are pulled. If you're using BYOK with a cloud provider
+instead, you'll obviously need a connection to reach that provider, but your saves
+stay local either way.
+
+**Planning to play somewhere without a connection?** Launch it once beforehand. That
+single successful startup is all it takes.

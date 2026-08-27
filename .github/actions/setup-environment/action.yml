@@ -35,6 +35,10 @@ inputs:
     description: 'Set to "true" to restore/save the shared Bun install + Moon build cache. Skip for jobs that never invoke moon (docker-release, reuse legs, planning jobs) — restoring an unused cache just costs time.'
     required: false
     default: "false"
+  moon-cache-save:
+    description: 'Set to "false" to RESTORE the Moon build cache without writing it back. Saving the rolling SHA-keyed entry costs ~20s of post-job time on every single run — even a no-op one — and each PR branch writes an entry that only that PR can ever read, while still competing for the repo-wide 10 GB budget. PR gates should restore-only; trusted main/release runs save so there is always a warm entry to restore from.'
+    required: false
+    default: "true"
 
   docker-registry:
     description: 'Set to a registry host (e.g. "europe-west1-docker.pkg.dev") to run `gcloud auth configure-docker` against it. Empty = skip.'
@@ -86,9 +90,24 @@ runs:
     # If that reading were ever wrong, the failure mode is a cache MISS
     # (slower) — never a stale or incorrect result, because moon recomputes
     # the hash from the real inputs on every run regardless.
-    - name: 🌙 Restore Moon build cache
-      if: inputs.moon-cache == 'true'
+    # Two variants of the same cache, selected by `moon-cache-save`, because
+    # `actions/cache` has no "restore but do not save" switch — the save is an
+    # implicit post step that registers itself whenever the action runs.
+    - name: 🌙 Restore Moon build cache (read-write)
+      if: inputs.moon-cache == 'true' && inputs.moon-cache-save == 'true'
       uses: actions/cache@v6 # zizmor: ignore[unpinned-uses] actions/* are exempt per C-440
+      with:
+        path: |
+          .moon/cache/states
+          .moon/cache/outputs
+        key: ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-moon-${{ github.workflow }}-
+          ${{ runner.os }}-${{ runner.arch }}-moon-
+
+    - name: 🌙 Restore Moon build cache (read-only)
+      if: inputs.moon-cache == 'true' && inputs.moon-cache-save != 'true'
+      uses: actions/cache/restore@v6 # zizmor: ignore[unpinned-uses] actions/* are exempt per C-440
       with:
         path: |
           .moon/cache/states
@@ -112,7 +131,7 @@ runs:
     #
     # Never fatal: a stale-cache cleanup failing must not fail the build.
     - name: 🧹 Prune stale moon cache entries
-      if: inputs.moon-cache == 'true' && inputs.install-deps == 'true'
+      if: inputs.moon-cache == 'true' && inputs.moon-cache-save == 'true' && inputs.install-deps == 'true'
       shell: bash
       run: bun moon clean --lifetime '7 days' || echo "moon clean failed — continuing with an unpruned cache"
 

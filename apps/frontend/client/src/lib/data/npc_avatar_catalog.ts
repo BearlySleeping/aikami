@@ -2,9 +2,9 @@
 //
 // NPC + player portrait avatar resolution for the dialogue overlay.
 //
-// Portraits are pre-generated WebP busts stored under
-// /static/assets/npc/{sprite}/{expression}.webp (mirrored in the R2 assets
-// bucket). Each known NPC id and player
+// Portraits are pre-generated WebP busts stored in the game-data catalog
+// under portraits/npc/{sprite}/{expression}.webp (published to R2 and
+// resolved through the AssetStore). Each known NPC id and player
 // class maps to a sprite folder; resolution validates that the requested
 // expression exists for the sprite, falls back to 'neutral', and — when no
 // portrait is configured at all — logs an error and returns a placeholder
@@ -14,14 +14,19 @@
 // Contract: C-239 Expression Emotion System (sprite folders), dialogue avatar fix
 /** biome-ignore-all lint/style/useNamingConvention: content-pack NPC ids use snake_case by design */
 
+import { assetStore } from '$lib/services/assets/asset_store.svelte';
 import { logger } from '$logger';
 import { NPC_SPRITE_EXPRESSIONS } from './npc_sprite_expressions';
 
-/** Base URL for NPC portrait sprites under the client static directory. */
-const NPC_SPRITE_BASE_URL = '/assets/npc' as const;
-
 /** Portrait shown when no avatar image is available for a character. */
-export const PLACEHOLDER_AVATAR_URL = `${NPC_SPRITE_BASE_URL}/placeholder.svg` as const;
+export const PLACEHOLDER_AVATAR_URL = '/game-data/portraits/npc/placeholder.svg' as const;
+
+/**
+ * Fallback base URL for NPC portraits when the asset store is unavailable.
+ * Served from the SvelteKit static directory during dev; removed in production
+ * once the asset store is always initialized.
+ */
+const NPC_SPRITE_BASE_URL = '/game-data/portraits/npc' as const;
 
 /** Default expression used when none is requested or the requested one is unavailable. */
 const DEFAULT_EXPRESSION = 'neutral' as const;
@@ -30,7 +35,7 @@ const DEFAULT_EXPRESSION = 'neutral' as const;
  * Known NPC id → portrait sprite folder.
  *
  * Kept in sync with the emberwatch content-pack spawn points
- * (static/content-packs/emberwatch/maps/*.json). When a dedicated per-NPC
+ * (content/packs/emberwatch/maps/*.json). When a dedicated per-NPC
  * portrait is generated, add its sprite folder here (or carry
  * `avatarSprite` on the NPC spawn data and read it from there).
  */
@@ -86,6 +91,10 @@ const _reportedClamped = new Set<string>();
 const _getAvailableExpressions = (sprite: string): readonly string[] =>
   NPC_SPRITE_EXPRESSIONS[sprite] ?? [];
 
+/** Build the catalog tag for a portrait sprite + expression. */
+const _portraitTag = (sprite: string, expression: string): string =>
+  `portraits:npc:${sprite}:${expression}`;
+
 /**
  * Resolves the portrait URL for an NPC.
  *
@@ -97,6 +106,9 @@ const _getAvailableExpressions = (sprite: string): readonly string[] =>
  * The requested expression is clamped to the sprite's available expressions
  * (warn + 'neutral' fallback). Debug traces use the spam-suppressed logger
  * because this getter re-evaluates on reactive expression changes.
+ *
+ * URLs are resolved through the AssetStore (cache → R2 → null)
+ * when available, falling back to the static placeholder path.
  */
 export const resolveNpcAvatarUrl = (options: {
   npcId: string;
@@ -131,7 +143,7 @@ export const resolveNpcAvatarUrl = (options: {
         npcId,
         npcName,
         sprite,
-        hint: `Create ${NPC_SPRITE_BASE_URL}/${sprite}/neutral.webp and register its expressions in NPC_SPRITE_EXPRESSIONS.`,
+        hint: `Create portraits/npc/${sprite}/neutral.webp and register its expressions in NPC_SPRITE_EXPRESSIONS.`,
       });
     }
     return PLACEHOLDER_AVATAR_URL;
@@ -152,14 +164,30 @@ export const resolveNpcAvatarUrl = (options: {
     }
   }
 
-  const url = `${NPC_SPRITE_BASE_URL}/${sprite}/${clamped}.webp`;
-  logger.spam('npcAvatar.resolve:ok', { npcId, sprite, expression: clamped, url });
-  return url;
+  // Resolve through the asset store (cache → R2 → null)
+  const tag = _portraitTag(sprite, clamped);
+  const resolved = assetStore.resolveUrl(tag);
+  if (resolved) {
+    logger.spam('npcAvatar.resolve:ok', { npcId, sprite, expression: clamped, url: resolved });
+    return resolved;
+  }
+
+  // Asset store not available or tag unknown — fall back to static path
+  // (dev mode / tests where the catalog hasn't been loaded).
+  const fallbackUrl = `${NPC_SPRITE_BASE_URL}/${sprite}/${clamped}.webp`;
+  logger.spam('npcAvatar.resolve:fallback', {
+    npcId,
+    sprite,
+    expression: clamped,
+    url: fallbackUrl,
+  });
+  return fallbackUrl;
 };
 
 /**
  * Resolves the portrait URL for the player character from its class.
  * Logs an error and returns the placeholder when the class has no portrait.
+ * Resolves through the AssetStore when available.
  */
 export const resolvePlayerAvatarUrl = (options: { classId?: string }): string => {
   const classId = options.classId ?? 'fighter';
@@ -178,7 +206,15 @@ export const resolvePlayerAvatarUrl = (options: { classId?: string }): string =>
     return PLACEHOLDER_AVATAR_URL;
   }
 
-  const url = `${NPC_SPRITE_BASE_URL}/${sprite}/${DEFAULT_EXPRESSION}.webp`;
-  logger.spam('playerAvatar.resolve:ok', { classId, sprite, url });
-  return url;
+  const tag = _portraitTag(sprite, DEFAULT_EXPRESSION);
+  const resolved = assetStore.resolveUrl(tag);
+  if (resolved) {
+    logger.spam('playerAvatar.resolve:ok', { classId, sprite, url: resolved });
+    return resolved;
+  }
+
+  // Asset store not available — fall back to static path (dev / tests).
+  const fallbackUrl = `${NPC_SPRITE_BASE_URL}/${sprite}/${DEFAULT_EXPRESSION}.webp`;
+  logger.spam('playerAvatar.resolve:fallback', { classId, sprite, url: fallbackUrl });
+  return fallbackUrl;
 };

@@ -4,9 +4,9 @@
  *
  * C-400 AC-5 — build-time content validator for NPC appearance indices.
  *
- * Walks every content pack under `apps/frontend/client/static/content-packs/*`
+ * Walks every content pack under `content/packs/*`
  * and validates each NPC's `appearanceLayers` against the generated LPC
- * catalog (`lpc_asset_catalog_generated.ts`):
+ * catalog (derived at runtime via `buildLpcCatalog` from `@aikami/lpc`):
  *
  *   - each 1-indexed layer value must be within its slot's variant range
  *   - head-slot indices must resolve to a `head/heads/*` asset (the old
@@ -28,11 +28,9 @@ import { join, resolve } from 'node:path';
 import process from 'node:process';
 
 const REPO_ROOT = resolve(import.meta.dir, '../../../..');
-const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'apps/frontend/client/static/content-packs');
-const GENERATED_CATALOG = join(
-  REPO_ROOT,
-  'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts',
-);
+const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'content/packs');
+// Catalog is now derived at runtime via buildLpcCatalog from @aikami/lpc.
+// The old GENERATED_CATALOG path (lpc_asset_catalog_generated.ts) is removed.
 
 /** Engine slot order — the same six slots the resolver iterates. */
 const ENGINE_SLOTS = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
@@ -72,7 +70,7 @@ export const parseGeneratedCatalog = (source: string): CatalogSlot[] => {
   // Collect all slot declaration offsets first, then slice blocks between
   // consecutive slot declarations.
   const slotOffsets: Array<{ name: string; index: number }> = [];
-  const slotPattern = /slot:\s*'([^']+)'/g;
+  const slotPattern = /slot:\s*['"]([^'"]+)['"]/g;
   while (true) {
     const slotMatch = slotPattern.exec(source);
     if (slotMatch === null) {
@@ -91,7 +89,7 @@ export const parseGeneratedCatalog = (source: string): CatalogSlot[] => {
     const block = source.slice(start, end);
 
     const variants: string[] = [];
-    const assetPattern = /assetId:\s*'([^']+)'/g;
+    const assetPattern = /assetId:\s*['"]([^'"]+)['"]/g;
     while (true) {
       const assetMatch = assetPattern.exec(block);
       if (assetMatch === null) {
@@ -109,10 +107,23 @@ export const parseGeneratedCatalog = (source: string): CatalogSlot[] => {
   return slots;
 };
 
-/** Loads the committed generated catalog. */
+/**
+ * Loads the LPC catalog from the legacy fixture.
+ * The catalog is now derived at runtime via buildLpcCatalog in @aikami/lpc.
+ * For build-time validation, we use the legacy fixture snapshot.
+ */
 export const loadCatalog = (): CatalogSlot[] => {
-  const source = readFileSync(GENERATED_CATALOG, 'utf-8');
-  return parseGeneratedCatalog(source);
+  const fixturePath = join(
+    REPO_ROOT,
+    'packages/shared/lpc/tests/__fixtures__/legacy_catalog_order.json',
+  );
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf-8')) as {
+    slots: Array<{ slot: string; label: string; assetIds: string[] }>;
+  };
+  return fixture.slots.map((s) => ({
+    slot: s.slot,
+    variants: s.assetIds,
+  }));
 };
 
 /** A content-pack manifest subset carrying NPC appearance data. */

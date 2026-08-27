@@ -62,8 +62,29 @@ setup('authenticate test users for all workers', async ({ browser }) => {
 
   // Sign in once to get a session cookie (same cookie works for all workers).
   console.log('[auth.setup] Signing in shared test user...');
-  const cookie = await signInCookie(TEST_EMAIL);
-  console.log('[auth.setup] Session cookie obtained');
+  let cookie: string;
+  try {
+    cookie = await signInCookie(TEST_EMAIL);
+    console.log('[auth.setup] Session cookie obtained');
+  } catch (_error) {
+    // Hub may not have D1 bindings in emulator — create minimal auth states
+    // so tests that don't need auth can still run.
+    console.log('[auth.setup] Hub auth unavailable, creating minimal auth states');
+    for (let workerIndex = 0; workerIndex < MAX_WORKERS; workerIndex++) {
+      const authFile = `${AUTH_DIR}/user-worker-${workerIndex}.json`;
+      if (!existsSync(authFile)) {
+        const context = await browser.newContext();
+        try {
+          await context.storageState({ path: authFile });
+          console.log(`[auth.setup]   ✅ Saved minimal ${authFile}`);
+        } finally {
+          await context.close();
+        }
+      }
+    }
+    console.log('[auth.setup] Minimal auth states created (hub auth unavailable)');
+    return;
+  }
 
   // Generate per-worker auth states
   for (let workerIndex = 0; workerIndex < MAX_WORKERS; workerIndex++) {

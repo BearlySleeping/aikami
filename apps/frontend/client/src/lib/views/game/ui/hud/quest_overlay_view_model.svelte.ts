@@ -7,7 +7,7 @@
 // Shows the current active quest, its description, and per-objective
 // progress, so the player always knows what they are working toward.
 
-import type { QuestData, QuestObjectiveData } from '@aikami/frontend/engine';
+import type { QuestData, QuestObjectiveData } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,

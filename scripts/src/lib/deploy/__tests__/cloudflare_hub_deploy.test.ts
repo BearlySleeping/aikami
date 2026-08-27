@@ -33,8 +33,8 @@ describe('hub Cloudflare Worker deploy config (AC-3)', () => {
     expect(wrangler).toContain('"main"');
   });
 
-  test('hub svelte.config.js uses @sveltejs/adapter-cloudflare', () => {
-    const config = readFileSync(join(repoRoot, 'apps/frontend/hub/svelte.config.js'), 'utf8');
+  test('hub vite.config.ts uses @sveltejs/adapter-cloudflare', () => {
+    const config = readFileSync(join(repoRoot, 'apps/frontend/hub/vite.config.ts'), 'utf8');
     expect(config).toContain('@sveltejs/adapter-cloudflare');
     expect(config).not.toContain('svelte-adapter-bun');
   });

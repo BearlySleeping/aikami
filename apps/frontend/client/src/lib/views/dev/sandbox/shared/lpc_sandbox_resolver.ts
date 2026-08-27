@@ -1,28 +1,22 @@
 // apps/frontend/client/src/lib/views/dev/sandbox/shared/lpc_sandbox_resolver.ts
 //
 // Shared catalog-based LPC recipe resolver for all sandbox ViewModels.
-// Replaces the old SandboxRecipes flat-map approach that was incompatible
-// with the engine's 1-indexed-per-slot variant index scheme.
+// Delegates to the same unified resolver the production boot pipeline uses
+// (game_boot_service.svelte.ts), against the real runtime-loaded LPC catalog
+// (getLpcCatalog) — never a static generated snapshot.
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine';
-import { GENERATED_LPC_SLOTS } from '$lib/data/lpc_asset_catalog_generated';
-
-const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
-
-const SlotCatalogIndex: Record<string, number> = {};
-for (let idx = 0; idx < GENERATED_LPC_SLOTS.length; idx++) {
-  const entry = GENERATED_LPC_SLOTS[idx];
-  if (!entry) {
-    continue;
-  }
-  SlotCatalogIndex[entry.slot] = idx;
-}
-
-const paletteBytes = new Uint8Array(1024);
+import {
+  DEFAULT_LPC_SLOT_FALLBACKS,
+  projectLpcCatalog,
+  resolveLpcAppearance,
+} from '@aikami/frontend/engine/content';
+import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 
 /**
- * Resolves engine variant indices to LPC layer recipes using the generated
- * catalog. Matches the production recipeResolver in game_boot_service.
+ * Resolves engine variant indices to LPC layer recipes using the real,
+ * runtime-loaded LPC catalog. Matches the production recipeResolver in
+ * game_boot_service (both go through the unified resolveLpcAppearance).
  *
  * Engine slot order: body, hair, torso, legs, feet, head.
  * Each value is a 1-indexed variant number within that slot's catalog.
@@ -31,34 +25,8 @@ const paletteBytes = new Uint8Array(1024);
  * @returns Array of LpcLayerRecipe for rendering.
  */
 export const sandboxRecipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
-  const recipes: LpcLayerRecipe[] = [];
-  for (let i = 0; i < EngineSlots.length; i++) {
-    const rawId = layerIds[i];
-    const slotName = EngineSlots[i] ?? `layer_${i}`;
-    const catalogIdx = SlotCatalogIndex[slotName];
-    if (catalogIdx === undefined) {
-      continue;
-    }
-    const slotDef = GENERATED_LPC_SLOTS[catalogIdx];
-    let effectiveIdx = typeof rawId === 'number' ? rawId - 1 : -1;
-    if (slotName === 'head') {
-      if (effectiveIdx < 0) {
-        effectiveIdx = 94;
-      }
-      const headVariant = slotDef?.variants[effectiveIdx];
-      if (!headVariant?.assetId.startsWith('head/heads/')) {
-        effectiveIdx = 94;
-      }
-    }
-    const variant = slotDef?.variants[effectiveIdx];
-    if (!variant) {
-      continue;
-    }
-    recipes.push({
-      slot: slotName,
-      assetId: variant.assetId,
-      hexPalette: paletteBytes,
-    });
-  }
-  return recipes;
+  const catalog = projectLpcCatalog(getLpcCatalog().slots);
+  return [
+    ...resolveLpcAppearance({ layerIds, catalog, fallbacks: DEFAULT_LPC_SLOT_FALLBACKS }).recipes,
+  ];
 };

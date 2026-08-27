@@ -1,6 +1,7 @@
 // apps/frontend/hub/src/lib/views/catalog/__tests__/streamed_stats.test.ts
 //
-// C-396 AC-4: Postgres-backed stats stream in and never block first paint.
+// C-436: D1-backed stats stream in and never block first paint.
+// Ported from the Postgres-backed path (C-396 AC-4).
 //
 // The catalog loads return the stats as a STREAMED promise — resolving it
 // must populate (zero counts are a valid populate — C-394's tables are empty
@@ -9,49 +10,15 @@
 // response after headers are sent (AC-4 watch point).
 
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { closePool } from '@aikami/backend-database';
-
-const LOCAL_URL = 'postgresql://localhost:5433/aikami_dev?sslmode=disable';
-const DEAD_URL = 'postgresql://localhost:59999/aikami_dev?sslmode=disable';
-
-/**
- * True when local PostgreSQL answers on 5433 — the reachable-database test
- * SKIPS when it is not running (same convention as the C-394 suites), so a
- * machine without postgres still gets a green suite.
- */
-const isDbReachable = async (): Promise<boolean> => {
-  const { connect } = await import('node:net');
-  return await new Promise((resolve) => {
-    const socket = connect(5433, 'localhost');
-    const timer = setTimeout(() => {
-      socket.destroy();
-      resolve(false);
-    }, 1500);
-    socket.once('connect', () => {
-      clearTimeout(timer);
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once('error', () => {
-      clearTimeout(timer);
-      resolve(false);
-    });
-  });
-};
-
-const dbReachable = await isDbReachable();
 
 // Minimal fixture origin so the category load has an index to read.
 let origin: { url: string; stop: () => void } | undefined;
 
-const setEnv = (options: { neonUrl: string | undefined; catalogOrigin?: string }): void => {
-  mock.module('$env/dynamic/private', () => ({
-    env: {
-      // biome-ignore lint/complexity/useLiteralKeys: env keys are SCREAMING_SNAKE_CASE literals by platform convention
-      ['NEON_DATABASE_URL']: options.neonUrl,
-      // biome-ignore lint/complexity/useLiteralKeys: env keys are SCREAMING_SNAKE_CASE literals by platform convention
-      ['CATALOG_ORIGIN_URL']: options.catalogOrigin ?? origin?.url,
-    } as Record<string, string | undefined>,
+const setEnv = (options: { catalogOrigin?: string }): void => {
+  mock.module('$app/env/private', () => ({
+    // biome-ignore lint/complexity/useLiteralKeys: env keys are SCREAMING_SNAKE_CASE literals by platform convention
+    ['CATALOG_ORIGIN_URL']: options.catalogOrigin ?? origin?.url,
+    __esModule: true,
   }));
 };
 
@@ -102,42 +69,17 @@ afterAll(() => {
   origin?.stop();
 });
 
-describe('streamed stats — C-396 AC-4 (never blocks first paint)', () => {
+describe('streamed stats — C-436 (never blocks first paint)', () => {
   beforeEach(async () => {
-    await closePool();
-    setEnv({ neonUrl: undefined });
-    // Drop the cached repository layer so each test rebuilds it over the
-    // freshly-created pool (closePool() resets the pool module only).
-    const { resetStatsRepositories } = await import('$lib/server/api/catalog_stats.ts');
-    resetStatsRepositories();
+    setEnv({});
   });
 
-  test('unconfigured (NEON_DATABASE_URL absent) → resolves null, never rejects', async () => {
+  test('unconfigured (no D1 binding) → resolves null, never rejects', async () => {
     const { loadPackStats } = await import('$lib/server/api/catalog_stats.ts');
     await expect(loadPackStats()).resolves.toBeNull();
   });
-
-  test('unreachable database host → resolves null, never rejects', async () => {
-    setEnv({ neonUrl: DEAD_URL });
-    const { loadPackStats } = await import('$lib/server/api/catalog_stats.ts');
-    await expect(loadPackStats()).resolves.toBeNull();
-  });
-
-  test.skipIf(!dbReachable)(
-    'reachable database → pack-derived count shape (zero is a valid populate)',
-    async () => {
-      setEnv({ neonUrl: LOCAL_URL });
-      const { loadPackStats } = await import('$lib/server/api/catalog_stats.ts');
-      const stats = await loadPackStats();
-      // The shape contract, not a hard zero: C-394's tables exist (migrations
-      // applied) but may already hold rows — what must hold is the packCount
-      // shape, so this test survives later contracts that write rows.
-      expect(stats).toEqual(expect.objectContaining({ packCount: expect.any(Number) }));
-    },
-  );
 
   test('the category load stream never rejects — .catch(() => null) guards the page data', async () => {
-    setEnv({ neonUrl: DEAD_URL });
     const { load } = await import('../../../../routes/(public)/catalog/[category]/+page.server.ts');
     const data = await load({
       params: { category: 'lpc' },
@@ -150,7 +92,6 @@ describe('streamed stats — C-396 AC-4 (never blocks first paint)', () => {
   });
 
   test('the detail route load stream never rejects — .catch(() => null) guards the page data too', async () => {
-    setEnv({ neonUrl: DEAD_URL });
     const { load } = await import(
       '../../../../routes/(public)/catalog/[category]/[tag]/+page.server.ts'
     );

@@ -78,10 +78,11 @@ bun run db:migrate     # apply pending migrations locally
 bun run db:status      # how many migrations are applied
 ```
 
-> 🔧 **Known gap:** `bun moon run hub:dev` currently runs plain Vite, which does
-> **not** provide the `DB` / `SAVES_BUCKET` bindings — so auth and catalog
-> routes degrade locally. A `wrangler dev` dev service that provides them is
-> tracked as **C-437**.
+> 🔧 **Local D1 bindings:** `bun moon run hub:dev` (Vite) does **not** provide
+> the `DB` / `SAVES_BUCKET` bindings. Use `bun moon run hub:dev-worker`
+> (wrangler dev --local) when your work touches auth, the catalog, or save
+> backups. See [dev-workflow.md](dev-workflow.md#hub-worker-wrangler-dev---local)
+> for setup instructions.
 
 ---
 
@@ -101,18 +102,12 @@ Adding a table:
 
 ---
 
-## Legacy: Neon Postgres
+## Removed: Neon Postgres (C-436)
 
-Before C-426 the hub ran on Neon PostgreSQL 18 behind a pooled `pg.Pool`, with a
-Nix-pinned local Postgres for development. That path still exists —
-`src/lib/schema.ts` (pg dialect), `src/lib/connection.ts`, the `postgres` herdr
-service, `bun postgres:*` scripts — but **only for the C-426 rollback window**.
-
-**Do not build new work against it.** It carries no live traffic, `NEON_DATABASE_URL`
-should be left blank, and the hub degrades cleanly with no Postgres configured
-(`GET /api/health/db` reports `unconfigured`).
-
-Removal is tracked as **C-436**.
+The Neon PostgreSQL data plane was removed in **C-436**. The hub now uses
+Cloudflare D1 exclusively. The Postgres schema (`pg` dialect), connection pool,
+herdr `postgres` service, and `bun postgres:*` scripts have all been deleted.
+`NEON_DATABASE_URL` is no longer a recognized environment variable.
 
 ---
 

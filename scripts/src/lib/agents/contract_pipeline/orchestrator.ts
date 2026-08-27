@@ -19,12 +19,13 @@ import {
 import { commitAll, pushBranch, remoteBranchExists, runGit } from '../git_worktree.ts';
 import { playError } from './alarm.ts';
 import { resolveContract } from './contract_resolver.ts';
-import { readContractStatus, withUpdatedStatus } from './contract_status.ts';
+import { parseContractStatus, readContractStatus, withUpdatedStatus } from './contract_status.ts';
 import {
   commitContractContent,
   currentBranch,
   isolateContractInWorktree,
   pullContractFromWorktree,
+  readMainContent,
 } from './contract_sync.ts';
 import { captureGitState, currentCommit } from './git_state.ts';
 import {
@@ -47,7 +48,12 @@ import { validatePostconditions } from './postconditions.ts';
 import { loadReviewPrompt, type ReviewProfile } from './prompt_loader.ts';
 import { chimeOnFirstResponse } from './review_alarm.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
-import { MAX_VERIFY_LOOPS, resolveNextStage, transition } from './state_machine.ts';
+import {
+  MAX_BLOCKED_ESCALATIONS,
+  MAX_VERIFY_LOOPS,
+  resolveNextStage,
+  transition,
+} from './state_machine.ts';
 import type {
   ContractPipelineStage,
   ContractReviewDecision,
@@ -55,6 +61,7 @@ import type {
   ReconciliationResult,
   ReviewDecision,
   RunManifest,
+  StageRunOutcome,
 } from './types.ts';
 import {
   isTerminalStage,
@@ -209,6 +216,65 @@ const enforceStageStatus = (options: {
     return options.result;
   }
   return options.result;
+};
+
+/**
+ * Fast-fail the one hard precondition the implementer's own Phase 0 checks
+ * before doing ANY other work: "Confirm status is `approved`. If `draft`,
+ * stop." (`.pi/prompts/contract-implement.md` step 9).
+ *
+ * 🔴 Every other Phase 0 step — auditing dev services, running baseline
+ * tests, reading PROGRESS.md, `moon_detect_affected` — happens BEFORE that
+ * check, so a draft contract still burns the full preflight (often 10+
+ * minutes of real agent time) before the worker ever reaches step 9 and
+ * reports back. C-443 (2026-08-26) hit exactly this, twice in the same
+ * run — the second time on an escalation the review captain had already
+ * spent its one shot trying to fix. The orchestrator can answer "is this
+ * contract approved" in milliseconds; there is no reason to pay for a full
+ * worker session to learn the same thing.
+ *
+ * Reads the AUTHORITATIVE status — `main`'s committed content, not
+ * repoRoot's on-disk mirror (see `readMainContent`'s doc comment for why
+ * that distinction matters: it's the same gap that made `isolateContractInWorktree`
+ * seed a stale copy in the first place). Returns undefined (proceed
+ * normally) whenever the contract is on main at all — this is a narrow
+ * short-circuit for the one condition Phase 0 treats as a hard stop, not a
+ * general re-implementation of the preflight.
+ */
+export const checkImplementPrecondition = (options: {
+  repoRoot: string;
+  contractPath: string;
+  runId: string;
+  attempt: number;
+}): ContractStageResult | undefined => {
+  const mainContent = readMainContent({
+    repoRoot: options.repoRoot,
+    contractPath: options.contractPath,
+  });
+  // Not on `main` yet at all — nothing to fast-fail on; let the worker run
+  // and report its own findings.
+  if (mainContent === undefined) {
+    return undefined;
+  }
+  const status = parseContractStatus(mainContent);
+  if (status !== 'draft') {
+    return undefined;
+  }
+  return {
+    runId: options.runId,
+    stage: 'implementer',
+    attempt: options.attempt,
+    status: 'blocked',
+    summary: 'Contract is still in `draft` status — implementation cannot begin (Phase 0 step 9).',
+    findings: [
+      'Contract status is `draft`, not `approved`, on `main`.',
+      'The critique stage either has not run yet or has not stamped the contract approved.',
+    ],
+    filesTouched: [],
+    evidence: [],
+    contractHash: '',
+    diffHash: '',
+  };
 };
 
 const readReviewDecision = (path: string, runId: string): ContractReviewDecision | undefined => {
@@ -400,13 +466,26 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
   } else {
     lines.push('Reason: Pipeline blocked — no reason recorded.');
   }
-  lines.push('');
-  const lastVerify = [...manifest.attempts]
-    .reverse()
-    .find((a) => a.stage === 'verify' && a.result?.findings?.length);
-  if (lastVerify?.result?.findings?.length) {
-    lines.push('Last verifier findings:');
-    for (const f of lastVerify.result.findings) {
+  // 🔴 A supervisor-written verdict is NOT the worker's own conclusion. Say
+  // so plainly — the C-442 banner read like the verifier had found 10 real
+  // defects when in fact a detector had killed a session that then passed.
+  const halted = [...manifest.attempts].reverse().find((a) => a.result?.haltedBy)?.result;
+  if (halted?.haltedBy) {
+    lines.push(
+      `⚠️  This verdict was written by the ${halted.haltedBy} supervisor, not by the`,
+      `    ${halted.stage} itself — the worker never produced its own result within the`,
+      `    settle window. Treat the stage as UNFINISHED, not as failed on the merits.`,
+      '',
+    );
+  }
+
+  // Findings from the LAST stage that produced any — previously hard-coded to
+  // `verify`, so a run blocked in `implement` or `critique` printed the stale
+  // findings of an older verify attempt (or nothing at all).
+  const lastWithFindings = [...manifest.attempts].reverse().find((a) => a.result?.findings?.length);
+  if (lastWithFindings?.result?.findings?.length) {
+    lines.push(`Last ${lastWithFindings.result.stage} findings:`);
+    for (const f of lastWithFindings.result.findings) {
       lines.push(`  ${severityIcon(f)} ${f}`);
     }
     lines.push('');
@@ -416,7 +495,10 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
   );
   if (impl.length > 0) {
     const all = [...new Set(impl.flatMap((a) => a.result?.filesTouched ?? []))].sort();
-    lines.push('Files needing fixes:');
+    // Not a defect list: this is everything the implementer reported touching.
+    // Labelling it "files needing fixes" sent people hunting for bugs in files
+    // that were simply edited.
+    lines.push('Files this run touched (context, not a defect list):');
     for (const f of all.slice(0, 10)) {
       lines.push(`  📄 ${f}`);
     }
@@ -425,11 +507,18 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
     }
     lines.push('');
   }
+  if (manifest.worktreeCheckoutPath) {
+    lines.push('Work in progress is preserved at:', `  ${manifest.worktreeCheckoutPath}`);
+    if (manifest.worktreeBranch) {
+      lines.push(`  branch: ${manifest.worktreeBranch}`);
+    }
+    lines.push('');
+  }
   lines.push(
     'Next steps:',
-    `  1. Fix the issues above manually in the codebase`,
-    `  2. Run:  bun contract ${manifest.contractId} --fresh`,
-    `  3. Or reset the contract status to 'implemented' and re-run without --fresh`,
+    `  1. Inspect the worktree above — the implementer's work is still there`,
+    `  2. Resume this run:  bun contract --resume ${manifest.runId}`,
+    `  3. Or start over:    bun contract ${manifest.contractId} --fresh`,
     '',
     hr,
     '',
@@ -950,32 +1039,55 @@ export const runContractPipeline = async (options: {
 
         const interactiveStage =
           !!options.interactiveWriter && stage === 'write_contract' && attempt === 1;
-        const outcome = await runStage({
-          repoRoot: options.repoRoot,
-          runDirectory: runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
-          runId: manifest.runId,
-          stage,
-          attempt,
-          contractPath: manifest.contractPath,
-          // The interactive writer legitimately sits idle while waiting for the
-          // user to describe their feature — don't nudge it or time it out
-          // early. Only the hard wall-clock cap bounds the wait.
-          idleTimeoutMs: interactiveStage
-            ? (STAGE_HARD_CAPS.write_contract ?? IDLE_TIMEOUT_MS)
-            : IDLE_TIMEOUT_MS,
-          hardTimeoutMs: STAGE_HARD_CAPS[stage] ?? 8 * 60 * 60 * 1000,
-          feedback,
-          // Lets runStage tell a late-finishing worker (adopt) apart from a
-          // deliberate new round after verifier/review feedback (must re-run).
-          // See the RETRY SAFEGUARD comment in stage_runner.ts.
-          previousAttemptRecordedStatus: manifest.attempts.find(
-            (a) => a.stage === stage && a.attempt === attempt - 1,
-          )?.result?.status,
-          interactiveWriter: interactiveStage,
-          launchWorker: (req) => adapter.launchWorker(req),
-          checkAgentWorking: (pid) => adapter.isWorkerActive(pid),
-          nudgeWorker: interactiveStage ? undefined : (opts) => adapter.nudgeWorker(opts),
-        });
+        // 🔴 Fast-fail BEFORE spawning a worker at all — see the doc comment
+        // on checkImplementPrecondition. A draft contract is knowable in
+        // milliseconds; there is no reason to pay for a full implementer
+        // preflight (dev-service audit, baseline tests, PROGRESS.md) to
+        // discover the same thing at Phase 0 step 9.
+        const precondition =
+          stage === 'implement'
+            ? checkImplementPrecondition({
+                repoRoot: options.repoRoot,
+                contractPath: manifest.contractPath,
+                runId: manifest.runId,
+                attempt,
+              })
+            : undefined;
+        const outcome: StageRunOutcome = precondition
+          ? { result: precondition, paneId: 'precondition-skipped' }
+          : await runStage({
+              repoRoot: options.repoRoot,
+              runDirectory: runDirectory({ runId: manifest.runId, cwd: options.repoRoot }),
+              runId: manifest.runId,
+              stage,
+              attempt,
+              contractPath: manifest.contractPath,
+              // The interactive writer legitimately sits idle while waiting for the
+              // user to describe their feature — don't nudge it or time it out
+              // early. Only the hard wall-clock cap bounds the wait.
+              idleTimeoutMs: interactiveStage
+                ? (STAGE_HARD_CAPS.write_contract ?? IDLE_TIMEOUT_MS)
+                : IDLE_TIMEOUT_MS,
+              hardTimeoutMs: STAGE_HARD_CAPS[stage] ?? 8 * 60 * 60 * 1000,
+              feedback,
+              // Lets runStage tell a late-finishing worker (adopt) apart from a
+              // deliberate new round after verifier/review feedback (must re-run).
+              // See the RETRY SAFEGUARD comment in stage_runner.ts.
+              previousAttemptRecordedStatus: manifest.attempts.find(
+                (a) => a.stage === stage && a.attempt === attempt - 1,
+              )?.result?.status,
+              interactiveWriter: interactiveStage,
+              launchWorker: (req) => adapter.launchWorker(req),
+              checkAgentWorking: (pid) => adapter.isWorkerActive(pid),
+              nudgeWorker: interactiveStage ? undefined : (opts) => adapter.nudgeWorker(opts),
+            });
+        if (precondition) {
+          pipelineLog({
+            runId: manifest.runId,
+            cwd: options.repoRoot,
+            message: `${stage}-${attempt}: skipped (precondition failed) — ${precondition.summary}`,
+          });
+        }
         const after = captureGitState(cwdForGit);
 
         // Direct-draft placeholder rename: the writer creates the real contract
@@ -1188,12 +1300,14 @@ export const runContractPipeline = async (options: {
           currentStage: stage,
           verdict: result,
           verifyLoops: manifest.verifyLoops,
+          blockedEscalations: manifest.blockedEscalations,
         });
         const exhausted =
           stage === 'verify' &&
           result.status === 'changes_requested' &&
           next.verifyLoops >= MAX_VERIFY_LOOPS;
         manifest.verifyLoops = next.verifyLoops;
+        manifest.blockedEscalations = next.blockedEscalations;
 
         // 🔴 When verifier loop is exhausted, always go to review — never block.
         // - YOLO: force reconcile + YOLO review (Captain creates PR, autofix, merges).
@@ -1226,6 +1340,26 @@ export const runContractPipeline = async (options: {
           }
           manifest = transition({ manifest, next: 'review' });
         } else {
+          // 🔴 A blocked/failed worker verdict now escalates to the review
+          // captain instead of ending the run silently (see resolveNextStage).
+          // `blockedReason` is what turns that into a BLOCKED review — the
+          // captain is briefed with the failure instead of being handed a
+          // clean "please review this PR" it cannot make sense of.
+          if (next.escalated) {
+            manifest.blockedReason = `${stage} stage ${result.status}: ${result.summary}`;
+            const haltNote = result.haltedBy
+              ? ` (halted by ${result.haltedBy}, worker never produced its own verdict)`
+              : '';
+            console.warn(
+              `\n⚠️  ${stage} reported ${result.status}${haltNote} — escalating to review ` +
+                `(${next.blockedEscalations}/${MAX_BLOCKED_ESCALATIONS}) rather than ending the run.\n`,
+            );
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `${stage}-${attempt} ${result.status}${haltNote} — escalated to review.`,
+            });
+          }
           manifest = transition({ manifest, next: next.next });
           if (manifest.currentStage === 'blocked') {
             manifest.blockedReason = result.summary;
@@ -1689,6 +1823,11 @@ export const runContractPipeline = async (options: {
       const s = formatBlockedSummary(manifest);
       pipelineLog({ runId: manifest.runId, cwd: options.repoRoot, message: s });
       console.log(s);
+      // 🔴 A blocked run used to end in total silence: no chime, no pane, just
+      // a banner in a background tab nobody was looking at. Every OTHER
+      // terminal outcome makes a sound (the review chime, the crash chime), so
+      // the one outcome that actually needs a human was the only silent one.
+      playError();
       const infraNotes = formatInfraNotesForPrompt(
         summarizeInfraIssues(readInfraIssuesForRun(options.repoRoot, manifest.runId)),
       );

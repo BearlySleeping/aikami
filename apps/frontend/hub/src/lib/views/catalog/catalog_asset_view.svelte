@@ -1,6 +1,11 @@
 <script lang="ts">
 // apps/frontend/hub/src/lib/views/catalog/catalog_asset_view.svelte
 // Asset detail page (C-396 AC-3): preview, size, license, attribution.
+//
+// C-446: adds a client-only preview island over the thumbnail. The preview
+// orchestration lives in the ViewModel's loadPreview() method. The view
+// retains only the mount trigger and template bindings.
+import { onMount } from 'svelte';
 import BaseViewModelContainer from '$components/base_view_model_container.svelte';
 import type { CatalogAssetViewModelInterface } from './catalog_asset_view_model.svelte.ts';
 
@@ -11,6 +16,10 @@ const formatLicense = (license: string): string => {
   const trimmed = license.trim();
   return trimmed.toLowerCase() === 'unknown' ? 'Unknown' : trimmed;
 };
+
+onMount(() => {
+  viewModel.loadPreview();
+});
 </script>
 
 <BaseViewModelContainer
@@ -42,13 +51,15 @@ const formatLicense = (license: string): string => {
   <div class="grid gap-6 md:grid-cols-[minmax(0,320px)_1fr]">
     <!-- Preview -->
     <div
-      class="flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30"
+      class="relative flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/30"
     >
       {#if viewModel.previewUrl}
+        <!-- Server-rendered thumbnail — always visible; hidden by preview canvas -->
         <img
           src={viewModel.previewUrl}
           alt={`Preview of ${viewModel.displayName}`}
           class="h-full w-full object-contain"
+          class:hidden={viewModel.previewMounted}
           data-testid="catalog-asset-preview"
         >
       {:else}
@@ -72,6 +83,37 @@ const formatLicense = (license: string): string => {
             />
           </svg>
           <p class="text-sm">Preview unavailable</p>
+        </div>
+      {/if}
+
+      <!-- C-446: Client-only preview island — mounted over the thumbnail -->
+      {#if viewModel.previewComponent && viewModel.previewKind !== 'none'}
+        <div class="absolute inset-0 z-10" data-testid="catalog-asset-preview-island">
+          <svelte:component this={viewModel.previewComponent} {...viewModel.previewProps} />
+        </div>
+      {/if}
+
+      <!-- C-446: Tileset grid toggle -->
+      {#if viewModel.previewKind === 'tileset' && viewModel.previewComponent}
+        <button
+          type="button"
+          class="absolute bottom-2 right-2 z-20 rounded bg-base-200/80 px-2 py-1 text-xs text-base-content transition-colors hover:bg-base-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          onclick={() => { viewModel.toggleTilesetGrid(); }}
+          data-testid="catalog-tileset-grid-toggle"
+        >
+          {viewModel.showTilesetGrid ? 'Hide Grid' : 'Show Grid'}
+        </button>
+      {/if}
+
+      <!-- C-446: Preview error notice — shown when the island fails -->
+      {#if viewModel.previewError}
+        <div
+          class="absolute bottom-2 left-2 right-2 z-20 rounded bg-error/90 px-3 py-2 text-xs text-error-content"
+          role="alert"
+          aria-live="polite"
+          data-testid="catalog-asset-preview-error"
+        >
+          ⚠️ {viewModel.previewError}
         </div>
       {/if}
     </div>

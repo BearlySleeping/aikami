@@ -10,13 +10,14 @@
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
-import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine';
+import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine/content';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { Campaign, PersonaData } from '@aikami/types';
+import { isTauri } from '$lib/views/utils/is_tauri';
 import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
@@ -29,6 +30,7 @@ const bootStageOrder: readonly GameBootStage[] = [
   'loading_campaign',
   'validating_save',
   'initializing_asset_registry',
+  'prefetching_starter_content',
   'warming_cache',
   'preloading_content',
   'creating_engine',
@@ -45,7 +47,8 @@ const bootStageLabels: Record<GameBootStage, string> = {
   loading_campaign: 'Loading campaign...',
   validating_save: 'Validating save...',
   initializing_asset_registry: 'Preparing assets...',
-  warming_cache: 'Downloading game assets...',
+  prefetching_starter_content: 'Downloading starter content...',
+  warming_cache: 'Finalizing...',
   preloading_content: 'Loading content pack...',
   creating_engine: 'Starting game engine...',
   hydrating_snapshot: 'Restoring world...',
@@ -384,6 +387,9 @@ class GameBootService
       case 'initializing_asset_registry':
         await this._stageInitializeAssetRegistry(generation);
         break;
+      case 'prefetching_starter_content':
+        await this._stagePrefetchStarterContent(generation);
+        break;
       case 'warming_cache':
         await this._stageWarmingCache(generation);
         break;
@@ -441,6 +447,29 @@ class GameBootService
         // Only mutate if generation is current
         if (generation === this._bootGeneration) {
           this._campaign = campaign;
+        }
+      } else if (campaign.state === 'creating') {
+        // Campaign is still in setup — auto-complete to playing so the boot
+        // pipeline can proceed. This happens when the user navigates to /game
+        // without finishing the persona creation flow (C-435 regression).
+        this.debug('stage:loading_campaign:auto-completing-setup');
+        try {
+          const playingState = transition(campaign.state, { type: 'SETUP_COMPLETE' });
+          const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
+          campaign = { ...campaign, state: playingState, updatedAt: new Date().toISOString() };
+          await campaignStorage.update(campaign);
+          if (generation === this._bootGeneration) {
+            this._campaign = campaign;
+          }
+          this.debug('stage:loading_campaign:setup-completed', { campaignId: campaign.id });
+        } catch (error) {
+          this.warn('stage:loading_campaign:auto-setup-failed', {
+            currentState: campaign.state,
+            error: String(error),
+          });
+          if (generation === this._bootGeneration) {
+            this._campaign = campaign;
+          }
         }
       } else {
         try {
@@ -630,152 +659,38 @@ class GameBootService
   }
 
   /**
-   * Stage: open the shared local DB, seed the asset registry from the
-   * compact boot seed (asset_seed.json), init the platform cache backend,
-   * and reconcile install state (C-373 AC-1/AC-3, C-435 AC-5/AC-6).
-   * Never blocks boot — any failure degrades to online mode and seeding
-   * retries on the next boot.
+   * Stage: ensure the shared {@link assetPrefetchService} has opened the
+   * local DB, seeded the asset registry, and initialized the cache backend
+   * (C-373 AC-1/AC-3, C-435 AC-5/AC-6). Delegated so the start-menu screen
+   * and the boot pipeline share one registry-init pass instead of each
+   * running their own (C-448 background downloading). Never blocks boot —
+   * any failure degrades to online mode and seeding retries on the next boot.
    */
   private async _stageInitializeAssetRegistry(generation: number): Promise<void> {
     const t0 = performance.now();
 
     try {
-      // 1. Open the shared DB (runs C-384 schema migrations) + registry
-      const { getLocalDatabase, AssetRegistryRepository } = await import(
-        '@aikami/frontend/storage'
+      const { assetPrefetchService } = await import(
+        '$lib/services/assets/asset_prefetch_service.svelte'
       );
-      const db = await getLocalDatabase();
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-      const registry = new AssetRegistryRepository(db);
-
-      // 1b. C-435 AC-7: Full-bundle build flag — when PUBLIC_FULL_BUNDLE is
-      //     'true', fall back to the old manifest.json + asset_hashes.json
-      //     loading path so the client behaves exactly as before this contract.
-      const { publicEnv } = await import('@aikami/frontend/configs');
-      const isFullBundle = publicEnv.PUBLIC_FULL_BUNDLE === 'true';
-
-      if (isFullBundle) {
-        this.debug('stage:initializing_asset_registry:full-bundle-mode');
-        await this._stageInitializeAssetRegistryLegacy(generation, registry);
-        if (generation !== this._bootGeneration) {
-          return;
-        }
-        // Continue to cache backend init + reconcile below
-      } else {
-        // 2. Load the compact boot seed (replaces 20 MB of manifest.json +
-        //    asset_hashes.json with ~1-2 MB of asset_seed.json).
-        //    The compact seed is bundled in static/game-data/asset_seed.json
-        //    and loads synchronously at boot (C-435 AC-5).
-        let seed: import('@aikami/types').AssetSeedDocument | undefined;
-        try {
-          const seedResponse = await fetch('/game-data/asset_seed.json');
-          if (!seedResponse.ok) {
-            this.warn('stage:initializing_asset_registry:no-seed', {
-              status: seedResponse.status,
-            });
-          } else {
-            const { parseAssetSeed } = await import('@aikami/types');
-            const compact = (await seedResponse.json()) as import('@aikami/types').CompactSeedDocument;
-            seed = parseAssetSeed(compact);
+      const { seed } = await assetPrefetchService.ensureRegistryReady({
+        onSeedProgress: ({ chunk, totalChunks }) => {
+          if (generation === this._bootGeneration) {
+            this.bootProgress.detail = `Seeding assets… chunk ${chunk}/${totalChunks}`;
           }
-        } catch (error) {
-          this.warn('stage:initializing_asset_registry:seed-fetch-failed', {
-            error: String(error),
-          });
-        }
-        if (generation !== this._bootGeneration) {
-          return;
-        }
-
-        // 3. Seed the registry from the compact seed if not already seeded.
-        if (seed && !(await registry.isSeeded(seed.generatedAt))) {
-          const seedT0 = performance.now();
-          await registry.seedFromCompactSeed(seed, ({ chunk, totalChunks }) => {
-            if (generation === this._bootGeneration) {
-              this.bootProgress.detail = `Seeding assets… chunk ${chunk}/${totalChunks}`;
-            }
-          });
-          const seedElapsed = Math.round(performance.now() - seedT0);
-          this.debug('stage:initializing_asset_registry:seeded', {
-            elapsedMs: seedElapsed,
-            rowCount: seed.rows.length,
-          });
-        } else if (!seed) {
-          this.debug('stage:initializing_asset_registry:seed-skipped-no-seed');
-        } else {
-          this.debug('stage:initializing_asset_registry:already-seeded');
-        }
-      }
+        },
+      });
       if (generation !== this._bootGeneration) {
         return;
       }
 
-      // 4. Add R2 sources for de-bundled assets (priority 0 for remote
-      //    assets, replacing the old bundled path). Offline-core assets
-      //    keep their bundled priority-0 sources (C-435).
-      try {
-        const r2BaseUrl = publicEnv.PUBLIC_ASSETS_BASE_URL;
-        if (r2BaseUrl) {
-          // Priority 0: R2 is the primary source for de-bundled assets.
-          // The old addR2Sources used priority 1 (fallback after bundled).
-          const added = await registry.addR2Sources(r2BaseUrl, 0);
-          this.debug('stage:initializing_asset_registry:storage-sources', {
-            r2BaseUrl,
-            sourcesAdded: added,
-          });
-        }
-      } catch (error) {
-        this.warn('stage:initializing_asset_registry:storage-sources-failed', {
-          error: String(error),
+      if (!seed) {
+        // No usable catalog — everything is de-bundled, so without the seed
+        // no asset can resolve. On a fresh install (no cached rows) this is
+        // fatal; on an upgrade the prior session's cache still serves.
+        this.warn('stage:initializing_asset_registry:no-seed', {
+          hint: 'Set PUBLIC_ASSETS_BASE_URL or check network connectivity.',
         });
-      }
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      // 4b. Add bundled priority-0 sources for offline-core assets.
-      //     These are the assets that stay bundled and must resolve from the
-      //     local filesystem without network (C-435).
-      if (!isFullBundle) {
-        try {
-          const coreResponse = await fetch('/game-data/offline_core.json');
-          if (coreResponse.ok) {
-            const core = (await coreResponse.json()) as import('@aikami/types').OfflineCoreDeclaration;
-            const added = await registry.addBundledSources(core.tags);
-            this.debug('stage:initializing_asset_registry:offline-core', {
-              tags: core.tags.length,
-              sourcesAdded: added,
-            });
-          }
-        } catch (error) {
-          this.warn('stage:initializing_asset_registry:offline-core-failed', {
-            error: String(error),
-          });
-        }
-        if (generation !== this._bootGeneration) {
-          return;
-        }
-      }
-
-      // 5. Platform cache backend (OPFS / Tauri FS) + persistence request.
-      const { createPlatformCacheBackend, assetManager } = await import(
-        '$lib/services/assets/asset_manager.svelte'
-      );
-      const backend = createPlatformCacheBackend();
-      await backend.init();
-      await backend.requestPersistence();
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      // 6. Initialize the manager (pre-registers cached binaries) + reconcile
-      //    interrupted downloads and stale-hash evictions.
-      await assetManager.initialize({ registry, backend });
-      await assetManager.reconcile();
-      if (generation !== this._bootGeneration) {
-        return;
       }
 
       const elapsed = performance.now() - t0;
@@ -789,178 +704,77 @@ class GameBootService
   }
 
   /**
-   * Legacy full-bundle seed path (C-435 AC-7). Uses the old manifest.json +
-   * asset_hashes.json loading when PUBLIC_FULL_BUNDLE is 'true', restoring
-   * the pre-contract behavior exactly.
+   * Stage: prefetch the starter content pack tags declared in offline_core.json,
+   * via the shared {@link assetPrefetchService} (C-448 background downloading —
+   * the start-menu screen may already have this in flight or finished, in
+   * which case this resolves immediately). On a fresh install with no
+   * network, this fails with an actionable message.
    */
-  private async _stageInitializeAssetRegistryLegacy(
-    generation: number,
-    registry: import('@aikami/frontend/storage').AssetRegistryRepository,
-  ): Promise<void> {
-    const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
-    if (!assetStore.manifest) {
-      await assetStore.fetchManifest();
-    }
-    if (generation !== this._bootGeneration) {
-      return;
-    }
-    if (!assetStore.manifest) {
-      this.warn('stage:initializing_asset_registry:no-manifest');
-      return;
-    }
-
-    let hashes: import('@aikami/types').AssetHashesFile | undefined;
-    try {
-      const hashesResponse = await fetch('/game-data/asset_hashes.json');
-      if (!hashesResponse.ok) {
-        this.warn('stage:initializing_asset_registry:no-sidecar', {
-          status: hashesResponse.status,
-        });
-      } else {
-        hashes = (await hashesResponse.json()) as import('@aikami/types').AssetHashesFile;
-      }
-    } catch (error) {
-      this.warn('stage:initializing_asset_registry:sidecar-fetch-failed', {
-        error: String(error),
-      });
-    }
-    if (generation !== this._bootGeneration) {
-      return;
-    }
-
-    if (hashes && !(await registry.isSeeded(assetStore.manifest.scannedAt))) {
-      const seedT0 = performance.now();
-      await registry.seedFromManifest({
-        manifest: assetStore.manifest,
-        hashes,
-        onProgress: ({ chunk, totalChunks }) => {
-          if (generation === this._bootGeneration) {
-            this.bootProgress.detail = `Seeding assets… chunk ${chunk}/${totalChunks}`;
-          }
-        },
-      });
-      const seedElapsed = Math.round(performance.now() - seedT0);
-      this.debug('stage:initializing_asset_registry:seeded', {
-        elapsedMs: seedElapsed,
-        manifestCount: assetStore.manifest.count,
-      });
-    } else if (!hashes) {
-      this.debug('stage:initializing_asset_registry:seed-skipped-no-sidecar');
-    } else {
-      this.debug('stage:initializing_asset_registry:already-seeded');
-    }
-  }
-
-  /**
-   * Stage: resumable first-run warming pass. Fetches de-bundled assets from
-   * the remote origin and caches them locally. Reports progress through the
-   * boot staging channel. Interruptible and resumable — closing mid-warm and
-   * reopening continues from where it stopped (C-435 AC-4).
-   *
-   * Assets already cached are skipped. The pass is best-effort: failures
-   * degrade gracefully and the boot continues — the game is playable with
-   * the bundled offline core while warming completes in the background.
-   */
-  private async _stageWarmingCache(generation: number): Promise<void> {
+  private _stagePrefetchStarterContent = async (generation: number): Promise<void> => {
     const t0 = performance.now();
 
-    try {
-      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
-      const { getLocalDatabase, AssetRegistryRepository } = await import(
-        '@aikami/frontend/storage'
-      );
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      const db = await getLocalDatabase();
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-      const registry = new AssetRegistryRepository(db);
-
-      // Read the compact seed to know which assets exist
-      const seedResponse = await fetch('/game-data/asset_seed.json');
-      if (!seedResponse.ok) {
-        this.warn('stage:warming_cache:no-seed', { status: seedResponse.status });
-        return;
-      }
-      const { parseAssetSeed } = await import('@aikami/types');
-      const compact = (await seedResponse.json()) as import('@aikami/types').CompactSeedDocument;
-      const seed = parseAssetSeed(compact);
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      // Check which assets are already cached
-      const installStates = await registry.listInstallStates();
-      if (generation !== this._bootGeneration) {
-        return;
-      }
-
-      const cachedTags = new Set(
-        installStates
-          .filter((s) => s.status === 'cached' || s.status === 'downloading')
-          .map((s) => s.assetId),
-      );
-
-      // Filter to assets that need warming (not cached)
-      const toWarm = seed.rows.filter((row) => !cachedTags.has(row.tag));
-
-      if (toWarm.length === 0) {
-        this.debug('stage:warming_cache:all-cached');
-        const elapsed = performance.now() - t0;
-        this.debug('stage:warming_cache:complete', { elapsedMs: Math.round(elapsed), warmed: 0 });
-        return;
-      }
-
-      this.debug('stage:warming_cache:starting', {
-        total: seed.rows.length,
-        toWarm: toWarm.length,
-      });
-
-      // Warm assets in chunks, reporting progress
-      const WARM_CHUNK_SIZE = 50;
-      let warmed = 0;
-      let failed = 0;
-
-      for (let i = 0; i < toWarm.length; i += WARM_CHUNK_SIZE) {
-        if (generation !== this._bootGeneration) {
-          return;
-        }
-
-        const chunk = toWarm.slice(i, i + WARM_CHUNK_SIZE);
-
-        // Fire-and-forget warm for each asset in the chunk
-        const results = await Promise.allSettled(
-          chunk.map((row) => assetManager.warm(row.tag)),
-        );
-
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            warmed++;
-          } else {
-            failed++;
-          }
-        }
-
-        this.bootProgress.detail = `Warming cache — ${warmed}/${toWarm.length} assets`;
-
-        // Yield between chunks to keep the UI responsive
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-
-      const elapsed = performance.now() - t0;
-      this.debug('stage:warming_cache:complete', {
-        elapsedMs: Math.round(elapsed),
-        warmed,
-        failed,
-        total: toWarm.length,
-      });
-    } catch (error) {
-      // Non-fatal: the game is playable with the bundled offline core.
-      this.warn('stage:warming_cache:degraded', { error: String(error) });
+    const { assetPrefetchService } = await import(
+      '$lib/services/assets/asset_prefetch_service.svelte'
+    );
+    if (generation !== this._bootGeneration) {
+      return;
     }
+
+    const result = await assetPrefetchService.prefetchCore((progress) => {
+      if (generation === this._bootGeneration) {
+        this.bootProgress.detail = `Downloading starter content — ${progress.done}/${progress.total}`;
+      }
+    });
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+
+    const elapsed = performance.now() - t0;
+
+    if (result.requested === 0) {
+      this.debug('stage:prefetching_starter_content:no-core-tags');
+      return;
+    }
+
+    if (result.failedTags.length > 0 && result.fetched === 0 && result.alreadyCached === 0) {
+      // Fresh install with no network — all tags failed
+      const message =
+        'Aikami needs to download starter content the first time you play. ' +
+        'Connect to the internet and try again.';
+      this.warn('stage:prefetching_starter_content:all-failed', {
+        failedTags: result.failedTags,
+        elapsedMs: Math.round(elapsed),
+      });
+      throw new Error(message);
+    }
+
+    if (result.failedTags.length > 0) {
+      // Partial failure — some tags failed but we have enough to proceed
+      this.warn('stage:prefetching_starter_content:partial-failure', {
+        failedTags: result.failedTags,
+        fetched: result.fetched,
+        alreadyCached: result.alreadyCached,
+        elapsedMs: Math.round(elapsed),
+      });
+    } else {
+      this.debug('stage:prefetching_starter_content:complete', {
+        fetched: result.fetched,
+        alreadyCached: result.alreadyCached,
+        elapsedMs: Math.round(elapsed),
+      });
+    }
+  };
+
+  /**
+   * Stage: deliberate no-op, kept in the pipeline for stage-numbering
+   * stability. Full-catalog warming ({@link
+   * assetPrefetchService.warmRemaining}) is opt-in only — a player action
+   * (e.g. "download all for offline") must trigger it explicitly. Boot never
+   * starts it on its own: on-demand, per-asset fetches already cover
+   * whatever the player encounters while playing on the offline core.
+   */
+  private async _stageWarmingCache(_generation: number): Promise<void> {
+    return;
   }
 
   /** Stage: preload content pack manifest + asset bundles. */
@@ -1074,15 +888,14 @@ class GameBootService
     // is loaded before the engine boots (idempotent — catalog module scope
     // also wires it).
     await wireLpcUrlResolver();
-    const { GENERATED_LPC_SLOTS: generatedLpcSlots } = await import(
-      '$lib/data/lpc_asset_catalog_generated'
-    );
+    const { getLpcCatalog } = await import('$lib/data/lpc_asset_catalog');
+    const lpcCatalog = getLpcCatalog();
     // Check generation after async imports
     if (generation !== this._bootGeneration) {
       return;
     }
 
-    const pipeline = this._buildLpcPipeline(generatedLpcSlots, (slot, assetId, state) =>
+    const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
       getLpcAssetPath(slot, assetId, state as unknown as number),
     );
 
@@ -1111,10 +924,24 @@ class GameBootService
     // Determine renderer preference — default 'webgl', boot may override
     this.bootProgress.detail = `Initializing renderer...`;
 
+    // Tauri/WebKitGTK is known to report garbage from
+    // window.innerWidth/innerHeight/devicePixelRatio and even
+    // document.documentElement.clientWidth/clientHeight on some hosts (seen
+    // as negative or billions-scale values). GameWorld.initialize() defaults
+    // to Pixi's resizeTo:window, which multiplies those into a canvas area
+    // WebKit silently refuses to render — a fully blank screen with no
+    // error. Source real dimensions from Tauri's native window API instead,
+    // and pass `resizeTo: undefined` (an explicit own-property, distinct
+    // from omitting it) so GameWorld doesn't fall back to resizeTo:window.
+    const viewportSize = isTauri()
+      ? await this._resolveTauriViewportSize(input.canvas)
+      : { width: input.canvas.clientWidth, height: input.canvas.clientHeight };
+
     await this._gameWorld.initialize({
       canvas: input.canvas,
-      width: input.canvas.clientWidth,
-      height: input.canvas.clientHeight,
+      width: viewportSize.width,
+      height: viewportSize.height,
+      resizeTo: isTauri() ? undefined : window,
       initialPayload: undefined,
       playerData,
       rendererPreference: input.rendererPreference,
@@ -1577,23 +1404,71 @@ class GameBootService
 
   // ── Asset preloading ──
 
-  /** Preloads a single PixiJS asset by URL. Cancellation-safe. */
+  /**
+   * Preloads a single PixiJS asset by URL. Cancellation-safe.
+   *
+   * `url` may be a logical content-pack path (e.g. "emberwatch/maps/village.json")
+   * rather than something directly fetchable — the same registry resolution
+   * loadTilemap/loadJtonMap perform internally (see map_loader.ts) must run
+   * here too, or the raw logical path gets handed straight to Assets.load()
+   * and fails against the real asset store / CDN.
+   *
+   * JSON assets (maps) skip Pixi's Assets/Loader system entirely: the
+   * registry resolver returns extension-less blob: URLs, so Pixi's
+   * extension-sniffing parser selection (checkExtension in loadJson) can't
+   * recognize them as JSON and falls through to the image parser instead,
+   * failing with "Cannot decode the data in the argument to
+   * createImageBitmap". This is harmless to skip — nothing downstream reads
+   * map JSON from Pixi's cache; loadTilemap/loadJtonMap do their own fetch +
+   * `_mapCache` when the real map load happens — so a plain fetch is enough
+   * to warm it and surface fetch failures early.
+   */
   private async _preloadAsset(url: string): Promise<void> {
     if (this._cancelled) {
       return;
     }
+    const resolvedUrl = this._resolveTag ? (this._resolveTag(url) ?? url) : url;
     try {
-      const { Assets } = await import('pixi.js');
-      await Assets.load(url);
+      if (url.split('?')[0]?.toLowerCase().endsWith('.json')) {
+        await fetch(resolvedUrl);
+      } else {
+        const { Assets } = await import('pixi.js');
+        await Assets.load(resolvedUrl);
+      }
     } catch (error) {
-      this.warn('_preloadAsset:failed', { url, error: String(error) });
+      this.warn('_preloadAsset:failed', { url, resolvedUrl, error: String(error) });
       // Non-fatal — the map loader will retry on first load
     }
   }
 
   // ── Resize handler ──
 
+  /**
+   * Resolves the real viewport size via Tauri's native window API. The DOM
+   * viewport-measurement APIs (window.innerWidth/innerHeight,
+   * document.documentElement.clientWidth/clientHeight) are unreliable on
+   * some WebKitGTK hosts — seen returning negative or billions-scale
+   * garbage in this webview. Falls back to the canvas's own box size if the
+   * Tauri call fails for any reason.
+   */
+  private async _resolveTauriViewportSize(
+    canvas: HTMLCanvasElement,
+  ): Promise<{ width: number; height: number }> {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      const size = await getCurrentWindow().innerSize();
+      return { width: size.width, height: size.height };
+    } catch (error) {
+      this.warn('_resolveTauriViewportSize:failed', { error: String(error) });
+      return { width: canvas.clientWidth, height: canvas.clientHeight };
+    }
+  }
+
   private _registerResizeHandler(canvas: HTMLCanvasElement): void {
+    if (isTauri()) {
+      this._registerTauriResizeHandler();
+      return;
+    }
     const handleResize = (): void => {
       if (this._gameWorld) {
         this._gameWorld.resize(canvas.clientWidth, canvas.clientHeight);
@@ -1602,6 +1477,38 @@ class GameBootService
     window.addEventListener('resize', handleResize);
     this._resizeCleanup = (): void => {
       window.removeEventListener('resize', handleResize);
+    };
+  }
+
+  /**
+   * Tauri variant: listens to the native window's resize event (physical
+   * pixel size from Tauri's Rust side) instead of the DOM `resize` event +
+   * canvas.clientWidth/clientHeight, which are unreliable in this webview
+   * (see _resolveTauriViewportSize).
+   */
+  private _registerTauriResizeHandler(): void {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void (async (): Promise<void> => {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        const registered = await getCurrentWindow().onResized(({ payload }) => {
+          this._gameWorld?.resize(payload.width, payload.height);
+        });
+        if (cancelled) {
+          registered();
+          return;
+        }
+        unlisten = registered;
+      } catch (error) {
+        this.warn('_registerTauriResizeHandler:failed', { error: String(error) });
+      }
+    })();
+
+    this._resizeCleanup = (): void => {
+      cancelled = true;
+      unlisten?.();
     };
   }
 

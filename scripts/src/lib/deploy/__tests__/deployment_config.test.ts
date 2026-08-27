@@ -4,12 +4,7 @@
 // `database-migration` service type and its secrets resolve unprefixed.
 
 import { describe, expect, test } from 'bun:test';
-import {
-  ALL_SERVICE_TYPES,
-  APP_CONFIG,
-  DEPLOYABLE_APPS,
-  resolveSecretName,
-} from '../deployment_config.ts';
+import { ALL_SERVICE_TYPES, APP_CONFIG, DEPLOYABLE_APPS } from '../deployment_config.ts';
 
 describe('database app registration (AC-5)', () => {
   test('database-migration is a registered service type', () => {
@@ -37,14 +32,8 @@ describe('database app registration (AC-5)', () => {
   });
 });
 
-describe('database secret naming (no guessing)', () => {
-  test('NEON_DATABASE_URL resolves unprefixed (not in APP_SPECIFIC_KEYS_FOR_PREFIX)', () => {
-    // The contract is explicit: neither NEON key is in the prefix set, so
-    // the GSM secret names are exactly NEON_DATABASE_URL and
-    // NEON_DATABASE_URL_DIRECT — NOT HUB_NEON_DATABASE_URL.
-    expect(resolveSecretName('NEON_DATABASE_URL', { prefix: 'HUB' })).toBe('NEON_DATABASE_URL');
-    expect(resolveSecretName('NEON_DATABASE_URL_DIRECT', { prefix: 'HUB' })).toBe(
-      'NEON_DATABASE_URL_DIRECT',
-    );
+describe('database app config', () => {
+  test('database service type is database-migration', () => {
+    expect(APP_CONFIG.database.serviceType).toBe('database-migration');
   });
 });

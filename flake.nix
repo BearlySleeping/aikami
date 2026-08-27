@@ -75,19 +75,7 @@
           # ── Hybrid Cloud Emulation ──
           google-cloud-sql-proxy
 
-          # ── Local PostgreSQL (C-387) ──
-          # Pinned major (18) so the local engine matches production Neon's
-          # wire protocol (C-394 AC-2 — Neon project is PostgreSQL 18, and
-          # D-8 requires local ≡ production). Nix provides the binaries;
-          # initdb + data live under .postgres/ in the repo (see
-          # scripts/src/lib/postgres/lifecycle.ts).
-          #
-          # 🔴 Major-version bumps do NOT upgrade an existing .postgres/data
-          # directory — PostgreSQL refuses to start on a data directory
-          # initialised by a different major. After bumping: `postgres:stop`
-          # → `postgres:reset --yes` → `postgres:init`. This destroys local
-          # data (see README).
-          postgresql_18
+
 
           # ── Developer Experience ──
           # direnv + nix-direnv for cached flake evaluation
@@ -106,6 +94,9 @@
           python3
           git-filter-repo
           gh
+
+          # Cloudflare wrangler CLI (C-437) — needed for local D1/R2 dev
+          wrangler
 
           # Chromium wrapped with PixiJS DevTools extension support
           chromium-pixi-devtools

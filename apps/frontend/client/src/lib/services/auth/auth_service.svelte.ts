@@ -19,15 +19,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type {
-  AppResult,
-  AuthMessageData,
-  AuthMessageResponse,
-  AuthMessageType,
-  CurrentUser,
-  FirebaseSignInProviderName,
-  RegisterForm,
-} from '@aikami/types';
+import type { AppResult, CurrentUser, RegisterForm, SignInProviderName } from '@aikami/types';
 import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import { hubApiBase } from '../api/hub_api_client';
@@ -128,7 +120,7 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
    * @param provider The social provider to use.
    * @returns A promise that resolves with the social sign-in response.
    */
-  socialSignIn(provider: FirebaseSignInProviderName): Promise<SocialSignInResponse>;
+  socialSignIn(provider: SignInProviderName): Promise<SocialSignInResponse>;
 
   /**
    * Registers a new user.
@@ -154,10 +146,7 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
    * Completes a device-flow authentication handoff for game clients.
    * Approves the Better Auth device-authorization code from the /link page.
    */
-  completeDeviceHandoff(options: {
-    code: string;
-    uid: string;
-  }): Promise<{ customFirebaseSignInToken: string }>;
+  completeDeviceHandoff(options: { code: string; uid: string }): Promise<void>;
 };
 
 export class AuthService
@@ -244,7 +233,7 @@ export class AuthService
     return false;
   }
 
-  async socialSignIn(provider: FirebaseSignInProviderName): Promise<SocialSignInResponse> {
+  async socialSignIn(provider: SignInProviderName): Promise<SocialSignInResponse> {
     // Browser uses a full-page redirect to the hub's Google OAuth; Tauri (no
     // OAuth popup) uses the device-authorization flow with the same polling
     // UX as before.
@@ -412,23 +401,10 @@ export class AuthService
     return undefined;
   }
 
-  protected async callAuthEndpoint<T extends AuthMessageType>(
-    data: AuthMessageData<T>,
-  ): Promise<AuthMessageResponse<T>> {
-    // Legacy Firebase-keyed auth actions are not used on the Better Auth
-    // path. Kept for interface compatibility; callers must not rely on it.
-    void data;
-    throw new Error('callAuthEndpoint is not supported on the Better Auth path');
-  }
-
-  async completeDeviceHandoff(options: {
-    code: string;
-    uid: string;
-  }): Promise<{ customFirebaseSignInToken: string }> {
+  async completeDeviceHandoff(options: { code: string; uid: string }): Promise<void> {
     // The device-link code is the device-authorization user code — approve it
-    // via the plugin instead of minting a Firebase custom token.
+    // via the Better Auth device-authorization plugin.
     await this.approveDeviceHandoff(options.code);
-    return { customFirebaseSignInToken: '' };
   }
 
   /**

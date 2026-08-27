@@ -90,9 +90,9 @@ Key jobs, in order:
 - `deploy-database-migration` — applies pending D1 migrations
 - `update-manifest` / `notify-discord` — publish the update manifest, announce
 
-> Some legacy jobs (`deploy-cloud-run-sveltekit`, `deploy-firebase-functions`)
-> still exist in the file but no app maps to them any more — the hub moved to a
-> Worker and Cloud Functions were removed. They're removed in **C-436**.
+> Legacy jobs (`deploy-cloud-run-sveltekit`, `deploy-firebase-functions`) were
+> removed in **C-436** — the hub moved to a Worker and Cloud Functions were
+> removed. The release.yml file no longer references them.
 
 ---
 

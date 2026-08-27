@@ -17,9 +17,24 @@
 // the request body.
 
 import { createBetterAuth } from '@aikami/backend-auth/better-auth';
-import { d1 } from '@aikami/backend-database';
+import {
+  accountBackups,
+  accounts,
+  deviceCodes,
+  packs,
+  packVersions,
+  sessions,
+  users,
+  verifications,
+} from '@aikami/backend-database';
 import { drizzle } from 'drizzle-orm/d1';
-import { env } from '$env/dynamic/private';
+import {
+  BETTER_AUTH_COOKIE_DOMAIN,
+  BETTER_AUTH_SECRET,
+  BETTER_AUTH_URL,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+} from '$app/env/private';
 import { logger } from '$logger';
 
 type BetterAuthEnv = {
@@ -47,8 +62,8 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
     return undefined;
   }
   if (!_auth) {
-    const baseURL = env.BETTER_AUTH_URL;
-    const secret = env.BETTER_AUTH_SECRET;
+    const baseURL = BETTER_AUTH_URL;
+    const secret = BETTER_AUTH_SECRET;
     // Never fall back to a hardcoded secret or a localhost base URL in
     // production — a missing secret would let anyone forge sessions. The
     // dev-only fallbacks are gated behind an explicit non-production check.
@@ -56,13 +71,24 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
     if (isProduction && (!baseURL || !secret)) {
       throw new Error('BETTER_AUTH_URL and BETTER_AUTH_SECRET are required in production');
     }
-    const db = drizzle(_env.DB, { schema: d1 });
+    const db = drizzle(_env.DB, {
+      schema: {
+        users,
+        sessions,
+        accounts,
+        verifications,
+        deviceCodes,
+        packs,
+        packVersions,
+        accountBackups,
+      },
+    });
     const cookieDomain = deriveCookieDomain();
     _auth = createBetterAuth(db, {
       baseURL: baseURL ?? 'http://localhost:5173',
       secret: secret ?? 'dev-secret-not-for-production',
-      googleClientId: env.GOOGLE_CLIENT_ID,
-      googleClientSecret: env.GOOGLE_CLIENT_SECRET,
+      googleClientId: GOOGLE_CLIENT_ID,
+      googleClientSecret: GOOGLE_CLIENT_SECRET,
       // SSO: share the session cookie across the client (`aikami.`) and hub
       // (`hub.`) subdomains of the same root domain.
       cookieDomain,
@@ -70,7 +96,7 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
     logger.info('better-auth:instance-created', {
       baseURL,
       cookieDomain: cookieDomain ?? null,
-      googleConfigured: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+      googleConfigured: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
       hasSecret: !!secret,
     });
   }
@@ -86,7 +112,7 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
 const deriveCookieDomain = (): string | undefined => {
   // When explicitly configured (production), use that domain for cross-subdomain
   // cookies. Otherwise (dev/emulator), return undefined so cookies are host-scoped.
-  const explicitDomain = env.BETTER_AUTH_COOKIE_DOMAIN;
+  const explicitDomain = BETTER_AUTH_COOKIE_DOMAIN;
   if (explicitDomain && explicitDomain.length > 0) {
     return explicitDomain;
   }

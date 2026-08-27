@@ -14,8 +14,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { LpcAnimationState } from '@aikami/lpc';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import type { LpcAnimationState } from '$lib/data/lpc_models';
 import { playSfxByName } from '$lib/services/audio/audio_asset_resolver';
 import {
   CombatDevViewModel,

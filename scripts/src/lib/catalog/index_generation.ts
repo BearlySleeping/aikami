@@ -64,7 +64,7 @@ const entryToShardEntry = (entry: CatalogEntry) => ({
   tag: entry.tag,
   hash: entry.hash,
   sizeBytes: entry.sizeBytes,
-  // Manifest categories are exactly the six scan categories (tilesets are
+  // Manifest categories are exactly the scan categories (tilesets are
   // excluded upstream) — narrow to the schema union for validation.
   category: entry.category as CatalogCategory,
   ...(entry.subcategory ? { subcategory: entry.subcategory } : {}),

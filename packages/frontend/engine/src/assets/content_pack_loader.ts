@@ -271,8 +271,22 @@ let _contentPackCache = new Map<string, ContentPackLoaderInterface>();
  * Cached per `packId` — calling twice with the same `packId` returns the
  * cached instance without re-fetching.
  *
+ * C-448: the bundled-path fallback has been removed. All content packs are
+ * resolved through the registry (R2) — there is no bundled copy to fall back
+ * to. If the resolver returns null or the fetch fails, an AppError is thrown.
+ *
+ * The default `basePath` is empty — NOT '/content-packs' — because the
+ * catalog seed's tags for content-pack assets are relative to `content/packs/`
+ * (e.g. `emberwatch:manifest`, `emberwatch:maps:village`; see
+ * generate_asset_seed.ts). `assetTagResolver` derives its lookup tag from
+ * this same path via `pathToTag`, so a non-empty basePath segment (like the
+ * pre-C-448 `/content-packs` bundled-fallback prefix) corrupts the tag —
+ * `content-packs:emberwatch:manifest` never matches a seed row, silently
+ * forcing every content-pack fetch through the (now nonexistent) local
+ * fallback path.
+ *
  * @param options.packId - Content pack identifier (matches Campaign.contentPackId).
- * @param options.basePath - Base path to content-pack root (default: '/content-packs').
+ * @param options.basePath - Base path to content-pack root (default: '').
  * @param options.fetchFn - Optional fetch override for testing.
  * @param options.resolveTag - Optional registry-backed tag resolver (C-434).
  * @param options.releaseUrl - Optional blob URL release function (C-434).
@@ -286,7 +300,7 @@ export const loadContentPack = async (options: {
   resolveTag?: AssetTagResolver;
   releaseUrl?: (url: string) => void;
 }): Promise<ContentPackLoaderInterface> => {
-  const { packId, basePath = '/content-packs', fetchFn, resolveTag, releaseUrl } = options;
+  const { packId, basePath = '', fetchFn, resolveTag, releaseUrl } = options;
 
   // Cache check
   const cached = _contentPackCache.get(packId);
@@ -313,63 +327,20 @@ export const loadContentPack = async (options: {
   try {
     response = await fetchImpl(resolvedManifestUrl);
   } catch (error) {
-    // If the resolved URL differs from the original, try the original as
-    // fallback (bundled path).
-    if (resolvedManifestUrl !== manifestUrl) {
-      logger.debug('loadContentPack:registry-fallback', { packId, manifestUrl });
-      try {
-        response = await fetchImpl(manifestUrl);
-      } catch (fallbackError) {
-        const message =
-          fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-        throw toAppError({
-          errorType: 'not-found',
-          errorMessage: 'ContentPackLoader: failed to fetch manifest',
-          details: { packId, manifestUrl, cause: message },
-        });
-      }
-    } else {
-      const message = error instanceof Error ? error.message : String(error);
-      throw toAppError({
-        errorType: 'not-found',
-        errorMessage: 'ContentPackLoader: failed to fetch manifest',
-        details: { packId, manifestUrl, cause: message },
-      });
-    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw toAppError({
+      errorType: 'not-found',
+      errorMessage: 'ContentPackLoader: failed to fetch manifest',
+      details: { packId, manifestUrl: resolvedManifestUrl, cause: message },
+    });
   }
 
   if (!response.ok) {
-    // If the resolved URL differs from the original, try the original as
-    // fallback (bundled path).
-    if (resolvedManifestUrl !== manifestUrl) {
-      logger.debug('loadContentPack:registry-fallback', {
-        packId,
-        manifestUrl,
-        status: response.status,
-      });
-      try {
-        response = await fetchImpl(manifestUrl);
-      } catch {
-        throw toAppError({
-          errorType: 'not-found',
-          errorMessage: `ContentPackLoader: manifest not found (HTTP ${response.status})`,
-          details: { packId, manifestUrl, status: response.status },
-        });
-      }
-      if (!response.ok) {
-        throw toAppError({
-          errorType: 'not-found',
-          errorMessage: `ContentPackLoader: manifest not found (HTTP ${response.status})`,
-          details: { packId, manifestUrl, status: response.status },
-        });
-      }
-    } else {
-      throw toAppError({
-        errorType: 'not-found',
-        errorMessage: `ContentPackLoader: manifest not found (HTTP ${response.status})`,
-        details: { packId, manifestUrl, status: response.status },
-      });
-    }
+    throw toAppError({
+      errorType: 'not-found',
+      errorMessage: `ContentPackLoader: manifest not found (HTTP ${response.status})`,
+      details: { packId, manifestUrl: resolvedManifestUrl, status: response.status },
+    });
   }
 
   // Parse JSON
@@ -448,7 +419,6 @@ export const loadContentPack = async (options: {
     npcCount: Object.keys(manifest.npcs).length,
     itemCount: Object.keys(manifest.items).length,
     dialogueCount: Object.keys(manifest.dialogues).length,
-    source: resolvedManifestUrl !== manifestUrl ? 'registry' : 'static',
   });
 
   return loader;

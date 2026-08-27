@@ -4,7 +4,7 @@
 // NEVER import this file from production code or non-(dev) routes.
 // Updated C-339: Added branching, hidden, optional, timed objective mocks
 
-import type { QuestData, QuestJournalEntry } from '@aikami/frontend/engine';
+import type { QuestData, QuestJournalEntry } from '@aikami/frontend/engine/sim';
 import { BaseViewModel, type BaseViewModelOptions } from '@aikami/frontend/services';
 import { questStateService, worldStateService } from '$services';
 import {

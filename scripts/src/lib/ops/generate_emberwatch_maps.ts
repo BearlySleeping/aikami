@@ -519,7 +519,7 @@ const loadObjectLayers = (
     readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
-        `../../../../apps/frontend/client/static/content-packs/emberwatch/maps/${mapName}.json`,
+        `../../../../content/packs/emberwatch/maps/${mapName}.json`,
       ),
       'utf-8',
     ),
@@ -702,7 +702,7 @@ const emit = (mapName: string, m: MapData): void => {
 
   const outPath = join(
     dirname(fileURLToPath(import.meta.url)),
-    `../../../../apps/frontend/client/static/content-packs/emberwatch/maps/${mapName}.json`,
+    `../../../../content/packs/emberwatch/maps/${mapName}.json`,
   );
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, `${JSON.stringify(mapJson, null, 2)}\n`);

@@ -1,15 +1,15 @@
 // apps/e2e/tests/client/offline_second_run.spec.ts
 //
-// E2E test for AC-2: A second run is fully offline.
-// Given a client that has completed a first run and warmed its cache,
-// when it is launched with no network, then it boots to a playable state,
-// loads a map, renders the character, and makes zero network requests.
+// E2E test for C-448 AC-5: A second run is fully offline.
+// Given an install that has completed a first run, when the network is
+// blocked entirely and the game boots, then it reaches playable state with
+// zero outbound network requests, and the pack loads from the cache.
 //
-// Contract: C-435 De-bundle game-data
+// Contract: C-448 De-bundle Content Packs
 
 import { expect, test } from '@playwright/test';
 
-test.describe('C-435 AC-2: Offline Second Run', () => {
+test.describe('C-448 AC-5: Offline Second Run', () => {
   test('should boot to playable state with zero network requests after cache is warmed', async ({
     page,
     context,
@@ -32,10 +32,20 @@ test.describe('C-435 AC-2: Offline Second Run', () => {
     const canvas = page.locator('#game-canvas-container canvas');
     await expect(canvas).toBeAttached({ timeout: 60000 });
 
-    // Wait a bit more for warming cache to make progress
+    // Wait a bit more for on-demand asset fetches (map, sprites) to settle —
+    // full-catalog warming is opt-in only and not exercised by this test.
     await page.waitForTimeout(5000);
 
     // ── Phase 2: Reload with network blocked ──
+    // Track content requests during the second boot
+    const offlineRequests: string[] = [];
+    page.on('request', (request) => {
+      const url = request.url();
+      if (url.startsWith('http') && !url.includes('localhost') && !url.startsWith('data:')) {
+        offlineRequests.push(url);
+      }
+    });
+
     // Block all network requests via route interception
     await context.route('**/*', (route) => {
       // Allow data: and blob: URIs (local assets)
@@ -55,18 +65,8 @@ test.describe('C-435 AC-2: Offline Second Run', () => {
     await expect(canvasAfter).toBeAttached({ timeout: 60000 });
 
     // Assert the player HUD is visible
-    const playerHud = page.locator('.bg-base-200\\/80');
+    const playerHud = page.getByTestId('player-hud');
     await expect(playerHud).toBeVisible({ timeout: 30000 });
-
-    // Assert zero network requests were made (all assets served from cache)
-    // We check that no outbound HTTP requests were attempted
-    const offlineRequests: string[] = [];
-    page.on('request', (request) => {
-      const url = request.url();
-      if (url.startsWith('http') && !url.includes('localhost') && !url.startsWith('data:')) {
-        offlineRequests.push(url);
-      }
-    });
 
     // Wait a moment for any late requests
     await page.waitForTimeout(3000);

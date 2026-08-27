@@ -11,6 +11,8 @@
       "@aikami/frontend/configs/*": ["../configs/src/lib/*"],
       "@aikami/frontend/utils": ["../utils/src/index.ts"],
       "@aikami/frontend/utils/*": ["../utils/src/lib/*"],
+      "@aikami/lpc": ["../../shared/lpc/src/index.ts"],
+      "@aikami/lpc/*": ["../../shared/lpc/src/*"],
       "@aikami/constants": ["../../shared/constants/src/index.ts"],
       "@aikami/constants/*": ["../../shared/constants/src/*"],
       "@aikami/mocks": ["../../shared/mocks/src/index.ts"],

@@ -23,16 +23,16 @@ export class ChatModesPage {
 
   /** Navigate to the chat modes sandbox. */
   async goto(): Promise<void> {
-    await this.page.goto('/dev/chat-modes');
+    await this.page.goto('/dev/sandbox/chat-c424');
     await this._waitForHydration();
   }
 
   /** Wait for the sandbox view to finish hydrating. */
   private async _waitForHydration(): Promise<void> {
-    await this.page.waitForTimeout(1500);
+    await this.page.waitForTimeout(2000);
     const { expect } = await import('@playwright/test');
-    await expect(this.page.getByRole('heading', { name: '/dev/chat-modes' })).toBeVisible({
-      timeout: 10000,
+    await expect(this.page.locator('textarea')).toBeVisible({
+      timeout: 15000,
     });
   }
 

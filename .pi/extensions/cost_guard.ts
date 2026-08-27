@@ -82,6 +82,24 @@ const _pipelineRole = (): ContractWorkerRole | undefined => {
 const _isUnattended = (): boolean =>
   _pipelineRole() !== undefined && Boolean(process.env.CONTRACT_PIPELINE_RESULT_PATH);
 
+/**
+ * Appended to every steer sent to an unattended pipeline worker.
+ *
+ * 🔴 The generic steers say "state plainly that you are stuck" — advice
+ * addressed to a human reader who does not exist in a headless worker. The
+ * ONLY exit a pipeline worker has is `contract_stage_complete`; a worker that
+ * writes a paragraph instead keeps looping until the halt tier kills it, and
+ * the orchestrator gets the guard's guess rather than the worker's verdict.
+ * Say the thing that actually ends the stage.
+ */
+const _pipelineExitInstruction = (): string =>
+  _isUnattended()
+    ? '\n\nYou are a headless pipeline worker: the ONLY way to end this stage is to call ' +
+      '`contract_stage_complete`. Call it NOW — with everything you have verified so far, ' +
+      'and status `blocked` if you genuinely cannot proceed. Do not write a summary message ' +
+      'instead; nothing reads it.'
+    : '';
+
 /** Convert model-registry cost (per 1M tokens) to per-token cost. */
 const PER_MILLION = 1_000_000;
 
@@ -277,6 +295,15 @@ export default function (pi: ExtensionAPI) {
               evidence: [],
               contractHash: '',
               diffHash: '',
+              // 🔴 Marks this as the GUARD's guess, not the worker's verdict.
+              // `ctx.shutdown()` below does not cancel the agent loop that is
+              // already in flight, so the worker frequently finishes anyway
+              // and overwrites this file seconds later. The orchestrator
+              // treats a `haltedBy` result as provisional and waits out a
+              // settle window before acting on it (stage_runner.ts,
+              // GUARD_SETTLE_MS) — on C-442 the real result, a full pass,
+              // landed 60s after this write and was thrown away.
+              haltedBy: 'cost_guard',
             },
           });
         }
@@ -336,7 +363,8 @@ export default function (pi: ExtensionAPI) {
       `[REPETITION GUARD] Your last message repeated the same sentence ${options.count} times ` +
         `without making progress.\n\n` +
         `Stop. Do not restate your intent again. Either take ONE concrete action with a ` +
-        `tool call, or state plainly that you are blocked and what you need to proceed.`,
+        `tool call, or state plainly that you are blocked and what you need to proceed.` +
+        _pipelineExitInstruction(),
       { deliverAs: 'steer' },
     );
   };
@@ -520,7 +548,8 @@ export default function (pi: ExtensionAPI) {
             `${cycle.cycles} times, with identical arguments each time, and the results have not changed.\n\n` +
             `Alternating between two actions is still a loop. Stop. Either state plainly that ` +
             `you are stuck — what you have tried and what you need — or take an action whose ` +
-            `arguments differ from everything above.`,
+            `arguments differ from everything above.` +
+            _pipelineExitInstruction(),
           { deliverAs: 'steer' },
         );
         return;
@@ -548,7 +577,8 @@ export default function (pi: ExtensionAPI) {
           `[LOOP GUARD] You have repeated the same action ${run} times in a row with ` +
             `identical arguments, and the result has not changed.\n\n` +
             `Stop repeating it. Either do something materially different, or state ` +
-            `plainly that you are stuck, what you have already tried, and what you need.`,
+            `plainly that you are stuck, what you have already tried, and what you need.` +
+            _pipelineExitInstruction(),
           { deliverAs: 'steer' },
         );
         return;

@@ -1,23 +1,16 @@
 // apps/frontend/client/src/lib/data/lpc_asset_catalog.ts
-import { LpcAnimationState, LpcDirection } from '$lib/data/lpc_models';
-import { setLpcManifestReady, setLpcUrlResolver } from '$lib/data/lpc_renderer';
-import { lpcTag } from '$lib/data/lpc_tags';
+
+import type { LpcCatalog } from '@aikami/lpc';
+import { buildLpcCatalog, LpcAnimationState, LpcDirection, lpcTag } from '@aikami/lpc';
+import type { AssetResolver } from '@aikami/types';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
+import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
 
 // ---------------------------------------------------------------------------
 // LPC Asset Catalog — types for slot definitions and variants.
-// Actual slot data is generated in lpc_asset_catalog_generated.ts from
-// the Universal LPC Spritesheet Character Generator.
+// Actual slot data is derived at runtime from the asset store's seed rows
+// via buildLpcCatalog (see getLpcCatalog below) — not a generated file.
 // ---------------------------------------------------------------------------
-
-/** Slots that every LPC character recipe MUST include for a valid render. */
-export const REQUIRED_LPC_SLOTS = ['head', 'body', 'torso'] as const;
-
-/** Default head asset used as fallback when a character's head texture fails to load. */
-export const LPC_DEFAULT_HEAD_ASSET_ID = 'head/heads/human_male';
-
-/** Default body asset used as fallback when a character's body layer is missing. */
-export const LPC_DEFAULT_BODY_ASSET_ID = 'body/bodies/male/light';
 
 /** Shape type for procedural mock sheet generation. */
 export type LpcMockShapeType =
@@ -83,26 +76,59 @@ export const DIRECTION_OPTIONS: readonly { value: LpcDirection; label: string }[
   { value: LpcDirection.Right, label: 'Right' },
 ];
 
-import { getLpcAssetPath as _getLpcAssetPath } from '$lib/data/lpc_renderer';
+// ---------------------------------------------------------------------------
+// Catalog builder — memoised on assetStore seed reference
+// ---------------------------------------------------------------------------
+
+let _lastSeed: object | null = null;
+let _cachedCatalog: LpcCatalog | null = null;
+
+/**
+ * Builds the LPC catalog from the asset store's seed rows.
+ * Memoised on the seed array reference — repeated calls are O(1).
+ * Returns an empty catalog if the seed is not yet loaded.
+ */
+export const getLpcCatalog = (): LpcCatalog => {
+  const seed = assetStore.seed;
+  if (!seed) {
+    return { slots: [], assetIdsBySlot: {}, allAssetIds: [] };
+  }
+  if (_lastSeed !== seed.rows) {
+    _lastSeed = seed.rows;
+    _cachedCatalog = buildLpcCatalog({ entries: seed.rows });
+  }
+  return _cachedCatalog ?? { slots: [], assetIdsBySlot: {}, allAssetIds: [] };
+};
+
+/**
+ * Builds an AI prompt string from the LPC catalog.
+ * Must be called after the catalog is built (not at module scope).
+ */
+export const getLpcCatalogPrompt = (catalog: LpcCatalog): string => {
+  const parts: string[] = ['Available LPC sprite components (asset IDs by slot):'];
+  for (const [slot, ids] of Object.entries(catalog.assetIdsBySlot)) {
+    parts.push(`  ${slot}: ${ids.join(', ')}`);
+  }
+  parts.push(
+    '\nWhen generating a character appearance, return a JSON object: {"lpcRecipe": {"head": "head/heads/human_male", ...}}',
+  );
+  return parts.join('\n');
+};
 
 // ── Manifest wiring ────────────────────────────────────────────────────────
 
 let _manifestLoadPromise: Promise<void> | null = null;
 
 /**
- * Wires the manifest-backed LPC URL resolver into the shared renderer and
- * ensures the asset manifest is loaded before returning.
+ * Ensures the asset manifest is loaded before LPC asset lookups run.
  *
  * Idempotent and deduped — safe to call from every bootstrap / ViewModel
- * wiring point: the resolver is registered once, and concurrent callers
- * share a single in-flight manifest fetch. Await this before rendering or
- * resolving LPC assets so `resolveUrl` never sees a not-yet-loaded manifest
- * (which would otherwise permanently cache `Texture.EMPTY`).
+ * wiring point: concurrent callers share a single in-flight manifest fetch.
+ * Await this before resolving LPC assets so `getLpcAssetPath` never sees a
+ * not-yet-loaded manifest (which would otherwise resolve to null).
  */
 export const wireLpcUrlResolver = async (): Promise<void> => {
-  setLpcUrlResolver((assetId, state) => assetStore.resolveUrl(lpcTag(assetId, state)));
   if (assetStore.manifest) {
-    setLpcManifestReady(true);
     return;
   }
   if (!_manifestLoadPromise) {
@@ -111,22 +137,28 @@ export const wireLpcUrlResolver = async (): Promise<void> => {
     });
   }
   await _manifestLoadPromise;
-  // Mark the renderer manifest-ready so unmapped lookups can be cached and
-  // transient not-ready results are retried against the loaded manifest.
-  setLpcManifestReady(Boolean(assetStore.manifest));
 };
 
 // Wire once at module scope — every consumer of getLpcAssetPath imports this
-// module, so the resolver is registered before any layer lookup happens.
-// The manifest fetch itself is awaited at each call site via wireLpcUrlResolver().
+// module, so the manifest fetch is already in flight before any layer lookup
+// happens. Each call site still awaits wireLpcUrlResolver() itself before
+// relying on the result.
 void wireLpcUrlResolver();
 
 /**
  * Asset path resolver for the sandbox/game engine.
- * Delegates to the shared LPC renderer.
+ * Resolves the LPC (assetId, state) pair to a static URL via the asset store.
  */
 export const getLpcAssetPath = (
   _slot: string,
   assetId: string,
   state: LpcAnimationState,
-): string | null => _getLpcAssetPath(assetId, state);
+): string | null => assetStore.resolveUrl(lpcTag(assetId, state));
+
+/**
+ * Registry-backed {@link AssetResolver} for `createLpcRenderer` consumers
+ * (e.g. the LPC preview). Resolves through the same asset store lookup as
+ * {@link getLpcAssetPath}, so callers must still `await wireLpcUrlResolver()`
+ * before resolving.
+ */
+export const lpcAssetResolver: AssetResolver = createRegistryAssetResolver();

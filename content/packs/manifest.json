@@ -1,0 +1,99 @@
+{
+  "scannedAt": "2026-08-26T14:59:28.568Z",
+  "count": 5,
+  "assets": {
+    "index": {
+      "tag": "index",
+      "category": "contentPacks",
+      "subcategory": "",
+      "name": "index",
+      "path": "index.json",
+      "ext": ".json"
+    },
+    "emberwatch:manifest": {
+      "tag": "emberwatch:manifest",
+      "category": "contentPacks",
+      "subcategory": "",
+      "name": "manifest",
+      "path": "emberwatch/manifest.json",
+      "ext": ".json"
+    },
+    "emberwatch:maps:inn": {
+      "tag": "emberwatch:maps:inn",
+      "category": "contentPacks",
+      "subcategory": "maps",
+      "name": "inn",
+      "path": "emberwatch/maps/inn.json",
+      "ext": ".json"
+    },
+    "emberwatch:maps:merchant_shop": {
+      "tag": "emberwatch:maps:merchant_shop",
+      "category": "contentPacks",
+      "subcategory": "maps",
+      "name": "merchant_shop",
+      "path": "emberwatch/maps/merchant_shop.json",
+      "ext": ".json"
+    },
+    "emberwatch:maps:village": {
+      "tag": "emberwatch:maps:village",
+      "category": "contentPacks",
+      "subcategory": "maps",
+      "name": "village",
+      "path": "emberwatch/maps/village.json",
+      "ext": ".json"
+    }
+  },
+  "byCategory": {
+    "music": [],
+    "sfx": [],
+    "ambient": [],
+    "sprites": [],
+    "backgrounds": [],
+    "lpc": [],
+    "maps": [],
+    "tilesets": [],
+    "contentPacks": [
+      {
+        "tag": "emberwatch:manifest",
+        "category": "contentPacks",
+        "subcategory": "",
+        "name": "manifest",
+        "path": "emberwatch/manifest.json",
+        "ext": ".json"
+      },
+      {
+        "tag": "emberwatch:maps:inn",
+        "category": "contentPacks",
+        "subcategory": "maps",
+        "name": "inn",
+        "path": "emberwatch/maps/inn.json",
+        "ext": ".json"
+      },
+      {
+        "tag": "emberwatch:maps:merchant_shop",
+        "category": "contentPacks",
+        "subcategory": "maps",
+        "name": "merchant_shop",
+        "path": "emberwatch/maps/merchant_shop.json",
+        "ext": ".json"
+      },
+      {
+        "tag": "emberwatch:maps:village",
+        "category": "contentPacks",
+        "subcategory": "maps",
+        "name": "village",
+        "path": "emberwatch/maps/village.json",
+        "ext": ".json"
+      },
+      {
+        "tag": "index",
+        "category": "contentPacks",
+        "subcategory": "",
+        "name": "index",
+        "path": "index.json",
+        "ext": ".json"
+      }
+    ],
+    "portraits": []
+  }
+}

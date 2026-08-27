@@ -5,6 +5,9 @@ name: PR Checks
 # typecheck, and unit tests for everything affected by the PR's diff.
 # Never deploys anything.
 #
+# Workflow/action linting lives in workflow-lint.yml (path-gated on
+# `.github/**`), not here.
+#
 # Expensive suites (Tauri desktop build, E2E/Playwright tests) are excluded
 # from the default graph via `runInCI: false` in their respective moon.yml
 # files. To run them on demand, use workflow_dispatch with include-heavy=true
@@ -13,7 +16,9 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, labeled]
+    # `reopened` and `ready_for_review` matter because draft PRs are skipped
+    # below — without them, marking a PR ready would never trigger the gate.
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -24,55 +29,37 @@ on:
 
 concurrency:
   # Unlike the release workflow, it's safe (and desirable) to cancel a
-  # stale in-progress check when a new commit lands on the same PR.
-  group: pr-checks-${{ github.event.pull_request.number || github.run_id }}
+  # stale in-progress check when a new commit lands on the same PR — or on
+  # main, where only the tip commit's result is interesting.
+  group: pr-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  workflow-lint:
-    name: Workflow Lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      checks: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # actionlint v1.7.7 — static analysis for GitHub Actions workflows
-      # https://github.com/rhysd/actionlint
-      - name: Run actionlint
-        uses: reviewdog/action-actionlint@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }} # Required for reviewdog to post comments
-          actionlint_flags: "-color -shellcheck=shellcheck"
-          fail_level: error
-          filter_mode: nofilter
-          reporter: github-pr-check
-
-      # zizmor v1.29.0 — security audit for GitHub Actions workflows
-      # https://github.com/woodruffw/zizmor
-      - name: Install zizmor
-        run: pip install zizmor==1.29.0
-
-      - name: Run zizmor
-        run: zizmor .github/
-
   validate:
     name: Moon CI
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Gate the whole JOB, not just the moon step. The `labeled` event
+    # re-triggers this workflow on every label change; skipping only the step
+    # still paid for a runner, a full-history checkout and a `bun install`
+    # (~55s) to do nothing. Drafts are skipped entirely — `ready_for_review`
+    # brings them back.
+    if: >-
+      github.event.pull_request.draft != true &&
+      (github.event.action != 'labeled' ||
+       contains(github.event.pull_request.labels.*.name, 'run-heavy'))
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # moon needs history to diff against the base branch
+          # moon needs history to diff against the base branch.
+          # (A `filter: blob:none` partial clone would shave ~3s off the
+          # measured 5s checkout, but changes how moon's git diff resolves
+          # blobs for rename detection. Not worth the behavioural risk for 3s.)
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup environment
@@ -80,20 +67,53 @@ jobs:
         with:
           moon-cache: "true"
           install-deps: "true"
+          # Restore-only on PRs. The moon cache key is rolling (SHA-based), so
+          # it is written on EVERY run — ~20s of post-job time even when moon
+          # had nothing to do — and a PR branch's entry is readable only by
+          # that same PR while still competing for the repo-wide 10 GB budget.
+          # Pushes to main keep saving, so PRs always have a warm entry to
+          # restore from via the `-moon-<workflow>-` restore-key prefix.
+          moon-cache-save: ${{ github.event_name == 'push' && 'true' || 'false' }}
 
-      # Skip the default check when only a label was added (the labeled event
-      # re-triggers the workflow; only run-heavy should re-run the full gate).
       - name: Run Moon CI (default check)
-        if: ${{ github.event.action != 'labeled' || contains(github.event.pull_request.labels.*.name, 'run-heavy') }}
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref || 'main' }}
-        run: |
           # For pull_request events, diff against the target branch.
-          # For workflow_dispatch, diff against main (no PR context).
-          bun moon ci --base="origin/$BASE_REF"
+          # For push/workflow_dispatch, diff against main (no PR context).
+          BASE_REF: ${{ github.event.pull_request.base.ref || 'main' }}
+        run: bun moon ci --base="origin/$BASE_REF"
 
-      - name: Run heavy suites (Tauri build + E2E)
-        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.include-heavy) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-heavy')) }}
-        run: |
-          bun moon run client:tauri-build
-          bun moon run e2e:test
+  # Heavy suites run as their own job so they execute IN PARALLEL with the
+  # default gate (previously they were extra steps that only started after
+  # moon ci finished), and as a matrix so the Tauri build and the Playwright
+  # run do not serialize behind each other either.
+  heavy:
+    name: Heavy — ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.include-heavy) ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.draft != true &&
+       contains(github.event.pull_request.labels.*.name, 'run-heavy'))
+    strategy:
+      fail-fast: false # one suite failing should not hide the other's result
+      matrix:
+        suite: [client:tauri-build, e2e:test]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+        with:
+          moon-cache: "true"
+          install-deps: "true"
+          moon-cache-save: "false" # heavy runs are label/dispatch-triggered, never the warm-cache source
+
+      - name: Run ${{ matrix.suite }}
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: bun moon run "$SUITE"
