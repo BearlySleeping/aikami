@@ -2,7 +2,7 @@
 id: C-447
 title: "Hub Walkable Map Sandbox — Collision, Z-Order and Render Ordering in the Browser"
 source: "user request 2026-08-26 — have a character walk around in a map sandbox in hub to detect collision, render ordering"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
