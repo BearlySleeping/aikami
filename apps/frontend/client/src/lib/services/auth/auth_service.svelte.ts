@@ -19,12 +19,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type {
-  AppResult,
-  CurrentUser,
-  RegisterForm,
-  SignInProviderName,
-} from '@aikami/types';
+import type { AppResult, CurrentUser, RegisterForm, SignInProviderName } from '@aikami/types';
 import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import { hubApiBase } from '../api/hub_api_client';

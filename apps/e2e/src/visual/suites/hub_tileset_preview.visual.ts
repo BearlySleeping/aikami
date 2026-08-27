@@ -45,10 +45,7 @@ export default defineConfig({
     {
       name: 'hub-tileset-grid-off',
       searchParams: {},
-      prompt: [
-        HUB_TILESET_PROMPT,
-        'The tileset should be visible WITHOUT grid lines.',
-      ].join('\n'),
+      prompt: [HUB_TILESET_PROMPT, 'The tileset should be visible WITHOUT grid lines.'].join('\n'),
       schema: HubTilesetSchema,
       screenshotSelector: '[data-testid="catalog-asset"]',
       requiredTrueFields: ['tilesetVisible', 'pixelArtCrisp'],

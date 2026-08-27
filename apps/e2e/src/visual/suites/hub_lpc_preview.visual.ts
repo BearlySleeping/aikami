@@ -49,10 +49,9 @@ export default defineConfig({
     {
       name: 'hub-lpc-down',
       searchParams: {},
-      prompt: [
-        HUB_LPC_PROMPT,
-        'The character should be facing DOWN (toward the viewer).',
-      ].join('\n'),
+      prompt: [HUB_LPC_PROMPT, 'The character should be facing DOWN (toward the viewer).'].join(
+        '\n',
+      ),
       schema: HubLpcPreviewSchema,
       screenshotSelector: '[data-testid="catalog-asset"]',
       requiredTrueFields: ['characterVisible', 'layersComposited', 'facesExpectedDirection'],
@@ -72,10 +71,7 @@ export default defineConfig({
     {
       name: 'hub-lpc-left',
       searchParams: { dir: '1' },
-      prompt: [
-        HUB_LPC_PROMPT,
-        'The character should be facing LEFT (profile view).',
-      ].join('\n'),
+      prompt: [HUB_LPC_PROMPT, 'The character should be facing LEFT (profile view).'].join('\n'),
       schema: HubLpcPreviewSchema,
       screenshotSelector: '[data-testid="catalog-asset"]',
       requiredTrueFields: ['characterVisible', 'layersComposited', 'facesExpectedDirection'],

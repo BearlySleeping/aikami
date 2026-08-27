@@ -3,8 +3,8 @@
 import type { LpcCatalog } from '@aikami/lpc';
 import { buildLpcCatalog, LpcAnimationState, LpcDirection, lpcTag } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';
-import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
+import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
 
 // ---------------------------------------------------------------------------
 // LPC Asset Catalog — types for slot definitions and variants.

@@ -34,6 +34,18 @@ import { assetManager } from './asset_manager.svelte.ts';
 const SEED_KEY = 'seed/asset_seed.json';
 
 /**
+ * Timeout for the catalog fetches.
+ *
+ * A bare `fetch()` has no timeout: a connection that opens and then stalls
+ * never settles, so `_loadPromise` stays pending forever. Because both the
+ * boot pipeline and the start menu await that one memoized promise, a single
+ * stalled request hangs the whole app on "Preparing assets…" with nothing
+ * logged. Failing after 15s degrades to online/cached mode instead, which
+ * every caller already handles.
+ */
+const CATALOG_FETCH_TIMEOUT_MS = 15_000;
+
+/**
  * R2 key for the offline-core declaration — the tags the client prefetches
  * and pins on first run (C-448). Before C-448 this declared tags *bundled
  * inside the client*; it now declares the first-run prefetch set: fetched
@@ -238,8 +250,10 @@ class AssetStoreImpl implements AssetStore {
 
     try {
       const [seedResponse, coreResponse] = await Promise.all([
-        fetch(`${baseUrl}/${SEED_KEY}`),
-        fetch(`${baseUrl}/${OFFLINE_CORE_KEY}`),
+        fetch(`${baseUrl}/${SEED_KEY}`, { signal: AbortSignal.timeout(CATALOG_FETCH_TIMEOUT_MS) }),
+        fetch(`${baseUrl}/${OFFLINE_CORE_KEY}`, {
+          signal: AbortSignal.timeout(CATALOG_FETCH_TIMEOUT_MS),
+        }),
       ]);
 
       if (!seedResponse.ok) {

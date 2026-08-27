@@ -63,17 +63,22 @@ const RENDER_BARREL = resolve(ENGINE_SRC, 'render.ts');
  */
 function extractImports(source: string): string[] {
   const imports: string[] = [];
-  // Match all import/export from statements
-  const re =
-    /(?:import|export)\s+(?:(?:type\s+)?(?:\{[^}]*\}|\*\s+as\s+\w+|\*\s+)|(?:type\s+)?\{\s*(?:\w+\s*,?\s*)+\}\s+from\s+|(?:type\s+)?\w+(?:\s*,\s*\{[^}]*\})?\s+from\s+)?['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]/g;
-  for (;;) {
-    const match = re.exec(source);
-    if (match === null) {
-      break;
+  // Every import/export form that names a module puts the path in a
+  // `from '...'` clause, regardless of what precedes it (named, default,
+  // `* as x`, bare `*`, mixed type/value, multiline) — so match on that
+  // clause directly instead of trying to enumerate the clauses that can
+  // precede it.
+  const fromRe = /from\s+['"]([^'"]+)['"]/g;
+  for (let match = fromRe.exec(source); match !== null; match = fromRe.exec(source)) {
+    if (match[1].startsWith('.')) {
+      imports.push(match[1]);
     }
-    const path = match[1] ?? match[2];
-    if (path?.startsWith('.')) {
-      imports.push(path);
+  }
+  // Side-effect-only imports (`import './foo.ts';`) have no `from` clause.
+  const sideEffectRe = /import\s+['"]([^'"]+)['"]/g;
+  for (let match = sideEffectRe.exec(source); match !== null; match = sideEffectRe.exec(source)) {
+    if (match[1].startsWith('.')) {
+      imports.push(match[1]);
     }
   }
   return imports;
@@ -212,18 +217,36 @@ describe('engine entrypoint boundaries', () => {
       });
 
       it('does not reach node.ts or its dependencies', () => {
+        // Files reachable from node.ts may also be reachable from a browser
+        // entrypoint via a shared, browser-safe utility (e.g. sim.ts and
+        // asset_manifest_node.ts both import pure helpers from
+        // asset_manifest.ts) — that overlap is fine. What must never happen
+        // is a browser entrypoint statically importing node:*/DB-driver
+        // code. node.ts's own actual Node-only I/O lives behind dynamic
+        // `await import(...)` (see asset_manifest_node.ts, C-243), which
+        // this same static regex correctly does not chase — so check the
+        // boundary's graph directly for forbidden static imports instead of
+        // diffing against node.ts's transitive closure.
         const visited = new Set<string>();
         const files = walkGraph(boundary.entry, visited);
 
-        const nodeEntry = resolve(ENGINE_SRC, 'node.ts');
-        const nodeDeps = walkGraph(nodeEntry, new Set());
-
-        for (const nodeFile of nodeDeps) {
-          if (files.includes(nodeFile)) {
-            const relPath = relative(ENGINE_SRC, nodeFile);
+        const nodeOnlyPattern = /from\s+['"](?:node:|@tursodatabase\/database)/;
+        for (const file of files) {
+          const source = readFileSync(file, 'utf-8');
+          const lines = source.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!nodeOnlyPattern.test(line)) {
+              continue;
+            }
+            const importPath = line.match(/from\s+['"]([^'"]+)['"]/)?.[1];
+            if (importPath && isTypeOnlyImport(source, importPath)) {
+              continue;
+            }
+            const relPath = relative(ENGINE_SRC, file);
             throw new Error(
-              `${boundary.name} transitively imports Node-only module ${relPath}.\n` +
-                `Node-only code (node.ts and its dependencies) must not be reachable from browser entrypoints.`,
+              `${boundary.name} statically imports Node-only module in ${relPath}:${i + 1}.\n` +
+                `Node-only code must stay behind a dynamic import() so it never reaches the browser bundle.`,
             );
           }
         }

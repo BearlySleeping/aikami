@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useNamingConvention: env keys are SCREAMING_SNAKE_CASE literals by platform convention
 // apps/frontend/hub/src/lib/test_preload.ts
 // Preload for Bun test runner — runs once before all test files.
 //

@@ -132,7 +132,12 @@ $effect(() => {
     }
 
     bgSize = getLpcIconBackgroundSize({ width, height });
-    bgPosition = getLpcIconBackgroundPosition({ col: hero.col, row: hero.row, cols: grid.cols, rows: grid.rows });
+    bgPosition = getLpcIconBackgroundPosition({
+      col: hero.col,
+      row: hero.row,
+      cols: grid.cols,
+      rows: grid.rows,
+    });
   };
   img.onerror = () => {
     if (!active) {

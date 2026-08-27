@@ -23,6 +23,7 @@ import {
 import type { AssetRegistryRepository } from '@aikami/frontend/storage';
 import { sha256Hex } from './asset_hasher.ts';
 import './blob_url_loader.ts';
+import { withStepTimeout } from '$lib/utils/step_timeout';
 import type { AssetCacheBackend } from './cache_backend.ts';
 import { OpfsCacheBackend } from './opfs_cache_backend.ts';
 import { TauriFSCacheBackend } from './tauri_fs_cache_backend.ts';
@@ -102,6 +103,12 @@ export type AssetManagerInterface = BaseFrontendClassInterface & {
  * See {@link AssetManagerInterface}.
  */
 class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements AssetManagerInterface {
+  /**
+   * Ceiling for a single DB/backend call during initialize(). Well under the
+   * caller's own 20s step budget so the inner, more specific name wins.
+   */
+  private static readonly _stepTimeoutMs = 8_000;
+
   /** Whether initialize() has completed. */
   isInitialized = false;
 
@@ -149,16 +156,30 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     // (synchronous acquireUrl/peekBlobUrl) without touching the network.
     // Queries are BATCHED (one listInstallStates + one findByIds, one
     // listHashes + one findIdsByHashes) — no per-entry DB fan-out.
+    // Each await below is wrapped so a stall names itself: these run against
+    // the local DB and the platform cache backend, both of which can block
+    // indefinitely in a webview (in-memory SQLite snapshotting to IndexedDB,
+    // Tauri FS calls over IPC) without ever rejecting.
+    const registry = this._registry;
+    const backend = this._backend;
     let registered = 0;
-    const states = await this._registry.listInstallStates();
+    const states = await withStepTimeout({
+      name: 'registry.listInstallStates',
+      timeoutMs: AssetManager._stepTimeoutMs,
+      run: () => registry.listInstallStates(),
+    });
     const stateById = new Map(states.map((state) => [state.assetId, state]));
     const cachedStates = states.filter(
       (state) => state.status === 'cached' && state.cachedHash !== undefined,
     );
     const recordsById = new Map(
-      (await this._registry.findByIds(cachedStates.map((state) => state.assetId))).map(
-        (record) => [record.id, record] as const,
-      ),
+      (
+        await withStepTimeout({
+          name: 'registry.findByIds(cached)',
+          timeoutMs: AssetManager._stepTimeoutMs,
+          run: () => registry.findByIds(cachedStates.map((state) => state.assetId)),
+        })
+      ).map((record) => [record.id, record] as const),
     );
 
     // Known-downloaded set: the registry hash must still match the recorded
@@ -172,7 +193,11 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
         continue;
       }
       this._verifiedHashes.set(state.assetId, state.cachedHash);
-      const blob = await this._backend.get(state.cachedHash);
+      const blob = await withStepTimeout({
+        name: 'backend.get(cachedState)',
+        timeoutMs: AssetManager._stepTimeoutMs,
+        run: () => backend.get(state.cachedHash as string),
+      });
       if (blob) {
         this._registerBlobUrl(state.assetId, blob);
         registered += 1;
@@ -183,13 +208,29 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     // lost (e.g. an in-memory DB fallback across reloads), hash-named files
     // in the cache are authoritative. Reverse-map them to registry tags,
     // register blob URLs, and repair the bookkeeping — all batched.
-    const cachedHashes = await this._backend.listHashes().catch(() => [] as string[]);
+    const cachedHashes = await withStepTimeout({
+      name: 'backend.listHashes',
+      timeoutMs: AssetManager._stepTimeoutMs,
+      run: () => backend.listHashes(),
+    }).catch(() => [] as string[]);
     if (cachedHashes.length > 0) {
-      const ids = await this._registry.findIdsByHashes(cachedHashes);
-      const records = await this._registry.findByIds(ids);
+      const ids = await withStepTimeout({
+        name: 'registry.findIdsByHashes',
+        timeoutMs: AssetManager._stepTimeoutMs,
+        run: () => registry.findIdsByHashes(cachedHashes),
+      });
+      const records = await withStepTimeout({
+        name: 'registry.findByIds(byHash)',
+        timeoutMs: AssetManager._stepTimeoutMs,
+        run: () => registry.findByIds(ids),
+      });
       for (const record of records) {
         this._verifiedHashes.set(record.id, record.hash);
-        const blob = await this._backend.get(record.hash);
+        const blob = await withStepTimeout({
+          name: 'backend.get(byHash)',
+          timeoutMs: AssetManager._stepTimeoutMs,
+          run: () => backend.get(record.hash),
+        });
         if (blob) {
           if (!this._blobUrls.has(record.id)) {
             this._registerBlobUrl(record.id, blob);

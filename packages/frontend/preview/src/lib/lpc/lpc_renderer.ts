@@ -5,8 +5,8 @@
 //
 // Contract: C-372, C-444, C-445
 
-import { resolveLpcSheetGeometry } from '@aikami/frontend/engine/content';
 import type { LpcSheetGeometry } from '@aikami/frontend/engine';
+import { resolveLpcSheetGeometry } from '@aikami/frontend/engine/content';
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { lpcStateSuffix, lpcTag } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';

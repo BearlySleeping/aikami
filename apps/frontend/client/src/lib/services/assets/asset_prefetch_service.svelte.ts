@@ -14,6 +14,7 @@
 
 import type { AssetRegistryRepository as AssetRegistryRepositoryClass } from '@aikami/frontend/storage';
 import type { AssetSeedDocument } from '@aikami/types';
+import { withStepTimeout } from '$lib/utils/step_timeout';
 import { logger } from '$logger';
 import type { AssetCacheBackend } from './cache_backend.ts';
 
@@ -99,6 +100,12 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
   warmProgress = $state<{ done: number; total: number } | null>(null);
   error = $state<string | undefined>(undefined);
 
+  /**
+   * Per-step ceiling for registry init. Below the boot pipeline's 30s stage
+   * timeout so the named step error wins the race and reaches the log.
+   */
+  private static readonly _stepTimeoutMs = 20_000;
+
   private _registryReadyPromise: Promise<RegistryHandle> | undefined;
   private _corePrefetchPromise: Promise<CorePrefetchResult> | undefined;
   private _warmStarted = false;
@@ -145,7 +152,15 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
   ensureRegistryReady(options?: {
     onSeedProgress?: (progress: { chunk: number; totalChunks: number }) => void;
   }): Promise<RegistryHandle> {
-    this._registryReadyPromise ??= this._initRegistry(options?.onSeedProgress);
+    this._registryReadyPromise ??= this._initRegistry(options?.onSeedProgress).catch(
+      (error: unknown) => {
+        // Never cache a failure. Both the boot pipeline and the start menu
+        // await this one promise, so a memoized rejection wedges the whole
+        // session with no way back — clearing it lets the next caller retry.
+        this._registryReadyPromise = undefined;
+        throw error;
+      },
+    );
     return this._registryReadyPromise;
   }
 
@@ -157,10 +172,13 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
     const { assetManager, createPlatformCacheBackend } = await import('./asset_manager.svelte.ts');
     const { assetStore } = await import('./asset_store.svelte.ts');
 
-    const db = await getLocalDatabase();
+    const step = <T>(name: string, run: () => Promise<T>): Promise<T> =>
+      withStepTimeout({ name, timeoutMs: AssetPrefetchService._stepTimeoutMs, run });
+
+    const db = await step('getLocalDatabase', () => getLocalDatabase());
     const registry = new AssetRegistryRepository(db);
 
-    await assetStore.fetchManifest();
+    await step('fetchManifest', () => assetStore.fetchManifest());
     const seed = assetStore.seed;
 
     if (!seed) {
@@ -168,9 +186,13 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
         error: assetStore.error,
         hint: 'Set PUBLIC_ASSETS_BASE_URL or check network connectivity.',
       });
-    } else if (await registry.isSeeded(seed.generatedAt)) {
+    } else if (await step('isSeeded', () => registry.isSeeded(seed.generatedAt))) {
       logger.debug('assetPrefetchService:already-seeded');
     } else {
+      // Deliberately NOT wrapped: seeding thousands of rows on a slow first
+      // run can legitimately outlast the step ceiling, and it is the one step
+      // that reports progress ("Seeding assets… chunk 3/40"), so a stall here
+      // is already visible rather than silent.
       await registry.seedFromCompactSeed({
         seed,
         r2BaseUrl: publicEnv.PUBLIC_ASSETS_BASE_URL,
@@ -181,11 +203,11 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
     }
 
     const backend = createPlatformCacheBackend();
-    await backend.init();
-    await backend.requestPersistence();
+    await step('backend.init', () => backend.init());
+    await step('backend.requestPersistence', () => backend.requestPersistence());
 
-    await assetManager.initialize({ registry, backend });
-    await assetManager.reconcile();
+    await step('assetManager.initialize', () => assetManager.initialize({ registry, backend }));
+    await step('assetManager.reconcile', () => assetManager.reconcile());
 
     return { registry, backend, seed };
   }

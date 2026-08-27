@@ -26,9 +26,17 @@
     // Register the audio-range service worker for iOS Safari compatibility.
     // Contract: C-150 Audio System — Service Worker Range Interceptor
     // Deferred to avoid forcing layout before stylesheets load (Firefox FOUC warning).
-    if ('serviceWorker' in navigator) {
+    // Tauri serves the app from tauri://localhost, and the Service Worker
+    // spec only permits http/https script URLs — registering there throws an
+    // unhandled rejection. The worker is an iOS Safari Range-request shim, so
+    // the desktop webview has nothing to gain from it anyway.
+    var swScheme = window.location.protocol;
+    if ('serviceWorker' in navigator && (swScheme === 'http:' || swScheme === 'https:')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+        navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch((error) => {
+          // biome-ignore lint/suspicious/noConsole: inline bootstrap script — the app logger is not loaded yet
+          console.warn('service-worker registration failed', error);
+        });
       });
     }
     </script>

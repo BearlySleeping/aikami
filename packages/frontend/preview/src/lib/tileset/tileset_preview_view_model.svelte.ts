@@ -15,7 +15,9 @@ import type { AssetResolver } from '@aikami/types';
 
 /** Reads a CSS custom property from the document, falling back to a default. */
 const _cssVar = (name: string, fallback: string): string => {
-  if (typeof document === 'undefined') return fallback;
+  if (typeof document === 'undefined') {
+    return fallback;
+  }
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 };
 
@@ -27,7 +29,7 @@ const _gridStroke = (): string => _cssVar('--grid-stroke', 'rgba(68, 68, 255, 0.
 export type TilesetPreviewViewModelInterface = BaseViewModelInterface & {
   readonly canvasElement: HTMLCanvasElement | undefined;
   setCanvasElement(canvas: HTMLCanvasElement): void;
-  readonly error: string | undefined;
+  readonly errorMessage: string | undefined;
   readonly loaded: boolean;
   readonly hoveredTileIndex: number | undefined;
   handleMouseMove(e: MouseEvent): void;
@@ -52,7 +54,7 @@ class TilesetPreviewViewModel
   // ── Public reactive state ──────────────────────────────────────────
 
   canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
-  error = $state<string | undefined>(undefined);
+  errorMessage = $state<string | undefined>(undefined);
   loaded = $state(false);
   hoveredTileIndex = $state<number | undefined>(undefined);
 
@@ -64,7 +66,6 @@ class TilesetPreviewViewModel
   private readonly _height: number;
   private readonly _tileSize: number;
   private readonly _showGrid: boolean;
-  private readonly _zoom: number;
 
   /** Retained loaded image dimensions for hover coordinate conversion. */
   private _imgNaturalWidth = 0;
@@ -81,7 +82,6 @@ class TilesetPreviewViewModel
     this._height = options.height ?? 512;
     this._tileSize = options.tileSize ?? 32;
     this._showGrid = options.showGrid ?? false;
-    this._zoom = options.zoom ?? 1;
   }
 
   setCanvasElement(canvas: HTMLCanvasElement): void {
@@ -104,7 +104,7 @@ class TilesetPreviewViewModel
   override async dispose(): Promise<void> {
     this.canvasElement = undefined;
     this.loaded = false;
-    this.error = undefined;
+    this.errorMessage = undefined;
     this.hoveredTileIndex = undefined;
     return await super.dispose();
   }
@@ -113,7 +113,9 @@ class TilesetPreviewViewModel
 
   handleMouseMove(e: MouseEvent): void {
     const canvas = this.canvasElement;
-    if (!canvas || !this.loaded) return;
+    if (!canvas || !this.loaded) {
+      return;
+    }
 
     const rect = canvas.getBoundingClientRect();
     const canvasX = e.clientX - rect.left;
@@ -135,16 +137,18 @@ class TilesetPreviewViewModel
 
   private async _render(): Promise<void> {
     const canvas = this.canvasElement;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
 
-    this.error = undefined;
+    this.errorMessage = undefined;
     this.loaded = false;
     this.hoveredTileIndex = undefined;
 
     try {
       const url = this._resolver.resolve(this._tag);
       if (!url) {
-        this.error = `Cannot resolve tileset: ${this._tag}`;
+        this.errorMessage = `Cannot resolve tileset: ${this._tag}`;
         return;
       }
 
@@ -155,9 +159,13 @@ class TilesetPreviewViewModel
         img.src = url;
       });
 
-      if (!this.canvasElement) return;
+      if (!this.canvasElement) {
+        return;
+      }
       const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        return;
+      }
 
       // Retain image dimensions for hover calculations
       this._imgNaturalWidth = img.width;
@@ -193,7 +201,7 @@ class TilesetPreviewViewModel
 
       this.loaded = true;
     } catch (err) {
-      this.error = err instanceof Error ? err.message : String(err);
+      this.errorMessage = err instanceof Error ? err.message : String(err);
     }
   }
 }
@@ -202,4 +210,4 @@ class TilesetPreviewViewModel
 
 export const getTilesetPreviewViewModel = (
   options: TilesetPreviewViewModelOptions,
-): TilesetPreviewViewModelInterface => TilesetPreviewViewModel.create(options);
+): TilesetPreviewViewModelInterface => new TilesetPreviewViewModel(options);

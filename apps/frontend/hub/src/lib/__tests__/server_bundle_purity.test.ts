@@ -10,7 +10,7 @@
 // Workers-boundary guard (node:* imports).
 
 import { describe, expect, it } from 'bun:test';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const hubRoot = resolve(import.meta.dir, '../../..');
@@ -58,7 +58,8 @@ const findPixiInServerGraph = (): string[] => {
   // Match dynamic import expressions: import('...')
   const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
   // Only follow relative imports (starts with ./ or ../)
-  const isRelative = (specifier: string): boolean => specifier.startsWith('./') || specifier.startsWith('../');
+  const isRelative = (specifier: string): boolean =>
+    specifier.startsWith('./') || specifier.startsWith('../');
 
   const visit = (file: string): void => {
     if (visited.has(file)) {
@@ -78,10 +79,10 @@ const findPixiInServerGraph = (): string[] => {
       }
 
       // Recurse into relative imports to walk the full server import graph
-      const dir = file.substring(0, file.lastIndexOf('/'));
-      let match: RegExpExecArray | null;
+      const dir = file.slice(0, file.lastIndexOf('/'));
+      let match: RegExpExecArray | null = importRe.exec(source);
 
-      while ((match = importRe.exec(source)) !== null) {
+      while (match !== null) {
         const specifier = match[1] ?? match[2] ?? '';
         if (isRelative(specifier)) {
           const resolved = join(dir, specifier);
@@ -99,8 +100,9 @@ const findPixiInServerGraph = (): string[] => {
           }
         }
       }
+      match = dynamicImportRe.exec(source);
 
-      while ((match = dynamicImportRe.exec(source)) !== null) {
+      while (match !== null) {
         const specifier = match[1] ?? '';
         if (isRelative(specifier)) {
           const resolved = join(dir, specifier);

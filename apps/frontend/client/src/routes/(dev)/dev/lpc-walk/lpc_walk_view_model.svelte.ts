@@ -42,6 +42,5 @@ class LpcWalkViewModel
   }
 }
 
-export const getLpcWalkViewModel = (
-  options: BaseDevViewModelOptions,
-): LpcWalkViewModelInterface => LpcWalkViewModel.create(options);
+export const getLpcWalkViewModel = (options: BaseDevViewModelOptions): LpcWalkViewModelInterface =>
+  LpcWalkViewModel.create(options);

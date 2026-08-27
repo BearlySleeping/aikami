@@ -4,11 +4,11 @@
 // This file exists for backward compatibility during the C-445 transition.
 // New code should import from '@aikami/frontend/preview' directly.
 
+export type { LpcGrid } from '@aikami/frontend/preview';
 export {
-  getLpcIconCellPitch,
   getLpcGrid,
-  getLpcIconBackgroundSize,
   getLpcIconBackgroundPosition,
+  getLpcIconBackgroundSize,
+  getLpcIconCellPitch,
   pickHeroCell,
 } from '@aikami/frontend/preview';
-export type { LpcGrid } from '@aikami/frontend/preview';

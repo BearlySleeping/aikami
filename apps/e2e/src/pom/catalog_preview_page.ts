@@ -4,7 +4,7 @@
 // Exposes stable selectors for the preview island, thumbnail, error notice,
 // and tileset grid toggle.
 
-import type { Page, Locator } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 export class CatalogPreviewPage {
   readonly page: Page;

@@ -11,7 +11,7 @@ import {
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
-import type { LpcAnimationState } from '@aikami/lpc';
+
 import type { AssetResolver } from '@aikami/types';
 
 export type WalkSandboxViewModelInterface = BaseDevViewModelInterface & {
@@ -57,19 +57,15 @@ class WalkSandboxViewModel
       this._textureManager = new TextureManager();
 
       const gameWorldOptions: GameWorldOptions = {
-        canvas,
-        engineBridge: this._engineBridge,
+        className: 'WalkSandboxGameWorld',
+        bridge: this._engineBridge,
         textureManager: this._textureManager,
-        assetUrlResolver: (_slot: string, assetId: string, _state: LpcAnimationState): string | null =>
+        assetUrlResolver: (_slot: string, assetId: string, _state: string): string | null =>
           this._resolver.resolve(assetId),
-        resolveEcsWorker: async () => {
-          const mod = await import('@aikami/frontend/engine/worker/ecs_worker.ts?worker&type=module');
-          return mod.default as unknown as new () => Worker;
-        },
       };
 
-      this._gameWorld = GameWorld.create(gameWorldOptions);
-      await this._gameWorld.initialize();
+      this._gameWorld = new GameWorld(gameWorldOptions);
+      await this._gameWorld.initialize({ canvas });
 
       if (this._initialMapTag) {
         await this.loadMap(this._initialMapTag);
@@ -93,13 +89,13 @@ class WalkSandboxViewModel
       throw new Error(`Cannot resolve map: ${mapTag}`);
     }
 
-    await this._gameWorld.loadMap(url);
+    await this._gameWorld.loadMap({ mapUrl: url, targetX: 0, targetY: 0 });
     this.currentMap = mapTag;
   }
 
   async destroyEngine(): Promise<void> {
     if (this._gameWorld) {
-      await this._gameWorld.dispose();
+      this._gameWorld.destroy();
       this._gameWorld = undefined;
     }
     this.engineReady = false;

@@ -62,19 +62,22 @@ describe('AC-1: Package is host-agnostic', () => {
     }
 
     if (violations.length > 0) {
-      const message = violations
-        .map((v) => `  ${v.file}:${v.pattern} — ${v.line}`)
-        .join('\n');
-      expect.fail(`Found ${violations.length} host-agnostic violations:\n${message}`);
+      const message = violations.map((v) => `  ${v.file}:${v.pattern} — ${v.line}`).join('\n');
+      throw new Error(`Found ${violations.length} host-agnostic violations:\n${message}`);
     }
   });
 
   it('should have two separate entrypoints (static vs sandbox)', () => {
     // Static entrypoint should NOT export WalkSandbox
-    const indexMod = { LpcPreview: true, TilesetPreview: true, PropPreview: true, MapPreview: true };
+    const indexMod = {
+      lpcPreview: true,
+      tilesetPreview: true,
+      propPreview: true,
+      mapPreview: true,
+    };
     expect(indexMod).not.toHaveProperty('WalkSandbox');
     // Sandbox entrypoint should NOT export LpcPreview
-    const sandboxMod = { WalkSandbox: true };
+    const sandboxMod = { walkSandbox: true };
     expect(sandboxMod).not.toHaveProperty('LpcPreview');
   });
 

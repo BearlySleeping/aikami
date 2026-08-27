@@ -1147,9 +1147,22 @@ const tickLoop = (): void => {
     // any null entries (transferred but not yet recycled).
     const oldIndex = activeBufferIndex;
 
-    // Find the next writable buffer — scan modulo FALLBACK_BUFFER_COUNT only
+    // Find the next writable buffer — scan modulo FALLBACK_BUFFER_COUNT only.
+    //
+    // The scan MUST NOT consider oldIndex itself. A full-length scan wraps
+    // around to `(oldIndex + FALLBACK_BUFFER_COUNT) % FALLBACK_BUFFER_COUNT
+    // === oldIndex`, so when every other slot is awaiting recycle the loop
+    // "finds" the buffer it is about to transfer away. The normal path then
+    // nulls that slot and builds activeWriteView from the null it just
+    // wrote — `new Float32Array(null)` yields a zero-length but *truthy*
+    // array, so nothing throws, activeBufferIndex points at an empty slot,
+    // and every later tick hits the writable-buffer guard and returns before
+    // `tickCount++`. That deadlock is unrecoverable: the RECYCLE_BUFFER
+    // resume path keys off `!activeWriteView`, which the truthy empty array
+    // defeats. Stopping one short leaves nextWritableIndex === -1 so the
+    // starvation branch below copies out and retains ownership instead.
     let nextWritableIndex = -1;
-    for (let attempt = 1; attempt <= FALLBACK_BUFFER_COUNT; attempt++) {
+    for (let attempt = 1; attempt < FALLBACK_BUFFER_COUNT; attempt++) {
       const candidate = (oldIndex + attempt) % FALLBACK_BUFFER_COUNT;
       const buf = bufferPool[candidate] as ArrayBuffer | null;
       if (buf && buf.byteLength > 0) {
@@ -1480,8 +1493,14 @@ self.onmessage = (event: MessageEvent): void => {
             });
           }
 
-          // Resume paused tick loop if it was starved (now has a real buffer)
-          if (!activeWriteView && slotFound) {
+          // Resume the tick loop if the slot it is pointing at is not
+          // writable. Testing `activeWriteView` alone is not sufficient — a
+          // zero-length Float32Array is truthy, so a starved loop can hold a
+          // view that reads as present while writing nowhere. Ask the pool
+          // directly instead.
+          const activeBuffer = bufferPool[activeBufferIndex] as ArrayBuffer | null;
+          const activeIsWritable = !!activeBuffer && activeBuffer.byteLength > 0;
+          if (slotFound && !activeIsWritable) {
             activeWriteView = new Float32Array(recycled);
             // Find which index we just filled
             for (let i = 0; i < FALLBACK_BUFFER_COUNT; i++) {

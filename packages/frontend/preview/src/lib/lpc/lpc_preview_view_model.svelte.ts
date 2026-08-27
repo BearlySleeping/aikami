@@ -17,9 +17,9 @@ import {
   REQUIRED_LPC_SLOTS,
 } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
-import { Application, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
-import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
+import { type Application, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
 import type { LpcRenderer } from './lpc_renderer';
+import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
 import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -158,7 +158,9 @@ class LpcPreviewViewModel
 
   // ── Status ───────────────────────────────────────────────────────────
 
-  statusBanner = $state<{ message: string; level: 'info' | 'warn' | 'error' } | undefined>(undefined);
+  statusBanner = $state<{ message: string; level: 'info' | 'warn' | 'error' } | undefined>(
+    undefined,
+  );
 
   // ── Animation ────────────────────────────────────────────────────────
 
@@ -211,8 +213,9 @@ class LpcPreviewViewModel
     // Uses REQUIRED_LPC_SLOTS (head, body, torso) to match the set that
     // triggers error banners in the recipes getter.
     if (!hadInitialState && this.activeLayers.length === 0 && this.allSlots.length > 0) {
-      const defaults = REQUIRED_LPC_SLOTS
-        .map((slot) => this.allSlots.findIndex((s) => s.slot === slot))
+      const defaults = REQUIRED_LPC_SLOTS.map((slot) =>
+        this.allSlots.findIndex((s) => s.slot === slot),
+      )
         .filter((slotDefIndex) => slotDefIndex >= 0)
         .map((slotDefIndex) => ({ slotDefIndex, variantIndex: 0 }));
       if (defaults.length > 0) {

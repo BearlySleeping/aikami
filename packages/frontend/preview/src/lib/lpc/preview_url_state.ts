@@ -210,13 +210,11 @@ export const decodeLpcPreviewState = (params: URLSearchParams): LpcPreviewState 
 /**
  * Creates a minimal default LPC preview state with two layers (body + hair).
  */
-export const createDefaultLpcPreviewState = (): LpcPreviewState => {
-  return {
-    ...DEFAULT_LPC_URL_STATE,
-    paletteOverrides: new Map(),
-    layers: [
-      { slotDefIndex: 0, variantIndex: 0 },
-      { slotDefIndex: 2, variantIndex: 0 },
-    ],
-  };
-};
+export const createDefaultLpcPreviewState = (): LpcPreviewState => ({
+  ...DEFAULT_LPC_URL_STATE,
+  paletteOverrides: new Map(),
+  layers: [
+    { slotDefIndex: 0, variantIndex: 0 },
+    { slotDefIndex: 2, variantIndex: 0 },
+  ],
+});

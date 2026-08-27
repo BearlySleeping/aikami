@@ -82,7 +82,9 @@ export type PickHeroCellOptions = {
  * Picks the cell with the most non-transparent pixel content.
  * Accepts a named options object instead of positional args.
  */
-export const pickHeroCell = (options: PickHeroCellOptions): { col: number; row: number } | undefined => {
+export const pickHeroCell = (
+  options: PickHeroCellOptions,
+): { col: number; row: number } | undefined => {
   const { counts, minContent = 10 } = options;
   let best: { col: number; row: number } | undefined;
   let bestCount = 0;

@@ -1,29 +1,29 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/sandbox/map/+page.svelte
-  //
-  // Dev route — wraps the shared WalkSandbox component with map loading.
-  // Supplies the registry resolver for asset resolution.
-  // Fetches asset catalog before creating/rendering WalkSandbox.
-  // Uses a dedicated ViewModel for resolver/manifest loading.
+// apps/frontend/client/src/routes/(dev)/dev/sandbox/map/+page.svelte
+//
+// Dev route — wraps the shared WalkSandbox component with map loading.
+// Supplies the registry resolver for asset resolution.
+// Fetches asset catalog before creating/rendering WalkSandbox.
+// Uses a dedicated ViewModel for resolver/manifest loading.
 
-  import { WalkSandbox } from '@aikami/frontend/preview/sandbox';
-  import {
-    getMapSandboxRouteViewModel,
-    type MapSandboxRouteViewModelInterface,
-  } from './map_sandbox_route_view_model.svelte';
+import { WalkSandbox } from '@aikami/frontend/preview/sandbox';
+import {
+  getMapSandboxRouteViewModel,
+  type MapSandboxRouteViewModelInterface,
+} from './map_sandbox_route_view_model.svelte';
 
-  let viewModel = $state<MapSandboxRouteViewModelInterface | undefined>(undefined);
+let viewModel = $state<MapSandboxRouteViewModelInterface | undefined>(undefined);
 
-  $effect(() => {
-    const vm = getMapSandboxRouteViewModel({ className: 'MapSandboxRoute' });
-    viewModel = vm;
-    void vm.initialize();
-    return () => {
-      void vm.dispose().catch((err: unknown) => {
-        console.error('MapSandbox route dispose failed:', err);
-      });
-    };
-  });
+$effect(() => {
+  const vm = getMapSandboxRouteViewModel({ className: 'MapSandboxRoute' });
+  viewModel = vm;
+  void vm.initialize();
+  return () => {
+    void vm.dispose().catch(() => {
+      // dispose silently
+    });
+  };
+});
 </script>
 
 <svelte:head>

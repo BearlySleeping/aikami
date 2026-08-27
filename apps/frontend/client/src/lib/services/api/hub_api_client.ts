@@ -69,4 +69,3 @@ export const hubApiBase = (): string => {
   }
   return HUB_API_BASE[mode] ?? '/api/hub';
 };
-

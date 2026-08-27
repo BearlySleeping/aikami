@@ -1,28 +1,25 @@
 <script lang="ts">
-  // apps/frontend/client/src/routes/(dev)/dev/lpc-walk/+page.svelte
-  //
-  // Dev route — wraps the shared WalkSandbox component.
-  // Supplies the registry resolver for asset resolution.
-  // Uses a dedicated ViewModel for resolver/manifest loading.
+// apps/frontend/client/src/routes/(dev)/dev/lpc-walk/+page.svelte
+//
+// Dev route — wraps the shared WalkSandbox component.
+// Supplies the registry resolver for asset resolution.
+// Uses a dedicated ViewModel for resolver/manifest loading.
 
-  import { WalkSandbox } from '@aikami/frontend/preview/sandbox';
-  import {
-    getLpcWalkViewModel,
-    type LpcWalkViewModelInterface,
-  } from './lpc_walk_view_model.svelte';
+import { WalkSandbox } from '@aikami/frontend/preview/sandbox';
+import { getLpcWalkViewModel, type LpcWalkViewModelInterface } from './lpc_walk_view_model.svelte';
 
-  let viewModel = $state<LpcWalkViewModelInterface | undefined>(undefined);
+let viewModel = $state<LpcWalkViewModelInterface | undefined>(undefined);
 
-  $effect(() => {
-    const vm = getLpcWalkViewModel({ className: 'LpcWalk' });
-    viewModel = vm;
-    void vm.initialize();
-    return () => {
-      void vm.dispose().catch((err: unknown) => {
-        console.error('LpcWalk route dispose failed:', err);
-      });
-    };
-  });
+$effect(() => {
+  const vm = getLpcWalkViewModel({ className: 'LpcWalk' });
+  viewModel = vm;
+  void vm.initialize();
+  return () => {
+    void vm.dispose().catch(() => {
+      // dispose silently
+    });
+  };
+});
 </script>
 
 <svelte:head>

@@ -4,6 +4,8 @@
 // Seeded from the SSR load; no re-fetch in initialize().
 //
 // C-446 additions: previewKind, resolver, lpcCatalog, previewMounted, previewError.
+
+import type { LpcSlotDef } from '@aikami/frontend/preview';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -15,7 +17,6 @@ import type { ComponentType } from 'svelte';
 import { routerService } from '$services';
 import type { AssetStats, CatalogAssetPageData } from '$types';
 import { formatBytes } from '$utils/catalog.ts';
-import type { LpcSlotDef } from '@aikami/frontend/preview';
 import { type PreviewKind, previewKindForEntry } from './preview_kind.ts';
 
 // ── LPC slot definition — imported from @aikami/frontend/preview ──
@@ -274,7 +275,9 @@ class CatalogAssetViewModel
       // This prevents assets from different subcategories from colliding.
       const subcategory = parts.slice(2, -1).join('/') ?? '';
       const assetId = parts[3] ?? '';
-      const fullAssetPath = subcategory ? `${slotName}/${subcategory}/${assetId}` : `${slotName}/${assetId}`;
+      const fullAssetPath = subcategory
+        ? `${slotName}/${subcategory}/${assetId}`
+        : `${slotName}/${assetId}`;
 
       if (!slotName || !assetId) {
         continue;
@@ -406,6 +409,8 @@ class CatalogAssetViewModel
       this.setPreviewError(`Preview failed to load: ${message}`);
     }
   }
+
+  async goToCategory(): Promise<void> {
     try {
       await routerService.goToRoute('catalogCategory', {
         pathParameters: { category: this._category },

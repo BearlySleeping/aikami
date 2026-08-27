@@ -12,7 +12,6 @@ describe('no duplicate LPC files', () => {
     'apps/frontend/client/src/lib/data/lpc_models.ts',
     'apps/frontend/client/src/lib/data/lpc_tags.ts',
     'apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts',
-    'apps/frontend/client/src/lib/views/dev/sandbox/shared/lpc_sandbox_resolver.ts',
   ];
 
   for (const filePath of deletedFiles) {

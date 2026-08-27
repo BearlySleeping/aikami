@@ -1,77 +1,74 @@
 <script lang="ts">
-  // packages/frontend/preview/src/lib/lpc/lpc_preview.svelte
-  //
-  // Host-agnostic LPC character preview component.
-  // Pure wrapper — all logic lives in the ViewModel.
-  // Takes a resolver, catalog slots, and optional initial state.
-  // Renders a canvas with PixiJS for the character + control panel.
+// packages/frontend/preview/src/lib/lpc/lpc_preview.svelte
+//
+// Host-agnostic LPC character preview component.
+// Pure wrapper — all logic lives in the ViewModel.
+// Takes a resolver, catalog slots, and optional initial state.
+// Renders a canvas with PixiJS for the character + control panel.
 
-  import {
-    getLpcPreviewViewModel,
-    type LpcPreviewViewModelInterface,
-    type LpcSlotDef,
-    type LpcPreviewState,
-  } from './lpc_preview_view_model.svelte';
-  import type { AssetResolver } from '@aikami/types';
-  import { LpcAnimationState, LpcDirection } from '@aikami/lpc';
+import { LpcAnimationState, LpcDirection } from '@aikami/lpc';
+import type { AssetResolver } from '@aikami/types';
+import {
+  getLpcPreviewViewModel,
+  type LpcPreviewState,
+  type LpcPreviewViewModelInterface,
+  type LpcSlotDef,
+} from './lpc_preview_view_model.svelte';
 
-  type Props = {
-    resolver: AssetResolver;
-    allSlots: LpcSlotDef[];
-    width?: number;
-    height?: number;
-    zoom?: number;
-    initialState?: LpcPreviewState;
-    onStateChange?: (state: LpcPreviewState) => void;
-    controls?: boolean;
-  };
+type Props = {
+  resolver: AssetResolver;
+  allSlots: LpcSlotDef[];
+  width?: number;
+  height?: number;
+  zoom?: number;
+  initialState?: LpcPreviewState;
+  onStateChange?: (state: LpcPreviewState) => void;
+  controls?: boolean;
+};
 
-  let {
+let {
+  resolver,
+  allSlots,
+  width = 960,
+  height = 540,
+  zoom = 1,
+  initialState,
+  onStateChange,
+  controls = true,
+}: Props = $props();
+
+let canvasEl: HTMLCanvasElement | undefined = $state(undefined);
+let viewModel = $state<LpcPreviewViewModelInterface | undefined>(undefined);
+// Mirrors the `controls` prop. $state($props()) would capture only the
+// initial value (svelte/state_referenced_locally); $derived tracks it.
+const showControls = $derived(controls);
+
+// Create ViewModel with zoom wired in
+$effect(() => {
+  const vm = getLpcPreviewViewModel({
+    className: 'LpcPreview',
     resolver,
     allSlots,
-    width = 960,
-    height = 540,
-    zoom = 1,
     initialState,
     onStateChange,
-    controls = true,
-  }: Props = $props();
-
-  let canvasEl: HTMLCanvasElement | undefined = $state(undefined);
-  let viewModel = $state<LpcPreviewViewModelInterface | undefined>(undefined);
-  let showControls = $state(controls);
-
-  // Derive showControls from controls prop reactively
-  $effect(() => {
-    showControls = controls;
+    zoom,
   });
-
-  // Create ViewModel with zoom wired in
-  $effect(() => {
-    const vm = getLpcPreviewViewModel({
-      className: 'LpcPreview',
-      resolver,
-      allSlots,
-      initialState,
-      onStateChange,
-      zoom,
+  viewModel = vm;
+  void vm.initialize();
+  // Return sync cleanup function (not async)
+  return () => {
+    void vm.dispose().catch(() => {
+      // dispose silently
     });
-    viewModel = vm;
-    void vm.initialize();
-    // Return sync cleanup function (not async)
-    return () => {
-      void vm.dispose().catch((err: unknown) => {
-        console.error('LpcPreview dispose failed:', err);
-      });
-    };
-  });
+  };
+});
 
-  // Bind canvas element once available
-  $effect(() => {
-    if (canvasEl && viewModel) {
-      viewModel.setCanvasElement(canvasEl);
-    }
-  });
+// Bind canvas element once available
+$effect(() => {
+  if (canvasEl && viewModel) {
+    viewModel.setCanvasElement(canvasEl);
+  }
+});
 </script>
 
 <div
@@ -104,15 +101,17 @@
       <canvas
         bind:this={canvasEl}
         class="block [image-rendering:pixelated]"
-        width={width}
-        height={height}
+        {width}
+        {height}
         aria-label="LPC character preview"
       ></canvas>
     </div>
 
     <!-- Controls -->
     {#if showControls && viewModel}
-      <div class="w-72 bg-base-200 border-l border-base-300 flex flex-col overflow-y-auto p-3 gap-3">
+      <div
+        class="w-72 bg-base-200 border-l border-base-300 flex flex-col overflow-y-auto p-3 gap-3"
+      >
         <!-- Animation Controls -->
         <fieldset class="border-0 p-0 m-0">
           <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
@@ -190,7 +189,7 @@
                 const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
                 viewModel?.setAnimationFrame(val);
               }}
-            />
+            >
           </label>
         </fieldset>
 
@@ -275,7 +274,7 @@
               const val = Number.parseFloat((e.target as HTMLInputElement).value);
               viewModel?.setZoom(val);
             }}
-          />
+          >
         </label>
       </div>
     {/if}

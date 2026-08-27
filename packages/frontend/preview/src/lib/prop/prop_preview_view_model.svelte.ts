@@ -15,7 +15,7 @@ import type { AssetResolver } from '@aikami/types';
 export type PropPreviewViewModelInterface = BaseViewModelInterface & {
   readonly canvasElement: HTMLCanvasElement | undefined;
   setCanvasElement(canvas: HTMLCanvasElement): void;
-  readonly error: string | undefined;
+  readonly errorMessage: string | undefined;
 };
 
 export type PropPreviewViewModelOptions = BaseViewModelOptions & {
@@ -35,7 +35,7 @@ class PropPreviewViewModel
   // ── Public reactive state ──────────────────────────────────────────
 
   canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
-  error = $state<string | undefined>(undefined);
+  errorMessage = $state<string | undefined>(undefined);
 
   // ── Private state ──────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ class PropPreviewViewModel
 
   override async dispose(): Promise<void> {
     this.canvasElement = undefined;
-    this.error = undefined;
+    this.errorMessage = undefined;
     return await super.dispose();
   }
 
@@ -81,22 +81,28 @@ class PropPreviewViewModel
 
   private async _render(): Promise<void> {
     const canvas = this.canvasElement;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
 
-    this.error = undefined;
+    this.errorMessage = undefined;
 
     try {
       const url = this._resolver.resolve(this._tag);
       if (!url) {
-        this.error = `Cannot resolve prop: ${this._tag}`;
+        this.errorMessage = `Cannot resolve prop: ${this._tag}`;
         return;
       }
 
       const img = new Image();
       img.onload = () => {
-        if (!this.canvasElement) return;
+        if (!this.canvasElement) {
+          return;
+        }
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (!ctx) {
+          return;
+        }
 
         ctx.imageSmoothingEnabled = false;
         ctx.clearRect(0, 0, this._width, this._height);
@@ -109,11 +115,11 @@ class PropPreviewViewModel
         ctx.drawImage(img, dx, dy, drawW, drawH);
       };
       img.onerror = () => {
-        this.error = `Failed to load prop: ${this._tag}`;
+        this.errorMessage = `Failed to load prop: ${this._tag}`;
       };
       img.src = url;
     } catch (err) {
-      this.error = err instanceof Error ? err.message : String(err);
+      this.errorMessage = err instanceof Error ? err.message : String(err);
     }
   }
 }
@@ -122,4 +128,4 @@ class PropPreviewViewModel
 
 export const getPropPreviewViewModel = (
   options: PropPreviewViewModelOptions,
-): PropPreviewViewModelInterface => PropPreviewViewModel.create(options);
+): PropPreviewViewModelInterface => new PropPreviewViewModel(options);

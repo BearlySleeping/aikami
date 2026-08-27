@@ -16,11 +16,16 @@ let { entry, previewUrl, onSelect }: Props = $props();
 
 const displayName = $derived(assetDisplayName(entry));
 
-const licenseBadge = $derived(
-  hasNoLicense(entry) ? 'Unknown' :
-  entry.licenses.length === 1 ? entry.licenses[0] :
-  `${entry.licenses[0]} +${entry.licenses.length - 1}`
-);
+const licenseBadge = $derived.by<string>(() => {
+  if (hasNoLicense(entry)) {
+    return 'Unknown';
+  }
+  const first = entry.licenses[0];
+  if (!first) {
+    return 'Unknown';
+  }
+  return entry.licenses.length === 1 ? first : `${first} +${entry.licenses.length - 1}`;
+});
 
 const isUnknown = $derived(hasNoLicense(entry));
 </script>

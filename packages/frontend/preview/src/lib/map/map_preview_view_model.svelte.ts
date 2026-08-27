@@ -14,7 +14,9 @@ import type { AssetResolver } from '@aikami/types';
 
 /** Reads a CSS custom property from the document, falling back to a default. */
 const _cssVar = (name: string, fallback: string): string => {
-  if (typeof document === 'undefined') return fallback;
+  if (typeof document === 'undefined') {
+    return fallback;
+  }
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 };
 
@@ -35,7 +37,7 @@ const _zBandColors = (): string[] => {
 export type MapPreviewViewModelInterface = BaseViewModelInterface & {
   readonly canvasElement: HTMLCanvasElement | undefined;
   setCanvasElement(canvas: HTMLCanvasElement): void;
-  readonly error: string | undefined;
+  readonly errorMessage: string | undefined;
   readonly loaded: boolean;
 };
 
@@ -58,7 +60,7 @@ class MapPreviewViewModel
   // ── Public reactive state ──────────────────────────────────────────
 
   canvasElement = $state<HTMLCanvasElement | undefined>(undefined);
-  error = $state<string | undefined>(undefined);
+  errorMessage = $state<string | undefined>(undefined);
   loaded = $state(false);
 
   // ── Private state ──────────────────────────────────────────────────
@@ -102,7 +104,7 @@ class MapPreviewViewModel
   override async dispose(): Promise<void> {
     this.canvasElement = undefined;
     this.loaded = false;
-    this.error = undefined;
+    this.errorMessage = undefined;
     return await super.dispose();
   }
 
@@ -110,27 +112,31 @@ class MapPreviewViewModel
 
   private async _render(): Promise<void> {
     const canvas = this.canvasElement;
-    if (!canvas) return;
+    if (!canvas) {
+      return;
+    }
 
-    this.error = undefined;
+    this.errorMessage = undefined;
     this.loaded = false;
 
     try {
       const url = this._resolver.resolve(this._mapTag);
       if (!url) {
-        this.error = `Cannot resolve map: ${this._mapTag}`;
+        this.errorMessage = `Cannot resolve map: ${this._mapTag}`;
         return;
       }
 
       const response = await fetch(url);
       if (!response.ok) {
-        this.error = `Failed to fetch map: ${response.status}`;
+        this.errorMessage = `Failed to fetch map: ${response.status}`;
         return;
       }
 
       const mapData = await response.json();
       const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        return;
+      }
 
       const zoom = this._zoom;
       const tileSize = 32;
@@ -182,14 +188,14 @@ class MapPreviewViewModel
           const ex = (entity.x ?? 0) * scaledTile;
           const ey = (entity.y ?? 0) * scaledTile;
           const band = entity.zBand ?? 0;
-          ctx.fillStyle = zColors[band % zColors.length] + '60';
+          ctx.fillStyle = `${zColors[band % zColors.length]}60`;
           ctx.fillRect(ex, ey, scaledTile, scaledTile);
         }
       }
 
       this.loaded = true;
     } catch (err) {
-      this.error = err instanceof Error ? err.message : String(err);
+      this.errorMessage = err instanceof Error ? err.message : String(err);
     }
   }
 }
@@ -198,4 +204,4 @@ class MapPreviewViewModel
 
 export const getMapPreviewViewModel = (
   options: MapPreviewViewModelOptions,
-): MapPreviewViewModelInterface => MapPreviewViewModel.create(options);
+): MapPreviewViewModelInterface => new MapPreviewViewModel(options);
