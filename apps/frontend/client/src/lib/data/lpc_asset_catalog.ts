@@ -2,7 +2,8 @@
 
 import type { LpcCatalog } from '@aikami/lpc';
 import { buildLpcCatalog, LpcAnimationState, LpcDirection, lpcTag } from '@aikami/lpc';
-import { setLpcManifestReady, setLpcUrlResolver } from '$lib/data/lpc_renderer';
+import type { AssetResolver } from '@aikami/types';
+import { createRegistryAssetResolver } from '$lib/services/assets/registry_asset_resolver';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
 
 // ---------------------------------------------------------------------------
@@ -75,8 +76,6 @@ export const DIRECTION_OPTIONS: readonly { value: LpcDirection; label: string }[
   { value: LpcDirection.Right, label: 'Right' },
 ];
 
-import { getLpcAssetPath as _getLpcAssetPath } from '$lib/data/lpc_renderer';
-
 // ---------------------------------------------------------------------------
 // Catalog builder — memoised on assetStore seed reference
 // ---------------------------------------------------------------------------
@@ -121,19 +120,15 @@ export const getLpcCatalogPrompt = (catalog: LpcCatalog): string => {
 let _manifestLoadPromise: Promise<void> | null = null;
 
 /**
- * Wires the manifest-backed LPC URL resolver into the shared renderer and
- * ensures the asset manifest is loaded before returning.
+ * Ensures the asset manifest is loaded before LPC asset lookups run.
  *
  * Idempotent and deduped — safe to call from every bootstrap / ViewModel
- * wiring point: the resolver is registered once, and concurrent callers
- * share a single in-flight manifest fetch. Await this before rendering or
- * resolving LPC assets so `resolveUrl` never sees a not-yet-loaded manifest
- * (which would otherwise permanently cache `Texture.EMPTY`).
+ * wiring point: concurrent callers share a single in-flight manifest fetch.
+ * Await this before resolving LPC assets so `getLpcAssetPath` never sees a
+ * not-yet-loaded manifest (which would otherwise resolve to null).
  */
 export const wireLpcUrlResolver = async (): Promise<void> => {
-  setLpcUrlResolver((assetId, state) => assetStore.resolveUrl(lpcTag(assetId, state)));
   if (assetStore.manifest) {
-    setLpcManifestReady(true);
     return;
   }
   if (!_manifestLoadPromise) {
@@ -142,22 +137,28 @@ export const wireLpcUrlResolver = async (): Promise<void> => {
     });
   }
   await _manifestLoadPromise;
-  // Mark the renderer manifest-ready so unmapped lookups can be cached and
-  // transient not-ready results are retried against the loaded manifest.
-  setLpcManifestReady(Boolean(assetStore.manifest));
 };
 
 // Wire once at module scope — every consumer of getLpcAssetPath imports this
-// module, so the resolver is registered before any layer lookup happens.
-// The manifest fetch itself is awaited at each call site via wireLpcUrlResolver().
+// module, so the manifest fetch is already in flight before any layer lookup
+// happens. Each call site still awaits wireLpcUrlResolver() itself before
+// relying on the result.
 void wireLpcUrlResolver();
 
 /**
  * Asset path resolver for the sandbox/game engine.
- * Delegates to the shared LPC renderer.
+ * Resolves the LPC (assetId, state) pair to a static URL via the asset store.
  */
 export const getLpcAssetPath = (
   _slot: string,
   assetId: string,
   state: LpcAnimationState,
-): string | null => _getLpcAssetPath(assetId, state);
+): string | null => assetStore.resolveUrl(lpcTag(assetId, state));
+
+/**
+ * Registry-backed {@link AssetResolver} for `createLpcRenderer` consumers
+ * (e.g. the LPC preview). Resolves through the same asset store lookup as
+ * {@link getLpcAssetPath}, so callers must still `await wireLpcUrlResolver()`
+ * before resolving.
+ */
+export const lpcAssetResolver: AssetResolver = createRegistryAssetResolver();

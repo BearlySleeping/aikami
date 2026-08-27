@@ -95,7 +95,7 @@ const _pickHeroCell = (options: { img: HTMLImageElement }): { col: number; row: 
       rows: grid.rows,
       pitch,
     });
-    const hero = pickHeroCell(counts);
+    const hero = pickHeroCell({ counts });
     return hero ?? null;
   } catch {
     // Canvas tainted or sampling failed — never show a blank box.
@@ -132,7 +132,7 @@ $effect(() => {
     }
 
     bgSize = getLpcIconBackgroundSize({ width, height });
-    bgPosition = getLpcIconBackgroundPosition(hero.col, hero.row, grid.cols, grid.rows);
+    bgPosition = getLpcIconBackgroundPosition({ col: hero.col, row: hero.row, cols: grid.cols, rows: grid.rows });
   };
   img.onerror = () => {
     if (!active) {

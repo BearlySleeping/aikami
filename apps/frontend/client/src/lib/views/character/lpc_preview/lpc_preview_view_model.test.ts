@@ -32,9 +32,11 @@ effectPolyfill.root = (fn: () => void) => {
 
 // ── Mocks ─────────────────────────────────────────────────────────────
 
-const mockResolveLayerDepth = (
-  _options: { slot: string; layerRole: string; direction: number },
-) => {
+const mockResolveLayerDepth = (_options: {
+  slot: string;
+  layerRole: string;
+  direction: number;
+}) => {
   const depths: Record<string, number> = {
     body: 0,
     legs: 10,
@@ -144,7 +146,13 @@ mock.module('$logger', () => ({
 }));
 
 mock.module('$lib/data/lpc_renderer', () => ({
-  loadLpcSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+  createLpcRenderer: () => ({
+    loadSheet: async () => ({ source: { scaleMode: 'nearest' }, width: 64, height: 64 }),
+    extractFrame: () => null,
+    getFrameTexture: async () => null,
+    createSprite: async () => null,
+    clearCaches: () => {},
+  }),
   detectLpcSheetLayout: (sheet: { width: number; height: number }) => ({
     pitch: 64,
     columns: Math.max(1, Math.floor(sheet.width / 64)),
@@ -152,12 +160,12 @@ mock.module('$lib/data/lpc_renderer', () => ({
     scale: 1,
   }),
   getLpcSpriteAnchor: () => ({ x: -32, y: -32 }),
-  setLpcUrlResolver: () => {},
 }));
 
 mock.module('$lib/data/lpc_asset_catalog', () => ({
   wireLpcUrlResolver: () => {},
   getLpcAssetPath: () => '/game-data/lpc/test.walk.webp',
+  lpcAssetResolver: { resolve: () => null, release: () => {}, kind: 'fixture' },
   ANIMATION_STATE_OPTIONS: [
     { value: 8, label: 'Walk' },
     { value: 0, label: 'Spellcast' },

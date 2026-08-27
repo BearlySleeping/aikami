@@ -75,35 +75,35 @@ describe('getLpcIconBackgroundSize — C-419 AC-4', () => {
 describe('getLpcIconBackgroundPosition — C-419 AC-4', () => {
   test('standard 9×4: hero at r2c0 → "0% 66.67%"', () => {
     // 2/(4-1) = 66.67%, 0/(9-1) = 0%
-    expect(getLpcIconBackgroundPosition(0, 2, 9, 4)).toBe('0% 66.67%');
+    expect(getLpcIconBackgroundPosition({ col: 0, row: 2, cols: 9, rows: 4 })).toBe('0% 66.67%');
   });
 
   test('standard 9×4: hero at r2c7 → "87.5% 66.67%" (dagger walk sheet)', () => {
     // 7/(9-1) = 87.5%, 2/(4-1) = 66.67%
-    expect(getLpcIconBackgroundPosition(7, 2, 9, 4)).toBe('87.5% 66.67%');
+    expect(getLpcIconBackgroundPosition({ col: 7, row: 2, cols: 9, rows: 4 })).toBe('87.5% 66.67%');
   });
 
   test('universal 13×4: hero at r3c12 → "100% 100%"', () => {
     // 12/(13-1) = 100%, 3/(4-1) = 100%
-    expect(getLpcIconBackgroundPosition(12, 3, 13, 4)).toBe('100% 100%');
+    expect(getLpcIconBackgroundPosition({ col: 12, row: 3, cols: 13, rows: 4 })).toBe('100% 100%');
   });
 
   test('standard 9×4: hero at r0c4 → "50% 0%"', () => {
-    expect(getLpcIconBackgroundPosition(4, 0, 9, 4)).toBe('50% 0%');
+    expect(getLpcIconBackgroundPosition({ col: 4, row: 0, cols: 9, rows: 4 })).toBe('50% 0%');
   });
 
   test('guards 1×1 grid → "0% 0%"', () => {
-    expect(getLpcIconBackgroundPosition(0, 0, 1, 1)).toBe('0% 0%');
+    expect(getLpcIconBackgroundPosition({ col: 0, row: 0, cols: 1, rows: 1 })).toBe('0% 0%');
   });
 
   test('single-column grid: origin on x-axis, valid offset preserved on y', () => {
     // cols=1 → x is the origin; rows=4 → y keeps 2/(4-1) = 66.67%.
-    expect(getLpcIconBackgroundPosition(0, 2, 1, 4)).toBe('0% 66.67%');
+    expect(getLpcIconBackgroundPosition({ col: 0, row: 2, cols: 1, rows: 4 })).toBe('0% 66.67%');
   });
 
   test('single-row grid: origin on y-axis, valid offset preserved on x', () => {
     // rows=1 → y is the origin; cols=9 → x keeps 3/(9-1) = 37.5%.
-    expect(getLpcIconBackgroundPosition(3, 0, 9, 1)).toBe('37.5% 0%');
+    expect(getLpcIconBackgroundPosition({ col: 3, row: 0, cols: 9, rows: 1 })).toBe('37.5% 0%');
   });
 });
 
@@ -114,7 +114,7 @@ describe('pickHeroCell — C-419 AC-4', () => {
       [0, 0, 0],
       [205, 0, 0],
     ];
-    expect(pickHeroCell(counts)).toEqual({ col: 0, row: 2 });
+    expect(pickHeroCell({ counts })).toEqual({ col: 0, row: 2 });
   });
 
   test('picks the max-content cell on a 9×4 grid (dagger walk content r1c0/r2c7/r3c0)', () => {
@@ -126,7 +126,7 @@ describe('pickHeroCell — C-419 AC-4', () => {
     ];
     // argmax is deterministic; any of the three content cells is valid —
     // assert the chosen cell has content (not the blank (0,0)).
-    const hero = pickHeroCell(counts);
+    const hero = pickHeroCell({ counts });
     expect(hero).toBeDefined();
     const { col, row } = hero ?? { col: 0, row: 0 };
     expect(counts[row]?.[col] ?? 0).toBeGreaterThan(0);
@@ -138,7 +138,7 @@ describe('pickHeroCell — C-419 AC-4', () => {
       [0, 0, 0],
       [0, 0, 0],
     ];
-    expect(pickHeroCell(counts)).toBeUndefined();
+    expect(pickHeroCell({ counts })).toBeUndefined();
   });
 
   test('rejects cells below the min-content threshold', () => {
@@ -147,7 +147,7 @@ describe('pickHeroCell — C-419 AC-4', () => {
       [0, 0, 0],
       [0, 9, 0],
     ];
-    expect(pickHeroCell(counts)).toBeUndefined();
+    expect(pickHeroCell({ counts })).toBeUndefined();
   });
 
   test('accepts a cell exactly at the threshold', () => {
@@ -156,10 +156,10 @@ describe('pickHeroCell — C-419 AC-4', () => {
       [0, 0, 0],
       [0, 10, 0],
     ];
-    expect(pickHeroCell(counts)).toEqual({ col: 1, row: 2 });
+    expect(pickHeroCell({ counts })).toEqual({ col: 1, row: 2 });
   });
 
   test('handles empty counts array', () => {
-    expect(pickHeroCell([])).toBeUndefined();
+    expect(pickHeroCell({ counts: [] })).toBeUndefined();
   });
 });

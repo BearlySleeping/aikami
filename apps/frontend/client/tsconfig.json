@@ -5,15 +5,8 @@
     "module": "ESNext",
     "strict": true,
     "checkJs": false,
-    "lib": [
-      "ESNext",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "types": [
-      "bun",
-      "$app/types"
-    ]
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["bun", "$app/types"]
   },
   "include": [
     "src/**/*.ts",

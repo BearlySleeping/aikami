@@ -41,12 +41,12 @@
     "@astrojs/sitemap": "3.7.3",
     "@tailwindcss/vite": "4.3.3",
     "@unlighthouse/cli": "0.18.0",
-    "astro": "7.2.6",
+    "astro": "7.2.7",
     "astro-compress": "2.4.3",
     "astro-robots-txt": "1.0.0",
     "lighthouse": "13.4.1",
     "tailwindcss": "4.3.3",
     "vite": "8.2.2",
-    "wrangler": "^4.125.0"
+    "wrangler": "4.126.0"
   }
 }

@@ -57,7 +57,7 @@ export type LpcLayerRecipe = {
   /** 1024-byte palette LUT (256 RGBA pixels) for this layer. */
   hexPalette: Uint8Array;
   /** Which side of the body this layer draws on. Defaults to 'front'. */
-  layerRole: LpcLayerRole;
+  layerRole?: LpcLayerRole;
 };
 
 /** One engine appearance slot, in render order. */

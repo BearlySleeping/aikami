@@ -3,15 +3,26 @@
   //
   // Dev route — wraps the shared WalkSandbox component with map loading.
   // Supplies the registry resolver for asset resolution.
+  // Fetches asset catalog before creating/rendering WalkSandbox.
+  // Uses a dedicated ViewModel for resolver/manifest loading.
 
-  import { onMount } from 'svelte';
   import { WalkSandbox } from '@aikami/frontend/preview/sandbox';
+  import {
+    getMapSandboxRouteViewModel,
+    type MapSandboxRouteViewModelInterface,
+  } from './map_sandbox_route_view_model.svelte';
 
-  let resolver: import('@aikami/types').AssetResolver | undefined = $state(undefined);
+  let viewModel = $state<MapSandboxRouteViewModelInterface | undefined>(undefined);
 
-  onMount(async () => {
-    const { createRegistryAssetResolver } = await import('$lib/services/assets/registry_asset_resolver');
-    resolver = createRegistryAssetResolver();
+  $effect(() => {
+    const vm = getMapSandboxRouteViewModel({ className: 'MapSandboxRoute' });
+    viewModel = vm;
+    void vm.initialize();
+    return () => {
+      void vm.dispose().catch((err: unknown) => {
+        console.error('MapSandbox route dispose failed:', err);
+      });
+    };
   });
 </script>
 
@@ -19,8 +30,8 @@
   <title>Map Sandbox</title>
 </svelte:head>
 
-{#if resolver}
-  <WalkSandbox {resolver} mapTag="sandbox_zone_a" />
+{#if viewModel?.resolver && !viewModel?.loading}
+  <WalkSandbox resolver={viewModel.resolver} mapTag="maps:sandbox_zone_a" />
 {:else}
   <div class="flex items-center justify-center h-64 text-base-content/40">
     Loading map sandbox...

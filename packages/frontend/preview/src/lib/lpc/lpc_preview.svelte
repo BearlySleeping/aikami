@@ -2,10 +2,10 @@
   // packages/frontend/preview/src/lib/lpc/lpc_preview.svelte
   //
   // Host-agnostic LPC character preview component.
+  // Pure wrapper — all logic lives in the ViewModel.
   // Takes a resolver, catalog slots, and optional initial state.
   // Renders a canvas with PixiJS for the character + control panel.
 
-  import { onMount } from 'svelte';
   import {
     getLpcPreviewViewModel,
     type LpcPreviewViewModelInterface,
@@ -41,16 +41,29 @@
   let viewModel = $state<LpcPreviewViewModelInterface | undefined>(undefined);
   let showControls = $state(controls);
 
-  onMount(async () => {
+  // Derive showControls from controls prop reactively
+  $effect(() => {
+    showControls = controls;
+  });
+
+  // Create ViewModel with zoom wired in
+  $effect(() => {
     const vm = getLpcPreviewViewModel({
       className: 'LpcPreview',
       resolver,
       allSlots,
       initialState,
       onStateChange,
+      zoom,
     });
     viewModel = vm;
-    await vm.initialize();
+    void vm.initialize();
+    // Return sync cleanup function (not async)
+    return () => {
+      void vm.dispose().catch((err: unknown) => {
+        console.error('LpcPreview dispose failed:', err);
+      });
+    };
   });
 
   // Bind canvas element once available
@@ -87,7 +100,7 @@
 
   <div class="flex {showControls ? 'flex-row' : 'flex-col'}">
     <!-- Canvas -->
-    <div class="flex-1 flex items-center justify-center bg-base-300 min-h-[{height}px]">
+    <div class="flex-1 flex items-center justify-center bg-base-300" style="min-height: {height}px">
       <canvas
         bind:this={canvasEl}
         class="block [image-rendering:pixelated]"
@@ -110,14 +123,14 @@
             <button
               type="button"
               class="btn btn-xs {viewModel.isPlaying ? 'btn-primary' : 'btn-ghost'}"
-              onclick={() => viewModel.togglePlayback()}
+              onclick={() => viewModel?.togglePlayback()}
             >
               {viewModel.isPlaying ? '⏸ Pause' : '▶ Play'}
             </button>
             <button
               type="button"
               class="btn btn-xs btn-ghost"
-              onclick={() => viewModel.stepPrev()}
+              onclick={() => viewModel?.stepPrev()}
               disabled={viewModel.isPlaying}
             >
               ⏮
@@ -125,7 +138,7 @@
             <button
               type="button"
               class="btn btn-xs btn-ghost"
-              onclick={() => viewModel.stepNext()}
+              onclick={() => viewModel?.stepNext()}
               disabled={viewModel.isPlaying}
             >
               ⏭
@@ -142,7 +155,7 @@
                 viewModel?.setAnimationState(val as LpcAnimationState);
               }}
             >
-              {#each Object.values(LpcAnimationState).filter((v): v is number => typeof v === 'number') as state}
+              {#each viewModel.animationStateOptions as state}
                 <option value={state}>{LpcAnimationState[state]}</option>
               {/each}
             </select>
@@ -158,7 +171,7 @@
                 viewModel?.setFacingDirection(val as LpcDirection);
               }}
             >
-              {#each Object.values(LpcDirection).filter((v): v is number => typeof v === 'number') as dir}
+              {#each viewModel.directionOptions as dir}
                 <option value={dir}>{LpcDirection[dir]}</option>
               {/each}
             </select>

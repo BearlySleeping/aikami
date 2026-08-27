@@ -16,9 +16,15 @@ import { LpcAnimationState, LpcDirection, lpcStateSuffix } from '@aikami/lpc';
 import {
   ANIMATION_STATE_OPTIONS,
   DIRECTION_OPTIONS,
+  lpcAssetResolver,
   wireLpcUrlResolver,
 } from '$lib/data/lpc_asset_catalog';
-import { detectLpcSheetLayout, getLpcSpriteAnchor, loadLpcSheet } from '$lib/data/lpc_renderer';
+import {
+  createLpcRenderer,
+  detectLpcSheetLayout,
+  getLpcSpriteAnchor,
+  type LpcRenderer,
+} from '$lib/data/lpc_renderer';
 import {
   Application,
   Container,
@@ -142,6 +148,7 @@ class LpcPreviewViewModel
   private _maxFrame = 8;
   private _sheetCache = new Map<string, Texture>();
   private _sheetPromises = new Map<string, Promise<Texture>>();
+  private _lpcRenderer: LpcRenderer | undefined;
   private _canvasWidth: number;
   private _canvasHeight: number;
   private _backgroundColor: number;
@@ -249,6 +256,10 @@ class LpcPreviewViewModel
     // Ensure the manifest-backed LPC URL resolver is wired and the manifest
     // is loaded before any layer lookup (idempotent).
     await wireLpcUrlResolver();
+    this._lpcRenderer = createLpcRenderer({
+      resolver: lpcAssetResolver,
+      onError: (error) => this.warn('lpcPreview.sheetLoadFailed', { error: String(error) }),
+    });
 
     this.registerEffectRoot(() => {
       // Reactively initialize PixiJS when canvasElement becomes available
@@ -277,6 +288,8 @@ class LpcPreviewViewModel
     this._destroyAllChildren();
     this._sheetCache.clear();
     this._sheetPromises.clear();
+    this._lpcRenderer?.clearCaches();
+    this._lpcRenderer = undefined;
 
     if (this._pixiApp) {
       this._pixiApp.destroy(true, { children: true });
@@ -538,10 +551,12 @@ class LpcPreviewViewModel
     }
 
     const promise = (async () => {
-      const texture = await loadLpcSheet(assetId, state);
-      // Only cache successful textures — transient EMPTY must be retried on a
-      // later call (the renderer only permanently caches genuinely unmapped
-      // assets once the manifest is loaded).
+      const texture = this._lpcRenderer
+        ? await this._lpcRenderer.loadSheet(assetId, state)
+        : Texture.EMPTY;
+      // Only cache successful textures at this layer — an EMPTY result is
+      // retried on a later call here even though the renderer instance's own
+      // cache remembers it as permanently unmapped.
       if (texture !== Texture.EMPTY) {
         this._sheetCache.set(cacheKey, texture);
       }

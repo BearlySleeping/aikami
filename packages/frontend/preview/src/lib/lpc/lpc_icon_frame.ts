@@ -48,15 +48,20 @@ export const getLpcIconBackgroundSize = (sheet: { width: number; height: number 
   return `${grid.cols * 100}% ${grid.rows * 100}%`;
 };
 
+/** Options for {@link getLpcIconBackgroundPosition}. */
+export type LpcIconBackgroundPositionOptions = {
+  col: number;
+  row: number;
+  cols: number;
+  rows: number;
+};
+
 /**
  * Computes the CSS `background-position` that aligns the hero cell so it fills the icon box.
+ * Accepts a named options object instead of positional args.
  */
-export const getLpcIconBackgroundPosition = (
-  col: number,
-  row: number,
-  cols: number,
-  rows: number,
-): string => {
+export const getLpcIconBackgroundPosition = (options: LpcIconBackgroundPositionOptions): string => {
+  const { col, row, cols, rows } = options;
   const x = cols <= 1 ? 0 : (col / (cols - 1)) * 100;
   const y = rows <= 1 ? 0 : (row / (rows - 1)) * 100;
   return `${_roundPct(x)}% ${_roundPct(y)}%`;
@@ -67,13 +72,18 @@ const _roundPct = (value: number): string => {
   return String(rounded);
 };
 
+/** Options for {@link pickHeroCell}. */
+export type PickHeroCellOptions = {
+  counts: number[][];
+  minContent?: number;
+};
+
 /**
  * Picks the cell with the most non-transparent pixel content.
+ * Accepts a named options object instead of positional args.
  */
-export const pickHeroCell = (
-  counts: number[][],
-  minContent = 10,
-): { col: number; row: number } | undefined => {
+export const pickHeroCell = (options: PickHeroCellOptions): { col: number; row: number } | undefined => {
+  const { counts, minContent = 10 } = options;
   let best: { col: number; row: number } | undefined;
   let bestCount = 0;
 

@@ -1,6 +1,7 @@
 // packages/frontend/preview/src/lib/sandbox/walk_sandbox_view_model.svelte.ts
 //
 // ViewModel for the walk sandbox — engine-mounting preview that creates a GameWorld.
+// Owns initialization, resolver loading, engine lifecycle, and state.
 // Generalised from apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view_model.svelte.ts (C-445).
 
 import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';

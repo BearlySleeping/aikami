@@ -25,7 +25,7 @@ mock.module('$services', () => ({
   },
 }));
 
-import { setLpcUrlResolver } from '$lib/data/lpc_renderer';
+import { assetStore } from '$lib/services/assets/asset_store.svelte.ts';
 import { vendorService } from '$lib/services/game/vendor_service.svelte.ts';
 import { getVendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';
 
@@ -246,12 +246,11 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
 
   describe('item art resolution — C-419 AC-4', () => {
     test('returns art URL for items with lpcAssetId in the catalog', () => {
-      // Wire a deterministic LPC URL resolver so this test does not depend
-      // on the asset manifest being loaded in the test env (which returns
+      // Stub the asset store's resolver so this test does not depend on the
+      // asset manifest being loaded in the test env (which returns
       // undefined). rustySword's lpcAssetId is weapon/sword/dagger.
-      setLpcUrlResolver((assetId) =>
-        assetId === 'weapon/sword/dagger' ? 'https://assets.example/dagger-walk.png' : null,
-      );
+      assetStore.resolveUrl = (tag) =>
+        tag === 'lpc:weapon:sword:dagger:walk' ? 'https://assets.example/dagger-walk.png' : null;
       const viewModel = createViewModel({ vendorInventory: 'rustySword' });
       const url = viewModel.getItemArtUrl('rustySword');
       expect(url).toBe('https://assets.example/dagger-walk.png');

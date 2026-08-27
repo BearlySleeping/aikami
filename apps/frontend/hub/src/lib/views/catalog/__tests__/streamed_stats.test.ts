@@ -15,11 +15,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'b
 let origin: { url: string; stop: () => void } | undefined;
 
 const setEnv = (options: { catalogOrigin?: string }): void => {
-  mock.module('$env/dynamic/private', () => ({
-    env: {
-      // biome-ignore lint/complexity/useLiteralKeys: env keys are SCREAMING_SNAKE_CASE literals by platform convention
-      ['CATALOG_ORIGIN_URL']: options.catalogOrigin ?? origin?.url,
-    } as Record<string, string | undefined>,
+  mock.module('$app/env/private', () => ({
+    // biome-ignore lint/complexity/useLiteralKeys: env keys are SCREAMING_SNAKE_CASE literals by platform convention
+    ['CATALOG_ORIGIN_URL']: options.catalogOrigin ?? origin?.url,
+    __esModule: true,
   }));
 };
 

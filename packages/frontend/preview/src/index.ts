@@ -17,3 +17,16 @@ export {
 export type { PreviewProps } from './lib/types';
 export type { LpcSlotDef } from '@aikami/lpc';
 export type { LpcPreviewViewModelInterface } from './lib/lpc/lpc_preview_view_model.svelte';
+export {
+  getLpcIconCellPitch,
+  getLpcGrid,
+  getLpcIconBackgroundSize,
+  getLpcIconBackgroundPosition,
+  pickHeroCell,
+  type LpcGrid,
+  type LpcIconBackgroundPositionOptions,
+  type PickHeroCellOptions,
+} from './lib/lpc/lpc_icon_frame';
+export type { MapPreviewViewModelInterface } from './lib/map/map_preview_view_model.svelte';
+export type { PropPreviewViewModelInterface } from './lib/prop/prop_preview_view_model.svelte';
+export type { TilesetPreviewViewModelInterface } from './lib/tileset/tileset_preview_view_model.svelte';
