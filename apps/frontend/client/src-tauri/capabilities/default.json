@@ -34,19 +34,23 @@
     },
     {
       "identifier": "fs:allow-mkdir",
-      "allow": [
-        { "path": "$APPDATA/aikami-assets" },
-        { "path": "$APPDATA/aikami-assets/**" },
-        { "path": "$APPDATA/session.json" }
-      ]
+      "allow": [{ "path": "$APPDATA/aikami-assets" }, { "path": "$APPDATA/aikami-assets/**" }]
     },
     {
       "identifier": "fs:allow-write-file",
-      "allow": [{ "path": "$APPDATA/aikami-assets/**" }, { "path": "$APPDATA/session.json" }]
+      "allow": [{ "path": "$APPDATA/aikami-assets/**" }]
     },
     {
       "identifier": "fs:allow-read-file",
-      "allow": [{ "path": "$APPDATA/aikami-assets/**" }, { "path": "$APPDATA/session.json" }]
+      "allow": [{ "path": "$APPDATA/aikami-assets/**" }]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [{ "path": "$APPDATA/session.json" }]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "$APPDATA/session.json" }]
     },
     {
       "identifier": "fs:allow-read-dir",

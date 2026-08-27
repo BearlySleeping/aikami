@@ -15,8 +15,7 @@
 
 import { PORTS } from '@aikami/constants';
 import { getPublicMode } from '@aikami/frontend/configs';
-import type { AuthMessageData, AuthMessageResponse, Mode } from '@aikami/types';
-import { toAppError } from '@aikami/utils';
+import type { Mode } from '@aikami/types';
 import { getDesktopSessionToken } from '$lib/services/auth/desktop_session_store';
 import { isTauri } from '$lib/views/utils/is_tauri';
 
@@ -71,69 +70,3 @@ export const hubApiBase = (): string => {
   return HUB_API_BASE[mode] ?? '/api/hub';
 };
 
-type HubErrorBody = {
-  errorType?: string;
-  errorMessage?: string;
-};
-
-const toHubError = (status: number, body: HubErrorBody): Error =>
-  toAppError({
-    errorType: body?.errorType ?? 'internal',
-    errorMessage: body?.errorMessage ?? `Hub request failed (HTTP ${status})`,
-  });
-
-/**
- * Calls the hub's multiplexed auth endpoint (formerly the `auth` callable).
- *
- * @param data The typed auth message (type + payload).
- */
-export const callHubAuthAction = async <T extends AuthMessageData['type']>(data: {
-  type: T;
-  payload: AuthMessageData<T>['payload'];
-}): Promise<AuthMessageResponse<T>> => {
-  const headers = hubAuthHeaders({ 'Content-Type': 'application/json' });
-
-  const response = await fetch(`${hubApiBase()}/auth/action`, {
-    method: 'POST',
-    headers,
-    credentials: 'include',
-    body: JSON.stringify({ type: data.type, payload: data.payload }),
-  });
-
-  const body = (await response.json().catch(() => ({}))) as HubErrorBody | AuthMessageResponse<T>;
-  if (!response.ok) {
-    throw toHubError(response.status, body as HubErrorBody);
-  }
-  return body as AuthMessageResponse<T>;
-};
-
-/**
- * Polls the hub's single-use device-handoff endpoint (formerly the
- * `poll_device_handoff` callable). Deliberately unauthenticated — the
- * caller (Tauri desktop app) has no session yet; codes are unguessable
- * UUIDs and the handoff doc is deleted on first read.
- */
-export const pollHubDeviceHandoff = async (
-  code: string,
-): Promise<{ customFirebaseSignInToken: string | null }> => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  const response = await fetch(`${hubApiBase()}/auth/poll-device-handoff`, {
-    method: 'POST',
-    headers,
-    credentials: 'include',
-    body: JSON.stringify({ code }),
-  });
-
-  const body = (await response.json().catch(() => ({}))) as
-    | HubErrorBody
-    | {
-        customFirebaseSignInToken: string | null;
-      };
-  if (!response.ok) {
-    throw toHubError(response.status, body as HubErrorBody);
-  }
-  return body as { customFirebaseSignInToken: string | null };
-};

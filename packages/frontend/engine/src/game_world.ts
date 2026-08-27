@@ -26,7 +26,14 @@ import {
 } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
-import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
+import {
+  createPixiApp,
+  DEFAULT_HEIGHT,
+  DEFAULT_WIDTH,
+  type PixiAppInstance,
+  type PixiAppOptions,
+} from './pixi_app.ts';
+import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import type { LpcSlotCatalog } from './rendering/lpc_appearance_resolver.ts';
@@ -563,12 +570,38 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // resizeTo: window ensures the canvas fills the viewport immediately
     // instead of waiting for the parent element's CSS layout to resolve.
     // Without this PixiJS may init at 0×0 when the $effect fires before
-    // layout is calculated.
+    // layout is calculated. Defaulted here, but NOT forced: a caller that
+    // explicitly passes `resizeTo` (own property, even `undefined`) opts
+    // out entirely and drives resize() itself — Tauri on WebKitGTK is known
+    // to report garbage from window.innerWidth/innerHeight/devicePixelRatio
+    // on some hosts, which Pixi's resizeTo:window watcher multiplies into
+    // an oversized canvas (silently refused — blank screen, no error). The
+    // client sources real dimensions from Tauri's native window API instead.
+    const resizeTo = Object.hasOwn(options, 'resizeTo') ? options.resizeTo : window;
     const pixiInstance: PixiAppInstance = await createPixiApp({
       ...options,
-      resizeTo: window,
+      resizeTo,
     });
     this._app = pixiInstance.app;
+
+    // Diagnostic for the WebKitGTK blank-canvas class of bug: if the
+    // backing store does not match what we asked for, the platform refused
+    // the allocation and every subsequent frame renders into nothing.
+    if (canvas.width !== this._app.renderer.canvas.width) {
+      this.error('[GameWorld] initialize:canvas-size-rejected', {
+        requestedWidth: options.width,
+        requestedHeight: options.height,
+        rendererWidth: this._app.renderer.canvas.width,
+        rendererHeight: this._app.renderer.canvas.height,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height,
+        resolution: this._app.renderer.resolution,
+        devicePixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio : undefined,
+        innerWidth: typeof window !== 'undefined' ? window.innerWidth : undefined,
+        innerHeight: typeof window !== 'undefined' ? window.innerHeight : undefined,
+        resizeTo: resizeTo === undefined ? 'none' : 'window',
+      });
+    }
 
     // ---- 1a. Build the world container with camera transform ----------
     this._worldContainer = new Container();
@@ -708,8 +741,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * correct world-to-screen ratio.
    */
   resize(width: number, height: number): void {
+    // Resize callers measure the DOM, which lies on some WebKitGTK hosts
+    // (negative innerWidth, billions-scale clientWidth). Passing that
+    // through wraps to a multi-gigapixel backing store the platform
+    // refuses, blanking a canvas that was rendering fine a frame earlier.
+    const safeWidth = sanitizeCanvasDimension(width, this._app?.renderer.width ?? DEFAULT_WIDTH);
+    const safeHeight = sanitizeCanvasDimension(height, this._app?.renderer.height ?? DEFAULT_HEIGHT);
+
     if (this._app) {
-      this._app.renderer.resize(width, height);
+      this._app.renderer.resize(safeWidth, safeHeight);
     }
 
     // Notify the worker so the camera system updates its screen dimensions
@@ -717,8 +757,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     if (this._worker) {
       this._worker.postMessage({
         type: 'SET_SCREEN_SIZE',
-        width,
-        height,
+        width: safeWidth,
+        height: safeHeight,
         scale: this._worldContainer?.scale.x ?? 4,
       });
     }

@@ -24,6 +24,14 @@
  * Env comes from .env.{mode} — generate first with download-secrets
  * (bun run scripts/src/lib/ops/download_secrets.ts --mode <mode>).
  * --dry-run prints the commands without running them.
+ *
+ * This is also what `bun moon run client:tauri-build` runs (moon.yml → the
+ * `build:tauri` script below). It replaced a `tauri build` CLI wrapper that
+ * always produced a release binary (+ OS installer bundles via Tauri's own
+ * bundler, which doesn't run here — see tauri_appimage.ts for a real
+ * AppImage). Default mode with no `--mode`/`TAURI_BUILD_MODE` is `emulator`,
+ * i.e. a DEBUG binary — pass `--mode production` (or set `TAURI_BUILD_MODE`)
+ * for a release build.
  */
 
 import { type SpawnSyncOptions, spawnSync } from 'node:child_process';

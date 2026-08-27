@@ -110,7 +110,7 @@ tasks:
     command: 'bun run tauri:dev'
     preset: 'server'
   tauri-build:
-    command: 'bun run tauri:build'
+    command: 'bun run build:tauri'
     options:
       cache: false
       # Excluded from default CI graph: compiles Rust + full desktop bundle,

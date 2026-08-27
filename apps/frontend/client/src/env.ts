@@ -111,6 +111,12 @@ export const variables = defineEnvVars({
     schema: optionalString(),
   },
 
+  /** Force-enable the Eruda debug console (even in production). */
+  PUBLIC_ERUDA_ENABLED: {
+    public: true,
+    schema: optionalString(),
+  },
+
   /** Emulator port offset for contract-scoped pipeline runs. */
   PUBLIC_EMULATOR_PORT_OFFSET: {
     public: true,

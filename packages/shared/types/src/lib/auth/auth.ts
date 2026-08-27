@@ -1,4 +1,4 @@
-/** biome-ignore-all lint/style/useNamingConvention: Firebase Auth API uses snake_case fields */
+/** biome-ignore-all lint/style/useNamingConvention: Google/Microsoft API uses snake_case fields */
 // packages/shared/types/src/lib/auth.ts
 //
 // Schema-derived names re-exported from @aikami/schemas; hand-authored types remain.

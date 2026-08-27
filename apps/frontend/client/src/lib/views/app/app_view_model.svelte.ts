@@ -143,7 +143,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     await this._handleRouteTransitions(this.currentRoute, user);
     this._initialRouteHandled = true;
 
-    if (isDevelopmentModePublic()) {
+    if (isDevelopmentModePublic() || publicEnv.PUBLIC_ERUDA_ENABLED) {
       const eruda = (await import('eruda')).default;
       eruda.init();
     }

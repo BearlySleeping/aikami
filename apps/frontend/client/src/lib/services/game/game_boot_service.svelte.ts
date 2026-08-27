@@ -17,6 +17,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { Campaign, PersonaData } from '@aikami/types';
+import { isTauri } from '$lib/views/utils/is_tauri';
 import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
@@ -923,10 +924,24 @@ class GameBootService
     // Determine renderer preference — default 'webgl', boot may override
     this.bootProgress.detail = `Initializing renderer...`;
 
+    // Tauri/WebKitGTK is known to report garbage from
+    // window.innerWidth/innerHeight/devicePixelRatio and even
+    // document.documentElement.clientWidth/clientHeight on some hosts (seen
+    // as negative or billions-scale values). GameWorld.initialize() defaults
+    // to Pixi's resizeTo:window, which multiplies those into a canvas area
+    // WebKit silently refuses to render — a fully blank screen with no
+    // error. Source real dimensions from Tauri's native window API instead,
+    // and pass `resizeTo: undefined` (an explicit own-property, distinct
+    // from omitting it) so GameWorld doesn't fall back to resizeTo:window.
+    const viewportSize = isTauri()
+      ? await this._resolveTauriViewportSize(input.canvas)
+      : { width: input.canvas.clientWidth, height: input.canvas.clientHeight };
+
     await this._gameWorld.initialize({
       canvas: input.canvas,
-      width: input.canvas.clientWidth,
-      height: input.canvas.clientHeight,
+      width: viewportSize.width,
+      height: viewportSize.height,
+      resizeTo: isTauri() ? undefined : window,
       initialPayload: undefined,
       playerData,
       rendererPreference: input.rendererPreference,
@@ -1389,23 +1404,71 @@ class GameBootService
 
   // ── Asset preloading ──
 
-  /** Preloads a single PixiJS asset by URL. Cancellation-safe. */
+  /**
+   * Preloads a single PixiJS asset by URL. Cancellation-safe.
+   *
+   * `url` may be a logical content-pack path (e.g. "emberwatch/maps/village.json")
+   * rather than something directly fetchable — the same registry resolution
+   * loadTilemap/loadJtonMap perform internally (see map_loader.ts) must run
+   * here too, or the raw logical path gets handed straight to Assets.load()
+   * and fails against the real asset store / CDN.
+   *
+   * JSON assets (maps) skip Pixi's Assets/Loader system entirely: the
+   * registry resolver returns extension-less blob: URLs, so Pixi's
+   * extension-sniffing parser selection (checkExtension in loadJson) can't
+   * recognize them as JSON and falls through to the image parser instead,
+   * failing with "Cannot decode the data in the argument to
+   * createImageBitmap". This is harmless to skip — nothing downstream reads
+   * map JSON from Pixi's cache; loadTilemap/loadJtonMap do their own fetch +
+   * `_mapCache` when the real map load happens — so a plain fetch is enough
+   * to warm it and surface fetch failures early.
+   */
   private async _preloadAsset(url: string): Promise<void> {
     if (this._cancelled) {
       return;
     }
+    const resolvedUrl = this._resolveTag ? (this._resolveTag(url) ?? url) : url;
     try {
-      const { Assets } = await import('pixi.js');
-      await Assets.load(url);
+      if (url.split('?')[0]?.toLowerCase().endsWith('.json')) {
+        await fetch(resolvedUrl);
+      } else {
+        const { Assets } = await import('pixi.js');
+        await Assets.load(resolvedUrl);
+      }
     } catch (error) {
-      this.warn('_preloadAsset:failed', { url, error: String(error) });
+      this.warn('_preloadAsset:failed', { url, resolvedUrl, error: String(error) });
       // Non-fatal — the map loader will retry on first load
     }
   }
 
   // ── Resize handler ──
 
+  /**
+   * Resolves the real viewport size via Tauri's native window API. The DOM
+   * viewport-measurement APIs (window.innerWidth/innerHeight,
+   * document.documentElement.clientWidth/clientHeight) are unreliable on
+   * some WebKitGTK hosts — seen returning negative or billions-scale
+   * garbage in this webview. Falls back to the canvas's own box size if the
+   * Tauri call fails for any reason.
+   */
+  private async _resolveTauriViewportSize(
+    canvas: HTMLCanvasElement,
+  ): Promise<{ width: number; height: number }> {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      const size = await getCurrentWindow().innerSize();
+      return { width: size.width, height: size.height };
+    } catch (error) {
+      this.warn('_resolveTauriViewportSize:failed', { error: String(error) });
+      return { width: canvas.clientWidth, height: canvas.clientHeight };
+    }
+  }
+
   private _registerResizeHandler(canvas: HTMLCanvasElement): void {
+    if (isTauri()) {
+      this._registerTauriResizeHandler();
+      return;
+    }
     const handleResize = (): void => {
       if (this._gameWorld) {
         this._gameWorld.resize(canvas.clientWidth, canvas.clientHeight);
@@ -1414,6 +1477,38 @@ class GameBootService
     window.addEventListener('resize', handleResize);
     this._resizeCleanup = (): void => {
       window.removeEventListener('resize', handleResize);
+    };
+  }
+
+  /**
+   * Tauri variant: listens to the native window's resize event (physical
+   * pixel size from Tauri's Rust side) instead of the DOM `resize` event +
+   * canvas.clientWidth/clientHeight, which are unreliable in this webview
+   * (see _resolveTauriViewportSize).
+   */
+  private _registerTauriResizeHandler(): void {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    void (async (): Promise<void> => {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        const registered = await getCurrentWindow().onResized(({ payload }) => {
+          this._gameWorld?.resize(payload.width, payload.height);
+        });
+        if (cancelled) {
+          registered();
+          return;
+        }
+        unlisten = registered;
+      } catch (error) {
+        this.warn('_registerTauriResizeHandler:failed', { error: String(error) });
+      }
+    })();
+
+    this._resizeCleanup = (): void => {
+      cancelled = true;
+      unlisten?.();
     };
   }
 
