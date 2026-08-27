@@ -2,7 +2,7 @@
 id: C-446
 title: "Hub Catalog Asset Previews — LPC, Tilesets, Maps and Props"
 source: "user request 2026-08-26 — lpc rendering preview in hub so people can check assets"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null

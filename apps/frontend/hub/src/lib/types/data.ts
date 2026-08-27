@@ -86,6 +86,14 @@ export type CatalogAssetPageData = {
   categoryLabel: string;
   entry: CatalogAssetEntry;
   /**
+   * Full entries from the category shard (C-446). Used by the client-side
+   * preview resolver to resolve tags without a second index fetch.
+   * For map and pack pages, this also includes the tilesets shard entries.
+   */
+  entries: readonly CatalogAssetEntry[];
+  /** CDN origin URL — used by the client-side resolver. */
+  originUrl: string;
+  /**
    * Resolved CDN URL for the preview — the single-frame thumbnail from the
    * pipeline (AC-5), NOT the raw multi-frame sheet. `undefined` when the
    * entry predates the thumbnail republish; the view must say the preview is
