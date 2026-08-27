@@ -2,7 +2,7 @@
 id: C-447
 title: "Hub Walkable Map Sandbox — Collision, Z-Order and Render Ordering in the Browser"
 source: "user request 2026-08-26 — have a character walk around in a map sandbox in hub to detect collision, render ordering"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-26"
 | **Target** | `apps/frontend/hub/src/routes/(public)/sandbox/`, `apps/frontend/hub/src/lib/views/sandbox/` |
 | **Priority** | P2 — high value for content authors, and the only surface that validates a map end to end. Strictly downstream. |
 | **Dependencies** | C-442, C-443, C-444, C-445, C-446. All must merge first. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | user-facing → map authoring page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
@@ -326,6 +326,12 @@ WebGL, and a failed worker construction
 **Then** the unknown tag 404s from the server load, and each of the other three
 renders its named message rather than a blank canvas.
 
+> **Note on WebGL testing**: "a browser without WebGL" is simulated by
+temporarily overriding `HTMLCanvasElement.prototype.getContext` to return
+`null` for `'webgl2'`/`'webgl'` before the sandbox mounts, then restoring it
+after the assertion. The E2E test must not require an actual WebGL-less
+environment.
+
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
@@ -336,6 +342,8 @@ renders its named message rather than a blank canvas.
 - E2E / Visual:
   - **Functional**: `apps/e2e/tests/hub/walk_sandbox_failures.spec.ts` — four
     cases, asserting status code for the 404 and message text for the rest.
+    The WebGL-unavailable case is simulated via `getContext` override (see AC
+    note above).
   - **Visual**: N/A.
 
 **Watch Points**:
@@ -346,10 +354,11 @@ renders its named message rather than a blank canvas.
 ---
 
 ### AC-5: Mounting is leak-free
-**Given** the sandbox route
+**Given** the sandbox route with a counting fixture resolver
 **When** it is entered and left 10 times
 **Then** exactly one WebGL context and one worker exist at any time, and both
-counts return to zero after the final navigation away.
+counts return to zero after the final navigation away, and every resolver URL
+acquired has been released.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -360,7 +369,8 @@ counts return to zero after the final navigation away.
 - Moon Task: `moon run hub:test`
 - E2E / Visual:
   - **Functional**: instrument `Worker` construction and `getContext('webgl2')`
-    from the test page, navigate repeatedly, assert the counts.
+    from the test page, navigate repeatedly, assert the counts. Use a
+    counting fixture resolver to track acquire/release symmetry.
   - **Visual**: N/A.
 
 **Watch Points**:
