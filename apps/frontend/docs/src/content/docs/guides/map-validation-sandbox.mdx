@@ -1,0 +1,79 @@
+---
+title: Map Validation Sandbox
+description: Walk through any published map in the Hub sandbox to validate collision, render ordering, and transition zones — without installing the game.
+---
+
+The Hub Walk Sandbox (`/sandbox/{mapTag}`) lets you open any published map,
+walk a character around it, and see immediately where collision is wrong, where
+an entity draws in front of a wall it should be behind, and where a transition
+zone does not fire — without installing the game or cloning the repository.
+
+## Opening a Map
+
+Navigate to `/sandbox/{mapTag}` where `{mapTag}` is the tag of a published map
+in the catalog. For example:
+
+- `/sandbox/maps:sandbox_zone_a`
+
+If the map tag is unknown, the page returns a 404 error.
+
+## Controls
+
+The sandbox uses the engine's default keyboard bindings:
+
+| Key | Action |
+|-----|--------|
+| Arrow keys / WASD | Move the character |
+| Tab | Focus the canvas for keyboard input |
+
+The canvas has a visible focus ring so you know where input is going.
+
+## Debug Overlays
+
+Five debug overlays help you inspect the map's structure. Each is toggled by a
+button below the canvas:
+
+| Overlay | What it shows |
+|---------|---------------|
+| **Collision** | Tints cells that the engine's collision system reports as blocked. Cells covered by walls, water, and cliffs are tinted; open walkable floor is not. |
+| **Z-Bands** | Colours entities by their render band, making it easy to see which Y-threshold an entity belongs to. |
+| **Render Order** | Labels each sprite with its computed z-index value. The avatar's label changes as it moves above or below tall objects. |
+| **Transitions** | Draws rectangles around transition zones so you can verify their position and size. |
+| **Spawns** | Marks spawn points on the map. |
+
+All overlays read from the engine's own data structures — they never compute
+their own values. This guarantees the overlay and the engine never disagree.
+
+## Player HUD
+
+A text HUD below the canvas reports the player's current cell coordinates and
+whether that cell is walkable. This information is available without reading
+pixels, making it accessible to all users.
+
+## Reproducible Bug Reports
+
+Click **Copy Repro Link** to copy a URL with the current player position as a
+`?spawn=x,y` parameter. Share this link with a developer to reproduce the exact
+state you're seeing.
+
+You can also manually add `?spawn=x,y` to the URL to start at a specific
+position.
+
+## Spawn Clamping
+
+If you specify a spawn position outside the map bounds, the collision system
+clamps it to the nearest valid position. The HUD shows a "Spawn clamped (out of
+bounds)" warning when this happens.
+
+## Error States
+
+The sandbox handles these failure cases explicitly:
+
+| Error | What happens |
+|-------|-------------|
+| Unknown map tag | Server returns 404 |
+| WebGL unavailable | Shows "WebGL is not available in this browser" |
+| Worker failure | Shows "Could not start the simulation worker" |
+| Map load failure | Shows "Could not load map {tag}" |
+
+The sandbox never shows a blank canvas with no message.

@@ -145,6 +145,7 @@ export default defineConfig(({ mode }) => {
         '@aikami/frontend/theme': toPackagesPath('frontend/theme/src'),
         '@aikami/frontend/theme/*': toPackagesPath('frontend/theme/src/lib/*'),
         '@aikami/frontend/preview': toPackagesPath('frontend/preview/src'),
+        '@aikami/frontend/preview/sandbox': toPackagesPath('frontend/preview/src/sandbox.ts'),
         '@aikami/frontend/preview/*': toPackagesPath('frontend/preview/src/lib/*'),
         '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
         '@aikami/frontend/engine/*': toPackagesPath('frontend/engine/src/*'),

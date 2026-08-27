@@ -103,3 +103,23 @@ export type CatalogAssetPageData = {
   /** Streamed — null when the stats endpoint is unreachable/unconfigured. */
   stats: Promise<AssetStats | null>;
 };
+
+// ---------------------------------------------------------------------------
+// Walk sandbox — map validation page
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk sandbox page data (C-447).
+ *
+ * The server load validates the map tag against the catalog index and 404s
+ * on miss. Tileset entries are fetched so the CDN resolver can resolve
+ * tileset references without a second index fetch.
+ */
+export type SandboxPageData = {
+  /** Validated map entry from the catalog index. */
+  readonly entry: CatalogAssetEntry;
+  /** Tileset entries the map references — needed by the resolver. */
+  readonly tilesetEntries: readonly CatalogAssetEntry[];
+  /** Injected origin; never hardcoded. */
+  readonly originUrl: string;
+};
