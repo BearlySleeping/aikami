@@ -1,6 +1,7 @@
 // packages/shared/types/src/lib/game/asset_resolver.ts
 //
-// AssetResolver — single interface for tag-to-URL resolution across all hosts.
+// Asset resolution seam (C-444): a tag → URL resolver that every preview
+// component and engine loader accepts as a parameter.
 //
 // Two implementations exist and must stay behaviourally interchangeable
 // from the caller's point of view:
@@ -9,11 +10,6 @@
 
 /**
  * Resolves a catalog tag to a URL a loader can fetch.
- *
- * Two implementations exist and must stay behaviourally interchangeable
- * from the caller's point of view:
- *   - client: registry → OPFS/Tauri cache → refcounted blob URL → origin
- *   - hub:    content-addressed CDN URL, no cache, no state
  */
 export type AssetResolver = {
   /**
