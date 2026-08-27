@@ -3,6 +3,7 @@
 // Walk sandbox ViewModel for the hub (C-447).
 // Orchestrates WalkSandbox mounting, CDN resolver, debug overlays,
 // player cell tracking, spawn parameter parsing, and repro-link generation.
+// Overlays read from the engine's own data structures via map data loading.
 
 import {
   BaseViewModel,
@@ -12,7 +13,7 @@ import {
 import type { CatalogAssetEntry } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
 import type { SandboxPageData } from '$types';
-import type { OverlayRenderer, OverlayType } from './sandbox_overlays.ts';
+import type { OverlayData, OverlayRenderer, OverlayType } from './sandbox_overlays.ts';
 import {
   createCollisionOverlay,
   createRenderOrderOverlay,
@@ -59,6 +60,8 @@ export type HubWalkSandboxViewModelInterface = BaseViewModelInterface & {
   readonly sandboxMounted: boolean;
   /** The spawn coordinates parsed from the URL, if any. */
   readonly spawnCoords: { readonly x: number; readonly y: number } | undefined;
+  /** Overlay data loaded from the map. */
+  readonly overlayData: OverlayData;
 
   toggleOverlay(key: keyof DebugOverlays): void;
   /** Copy a ?spawn= link reproducing the current position. */
@@ -71,10 +74,10 @@ export type HubWalkSandboxViewModelInterface = BaseViewModelInterface & {
   updatePlayerCell(x: number, y: number, walkable: boolean): void;
   /** Build the CDN resolver lazily (client-side only). */
   ensureResolverBuilt(): Promise<AssetResolver | undefined>;
+  /** Load map data for overlays (client-side only). */
+  loadOverlayData(): Promise<void>;
   /** Create overlay renderers for the given parent element. */
   createOverlays(parent: HTMLElement, width: number, height: number): void;
-  /** Toggle an overlay on/off. */
-  toggleOverlay(key: OverlayType): void;
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -154,6 +157,7 @@ class HubWalkSandboxViewModel
   private _spawnClamped = $state(false);
   private _overlays = $state<DebugOverlays>(loadOverlayState());
   private _overlayRenderers = new Map<string, OverlayRenderer>();
+  private _overlayData = $state<OverlayData>({});
 
   constructor(options: HubWalkSandboxViewModelOptions) {
     super(options);
@@ -213,6 +217,10 @@ class HubWalkSandboxViewModel
     return this._spawnCoords;
   }
 
+  get overlayData(): OverlayData {
+    return this._overlayData;
+  }
+
   // ── Public methods ─────────────────────────────────────────────────────
 
   toggleOverlay(key: keyof DebugOverlays): void {
@@ -254,6 +262,57 @@ class HubWalkSandboxViewModel
     this._playerCellWalkable = walkable;
   }
 
+  /**
+   * Load map data for overlays using the engine's own data extraction
+   * functions. This ensures the overlays read from the same data the
+   * engine uses — they never compute their own values.
+   */
+  async loadOverlayData(): Promise<void> {
+    const resolver = this._resolver;
+    if (!resolver) {
+      this.debug('loadOverlayData:noResolver');
+      return;
+    }
+
+    const mapUrl = resolver.resolve(this._mapTag);
+    if (!mapUrl) {
+      this.debug('loadOverlayData:unresolvable', { tag: this._mapTag });
+      return;
+    }
+
+    try {
+      // Dynamically import engine functions to avoid pulling them into the
+      // server bundle. These are the same functions the engine uses internally.
+      const { loadTilemap, extractCollisionGrid, extractTransitionZones, extractSpawnPoints } =
+        await import('@aikami/frontend/engine');
+
+      const tilemap = await loadTilemap({ url: mapUrl });
+
+      const collisionGrid = extractCollisionGrid(tilemap);
+      const transitionZones = extractTransitionZones(tilemap);
+      const spawnPoints = extractSpawnPoints(tilemap);
+
+      this._overlayData = {
+        collisionGrid,
+        transitionZones,
+        spawnPoints,
+      };
+
+      // Update all overlay renderers with the new data
+      for (const renderer of this._overlayRenderers.values()) {
+        renderer.updateData(this._overlayData);
+      }
+
+      this.debug('loadOverlayData:loaded', {
+        gridSize: collisionGrid.grid.length,
+        zones: transitionZones.length,
+        spawns: spawnPoints.length,
+      });
+    } catch (error) {
+      this.error('loadOverlayData:failed', error);
+    }
+  }
+
   createOverlays(parent: HTMLElement, width: number, height: number): void {
     // Create all overlay renderers
     const overlayTypes: OverlayType[] = [
@@ -269,6 +328,8 @@ class HubWalkSandboxViewModel
         this._overlayRenderers.set(type, renderer);
         // Apply current state
         renderer.setEnabled(this._overlays[type]);
+        // Apply current data if available
+        renderer.updateData(this._overlayData);
       } catch (error) {
         this.error('createOverlay:failed', { type, error });
       }
@@ -279,20 +340,9 @@ class HubWalkSandboxViewModel
     type: OverlayType,
     options: { parent: HTMLElement; width: number; height: number },
   ): OverlayRenderer {
-    // Dynamic import to avoid pulling PixiJS into the server bundle
-    // The overlay renderers use plain Canvas2D, not PixiJS
     switch (type) {
-      case 'collision': {
-        const resolver = this._resolver;
-        if (!resolver) {
-          throw new Error('Resolver not available for collision overlay');
-        }
-        return createCollisionOverlay({
-          ...options,
-          resolver,
-          mapTag: this._mapTag,
-        });
-      }
+      case 'collision':
+        return createCollisionOverlay(options);
       case 'zBands':
         return createZBandsOverlay(options);
       case 'renderOrder':

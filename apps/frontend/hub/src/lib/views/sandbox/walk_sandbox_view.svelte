@@ -1,6 +1,7 @@
 <script lang="ts">
 // apps/frontend/hub/src/lib/views/sandbox/walk_sandbox_view.svelte
 // Walk sandbox view (C-447): mounts WalkSandbox engine with debug overlays and HUD.
+// Player position is tracked from engine bridge events, not local keyboard state.
 
 import { onMount, tick } from 'svelte';
 import BaseViewModelContainer from '$components/base_view_model_container.svelte';
@@ -29,12 +30,10 @@ onMount(() => {
       }
 
       // Dynamically import WalkSandbox ViewModel (avoids pulling engine into server bundle)
-      const { getWalkSandboxViewModel: getBaseVm } = await import(
-        '@aikami/frontend/preview/sandbox'
-      );
+      const mod = await import('@aikami/frontend/preview/sandbox');
 
       // Create the base WalkSandbox ViewModel
-      const baseVm = getBaseVm({
+      const baseVm = mod.getWalkSandboxViewModel({
         className: 'HubWalkSandbox',
         resolver,
         mapTag: viewModel.mapTag,
@@ -56,37 +55,36 @@ onMount(() => {
         viewModel.createOverlays(overlayContainerEl, 960, 640);
       }
 
-      // Listen to engine events for player position
-      // The engine emits PLAYER_POSITION_CHANGED events through the bridge
-      // For now, we track position via keyboard events on the canvas
-      const handleKeyDown = (e: KeyboardEvent) => {
-        // Arrow keys and WASD
-        const key = e.key.toLowerCase();
-        let dx = 0;
-        let dy = 0;
-        if (key === 'arrowup' || key === 'w') {
-          dy = -1;
-        } else if (key === 'arrowdown' || key === 's') {
-          dy = 1;
-        } else if (key === 'arrowleft' || key === 'a') {
-          dx = -1;
-        } else if (key === 'arrowright' || key === 'd') {
-          dx = 1;
-        }
-        if (dx !== 0 || dy !== 0) {
-          // Update player cell (approximate from movement)
-          const current = viewModel.playerCell ?? { x: 0, y: 0 };
-          const newX = current.x + dx;
-          const newY = current.y + dy;
-          viewModel.updatePlayerCell(newX, newY, true);
-        }
-      };
+      // Load overlay data (collision grid, transitions, spawns) from the map
+      // using the engine's own data extraction functions
+      await viewModel.loadOverlayData();
 
-      window.addEventListener('keydown', handleKeyDown);
+      // Listen to engine events for player position.
+      // The engine emits PLAYER_POSITION_CHANGED events through the bridge.
+      let cleanup: (() => void) | undefined;
+
+      try {
+        const { createEngineBridge, isWalkable } = await import('@aikami/frontend/engine');
+        const bridge = createEngineBridge();
+
+        if (bridge) {
+          cleanup = bridge.on('PLAYER_POSITION_CHANGED', (event) => {
+            const cellX = Math.floor(event.x / 32);
+            const cellY = Math.floor(event.y / 32);
+            const walkable = isWalkable(event.x, event.y);
+            viewModel.updatePlayerCell(cellX, cellY, walkable);
+          });
+        }
+      } catch {
+        // Bridge events are a best-effort enhancement — the HUD will show
+        // player position when events arrive
+      }
 
       // Cleanup
       return () => {
-        window.removeEventListener('keydown', handleKeyDown);
+        if (cleanup) {
+          cleanup();
+        }
         void baseVm.dispose().catch(() => {});
       };
     } catch (error) {
@@ -96,6 +94,7 @@ onMount(() => {
       loading = false;
     }
   };
+
   return _mount();
 });
 
