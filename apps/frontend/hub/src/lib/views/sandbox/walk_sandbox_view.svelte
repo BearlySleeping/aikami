@@ -18,6 +18,10 @@ let loading = $state(true);
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
 onMount(() => {
+  let cleanup: (() => void) | undefined;
+  let baseVm: { dispose: () => Promise<void> } | undefined;
+  let disposed = false;
+
   const _mount = async () => {
     try {
       // Build the CDN resolver
@@ -33,7 +37,7 @@ onMount(() => {
       const mod = await import('@aikami/frontend/preview/sandbox');
 
       // Create the base WalkSandbox ViewModel
-      const baseVm = mod.getWalkSandboxViewModel({
+      baseVm = mod.getWalkSandboxViewModel({
         className: 'HubWalkSandbox',
         resolver,
         mapTag: viewModel.mapTag,
@@ -41,16 +45,19 @@ onMount(() => {
 
       await baseVm.initialize();
 
-      // Initialize engine on the canvas
-      if (canvasEl) {
-        await baseVm.initializeEngine(canvasEl);
+      // Clear loading state and await DOM update to ensure canvas is rendered
+      loading = false;
+      await tick();
+
+      // Initialize engine on the canvas (requires canvas to be in DOM)
+      if (!canvasEl) {
+        throw new Error('Canvas element not found after DOM update');
       }
+      await baseVm.initializeEngine(canvasEl);
 
       viewModel.setSandboxMounted();
-      loading = false;
 
-      // Create overlays after the DOM updates
-      await tick();
+      // Create overlays after successful engine initialization
       if (overlayContainerEl) {
         viewModel.createOverlays(overlayContainerEl, 960, 640);
       }
@@ -61,8 +68,6 @@ onMount(() => {
 
       // Listen to engine events for player position.
       // The engine emits PLAYER_POSITION_CHANGED events through the bridge.
-      let cleanup: (() => void) | undefined;
-
       try {
         const { createEngineBridge, isWalkable } = await import('@aikami/frontend/engine');
         const bridge = createEngineBridge();
@@ -79,14 +84,6 @@ onMount(() => {
         // Bridge events are a best-effort enhancement — the HUD will show
         // player position when events arrive
       }
-
-      // Cleanup
-      return () => {
-        if (cleanup) {
-          cleanup();
-        }
-        void baseVm.dispose().catch(() => {});
-      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       sandboxError = `Could not load sandbox: ${message}`;
@@ -95,7 +92,23 @@ onMount(() => {
     }
   };
 
-  return _mount();
+  // Start mounting asynchronously (don't return the promise)
+  void _mount();
+
+  // Return a synchronous cleanup function
+  return () => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+
+    if (cleanup) {
+      cleanup();
+    }
+    if (baseVm) {
+      void baseVm.dispose().catch(() => {});
+    }
+  };
 });
 
 // ── Overlay toggle labels ─────────────────────────────────────────────────

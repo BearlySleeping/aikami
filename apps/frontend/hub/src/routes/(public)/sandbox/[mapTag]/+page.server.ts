@@ -8,6 +8,7 @@
 // only validates the tag and provides data; rendering is entirely client-side.
 
 import { error } from '@sveltejs/kit';
+import type { CatalogAssetEntry } from '@aikami/schemas';
 import {
   CatalogIndexUnavailableError,
   getCategoryEntries,
@@ -49,10 +50,18 @@ export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
   }
 
   // Fetch tilesets shard so the resolver can resolve tileset references
-  let tilesetEntries: readonly import('@aikami/schemas').CatalogAssetEntry[] = [];
+  // Use the same originUrl as the maps category to ensure consistency
+  let tilesetEntries: readonly CatalogAssetEntry[] = [];
   try {
     const tilesetsData = await getCategoryEntries('tilesets');
     if (tilesetsData) {
+      // Verify that the tilesets origin matches the maps origin
+      if (tilesetsData.originUrl !== categoryData.originUrl) {
+        // Origins differ — this is unexpected but we log and continue with the map's origin
+        console.warn(
+          `Tileset origin (${tilesetsData.originUrl}) differs from map origin (${categoryData.originUrl})`,
+        );
+      }
       tilesetEntries = tilesetsData.entries;
     }
   } catch {

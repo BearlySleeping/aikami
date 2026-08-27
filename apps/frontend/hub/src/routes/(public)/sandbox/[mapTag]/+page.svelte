@@ -8,7 +8,8 @@ import type { PageProps } from './$types';
 
 let { data }: PageProps = $props();
 
-const viewModel = $derived(getWalkSandboxViewModel({ data, className: 'HubWalkSandboxViewModel' }));
+// Create the ViewModel once per data change (not derived, to avoid recreation on every access)
+const viewModel = getWalkSandboxViewModel({ data, className: 'HubWalkSandboxViewModel' });
 </script>
 
 <WalkSandboxView {viewModel} />

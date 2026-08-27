@@ -44,7 +44,7 @@ export type HubWalkSandboxViewModelOptions = BaseViewModelOptions & {
 export type HubWalkSandboxViewModelInterface = BaseViewModelInterface & {
   readonly ready: boolean;
   /** Explicit, human-readable failure — never an empty canvas. */
-  readonly error: string | undefined;
+  readonly sandboxError: string | undefined;
   readonly overlays: DebugOverlays;
   /** Live player cell, shown in the HUD for bug reports. */
   readonly playerCell: { readonly x: number; readonly y: number } | undefined;
@@ -181,7 +181,7 @@ class HubWalkSandboxViewModel
     return this._ready;
   }
 
-  get error(): string | undefined {
+  get sandboxError(): string | undefined {
     return this._error;
   }
 
@@ -288,9 +288,17 @@ class HubWalkSandboxViewModel
 
       const tilemap = await loadTilemap({ url: mapUrl });
 
-      const collisionGrid = extractCollisionGrid(tilemap);
+      const extractedGrid = extractCollisionGrid(tilemap);
       const transitionZones = extractTransitionZones(tilemap);
       const spawnPoints = extractSpawnPoints(tilemap);
+
+      // Wrap the extracted collision array in a CollisionGrid with tilemap dimensions
+      const collisionGrid = {
+        grid: extractedGrid ?? [],
+        width: tilemap.width,
+        height: tilemap.height,
+        tileSize: tilemap.tilewidth,
+      };
 
       this._overlayData = {
         collisionGrid,

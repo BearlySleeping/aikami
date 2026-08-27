@@ -75,15 +75,15 @@ export const createCollisionOverlay = (options: {
     }
     ctx.clearRect(0, 0, width, height);
 
-    const { grid, mapWidth, mapHeight } = collisionGrid;
+    const { grid, width: mapWidth, height: mapHeight } = collisionGrid;
     const tilesX = mapWidth;
     const tilesY = mapHeight;
 
     for (let ty = 0; ty < tilesY; ty++) {
       for (let tx = 0; tx < tilesX; tx++) {
         const cell = grid[ty * tilesX + tx];
-        // A blocked cell has cost >= 255 (unwalkable) or is explicitly blocked
-        if (cell !== undefined && cell >= 255) {
+        // A blocked cell is explicitly marked as true in the collision grid
+        if (cell === true) {
           ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
           ctx.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
           // Draw a subtle border around blocked cells

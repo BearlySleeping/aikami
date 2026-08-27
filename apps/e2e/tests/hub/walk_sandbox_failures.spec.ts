@@ -5,6 +5,7 @@
 // their named message.
 
 import { expect, test } from '@playwright/test';
+import { SandboxPage } from '$pom';
 
 test.describe('Hub walk sandbox failures — C-447 AC-4', () => {
   test('unknown map tag shows not-found error', async ({ page }) => {
@@ -25,40 +26,48 @@ test.describe('Hub walk sandbox failures — C-447 AC-4', () => {
   test('WebGL unavailable shows explicit error', async ({ page }) => {
     // Simulate WebGL unavailability by overriding getContext
     await page.addInitScript(() => {
-      const originalGetContext = HTMLCanvasElement.prototype.getContext.bind(
-        HTMLCanvasElement.prototype,
-      );
-      HTMLCanvasElement.prototype.getContext = ((contextId: string, ...args: unknown[]) => {
+      const originalGetContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (
+        this: HTMLCanvasElement,
+        contextId: string,
+        ...args: unknown[]
+      ) {
         if (contextId === 'webgl2' || contextId === 'webgl') {
           return null;
         }
-        return originalGetContext(contextId, ...args);
-      }) as typeof HTMLCanvasElement.prototype.getContext;
+        return originalGetContext.call(this, contextId, ...args);
+      } as typeof HTMLCanvasElement.prototype.getContext;
     });
 
+    const sandbox = new SandboxPage(page);
+
     await page.goto('/sandbox/maps:sandbox_zone_a');
-    await expect(page.getByTestId('sandbox-error')).toBeVisible({ timeout: 15000 });
-    const errorText = await page.getByTestId('sandbox-error').textContent();
+    await expect(sandbox.errorMessage).toBeVisible({ timeout: 15000 });
+    const errorText = await sandbox.getErrorText();
     expect(errorText?.toLowerCase()).toContain('webgl');
   });
 
   test('worker failure shows explicit error', async ({ page }) => {
+    const sandbox = new SandboxPage(page);
+
     // Block worker script to simulate worker construction failure
     await page.route('**/ecs_worker*', (route) => route.abort('blockedbyclient'));
 
     await page.goto('/sandbox/maps:sandbox_zone_a');
-    await expect(page.getByTestId('sandbox-error')).toBeVisible({ timeout: 15000 });
-    const errorText = await page.getByTestId('sandbox-error').textContent();
+    await expect(sandbox.errorMessage).toBeVisible({ timeout: 15000 });
+    const errorText = await sandbox.getErrorText();
     expect(errorText?.toLowerCase()).toContain('worker');
   });
 
   test('map load failure shows explicit error', async ({ page }) => {
+    const sandbox = new SandboxPage(page);
+
     // Block asset requests to simulate map load failure
     await page.route('**/assets/**', (route) => route.abort('blockedbyclient'));
 
     await page.goto('/sandbox/maps:sandbox_zone_a');
-    await expect(page.getByTestId('sandbox-error')).toBeVisible({ timeout: 15000 });
-    const errorText = await page.getByTestId('sandbox-error').textContent();
+    await expect(sandbox.errorMessage).toBeVisible({ timeout: 15000 });
+    const errorText = await sandbox.getErrorText();
     expect(errorText?.toLowerCase()).toContain('could not load');
   });
 });
