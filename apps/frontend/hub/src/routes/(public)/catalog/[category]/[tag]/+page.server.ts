@@ -28,6 +28,20 @@ import type { PageServerLoad } from './$types';
 /** Categories whose detail pages need the tilesets shard for preview resolution. */
 const CATEGORIES_NEEDING_TILESETS = new Set(['maps', 'contentPacks']);
 
+/**
+ * Load function for the asset detail page.
+ *
+ * Fetches the full category shard server-side, selects the one matching entry,
+ * and passes the full entries list to the client so the preview resolver can
+ * resolve tags without a second index fetch (C-446).
+ *
+ * For map and pack detail pages, also fetches the tilesets shard (C-446 AC-4)
+ * so the map preview can resolve tileset references.
+ *
+ * @returns {CatalogAssetPageData} Page data with entry, entries, originUrl, previewUrl, stats.
+ * @throws {SvelteKitError} 503 when the catalog index is unreachable.
+ * @throws {SvelteKitError} 404 when the category or asset tag is not found.
+ */
 export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
   depends('catalog:pack');
 

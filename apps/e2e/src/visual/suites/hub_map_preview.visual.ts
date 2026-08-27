@@ -38,7 +38,7 @@ const HUB_MAP_PROMPT = [
 export default defineConfig({
   id: 'hub_map_preview',
   app: 'hub',
-  route: '/catalog/maps',
+  route: '/catalog/maps/maps%3Aexample%3Adungeon',
   waitCondition: 'hub_ready',
   cases: [
     {

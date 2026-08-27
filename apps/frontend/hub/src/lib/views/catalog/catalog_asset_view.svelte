@@ -1,12 +1,10 @@
 <script lang="ts">
-import type { ComponentType } from 'svelte';
 // apps/frontend/hub/src/lib/views/catalog/catalog_asset_view.svelte
 // Asset detail page (C-396 AC-3): preview, size, license, attribution.
 //
 // C-446: adds a client-only preview island over the thumbnail. The preview
-// is dynamically imported inside onMount so PixiJS never enters the server
-// bundle. The thumbnail remains visible underneath and is hidden only after
-// the canvas has painted its first frame.
+// orchestration lives in the ViewModel's loadPreview() method. The view
+// retains only the mount trigger and template bindings.
 import { onMount } from 'svelte';
 import BaseViewModelContainer from '$components/base_view_model_container.svelte';
 import type { CatalogAssetViewModelInterface } from './catalog_asset_view_model.svelte.ts';
@@ -19,95 +17,8 @@ const formatLicense = (license: string): string => {
   return trimmed.toLowerCase() === 'unknown' ? 'Unknown' : trimmed;
 };
 
-// ── C-446: Preview island state ─────────────────────────────────────────
-let PreviewComponent = $state<ComponentType | undefined>(undefined);
-let previewProps = $state<Record<string, unknown>>({});
-let showTilesetGrid = $state(false);
-
-onMount(async () => {
-  const kind = viewModel.previewKind;
-  if (kind === 'none') {
-    return;
-  }
-
-  try {
-    const resolver = await viewModel.ensureResolverBuilt();
-    if (!resolver) {
-      viewModel.setPreviewError('Preview resolver unavailable.');
-      return;
-    }
-
-    const tag = viewModel.entry.tag;
-
-    switch (kind) {
-      case 'lpc': {
-        const mod = await import('@aikami/frontend/preview');
-        const { decodeLpcPreviewState, encodeLpcPreviewState } = mod;
-        const initialParams = new URLSearchParams(window.location.search);
-        const initialState = decodeLpcPreviewState(initialParams);
-
-        // Build scoped LPC slots from shard entries
-        const allSlots = await viewModel.ensureLpcSlotsBuilt();
-
-        PreviewComponent = mod.default as ComponentType;
-        previewProps = {
-          resolver,
-          allSlots,
-          initialState,
-          width: 320,
-          height: 320,
-          zoom: 2,
-          controls: true,
-          onStateChange: (state: unknown) => {
-            const params = encodeLpcPreviewState(
-              state as Parameters<typeof encodeLpcPreviewState>[0],
-            );
-            const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-            window.history.replaceState(null, '', newUrl);
-          },
-        };
-        break;
-      }
-      case 'tileset': {
-        const { default: TilesetPreview } = await import('@aikami/frontend/preview');
-        PreviewComponent = TilesetPreview as ComponentType;
-        previewProps = {
-          resolver,
-          tag,
-          width: 320,
-          height: 320,
-          zoom: 1,
-          showGrid: showTilesetGrid,
-        };
-        break;
-      }
-      case 'map': {
-        const { default: MapPreview } = await import('@aikami/frontend/preview');
-        PreviewComponent = MapPreview as ComponentType;
-        previewProps = { resolver, mapTag: tag, width: 320, height: 320, zoom: 1 };
-        break;
-      }
-      case 'prop': {
-        const { default: PropPreview } = await import('@aikami/frontend/preview');
-        PreviewComponent = PropPreview as ComponentType;
-        previewProps = { resolver, tag, width: 320, height: 320, zoom: 2 };
-        break;
-      }
-      case 'pack': {
-        // Pack preview: show a simple placeholder
-        // Full pack contents listing in Phase 3.
-        PreviewComponent = undefined;
-        previewProps = {};
-        viewModel.setPreviewMounted();
-        return;
-      }
-    }
-
-    viewModel.setPreviewMounted();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    viewModel.setPreviewError(`Preview failed to load: ${message}`);
-  }
+onMount(() => {
+  viewModel.loadPreview();
 });
 </script>
 
@@ -176,21 +87,21 @@ onMount(async () => {
       {/if}
 
       <!-- C-446: Client-only preview island — mounted over the thumbnail -->
-      {#if PreviewComponent && viewModel.previewKind !== 'none'}
+      {#if viewModel.previewComponent && viewModel.previewKind !== 'none'}
         <div class="absolute inset-0 z-10" data-testid="catalog-asset-preview-island">
-          <PreviewComponent {...previewProps} />
+          <svelte:component this={viewModel.previewComponent} {...viewModel.previewProps} />
         </div>
       {/if}
 
       <!-- C-446: Tileset grid toggle -->
-      {#if viewModel.previewKind === 'tileset' && PreviewComponent}
+      {#if viewModel.previewKind === 'tileset' && viewModel.previewComponent}
         <button
           type="button"
           class="absolute bottom-2 right-2 z-20 rounded bg-base-200/80 px-2 py-1 text-xs text-base-content transition-colors hover:bg-base-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-          onclick={() => { showTilesetGrid = !showTilesetGrid; }}
+          onclick={() => { viewModel.toggleTilesetGrid(); }}
           data-testid="catalog-tileset-grid-toggle"
         >
-          {showTilesetGrid ? 'Hide Grid' : 'Show Grid'}
+          {viewModel.showTilesetGrid ? 'Hide Grid' : 'Show Grid'}
         </button>
       {/if}
 

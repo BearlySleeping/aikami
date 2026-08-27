@@ -4,50 +4,47 @@
 // LPC preview configuration is linkable via URL.
 
 import { expect, test } from '@playwright/test';
+import { CatalogPreviewPage } from '$pom';
 
 test.describe('Catalog asset preview — C-446 AC-2, AC-6', () => {
   test('preview island becomes visible on an LPC detail page', async ({ page }) => {
+    const preview = new CatalogPreviewPage(page);
     await page.goto('/catalog/lpc/lpc%3Abeard%3Abeard%3A5oclock_shadow%3Abackslash');
-    await expect(page.getByTestId('catalog-asset')).toBeVisible();
+    await expect(preview.assetContainer).toBeVisible();
 
     // The preview island should mount and the canvas should become visible
-    // (data-testid is set on the island container; the canvas is inside).
-    const island = page.getByTestId('catalog-asset-preview-island');
-    await expect(island).toBeVisible({ timeout: 10000 });
+    await expect(preview.island).toBeVisible({ timeout: 10000 });
 
-    // The thumbnail should be hidden once the preview mounts.
-    const thumbnail = page.getByTestId('catalog-asset-preview');
-    // It may or may not be hidden depending on whether the preview actually
-    // mounted — we just check it doesn't error.
-    await expect(thumbnail).toBeAttached();
+    // The thumbnail should be attached (may be hidden once preview mounts).
+    await expect(preview.thumbnail).toBeAttached();
   });
 
   test('LPC preview configuration is linkable via URL', async ({ page }) => {
+    const preview = new CatalogPreviewPage(page);
     await page.goto('/catalog/lpc/lpc%3Abeard%3Abeard%3A5oclock_shadow%3Abackslash');
-    await expect(page.getByTestId('catalog-asset')).toBeVisible();
+    await expect(preview.assetContainer).toBeVisible();
 
     // Wait for the preview island to mount.
-    const island = page.getByTestId('catalog-asset-preview-island');
-    await expect(island).toBeVisible({ timeout: 10000 });
+    await expect(preview.island).toBeVisible({ timeout: 10000 });
 
     // Read the current URL search params — the preview should have synced
-    // its state to the URL via replaceState.
+    // its state to the URL via replaceState with 'l0' parameter.
     const currentUrl = new URL(page.url());
-    // The URL should have search params from the preview state.
-    // At minimum, the preview state should be present.
-    expect(currentUrl.search.length).toBeGreaterThanOrEqual(0);
+    // The URL should contain the encoded preview state (l0 parameter).
+    expect(currentUrl.searchParams.has('l0')).toBe(true);
   });
 
-  test('preview error notice shows when resolver fails', async ({ page }) => {
+  test('thumbnail remains visible when CDN is blocked', async ({ page }) => {
+    const preview = new CatalogPreviewPage(page);
+
     // Block CDN requests to simulate resolver failure
     await page.route('**/assets/**', (route) => route.abort());
     await page.route('**/thumbnails/**', (route) => route.abort());
 
     await page.goto('/catalog/lpc/lpc%3Abeard%3Abeard%3A5oclock_shadow%3Abackslash');
-    await expect(page.getByTestId('catalog-asset')).toBeVisible();
+    await expect(preview.assetContainer).toBeVisible();
 
     // The thumbnail should still be visible (degraded path).
-    const thumbnail = page.getByTestId('catalog-asset-preview');
-    await expect(thumbnail).toBeAttached();
+    await expect(preview.thumbnail).toBeAttached();
   });
 });

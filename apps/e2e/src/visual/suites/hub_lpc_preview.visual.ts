@@ -16,6 +16,9 @@ const HubLpcPreviewSchema = Type.Object({
   layersComposited: Type.Boolean({
     description: 'Multiple layers (body, head, hair, etc.) are composited correctly',
   }),
+  facesExpectedDirection: Type.Boolean({
+    description: 'The character faces the direction specified in the test case',
+  }),
   facingDirection: Type.String({
     description: 'The direction the character is facing: down, up, left, or right',
   }),
@@ -52,7 +55,7 @@ export default defineConfig({
       ].join('\n'),
       schema: HubLpcPreviewSchema,
       screenshotSelector: '[data-testid="catalog-asset"]',
-      requiredTrueFields: ['characterVisible', 'layersComposited'],
+      requiredTrueFields: ['characterVisible', 'layersComposited', 'facesExpectedDirection'],
     },
     {
       name: 'hub-lpc-up',
@@ -64,18 +67,18 @@ export default defineConfig({
       ].join('\n'),
       schema: HubLpcPreviewSchema,
       screenshotSelector: '[data-testid="catalog-asset"]',
-      requiredTrueFields: ['characterVisible', 'layersComposited'],
+      requiredTrueFields: ['characterVisible', 'layersComposited', 'facesExpectedDirection'],
     },
     {
       name: 'hub-lpc-left',
-      searchParams: { dir: '3' },
+      searchParams: { dir: '1' },
       prompt: [
         HUB_LPC_PROMPT,
         'The character should be facing LEFT (profile view).',
       ].join('\n'),
       schema: HubLpcPreviewSchema,
       screenshotSelector: '[data-testid="catalog-asset"]',
-      requiredTrueFields: ['characterVisible', 'layersComposited'],
+      requiredTrueFields: ['characterVisible', 'layersComposited', 'facesExpectedDirection'],
     },
   ],
 });

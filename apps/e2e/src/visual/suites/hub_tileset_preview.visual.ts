@@ -39,7 +39,7 @@ const HUB_TILESET_PROMPT = [
 export default defineConfig({
   id: 'hub_tileset_preview',
   app: 'hub',
-  route: '/catalog/tilesets',
+  route: '/catalog/tilesets/tilesets%3Aexample%3Atileset',
   waitCondition: 'hub_ready',
   cases: [
     {

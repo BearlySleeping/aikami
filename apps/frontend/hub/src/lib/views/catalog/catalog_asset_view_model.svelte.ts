@@ -11,19 +11,15 @@ import {
 } from '@aikami/frontend/services';
 import type { CatalogAssetEntry } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
+import type { ComponentType } from 'svelte';
 import { routerService } from '$services';
 import type { AssetStats, CatalogAssetPageData } from '$types';
 import { formatBytes } from '$utils/catalog.ts';
+import type { LpcSlotDef } from '@aikami/frontend/preview';
 import { type PreviewKind, previewKindForEntry } from './preview_kind.ts';
 
-// ── LPC slot definition (mirrors LpcSlotDef from @aikami/frontend/preview) ──
-// Used to build a scoped catalog from shard entries for the LPC preview.
-
-type LpcSlotDef = {
-  slot: string;
-  label: string;
-  variants: Array<{ label: string; assetId: string }>;
-};
+// ── LPC slot definition — imported from @aikami/frontend/preview ──
+// Type-only import is safe for the server bundle (erased at compile time).
 
 export type CatalogAssetViewModelOptions = BaseViewModelOptions & {
   data: CatalogAssetPageData;
@@ -61,8 +57,21 @@ export type CatalogAssetViewModelInterface = BaseViewModelInterface & {
   setPreviewMounted(): void;
   /** Record a preview mount error. */
   setPreviewError(message: string): void;
+  /** Build the CDN resolver lazily (client-side only). */
+  ensureResolverBuilt(): Promise<AssetResolver | undefined>;
   /** Ensure the LPC slot definitions are built (lazy, client-side). */
   ensureLpcSlotsBuilt(): Promise<readonly LpcSlotDef[]>;
+  /** Preview component instance (dynamically imported, client-only). */
+  readonly previewComponent: ComponentType | undefined;
+  /** Props passed to the preview component. */
+  readonly previewProps: Record<string, unknown>;
+  /** Tileset grid overlay toggle state. */
+  readonly showTilesetGrid: boolean;
+  /** Load the preview: dynamic imports, prop construction, URL state, error handling. */
+  /** Load the preview: dynamic imports, prop construction, URL state, error handling. */
+  loadPreview(): Promise<void>;
+  /** Toggle the tileset grid overlay. */
+  toggleTilesetGrid(): void;
 
   goToCategory(): Promise<void>;
   goToLanding(): Promise<void>;
@@ -83,12 +92,21 @@ class CatalogAssetViewModel
   private readonly _previewKind: PreviewKind;
   private readonly _dataEntries: readonly CatalogAssetEntry[];
   private readonly _dataOriginUrl: string;
-  private _resolver: AssetResolver | undefined = undefined;
+  private _resolver = $state<AssetResolver | undefined>(undefined);
   private _resolverBuilt = false;
-  private _lpcSlots: readonly LpcSlotDef[] = [];
+  private _lpcSlots = $state<readonly LpcSlotDef[]>([]);
   private _lpcSlotsBuilt = false;
   private _previewMounted = $state(false);
   private _previewError = $state<string | undefined>(undefined);
+  previewComponent = $state<ComponentType | undefined>(undefined);
+  previewProps = $state<Record<string, unknown>>({});
+  showTilesetGrid = $state(false);
+
+  /** Toggle the tileset grid overlay and update preview props reactively. */
+  toggleTilesetGrid(): void {
+    this.showTilesetGrid = !this.showTilesetGrid;
+    this.previewProps = { ...this.previewProps, showGrid: this.showTilesetGrid };
+  }
 
   constructor(options: CatalogAssetViewModelOptions) {
     super(options);
@@ -251,10 +269,12 @@ class CatalogAssetViewModel
       }
 
       const slotName = parts[1] ?? '';
-      // assetId is the fourth segment (e.g., "celestial_adult" from "lpc:hat:magic:celestial_adult:thrust")
+      // Build the complete asset identity path expected by lpcTag() —
+      // slot/subcategory/assetId, using the full subcategory path.
+      // This prevents assets from different subcategories from colliding.
+      const subcategory = parts.slice(2, -1).join('/') ?? '';
       const assetId = parts[3] ?? '';
-      // subcategory is the third segment (e.g., "magic")
-      const subcategory = parts[2] ?? '';
+      const fullAssetPath = subcategory ? `${slotName}/${subcategory}/${assetId}` : `${slotName}/${assetId}`;
 
       if (!slotName || !assetId) {
         continue;
@@ -265,11 +285,11 @@ class CatalogAssetViewModel
       }
 
       const variantMap = slotMap.get(slotName);
-      if (variantMap && !variantMap.has(assetId)) {
+      if (variantMap && !variantMap.has(fullAssetPath)) {
         // Use subcategory + assetId as the label for disambiguation
         const label = subcategory ? `${subcategory}:${assetId}` : assetId;
         variantMap.set(
-          assetId,
+          fullAssetPath,
           label.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
         );
       }
@@ -298,8 +318,94 @@ class CatalogAssetViewModel
     this._lpcSlots = slots;
     return slots;
   }
+  /**
+   * Load the preview: dynamic imports, prop construction, URL state, error handling.
+   * Called from the view's onMount (client-side only).
+   */
+  async loadPreview(): Promise<void> {
+    const kind = this._previewKind;
+    if (kind === 'none') {
+      return;
+    }
 
-  async goToCategory(): Promise<void> {
+    try {
+      const resolver = await this.ensureResolverBuilt();
+      if (!resolver) {
+        this.setPreviewError('Preview resolver unavailable.');
+        return;
+      }
+
+      const tag = this._entry.tag;
+
+      switch (kind) {
+        case 'lpc': {
+          const mod = await import('@aikami/frontend/preview');
+          const { LpcPreview, decodeLpcPreviewState, encodeLpcPreviewState } = mod;
+          const initialParams = new URLSearchParams(window.location.search);
+          const initialState = decodeLpcPreviewState(initialParams);
+
+          // Build scoped LPC slots from shard entries
+          const allSlots = await this.ensureLpcSlotsBuilt();
+
+          this.previewComponent = LpcPreview as ComponentType;
+          this.previewProps = {
+            resolver,
+            allSlots,
+            initialState,
+            width: 320,
+            height: 320,
+            zoom: 2,
+            controls: true,
+            onStateChange: (state: unknown) => {
+              const params = encodeLpcPreviewState(
+                state as Parameters<typeof encodeLpcPreviewState>[0],
+              );
+              const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+              window.history.replaceState(null, '', newUrl);
+            },
+          };
+          break;
+        }
+        case 'tileset': {
+          const { TilesetPreview } = await import('@aikami/frontend/preview');
+          this.previewComponent = TilesetPreview as ComponentType;
+          this.previewProps = {
+            resolver,
+            tag,
+            width: 320,
+            height: 320,
+            zoom: 1,
+            showGrid: this.showTilesetGrid,
+          };
+          break;
+        }
+        case 'map': {
+          const { MapPreview } = await import('@aikami/frontend/preview');
+          this.previewComponent = MapPreview as ComponentType;
+          this.previewProps = { resolver, mapTag: tag, width: 320, height: 320, zoom: 1 };
+          break;
+        }
+        case 'prop': {
+          const { PropPreview } = await import('@aikami/frontend/preview');
+          this.previewComponent = PropPreview as ComponentType;
+          this.previewProps = { resolver, tag, width: 320, height: 320, zoom: 2 };
+          break;
+        }
+        case 'pack': {
+          // Pack preview not yet implemented — leave thumbnail visible.
+          // Full pack contents listing in Phase 3.
+          this.previewComponent = undefined;
+          this.previewProps = {};
+          return;
+        }
+      }
+
+      this.setPreviewMounted();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.setPreviewError(`Preview failed to load: ${message}`);
+    }
+  }
     try {
       await routerService.goToRoute('catalogCategory', {
         pathParameters: { category: this._category },

@@ -37,7 +37,7 @@ The following asset types support interactive previews:
 | `tilesets` | Tileset Grid | Atlas rendered at integer scale with optional grid overlay. |
 | `maps` | Tilemap | Rendered tilemap with layers in order. |
 | `props` / `sprites` | Single Sprite | Centered sprite at configurable zoom. |
-| `contentPacks` | Pack Listing | Lists the pack's constituent entries. |
+| `contentPacks` | Pack Listing *(planned)* | Lists the pack's constituent entries. |
 
 Audio categories (`music`, `sfx`, `ambient`) and `backgrounds` show the
 server-rendered thumbnail only.

@@ -10,7 +10,7 @@
 // Workers-boundary guard (node:* imports).
 
 import { describe, expect, it } from 'bun:test';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const hubRoot = resolve(import.meta.dir, '../../..');
@@ -19,7 +19,6 @@ const hubRoot = resolve(import.meta.dir, '../../..');
 const serverEntryPoints = [
   join(hubRoot, 'src/hooks.server.ts'),
   ...(() => {
-    const { readdirSync } = require('node:fs');
     const routesDir = join(hubRoot, 'src/routes');
     const files: string[] = [];
     const walk = (dir: string): void => {
@@ -44,15 +43,22 @@ const serverEntryPoints = [
 });
 
 /** PixiJS markers that indicate a Pixi import in the server graph. */
-const PIXI_MARKERS = ['pixi.js', '@pixi/', 'PIXI.', 'PIXI', 'from "pixi.js"', "from 'pixi.js'"];
+const PIXI_MARKERS = ['pixi.js', '@pixi/'];
 
 /**
  * Walk the server import graph looking for PixiJS markers.
- * This is a simplified check — the full graph walk is in worker_boundary.test.ts.
+ * Parses relative imports from each visited file and recurses.
  */
 const findPixiInServerGraph = (): string[] => {
   const visited = new Set<string>();
   const offenders: string[] = [];
+
+  // Match static import statements: import ... from '...' or import "..."
+  const importRe = /\bfrom\s+['"]([^'"]+)['"]|\bimport\s+['"]([^'"]+)['"]/g;
+  // Match dynamic import expressions: import('...')
+  const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  // Only follow relative imports (starts with ./ or ../)
+  const isRelative = (specifier: string): boolean => specifier.startsWith('./') || specifier.startsWith('../');
 
   const visit = (file: string): void => {
     if (visited.has(file)) {
@@ -68,6 +74,47 @@ const findPixiInServerGraph = (): string[] => {
         if (lower.includes(marker.toLowerCase())) {
           offenders.push(`${file} contains PixiJS marker: "${marker}"`);
           return; // One report per file is enough.
+        }
+      }
+
+      // Recurse into relative imports to walk the full server import graph
+      const dir = file.substring(0, file.lastIndexOf('/'));
+      let match: RegExpExecArray | null;
+
+      while ((match = importRe.exec(source)) !== null) {
+        const specifier = match[1] ?? match[2] ?? '';
+        if (isRelative(specifier)) {
+          const resolved = join(dir, specifier);
+          // Try .ts, .js extensions
+          for (const ext of ['.ts', '.js', '']) {
+            const candidate = resolved.endsWith(ext) ? resolved : `${resolved}${ext}`;
+            try {
+              if (statSync(candidate).isFile()) {
+                visit(candidate);
+                break;
+              }
+            } catch {
+              // File not found with this extension, try next
+            }
+          }
+        }
+      }
+
+      while ((match = dynamicImportRe.exec(source)) !== null) {
+        const specifier = match[1] ?? '';
+        if (isRelative(specifier)) {
+          const resolved = join(dir, specifier);
+          for (const ext of ['.ts', '.js', '']) {
+            const candidate = resolved.endsWith(ext) ? resolved : `${resolved}${ext}`;
+            try {
+              if (statSync(candidate).isFile()) {
+                visit(candidate);
+                break;
+              }
+            } catch {
+              // File not found with this extension, try next
+            }
+          }
         }
       }
     } catch {
