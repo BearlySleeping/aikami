@@ -496,14 +496,14 @@ jobs:
           VERSION: ${{ needs.plan-desktop.outputs.version }}
           CHECKSUM: ${{ needs.plan-desktop.outputs.checksum }}
           LEG: ${{ toJson(matrix) }}
+          CI: "true"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_TARGET: ${{ matrix.platform == 'macos' && 'universal-apple-darwin' || '' }}
         run: |
           bun scripts/src/lib/deploy/ci_run.ts \
             --mode="$MODE" \
             --version="$VERSION" \
             --checksum="$CHECKSUM"
-          CI: "true"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_TARGET: ${{ matrix.platform == 'macos' && 'universal-apple-darwin' || '' }}
           # Updater signing key: NOT passed here. It lives in GCM as
           # TAURI_SIGNING_PRIVATE_KEY / _PASSWORD (unprefixed, scripts/.env.example)
           # and reaches this step's process.env automatically — the "Restore env
