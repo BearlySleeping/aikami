@@ -824,11 +824,19 @@ class LpcPreviewViewModel
       this.pixiApp.stage.addChild(this.stageContainer);
 
       const canvas = this.pixiApp.renderer.canvas as HTMLCanvasElement;
+      // preventDefault() is required by the WebGL spec for the browser to
+      // attempt restoration — without it `webglcontextrestored` never fires
+      // and the preview stays blank permanently. The status banner matters
+      // just as much: a lost context renders nothing and raises no error, so
+      // without it the canvas is simply, inexplicably empty.
       canvas.addEventListener('webglcontextlost', (event: Event) => {
+        event.preventDefault();
         this.error('lpcPreview.webglContextLost', { event: String(event) });
+        this._setStatus('WebGL context lost — the GPU dropped the canvas.', 'error');
       });
       canvas.addEventListener('webglcontextrestored', () => {
         this.warn('lpcPreview.webglContextRestored');
+        this._setStatus('WebGL context restored.', 'info');
       });
 
       const app = result.app;

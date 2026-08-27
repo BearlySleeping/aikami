@@ -17,6 +17,7 @@ import {
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
+import { withStepTimeout } from '$lib/utils/step_timeout';
 
 /** Outcome of a single probe. `warn` = works, but not the expected value. */
 export type ProbeStatus = 'pass' | 'warn' | 'fail' | 'pending';
@@ -93,6 +94,8 @@ class TauriTestViewModel
         await this._probeRaf(),
         await this._probeWorker(),
         await this._probeAssetCatalog(),
+        await this._probeCacheBackend(),
+        await this._probeAssetPipeline(),
       ];
     } catch (error) {
       this.error('tauriTest.probesFailed', { error: String(error) });
@@ -127,8 +130,10 @@ class TauriTestViewModel
       status: dprOk ? 'pass' : 'fail',
       note: dprOk
         ? undefined
-        : 'Negative or zero. Every other DOM metric is derived from this, so it is the ' +
-          'upstream fault. -1/96 (≈ -0.0104) means GDK handed the webview a negative scale factor.',
+        : 'Negative or zero. Every other DOM metric derives from this, so it is the upstream ' +
+          'fault. Compare against Tauri scaleFactor() below: if that reads 1, the native side ' +
+          "is healthy and the corruption is inside WebKit's own DOM metrics, not GDK — in " +
+          'which case --gdk-scale cannot help and the only fix is to never read DOM metrics.',
     });
 
     for (const [label, value] of [
@@ -164,7 +169,8 @@ class TauriTestViewModel
         value: format(scale),
         status: isUsableDimension(scale) ? 'pass' : 'fail',
         note: isUsableDimension(scale)
-          ? undefined
+          ? 'Healthy here while devicePixelRatio is negative means the fault is inside ' +
+            'WebKit, not GDK or wry — source every dimension from this API instead.'
           : 'Negative here too means the bad value originates below wry, in GDK. ' +
             'Retry with: bun moon run client:tauri-run -- --gdk-scale 1 --route /dev/tauri-test',
       });
@@ -221,11 +227,16 @@ class TauriTestViewModel
   /** Whether a GPU context is obtainable at all, and from which driver. */
   private _probeWebGl(): ProbeGroup {
     const rows: ProbeRow[] = [];
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
 
     for (const contextId of ['webgl2', 'webgl'] as const) {
+      // A fresh canvas per context type. A canvas keeps the first context it
+      // was given, so asking one canvas for 'webgl' after 'webgl2' always
+      // returns null — which reads as a platform failure but is just how the
+      // API works.
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+
       let context: RenderingContext | null = null;
       try {
         context = canvas.getContext(contextId);
@@ -237,7 +248,9 @@ class TauriTestViewModel
         label: contextId,
         value: context ? 'available' : 'null',
         status: context ? 'pass' : 'fail',
-        note: context ? undefined : 'The engine prefers webgl — a null context renders nothing.',
+        note: context
+          ? undefined
+          : 'Pixi v8 requires WebGL2, so webgl2 is the row that decides whether the engine renders.',
       });
 
       if (context && contextId === 'webgl2') {
@@ -248,6 +261,10 @@ class TauriTestViewModel
             label: 'GL renderer',
             value: String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)),
             status: 'pass',
+            note:
+              'WebKit masks this string for fingerprinting resistance — it reports a generic ' +
+              'value ("Apple GPU") on every platform, so it cannot confirm which driver is ' +
+              'actually in use and says nothing about whether --software-gl took effect.',
           });
         }
         rows.push({
@@ -366,6 +383,88 @@ class TauriTestViewModel
     return { title: 'Workers', rows };
   }
   /**
+   * Exercises the platform cache backend.
+   *
+   * This is the sharpest Tauri-vs-browser difference in the whole asset
+   * path: the deployed web build uses OpfsCacheBackend, the desktop build
+   * uses TauriFSCacheBackend, which round-trips every call through IPC to
+   * Rust and is subject to the fs capability scopes in
+   * src-tauri/capabilities/default.json. `assetManager.initialize` calls
+   * listHashes() and get() during boot, so a stall in either wedges startup
+   * while the same code path is perfectly healthy in a browser.
+   *
+   * Every call is bounded — a hang here is the thing being hunted, so it
+   * must not hang the diagnostic too.
+   */
+  private async _probeCacheBackend(): Promise<ProbeGroup> {
+    const rows: ProbeRow[] = [];
+    const bounded = async <T>(label: string, run: () => Promise<T>): Promise<T | undefined> => {
+      const startedAt = performance.now();
+      try {
+        const value = await withStepTimeout({ name: label, timeoutMs: 8_000, run });
+        rows.push({
+          label,
+          value: `ok in ${Math.round(performance.now() - startedAt)}ms`,
+          status: 'pass',
+        });
+        return value;
+      } catch (error) {
+        rows.push({
+          label,
+          value: String(error),
+          status: 'fail',
+          note: 'This call is on the boot path via assetManager.initialize.',
+        });
+        return undefined;
+      }
+    };
+
+    try {
+      const { createPlatformCacheBackend } = await import(
+        '$lib/services/assets/asset_manager.svelte'
+      );
+      const backend = createPlatformCacheBackend();
+      rows.push({ label: 'Selected backend', value: backend.kind, status: 'pass' });
+
+      await bounded('init()', () => backend.init());
+      rows.push({
+        label: 'isAvailable',
+        value: String(backend.isAvailable),
+        status: backend.isAvailable ? 'pass' : 'fail',
+        note: backend.isAvailable
+          ? undefined
+          : 'The backend failed to open its directory — check the fs capability scopes.',
+      });
+
+      const hashes = await bounded('listHashes()', () => backend.listHashes());
+      if (hashes) {
+        rows.push({ label: 'Cached entries', value: String(hashes.length), status: 'pass' });
+      }
+
+      // Round-trip a real blob. put() verifies sha256(blob) === hash, so the
+      // hash must be computed rather than invented.
+      const blob = new Blob([new Uint8Array([1, 2, 3, 4])]);
+      const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+      const hash = Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
+
+      await bounded('put()', () => backend.put({ hash, blob }));
+      const readBack = await bounded('get()', () => backend.get(hash));
+      rows.push({
+        label: 'Round-trip integrity',
+        value: readBack ? `${readBack.size} bytes` : 'missing',
+        status: readBack?.size === 4 ? 'pass' : 'fail',
+      });
+      await bounded('remove()', () => backend.remove(hash));
+    } catch (error) {
+      rows.push({ label: 'Cache backend', value: String(error), status: 'fail' });
+    }
+
+    return { title: 'Cache backend', rows };
+  }
+
+  /**
    * Fetches the asset catalog the boot pipeline blocks on.
    *
    * `initializing_asset_registry` is a chain of awaits that logs nothing at
@@ -418,6 +517,75 @@ class TauriTestViewModel
     }
 
     return { title: 'Asset catalog', rows };
+  }
+
+  /**
+   * Runs the real boot-time asset pipeline (`ensureRegistryReady`) end to
+   * end — same singleton, same steps, same 20s per-step budget as
+   * `GameBootService` uses — and reports total wall time.
+   *
+   * The other probes exercise the cache backend and catalog fetch in
+   * isolation with synthetic/small payloads, which is exactly why they can
+   * all read PASS while boot still times out: `assetManager.initialize()`
+   * doing one backend.get() per cached asset, sequentially, only shows up
+   * at real catalog scale (10k+ entries on this install). This probe is
+   * the one number that actually predicts whether `/game` will boot.
+   */
+  private async _probeAssetPipeline(): Promise<ProbeGroup> {
+    const rows: ProbeRow[] = [];
+    const startedAt = performance.now();
+    try {
+      const { assetPrefetchService } = await import(
+        '$lib/services/assets/asset_prefetch_service.svelte'
+      );
+      const { registry, seed } = await assetPrefetchService.ensureRegistryReady();
+      const elapsedMs = Math.round(performance.now() - startedAt);
+
+      let cachedRows = 0;
+      try {
+        const states = await registry.listInstallStates();
+        cachedRows = states.filter((state) => state.status === 'cached').length;
+      } catch {
+        // Non-fatal — the elapsed-time row below is what matters most.
+      }
+
+      let status: ProbeStatus = 'fail';
+      if (elapsedMs < 15_000) {
+        status = 'pass';
+      } else if (elapsedMs < 20_000) {
+        status = 'warn';
+      }
+      rows.push({
+        label: 'ensureRegistryReady() total',
+        value: `${elapsedMs}ms`,
+        status,
+        note:
+          status === 'pass'
+            ? undefined
+            : `Comfortably under 20000ms is the target — this run is ${
+                status === 'warn' ? 'close to' : 'over'
+              } the boot pipeline's per-step timeout budget.`,
+      });
+      rows.push({
+        label: 'Seed loaded',
+        value: seed ? `generatedAt ${seed.generatedAt}, ${seed.rows.length} rows` : 'none',
+        status: seed ? 'pass' : 'fail',
+      });
+      rows.push({ label: 'Cached install-state rows', value: String(cachedRows), status: 'pass' });
+    } catch (error) {
+      const elapsedMs = Math.round(performance.now() - startedAt);
+      rows.push({
+        label: 'ensureRegistryReady() total',
+        value: `${error instanceof Error ? error.message : String(error)} (after ${elapsedMs}ms)`,
+        status: 'fail',
+        note:
+          'The error message names the specific step that stalled (e.g. ' +
+          '"backend.get(cachedState)") — that name, not the generic ' +
+          '"assetManager.initialize", is the next thing to chase.',
+      });
+    }
+
+    return { title: 'Asset pipeline (real, boot-equivalent)', rows };
   }
 }
 

@@ -198,6 +198,29 @@ const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> 
     appInit?.(app, '8.x');
   }
 
+  // -- WebGL context loss ----------------------------------------------
+  // A lost context makes the renderer silently stop drawing: no exception,
+  // no Pixi error, just a canvas that never updates again. On WebKitGTK with
+  // hybrid i915 graphics this is a routine event, and without a listener it
+  // is indistinguishable from a sizing or asset bug.
+  //
+  // preventDefault() is not optional: per the WebGL spec the browser only
+  // attempts restoration when the `webglcontextlost` handler cancels the
+  // event. Without it `webglcontextrestored` can never fire and the canvas
+  // stays dead for the life of the page.
+  const rendererCanvas = app.renderer.canvas as HTMLCanvasElement;
+  if (typeof rendererCanvas?.addEventListener === 'function') {
+    rendererCanvas.addEventListener('webglcontextlost', (event: Event) => {
+      event.preventDefault();
+      logger.error('createPixiApp:webgl-context-lost', {
+        hint: 'The canvas has stopped rendering. On Linux/WebKitGTK retry with --software-gl.',
+      });
+    });
+    rendererCanvas.addEventListener('webglcontextrestored', () => {
+      logger.warn('createPixiApp:webgl-context-restored');
+    });
+  }
+
   // -- Debug metrics: rolling-average FPS via ticker -------------------
   const counters: DebugCounters = {
     fps: 0,

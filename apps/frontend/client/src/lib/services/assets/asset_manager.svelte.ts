@@ -65,6 +65,8 @@ export type AssetManagerInterface = BaseFrontendClassInterface & {
   initialize(options: {
     registry: AssetRegistryRepository;
     backend: AssetCacheBackend;
+    /** Tags to eagerly materialise; everything else resolves lazily. */
+    coreTags?: ReadonlySet<string>;
   }): Promise<void>;
   /**
    * Resolves an asset tag to a blob: URL, fetching + verifying + caching on
@@ -109,6 +111,25 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
    */
   private static readonly _stepTimeoutMs = 8_000;
 
+  /**
+   * How many rehydration fetches run concurrently during initialize().
+   *
+   * Each cached asset needs its own backend.get() round trip, and on Tauri
+   * desktop that's an IPC call to Rust. A large offline-core catalog
+   * (10k+ entries) run one-at-a-time blows the caller's 20s step budget even
+   * though each individual call is fast — the IPC round-trip overhead is
+   * cumulative, not per-item-slow. Running them in bounded-concurrency
+   * batches instead of fully sequential keeps wall time roughly
+   * proportional to catalog-size / this value.
+   *
+   * Measured on a 12,726-row catalog (real Tauri desktop hardware, 2026-08-27):
+   * 24 in flight completed in 16.6s — under the 20s budget, but close enough
+   * that IPC timing variance seen elsewhere (26ms-120ms for a single
+   * listHashes() call across runs) could tip it over. Raised for margin;
+   * revisit if this proves too aggressive for the IPC channel.
+   */
+  private static readonly _rehydrateConcurrency = 64;
+
   /** Whether initialize() has completed. */
   isInitialized = false;
 
@@ -144,6 +165,26 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
   async initialize(options: {
     registry: AssetRegistryRepository;
     backend: AssetCacheBackend;
+    /**
+     * Tags that must resolve synchronously from the first frame (the
+     * offline-core set, ~16 tags — see {@link OFFLINE_CORE_PACK_ID}).
+     *
+     * Only these get their blob URL eagerly materialised during
+     * rehydration below. Every other cached tag — the bulk of a real
+     * catalog (10k+ downloaded entries) — is left as a verified hash only
+     * and lazily materialised on first actual access via
+     * {@link AssetManager._doResolve} step 1b. Eagerly fetching all of them
+     * at every boot was one IPC round trip per cached blob with no
+     * aggregate cap: harmless at Web-OPFS scale, but a real Tauri desktop
+     * catalog (12k+ entries) blew the boot pipeline's 20s budget because
+     * the IPC channel has a fixed per-call floor that concurrency cannot
+     * shrink (raising in-flight calls from 24 to 64 made no measurable
+     * difference — confirmed 2026-08-27, 16.6s either way).
+     *
+     * Omit to eagerly materialise everything (legacy behaviour) — used by
+     * tests that don't wire a real core-tags set.
+     */
+    coreTags?: ReadonlySet<string>;
   }): Promise<void> {
     // Idempotent across boots — drop any state from a previous session.
     await this.teardown();
@@ -151,6 +192,7 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     this._registry = options.registry;
     this._backend = options.backend;
     this.isInitialized = true;
+    const isCoreTag = (tag: string): boolean => options.coreTags?.has(tag) ?? true;
 
     // Rehydrate verified cached binaries so offline reloads resolve instantly
     // (synchronous acquireUrl/peekBlobUrl) without touching the network.
@@ -187,22 +229,32 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     // reconcile()). Blob URLs are materialised eagerly for this set — the
     // engine resolves through a synchronous resolver, so offline first-access
     // needs the URL ready before the first resolveUrl() call.
-    for (const state of cachedStates) {
-      const record = recordsById.get(state.assetId);
-      if (!record || record.hash !== state.cachedHash) {
-        continue;
-      }
-      this._verifiedHashes.set(state.assetId, state.cachedHash);
-      const blob = await withStepTimeout({
-        name: 'backend.get(cachedState)',
-        timeoutMs: AssetManager._stepTimeoutMs,
-        run: () => backend.get(state.cachedHash as string),
-      });
-      if (blob) {
-        this._registerBlobUrl(state.assetId, blob);
-        registered += 1;
-      }
-    }
+    await AssetManager._forEachConcurrent(
+      cachedStates,
+      AssetManager._rehydrateConcurrency,
+      async (state) => {
+        const record = recordsById.get(state.assetId);
+        if (!record || record.hash !== state.cachedHash) {
+          return;
+        }
+        this._verifiedHashes.set(state.assetId, state.cachedHash);
+        if (!isCoreTag(state.assetId)) {
+          // Non-core: verified hash is enough. Blob URL materialises lazily
+          // on first actual access (_doResolve step 1b) instead of costing
+          // an IPC round trip here for a tag that may never be used.
+          return;
+        }
+        const blob = await withStepTimeout({
+          name: 'backend.get(cachedState)',
+          timeoutMs: AssetManager._stepTimeoutMs,
+          run: () => backend.get(state.cachedHash as string),
+        });
+        if (blob) {
+          this._registerBlobUrl(state.assetId, blob);
+          registered += 1;
+        }
+      },
+    );
 
     // Content-addressed rehydration: even when install_state bookkeeping was
     // lost (e.g. an in-memory DB fallback across reloads), hash-named files
@@ -224,30 +276,58 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
         timeoutMs: AssetManager._stepTimeoutMs,
         run: () => registry.findByIds(ids),
       });
-      for (const record of records) {
-        this._verifiedHashes.set(record.id, record.hash);
-        const blob = await withStepTimeout({
-          name: 'backend.get(byHash)',
-          timeoutMs: AssetManager._stepTimeoutMs,
-          run: () => backend.get(record.hash),
-        });
-        if (blob) {
-          if (!this._blobUrls.has(record.id)) {
-            this._registerBlobUrl(record.id, blob);
-            registered += 1;
+      await AssetManager._forEachConcurrent(
+        records,
+        AssetManager._rehydrateConcurrency,
+        async (record) => {
+          if (this._verifiedHashes.get(record.id) === record.hash) {
+            // Already resolved via install_state bookkeeping in the loop
+            // above — skip the redundant full-file IPC read for this blob.
+            return;
           }
-          const state = stateById.get(record.id);
-          if (state?.status !== 'cached') {
-            await this._registry.setInstallState({
-              assetId: record.id,
-              status: 'cached',
-              cachedHash: record.hash,
-              localPath: record.hash,
-              downloadedAt: state?.downloadedAt ?? new Date().toISOString(),
+          this._verifiedHashes.set(record.id, record.hash);
+
+          const repairInstallState = async (): Promise<void> => {
+            const state = stateById.get(record.id);
+            if (state?.status === 'cached') {
+              return;
+            }
+            await withStepTimeout({
+              name: 'registry.setInstallState(byHash)',
+              timeoutMs: AssetManager._stepTimeoutMs,
+              run: () =>
+                registry.setInstallState({
+                  assetId: record.id,
+                  status: 'cached',
+                  cachedHash: record.hash,
+                  localPath: record.hash,
+                  downloadedAt: state?.downloadedAt ?? new Date().toISOString(),
+                }),
             });
+          };
+
+          if (!isCoreTag(record.id)) {
+            // Non-core: repair install-state bookkeeping (a cheap DB write)
+            // but skip the IPC blob read — lazily materialised on first
+            // actual access instead.
+            await repairInstallState();
+            return;
           }
-        }
-      }
+
+          const blob = await withStepTimeout({
+            name: 'backend.get(byHash)',
+            timeoutMs: AssetManager._stepTimeoutMs,
+            run: () => backend.get(record.hash),
+          });
+          if (blob) {
+            if (!this._blobUrls.has(record.id)) {
+              this._registerBlobUrl(record.id, blob);
+              registered += 1;
+            }
+            await repairInstallState();
+          }
+        },
+      );
     }
 
     this.debug('asset_manager:initialized', { cachedRows: states.length, registered });
@@ -667,6 +747,28 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
       return error.name === 'QuotaExceededError';
     }
     return (error as Error | undefined)?.name === 'QuotaExceededError';
+  }
+
+  /**
+   * Runs `fn` over `items` with at most `concurrency` calls in flight at
+   * once, rather than one after another. Used to bound wall time for
+   * per-item IPC round trips during rehydration without unbounding it
+   * entirely (a single `Promise.all` over 10k+ items would flood Tauri's
+   * IPC channel at once).
+   */
+  private static async _forEachConcurrent<T>(
+    items: readonly T[],
+    concurrency: number,
+    fn: (item: T) => Promise<void>,
+  ): Promise<void> {
+    let nextIndex = 0;
+    const worker = async (): Promise<void> => {
+      while (nextIndex < items.length) {
+        const item = items[nextIndex++] as T;
+        await fn(item);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   }
 }
 
