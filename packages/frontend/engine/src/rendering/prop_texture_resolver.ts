@@ -14,7 +14,7 @@
 // `fallbackTile` with a logged warning — never a white square, never an
 // LPC character sprite.
 
-import { Assets, type Spritesheet, type Texture } from 'pixi.js';
+import { Assets, Spritesheet, type Texture } from 'pixi.js';
 import { logger } from '$logger';
 
 // ---------------------------------------------------------------------------
@@ -102,16 +102,43 @@ export const createPropFrameResolver = (
   const sheetLoader =
     options.sheetLoader ??
     (async () => {
-      const loadUrl = spritesheetUrl || textureUrl;
-      const loaded: unknown = await Assets.load(loadUrl);
-      if (loaded && typeof loaded === 'object' && 'textures' in loaded) {
-        return loaded as unknown as PropSpritesheet;
+      if (!spritesheetUrl) {
+        const loaded: unknown = await Assets.load(textureUrl);
+        if (loaded && typeof loaded === 'object' && 'textures' in loaded) {
+          return loaded as unknown as PropSpritesheet;
+        }
+        logger.error('prop-frame-resolver:load-unexpected', {
+          loadUrl: textureUrl,
+          hint: 'Expected Assets.load() to return a parsed Spritesheet (spritesheet JSON).',
+        });
+        return null;
       }
-      logger.error('prop-frame-resolver:load-unexpected', {
-        loadUrl,
-        hint: 'Expected Assets.load() to return a parsed Spritesheet (spritesheet JSON).',
-      });
-      return null;
+
+      // Load the texture and the raw spritesheet JSON independently, then
+      // parse them together — never `Assets.load(spritesheetUrl)` directly.
+      // PixiJS's built-in spritesheet loader resolves the JSON's `meta.image`
+      // relative to the spritesheet JSON's *own* URL, which only works when
+      // both files sit side by side as literal files. Once the texture is
+      // served from a content-addressed R2 key (C-435), it lives at an
+      // unrelated URL and that resolution 404s. TextureManager.
+      // getOrCreateSpritesheet (packages/frontend/engine/src/rendering/
+      // texture_manager.ts) already avoids this by constructing
+      // `new Spritesheet(texture, data)` directly — same pattern here.
+      const [texture, sheetData] = await Promise.all([
+        Assets.load<Texture>(textureUrl),
+        fetch(spritesheetUrl).then((response) => {
+          if (!response.ok) {
+            throw new Error(
+              `Failed to fetch spritesheet JSON (${response.status} ${response.statusText}): ${spritesheetUrl}`,
+            );
+          }
+          return response.json();
+        }),
+      ]);
+
+      const sheet = new Spritesheet(texture, sheetData);
+      await sheet.parse();
+      return sheet as unknown as PropSpritesheet;
     });
 
   let _sheet: PropSpritesheet | null | undefined;

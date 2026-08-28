@@ -12,6 +12,7 @@ import {
   createPropFrameResolver,
   type PropFrameResolverHandle,
 } from '@aikami/frontend/engine/render';
+import { Assets } from 'pixi.js';
 import { logger } from '$logger';
 
 /** Minimal manifest shape needed to build the resolver. */
@@ -35,9 +36,20 @@ export type PropFrameResolverPackManifest = {
  * Packs without atlas metadata get a no-op resolver (props keep their
  * placeholder) with a logged warning — never a crash, never a white
  * square from the old `Texture.from(frame)` global-cache path.
+ *
+ * `resolveTag`, when supplied, resolves the manifest's raw file paths (e.g.
+ * "/game-data/sprites/tilesets/atlas.webp") through the asset registry
+ * (cache blob: URL → origin CDN URL → null) before handing them to
+ * `Assets.load()` — the same resolution `_preloadAsset` already applies to
+ * the map/spritesheet preload a few lines above this call in
+ * game_boot_service. Without it, `Assets.load()` fetches the raw path
+ * directly: harmless on web (served statically alongside the app), but on
+ * Tauri desktop nothing serves that path, so it 404s into the SPA fallback
+ * HTML and the atlas fails to decode.
  */
 export const buildPropFrameResolver = async (
   manifest: PropFrameResolverPackManifest,
+  resolveTag?: (tag: string) => string | null,
 ): Promise<PropFrameResolverHandle> => {
   const atlas = manifest.atlas;
   if (!atlas?.textureUrl) {
@@ -60,9 +72,30 @@ export const buildPropFrameResolver = async (
     });
   }
 
+  const rawTextureUrl = atlas.textureUrl;
+  const resolvedTextureUrl = resolveTag?.(rawTextureUrl) ?? rawTextureUrl;
+  const spritesheetUrl = atlas.spritesheetUrl
+    ? (resolveTag?.(atlas.spritesheetUrl) ?? atlas.spritesheetUrl)
+    : undefined;
+
+  // Register the raw manifest path as a Pixi alias for the resolved URL, and
+  // load THROUGH that alias (not the resolved URL directly) — same pattern
+  // as tilemap_render_system.ts. `AssetStore.resolveUrl()` can return a
+  // different URL for the same tag depending on cache-warm timing (the R2
+  // origin URL before the background warm finishes, a `blob:` URL after),
+  // so two independent `Assets.load(resolvedUrl)` calls for the "same"
+  // texture can end up creating two different `Texture.Source` instances.
+  // Terrain autotiling (game_world.ts `_buildFrameUvResolver`) compares the
+  // prop-resolver's texture source against the tilemap's texture source by
+  // identity — aliasing by the stable raw path guarantees both resolve to
+  // the exact same cached Texture regardless of which one loads first.
+  if (resolvedTextureUrl !== rawTextureUrl && !Assets.resolver.hasKey(rawTextureUrl)) {
+    Assets.add({ alias: rawTextureUrl, src: resolvedTextureUrl });
+  }
+
   const handle = createPropFrameResolver({
-    textureUrl: atlas.textureUrl,
-    spritesheetUrl: atlas.spritesheetUrl,
+    textureUrl: rawTextureUrl,
+    spritesheetUrl,
     fallbackTile,
   });
 
@@ -73,7 +106,8 @@ export const buildPropFrameResolver = async (
     await handle.preload();
   } catch (error) {
     logger.error('buildPropFrameResolver:preload-failed', {
-      textureUrl: atlas.textureUrl,
+      textureUrl: rawTextureUrl,
+      resolvedTextureUrl,
       error: error instanceof Error ? error.message : String(error),
       hint: 'Props will keep placeholder visuals; the atlas may be missing or malformed.',
     });

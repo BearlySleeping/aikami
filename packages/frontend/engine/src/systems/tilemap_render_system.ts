@@ -179,12 +179,23 @@ export const renderTilemap = async (
   }
 
   // Load all tileset textures.
-  // Asset URLs are resolved by the global resolver (Assets.resolver.rootPath
-  // handles custom-scheme/Tauri origins), so the raw path stays a valid cache
-  // alias for Texture.from() below.
-  const loadPromises = [...imageSet].map((image) =>
-    Assets.load(imageToResolvedUrl.get(image) ?? image),
-  );
+  //
+  // `Assets.load(src)` caches the result keyed by `src` itself, so loading
+  // straight from a resolved URL (an R2 CDN URL, not the map's raw tileset
+  // path) would register the texture under that resolved URL — leaving
+  // `Texture.from(image)` below (which looks up the raw path) unable to
+  // find it, resolving to Texture.WHITE with a "not found in the Cache"
+  // warning. `Assets.add({ alias, src })` registers the resolved URL as the
+  // fetch source while keeping the raw path as the cache key, so the raw
+  // path stays a valid alias for Texture.from() as the comment always
+  // intended.
+  const loadPromises = [...imageSet].map((image) => {
+    const resolved = imageToResolvedUrl.get(image) ?? image;
+    if (resolved !== image && !Assets.resolver.hasKey(image)) {
+      Assets.add({ alias: image, src: resolved });
+    }
+    return Assets.load(image);
+  });
   await Promise.all(loadPromises);
 
   // Release resolved blob URLs after the textures are loaded — the data

@@ -29,7 +29,15 @@ export const createAssetTagResolver = (): AssetTagResolver => {
     try {
       // Strip leading slash so absolute paths like "/content-packs/..."
       // produce the same tag as their relative counterpart (no leading colon).
-      const normalized = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+      const withoutLeadingSlash = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+      // "game-data/" is a URL-only root alias, not a real path segment —
+      // scan_assets.ts tags game-data-rooted assets relative to that
+      // directory (no "game-data:" prefix), so it must be stripped here too
+      // or every game-data asset's tag would carry a segment the catalog
+      // never produced.
+      const normalized = withoutLeadingSlash.startsWith('game-data/')
+        ? withoutLeadingSlash.slice('game-data/'.length)
+        : withoutLeadingSlash;
       // Convert the file path to a published tag (e.g. "maps/sandbox.json"
       // → "maps:sandbox").
       const tag = pathToTag(normalized);

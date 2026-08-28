@@ -61,6 +61,14 @@ export type AssetCategoryDefinition = {
    * `lpc:body:bodies_male:walk` instead of `lpc:body:bodies_male.walk`.
    */
   stateExtensions?: readonly string[];
+  /**
+   * Optional: keep the file extension in the tag's trailing segment instead
+   * of stripping it. Needed when a category has same-name files that only
+   * differ by extension (tilesets: `atlas.webp` vs `atlas.json`) — dropping
+   * the extension would collapse both onto one tag and silently drop the
+   * second file from the catalog.
+   */
+  tagIncludesExtension?: boolean;
 };
 
 /**
@@ -154,6 +162,7 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
     name: 'tilesets',
     extensions: new Set(['.webp', '.png', '.json']),
     defaultSubdirs: [],
+    tagIncludesExtension: true,
   },
 
   // C-433: content-pack constituents — manifests, pack maps, pack sprites
@@ -170,6 +179,29 @@ export const ASSET_CATEGORIES: Record<string, AssetCategoryDefinition> = {
     defaultSubdirs: [],
   },
 } as const satisfies Record<string, AssetCategoryDefinition>;
+
+/**
+ * Determines the asset category from a game-data-relative path.
+ *
+ * Directory-based overrides take priority over the literal first path
+ * segment — `sprites/tilesets/` maps to the `tilesets` category rather than
+ * `sprites`, so tileset atlases can live under `sprites/` without joining
+ * the `sprites` category. This must be the single source of truth for
+ * category detection: `scan_assets.ts` (publish side) and `pathToTag`
+ * (runtime resolver) both need the same category for a given path, since
+ * the category determines whether the tag keeps its file extension
+ * ({@link AssetCategoryDefinition.tagIncludesExtension}).
+ *
+ * @param relPath - Relative file path from the game-data root.
+ * @returns The category name, or undefined when no category matches.
+ */
+export const categoryForPath = (relPath: string): string | undefined => {
+  if (relPath.startsWith('sprites/tilesets/')) {
+    return 'tilesets';
+  }
+  const categoryName = relPath.split('/')[0] ?? '';
+  return ASSET_CATEGORIES[categoryName] ? categoryName : undefined;
+};
 
 // ---------------------------------------------------------------------------
 // Tag normalization helpers

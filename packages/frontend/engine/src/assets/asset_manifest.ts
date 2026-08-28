@@ -6,7 +6,7 @@
 //
 // Contract: C-243
 
-import { MAX_TAG_LIST_LENGTH, tagToAssetPath } from '@aikami/constants';
+import { ASSET_CATEGORIES, categoryForPath, MAX_TAG_LIST_LENGTH, tagToAssetPath } from '@aikami/constants';
 import type { AssetManifest, AssetTreeNode } from '@aikami/types';
 
 // ---------------------------------------------------------------------------
@@ -16,13 +16,24 @@ import type { AssetManifest, AssetTreeNode } from '@aikami/types';
 /**
  * Converts a relative file path to its manifest tag.
  *
- * Strips the file extension and replaces all path separators with `:`.
+ * Replaces all path separators with `:`. Strips the file extension, unless
+ * the leading segment names a category with `tagIncludesExtension` set
+ * (tilesets: `atlas.webp` and `atlas.json` would otherwise collapse onto the
+ * same tag) — this must mirror `scan_assets.ts`'s tagging exactly, since a
+ * mismatch means `resolveUrl()` never finds the catalog row scan_assets.ts
+ * published under the "real" tag.
  *
  * @example "sprites/generic-fantasy/elf-male.png" → "sprites:generic-fantasy:elf-male"
+ * @example "sprites/tilesets/atlas.webp" → "sprites:tilesets:atlas.webp"
  * @param relPath - Relative file path from the game-data root.
  * @returns The manifest tag string.
  */
 export const pathToTag = (relPath: string): string => {
+  const category = categoryForPath(relPath);
+  if (category && ASSET_CATEGORIES[category]?.tagIncludesExtension) {
+    const ext = relPath.match(/\.[^.]+$/)?.[0] ?? '';
+    return `${relPath.slice(0, relPath.length - ext.length).replace(/\//g, ':')}${ext}`;
+  }
   const withoutExt = relPath.replace(/\.[^.]+$/, '');
   return withoutExt.replace(/\//g, ':');
 };
