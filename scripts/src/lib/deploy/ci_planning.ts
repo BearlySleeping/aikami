@@ -143,7 +143,7 @@ type Leg = {
   sourceReleaseTag: string | null;
 };
 
-type CacheState = { checksum: string; releaseTag: string | null } | null;
+type CacheState = { checksum: string; releaseTag: string | null; version: string } | null;
 
 /**
  * Decide what to do with a single (platform, bundles) pair.
@@ -153,7 +153,12 @@ type CacheState = { checksum: string; releaseTag: string | null } | null;
  *   no current release (workflow_dispatch)   → skip (ephemeral artifacts only)
  *   same release as cached, assets present   → skip (re-run, nothing to do)
  *   same release, assets MISSING             → build (don't trust the cache)
- *   different release, source has assets     → reuse (copy forward)
+ *   different release, tag-derived version differs → build (never reuse across
+ *                                              a version bump — the cached
+ *                                              bytes have the OLD version
+ *                                              embedded, which would desync
+ *                                              from latest.json's version)
+ *   different release, same version, source has assets → reuse (copy forward)
  *   different release, source has NO assets  → build (fall back)
  */
 async function decideLeg(
@@ -204,9 +209,27 @@ async function decideLeg(
       sourceReleaseTag: null,
     };
   }
-  // Different release than the one that built these artifacts.
+  // Different release than the one that built these artifacts. The checksum
+  // matching only proves the SOURCE didn't change — the target version still
+  // might have (ci_run.ts derives the embedded version from the release tag,
+  // not from checksummed source), so reusing bytes built for a different
+  // version would ship a binary whose own version string disagrees with the
+  // latest.json this release publishes. Only reuse when they'd match.
+  const targetVersion = releaseTag.replace(/^v/, '');
+  if (cached.version !== targetVersion) {
+    log(
+      `  ${leg.platform}: unchanged checksum but version changed (${cached.version} → ${targetVersion}) → build`,
+    );
+    return {
+      runsOn: leg.runsOn,
+      platform: leg.platform,
+      bundles: leg.bundles,
+      action: 'build',
+      sourceReleaseTag: null,
+    };
+  }
   if (cached.releaseTag && (await assetsPresentOnRelease(cached.releaseTag, bundles))) {
-    log(`  ${leg.platform}: reuse artifacts from ${cached.releaseTag}`);
+    log(`  ${leg.platform}: reuse artifacts from ${cached.releaseTag} (version unchanged)`);
     return {
       runsOn: 'ubuntu-latest', // no native OS needed to copy files
       platform: leg.platform,
@@ -238,6 +261,7 @@ async function main(): Promise<void> {
     version: { type: 'string' },
     'cached-checksum': { type: 'string' },
     'cached-release-tag': { type: 'string' },
+    'cached-version': { type: 'string' },
   });
   const mode = opts.mode ?? 'production';
   const releaseTag = process.env.RELEASE_TAG?.trim() || null;
@@ -266,6 +290,7 @@ async function main(): Promise<void> {
     emitOutput('version', version);
     emitOutput('cached_checksum', cached?.checksum ?? '');
     emitOutput('cached_release_tag', cached?.releaseTag ?? '');
+    emitOutput('cached_version', cached?.version ?? '');
     ok('Compute complete.');
     return;
   }
@@ -279,6 +304,7 @@ async function main(): Promise<void> {
       ? {
           checksum: opts['cached-checksum'],
           releaseTag: opts['cached-release-tag'] ? opts['cached-release-tag'] : null,
+          version: opts['cached-version'] ?? '',
         }
       : null;
 

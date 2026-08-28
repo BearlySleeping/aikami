@@ -231,6 +231,11 @@ export async function buildTauriArtifacts(
   // which rejects tauri's own flags ("unexpected argument '--bundles'").
   const targetFlag = tauriTarget ? ` --target ${tauriTarget}` : '';
 
+  // Normalized once so an empty/whitespace-only string (e.g. a malformed
+  // release tag stripped down to nothing) is treated the same as "no
+  // override" everywhere below, rather than a truthy-check on the raw opt.
+  const normalizedVersionOverride = opts.versionOverride?.trim() || undefined;
+
   const configOverride: {
     version?: string;
     build?: { beforeBuildCommand: string };
@@ -246,8 +251,8 @@ export async function buildTauriArtifacts(
   if ((liveModes as readonly string[]).includes(mode)) {
     configOverride.bundle = { createUpdaterArtifacts: true };
   }
-  if (opts.versionOverride) {
-    configOverride.version = opts.versionOverride;
+  if (normalizedVersionOverride !== undefined) {
+    configOverride.version = normalizedVersionOverride;
   }
 
   let configOverridePath: string | undefined;
@@ -314,7 +319,7 @@ export async function buildTauriArtifacts(
 
   return {
     artifacts: finalArtifacts,
-    version: opts.versionOverride ?? readCargoVersion(tauriDir),
+    version: normalizedVersionOverride ?? readCargoVersion(tauriDir),
     platformDir,
     bundleDir,
   };
@@ -378,12 +383,17 @@ export async function deployTauriRelease(
     checksum = cache.checksum;
   }
 
-  // 1-4. Build + collect (shared with ci_run.ts)
+  // 1-4. Build + collect (shared with ci_run.ts). When this local pipeline is
+  // itself publishing to a real GitHub Release (RELEASE_TAG set — see step 5
+  // below), derive the embedded version from the tag the same way ci_run.ts
+  // does, so a manually-run `RELEASE_TAG=v0.1.1 bun run deploy ... client-tauri`
+  // embeds the same version its own uploaded latest.json will claim.
+  const versionOverride = releaseTag ? releaseTag.replace(/^v/, '') : undefined;
   const {
     artifacts,
     version: ver,
     bundleDir,
-  } = await buildTauriArtifacts(config, mode, rootDir, {});
+  } = await buildTauriArtifacts(config, mode, rootDir, { versionOverride });
 
   // 5. Publish artifacts
   // A real GitHub Release only exists when this run was triggered by
