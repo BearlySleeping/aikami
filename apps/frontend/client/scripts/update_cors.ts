@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// apps/frontend/client/scripts/update_cors.ts
 
 /**
  * Regenerates the Tauri CSP `connect-src` allowlist in
@@ -13,12 +14,10 @@
  * Providers without a fixed `apiBaseUrl` (ollama, llamacpp, custom, local
  * TTS/image servers, the "Custom API" / "OpenAI Compatible" entries, ...)
  * take a user-typed URL at runtime, so no static host can be allowlisted
- * for them. Rather than silently leaving those broken, this script adds a
- * blanket `https://*` / `http://*` to connect-src — the desktop app is a
- * BYOK client the user points at servers of their own choosing, so this
- * directive isn't meaningfully protective for that traffic anyway. Other
- * CSP directives (script-src, style-src, img-src) are untouched and keep
- * doing the real work of blocking injected script execution.
+ * for them. Rather than silently leaving those broken, this script allows
+ * arbitrary HTTPS origins plus cleartext HTTP on loopback only. Other CSP
+ * directives (script-src, style-src, img-src) are untouched and keep doing
+ * the real work of blocking injected script execution.
  *
  * Run directly: `bun scripts/update_cors.ts`
  * Wired into `beforeDevCommand` / `beforeBuildCommand` in tauri.conf.json
@@ -56,18 +55,17 @@ const BASE_CONNECT_SRC = [
 ];
 
 // Local/custom-URL providers take an arbitrary user-supplied endpoint at
-// runtime — no fixed host can be allowlisted, so connect-src is opened for
-// any origin instead of silently failing for whatever the user configures.
-const WILDCARD_CONNECT_SRC = ['https://*', 'http://*'];
+// runtime — no fixed host can be allowlisted. Remote endpoints must use
+// HTTPS; cleartext HTTP is limited to locally-run providers.
+const WILDCARD_CONNECT_SRC = ['https://*', 'http://localhost:*', 'http://127.0.0.1:*'];
 
 const collectProviderOrigins = (): string[] => {
   const origins = new Set<string>();
   for (const provider of [...TEXT_PROVIDERS, ...VOICE_PROVIDERS, ...IMAGE_PROVIDERS]) {
-    const apiBaseUrl = (provider as { apiBaseUrl?: string }).apiBaseUrl;
-    if (!apiBaseUrl) {
+    if (!('apiBaseUrl' in provider)) {
       continue;
     }
-    origins.add(new URL(apiBaseUrl).origin);
+    origins.add(new URL(provider.apiBaseUrl).origin);
   }
   return [...origins].sort();
 };

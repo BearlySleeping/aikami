@@ -214,7 +214,7 @@ leaving the canvas at its 300×150 default — a black screen with nothing throw
 | R2 CORS blocks `tauri://localhost` | Policy is `{"origins":["*"],"methods":["GET","HEAD"],"headers":["*"]}` (`bun cf r2 buckets cors get aikami-catalog`); `curl` with `Origin: tauri://localhost` returns `access-control-allow-origin: *`; all sampled offline-core binaries return 200; in-app probe fetched the seed at `200 OK in 15ms` |
 | GPU / driver instability | `--software-gl` gave a byte-identical report; `webgl2` available, `MAX_TEXTURE_SIZE` 32768 |
 | Negative GDK scale factor | Tauri `scaleFactor()` returns `1` |
-| Missing COOP/COEP in Tauri | The working deployment's `static/_headers` sets no COEP either, so it also lacks `SharedArrayBuffer` and also falls off OPFS. **Do not add these headers.** |
+| Missing COOP/COEP in Tauri | The working deployment's `static/_headers` sets no COEP either, so it also lacks `SharedArrayBuffer` and also falls off OPFS. These headers are **not a blank-canvas fix** and must not be added as one. OPFS persistence remains a separate rollout task that requires validating every cross-origin network path; see [`docs/TODO.md`](../TODO.md). |
 | Service worker stale bundle | `src/service-worker.js` returns early unless the path starts with `/game-data/{music,sfx,ambient}/` |
 | Missing `SharedArrayBuffer` breaks the engine | The SAB path was already removed; the engine uses an N-buffer `postMessage` protocol |
 | `requestAnimationFrame` never fires | 34 frames / 500ms |

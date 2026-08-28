@@ -25,6 +25,14 @@ export type PropFrameResolverPackManifest = {
   fallbackTile?: string;
 };
 
+/** Options for {@link buildPropFrameResolver}. */
+export type BuildPropFrameResolverOptions = {
+  /** Content-pack manifest containing the atlas declaration. */
+  manifest: PropFrameResolverPackManifest;
+  /** Resolves manifest asset tags to cache or origin URLs. */
+  resolveTag?: (tag: string) => string | null;
+};
+
 /**
  * Builds + preloads the prop frame resolver for a content pack.
  *
@@ -47,10 +55,10 @@ export type PropFrameResolverPackManifest = {
  * Tauri desktop nothing serves that path, so it 404s into the SPA fallback
  * HTML and the atlas fails to decode.
  */
-export const buildPropFrameResolver = async (
-  manifest: PropFrameResolverPackManifest,
-  resolveTag?: (tag: string) => string | null,
-): Promise<PropFrameResolverHandle> => {
+export const buildPropFrameResolver = async ({
+  manifest,
+  resolveTag,
+}: BuildPropFrameResolverOptions): Promise<PropFrameResolverHandle> => {
   const atlas = manifest.atlas;
   if (!atlas?.textureUrl) {
     logger.warn('buildPropFrameResolver:no-atlas', {

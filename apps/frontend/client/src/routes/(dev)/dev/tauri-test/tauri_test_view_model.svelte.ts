@@ -538,7 +538,11 @@ class TauriTestViewModel
       const { assetPrefetchService } = await import(
         '$lib/services/assets/asset_prefetch_service.svelte'
       );
-      const { registry, seed } = await assetPrefetchService.ensureRegistryReady();
+      const { registry, seed } = await withStepTimeout({
+        name: 'assetPrefetchService.ensureRegistryReady',
+        timeoutMs: 30_000,
+        run: () => assetPrefetchService.ensureRegistryReady(),
+      });
       const elapsedMs = Math.round(performance.now() - startedAt);
 
       let cachedRows = 0;

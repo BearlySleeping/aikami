@@ -58,8 +58,10 @@ export type CreatePropFrameResolverOptions = {
   /**
    * Optional loader override for tests.
    *
-   * Defaults to `Assets.load(spritesheetUrl ?? textureUrl)` and extracts
-   * the parsed spritesheet's `textures` map.
+   * Without `spritesheetUrl`, the default calls `Assets.load(textureUrl)`
+   * and uses the returned parsed spritesheet. With `spritesheetUrl`, it loads
+   * the texture, fetches the JSON separately, then constructs and parses a
+   * `Spritesheet` from both results.
    */
   sheetLoader?: () => Promise<PropSpritesheet | null>;
 };

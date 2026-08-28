@@ -756,7 +756,10 @@ class GameEngineService
         releaseUrl,
       });
       const { buildPropFrameResolver } = await import('./prop_frame_resolver');
-      this._propFrameResolverHandle = await buildPropFrameResolver(pack.manifest, assetTagResolver);
+      this._propFrameResolverHandle = await buildPropFrameResolver({
+        manifest: pack.manifest,
+        resolveTag: assetTagResolver,
+      });
 
       this._gameWorld = (EngineGameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
         className: 'GameWorld',

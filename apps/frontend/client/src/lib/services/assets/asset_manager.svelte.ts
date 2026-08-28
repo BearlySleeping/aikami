@@ -498,7 +498,11 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     const verifiedHash = this._verifiedHashes.get(tag);
     if (verifiedHash) {
       this._verifiedHashes.delete(tag);
-      const blob = await backend.get(verifiedHash);
+      const blob = await withStepTimeout({
+        name: 'backend.get(lazy)',
+        timeoutMs: AssetManager._stepTimeoutMs,
+        run: () => backend.get(verifiedHash),
+      }).catch(() => undefined);
       if (blob) {
         const state = await registry.getInstallState(tag);
         if (state?.status !== 'cached') {
@@ -532,7 +536,11 @@ class AssetManager extends BaseFrontendClass<AssetManagerOptions> implements Ass
     //    lost the rows). Target: <10ms/item.
     const cachedHash = state?.status === 'cached' ? state.cachedHash : record.hash;
     if (cachedHash === record.hash && (await backend.has(record.hash))) {
-      const blob = await backend.get(record.hash);
+      const blob = await withStepTimeout({
+        name: 'backend.get(cacheHit)',
+        timeoutMs: AssetManager._stepTimeoutMs,
+        run: () => backend.get(record.hash),
+      }).catch(() => undefined);
       if (blob) {
         if (state?.status !== 'cached') {
           await registry.setInstallState({
