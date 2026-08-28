@@ -9,18 +9,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
-// ── Module under test ───────────────────────────────────────────────────
-
-const { sopsKeyAvailable, isSopsEncrypted } = await import('../secrets_backend.ts');
+import { isSopsEncrypted, sopsKeyAvailable } from '../secrets_backend.ts';
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 let _tmpDir: string;
 
-function tmpPath(name: string): string {
-  return join(_tmpDir, name);
-}
+const tmpPath = (name: string): string => join(_tmpDir, name);
 
 // ── Tests ───────────────────────────────────────────────────────────────
 

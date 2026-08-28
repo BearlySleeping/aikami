@@ -114,8 +114,9 @@ bun install
 
 Bun auto-loads `.env.{mode}` (see `.env.example` for the full key list —
 `DISCORD_BOT_TOKEN`, `GITHUB_ISSUES_TOKEN`, `OPENROUTER_API_KEY`,
-`OPENROUTER_MODEL`, `DISCORD_PUBLIC_KEY`). Generate one from GCP Secret
-Manager with the repo's standard scripts (this app is registered in
+`OPENROUTER_MODEL`, `DISCORD_PUBLIC_KEY`). Generate one from the
+SOPS-encrypted bundle (`secrets/{mode}.enc.env`, C-441) with the repo's
+standard scripts (this app is registered in
 `scripts/src/lib/deploy/deployment_config.ts`'s `APP_CONFIG` for exactly
 this — `enabled: false` there just means the *generic docker-release
 pipeline* skips it, not the secrets pipeline):

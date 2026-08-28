@@ -16,7 +16,7 @@
 
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { modes } from '../../../../packages/shared/constants/src/lib/project';
+import { modes } from '@aikami/constants';
 import { parseCliArgs, parseEnvFile } from '../cli_utils';
 import {
   APP_SPECIFIC_KEYS_FOR_PREFIX,
@@ -273,7 +273,7 @@ if (allSecrets.size === 0) {
   // sopsEncrypt merges onto the existing bundle — a scoped run (e.g. `hub`
   // only) updates just these keys and leaves every other app's keys in the
   // shared bundle untouched.
-  const written = await sopsEncrypt(mode, allSecrets);
+  const written = await sopsEncrypt({ mode, secrets: allSecrets });
   if (written) {
     console.log(
       `\n✅ Merged ${allSecrets.size} secret(s) from this run into secrets/${mode}.enc.env`,

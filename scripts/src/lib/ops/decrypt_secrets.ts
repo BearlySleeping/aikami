@@ -26,7 +26,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { modes } from '../../../../packages/shared/constants/src/lib/project';
+import { modes } from '@aikami/constants';
 import { parseCliArgs } from '../cli_utils';
 import { PROJECT_ENV_CONFIG, resolveEnvFile, resolveSecretName } from '../deploy/deployment_config';
 import { NEVER_ENCRYPT_KEYS, sopsDecrypt } from './secrets_backend';
@@ -394,6 +394,18 @@ console.log('');
 let totalUpdated = 0;
 
 for (const m of appMappings) {
+  if (keysFilter.size > 0 && !existsSync(m.envFilePath)) {
+    // A --keys run only knows the values for the filtered key(s) — every
+    // other key in allKeys has no source to fall back to but "blank" when
+    // the file doesn't exist yet. Writing that out would look like a full,
+    // valid .env file with everything else silently emptied. Refuse instead.
+    console.error(
+      `  ❌ ${m.envFilePath} doesn't exist yet — --keys can only update an existing file, not create one (would blank out every other key).`,
+    );
+    console.error(`     Run without --keys first to generate the full file.`);
+    process.exitCode = 1;
+    continue;
+  }
   const existing = readExistingEnv(m.envFilePath);
   const emulatorOverrides = isEmulator ? (EMULATOR_ENV_OVERRIDES[m.appName] ?? {}) : {};
   const content = generateEnvContent(

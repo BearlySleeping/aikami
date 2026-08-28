@@ -9,8 +9,8 @@ import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runStream } from '../cli_utils.ts';
-import { syncContracts } from './sync_contracts.ts';
 import { isSopsEncrypted } from './secrets_backend.ts';
+import { syncContracts } from './sync_contracts.ts';
 
 const isWorktree = !!process.env.CONTRACT_PIPELINE_WORKTREE;
 
@@ -20,10 +20,7 @@ const isWorktree = !!process.env.CONTRACT_PIPELINE_WORKTREE;
 
 const ROOT_DIR = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
 
-const PLAINTEXT_PATTERNS = [
-  '.env.production',
-  '.env.staging',
-];
+const PLAINTEXT_PATTERNS = ['.env.production', '.env.staging'];
 
 function checkPlaintextSecrets(): void {
   try {

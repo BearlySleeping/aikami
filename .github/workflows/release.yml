@@ -62,9 +62,6 @@ name: Release
 env:
   # Default: desktop only. Overridden per-event in resolve-plan.
   DEPLOY_APPS: "client-tauri"
-  # C-441: every job decrypts its own env files locally from SOPS — no
-  # relay between jobs, so this must be visible to every job/step.
-  SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 
 on:
   release:
@@ -208,6 +205,7 @@ jobs:
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
           bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
             $ALL_APPS
@@ -243,6 +241,7 @@ jobs:
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
           bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
             $ALL_APPS
@@ -325,6 +324,7 @@ jobs:
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
           bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
             $ALL_APPS
@@ -463,6 +463,7 @@ jobs:
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
           bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
             $ALL_APPS
@@ -617,6 +618,7 @@ jobs:
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
           bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
             $ALL_APPS
@@ -655,6 +657,7 @@ jobs:
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
           bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
             $ALL_APPS

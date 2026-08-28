@@ -37,14 +37,7 @@ export const NEVER_ENCRYPT_KEYS = new Set([
 const ROOT_DIR = resolve(import.meta.dirname, '../../../..');
 
 /** Path to the encrypted secrets file for a given mode. */
-export function sopsEncPath(mode: string): string {
-  return join(ROOT_DIR, 'secrets', `${mode}.enc.env`);
-}
-
-/** Path to the decrypted output .env.{mode} file for an app. */
-export function sopsDecryptedPath(mode: string, appPath: string): string {
-  return join(ROOT_DIR, appPath, `.env.${mode}`);
-}
+export const sopsEncPath = (mode: string): string => join(ROOT_DIR, 'secrets', `${mode}.enc.env`);
 
 // ── SOPS operations ────────────────────────────────────────────────────
 
@@ -58,7 +51,7 @@ export function sopsDecryptedPath(mode: string, appPath: string): string {
  *
  * 🔴 Never log the decrypted values. Log key names and counts only.
  */
-export async function sopsDecrypt(mode: string): Promise<Map<string, string>> {
+export const sopsDecrypt = async (mode: string): Promise<Map<string, string>> => {
   const encPath = sopsEncPath(mode);
 
   if (!existsSync(encPath)) {
@@ -109,7 +102,7 @@ export async function sopsDecrypt(mode: string): Promise<Map<string, string>> {
 
   console.log(`   ${c.dim}Decrypted ${result.size} keys from ${encPath}${c.reset}`);
   return result;
-}
+};
 
 /**
  * Decrypt the existing bundle for a mode, or an empty map if it doesn't
@@ -117,7 +110,7 @@ export async function sopsDecrypt(mode: string): Promise<Map<string, string>> {
  * encrypt_secrets.ts calls this to merge into, and "nothing encrypted yet"
  * is the expected first-run state.
  */
-async function decryptExistingOrEmpty(mode: string): Promise<Map<string, string>> {
+const decryptExistingOrEmpty = async (mode: string): Promise<Map<string, string>> => {
   const encPath = sopsEncPath(mode);
   if (!existsSync(encPath)) {
     return new Map();
@@ -150,7 +143,7 @@ async function decryptExistingOrEmpty(mode: string): Promise<Map<string, string>
     result.set(trimmed.slice(0, eq), trimmed.slice(eq + 1));
   }
   return result;
-}
+};
 
 /**
  * Encrypt a key-value map into a SOPS-encrypted file.
@@ -169,7 +162,11 @@ async function decryptExistingOrEmpty(mode: string): Promise<Map<string, string>
  * (SOPS re-encryption changes the IV, producing noisy diffs — avoid
  * unnecessary re-encryption).
  */
-export async function sopsEncrypt(mode: string, secrets: Map<string, string>): Promise<boolean> {
+export const sopsEncrypt = async (options: {
+  mode: string;
+  secrets: Map<string, string>;
+}): Promise<boolean> => {
+  const { mode, secrets } = options;
   const encPath = sopsEncPath(mode);
 
   const merged = await decryptExistingOrEmpty(mode);
@@ -244,12 +241,12 @@ export async function sopsEncrypt(mode: string, secrets: Map<string, string>): P
   writeFileSync(encPath, encrypted);
   console.log(`   ${c.dim}Wrote ${encPath}${c.reset}`);
   return true;
-}
+};
 
 /**
  * Check if the SOPS age key is available (for pre-commit validation).
  */
-export function sopsKeyAvailable(): boolean {
+export const sopsKeyAvailable = (): boolean => {
   if (process.env.SOPS_AGE_KEY) {
     return true;
   }
@@ -267,15 +264,15 @@ export function sopsKeyAvailable(): boolean {
     }
   }
   return false;
-}
+};
 
 /**
  * Check if a file looks like a SOPS-encrypted file (starts with SOPS header).
  */
-export function isSopsEncrypted(filePath: string): boolean {
+export const isSopsEncrypted = (filePath: string): boolean => {
   if (!existsSync(filePath)) {
     return false;
   }
   const content = readFileSync(filePath, 'utf8');
   return content.startsWith('ENC[') || content.includes('sops');
-}
+};
