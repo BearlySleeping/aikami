@@ -381,7 +381,10 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
         const routeKey = page.route.id ?? page.url.pathname;
         if (!this._unmappedRouteIds.has(routeKey)) {
           this._unmappedRouteIds.add(routeKey);
-          this.warn('Page has no route', { routeId: routeKey });
+          this.warn('Page has no route', {
+            routeId: page.route.id,
+            pathname: page.url.pathname,
+          });
         }
         return;
       }
