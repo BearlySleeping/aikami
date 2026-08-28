@@ -113,7 +113,7 @@ export type AppConfig = {
   shortName: string;
   /** Set to false to exclude from deployment. Default: true. */
   enabled?: boolean;
-  /** Env var prefix for app-specific secrets in GCP Secret Manager */
+  /** Env var prefix for app-specific secrets in the SOPS-encrypted bundle */
   prefix?: string;
   /** Branches that are allowed to deploy this app. If omitted, all branches. */
   deployBranches?: string[];
@@ -309,7 +309,7 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
    * Endpoint) — see apps/backend/worker/README.md. Own build→push→restart
    * script (scripts/src/lib/worker/deploy.ts), NOT the generic docker-release
    * gcloud flow this service type otherwise implies — `enabled: false` is
-   * what skips that. Listed here purely so download-secrets/upload-secrets
+   * what skips that. Listed here purely so decrypt-secrets/encrypt-secrets
    * manage its .env.{mode} — same shape as image/text/voice above.
    */
   worker: {

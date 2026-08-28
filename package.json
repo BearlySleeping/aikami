@@ -82,9 +82,9 @@
     "switch": "bun run scripts/src/lib/ops/switch_mode.ts",
     "deploy": "bun run scripts/src/lib/deploy/index.ts",
     "deploy:worker": "bun run scripts/src/lib/worker/deploy.ts",
-    "download-secrets": "bun run scripts/src/lib/ops/download_secrets.ts",
-    "setup:env": "bun run download-secrets --mode emulator",
-    "upload-secrets": "bun run scripts/src/lib/ops/upload_secrets.ts",
+    "decrypt-secrets": "bun run scripts/src/lib/ops/decrypt_secrets.ts",
+    "setup:env": "bun run decrypt-secrets --mode emulator",
+    "encrypt-secrets": "bun run scripts/src/lib/ops/encrypt_secrets.ts",
     "sync-env": "bun run scripts/src/lib/ops/sync_env.ts",
     "infra:report": "bun run scripts/src/lib/ops/infra_report_cli.ts"
   },

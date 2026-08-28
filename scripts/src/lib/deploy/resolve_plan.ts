@@ -4,7 +4,7 @@
 // CI-only planner that turns DEPLOY_APPS into per-service-type app lists.
 // This is what lets release.yml:
 //
-//   1. Fetch every app's secrets EXACTLY ONCE (see the download-secrets job),
+//   1. Fetch every app's secrets EXACTLY ONCE (see the decrypt-secrets job),
 //      instead of once per service type / once per app.
 //   2. Run one job PER SERVICE TYPE (desktop, cloudflare-worker,
 //      docker-release), each gated at
@@ -101,7 +101,7 @@ function main(): void {
   }
 
   // The union — one Secret Manager fetch for the whole run, however many
-  // service types are actually in play (see download-secrets in release.yml).
+  // service types are actually in play (see decrypt-secrets in release.yml).
   emitOutput('all_apps', apps.join(' '));
   for (const [key, list] of Object.entries(buckets)) {
     emitOutput(key, list.join(' '));

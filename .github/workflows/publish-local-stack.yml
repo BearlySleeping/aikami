@@ -157,8 +157,7 @@ jobs:
       - name: Decrypt client secrets from SOPS
         if: matrix.needs-gcp
         run: |
-          AIKAMI_SECRETS_BACKEND=sops \
-            bun scripts/src/lib/ops/download_secrets.ts --mode=production --strict client
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode=production --strict client
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 

@@ -221,14 +221,14 @@ The mapping from env key to secret name is in
 ### Local usage
 
 ```bash
-# Decrypt secrets for a mode (needs age key in ~/.config/sops/age/keys.txt)
-bun run download-secrets --mode staging
+# Decrypt secrets for a mode (needs an age key — see Key management below)
+bun run decrypt-secrets --mode staging
 
-# Upload/encrypt secrets from .env.staging to SOPS
-bun run upload-secrets --mode staging
+# Encrypt secrets from .env.staging into SOPS
+bun run encrypt-secrets --mode staging
 
 # Emulator mode — no key needed at all
-bun run download-secrets --mode emulator
+bun run decrypt-secrets --mode emulator
 ```
 
 **Contributors never need any of this.** `bun run setup:env` generates a working
@@ -240,26 +240,31 @@ In CI, the `SOPS_AGE_KEY` GitHub secret provides the decryption key. Every job
 that needs secrets runs:
 
 ```bash
-AIKAMI_SECRETS_BACKEND=sops \
-  bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict
+bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict
 ```
 
-No GCP auth, no Redis relay, no `env_share.ts`. The old `prepare-secrets` job
-and the Upstash Redis relay have been removed (C-441).
+No GCP auth, no Redis relay, no `env_share.ts`. GCP Secret Manager, the old
+`prepare-secrets` job, and the Upstash Redis relay have all been removed
+(C-441) — SOPS/age is the only secrets backend.
 
 ### Key management
 
 - **`.sops.yaml`** at the repo root defines which age recipients can decrypt.
 - **`.age/recipients.txt`** lists public keys (never private keys).
+- Locally, sops resolves the decryption key from `SOPS_AGE_KEY_FILE` (an
+  aikami-only key at `.age/maintainer_key.txt`, exported by
+  `scripts/direnv/bootstrap.sh` — kept separate from any personal
+  dotfiles-managed default), falling back to
+  `~/.config/sops/age/keys.txt`.
 - **`TAURI_SIGNING_PRIVATE_KEY`** is NEVER committed — it lives in a GitHub
   Actions secret under separate custody.
 
 ### Adding a new secret
 
 1. Add the key to the relevant `.env.example` file (empty value).
-2. Run `bun run download-secrets --mode <mode>` to pull existing secrets.
+2. Run `bun run decrypt-secrets --mode <mode>` to pull existing secrets.
 3. Set the new key's value in the generated `.env.<mode>`.
-4. Run `bun run upload-secrets --mode <mode>` to encrypt.
+4. Run `bun run encrypt-secrets --mode <mode>` to encrypt.
 5. Commit the updated `secrets/<mode>.enc.env`.
 
 ### Key rotation

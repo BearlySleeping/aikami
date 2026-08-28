@@ -203,7 +203,7 @@ const runCmd = [
 if ((await spawnInherit(runCmd)) !== 0) {
   error('AppImage build failed.');
   info('If it failed on missing env vars, generate them first:');
-  info(`  ${c.cyan}bun run scripts/src/lib/ops/download_secrets.ts --mode ${mode}${c.reset}`);
+  info(`  ${c.cyan}bun run scripts/src/lib/ops/decrypt_secrets.ts --mode ${mode}${c.reset}`);
   process.exit(1);
 }
 

@@ -121,7 +121,7 @@ this — `enabled: false` there just means the *generic docker-release
 pipeline* skips it, not the secrets pipeline):
 
 ```bash
-bun run download-secrets --mode production worker   # → .env.production
+bun run decrypt-secrets --mode production worker   # → .env.production
 bun run start
 ```
 
@@ -148,8 +148,8 @@ The *build→push→restart* rollout above is not wired into the generic
 service-type/`gcloud run deploy` framework) — that models one-shot deploys
 of stateless services/functions, a poor fit for a single persistent VM with
 its own restart step. `APP_CONFIG` still lists this app (`enabled: false`,
-same shape as `image`/`text`/`voice`) purely so `download-secrets` /
-`upload-secrets` manage its `.env.{mode}` files — see "Local development"
+same shape as `image`/`text`/`voice`) purely so `decrypt-secrets` /
+`encrypt-secrets` manage its `.env.{mode}` files — see "Local development"
 above. Secrets themselves are never passed via `--container-env` at deploy
 time either way: the running container fetches them itself from Secret
 Manager using the VM's own identity (`src/secrets.ts`), so nothing sensitive
