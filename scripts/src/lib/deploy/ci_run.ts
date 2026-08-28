@@ -208,11 +208,17 @@ async function main(): Promise<void> {
 
   if (leg.action === 'build') {
     // ── Build leg ────────────────────────────────────────────────────
+    // Release runs derive the app version from the tag itself (v0.1.1 →
+    // 0.1.1) rather than a committed Cargo.toml/tauri.conf.json version —
+    // no version-bump commit needed to cut a release. workflow_dispatch runs
+    // have no tag and keep using the committed version, same as a local build.
+    const versionOverride = releaseTag ? releaseTag.replace(/^v/, '') : undefined;
     const { artifacts, version } = await buildTauriArtifacts(config, mode, ROOT_DIR, {
       bundles: leg.bundles,
       // The shared web build was produced by the build-web job and downloaded
       // to apps/frontend/client/build — don't rebuild it inside tauri build.
       disableBeforeBuildCommand: true,
+      versionOverride,
     });
 
     if (releaseTag) {

@@ -29,7 +29,6 @@
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { c, error, log, ok, parseCliArgs, run, warn } from '../cli_utils';
-import { readCargoVersion } from './tauri_release';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -314,7 +313,6 @@ async function main(): Promise<void> {
     merge: { type: 'boolean' },
     'fragments-dir': { type: 'string' },
     'release-tag': { type: 'string' },
-    'tauri-dir': { type: 'string' },
   });
 
   if (!opts.merge) {
@@ -355,11 +353,12 @@ async function main(): Promise<void> {
     );
   }
 
-  const tauriDir = opts['tauri-dir'] ?? 'apps/frontend/client/src-tauri';
   const manifest: UpdaterManifest = {
-    // Cargo.toml version — no leading 'v'. Must be bumped per release for
-    // the updater to detect a newer build.
-    version: readCargoVersion(tauriDir),
+    // Derived from the release tag itself (v0.1.1 → 0.1.1) — the same source
+    // ci_run.ts embeds into the built bundles (see buildTauriArtifacts'
+    // versionOverride) — so the manifest and the binaries always agree with
+    // no Cargo.toml/tauri.conf.json version-bump commit required per release.
+    version: releaseTag.replace(/^v/, ''),
     notes: await fetchReleaseNotes(releaseTag),
     pub_date: new Date().toISOString(),
     platforms,
