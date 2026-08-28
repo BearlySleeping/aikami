@@ -162,10 +162,12 @@ const decryptExistingOrEmpty = async (mode: string): Promise<Map<string, string>
  * (SOPS re-encryption changes the IV, producing noisy diffs — avoid
  * unnecessary re-encryption).
  */
-export const sopsEncrypt = async (options: {
+export type SopsEncryptOptions = {
   mode: string;
   secrets: Map<string, string>;
-}): Promise<boolean> => {
+};
+
+export const sopsEncrypt = async (options: SopsEncryptOptions): Promise<boolean> => {
   const { mode, secrets } = options;
   const encPath = sopsEncPath(mode);
 

@@ -161,13 +161,29 @@ runs:
         REGISTRY: ${{ inputs.docker-registry }}
       run: gcloud auth configure-docker "$REGISTRY" --quiet
 
+    # cosign verifies the downloaded sops binary below wasn't tampered with
+    # in transit or substituted by a compromised release — this installs a
+    # CI credential (decrypts every production secret), so an unverified
+    # binary download here is a real supply-chain risk, not a theoretical one.
+    - name: 🔏 Install cosign
+      if: inputs.sops == 'true'
+      uses: sigstore/cosign-installer@v3 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
+
     # Cross-platform because desktop build legs run on linux/windows/macos
     # (see ci_planning.ts PLATFORM_DEFAULTS) and each decrypts secrets.
     # macos-latest / windows-latest are both arm64/amd64 respectively as of
     # this writing — resolved dynamically from runner.os/runner.arch rather
     # than hardcoded, so a future runner-image architecture change doesn't
     # silently pick the wrong asset.
-    - name: 🔐 Install sops
+    #
+    # Verification chain: cosign confirms sops-vX.Y.Z.checksums.txt was
+    # actually signed by getsops/sops's own release workflow (keyless
+    # sigstore signing — certificate identity pinned to that exact repo +
+    # workflow, issued by GitHub's OIDC token endpoint), THEN the
+    # downloaded binary's sha256 is checked against the value inside that
+    # now-verified checksums file. Either step failing aborts before the
+    # binary is ever placed on PATH.
+    - name: 🔐 Install sops (checksum + signature verified)
       if: inputs.sops == 'true'
       shell: bash
       env:
@@ -186,11 +202,37 @@ runs:
             exit 1
             ;;
         esac
-        URL="https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/${ASSET}"
+
+        BASE_URL="https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}"
+        WORKDIR="${RUNNER_TEMP}/sops-install"
+        mkdir -p "$WORKDIR"
+        cd "$WORKDIR"
+
+        curl -sSfL -o "$ASSET" "${BASE_URL}/${ASSET}"
+        curl -sSfL -o checksums.txt "${BASE_URL}/sops-v${SOPS_VERSION}.checksums.txt"
+        curl -sSfL -o checksums.sigstore.json "${BASE_URL}/sops-v${SOPS_VERSION}.checksums.sigstore.json"
+
+        cosign verify-blob \
+          --certificate-identity-regexp "^https://github\.com/getsops/sops/\.github/workflows/release\.yml@refs/tags/v${SOPS_VERSION}\$" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          --bundle checksums.sigstore.json \
+          checksums.txt
+
+        EXPECTED=$(grep " ${ASSET}\$" checksums.txt | awk '{print $1}')
+        if [ -z "$EXPECTED" ]; then
+          echo "❌ ${ASSET} not listed in verified checksums.txt"
+          exit 1
+        fi
+        ACTUAL=$(sha256sum "$ASSET" | awk '{print $1}')
+        if [ "$EXPECTED" != "$ACTUAL" ]; then
+          echo "❌ Checksum mismatch for ${ASSET}: expected $EXPECTED, got $ACTUAL"
+          exit 1
+        fi
+
         if [ "${{ runner.os }}" = "Windows" ]; then
-          curl -sSfL -o "${RUNNER_TEMP}/sops.exe" "$URL"
+          cp "$ASSET" "${RUNNER_TEMP}/sops.exe"
           echo "${RUNNER_TEMP}" >> "$GITHUB_PATH"
         else
-          sudo curl -sSfL -o /usr/local/bin/sops "$URL"
+          sudo cp "$ASSET" /usr/local/bin/sops
           sudo chmod +x /usr/local/bin/sops
         fi

@@ -22,7 +22,7 @@ const ROOT_DIR = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' })
 
 const PLAINTEXT_PATTERNS = ['.env.production', '.env.staging'];
 
-function checkPlaintextSecrets(): void {
+export function checkPlaintextSecrets(): void {
   try {
     // Get staged files
     const staged = execSync('git diff --cached --name-only', {
@@ -68,8 +68,16 @@ function checkPlaintextSecrets(): void {
       }
       process.exit(1);
     }
-  } catch {
-    // If git commands fail (e.g., not a git repo), skip the guard silently
+  } catch (err) {
+    // 🔴 Fail closed. This guard exists to catch a real security mistake
+    // (plaintext secrets staged for commit) — an inspection failure (git
+    // command error, unreadable file) must block the commit too, not pass
+    // it through silently. ROOT_DIR above already resolves the repo root
+    // unguarded, so "not a git repo" can't reach this catch — anything
+    // landing here is a genuine, unexpected failure.
+    console.error('\n❌ PRE-COMMIT BLOCKED: could not inspect staged files for plaintext secrets');
+    console.error(`   ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
   }
 }
 
