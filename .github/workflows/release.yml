@@ -200,6 +200,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+        with:
+          sops: "true"
 
       - name: Decrypt secrets from SOPS
         shell: bash
@@ -233,6 +235,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+        with:
+          sops: "true"
 
       - name: Decrypt secrets from SOPS
         shell: bash
@@ -314,6 +318,7 @@ jobs:
         with:
           moon-cache: "true"
           install-deps: "true"
+          sops: "true"
 
       - name: Decrypt secrets from SOPS
         shell: bash
@@ -371,6 +376,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+        with:
+          sops: "true"
 
       # macOS GitHub runners ship a stock Homebrew install with several
       # third-party taps pre-added (aws/tap among them) that Homebrew 6's new
@@ -602,6 +609,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+        with:
+          sops: "true"
 
       - name: Decrypt secrets from SOPS
         shell: bash
@@ -639,6 +648,7 @@ jobs:
         with:
           moon-cache: "true"
           install-deps: "true"
+          sops: "true"
 
       - name: Decrypt secrets from SOPS
         shell: bash

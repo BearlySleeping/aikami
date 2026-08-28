@@ -48,6 +48,15 @@ inputs:
     required: false
     default: ""
 
+  sops:
+    description: 'Set to "true" to install the pinned sops CLI (C-441 secrets — decrypt_secrets.ts / encrypt_secrets.ts shell out to it). GitHub-hosted runners don''t ship it. Only jobs that decrypt/encrypt secrets need this.'
+    required: false
+    default: "false"
+  sops-version:
+    description: "sops version to install. Keep in sync with the version used locally (see flake.nix)."
+    required: false
+    default: "3.13.3"
+
 runs:
   using: "composite"
   steps:
@@ -151,3 +160,37 @@ runs:
       env:
         REGISTRY: ${{ inputs.docker-registry }}
       run: gcloud auth configure-docker "$REGISTRY" --quiet
+
+    # Cross-platform because desktop build legs run on linux/windows/macos
+    # (see ci_planning.ts PLATFORM_DEFAULTS) and each decrypts secrets.
+    # macos-latest / windows-latest are both arm64/amd64 respectively as of
+    # this writing — resolved dynamically from runner.os/runner.arch rather
+    # than hardcoded, so a future runner-image architecture change doesn't
+    # silently pick the wrong asset.
+    - name: 🔐 Install sops
+      if: inputs.sops == 'true'
+      shell: bash
+      env:
+        SOPS_VERSION: ${{ inputs.sops-version }}
+      run: |
+        set -euo pipefail
+        case "${{ runner.os }}-${{ runner.arch }}" in
+          Linux-X64)     ASSET="sops-v${SOPS_VERSION}.linux.amd64" ;;
+          Linux-ARM64)   ASSET="sops-v${SOPS_VERSION}.linux.arm64" ;;
+          macOS-X64)     ASSET="sops-v${SOPS_VERSION}.darwin.amd64" ;;
+          macOS-ARM64)   ASSET="sops-v${SOPS_VERSION}.darwin.arm64" ;;
+          Windows-X64)   ASSET="sops-v${SOPS_VERSION}.amd64.exe" ;;
+          Windows-ARM64) ASSET="sops-v${SOPS_VERSION}.arm64.exe" ;;
+          *)
+            echo "❌ Unsupported runner ${{ runner.os }}-${{ runner.arch }} for sops install"
+            exit 1
+            ;;
+        esac
+        URL="https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/${ASSET}"
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          curl -sSfL -o "${RUNNER_TEMP}/sops.exe" "$URL"
+          echo "${RUNNER_TEMP}" >> "$GITHUB_PATH"
+        else
+          sudo curl -sSfL -o /usr/local/bin/sops "$URL"
+          sudo chmod +x /usr/local/bin/sops
+        fi

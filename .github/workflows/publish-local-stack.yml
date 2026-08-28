@@ -153,6 +153,7 @@ jobs:
         uses: ./.github/actions/setup-environment
         with:
           install-deps: "true"
+          sops: "true"
 
       - name: Decrypt client secrets from SOPS
         if: matrix.needs-gcp
