@@ -2,7 +2,7 @@
 id: C-441
 title: "SOPS secrets migration — retire GCP Secret Manager and the Redis env relay"
 source: "user request 2026-08-25 — GCP Secret Manager is the project's most expensive service; CI/CD audit identified the relay it forces as the largest simplification available"
-status: approved
+status: implemented
 github:
     issue_number: null
     issue_url: null
@@ -22,7 +22,7 @@ created_at: "2026-08-25"
 | **Target**           | `scripts/src/lib/ops/download_secrets.ts`, `upload_secrets.ts`, `env_share.ts`, `.github/workflows/release.yml` (the `prepare-secrets` job), `.github/actions/setup-environment/action.yml` (the `gcp-auth` inputs), and a new `secrets/` tree |
 | **Priority**         | P2 — cost and simplification, not correctness. Nothing is broken. Sequence it after the measurement in Phase 1 confirms it is worth doing at all.                                                                                              |
 | **Dependencies**     | None hard. Overlaps C-436 (Postgres decommission removes `NEON_DATABASE_URL*` from the key set) — land C-436 first if both are queued, so this contract migrates fewer keys.                                                                   |
-| **Status**           | implemented                                                                                                                                                                                                                                    |
+| **Status** | implemented |
 | **Promotion**        | —                                                                                                                                                                                                                                              |
 | **Docs Impact**      | internal — `docs/guides/CI_CD.md` and `CONTRIBUTING.md` both describe the current `download-secrets` flow and must be rewritten.                                                                                                               |
 | **Contract version** | 2.0.0                                                                                                                                                                                                                                          |
