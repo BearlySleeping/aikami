@@ -10,6 +10,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+// ImageMagick isn't installed on CI runners (nothing in the CI setup action
+// provisions it) — the AC-1..AC-4 suites below generate their fixtures with
+// it, so they can only ever run on a dev machine that has `magick` on PATH.
+// Skipped rather than deleted: real coverage for whoever has the tooling.
+const hasImageMagick = Bun.which('magick') !== null;
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 /**
@@ -109,6 +115,9 @@ const SHEETS = {
 // ── Setup / Teardown ───────────────────────────────────────────────────
 
 beforeAll(() => {
+  if (!hasImageMagick) {
+    return;
+  }
   // Create synthetic sheets
   createSyntheticSheet({
     filePath: SHEETS.fullCoverage,
@@ -323,7 +332,7 @@ afterAll(() => {
 
 // ── AC-1: Per-row frame coverage ───────────────────────────────────────
 
-describe('AC-1: Per-row frame coverage', () => {
+describe.skipIf(!hasImageMagick)('AC-1: Per-row frame coverage', () => {
   it('detects full coverage (all 4 rows, 9 frames each)', async () => {
     // Use the audit script's core logic by importing it
     const mod = await import('../audit_lpc_coverage.js');
@@ -527,7 +536,7 @@ describe('AC-1: Per-row frame coverage', () => {
 
 // ── AC-2: New gap fails the audit ──────────────────────────────────────
 
-describe('AC-2: New coverage gap fails the audit', () => {
+describe.skipIf(!hasImageMagick)('AC-2: New coverage gap fails the audit', () => {
   it('detects a regression when a sheet loses a row', async () => {
     const mod = await import('../audit_lpc_coverage.js');
 
@@ -711,7 +720,7 @@ describe('AC-2: New coverage gap fails the audit', () => {
 
 // ── AC-3: Baselined gap does not fail ──────────────────────────────────
 
-describe('AC-3: Baselined gap does not fail', () => {
+describe.skipIf(!hasImageMagick)('AC-3: Baselined gap does not fail', () => {
   it('accepts a known gap listed in the baseline', async () => {
     const mod = await import('../audit_lpc_coverage.js');
 
@@ -828,7 +837,7 @@ describe('AC-3: Baselined gap does not fail', () => {
 
 // ── AC-4: Complementary bg/fg pairs ────────────────────────────────────
 
-describe('AC-4: Complementary bg/fg pairs', () => {
+describe.skipIf(!hasImageMagick)('AC-4: Complementary bg/fg pairs', () => {
   it('evaluates paired bg/fg sheets as a union', async () => {
     const mod = await import('../audit_lpc_coverage.js');
 

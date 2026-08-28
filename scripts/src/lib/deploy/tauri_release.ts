@@ -159,7 +159,7 @@ export const readCargoVersion = (tauriDir: string): string => {
 export type TauriBuildResult = {
   /** Absolute paths to the final distributable artifacts. */
   artifacts: string[];
-  /** Cargo.toml version. */
+  /** The version actually embedded in the built bundle (see `versionOverride`). */
   version: string;
   /** Host platform dir (linux/windows/macos). */
   platformDir: 'linux' | 'windows' | 'macos';
@@ -179,6 +179,15 @@ export type TauriBuildOptions = {
    * cmd.exe on Windows).
    */
   disableBeforeBuildCommand?: boolean;
+  /**
+   * Version to embed in the built bundle, overriding both Cargo.toml and
+   * tauri.conf.json's checked-in "version" — passed as a `--config` override
+   * so it never requires a commit to cut a release. `ci_run.ts` derives this
+   * from RELEASE_TAG (stripped of its leading "v") on `release: published`
+   * runs; omitted on workflow_dispatch / local builds, which keep using
+   * Cargo.toml's committed version as before.
+   */
+  versionOverride?: string;
 };
 
 /**
@@ -222,7 +231,13 @@ export async function buildTauriArtifacts(
   // which rejects tauri's own flags ("unexpected argument '--bundles'").
   const targetFlag = tauriTarget ? ` --target ${tauriTarget}` : '';
 
+  // Normalized once so an empty/whitespace-only string (e.g. a malformed
+  // release tag stripped down to nothing) is treated the same as "no
+  // override" everywhere below, rather than a truthy-check on the raw opt.
+  const normalizedVersionOverride = opts.versionOverride?.trim() || undefined;
+
   const configOverride: {
+    version?: string;
     build?: { beforeBuildCommand: string };
     bundle?: { createUpdaterArtifacts: boolean };
   } = {};
@@ -235,6 +250,9 @@ export async function buildTauriArtifacts(
   // working for any contributor without desktop-release secrets.
   if ((liveModes as readonly string[]).includes(mode)) {
     configOverride.bundle = { createUpdaterArtifacts: true };
+  }
+  if (normalizedVersionOverride !== undefined) {
+    configOverride.version = normalizedVersionOverride;
   }
 
   let configOverridePath: string | undefined;
@@ -301,7 +319,7 @@ export async function buildTauriArtifacts(
 
   return {
     artifacts: finalArtifacts,
-    version: readCargoVersion(tauriDir),
+    version: normalizedVersionOverride ?? readCargoVersion(tauriDir),
     platformDir,
     bundleDir,
   };
@@ -365,12 +383,17 @@ export async function deployTauriRelease(
     checksum = cache.checksum;
   }
 
-  // 1-4. Build + collect (shared with ci_run.ts)
+  // 1-4. Build + collect (shared with ci_run.ts). When this local pipeline is
+  // itself publishing to a real GitHub Release (RELEASE_TAG set — see step 5
+  // below), derive the embedded version from the tag the same way ci_run.ts
+  // does, so a manually-run `RELEASE_TAG=v0.1.1 bun run deploy ... client-tauri`
+  // embeds the same version its own uploaded latest.json will claim.
+  const versionOverride = releaseTag ? releaseTag.replace(/^v/, '') : undefined;
   const {
     artifacts,
     version: ver,
     bundleDir,
-  } = await buildTauriArtifacts(config, mode, rootDir, {});
+  } = await buildTauriArtifacts(config, mode, rootDir, { versionOverride });
 
   // 5. Publish artifacts
   // A real GitHub Release only exists when this run was triggered by

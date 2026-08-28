@@ -188,6 +188,13 @@ runs:
       shell: bash
       env:
         SOPS_VERSION: ${{ inputs.sops-version }}
+        # Git Bash on windows-latest runners mangles backslash-escaped
+        # characters when an argument is forwarded to a native (non-MSYS)
+        # .exe — cosign.exe's --certificate-identity-regexp arrives with
+        # every `\.` rewritten to `/.`, which cosign then rejects as a
+        # non-matching identity. MSYS2_ARG_CONV_EXCL='*' disables that
+        # argv-conversion heuristic for this step; no-op on Linux/macOS.
+        MSYS2_ARG_CONV_EXCL: '*'
       run: |
         set -euo pipefail
         case "${{ runner.os }}-${{ runner.arch }}" in

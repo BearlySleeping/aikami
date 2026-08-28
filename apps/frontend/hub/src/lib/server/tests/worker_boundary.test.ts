@@ -27,6 +27,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import { matchAlias, resolveFile, svelteAliases } from '../../../../scripts/svelte_aliases';
 
 const hubRoot = resolve(import.meta.dir, '../../../..');
 const repoRoot = resolve(hubRoot, '../../..');
@@ -76,30 +77,6 @@ const stripComments = (source: string): string =>
 const isTestFile = (file: string): boolean =>
   file.includes('.test.') || /[/\\](?:tests|__tests__)[/\\]/.test(file);
 
-/** Resolve a path that may be missing its extension or be a directory barrel. */
-const resolveFile = (candidate: string): string | undefined => {
-  const attempts = [
-    candidate,
-    // Some barrels import the emitted name (`./lib/ai/index.js`) while the
-    // source on disk is `.ts`.
-    ...(candidate.endsWith('.js') ? [candidate.replace(/\.js$/, '.ts')] : []),
-    `${candidate}.ts`,
-    `${candidate}.js`,
-    join(candidate, 'index.ts'),
-    join(candidate, 'index.js'),
-  ];
-  for (const attempt of attempts) {
-    try {
-      if (statSync(attempt).isFile()) {
-        return attempt;
-      }
-    } catch {
-      // Try the next candidate.
-    }
-  }
-  return undefined;
-};
-
 /** Every file under `directory` matching `predicate`, recursively. */
 const filesUnder = (directory: string, predicate: (file: string) => boolean): string[] => {
   const found: string[] = [];
@@ -112,35 +89,6 @@ const filesUnder = (directory: string, predicate: (file: string) => boolean): st
     }
   }
   return found;
-};
-
-/**
- * The `kit.alias` map from svelte.config.js, read from the config itself so a
- * new alias cannot silently shrink this test's coverage.
- *
- * The config builds values with `toSrcPath('x')` / `toPackagesPath('x')`, which
- * is regular enough to read without executing it.
- */
-type Alias = { prefix: string; base: string; wildcard: boolean };
-
-const svelteAliases = (): Alias[] => {
-  // Hub uses SvelteKit 3 config embedded in vite.config.ts (no svelte.config.js)
-  const source = readFileSync(join(hubRoot, 'vite.config.ts'), 'utf8');
-  const pattern = /'?([$@][\w/*.-]+)'?:\s*to(Src|Packages)Path\('([^']+)'\)/g;
-  return [...source.matchAll(pattern)].map(([, key, kind, value]) => {
-    const root = kind === 'Src' ? join(hubRoot, 'src') : packagesDirectory;
-    const wildcard = (key as string).endsWith('/*');
-    // The config is inconsistent about whether the *value* repeats the `/*`
-    // (`'$lib/*': toSrcPath('lib/*')` vs
-    // `'@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib')`).
-    // Normalise both sides to a bare directory and rejoin explicitly.
-    const target = (value as string).replace(/\/\*$/, '');
-    return {
-      prefix: (key as string).replace(/\/\*$/, ''),
-      base: join(root, target),
-      wildcard,
-    };
-  });
 };
 
 /** Workspace package name → its entry files, from each package.json. */
@@ -177,7 +125,7 @@ const workspaceEntries = (): Map<string, string> => {
   return entries;
 };
 
-const ALIASES = svelteAliases();
+const ALIASES = svelteAliases(hubRoot, packagesDirectory);
 const WORKSPACE = workspaceEntries();
 
 type Resolution =
@@ -185,34 +133,6 @@ type Resolution =
   | { kind: 'node'; specifier: string }
   | { kind: 'external' }
   | { kind: 'unresolved' };
-
-/**
- * Longest-prefix match, mirroring Vite: an alias applies to sub-paths whether
- * or not its key ends in `/*` (`$utils` resolves `$utils/catalog.ts`).
- *
- * `$lib` and `$lib/*` are declared with the same prefix but different roots,
- * so ties break toward the wildcard entry for a sub-path and the plain entry
- * for an exact hit.
- */
-const matchAlias = (specifier: string): Alias | undefined => {
-  let best: Alias | undefined;
-  for (const alias of ALIASES) {
-    const isSubPath = specifier.startsWith(`${alias.prefix}/`);
-    if (!isSubPath && specifier !== alias.prefix) {
-      continue;
-    }
-    const better =
-      best === undefined ||
-      alias.prefix.length > best.prefix.length ||
-      (alias.prefix.length === best.prefix.length &&
-        alias.wildcard === isSubPath &&
-        best.wildcard !== isSubPath);
-    if (better) {
-      best = alias;
-    }
-  }
-  return best;
-};
 
 const resolveSpecifier = (specifier: string, importer: string): Resolution => {
   if (specifier.startsWith('node:')) {
@@ -226,7 +146,7 @@ const resolveSpecifier = (specifier: string, importer: string): Resolution => {
     return path ? { kind: 'file', path } : { kind: 'unresolved' };
   }
 
-  const alias = matchAlias(specifier);
+  const alias = matchAlias(ALIASES, specifier);
   if (alias !== undefined) {
     const rest = specifier.slice(alias.prefix.length).replace(/^\//, '');
     const path = resolveFile(rest ? join(alias.base, rest) : alias.base);

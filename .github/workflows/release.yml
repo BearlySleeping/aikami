@@ -225,6 +225,7 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       cached_checksum: ${{ steps.plan.outputs.cached_checksum }}
       cached_release_tag: ${{ steps.plan.outputs.cached_release_tag }}
+      cached_version: ${{ steps.plan.outputs.cached_version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -282,6 +283,7 @@ jobs:
             --version="$VERSION" \
             --cached-checksum="$CACHED_CHECKSUM" \
             --cached-release-tag="$CACHED_RELEASE_TAG" \
+            --cached-version="$CACHED_VERSION" \
             --platforms="$PLATFORMS" --bundles="$BUNDLES" $FORCE_FLAG
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
@@ -289,6 +291,7 @@ jobs:
           VERSION: ${{ needs.plan-desktop.outputs.version }}
           CACHED_CHECKSUM: ${{ needs.plan-desktop.outputs.cached_checksum }}
           CACHED_RELEASE_TAG: ${{ needs.plan-desktop.outputs.cached_release_tag }}
+          CACHED_VERSION: ${{ needs.plan-desktop.outputs.cached_version }}
           PLATFORMS: ${{ github.event.inputs.platforms }}
           BUNDLES: ${{ github.event.inputs.bundles }}
           FORCE_FLAG: ${{ github.event.inputs.force == 'true' && '--force' || '' }}

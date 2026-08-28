@@ -9,7 +9,7 @@
 // mismatched maps/atlases.
 
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ATLAS_COLS,
@@ -24,6 +24,13 @@ import {
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
 const MANIFEST_PATH = join(REPO_ROOT, 'content/packs/emberwatch/manifest.json');
+const ATLAS_PATH = join(
+  REPO_ROOT,
+  'apps/frontend/client/static/game-data/sprites/tilesets/atlas.json',
+);
+// static/game-data/ is gitignored (assets ship from R2, not the repo — see
+// C-435) — this atlas only exists on a machine that generated it locally.
+const hasCommittedAtlas = existsSync(ATLAS_PATH);
 
 /** Reads the committed emberwatch manifest tiles. */
 const readManifestTilesFromDisk = (): Record<string, { name?: string; frame?: string }> => {
@@ -174,14 +181,11 @@ describe('C-378 — corner-16 terrain frame derivation', () => {
   });
 });
 
-describe('C-378 AC-5 — atlas packer determinism', () => {
+describe.skipIf(!hasCommittedAtlas)('C-378 AC-5 — atlas packer determinism', () => {
   test('all 32 corner-16 frame rects exist at 32×32 with 1px margin and distinct cells', () => {
-    const atlas = JSON.parse(
-      readFileSync(
-        join(REPO_ROOT, 'apps/frontend/client/static/game-data/sprites/tilesets/atlas.json'),
-        'utf-8',
-      ),
-    ) as { frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> };
+    const atlas = JSON.parse(readFileSync(ATLAS_PATH, 'utf-8')) as {
+      frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }>;
+    };
     const CELL = 34; // extruded cell pitch (32 content + 1px margin each side)
     const seenRects = new Set<string>();
     let checked = 0;
@@ -218,12 +222,9 @@ describe('C-378 AC-5 — atlas packer determinism', () => {
   });
 
   test('the committed atlas is 544×272 (extruded)', () => {
-    const atlas = JSON.parse(
-      readFileSync(
-        join(REPO_ROOT, 'apps/frontend/client/static/game-data/sprites/tilesets/atlas.json'),
-        'utf-8',
-      ),
-    ) as { meta: { size: { w: number; h: number } } };
+    const atlas = JSON.parse(readFileSync(ATLAS_PATH, 'utf-8')) as {
+      meta: { size: { w: number; h: number } };
+    };
     expect(atlas.meta.size).toEqual({ w: 544, h: 272 });
   });
 });
