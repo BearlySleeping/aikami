@@ -29,14 +29,10 @@ name: Release
 #                      the whole point is that the rest of the stack still
 #                      deploys fine locally (`bun run deploy`) and doesn't
 #                      need to burn Action minutes on every desktop release.
-#   prepare-secrets  → the ONE place that authenticates to GCP and downloads
-#                      Secret Manager secrets, for the UNION of every app in
-#                      scope this run (desktop + web).
-#                      Shared to every other job over Redis (env_share.ts) —
-#                      no job below this one re-authenticates to GCP just to
-#                      read secrets (they may still auth to GCP for their own
-#                      deploy calls — wrangler deploy, docker push, etc.
-#                      that's a different concern from *fetching* secrets).
+#   decrypt-secrets → decrypts SOPS-encrypted env files locally (C-441).
+#                      No GCP auth, no Redis relay. Each job that needs
+#                      secrets decrypts independently; the operation is
+#                      fast (~100ms) and idempotent.
 #   plan-desktop     → (client-tauri only) checksum + shared version +
 #                      cached-release lookup, from the shared secrets.
 #   plan-matrix      → platform/bundle filtering + per-leg build/reuse/skip
@@ -55,8 +51,13 @@ name: Release
 #                      when resolve-plan found apps of that type. Each calls
 #                      the same local orchestrator (scripts/.../deploy/index.ts)
 #                      scoped to just its own apps — index.ts already handles
-#                      checksum-skip, parallel deploys, and build dedup for a
-#                      given set of apps, so these jobs stay thin.
+#                      checksum-skip, parallel deploys, and build dedup for
+#                      a given set of apps, so these jobs stay thin.
+#
+# 🔐 Secrets (C-441): All env files are decrypted locally from SOPS-encrypted
+#   secrets/<mode>.enc.env files committed to the repo. The only GitHub
+#   secret needed is SOPS_AGE_KEY. No GCP auth, no Redis relay, no
+#   env_share.ts.
 # ────────────────────────────────────────────────────────────────────────
 env:
   # Default: desktop only. Overridden per-event in resolve-plan.
@@ -95,12 +96,11 @@ on:
       platforms:
         description: "Comma-separated platforms to build (linux,windows,macos). Empty = all"
         required: false
-        type: string
         default: ""
+        type: string
       bundles:
         description: "Comma-separated bundle targets (appimage,nsis,app,dmg) — deb/rpm/msi aren't in PLATFORM_DEFAULTS (see ci_planning.ts). Empty = platform defaults"
         required: false
-        type: string
         default: ""
 # Two independent queues, because the two trigger kinds want opposite
 # behaviour:
@@ -178,18 +178,15 @@ jobs:
         shell: bash
         run: bun scripts/src/lib/deploy/resolve_plan.ts
 
-  # ── Prepare secrets: the ONE Secret Manager fetch for this whole run ─
-  # Every job below needs the same .env.{mode} files. Fetching per-job/
-  # per-service-type spawned concurrent `gcloud secrets` processes that
-  # collide on gcloud's config/token cache (Windows file-lock). Fetch ONCE
-  # here, for every app across every service type in scope this run, and
-  # hand the files down via Upstash Redis (per-run key, 4h TTL) — the repo
-  # is PUBLIC, so no env content may ride in downloadable workflow
-  # artifacts. Downstream jobs restore the files with env_share.ts --get.
-  prepare-secrets:
-    name: 🔐 Prepare Secrets
+  # ── Download secrets: decrypt SOPS-encrypted env files (C-441) ─────
+  # Every job below needs the same .env.{mode} files. With the SOPS backend,
+  # decryption is a local operation — no GCP auth, no Redis relay.
+  # Each job decrypts independently; the operation is fast (~100ms) and
+  # idempotent. The only GitHub secret needed is SOPS_AGE_KEY.
+  decrypt-secrets:
+    name: 🔓 Decrypt Secrets
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     needs: [resolve-plan]
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
@@ -201,35 +198,25 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-environment
         with:
-          gcp-auth: "true"
-          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
+          sops: "true"
 
-      - name: Download Secrets from GCP Secret Manager
+      - name: Decrypt secrets from SOPS
         shell: bash
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
-          bun scripts/src/lib/ops/download_secrets.ts --mode="$MODE" --strict scripts \
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
             $ALL_APPS
 
-      - name: Share env files via Redis
-        shell: bash
-        env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
-        run: |
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --put
-
   # ── Plan desktop: checksum + version + cache read ──────────────────
-  # No GCP auth here anymore — prepare-secrets already fetched the .env file
-  # this checksum hashes; this job just restores it from Redis.
+  # Decrypts secrets locally from SOPS (no GCP auth, no Redis relay).
   plan-desktop:
     name: Plan Desktop Release
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [resolve-plan, prepare-secrets]
+    needs: [resolve-plan, decrypt-secrets]
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
     if: needs.resolve-plan.outputs.desktop_apps != ''
@@ -246,15 +233,18 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+        with:
+          sops: "true"
 
-      - name: Restore env files from Redis
+      - name: Decrypt secrets from SOPS
         shell: bash
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+          ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
+            $ALL_APPS
 
       - name: Compute checksum + version
         id: plan
@@ -265,7 +255,7 @@ jobs:
           RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
   # ── Plan-matrix: build/skip/reuse decisions → the JSON matrix ─────
-  # Deliberately NO secret references (no GCP auth, no download_secrets) so
+  # Deliberately NO secret references (no download_secrets/decrypt_secrets calls) so
   # GitHub's masker never registers `{`/`}` here and the JSON matrix output
   # survives. All state comes in as plain strings from plan-desktop.
   plan-matrix:
@@ -312,7 +302,7 @@ jobs:
     name: Build Web Bundle
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [plan-desktop, plan-matrix]
+    needs: [resolve-plan, plan-desktop, plan-matrix]
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
     if: needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.needs_build == 'true'
@@ -327,15 +317,17 @@ jobs:
         with:
           moon-cache: "true"
           install-deps: "true"
+          sops: "true"
 
-      - name: Restore env files from Redis
+      - name: Decrypt secrets from SOPS
         shell: bash
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+          ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
+            $ALL_APPS
 
       - name: Build web bundle
         shell: bash
@@ -366,7 +358,7 @@ jobs:
     name: Desktop (${{ matrix.platform }}${{ matrix.action == 'reuse' && ' — reuse' || '' }})
     runs-on: ${{ matrix.runsOn }}
     timeout-minutes: 45
-    needs: [plan-desktop, plan-matrix, build-web]
+    needs: [resolve-plan, plan-desktop, plan-matrix, build-web]
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
     if: needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.matrix != '[]'
@@ -384,6 +376,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+        with:
+          sops: "true"
 
       # macOS GitHub runners ship a stock Homebrew install with several
       # third-party taps pre-added (aws/tap among them) that Homebrew 6's new
@@ -460,17 +454,19 @@ jobs:
         if: matrix.action == 'build'
         run: bun install --frozen-lockfile
 
-      # Env files for the leg (REDIS creds for the deploy cache) — restored
-      # from the prepare-secrets job's shared Redis entry, no per-leg GSM
-      # fetch (avoids concurrent-gcloud file-lock races, see prepare-secrets).
-      - name: Restore env files from Redis
+      # Env files for the leg — decrypted locally from SOPS, no GCP auth,
+      # no Redis relay (C-441). Each leg decrypts independently; the
+      # operation is fast (~100ms) and avoids the old concurrent-gcloud
+      # file-lock races that motivated the Redis relay.
+      - name: Decrypt secrets from SOPS
         shell: bash
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+          ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
+            $ALL_APPS
 
       # ── Build legs only: consume the shared web bundle ─────────────
       - name: Download shared web build
@@ -496,25 +492,25 @@ jobs:
           VERSION: ${{ needs.plan-desktop.outputs.version }}
           CHECKSUM: ${{ needs.plan-desktop.outputs.checksum }}
           LEG: ${{ toJson(matrix) }}
+          CI: "true"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_TARGET: ${{ matrix.platform == 'macos' && 'universal-apple-darwin' || '' }}
+          # Updater signing key: passed directly as a GitHub Actions secret,
+          # NEVER routed through the SOPS-decrypted scripts/.env.{mode} file
+          # — see NEVER_ENCRYPT_KEYS in secrets_backend.ts (C-441 AC-6). The
+          # client's vite envPrefix is ['PUBLIC_'], so this could never reach
+          # the frontend bundle either way (GHSA-2rcp-jvr4-r259 safe).
+          # src-tauri/tauri.conf.json's static createUpdaterArtifacts stays
+          # `false` (so a plain local `bun tauri build` needs no signing key)
+          # — tauri_release.ts's buildTauriArtifacts() overrides it to `true`
+          # at build time for staging/production only (see liveModes).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           bun scripts/src/lib/deploy/ci_run.ts \
             --mode="$MODE" \
             --version="$VERSION" \
             --checksum="$CHECKSUM"
-          CI: "true"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_TARGET: ${{ matrix.platform == 'macos' && 'universal-apple-darwin' || '' }}
-          # Updater signing key: NOT passed here. It lives in GCM as
-          # TAURI_SIGNING_PRIVATE_KEY / _PASSWORD (unprefixed, scripts/.env.example)
-          # and reaches this step's process.env automatically — the "Restore env
-          # files from Redis" step above writes scripts/.env.{mode} to disk, and
-          # ci_run.ts's initScriptsEnv(mode) call loads it before spawning
-          # `tauri build`. The client's vite envPrefix is ['PUBLIC_'], so these
-          # could never reach the frontend bundle either way (GHSA-2rcp-jvr4-r259
-          # safe). src-tauri/tauri.conf.json's static createUpdaterArtifacts
-          # stays `false` (so a plain local `bun tauri build` needs no signing
-          # key) — tauri_release.ts's buildTauriArtifacts() overrides it to
-          # `true` at build time for staging/production only (see liveModes).
 
       # Updater fragment for this leg (release runs only) — the
       # update-manifest job merges all fragments into latest.json.
@@ -606,7 +602,7 @@ jobs:
     name: Announce Release (Discord)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [plan-matrix, deploy-desktop]
+    needs: [resolve-plan, plan-matrix, deploy-desktop]
     if: github.event_name == 'release' && needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.matrix != '[]'
     steps:
       - name: Checkout repository
@@ -614,13 +610,18 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+        with:
+          sops: "true"
 
-      - name: Restore env files from Redis
+      - name: Decrypt secrets from SOPS
         shell: bash
-        run: bun scripts/src/lib/ops/env_share.ts --mode=production --get
         env:
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+          MODE: ${{ github.event.inputs.mode || 'production' }}
+          ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
+            $ALL_APPS
 
       - name: Post release announcement to Discord
         shell: bash
@@ -634,7 +635,7 @@ jobs:
     name: Cloudflare Workers
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [resolve-plan, prepare-secrets]
+    needs: [resolve-plan, decrypt-secrets]
     environment:
       name: ${{ github.event.inputs.mode || 'production' }}
     if: needs.resolve-plan.outputs.cloudflare_apps != ''
@@ -649,15 +650,17 @@ jobs:
         with:
           moon-cache: "true"
           install-deps: "true"
+          sops: "true"
 
-      - name: Restore env files from Redis
+      - name: Decrypt secrets from SOPS
         shell: bash
         env:
           MODE: ${{ github.event.inputs.mode || 'production' }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_TOKEN: ${{ secrets.REDIS_TOKEN }}
+          ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
-          bun scripts/src/lib/ops/env_share.ts --mode="$MODE" --get
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
+            $ALL_APPS
 
       - name: Run Web Deploy Pipeline (Cloudflare)
         shell: bash
@@ -681,7 +684,7 @@ jobs:
     if: ${{ failure() }}
     needs:
       - resolve-plan
-      - prepare-secrets
+      - decrypt-secrets
       - plan-desktop
       - plan-matrix
       - build-web

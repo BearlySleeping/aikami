@@ -3,11 +3,7 @@
 // C-447 AC-1, AC-2, AC-3: Hub walk sandbox visual tests.
 // Validates map rendering, collision overlay, and z-band/render-order overlays.
 
-import {
-  CollisionOverlaySchema,
-  SandboxLoadedSchema,
-  ZOrderSchema,
-} from '@aikami/schemas';
+import { CollisionOverlaySchema, SandboxLoadedSchema, ZOrderSchema } from '@aikami/schemas';
 import { defineConfig } from '$visual/core/config';
 
 // ── Prompts ───────────────────────────────────────────────────────────────
@@ -73,12 +69,12 @@ const ZORDER_FRONT_PROMPT = [
   '',
   'EXPECTED:',
   '- The character is positioned below a tall object (wall, tree, building).',
-  '- The character fully occludes the object\'s base (drawn in front).',
+  "- The character fully occludes the object's base (drawn in front).",
   '- The character does NOT overlap the object while also being occluded.',
   '',
   'EVALUATE:',
   '- Is the character in front of the object?',
-  '- Does the character occlude the object\'s base?',
+  "- Does the character occlude the object's base?",
   '- Is there any conflicting overlap?',
   '',
   'Score: 90-100 for correct z-ordering, 70-89 for partial, 0-69 for incorrect.',

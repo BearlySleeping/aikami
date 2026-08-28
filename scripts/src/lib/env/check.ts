@@ -83,7 +83,7 @@ async function checkGcp(): Promise<boolean> {
     if (code === 0 && account) {
       warn(`Using user account: ${account}`);
       warn(`For service account auth, ensure the SA key is in .env.${mode}`);
-      warn(`Run: bun run scripts/src/lib/ops/download_secrets.ts --mode=${mode}`);
+      warn(`Run: bun run scripts/src/lib/ops/decrypt_secrets.ts --mode=${mode}`);
       return true;
     }
 

@@ -63,8 +63,6 @@ import { deployDockerRelease } from './docker_release';
 import { type AppResult, type NotificationInput, notifyDeployment } from './notification';
 import { deployTauriRelease } from './tauri_release';
 import {
-  authenticateDocker,
-  ensureGcloudAuth,
   getCurrentBranch,
   isVerbose,
   resolveProjectId,
@@ -327,12 +325,11 @@ async function main(): Promise<void> {
     }
   }
 
-  // Auth check — user credentials first, then fall back to the mode's
-  // service-account key (.secrets/gcp_sa_key.{mode}.json) so deploys work
-  // without an interactive `gcloud auth login`.
-  ensureGcloudAuth(mode, projectId, ROOT_DIR);
-
-  authenticateDocker();
+  // No GCP auth gate here (C-441 removed GSM; every currently-enabled app
+  // is either a Cloudflare Worker or a D1 migration, neither needs GCP).
+  // docker-release apps authenticate their own Artifact Registry access via
+  // authenticateDocker() inside docker_release.ts when that path actually
+  // runs — see deployDockerRelease().
 
   // ── Pre-flight: Check deployment caches (before any builds) ──
   log(`\n${c.bold}Checking deployment caches...${c.reset}`);

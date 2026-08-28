@@ -59,10 +59,6 @@ const DEPLOY_ROLES: Array<{ role: string; why: string }> = [
     role: 'roles/storage.objectAdmin',
     why: 'Firebase Hosting/Functions staging buckets + asset uploads',
   },
-  {
-    role: 'roles/secretmanager.admin',
-    why: 'create/update/read secrets in GSM (bun run upload-secrets, download-secrets)',
-  },
 ];
 
 /**
@@ -71,10 +67,6 @@ const DEPLOY_ROLES: Array<{ role: string; why: string }> = [
  * deliberately smaller than the deploy role set.
  */
 const RUNTIME_ROLES: Array<{ role: string; why: string }> = [
-  {
-    role: 'roles/secretmanager.secretAccessor',
-    why: 'runtime secret reads (Cloud Run --set-secrets values)',
-  },
   { role: 'roles/logging.logWriter', why: 'Cloud Run runtime writes logs' },
   {
     role: 'roles/firebase.admin',

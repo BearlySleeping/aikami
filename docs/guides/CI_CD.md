@@ -211,17 +211,70 @@ Third-party service outages must never block a merge.
 
 ## Secrets
 
-Deploy-time secrets live in **GCP Secret Manager** and are pulled by
-`prepare-secrets`. The mapping from env key to secret name is in
+Deploy-time secrets are stored as **SOPS-encrypted files** committed to the
+repository under `secrets/<mode>.enc.env` (see C-441). They are encrypted with
+`age` and decrypted locally — no cloud round-trip, no GCP dependency.
+
+The mapping from env key to secret name is in
 `scripts/src/lib/deploy/deployment_config.ts`.
 
+### Local usage
+
 ```bash
-bun run download-secrets --mode staging      # needs gcloud auth
-bun run upload-secrets --mode staging
+# Decrypt secrets for a mode (needs an age key — see Key management below)
+bun run decrypt-secrets --mode staging
+
+# Encrypt secrets from .env.staging into SOPS
+bun run encrypt-secrets --mode staging
+
+# Emulator mode — no key needed at all
+bun run decrypt-secrets --mode emulator
 ```
 
 **Contributors never need any of this.** `bun run setup:env` generates a working
 local env with no cloud access at all.
+
+### CI usage
+
+In CI, the `SOPS_AGE_KEY` GitHub secret provides the decryption key. Every job
+that needs secrets runs:
+
+```bash
+bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict
+```
+
+No GCP auth, no Redis relay, no `env_share.ts`. GCP Secret Manager, the old
+`prepare-secrets` job, and the Upstash Redis relay have all been removed
+(C-441) — SOPS/age is the only secrets backend.
+
+### Key management
+
+- **`.sops.yaml`** at the repo root defines which age recipients can decrypt.
+- **`.age/recipients.txt`** lists public keys (never private keys).
+- Locally, sops resolves the decryption key from `SOPS_AGE_KEY_FILE` (an
+  aikami-only key at `.age/maintainer_key.txt`, exported by
+  `scripts/direnv/bootstrap.sh` — kept separate from any personal
+  dotfiles-managed default), falling back to
+  `~/.config/sops/age/keys.txt`.
+- **`TAURI_SIGNING_PRIVATE_KEY`** is NEVER committed — it lives in a GitHub
+  Actions secret under separate custody.
+
+### Adding a new secret
+
+1. Add the key to the relevant `.env.example` file (empty value).
+2. Run `bun run decrypt-secrets --mode <mode>` to pull existing secrets.
+3. Set the new key's value in the generated `.env.<mode>`.
+4. Run `bun run encrypt-secrets --mode <mode>` to encrypt.
+5. Commit the updated `secrets/<mode>.enc.env`.
+
+### Key rotation
+
+1. Generate a new age key: `age-keygen -o ~/.age/new_key.txt`
+2. Add the public key to `.age/recipients.txt` and `.sops.yaml`.
+3. Re-encrypt: `sops updatekeys secrets/*.enc.env`
+4. Remove the old recipient from `.sops.yaml`.
+5. Re-encrypt again.
+6. Distribute the new private key out of band.
 
 Cloudflare API tokens for `wrangler deploy` are stored as GitHub Actions
 secrets on the repository.

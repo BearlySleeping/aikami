@@ -7,8 +7,8 @@
 // This route is client-only (ssr: false in the page) — the load function
 // only validates the tag and provides data; rendering is entirely client-side.
 
-import { error } from '@sveltejs/kit';
 import type { CatalogAssetEntry } from '@aikami/schemas';
+import { error } from '@sveltejs/kit';
 import {
   CatalogIndexUnavailableError,
   getCategoryEntries,
@@ -58,6 +58,7 @@ export const load: PageServerLoad = async ({ params, setHeaders, depends }) => {
       // Verify that the tilesets origin matches the maps origin
       if (tilesetsData.originUrl !== categoryData.originUrl) {
         // Origins differ — this is unexpected but we log and continue with the map's origin
+        // biome-ignore lint/suspicious/noConsole: intentional diagnostic warning, no logger wired into this loader
         console.warn(
           `Tileset origin (${tilesetsData.originUrl}) differs from map origin (${categoryData.originUrl})`,
         );

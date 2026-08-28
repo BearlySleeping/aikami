@@ -4,12 +4,15 @@
 #
 # Shared setup for release/deploy jobs. Every input defaults to "off" so each
 # job opts INTO only what it actually needs instead of every job paying for
-# every tool (Node, GCP auth, Docker registry auth, Bun/Moon caches).
+# every tool (Node, Docker registry auth, Bun/Moon caches).
+#
+# GCP auth was removed in C-441 (SOPS/age replaced GCP Secret Manager as the
+# secrets backend) — no job needs a GCP credential anymore.
 #
 # Assumes `actions/checkout` already ran — checkout is deliberately NOT
 # included here so callers control fetch-depth / ref per job.
 name: "Setup Deploy Environment"
-description: "Bun (+ optional Node), optional GCP auth, optional Docker registry auth, optional Bun/Moon build cache — only what the calling job needs."
+description: "Bun (+ optional Node), optional Docker registry auth, optional Bun/Moon build cache — only what the calling job needs."
 
 inputs:
   bun-version:
@@ -40,18 +43,19 @@ inputs:
     required: false
     default: "true"
 
-  gcp-auth:
-    description: 'Set to "true" to authenticate to Google Cloud. Only needed by the single secrets job and by jobs that call gcloud/docker push directly at deploy time — NOT by every job (see prepare-secrets in release.yml).'
-    required: false
-    default: "false"
-  gcp-service-account-key:
-    description: "The GCP service account key JSON. Required if gcp-auth is true."
-    required: false
-
   docker-registry:
     description: 'Set to a registry host (e.g. "europe-west1-docker.pkg.dev") to run `gcloud auth configure-docker` against it. Empty = skip.'
     required: false
     default: ""
+
+  sops:
+    description: 'Set to "true" to install the pinned sops CLI (C-441 secrets — decrypt_secrets.ts / encrypt_secrets.ts shell out to it). GitHub-hosted runners don''t ship it. Only jobs that decrypt/encrypt secrets need this.'
+    required: false
+    default: "false"
+  sops-version:
+    description: "sops version to install. Keep in sync with the version used locally (see flake.nix)."
+    required: false
+    default: "3.13.3"
 
 runs:
   using: "composite"
@@ -143,16 +147,6 @@ runs:
       shell: bash
       run: bun moon clean --lifetime '7 days' || echo "moon clean failed — continuing with an unpruned cache"
 
-    - name: 🔑 Authenticate to Google Cloud
-      if: inputs.gcp-auth == 'true'
-      uses: google-github-actions/auth@v3 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
-      with:
-        credentials_json: ${{ inputs.gcp-service-account-key }}
-
-    - name: ☁️ Setup Google Cloud SDK
-      if: inputs.gcp-auth == 'true'
-      uses: google-github-actions/setup-gcloud@v3 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
-
     # Force moon to use the globally installed bun (from setup-bun) instead
     # of provisioning its own via proto. Without this, moon's toolchain sees
     # `bun: version: "latest"` in .moon/toolchains.yml and downloads a
@@ -166,3 +160,79 @@ runs:
       env:
         REGISTRY: ${{ inputs.docker-registry }}
       run: gcloud auth configure-docker "$REGISTRY" --quiet
+
+    # cosign verifies the downloaded sops binary below wasn't tampered with
+    # in transit or substituted by a compromised release — this installs a
+    # CI credential (decrypts every production secret), so an unverified
+    # binary download here is a real supply-chain risk, not a theoretical one.
+    - name: 🔏 Install cosign
+      if: inputs.sops == 'true'
+      uses: sigstore/cosign-installer@v3 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
+
+    # Cross-platform because desktop build legs run on linux/windows/macos
+    # (see ci_planning.ts PLATFORM_DEFAULTS) and each decrypts secrets.
+    # macos-latest / windows-latest are both arm64/amd64 respectively as of
+    # this writing — resolved dynamically from runner.os/runner.arch rather
+    # than hardcoded, so a future runner-image architecture change doesn't
+    # silently pick the wrong asset.
+    #
+    # Verification chain: cosign confirms sops-vX.Y.Z.checksums.txt was
+    # actually signed by getsops/sops's own release workflow (keyless
+    # sigstore signing — certificate identity pinned to that exact repo +
+    # workflow, issued by GitHub's OIDC token endpoint), THEN the
+    # downloaded binary's sha256 is checked against the value inside that
+    # now-verified checksums file. Either step failing aborts before the
+    # binary is ever placed on PATH.
+    - name: 🔐 Install sops (checksum + signature verified)
+      if: inputs.sops == 'true'
+      shell: bash
+      env:
+        SOPS_VERSION: ${{ inputs.sops-version }}
+      run: |
+        set -euo pipefail
+        case "${{ runner.os }}-${{ runner.arch }}" in
+          Linux-X64)     ASSET="sops-v${SOPS_VERSION}.linux.amd64" ;;
+          Linux-ARM64)   ASSET="sops-v${SOPS_VERSION}.linux.arm64" ;;
+          macOS-X64)     ASSET="sops-v${SOPS_VERSION}.darwin.amd64" ;;
+          macOS-ARM64)   ASSET="sops-v${SOPS_VERSION}.darwin.arm64" ;;
+          Windows-X64)   ASSET="sops-v${SOPS_VERSION}.amd64.exe" ;;
+          Windows-ARM64) ASSET="sops-v${SOPS_VERSION}.arm64.exe" ;;
+          *)
+            echo "❌ Unsupported runner ${{ runner.os }}-${{ runner.arch }} for sops install"
+            exit 1
+            ;;
+        esac
+
+        BASE_URL="https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}"
+        WORKDIR="${RUNNER_TEMP}/sops-install"
+        mkdir -p "$WORKDIR"
+        cd "$WORKDIR"
+
+        curl -sSfL -o "$ASSET" "${BASE_URL}/${ASSET}"
+        curl -sSfL -o checksums.txt "${BASE_URL}/sops-v${SOPS_VERSION}.checksums.txt"
+        curl -sSfL -o checksums.sigstore.json "${BASE_URL}/sops-v${SOPS_VERSION}.checksums.sigstore.json"
+
+        cosign verify-blob \
+          --certificate-identity-regexp "^https://github\.com/getsops/sops/\.github/workflows/release\.yml@refs/tags/v${SOPS_VERSION}\$" \
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+          --bundle checksums.sigstore.json \
+          checksums.txt
+
+        EXPECTED=$(grep " ${ASSET}\$" checksums.txt | awk '{print $1}')
+        if [ -z "$EXPECTED" ]; then
+          echo "❌ ${ASSET} not listed in verified checksums.txt"
+          exit 1
+        fi
+        ACTUAL=$(sha256sum "$ASSET" | awk '{print $1}')
+        if [ "$EXPECTED" != "$ACTUAL" ]; then
+          echo "❌ Checksum mismatch for ${ASSET}: expected $EXPECTED, got $ACTUAL"
+          exit 1
+        fi
+
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          cp "$ASSET" "${RUNNER_TEMP}/sops.exe"
+          echo "${RUNNER_TEMP}" >> "$GITHUB_PATH"
+        else
+          sudo cp "$ASSET" /usr/local/bin/sops
+          sudo chmod +x /usr/local/bin/sops
+        fi

@@ -17,15 +17,14 @@ The `bun run setup` script is a CLI guide that checks your local machine
 like jdk/chromium, and Tauri build deps) and prints install commands for
 anything missing.
 
-`bun run setup:env` (`download_secrets.ts --mode emulator`) writes each
+`bun run setup:env` (`decrypt_secrets.ts --mode emulator`) writes each
 app's `.env.emulator` from `.env.example` plus safe fake values for the
-handful of keys required at runtime — the
-`demo-aikami-emulator` project isn't real, so no GCP/gcloud access is
-needed. Contributors without staging/production access still get a
-working local build this way; `bun run download-secrets --mode staging`
-(or `production`) is the separate, GCP-authenticated path for those who
-have it. Re-running `setup:env` never clobbers values you've since
-customized in `.env.emulator` — only fills in what's still missing.
+handful of keys required at runtime — emulator mode has no encrypted
+bundle, so no age key or network access is needed. Contributors without an
+age key still get a working local build this way; `bun run decrypt-secrets
+--mode staging` (or `production`) is the separate, key-authenticated path
+for those who have one. Re-running `setup:env` never clobbers values you've
+since customized in `.env.emulator` — only fills in what's still missing.
 
 > 🔴 `bun run setup` sets up YOUR machine. The GCP cloud project wizard is
 > a separate command: `bun run project:setup` (see docs/intro/setup.md).
