@@ -22,7 +22,7 @@
     "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental",
     "fix": "biome check --write src",
     "test": "bun run test:unit",
-    "test:unit": "bunx svelte-kit sync && bun test --isolate --preload ./src/lib/test_preload.ts --tsconfig-override=tsconfig.test.json src/lib",
+    "test:unit": "bunx svelte-kit sync && bun run scripts/write_test_tsconfig.ts && bun test --isolate --preload ./src/lib/test_preload.ts --tsconfig-override=tsconfig.test.json src/lib",
     "deploy": "bun run scripts/deploy.ts"
   },
   "devDependencies": {
