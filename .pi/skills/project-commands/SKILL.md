@@ -293,7 +293,7 @@ The root `package.json` provides shortcuts for common operations:
 
 | Script         | Command                                  | Purpose                  |
 | -------------- | ---------------------------------------- | ------------------------ |
-| `ops:secrets`  | `bun run scripts/ops/upload_secrets.ts`  | Upload secrets to GCP    |
+| `ops:secrets`  | `bun run encrypt-secrets --mode <mode>`  | Encrypt secrets into secrets/{mode}.enc.env |
 | `ops:add-user` | `bun run scripts/ops/add_user.ts`        | Add user to GCP IAM      |
 | `ops:dev-all`  | `bun run scripts/src/lib/ops/dev_all.ts` | Start full stack in herdr |
 

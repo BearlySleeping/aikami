@@ -18,8 +18,8 @@
  * expansion is not portable — bun is always the runner, so reading the env
  * var here is safe on every OS.
  *
- * Env comes from .env.{mode} — generate first with download-secrets
- * (bun run scripts/src/lib/ops/download_secrets.ts --mode <mode>).
+ * Env comes from .env.{mode} — generate first with decrypt-secrets
+ * (bun run scripts/src/lib/ops/decrypt_secrets.ts --mode <mode>).
  */
 
 import { spawnSync } from 'node:child_process';

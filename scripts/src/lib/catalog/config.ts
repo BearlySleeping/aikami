@@ -3,7 +3,7 @@
 // Catalog publish configuration (C-395).
 //
 // R2 write credentials come from scripts/.env.{mode} (populated by
-// download_secrets.ts from GSM) — they belong to the publish pipeline, NOT
+// decrypt_secrets.ts) — they belong to the publish pipeline, NOT
 // to the hub: the hub never writes to R2 (invariant I-7), so they must never
 // appear in apps/frontend/hub/.env.* where buildSecretArgsFromEnvFile would
 // ship them to Cloud Run.

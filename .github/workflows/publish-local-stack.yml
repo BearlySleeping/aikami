@@ -146,18 +146,21 @@ jobs:
           sudo swapon /mnt/swapfile
           free -h
 
-      # Client image needs GCP auth + secrets + SPA build before docker build.
+      # Client image needs secrets + SPA build before docker build.
+      # Secrets are decrypted locally from SOPS (C-441) — no GCP auth needed.
       - name: Setup environment (client only)
         if: matrix.needs-gcp
         uses: ./.github/actions/setup-environment
         with:
           install-deps: "true"
-          gcp-auth: "true"
-          gcp-service-account-key: ${{ secrets.GCP_SA_KEY }}
+          sops: "true"
 
-      - name: Download client secrets from GCP Secret Manager
+      - name: Decrypt client secrets from SOPS
         if: matrix.needs-gcp
-        run: bun scripts/src/lib/ops/download_secrets.ts --mode=production --strict client
+        run: |
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode=production --strict client
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 
       - name: Build the client SPA
         if: matrix.needs-gcp

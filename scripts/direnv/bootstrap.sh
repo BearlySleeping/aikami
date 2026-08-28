@@ -24,6 +24,16 @@ fi
 AIKAMI_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
 export AIKAMI_ROOT
 
+# ── 0.1 SOPS age key (C-441) ────────────────────────────────────────────
+# Dedicated aikami-only maintainer key, kept separate from any personal
+# dotfiles-managed default at ~/.config/sops/age/keys.txt — losing or
+# rotating one must never touch the other. sops checks SOPS_AGE_KEY_FILE
+# before falling back to the global default, so this only takes effect
+# inside the aikami repo.
+if [ -f "$AIKAMI_ROOT/.age/maintainer_key.txt" ]; then
+  export SOPS_AGE_KEY_FILE="$AIKAMI_ROOT/.age/maintainer_key.txt"
+fi
+
 # ── 1. Nix-direnv integration ──────────────────────────────────────────
 
 _aikami_setup_nix_direnv() {

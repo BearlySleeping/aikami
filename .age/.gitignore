@@ -1,0 +1,7 @@
+# .age/.gitignore
+# 🔴 Only recipients.txt (public keys) is committed. Any private key file
+# placed here (e.g. maintainer_key.txt, see scripts/direnv/bootstrap.sh)
+# must NEVER be committed.
+*
+!.gitignore
+!recipients.txt

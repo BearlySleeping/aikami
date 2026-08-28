@@ -5,7 +5,7 @@
  *
  * Priority:
  *   1. process.env.X (already set by direnv, CI, or explicit export)
- *   2. scripts/.env.{mode} (populated by download_secrets.ts from GSM)
+ *   2. scripts/.env.{mode} (populated by decrypt_secrets.ts)
  *
  * The file is read once and cached — subsequent calls hit the cache.
  *
