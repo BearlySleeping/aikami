@@ -512,6 +512,7 @@ jobs:
             --version="$VERSION" \
             --checksum="$CHECKSUM"
 
+
       # Updater fragment for this leg (release runs only) — the
       # update-manifest job merges all fragments into latest.json.
       - name: Upload updater fragment

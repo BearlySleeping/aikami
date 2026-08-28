@@ -136,6 +136,17 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
   private _currentRoute = $state<RouteName | undefined>();
   private _lastSyncedUrl = '';
   private _lastNavType: string | undefined = undefined;
+  /**
+   * Route ids already reported as unmapped.
+   *
+   * The URL guard above keys on pathname + search, so a page that syncs its
+   * state into the query string (the LPC preview, the sandboxes) re-enters
+   * this on every state change. For a route with no mapping that produced
+   * the same warning dozens of times per minute, burying every other line in
+   * the log. The condition is a property of the route id, not of the visit,
+   * so reporting it once per id loses nothing.
+   */
+  private readonly _unmappedRouteIds = new Set<string>();
   private readonly _redirectToKey = REDIRECT_TO_URL_SEARCH_PARAM_KEY;
 
   protected get redirectToHref(): string | undefined {
@@ -367,7 +378,14 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
       this.log('page changed:route', currentRoute);
 
       if (!currentRoute) {
-        this.warn('Page has no route');
+        const routeKey = page.route.id ?? page.url.pathname;
+        if (!this._unmappedRouteIds.has(routeKey)) {
+          this._unmappedRouteIds.add(routeKey);
+          this.warn('Page has no route', {
+            routeId: page.route.id,
+            pathname: page.url.pathname,
+          });
+        }
         return;
       }
 

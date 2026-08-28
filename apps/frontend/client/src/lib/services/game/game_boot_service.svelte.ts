@@ -847,7 +847,10 @@ class GameBootService
     // from the pack manifest (atlas + fallbackTile). It must be ready
     // before the first ENTITY_CREATED swaps prop placeholders.
     const { buildPropFrameResolver } = await import('./prop_frame_resolver');
-    const propFrameHandle = await buildPropFrameResolver(pack.manifest);
+    const propFrameHandle = await buildPropFrameResolver({
+      manifest: pack.manifest,
+      resolveTag: this._resolveTag,
+    });
     // Check generation immediately after the await and BEFORE mutating
     // _propFrameResolverHandle — a stale boot must never clobber the
     // resolver of the current boot.

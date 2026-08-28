@@ -238,7 +238,10 @@ export const handle: Handle = async ({ event, resolve }) => {
       // Only answer preflight for trusted origins — never fall back to a
       // wildcard, and omit CORS headers for disallowed origins.
       const isExtensionOrigin = origin?.startsWith('chrome-extension://') || origin === 'null';
-      const isLoggingOrigin = isLoggingEndpoint && isAikamiWebOrigin(origin);
+      // Logs are also forwarded from the Tauri desktop webview (client has
+      // no server of its own to log from) — allow that origin too.
+      const isLoggingOrigin =
+        isLoggingEndpoint && (isAikamiWebOrigin(origin) || isTauriWebviewOrigin(origin));
       const isAskOriginMatch = isAskEndpoint && isAskOrigin(origin);
       // The Better Auth paths are reached from the Tauri desktop webview
       // (tauri://localhost / http(s)://tauri.localhost) as well as first-party
@@ -297,7 +300,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (allowExtensionCors && (origin?.startsWith('chrome-extension://') || origin === 'null')) {
       response.headers.set('Access-Control-Allow-Origin', origin);
       response.headers.set('Access-Control-Allow-Credentials', 'true');
-    } else if (isLoggingEndpoint && isAikamiWebOrigin(origin)) {
+    } else if (isLoggingEndpoint && (isAikamiWebOrigin(origin) || isTauriWebviewOrigin(origin))) {
       response.headers.set('Access-Control-Allow-Origin', origin);
     } else if (isAskEndpoint && isAskOrigin(origin)) {
       response.headers.set('Access-Control-Allow-Origin', origin);

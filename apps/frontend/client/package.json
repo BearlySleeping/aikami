@@ -12,6 +12,7 @@
     "build:emulator": "AIKAMI_INCLUDE_DEV_ROUTES=true bun scripts/build_client.ts --mode emulator",
     "build:production": "bun scripts/build_client.ts --mode production",
     "check:bundle": "bun scripts/check_bundle.ts",
+    "update:cors": "bun scripts/update_cors.ts",
     "tauri": "tauri",
     "tauri:icon": "tauri icon ../../../assets/default.svg",
     "tauri:dev": "tauri dev",

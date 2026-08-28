@@ -206,7 +206,9 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
     await step('backend.init', () => backend.init());
     await step('backend.requestPersistence', () => backend.requestPersistence());
 
-    await step('assetManager.initialize', () => assetManager.initialize({ registry, backend }));
+    await step('assetManager.initialize', () =>
+      assetManager.initialize({ registry, backend, coreTags: assetStore.coreTags }),
+    );
     await step('assetManager.reconcile', () => assetManager.reconcile());
 
     return { registry, backend, seed };

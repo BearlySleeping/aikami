@@ -35,7 +35,8 @@ import {
 // Re-exports from @aikami/constants for backward compatibility
 // ---------------------------------------------------------------------------
 
-export { TEXT_PROVIDERS } from '@aikami/constants';
+export type { ImageProvider, VoiceProvider } from '@aikami/constants';
+export { IMAGE_PROVIDERS, TEXT_PROVIDERS, VOICE_PROVIDERS } from '@aikami/constants';
 
 // ---------------------------------------------------------------------------
 // Legacy TextConfig — kept as a stub for backward compatibility.
@@ -146,19 +147,8 @@ export const KOKORO_VOICES: readonly VoiceOption[] = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Voice TTS providers (C-204: expanded provider selection)
+// Voice TTS providers — see the re-export from '@aikami/constants' above.
 // ---------------------------------------------------------------------------
-
-/** Available TTS provider identifiers. */
-export const VOICE_PROVIDERS = [
-  { id: 'kokoro', label: 'Kokoro (local)', description: 'Local Kokoro TTS via Docker' },
-  { id: 'elevenlabs', label: 'ElevenLabs', description: 'Cloud-based TTS' },
-  { id: 'voicevox', label: 'VOICEVOX', description: 'Local Japanese TTS engine' },
-  { id: 'openai', label: 'OpenAI TTS', description: 'OpenAI cloud TTS' },
-  { id: 'fish-speech', label: 'Fish Speech', description: 'Open-source TTS' },
-] as const;
-
-export type VoiceProvider = (typeof VOICE_PROVIDERS)[number]['id'];
 
 /** Voice / TTS subsystem configuration. */
 export type VoiceConfig = {
@@ -216,21 +206,8 @@ export const DEFAULT_VOICE_ARCHETYPES: readonly VoiceArchetype[] = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Image generation providers (C-204: expanded provider selection)
+// Image generation providers — see the re-export from '@aikami/constants' above.
 // ---------------------------------------------------------------------------
-
-/** Available image generation provider identifiers. */
-export const IMAGE_PROVIDERS = [
-  { id: 'comfyui', label: 'ComfyUI (local)', description: 'Local ComfyUI via Docker' },
-  { id: 'webui', label: 'AUTOMATIC1111 WebUI', description: 'Local Stable Diffusion WebUI' },
-  { id: 'novelai', label: 'NovelAI', description: 'Cloud-based anime/SD' },
-  { id: 'dalle', label: 'DALL·E', description: 'OpenAI DALL·E' },
-  { id: 'stability', label: 'Stability AI', description: 'Stability API' },
-  { id: 'fal', label: 'fal.ai', description: 'Serverless generative media' },
-  { id: 'openai-compat', label: 'OpenAI Compatible', description: 'OpenAI-compatible image API' },
-] as const;
-
-export type ImageProvider = (typeof IMAGE_PROVIDERS)[number]['id'];
 
 /** Image generation subsystem configuration. */
 export type ImageConfig = {

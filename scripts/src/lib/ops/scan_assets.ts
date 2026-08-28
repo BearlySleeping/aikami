@@ -14,8 +14,8 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
-import { ASSET_CATEGORIES, splitStateSegments } from '@aikami/constants';
+import { extname, join, relative, resolve, sep } from 'node:path';
+import { ASSET_CATEGORIES, categoryForPath, splitStateSegments } from '@aikami/constants';
 import type { AssetEntry, AssetHashesFile, AssetManifest } from '@aikami/types';
 import { CONTENT_PACKS_DIR, GAME_DATA_DIR } from '../catalog/config.ts';
 
@@ -33,22 +33,6 @@ const pathToTag = (relPath: string, options?: { includeExt?: boolean }): string 
   }
   const withoutExt = relPath.replace(/\.[^.]+$/, '');
   return withoutExt.replace(/\//g, ':');
-};
-
-/**
- * Determine the asset category from a relative path.
- * Uses the first path segment by default, but overrides for special cases
- * like `sprites/tilesets/` which should map to the `tilesets` category
- * (C-433: directory-based category assignment).
- */
-const categoryForPath = (relPath: string): string | undefined => {
-  // Check for tilesets override: sprites/tilesets/ → tilesets
-  if (relPath.startsWith('sprites/tilesets/')) {
-    return 'tilesets';
-  }
-  const pathSegments = relPath.split('/');
-  const categoryName = pathSegments[0];
-  return ASSET_CATEGORIES[categoryName] ? categoryName : undefined;
 };
 
 const scanDir = async (
@@ -95,7 +79,12 @@ const scanDir = async (
         continue;
       }
 
-      const relPath = entryPath.replace(`${scanRootDir}/`, '');
+      // `relative()` + a forward-slash join keeps tags/paths portable: on
+      // Windows path.join/resolve produce `\`-separated paths, so a naive
+      // string replace against `${scanRootDir}/` never matches and every
+      // downstream check that assumes `/` (categoryForPath, pathToTag)
+      // silently no-ops the whole scan root.
+      const relPath = relative(scanRootDir, entryPath).split(sep).join('/');
 
       // Skip root-level manifest.json, asset_hashes.json, and asset_credits.json
       // (these are scan output files, not catalog assets). Preserve scanning of
@@ -121,9 +110,12 @@ const scanDir = async (
         continue;
       }
 
-      // C-433: include extension in tag for tilesets to disambiguate
-      // same-name files with different extensions (atlas.webp vs atlas.json).
-      const includeExt = categoryName === 'tilesets';
+      // C-433: include extension in tag for categories that declare
+      // tagIncludesExtension (tilesets), to disambiguate same-name files
+      // with different extensions (atlas.webp vs atlas.json). Must mirror
+      // the client-side pathToTag (packages/frontend/engine) exactly, or
+      // resolveUrl() never finds the row published under this tag.
+      const includeExt = ASSET_CATEGORIES[categoryName]?.tagIncludesExtension === true;
       const tag = pathToTag(splitStateSegments(relPath, categoryName), { includeExt });
       const nameDotIdx = entryName.lastIndexOf('.');
       const name = nameDotIdx >= 0 ? entryName.slice(0, nameDotIdx) : entryName;
