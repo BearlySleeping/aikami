@@ -67,6 +67,10 @@ tasks:
     command: 'bun run db:seed:local'
     options:
       cache: false
+      # Needs a live hub-worker dev server on :5278 to post seed data to —
+      # nothing in CI ever starts one, so this task can only fail there.
+      # Local-only, same as `deploy` below.
+      runInCI: false
 
   build:
     command: 'bun run build'
