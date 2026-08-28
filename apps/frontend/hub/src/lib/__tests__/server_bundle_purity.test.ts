@@ -54,9 +54,9 @@ const findPixiInServerGraph = (): string[] => {
   const offenders: string[] = [];
 
   // Match static import statements: import ... from '...' or import "..."
-  const importRe = /\bfrom\s+['"]([^'"]+)['"]|\bimport\s+['"]([^'"]+)['"]/g;
+  const importPattern = /\bfrom\s+['"]([^'"]+)['"]|\bimport\s+['"]([^'"]+)['"]/g;
   // Match dynamic import expressions: import('...')
-  const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  const dynamicImportPattern = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
   // Only follow relative imports (starts with ./ or ../)
   const isRelative = (specifier: string): boolean =>
     specifier.startsWith('./') || specifier.startsWith('../');
@@ -78,34 +78,24 @@ const findPixiInServerGraph = (): string[] => {
         }
       }
 
-      // Recurse into relative imports to walk the full server import graph
+      // Recurse into relative imports to walk the full server import graph.
+      // `matchAll` is used (rather than a shared `.exec()` loop) because
+      // `visit` is recursive: a shared regex's `.lastIndex` would get
+      // clobbered by the nested call scanning a different `source` string,
+      // corrupting the outer loop's position and blowing up into a
+      // combinatorial re-scan of the whole graph — this hung `bun test`
+      // indefinitely in CI. `matchAll` snapshots its own iterator state per
+      // call, so recursion can't interfere with it.
       const dir = file.slice(0, file.lastIndexOf('/'));
-      let match: RegExpExecArray | null = importRe.exec(source);
+      const specifiers = [
+        ...[...source.matchAll(importPattern)].map((match) => match[1] ?? match[2] ?? ''),
+        ...[...source.matchAll(dynamicImportPattern)].map((match) => match[1] ?? ''),
+      ];
 
-      while (match !== null) {
-        const specifier = match[1] ?? match[2] ?? '';
+      for (const specifier of specifiers) {
         if (isRelative(specifier)) {
           const resolved = join(dir, specifier);
           // Try .ts, .js extensions
-          for (const ext of ['.ts', '.js', '']) {
-            const candidate = resolved.endsWith(ext) ? resolved : `${resolved}${ext}`;
-            try {
-              if (statSync(candidate).isFile()) {
-                visit(candidate);
-                break;
-              }
-            } catch {
-              // File not found with this extension, try next
-            }
-          }
-        }
-      }
-      match = dynamicImportRe.exec(source);
-
-      while (match !== null) {
-        const specifier = match[1] ?? '';
-        if (isRelative(specifier)) {
-          const resolved = join(dir, specifier);
           for (const ext of ['.ts', '.js', '']) {
             const candidate = resolved.endsWith(ext) ? resolved : `${resolved}${ext}`;
             try {
