@@ -2,7 +2,7 @@
 id: C-449
 title: "Misc polish batch — settings, capability UX, hub, CI/onboarding, device-link, previews"
 source: "docs/TODO.md, item 8 (2026-08-29) — 8 independent low-effort bugs bundled by user request as one filler contract"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-29"
 | **Target** | See per-item Target rows under Architecture Directives — spans `apps/frontend/client`, `apps/frontend/hub`, `packages/backend/discord-bot`, `.github/workflows/`, `scripts/` |
 | **Priority** | P2 — none of the eight are blockers; several are visible, low-cost user-facing bugs (8a, 8f, 8g). |
 | **Dependencies** | 8d overlaps completed work in `C-441` (SOPS) and `C-440` (CI tooling) — reuse, don't re-solve. 8h shares root cause surface with `C-446`/`C-447` (hub catalog/sandbox previews). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `sandbox` |
 | **Docs Impact** | internal — `docs/guides/CI_CD.md` gains the local build-cache section (8c) and the onboarding stage (8d) if new; no user-facing docs page needed for the rest. |
 | **Contract version** | 1.0.0 |
@@ -43,7 +43,7 @@ Eight small, previously-unfiled bugs/polish items accumulated in `docs/TODO.md`.
 
 **Existing implementation to reuse**:
 - 8c: `Swatinem/rust-cache@v2` + `actions/cache@v6` patterns already proven in `release.yml` lines ~400-448.
-- 8d: `scripts/src/lib/ops/download_secrets.ts` / `upload_secrets.ts` (SOPS tooling from C-441) — the onboarding stage should call into these, not reimplement secret handling.
+- 8d: `scripts/src/lib/ops/decrypt_secrets.ts` / `encrypt_secrets.ts` (SOPS tooling from C-441) — the onboarding stage should call into these, not reimplement secret handling.
 - 8f: The `sessionStorage` round-trip mechanism in `link_view_model.svelte.ts` is correct and should NOT be reworked — the fix is scoped to the sign-in call's redirect target.
 - 8g: Copy `apps/frontend/client/src/app.html`'s `<link rel="icon">` block verbatim (paths already resolve identically via `%sveltekit.assets%`, and hub's `static/` already has the matching files).
 
@@ -82,7 +82,7 @@ Eight small, independent fixes and small features bundled into one contract per 
 
 - `apps/frontend/client/src/app.html` — correct favicon `<link>` pattern for 8g.
 - `.github/workflows/release.yml` (lines ~400-448) — cache action patterns for 8c.
-- `scripts/src/lib/ops/download_secrets.ts` / `upload_secrets.ts` — SOPS flow for 8d.
+- `scripts/src/lib/ops/decrypt_secrets.ts` / `encrypt_secrets.ts` — SOPS flow for 8d.
 - `apps/frontend/client/src/lib/views/link/link_view_model.svelte.ts` header comment — documents the intended handoff flow for 8f.
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
@@ -92,7 +92,7 @@ Eight small, independent fixes and small features bundled into one contract per 
 - **8a**: Fix in `apps/frontend/client/src/lib/services/audio/voice_model_service.svelte.ts` and/or `settings_audio_view_model.svelte.ts`. Root-cause first (add temporary logging or reproduce via `moon run client:dev`), then fix.
 - **8b**: Branch `CapabilityViewModelInterface`'s cloud-setup flow by `activeTab` capability. Voice tab surfaces the local-download path (8a) as a first-class option alongside cloud; Image tab keeps the existing cloud-only guided setup. Persist the modal's in-progress state (e.g. across tab switches or a route re-entry) using the same `$state` pattern already used elsewhere in the ViewModel.
 - **8c**: Add a Moon task (or a shared script under `scripts/`) that wraps `moon run <app>:build` with the same cache directories the CI workflow uses (Bun install cache, Rust target dir for Tauri) — read from local paths (`~/.bun/install/cache`, `src-tauri/target`) rather than GitHub Actions cache API, since there's no cache service locally; the goal is warm-rebuild speed via persistent local directories, not cross-machine cache sharing.
-- **8d**: New onboarding script/doc (`scripts/src/lib/ops/` or `CONTRIBUTING.md` section) that: (1) walks through creating a Cloudflare API token with the right scopes, (2) walks through generating/obtaining an `age` key for SOPS, (3) calls the existing `download_secrets.ts` to decrypt `secrets/` locally. Do not reimplement secret decryption — call the existing script.
+- **8d**: New onboarding script/doc (`scripts/src/lib/ops/` or `CONTRIBUTING.md` section) that: (1) walks through creating a Cloudflare API token with the right scopes, (2) walks through generating/obtaining an `age` key for SOPS, (3) calls the existing `decrypt_secrets.ts` to decrypt `secrets/` locally. Do not reimplement secret decryption — call the existing script.
 - **8e**: Add role-sync logic to `packages/backend/discord-bot/src/index.ts` (or a new `lib/role_sync.ts`), triggered on Discord `guildMemberUpdate`/channel-permission-change events, mapping channel membership → third-party tool grants per a config table in `lib/constants.ts`.
 - **8f**: In `login_view_model.svelte.ts`'s `signIn()`, when invoked from the `/link` route, pass an explicit `callbackURL` (or equivalent better-auth option) pointing back to `/link?code=<code>` so the OAuth redirect returns to the link page with the code intact, instead of falling to the default callback.
 - **8g**: Copy the `<link rel="icon">`/`<link rel="apple-touch-icon">`/`<link rel="manifest">` block from `apps/frontend/client/src/app.html` into `apps/frontend/hub/src/app.html`, verified against files already present in `apps/frontend/hub/static/`.
@@ -192,7 +192,7 @@ N/A — no persistent state changes in any of the 8 items.
 ### AC-4: Cloudflare + SOPS onboarding stage exists (8d)
 **Given** a new contributor with repo access but no Cloudflare token or `age` key
 **When** they follow the new onboarding script/doc
-**Then** they end up with a working local `secrets/` decryption via the existing `download_secrets.ts` tooling, without needing to ask a teammate for undocumented steps.
+**Then** they end up with a working local `secrets/` decryption via the existing `decrypt_secrets.ts` tooling, without needing to ask a teammate for undocumented steps.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -274,7 +274,7 @@ N/A — no persistent state changes in any of the 8 items.
 | AC-8 | E2E + Visual | `apps/e2e/tests/hub/catalog_preview.spec.ts`, `apps/e2e/src/visual/suites/hub_lpc_preview.visual.ts` | `hub.bearlysleeping.com/sandbox/[mapTag]`, catalog LPC preview | Filled during verification |
 
 **Test Hooks**:
-- Moon Task: `moon run apps/e2e:test`
+- Moon Task: `moon run e2e:test`
 - Integration: Manual browser check with devtools console open on both preview types.
 - E2E / Visual:
     - **Functional**: Re-run `apps/e2e/tests/hub/catalog_preview.spec.ts`; confirm no console errors.
