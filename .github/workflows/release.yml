@@ -358,6 +358,8 @@ jobs:
   # previously-built artifacts between releases. No per-leg "Platform gate" —
   # unneeded legs are never scheduled.
   deploy-desktop:
+    permissions:
+      contents: write # for gh release upload (the top-level default is read-only)
     name: Desktop (${{ matrix.platform }}${{ matrix.action == 'reuse' && ' — reuse' || '' }})
     runs-on: ${{ matrix.runsOn }}
     timeout-minutes: 45
