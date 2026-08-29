@@ -5,12 +5,12 @@
 //
 // C-446 additions: previewKind, resolver, lpcCatalog, previewMounted, previewError.
 
-import type { LpcSlotDef } from '@aikami/frontend/preview';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { LpcSlotDef } from '@aikami/frontend-preview';
 import type { CatalogAssetEntry } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
 import type { ComponentType } from 'svelte';
@@ -19,7 +19,7 @@ import type { AssetStats, CatalogAssetPageData } from '$types';
 import { formatBytes } from '$utils/catalog.ts';
 import { type PreviewKind, previewKindForEntry } from './preview_kind.ts';
 
-// ── LPC slot definition — imported from @aikami/frontend/preview ──
+// ── LPC slot definition — imported from @aikami/frontend-preview ──
 // Type-only import is safe for the server bundle (erased at compile time).
 
 export type CatalogAssetViewModelOptions = BaseViewModelOptions & {
@@ -342,7 +342,7 @@ class CatalogAssetViewModel
 
       switch (kind) {
         case 'lpc': {
-          const mod = await import('@aikami/frontend/preview');
+          const mod = await import('@aikami/frontend-preview');
           const { LpcPreview, decodeLpcPreviewState, encodeLpcPreviewState } = mod;
           const initialParams = new URLSearchParams(window.location.search);
           const initialState = decodeLpcPreviewState(initialParams);
@@ -370,7 +370,7 @@ class CatalogAssetViewModel
           break;
         }
         case 'tileset': {
-          const { TilesetPreview } = await import('@aikami/frontend/preview');
+          const { TilesetPreview } = await import('@aikami/frontend-preview');
           this.previewComponent = TilesetPreview as ComponentType;
           this.previewProps = {
             resolver,
@@ -383,13 +383,13 @@ class CatalogAssetViewModel
           break;
         }
         case 'map': {
-          const { MapPreview } = await import('@aikami/frontend/preview');
+          const { MapPreview } = await import('@aikami/frontend-preview');
           this.previewComponent = MapPreview as ComponentType;
           this.previewProps = { resolver, mapTag: tag, width: 320, height: 320, zoom: 1 };
           break;
         }
         case 'prop': {
-          const { PropPreview } = await import('@aikami/frontend/preview');
+          const { PropPreview } = await import('@aikami/frontend-preview');
           this.previewComponent = PropPreview as ComponentType;
           this.previewProps = { resolver, tag, width: 320, height: 320, zoom: 2 };
           break;

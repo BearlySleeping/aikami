@@ -14,7 +14,7 @@
     "@aikami/logger": "workspace:*",
     "@aikami/utils": "workspace:*",
     "discord.js": "14.27.0",
-    "elysia": "^1.4.29",
+    "elysia": "1.4.30",
     "tweetnacl": "1.0.3"
   }
 }

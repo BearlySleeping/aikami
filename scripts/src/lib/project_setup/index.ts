@@ -3,8 +3,7 @@
 /**
  * Aikami Project Setup Wizard
  *
- * One-time GCP project setup — orchestrates GCP APIs, Firebase, Firestore,
- * Storage, Artifact Registry, IAM, Secrets, and Firebase Hosting sites.
+ * One-time GCP project setup — orchestrates GCP APIs, Storage, Artifact Registry, IAM, Secrets.
  *
  * 🔴 This is PROJECT (cloud infrastructure) setup, NOT local machine setup.
  * For local developer environment setup, run: bun run setup
@@ -16,7 +15,6 @@
  *
  * Individual steps:
  *   bun run scripts/src/lib/project_setup/gcp_apis.ts --mode=staging
- *   bun run scripts/src/lib/project_setup/firebase_setup.ts --mode=staging
  *   bun run scripts/src/lib/project_setup/artifact_registry.ts --mode=staging
  *   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=staging
  *   bun run scripts/src/lib/project_setup/github.ts --mode=staging

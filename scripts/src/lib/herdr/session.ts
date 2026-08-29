@@ -1111,23 +1111,21 @@ export const SHELL_NAMES = new Set([
 /**
  * True when a pane's foreground process name is just an idle shell.
  *
- * 🔴 On Windows, `bash` is excluded even though it's in SHELL_NAMES. herdr
- * never natively defaults a Windows pane to bash (Nushell/pwsh/cmd only —
- * see SHELL_NAMES above); every bash.exe seen on a Windows pane got there
- * via wrapCommand/bashScriptForPane's `& 'bash.exe' 'script.sh'` wrapper,
- * which stays foreground for the wrapped command's ENTIRE lifetime (the
- * trailer's `read` only runs after it exits). Treating that as idle made
- * assessServicePane misread an actively-running, healthy service (vite)
- * as crashed, triggering a restart that killed it mid-run —
- * confirmed on a live Windows run where a healthy `client` (vite) pane got
- * silently restarted and lost its listening port. POSIX panes are
- * unaffected: there, bash genuinely is the pane's native idle shell.
+ * On Windows, bash is NOT excluded here even though it wraps our
+ * commands via wrapCommand/bashScriptForPane. The exclusion was added to
+ * prevent assessServicePane from misreading a healthy service (vite)
+ * as crashed — but assessServicePane ALREADY has a Windows-specific guard
+ * that returns 'booting' before reaching the process-info check, so the
+ * exclusion is redundant there. For worker panes (implementer, verifier,
+ * critic), the exclusion is actively harmful: when the pi agent crashes,
+ * bash is left sitting at a bare prompt with no children, and isCommandRunning
+ * returns true because bash isn't considered idle — the orchestrator then
+ * waits for the 12-hour hard timeout instead of relaunching the worker.
+ * Removing the exclusion fixes worker pane detection without regressing
+ * service pane health checks.
  */
 export const isIdleShellName = (name: string): boolean => {
   const normalized = name.toLowerCase().replace(/\.exe$/, '');
-  if (process.platform === 'win32' && normalized === 'bash') {
-    return false;
-  }
   return SHELL_NAMES.has(normalized);
 };
 

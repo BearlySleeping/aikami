@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/services/assets/registry_asset_resolver.ts
 //
 // Registry-backed AssetResolver (C-444) — the client's implementation of the
-// resolve/release seam consumed by @aikami/frontend/preview
+// resolve/release seam consumed by @aikami/frontend-preview
 // (createLpcRenderer, PreviewProps.resolver) and the LPC asset catalog.
 //
 // Resolves catalog tags through the AssetStore (cache → R2 → bundled static

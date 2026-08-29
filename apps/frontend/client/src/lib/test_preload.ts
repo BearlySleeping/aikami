@@ -7,7 +7,7 @@
 // 2. Provide a consistent mock for @aikami/frontend/services so all test
 //    files see the same exports regardless of load order.
 //
-// 3. Set Vite env vars so @aikami/frontend/configs/environment.ts can
+// 3. Set Vite env vars so @aikami/frontend-configs/environment.ts can
 //    validate without crashing in Bun.
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names from @aikami/frontend-services for module mocking
@@ -713,7 +713,7 @@ mock.module('$app/state', () => ({
   },
 }));
 
-// ── Vite env vars required by @aikami/frontend/configs/environment.ts ─────
+// ── Vite env vars required by @aikami/frontend-configs/environment.ts ─────
 
 process.env.PUBLIC_APP_ID = 'client';
 process.env.PUBLIC_MODE = 'testing';
@@ -899,8 +899,8 @@ mock.module('@aikami/frontend/storage', () => ({
   __esModule: true,
 }));
 
-// ── @aikami/frontend/preview mock ────────────────────────────────────────
-// The preview package depends on @aikami/frontend/engine and pixi.js which
+// ── @aikami/frontend-preview mock ────────────────────────────────────────
+// The preview package depends on @aikami/frontend-engine and pixi.js which
 // cannot be resolved in bun test. Only createLpcRenderer (which depends on
 // pixi.js) is stubbed; pure helpers are re-exported from their real implementations
 // via direct module imports to avoid pixi.js dependency.
@@ -918,7 +918,7 @@ import {
   encodeLpcPreviewState,
 } from '../../../../../packages/frontend/preview/src/lib/lpc/preview_url_state.ts';
 
-mock.module('@aikami/frontend/preview', () => ({
+mock.module('@aikami/frontend-preview', () => ({
   createLpcRenderer: mock(() => ({
     loadSheet: mock(async () => ({})),
     extractFrame: mock(() => null),

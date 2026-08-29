@@ -55,7 +55,7 @@ export const modes = ['staging', 'production', 'emulator', 'testing'] as const;
 export const defaultMode = 'production' as const satisfies (typeof modes)[number];
 
 /**
- * Maps each Aikami deployment mode to its Firebase/GCP project ID.
+ * Maps each Aikami deployment mode to its GCP project ID.
  * Used by both frontend and backend apps.
  *
  * Emulator mode uses the `demo-` prefix so Firebase doesn't attempt production project lookups.
@@ -69,7 +69,6 @@ export const MODE_PROJECT_MAP = {
 
 /**
  * GCP region where Cloud Functions and Cloud Run services are deployed.
- * Must match the `region` field in `apps/backend/firebase/firestack.config.ts`.
  */
 export const CLOUD_FUNCTIONS_REGION = 'europe-west4' as const;
 

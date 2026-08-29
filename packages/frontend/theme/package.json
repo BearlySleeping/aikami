@@ -1,5 +1,5 @@
 {
-  "name": "@aikami/frontend/theme",
+  "name": "@aikami/frontend-theme",
   "license": "MIT",
   "main": "src/index.ts",
   "exports": {

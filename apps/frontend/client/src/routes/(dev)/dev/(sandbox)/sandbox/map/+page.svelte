@@ -6,7 +6,7 @@
 // Fetches asset catalog before creating/rendering WalkSandbox.
 // Uses a dedicated ViewModel for resolver/manifest loading.
 
-import { WalkSandbox } from '@aikami/frontend/preview/sandbox';
+import { WalkSandbox } from '@aikami/frontend-preview/sandbox';
 import {
   getMapSandboxRouteViewModel,
   type MapSandboxRouteViewModelInterface,

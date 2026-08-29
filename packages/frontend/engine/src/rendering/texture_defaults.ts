@@ -15,7 +15,7 @@
 // they are redundant but harmless.
 //
 // Kept in a config-free module so engine tests can exercise the identical
-// production default without the `@aikami/frontend/configs` env bootstrap.
+// production default without the `@aikami/frontend-configs` env bootstrap.
 
 import { TextureStyle } from 'pixi.js';
 

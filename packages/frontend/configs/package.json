@@ -1,5 +1,5 @@
 {
-  "name": "@aikami/frontend/configs",
+  "name": "@aikami/frontend-configs",
   "license": "MIT",
   "main": "src/index.ts",
   "scripts": {
@@ -13,6 +13,6 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "typebox": "1.3.19"
+    "typebox": "1.3.20"
   }
 }

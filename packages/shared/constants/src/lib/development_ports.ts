@@ -58,7 +58,6 @@ export const EPHEMERAL_PORT_START = 32768;
 
 const FB_EMULATOR_PORTS = {
   auth: 9098,
-  firestore: 8081,
   functions: 5003,
   hosting: 5002,
   pubsub: 8086,

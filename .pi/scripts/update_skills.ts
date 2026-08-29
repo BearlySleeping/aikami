@@ -12,6 +12,7 @@
 import { existsSync } from 'node:fs';
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { $ } from 'bun';
 
@@ -190,9 +191,21 @@ async function installSkillSource(source: SkillSource): Promise<void> {
     console.log(`Copied ${source.sourceSubdir} → ${target}${excludeNote}`);
   }
 
-  // 4. Clean up temp clone
-  await rm(tmp, { recursive: true });
-  console.log('Cleaned up temp clone.');
+  // 4. Clean up temp clone (retry on Windows EBUSY)
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await rm(tmp, { recursive: true });
+      console.log('Cleaned up temp clone.');
+      break;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException)?.code === 'EBUSY' && attempt < 4) {
+        console.log(`  Temp dir busy, retrying in 500ms (attempt ${attempt + 1})...`);
+        await sleep(500);
+      } else {
+        throw err;
+      }
+    }
+  }
 }
 
 // ── validate local Git Worktree skill ───────────────────────────────────

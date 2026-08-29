@@ -32,12 +32,41 @@ import { execSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+// ── Windows workaround ──────────────────────────────────────────
+//
+// `bun add` inside a workspace subdirectory fails on Windows with:
+//   "@aikami/frontend-engine" is not a valid install folder name
+//
+// This is a bun workspace resolution bug on Windows (bun#14939-ish).
+// The workaround: run `bun add` from the monorepo root with the
+// `--filter` flag targeting the workspace package name, which
+// avoids the broken workspace-protocol resolution path.
+//
+function bunAddInWorkspace(pkgName: string, pkgSpec: string): void {
+  const isWindows = process.platform === 'win32';
+  if (isWindows) {
+    // Run from root with --filter to work around bun workspace resolution bug
+    execSync(`bun add ${pkgSpec} --filter ${pkgName}`, {
+      cwd: MONOREPO_ROOT,
+      stdio: 'inherit',
+    });
+  } else {
+    execSync(`bun add ${pkgSpec}`, {
+      cwd: resolve(MONOREPO_ROOT, pkgName),
+      stdio: 'inherit',
+    });
+  }
+}
+
 const MONOREPO_ROOT = resolve(import.meta.dir, '../../../..');
 
 function findCurrentPlaywrightVersion(): string {
   // 1. Nix-provided playwright binary (authoritative on NixOS)
   try {
-    const output = execSync('playwright --version', { encoding: 'utf-8' });
+    const output = execSync('playwright --version', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     const match = output.match(/Version (\d+\.\d+\.\d+)/);
     if (match) {
       console.log(`   📌 Nix playwright version: ${match[1]}`);
@@ -77,43 +106,51 @@ if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(currentVersion)) {
 }
 
 // Packages that depend on @playwright/test (check both for devDependency)
-const playwrightDirs = ['apps/frontend/client', 'apps/e2e'].filter((dir) => {
-  const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');
-  if (!existsSync(pkgPath)) {
-    return false;
-  }
-  try {
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    return '@playwright/test' in (pkg.devDependencies || {});
-  } catch {
-    return false;
-  }
-});
+type WorkspaceInfo = { dir: string; name: string };
+
+const playwrightDirs: WorkspaceInfo[] = ['apps/frontend/client', 'apps/e2e']
+  .filter((dir) => {
+    const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');
+    if (!existsSync(pkgPath)) {
+      return false;
+    }
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      return '@playwright/test' in (pkg.devDependencies || {});
+    } catch {
+      return false;
+    }
+  })
+  .map((dir) => {
+    const pkg = JSON.parse(readFileSync(resolve(MONOREPO_ROOT, dir, 'package.json'), 'utf-8'));
+    return { dir, name: pkg.name };
+  });
 
 console.log(`🔒 Pinning @playwright/test to ${currentVersion}`);
 
 // Packages that also depend on `playwright` (the CLI/driver package)
-const playwrightCliDirs = ['apps/e2e'].filter((dir) => {
-  const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');
-  if (!existsSync(pkgPath)) {
-    return false;
-  }
-  try {
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    return 'playwright' in (pkg.devDependencies || {});
-  } catch {
-    return false;
-  }
-});
+const playwrightCliDirs: WorkspaceInfo[] = ['apps/e2e']
+  .filter((dir) => {
+    const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');
+    if (!existsSync(pkgPath)) {
+      return false;
+    }
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      return 'playwright' in (pkg.devDependencies || {});
+    } catch {
+      return false;
+    }
+  })
+  .map((dir) => {
+    const pkg = JSON.parse(readFileSync(resolve(MONOREPO_ROOT, dir, 'package.json'), 'utf-8'));
+    return { dir, name: pkg.name };
+  });
 
 let hasError = false;
-for (const dir of playwrightDirs) {
-  const absDir = resolve(MONOREPO_ROOT, dir);
+for (const { dir, name } of playwrightDirs) {
   try {
-    execSync(`bun add -d @playwright/test@${currentVersion} --exact`, {
-      cwd: absDir,
-      stdio: 'inherit',
-    });
+    bunAddInWorkspace(name, `-d @playwright/test@${currentVersion} --exact`);
     console.log(`✅ Pinned @playwright/test@${currentVersion} in ${dir}`);
   } catch (err) {
     console.error(
@@ -126,13 +163,9 @@ for (const dir of playwrightDirs) {
 
 // Pin `playwright` CLI package to the same version as @playwright/test
 console.log(`🔒 Pinning playwright to ${currentVersion}`);
-for (const dir of playwrightCliDirs) {
-  const absDir = resolve(MONOREPO_ROOT, dir);
+for (const { dir, name } of playwrightCliDirs) {
   try {
-    execSync(`bun add -d playwright@${currentVersion} --exact`, {
-      cwd: absDir,
-      stdio: 'inherit',
-    });
+    bunAddInWorkspace(name, `-d playwright@${currentVersion} --exact`);
     console.log(`✅ Pinned playwright@${currentVersion} in ${dir}`);
   } catch (err) {
     console.error(
@@ -182,10 +215,7 @@ const starlightVersion = findCurrentStarlightVersion();
 console.log(`🔒 Pinning @astrojs/starlight to ${starlightVersion}`);
 
 try {
-  execSync(`bun add @astrojs/starlight@${starlightVersion} --exact`, {
-    cwd: resolve(MONOREPO_ROOT, 'apps/frontend/docs'),
-    stdio: 'inherit',
-  });
+  bunAddInWorkspace('@aikami/docs', `@astrojs/starlight@${starlightVersion} --exact`);
   console.log(`✅ Pinned @astrojs/starlight@${starlightVersion} in apps/frontend/docs`);
 } catch (err) {
   console.error(
@@ -198,11 +228,11 @@ try {
 // ── typescript ──────────────────────────────────────────────────
 
 const TYPESCRIPT_VERSION = '6.0.3';
-const tsDirs = [
-  '.', // root
-  'apps/e2e',
-  'packages/backend/ai',
-].filter((dir) => {
+const tsDirs: WorkspaceInfo[] = [
+  { dir: '.', name: '@aikami/monorepo' },
+  { dir: 'apps/e2e', name: '@aikami/e2e' },
+  { dir: 'packages/backend/ai', name: '@aikami/backend-ai' },
+].filter(({ dir }) => {
   const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');
   if (!existsSync(pkgPath)) {
     return false;
@@ -217,12 +247,9 @@ const tsDirs = [
 
 console.log(`🔒 Pinning typescript to ${TYPESCRIPT_VERSION}`);
 
-for (const dir of tsDirs) {
+for (const { dir, name } of tsDirs) {
   try {
-    execSync(`bun add -d typescript@${TYPESCRIPT_VERSION} --exact`, {
-      cwd: resolve(MONOREPO_ROOT, dir),
-      stdio: 'inherit',
-    });
+    bunAddInWorkspace(name, `-d typescript@${TYPESCRIPT_VERSION} --exact`);
     console.log(`✅ Pinned typescript@${TYPESCRIPT_VERSION} in ${dir}`);
   } catch (err) {
     console.error(

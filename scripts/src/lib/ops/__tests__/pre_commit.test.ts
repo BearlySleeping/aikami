@@ -10,9 +10,9 @@
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
-const REPO_ROOT = new URL('../../../../..', import.meta.url).pathname;
+const REPO_ROOT = import.meta.dir ? resolve(import.meta.dir, '../../../../..') : resolve('.');
 const PRE_COMMIT_SCRIPT = join(REPO_ROOT, 'scripts/src/lib/ops/pre_commit.ts');
 
 describe('pre_commit checkPlaintextSecrets', () => {

@@ -285,8 +285,7 @@ export class DockerManager {
     return {
       // Firebase Auth emulator — container reaches host via host.docker.internal
       FIREBASE_AUTH_EMULATOR_HOST: 'host.docker.internal:9098',
-      // Firestore emulator
-      FIRESTORE_EMULATOR_HOST: 'host.docker.internal:8081',
+
       // Functions emulator
       FIREBASE_FUNCTIONS_EMULATOR_HOST: 'host.docker.internal:5003',
       // Storage emulator

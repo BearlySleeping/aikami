@@ -84,7 +84,7 @@ mock.module('$logger', () => ({
   __esModule: true,
 }));
 
-// ── Vite env vars required by @aikami/frontend/configs/environment.ts ─────
+// ── Vite env vars required by @aikami/frontend-configs/environment.ts ─────
 
 process.env.PUBLIC_APP_ID = 'hub';
 process.env.PUBLIC_MODE = 'testing';

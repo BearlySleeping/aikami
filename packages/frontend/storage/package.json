@@ -7,7 +7,7 @@
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
     "fix": "biome check --write . --error-on-warnings",
-    "test": "bun test"
+    "test": "bun test --isolate"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

@@ -227,6 +227,28 @@ const TOOLS: ToolCheck[] = [
     },
   },
   {
+    name: 'hypa',
+    bins: ['hypa'],
+    why: 'CLI output compression — makes `hypa_find`/`hypa_grep`/`hypa_read` tools work in pi. Optional.',
+    category: 'dx',
+    verify: (out) => /^\d+\.\d+/.test(out.trim()),
+    install: {
+      linux: {
+        label: 'Install hypa (npm)',
+        commands: ['npm install -g @hypabolic/hypa'],
+      },
+      darwin: {
+        label: 'Install hypa (npm)',
+        commands: ['npm install -g @hypabolic/hypa'],
+      },
+      win32: {
+        label: 'Install hypa (npm)',
+        commands: ['npm install -g @hypabolic/hypa'],
+      },
+    },
+    hint: 'After install, restart your shell. Without hypa, pi falls back to direct bash execution.',
+  },
+  {
     name: 'herdr',
     bins: ['herdr'],
     why: 'Terminal-native service multiplexer for `bun run dev:all` / `bun herdr:*`. Optional.',
@@ -274,6 +296,28 @@ const TOOLS: ToolCheck[] = [
     hint: 'Also provided inside the flake devShell (flake.nix). Run `gcloud init` after install.',
   },
   {
+    name: 'Docker',
+    bins: ['docker'],
+    why: 'Container runtime — needed for local AI microservices (text, image, voice) and the local-stack Docker topology.',
+    category: 'cloud',
+    verify: (out) => /Docker version \d+\.\d+/.test(out.trim()),
+    install: {
+      linux: {
+        label: 'Install Docker (apt)',
+        commands: ['sudo apt-get install -y docker.io', 'sudo systemctl enable --now docker'],
+      },
+      darwin: {
+        label: 'Install Docker Desktop (brew)',
+        commands: ['brew install --cask docker'],
+      },
+      win32: {
+        label: 'Install Docker Desktop (winget)',
+        commands: ['winget install --id Docker.DockerDesktop'],
+      },
+    },
+    hint: 'Also used by the local-stack (apps/backend/local-stack). After install, start Docker Desktop / daemon.',
+  },
+  {
     name: 'gh',
     bins: ['gh'],
     why: 'GitHub CLI — PRs, issues, releases, CI checks (pi tools call it directly). Optional.',
@@ -295,6 +339,34 @@ const TOOLS: ToolCheck[] = [
   },
 
   // ── Browser (optional) ────────────────────────────────────────────
+  {
+    name: 'Playwright',
+    bins: ['playwright'],
+    why: 'E2E test runner — runs the full test suite in apps/e2e.',
+    category: 'emulator',
+    verify: (out) => /^\d+\.\d+/.test(out.trim()),
+    install: {
+      linux: {
+        label: 'Install Playwright (bun)',
+        commands: [
+          'cd apps/e2e && bun add -d @playwright/test && bunx playwright install chromium',
+        ],
+      },
+      darwin: {
+        label: 'Install Playwright (bun)',
+        commands: [
+          'cd apps/e2e && bun add -d @playwright/test && bunx playwright install chromium',
+        ],
+      },
+      win32: {
+        label: 'Install Playwright (bun)',
+        commands: [
+          'bun add -d @playwright/test --filter @aikami/e2e && bunx playwright install chromium',
+        ],
+      },
+    },
+    hint: 'Playwright is installed per-project in apps/e2e. Run from that directory.',
+  },
   {
     name: 'Chromium',
     bins: ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable'],

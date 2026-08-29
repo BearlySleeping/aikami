@@ -1,7 +1,7 @@
 /**
  * Bash Timeout Normalizer — enforces seconds-only convention for Bash tool timeouts,
- * injects non-interactive environment guards, caps runaway timeouts, and makes
- * `find -exec` terminators survive @hypabolic/pi-hypa's command rewriter.
+ * injects non-interactive environment guards, and conditionally wraps commands
+ * with `hypa -c` for output compression when the hypa CLI is available.
  *
  * Pi's built-in Bash tool interprets `timeout` as SECONDS. However, the model is
  * frequently trained on millisecond-based APIs and may pass values like 120000
@@ -12,11 +12,14 @@
  *   2. Caps timeouts at a safe maximum (default: 600 s = 10 min).
  *   3. Injects CI=true, FORCE_COLOR=1, GIT_TERMINAL_PROMPT=0 into every command so
  *      CLI tools never hang waiting for interactive input (TTY prompts, colour queries, etc.).
+ *   4. If the `hypa` CLI is on PATH, wraps the command with `hypa -c "..."` for
+ *      compressed output — making it optional: no hypa, no crash.
  *
  * Heuristic: timeout ≥ 1000 → divide by 1000 (no legitimate bash timeout needs
  * 1000+ seconds / ~17 minutes).
  */
 
+import { execSync } from 'node:child_process';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { isToolCallEventType } from '@earendil-works/pi-coding-agent';
 
@@ -28,6 +31,27 @@ const DEFAULT_TIMEOUT_SECONDS = 60;
 
 /** Environment guard prefix injected before every command. */
 const ENV_GUARD = 'export CI=true FORCE_COLOR=1 GIT_TERMINAL_PROMPT=0 2>/dev/null; ';
+
+/** Cached result of `hypa` availability check. */
+let hypaAvailable: boolean | null = null;
+
+/**
+ * Check whether the `hypa` CLI is on PATH.
+ * Cached after first call since PATH doesn't change mid-session.
+ */
+function isHypaAvailable(): boolean {
+  if (hypaAvailable === null) {
+    try {
+      // which/where is available on both POSIX and Windows
+      const cmd = process.platform === 'win32' ? 'where' : 'which';
+      execSync(`${cmd} hypa`, { encoding: 'utf8', stdio: 'ignore' });
+      hypaAvailable = true;
+    } catch {
+      hypaAvailable = false;
+    }
+  }
+  return hypaAvailable;
+}
 
 /**
  * Rewrite an UNQUOTED `\;` to `';'`.
@@ -42,18 +66,11 @@ const ENV_GUARD = 'export CI=true FORCE_COLOR=1 GIT_TERMINAL_PROMPT=0 2>/dev/nul
  *                                                ^^^ opening quote never closed
  *
  * bash then rejects the whole command with `unexpected EOF while looking for
- * matching '"'`. Because the mangling is deterministic, the model retries the
- * identical command and storm-breaker kills the session at three failures —
- * observed 2026-08-23, and in 24 of 28,814 stored bash calls across every
- * model (16 of them on the healthy direct DeepSeek, so this is not a model
- * fault). `';'` is exactly equivalent to `\;` in POSIX find, and survives the
- * rewriter untouched.
- *
- * This extension is project-local, and pi loads `cwd/.pi/extensions/` BEFORE
- * package extensions, so this runs before hypa reads the command.
+ * matching '"'`. `';'` is exactly equivalent to `\;` in POSIX find, and survives
+ * the rewriter untouched.
  *
  * Only unquoted occurrences are rewritten: inside quotes `\;` is literal text
- * (e.g. a grep pattern), and hypa handles those correctly already.
+ * (e.g. a grep pattern).
  */
 export const quoteExecTerminators = (command: string): string => {
   let out = '';
@@ -121,15 +138,26 @@ export default function (pi: ExtensionAPI) {
       event.input.timeout = DEFAULT_TIMEOUT_SECONDS;
     }
 
-    // Inject non-interactive environment guards at the front of every command.
-    // This prevents tools like git, python, node, etc. from hanging on:
-    //   - TTY detection (CI=true)
-    //   - Colour / progress queries (FORCE_COLOR=1)
-    //   - Credential prompts (GIT_TERMINAL_PROMPT=0)
     if (typeof event.input?.command === 'string') {
-      const cmd = quoteExecTerminators(event.input.command);
-      // Don't double-inject if already present
-      event.input.command = cmd.startsWith('export CI=true') ? cmd : ENV_GUARD + cmd;
+      let cmd = event.input.command;
+
+      // Inject non-interactive environment guards at the front of every command.
+      // This prevents tools like git, python, node, etc. from hanging on:
+      //   - TTY detection (CI=true)
+      //   - Colour / progress queries (FORCE_COLOR=1)
+      //   - Credential prompts (GIT_TERMINAL_PROMPT=0)
+      if (!cmd.startsWith('export CI=true')) {
+        cmd = ENV_GUARD + cmd;
+      }
+
+      // If hypa is on PATH, wrap with hypa -c for compressed output.
+      // This is optional — no hypa, no crash, commands run directly.
+      if (isHypaAvailable()) {
+        cmd = quoteExecTerminators(cmd);
+        cmd = `hypa -c ${JSON.stringify(cmd)}`;
+      }
+
+      event.input.command = cmd;
     }
   });
 }

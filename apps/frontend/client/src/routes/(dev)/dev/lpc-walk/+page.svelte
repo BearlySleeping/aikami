@@ -5,7 +5,7 @@
 // Supplies the registry resolver for asset resolution.
 // Uses a dedicated ViewModel for resolver/manifest loading.
 
-import { WalkSandbox } from '@aikami/frontend/preview/sandbox';
+import { WalkSandbox } from '@aikami/frontend-preview/sandbox';
 import { getLpcWalkViewModel, type LpcWalkViewModelInterface } from './lpc_walk_view_model.svelte';
 
 let viewModel = $state<LpcWalkViewModelInterface | undefined>(undefined);

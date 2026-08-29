@@ -7,8 +7,8 @@
     "rootDir": "../..",
     "outDir": "dist",
     "paths": {
-      "@aikami/frontend/configs": ["./src/index.ts"],
-      "@aikami/frontend/configs/*": ["./src/lib/*"],
+      "@aikami/frontend-configs": ["./src/index.ts"],
+      "@aikami/frontend-configs/*": ["./src/lib/*"],
       "@aikami/constants": ["../../shared/constants/src/index.ts"],
       "@aikami/constants/*": ["../../shared/constants/src/lib/*"],
       "@aikami/schemas": ["../../shared/schemas/src/index.ts"],

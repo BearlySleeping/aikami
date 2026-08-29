@@ -3,13 +3,12 @@
 // ViewModel for the LPC preview component — host-agnostic, no SvelteKit deps.
 // Manages layer selection, animation state, palette overrides, and PixiJS rendering.
 
-import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '@aikami/frontend/engine';
-import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { LpcLayerRecipe } from '@aikami/frontend-engine/sim';
 import { LpcAnimationState, LpcDirection, lpcStateSuffix } from '@aikami/lpc';
 import {
   LPC_DEFAULT_BODY_ASSET_ID,
@@ -18,6 +17,7 @@ import {
 } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
 import { type Application, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js';
+import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '../../../../engine/src/index.ts';
 import type { LpcRenderer } from './lpc_renderer';
 import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
 import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';

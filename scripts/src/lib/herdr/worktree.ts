@@ -28,6 +28,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -675,35 +676,114 @@ export CONTRACT_PIPELINE_WORKTREE=1
     seedWorktreeFiles({ checkoutPath, repoRoot });
   }
 
-  // ── 5. bun install ──
+  // ── 5. Seed worktree deps (workaround for bun 1.4.0 Windows bug) ──
+  // 🔴 bun 1.4.0 on Windows fails to install workspace packages with `/` in
+  // their names (e.g. `@aikami/frontend/engine`) with "is not a valid install
+  // folder name". Fix: create node_modules as a real directory, copy .bun cache
+  // from root, create @aikami symlinks to worktree's own source dirs, and
+  // junction per-app node_modules for vite/pixi.js.
   let installed = false;
   if (options.install !== false) {
-    const timeoutMs = options.installTimeoutMs ?? 180_000;
-    try {
-      execSync('bun install --frozen-lockfile', {
-        cwd: checkoutPath,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-        timeout: timeoutMs,
-        // Windows: hide the cmd.exe console window (no-op on POSIX).
-        windowsHide: true,
-      });
+    const worktreeNodeModules = join(checkoutPath, 'node_modules');
+    if (!existsSync(worktreeNodeModules)) {
+      mkdirSync(worktreeNodeModules, { recursive: true });
+      // Junction .bun cache from root (non-workspace deps)
+      // 🔴 cpSync fails with EPERM on symlinks inside the cache. Use junction instead.
+      const rootBunCache = join(repoRoot, 'node_modules', '.bun');
+      if (existsSync(rootBunCache)) {
+        try {
+          symlinkSync(rootBunCache, join(worktreeNodeModules, '.bun'), 'junction');
+        } catch (err: unknown) {
+          console.warn(
+            `⚠️  Could not junction .bun cache: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+      // Create @aikami symlinks to worktree's own workspace source dirs
+      const aikamiDir = join(worktreeNodeModules, '@aikami');
+      mkdirSync(aikamiDir, { recursive: true });
+      const workspaces =
+        (
+          JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8')) as {
+            workspaces?: string[];
+          }
+        ).workspaces ?? [];
+      for (const wsGlob of workspaces) {
+        const base = wsGlob.replace(/\*$/, '');
+        const dir = join(checkoutPath, base);
+        if (!existsSync(dir)) {
+          continue;
+        }
+        for (const entry of readdirSync(dir)) {
+          const pkgPath = join(dir, entry, 'package.json');
+          if (!existsSync(pkgPath)) {
+            continue;
+          }
+          const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { name?: string };
+          if (!pkg.name?.startsWith('@aikami/')) {
+            continue;
+          }
+          const parts = pkg.name.slice('@aikami/'.length).split('/');
+          const targetDir = join(aikamiDir, ...parts);
+          const srcDir = join(dir, entry);
+          mkdirSync(join(targetDir, '..'), { recursive: true });
+          try {
+            symlinkSync(srcDir, targetDir, 'junction');
+          } catch (err: unknown) {
+            console.warn(
+              `⚠️  Could not link ${pkg.name}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+      }
+      // Junction per-app node_modules from root (vite, pixi.js, etc.)
+      for (const wsGlob of workspaces) {
+        const base = wsGlob.replace(/\*$/, '');
+        const rootDir = join(repoRoot, base);
+        const worktreeDir = join(checkoutPath, base);
+        if (!existsSync(rootDir) || !existsSync(worktreeDir)) {
+          continue;
+        }
+        for (const entry of readdirSync(rootDir)) {
+          const srcNm = join(rootDir, entry, 'node_modules');
+          const dstNm = join(worktreeDir, entry, 'node_modules');
+          if (existsSync(srcNm) && !existsSync(dstNm)) {
+            try {
+              symlinkSync(srcNm, dstNm, 'junction');
+            } catch {
+              // skip
+            }
+          }
+        }
+      }
       installed = true;
-    } catch (err: unknown) {
-      // Report the failure — a worktree without deps is broken, but the
-      // caller may choose to continue (e.g. docs-only tasks).
-      console.warn(
-        `⚠️  bun install failed in ${checkoutPath}. Run it manually: cd ${checkoutPath} && bun install`,
-      );
-      reportInfraIssue({
-        component: 'worktree_bootstrap',
-        operation: 'bun install --frozen-lockfile',
-        error: err,
-        context: { checkoutPath },
-        cwd: repoRoot,
-      });
+    } else {
+      // node_modules already exists — run bun install normally
+      const timeoutMs = options.installTimeoutMs ?? 180_000;
+      try {
+        execSync('bun install --frozen-lockfile', {
+          cwd: checkoutPath,
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: timeoutMs,
+          windowsHide: true,
+        });
+        installed = true;
+      } catch (err: unknown) {
+        console.warn(
+          `⚠️  bun install failed in ${checkoutPath}. Run it manually: cd ${checkoutPath} && bun install`,
+        );
+        reportInfraIssue({
+          component: 'worktree_bootstrap',
+          operation: 'bun install --frozen-lockfile',
+          error: err,
+          context: { checkoutPath },
+          cwd: repoRoot,
+        });
+      }
     }
   }
+
   return { installed };
 };
 
@@ -758,7 +838,6 @@ const killContractPorts = async (checkoutPath: string): Promise<void> => {
     PORTS.emulator.hub,
     PORTS.emulator.site,
     PORTS.emulator.auth,
-    PORTS.emulator.firestore,
     PORTS.emulator.functions,
     PORTS.emulator.hosting,
     PORTS.emulator.pubsub,

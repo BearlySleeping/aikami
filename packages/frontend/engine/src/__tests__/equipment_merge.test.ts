@@ -13,7 +13,7 @@ import { describe, expect, it } from 'bun:test';
 // ---------------------------------------------------------------------------
 // Environment bootstrap
 //
-// game_world.ts transitively imports @aikami/frontend/configs (via pixi_app),
+// game_world.ts transitively imports @aikami/frontend-configs (via pixi_app),
 // whose environment singleton validates PUBLIC_APP_ID / PUBLIC_MODE at module
 // load. The engine test task has no preload (unlike client), so the env is
 // set here and the module is imported dynamically AFTER the vars exist.

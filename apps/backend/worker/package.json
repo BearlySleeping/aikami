@@ -16,6 +16,6 @@
   "dependencies": {
     "@aikami/backend-discord-bot": "workspace:*",
     "@aikami/logger": "workspace:*",
-    "elysia": "^1.4.29"
+    "elysia": "1.4.30"
   }
 }

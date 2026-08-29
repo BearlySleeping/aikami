@@ -27,7 +27,6 @@ export type BackendEnv = {
   readonly PWA_URL?: string;
   readonly APP_URL?: string;
   readonly FIREBASE_SERVICE_ACCOUNT?: string;
-  readonly FIRESTORE_EMULATOR_HOST?: string;
   readonly FIREBASE_AUTH_EMULATOR_HOST?: string;
   readonly GCP_PROJECT_ID?: string;
   readonly GMAIL_CLIENT_ID?: string;
@@ -120,7 +119,6 @@ const BACKEND_ENV_KEYS: (keyof BackendEnv)[] = [
   'K_SERVICE',
   'PWA_URL',
   'FIREBASE_SERVICE_ACCOUNT',
-  'FIRESTORE_EMULATOR_HOST',
   'FIREBASE_AUTH_EMULATOR_HOST',
   'GCP_PROJECT_ID',
   'GMAIL_CLIENT_ID',
@@ -228,7 +226,7 @@ export const isEmulatorMode = (): boolean => {
 
   const appMode = getMode();
 
-  return !!backendEnv.FIRESTORE_EMULATOR_HOST || appMode === 'emulator' || appMode === 'testing';
+  return appMode === 'emulator' || appMode === 'testing';
 };
 
 /**

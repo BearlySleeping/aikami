@@ -312,7 +312,7 @@ const short = (path: string): string => relative(bundleDir, path);
  * and transitively via the barrel's `export *`. See docs/TODO.md.
  *
  * Verified via `bun -e "await import('./sim.ts')"` etc. that none of the
- * ~25 dynamic `await import('@aikami/frontend/engine')` call sites in
+ * ~25 dynamic `await import('@aikami/frontend-engine')` call sites in
  * client/src destructure any of these names — so today this is a dangling
  * getter nobody calls, not a live crash. Revisit if that ever changes.
  */

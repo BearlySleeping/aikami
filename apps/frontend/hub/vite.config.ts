@@ -140,15 +140,15 @@ export default defineConfig(({ mode }) => {
         '@aikami/frontend/components': toPackagesPath('frontend/components/src'),
         '@aikami/frontend/components/*': toPackagesPath('frontend/components/src/lib/*'),
 
-        '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
-        '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
-        '@aikami/frontend/theme': toPackagesPath('frontend/theme/src'),
-        '@aikami/frontend/theme/*': toPackagesPath('frontend/theme/src/lib/*'),
-        '@aikami/frontend/preview': toPackagesPath('frontend/preview/src'),
-        '@aikami/frontend/preview/sandbox': toPackagesPath('frontend/preview/src/sandbox.ts'),
-        '@aikami/frontend/preview/*': toPackagesPath('frontend/preview/src/lib/*'),
-        '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
-        '@aikami/frontend/engine/*': toPackagesPath('frontend/engine/src/*'),
+        '@aikami/frontend-configs': toPackagesPath('frontend/configs/src'),
+        '@aikami/frontend-configs/*': toPackagesPath('frontend/configs/src/lib'),
+        '@aikami/frontend-theme': toPackagesPath('frontend/theme/src'),
+        '@aikami/frontend-theme/*': toPackagesPath('frontend/theme/src/lib/*'),
+        '@aikami/frontend-preview': toPackagesPath('frontend/preview/src'),
+        '@aikami/frontend-preview/sandbox': toPackagesPath('frontend/preview/src/sandbox.ts'),
+        '@aikami/frontend-preview/*': toPackagesPath('frontend/preview/src/lib/*'),
+        '@aikami/frontend-engine': toPackagesPath('frontend/engine/src'),
+        '@aikami/frontend-engine/*': toPackagesPath('frontend/engine/src/*'),
         '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
         '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
         '@aikami/frontend/storage': toPackagesPath('frontend/storage/src'),
@@ -181,7 +181,7 @@ export default defineConfig(({ mode }) => {
 
     define: {
       // Ensure PUBLIC_APP_ID and PUBLIC_MODE are always available at runtime.
-      // The configs package (@aikami/frontend/configs) requires these.
+      // The configs package (@aikami/frontend-configs) requires these.
       'import.meta.env.PUBLIC_APP_ID': JSON.stringify(process.env.PUBLIC_APP_ID || 'hub'),
       'import.meta.env.PUBLIC_MODE': JSON.stringify(process.env.PUBLIC_MODE || mode),
     },

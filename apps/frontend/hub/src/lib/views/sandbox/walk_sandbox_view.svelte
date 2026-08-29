@@ -34,7 +34,7 @@ onMount(() => {
       }
 
       // Dynamically import WalkSandbox ViewModel (avoids pulling engine into server bundle)
-      const mod = await import('@aikami/frontend/preview/sandbox');
+      const mod = await import('@aikami/frontend-preview/sandbox');
 
       // Create the base WalkSandbox ViewModel
       baseVm = mod.getWalkSandboxViewModel({

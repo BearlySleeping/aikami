@@ -10,7 +10,6 @@ export const EMULATOR_REGION = CLOUD_FUNCTIONS_REGION;
 
 export const EMULATOR_HOSTS = {
   auth: `localhost:${EMULATOR_PORTS.auth}`,
-  firestore: `localhost:${EMULATOR_PORTS.firestore}`,
   functions: `localhost:${EMULATOR_PORTS.functions}`,
   hosting: `localhost:${EMULATOR_PORTS.hosting}`,
   storage: `localhost:${EMULATOR_PORTS.storage}`,
@@ -19,16 +18,4 @@ export const EMULATOR_HOSTS = {
 
 export const EMULATOR_HEALTH_URLS = {
   auth: `http://${EMULATOR_HOSTS.auth}`,
-  firestore: `http://${EMULATOR_HOSTS.firestore}`,
 } as const;
-
-// ── Firestore REST URL builders ──────────────────────────────
-/** Base URL for Firestore emulator REST API (documents). */
-export function getEmulatorFirestoreUrl(): string {
-  return `http://${EMULATOR_HOSTS.firestore}/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents`;
-}
-
-/** URL for Firestore emulator :runQuery endpoint. */
-export function getEmulatorFirestoreRunQueryUrl(): string {
-  return `http://${EMULATOR_HOSTS.firestore}/v1/projects/${EMULATOR_PROJECT_ID}/databases/(default)/documents:runQuery`;
-}

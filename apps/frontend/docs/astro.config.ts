@@ -116,8 +116,8 @@ export default defineConfig({
   vite: {
     resolve: {
       alias: {
-        '@aikami/frontend/theme': `${monorepoRoot}packages/frontend/theme/src/index.ts`,
-        '@aikami/frontend/theme/': `${monorepoRoot}packages/frontend/theme/src/lib/`,
+        '@aikami/frontend-theme': `${monorepoRoot}packages/frontend/theme/src/index.ts`,
+        '@aikami/frontend-theme/': `${monorepoRoot}packages/frontend/theme/src/lib/`,
       },
     },
     server: {

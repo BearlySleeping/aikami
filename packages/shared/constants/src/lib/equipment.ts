@@ -59,7 +59,7 @@ export const EQUIPMENT_SLOT_TO_LPC_SLOT: Readonly<Record<EquipmentSlot, string>>
 // C-430: LPC_SLOT_Z_ORDER and LPC_DEFAULT_SLOT_Z removed — the canonical
 // direction-aware order table lives in packages/frontend/engine/src/rendering/
 // lpc_layer_order.ts. This was one of seven competing tables.
-// See LPC_LAYER_ORDER and resolveLayerDepth in @aikami/frontend/engine.
+// See LPC_LAYER_ORDER and resolveLayerDepth in @aikami/frontend-engine.
 
 // ── Starter kit (character creation) ─────────────────────────────────────
 

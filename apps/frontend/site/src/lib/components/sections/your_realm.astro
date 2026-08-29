@@ -18,7 +18,7 @@ const stats = await getRepoStats();
       </h2>
       <p class="mt-5 text-muted-foreground leading-relaxed">
         Aikami is built from the ground up for self-hosting and offline-first operation. Everything
-        runs locally by default. Saves, assets, and world state can sync to Firebase for
+        runs locally by default. Saves, assets, and world state can sync to the cloud for
         multi-device continuity, but it's completely optional — your world works perfectly offline
         with no internet connection. No vendor lock-in. No subscriptions. Just your hardware, your
         rules.
@@ -365,11 +365,10 @@ bun tauri build
       <p
         class="mt-6 text-center text-xs text-muted-foreground/70 leading-relaxed max-w-2xl mx-auto"
       >
-        Firebase sits on top for auth and optional cloud sync. The game reads and writes local
+        Cloud sync sits on top for auth and optional cloud sync. The game reads and writes local
         storage first (Turso for desktop, IndexedDB for web), so it plays and saves with no account
-        and no connection. When signed in with sync enabled, save copies go to Firebase Storage and
-        some data may use Firestore for cross-device delivery. Firebase is not a boot dependency for
-        gameplay availability.
+        and no connection. When signed in with sync enabled, save copies go to the cloud for
+        cross-device delivery. Cloud sync is not a boot dependency for gameplay availability.
       </p>
     </div>
   </div>

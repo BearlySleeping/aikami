@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/components/game/lpc_context_keys.ts
 
 /**
- * Svelte context key for injecting the {@link import('@aikami/frontend/engine').LpcBatchManager}
+ * Svelte context key for injecting the {@link import('@aikami/frontend-engine').LpcBatchManager}
  * into the LPC rendering component tree.
  *
  * Parents call `setContext(LPC_BATCH_MANAGER_KEY, batchManager)` and

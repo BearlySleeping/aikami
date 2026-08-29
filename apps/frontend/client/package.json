@@ -29,10 +29,10 @@
     "format": "biome format src",
     "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental",
     "fix": "biome check --write src --error-on-warnings",
-    "test:unit": "bunx svelte-kit sync && bun test --isolate --preload ./src/lib/test_preload.ts --tsconfig-override=tsconfig.test.json src/lib"
+    "test:unit": "bunx svelte-kit sync && bun scripts/write_test_tsconfig.ts && bun test --isolate --preload ./src/lib/test_preload.ts --tsconfig-override=tsconfig.test.json src/lib"
   },
   "devDependencies": {
-    "@inlang/paraglide-js": "2.24.1",
+    "@inlang/paraglide-js": "2.25.0",
     "@playwright/test": "1.62.1",
     "@sveltejs/adapter-static": "4.0.0-next.4",
     "@sveltejs/kit": "3.0.0-next.25",
@@ -40,11 +40,10 @@
     "@tailwindcss/vite": "4.3.3",
     "@tauri-apps/cli": "^2",
     "@types/jszip": "^3.4.1",
-    "@types/node": "26.3.0",
+    "@types/node": "26.4.0",
     "@types/png-chunks-extract": "1.0.2",
     "@types/text-encoding": "0.0.40",
     "daisyui": "5.7.22",
-    "firebase-tools": "15.28.1",
     "rollup-plugin-visualizer": "7.1.1",
     "svelte": "5.56.10",
     "svelte-check": "4.7.6",
@@ -53,15 +52,15 @@
     "vite": "8.2.2",
     "vite-plugin-devtools-json": "1.1.0",
     "vite-plugin-iso-import": "1.3.0",
-    "wrangler": "4.126.0"
+    "wrangler": "4.127.1"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
     "@aikami/frontend-components": "workspace:*",
     "@aikami/frontend-services": "workspace:*",
     "@aikami/frontend-utils": "workspace:*",
-    "@aikami/frontend/engine": "workspace:*",
-    "@aikami/frontend/theme": "workspace:*",
+    "@aikami/frontend-engine": "workspace:*",
+    "@aikami/frontend-theme": "workspace:*",
     "@aikami/logger": "workspace:*",
     "@aikami/lpc": "workspace:*",
     "@aikami/mocks": "workspace:*",
@@ -81,13 +80,12 @@
     "bitecs": "^0.4.0",
     "device-detector-js": "3.0.3",
     "eruda": "3.4.3",
-    "firebase-admin": "14.3.0",
     "jszip": "^3.10.1",
     "kokoro-js": "1.2.1",
     "onnxruntime-web": "1.29.0",
-    "pixi.js": "8.20.0",
+    "pixi.js": "8.20.1",
     "png-chunks-extract": "1.0.0",
     "text-encoding": "0.7.0",
-    "@aikami/frontend/preview": "workspace:*"
+    "@aikami/frontend-preview": "workspace:*"
   }
 }

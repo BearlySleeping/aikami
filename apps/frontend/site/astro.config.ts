@@ -180,10 +180,10 @@ export default defineConfig({
     plugins: [tailwindcss()] as any[],
     resolve: {
       alias: {
-        '@aikami/frontend/theme': fileURLToPath(
+        '@aikami/frontend-theme': fileURLToPath(
           new URL('../../../packages/frontend/theme/src/index.ts', import.meta.url),
         ),
-        '@aikami/frontend/theme/': fileURLToPath(
+        '@aikami/frontend-theme/': fileURLToPath(
           new URL('../../../packages/frontend/theme/src/lib/', import.meta.url),
         ),
       },

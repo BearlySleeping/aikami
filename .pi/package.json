@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "@types/bun": "^1.4.0",
-    "@earendil-works/pi-coding-agent": "^0.84.3"
+    "@earendil-works/pi-coding-agent": "^0.84.4"
   },
   "scripts": {
     "test": "bun test extensions/",
@@ -19,6 +19,6 @@
   "dependencies": {
     "@hypabolic/hypa": "^0.1.14",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   }
 }

@@ -11,7 +11,6 @@
   "packages": [
     "npm:context-mode",
     "npm:pi-mcp-adapter",
-    "npm:@hypabolic/pi-hypa",
     "npm:pi-cache-optimizer",
     "npm:pi-deepinfra",
     "git:github.com/jrimmer/pi-deepseek-optimized"

@@ -5,20 +5,20 @@
 //
 // Contract: C-372, C-444, C-445
 
-import type { LpcSheetGeometry } from '@aikami/frontend/engine';
-import { resolveLpcSheetGeometry } from '@aikami/frontend/engine/content';
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import { lpcStateSuffix, lpcTag } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';
 import { Assets, Rectangle, Sprite, Texture } from 'pixi.js';
+import { resolveLpcSheetGeometry } from '../../../../engine/src/content.ts';
+import type { LpcSheetGeometry } from '../../../../engine/src/index.ts';
 
 // ── Sheet layout detection ────────────────────────────────────────────────
 
 // C-428: LpcSheetLayout and detectLpcSheetLayout are replaced by the shared
-// resolver in @aikami/frontend/engine. This file delegates to it.
+// resolver in @aikami/frontend-engine. This file delegates to it.
 
 /**
- * @deprecated Use the shared LpcSheetGeometry from @aikami/frontend/engine.
+ * @deprecated Use the shared LpcSheetGeometry from @aikami/frontend-engine.
  *   Re-exported here for backward compatibility.
  */
 export type LpcSheetLayout = LpcSheetGeometry;

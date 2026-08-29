@@ -132,7 +132,7 @@ const computeFrameRect = (options: {
 
 describe('C-428 AC-4: Both renderers agree on every shipped LPC sheet shape', () => {
   // Store dynamically imported modules
-  let engine: typeof import('@aikami/frontend/engine');
+  let engine: typeof import('@aikami/frontend-engine');
   let client: typeof import('./lpc_renderer');
 
   beforeEach(async () => {
@@ -148,9 +148,9 @@ describe('C-428 AC-4: Both renderers agree on every shipped LPC sheet shape', ()
       logger: { debug: () => {}, warn: () => {}, info: () => {}, error: () => {} },
     }));
 
-    engine = await import('@aikami/frontend/engine');
+    engine = await import('../../../../../../packages/frontend/engine/src/index.ts');
     client = await import('./lpc_renderer');
-  });
+  }, 15000);
 
   it('engine resolver and client wrapper produce identical geometry for all shapes', () => {
     for (const shape of SHIPPED_SHEET_SHAPES) {

@@ -1,5 +1,5 @@
 {
-  "name": "@aikami/frontend/preview",
+  "name": "@aikami/frontend-preview",
   "license": "MIT",
   "version": "0.0.1",
   "type": "module",
@@ -22,14 +22,14 @@
     "fix": "biome check --write ."
   },
   "dependencies": {
-    "@aikami/frontend/engine": "workspace:*",
+    "@aikami/frontend-engine": "workspace:*",
     "@aikami/frontend-services": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/lpc": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "pixi.js": "8.20.0"
+    "pixi.js": "8.20.1"
   },
   "devDependencies": {
     "svelte": "5.56.10",

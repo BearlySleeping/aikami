@@ -4,15 +4,14 @@
 // Owns initialization, resolver loading, engine lifecycle, and state.
 // Generalised from apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view_model.svelte.ts (C-445).
 
-import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
-import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
 import {
   BaseDevViewModel,
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
-
 import type { AssetResolver } from '@aikami/types';
+import type { EngineBridge, GameWorldOptions } from '../../../../engine/src/index.ts';
+import { createEngineBridge, GameWorld, TextureManager } from '../../../../engine/src/index.ts';
 
 export type WalkSandboxViewModelInterface = BaseDevViewModelInterface & {
   readonly engineReady: boolean;

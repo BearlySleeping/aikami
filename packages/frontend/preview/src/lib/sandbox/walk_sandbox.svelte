@@ -3,7 +3,7 @@
 //
 // Walk sandbox component — mounts a GameWorld for interactive map exploration.
 // Pure wrapper; all logic lives in the ViewModel.
-// Imported from @aikami/frontend/preview/sandbox to avoid pulling GameWorld
+// Imported from @aikami/frontend-preview/sandbox to avoid pulling GameWorld
 // into static preview bundles.
 
 import type { AssetResolver } from '@aikami/types';

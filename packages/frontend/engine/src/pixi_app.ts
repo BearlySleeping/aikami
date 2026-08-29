@@ -4,9 +4,9 @@
 // for environments without eval() (e.g., Tauri's CSP).
 import 'pixi.js/unsafe-eval';
 
-import { isEmulatorModePublic } from '@aikami/frontend/configs';
 import { Application } from 'pixi.js';
 import { logger } from '$logger';
+import { isEmulatorModePublic } from '../../configs/src/index.ts';
 import { isE2ETestMode, resolvePixiInitOptions } from './pixi_init_options.ts';
 import { initLpcShaders } from './rendering/sprite_composer.ts';
 import { installNearestTextureDefault } from './rendering/texture_defaults.ts';

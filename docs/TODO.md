@@ -97,3 +97,11 @@ Reference material for item 6. SvelteKit 3 (`chore/sveltekit3-migration`) prints
 5. Run `moon check` (typecheck + lint) and `bun test` for both apps — TypeScript resolves `imports` field subpaths automatically under `moduleResolution: "bundler"`, which this repo already uses, so no `tsconfig.json` changes should be needed, but verify `apps/frontend/client/tsconfig.json` / `apps/frontend/hub/tsconfig.json` after.
 6. Update `.pi/skills/svelte-conventions/SKILL.md` (and anywhere else in `.pi/skills` that documents the `$lib`/`@aikami/*` import convention) to describe the new `#`-prefixed convention — otherwise every future contract will regenerate the old aliases from muscle memory.
 7. Build + preview both apps (`bun run build && bun run preview` in each) and confirm the `config.alias` deprecation warning is gone and nothing 404s.
+
+## Other
+- Have .pi/extensions all execute bun run instead of importing from scripts directly, that way we can use bun utilities and use path alias in scripts, then we can implement $logger inside scripts as well. (right we run a test to check if any code in .pi uses bun utilities, so we can update the test to check for any imports from scripts, createa a common wrapper to execute scripts from .pi in .pi/extensions/lib)
+- add Bun.spawn({
+  cmd: ["your-command"],
+  windowsHide: true, // Hides the console window on Windows
+});
+ for scripts in .pi/extensions to avoid console window popups, so first make .pi/extensions use bun run and then have bun.spawn as test wrapper for bun run autofix

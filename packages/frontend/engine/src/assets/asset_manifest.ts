@@ -6,7 +6,12 @@
 //
 // Contract: C-243
 
-import { ASSET_CATEGORIES, categoryForPath, MAX_TAG_LIST_LENGTH, tagToAssetPath } from '@aikami/constants';
+import {
+  ASSET_CATEGORIES,
+  categoryForPath,
+  MAX_TAG_LIST_LENGTH,
+  tagToAssetPath,
+} from '@aikami/constants';
 import type { AssetManifest, AssetTreeNode } from '@aikami/types';
 
 // ---------------------------------------------------------------------------

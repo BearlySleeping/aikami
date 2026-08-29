@@ -36,7 +36,6 @@ let prompt = $state('');
         onclick={() => {
           const currentPrompt = prompt;
           onGenerate?.(currentPrompt);
-          // biome-ignore lint/suspicious/noGlobalAssign: Svelte 5 $state() rune, not a global
           prompt = '';
         }}
       >
