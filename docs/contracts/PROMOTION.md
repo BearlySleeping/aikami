@@ -1,6 +1,6 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-08-26
+> Auto-generated: 2026-08-29
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
@@ -188,8 +188,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-439 | Card Lorebook Import | 🛠️ implemented | v2 |
 | C-440 | Ci Tooling Baseline | 🛠️ implemented | v2 |
 | C-441 | Sops Secrets Migration | 🛠️ implemented | v2 |
-| C-442 | Lpc Core Package Runtime Catalog | 📝 draft | v1 |
-| C-443 | Engine Subpath Entrypoints | 📝 draft | v1 |
-| C-444 | Asset Resolver Seam | 📝 draft | v1 |
-| C-448 | Debundle Content Packs | 📝 draft | v1 |
+| C-442 | Lpc Core Package Runtime Catalog | 🛠️ implemented | v1 |
+| C-443 | Engine Subpath Entrypoints | 🛠️ implemented | v1 |
+| C-444 | Asset Resolver Seam | 🛠️ implemented | v1 |
+| C-448 | Debundle Content Packs | 🛠️ implemented | v1 |
 

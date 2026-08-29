@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-08-26)
+## Status Summary (Auto-generated: 2026-08-29)
 
-**202 active (0 without contract file), 119 archived, 0 duplicates**
+**203 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -203,13 +203,14 @@
 | C-439 | Card Lorebook Import | 🛠️ implemented | — | v2 |
 | C-440 | Ci Tooling Baseline | 🛠️ implemented | — | v2 |
 | C-441 | Sops Secrets Migration | 🛠️ implemented | — | v2 |
-| C-442 | Lpc Core Package Runtime Catalog | 📝 draft | — | v1 |
-| C-443 | Engine Subpath Entrypoints | 📝 draft | — | v1 |
-| C-444 | Asset Resolver Seam | 📝 draft | — | v1 |
+| C-442 | Lpc Core Package Runtime Catalog | 🛠️ implemented | — | v1 |
+| C-443 | Engine Subpath Entrypoints | 🛠️ implemented | — | v1 |
+| C-444 | Asset Resolver Seam | 🛠️ implemented | — | v1 |
 | C-445 | Shared Preview Package | 📝 draft | ❓ `sandbox` | v1 |
-| C-446 | Hub Catalog Asset Previews | 📝 draft | ❓ `integrated` | v1 |
-| C-447 | Hub Walkable Map Sandbox | 📝 draft | ❓ `integrated` | v1 |
-| C-448 | Debundle Content Packs | 📝 draft | — | v1 |
+| C-446 | Hub Catalog Asset Previews | 🛠️ implemented | ❓ `integrated` | v1 |
+| C-447 | Hub Walkable Map Sandbox | 🛠️ implemented | ❓ `integrated` | v1 |
+| C-448 | Debundle Content Packs | 🛠️ implemented | — | v1 |
+| C-449 | Misc Polish Batch | 📝 draft | ❓ `sandbox` | v1 |
 
 ---
 
