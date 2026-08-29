@@ -55,6 +55,7 @@
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
     "@elysiajs/eden": "^1.4.9",
+    "@sinclair/typebox": "0.34.0",
     "drizzle-orm": "^0.45.2",
     "elysia": "1.4.30",
     "eruda": "3.4.3"

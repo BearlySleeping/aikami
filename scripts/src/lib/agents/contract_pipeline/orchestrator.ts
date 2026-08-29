@@ -508,7 +508,11 @@ const formatBlockedSummary = (manifest: RunManifest): string => {
     lines.push('');
   }
   if (manifest.worktreeCheckoutPath) {
-    lines.push('Work in progress is preserved at:', `  ${manifest.worktreeCheckoutPath}`);
+    // 🔴 Normalize backslashes to forward slashes on Windows — the review
+    // captain (a pi agent) uses the bash tool which cannot handle
+    // C:\Users\... paths through hypa.
+    const normalizedPath = manifest.worktreeCheckoutPath.replaceAll('\\', '/');
+    lines.push('Work in progress is preserved at:', `  ${normalizedPath}`);
     if (manifest.worktreeBranch) {
       lines.push(`  branch: ${manifest.worktreeBranch}`);
     }

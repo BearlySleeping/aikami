@@ -130,6 +130,43 @@ const { viewModel }: Props = $props();
           {/if}
         </div>
 
+        <!-- Voice local download section (C-449 AC-2) -->
+        {#if viewModel.showVoiceLocalDownload}
+          <div class="divider text-sm text-base-content/60">Or download the local voice model</div>
+          <div class="flex flex-col gap-2 p-3 bg-base-200 rounded-box">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-medium">Kokoro TTS Model</span>
+              <span class="text-xs text-base-content/50">{viewModel.voiceModelSizeLabel}</span>
+            </div>
+            {#if viewModel.voiceModelState.status === 'downloading' || viewModel.voiceModelState.status === 'verifying'}
+              <progress
+                class="progress progress-primary w-full"
+                value={viewModel.voiceModelProgress}
+                max="100"
+              ></progress>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline flex-1"
+                  onclick={() => viewModel.cancelVoiceModelDownload()}
+                >
+                  Cancel
+                </button>
+              </div>
+            {:else if viewModel.voiceModelState.status === 'ready'}
+              <p class="text-xs text-success">✓ Voice model ready</p>
+            {:else}
+              <button
+                type="button"
+                class="btn btn-sm btn-primary"
+                onclick={() => viewModel.downloadVoiceModel()}
+              >
+                Download Voice Model
+              </button>
+            {/if}
+          </div>
+        {/if}
+
         <!-- Start Campaign — disabled without a text provider -->
         <button
           type="button"

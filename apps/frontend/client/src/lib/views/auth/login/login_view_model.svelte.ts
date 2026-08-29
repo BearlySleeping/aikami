@@ -74,8 +74,13 @@ class LoginViewModel
     this._isSigningIn = true;
     this.errorMessage = undefined;
 
+    // C-449 AC-6: when on the /link route, pass the current URL as callbackURL
+    // so the OAuth redirect returns to the link page with the code intact
+    // instead of falling back to the default callback (/).
+    const callbackURL = window.location.pathname === '/link' ? window.location.href : undefined;
+
     try {
-      const response = await authService.socialSignIn('google');
+      const response = await authService.socialSignIn('google', callbackURL);
       // socialSignIn uses a full-page redirect in the browser (the Tauri
       // path hands off to the /link device page instead). Callers that need
       // to act once signed in (e.g. the /link handoff) react to

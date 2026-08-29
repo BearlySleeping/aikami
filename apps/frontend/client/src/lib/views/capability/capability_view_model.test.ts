@@ -66,6 +66,13 @@ const _createSvcStub = () => {
 
 mock.module('$services', () => ({
   ..._createSvcStub(),
+  voiceModelService: {
+    state: { status: 'not-downloaded', receivedBytes: 0, totalBytes: 92887435 },
+    totalBytes: 92887435,
+    download: mock(async () => ({ status: 'ready' })),
+    cancel: mock(() => {}),
+    checkStatus: mock(async () => ({ status: 'not-downloaded' })),
+  },
   // C-389: engine URLs resolve from the runtime config at call time.
   runtimeConfigService: {
     getTextUrl: () => undefined,
@@ -324,5 +331,41 @@ describe('CapabilityViewModel', () => {
     expect(vm.hasImageProvider).toBe(true);
     expect(vm.connectionEntries.length).toBeGreaterThan(0);
     expect(vm.connectionEntries[0].providerLabel).toBe('ComfyUI (local)');
+  });
+
+  // ── C-449 AC-2: Voice/image capability UX differentiation ────────────
+
+  test('showVoiceLocalDownload is true on voice tab when no voice provider configured', () => {
+    const vm = createVm();
+    vm.setActiveTab('voice');
+    expect(vm.showVoiceLocalDownload).toBe(true);
+  });
+
+  test('showVoiceLocalDownload is false on non-voice tabs', () => {
+    const vm = createVm();
+    expect(vm.showVoiceLocalDownload).toBe(false); // text tab
+    vm.setActiveTab('image');
+    expect(vm.showVoiceLocalDownload).toBe(false); // image tab
+  });
+
+  test('showVoiceLocalDownload is false on voice tab when voice provider exists', async () => {
+    const { configService } = await import('$services');
+    configService.addConnection({
+      provider: 'elevenlabs',
+      capability: 'voice',
+      name: 'ElevenLabs',
+      model: '',
+      baseUrl: '',
+      apiKey: 'test',
+    });
+    const vm = createVm();
+    vm.setActiveTab('voice');
+    expect(vm.showVoiceLocalDownload).toBe(false);
+  });
+
+  test('voiceModelState and voiceModelSizeLabel surface from voiceModelService', () => {
+    const vm = createVm();
+    expect(vm.voiceModelSizeLabel).toMatch(/MB/);
+    expect(vm.voiceModelState).toBeDefined();
   });
 });

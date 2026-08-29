@@ -14,6 +14,7 @@ import { logger } from '@aikami/logger';
 import { Client, Events, GatewayIntentBits, Partials } from 'discord.js';
 import { handleMessageCreate } from './lib/handlers/message_create';
 import { handleThreadCreate } from './lib/handlers/thread_create';
+import { handleGuildMemberUpdate } from './lib/role_sync';
 import type { DiscordBotEnv } from './lib/types';
 
 export { discordInteractions } from './lib/interactions/handler';
@@ -34,12 +35,19 @@ export async function startDiscordBot(env: DiscordBotEnv): Promise<Client> {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildMembers,
     ],
     partials: [Partials.Message, Partials.Channel],
   });
 
   client.once(Events.ClientReady, (c) => {
     logger.info(`discord-bot: logged in as ${c.user.tag}`);
+  });
+
+  client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
+    handleGuildMemberUpdate(oldMember, newMember).catch((err) => {
+      logger.error(`discord-bot: unhandled guildMemberUpdate error: ${(err as Error).message}`);
+    });
   });
 
   client.on(Events.ThreadCreate, (thread, newlyCreated) => {

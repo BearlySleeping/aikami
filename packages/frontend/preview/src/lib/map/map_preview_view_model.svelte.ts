@@ -132,6 +132,13 @@ class MapPreviewViewModel
         return;
       }
 
+      const contentType = response.headers.get('content-type') ?? '';
+      if (!contentType.includes('json')) {
+        const text = await response.text().catch(() => '');
+        this.errorMessage = `Expected JSON but got ${contentType || 'unknown'} — server returned: ${text.slice(0, 200)}`;
+        return;
+      }
+
       const mapData = await response.json();
       const ctx = canvas.getContext('2d');
       if (!ctx) {

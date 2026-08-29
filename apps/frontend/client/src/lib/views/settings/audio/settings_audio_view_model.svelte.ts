@@ -227,13 +227,27 @@ class SettingsAudioViewModel
   }
 
   async downloadVoiceModel(): Promise<void> {
-    await voiceModelService.download();
-    // Re-initialize TTS now that the model exists (C-389 CR): whenever the
-    // engine is not already ready after a successful download — but never
-    // tear down an active server backend.
-    if (voiceModelService.state.status === 'ready' && ttsService.status !== 'ready') {
-      ttsService.reset();
-      await ttsService.initialize().catch(() => {});
+    // C-449 AC-1: check connectivity before attempting download
+    if (!navigator.onLine) {
+      this.feedback =
+        'Cannot download: you appear to be offline. Please check your connection and try again.';
+      return;
+    }
+
+    try {
+      await voiceModelService.download();
+      // Re-initialize TTS now that the model exists (C-389 CR): whenever the
+      // engine is not already ready after a successful download — but never
+      // tear down an active server backend.
+      if (voiceModelService.state.status === 'ready' && ttsService.status !== 'ready') {
+        ttsService.reset();
+        await ttsService.initialize().catch(() => {});
+      }
+      this.feedback = 'Voice model downloaded successfully.';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.feedback = `Download failed: ${message}`;
+      this.warn('downloadVoiceModel:failed', error);
     }
   }
 

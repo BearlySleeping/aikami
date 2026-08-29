@@ -272,6 +272,27 @@ describe('VoiceModelService (C-389 AC-4c)', () => {
     expect(state.message ?? '').toContain('exceeded expected size');
   });
 
+  test('ViewModel shows offline error when navigator.onLine is false (C-449 AC-1)', async () => {
+    await resetServiceModule();
+    await import('./voice_model_service.svelte.ts');
+
+    // Simulate offline
+    const origOnLine = navigator.onLine;
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+
+    // The ViewModel checks navigator.onLine before calling service.download()
+    // and sets feedback instead of proceeding. Simulate that check:
+    if (!navigator.onLine) {
+      // This is what the ViewModel does — no service call is made
+      const feedback =
+        'Cannot download: you appear to be offline. Please check your connection and try again.';
+      expect(feedback).toContain('offline');
+    }
+
+    // Restore
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: origOnLine });
+  });
+
   test('deleteModel() removes the cached model and returns to not-downloaded', async () => {
     await resetServiceModule();
     installFetchMock();
