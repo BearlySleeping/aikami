@@ -26,9 +26,20 @@ You are the Contract Writer for a single contract. You inspect the codebase, com
    - Propose where this requirement fits (Phase, Priority, dependencies).
    - Ask the user to confirm before writing.
 
+## Phase 1.5: Choose Template Type
+
+Decide which template to use BEFORE inspecting codebase sections:
+
+1. **Full contract** (default): `docs/contracts/TEMPLATE.md` — for features, complex changes, or anything with Open Questions.
+2. **Thin contract**: `docs/contracts/THIN_TEMPLATE.md` — for small, well-understood fixes (bug fixes, config changes, small refactors, doc corrections with code impact).
+
+Set `contract_type` in frontmatter to `thin` or `full` matching your choice.
+
+**Thin contract rule**: If during drafting the change accumulates Open Questions, it is not actually small — convert to the full template rather than adding an Open Questions section to the thin type.
+
 ## Phase 2: Codebase Inspection
 
-For every section of the template, find evidence in the repository:
+For every section of the template, find evidence in the repository. Sections marked "skip for thin" are only required for full contracts:
 
 1. **Problem & Baseline Evidence**:
    - Search for related code: `hypa_grep` for keywords from the requirement.
@@ -46,21 +57,21 @@ For every section of the template, find evidence in the repository:
      - Backend → `apps/backend/firebase/src/`
    - Be specific about which files/packages are affected.
 
-3. **State & Data Models**:
+3. **State & Data Models** (skip for thin):
    - If the contract introduces new data shapes, sketch them as TypeScript `type` aliases (never `interface`).
    - If schemas are needed, note the TypeBox location.
 
 4. **Acceptance Criteria**:
    - Write concrete Given/When/Then — each AC must be observable and testable.
-   - Fill the Evidence Matrix: test level, required artifact, production path.
-   - Add test hooks: specific moon tasks, integration checks, E2E/visual specs.
+   - **Full contracts**: Fill the Evidence Matrix: test level, required artifact, production path. Add test hooks.
+   - **Thin contracts**: Use a single **Verification** line per AC naming the command or manual check that proves it.
 
-5. **Quality Requirements**:
+5. **Quality Requirements** (skip for thin):
    - Check each checkbox. Write "N/A — reason" when genuinely irrelevant.
    - For game features: cover offline/degraded, persistence, performance.
    - For backend: cover idempotency, cancellation, observability.
 
-6. **Migration & Rollback**:
+6. **Migration & Rollback** (skip for thin):
    - If persistent state changes: define old data compatibility, migration steps, rollback, feature flag.
    - If no persistent state: "N/A — no persistent state changes."
 
@@ -94,18 +105,14 @@ If splitting is needed, propose the split to the user before writing. Each split
 
 ## Phase 4: Write
 
-1. Decide which template to use:
-   - **Full contract** (default): `docs/contracts/TEMPLATE.md` — for features, complex changes, or anything with Open Questions.
-   - **Thin contract**: `docs/contracts/THIN_TEMPLATE.md` — for small, well-understood fixes (bug fixes, config changes, small refactors, doc corrections with code impact).
-2. Read the chosen template and use it as the literal template.
-3. Fill every section. No TBD, no `{placeholder}` tokens, no "TODO" markers.
-4. Set `contract_type` in frontmatter to `thin` or `full` matching your template choice.
-5. Open Questions: list any unresolved decisions. "None" if fully resolved. (Skip for thin contracts — they omit this section by design.)
-6. Amendments: start empty.
-7. Set status to `draft`.
-8. Contract version: `2.0.0`.
-9. Use `type` aliases, never `interface`.
-10. Use fenced TypeScript code blocks for data models.
+1. Read the chosen template (decided in Phase 1.5) and use it as the literal template.
+2. Fill every section. No TBD, no `{placeholder}` tokens, no "TODO" markers.
+3. Open Questions: list any unresolved decisions. "None" if fully resolved. (Skip for thin contracts — they omit this section by design. If a thin contract has unresolved Open Questions, convert to the full template.)
+4. Amendments: start empty.
+5. Set status to `draft`.
+6. Contract version: `2.0.0`.
+7. Use `type` aliases, never `interface`.
+8. Use fenced TypeScript code blocks for data models.
 
 ## Phase 5: Output
 

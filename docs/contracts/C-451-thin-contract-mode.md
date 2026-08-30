@@ -2,6 +2,7 @@
 id: C-451
 title: "Thin Contract Mode for Quick Fixes"
 source: "User request during C-450 pipeline-integrity review, 2026-08-30. Idea: small fixes currently either skip the contract pipeline entirely (no history) or force a full 18-section contract (high overhead for a one-line change). Add a lightweight contract type that stays documented but skips the sections that don't apply to small changes."
+contract_type: full
 status: implemented
 github:
   issue_number: null
@@ -21,7 +22,7 @@ created_at: "2026-08-30"
 | **Target** | `docs/contracts/THIN_TEMPLATE.md` (new), `docs/contracts/TEMPLATE.md` (cross-reference only), `scripts/src/lib/ops/lint_contracts.ts`, `scripts/src/lib/ops/sync_contracts.ts`, `scripts/src/lib/agents/contract_pipeline.ts`, `scripts/src/lib/agents/contract_pipeline/orchestrator.ts`, `docs/contracts/SHARED_SECTIONS.md` |
 | **Priority** | P2 — process/tooling improvement, not user-facing, but reduces friction that currently pushes small fixes outside the contract system entirely (undocumented history) |
 | **Dependencies** | None. Independent of [[C-450]] (which fixes historical status drift, not contract shape). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → `docs/contracts/` process docs only |
 | **Contract version** | 1.0.0 |
@@ -114,7 +115,7 @@ contract_type: full   # or: thin
 
 - **Old data compatibility**: all ~450 existing contracts lack `contract_type` — they must be treated as `full` by default, no backfill edit required.
 - **Migration**: none — additive field with a safe default.
-- **Rollback**: revert the linter/sync_contracts.ts changes; existing thin contracts remain valid markdown, just under-linted (harmless).
+- **Rollback**: revert the linter/sync_contracts.ts changes. Before reverting, convert any existing thin contracts to full contracts (they gain no new structural requirements — the linter simply becomes stricter) so they remain properly linted. Alternatively, retain compatible linter support for thin contracts throughout the rollback window.
 - **Feature flag or kill switch**: N/A — opt-in by field, not a global switch.
 - **Failure recovery**: N/A — no automated migration step to fail.
 

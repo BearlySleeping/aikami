@@ -20,7 +20,7 @@ created_at: "{created_at}"
 |---|---|
 | **Source** | `{reference_description}` |
 | **Target** | `{path}` — {brief description} |
-| **Type** | full | thin |
+| **Type** | full \| thin |
 | **Priority** | P{0\|1\|2\|3} — {one-line justification} |
 | **Dependencies** | {list of contracts or packages this depends on} |
 | **Status** | draft |

@@ -43,7 +43,7 @@ Single-session flow. You are architect, coder, QA, and docs writer in sequence. 
 
 3. **Record baseline**: The run manifest already stores the base commit — no manual bookkeeping needed. Never write state to `/tmp`.
 
-4. **Read the contract** fully. If the contract has `contract_type: thin` in its frontmatter, it uses the reduced THIN_TEMPLATE.md format — expect only: Metadata, Problem & Baseline Evidence, User Outcome, Scope Boundaries, Acceptance Criteria (with Verification line instead of Evidence Matrix), Edge Cases & Gotchas (optional), Amendments. Sections like Evidence Matrix, Quality Requirements, Implementation Sequence, and Open Questions are intentionally absent. For full contracts, read: data model, ACs, Evidence Matrix, Scope, Quality Requirements, Open Questions.
+4. **Read the contract** fully. If the contract has `contract_type: thin` in its frontmatter, it uses the reduced THIN_TEMPLATE.md format — expect only: Metadata, Problem & Baseline Evidence, User Outcome, Scope Boundaries, Acceptance Criteria (with Verification line instead of Evidence Matrix), Edge Cases & Gotchas (optional), Amendments, Execution Report (required before promotion to `implemented`). Sections like Evidence Matrix, Quality Requirements, Implementation Sequence, and Open Questions are intentionally absent. For full contracts, read: data model, ACs, Evidence Matrix, Scope, Quality Requirements, Open Questions.
 
 5. **Check dependencies**: every contract in Dependencies must exist. Status should ideally be `verified` or `completed`; `implemented` is acceptable (merged PR with evidence). Only stop if a dependency is `blocked` or `draft`.
 

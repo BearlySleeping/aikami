@@ -82,3 +82,37 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+{2-4 sentences — what was built, what was deferred}
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅/⚠️/❌ | {one-line note — be honest} |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `{path}` | {description} |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `{path}` | {description} |
+
+### Deviations from Spec
+
+{Any AC change, scope expansion/reduction, or unplanned work. If the contract's AC was wrong, note it here and propose an Amendment.}
+
+### Test Results
+
+- Unit: {PASS}/{total} ({FAIL} failures)
+- E2E: {PASS}/{total} ({FAIL} failures)
+- Baseline: {N} pre-existing failures, {N} new failures

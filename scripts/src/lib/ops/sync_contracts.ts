@@ -88,6 +88,18 @@ const extractPromotion = (content: string): string | undefined => {
  * Detect contract format version.
  * Returns 2 if contract declares version 2.0.0+, 1 otherwise.
  */
+const extractContractType = (content: string): string => {
+  // Read from frontmatter: contract_type: thin | full
+  const fm = content.match(/^---\n[\s\S]*?\n---/);
+  if (fm) {
+    const typeMatch = fm[0].match(/^contract_type:\s*(\S+)$/m);
+    if (typeMatch) {
+      return (typeMatch[1] ?? 'full').trim().toLowerCase();
+    }
+  }
+  return 'full'; // default for existing contracts without the field
+};
+
 const detectVersion = (content: string): number => {
   const versionMatch = content.match(
     /\|\s*\*\*Contract version\*\*\s*\|\s*\*{0,2}([^*|]+?)\*{0,2}\s*\|/i,
@@ -108,6 +120,7 @@ type ContractInfo = {
   promotion: string | undefined;
   fileName: string;
   archived: boolean;
+  contractType: string;
 };
 
 const readContractsFromDir = (
@@ -153,7 +166,8 @@ const readContractsFromDir = (
 
     const promotion = archived ? undefined : extractPromotion(content);
 
-    contracts.push({ id, name, status, version, promotion, fileName: file, archived });
+    const contractType = extractContractType(content);
+    contracts.push({ id, name, status, version, promotion, fileName: file, archived, contractType });
   }
 
   return { contracts, duplicateIds };

@@ -447,11 +447,6 @@ const checkOpenQuestions = (info: ContractInfo): LintIssue[] => {
     return [];
   }
 
-  // Thin contracts omit the Open Questions section entirely — skip this check
-  if (info.contractType === 'thin') {
-    return [];
-  }
-
   const oqMatch = info.content.match(/## Open Questions\n\n([\s\S]*?)(?=\n## |$)/);
   if (!oqMatch) {
     return []; // No Open Questions section — OK
@@ -499,11 +494,6 @@ const checkEvidenceMatrix = (info: ContractInfo): LintIssue[] => {
     return [];
   }
 
-  // Thin contracts omit the per-AC Evidence Matrix — skip this check
-  if (info.contractType === 'thin') {
-    return [];
-  }
-
   // Check that Evidence Matrix section exists
   const hasMatrix =
     /\*\*Evidence Matrix\*\*/i.test(info.content) ||
@@ -539,8 +529,12 @@ const lintContract = (info: ContractInfo): LintIssue[] => {
 
   if (info.version === 2 && APPROVED_OR_LATER.has(info.status)) {
     issues.push(...checkDependencies(info));
-    issues.push(...checkEvidenceMatrix(info));
-    issues.push(...checkOpenQuestions(info));
+    if (!THIN_SKIP_CHECKS.has('missing-evidence-matrix') || info.contractType !== 'thin') {
+      issues.push(...checkEvidenceMatrix(info));
+    }
+    if (!THIN_SKIP_CHECKS.has('open-questions') || info.contractType !== 'thin') {
+      issues.push(...checkOpenQuestions(info));
+    }
   }
 
   if (info.version === 2 && IMPLEMENTED_OR_LATER.has(info.status)) {

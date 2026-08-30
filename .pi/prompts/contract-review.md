@@ -102,9 +102,9 @@ Then:
 ## Phase 5: Test Verification
 
 1. Run the specific tests declared in the contract's Evidence Matrix (or Verification lines for thin contracts):
-   ```bash
-   bun moon run <project>:test -- -- --testPathPattern="<test file>"
-   ```
+   - **Test-file references**: Use `bun moon run <project>:test -- -- --testPathPattern="<test file>"`.
+   - **Command references** (thin Verification lines): Execute the command directly and confirm it exits cleanly.
+   - **Manual checks** (thin Verification lines): Record them as requiring live verification — do not attempt to automate.
 2. Record exact PASS/FAIL/SKIPPED counts.
 3. Compare against the execution report's test results. Discrepancies = flag.
 4. Run `validate({ test: true })` on affected projects. New failures = flag.
