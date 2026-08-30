@@ -40,6 +40,13 @@ All contracts follow `docs/contracts/TEMPLATE.md`. Each contract answers:
 
 ## Phase Organization
 
+> ⚠️ **The Phase 1–4 tables below are historical organization only.** They use a
+> numbering scheme (C-312–C-359) that predates the current contract numbering
+> and no longer matches the live contract IDs in `docs/contracts/PROGRESS.md`.
+> For example, INDEX.md's C-335 is "Build Party and Companion Gameplay" but the
+> live C-335 is "Enforce the Playable Demo Release Gate." See `PROGRESS.md` for
+> the authoritative status of every contract.
+
 ### Phase 0 — Foundation (Completed Legacy Contracts)
 
 Completed infrastructure contracts that established the monorepo, tooling,
@@ -69,10 +76,11 @@ database, AI, and game engine boundaries.
 
 ---
 
-### Phase 1 — Playable, Polished, Offline-Capable Vertical Slice
+### Phase 1 — Playable, Polished, Offline-Capable Vertical Slice (Historical)
 
-> **Order is mandatory.** See `docs/TODO.md` for full descriptions, acceptance
-> gates, and dependency chains.
+> ⚠️ **Historical table.** The IDs below (C-312–C-330) are from a pre-existing
+> numbering scheme and do not match the live contracts with those IDs in
+> `PROGRESS.md`. See `PROGRESS.md` for authoritative status.
 
 | ID | Title | Priority | Status |
 |----|-------|----------|--------|
@@ -96,7 +104,11 @@ database, AI, and game engine boundaries.
 | C-329 | Make Local Save, Continue, Autosave, and Recovery Reliable | P0 | ⏳ not_started |
 | C-330 | Enforce the Playable Demo Release Gate | P0 | ⏳ not_started |
 
-### Phase 2 — Core RPG Depth and Replayability
+### Phase 2 — Core RPG Depth and Replayability (Historical)
+
+> ⚠️ **Historical table.** The IDs below (C-331–C-342) are from a pre-existing
+> numbering scheme and do not match the live contracts with those IDs in
+> `PROGRESS.md`. See `PROGRESS.md` for authoritative status.
 
 | ID | Title | Priority | Status |
 |----|-------|----------|--------|
@@ -113,7 +125,11 @@ database, AI, and game engine boundaries.
 | C-341 | Complete Gamepad, Touch, Responsive, and Accessibility Support | P1 | ⏳ not_started |
 | C-342 | Establish Asset Attribution, Licensing, and Content Provenance | P1 | ⏳ not_started |
 
-### Phase 3 — AI-Powered Living World
+### Phase 3 — AI-Powered Living World (Historical)
+
+> ⚠️ **Historical table.** The IDs below (C-343–C-351) are from a pre-existing
+> numbering scheme and do not match the live contracts with those IDs in
+> `PROGRESS.md`. See `PROGRESS.md` for authoritative status.
 
 | ID | Title | Priority | Status |
 |----|-------|----------|--------|
@@ -127,7 +143,11 @@ database, AI, and game engine boundaries.
 | C-350 | Build an Optional Media Director for Expressions, Voice, Images, and Music | P2 | ⏳ not_started |
 | C-351 | Complete Local Model Discovery, Lifecycle, and Hybrid Failover | P2 | ⏳ not_started |
 
-### Phase 4 — Offline Sync, Authoring, Performance, and Platform Quality
+### Phase 4 — Offline Sync, Authoring, Performance, and Platform Quality (Historical)
+
+> ⚠️ **Historical table.** The IDs below (C-352–C-359) are from a pre-existing
+> numbering scheme and do not match the live contracts with those IDs in
+> `PROGRESS.md`. See `PROGRESS.md` for authoritative status.
 
 | ID | Title | Priority | Status |
 |----|-------|----------|--------|
