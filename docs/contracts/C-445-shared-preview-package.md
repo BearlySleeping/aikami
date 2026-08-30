@@ -2,7 +2,7 @@
 id: C-445
 title: "Shared Preview Package — One Set of Asset Preview Surfaces"
 source: "user request 2026-08-26 — one place for hub, client dev, and the actual game"
-status: implemented
+status: draft
 github:
     issue_number: null
     issue_url: null
@@ -501,7 +501,7 @@ Must be resolved before status becomes `approved`:
 
 | Version | Date | Change | Approved by |
 | ------- | ---- | ------ | ----------- |
-| —       | —    | —      | —           |
+| 1.0.1   | 2026-08-30 | C-450: Corrected frontmatter `status: implemented` → `draft` to match the canonical table field | C-450 pipeline |
 
 ## Promotion Lifecycle
 

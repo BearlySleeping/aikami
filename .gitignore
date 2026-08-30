@@ -14,7 +14,7 @@
 
 # --- 1. Dependencies & Tool Caches ---
 ## 📦 Dependencies
-node_modules/
+node_modules
 .pnp/
 .pnp.js
 
