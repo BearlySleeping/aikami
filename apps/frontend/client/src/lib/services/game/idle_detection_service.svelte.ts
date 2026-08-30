@@ -11,6 +11,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 
+export type IdleDetectionServiceOptions = BaseFrontendClassOptions;
 // ── Types ────────────────────────────────────────────────────────────────
 
 export type IdleDetectionServiceInterface = BaseFrontendClassInterface & {
@@ -37,7 +38,7 @@ export type IdleDetectionServiceInterface = BaseFrontendClassInterface & {
 // ── Constants ────────────────────────────────────────────────────────────
 
 /** Throttle lastInputAt updates to once per second to avoid excessive $state writes. */
-const INPUT_THROTTLE_MS = 1000;
+const _INPUT_THROTTLE_MS = 1000;
 
 /** Events that count as user input. */
 const INPUT_EVENTS = [
@@ -59,7 +60,6 @@ class IdleDetectionService
   lastInputAt = $state(Date.now());
   private _isPageVisible = $state(true);
   private _intervalHandle: ReturnType<typeof setInterval> | undefined;
-  private _lastThrottledInput = 0;
 
   // ── Initialization ──────────────────────────────────────────────────
 
@@ -98,17 +98,6 @@ class IdleDetectionService
     }
   }
 
-  // ── Private: Event binding ──────────────────────────────────────────
-
-  private _handleInput = (): void => {
-    const now = Date.now();
-    if (now - this._lastThrottledInput < INPUT_THROTTLE_MS) {
-      return;
-    }
-    this._lastThrottledInput = now;
-    this.resetIdle();
-  };
-
   private _bindInputEvents(): void {
     for (const event of INPUT_EVENTS) {
       document.addEventListener(event, this._handleInput, { passive: true });
@@ -120,17 +109,6 @@ class IdleDetectionService
       document.removeEventListener(event, this._handleInput);
     }
   }
-
-  private _handleVisibilityChange = (): void => {
-    const wasHidden = !this._isPageVisible;
-    this._isPageVisible = document.visibilityState === 'visible';
-
-    // When tab becomes visible after being hidden, reset idle time
-    if (wasHidden && this._isPageVisible) {
-      this.debug('visibilityChange:tab-returned — resetting idle');
-      this.resetIdle();
-    }
-  };
 
   private _bindVisibilityChange(): void {
     document.addEventListener('visibilitychange', this._handleVisibilityChange);

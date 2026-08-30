@@ -32,7 +32,7 @@ const KEY_PREFIX = 'aikami_save_';
  * Used for save envelope integrity checks. Not a security HMAC — purely for
  * corruption detection.
  */
-export const sha256 = async (input: string): Promise<string> => {
+const sha256 = async (input: string): Promise<string> => {
   const encoder = new TextEncoder();
   const data = encoder.encode(input);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -41,7 +41,7 @@ export const sha256 = async (input: string): Promise<string> => {
 };
 
 /** Current save envelope version. */
-export const SAVE_ENVELOPE_VERSION = 3;
+const SAVE_ENVELOPE_VERSION = 3;
 
 /**
  * Map-routing block persisted in the save envelope (v3+).
@@ -50,7 +50,7 @@ export const SAVE_ENVELOPE_VERSION = 3;
  * where the player is (map identity + pixel coordinates) so the boot
  * pipeline can re-load the map before overlaying the player snapshot.
  */
-export type SaveMapBlock = {
+type SaveMapBlock = {
   /** Content pack id (e.g. 'emberwatch'). */
   packId: string;
   /** Map id within the pack (e.g. 'merchant_shop'). */
@@ -74,7 +74,7 @@ export type SaveMapBlock = {
  *
  * @returns The parsed envelope with version metadata and validation result.
  */
-export const parseSavePayloadEnvelope = (
+const parseSavePayloadEnvelope = (
   raw: string,
 ): {
   ecsSnapshot: string;
@@ -138,7 +138,7 @@ export const parseSavePayloadEnvelope = (
  *
  * @returns true if checksum matches, false on mismatch or error.
  */
-export const validateEnvelopeChecksum = async (options: {
+const validateEnvelopeChecksum = async (options: {
   ecsSnapshot: string;
   serviceSnapshots?: ServiceSnapshot[];
   /** Map block — included in the v3+ digest only. */
@@ -170,16 +170,6 @@ export const validateEnvelopeChecksum = async (options: {
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-/** Internal save document shape persisted to SQLite. */
-export type SaveDocument = {
-  id: string;
-  slotId: string;
-  campaignId: string | null;
-  timestamp: number;
-  mapName: string;
-  payload: string;
-};
 
 /** Options for constructing a {@link GameSaveService}. */
 export type GameSaveServiceOptions = BaseFrontendClassOptions & {

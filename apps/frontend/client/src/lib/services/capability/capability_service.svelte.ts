@@ -21,6 +21,7 @@ import type {
 } from '@aikami/types';
 import { aiGatewayService } from '$services';
 
+export type CapabilityServiceOptions = BaseFrontendClassOptions;
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type CapabilityServiceInterface = BaseFrontendClassInterface & {

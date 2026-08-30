@@ -12,12 +12,15 @@ import type { ExpressionAssetResolverInterface } from '../expression/expression_
 import type { PixiTextureInjectorInterface } from '../game/pixi_texture_injector';
 import { SentenceBoundaryChunker } from './sentence_boundary_chunker.ts';
 
+export type StreamOrchestratorServiceOptions = StreamOrchestratorOptions;
+
+export type StreamOrchestratorServiceInterface = StreamOrchestratorInterface;
 // ---------------------------------------------------------------------------
 // Network Connection Interfaces
 // ---------------------------------------------------------------------------
 
 /** SSE-based text stream connection. */
-export type TextStreamConnection = {
+type TextStreamConnection = {
   start(options: {
     signal: AbortSignal;
     onChunk: (text: string) => void;
@@ -26,7 +29,7 @@ export type TextStreamConnection = {
 };
 
 /** WebSocket-based image generation stream connection. */
-export type ImageStreamConnection = {
+type ImageStreamConnection = {
   connect(options: { signal: AbortSignal; onComplete: (buffer: ArrayBuffer) => void }): void;
   close(): void;
 };
@@ -48,7 +51,7 @@ type KokoroRequest = {
 // StreamOrchestrator
 // ---------------------------------------------------------------------------
 
-export type StreamOrchestratorOptions = BaseFrontendClassOptions & {
+type StreamOrchestratorOptions = BaseFrontendClassOptions & {
   textStream: TextStreamConnection;
   imageStream: ImageStreamConnection;
   audioQueuePlayer: AudioQueuePlayerInterface;
@@ -64,7 +67,7 @@ export type StreamOrchestratorOptions = BaseFrontendClassOptions & {
   }) => Promise<ArrayBuffer>;
 };
 
-export type StreamOrchestratorInterface = BaseFrontendClassInterface & {
+type StreamOrchestratorInterface = BaseFrontendClassInterface & {
   readonly isGenerating: boolean;
   readonly currentText: string;
   readonly currentSpeakerId: string | undefined;
@@ -572,6 +575,5 @@ export class StreamOrchestrator
   }
 }
 
-export const getStreamOrchestrator = (
-  options: StreamOrchestratorOptions,
-): StreamOrchestratorInterface => StreamOrchestrator.create(options);
+const _getStreamOrchestrator = (options: StreamOrchestratorOptions): StreamOrchestratorInterface =>
+  StreamOrchestrator.create(options);

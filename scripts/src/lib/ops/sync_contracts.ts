@@ -167,7 +167,16 @@ const readContractsFromDir = (
     const promotion = archived ? undefined : extractPromotion(content);
 
     const contractType = extractContractType(content);
-    contracts.push({ id, name, status, version, promotion, fileName: file, archived, contractType });
+    contracts.push({
+      id,
+      name,
+      status,
+      version,
+      promotion,
+      fileName: file,
+      archived,
+      contractType,
+    });
   }
 
   return { contracts, duplicateIds };

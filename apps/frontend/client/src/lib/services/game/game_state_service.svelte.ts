@@ -650,6 +650,17 @@ export class GameStateService
   }
 }
 
+// ---------------------------------------------------------------------------
+// Singleton (backward-compatible — production code should use the five split
+// services: PlayerStateService, WorldStateService, InventoryService,
+// EquipmentService, GameModeService via the composition root).
+// ---------------------------------------------------------------------------
+
+export const gameStateService: GameStateServiceInterface = GameStateService.create({
+  className: 'GameStateService',
+  uid: '',
+});
+
 // C-314: Module-level singleton removed. Use the five split services instead:
 // PlayerStateService, WorldStateService, InventoryService, EquipmentService, GameModeService
 //

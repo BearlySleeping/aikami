@@ -4,7 +4,7 @@
 // Export & Data settings tab (C-246, AC-6).
 // Lists chats, characters, sessions, and provides download triggers
 // for all export operations.
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { ExportViewModelInterface } from './export_view_model.svelte';
 
 type Props = {

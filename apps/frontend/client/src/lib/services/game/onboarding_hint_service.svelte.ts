@@ -12,14 +12,13 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { OnboardingHintStep, OnboardingSection } from '@aikami/types';
-import { logger } from '$logger';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 /** Client-local persisted progress (localStorage). */
-export type OnboardingProgress = {
+type OnboardingProgress = {
   packId: string;
   /** hint id → learned */
   learned: Record<string, boolean>;
@@ -328,7 +327,7 @@ export class OnboardingHintService
         }
       }
     } catch (err) {
-      logger.debug('OnboardingHintService: failed to load progress, using defaults', {
+      this.debug('OnboardingHintService: failed to load progress, using defaults', {
         error: String(err),
       });
     }
@@ -347,7 +346,7 @@ export class OnboardingHintService
       };
       localStorage.setItem(key, JSON.stringify(progress));
     } catch (err) {
-      logger.debug('OnboardingHintService: failed to save progress', { error: String(err) });
+      this.debug('OnboardingHintService: failed to save progress', { error: String(err) });
     }
   }
 }

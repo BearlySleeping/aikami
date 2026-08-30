@@ -3,7 +3,7 @@
 //
 // Settings > Game > Audio sub-tab. Volume sliders wired to AudioService
 // plus optional test-playback buttons.
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { SettingsAudioViewModelInterface } from './settings_audio_view_model.svelte';
 
 type Props = {

@@ -12,8 +12,9 @@ import { gameEngineService } from './game_engine_service.svelte';
 import type { GameOverlayType } from './game_overlay_service.svelte';
 import { registerSerializable, type SerializableService } from './serializable_service';
 
+export type CombatServiceOptions = BaseFrontendClassOptions;
 /** Serialized shape for save/load. */
-export type CombatState = {
+type CombatState = {
   enemyName: string;
   enemyHp: number;
   enemyMaxHp: number;

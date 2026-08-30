@@ -6,7 +6,7 @@
 //   2. Manual creation steps (identity → play_style → appearance → review)
 //   3. Shared review page (edit before entering world)
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import OnboardingAppearanceStepView from './onboarding_appearance_step_view.svelte';
 import OnboardingChatView from './onboarding_chat_view.svelte';
 import type { OnboardingCoordinatorViewModelInterface } from './onboarding_coordinator_view_model.svelte';

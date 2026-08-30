@@ -132,6 +132,7 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
 
   // LPC appearance state
   lpcRecipe: Record<string, string>;
+  readonly defaultLpcRecipe: Record<string, string>;
   paletteOverrides: Record<string, string>;
   selectedPresetId: string | undefined;
   previewPlaying: boolean;
@@ -215,6 +216,7 @@ class OnboardingCoordinatorViewModel
   equipment = $state<string[]>([]);
 
   // LPC appearance state
+  readonly defaultLpcRecipe = DEFAULT_LPC_RECIPE;
   lpcRecipe = $state<Record<string, string>>({ ...DEFAULT_LPC_RECIPE });
   paletteOverrides = $state<Record<string, string>>({});
   selectedPresetId = $state<string | undefined>(undefined);

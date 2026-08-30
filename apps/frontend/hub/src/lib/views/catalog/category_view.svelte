@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/hub/src/lib/views/catalog/category_view.svelte
 // One category's browse page — grid, filter/search, streamed stats (C-396).
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import { resolveThumbnailUrl } from '$utils/catalog.ts';
 import type { CategoryViewModelInterface } from './category_view_model.svelte.ts';
 import CatalogAssetTile from './components/catalog_asset_tile.svelte';

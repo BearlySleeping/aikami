@@ -10,6 +10,7 @@
 // signInWithRedirect round-trip this re-renders to the signed-in state on
 // the next page load with no button handler involvement.
 
+import { BaseViewModelContainer } from '$components';
 import { getLoginViewModel, type LoginViewModelInterface } from './login_view_model.svelte';
 
 type Props = {
@@ -24,28 +25,29 @@ let {
   buttonClass = 'btn btn-outline btn-lg',
 }: Props = $props();
 </script>
+<BaseViewModelContainer {viewModel}>
+  {#if viewModel.errorMessage}
+    <p class="text-error text-sm">{viewModel.errorMessage}</p>
+  {/if}
 
-{#if viewModel.errorMessage}
-  <p class="text-error text-sm">{viewModel.errorMessage}</p>
-{/if}
-
-{#if viewModel.isSigningIn}
-  <button
-    type="button"
-    class="{buttonClass}"
-    disabled
-    aria-busy="true"
-    aria-label={viewModel.isLoggedIn ? 'Signing out' : 'Signing in'}
-  >
-    <span class="loading loading-spinner" aria-hidden="true"></span>
-    {viewModel.isLoggedIn ? 'Signing out...' : 'Signing in...'}
-  </button>
-{:else if viewModel.isLoggedIn}
-  <button type="button" class="{buttonClass}" onclick={() => viewModel.signOut()}>
-    Sign Out ({viewModel.playerDisplayName})
-  </button>
-{:else}
-  <button type="button" class="{buttonClass}" onclick={() => viewModel.signIn()}>
-    {viewModel.signInLabel}
-  </button>
-{/if}
+  {#if viewModel.isSigningIn}
+    <button
+      type="button"
+      class="{buttonClass}"
+      disabled
+      aria-busy="true"
+      aria-label={viewModel.isLoggedIn ? 'Signing out' : 'Signing in'}
+    >
+      <span class="loading loading-spinner" aria-hidden="true"></span>
+      {viewModel.isLoggedIn ? 'Signing out...' : 'Signing in...'}
+    </button>
+  {:else if viewModel.isLoggedIn}
+    <button type="button" class="{buttonClass}" onclick={() => viewModel.signOut()}>
+      Sign Out ({viewModel.playerDisplayName})
+    </button>
+  {:else}
+    <button type="button" class="{buttonClass}" onclick={() => viewModel.signIn()}>
+      {viewModel.signInLabel}
+    </button>
+  {/if}
+</BaseViewModelContainer>

@@ -10,6 +10,7 @@ import { audioContextManager } from './audio_context_manager';
 import { audioService } from './audio_service.svelte.ts';
 import { voiceModelService } from './voice_model_service.svelte.ts';
 
+export type TtsServiceOptions = TtsOptions;
 /** True when running inside a Tauri webview. */
 const isTauriRuntime = (): boolean =>
   typeof window !== 'undefined' &&
@@ -31,7 +32,7 @@ const isLocalhostUrl = (url: string): boolean => {
 };
 
 /** Lifecycle status of the native Kokoro TTS engine. */
-export type TtsStatus =
+type TtsStatus =
   | 'uninitialized'
   | 'initializing'
   | 'ready'
@@ -39,7 +40,7 @@ export type TtsStatus =
   | 'not-downloaded'
   | 'disabled';
 
-export type TtsOptions = BaseFrontendClassOptions;
+type TtsOptions = BaseFrontendClassOptions;
 
 export type TtsServiceInterface = BaseFrontendClassInterface & {
   /** Lifecycle status of the native Kokoro WebGPU engine. */

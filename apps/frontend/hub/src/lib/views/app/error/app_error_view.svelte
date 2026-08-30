@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/hub/src/lib/views/app/error/AppErrorView.svelte
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 
 import type { AppErrorViewModelInterface } from './app_error_view_model.svelte.ts';
 

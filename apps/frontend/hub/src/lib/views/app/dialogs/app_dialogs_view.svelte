@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/hub/src/lib/views/app/dialogs/app_dialogs_view.svelte
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import { getAppDialogsViewModel } from './app_dialogs_view_model.svelte.ts';
 import AppLoading from './components/app_loading.svelte';
 import AppSnackbar from './components/app_snackbar.svelte';

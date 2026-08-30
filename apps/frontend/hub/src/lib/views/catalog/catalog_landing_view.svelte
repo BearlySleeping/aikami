@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/hub/src/lib/views/catalog/catalog_landing_view.svelte
 // Catalog landing — public for everyone (C-396 AC-1).
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { CatalogLandingViewModelInterface } from './catalog_landing_view_model.svelte.ts';
 
 type Props = { viewModel: CatalogLandingViewModelInterface };

@@ -73,10 +73,7 @@ const APPROVED_OR_LATER = new Set([
 ]);
 
 // Sections that thin contracts omit — skip structural-completeness checks for these
-const THIN_SKIP_CHECKS = new Set([
-  'missing-evidence-matrix',
-  'open-questions',
-]);
+const THIN_SKIP_CHECKS = new Set(['missing-evidence-matrix', 'open-questions']);
 
 // ── Helpers ────────────────────────────────────────────────
 

@@ -38,7 +38,7 @@ import { timeService } from './time_service.svelte';
 // Pressing Escape always pops the top overlay — exactly one layer at a time.
 // ---------------------------------------------------------------------------
 
-export type GameOverlayType =
+type GameOverlayType =
   | 'NONE'
   | 'PAUSE_MENU'
   | 'DIALOGUE'
@@ -54,7 +54,7 @@ export type GameOverlayType =
   | 'TALK_TO_PARTY'
   | 'REPUTATION';
 
-export type DialogueNpcData = {
+type DialogueNpcData = {
   npcId: string;
   npcName: string;
   dialog?: string;
@@ -63,10 +63,10 @@ export type DialogueNpcData = {
   initialSuggestions?: NpcSuggestionChip[];
 };
 
-export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 /** Entry in the overlay stack. 'NONE' is never pushed — an empty stack means no overlay. */
-export type OverlayStackEntry = {
+type OverlayStackEntry = {
   type: GameOverlayType;
   /** Element that had focus before this overlay opened (for restore on pop). */
   previousFocus: HTMLElement | undefined;
@@ -139,7 +139,7 @@ const OVERLAY_COMPATIBILITY: Record<
   },
 };
 
-export type OverlayEventHandlers = {
+type OverlayEventHandlers = {
   onDialogueStart(npcData: DialogueNpcData): void;
   onDialogueEnd(): void;
   onCombatStart(event: {

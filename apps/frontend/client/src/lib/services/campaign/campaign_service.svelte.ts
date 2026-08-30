@@ -17,6 +17,7 @@ import { registerSerializable } from '../game/serializable_service.ts';
 import { transition } from './boot_state_machine.ts';
 import { campaignStorage } from './campaign_storage.svelte.ts';
 
+export type CampaignServiceOptions = BaseFrontendClassOptions;
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------

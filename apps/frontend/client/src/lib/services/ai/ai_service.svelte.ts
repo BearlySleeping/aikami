@@ -13,6 +13,7 @@ import {
 import type { NpcData, PersonaData } from '@aikami/types';
 import { aiGatewayService } from '$services';
 
+export type AiServiceOptions = AIServiceOptions;
 export type AIServiceOptions = BaseFrontendClassOptions;
 
 export type AIServiceInterface = BaseFrontendClassInterface & {
@@ -32,7 +33,7 @@ export type AIServiceInterface = BaseFrontendClassInterface & {
   createPersona(prompt: string): Promise<PersonaData | undefined>;
 };
 
-export class AIService extends BaseFrontendClass<AIServiceOptions> implements AIServiceInterface {
+class AIService extends BaseFrontendClass<AIServiceOptions> implements AIServiceInterface {
   async createPersona(prompt: string): Promise<PersonaData | undefined> {
     this.log('createPersona', { prompt });
     try {

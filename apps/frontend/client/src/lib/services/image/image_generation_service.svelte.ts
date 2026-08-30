@@ -30,24 +30,25 @@ import type {
   ResolvedImageEngineId,
 } from './engine/types.ts';
 
+export type ImageGenerationServiceOptions = ImageGenerationOptions;
 /** Descriptor for a checkpoint/model returned by the model listing. */
-export type CheckpointInfo = {
+type CheckpointInfo = {
   readonly id: string;
   readonly description: string;
 };
 
-export type ImageGenerationOptions = BaseFrontendClassOptions & {
+type ImageGenerationOptions = BaseFrontendClassOptions & {
   /** If true, the service operates in demo mode (mock data, no real API calls). */
   isDemo: boolean;
 };
 
-export type ImageGenerationResult = {
+type ImageGenerationResult = {
   url: string;
   isDemo: boolean;
 };
 
 /** Extended options for generateImage — superset of the old { prompt, checkpoint }. */
-export type GenerateImageOptions = {
+type GenerateImageOptions = {
   prompt: string;
   negativePrompt?: string;
   checkpoint?: string;

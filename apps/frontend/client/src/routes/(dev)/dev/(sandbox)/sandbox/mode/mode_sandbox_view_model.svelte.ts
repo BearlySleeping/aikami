@@ -173,6 +173,6 @@ class ModeSandboxViewModel
 /** Factory for instantiating the sandbox ViewModel in route pages. */
 export const getModeSandboxViewModel = (
   options: ModeSandboxViewModelOptions,
-): ModeSandboxViewModel => new ModeSandboxViewModel(options);
+): ModeSandboxViewModel => ModeSandboxViewModel.create(options);
 
 export { ModeSandboxViewModel };

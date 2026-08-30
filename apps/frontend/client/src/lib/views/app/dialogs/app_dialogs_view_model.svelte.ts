@@ -50,9 +50,9 @@ class AppDialogsViewModel
     return imageGenerationService.generationProgress;
   }
 
-  closeDialog = (result?: unknown): void => {
+  closeDialog(result?: unknown): void {
     dialogService.close(result);
-  };
+  }
 
   dismissToast(id: number): void {
     this._toasts = this._toasts.filter((t) => t.id !== id);

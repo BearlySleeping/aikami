@@ -36,15 +36,15 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
-import { localTaskPool } from '$lib/services/ai/local_task_pool_service.svelte.ts';
-import { configService } from '$lib/services/config/config_service.svelte.ts';
-import { resolveImageEngine } from '$lib/services/image/engine/image_engine_factory.svelte.ts';
 import {
   aiSettingsService,
+  configService,
   getOllamaRuntimeEndpoints,
   getOpenAiCompatRuntimeModelsUrl,
   imageGenerationService,
+  localTaskPoolService,
   PROVIDER_MODEL_FETCH,
+  resolveImageEngine,
   ttsService,
 } from '$services';
 
@@ -130,7 +130,7 @@ class AiGatewayService
 
     // Register local text adapter for offline mode (C-427)
     const localTextAdapter = createLocalTextAdapter({
-      taskPool: localTaskPool,
+      taskPool: localTaskPoolService.pool,
       provider: 'local-qwen3',
     });
     registry.registerText({ mode: 'offline', adapter: localTextAdapter });

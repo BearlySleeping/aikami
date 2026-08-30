@@ -24,6 +24,7 @@ import type { VendorSessionOptions } from '$types';
 import { playSfxByName } from '../audio/audio_asset_resolver';
 import { getItemDefinition, inventoryService } from './inventory_service.svelte';
 
+export type VendorServiceOptions = BaseFrontendClassOptions;
 // ── Pricing ─────────────────────────────────────────────────────────────
 
 /**
@@ -37,11 +38,11 @@ const getBasePrice = (itemId: string): number => {
 
 // ── Types ───────────────────────────────────────────────────────────────
 
-export type VendorChatMessage = { id: string; role: 'player' | 'vendor'; content: string };
+type VendorChatMessage = { id: string; role: 'player' | 'vendor'; content: string };
 
-export type VendorItemEntry = { itemId: string; label: string; basePrice: number };
+type VendorItemEntry = { itemId: string; label: string; basePrice: number };
 
-export type VendorSellEntry = {
+type VendorSellEntry = {
   itemId: string;
   label: string;
   quantity: number;

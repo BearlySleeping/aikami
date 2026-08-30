@@ -12,14 +12,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import { clearVault, decrypt, encrypt } from '$lib/views/utils/crypto_vault';
-import { logger } from '$logger';
-import type {
-  Connection,
-  ConnectionCapability,
-  ConnectionId,
-  Lorebook,
-  LorebookEntry,
-} from '$types';
+import type { ConnectionCapability, Lorebook, LorebookEntry } from '$types';
 import {
   type AuxiliaryModels,
   type GenerationParams,
@@ -35,7 +28,6 @@ import {
 // Re-exports from @aikami/constants for backward compatibility
 // ---------------------------------------------------------------------------
 
-export type { ImageProvider, VoiceProvider } from '@aikami/constants';
 export { IMAGE_PROVIDERS, TEXT_PROVIDERS, VOICE_PROVIDERS } from '@aikami/constants';
 
 // ---------------------------------------------------------------------------
@@ -44,12 +36,12 @@ export { IMAGE_PROVIDERS, TEXT_PROVIDERS, VOICE_PROVIDERS } from '@aikami/consta
 // ---------------------------------------------------------------------------
 
 /** @deprecated Use `connections[]` instead. */
-export type TextConfig = {
+type TextConfig = {
   provider: string;
 };
 
 /** Memory subsystem configuration. */
-export type MemoryConfig = {
+type MemoryConfig = {
   /** Memory type (algorithm). */
   type: MemoryType;
   /** Maximum context window size in tokens. */
@@ -76,7 +68,7 @@ export type MemoryConfig = {
 
 /** Memory subsystem type. */
 export const MEMORY_TYPES = ['none', 'basic', 'hypa-style', 'hanurai'] as const;
-export type MemoryType = (typeof MEMORY_TYPES)[number];
+type MemoryType = (typeof MEMORY_TYPES)[number];
 
 /** Embedding model providers. */
 export const EMBEDDING_MODELS = [
@@ -88,7 +80,7 @@ export const EMBEDDING_MODELS = [
   { id: 'custom', label: 'Custom API' },
 ] as const;
 
-export type EmbeddingModel = (typeof EMBEDDING_MODELS)[number]['id'];
+type EmbeddingModel = (typeof EMBEDDING_MODELS)[number]['id'];
 
 // ---------------------------------------------------------------------------
 // Voice engine selection
@@ -101,11 +93,8 @@ export const VOICE_ENGINES = [
   { id: 'openai', label: 'OpenAI TTS', description: 'OpenAI cloud TTS' },
 ] as const;
 
-/** TTS engine identifier. */
-export type VoiceEngine = (typeof VOICE_ENGINES)[number]['id'];
-
 /** A voice option displayed in the dropdown. */
-export type VoiceOption = {
+type VoiceOption = {
   /** Voice identifier (e.g. 'af_heart'). */
   id: string;
   /** Human-readable label. */
@@ -151,7 +140,7 @@ export const KOKORO_VOICES: readonly VoiceOption[] = [
 // ---------------------------------------------------------------------------
 
 /** Voice / TTS subsystem configuration. */
-export type VoiceConfig = {
+type VoiceConfig = {
   /** Selected TTS provider (e.g. 'kokoro', 'elevenlabs'). */
   provider: VoiceProvider;
   /** Selected TTS engine (mirrors provider). */
@@ -177,7 +166,7 @@ export type VoiceConfig = {
 // ---------------------------------------------------------------------------
 
 /** A named voice archetype mapped to a provider-specific voice ID. */
-export type VoiceArchetype = {
+type VoiceArchetype = {
   /** Unique archetype key (e.g. 'female-warm', 'male-deep'). */
   id: string;
   /** Human-readable label (e.g. 'Female — Warm'). */
@@ -210,7 +199,7 @@ export const DEFAULT_VOICE_ARCHETYPES: readonly VoiceArchetype[] = [
 // ---------------------------------------------------------------------------
 
 /** Image generation subsystem configuration. */
-export type ImageConfig = {
+type ImageConfig = {
   /** Selected image generation provider. */
   provider: ImageProvider;
   /** Selected image generation backend (mirrors provider). */
@@ -244,7 +233,7 @@ export type ImageConfig = {
 };
 
 /** Generic model configuration for a single provider. */
-export type ModelConfig = {
+type ModelConfig = {
   /** Model identifier (e.g. 'claude-3-opus-20240229'). */
   model: string;
   /** Provider this model belongs to. */
@@ -257,10 +246,10 @@ export type ModelConfig = {
 
 /** Emotion resolution methods. */
 export const EMOTION_METHODS = ['submodel', 'embedding'] as const;
-export type EmotionMethod = (typeof EMOTION_METHODS)[number];
+type EmotionMethod = (typeof EMOTION_METHODS)[number];
 
 /** Emotion resolution configuration. */
-export type EmotionConfig = {
+type EmotionConfig = {
   /** How character emotions are resolved. */
   method: EmotionMethod;
   /** Target model for emotion extraction (when method is 'submodel'). */
@@ -270,13 +259,13 @@ export type EmotionConfig = {
 // ── AI Generation Settings (absorbed from ai_settings.svelte.ts) ────────
 
 /** Advanced overrides for specific providers. */
-export type AdvancedOverrides = {
+type AdvancedOverrides = {
   /** Thinking/reasoning level for DeepSeek/Claude models. */
   thinkingLevel: number;
 };
 
 /** Resolved text generation provider ready for API calls. */
-export type ResolvedTextProvider = {
+type ResolvedTextProvider = {
   /** Model identifier (e.g. 'openrouter/owl-alpha'). */
   model: string;
   /** Provider name (e.g. 'openrouter'). */
@@ -290,10 +279,11 @@ export type ResolvedTextProvider = {
 // ---------------------------------------------------------------------------
 // Re-exports for backward compatibility
 export { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
-export type { Connection, ConnectionId, ConnectionTestResult } from '$types';
+
+import type { Connection, ConnectionId } from '$types';
 
 /** Top-level configuration state. */
-export type ConfigState = {
+type ConfigState = {
   /** Text generation settings (provider, API keys, URL). */
   text: TextConfig;
   /** Preferred text generation model. */
@@ -563,7 +553,7 @@ class ConfigService
   // ── Persistence ───────────────────────────────────────────────────────
 
   async load(pin?: string): Promise<void> {
-    logger.debug('ConfigService.load');
+    this.debug('ConfigService.load');
 
     // 1. Load connections from encrypted vault
     const raw = await decrypt({ pin });
@@ -677,7 +667,7 @@ class ConfigService
   }
 
   async save(): Promise<void> {
-    logger.debug('ConfigService.save');
+    this.debug('ConfigService.save');
 
     // Encrypt sensitive data: connections (API keys)
     const userPresets = this.state.presets.filter((p) => !p.isBuiltIn);
@@ -707,7 +697,7 @@ class ConfigService
   }
 
   async reset(): Promise<void> {
-    logger.debug('ConfigService.reset');
+    this.debug('ConfigService.reset');
     this.state = this._makeDefaultState();
     await clearVault();
     localStorage.removeItem(PLAIN_CONFIG_KEY);

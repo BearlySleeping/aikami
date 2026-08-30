@@ -5,7 +5,7 @@
 // per-NPC controls placeholder, and schedule editor mounting.
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { AutonomousSettingsViewModelInterface } from './autonomous_settings_view_model.svelte';
 import ScheduleEditorView from './schedule_editor_view.svelte';
 

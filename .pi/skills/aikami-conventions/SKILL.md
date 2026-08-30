@@ -899,7 +899,7 @@ import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
 ```svelte
 <script lang="ts">
   // apps/frontend/client/src/lib/views/feature/feature_view.svelte
-  import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+  import { BaseViewModelContainer } from '$components';
 </script>
 ```
 

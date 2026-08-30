@@ -14,7 +14,6 @@ import {
   getExpressionEntry,
   getKeywordRegex,
 } from '$lib/data/expression_catalog';
-import { logger } from '$logger';
 import { textGenerationService } from '$services';
 import type {
   DetectExpressionOptions,
@@ -26,6 +25,7 @@ import type {
 } from '$types';
 import type { ExpressionOutput } from '../agent/agent_schemas.ts';
 
+export type ExpressionServiceOptions = BaseFrontendClassOptions;
 // ── Service Interface ────────────────────────────────────────────────────
 
 export type ExpressionServiceInterface = BaseFrontendClassInterface & {
@@ -137,7 +137,7 @@ class ExpressionService
           return agentResult;
         }
       } catch (error) {
-        logger.warn('ExpressionService: agent detection failed, falling back to keyword', {
+        this.warn('ExpressionService: agent detection failed, falling back to keyword', {
           error: (error as Error).message,
         });
       }
@@ -150,7 +150,7 @@ class ExpressionService
   resolveLpcOverlays(expressionId: ExpressionId): ExpressionOverlay {
     const entry = getExpressionEntry(expressionId);
     if (!entry) {
-      logger.warn('ExpressionService: no catalog entry for expression', { expressionId });
+      this.warn('ExpressionService: no catalog entry for expression', { expressionId });
       return {};
     }
     return entry.lpcOverlays;
@@ -224,7 +224,7 @@ class ExpressionService
         // keyword fallback. Return undefined so detectExpression falls
         // through to Tier 2 keyword detection.
         if (!this._isRecognizedMood(char.expression)) {
-          logger.debug(
+          this.debug(
             'ExpressionService: agent returned unrecognized mood — falling back to keyword',
             { expression: char.expression },
           );
@@ -328,7 +328,7 @@ class ExpressionService
 
     // If tie at same position, use neutral
     if (tieDetected) {
-      logger.debug('ExpressionService: keyword tie detected, falling back to neutral', {
+      this.debug('ExpressionService: keyword tie detected, falling back to neutral', {
         messagePreview: message.slice(0, 80),
       });
       return 'neutral';

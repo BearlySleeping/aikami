@@ -3,7 +3,7 @@
 //
 // Settings page with progressive disclosure — Basic/Advanced toggle,
 // search filtering, per-section reset, and capability badges.
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
 import AgentListView from '../agent/list/agent_list_view.svelte';
 import AIPrivacyView from './ai_privacy/ai_privacy_view.svelte';

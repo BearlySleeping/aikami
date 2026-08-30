@@ -10,6 +10,7 @@ import {
 } from '@aikami/frontend/services';
 import { questStateService } from './quest_state_service.svelte';
 
+export type QuestServiceOptions = BaseFrontendClassOptions;
 export type QuestServiceInterface = BaseFrontendClassInterface & {
   readonly isOpen: boolean;
   readonly quests: readonly QuestData[];

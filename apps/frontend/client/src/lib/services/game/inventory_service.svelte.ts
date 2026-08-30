@@ -21,6 +21,7 @@ import type { InventorySnapshot, ItemDefinition } from '@aikami/types';
 import { playerStateService } from './player_state_service.svelte';
 import { registerSerializable, type SerializableService } from './serializable_service';
 
+export type InventoryServiceOptions = BaseFrontendClassOptions;
 // ---------------------------------------------------------------------------
 // Item catalog — maps itemId strings to stat bonuses and metadata.
 // Contract: C-153 Character Dashboard & Equipment

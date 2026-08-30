@@ -13,6 +13,7 @@ import {
 } from '@aikami/frontend/services';
 import type { GameMode } from '$types';
 
+export type GameModeServiceOptions = BaseFrontendClassOptions;
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------

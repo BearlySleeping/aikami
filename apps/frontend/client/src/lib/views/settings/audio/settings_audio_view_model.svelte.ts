@@ -8,7 +8,6 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { playSceneBgm } from '$lib/services/audio/audio_asset_resolver';
-import { runtimeConfigService } from '$lib/services/config/runtime_config_service.svelte';
 import { audioService, musicPlayerService, ttsService, voiceModelService } from '$services';
 import type { VoiceModelState } from '$types';
 

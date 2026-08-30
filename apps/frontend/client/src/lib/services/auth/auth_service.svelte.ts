@@ -49,14 +49,14 @@ const DEVICE_LINK_URL = 'https://aikami.bearlysleeping.com/link';
 // service; now local to the client's Better Auth path).
 // ---------------------------------------------------------------------------
 
-export type SocialSignInError = {
+type SocialSignInError = {
   code?: string;
   message?: string;
   email?: string;
   accountExists?: boolean;
 };
 
-export type SocialSignInResponse =
+type SocialSignInResponse =
   | { status: 'exitingUser'; payload: CurrentUser }
   | { status: 'failed'; payload: SocialSignInError };
 

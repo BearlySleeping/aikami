@@ -20,9 +20,10 @@ import { NpcScheduleSchema, schemaCheck } from '@aikami/schemas';
 import type { AvailabilityStatus, NpcSchedule } from '@aikami/types';
 import { npcScheduleStorage } from './npc_schedule_storage.svelte.ts';
 
+export type NpcScheduleServiceOptions = BaseFrontendClassOptions;
 // ── Types ────────────────────────────────────────────────────────────────
 
-export type CurrentStatus = {
+type CurrentStatus = {
   status: AvailabilityStatus;
   activity: string;
 };

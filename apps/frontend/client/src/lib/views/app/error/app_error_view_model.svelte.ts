@@ -215,7 +215,7 @@ class AppErrorViewModel
 }
 
 export const getAppErrorViewModel = (options: AppErrorViewModelOptions) =>
-  new AppErrorViewModel({
+  AppErrorViewModel.create({
     ...options,
     className: 'AppErrorViewModel',
   });

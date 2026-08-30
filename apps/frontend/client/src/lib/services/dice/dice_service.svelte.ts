@@ -11,7 +11,7 @@ export type DiceServiceOptions = BaseFrontendClassOptions;
 
 /** A single entry in the roll history. Optional check context is present only
  * when the roll was made against a DC. */
-export type DiceHistoryEntry = {
+type DiceHistoryEntry = {
   roll: number;
   sides: number;
   modifier: number;

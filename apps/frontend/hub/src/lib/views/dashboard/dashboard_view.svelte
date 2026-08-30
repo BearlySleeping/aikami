@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/hub/src/lib/views/dashboard/dashboard_view.svelte
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { DashboardViewModelInterface } from './dashboard_view_model.svelte.ts';
 
 type Props = { viewModel: DashboardViewModelInterface };

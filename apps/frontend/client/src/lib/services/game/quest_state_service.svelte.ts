@@ -31,12 +31,13 @@ import { inventoryService } from './inventory_service.svelte';
 import { playerStateService } from './player_state_service.svelte';
 import { registerSerializable } from './serializable_service';
 
+export type QuestStateServiceOptions = BaseFrontendClassOptions;
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 /** World trigger event that can advance quest objectives. */
-export type QuestTriggerEvent =
+type QuestTriggerEvent =
   | { type: 'MAP_ENTERED'; mapUrl: string }
   | { type: 'NPC_INTERACTED'; npcId: string }
   | { type: 'ENCOUNTER_COMPLETED'; encounterId: string; victory: boolean }
