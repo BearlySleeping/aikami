@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/presets/preset_editor_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { PresetEditorViewModelInterface } from './preset_editor_view_model.svelte.ts';
 
 type Props = {

@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view.svelte
 import { onMount } from 'svelte';
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { SandboxViewModelInterface } from './sandbox_view_model.svelte.ts';
 
 type Props = {

@@ -177,7 +177,7 @@ class PartyFollowSandboxViewModel
       const worldOptions: GameWorldOptions = {
         className: 'PartyFollowSandboxGameWorld',
         bridge: this._bridge,
-        workerFactory: () => new workerCtor(),
+        workerFactory: () => workerCtor.create(),
         recipeResolver: (layerIds) =>
           layerIds.map((id) => SandboxRecipes[id]).filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
@@ -451,4 +451,4 @@ class PartyFollowSandboxViewModel
 
 export const getPartyFollowSandboxViewModel = (
   options: PartyFollowSandboxViewModelOptions,
-): PartyFollowSandboxViewModel => new PartyFollowSandboxViewModel(options);
+): PartyFollowSandboxViewModel => PartyFollowSandboxViewModel.create(options);

@@ -243,4 +243,4 @@ class SaveLoadViewModel
 
 export const getSaveLoadViewModel = (
   options: SaveLoadViewModelOptions,
-): SaveLoadViewModelInterface => new SaveLoadViewModel(options);
+): SaveLoadViewModelInterface => SaveLoadViewModel.create(options);

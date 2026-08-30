@@ -336,4 +336,4 @@ class VoiceViewModel
 }
 
 export const getVoiceViewModel = (options: VoiceViewModelOptions): VoiceViewModelInterface =>
-  new VoiceViewModel(options);
+  VoiceViewModel.create(options);

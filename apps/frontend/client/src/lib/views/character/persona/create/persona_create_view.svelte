@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view.svelte
 import { onDestroy } from 'svelte';
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
 import {
   getLpcPreviewViewModel,

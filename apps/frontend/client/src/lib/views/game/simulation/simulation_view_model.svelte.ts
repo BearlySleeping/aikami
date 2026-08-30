@@ -361,6 +361,6 @@ class SimulationViewModel
  * @param options - ViewModel options including optional log size.
  */
 export const getSimulationViewModel = (options: SimulationViewModelOptions): SimulationViewModel =>
-  new SimulationViewModel(options);
+  SimulationViewModel.create(options);
 
 export { SimulationViewModel };

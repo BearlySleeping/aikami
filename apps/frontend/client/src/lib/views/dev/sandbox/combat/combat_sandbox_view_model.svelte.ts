@@ -188,7 +188,7 @@ class CombatSandboxViewModel
       const worldOptions: GameWorldOptions = {
         className: 'CombatSandboxGameWorld',
         bridge: this._bridge,
-        workerFactory: () => new workerCtor(),
+        workerFactory: () => workerCtor.create(),
         recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
@@ -564,4 +564,4 @@ const _recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
  */
 export const getCombatSandboxViewModel = (
   options: CombatSandboxViewModelOptions,
-): CombatSandboxViewModel => new CombatSandboxViewModel(options);
+): CombatSandboxViewModel => CombatSandboxViewModel.create(options);

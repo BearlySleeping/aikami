@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/save_load/save_load_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { SaveLoadViewModelInterface } from './save_load_view_model.svelte.ts';
 
 type Props = {

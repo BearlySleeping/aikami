@@ -5,7 +5,7 @@
 //
 // Contract: C-239 Expression Emotion System
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { ExpressionDevViewModelInterface } from './expression_view_model.svelte.ts';
 
 type Props = {

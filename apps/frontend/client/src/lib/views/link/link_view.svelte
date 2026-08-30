@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/link/link_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import LoginView from '$lib/views/auth/login/login_view.svelte';
 import m from '$lib/views/utils/i18n';
 import type { LinkViewModelInterface } from './link_view_model.svelte';

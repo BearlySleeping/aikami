@@ -151,7 +151,7 @@ class SandboxViewModel
         recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
-        workerFactory: () => new EcsWorker(),
+        workerFactory: () => EcsWorker.create(),
       };
       this._gameWorld = GameWorld.create(worldOptions);
 
@@ -342,4 +342,4 @@ class SandboxViewModel
 }
 
 export const getSandboxViewModel = (options: SandboxViewModelOptions): SandboxViewModelInterface =>
-  new SandboxViewModel(options);
+  SandboxViewModel.create(options);

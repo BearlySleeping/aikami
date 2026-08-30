@@ -5,7 +5,6 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { DiceHistoryEntry } from '$lib/services/dice/dice_service.svelte.ts';
 import { diceService, gameOverlayService } from '$services';
 
 export type PauseMenuViewModelInterface = BaseViewModelInterface & {

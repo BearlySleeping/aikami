@@ -259,7 +259,7 @@ class CameraSandboxViewModel
             .filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
-        workerFactory: () => new EcsWorker(),
+        workerFactory: () => EcsWorker.create(),
       };
       this._gameWorld = GW.create(worldOptions);
 
@@ -380,4 +380,4 @@ class CameraSandboxViewModel
 
 export const getCameraSandboxViewModel = (
   options: CameraSandboxViewModelOptions,
-): CameraSandboxViewModelInterface => new CameraSandboxViewModel(options);
+): CameraSandboxViewModelInterface => CameraSandboxViewModel.create(options);

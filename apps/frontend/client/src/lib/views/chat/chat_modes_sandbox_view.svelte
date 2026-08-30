@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/chat/chat_modes_sandbox_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import ChatView from '$views/chat/chat_view.svelte';
 import type { ChatModesSandboxViewModel } from './chat_modes_sandbox_view_model.svelte.ts';
 

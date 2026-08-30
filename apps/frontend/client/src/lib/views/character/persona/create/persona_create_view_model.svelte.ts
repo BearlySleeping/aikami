@@ -838,7 +838,7 @@ export class PersonaCreateViewModel
 
 export const getPersonaCreateViewModel = (
   options: PersonaCreateViewModelOptions,
-): PersonaCreateViewModelInterface => new PersonaCreateViewModel(options);
+): PersonaCreateViewModelInterface => PersonaCreateViewModel.create(options);
 
 // ---------------------------------------------------------------------------
 // Module helpers

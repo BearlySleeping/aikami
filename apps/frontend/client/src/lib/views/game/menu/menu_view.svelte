@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/menu/menu_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import LoginView from '$lib/views/auth/login/login_view.svelte';
 import type { MenuViewModelInterface } from './menu_view_model.svelte.ts';
 

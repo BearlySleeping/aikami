@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/presets/prompt_preview_modal.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { PromptPreviewViewModelInterface } from './prompt_preview_view_model.svelte.ts';
 
 type Props = {

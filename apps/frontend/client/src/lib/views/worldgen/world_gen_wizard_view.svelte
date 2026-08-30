@@ -8,7 +8,7 @@
 //
 // Contract: C-233
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { WorldGenWizardViewModelInterface } from './world_gen_wizard_view_model.svelte.ts';
 import {
   DIFFICULTY_OPTIONS,

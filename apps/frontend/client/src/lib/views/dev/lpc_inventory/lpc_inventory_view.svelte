@@ -5,7 +5,7 @@ import type { EquipmentSlot } from '@aikami/types';
 // Dev sandbox view: live LPC character preview beside an inventory
 // paperdoll + bag. Equipping/unequipping gear updates the LPC render in
 // real time (C-374).
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import LpcAnimationDebugPanel from '$components/game/lpc_animation_debug_panel.svelte';
 import LpcPreviewView from '$views/character/lpc_preview/lpc_preview_view.svelte';
 import type { LpcInventoryViewModel } from './lpc_inventory_view_model.svelte';

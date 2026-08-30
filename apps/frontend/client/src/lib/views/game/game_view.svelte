@@ -6,7 +6,7 @@
 //
 // Contract: C-314 — Production game composition root
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import CombatSidebar from '../combat/combat_sidebar.svelte';
 import GameCanvasView from './canvas/game_canvas_view.svelte';
 import type { GameViewModelInterface } from './game_view_model.svelte';

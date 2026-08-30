@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/voice/voice_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { VoiceViewModelInterface } from './voice_view_model.svelte.ts';
 import { OUTPUT_FORMATS } from './voice_view_model.svelte.ts';
 

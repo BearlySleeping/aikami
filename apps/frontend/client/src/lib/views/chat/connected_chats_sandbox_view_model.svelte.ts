@@ -297,7 +297,7 @@ export class ConnectedChatsSandboxViewModel extends ChatViewModel {
 export const getConnectedChatsSandboxViewModel = (
   options: Omit<ChatViewModelOptions, 'chatId'> & { chatId?: string },
 ): ConnectedChatsSandboxViewModel =>
-  new ConnectedChatsSandboxViewModel({
+  ConnectedChatsSandboxViewModel.create({
     ...options,
     chatId: options.chatId ?? 'dev-connected-chats-game',
   });

@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/image/image_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { ImageViewModelInterface } from './image_view_model.svelte.ts';
 import { EXPRESSIONS, SAMPLERS, SCHEDULERS } from './image_view_model.svelte.ts';
 

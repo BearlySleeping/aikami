@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/layout/layout_view.dev.svelte
 import type { Snippet } from 'svelte';
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import { routerService } from '$services';
 import type { DevViewModelInterface } from './layout_view_model.dev.svelte.ts';
 

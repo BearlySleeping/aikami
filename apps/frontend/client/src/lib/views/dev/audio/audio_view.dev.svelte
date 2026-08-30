@@ -3,7 +3,7 @@
 //
 // Dev sandbox view for testing BGM transitions, SFX playback, and the
 // in-game music player (overlay toggle, vibe-matched skip, pause/stop).
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import MusicPlayerOverlay from '$lib/views/game/ui/hud/music_player_overlay.svelte';
 import { routerService } from '$services';
 import type { DevAudioViewModelInterface } from './audio_view_model.dev.svelte.ts';

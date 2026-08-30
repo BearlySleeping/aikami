@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/quest/quest_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { QuestViewModelInterface } from './quest_view_model.svelte.ts';
 
 type Props = { viewModel: QuestViewModelInterface };

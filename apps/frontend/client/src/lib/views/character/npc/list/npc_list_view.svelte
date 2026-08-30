@@ -2,8 +2,8 @@
 // apps/frontend/client/src/lib/views/character/npc/list/npc_list_view.svelte
 
 import type { NpcData } from '@aikami/types';
+import { BaseViewModelContainer } from '$components';
 import t from '$i18n';
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import type { NpcListViewModelInterface, NpcTab } from './npc_list_view_model.svelte.ts';
 
 type Props = {

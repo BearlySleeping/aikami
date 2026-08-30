@@ -1,5 +1,5 @@
 <script lang="ts">
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view.svelte
 //
 // LPC Preview View — zero-logic wrapper for the PixiJS character preview canvas.

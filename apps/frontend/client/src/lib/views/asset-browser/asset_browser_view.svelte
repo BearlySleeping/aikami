@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/asset-browser/asset_browser_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { AssetBrowserViewModelInterface } from './asset_browser_view_model.svelte';
 
 type Props = { viewModel: AssetBrowserViewModelInterface };
