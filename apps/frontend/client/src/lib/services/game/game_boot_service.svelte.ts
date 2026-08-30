@@ -696,6 +696,20 @@ class GameBootService
   }
 
   /**
+   * Stage: kick off the shared asset-prefetch pipeline. The pipeline is
+   * memoized — concurrent callers (start menu, boot) share one run. If the
+   * pipeline degraded (no seed, network failure) the boot proceeds anyway;
+   * the game will fetch assets on-demand.
+   */
+  private async _stagePrefetchStarterContent(generation: number): Promise<void> {
+    const { assetPrefetchService } = await import('$lib/services/assets/asset_prefetch_service.svelte');
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+    assetPrefetchService.ensureStarted();
+  }
+
+  /**
    * Stage: deliberate no-op, kept in the pipeline for stage-numbering
    * stability. Full-catalog warming ({@link
    * assetPrefetchService.warmRemaining}) is opt-in only — a player action
