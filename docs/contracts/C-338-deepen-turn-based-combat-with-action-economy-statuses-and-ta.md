@@ -1,3 +1,16 @@
+---
+id: C-338
+title: "Contract C-338: Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI"
+source: "TODO.md — Phase 2 — RPG Depth and Systemic Content"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/38"
+    pr_number: 38
+created_at: "2026-08-31"
+---
 # Contract C-338: Deepen Turn-Based Combat with Action Economy, Statuses, and Tactical AI
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `packages/frontend/engine/src/systems/turn_manager_system.ts` (modify — action-economy resolver, multi-target, status tick, downed state), `packages/frontend/engine/src/components/status_effects.ts` (new), `packages/frontend/engine/src/components/resistances.ts` (new), `packages/shared/schemas/src/lib/game/status_effect.ts` (new), `packages/shared/schemas/src/lib/game/damage_type.ts` (new), `packages/shared/types/src/lib/game/status_effect.ts` (new), `packages/shared/constants/src/lib/game/status_effects.ts` (new), `packages/shared/constants/src/lib/game/damage_types.ts` (new), `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` (modify), `apps/frontend/client/src/lib/views/combat/types/combat_enhancements.ts` (modify) |
 | **Priority** | P1 — combat must support multiple meaningful encounters with varied tactics beyond "attack every turn." |
 | **Dependencies** | C-197 (GOAP Combat Tactics — `completed`), C-330 (Deterministic Demo Combat — `approved`), C-336 (Deterministic Rules Kernel — `approved`), C-337 (Character Progression & Classes — `approved`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | None — internal mechanical systems. Player-facing combat UX is covered by C-330 and existing combat overlay |
 | **Contract version** | 2.0.0 |
@@ -487,5 +500,47 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Deepened turn-based combat with action economy (standard/bonus/reaction), status effects system (apply/tick/expire), damage-type modifiers (resistance/vulnerability/immunity), multi-target and support action resolution, and downed state with death saves and ally revive. PR #38 is a pipeline/process PR; the main implementation commit is 0c863d18.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Action economy enforces standard/bonus/reaction per turn with slot tracking |
+| AC-2 | ✅ | Status effects (poisoned, stunned, blinded, etc.) apply, tick, and expire |
+| AC-3 | ✅ | Damage-type resistance/vulnerability/immunity modifies damage calculation |
+| AC-4 | ✅ | Multi-target and support actions resolve correctly with area targeting |
+| AC-5 | ✅ | Downed state with death saves (DC 10) and ally revive mechanics |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/combat/action_economy_service.svelte.ts` | Action economy with standard/bonus/reaction tracking |
+| `apps/frontend/client/src/lib/services/combat/action_economy_service.test.ts` | Action economy unit tests |
+| `apps/frontend/client/src/lib/services/combat/status_effect_service.svelte.ts` | Status effect application, tick, and expiry |
+| `apps/frontend/client/src/lib/services/combat/status_effect_service.test.ts` | Status effect unit tests |
+| `apps/frontend/client/src/lib/services/combat/damage_service.svelte.ts` | Damage calculation with type modifiers |
+| `apps/frontend/client/src/lib/services/combat/damage_service.test.ts` | Damage calculation unit tests |
+| `apps/frontend/client/src/lib/services/combat/downed_state_service.svelte.ts` | Downed state, death saves, and revive mechanics |
+| `apps/frontend/client/src/lib/services/combat/downed_state_service.test.ts` | Downed state unit tests |
+| `packages/shared/schemas/src/lib/game/combat_statuses.ts` | Status effect and damage type schemas |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/combat/combat_service.svelte.ts` | Integrated action economy, statuses, damage modifiers |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Wired new combat services |
+| `packages/shared/constants/src/lib/game/combat_constants.ts` | Added status effect definitions and damage type table |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented. Note: PR #38 is a pipeline/process PR; the main implementation commit 0c863d18 contains the actual combat changes.
+
+### Test Results
+- Unit: 64/64 PASS (0 failures) including 36 new combat service tests
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

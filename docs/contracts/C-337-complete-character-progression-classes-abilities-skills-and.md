@@ -1,3 +1,16 @@
+---
+id: C-337
+title: "Contract C-337: Complete Character Progression, Classes, Abilities, Skills, and Spells"
+source: "TODO.md — Phase 2 — RPG Depth and Systemic Content"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/37"
+    pr_number: 37
+created_at: "2026-08-31"
+---
 # Contract C-337: Complete Character Progression, Classes, Abilities, Skills, and Spells
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `packages/shared/schemas/src/lib/game/class_definition.ts`, `packages/shared/types/src/lib/game/class_definition.ts`, `packages/shared/constants/src/lib/game/classes.ts`, `packages/frontend/engine/src/systems/progression_system.ts`, `apps/frontend/client/src/lib/views/game/dashboard/character_sheet_view_model.svelte.ts` (extend), `apps/frontend/client/src/lib/views/game/hotbar/` (new) |
 | **Priority** | P1 — character choices need consequences beyond initial stats. |
 | **Dependencies** | C-232 (Character Sheet & Traits — `completed`), C-153 (Character Dashboard & Equipment — `completed`), C-162 (BG3 Action Menu & Dice — `completed`), C-336 (Deterministic Rules Kernel — `approved`, not yet implemented — implementer must stub `grantXp` command type locally if C-336 kernel routines are unavailable; align with C-336's `RulesCommand` discriminated union pattern) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | None — internal systems only until Phase 3 media/gameplay promotion |
 | **Contract version** | 2.0.0 |
@@ -474,5 +487,52 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Implemented complete character progression system with 4 starter classes (Fighter, Wizard, Rogue, Cleric) with 5 levels each, XP-driven feature unlocks, character sheet with class features and next-level projection, hotbar with keyboard activation, and AI context enrichment with class/ability information. 25 files modified.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | 4 starter classes (Fighter, Wizard, Rogue, Cleric) with 5 levels each defined in constants |
+| AC-2 | ✅ | XP progression unlocks class features at correct levels (subclass at 3, ASI at 4, extra attack at 5) |
+| AC-3 | ✅ | Character sheet displays class features, ability scores, and next-level projection |
+| AC-4 | ✅ | Hotbar with 6 slots supporting keyboard activation (1-6) |
+| AC-5 | ✅ | AI context includes class, level, abilities, and available features |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/constants/src/lib/game/class_definitions.ts` | 4 starter class definitions with 5 levels of features |
+| `packages/shared/constants/src/lib/game/class_definitions.test.ts` | Class definition validation tests |
+| `packages/shared/schemas/src/lib/game/class_schemas.ts` | Class and ability TypeBox schemas |
+| `packages/shared/types/src/lib/game/class_types.ts` | Static-derived class types |
+| `apps/frontend/client/src/lib/services/game/progression_service.svelte.ts` | XP progression and feature unlock service |
+| `apps/frontend/client/src/lib/services/game/progression_service.test.ts` | Progression service unit tests |
+| `apps/frontend/client/src/lib/views/character/character_sheet_view.svelte` | Character sheet component |
+| `apps/frontend/client/src/lib/views/character/character_sheet_view_model.svelte.ts` | Character sheet ViewModel |
+| `apps/frontend/client/src/lib/views/character/hotbar_view.svelte` | Hotbar component |
+| `apps/frontend/client/src/lib/views/character/hotbar_view_model.svelte.ts` | Hotbar ViewModel |
+| `apps/e2e/tests/client/character-progression.spec.ts` | E2E tests for character progression |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/gm_prompt_service.svelte.ts` | Added class/ability context to AI prompt |
+| `apps/frontend/client/src/lib/services/game/world_state_service.svelte.ts` | Added character progression state |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Wired progression service |
+| `apps/frontend/client/src/lib/services/game/keybinding_config.ts` | Added hotbar keybindings (1-6) |
+| `packages/shared/constants/src/lib/game/item_catalog.ts` | Added class-specific items |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 52/52 PASS (0 failures) including 28 new progression service tests
+- E2E: 1 spec passing
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

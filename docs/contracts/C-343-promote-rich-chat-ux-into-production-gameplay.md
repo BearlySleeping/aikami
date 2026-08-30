@@ -1,3 +1,16 @@
+---
+id: C-343
+title: "Contract C-343: Promote Rich Chat UX into Production Gameplay"
+source: "TODO.md — Phase 2 — RPG Depth and Systemic Content"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/43"
+    pr_number: 43
+created_at: "2026-08-31"
+---
 # Contract C-343: Promote Rich Chat UX into Production Gameplay
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | Production dialogue overlay (`apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/`), message interaction primitives (action bars, alternatives/swiping, drafts, cancel, streaming TTS, CYOA integration, edit/branch UX) |
 | **Priority** | P1 — keep Marinara-level conversation quality without turning the game into a chat configuration app |
 | **Dependencies** | C-231 (Rich Chat Streaming — COMPLETED: message branching, drafts, action bar types, streaming TTS chunker), C-241 (Chat Modes & Address System — COMPLETED: impersonation, Scene/Party/GM toggle), C-245 (CYOA Choices — COMPLETED: choice buttons, impersonation integration, choice history store), C-328 (Integrate Bounded AI NPC Dialogue — implemented: production dialogue loop, orchestrator, authored fallback), C-340 (Party and Companion Gameplay — not_started: party address mode depends on party roster) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` — the production dialogue overlay on `/game` already mounts with streaming AI dialogue (C-328); this contract hardens the rich chat surface in place (no sandbox promotion step) |
 | **Docs Impact** | none — internal developer-facing UX promotion, no new player-facing docs |
 | **Contract version** | 2.0.0 |
@@ -409,5 +422,43 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Promoted rich chat UX features from sandbox to production gameplay: message action bar with swipe gestures, cancel streaming with draft recovery and auto-resize textarea, streaming TTS visual indicator, CYOA choice buttons in dialogue overlay, and edit/delete message with conversation branching. 5 files modified.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Message action bar with copy, edit, delete, and swipe gesture support |
+| AC-2 | ✅ | Cancel streaming button, draft recovery on reopen, auto-resize textarea |
+| AC-3 | ✅ | Streaming TTS visual indicator (pulsing dot) during audio generation |
+| AC-4 | ✅ | CYOA choice buttons in dialogue overlay with per-chat toggle |
+| AC-5 | ✅ | Edit message, delete message with confirmation, and conversation branching |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/views/dialogue/dialogue_overlay.svelte` | Production dialogue overlay component |
+| `apps/frontend/client/src/lib/views/dialogue/dialogue_overlay_view_model.svelte.ts` | Dialogue overlay ViewModel |
+| `apps/frontend/client/src/lib/views/dialogue/dialogue_types.ts` | Dialogue overlay type definitions |
+| `apps/e2e/tests/client/dialogue.spec.ts` | E2E tests for dialogue overlay |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Wired dialogue overlay service |
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | Added DIALOGUE overlay type |
+| `apps/frontend/client/src/lib/services/tts/tts_service.svelte.ts` | Added streaming TTS indicator integration |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 24/24 PASS (0 failures) including 12 new dialogue overlay tests
+- E2E: 1 spec passing
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---
