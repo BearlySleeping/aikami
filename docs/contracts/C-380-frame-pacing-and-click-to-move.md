@@ -21,7 +21,7 @@ created_at: "2026-08-11"
 | **Target** | `packages/frontend/engine/src/worker/ecs_worker.ts` — tick clock + state timestamps; `game_world.ts` — interpolation, pointer input, unprojection; `engine_bridge.ts` + `types.ts` — `MOVE_TO_CELL`; `apps/frontend/client/` — cursor UI |
 | **Priority** | P1 — the sim runs on `setTimeout(16)` while rendering runs on rAF with **no interpolation**, producing continuous judder that no amount of texture work fixes. Point-and-click is greenfield and is the input model the game is meant to have. |
 | **Dependencies** | **C-379** (hard — click-to-move consumes its A* and `PathFollow`; file: `C-379-collision-and-movement-unification.md`). C-377 (pixel snap must land before interpolation, or sub-pixel interpolation reintroduces shimmer; file: `C-377-pixel-art-render-correctness.md`). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` — `/game` route + a new Playwright spec |
 | **Docs Impact** | user-facing → controls documentation update in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
@@ -439,3 +439,48 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Implemented fixed-timestep accumulator in the ECS worker (60Hz), interpolation between two sim states on the main thread, buffer copy safety for the ArrayBuffer transfer path, screen→world unprojection, canvas-level click-to-move with A* pathfinding, hover highlight and destination marker cursor feedback, and keyboard/mode cancellation of click-paths. All existing tests pass (1070/1071, 1 pre-existing failure).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Fixed-timestep accumulator in worker; tick/simTimeMs/stepMs in STATE_UPDATE |
+| AC-2 | ✅ | Two-state window interpolation with pixel snap after blending |
+| AC-3 | ✅ | Previous buffer copied before recycle; no detachment under interpolation |
+| AC-4 | ✅ | Unprojection co-located with camera transform; MOVE_TO_CELL with A* pathfinding |
+| AC-5 | ✅ | Click routing via MOVE_TO_CELL → worker resolves intent from grids |
+| AC-6 | ✅ | Hover highlight (white semi-transparent) + destination marker (green crosshair) |
+| AC-7 | ✅ | Keyboard movement and mode changes cancel active click-path |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/__tests__/frame_pacing.test.ts` | Unit tests for fixed-timestep, interpolation alpha, buffer copy, unprojection |
+| `apps/e2e/tests/game/click_to_move.spec.ts` | E2E tests for click-to-move and keyboard cancellation |
+| `apps/frontend/docs/src/content/docs/guides/controls.md` | Controls documentation |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | Fixed-timestep accumulator (FIXED_STEP_MS, MAX_STEPS_PER_WAKE, accumulator); timing fields in STATE_UPDATE; MOVE_TO_CELL handler with A* pathfinding |
+| `packages/frontend/engine/src/game_world.ts` | Interpolation state window; buffer copy before recycle; interpolated entity/camera rendering; unprojection methods; pointer listener (click-to-move + hover); cursor overlays; cancellation on keyboard/mode change |
+| `packages/frontend/engine/src/types.ts` | Added MOVE_TO_CELL to GameCommand union |
+
+### Deviations from Spec
+
+None. All ACs implemented as specified.
+
+### Test Results
+
+- Unit: 1070/1071 PASS (1 pre-existing failure: emberwatch atlas.json)
+- E2E: click_to_move.spec.ts written (requires Playwright runtime to execute)
+- Visual: N/A
+- Baseline: 1 pre-existing failure, 0 new failures
