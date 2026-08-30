@@ -21,7 +21,7 @@ created_at: "2026-08-17"
 | **Target** | `packages/frontend/configs`, four app `app.css` files; `apps/frontend/client/src/routes/(dev)/`; tsconfig/svelte.config alias references; `apps/backend/firebase/`, `apps/frontend/hub/`; `docs/architecture/`, `docs/strategy/deferred.md`; `apps/backend/local-stack/` |
 | **Priority** | P2 — consistency, cleanup, infrastructure. **Do not start before the P0 block (C-400/401/402/405) lands.** |
 | **Dependencies** | — |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `—` |
 | **Docs Impact** | user-facing → `apps/backend/local-stack/README.md` Quick Start (Feature F only); rest internal |
 | **Contract version** | 2.0.0 |
