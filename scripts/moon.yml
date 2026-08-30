@@ -32,6 +32,7 @@ tasks:
       - '@group(entry)'
     options:
       mergeArgs: 'replace'
+      runInCI: false
 
   typecheck:
     command: 'bun run typecheck'
