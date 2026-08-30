@@ -21,15 +21,15 @@
     ".pi": {
       "name": "pi",
       "dependencies": {
-        "@hypabolic/hypa": "latest",
-        "@modelcontextprotocol/sdk": "latest",
-        "zod": "latest",
+        "@hypabolic/hypa": "^0.1.14",
+        "@modelcontextprotocol/sdk": "^1.30.0",
+        "zod": "^4.5.4",
       },
       "devDependencies": {
-        "@earendil-works/pi-agent-core": "latest",
-        "@earendil-works/pi-ai": "latest",
-        "@earendil-works/pi-coding-agent": "latest",
-        "@types/bun": "latest",
+        "@earendil-works/pi-agent-core": "^0.84.4",
+        "@earendil-works/pi-ai": "^0.84.4",
+        "@earendil-works/pi-coding-agent": "^0.84.4",
+        "@types/bun": "^1.4.0",
       },
     },
     "apps/backend/image": {

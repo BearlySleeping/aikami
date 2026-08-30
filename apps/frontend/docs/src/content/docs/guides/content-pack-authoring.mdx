@@ -1,0 +1,182 @@
+---
+title: Content Pack Authoring & Licensing
+description: How to author content packs with per-asset provenance, version pinning, and validation.
+---
+
+Content packs are the building blocks of Aikami game worlds. This guide covers
+how to author a pack that passes validation, carries proper licensing, and
+survives updates without breaking existing saves.
+
+## Pack Structure
+
+A content pack is a directory under `content/packs/<pack-id>/` containing:
+
+- `manifest.json` — the pack manifest (required)
+- `maps/*.json` — map files referenced by the manifest
+- Other assets referenced by the manifest
+
+## Manifest Schema
+
+The manifest is validated against `ContentPackManifestSchema`. Key fields:
+
+```json
+{
+  "id": "my-adventure",
+  "name": "My Adventure",
+  "version": "1.0.0",
+  "startingMapId": "start",
+  "maps": {
+    "start": { "file": "maps/start.json", "name": "Starting Village" }
+  },
+  "atlas": {
+    "textureUrl": "sprites/tileset.png",
+    "spritesheetUrl": "sprites/atlas.json"
+  }
+}
+```
+
+## Per-Asset Provenance (C-381)
+
+Every asset in a pack must carry provenance information: licence, author, and
+source. This is required by the pack validator and enforced at load time.
+
+### Adding Provenance to Tiles
+
+```json
+{
+  "tiles": {
+    "1": {
+      "name": "grass",
+      "frame": "grass.png",
+      "isWalkable": true,
+      "provenance": {
+        "license": "CC-BY-SA-4.0",
+        "author": ["Liberated Pixel Cup contributors"],
+        "source": "https://lpc.opengameart.org",
+        "shareAlike": true
+      }
+    }
+  }
+}
+```
+
+### Adding Provenance to Props
+
+```json
+{
+  "props": {
+    "well": {
+      "name": "Village Well",
+      "frame": "well.png",
+      "isWalkable": false,
+      "provenance": {
+        "license": "CC-BY-SA-4.0",
+        "author": ["Liberated Pixel Cup contributors"],
+        "source": "https://lpc.opengameart.org",
+        "shareAlike": true
+      }
+    }
+  }
+}
+```
+
+### Atlas Provenance
+
+The atlas itself can also carry provenance:
+
+```json
+{
+  "atlas": {
+    "textureUrl": "sprites/tileset.png",
+    "spritesheetUrl": "sprites/atlas.json",
+    "provenance": {
+      "license": "CC-BY-SA-4.0",
+      "author": ["Liberated Pixel Cup contributors"],
+      "source": "https://lpc.opengameart.org",
+      "shareAlike": true
+    }
+  }
+}
+```
+
+### Valid Licences
+
+The `license` field must be one of the following SPDX identifiers:
+
+| Licence | Identifier | Share-Alike |
+|---|---|---|
+| MIT | `MIT` | No |
+| Apache 2.0 | `Apache-2.0` | No |
+| GPL 2.0 | `GPL-2.0` | Yes |
+| GPL 3.0 | `GPL-3.0` | Yes |
+| Creative Commons BY 4.0 | `CC-BY-4.0` | No |
+| Creative Commons BY-SA 4.0 | `CC-BY-SA-4.0` | Yes |
+| Creative Commons BY-SA 3.0 | `CC-BY-SA-3.0` | Yes |
+| OGA BY 3.0 | `OGA-BY-3.0` | No |
+| Proprietary | `proprietary` | N/A |
+
+## Hash-Only Asset References (C-381)
+
+Packs must reference assets by content hash through the registry, never by
+arbitrary URL. The pack validator rejects:
+
+- Absolute URLs (`https://...`)
+- Path traversal (`../`)
+- `data:` URIs
+- `javascript:` URIs
+
+All asset resolution goes through the C-373 asset registry which verifies
+SHA-256 hashes before use.
+
+## Version Pinning (C-381)
+
+Saves record the pack version they were created against. When a pack is
+updated, the game detects the version mismatch and provides a clear resolution
+path:
+
+- **Map renamed**: falls back to the pack's starting map with a warning
+- **Pack missing**: reports the missing pack and offers to load a cached
+  version if available
+
+The pack version is read from `manifest.json`'s `version` field, which must
+follow semantic versioning (`x.y.z`).
+
+## Pack Validation
+
+Before a pack can be loaded, it must pass validation. The `validatePack()`
+service returns structured results:
+
+```typescript
+const result = validatePack(manifest, {
+  atlasFrames: new Set([...atlasFrameKeys]),
+  mapFiles: { start: 'maps/start.json' },
+});
+
+if (result.errors.length > 0) {
+  // Pack cannot be loaded — surface errors to the author
+  for (const error of result.errors) {
+    console.error(`[${error.code}] ${error.path}: ${error.message}`);
+    console.error(`  Hint: ${error.hint}`);
+  }
+}
+```
+
+### Error Codes
+
+| Code | Meaning |
+|---|---|
+| `asset.missing-provenance` | Asset missing licence/author/source |
+| `asset.absolute-url` | Asset uses an absolute URL |
+| `asset.path-traversal` | Asset path contains `../` |
+| `asset.data-scheme` | Asset uses `data:` URI |
+| `asset.javascript-scheme` | Asset uses `javascript:` URI |
+| `manifest.map-file-not-found` | Declared map file does not exist |
+| `manifest.tile-frame-missing` | Tile frame not found in atlas |
+| `manifest.prop-frame-missing` | Prop frame not found in atlas |
+| `terrain.frame-missing-in-atlas` | Terrain frame not found in atlas |
+
+## Attribution Screen
+
+Provenance data feeds the in-game attribution screen, which displays licence
+and author information for every asset used in the current pack. This screen
+is reachable from the main menu and is screen-reader accessible.

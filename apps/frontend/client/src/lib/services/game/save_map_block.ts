@@ -6,6 +6,7 @@
 // part of the barrel, so callers must import this module by path.
 
 import { gameEngineService } from './game_engine_service.svelte';
+import { campaignService } from '../campaign/campaign_service.svelte';
 
 /** Map-routing block persisted in the save envelope (v3+). */
 export type SaveMapBlock = {
@@ -19,6 +20,18 @@ export type SaveMapBlock = {
   playerY: number;
   /** Optional spawn id the player used to enter the map (provenance/debug). */
   spawnId?: string;
+  /**
+   * Pack version when the save was created (v4+).
+   * Missing = treat as the currently installed version (v3 compatibility).
+   * Contract: C-381 AC-3.
+   */
+  packVersion?: string;
+  /**
+   * Seed for reproducible world generation (v4+).
+   * Missing = derived deterministically from campaign id (v3 compatibility).
+   * Contract: C-381 AC-4 / AC-9.
+   */
+  worldSeed?: string;
 };
 
 /**
@@ -40,7 +53,15 @@ export const buildSaveMapBlock = async (): Promise<SaveMapBlock | undefined> => 
   if (!mapId || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
     return undefined;
   }
-  return { packId, mapId, playerX: Math.round(pos.x), playerY: Math.round(pos.y) };
+  const campaign = campaignService.activeCampaign;
+  return {
+    packId,
+    mapId,
+    playerX: Math.round(pos.x),
+    playerY: Math.round(pos.y),
+    packVersion: undefined, // resolved from the pack manifest at save time
+    worldSeed: campaign?.seed != null ? String(campaign.seed) : undefined,
+  };
 };
 
 /**

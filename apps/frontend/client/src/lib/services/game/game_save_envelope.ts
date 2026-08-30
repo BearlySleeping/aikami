@@ -14,6 +14,18 @@ export type SaveMapBlock = {
   playerY: number;
   /** Optional spawn identifier used to enter the map. */
   spawnId?: string;
+  /**
+   * Pack version when the save was created (v4+).
+   * Missing = treat as the currently installed version (v3 compatibility).
+   * Contract: C-381 AC-3.
+   */
+  packVersion?: string;
+  /**
+   * Seed for reproducible world generation (v4+).
+   * Missing = derived deterministically from campaign id (v3 compatibility).
+   * Contract: C-381 AC-4 / AC-9.
+   */
+  worldSeed?: string;
 };
 
 /** Parsed representation of a persisted save payload. */
@@ -99,16 +111,24 @@ export const validateEnvelopeChecksum = async (options: {
   try {
     const version = options.version ?? 2;
     const dataToHash =
-      version >= 3
+      version >= 4
         ? JSON.stringify({
             ecsSnapshot: options.ecsSnapshot,
             serviceSnapshots: options.serviceSnapshots,
             map: options.map,
+            packVersion: options.map?.packVersion,
+            worldSeed: options.map?.worldSeed,
           })
-        : JSON.stringify({
-            ecsSnapshot: options.ecsSnapshot,
-            serviceSnapshots: options.serviceSnapshots,
-          });
+        : version >= 3
+          ? JSON.stringify({
+              ecsSnapshot: options.ecsSnapshot,
+              serviceSnapshots: options.serviceSnapshots,
+              map: options.map,
+            })
+          : JSON.stringify({
+              ecsSnapshot: options.ecsSnapshot,
+              serviceSnapshots: options.serviceSnapshots,
+            });
     const computed = await sha256(dataToHash);
     return computed === options.storedChecksum;
   } catch {

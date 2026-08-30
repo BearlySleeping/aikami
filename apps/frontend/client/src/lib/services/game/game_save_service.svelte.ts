@@ -28,7 +28,7 @@ import { hydrateAllServices, serializeAllServices } from './serializable_service
 const KEY_PREFIX = 'aikami_save_';
 
 /** Current save envelope version. */
-const SAVE_ENVELOPE_VERSION = 3;
+const SAVE_ENVELOPE_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -89,6 +89,10 @@ export type GameSaveServiceInterface = BaseFrontendClassInterface & {
     campaignId?: string;
     mapName?: string;
     map: SaveMapBlock;
+    /** Pack version to pin in the save (C-381 AC-3). */
+    packVersion?: string;
+    /** World seed for reproducible generation (C-381 AC-9). */
+    worldSeed?: string;
   }): Promise<void>;
 
   /**
@@ -186,12 +190,14 @@ class GameSaveService
     campaignId?: string;
     mapName?: string;
     map: SaveMapBlock;
+    packVersion?: string;
+    worldSeed?: string;
   }): Promise<void> {
     if (this.isSaving) {
       return;
     }
 
-    const { slotId = 'auto-save', campaignId, mapName = 'World', map } = options;
+    const { slotId = 'auto-save', campaignId, mapName = 'World', map, packVersion, worldSeed } = options;
 
     this.isSaving = true;
 
@@ -224,13 +230,18 @@ class GameSaveService
       const dataToHash = JSON.stringify({ ecsSnapshot, serviceSnapshots, map });
       const checksum = await sha256(dataToHash);
 
-      // v3 envelope (C-334, map-authoritative restore)
+      // v4 envelope (C-381, pack version pinning + world seed)
+      const mapWithVersion = {
+        ...map,
+        ...(packVersion ? { packVersion } : {}),
+        ...(worldSeed ? { worldSeed } : {}),
+      };
       const payload = JSON.stringify({
         version: SAVE_ENVELOPE_VERSION,
         checksum,
         ecsSnapshot,
         serviceSnapshots,
-        map,
+        map: mapWithVersion,
         savedAt,
       });
 
