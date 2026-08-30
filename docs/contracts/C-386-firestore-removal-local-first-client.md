@@ -2,7 +2,7 @@
 id: C-386
 title: "Firestore Removal: client becomes local-first"
 source: "external data-layer review (docs/research/database-architecture-recommendation.md §4)"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
