@@ -209,11 +209,19 @@ export type GameCommand =
     }
   | {
       /**
-       * Configures the environment system at runtime (time scale, weather).
-       * Used by dev sandboxes to test diurnal cycles and weather overlays.
+       * Moves the player to a target cell using PathFollow.
+       * A goal, not a velocity — the worker's path-follow system
+       * handles the actual locomotion.
        *
-       * Contract: C-213 Environment, Time, and Weather Core System
+       * Contract: C-380 AC-4
        */
+      type: 'MOVE_TO_CELL';
+      cellX: number;
+      cellY: number;
+      /** Stop this many world pixels short (interaction range, formation slot). */
+      arriveRadius: number;
+    }
+  | {
       type: 'SET_ENVIRONMENT_CONFIG';
       /** Time scale: game seconds per real second. */
       timeScale?: number;
