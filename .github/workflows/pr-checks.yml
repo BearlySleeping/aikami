@@ -80,6 +80,9 @@ jobs:
           # For pull_request events, diff against the target branch.
           # For push/workflow_dispatch, diff against main (no PR context).
           BASE_REF: ${{ github.event.pull_request.base.ref || 'main' }}
+          # Astro sites need these for static builds
+          PUBLIC_APP_ID: site
+          PUBLIC_MODE: development
         run: bun moon ci --base="origin/$BASE_REF"
 
   # Heavy suites run as their own job so they execute IN PARALLEL with the
