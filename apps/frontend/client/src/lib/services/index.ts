@@ -88,6 +88,7 @@ export * from './game/game_composition_root.svelte.ts';
 export * from './game/game_engine_service.svelte.ts';
 export * from './game/game_mode_service.svelte.ts';
 export * from './game/game_overlay_service.svelte.ts';
+export * from './game/game_save_envelope.ts';
 export * from './game/game_save_service.svelte.ts';
 export * from './game/game_state_facts.ts';
 export * from './game/game_state_service.svelte.ts';

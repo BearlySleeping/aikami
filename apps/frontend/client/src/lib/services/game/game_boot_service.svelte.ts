@@ -24,6 +24,7 @@ import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { personaService } from '../persona/persona_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
+import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 
 /** Ordered pipeline stages that execute sequentially during a boot attempt. */
 const bootStageOrder: readonly GameBootStage[] = [
@@ -533,13 +534,6 @@ class GameBootService
       this.debug('stage:validating_save:payload-provided');
 
       // C-334 AC-4: Validate checksum for v2+ payloads
-      const { parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
-        './game_save_service.svelte.ts'
-      );
-      // Check generation after async import
-      if (generation !== this._bootGeneration) {
-        return;
-      }
       const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
         parseSavePayloadEnvelope(input.pendingSavePayload);
 
@@ -578,9 +572,7 @@ class GameBootService
     // Fetch the payload to validate it exists and is parseable
     const slotId = this._campaign.lastSaveSlotId;
     try {
-      const { gameSaveService, parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
-        './game_save_service.svelte.ts'
-      );
+      const { gameSaveService } = await import('./game_save_service.svelte.ts');
       // Check generation after async import
       if (generation !== this._bootGeneration) {
         return;
@@ -931,7 +923,6 @@ class GameBootService
       // Restore from save snapshot — the payload may be a full envelope
       // ({ ecsSnapshot, serviceSnapshots, map }) or a plain ECS snapshot.
       this.bootProgress.detail = 'Restoring saved world...';
-      const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte.ts');
       const { hydrateAllServices } = await import('./serializable_service');
       // Check generation after async imports
       if (generation !== this._bootGeneration) {
@@ -1504,9 +1495,7 @@ class GameBootService
     }
 
     try {
-      const { gameSaveService, parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
-        './game_save_service.svelte.ts'
-      );
+      const { gameSaveService } = await import('./game_save_service.svelte.ts');
 
       // Fetch all saves for this campaign, sorted newest first
       await gameSaveService.fetchAvailableSaves(this._campaign.id);

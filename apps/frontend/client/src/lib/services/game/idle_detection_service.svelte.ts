@@ -5,13 +5,8 @@
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-
-export type IdleDetectionServiceOptions = BaseFrontendClassOptions;
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import type { IdleDetectionServiceOptions } from '$types';
 // ── Types ────────────────────────────────────────────────────────────────
 
 export type IdleDetectionServiceInterface = BaseFrontendClassInterface & {
@@ -52,7 +47,7 @@ const INPUT_EVENTS = [
 // ── Implementation ───────────────────────────────────────────────────────
 
 class IdleDetectionService
-  extends BaseFrontendClass<BaseFrontendClassOptions>
+  extends BaseFrontendClass<IdleDetectionServiceOptions>
   implements IdleDetectionServiceInterface
 {
   idleDurationMs = $state(0);

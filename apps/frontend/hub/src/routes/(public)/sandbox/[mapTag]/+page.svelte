@@ -12,4 +12,6 @@ let { data }: PageProps = $props();
 const viewModel = $derived(getWalkSandboxViewModel({ data, className: 'HubWalkSandboxViewModel' }));
 </script>
 
-<WalkSandboxView {viewModel} />
+{#key data.entry.tag}
+  <WalkSandboxView {viewModel} />
+{/key}

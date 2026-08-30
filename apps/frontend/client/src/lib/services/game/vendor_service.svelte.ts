@@ -24,6 +24,7 @@ import type { VendorSessionOptions } from '$types';
 import { playSfxByName } from '../audio/audio_asset_resolver';
 import { getItemDefinition, inventoryService } from './inventory_service.svelte';
 
+/** Options used to construct the vendor transaction service. */
 export type VendorServiceOptions = BaseFrontendClassOptions;
 // ── Pricing ─────────────────────────────────────────────────────────────
 

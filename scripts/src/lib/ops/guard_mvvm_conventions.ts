@@ -23,8 +23,8 @@
 //     M1  Exports a `${Name}ViewModelOptions` type.
 //     M2  Exports a `${Name}ViewModelInterface` type.
 //     M3  The class extends BaseViewModel.
-//     M4  Exported via a `ClassName.create(options)` factory — never `new
-//         ClassName(`.
+//     M4  Exported via the declared ViewModel class's
+//         `ClassName.create(options)` factory — never `new ClassName(`.
 //     M5  Service imports come from the `$services` barrel, never
 //         `$lib/services/*` direct paths.
 //     M6  No `$logger` import — BaseViewModel provides this.debug() etc.
@@ -72,22 +72,38 @@ const walk = (dir: string, matches: (name: string) => boolean): string[] => {
 
 const checkView = (file: string): void => {
   const content = readFileSync(file, 'utf8');
-  const scriptMatch = content.match(/<script lang="ts">([\s\S]*?)<\/script>/);
-  const script = scriptMatch?.[1] ?? '';
-  const markup = content.slice((scriptMatch?.index ?? 0) + (scriptMatch?.[0].length ?? 0));
+  const scriptMatches = [...content.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+  const scriptMatch =
+    scriptMatches.find(
+      (match) => !/\bmodule\b|\bcontext\s*=\s*['"]module['"]/i.test(match[1] ?? ''),
+    ) ?? scriptMatches[0];
+  const scriptAttributes = scriptMatch?.[1] ?? '';
+  const script = scriptMatch?.[2] ?? '';
+  const markup = content
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .trim();
 
-  const hasViewModelProp = /viewModel\??:\s*\w+ViewModelInterface/.test(script);
-  if (!hasViewModelProp) {
-    return; // pure presentational sub-component — not subject to the container rule
+  if (scriptMatch && !/\blang\s*=\s*(['"])ts\1/i.test(scriptAttributes)) {
+    violations.push({
+      file: relPath(file),
+      rule: 'V1',
+      message: 'uses a <script> block without lang="ts"',
+    });
   }
 
-  const isHeadOnly =
-    /<svelte:head>/.test(markup) &&
-    markup
-      .replace(/<svelte:head>[\s\S]*?<\/svelte:head>/, '')
-      .replace(/<!--[\s\S]*?-->/g, '')
-      .trim() === '';
-  if (!isHeadOnly && !/BaseViewModelContainer/.test(content)) {
+  const hasViewModelProp = /viewModel\??:\s*\w+ViewModelInterface/.test(script);
+  const renderedMarkup = markup.replace(/<svelte:head\b[^>]*>[\s\S]*?<\/svelte:head>/gi, '').trim();
+  const directContainerPattern =
+    /^<BaseViewModelContainer\b(?=[^>]*(?:\{viewModel\}|viewModel\s*=\s*\{viewModel\}))[^>]*>[\s\S]*<\/BaseViewModelContainer>$/.test(
+      renderedMarkup,
+    );
+  const guardedContainerPattern =
+    /^{#if\s+viewModel}\s*<BaseViewModelContainer\b(?=[^>]*(?:\{viewModel\}|viewModel\s*=\s*\{viewModel\}))[^>]*>[\s\S]*<\/BaseViewModelContainer>\s*{\/if}$/.test(
+      renderedMarkup,
+    );
+  const wrapsViewModel = directContainerPattern || guardedContainerPattern;
+  if (hasViewModelProp && renderedMarkup && !wrapsViewModel) {
     violations.push({
       file: relPath(file),
       rule: 'V1',
@@ -155,14 +171,20 @@ const checkViewModel = (file: string): void => {
       message: 'class does not extend BaseViewModel',
     });
   }
-  if (!/\w+\.create\(/.test(content)) {
+  const className = content.match(/\bclass\s+(\w+ViewModel)\s+extends\s+BaseViewModel\b/)?.[1];
+  const hasClassFactory =
+    className !== undefined &&
+    new RegExp(
+      `export\\s+const\\s+\\w+\\s*=\\s*[\\s\\S]{0,800}?=>\\s*${className}\\.create\\s*\\(`,
+    ).test(content);
+  if (!hasClassFactory) {
     violations.push({
       file: relPath(file),
       rule: 'M4',
-      message: 'missing `ClassName.create(options)` factory export',
+      message: 'missing an exported factory that invokes the declared ViewModel class `.create()`',
     });
   }
-  if (/new\s+\w*ViewModel\s*\(/.test(content)) {
+  if (className && new RegExp(`new\\s+${className}\\s*\\(`).test(content)) {
     violations.push({
       file: relPath(file),
       rule: 'M4',

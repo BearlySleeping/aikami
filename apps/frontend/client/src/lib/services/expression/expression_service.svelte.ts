@@ -4,11 +4,7 @@
 // and LPC overlay resolution for character portrait rendering.
 //
 // Contract: C-239 Expression Emotion System
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
 import {
   EXPRESSION_CATALOG,
   getExpressionEntry,
@@ -22,10 +18,10 @@ import type {
   ExpressionId,
   ExpressionMap,
   ExpressionOverlay,
+  ExpressionServiceOptions,
 } from '$types';
 import type { ExpressionOutput } from '../agent/agent_schemas.ts';
 
-export type ExpressionServiceOptions = BaseFrontendClassOptions;
 // ── Service Interface ────────────────────────────────────────────────────
 
 export type ExpressionServiceInterface = BaseFrontendClassInterface & {
@@ -109,7 +105,7 @@ const MOOD_TO_EXPRESSION_ID: Record<string, ExpressionId> = {
 };
 
 class ExpressionService
-  extends BaseFrontendClass<BaseFrontendClassOptions>
+  extends BaseFrontendClass<ExpressionServiceOptions>
   implements ExpressionServiceInterface
 {
   readonly catalogEntries = EXPRESSION_CATALOG.map((entry) => ({

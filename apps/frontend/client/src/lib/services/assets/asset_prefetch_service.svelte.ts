@@ -17,6 +17,7 @@ import type { AssetSeedDocument } from '@aikami/types';
 import { withStepTimeout } from '$lib/utils/step_timeout';
 import type { AssetCacheBackend } from './cache_backend.ts';
 
+/** Options used to construct the shared asset-prefetch service. */
 export type AssetPrefetchServiceOptions = BaseFrontendClassOptions;
 /** Concurrent fetches during the background warm pass — see game_boot_service. */
 const WARM_CONCURRENCY = 8;
@@ -347,4 +348,6 @@ class AssetPrefetchService
 }
 
 /** Shared singleton — the start menu and the boot pipeline both call into this. */
-export const assetPrefetchService: AssetPrefetchServiceInterface = AssetPrefetchService.create();
+export const assetPrefetchService: AssetPrefetchServiceInterface = AssetPrefetchService.create({
+  className: 'AssetPrefetchService',
+});

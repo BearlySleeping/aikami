@@ -21,6 +21,7 @@ import type {
 } from '@aikami/types';
 import { aiGatewayService } from '$services';
 
+/** Options used to construct the AI capability-detection service. */
 export type CapabilityServiceOptions = BaseFrontendClassOptions;
 // ── Types ──────────────────────────────────────────────────────────────
 

@@ -214,6 +214,12 @@ class AppErrorViewModel
   }
 }
 
+/**
+ * Constructs the app-error ViewModel from its base ViewModel options.
+ *
+ * @param options - Construction options forwarded to the instrumented ViewModel factory.
+ * @returns The initialized app-error ViewModel contract.
+ */
 export const getAppErrorViewModel = (options: AppErrorViewModelOptions) =>
   AppErrorViewModel.create({
     ...options,

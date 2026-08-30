@@ -10,6 +10,7 @@ import { audioContextManager } from './audio_context_manager';
 import { audioService } from './audio_service.svelte.ts';
 import { voiceModelService } from './voice_model_service.svelte.ts';
 
+/** Options used to construct the text-to-speech service. */
 export type TtsServiceOptions = TtsOptions;
 /** True when running inside a Tauri webview. */
 const isTauriRuntime = (): boolean =>

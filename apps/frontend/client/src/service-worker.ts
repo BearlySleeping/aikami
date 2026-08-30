@@ -19,13 +19,17 @@
 /// <reference lib="esnext" />
 /// <reference lib="webworker" />
 
-// Ensures that the `$service-worker` import has proper type definitions
+// Ensures that SvelteKit virtual modules have proper type definitions.
 /// <reference types="@sveltejs/kit" />
+
+import { version } from '$app/env';
 
 const worker = self as unknown as ServiceWorkerGlobalScope;
 
 /** Base paths for audio assets to intercept. */
 const AUDIO_PATH_PREFIXES = ['/game-data/music/', '/game-data/sfx/', '/game-data/ambient/'];
+const AUDIO_CACHE_PREFIX = 'aikami-audio-';
+const AUDIO_CACHE_NAME = `${AUDIO_CACHE_PREFIX}${version}`;
 
 type ParsedRange = {
   start: number;
@@ -37,7 +41,7 @@ const isAudioPath = (pathname: string): boolean =>
   AUDIO_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
 /** Opens (or creates) a dedicated cache for audio assets. */
-const openAudioCache = async (): Promise<Cache> => caches.open('aikami-audio-v1');
+const openAudioCache = async (): Promise<Cache> => caches.open(AUDIO_CACHE_NAME);
 
 /** Content-Type for an audio asset URL, inferred from its extension. */
 const contentTypeFor = (url: string): string => {
@@ -65,20 +69,37 @@ const fetchAndCacheAsset = async (url: string): Promise<ArrayBuffer> => {
 
   // Store in cache for subsequent byte-range slicing
   const cache = await openAudioCache();
-  await cache.put(url, cloned);
+  await cache.put(url, cloned).catch(() => undefined);
 
   return response.arrayBuffer();
 };
 
-/** Parses a `Range: bytes=start-end` header against a buffer's byte length. */
+/** Parses a byte range, including suffix ranges, against a buffer's byte length. */
 const parseRange = (rangeHeader: string, byteLength: number): ParsedRange | undefined => {
-  const match = rangeHeader.match(/^bytes=(\d+)-(\d*)/);
+  const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
   if (!match) {
     return undefined;
   }
 
-  const start = Number.parseInt(match[1], 10);
-  const end = match[2] ? Math.min(Number.parseInt(match[2], 10), byteLength - 1) : byteLength - 1;
+  const startText = match[1] ?? '';
+  const endText = match[2] ?? '';
+  if (!startText && !endText) {
+    return undefined;
+  }
+
+  if (!startText) {
+    const suffixLength = Number.parseInt(endText, 10);
+    if (suffixLength <= 0 || byteLength <= 0) {
+      return undefined;
+    }
+    return {
+      start: Math.max(byteLength - suffixLength, 0),
+      end: byteLength - 1,
+    };
+  }
+
+  const start = Number.parseInt(startText, 10);
+  const end = endText ? Math.min(Number.parseInt(endText, 10), byteLength - 1) : byteLength - 1;
 
   if (start >= byteLength || start > end) {
     return undefined;
@@ -148,7 +169,17 @@ worker.addEventListener('install', () => {
 
 // ── Activate — claim all clients ──
 worker.addEventListener('activate', (event) => {
-  event.waitUntil(worker.clients.claim());
+  event.waitUntil(
+    Promise.all([
+      caches.keys().then(async (cacheNames) => {
+        const obsoleteCacheNames = cacheNames.filter(
+          (cacheName) => cacheName.startsWith(AUDIO_CACHE_PREFIX) && cacheName !== AUDIO_CACHE_NAME,
+        );
+        await Promise.all(obsoleteCacheNames.map((cacheName) => caches.delete(cacheName)));
+      }),
+      worker.clients.claim(),
+    ]).then(() => undefined),
+  );
 });
 
 // ── Fetch — intercept audio asset requests ──

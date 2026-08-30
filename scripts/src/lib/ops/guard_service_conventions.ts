@@ -6,11 +6,11 @@
 // ai_gateway_service.svelte.ts as the reference implementation.
 //
 //   Service rules (*_service.svelte.ts):
-//     S1  Exports a `${Name}ServiceOptions` type.
+//     S1  Declares or imports a `${Name}ServiceOptions` type.
 //     S2  Exports a `${Name}ServiceInterface` type.
 //     S3  The class extends BaseFrontendClass.
-//     S4  Exported via a `ClassName.create(options)` factory — never `new
-//         ClassName(`.
+//     S4  Exported via that declared class's `ClassName.create(options)`
+//         factory or singleton initializer — never `new ClassName(`.
 //     S5  The singleton is exported typed against its `*ServiceInterface`
 //         (`export const xService: XServiceInterface = XService.create(...)`)
 //         so the concrete class stays swappable/mockable behind the
@@ -68,11 +68,14 @@ const checkService = (file: string): void => {
     return;
   }
 
-  if (!/export type \w*ServiceOptions\s*=/.test(content)) {
+  const hasServiceOptions =
+    /export type \w*ServiceOptions\s*=/.test(content) ||
+    /import\s+type\s*\{[^}]*\b\w*ServiceOptions\b[^}]*\}/s.test(content);
+  if (!hasServiceOptions) {
     violations.push({
       file: relPath(file),
       rule: 'S1',
-      message: 'missing exported `*ServiceOptions` type',
+      message: 'missing a declared or imported `*ServiceOptions` type',
     });
   }
   if (!/export type \w*ServiceInterface\s*=/.test(content)) {
@@ -92,14 +95,26 @@ const checkService = (file: string): void => {
       message: 'class does not extend BaseFrontendClass',
     });
   }
-  if (!/\w+\.create\(/.test(content)) {
+  const className = content.match(/\bclass\s+(\w+)\s+extends\s+BaseFrontendClass\b/)?.[1];
+  const hasSingletonFactory =
+    className !== undefined &&
+    new RegExp(
+      `export\\s+const\\s+\\w+\\s*:\\s*\\w*ServiceInterface\\s*=\\s*${className}\\.create\\s*\\(`,
+    ).test(content);
+  const hasExportedFactory =
+    className !== undefined &&
+    new RegExp(
+      `export\\s+const\\s+\\w+\\s*=\\s*[\\s\\S]{0,800}?=>\\s*${className}\\.create\\s*\\(`,
+    ).test(content);
+  if (!hasSingletonFactory && !hasExportedFactory) {
     violations.push({
       file: relPath(file),
       rule: 'S4',
-      message: 'missing `ClassName.create(options)` factory export',
+      message:
+        'missing an exported singleton or factory that invokes the declared service class `.create()`',
     });
   }
-  if (/new\s+\w*Service\s*\(/.test(content)) {
+  if (className && new RegExp(`new\\s+${className}\\s*\\(`).test(content)) {
     violations.push({
       file: relPath(file),
       rule: 'S4',
@@ -107,8 +122,8 @@ const checkService = (file: string): void => {
     });
   }
   if (
-    /export const \w+\s*=\s*\w+\.create\(/.test(content) &&
-    !/export const \w+\s*:\s*\w*ServiceInterface\s*=\s*\w+\.create\(/.test(content)
+    className !== undefined &&
+    new RegExp(`export\\s+const\\s+\\w+\\s*=\\s*${className}\\.create\\s*\\(`).test(content)
   ) {
     violations.push({
       file: relPath(file),
@@ -154,8 +169,20 @@ const checkService = (file: string): void => {
   const exportedConstRe = /^export const (\w+)/gm;
   for (const match of content.matchAll(exportedConstRe)) {
     const name = match[1] ?? '';
-    if (new RegExp(`^export const ${name}\\s*:?[^=]*=\\s*\\w+\\.create\\(`, 'm').test(content)) {
-      continue; // the singleton instance itself
+    const isClassSingleton =
+      className !== undefined &&
+      new RegExp(
+        `^export const ${name}\\s*:\\s*\\w*ServiceInterface\\s*=\\s*${className}\\.create\\s*\\(`,
+        'm',
+      ).test(content);
+    const isClassFactory =
+      className !== undefined &&
+      new RegExp(
+        `^export const ${name}\\s*=\\s*[\\s\\S]{0,800}?=>\\s*${className}\\.create\\s*\\(`,
+        'm',
+      ).test(content);
+    if (isClassSingleton || isClassFactory) {
+      continue;
     }
     violations.push({
       file: relPath(file),

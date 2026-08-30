@@ -6,7 +6,6 @@
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
 import { onDestroy } from 'svelte';
-import { BaseViewModelContainer } from '$components';
 import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
 import {
@@ -100,219 +99,217 @@ const headAccessoryVariants = getSlotVariants('head').filter((v) => !isHeadVaria
 
 const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot] ?? 'CCCCCC';
 </script>
-<BaseViewModelContainer {viewModel}>
-  <div class="space-y-6">
-    <h2 class="text-2xl font-bold text-base-content">Describe Your Hero</h2>
+<div class="space-y-6">
+  <h2 class="text-2xl font-bold text-base-content">Describe Your Hero</h2>
 
-    <!-- LPC Preview -->
-    <LpcPreviewView viewModel={previewVm} />
+  <!-- LPC Preview -->
+  <LpcPreviewView viewModel={previewVm} />
 
-    <!-- Curated Appearance Presets -->
-    <fieldset class="border-0 p-0">
-      <legend class="text-sm font-semibold mb-2">Quick Presets</legend>
-      <div class="grid grid-cols-2 gap-2">
-        {#each viewModel.appearancePresets as preset}
-          <button
-            type="button"
-            class="card bg-base-200 hover:bg-base-300 transition-colors border cursor-pointer text-left p-3 {viewModel.selectedPresetId === preset.id
+  <!-- Curated Appearance Presets -->
+  <fieldset class="border-0 p-0">
+    <legend class="text-sm font-semibold mb-2">Quick Presets</legend>
+    <div class="grid grid-cols-2 gap-2">
+      {#each viewModel.appearancePresets as preset}
+        <button
+          type="button"
+          class="card bg-base-200 hover:bg-base-300 transition-colors border cursor-pointer text-left p-3 {viewModel.selectedPresetId === preset.id
             ? 'border-primary'
             : 'border-base-300'}"
-            onclick={() => viewModel.selectAppearancePreset(preset.id)}
-            aria-pressed={viewModel.selectedPresetId === preset.id}
-          >
-            <div class="font-semibold text-sm">{preset.label}</div>
-            <div class="text-xs text-base-content/60 mt-1">{preset.description}</div>
-          </button>
-        {/each}
-      </div>
-    </fieldset>
+          onclick={() => viewModel.selectAppearancePreset(preset.id)}
+          aria-pressed={viewModel.selectedPresetId === preset.id}
+        >
+          <div class="font-semibold text-sm">{preset.label}</div>
+          <div class="text-xs text-base-content/60 mt-1">{preset.description}</div>
+        </button>
+      {/each}
+    </div>
+  </fieldset>
 
-    <!-- Layer Selectors -->
-    <fieldset class="border-0 p-0">
-      <legend class="text-sm font-semibold mb-2">Customize Layers</legend>
-      <div class="grid grid-cols-2 gap-2">
-        <!-- Body (required — only actual body shapes) -->
-        <div class="form-control w-full">
-          <label for="lpc-slot-body" class="label py-1">
-            <span class="label-text text-xs">Body</span>
-            <span class="badge badge-primary badge-xs">Required</span>
-          </label>
-          <select
-            id="lpc-slot-body"
-            class="select select-bordered select-sm w-full"
-            value={viewModel.lpcRecipe.body ?? ''}
-            onchange={(e) =>
+  <!-- Layer Selectors -->
+  <fieldset class="border-0 p-0">
+    <legend class="text-sm font-semibold mb-2">Customize Layers</legend>
+    <div class="grid grid-cols-2 gap-2">
+      <!-- Body (required — only actual body shapes) -->
+      <div class="form-control w-full">
+        <label for="lpc-slot-body" class="label py-1">
+          <span class="label-text text-xs">Body</span>
+          <span class="badge badge-primary badge-xs">Required</span>
+        </label>
+        <select
+          id="lpc-slot-body"
+          class="select select-bordered select-sm w-full"
+          value={viewModel.lpcRecipe.body ?? ''}
+          onchange={(e) =>
             viewModel.setLpcLayer('body', (e.target as HTMLSelectElement).value)}
-          >
-            {#each bodyVariants as variant}
-              <option value={variant.assetId}>{variant.label}</option>
-            {/each}
-          </select>
-        </div>
-
-        <!-- Accessories (optional — wings, tails, wounds, etc.) -->
-        <div class="form-control w-full">
-          <label for="lpc-slot-accessories" class="label py-1">
-            <span class="label-text text-xs">Accessories</span>
-          </label>
-          <select
-            id="lpc-slot-accessories"
-            class="select select-bordered select-sm w-full"
-            value={viewModel.lpcRecipe.accessories ?? ''}
-            onchange={(e) =>
-            viewModel.setLpcLayer('accessories', (e.target as HTMLSelectElement).value)}
-          >
-            <option value="">—</option>
-            {#each accessoryVariants as variant}
-              <option value={variant.assetId}>{variant.label}</option>
-            {/each}
-          </select>
-        </div>
-
-        <!-- Head (required — only actual head shapes) -->
-        <div class="form-control w-full">
-          <label for="lpc-slot-head" class="label py-1">
-            <span class="label-text text-xs">Head</span>
-            <span class="badge badge-primary badge-xs">Required</span>
-          </label>
-          <select
-            id="lpc-slot-head"
-            class="select select-bordered select-sm w-full"
-            value={viewModel.lpcRecipe.head ?? ''}
-            onchange={(e) =>
-            viewModel.setLpcLayer('head', (e.target as HTMLSelectElement).value)}
-          >
-            {#each headVariants as variant}
-              <option value={variant.assetId}>{variant.label}</option>
-            {/each}
-          </select>
-        </div>
-
-        <!-- Head Accessories (optional — ears, faces, nose, horns, fins, etc.) -->
-        <div class="form-control w-full">
-          <label for="lpc-slot-head-accessories" class="label py-1">
-            <span class="label-text text-xs">Head Accessories</span>
-          </label>
-          <select
-            id="lpc-slot-head-accessories"
-            class="select select-bordered select-sm w-full"
-            value={viewModel.lpcRecipe.headAccessories ?? ''}
-            onchange={(e) =>
-            viewModel.setLpcLayer('headAccessories', (e.target as HTMLSelectElement).value)}
-          >
-            <option value="">—</option>
-            {#each headAccessoryVariants as variant}
-              <option value={variant.assetId}>{variant.label}</option>
-            {/each}
-          </select>
-        </div>
-
-        {#each editableSlots as slot}
-          {@const variants = getSlotVariants(slot)}
-          {@const currentAssetId = viewModel.lpcRecipe[slot] ?? ''}
-          <div class="form-control w-full">
-            <label for="lpc-slot-{slot}" class="label py-1">
-              <span class="label-text text-xs">{slotLabels[slot] ?? slot}</span>
-            </label>
-            <select
-              id="lpc-slot-{slot}"
-              class="select select-bordered select-sm w-full"
-              value={currentAssetId}
-              onchange={(e) =>
-              viewModel.setLpcLayer(slot, (e.target as HTMLSelectElement).value)}
-            >
-              <option value="">—</option>
-              {#each variants as variant}
-                <option value={variant.assetId}>{variant.label}</option>
-              {/each}
-            </select>
-          </div>
-        {/each}
+        >
+          {#each bodyVariants as variant}
+            <option value={variant.assetId}>{variant.label}</option>
+          {/each}
+        </select>
       </div>
-    </fieldset>
 
-    <!-- Palette / Color Controls -->
-    <fieldset class="border-0 p-0">
-      <legend class="text-sm font-semibold mb-2">Colors</legend>
-      <div class="flex flex-wrap gap-3">
-        <div class="form-control">
-          <label for="lpc-color-skin" class="label py-1">
-            <span class="label-text text-xs">Skin</span>
+      <!-- Accessories (optional — wings, tails, wounds, etc.) -->
+      <div class="form-control w-full">
+        <label for="lpc-slot-accessories" class="label py-1">
+          <span class="label-text text-xs">Accessories</span>
+        </label>
+        <select
+          id="lpc-slot-accessories"
+          class="select select-bordered select-sm w-full"
+          value={viewModel.lpcRecipe.accessories ?? ''}
+          onchange={(e) =>
+            viewModel.setLpcLayer('accessories', (e.target as HTMLSelectElement).value)}
+        >
+          <option value="">—</option>
+          {#each accessoryVariants as variant}
+            <option value={variant.assetId}>{variant.label}</option>
+          {/each}
+        </select>
+      </div>
+
+      <!-- Head (required — only actual head shapes) -->
+      <div class="form-control w-full">
+        <label for="lpc-slot-head" class="label py-1">
+          <span class="label-text text-xs">Head</span>
+          <span class="badge badge-primary badge-xs">Required</span>
+        </label>
+        <select
+          id="lpc-slot-head"
+          class="select select-bordered select-sm w-full"
+          value={viewModel.lpcRecipe.head ?? ''}
+          onchange={(e) =>
+            viewModel.setLpcLayer('head', (e.target as HTMLSelectElement).value)}
+        >
+          {#each headVariants as variant}
+            <option value={variant.assetId}>{variant.label}</option>
+          {/each}
+        </select>
+      </div>
+
+      <!-- Head Accessories (optional — ears, faces, nose, horns, fins, etc.) -->
+      <div class="form-control w-full">
+        <label for="lpc-slot-head-accessories" class="label py-1">
+          <span class="label-text text-xs">Head Accessories</span>
+        </label>
+        <select
+          id="lpc-slot-head-accessories"
+          class="select select-bordered select-sm w-full"
+          value={viewModel.lpcRecipe.headAccessories ?? ''}
+          onchange={(e) =>
+            viewModel.setLpcLayer('headAccessories', (e.target as HTMLSelectElement).value)}
+        >
+          <option value="">—</option>
+          {#each headAccessoryVariants as variant}
+            <option value={variant.assetId}>{variant.label}</option>
+          {/each}
+        </select>
+      </div>
+
+      {#each editableSlots as slot}
+        {@const variants = getSlotVariants(slot)}
+        {@const currentAssetId = viewModel.lpcRecipe[slot] ?? ''}
+        <div class="form-control w-full">
+          <label for="lpc-slot-{slot}" class="label py-1">
+            <span class="label-text text-xs">{slotLabels[slot] ?? slot}</span>
           </label>
-          <input
-            id="lpc-color-skin"
-            type="color"
-            class="w-10 h-10 rounded cursor-pointer"
-            value="#{getPaletteHex('body')}"
-            oninput={(e) =>
+          <select
+            id="lpc-slot-{slot}"
+            class="select select-bordered select-sm w-full"
+            value={currentAssetId}
+            onchange={(e) =>
+              viewModel.setLpcLayer(slot, (e.target as HTMLSelectElement).value)}
+          >
+            <option value="">—</option>
+            {#each variants as variant}
+              <option value={variant.assetId}>{variant.label}</option>
+            {/each}
+          </select>
+        </div>
+      {/each}
+    </div>
+  </fieldset>
+
+  <!-- Palette / Color Controls -->
+  <fieldset class="border-0 p-0">
+    <legend class="text-sm font-semibold mb-2">Colors</legend>
+    <div class="flex flex-wrap gap-3">
+      <div class="form-control">
+        <label for="lpc-color-skin" class="label py-1">
+          <span class="label-text text-xs">Skin</span>
+        </label>
+        <input
+          id="lpc-color-skin"
+          type="color"
+          class="w-10 h-10 rounded cursor-pointer"
+          value="#{getPaletteHex('body')}"
+          oninput={(e) =>
             viewModel.setPaletteOverride(
               'body',
               (e.target as HTMLInputElement).value.replace('#', ''),
             )}
-          >
-        </div>
-        <div class="form-control">
-          <label for="lpc-color-hair" class="label py-1">
-            <span class="label-text text-xs">Hair</span>
-          </label>
-          <input
-            id="lpc-color-hair"
-            type="color"
-            class="w-10 h-10 rounded cursor-pointer"
-            value="#{getPaletteHex('hair')}"
-            oninput={(e) =>
+        >
+      </div>
+      <div class="form-control">
+        <label for="lpc-color-hair" class="label py-1">
+          <span class="label-text text-xs">Hair</span>
+        </label>
+        <input
+          id="lpc-color-hair"
+          type="color"
+          class="w-10 h-10 rounded cursor-pointer"
+          value="#{getPaletteHex('hair')}"
+          oninput={(e) =>
             viewModel.setPaletteOverride(
               'hair',
               (e.target as HTMLInputElement).value.replace('#', ''),
             )}
-          >
-        </div>
+        >
       </div>
-    </fieldset>
+    </div>
+  </fieldset>
 
-    <!-- Appearance Description -->
-    <div class="form-control w-full">
-      <label for="onboarding-appearance" class="label">
-        <span class="label-text font-semibold">Physical Description</span>
-      </label>
-      <textarea
-        id="onboarding-appearance"
-        class="textarea textarea-bordered w-full h-24"
-        placeholder="Describe what your character looks like..."
-        value={viewModel.appearanceDescription}
-        oninput={(e) =>
+  <!-- Appearance Description -->
+  <div class="form-control w-full">
+    <label for="onboarding-appearance" class="label">
+      <span class="label-text font-semibold">Physical Description</span>
+    </label>
+    <textarea
+      id="onboarding-appearance"
+      class="textarea textarea-bordered w-full h-24"
+      placeholder="Describe what your character looks like..."
+      value={viewModel.appearanceDescription}
+      oninput={(e) =>
         viewModel.setAppearanceDescription((e.target as HTMLTextAreaElement).value)}
-      ></textarea>
-    </div>
-
-    <!-- Background -->
-    <div class="form-control w-full">
-      <label for="onboarding-background" class="label">
-        <span class="label-text font-semibold">Background Story</span>
-      </label>
-      <textarea
-        id="onboarding-background"
-        class="textarea textarea-bordered w-full h-20"
-        placeholder="Where does your character come from? What drives them?"
-        value={viewModel.background}
-        oninput={(e) => viewModel.setBackground((e.target as HTMLTextAreaElement).value)}
-      ></textarea>
-    </div>
-
-    <!-- Personality Traits -->
-    <div class="form-control w-full">
-      <label for="onboarding-personality" class="label">
-        <span class="label-text font-semibold">Personality Traits</span>
-      </label>
-      <input
-        id="onboarding-personality"
-        type="text"
-        class="input input-bordered w-full"
-        placeholder="e.g., Brave, curious, stubborn, compassionate..."
-        value={viewModel.personalityTraits}
-        oninput={(e) =>
-        viewModel.setPersonalityTraits((e.target as HTMLInputElement).value)}
-      >
-    </div>
+    ></textarea>
   </div>
-</BaseViewModelContainer>
+
+  <!-- Background -->
+  <div class="form-control w-full">
+    <label for="onboarding-background" class="label">
+      <span class="label-text font-semibold">Background Story</span>
+    </label>
+    <textarea
+      id="onboarding-background"
+      class="textarea textarea-bordered w-full h-20"
+      placeholder="Where does your character come from? What drives them?"
+      value={viewModel.background}
+      oninput={(e) => viewModel.setBackground((e.target as HTMLTextAreaElement).value)}
+    ></textarea>
+  </div>
+
+  <!-- Personality Traits -->
+  <div class="form-control w-full">
+    <label for="onboarding-personality" class="label">
+      <span class="label-text font-semibold">Personality Traits</span>
+    </label>
+    <input
+      id="onboarding-personality"
+      type="text"
+      class="input input-bordered w-full"
+      placeholder="e.g., Brave, curious, stubborn, compassionate..."
+      value={viewModel.personalityTraits}
+      oninput={(e) =>
+        viewModel.setPersonalityTraits((e.target as HTMLInputElement).value)}
+    >
+  </div>
+</div>

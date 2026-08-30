@@ -115,19 +115,3 @@ tasks:
     options:
       cache: false
       runInCI: true
-
-  # Structural guard for the Svelte MVVM conventions in
-  # .pi/skills/svelte-conventions/SKILL.md — View wrapping/imports/style and
-  # ViewModel shape rules. runInCI is off until the existing backlog this
-  # guard surfaced is cleared; flip to true once clean.
-  guard-mvvm-conventions:
-    command: 'bun run src/lib/ops/guard_mvvm_conventions.ts'
-    inputs:
-      - 'src/lib/ops/guard_mvvm_conventions.ts'
-      - '/apps/frontend/client/src/**/*_view.svelte'
-      - '/apps/frontend/client/src/**/*_view_model.svelte.ts'
-      - '/apps/frontend/hub/src/**/*_view.svelte'
-      - '/apps/frontend/hub/src/**/*_view_model.svelte.ts'
-    options:
-      cache: false
-      runInCI: false

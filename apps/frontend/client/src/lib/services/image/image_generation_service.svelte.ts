@@ -9,13 +9,10 @@
 //
 // Contract: C-388 Image Engine Provider Abstraction
 
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
 import type { ImageEngineId } from '@aikami/types';
-import { configService } from '$services';
+import type { ImageGenerationServiceOptions } from '$types';
+import { configService } from '../config/config_service.svelte.ts';
 import {
   getConfiguredImageEngineId,
   resetImageEngineCache,
@@ -30,16 +27,10 @@ import type {
   ResolvedImageEngineId,
 } from './engine/types.ts';
 
-export type ImageGenerationServiceOptions = ImageGenerationOptions;
 /** Descriptor for a checkpoint/model returned by the model listing. */
 type CheckpointInfo = {
   readonly id: string;
   readonly description: string;
-};
-
-type ImageGenerationOptions = BaseFrontendClassOptions & {
-  /** If true, the service operates in demo mode (mock data, no real API calls). */
-  isDemo: boolean;
 };
 
 type ImageGenerationResult = {
@@ -152,7 +143,7 @@ const _writeNamespacedCheckpoint = (engineId: ResolvedImageEngineId, id: string)
 // ── Implementation ──────────────────────────────────────────────────────
 
 export class ImageGenerationService
-  extends BaseFrontendClass<ImageGenerationOptions>
+  extends BaseFrontendClass<ImageGenerationServiceOptions>
   implements ImageGenerationServiceInterface
 {
   private _isDemo: boolean;
@@ -160,7 +151,7 @@ export class ImageGenerationService
   // a plain field would never invalidate after async engine detection.
   private _engine = $state<ImageEngineClient | undefined>(undefined);
 
-  constructor(options: ImageGenerationOptions) {
+  constructor(options: ImageGenerationServiceOptions) {
     super(options);
     this._isDemo = options.isDemo ?? false;
   }

@@ -6,23 +6,20 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import {
-  type AutoSaveStatus,
   aiSettingsService,
   chatService,
   combatService,
-  type DialogueNpcData,
   type GameEngineServiceInterface,
-  type GameOverlayType,
   gameEngineService,
   gameOverlayService,
   inputActionService,
   npcDialogueService,
-  type OverlayStackEntry,
   onboardingHintService,
   playerStateService,
   sessionService,
   timeService,
 } from '$services';
+import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
 import {
   type CombatViewModel,
   type CombatViewModelInterface,

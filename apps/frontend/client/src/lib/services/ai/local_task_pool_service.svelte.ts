@@ -8,18 +8,14 @@
 import { QWEN3_BUNDLE } from '@aikami/constants';
 import { sanitizeJsonResponse, validateAgainstSchema } from '@aikami/frontend/ai-gateway';
 import { LocalTaskPool } from '@aikami/frontend/local-runtime';
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import type { LocalTaskPoolServiceOptions } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type LocalTaskPoolServiceOptions = BaseFrontendClassOptions;
-
+/** Public contract for the configured local task-pool singleton. */
 export type LocalTaskPoolServiceInterface = BaseFrontendClassInterface & {
   /** The underlying LocalTaskPool instance. */
   readonly pool: LocalTaskPool;

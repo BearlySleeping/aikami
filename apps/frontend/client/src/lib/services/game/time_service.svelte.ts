@@ -10,6 +10,7 @@ import {
 } from '@aikami/frontend/services';
 import { registerSerializable, type SerializableService } from './serializable_service';
 
+/** Options used to construct the in-game clock service. */
 export type TimeServiceOptions = BaseFrontendClassOptions;
 /** Serialized shape for save/load. */
 type TimeState = {

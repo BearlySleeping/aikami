@@ -36,17 +36,17 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
+import { ttsService } from '../audio/tts_service.svelte.ts';
+import { configService } from '../config/config_service.svelte.ts';
 import {
-  aiSettingsService,
-  configService,
   getOllamaRuntimeEndpoints,
   getOpenAiCompatRuntimeModelsUrl,
-  imageGenerationService,
-  localTaskPoolService,
   PROVIDER_MODEL_FETCH,
-  resolveImageEngine,
-  ttsService,
-} from '$services';
+} from '../config/provider_endpoints.ts';
+import { resolveImageEngine } from '../image/engine/image_engine_factory.svelte.ts';
+import { imageGenerationService } from '../image/image_generation_service.svelte.ts';
+import { aiSettingsService } from '../settings/ai_settings.svelte.ts';
+import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
