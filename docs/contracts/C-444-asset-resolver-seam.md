@@ -2,7 +2,7 @@
 id: C-444
 title: "Asset Resolution Seam — Resolver as Parameter, Two Implementations"
 source: "user request 2026-08-26 — one source for hub, client dev, and the game"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
