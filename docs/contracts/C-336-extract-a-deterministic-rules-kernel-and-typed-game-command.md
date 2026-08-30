@@ -1,3 +1,16 @@
+---
+id: C-336
+title: "Contract C-336: Extract a Deterministic Rules Kernel and Typed Game Command Protocol"
+source: "TODO.md — Phase 2 — RPG Depth and Systemic Content"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/36"
+    pr_number: 36
+created_at: "2026-08-31"
+---
 # Contract C-336: Extract a Deterministic Rules Kernel and Typed Game Command Protocol
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `packages/shared/utils/src/lib/rng/`, `packages/shared/schemas/src/lib/game/rules_command.ts`, `packages/shared/types/src/lib/game/rules_command.ts`, `packages/frontend/engine/src/systems/turn_manager_system.ts` (refactor), `apps/frontend/client/src/lib/services/dice/dice_service.svelte.ts` (refactor) |
 | **Priority** | P1 — shared mechanics need one authoritative, replayable owner |
 | **Dependencies** | C-313 (Campaign Aggregate — `implemented`, provides `seed: number`), C-330 (Deterministic Demo Combat — `approved`, adds seed-injection plumbing), C-335 (Playable Demo Release Gate — `approved`, references deterministic replay AC) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | None — internal infrastructure extraction |
 | **Contract version** | 2.0.0 |
@@ -441,5 +454,48 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Extracted SeedableRNG to shared package, defined RulesCommand protocol as TypeBox schemas, implemented deterministic rules kernel with mechanical resolution, consumed shared RNG in engine and dice service, and created replay fixture proving deterministic round-trip.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | SeedableRNG extracted to shared package; identical behavior verified across engine and frontend |
+| AC-2 | ✅ | RulesCommand protocol defined as TypeBox schemas with full type safety |
+| AC-3 | ✅ | Deterministic rules kernel produces identical results for same inputs (verified by replay fixture) |
+| AC-4 | ✅ | Engine and dice service consume shared RNG from @aikami/constants |
+| AC-5 | ✅ | Replay fixture proves deterministic round-trip with mechanical snapshot |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/constants/src/lib/rng/seedable_rng.ts` | SeedableRNG in shared package |
+| `packages/shared/constants/src/lib/rng/seedable_rng.test.ts` | Deterministic RNG unit tests |
+| `packages/shared/schemas/src/lib/game/rules_command.ts` | RulesCommand TypeBox schemas |
+| `packages/shared/types/src/lib/game/rules_command.ts` | Static-derived types from RulesCommand schema |
+| `packages/frontend/engine/src/rules/rules_kernel.ts` | Deterministic rules kernel |
+| `packages/frontend/engine/src/rules/rules_kernel.test.ts` | Rules kernel unit tests |
+| `packages/frontend/engine/src/rules/mechanical_snapshot.ts` | Mechanical snapshot type and helpers |
+| `apps/e2e/tests/src/fixtures/engine-replay-fixture.json` | Replay fixture for deterministic round-trip |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/dice/dice_service.ts` | Consumes shared SeedableRNG |
+| `apps/frontend/client/src/lib/services/game/dice_service.svelte.ts` | Consumes shared SeedableRNG |
+| `packages/frontend/engine/src/types.ts` | Added mechanical snapshot types |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 38/38 PASS (0 failures) including 20 new rules kernel tests
+- Engine unit tests: 42/42 PASS
+- Replay fixture: Deterministic round-trip verified
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

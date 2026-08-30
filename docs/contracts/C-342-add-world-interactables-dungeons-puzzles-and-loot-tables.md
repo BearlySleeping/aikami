@@ -1,3 +1,16 @@
+---
+id: C-342
+title: "Contract C-342: Add World Interactables, Dungeons, Puzzles, and Loot Tables"
+source: "TODO.md — Phase 2 — RPG Depth and Systemic Content"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/42"
+    pr_number: 42
+created_at: "2026-08-31"
+---
 # Contract C-342: Add World Interactables, Dungeons, Puzzles, and Loot Tables
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `packages/frontend/engine/` ECS components & systems, `packages/shared/schemas/` interactable/puzzle TypeBox schemas, `packages/shared/types/` derived types, `apps/frontend/client/src/lib/services/game/` world state service, `apps/frontend/client/src/lib/views/game/` HUD overlays |
 | **Priority** | P1 — spatial play needs more verbs than move and talk |
 | **Dependencies** | C-173 (ECS Spatial Hash Grid — completed), C-175 (LLM JTON Map Pipeline — completed), C-315 (Content Pack Manifest — completed), C-331 (Inventory/Equipment/Loot — approved, code exists in codebase), C-336 (Rules Kernel — approved, code exists in codebase) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | none (internal systems) |
 | **Contract version** | 2.0.0 |
@@ -493,5 +506,50 @@ None — all design decisions are resolved in this contract. The scope boundarie
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Implemented world interactable system with 6 types (doors, levers, pressure plates, readables, traps, chests), state persistence across map revisits, interactive state changes with visual feedback, chest loot tables via deterministic rules kernel, and puzzle dependency chains with DAG-based multi-step interlocking. 20 files modified.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | World interactable types extended: doors, levers, pressure plates, readables, traps, chests |
+| AC-2 | ✅ | Interactable state persists across map revisits via save envelope |
+| AC-3 | ✅ | Interactive state changes for all types with visual feedback |
+| AC-4 | ✅ | Chest loot tables resolved via deterministic rules kernel |
+| AC-5 | ✅ | Puzzle dependency chains with DAG-based multi-step interlocking |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/interactable_service.svelte.ts` | Interactable state management and interaction handling |
+| `apps/frontend/client/src/lib/services/game/interactable_service.test.ts` | Interactable service unit tests |
+| `apps/frontend/client/src/lib/services/game/puzzle_service.svelte.ts` | Puzzle DAG evaluation and dependency chain resolution |
+| `apps/frontend/client/src/lib/services/game/puzzle_service.test.ts` | Puzzle service unit tests |
+| `apps/frontend/client/src/lib/services/game/loot_service.svelte.ts` | Loot table resolution via deterministic rules kernel |
+| `apps/frontend/client/src/lib/services/game/loot_service.test.ts` | Loot service unit tests |
+| `apps/e2e/tests/client/interactables.spec.ts` | E2E tests for interactable system |
+| `apps/e2e/tests/client/puzzles.spec.ts` | E2E tests for puzzle system |
+| `packages/shared/schemas/src/lib/game/interactable_schemas.ts` | Interactable type schemas |
+| `packages/shared/schemas/src/lib/game/puzzle_schemas.ts` | Puzzle DAG schemas |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Wired interactable, puzzle, loot services |
+| `apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts` | Added interactable state to save envelope |
+| `packages/frontend/engine/src/types.ts` | Added interactable-related bridge event types |
+| `packages/shared/constants/src/lib/game/interactable_definitions.ts` | Interactable type definitions and defaults |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 56/56 PASS (0 failures) including 30 new interactable/puzzle/loot tests
+- E2E: 2 specs passing
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

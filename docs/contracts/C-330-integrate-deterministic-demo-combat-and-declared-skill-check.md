@@ -1,3 +1,16 @@
+---
+id: C-330
+title: "Contract C-330: Integrate Deterministic Demo Combat and Declared Skill Checks"
+source: "TODO.md — Phase 1 — Playable, Polished, Offline-Capable Vertical Slice"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/30"
+    pr_number: 30
+created_at: "2026-08-31"
+---
 # Contract C-330: Integrate Deterministic Demo Combat and Declared Skill Checks
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | Production combat overlay wiring, seedable RNG in ECS combat engine, encounter trigger pipeline from content pack, declared-DC skill check enforcement, defeat/retry UX |
 | **Priority** | P0 — D&D feel requires visible uncertainty and fair mechanical consequences, not AI-authored success |
 | **Dependencies** | C-316 (content pack), C-326 (`/game` boot), C-328 (dialogue overlay); pre-existing engine subsystems (turn manager C-145, enemy AI C-197, dice service, combat UI) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | None (internal mechanical integration — docs updated only if combat UX deviates from existing patterns) |
 | **Contract version** | 2.0.0 |
@@ -402,5 +415,48 @@ Must be resolved before status becomes `approved`:
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Implemented deterministic combat system with seedable RNG, encounter triggering from content pack definitions, declared-DC skill checks in dialogue, non-combat resolution paths, and defeat retry with seed preservation. Extracted SeedableRNG to shared package with identical behavior across engine and frontend. Wired encounter system to content pack encounter definitions.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | SeedableRNG extracted to shared package; produces deterministic combat replay |
+| AC-2 | ✅ | Encounter triggers combat from content pack definition via ENCOUNTER_COMPLETED event |
+| AC-3 | ✅ | Declared-DC skill checks in dialogue overlay with visible DC display |
+| AC-4 | ✅ | Non-combat skill check resolution path for encounters |
+| AC-5 | ✅ | Defeat retry with same seed preserves deterministic outcome |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/constants/src/lib/rng/seedable_rng.ts` | SeedableRNG implementation (shared package) |
+| `packages/shared/constants/src/lib/rng/seedable_rng.test.ts` | Deterministic RNG unit tests |
+| `apps/frontend/client/src/lib/services/combat/combat_service.svelte.ts` | Combat service with deterministic resolution |
+| `apps/frontend/client/src/lib/services/combat/combat_service.test.ts` | Combat service unit tests |
+| `apps/frontend/client/src/lib/services/combat/encounter_service.svelte.ts` | Encounter trigger and resolution service |
+| `apps/frontend/client/src/lib/views/game/ui/combat_sidebar.svelte` | Combat UI sidebar component |
+| `apps/frontend/client/src/lib/views/game/ui/skill_check_view.svelte` | Skill check display component |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/worker/ecs_worker.ts` | Added ENCOUNTER_COMPLETED event emission |
+| `packages/frontend/engine/src/types.ts` | Added combat-related bridge event types |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Wired combat service and encounter service |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Added declared-DC skill check support |
+| `packages/shared/schemas/src/lib/game/content_pack.ts` | Extended encounter and skill check schemas |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 56/56 PASS (0 failures) including 18 new combat service tests
+- Engine unit tests: 42/42 PASS
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

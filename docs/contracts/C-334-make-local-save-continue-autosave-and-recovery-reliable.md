@@ -1,3 +1,16 @@
+---
+id: C-334
+title: "Contract C-334: Make Local Save, Continue, Autosave, and Recovery Reliable"
+source: "TODO.md — Phase 1 — Playable, Polished, Offline-Capable Vertical Slice"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/34"
+    pr_number: 34
+created_at: "2026-08-31"
+---
 # Contract C-334: Make Local Save, Continue, Autosave, and Recovery Reliable
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `GameSaveService` (Turso save/load), `GameOverlayService` (auto-save trigger), `GameBootService` (validating_save stage), `CampaignService` (saveCampaign linkage), `start_view_model` (Continue UI) |
 | **Priority** | P0 — offline-first is a gameplay requirement, not a later sync |
 | **Dependencies** | C-313 (Campaign Aggregate & Boot State Machine — implemented, promotion `sandbox`), C-321 (Local Persistence → Turso — implemented, promotion `integrated`), C-326 (Game Boot Atomic — implemented), C-329 (Demo Quest — approved), C-330 (Demo Combat — approved), C-331 (Inventory/Economy — approved, promotion `integrated`), C-332 (HUD/Overlays — approved, promotion `integrated`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — none |
 | **Contract version** | 2.0.0 |
@@ -347,5 +360,47 @@ type SessionMarker = {
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Implemented reliable local save system with scheduled autosave, versioned manual saves with SHA-256 checksums, Continue functionality restoring complete game state, corruption detection with recovery prompt, and crash recovery via unclean shutdown detection. Turso persistence with campaign-scoped save slots.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Autosave at 2-minute intervals and on safe checkpoints (map transitions, rest) |
+| AC-2 | ✅ | Manual save with versioned, SHA-256 checksummed documents |
+| AC-3 | ✅ | Continue restores complete game state from most recent valid save |
+| AC-4 | ✅ | Corruption detection via checksum verification; recovery prompt on mismatch |
+| AC-5 | ✅ | Unclean shutdown detection via session marker; recovery flow on next boot |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/campaign/save_service.svelte.ts` | Save/load service with autosave, manual save, checksum |
+| `apps/frontend/client/src/lib/services/campaign/save_service.test.ts` | Save service unit tests |
+| `apps/frontend/client/src/lib/services/campaign/recovery_service.svelte.ts` | Crash recovery and corruption detection service |
+| `apps/frontend/client/src/lib/services/campaign/recovery_service.test.ts` | Recovery service unit tests |
+| `apps/e2e/tests/client/save-load.spec.ts` | E2E tests for save/load flows |
+| `apps/e2e/tests/client/crash-recovery.spec.ts` | E2E tests for crash recovery |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts` | Integrated save/load with Turso persistence |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Added recovery check on boot |
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | Added autosave indicator integration |
+| `apps/frontend/client/src/lib/views/game/ui/hud_bar.svelte` | Added autosave indicator display |
+| `packages/shared/schemas/src/lib/game/save_document.ts` | SaveDocumentV2 schema with versioning and checksum |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 44/44 PASS (0 failures) including 26 new save/recovery tests
+- E2E: 2 specs passing
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

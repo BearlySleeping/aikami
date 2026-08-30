@@ -1,3 +1,16 @@
+---
+id: C-333
+title: "Contract C-333: Simplify Settings with Progressive Disclosure"
+source: "TODO.md — Phase 1 — Playable, Polished, Offline-Capable Vertical Slice"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/33"
+    pr_number: 33
+created_at: "2026-08-31"
+---
 # Contract C-333: Simplify Settings with Progressive Disclosure
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/settings/settings_view.svelte`, `settings_view_model.svelte.ts`, settings registry, pause-menu `/settings` launch, in-game overlay |
 | **Priority** | P0 — advanced configuration currently competes with basic player settings |
 | **Dependencies** | C-127 (completed — tabbed layout), C-202 (completed — provider UX), C-219 (completed — component system), C-230 (completed — connection config), C-249 (completed — music DJ), C-318 (implemented — capability setup), C-332 (approved — HUD overlay stack) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — settings help page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
@@ -334,5 +347,48 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Implemented progressive disclosure settings system with basic/advanced modes, search filtering, in-game overlay via pause menu, and per-section reset with preview/revert. Settings sections organized by complexity with clear visual hierarchy.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Basic mode shows only essential settings (audio, display, language) |
+| AC-2 | ✅ | Advanced toggle reveals gameplay, AI/privacy, accessibility sections |
+| AC-3 | ✅ | Search filters settings sections by keyword matching |
+| AC-4 | ✅ | In-game settings overlay accessible via pause menu |
+| AC-5 | ✅ | Per-section reset to defaults and immediate preview/revert |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/views/settings/settings_view.svelte` | Settings page component |
+| `apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts` | Settings ViewModel with progressive disclosure |
+| `apps/frontend/client/src/lib/views/settings/settings_overlay.svelte` | In-game settings overlay component |
+| `apps/frontend/client/src/lib/views/settings/settings_overlay_view_model.svelte.ts` | Settings overlay ViewModel |
+| `apps/frontend/client/src/lib/services/config/config_service.svelte.ts` | Configuration service with section registry |
+| `apps/frontend/client/src/lib/services/config/config_service.test.ts` | Config service unit tests |
+| `apps/e2e/tests/client/settings.spec.ts` | E2E tests for settings flows |
+| `apps/e2e/tests/client/settings-visual.visual.ts` | Visual tests for settings UI |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | Added SETTINGS overlay type to overlay stack |
+| `apps/frontend/client/src/lib/services/game/keybinding_config.ts` | Added settings keybinding |
+| `packages/shared/constants/src/lib/game/settings_registry.ts` | Settings section registry with keywords and defaults |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 36/36 PASS (0 failures) including 18 new config service tests
+- E2E: 1 spec passing
+- Visual: Score 88/100 — PASS
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---
