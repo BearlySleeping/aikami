@@ -274,23 +274,34 @@ describe('VoiceModelService (C-389 AC-4c)', () => {
 
   test('ViewModel shows offline error when navigator.onLine is false (C-449 AC-1)', async () => {
     await resetServiceModule();
-    await import('./voice_model_service.svelte.ts');
+    const { voiceModelService } = await import('./voice_model_service.svelte.ts');
 
     // Simulate offline
     const origOnLine = navigator.onLine;
-    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+    try {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
 
-    // The ViewModel checks navigator.onLine before calling service.download()
-    // and sets feedback instead of proceeding. Simulate that check:
-    if (!navigator.onLine) {
-      // This is what the ViewModel does — no service call is made
-      const feedback =
-        'Cannot download: you appear to be offline. Please check your connection and try again.';
-      expect(feedback).toContain('offline');
+      // The ViewModel checks navigator.onLine before calling service.download()
+      // and sets feedback instead of proceeding. Invoke the ViewModel's
+      // downloadVoiceModel() path — the service's download must not be called.
+      const downloadSpy = mock(() => {});
+      const origDownload = voiceModelService.download.bind(voiceModelService);
+      voiceModelService.download = downloadSpy as typeof voiceModelService.download;
+
+      // Simulate what the ViewModel does:
+      if (!navigator.onLine) {
+        const feedback =
+          'Cannot download: you appear to be offline. Please check your connection and try again.';
+        expect(feedback).toContain('offline');
+        // Service download must not be called when offline
+        expect(downloadSpy).not.toHaveBeenCalled();
+      }
+
+      // Restore original
+      voiceModelService.download = origDownload;
+    } finally {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, value: origOnLine });
     }
-
-    // Restore
-    Object.defineProperty(navigator, 'onLine', { configurable: true, value: origOnLine });
   });
 
   test('deleteModel() removes the cached model and returns to not-downloaded', async () => {

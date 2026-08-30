@@ -28,7 +28,7 @@ const CACHE_DIRS = [
  * Ensure CI-matching cache directories exist for local warm builds.
  * Prints status for each directory.
  */
-export function setupBuildCache(): void {
+export const setupBuildCache = (): void => {
   console.log('Setting up local build cache directories…\n');
 
   for (const dir of CACHE_DIRS) {
@@ -46,4 +46,6 @@ export function setupBuildCache(): void {
 }
 
 // Run directly
-setupBuildCache();
+if (import.meta.main) {
+  setupBuildCache();
+}

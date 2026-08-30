@@ -9,7 +9,7 @@
 // when they leave, access is revoked.
 
 import { logger } from '@aikami/logger';
-import { type GuildMember, type PartialGuildMember, TextChannel } from 'discord.js';
+import { type GuildMember, type PartialGuildMember } from 'discord.js';
 import { CHANNEL_TOOL_ACCESS } from './constants';
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ export async function handleGuildMemberUpdate(
 
   // Check each text channel the member has permission to view
   for (const [, channel] of newMember.guild.channels.cache) {
-    if (channel.isTextBased() && channel instanceof TextChannel) {
+    if (channel.isTextBased()) {
       const permissions = channel.permissionsFor(newMember);
       if (permissions?.has('ViewChannel')) {
         accessibleChannels.push(channel.id);

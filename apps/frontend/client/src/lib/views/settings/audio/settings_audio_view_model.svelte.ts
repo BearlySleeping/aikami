@@ -235,15 +235,19 @@ class SettingsAudioViewModel
     }
 
     try {
-      await voiceModelService.download();
-      // Re-initialize TTS now that the model exists (C-389 CR): whenever the
-      // engine is not already ready after a successful download — but never
-      // tear down an active server backend.
-      if (voiceModelService.state.status === 'ready' && ttsService.status !== 'ready') {
-        ttsService.reset();
-        await ttsService.initialize().catch(() => {});
+      const state = await voiceModelService.download();
+      if (state.status === 'ready') {
+        // Re-initialize TTS now that the model exists (C-389 CR): whenever the
+        // engine is not already ready after a successful download — but never
+        // tear down an active server backend.
+        if (voiceModelService.state.status === 'ready' && ttsService.status !== 'ready') {
+          ttsService.reset();
+          await ttsService.initialize().catch(() => {});
+        }
+        this.feedback = 'Voice model downloaded successfully.';
+      } else {
+        this.feedback = state.message ?? 'Download failed';
       }
-      this.feedback = 'Voice model downloaded successfully.';
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.feedback = `Download failed: ${message}`;

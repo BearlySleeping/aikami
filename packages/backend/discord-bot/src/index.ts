@@ -14,7 +14,7 @@ import { logger } from '@aikami/logger';
 import { Client, Events, GatewayIntentBits, Partials } from 'discord.js';
 import { handleMessageCreate } from './lib/handlers/message_create';
 import { handleThreadCreate } from './lib/handlers/thread_create';
-import { handleGuildMemberUpdate } from './lib/role_sync';
+import { handleGuildMemberUpdate, syncMemberToolAccess } from './lib/role_sync';
 import type { DiscordBotEnv } from './lib/types';
 
 export { discordInteractions } from './lib/interactions/handler';
@@ -35,6 +35,8 @@ export async function startDiscordBot(env: DiscordBotEnv): Promise<Client> {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
+      // Privileged intent: requires Discord Developer Portal enablement and,
+      // for verified bots with >100 servers, bot verification approval.
       GatewayIntentBits.GuildMembers,
     ],
     partials: [Partials.Message, Partials.Channel],
@@ -48,6 +50,29 @@ export async function startDiscordBot(env: DiscordBotEnv): Promise<Client> {
     handleGuildMemberUpdate(oldMember, newMember).catch((err) => {
       logger.error(`discord-bot: unhandled guildMemberUpdate error: ${(err as Error).message}`);
     });
+  });
+
+  // C-449 AC-5: re-sync tool access when channel permissions change
+  client.on(Events.ChannelUpdate, (_oldChannel, newChannel) => {
+    if (!newChannel.isTextBased() || newChannel.isDMBased()) {
+      return;
+    }
+    // Fetch all guild members and re-sync their tool access for this channel
+    newChannel.guild?.members
+      .fetch()
+      .then((members: import('discord.js').GuildMemberManager['fetch'] extends (...args: never[]) => Promise<infer R> ? R : never) => {
+        for (const [, member] of members) {
+          const permissions = newChannel.permissionsFor(member);
+          const hasAccess = permissions?.has('ViewChannel') ?? false;
+          const channelIds = hasAccess ? [newChannel.id] : [];
+          syncMemberToolAccess(member, channelIds).catch((err: unknown) => {
+            logger.error(`role-sync: channelUpdate sync error for ${member.user.tag}: ${(err as Error).message}`);
+          });
+        }
+      })
+      .catch((err: unknown) => {
+        logger.error(`role-sync: failed to fetch members on channel update: ${(err as Error).message}`);
+      });
   });
 
   client.on(Events.ThreadCreate, (thread, newlyCreated) => {

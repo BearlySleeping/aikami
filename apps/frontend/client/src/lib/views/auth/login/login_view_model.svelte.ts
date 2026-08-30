@@ -80,7 +80,7 @@ class LoginViewModel
     const callbackURL = window.location.pathname === '/link' ? window.location.href : undefined;
 
     try {
-      const response = await authService.socialSignIn('google', callbackURL);
+      const response = await authService.socialSignIn({ provider: 'google', callbackURL });
       // socialSignIn uses a full-page redirect in the browser (the Tauri
       // path hands off to the /link device page instead). Callers that need
       // to act once signed in (e.g. the /link handoff) react to

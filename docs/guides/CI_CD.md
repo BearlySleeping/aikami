@@ -27,7 +27,7 @@ the default check cheap — typically under 10 minutes.
 The job:
 
 1. Checks out with full history (moon needs it to diff against the base)
-2. Installs Bun 1.3.13 and restores the Bun + Moon caches
+2. Installs Bun 1.4.0 and restores the Bun + Moon caches
 3. `bun install --frozen-lockfile`
 4. `bun moon ci --base=origin/<base-branch>` with `MOON_TOOLCHAIN_FORCE_GLOBALS=true`
 

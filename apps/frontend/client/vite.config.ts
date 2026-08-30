@@ -147,7 +147,7 @@ export default defineConfig(({ mode }) => {
       prerender: {
         handleUnseenRoutes: 'ignore',
       },
-      // app.html registers src/service-worker.js manually, deferred to the
+      // app.html registers static/service-worker.js manually, deferred to the
       // `load` event to avoid forcing layout before stylesheets are ready —
       // don't also auto-register it (SvelteKit's default) on top of that.
       serviceWorker: {
@@ -183,12 +183,12 @@ export default defineConfig(({ mode }) => {
         '@aikami/lpc/*': toPackagesPath('shared/lpc/src/lib/*'),
         '@aikami/constants': toPackagesPath('shared/constants/src'),
         '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
-        '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib'),
+        '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib/*'),
         '@aikami/frontend/components': toPackagesPath('frontend/components/src'),
         '@aikami/frontend/components/*': toPackagesPath('frontend/components/src/lib/*'),
 
         '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
-        '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib'),
+        '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib/*'),
         '@aikami/frontend/theme': toPackagesPath('frontend/theme/src'),
         '@aikami/frontend/theme/*': toPackagesPath('frontend/theme/src/lib/*'),
         '@aikami/frontend/ai-gateway': toPackagesPath('frontend/ai-gateway/src'),
@@ -203,9 +203,9 @@ export default defineConfig(({ mode }) => {
 
         '@aikami/frontend/test': toPackagesPath('frontend/test/src'),
         '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
-        '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
+        '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib/*'),
         '@aikami/frontend/storage': toPackagesPath('frontend/storage/src'),
-        '@aikami/frontend/storage/*': toPackagesPath('frontend/storage/src/lib'),
+        '@aikami/frontend/storage/*': toPackagesPath('frontend/storage/src/lib/*'),
 
         '@aikami/mocks': toPackagesPath('shared/mocks/src'),
         '@aikami/schemas': toPackagesPath('shared/schemas/src'),

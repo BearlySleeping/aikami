@@ -29,10 +29,7 @@ export const ISSUE_TRIGGER_REGEX = /github issue/i;
 //
 // This is the source of truth — update it when channels or tools change.
 
-export const CHANNEL_TOOL_ACCESS: readonly {
-  channelId: string;
-  tools: readonly { toolId: string; label: string }[];
-}[] = [
+export const CHANNEL_TOOL_ACCESS = [
   {
     // #bugs-features-requests forum channel
     channelId: FORUM_CHANNEL_ID,
@@ -45,4 +42,4 @@ export const CHANNEL_TOOL_ACCESS: readonly {
   //     { toolId: 'llm-chat', label: 'LLM Chat Access' },
   //   ],
   // },
-];
+] as const;

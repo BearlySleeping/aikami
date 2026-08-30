@@ -11,24 +11,24 @@
 //
 // This script is interactive and will prompt for input.
 
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function printHeader(text: string): void {
+const printHeader = (text: string): void => {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`  ${text}`);
   console.log('='.repeat(60));
 }
 
-function printStep(num: number, text: string): void {
+const printStep = (num: number, text: string): void => {
   console.log(`\n  Step ${num}: ${text}`);
   console.log(`  ${'-'.repeat(text.length + 10)}`);
 }
 
-async function confirmStep(promptText: string): Promise<boolean> {
+const confirmStep = async (promptText: string): Promise<boolean> => {
   console.log(`\n  ${promptText} (y/N)`);
   // Read a single line from stdin using the standard Node.js stream API
   const result = await new Promise<string>((resolve) => {
@@ -40,14 +40,14 @@ async function confirmStep(promptText: string): Promise<boolean> {
   return answer === 'y' || answer === 'yes';
 }
 
-function checkCommand(cmd: string): boolean {
+const checkCommand = (cmd: string): boolean => {
   const result = Bun.spawnSync([cmd, '--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
   return result.exitCode === 0;
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────
 
-async function main(): Promise<void> {
+const main = async (): Promise<void> => {
   printHeader('Aikami — First-Run Onboarding Setup');
   console.log('\n  This script will help you configure your local development');
   console.log('  environment with Cloudflare and SOPS access.\n');
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
   }
 }
 
-async function cloudflareTokenGuide(): Promise<void> {
+const cloudflareTokenGuide = async (): Promise<void> => {
   console.log('\n  To create a Cloudflare API token:');
   console.log('    1. Go to https://dash.cloudflare.com/profile/api-tokens');
   console.log('    2. Click "Create Token" → "Create Custom Token"');
@@ -182,10 +182,17 @@ async function cloudflareTokenGuide(): Promise<void> {
   }
 }
 
-async function generateAgeKey(): Promise<void> {
+const generateAgeKey = async (): Promise<void> => {
   console.log('\n  Generating a new age key for SOPS...\n');
 
-  const result = Bun.spawnSync(['age-keygen'], {
+  // Create parent directory for the key file
+  const ageDir = join(homedir(), '.config', 'sops', 'age');
+  if (!existsSync(ageDir)) {
+    mkdirSync(ageDir, { recursive: true });
+  }
+
+  const ageKeyPath = join(ageDir, 'keys.txt');
+  const result = Bun.spawnSync(['age-keygen', '-o', ageKeyPath], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -194,21 +201,17 @@ async function generateAgeKey(): Promise<void> {
     process.exit(1);
   }
 
-  const keyOutput = result.stdout.toString();
-  console.log('  Generated age key:');
-  console.log(keyOutput);
-
-  // Extract the public key
-  const pubKeyMatch = keyOutput.match(/# public key: (age1[a-z0-9]+)/);
+  // Read back the generated key to extract the public key
+  const keyContent = readFileSync(ageKeyPath, 'utf8');
+  const pubKeyMatch = keyContent.match(/# public key: (age1[a-z0-9]+)/);
   const pubKey = pubKeyMatch?.[1];
 
   if (pubKey) {
-    console.log(`\n  Your public key: ${pubKey}`);
+    console.log(`  Your public key: ${pubKey}`);
     console.log('\n  ⚠️  IMPORTANT: Share this public key with the team so they can');
     console.log('  add it to the SOPS encryption configuration. Without it, you');
     console.log("  won't be able to decrypt secrets/ locally.");
-    console.log('\n  The private key was saved to ~/.config/sops/age/keys.txt');
-    console.log('  (or ~/.age/keys.txt on some systems).\n');
+    console.log(`\n  The private key was saved to ${ageKeyPath}\n`);
   }
 
   const done = await confirmStep('Have you saved the key and shared your public key?');

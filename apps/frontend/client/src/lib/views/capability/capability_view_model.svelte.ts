@@ -23,7 +23,7 @@ import {
   VOICE_PROVIDERS,
   voiceModelService,
 } from '$services';
-import type { Connection, ConnectionCapability } from '$types';
+import type { Connection, ConnectionCapability, VoiceModelState } from '$types';
 import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$types';
 import type { ConnectionManagerViewModelInterface } from '$views/settings/connection/connection_manager_view_model.svelte';
 import { getConnectionManagerViewModel } from '$views/settings/connection/connection_manager_view_model.svelte';
@@ -78,7 +78,7 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   /** Whether to show the local voice model download section in the Voice tab. */
   readonly showVoiceLocalDownload: boolean;
   /** Voice model download state (mirrored from voiceModelService). */
-  readonly voiceModelState: import('$types').VoiceModelState;
+  readonly voiceModelState: VoiceModelState;
   /** Voice model download progress (0–100). */
   readonly voiceModelProgress: number;
   /** Voice model size label. */
@@ -314,7 +314,7 @@ class CapabilityViewModel
     return this.activeTab === 'voice' && !this.hasVoiceProvider;
   }
 
-  get voiceModelState(): import('$types').VoiceModelState {
+  get voiceModelState(): VoiceModelState {
     return voiceModelService.state;
   }
 
@@ -341,8 +341,12 @@ class CapabilityViewModel
       return;
     }
     try {
-      await voiceModelService.download();
-      this.errorMessage = '';
+      const state = await voiceModelService.download();
+      if (state.status === 'ready') {
+        this.errorMessage = '';
+      } else {
+        this.errorMessage = state.message ?? 'Download failed';
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       this.errorMessage = `Download failed: ${message}`;

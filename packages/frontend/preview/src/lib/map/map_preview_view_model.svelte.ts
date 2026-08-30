@@ -132,7 +132,7 @@ class MapPreviewViewModel
         return;
       }
 
-      const contentType = response.headers.get('content-type') ?? '';
+      const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
       if (!contentType.includes('json')) {
         const text = await response.text().catch(() => '');
         this.errorMessage = `Expected JSON but got ${contentType || 'unknown'} — server returned: ${text.slice(0, 200)}`;

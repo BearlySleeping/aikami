@@ -101,6 +101,8 @@ class AppErrorViewModel
     } else {
       this.error('app-error:unknown', { code: status, message: error?.message });
     }
+
+    return await super.initialize();
   }
 
   async handleRetry(): Promise<void> {

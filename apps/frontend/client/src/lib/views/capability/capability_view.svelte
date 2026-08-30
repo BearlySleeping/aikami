@@ -2,6 +2,7 @@
 // apps/frontend/client/src/lib/views/capability/capability_view.svelte
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import ConnectionEditorPanel from '$views/settings/connection/connection_editor_panel.svelte';
+import VoiceModelDownload from '@aikami/frontend/components/voice-model-download/voice_model_download.svelte';
 import type { CapabilityViewModelInterface, ConnectionEntry } from './capability_view_model.svelte';
 
 type Props = {
@@ -131,41 +132,14 @@ const { viewModel }: Props = $props();
         </div>
 
         <!-- Voice local download section (C-449 AC-2) -->
-        {#if viewModel.showVoiceLocalDownload}
-          <div class="divider text-sm text-base-content/60">Or download the local voice model</div>
-          <div class="flex flex-col gap-2 p-3 bg-base-200 rounded-box">
-            <div class="flex items-center justify-between">
-              <span class="text-sm font-medium">Kokoro TTS Model</span>
-              <span class="text-xs text-base-content/50">{viewModel.voiceModelSizeLabel}</span>
-            </div>
-            {#if viewModel.voiceModelState.status === 'downloading' || viewModel.voiceModelState.status === 'verifying'}
-              <progress
-                class="progress progress-primary w-full"
-                value={viewModel.voiceModelProgress}
-                max="100"
-              ></progress>
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline flex-1"
-                  onclick={() => viewModel.cancelVoiceModelDownload()}
-                >
-                  Cancel
-                </button>
-              </div>
-            {:else if viewModel.voiceModelState.status === 'ready'}
-              <p class="text-xs text-success">✓ Voice model ready</p>
-            {:else}
-              <button
-                type="button"
-                class="btn btn-sm btn-primary"
-                onclick={() => viewModel.downloadVoiceModel()}
-              >
-                Download Voice Model
-              </button>
-            {/if}
-          </div>
-        {/if}
+        <VoiceModelDownload
+          show={viewModel.showVoiceLocalDownload}
+          state={viewModel.voiceModelState}
+          progress={viewModel.voiceModelProgress}
+          sizeLabel={viewModel.voiceModelSizeLabel}
+          ondownload={() => viewModel.downloadVoiceModel()}
+          oncancel={() => viewModel.cancelVoiceModelDownload()}
+        />
 
         <!-- Start Campaign — disabled without a text provider -->
         <button
