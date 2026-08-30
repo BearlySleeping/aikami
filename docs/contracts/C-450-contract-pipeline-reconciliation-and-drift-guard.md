@@ -1,8 +1,8 @@
 ---
 id: C-450
 title: "Contract Pipeline Reconciliation & Status Drift Guard"
+status: implemented
 source: "user request — a 2026-08-30 architecture audit found 22 of 26 `approved`/`draft` contracts in docs/contracts/PROGRESS.md already had a merged implementation PR. Verified against the existing `mark_contract_implemented.ts --dry-run` tool (not manual inspection): 4 are a pure historical-backfill-coverage gap, 1 is a frontmatter typo, 17 are missing the Execution Report the tool correctly requires before advancing status."
-status: approved
 github:
     issue_number: null
     issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-30"
 | **Target**           | 4 contract files advanced via `scripts/src/lib/ops/mark_contract_implemented.ts` (no code changes to the script itself), 1 contract file's frontmatter, `docs/contracts/INDEX.md`, `docs/contracts/C-371-*.md`'s title, GitHub Issues on `BearlySleeping/aikami`                          |
 | **Priority**         | P0 — every planning decision made against `PROGRESS.md` or a contract's own status field is currently unreliable; this session re-derived six false "not yet built" premises before catching it by hand. Nothing that plans off the contract pipeline should proceed until this is fixed. |
 | **Dependencies**     | none                                                                                                                                                                                                                                                                                      |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion**        | —                                                                                                                                                                                                                                                                                         |
 | **Docs Impact**      | internal — no player-facing surface; contract-pipeline maintainers and future planning sessions are the audience                                                                                                                                                                          |
 | **Contract version** | 2.0.0                                                                                                                                                                                                                                                                                     |
@@ -279,3 +279,55 @@ Target: **`integrated`** — this is tooling/process, not a player-facing surfac
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Ran the existing `mark_contract_implemented.ts` tool for real against 4 confirmed-ready contracts (C-388, C-392, C-393, C-418), advancing them from `approved` → `implemented`. Fixed C-445's stale frontmatter (`implemented` → `draft`). Added YAML frontmatter to C-371 (was missing entirely). Added historical warning banners to INDEX.md's Phase 1–4 tables. Closed 29 of 34 open GitHub issues with comments linking the superseding or overlapping contract; left 5 genuinely-open items as untracked feature requests. Ran a full historical sweep of all 90 merged, contract-referencing PRs via `mark_contract_implemented.ts --dry-run`, finding and fixing 2 additional frontmatter-reconciliation stragglers (C-444, C-386). Regenerated PROGRESS.md via `sync_contracts.ts`.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | C-388 (#140), C-392 (#145), C-393 (#146), C-418 (#160) all advanced to `implemented` via the existing tool |
+| AC-2 | ✅ | C-445 frontmatter corrected from `implemented` to `draft`; amendment entry added |
+| AC-3 | ✅ | INDEX.md Phase 1–4 tables marked as historical with warning banners |
+| AC-4 | ✅ | 29 issues closed with contract links; 5 genuinely-open items left as untracked feature requests |
+| AC-5 | ✅ | Full sweep of 90 merged PRs completed; 2 additional stragglers (C-444, C-386) reconciled |
+
+### Files Created
+
+None.
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `docs/contracts/C-445-shared-preview-package.md` | Frontmatter `status: implemented` → `draft`; added amendment entry |
+| `docs/contracts/C-371.md` | Added YAML frontmatter block (was missing entirely) |
+| `docs/contracts/INDEX.md` | Phase 1–4 tables marked as historical with warning banners |
+| `docs/contracts/C-450-contract-pipeline-reconciliation-and-drift-guard.md` | Status updated to `implemented`; Execution Report appended |
+
+### Files Advanced by External Tool (pushed directly to main)
+
+| File | Change |
+|---|---|
+| `docs/contracts/C-388-image-engine-provider-abstraction.md` | Advanced `approved` → `implemented` by `mark_contract_implemented.ts` |
+| `docs/contracts/C-392-converge-dev-engine-services-with-stack.md` | Advanced `approved` → `implemented` by `mark_contract_implemented.ts` |
+| `docs/contracts/C-393-speech-to-text-backend-service.md` | Advanced `approved` → `implemented` by `mark_contract_implemented.ts` |
+| `docs/contracts/C-418-p2-cleanup-and-infrastructure.md` | Advanced `approved` → `implemented` by `mark_contract_implemented.ts` |
+| `docs/contracts/C-444-asset-resolver-seam.md` | Frontmatter reconciled `approved` → `implemented` by `mark_contract_implemented.ts` |
+| `docs/contracts/C-386-firestore-removal-local-first-client.md` | Frontmatter reconciled `approved` → `implemented` by `mark_contract_implemented.ts` |
+
+### Deviations from Spec
+
+- AC-4 (GitHub issues): The 5 genuinely-open issues (#83, #84, #85, #86, #104) were left open with triage comments rather than converted into new contracts. The contract's scope says "this contract's scope is the triage decision and the close/link action, not hand-authoring all resulting contracts inline" — these items have no overlapping contract, so they remain as untracked feature requests for future contract drafting.
+- The full sweep (AC-5) found 2 additional stragglers beyond the 4 known cases: C-444 and C-386 needed frontmatter reconciliation (table already `implemented`, frontmatter still `approved`). Both were fixed via the existing tool.
+
+### Test Results
+
+- Unit: N/A (docs-only changes)
+- E2E: N/A (docs-only changes)
+- Visual: N/A (docs-only changes)
+- Baseline: N/A (no code changes)
