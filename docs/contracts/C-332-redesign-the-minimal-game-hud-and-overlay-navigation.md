@@ -1,3 +1,16 @@
+---
+id: C-332
+title: "Contract C-332: Redesign the Minimal Game HUD and Overlay Navigation"
+source: "TODO.md — Phase 1 — Playable, Polished, Offline-Capable Vertical Slice"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/32"
+    pr_number: 32
+created_at: "2026-08-31"
+---
 # Contract C-332: Redesign the Minimal Game HUD and Overlay Navigation
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/game/ui/` (HUD components, overlay router, pause menu), `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` (overlay stack), `apps/frontend/client/src/lib/views/game/game_view.svelte` (combat-aware canvas), `apps/e2e/` (tests) |
 | **Priority** | P0 — production currently exposes capability overlays without a clear player hierarchy; always-visible essentials (HP, objective, interaction hint) are missing or scattered |
 | **Dependencies** | C-125 (legacy_completed — overlay architecture), C-161 (completed — spatial UI camera), C-164 (completed — combat split-screen layout), C-213 (not_started per PROGRESS, clock HUD already mounted — reuse only), C-327 (implemented — interaction prompt + onboarding hints), C-329 (approved — quest tracker component exists but is orphan), C-330 (approved — combat state), C-331 (approved — inventory/vendor overlays) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` — the HUD and overlay navigation already live on the production `/game` route; this contract redesigns them in place. Dev sandboxes are updated alongside. |
 | **Docs Impact** | internal → none (player-facing HUD documentation lands with the Phase 1 release gate, C-335) |
 | **Contract version** | 2.0.0 |
@@ -382,5 +395,48 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Redesigned the minimal game HUD with always-visible bar (HP, gold, quest tracker, menu button), overlay stack navigation (Escape pops one layer), autosave indicator, focus trap with restore, and combat-aware layout switching. 14 files modified across frontend components, services, and tests.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Minimal HUD bar with HP, gold, quest tracker, and menu button always visible during exploration |
+| AC-2 | ✅ | Overlay stack with Escape popping exactly one layer; verified with pause menu, settings, inventory |
+| AC-3 | ✅ | Autosave indicator (spinning icon) in HUD during save operations |
+| AC-4 | ✅ | Focus trap in overlays; focus restored to game canvas on close |
+| AC-5 | ✅ | HUD layout switches to combat-aware mode during encounters |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/views/game/ui/hud_bar.svelte` | Minimal HUD bar component |
+| `apps/frontend/client/src/lib/views/game/ui/hud_bar_view_model.svelte.ts` | HUD bar ViewModel |
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts` | Overlay stack management service |
+| `apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts` | Overlay service unit tests |
+| `apps/e2e/tests/client/hud.spec.ts` | E2E tests for HUD functionality |
+| `apps/e2e/tests/client/overlay-navigation.spec.ts` | E2E tests for overlay navigation |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/views/game/game_view.svelte` | Integrated HUD bar and overlay stack |
+| `apps/frontend/client/src/lib/views/game/game_view_model.svelte.ts` | Added HUD state and overlay management |
+| `apps/frontend/client/src/lib/services/game/game_mode_service.svelte.ts` | Added combat mode awareness for HUD layout |
+| `apps/frontend/client/src/lib/services/game/keybinding_config.ts` | Added overlay navigation keybindings |
+| `apps/frontend/client/src/lib/services/game/world_state_service.svelte.ts` | Added HUD state fields |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 24/24 PASS (0 failures) including 12 new overlay service tests
+- E2E: 2 specs passing
+- Visual: Score 90/100 — PASS
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

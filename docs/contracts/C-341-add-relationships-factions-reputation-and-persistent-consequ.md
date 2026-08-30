@@ -1,3 +1,16 @@
+---
+id: C-341
+title: "Contract C-341: Add Relationships, Factions, Reputation, and Persistent Consequences"
+source: "TODO.md — Phase 2 — RPG Depth and Systemic Content"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/41"
+    pr_number: 41
+created_at: "2026-08-31"
+---
 # Contract C-341: Add Relationships, Factions, Reputation, and Persistent Consequences
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `packages/shared/schemas/src/lib/game/faction_standing.ts` (new), `packages/shared/schemas/src/lib/game/relationship_state.ts` (new — extends existing `relationship.ts`), `packages/shared/types/src/lib/game/` (new derived types), `apps/frontend/client/src/lib/services/game/relationship_service.svelte.ts` (new), `apps/frontend/client/src/lib/services/game/game_state_facts.ts` (modify — inject relationship/faction facts), `apps/frontend/client/src/lib/views/game/ui/overlays/reputation/` (new UI), content pack faction definitions (extend `content_pack.ts`) |
 | **Priority** | P1 — AI NPCs feel alive when choices alter future behavior. Phase 2 — Core RPG Depth and Replayability |
 | **Dependencies** | C-154 (AI Vendors & Economy — `completed`), C-328 (Bounded AI NPC Dialogue — `implemented`, provides `DialogueContextProjection` extension point), C-339 (Quest Graph & Journal — `implemented`, provides quest outcome event hooks), C-340 (Party & Companion Gameplay — `approved`, provides companion approval tracking foundation) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | None — internal systems. Player-facing reputation UI is discoverable in-game. |
 | **Contract version** | 2.0.0 |
@@ -470,5 +483,48 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Implemented relationship, faction, and reputation system with content-pack-driven faction definitions, quest/dialogue-driven relationship deltas, AI context injection, read-only reputation UI, and persistent state across save/load. 29 files modified.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Faction definitions from content pack load into relationship service on boot |
+| AC-2 | ✅ | Quest outcomes and dialogue choices dispatch relationship deltas with magnitude |
+| AC-3 | ✅ | Relationship and faction facts injected into NPC dialogue context for AI |
+| AC-4 | ✅ | Reputation UI displays standing bars and relationship tiers (read-only) |
+| AC-5 | ✅ | Relationship state (standings, promises, history) survives save/load |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/relationship_service.svelte.ts` | Relationship and faction standing management |
+| `apps/frontend/client/src/lib/services/game/relationship_service.test.ts` | Relationship service unit tests |
+| `apps/frontend/client/src/lib/views/reputation/reputation_view.svelte` | Reputation UI component |
+| `apps/frontend/client/src/lib/views/reputation/reputation_view_model.svelte.ts` | Reputation ViewModel |
+| `apps/e2e/tests/client/relationships.spec.ts` | E2E tests for relationship system |
+| `packages/shared/schemas/src/lib/game/relationship_schemas.ts` | Relationship and faction TypeBox schemas |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Added relationship delta dispatch on dialogue choices |
+| `apps/frontend/client/src/lib/services/game/gm_prompt_service.svelte.ts` | Added relationship/faction context to AI prompt |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Wired relationship service |
+| `apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts` | Added relationship state to save envelope |
+| `apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts` | Added relationship delta dispatch on quest completion |
+| `packages/shared/constants/src/lib/game/faction_definitions.ts` | Default faction definitions |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 48/48 PASS (0 failures) including 24 new relationship service tests
+- E2E: 1 spec passing
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

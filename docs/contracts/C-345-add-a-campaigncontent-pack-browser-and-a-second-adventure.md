@@ -1,3 +1,16 @@
+---
+id: C-345
+title: "Contract C-345: Add a Campaign/Content-Pack Browser and a Second Adventure"
+source: "TODO.md — Phase 2 — RPG Depth and Systemic Content"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/45"
+    pr_number: 45
+created_at: "2026-08-31"
+---
 # Contract C-345: Add a Campaign/Content-Pack Browser and a Second Adventure
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `packages/shared/schemas/src/lib/game/content_pack.ts` (modify — add optional `description` field), `packages/shared/schemas/src/lib/game/pack_index.ts` (new), `packages/shared/types/src/lib/game/pack_index.ts` (new), `apps/frontend/client/src/lib/services/campaign/pack_registry_service.svelte.ts` (new), `apps/frontend/client/src/lib/views/start/components/pack_browser_view.svelte` (new), `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` (modify), `apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts` (modify), `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` (modify), `apps/frontend/client/static/content-packs/` (new second pack + pack index) |
 | **Priority** | P1 — one vertical slice proves quality; a second proves the architecture is reusable |
 | **Dependencies** | C-315 (Define a Versioned Campaign Content Pack and Atomic Loader — `completed`), C-334 (Make Local Save, Continue, Autosave, and Recovery Reliable — `approved`), C-339 (Complete Quest Graph, Journal, Objectives, and Reward Pipelines — `implemented`), C-344 (Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle — `implemented`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | None — internal infrastructure |
 | **Contract version** | 2.0.0 |
@@ -421,5 +434,52 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Implemented campaign/content-pack browser with pack discovery and listing, metadata inspection, campaign creation with pack selection, campaign switching with isolated pack-specific state, and cache isolation on pack switch. Added Whispering Caves as second adventure content pack. 19 files modified.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Pack discovery scans content/packs directory; listing shows available packs |
+| AC-2 | ✅ | Pack metadata inspection shows description, difficulty, estimated playtime |
+| AC-3 | ✅ | Campaign creation with pack selection from available packs |
+| AC-4 | ✅ | Campaign switching isolates pack-specific state (quests, world flags, relationships) |
+| AC-5 | ✅ | Cache isolation on pack switch clears pack-specific cached data |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/pack_registry_service.svelte.ts` | Pack discovery and registry management |
+| `apps/frontend/client/src/lib/services/game/pack_registry_service.test.ts` | Pack registry unit tests |
+| `apps/frontend/client/src/lib/services/game/campaign_browser_service.svelte.ts` | Campaign browser and creation service |
+| `apps/frontend/client/src/lib/services/game/campaign_browser_service.test.ts` | Campaign browser unit tests |
+| `apps/frontend/client/src/lib/views/campaign/pack_browser_view.svelte` | Pack browser UI component |
+| `apps/frontend/client/src/lib/views/campaign/pack_browser_view_model.svelte.ts` | Pack browser ViewModel |
+| `apps/frontend/client/src/lib/views/campaign/campaign_creation_view.svelte` | Campaign creation UI component |
+| `apps/frontend/client/src/lib/views/campaign/campaign_creation_view_model.svelte.ts` | Campaign creation ViewModel |
+| `apps/frontend/client/src/lib/views/campaign/campaign_switcher_view.svelte` | Campaign switcher UI component |
+| `apps/frontend/client/src/lib/views/campaign/campaign_switcher_view_model.svelte.ts` | Campaign switcher ViewModel |
+| `content/packs/whispering-caves/` | Whispering Caves second adventure content pack |
+| `apps/e2e/tests/client/pack-browser.spec.ts` | E2E tests for pack browser |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts` | Added campaign switching and pack isolation |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Added pack selection to boot flow |
+| `packages/shared/schemas/src/lib/game/pack_index.ts` | Pack index schema with metadata |
+| `packages/shared/constants/src/lib/game/pack_definitions.ts` | Default pack definitions |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 40/40 PASS (0 failures) including 20 new pack/campaign browser tests
+- E2E: 1 spec passing
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

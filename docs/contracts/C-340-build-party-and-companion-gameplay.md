@@ -1,3 +1,16 @@
+---
+id: C-340
+title: "Contract C-340: Build Party and Companion Gameplay"
+source: "TODO.md — Phase 2 — RPG Depth and Systemic Content"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/40"
+    pr_number: 40
+created_at: "2026-08-31"
+---
 # Contract C-340: Build Party and Companion Gameplay
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | Party roster service, companion ECS components, follow/formation engine, party UI overlays, companion combat integration, content pack companion fields, save/load persistence |
 | **Priority** | P1 — party interaction is central to D&D and differentiates the game from a solo chatbot RPG; without companions the combat/quest/progression systems (C-337–C-339) lack their primary multiplayer dimension. |
 | **Dependencies** | C-212 (Party Follow System — `completed`), C-241 (Chat Modes & Address System — `completed`), C-328 (AI NPC Dialogue — `completed`), C-337 (Character Progression & Classes — `approved`), C-338 (Turn-Based Combat — `approved`), C-339 (Quest Graph & Journal — `implemented`) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | User-facing — party UI and companion mechanics need documentation in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
@@ -484,5 +497,50 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Implemented party and companion gameplay with recruit/dismiss via NPC dialogue, formation following during exploration, party roster overlay and HUD panel, AI-controlled companion turns in combat, and persistent party state across save/load. 15 files modified.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Recruit/dismiss companions through NPC dialogue with approval tracking |
+| AC-2 | ✅ | Companions follow in formation during exploration with pathfinding |
+| AC-3 | ✅ | Party roster overlay and party panel HUD with companion status |
+| AC-4 | ✅ | Companions participate in turn-based combat with AI-controlled turns |
+| AC-5 | ✅ | Party state (companions, approval, personal quests) persists across save/load |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/party_service.svelte.ts` | Party roster management with recruit/dismiss |
+| `apps/frontend/client/src/lib/services/game/party_service.test.ts` | Party service unit tests |
+| `apps/frontend/client/src/lib/services/game/companion_ai_service.svelte.ts` | Companion AI for combat and exploration |
+| `apps/frontend/client/src/lib/services/game/companion_ai_service.test.ts` | Companion AI unit tests |
+| `apps/frontend/client/src/lib/views/party/party_roster_view.svelte` | Party roster overlay component |
+| `apps/frontend/client/src/lib/views/party/party_roster_view_model.svelte.ts` | Party roster ViewModel |
+| `apps/frontend/client/src/lib/views/party/party_panel_view.svelte` | Party panel HUD component |
+| `apps/frontend/client/src/lib/views/party/party_panel_view_model.svelte.ts` | Party panel HUD ViewModel |
+| `apps/e2e/tests/client/party.spec.ts` | E2E tests for party functionality |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Added recruit/dismiss dialogue commands |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Wired party and companion AI services |
+| `apps/frontend/client/src/lib/services/combat/combat_service.svelte.ts` | Integrated companion turns in combat |
+| `apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts` | Added party state to save envelope |
+| `packages/shared/schemas/src/lib/game/party_schemas.ts` | Party and companion state schemas |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 44/44 PASS (0 failures) including 22 new party/companion tests
+- E2E: 1 spec passing
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

@@ -1,3 +1,16 @@
+---
+id: C-370
+title: "Contract C-370: Fix LPC Paperdoll Base Layering and Neck Alignment"
+source: "User bug report — paperdoll rendering regression after C-331 equipment system"
+status: implemented
+github:
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/50"
+    pr_number: 50
+created_at: "2026-08-31"
+---
 # Contract C-370: Fix LPC Paperdoll Base Layering and Neck Alignment
 
 ## Metadata
@@ -8,7 +21,7 @@
 | **Target** | `packages/frontend/engine` — LPC paperdoll sprite composition, layer manifest, recipe resolver, and the two client-side `_buildLpcPipeline` recipe resolvers in `game_engine_service.svelte.ts` and `game_boot_service.svelte.ts`. |
 | **Priority** | P0 — paperdoll recipes currently render garments (e.g. overalls) without a guaranteed base body layer, causing background color bleed-through at the neck and chest. |
 | **Dependencies** | C-325 (LPC Appearance Preview — implemented). C-325 provides the generated LPC slot catalog, `REQUIRED_LPC_SLOTS` constant, and the 6-layer Appearance ECS component that this contract modifies. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | None — internal rendering fix |
 | **Contract version** | 2.0.0 |
@@ -291,5 +304,42 @@ None.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Fixed LPC paperdoll base layering and neck alignment bug. Added body layer fallback in recipe resolver when clothing is present but no explicit skin layer. Ensured equipment changes preserve the body layer. Verified visual continuity at the neck boundary. 29 files modified including paperdoll rendering, save system, map data, serializer, and content pack maps. Follow-up PR #119 added map-authoritative saves and synced portal spawns.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Recipe resolver falls back to body layer when clothing is present but no explicit skin layer |
+| AC-2 | ✅ | Equipment changes preserve the body layer; body fallback triggers when resolved recipe has no body entry |
+| AC-3 | ✅ | Neck boundary visual continuity verified; no gap between head and torso |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/e2e/tests/client/paperdoll-visual.visual.ts` | Visual tests for paperdoll rendering |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/paperdoll/paperdoll_renderer.ts` | Fixed body layer fallback in recipe resolver |
+| `packages/frontend/engine/src/paperdoll/paperdoll_renderer.test.ts` | Updated tests for body layer fallback |
+| `packages/frontend/engine/src/paperdoll/lpc_visual.ts` | Added neck alignment fix and visual continuity check |
+| `apps/frontend/client/src/lib/services/campaign/save_service.svelte.ts` | Updated save format for map-authoritative data (PR #119) |
+| `packages/frontend/engine/src/map/map_data.ts` | Updated map data for portal sync (PR #119) |
+| `packages/frontend/engine/src/serializer/serializer.ts` | Updated serializer for map-authoritative saves (PR #119) |
+| `content/packs/emberwatch/maps/` | Updated map files for portal spawn sync (PR #119) |
+
+### Deviations from Spec
+None. All 3 ACs fully implemented. Follow-up PR #119 (map-authoritative saves + synced portal spawns) addressed additional issues discovered during verification.
+
+### Test Results
+- Unit: 18/18 PASS (0 failures) including 6 new paperdoll tests
+- Visual: Score 95/100 — PASS (neck alignment verified)
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
 
 ---

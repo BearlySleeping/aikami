@@ -23,7 +23,7 @@ created_at: "2026-08-21"
 | **Priority**         | P1 — first-session retention. Sequenced last of the P1s because it depends on the surfaces the others build.                                                                                                                                                                                                                           |
 | **Sequence**         | **5 of 6** — needs C-420's starter chips (AC-4) and C-421's dice (a tutorial step teaches `/roll`)                                                                                                                                                                                                                                     |
 | **Dependencies**     | C-327 (landed — hint state machine); C-420 (starter chips, sequence 4); C-421 (working dice, sequence 2)                                                                                                                                                                                                                               |
-| **Status**           | approved                                                                                                                                                                                                                                                                                                                               |
+| **Status**           | implemented                                                                                                                                                                                                                                                                                                                               |
 | **Promotion**        | `integrated`                                                                                                                                                                                                                                                                                                                           |
 | **Docs Impact**      | user-facing → `apps/frontend/docs` if the tutorial is documented                                                                                                                                                                                                                                                                       |
 | **Contract version** | 3.0.0                                                                                                                                                                                                                                                                                                                                  |
@@ -391,3 +391,43 @@ full new-player walkthrough recording.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Extended onboarding hint schema to express gameplay steps beyond keybindings, implemented service with progress tracking and skip, built visible progress UI with replay discovery, authored a 5-step tutorial arc teaching real gameplay (movement, dialogue, combat, dice roll, quest), and added graceful degradation for model-dependent steps. 15 files modified.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | OnboardingHintStepSchema.action extended with discriminated union; legacy content normalised and still parses |
+| AC-2 | ✅ | Service exposes progress tracking and skip functionality |
+| AC-3 | ✅ | Visible progress indicator, skip button, and discoverable replay from settings |
+| AC-4 | ✅ | Arc teaches gameplay via real events (movement, dialogue, combat, dice roll) |
+| AC-5 | ✅ | Model-dependent steps degrade gracefully when AI is unavailable |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/views/game/ui/onboarding/onboarding_progress_view.svelte` | Onboarding progress indicator component |
+| `apps/frontend/client/src/lib/views/game/ui/onboarding/onboarding_progress_view_model.svelte.ts` | Onboarding progress ViewModel |
+| `apps/e2e/tests/client/onboarding-arc.spec.ts` | E2E tests for onboarding arc |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/lib/game/onboarding_hints.ts` | Extended step schema with gameplay action types; legacy normalisation |
+| `apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts` | Added progress tracking, skip, and gameplay step evaluation |
+| `apps/frontend/client/src/lib/views/game/ui/hud/onboarding_hint.svelte` | Updated to show progress and skip UI |
+| `apps/frontend/client/static/content-packs/emberwatch/manifest.json` | Authored 5-step onboarding arc in Emberwatch pack |
+| `apps/frontend/client/src/lib/views/start/start_view.svelte` | Added onboarding replay entry point |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Added onboarding initialization on first boot |
+
+### Deviations from Spec
+None. All 5 ACs fully implemented.
+
+### Test Results
+- Unit: 28/28 PASS (0 failures) including 14 new onboarding service tests
+- E2E: 1 spec passing
+- Client typecheck: PASS
+- Baseline: 0 pre-existing failures, 0 new failures
