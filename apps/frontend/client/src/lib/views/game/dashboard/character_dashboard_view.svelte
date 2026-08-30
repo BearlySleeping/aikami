@@ -14,10 +14,10 @@ const { viewModel }: Props = $props();
     class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
     role="dialog"
     aria-modal="true"
-    aria-label="Close dialog"
+    aria-label="Character Sheet"
     tabindex="-1"
-    onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) { viewModel.closeDashboard(); } }}
-    onkeydown={(e: KeyboardEvent) => e.key === 'Escape' && viewModel.closeDashboard()}
+    onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
+    onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
   >
     <div class="card w-full max-w-lg bg-base-100 shadow-2xl">
       <div class="card-body p-6 gap-4">

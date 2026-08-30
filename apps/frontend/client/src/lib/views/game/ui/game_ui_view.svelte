@@ -136,32 +136,14 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
     {:else if viewModel.activeOverlay === 'INVENTORY' && viewModel.inventoryViewModel}
       <InventoryView viewModel={viewModel.inventoryViewModel} />
     {:else if viewModel.activeOverlay === 'QUEST_LOG' && viewModel.questViewModel}
-      <!-- svelte-ignore a11y_no_static_element_interactions — backdrop click-to-close with focus trap -->
       <div
         class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
         aria-label="Quest Log"
         tabindex="-1"
-        onkeydown={(e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          viewModel.handleKeyDown(e);
-          return;
-        }
-        if (e.key === 'Tab') {
-          e.preventDefault();
-          const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-            'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href]'
-          );
-          if (focusable.length === 0) {
-            return;
-          }
-          const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
-          const direction = e.shiftKey ? -1 : 1;
-          const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
-          focusable[nextIndex].focus();
-        }
-      }}
+        onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
+        onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
         use:focusOnMount
       >
         <div

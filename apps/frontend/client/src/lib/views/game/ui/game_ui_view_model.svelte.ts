@@ -156,6 +156,7 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly reducedMotion: boolean;
 
   handleKeyDown(event: KeyboardEvent): void;
+  handleBackdropClick(event: MouseEvent): void;
   resumeGame(): void;
   endDialogue(): void;
   saveGame(): Promise<void>;
@@ -586,7 +587,28 @@ class GameUIViewModel
   // ── Delegated ──
 
   handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Tab' && this.activeOverlay === 'QUEST_LOG') {
+      event.preventDefault();
+      const dialog = event.currentTarget as HTMLElement;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href]',
+      );
+      if (focusable.length === 0) {
+        return;
+      }
+      const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+      const direction = event.shiftKey ? -1 : 1;
+      const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+      focusable[nextIndex]?.focus();
+      return;
+    }
     gameOverlayService.handleKeyDown(event);
+  }
+
+  handleBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      gameOverlayService.closeQuestLog();
+    }
   }
 
   resumeGame(): void {

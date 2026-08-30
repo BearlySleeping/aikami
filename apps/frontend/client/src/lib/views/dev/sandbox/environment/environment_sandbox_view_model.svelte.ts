@@ -107,7 +107,7 @@ class EnvironmentSandboxViewModel
       const worldOptions: GameWorldOptions = {
         className: 'EnvironmentSandboxGameWorld',
         bridge: this._bridge,
-        workerFactory: () => workerCtor.create(),
+        workerFactory: () => new workerCtor(),
         recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),

@@ -22,18 +22,14 @@ const approvalBadgeClass = $derived.by(() => {
 });
 </script>
 <BaseViewModelContainer {viewModel}>
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm"
     role="dialog"
     aria-modal="true"
     aria-label="Talking to {viewModel.npcName}"
     tabindex="-1"
-    onkeydown={(e: KeyboardEvent) => {
-		if (e.key === 'Escape') {
-			viewModel.close();
-		}
-	}}
+    onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
+    onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
   >
     <div
       class="mx-auto flex w-full max-w-2xl flex-col rounded-xl border border-base-300 bg-base-200/95 shadow-2xl"

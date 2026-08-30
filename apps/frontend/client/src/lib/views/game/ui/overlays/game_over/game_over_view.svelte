@@ -12,6 +12,9 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel}>
   <div
     class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
   >
     <div class="flex flex-col items-center gap-6 rounded-2xl bg-base-200 p-10 shadow-2xl">
       <div class="text-6xl">💀</div>

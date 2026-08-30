@@ -148,6 +148,8 @@ export type CharacterSheetViewModelInterface = BaseViewModelInterface & {
   saveJsonEdit(): void;
   toggleAiPreview(): void;
   getAiContext(): string;
+  handleBackdropClick(event: MouseEvent): void;
+  handleKeyDown(event: KeyboardEvent): void;
   closeSheet(): void;
 };
 
@@ -612,6 +614,37 @@ class CharacterSheetViewModel
 
   toggleAiPreview(): void {
     this.showAiPreview = !this.showAiPreview;
+  }
+
+  /** Closes the sheet when the backdrop itself is clicked. */
+  handleBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.closeSheet();
+    }
+  }
+
+  /** Handles dismissal and focus trapping for the sheet dialog. */
+  handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.closeSheet();
+      return;
+    }
+    if (event.key !== 'Tab') {
+      return;
+    }
+
+    event.preventDefault();
+    const dialog = event.currentTarget as HTMLElement;
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href]',
+    );
+    if (focusable.length === 0) {
+      return;
+    }
+    const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+    const direction = event.shiftKey ? -1 : 1;
+    const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+    focusable[nextIndex]?.focus();
   }
 
   /** Closes the sheet overlay. */

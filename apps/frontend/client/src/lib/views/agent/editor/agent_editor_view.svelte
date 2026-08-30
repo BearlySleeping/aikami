@@ -37,7 +37,7 @@ const macroLabel = 'Use {{user}}, {{input}}, etc.';
         <div class="card-body p-6">
           <!-- Header -->
           <div class="flex items-center justify-between mb-4">
-            <h2 class="font-mono text-lg font-bold text-[#cabeff]">
+            <h2 class="font-mono text-lg font-bold text-primary">
               {viewModel.isEditing ? 'Edit Agent' : 'Create Agent'}
             </h2>
             <button
@@ -148,14 +148,7 @@ const macroLabel = 'Use {{user}}, {{input}}, etc.';
                 rows="6"
                 placeholder={'{ "type": "object", "properties": { } }'}
                 bind:value={viewModel.outputSchemaText}
-                onblur={() => {
-                try {
-                  JSON.parse(viewModel.outputSchemaText);
-                  viewModel.schemaError = '';
-                } catch (e) {
-                  viewModel.schemaError = e instanceof Error ? e.message : 'Invalid JSON';
-                }
-              }}
+                onblur={() => viewModel.validateOutputSchema()}
               ></textarea>
               {#if viewModel.schemaError}
                 <p class="text-error text-xs mt-1">{viewModel.schemaError}</p>
@@ -236,7 +229,7 @@ const macroLabel = 'Use {{user}}, {{input}}, etc.';
              Test Run Section
              ═══════════════════════════════════════════════════════════ -->
           <div class="mt-6 pt-4 border-t border-base-300">
-            <h3 class="font-mono text-md font-semibold text-[#cabeff] mb-3">Test Run</h3>
+            <h3 class="font-mono text-md font-semibold text-primary mb-3">Test Run</h3>
 
             <div>
               <label for="test-input" class="label">

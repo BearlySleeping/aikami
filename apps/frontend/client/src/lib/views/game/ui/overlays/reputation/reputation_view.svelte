@@ -45,18 +45,14 @@ const progressColor = (value: number): string => {
 };
 </script>
 <BaseViewModelContainer {viewModel}>
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm"
     role="dialog"
     aria-modal="true"
     aria-label="Reputation"
     tabindex="-1"
-    onkeydown={(e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      viewModel.close();
-    }
-  }}
+    onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
+    onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
   >
     <div class="w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl p-6">
       <!-- Header -->

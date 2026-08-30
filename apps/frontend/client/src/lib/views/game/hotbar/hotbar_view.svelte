@@ -24,9 +24,9 @@ const { viewModel = getHotbarViewModel({ className: 'HotbarViewModel' }) }: Prop
       {#each viewModel.slots as slot}
         <button
           type="button"
-          class="w-16 h-16 rounded-lg border-2 border-white/20 bg-white/5 flex flex-col items-center justify-center cursor-pointer relative transition-colors duration-200 hover:border-white/50 hover:bg-white/10 {slot.filled ? 'border-purple-500/60 bg-purple-500/10 hover:border-purple-500/90 hover:bg-purple-500/20' : 'opacity-50 hover:opacity-70'} {slot.canUse ? '' : 'opacity-40 cursor-not-allowed'}"
+          class={slot.className}
           onclick={() => viewModel.activateSlot(slot.index)}
-          title={slot.filled ? slot.label : `Slot ${slot.keybind} (empty)`}
+          title={slot.title}
         >
           <span class="absolute top-0.5 left-1 text-[0.65rem] text-white/50 font-bold"
             >{slot.keybind}</span

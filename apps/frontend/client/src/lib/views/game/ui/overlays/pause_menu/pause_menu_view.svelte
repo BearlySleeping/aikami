@@ -90,7 +90,6 @@ $effect(() => {
         <h2 class="text-center text-lg font-bold text-base-content">Paused</h2>
 
         <div class="mt-6 space-y-3">
-          <!-- svelte-ignore a11y_autofocus — intentional for modal dialog focus (C-332 AC-4) -->
           <button
             type="button"
             class="btn btn-primary btn-block"

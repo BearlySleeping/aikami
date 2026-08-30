@@ -15,7 +15,7 @@ type Props = {
 
 const { viewModel }: Props = $props();
 </script>
-<BaseViewModelContainer {viewModel}>
+<BaseViewModelContainer {viewModel} class="h-full">
   <div class="flex h-full gap-4">
     <!-- ═══ Lorebook list sidebar ═══ -->
     <div class="w-56 shrink-0 flex flex-col gap-2 border-r border-base-300 pr-3 overflow-auto">
@@ -44,7 +44,7 @@ const { viewModel }: Props = $props();
       </div>
 
       <!-- Lorebook list -->
-      {#each viewModel.lorebooks as lb}
+      {#each viewModel.lorebooks as lb (lb.id)}
         <button
           type="button"
           class="btn btn-sm w-full justify-start text-left {lb.id === viewModel.selectedLorebookId ? 'btn-active' : 'btn-ghost'}"
@@ -172,7 +172,7 @@ const { viewModel }: Props = $props();
             Entries ({viewModel.entries.length})
           </h4>
 
-          {#each viewModel.entries as entry}
+          {#each viewModel.entries as entry (entry.id)}
             <div class="flex flex-col gap-1 p-3 border border-base-300 rounded-lg bg-base-200/50">
               <!-- Keyword chips -->
               <div class="flex flex-wrap gap-1">

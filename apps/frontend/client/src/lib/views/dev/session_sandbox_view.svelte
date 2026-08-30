@@ -131,7 +131,7 @@ const { viewModel }: Props = $props();
           <p class="text-sm text-base-content/50 font-mono">No log entries</p>
         {:else}
           <div class="space-y-1">
-            {#each viewModel.testLog as entry (entry)}
+            {#each viewModel.testLog as entry, index (index)}
               <p class="text-xs text-base-content/70 font-mono">{entry}</p>
             {/each}
           </div>

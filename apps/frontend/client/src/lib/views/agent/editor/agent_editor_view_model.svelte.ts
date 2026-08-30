@@ -91,6 +91,8 @@ export type AgentEditorViewModelInterface = BaseViewModelInterface & {
   openEdit(agent: CustomAgentDefinition): void;
   /** Closes the editor. */
   close(): void;
+  /** Validates the output schema as JSON. */
+  validateOutputSchema(): void;
   /** Saves the agent (creates or updates). */
   save(): Promise<void>;
   /** Runs a test execution with mock input. */
@@ -206,6 +208,16 @@ class AgentEditorViewModel
     this._editingId = undefined;
     this.isOpen = false;
     this._resetForm();
+  }
+
+  /** @inheritdoc */
+  validateOutputSchema(): void {
+    try {
+      JSON.parse(this.outputSchemaText);
+      this.schemaError = '';
+    } catch (error) {
+      this.schemaError = error instanceof Error ? error.message : 'Invalid JSON';
+    }
   }
 
   /** @inheritdoc */

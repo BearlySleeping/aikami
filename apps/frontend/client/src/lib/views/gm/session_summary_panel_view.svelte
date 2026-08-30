@@ -1,6 +1,6 @@
 <script lang="ts">
-import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/gm/session_summary_panel_view.svelte
+import { BaseViewModelContainer } from '$components';
 import type { SessionSummaryPanelViewModelInterface } from './session_summary_panel_view_model.svelte.ts';
 
 type Props = {

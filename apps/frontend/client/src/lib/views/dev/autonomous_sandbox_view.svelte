@@ -1,11 +1,11 @@
 <script lang="ts">
-import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/dev/autonomous_sandbox_view.svelte
 //
 // Dev sandbox for testing autonomous NPC behavior — idle simulation,
 // DND toggle, poller control, mock NPCs, schedule editor access.
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
+import { BaseViewModelContainer } from '$components';
 import ScheduleEditorView from '$views/settings/autonomous/schedule_editor_view.svelte';
 import type { AutonomousSandboxViewModelInterface } from './autonomous_sandbox_view_model.svelte';
 
@@ -216,16 +216,14 @@ const pollerLabel = $derived.by(() => {
           <h2 class="card-title text-base">Quick Status Check</h2>
           <p class="text-xs text-base-content/50 mb-2">
             What's happening right now? The current time is{' '}
-            <span class="font-mono">{new Date().toLocaleString()}</span>.
+            <span class="font-mono">{viewModel.currentTimeLabel}</span>.
           </p>
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div class="p-3 rounded bg-base-200">
-              <span class="font-semibold">{viewModel.dayLabels[new Date().getDay()]}</span>
-              <span class="text-base-content/50 ml-1">Day {new Date().getDay()}</span>
+              <span class="font-semibold">{viewModel.dayLabel}</span>
             </div>
             <div class="p-3 rounded bg-base-200">
-              <span class="font-semibold">{new Date().getHours()}:00</span>
-              <span class="text-base-content/50 ml-1">Hour {new Date().getHours()}</span>
+              <span class="font-semibold">{viewModel.hourLabel}</span>
             </div>
           </div>
         </div>

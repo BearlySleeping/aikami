@@ -49,6 +49,8 @@ export type EndSessionViewModelInterface = BaseViewModelInterface & {
   saveRecap(): Promise<void>;
   /** Cancels editing and returns to preview without saving (C-344). */
   cancelEdit(): void;
+  /** Closes the dialog when the backdrop itself is clicked. */
+  handleBackdropClick(event: MouseEvent): void;
 };
 
 class EndSessionViewModel
@@ -101,6 +103,13 @@ class EndSessionViewModel
   /** @inheritdoc */
   cancel(): void {
     gameOverlayService.closeEndSession();
+  }
+
+  /** @inheritdoc */
+  handleBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.cancel();
+    }
   }
 
   /** @inheritdoc */

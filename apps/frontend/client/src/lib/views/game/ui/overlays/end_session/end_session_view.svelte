@@ -26,6 +26,7 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
     aria-modal="true"
     aria-label="End Session"
     tabindex="-1"
+    onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
     onkeydown={(e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       if (viewModel.phase === 'editing') {

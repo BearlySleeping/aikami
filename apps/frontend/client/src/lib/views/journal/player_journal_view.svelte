@@ -5,7 +5,6 @@
 //
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
-import { onMount } from 'svelte';
 import { BaseViewModelContainer } from '$components';
 import type { PlayerJournalViewModelInterface } from './player_journal_view_model.svelte';
 
@@ -16,10 +15,6 @@ type Props = {
 };
 
 const { viewModel, campaignId, sessionNumber }: Props = $props();
-
-onMount(() => {
-  viewModel.loadEntries({ campaignId });
-});
 </script>
 <BaseViewModelContainer {viewModel}>
   <div class="flex min-h-screen flex-col bg-base-200">
@@ -109,6 +104,9 @@ onMount(() => {
           role="dialog"
           aria-modal="true"
           aria-label={viewModel.isEditingExisting ? 'Edit Entry' : 'New Entry'}
+          tabindex="-1"
+          onclick={(event: MouseEvent) => viewModel.handleEditorBackdropClick(event)}
+          onkeydown={(event: KeyboardEvent) => viewModel.handleEditorKeyDown(event)}
         >
           <div class="w-96 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
             <h2 class="text-lg font-bold text-base-content">

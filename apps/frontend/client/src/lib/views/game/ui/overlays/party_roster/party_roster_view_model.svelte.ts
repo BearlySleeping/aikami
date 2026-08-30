@@ -39,6 +39,9 @@ export type PartyRosterViewModelInterface = BaseViewModelInterface & {
   viewEquipment(options: { npcId: string }): void;
 
   /** Close the overlay. */
+  handleBackdropClick(event: MouseEvent): void;
+  handleKeyDown(event: KeyboardEvent): void;
+  handleDismissKeyDown(event: KeyboardEvent): void;
   close(): void;
 };
 
@@ -101,6 +104,29 @@ class PartyRosterViewModel
     // Open character dashboard scoped to this companion
     gameOverlayService.openCharacterDashboard();
     this.debug('viewEquipment', { npcId: _options.npcId });
+  }
+
+  /** Closes the roster when the backdrop itself is clicked. */
+  handleBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.close();
+    }
+  }
+
+  /** Closes the roster when Escape is pressed. */
+  handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.close();
+    }
+  }
+
+  /** Cancels dismissal without allowing Escape to close the roster. */
+  handleDismissKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.cancelDismiss();
+    }
   }
 
   /** @inheritdoc */

@@ -1,7 +1,7 @@
 <script lang="ts">
+// apps/frontend/client/src/lib/views/vendor/vendor_view.svelte
 import { BaseViewModelContainer } from '$components';
 import LpcItemIcon from '$lib/components/game/lpc_item_icon.svelte';
-// apps/frontend/client/src/lib/views/vendor/vendor_view.svelte
 import { logger } from '$logger';
 import { gameModeService } from '$services';
 import type { VendorViewModelInterface } from './vendor_view_model.svelte';
@@ -221,7 +221,11 @@ const _itemIcon = (itemId: string): string => {
 <BaseViewModelContainer {viewModel}>
   <div
     class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-    onclick={() => viewModel.closeVendor()}
+    onclick={(event: MouseEvent) => {
+      if (event.target === event.currentTarget) {
+        viewModel.closeVendor();
+      }
+    }}
     role="dialog"
     aria-modal="true"
     tabindex="-1"
@@ -230,8 +234,6 @@ const _itemIcon = (itemId: string): string => {
   >
     <div
       class="flex w-full max-w-5xl h-[80vh] rounded-xl border border-base-300 bg-base-200 shadow-2xl overflow-hidden"
-      onclick={(e: MouseEvent) => e.stopPropagation()}
-      role="none"
     >
       <!-- ── Left pane: AI Chat ── -->
       <!-- C-419 AC-3: collapsed to a slim affordance until a conversation
@@ -595,14 +597,8 @@ const _itemIcon = (itemId: string): string => {
                   </button>
                 </div>
               </div>
-              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-              <form
-                method="dialog"
-                class="modal-backdrop"
-                onclick={cancelSellWithDialog}
-                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { cancelSellWithDialog(); } }}
-              >
-                <button type="button">close</button>
+              <form method="dialog" class="modal-backdrop">
+                <button type="button" onclick={cancelSellWithDialog}>close</button>
               </form>
             </dialog>
           {/if}

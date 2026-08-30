@@ -1,6 +1,6 @@
 <script lang="ts">
-import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/gm/push_story_button_view.svelte
+import { BaseViewModelContainer } from '$components';
 import type { PushStoryButtonViewModelInterface } from './push_story_button_view_model.svelte.ts';
 
 type Props = {
