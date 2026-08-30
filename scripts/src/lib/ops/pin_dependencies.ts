@@ -28,7 +28,7 @@
 // resolved through `moduleResolution: "bundler"`. Upgrading starlight
 // may introduce new type errors from upstream .ts changes.
 
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -42,19 +42,32 @@ import { resolve } from 'node:path';
 // `--filter` flag targeting the workspace package name, which
 // avoids the broken workspace-protocol resolution path.
 //
-function bunAddInWorkspace(pkgName: string, pkgSpec: string): void {
+function bunAddInWorkspace(pkgName: string, pkgDir: string, pkgSpec: string): void {
   const isWindows = process.platform === 'win32';
+  const args = ['add', ...pkgSpec.split(' ')];
   if (isWindows) {
     // Run from root with --filter to work around bun workspace resolution bug
-    execSync(`bun add ${pkgSpec} --filter ${pkgName}`, {
-      cwd: MONOREPO_ROOT,
-      stdio: 'inherit',
-    });
-  } else {
-    execSync(`bun add ${pkgSpec}`, {
-      cwd: resolve(MONOREPO_ROOT, pkgName),
-      stdio: 'inherit',
-    });
+    args.push('--filter', pkgName);
+  }
+  // Use the filesystem directory path for cwd, not the workspace package name
+  const cwd = isWindows ? MONOREPO_ROOT : resolve(MONOREPO_ROOT, pkgDir);
+  // Use process.execPath to get the full path to the current Bun binary.
+  // When `bun run` executes a script, it sanitizes PATH to only include
+  // node_modules/.bin directories, so just 'bun' may not be resolvable
+  // for child process spawning.
+  const bunPath = process.execPath;
+  const result = spawnSync(bunPath, args, {
+    cwd,
+    stdio: 'inherit',
+  });
+  if (result.error) {
+    throw new Error(`spawnSync error: ${result.error.message}`);
+  }
+  if (result.signal) {
+    throw new Error(`bun add was killed by signal ${result.signal}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(`bun add exited with code ${result.status}`);
   }
 }
 
@@ -63,14 +76,17 @@ const MONOREPO_ROOT = resolve(import.meta.dir, '../../../..');
 function findCurrentPlaywrightVersion(): string {
   // 1. Nix-provided playwright binary (authoritative on NixOS)
   try {
-    const output = execSync('playwright --version', {
+    const result = spawnSync('playwright', ['--version'], {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const match = output.match(/Version (\d+\.\d+\.\d+)/);
-    if (match) {
-      console.log(`   📌 Nix playwright version: ${match[1]}`);
-      return match[1];
+    if (result.status === 0) {
+      const output = result.stdout;
+      const match = output.match(/Version (\d+\.\d+\.\d+)/);
+      if (match) {
+        console.log(`   📌 Nix playwright version: ${match[1]}`);
+        return match[1];
+      }
     }
   } catch {
     /* nix playwright not in PATH — fall through */
@@ -150,7 +166,7 @@ const playwrightCliDirs: WorkspaceInfo[] = ['apps/e2e']
 let hasError = false;
 for (const { dir, name } of playwrightDirs) {
   try {
-    bunAddInWorkspace(name, `-d @playwright/test@${currentVersion} --exact`);
+    bunAddInWorkspace(name, dir, `-d @playwright/test@${currentVersion} --exact`);
     console.log(`✅ Pinned @playwright/test@${currentVersion} in ${dir}`);
   } catch (err) {
     console.error(
@@ -165,7 +181,7 @@ for (const { dir, name } of playwrightDirs) {
 console.log(`🔒 Pinning playwright to ${currentVersion}`);
 for (const { dir, name } of playwrightCliDirs) {
   try {
-    bunAddInWorkspace(name, `-d playwright@${currentVersion} --exact`);
+    bunAddInWorkspace(name, dir, `-d playwright@${currentVersion} --exact`);
     console.log(`✅ Pinned playwright@${currentVersion} in ${dir}`);
   } catch (err) {
     console.error(
@@ -215,7 +231,7 @@ const starlightVersion = findCurrentStarlightVersion();
 console.log(`🔒 Pinning @astrojs/starlight to ${starlightVersion}`);
 
 try {
-  bunAddInWorkspace('@aikami/docs', `@astrojs/starlight@${starlightVersion} --exact`);
+  bunAddInWorkspace('@aikami/docs', 'apps/frontend/docs', `@astrojs/starlight@${starlightVersion} --exact`);
   console.log(`✅ Pinned @astrojs/starlight@${starlightVersion} in apps/frontend/docs`);
 } catch (err) {
   console.error(
@@ -249,7 +265,7 @@ console.log(`🔒 Pinning typescript to ${TYPESCRIPT_VERSION}`);
 
 for (const { dir, name } of tsDirs) {
   try {
-    bunAddInWorkspace(name, `-d typescript@${TYPESCRIPT_VERSION} --exact`);
+    bunAddInWorkspace(name, dir, `-d typescript@${TYPESCRIPT_VERSION} --exact`);
     console.log(`✅ Pinned typescript@${TYPESCRIPT_VERSION} in ${dir}`);
   } catch (err) {
     console.error(

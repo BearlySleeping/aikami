@@ -11,6 +11,6 @@
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
-    "typebox": "1.3.20"
+    "typebox": "1.3.22"
   }
 }
