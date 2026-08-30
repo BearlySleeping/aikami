@@ -21,7 +21,7 @@ created_at: "2026-08-13"
 | **Target** | `apps/backend/text/`, `apps/backend/image/`, `apps/backend/voice/`, `apps/backend/local-stack/`, `scripts/src/lib/herdr/session.ts` |
 | **Priority** | P1 — must land with or immediately after C-390. Leaving it undone means the dev environment and the shipped product disagree about every engine. |
 | **Dependencies** | C-390 (defines the engine baseline, the compose topology, the model manifest, and the fetcher). C-388 (the client must be able to talk to sd-server before `image` switches to it). |
-| **Status** | implemented |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → `apps/backend/{text,image}/README.md` rewrites; developer setup notes |
 | **Contract version** | 2.0.0 |
