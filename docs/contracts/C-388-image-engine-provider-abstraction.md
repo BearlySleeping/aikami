@@ -21,7 +21,7 @@ created_at: "2026-08-13"
 | **Target** | `apps/frontend/client/src/lib/services/image/`, `apps/frontend/client/src/lib/services/ai/clients/ai/` — image generation provider layer |
 | **Priority** | P1 — blocks C-390 (the bundled stack cannot ship sd-server until the client can talk to it), and fixes a live quality bug (negative prompts are discarded). |
 | **Dependencies** | None. Independently mergeable — the de-duplication alone is a net win even if sd-server is never enabled. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → image-engine selection page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
