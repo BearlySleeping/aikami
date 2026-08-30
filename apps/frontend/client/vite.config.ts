@@ -304,6 +304,10 @@ export default defineConfig(({ mode }) => {
       // build.rollupOptions is a deprecated alias for rolldownOptions in
       // Vite 8 — use the current option directly.
       rolldownOptions: {
+        // Tauri APIs are only available at runtime in a Tauri context —
+        // externalize them so the web build doesn't fail on dynamic imports
+        // like `import('@tauri-apps/api/path')`.
+        external: (id: string) => id.startsWith('@tauri-apps/'),
         // Mute unavoidable warnings from third-party dependencies
         onwarn(warning, warn) {
           // Silence all eval warnings

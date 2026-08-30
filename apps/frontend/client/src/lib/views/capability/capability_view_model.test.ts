@@ -102,12 +102,13 @@ mock.module('$services', () => ({
     };
     return {
       state,
-      addConnection: mock((params: { provider: string; capability?: string }) => {
+      addConnection: mock((params: { provider: string; capability?: string; apiKey?: string }) => {
         const id = `conn-${_nextId++}`;
         state.connections.push({
           id,
           provider: params.provider,
           capability: params.capability ?? 'text',
+          apiKey: params.apiKey ?? '',
         });
         return id;
       }),

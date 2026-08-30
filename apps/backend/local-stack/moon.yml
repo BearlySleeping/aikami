@@ -49,6 +49,8 @@ tasks:
 
   test:
     command: 'bun run test'
+    options:
+      runInCI: false
 
   lint:
     command: 'bun run lint'

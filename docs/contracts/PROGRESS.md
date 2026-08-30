@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-08-29)
+## Status Summary (Auto-generated: 2026-08-30)
 
 **203 active (0 without contract file), 119 archived, 0 duplicates**
 
@@ -210,7 +210,7 @@
 | C-446 | Hub Catalog Asset Previews | 🛠️ implemented | ❓ `integrated` | v1 |
 | C-447 | Hub Walkable Map Sandbox | 🛠️ implemented | ❓ `integrated` | v1 |
 | C-448 | Debundle Content Packs | 🛠️ implemented | — | v1 |
-| C-449 | Misc Polish Batch | 📝 draft | ❓ `sandbox` | v1 |
+| C-449 | Misc Polish Batch | 🛠️ implemented | ❓ `sandbox` | v1 |
 
 ---
 

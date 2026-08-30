@@ -38,6 +38,7 @@ tasks:
       - '@group(configs)'
     options:
       mergeArgs: 'replace'
+      runInCI: false
 
   typecheck:
     command: 'bun run typecheck'
