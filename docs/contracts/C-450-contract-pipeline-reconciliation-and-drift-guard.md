@@ -111,7 +111,7 @@ N/A — no persistent state changes. Feature A/B edit contract markdown files an
 ## Scope Boundaries
 
 - **In Scope:**
-    - Feature A: run `mark_contract_implemented.ts` for real against C-388, C-392, C-393, C-418; fix C-445's frontmatter by hand; retire or clearly mark-historical INDEX.md's Phase 1–4 tables; convert the 34 open GitHub issues into contracts (or link them to an existing overlapping contract, per the earlier audit's disposition), closing each issue once ported; fix C-371's placeholder title.
+    - Feature A: run `mark_contract_implemented.ts` for real against C-388, C-392, C-393, C-418; fix C-445's frontmatter by hand; retire or clearly mark-historical INDEX.md's Phase 1–4 tables; convert the 34 open GitHub issues into contracts (or link them to an existing overlapping contract, per the earlier audit's disposition), closing each issue once ported; fix C-371's placeholder title by adding YAML frontmatter (the H1 heading is already correct — the file lacks frontmatter entirely, so `sync_contracts.ts` cannot extract a title).
     - Feature B: run `mark_contract_implemented.ts --dry-run` against every merged, contract-referencing PR in `gh pr list --state merged` (not a hand-picked subset); for any additional straggler found (same shape as C-388: has an Execution Report, tool confirms `advance`), run it for real.
 - **Out of Scope:**
     - Writing the 17 missing Execution Reports (C-329 through C-345, C-370, C-422, per the corrected Problem section) — real per-feature documentation work, tracked as its own contract, not a pipeline-tooling fix.
