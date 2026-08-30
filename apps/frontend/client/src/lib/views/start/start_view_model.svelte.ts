@@ -1,8 +1,10 @@
 // apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts
 //
 // ViewModel for the root Start Menu. Bridges AuthService (Firebase auth),
-// RouterService (SPA navigation), and Tauri window API (desktop quit).
+// RouterService (SPA navigation), CampaignService (campaign-first flow),
+// and Tauri window API (desktop quit).
 // Supports optional Google Sign-In — the game is fully functional without it.
+// Contract: C-317 Rebuild the Start Menu Around Campaigns, Not Personas
 // Contract: C-334 Crash Detection Recovery (AC-5)
 
 import {
@@ -10,7 +12,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { PackIndexEntry } from '@aikami/types';
+import type { Campaign, CapabilityProfile, PackIndexEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
 import {
   type AssetPrefetchPhase,
@@ -26,12 +28,10 @@ import {
   inventoryService,
   onboardingHintService,
   packRegistryService,
-  personaService,
   playerStateService,
   routerService,
   worldStateService,
 } from '$services';
-import type { SaveSlotInfo } from '$types';
 import { CREDIT_GROUPS, type CreditGroup } from './credits_data';
 
 // ---------------------------------------------------------------------------
@@ -40,15 +40,21 @@ import { CREDIT_GROUPS, type CreditGroup } from './credits_data';
 
 export type StartViewModelOptions = BaseViewModelOptions;
 
-/**
- * Where "Start campaign" sends the player, resolved from existing state.
- * C-405: the default path must never route through the world-generation
- * wizard — the generated world is a preview, not a playable map (issue #81).
- */
-type NewCampaignDestination =
-  | { readonly kind: 'onboarding'; readonly contentPackId: string }
-  | { readonly kind: 'persona_picker'; readonly contentPackId: string }
-  | { readonly kind: 'game'; readonly contentPackId: string };
+/** Display-ready summary of a campaign for the start menu. */
+export type CampaignSummary = {
+  /** Campaign ID. */
+  readonly id: string;
+  /** Display name. */
+  readonly name: string;
+  /** ISO timestamp of last save, or undefined if never saved. */
+  readonly lastSavedAt: string | undefined;
+  /** Content pack display label. */
+  readonly contentPackLabel: string;
+  /** Whether the campaign is resumable (state is playing, paused, or saving). */
+  readonly isResumable: boolean;
+  /** AI capability indicators. */
+  readonly capabilities: CapabilityProfile;
+};
 
 export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether running inside Tauri (desktop). */
@@ -60,11 +66,17 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether the credits modal is visible. */
   readonly showCredits: boolean;
 
-  /** Whether there are existing IndexedDB saves available. */
-  readonly hasSaves: boolean;
+  /** C-317 AC-1: The latest resumable campaign, or undefined if none exist. */
+  readonly latestResumableCampaign: CampaignSummary | undefined;
 
-  /** Available save slots from IndexedDB (sorted newest first). */
-  readonly availableSaves: readonly SaveSlotInfo[];
+  /** C-317 AC-3: All campaigns as display-ready summaries (newest first). */
+  readonly campaignSummaries: readonly CampaignSummary[];
+
+  /** C-317 AC-3: Whether the Load Campaign modal is visible. */
+  readonly showLoadCampaign: boolean;
+
+  /** C-317 AC-4: Whether the New Adventure confirmation dialog is visible. */
+  readonly showNewAdventureConfirm: boolean;
 
   /** C-334 AC-5: Whether a crash recovery prompt should be shown. */
   readonly showRecoveryPrompt: boolean;
@@ -75,13 +87,26 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** C-334 AC-5: Whether a recovery action is in progress. */
   readonly isRecovering: boolean;
 
-  /** Start a New Game — routes to the capability screen. */
-  startNewGame(): Promise<void>;
+  /** C-317 AC-2: Start a new adventure — always creates a fresh campaign draft. */
+  startNewAdventure(): Promise<void>;
 
-  /** Continue the most recent saved game. */
-  continueGame(): Promise<void>;
+  /** C-317 AC-1: Continue the latest resumable campaign. */
+  continueLatestCampaign(): Promise<void>;
 
-  startGame(): Promise<void>;
+  /** C-317 AC-3: Open the Load Campaign modal. */
+  openLoadCampaign(): void;
+
+  /** C-317 AC-3: Close the Load Campaign modal. */
+  closeLoadCampaign(): void;
+
+  /** C-317 AC-3: Load a specific campaign by ID. */
+  loadCampaignById(campaignId: string): Promise<void>;
+
+  /** C-317 AC-4: Confirm starting a new adventure when a resumable campaign exists. */
+  confirmNewAdventure(): Promise<void>;
+
+  /** C-317 AC-4: Cancel the New Adventure confirmation. */
+  cancelNewAdventure(): void;
 
   /** Navigates to the options/settings screen. */
   goToOptions(): Promise<void>;
@@ -150,14 +175,41 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /**
    * Whether to offer the explicit "download everything for offline" action.
    * True once the required-to-play core is ready and the player hasn't
-   * already started a full-catalog download — the catalog is otherwise only
-   * fetched on demand as assets are actually needed.
+   * already started a full-catalog download.
    */
   readonly canDownloadAllAssets: boolean;
 
   /** Starts downloading every remaining catalog asset for offline play. */
   downloadAllAssets(): void;
 };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Maps a content pack ID to a human-readable label. */
+const CONTENT_PACK_LABELS: Record<string, string> = {
+  emberwatch: 'Emberwatch: The Fading Ward',
+} as const;
+
+const getContentPackLabel = (contentPackId: string): string =>
+  CONTENT_PACK_LABELS[contentPackId] ?? contentPackId;
+
+/** States that count as resumable. */
+const RESUMABLE_STATES = new Set(['playing', 'paused', 'saving']);
+
+/** Whether a campaign is in a resumable state. */
+const isResumable = (campaign: Campaign): boolean => RESUMABLE_STATES.has(campaign.state);
+
+/** Builds a CampaignSummary from a Campaign. */
+const toCampaignSummary = (campaign: Campaign): CampaignSummary => ({
+  id: campaign.id,
+  name: campaign.name,
+  lastSavedAt: campaign.lastSavedAt,
+  contentPackLabel: getContentPackLabel(campaign.contentPackId),
+  isResumable: isResumable(campaign),
+  capabilities: campaign.capabilityProfile,
+});
 
 // ---------------------------------------------------------------------------
 // ViewModel
@@ -170,14 +222,20 @@ class StartViewModel
   /** Initialization error message — null when initialization succeeded. */
   private _initError = $state<string | null>(null);
 
-  /** Whether there are existing IndexedDB saves. */
-  hasSaves = $state(false);
-
-  /** Available save slots from IndexedDB (sorted newest first). */
-  availableSaves: SaveSlotInfo[] = $state([]);
-
   /** Whether the credits modal is currently visible. */
   showCredits = $state(false);
+
+  /** C-317 AC-1: The latest resumable campaign summary, or undefined. */
+  latestResumableCampaign = $state<CampaignSummary | undefined>(undefined);
+
+  /** C-317 AC-3: All campaign summaries (newest first). */
+  campaignSummaries: CampaignSummary[] = $state([]);
+
+  /** C-317 AC-3: Whether the Load Campaign modal is visible. */
+  showLoadCampaign = $state(false);
+
+  /** C-317 AC-4: Whether the New Adventure confirmation dialog is visible. */
+  showNewAdventureConfirm = $state(false);
 
   /** C-334 AC-5: Whether a crash recovery prompt should be shown. */
   showRecoveryPrompt = $state(false);
@@ -253,11 +311,109 @@ class StartViewModel
   }
 
   /** @inheritdoc */
-  async startNewGame(): Promise<void> {
-    await routerService.goToRoute('capability', {
-      queryParameters: undefined,
-      pathParameters: undefined,
-    });
+  async startNewAdventure(): Promise<void> {
+    // AC-4: If a resumable campaign exists, show confirmation dialog first
+    if (this.latestResumableCampaign) {
+      this.showNewAdventureConfirm = true;
+      return;
+    }
+
+    await this._doStartNewAdventure();
+  }
+
+  /** @inheritdoc */
+  async confirmNewAdventure(): Promise<void> {
+    this.showNewAdventureConfirm = false;
+    await this._doStartNewAdventure();
+  }
+
+  /** @inheritdoc */
+  cancelNewAdventure(): void {
+    this.showNewAdventureConfirm = false;
+  }
+
+  /**
+   * Internal: creates a fresh campaign and routes to /setup for character creation.
+   * The text provider check remains as a soft advisory, not a hard block.
+   */
+  private async _doStartNewAdventure(): Promise<void> {
+    try {
+      // Reset game state for a fresh start
+      inventoryService.reset();
+      worldStateService.reset();
+      playerStateService.reset();
+      equipmentService.reset();
+      gameModeService.reset();
+
+      await campaignService.startNewCampaign({ contentPackId: 'emberwatch' });
+
+      await routerService.goToRoute('personaCreate', {
+        queryParameters: { onboarding: '1' },
+        pathParameters: undefined,
+      });
+    } catch (error) {
+      if (isAiTextProviderRequiredError(error)) {
+        this.warn('startNewAdventure:no-text-provider', { error: String(error) });
+        // Soft advisory — route to capability screen instead of blocking
+        await routerService.goToRoute('capability', {
+          queryParameters: { reason: 'text-provider-required' },
+          pathParameters: undefined,
+        });
+        return;
+      }
+
+      this.error('startNewAdventure:failed', error);
+      this.errorMessage = 'Failed to start campaign. Try again.';
+    }
+  }
+
+  /** @inheritdoc */
+  async continueLatestCampaign(): Promise<void> {
+    const campaign = this.latestResumableCampaign;
+    if (!campaign) {
+      this.warn('continueLatestCampaign:no-resumable-campaign');
+      return;
+    }
+
+    try {
+      await campaignService.loadCampaign({ campaignId: campaign.id });
+
+      await routerService.goToRoute('game', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+    } catch (error) {
+      this.error('continueLatestCampaign:failed', error);
+      this.errorMessage = 'Failed to load campaign. Try starting a new adventure.';
+    }
+  }
+
+  /** @inheritdoc */
+  openLoadCampaign(): void {
+    this.showLoadCampaign = true;
+  }
+
+  /** @inheritdoc */
+  closeLoadCampaign(): void {
+    this.showLoadCampaign = false;
+  }
+
+  /** @inheritdoc */
+  async loadCampaignById(campaignId: string): Promise<void> {
+    this.debug('loadCampaignById', { campaignId });
+
+    try {
+      await campaignService.loadCampaign({ campaignId });
+      this.showLoadCampaign = false;
+
+      await routerService.goToRoute('game', {
+        queryParameters: undefined,
+        pathParameters: undefined,
+      });
+    } catch (error) {
+      this.error('loadCampaignById:failed', { campaignId, error: String(error) });
+      this.errorMessage = 'Failed to load campaign.';
+    }
   }
 
   /** @inheritdoc */
@@ -280,50 +436,13 @@ class StartViewModel
   }
 
   /** @inheritdoc */
-  async continueGame(): Promise<void> {
-    if (this.availableSaves.length === 0) {
-      this.warn('continueGame:no-saves');
-      return;
-    }
-
-    // Load the most recent save (sorted newest first)
-    const latestSave = this.availableSaves[0];
-    const campaignId = latestSave.campaignId;
-
-    try {
-      if (campaignId) {
-        // C-334 AC-3: Load the campaign first, then the boot pipeline handles the save
-        await campaignService.loadCampaign({ campaignId });
-      }
-
-      await routerService.goToRoute('game', {
-        queryParameters: undefined,
-        pathParameters: undefined,
-      });
-    } catch (error) {
-      this.error('continueGame:failed', error);
-      this.errorMessage = 'Failed to load save. Try starting a new game.';
-    }
-  }
-
-  async startGame(): Promise<void> {
-    return this.startNewGame();
-  }
-
-  /** @inheritdoc */
   override async initialize(): Promise<void> {
     this.debug('initialize');
 
     // C-448: start (or observe) the required-to-play (offline-core) download
-    // as soon as the start menu mounts — the game is unplayable without it,
-    // so there's no reason to wait for "New Game" to begin fetching it. This
-    // does NOT download the rest of the catalog — that's opt-in only via
-    // downloadAllAssets(). Fire-and-forget: this ViewModel only reads the
-    // shared service's reactive progress, never awaits it (a slow/offline
-    // connection must never block the start menu from rendering).
     assetPrefetchService.ensureStarted();
 
-    // Check for existing campaigns
+    // Load campaigns from IndexedDB
     try {
       await campaignService.refreshCampaigns();
       this._initError = null;
@@ -334,6 +453,9 @@ class StartViewModel
       this._showLoadingView = false;
       return;
     }
+
+    // Build campaign summaries
+    this._refreshCampaignState();
 
     // C-334 AC-5: Check for stale session marker (crash recovery)
     try {
@@ -347,21 +469,23 @@ class StartViewModel
       this.debug('initialize:recovery-check-failed', { error: String(error) });
     }
 
-    // Check IndexedDB for existing game saves
-    try {
-      await gameSaveService.fetchAvailableSaves();
-      this.availableSaves = gameSaveService.availableSaves;
-      this.hasSaves = this.availableSaves.length > 0;
-      this.debug('initialize:saves-checked', {
-        count: this.availableSaves.length,
-      });
-    } catch (error) {
-      this.warn('initialize:save-check-failed', error);
-      this.hasSaves = false;
-    }
-
     await super.initialize();
     this._showLoadingView = false;
+  }
+
+  /** Refreshes the campaign summary state from the campaign service. */
+  private _refreshCampaignState(): void {
+    const campaigns = campaignService.campaigns;
+    this.campaignSummaries = campaigns.map(toCampaignSummary);
+
+    // Find the latest resumable campaign (newest first from service)
+    const resumable = campaigns.find(isResumable);
+    this.latestResumableCampaign = resumable ? toCampaignSummary(resumable) : undefined;
+
+    this.debug('_refreshCampaignState', {
+      total: campaigns.length,
+      resumable: this.latestResumableCampaign?.id,
+    });
   }
 
   /** @inheritdoc */
@@ -387,29 +511,9 @@ class StartViewModel
     window.location.reload();
   }
 
-  /**
-   * Returns the credit groups for the credits modal.
-   * Public getter so the View can iterate groups.
-   */
+  /** @inheritdoc */
   get creditGroups(): readonly CreditGroup[] {
     return CREDIT_GROUPS;
-  }
-
-  /**
-   * Returns the number of saved characters in localStorage.
-   * Used to determine the New Game flow: 0→onboarding, 1→/game, 2+→/personas.
-   */
-  private _getCharacterCount(): number {
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (!stored) {
-        return 0;
-      }
-      const characters = JSON.parse(stored) as unknown[];
-      return Array.isArray(characters) ? characters.length : 0;
-    } catch {
-      return 0;
-    }
   }
 
   /** @inheritdoc */
@@ -463,7 +567,7 @@ class StartViewModel
       });
     } catch (error) {
       this.error('acceptRecovery:failed', { error: String(error) });
-      this.errorMessage = 'Failed to recover session. Try starting a new game.';
+      this.errorMessage = 'Failed to recover session. Try starting a new adventure.';
     } finally {
       this.isRecovering = false;
     }
@@ -500,7 +604,7 @@ class StartViewModel
       this.showPackBrowser = true;
     } catch (error) {
       this.error('openPackBrowser:failed', error);
-      this.errorMessage = 'Failed to load content packs. Try starting a new game.';
+      this.errorMessage = 'Failed to load content packs. Try starting a new adventure.';
     }
   }
 
@@ -529,101 +633,26 @@ class StartViewModel
   }
 
   /**
-   * Resolves where a new campaign should send the player, based on the
-   * number of existing characters. C-405: the zero-character branch targets
-   * persona creation (onboarding), never the world-generation wizard.
-   */
-  private _resolveNewCampaignDestination(packId: string): NewCampaignDestination {
-    const characterCount = this._getCharacterCount();
-
-    if (characterCount === 1) {
-      return { kind: 'game', contentPackId: packId };
-    }
-
-    if (characterCount > 1) {
-      return { kind: 'persona_picker', contentPackId: packId };
-    }
-
-    return { kind: 'onboarding', contentPackId: packId };
-  }
-
-  /**
    * Proceeds with campaign creation using the given pack ID.
-   * The resolved NewCampaignDestination is the single routing decision —
-   * character-count branching lives only in _resolveNewCampaignDestination.
-   * C-405: the onboarding branch routes to persona creation, not /setup.
+   * Routes to persona creation (onboarding) for character creation.
    */
   private async _proceedWithPack(packId: string): Promise<void> {
     try {
-      const destination = this._resolveNewCampaignDestination(packId);
-      this.debug('_proceedWithPack:destination', {
-        kind: destination.kind,
-        contentPackId: destination.contentPackId,
+      this.debug('_proceedWithPack', { contentPackId: packId });
+
+      // Reset game state for a fresh start
+      inventoryService.reset();
+      worldStateService.reset();
+      playerStateService.reset();
+      equipmentService.reset();
+      gameModeService.reset();
+
+      await campaignService.startNewCampaign({ contentPackId: packId });
+
+      await routerService.goToRoute('personaCreate', {
+        queryParameters: { onboarding: '1' },
+        pathParameters: undefined,
       });
-
-      switch (destination.kind) {
-        case 'game': {
-          // One character — load it directly into /game with this pack
-          inventoryService.reset();
-          worldStateService.reset();
-          playerStateService.reset();
-          equipmentService.reset();
-          gameModeService.reset();
-
-          try {
-            const stored = localStorage.getItem('aikami-characters');
-            if (stored) {
-              const characters = JSON.parse(stored) as Array<{ persona: { id: string } }>;
-              if (characters.length > 0) {
-                try {
-                  await personaService.setActivePersona(characters[0].persona.id);
-                } catch {
-                  // Non-critical
-                }
-              }
-            }
-          } catch (error) {
-            this.warn('_proceedWithPack:persona-set-failed', error);
-          }
-
-          await campaignService.startNewCampaign({ contentPackId: destination.contentPackId });
-          campaignService.completeSetup();
-          await routerService.goToRoute('game', {
-            queryParameters: undefined,
-            pathParameters: undefined,
-          });
-          return;
-        }
-
-        case 'persona_picker': {
-          // Multiple characters — create campaign, let user choose character
-          await campaignService.startNewCampaign({ contentPackId: destination.contentPackId });
-          await routerService.goToRoute('personas', {
-            queryParameters: undefined,
-            pathParameters: undefined,
-          });
-          return;
-        }
-
-        case 'onboarding': {
-          // Zero characters — go to persona creation (onboarding) with the pack
-          // selected. C-405 AC-1: this must NOT pass through the world-generation
-          // wizard; the onboarding coordinator is the default destination.
-          inventoryService.reset();
-          worldStateService.reset();
-          playerStateService.reset();
-          equipmentService.reset();
-          gameModeService.reset();
-
-          await campaignService.startNewCampaign({ contentPackId: destination.contentPackId });
-
-          await routerService.goToRoute('personaCreate', {
-            queryParameters: { onboarding: '1' },
-            pathParameters: undefined,
-          });
-          return;
-        }
-      }
     } catch (error) {
       if (isAiTextProviderRequiredError(error)) {
         this.warn('_proceedWithPack:no-text-provider', { error: String(error) });
@@ -635,7 +664,7 @@ class StartViewModel
       }
 
       this.error('_proceedWithPack:failed', error);
-      this.errorMessage = 'Failed to start campaign. Try starting a new game.';
+      this.errorMessage = 'Failed to start campaign. Try again.';
     }
   }
 }

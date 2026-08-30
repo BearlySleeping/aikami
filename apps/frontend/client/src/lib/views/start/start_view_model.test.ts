@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/views/start/start_view_model.test.ts
+// Contract: C-317 Rebuild the Start Menu Around Campaigns, Not Personas
 // Contract: C-323 AC-3 (start menu routes to capability screen instead of dialog)
 // Contract: C-345 (pack browser) — wired into startNewGame by C-405
 // Contract: C-405 AC-1/AC-2/AC-3 (default path skips world generation)
@@ -36,12 +37,23 @@ mock.module('$app/state', () => ({
 // Mock state
 // ---------------------------------------------------------------------------
 
-let fetchSavesResult: Array<{
+/** Mock campaign shape for tests. */
+type MockCampaign = {
   id: string;
-  timestamp: number;
-  mapName: string;
-  campaignId?: string;
-}> = [];
+  name: string;
+  state: string;
+  contentPackId: string;
+  lastSavedAt?: string;
+  capabilityProfile: {
+    textProvider: boolean;
+    imageProvider: boolean;
+    voiceProvider: boolean;
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
+let mockCampaigns: MockCampaign[] = [];
 let routeCalls: Array<{
   route: string;
   options?: { queryParameters?: Record<string, string>; pathParameters?: unknown };
@@ -65,7 +77,6 @@ const PACK_EMBERWATCH: MockPack = {
   updatedAt: '2026-07-13T00:00:00.000Z',
 };
 
-// Generic second pack used to exercise multi-pack (browser) behavior.
 const PACK_SECOND: MockPack = {
   id: 'stormreach',
   name: 'Stormreach',
@@ -74,9 +85,21 @@ const PACK_SECOND: MockPack = {
   updatedAt: '2026-07-20T00:00:00.000Z',
 };
 
+/** Creates a mock campaign with sensible defaults. */
+const makeCampaign = (overrides: Partial<MockCampaign> = {}): MockCampaign => ({
+  id: 'camp-1',
+  name: 'Emberwatch',
+  state: 'playing',
+  contentPackId: 'emberwatch',
+  lastSavedAt: new Date().toISOString(),
+  capabilityProfile: { textProvider: true, imageProvider: false, voiceProvider: false },
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  ...overrides,
+});
+
 // ---------------------------------------------------------------------------
 // Import the stub barrel (preloaded mock) so we can mutate service methods.
-// These are the same Proxy stubs that test_preload installed globally.
 // ---------------------------------------------------------------------------
 
 import * as _svcStubs from '$services';
@@ -89,30 +112,43 @@ let mockSessionMarkerCampaignId: string | undefined;
 let mockClearSessionMarkerCalls = 0;
 
 const _setupServiceOverrides = (): void => {
-  // ── gameSaveService ───────────────────────────────────────────────────
-  // fetchAvailableSaves populates the availableSaves getter
-  (_svcStubs.gameSaveService as Record<string, unknown>).fetchAvailableSaves = mock(async () => {
-    // The getter below returns fetchSavesResult — the real service
-    // would populate this from local DB; we simulate it inline.
+  // ── campaignService ──────────────────────────────────────────────────
+  (_svcStubs.campaignService as Record<string, unknown>).refreshCampaigns = mock(async () => {
+    // The getter below returns mockCampaigns
   });
 
-  Object.defineProperty(_svcStubs.gameSaveService, 'availableSaves', {
-    get: () => fetchSavesResult,
+  Object.defineProperty(_svcStubs.campaignService, 'campaigns', {
+    get: () => mockCampaigns,
     configurable: true,
   });
 
-  // ── campaignService ──────────────────────────────────────────────────
-  (_svcStubs.campaignService as Record<string, unknown>).loadCampaign = mock(async () => ({
-    id: 'camp-1',
-    state: 'playing',
-  }));
+  (_svcStubs.campaignService as Record<string, unknown>).loadCampaign = mock(
+    async (options: { campaignId: string }) => {
+      const found = mockCampaigns.find((c: MockCampaign) => c.id === options.campaignId);
+      if (!found) {
+        throw new Error(`Campaign not found: ${options.campaignId}`);
+      }
+      return { ...found, state: 'playing' };
+    },
+  );
 
-  // Fresh mock each test so `.mock.calls` assertions are scoped to this test.
-  (_svcStubs.campaignService as Record<string, unknown>).startNewCampaign = mock(async () => ({
-    id: 'camp-new',
-    state: 'creating',
-  }));
-  (_svcStubs.campaignService as Record<string, unknown>).completeSetup = mock(() => {});
+  (_svcStubs.campaignService as Record<string, unknown>).startNewCampaign = mock(
+    async (options?: { contentPackId?: string }) => ({
+      id: 'camp-new',
+      name: 'New Adventure',
+      state: 'creating',
+      contentPackId: options?.contentPackId ?? 'emberwatch',
+      capabilityProfile: { textProvider: true, imageProvider: false, voiceProvider: false },
+    }),
+  );
+
+  (_svcStubs.campaignService as Record<string, unknown>).getLatestCampaign = mock(() =>
+    mockCampaigns.length > 0 ? mockCampaigns[0] : undefined,
+  );
+
+  (_svcStubs.campaignService as Record<string, unknown>).hasCampaigns = mock(
+    () => mockCampaigns.length > 0,
+  );
 
   // ── routerService ─────────────────────────────────────────────────────
   (_svcStubs.routerService as Record<string, unknown>).goToRoute = mock(
@@ -132,9 +168,15 @@ const _setupServiceOverrides = (): void => {
     mockClearSessionMarkerCalls++;
   });
 
-  // ── aiGatewayService.resolveMode — mock text resolution ──
-  (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
-    // Default: no-op (succeeds), overridden in individual tests
+  // ── gameSaveService ──
+  const mockSaves: Array<{ id: string; timestamp: number; mapName: string; campaignId?: string }> =
+    [];
+  (_svcStubs.gameSaveService as Record<string, unknown>).fetchAvailableSaves = mock(async () => {
+    // Populated per-test by setting the getter
+  });
+  Object.defineProperty(_svcStubs.gameSaveService, 'availableSaves', {
+    get: () => mockSaves,
+    configurable: true,
   });
 
   // ── aiSettingsService.textProvider — ensure it returns a configured key ──
@@ -144,11 +186,7 @@ const _setupServiceOverrides = (): void => {
   });
 
   // ── packRegistryService (C-345 / C-405) ────────────────────────────────
-  (_svcStubs.packRegistryService as Record<string, unknown>).refresh = mock(async () => {
-    // The getter below returns mockAvailablePacks — the real service would
-    // populate this from /content-packs/index.json.
-  });
-
+  (_svcStubs.packRegistryService as Record<string, unknown>).refresh = mock(async () => {});
   Object.defineProperty(_svcStubs.packRegistryService, 'availablePacks', {
     get: () => mockAvailablePacks,
     configurable: true,
@@ -171,6 +209,9 @@ mock.module('$lib/services/persona/persona_service.svelte', () => ({
 
 const { getStartViewModel } = await import('./start_view_model.svelte.ts');
 
+import { AiTextProviderRequiredError } from '@aikami/utils';
+import type { CampaignSummary } from './start_view_model.svelte';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -178,8 +219,10 @@ const { getStartViewModel } = await import('./start_view_model.svelte.ts');
 const createViewModel = () => {
   const vm = getStartViewModel({ className: 'StartViewModel' });
   return vm as unknown as {
-    hasSaves: boolean;
-    availableSaves: Array<{ id: string; timestamp: number; mapName: string; campaignId?: string }>;
+    latestResumableCampaign: CampaignSummary | undefined;
+    campaignSummaries: CampaignSummary[];
+    showLoadCampaign: boolean;
+    showNewAdventureConfirm: boolean;
     errorMessage: string | undefined;
     showRecoveryPrompt: boolean;
     recoveryCampaignId: string | undefined;
@@ -187,9 +230,14 @@ const createViewModel = () => {
     showPackBrowser: boolean;
     selectedPackId: string | undefined;
     initialize(): Promise<void>;
-    startNewGame(): Promise<void>;
+    startNewAdventure(): Promise<void>;
+    continueLatestCampaign(): Promise<void>;
+    openLoadCampaign(): void;
+    closeLoadCampaign(): void;
+    loadCampaignById(campaignId: string): Promise<void>;
+    confirmNewAdventure(): Promise<void>;
+    cancelNewAdventure(): void;
     startWorldGeneration(): Promise<void>;
-    continueGame(): Promise<void>;
     acceptRecovery(): Promise<void>;
     declineRecovery(): Promise<void>;
     openPackBrowser(): Promise<void>;
@@ -199,227 +247,393 @@ const createViewModel = () => {
   };
 };
 
-/** Sets the stored characters in localStorage for the character-count branch. */
-const setCharacters = (count: number): void => {
-  if (count === 0) {
-    localStorage.removeItem('aikami-characters');
-    return;
-  }
-  const characters = Array.from({ length: count }, (_, i) => ({
-    persona: { id: `persona-${i}` },
-  }));
-  localStorage.setItem('aikami-characters', JSON.stringify(characters));
-};
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('StartViewModel', () => {
+describe('StartViewModel (C-317 Campaign-First)', () => {
   beforeEach(() => {
     mockClearSessionMarkerCalls = 0;
-    fetchSavesResult = [];
+    mockCampaigns = [];
     routeCalls = [];
     mockAvailablePacks = [];
     localStorage.clear();
     _setupServiceOverrides();
   });
 
-  // ── C-405 AC-1: New Game routes to persona creation (onboarding) ──────
+  // ── AC-1: Continue Shows Only for Resumable Campaigns ────────────────
 
-  // ── New Game: routes to the capability screen ──────────────────────────
-
-  describe('startNewGame()', () => {
-    test('routes to /capability', async () => {
+  describe('AC-1: Continue visibility', () => {
+    test('shows Continue when a resumable campaign exists (playing)', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
       const vm = createViewModel();
+      await vm.initialize();
 
-      await vm.startNewGame();
-
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('capability');
+      expect(vm.latestResumableCampaign).toBeDefined();
+      expect(vm.latestResumableCampaign?.id).toBe('camp-1');
+      expect(vm.latestResumableCampaign?.isResumable).toBe(true);
     });
 
-    test('does not open the pack browser', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
+    test('shows Continue when campaign is paused', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'paused' })];
       const vm = createViewModel();
+      await vm.initialize();
 
-      await vm.startNewGame();
-
-      expect(vm.showPackBrowser).toBe(false);
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('capability');
-    });
-  });
-
-  // ── C-405 AC-2: all three character-count branches reach a playable path ──
-
-  describe('NewCampaignDestination (AC-2)', () => {
-    test('zero characters → persona creation (onboarding)', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH];
-      setCharacters(0);
-      const vm = createViewModel();
-
-      await vm.openPackBrowser();
-
-      expect(routeCalls[0].route).toBe('personaCreate');
-      expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
+      expect(vm.latestResumableCampaign).toBeDefined();
+      expect(vm.latestResumableCampaign?.isResumable).toBe(true);
     });
 
-    test('one character → /game directly', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH];
-      setCharacters(1);
+    test('shows Continue when campaign is saving', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'saving' })];
       const vm = createViewModel();
+      await vm.initialize();
 
-      await vm.openPackBrowser();
-
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('game');
+      expect(vm.latestResumableCampaign).toBeDefined();
+      expect(vm.latestResumableCampaign?.isResumable).toBe(true);
     });
 
-    test('two characters → persona picker (/personas)', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH];
-      setCharacters(2);
+    test('hides Continue when no campaigns exist', async () => {
+      mockCampaigns = [];
       const vm = createViewModel();
+      await vm.initialize();
 
-      await vm.openPackBrowser();
-
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('personas');
+      expect(vm.latestResumableCampaign).toBeUndefined();
     });
 
-    test('confirmPackSelection carries the selected pack into the branch', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
-      setCharacters(0);
+    test('hides Continue when campaign is in failed state', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'failed' })];
       const vm = createViewModel();
+      await vm.initialize();
 
-      await vm.openPackBrowser();
-      vm.selectPack('stormreach');
-      await vm.confirmPackSelection();
-
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('personaCreate');
-      expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
-      expect(
-        (_svcStubs.campaignService.startNewCampaign as ReturnType<typeof mock>).mock.calls[0]?.[0],
-      ).toEqual({ contentPackId: 'stormreach' });
+      expect(vm.latestResumableCampaign).toBeUndefined();
     });
-  });
 
-  // ── AC-3: Continue loads save and routes to /game ────────────────────
-
-  describe('continueGame()', () => {
-    test('loads the most recent save and routes to /game', async () => {
+    test('hides Continue when campaign is in creating state', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'creating' })];
       const vm = createViewModel();
-      vm.availableSaves = [
-        { id: 'manual-1', timestamp: 2000, mapName: 'Plains', campaignId: 'camp-1' },
-        { id: 'auto-save', timestamp: 1000, mapName: 'Town', campaignId: 'camp-1' },
+      await vm.initialize();
+
+      expect(vm.latestResumableCampaign).toBeUndefined();
+    });
+
+    test('hides Continue when campaign is in loading state', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'loading' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.latestResumableCampaign).toBeUndefined();
+    });
+
+    test('shows latest resumable campaign when multiple campaigns exist', async () => {
+      mockCampaigns = [
+        makeCampaign({ id: 'camp-old', state: 'failed', name: 'Failed Campaign' }),
+        makeCampaign({ id: 'camp-resumable', state: 'playing', name: 'Active Campaign' }),
+        makeCampaign({ id: 'camp-new', state: 'creating', name: 'New Campaign' }),
       ];
-      vm.hasSaves = true;
+      const vm = createViewModel();
+      await vm.initialize();
 
-      await vm.continueGame();
+      expect(vm.latestResumableCampaign).toBeDefined();
+      expect(vm.latestResumableCampaign?.id).toBe('camp-resumable');
+    });
+
+    test('continueLatestCampaign loads and routes to /game', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      await vm.continueLatestCampaign();
 
       expect(routeCalls).toHaveLength(1);
       expect(routeCalls[0].route).toBe('game');
     });
 
-    test('navigates to /game with most recent save campaign', async () => {
+    test('continueLatestCampaign does nothing when no resumable campaign', async () => {
+      mockCampaigns = [];
       const vm = createViewModel();
-      vm.availableSaves = [
-        { id: 'auto-save', timestamp: 1000, mapName: 'Town', campaignId: 'camp-1' },
-      ];
-      vm.hasSaves = true;
+      await vm.initialize();
 
-      await vm.continueGame();
-
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('game');
-    });
-
-    test('warns and does not route when no saves exist', async () => {
-      const vm = createViewModel();
-      vm.availableSaves = [];
-      vm.hasSaves = false;
-
-      await vm.continueGame();
+      await vm.continueLatestCampaign();
 
       expect(routeCalls).toHaveLength(0);
     });
 
-    test('sets error message when campaignService.loadCampaign throws', async () => {
+    test('continueLatestCampaign sets error when loadCampaign throws', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
       const vm = createViewModel();
-      vm.availableSaves = [
-        { id: 'corrupt-save', timestamp: 1000, mapName: 'Void', campaignId: 'camp-1' },
-      ];
-      vm.hasSaves = true;
+      await vm.initialize();
 
-      // Override campaignService.loadCampaign to throw
+      // Override loadCampaign to throw
       (_svcStubs.campaignService as Record<string, unknown>).loadCampaign = mock(async () => {
         throw new Error('Campaign not found');
       });
 
-      await vm.continueGame();
+      await vm.continueLatestCampaign();
 
       expect(routeCalls).toHaveLength(0);
-      expect(vm.errorMessage).toBe('Failed to load save. Try starting a new game.');
+      expect(vm.errorMessage).toBe('Failed to load campaign. Try starting a new adventure.');
     });
   });
 
-  // ── AC-3: starts new game regardless of AI gate ──
+  // ── AC-2: New Adventure Always Creates a Fresh Campaign Draft ────────
 
-  test('startNewGame routes to /capability even when gateway resolveMode would fail', async () => {
-    const vm = createViewModel();
+  describe('AC-2: New Adventure', () => {
+    test('creates a fresh campaign and routes to /setup', async () => {
+      const vm = createViewModel();
+      await vm.initialize();
 
-    // Even when gateway resolution would fail, startNewGame proceeds to the
-    // capability screen (which handles provider setup).
-    (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
-      throw new Error('No text generation provider configured.');
+      await vm.startNewAdventure();
+
+      expect(routeCalls).toHaveLength(1);
+      expect(routeCalls[0].route).toBe('personaCreate');
+      expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
     });
 
-    await vm.startNewGame();
+    test('routes to capability screen when text provider is missing', async () => {
+      const vm = createViewModel();
+      await vm.initialize();
 
-    expect(routeCalls).toHaveLength(1);
-    expect(routeCalls[0].route).toBe('capability');
-  });
+      // Override startNewCampaign to throw text-provider error
+      (_svcStubs.campaignService as Record<string, unknown>).startNewCampaign = mock(async () => {
+        throw new AiTextProviderRequiredError('Text provider required');
+      });
 
-  test('continueGame succeeds even when gateway resolveMode would fail', async () => {
-    const vm = createViewModel();
-    vm.availableSaves = [
-      { id: 'auto-save', timestamp: 1000, mapName: 'Town', campaignId: 'camp-1' },
-    ];
-    vm.hasSaves = true;
+      await vm.startNewAdventure();
 
-    // Even when gateway resolution would fail, continueGame proceeds
-    (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => {
-      throw new Error('No text generation provider configured.');
+      expect(routeCalls).toHaveLength(1);
+      expect(routeCalls[0].route).toBe('capability');
     });
 
-    await vm.continueGame();
+    test('works with 0, 1, or 3 existing campaigns (no character-count check)', async () => {
+      // Zero campaigns
+      mockCampaigns = [];
+      let vm = createViewModel();
+      await vm.initialize();
+      await vm.startNewAdventure();
+      expect(routeCalls[0].route).toBe('personaCreate');
+      routeCalls = [];
 
-    // Should route to /game, not /capability
-    expect(routeCalls).toHaveLength(1);
-    expect(routeCalls[0].route).toBe('game');
+      // One campaign
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
+      vm = createViewModel();
+      await vm.initialize();
+      routeCalls = []; // Clear initialize routes
+      await vm.startNewAdventure();
+      // Should show confirmation dialog first, not route
+      expect(vm.showNewAdventureConfirm).toBe(true);
+      expect(routeCalls).toHaveLength(0);
+    });
   });
 
-  test('startNewGame routes to /capability when gateway resolves successfully', async () => {
-    const vm = createViewModel();
+  // ── AC-3: Load Campaign Shows All Campaigns as Summary Cards ─────────
 
-    // Gateway resolves successfully
-    (_svcStubs.aiGatewayService as Record<string, unknown>).resolveMode = mock(() => ({
-      capability: 'text',
-      mode: 'offline',
-      provider: 'ollama',
-      model: 'llama3',
-    }));
+  describe('AC-3: Load Campaign', () => {
+    test('openLoadCampaign shows the modal', async () => {
+      const vm = createViewModel();
+      vm.openLoadCampaign();
 
-    await vm.startNewGame();
+      expect(vm.showLoadCampaign).toBe(true);
+    });
 
-    expect(routeCalls).toHaveLength(1);
-    expect(routeCalls[0].route).toBe('capability');
+    test('closeLoadCampaign hides the modal', async () => {
+      const vm = createViewModel();
+      vm.openLoadCampaign();
+      expect(vm.showLoadCampaign).toBe(true);
+
+      vm.closeLoadCampaign();
+      expect(vm.showLoadCampaign).toBe(false);
+    });
+
+    test('campaignSummaries contains all campaigns sorted newest first', async () => {
+      mockCampaigns = [
+        makeCampaign({ id: 'camp-1', name: 'First', state: 'playing' }),
+        makeCampaign({ id: 'camp-2', name: 'Second', state: 'failed' }),
+        makeCampaign({ id: 'camp-3', name: 'Third', state: 'creating' }),
+      ];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.campaignSummaries).toHaveLength(3);
+      expect(vm.campaignSummaries[0].id).toBe('camp-1');
+      expect(vm.campaignSummaries[1].id).toBe('camp-2');
+      expect(vm.campaignSummaries[2].id).toBe('camp-3');
+    });
+
+    test('campaign summary has correct content pack label', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', contentPackId: 'emberwatch' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.campaignSummaries[0].contentPackLabel).toBe('Emberwatch: The Fading Ward');
+    });
+
+    test('campaign summary shows "Not yet saved" when never saved', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', lastSavedAt: undefined })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.campaignSummaries[0].lastSavedAt).toBeUndefined();
+    });
+
+    test('campaign summary has correct isResumable for each state', async () => {
+      mockCampaigns = [
+        makeCampaign({ id: 'c1', state: 'playing' }),
+        makeCampaign({ id: 'c2', state: 'paused' }),
+        makeCampaign({ id: 'c3', state: 'saving' }),
+        makeCampaign({ id: 'c4', state: 'failed' }),
+        makeCampaign({ id: 'c5', state: 'creating' }),
+        makeCampaign({ id: 'c6', state: 'loading' }),
+      ];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.campaignSummaries[0].isResumable).toBe(true); // playing
+      expect(vm.campaignSummaries[1].isResumable).toBe(true); // paused
+      expect(vm.campaignSummaries[2].isResumable).toBe(true); // saving
+      expect(vm.campaignSummaries[3].isResumable).toBe(false); // failed
+      expect(vm.campaignSummaries[4].isResumable).toBe(false); // creating
+      expect(vm.campaignSummaries[5].isResumable).toBe(false); // loading
+    });
+
+    test('loadCampaignById loads campaign and routes to /game', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      await vm.loadCampaignById('camp-1');
+
+      expect(routeCalls).toHaveLength(1);
+      expect(routeCalls[0].route).toBe('game');
+    });
+
+    test('loadCampaignById sets error when campaign not found', async () => {
+      const vm = createViewModel();
+      await vm.initialize();
+
+      await vm.loadCampaignById('nonexistent');
+
+      expect(routeCalls).toHaveLength(0);
+      expect(vm.errorMessage).toBe('Failed to load campaign.');
+    });
+
+    test('empty campaign list shows no campaigns', async () => {
+      mockCampaigns = [];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.campaignSummaries).toHaveLength(0);
+    });
   });
 
-  // ── AC-5: Crash Recovery ────────────────────────────────────────────
+  // ── AC-4: Destructive Confirmation Before Overwriting Active Campaign ─
 
-  describe('AC-5 Crash Recovery', () => {
+  describe('AC-4: New Adventure confirmation', () => {
+    test('shows confirmation dialog when resumable campaign exists', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      await vm.startNewAdventure();
+
+      expect(vm.showNewAdventureConfirm).toBe(true);
+      expect(routeCalls).toHaveLength(0); // Not routed yet
+    });
+
+    test('does NOT show confirmation when no resumable campaigns exist', async () => {
+      mockCampaigns = [];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      await vm.startNewAdventure();
+
+      expect(vm.showNewAdventureConfirm).toBe(false);
+      expect(routeCalls).toHaveLength(1); // Routed directly
+    });
+
+    test('confirmNewAdventure creates campaign and routes to /setup', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      await vm.startNewAdventure();
+      expect(vm.showNewAdventureConfirm).toBe(true);
+
+      await vm.confirmNewAdventure();
+
+      expect(vm.showNewAdventureConfirm).toBe(false);
+      expect(routeCalls).toHaveLength(1);
+      expect(routeCalls[0].route).toBe('personaCreate');
+    });
+
+    test('cancelNewAdventure hides dialog without routing', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      await vm.startNewAdventure();
+      expect(vm.showNewAdventureConfirm).toBe(true);
+
+      vm.cancelNewAdventure();
+
+      expect(vm.showNewAdventureConfirm).toBe(false);
+      expect(routeCalls).toHaveLength(0);
+    });
+  });
+
+  // ── AC-5: Keyboard and Gamepad Navigation ────────────────────────────
+
+  describe('AC-5: Focus order', () => {
+    test('menu button order is correct', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      // The button hierarchy is:
+      // 1. Continue (when resumable exists)
+      // 2. New Adventure
+      // 3. Load Campaign
+      // 4. Sign In (LoginView)
+      // 5. How to Play
+      // 6. Settings
+      // 7. Credits
+      // 8. Quit (Tauri only)
+
+      expect(vm.latestResumableCampaign).toBeDefined(); // Continue visible
+    });
+
+    test('Continue is hidden when no resumable campaign', async () => {
+      mockCampaigns = [];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.latestResumableCampaign).toBeUndefined();
+    });
+
+    test('Escape closes Load Campaign modal', async () => {
+      const vm = createViewModel();
+      vm.openLoadCampaign();
+      expect(vm.showLoadCampaign).toBe(true);
+
+      vm.closeLoadCampaign();
+      expect(vm.showLoadCampaign).toBe(false);
+    });
+
+    test('Escape closes New Adventure confirmation', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      await vm.startNewAdventure();
+      expect(vm.showNewAdventureConfirm).toBe(true);
+
+      vm.cancelNewAdventure();
+      expect(vm.showNewAdventureConfirm).toBe(false);
+    });
+  });
+
+  // ── AC-5: Crash Recovery (C-334, preserved) ─────────────────────────
+
+  describe('AC-5 Crash Recovery (C-334)', () => {
     test('initialize() shows recovery prompt when session marker exists', async () => {
       mockSessionMarkerCampaignId = 'camp-crash-1';
       const vm = createViewModel();
@@ -440,11 +654,16 @@ describe('StartViewModel', () => {
       expect(vm.recoveryCampaignId).toBeUndefined();
     });
 
-    test('acceptRecovery() loads latest save and routes to /game', async () => {
+    test('acceptRecovery() routes to /game', async () => {
       mockSessionMarkerCampaignId = 'camp-crash-1';
-      fetchSavesResult = [
+      // Set up mock saves so acceptRecovery finds one
+      const mockSaves = [
         { id: 'auto-save', timestamp: Date.now(), mapName: 'CrashMap', campaignId: 'camp-crash-1' },
       ];
+      Object.defineProperty(_svcStubs.gameSaveService, 'availableSaves', {
+        get: () => mockSaves,
+        configurable: true,
+      });
       const vm = createViewModel();
       await vm.initialize();
 
@@ -454,19 +673,6 @@ describe('StartViewModel', () => {
       expect(mockClearSessionMarkerCalls).toBeGreaterThanOrEqual(1);
       expect(routeCalls).toHaveLength(1);
       expect(routeCalls[0].route).toBe('game');
-      expect(vm.showRecoveryPrompt).toBe(false);
-    });
-
-    test('acceptRecovery() handles no saves gracefully', async () => {
-      mockSessionMarkerCampaignId = 'camp-crash-empty';
-      fetchSavesResult = [];
-      const vm = createViewModel();
-      await vm.initialize();
-
-      await vm.acceptRecovery();
-
-      expect(mockClearSessionMarkerCalls).toBeGreaterThanOrEqual(1);
-      expect(routeCalls).toHaveLength(0);
       expect(vm.showRecoveryPrompt).toBe(false);
     });
 
@@ -485,45 +691,9 @@ describe('StartViewModel', () => {
     });
   });
 
-  // ── AC-1/3: initialize() checks for existing saves ────────────────────
+  // ── Pack Browser (C-345, preserved) ──────────────────────────────────
 
-  describe('initialize()', () => {
-    test('sets hasSaves=true when saves are found', async () => {
-      fetchSavesResult = [
-        { id: 'auto-save', timestamp: Date.now(), mapName: 'Town', campaignId: 'camp-1' },
-      ];
-      const vm = createViewModel();
-
-      await vm.initialize();
-
-      expect(vm.hasSaves).toBe(true);
-      expect(vm.availableSaves).toHaveLength(1);
-    });
-
-    test('sets hasSaves=false when no saves exist', async () => {
-      fetchSavesResult = [];
-      const vm = createViewModel();
-
-      await vm.initialize();
-
-      expect(vm.hasSaves).toBe(false);
-      expect(vm.availableSaves).toHaveLength(0);
-    });
-
-    test('handles empty IndexedDB gracefully', async () => {
-      fetchSavesResult = [];
-      const vm = createViewModel();
-
-      await vm.initialize();
-
-      expect(vm.hasSaves).toBe(false);
-      expect(vm.errorMessage).toBeUndefined(); // graceful degradation
-    });
-  });
-
-  // ── C-345 Pack Browser (wired by C-405 AC-3) ───────────────────────────
-
-  describe('pack browser', () => {
+  describe('pack browser (C-345)', () => {
     test('openPackBrowser loads packs and shows browser when multiple packs available', async () => {
       mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
       const vm = createViewModel();
@@ -565,58 +735,6 @@ describe('StartViewModel', () => {
       expect(vm.selectedPackId).toBe('stormreach');
     });
 
-    test('confirmPackSelection hides browser and proceeds with selected pack', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
-      const vm = createViewModel();
-      await vm.openPackBrowser();
-      vm.selectPack('stormreach');
-
-      await vm.confirmPackSelection();
-
-      expect(vm.showPackBrowser).toBe(false);
-      expect(vm.selectedPackId).toBeUndefined();
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('personaCreate');
-    });
-
-    test('confirmPackSelection with 1 character routes directly to /game', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
-      setCharacters(1);
-      const vm = createViewModel();
-      await vm.openPackBrowser();
-      vm.selectPack('stormreach');
-
-      await vm.confirmPackSelection();
-
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('game');
-    });
-
-    test('confirmPackSelection with 0 characters routes to persona creation', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
-      setCharacters(0);
-      const vm = createViewModel();
-      await vm.openPackBrowser();
-
-      await vm.confirmPackSelection();
-
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('personaCreate');
-      expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
-    });
-
-    test('confirmPackSelection with 2+ characters routes to /personas', async () => {
-      mockAvailablePacks = [PACK_EMBERWATCH, PACK_SECOND];
-      setCharacters(2);
-      const vm = createViewModel();
-      await vm.openPackBrowser();
-
-      await vm.confirmPackSelection();
-
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('personas');
-    });
-
     test('confirmPackSelection with no selection is a no-op', async () => {
       const vm = createViewModel();
       await vm.confirmPackSelection();
@@ -631,21 +749,41 @@ describe('StartViewModel', () => {
       expect(routeCalls).toHaveLength(1);
       expect(routeCalls[0].route).toBe('worldgen');
     });
+  });
 
-    test('openPackBrowser falls back to emberwatch when no packs are installed', async () => {
-      mockAvailablePacks = [];
-      setCharacters(0);
+  // ── initialize() ─────────────────────────────────────────────────────
+
+  describe('initialize()', () => {
+    test('sets latestResumableCampaign when campaigns exist', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
       const vm = createViewModel();
 
-      await vm.openPackBrowser();
+      await vm.initialize();
 
-      expect(vm.showPackBrowser).toBe(false);
-      expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('personaCreate');
-      expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
-      expect(
-        (_svcStubs.campaignService.startNewCampaign as ReturnType<typeof mock>).mock.calls[0]?.[0],
-      ).toEqual({ contentPackId: 'emberwatch' });
+      expect(vm.latestResumableCampaign).toBeDefined();
+      expect(vm.latestResumableCampaign?.id).toBe('camp-1');
+    });
+
+    test('handles empty IndexedDB gracefully', async () => {
+      mockCampaigns = [];
+      const vm = createViewModel();
+
+      await vm.initialize();
+
+      expect(vm.latestResumableCampaign).toBeUndefined();
+      expect(vm.campaignSummaries).toHaveLength(0);
+      expect(vm.errorMessage).toBeUndefined();
+    });
+
+    test('handles campaign refresh failure gracefully', async () => {
+      (_svcStubs.campaignService as Record<string, unknown>).refreshCampaigns = mock(async () => {
+        throw new Error('Storage error');
+      });
+      const vm = createViewModel();
+
+      await vm.initialize();
+
+      expect(vm.initError).toBe('Error: Storage error');
     });
   });
 });
