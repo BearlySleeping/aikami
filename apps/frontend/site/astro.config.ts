@@ -186,6 +186,12 @@ export default defineConfig({
         '@aikami/frontend-theme/': fileURLToPath(
           new URL('../../../packages/frontend/theme/src/lib/', import.meta.url),
         ),
+        '@aikami/frontend/theme': fileURLToPath(
+          new URL('../../../packages/frontend/theme/src/lib', import.meta.url),
+        ),
+        '@aikami/frontend/theme/*': fileURLToPath(
+          new URL('../../../packages/frontend/theme/src/lib/*', import.meta.url),
+        ),
       },
     },
   },
