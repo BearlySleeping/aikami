@@ -2,7 +2,7 @@
 id: C-381
 title: "Content Pipeline Hardening — Provenance, Trust, Versioning, Validation, Boot"
 source: "external architecture review (claude CLI) — docs/research/game_engine_architecture_review.md §4 Q6-Q8, §5; generated/community content design discussion"
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-11"
 | **Target** | `packages/shared/schemas/src/lib/game/content_pack.ts` — provenance + trust constraints; `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` — boot parallelization; `services/assets/` + `packages/frontend/storage/` — lazy registry seeding; `scripts/src/lib/ops/` — manifest slimming; new pack validation service |
 | **Priority** | P1 — none of this blocks Emberwatch polish, but every item is **cheap now and impossible-to-retrofit later**. Per-asset licensing in particular cannot be added after community packs exist without deleting them. |
 | **Dependencies** | None hard. Runs in parallel with C-377→C-380. Touches `content_pack.ts` which C-378 also touches — sequence the schema edits or expect a merge conflict. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` — `/game` boot path + hub upload gate |
 | **Docs Impact** | user-facing → content-pack authoring + licensing page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
@@ -42,7 +42,10 @@ Verified against HEAD (`4ea2ccf5`).
 ```
 
 There is **no `license`, `author`, or `source` field on any individual asset** —
-grep `content_pack.ts` for `license` returns nothing. The bundled LPC set is
+grep `content_pack.ts` for `license` returns nothing. (Separate sidecar files
+`content/packs/asset_credits.json` and `static/game-data/lpc_credits.json` do
+carry per-asset credits, but they are not part of the manifest schema and are
+not enforced at load time.) The bundled LPC set is
 12,699 files under CC-BY-SA / GPL, which require attribution and are
 share-alike. The moment community packs mix LPC-derived art with
 AI-generated art, per-asset provenance becomes a legal requirement and an
@@ -76,7 +79,7 @@ capability exists and is simply not enforced.
 `{ packId, mapId, playerX, playerY, spawnId? }`. Nothing records the pack
 *version*, and `content-packs/index.json` carries a `version` per pack that is
 already inconsistent with the manifests — the index says emberwatch `2.1.0`
-while `emberwatch/manifest.json` says `3.1.0`.
+while `emberwatch/manifest.json` says `3.2.0`.
 
 A community pack that renames a map or moves a spawn point silently breaks every
 save that referenced it. There is no migration path because there is nothing to
@@ -114,7 +117,7 @@ character's six LPC layers.**
 
 ### 🔴 F. The boot pipeline serializes independent work
 
-`game_boot_service.svelte.ts` runs 7 stages, each fully awaited, 30s timeout
+`game_boot_service.svelte.ts` runs 9 stages, each fully awaited, 30s timeout
 each (`STAGE_TIMEOUT_MS`). `_stageInitializeAssetRegistry` (`:613-746`) is
 explicitly **non-fatal** — it catches everything and degrades to online mode
 (`:742-745`) — yet it blocks the five stages after it while it:
@@ -181,6 +184,7 @@ reproduced from a bug report.
 | Save envelope | `services/game/game_save_service.svelte.ts`, `save_map_block.ts` | modify — pin pack version + world seed |
 | Pack registry | `services/campaign/pack_registry_service.svelte.ts` | reuse — the validator's natural home for uploads |
 | Canvas boot call | `views/game/canvas/game_canvas_view_model.svelte.ts:135` | modify — read the campaign's pack |
+| Per-asset credits (sidecar) | `content/packs/asset_credits.json`, `static/game-data/lpc_credits.json` | replace — provenance moves into the manifest schema; sidecar files become derivable |
 
 ## Overview
 
@@ -216,7 +220,7 @@ pipeline stops serializing work that has no dependency on the map appearing.
 /** Provenance carried by every asset a pack declares. */
 const AssetProvenanceSchema = Type.Object({
   /** SPDX identifier, or 'proprietary'. Free text is not acceptable here. */
-  license: Type.String(),
+  license: Type.String({ pattern: '^(MIT|Apache-2\\.0|GPL-2\\.0|GPL-3\\.0|CC-BY-4\\.0|CC-BY-SA-4\\.0|CC-BY-SA-3\\.0|OGA-BY-3\\.0|proprietary)$' }),
   /** Attribution name(s) required by the licence. */
   author: Type.Array(Type.String(), { minItems: 1 }),
   /** Where it came from: an upstream URL, 'generated:<provider>', or 'original'. */
@@ -377,7 +381,7 @@ splitting them would leave two representations of the asset catalog live at once
 - E2E / Visual: N/A
 
 **Watch Points**:
-- `content-packs/index.json` says emberwatch `2.1.0` while `emberwatch/manifest.json` says `3.1.0`. Reconcile and pick one source of truth before pinning to it, or pinning records a number nobody maintains.
+- `content-packs/index.json` says emberwatch `2.1.0` while `emberwatch/manifest.json` says `3.2.0`. Reconcile and pick one source of truth before pinning to it, or pinning records a number nobody maintains.
 - A missing map after an update is recoverable (fall back to the pack's starting map with a warning). A missing *pack* is not — define both.
 
 ### AC-4: v3 saves load, and v4 saves are readable by a reverted v3 reader
@@ -515,6 +519,7 @@ splitting them would leave two representations of the asset catalog live at once
 **Watch Points**:
 - `game_composition_root.svelte.ts:252` already resolves the pack correctly; only the canvas VM's literal is wrong. Verify there is no third place that hardcodes it.
 - This is the regression canary for pack-independence across the whole C-377→C-381 sequence. Keep the test cheap so it stays enabled.
+- `whispering-caves` exists in the build output (`apps/backend/local-stack/.build/client/content-packs/whispering-caves/`) but NOT in the source `content/packs/` directory. The implementer must either add it to the source directory or ensure the build pipeline generates it.
 
 ## Implementation Sequence
 
@@ -541,7 +546,7 @@ splitting them would leave two representations of the asset catalog live at once
 
 Must be resolved before status becomes `approved`:
 
-- Which is the source of truth for pack version — `content-packs/index.json` or the pack's own `manifest.json`? They currently disagree (2.1.0 vs 3.1.0). Recommendation: the manifest, with the index generated from it.
+- Which is the source of truth for pack version — `content-packs/index.json` or the pack's own `manifest.json`? They currently disagree (2.1.0 vs 3.2.0). Recommendation: the manifest, with the index generated from it.
 - Should `worldSeed` be per-campaign or per-map? Recommendation: per-campaign, with per-map seeds derived from it, so one recorded value reproduces everything.
 - Does the attribution screen ship in this contract or follow it? Recommendation: ship it — provenance without a surface that displays it does not satisfy the licence.
 - Should named map regions (for the AI Game Master) be pulled into C-378's format work now, given it is the only other contract touching the map format? Recommendation: yes, if C-378 has not merged — it is a format addition and cheap there, expensive later.
