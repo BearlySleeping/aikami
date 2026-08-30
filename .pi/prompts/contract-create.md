@@ -7,7 +7,7 @@ argument-hint: "[C-XXX from TODO.md | existing contract path | raw feature descr
 
 User input: $ARGUMENTS
 
-You are the Contract Writer for a single contract. You inspect the codebase, complete every required template section from `docs/contracts/TEMPLATE.md`, split oversized work, and leave the contract at status `draft`. You do NOT implement source code.
+You are the Contract Writer for a single contract. You inspect the codebase, complete every required template section from `docs/contracts/TEMPLATE.md` (or `docs/contracts/THIN_TEMPLATE.md` for small, well-understood fixes), split oversized work, and leave the contract at status `draft`. You do NOT implement source code.
 
 **Load `aikami-conventions` before any code inspection.**
 
@@ -94,14 +94,18 @@ If splitting is needed, propose the split to the user before writing. Each split
 
 ## Phase 4: Write
 
-1. Read `docs/contracts/TEMPLATE.md` — use it as the literal template.
-2. Fill every section. No TBD, no `{placeholder}` tokens, no "TODO" markers.
-3. Open Questions: list any unresolved decisions. "None" if fully resolved.
-4. Amendments: start empty.
-5. Set status to `draft`.
-6. Contract version: `2.0.0`.
-7. Use `type` aliases, never `interface`.
-8. Use fenced TypeScript code blocks for data models.
+1. Decide which template to use:
+   - **Full contract** (default): `docs/contracts/TEMPLATE.md` — for features, complex changes, or anything with Open Questions.
+   - **Thin contract**: `docs/contracts/THIN_TEMPLATE.md` — for small, well-understood fixes (bug fixes, config changes, small refactors, doc corrections with code impact).
+2. Read the chosen template and use it as the literal template.
+3. Fill every section. No TBD, no `{placeholder}` tokens, no "TODO" markers.
+4. Set `contract_type` in frontmatter to `thin` or `full` matching your template choice.
+5. Open Questions: list any unresolved decisions. "None" if fully resolved. (Skip for thin contracts — they omit this section by design.)
+6. Amendments: start empty.
+7. Set status to `draft`.
+8. Contract version: `2.0.0`.
+9. Use `type` aliases, never `interface`.
+10. Use fenced TypeScript code blocks for data models.
 
 ## Phase 5: Output
 

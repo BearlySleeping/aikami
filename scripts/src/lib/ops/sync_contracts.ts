@@ -116,7 +116,13 @@ const readContractsFromDir = (
 ): { contracts: ContractInfo[]; duplicateIds: string[] } => {
   let files: string[];
   try {
-    files = readdirSync(dir).filter((f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md'));
+    files = readdirSync(dir).filter(
+      (f) =>
+        /^(C|MIG)-\d+/.test(f) &&
+        f.endsWith('.md') &&
+        f !== 'TEMPLATE.md' &&
+        f !== 'THIN_TEMPLATE.md',
+    );
   } catch {
     return { contracts: [], duplicateIds: [] };
   }
@@ -199,6 +205,7 @@ export const syncContracts = () => {
           promotion: undefined,
           fileName: '(no contract file)',
           archived: false,
+          contractType: 'full',
         });
         missingFromContracts++;
       }
@@ -227,8 +234,8 @@ export const syncContracts = () => {
       '',
       '### Active Contracts',
       '',
-      '| Contract | Name | Status | Promotion | Version |',
-      '|----------|------|--------|-----------|---------|',
+      '| Contract | Name | Status | Promotion | Version | Type |',
+      '|----------|------|--------|-----------|---------|------|',
     ];
 
     for (const c of activeContracts) {
@@ -244,8 +251,9 @@ export const syncContracts = () => {
       } else {
         verLabel = 'v1';
       }
+      const typeLabel = c.contractType === 'thin' ? 'thin' : 'full';
       lines.push(
-        `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${promotionLabel} | ${verLabel} |`,
+        `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${promotionLabel} | ${verLabel} | ${typeLabel} |`,
       );
     }
 
@@ -260,15 +268,16 @@ export const syncContracts = () => {
       );
       lines.push('> See `docs/contracts/archived/README.md` for details.');
       lines.push('');
-      lines.push('| Contract | Name | Status | Version |');
-      lines.push('|----------|------|--------|---------|');
+      lines.push('| Contract | Name | Status | Version | Type |');
+      lines.push('|----------|------|--------|---------|------|');
 
       // Show first 20 archived, then count remaining
       const shownArchived = archivedContracts.slice(0, 20);
       for (const c of shownArchived) {
         const label = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
         const verLabel = c.version === 2 ? 'v2' : 'v1';
-        lines.push(`| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${verLabel} |`);
+        const typeLabel = c.contractType === 'thin' ? 'thin' : 'full';
+        lines.push(`| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${verLabel} | ${typeLabel} |`);
       }
 
       if (archivedContracts.length > 20) {
@@ -277,7 +286,7 @@ export const syncContracts = () => {
           .slice(20)
           .map((c) => c.id.toUpperCase())
           .join(', ');
-        lines.push(`| ... | _${remaining} more archived_ | | |`);
+        lines.push(`| ... | _${remaining} more archived_ | | | |`);
         lines.push('');
         lines.push(`<details><summary>All ${archivedContracts.length} archived IDs</summary>`);
         lines.push('');
@@ -326,13 +335,14 @@ export const syncContracts = () => {
       if (sectionContracts.length === 0) {
         promotionLines.push('_None_');
       } else {
-        promotionLines.push('| Contract | Name | Status | Version |');
-        promotionLines.push('|----------|------|--------|---------|');
+        promotionLines.push('| Contract | Name | Status | Version | Type |');
+        promotionLines.push('|----------|------|--------|---------|------|');
         for (const c of sectionContracts) {
           const statusLabel = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
           const verLabel = c.version === 2 ? 'v2' : 'v1';
+          const typeLabel = c.contractType === 'thin' ? 'thin' : 'full';
           promotionLines.push(
-            `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${verLabel} |`,
+            `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${verLabel} | ${typeLabel} |`,
           );
         }
       }

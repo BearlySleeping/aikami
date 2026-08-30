@@ -101,7 +101,7 @@ Then:
 
 ## Phase 5: Test Verification
 
-1. Run the specific tests declared in the contract's Evidence Matrix:
+1. Run the specific tests declared in the contract's Evidence Matrix (or Verification lines for thin contracts):
    ```bash
    bun moon run <project>:test -- -- --testPathPattern="<test file>"
    ```
