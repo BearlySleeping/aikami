@@ -21,7 +21,7 @@ created_at: "2026-08-13"
 | **Target** | `apps/backend/local-stack/docker/voice/`, `compose.yaml` (healthcheck + profile wiring), `.env.example` (STT-off default), `bin/run-native-stt.sh`, `stack/models.manifest.json`, `packages/shared/{schemas,types}/` |
 | **Priority** | P2 — no consumer exists until C-359 (Speech Input and Hands-Free Play). Land it before that work starts, not before. |
 | **Dependencies** | C-390 (compose topology, `stt` profile, port constant, model manifest and fetcher). C-389 reserves `voice.stt.url` in the runtime client config. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing → the voice section of "Run Aikami locally"; internal → the STT API contract that C-359 codes against |
 | **Contract version** | 2.0.0 |
