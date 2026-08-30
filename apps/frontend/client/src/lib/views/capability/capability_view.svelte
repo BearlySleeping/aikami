@@ -2,6 +2,7 @@
 // apps/frontend/client/src/lib/views/capability/capability_view.svelte
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import ConnectionEditorPanel from '$views/settings/connection/connection_editor_panel.svelte';
+import VoiceModelDownload from '@aikami/frontend/components/voice-model-download/voice_model_download.svelte';
 import type { CapabilityViewModelInterface, ConnectionEntry } from './capability_view_model.svelte';
 
 type Props = {
@@ -129,6 +130,16 @@ const { viewModel }: Props = $props();
             </button>
           {/if}
         </div>
+
+        <!-- Voice local download section (C-449 AC-2) -->
+        <VoiceModelDownload
+          show={viewModel.showVoiceLocalDownload}
+          state={viewModel.voiceModelState}
+          progress={viewModel.voiceModelProgress}
+          sizeLabel={viewModel.voiceModelSizeLabel}
+          ondownload={() => viewModel.downloadVoiceModel()}
+          oncancel={() => viewModel.cancelVoiceModelDownload()}
+        />
 
         <!-- Start Campaign — disabled without a text provider -->
         <button

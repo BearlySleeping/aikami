@@ -117,10 +117,15 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
 
   /**
    * Signs in a user with a social provider.
-   * @param provider The social provider to use.
+   * @param options - The sign-in options.
+   * @param options.provider - The social provider to use.
+   * @param options.callbackURL - Optional URL to redirect to after sign-in (defaults to /).
    * @returns A promise that resolves with the social sign-in response.
    */
-  socialSignIn(provider: SignInProviderName): Promise<SocialSignInResponse>;
+  socialSignIn(options: {
+    provider: SignInProviderName;
+    callbackURL?: string;
+  }): Promise<SocialSignInResponse>;
 
   /**
    * Registers a new user.
@@ -233,13 +238,26 @@ export class AuthService
     return false;
   }
 
-  async socialSignIn(provider: SignInProviderName): Promise<SocialSignInResponse> {
+  /**
+   * @inheritdoc
+   * @param options - The sign-in options.
+   * @param options.provider - The social provider to use.
+   * @param options.callbackURL - Optional URL to redirect to after sign-in (defaults to /).
+   */
+  async socialSignIn(options: {
+    provider: SignInProviderName;
+    callbackURL?: string;
+  }): Promise<SocialSignInResponse> {
+    const { provider, callbackURL } = options;
     // Browser uses a full-page redirect to the hub's Google OAuth; Tauri (no
     // OAuth popup) uses the device-authorization flow with the same polling
     // UX as before.
     if (!isTauri()) {
       try {
-        await socialSignInRedirect(provider as import('@aikami/types').SignInSocialProvider);
+        await socialSignInRedirect({
+          provider: provider as import('@aikami/types').SignInSocialProvider,
+          callbackURL,
+        });
       } catch (error) {
         this.error('socialSignIn:redirect', error);
         return {

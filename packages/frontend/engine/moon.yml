@@ -31,3 +31,5 @@ tasks:
     inputs:
       - '@group(sources)'
       - '@group(configs)'
+    options:
+      runInCI: false

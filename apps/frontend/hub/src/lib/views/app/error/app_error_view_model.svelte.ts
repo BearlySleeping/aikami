@@ -97,10 +97,12 @@ class AppErrorViewModel
     const { error, status, url } = page;
 
     if (status === 404) {
-      void this.logEvent('invalidUrl', { url: url.href });
+      this.warn('app-error:invalid-url', { url: url.href });
     } else {
-      void this.logEvent('unknownError', { code: status, message: error?.message });
+      this.error('app-error:unknown', { code: status, message: error?.message });
     }
+
+    return await super.initialize();
   }
 
   async handleRetry(): Promise<void> {

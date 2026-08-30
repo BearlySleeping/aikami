@@ -21,8 +21,9 @@ import {
   routerService,
   runtimeConfigService,
   VOICE_PROVIDERS,
+  voiceModelService,
 } from '$services';
-import type { Connection, ConnectionCapability } from '$types';
+import type { Connection, ConnectionCapability, VoiceModelState } from '$types';
 import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$types';
 import type { ConnectionManagerViewModelInterface } from '$views/settings/connection/connection_manager_view_model.svelte';
 import { getConnectionManagerViewModel } from '$views/settings/connection/connection_manager_view_model.svelte';
@@ -74,6 +75,20 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   openCloudSetup(): void;
   /** Closes the guided cloud connection modal. */
   closeCloudSetup(): void;
+  /** Whether to show the local voice model download section in the Voice tab. */
+  readonly showVoiceLocalDownload: boolean;
+  /** Voice model download state (mirrored from voiceModelService). */
+  readonly voiceModelState: VoiceModelState;
+  /** Voice model download progress (0–100). */
+  readonly voiceModelProgress: number;
+  /** Voice model size label. */
+  readonly voiceModelSizeLabel: string;
+
+  /** Starts (or joins) the explicit voice model download. */
+  downloadVoiceModel(): Promise<void>;
+  /** Cancels an in-flight voice model download. */
+  cancelVoiceModelDownload(): void;
+
   /** Starts the campaign and navigates to /setup. */
   startCampaign(): Promise<void>;
 };
@@ -290,6 +305,57 @@ class CapabilityViewModel
   closeCloudSetup(): void {
     this.cloudConnectionVm.cancelEdit();
     this.showCloudSetup = false;
+  }
+
+  // ── Voice model download (C-449 AC-2) ────────────────────────────────
+
+  /** Show local download section in Voice tab when no cloud voice provider is configured. */
+  get showVoiceLocalDownload(): boolean {
+    return this.activeTab === 'voice' && !this.hasVoiceProvider;
+  }
+
+  get voiceModelState(): VoiceModelState {
+    return voiceModelService.state;
+  }
+
+  get voiceModelProgress(): number {
+    const state = voiceModelService.state;
+    if (state.status === 'downloading') {
+      return Math.round((state.receivedBytes / Math.max(1, state.totalBytes)) * 100);
+    }
+    if (state.status === 'verifying') {
+      return 100;
+    }
+    return 0;
+  }
+
+  get voiceModelSizeLabel(): string {
+    const bytes = voiceModelService.totalBytes;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async downloadVoiceModel(): Promise<void> {
+    if (!navigator.onLine) {
+      this.errorMessage =
+        'Cannot download: you appear to be offline. Please check your connection and try again.';
+      return;
+    }
+    try {
+      const state = await voiceModelService.download();
+      if (state.status === 'ready') {
+        this.errorMessage = '';
+      } else {
+        this.errorMessage = state.message ?? 'Download failed';
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.errorMessage = `Download failed: ${message}`;
+      this.warn('downloadVoiceModel:failed', error);
+    }
+  }
+
+  cancelVoiceModelDownload(): void {
+    voiceModelService.cancel();
   }
 
   private _handleEditorClosed(): void {

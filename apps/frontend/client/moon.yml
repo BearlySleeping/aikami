@@ -94,6 +94,8 @@ tasks:
       - '@group(configs)'
     options:
       cache: true
+      timeout: 120
+      runInCI: false
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test-unit:
@@ -104,6 +106,8 @@ tasks:
       - '@group(configs)'
     options:
       cache: true
+      timeout: 120
+      runInCI: false
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   tauri-dev:

@@ -34,7 +34,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2 # zizmor: ignore[unpinned-uses] to be pinned to SHA by Renovate (C-440 AC-4)
         with:
-          bun-version: "1.3.13"
+          bun-version-file: .bun-version
 
       - name: Announce PR activity
         if: github.event_name == 'pull_request'

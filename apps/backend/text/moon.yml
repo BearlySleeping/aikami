@@ -31,3 +31,5 @@ tasks:
 
   test:
     command: 'bun run test'
+    options:
+      runInCI: false

@@ -100,9 +100,13 @@ const handleRangeRequest = async (request) => {
   }
 
   const start = Number.parseInt(match[1], 10);
-  const end = match[2] ? Number.parseInt(match[2], 10) : arrayBuffer.byteLength - 1;
+  let end = match[2] ? Number.parseInt(match[2], 10) : arrayBuffer.byteLength - 1;
+  // Clamp end to the buffer bounds and reject when start exceeds the clamped end
+  if (end >= arrayBuffer.byteLength) {
+    end = arrayBuffer.byteLength - 1;
+  }
 
-  if (start >= arrayBuffer.byteLength) {
+  if (start >= arrayBuffer.byteLength || start > end) {
     return new Response('Range Not Satisfiable', {
       status: 416,
       headers: { 'Content-Range': `bytes */${arrayBuffer.byteLength}` },

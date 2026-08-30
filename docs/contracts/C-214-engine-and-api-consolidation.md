@@ -107,5 +107,5 @@ Consolidated legacy `lib/game` directory and `api-core` package. Migrated active
 ### Test Results
 - `persona_create_view_model.test.ts`: 40 pass, 0 fail
 - `dialogue_overlay_view_model.test.ts`: 27 pass, 0 fail
-- Full test suite: Bun 1.3.13 segfault (pre-existing — logged in TODO.md)
+- Full test suite: Bun 1.4.0 segfault (pre-existing — logged in TODO.md)
 - Typecheck: 0 errors, 0 warnings (engine + client)

@@ -7,7 +7,7 @@ bun:
   # not guaranteed to find `.bun-version` from moon's toolchain resolution,
   # and a silent version drift between local and CI is exactly the failure
   # this pin exists to prevent. `bun run verify-bun-version` asserts they match.
-  version: "1.3.13"
+  version: "1.4.0"
 
 javascript:
   packageManager: "bun"

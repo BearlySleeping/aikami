@@ -59,6 +59,7 @@ const FORCE_EXTERNAL = new Set([
   'web-streams-polyfill',
   'data-uri-to-buffer',
   'node-domexception',
+  '@sinclair/typebox',
 ]);
 
 // Default Vite logger, wrapped below to filter out warnings that cannot be
@@ -134,25 +135,25 @@ export default defineConfig(({ mode }) => {
         '@aikami/lpc': toPackagesPath('shared/lpc/src'),
         '@aikami/lpc/*': toPackagesPath('shared/lpc/src/lib/*'),
         '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
-        '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib'),
+        '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib/*'),
         '@aikami/logger': toPackagesPath('shared/logger/src'),
 
         '@aikami/frontend/components': toPackagesPath('frontend/components/src'),
         '@aikami/frontend/components/*': toPackagesPath('frontend/components/src/lib/*'),
 
-        '@aikami/frontend-configs': toPackagesPath('frontend/configs/src'),
-        '@aikami/frontend-configs/*': toPackagesPath('frontend/configs/src/lib'),
-        '@aikami/frontend-theme': toPackagesPath('frontend/theme/src'),
-        '@aikami/frontend-theme/*': toPackagesPath('frontend/theme/src/lib/*'),
-        '@aikami/frontend-preview': toPackagesPath('frontend/preview/src'),
-        '@aikami/frontend-preview/sandbox': toPackagesPath('frontend/preview/src/sandbox.ts'),
-        '@aikami/frontend-preview/*': toPackagesPath('frontend/preview/src/lib/*'),
-        '@aikami/frontend-engine': toPackagesPath('frontend/engine/src'),
-        '@aikami/frontend-engine/*': toPackagesPath('frontend/engine/src/*'),
+        '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
+        '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib/*'),
+        '@aikami/frontend/theme': toPackagesPath('frontend/theme/src'),
+        '@aikami/frontend/theme/*': toPackagesPath('frontend/theme/src/lib/*'),
+        '@aikami/frontend/preview': toPackagesPath('frontend/preview/src'),
+        '@aikami/frontend/preview/sandbox': toPackagesPath('frontend/preview/src/sandbox.ts'),
+        '@aikami/frontend/preview/*': toPackagesPath('frontend/preview/src/lib/*'),
+        '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
+        '@aikami/frontend/engine/*': toPackagesPath('frontend/engine/src/*'),
         '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
-        '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
+        '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib/*'),
         '@aikami/frontend/storage': toPackagesPath('frontend/storage/src'),
-        '@aikami/frontend/storage/*': toPackagesPath('frontend/storage/src/lib'),
+        '@aikami/frontend/storage/*': toPackagesPath('frontend/storage/src/lib/*'),
 
         '@aikami/schemas': toPackagesPath('shared/schemas/src'),
         '@aikami/types': toPackagesPath('shared/types/src'),
@@ -263,6 +264,7 @@ export default defineConfig(({ mode }) => {
             'web-streams-polyfill',
             'data-uri-to-buffer',
             'node-domexception',
+            '@sinclair/typebox',
           ];
           for (const pkg of externals) {
             if (id === pkg || id.includes(`/node_modules/${pkg}/`)) {

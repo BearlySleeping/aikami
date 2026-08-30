@@ -201,9 +201,17 @@ export const sendPasswordResetEmail = async (email: string): Promise<void> => {
  * authorize URL ({ url, redirect: true }) — it is NOT a GET redirect. POST,
  * then navigate to the returned URL. The callback lands on the client home
  * page, where app boot reads the session and routes the user.
+ *
+ * @param options - The sign-in options.
+ * @param options.provider - The social provider to use.
+ * @param options.callbackURL - Optional URL to redirect to after sign-in (defaults to the current origin /).
  */
-export const socialSignInRedirect = async (provider: SignInProviderName): Promise<void> => {
-  const callbackURL = `${window.location.origin}/`;
+export const socialSignInRedirect = async (options: {
+  provider: SignInProviderName;
+  callbackURL?: string;
+}): Promise<void> => {
+  const { provider, callbackURL } = options;
+  const resolvedCallbackURL = callbackURL ?? `${window.location.origin}/`;
   const response = await fetch(`${hubApiBase()}/auth/sign-in/social`, {
     method: 'POST',
     headers: hubAuthHeaders(jsonHeaders),
@@ -211,7 +219,7 @@ export const socialSignInRedirect = async (provider: SignInProviderName): Promis
     // OAuth state cookie (Set-Cookie on this response) is stored — otherwise
     // the Google callback finds no state and fails with `state_mismatch`.
     credentials: 'include',
-    body: JSON.stringify({ provider, callbackURL }),
+    body: JSON.stringify({ provider, callbackURL: resolvedCallbackURL }),
   });
   if (!response.ok) {
     throw await toAppErrorFromResponse(response);

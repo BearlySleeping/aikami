@@ -147,7 +147,7 @@ export default defineConfig(({ mode }) => {
       prerender: {
         handleUnseenRoutes: 'ignore',
       },
-      // app.html registers src/service-worker.js manually, deferred to the
+      // app.html registers static/service-worker.js manually, deferred to the
       // `load` event to avoid forcing layout before stylesheets are ready —
       // don't also auto-register it (SvelteKit's default) on top of that.
       serviceWorker: {
@@ -183,29 +183,29 @@ export default defineConfig(({ mode }) => {
         '@aikami/lpc/*': toPackagesPath('shared/lpc/src/lib/*'),
         '@aikami/constants': toPackagesPath('shared/constants/src'),
         '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
-        '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib'),
+        '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib/*'),
         '@aikami/frontend/components': toPackagesPath('frontend/components/src'),
         '@aikami/frontend/components/*': toPackagesPath('frontend/components/src/lib/*'),
 
-        '@aikami/frontend-configs': toPackagesPath('frontend/configs/src'),
-        '@aikami/frontend-configs/*': toPackagesPath('frontend/configs/src/lib'),
-        '@aikami/frontend-theme': toPackagesPath('frontend/theme/src'),
-        '@aikami/frontend-theme/*': toPackagesPath('frontend/theme/src/lib/*'),
+        '@aikami/frontend/configs': toPackagesPath('frontend/configs/src'),
+        '@aikami/frontend/configs/*': toPackagesPath('frontend/configs/src/lib/*'),
+        '@aikami/frontend/theme': toPackagesPath('frontend/theme/src'),
+        '@aikami/frontend/theme/*': toPackagesPath('frontend/theme/src/lib/*'),
         '@aikami/frontend/ai-gateway': toPackagesPath('frontend/ai-gateway/src'),
         '@aikami/frontend/ai-gateway/*': toPackagesPath('frontend/ai-gateway/src/lib/*'),
         '@aikami/frontend/local-runtime': toPackagesPath('frontend/local-runtime/src'),
         '@aikami/frontend/local-runtime/*': toPackagesPath('frontend/local-runtime/src/lib/*'),
-        '@aikami/frontend-engine': toPackagesPath('frontend/engine/src'),
-        '@aikami/frontend-engine/*': toPackagesPath('frontend/engine/src/*'),
+        '@aikami/frontend/engine': toPackagesPath('frontend/engine/src'),
+        '@aikami/frontend/engine/*': toPackagesPath('frontend/engine/src/*'),
 
-        '@aikami/frontend-preview': toPackagesPath('frontend/preview/src'),
-        '@aikami/frontend-preview/*': toPackagesPath('frontend/preview/src/*'),
+        '@aikami/frontend/preview': toPackagesPath('frontend/preview/src'),
+        '@aikami/frontend/preview/*': toPackagesPath('frontend/preview/src/*'),
 
         '@aikami/frontend/test': toPackagesPath('frontend/test/src'),
         '@aikami/frontend/utils': toPackagesPath('frontend/utils/src'),
-        '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib'),
+        '@aikami/frontend/utils/*': toPackagesPath('frontend/utils/src/lib/*'),
         '@aikami/frontend/storage': toPackagesPath('frontend/storage/src'),
-        '@aikami/frontend/storage/*': toPackagesPath('frontend/storage/src/lib'),
+        '@aikami/frontend/storage/*': toPackagesPath('frontend/storage/src/lib/*'),
 
         '@aikami/mocks': toPackagesPath('shared/mocks/src'),
         '@aikami/schemas': toPackagesPath('shared/schemas/src'),
@@ -304,6 +304,10 @@ export default defineConfig(({ mode }) => {
       // build.rollupOptions is a deprecated alias for rolldownOptions in
       // Vite 8 — use the current option directly.
       rolldownOptions: {
+        // Tauri APIs are only available at runtime in a Tauri context —
+        // externalize them so the web build doesn't fail on dynamic imports
+        // like `import('@tauri-apps/api/path')`.
+        external: (id: string) => id.startsWith('@tauri-apps/'),
         // Mute unavoidable warnings from third-party dependencies
         onwarn(warning, warn) {
           // Silence all eval warnings

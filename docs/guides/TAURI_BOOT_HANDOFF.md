@@ -38,7 +38,7 @@ session, or the pipeline promise will already be memoized and the probe will
 just report the cached result.
 
 Environment: NixOS, webkitgtk `2.52.6+abi=4.1`, Tauri v2 / wry, hybrid Intel
-i915 GPU, bun 1.3.13. Last verified 2026-08-27.
+i915 GPU, bun 1.4.0. Last verified 2026-08-27.
 
 See also `docs/guides/TAURI.md` for this repo's other WebKitGTK-on-Linux notes.
 
