@@ -2,7 +2,7 @@
 id: C-451
 title: "Thin Contract Mode for Quick Fixes"
 source: "User request during C-450 pipeline-integrity review, 2026-08-30. Idea: small fixes currently either skip the contract pipeline entirely (no history) or force a full 18-section contract (high overhead for a one-line change). Add a lightweight contract type that stays documented but skips the sections that don't apply to small changes."
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -213,3 +213,48 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Created the Thin Contract Mode for quick fixes: added `docs/contracts/THIN_TEMPLATE.md` with a reduced section list, added `contract_type` frontmatter field to both templates, updated `SHARED_SECTIONS.md` with thin-mode documentation, extended `lint_contracts.ts` to skip Evidence Matrix and Open Questions checks for thin contracts, added a Type column to `sync_contracts.ts`'s PROGRESS.md/PROMOTION.md generation, and audited all pipeline prompts (implement, verify, critique, create, review) to be thin-contract-aware.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | THIN_TEMPLATE.md created; linter passes thin contracts without errors about missing full-contract sections |
+| AC-2 | ✅ | Existing contracts default to `full`; PROGRESS.md gains Type column showing `full` for all existing contracts |
+| AC-3 | ✅ | `mark_contract_implemented.ts` unchanged — `hasExecutionReport` gate applies identically to both types |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `docs/contracts/THIN_TEMPLATE.md` | Reduced-section template for small, well-understood fixes |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `docs/contracts/TEMPLATE.md` | Added `contract_type: full` frontmatter field and `Type` metadata row |
+| `docs/contracts/SHARED_SECTIONS.md` | Added Thin Contract Mode documentation with section list and upgrade guidance |
+| `scripts/src/lib/ops/lint_contracts.ts` | Added `contract_type` extraction, THIN_TEMPLATE.md exclusion, skip Evidence Matrix/Open Questions checks for thin contracts |
+| `scripts/src/lib/ops/sync_contracts.ts` | Added `contract_type` extraction, Type column to PROGRESS.md and PROMOTION.md tables |
+| `.pi/prompts/contract-implement.md` | Updated to reference thin contract format and section expectations |
+| `.pi/prompts/contract-verify.md` | Updated to handle Verification lines instead of Evidence Matrix for thin contracts |
+| `.pi/prompts/contract-critique.md` | Updated to skip thin-omitted sections in critique questions |
+| `.pi/prompts/contract-create.md` | Updated to mention THIN_TEMPLATE.md as an alternative to TEMPLATE.md |
+| `.pi/prompts/contract-review.md` | Updated to reference Verification lines for thin contracts |
+
+### Deviations from Spec
+
+None. All ACs implemented as specified.
+
+### Test Results
+
+- Unit: 415/422 pass (5 pre-existing failures due to missing `sharp` package in worktree, 2 skipped)
+- E2E: N/A — authoring-tooling change, no UI
+- Visual: N/A — authoring-tooling change, no UI
+- Baseline: 5 pre-existing failures (missing `sharp` package), 0 new failures
