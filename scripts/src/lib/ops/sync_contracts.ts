@@ -88,6 +88,18 @@ const extractPromotion = (content: string): string | undefined => {
  * Detect contract format version.
  * Returns 2 if contract declares version 2.0.0+, 1 otherwise.
  */
+const extractContractType = (content: string): string => {
+  // Read from frontmatter: contract_type: thin | full
+  const fm = content.match(/^---\n[\s\S]*?\n---/);
+  if (fm) {
+    const typeMatch = fm[0].match(/^contract_type:\s*(\S+)$/m);
+    if (typeMatch) {
+      return (typeMatch[1] ?? 'full').trim().toLowerCase();
+    }
+  }
+  return 'full'; // default for existing contracts without the field
+};
+
 const detectVersion = (content: string): number => {
   const versionMatch = content.match(
     /\|\s*\*\*Contract version\*\*\s*\|\s*\*{0,2}([^*|]+?)\*{0,2}\s*\|/i,
@@ -108,6 +120,7 @@ type ContractInfo = {
   promotion: string | undefined;
   fileName: string;
   archived: boolean;
+  contractType: string;
 };
 
 const readContractsFromDir = (
@@ -116,7 +129,13 @@ const readContractsFromDir = (
 ): { contracts: ContractInfo[]; duplicateIds: string[] } => {
   let files: string[];
   try {
-    files = readdirSync(dir).filter((f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md'));
+    files = readdirSync(dir).filter(
+      (f) =>
+        /^(C|MIG)-\d+/.test(f) &&
+        f.endsWith('.md') &&
+        f !== 'TEMPLATE.md' &&
+        f !== 'THIN_TEMPLATE.md',
+    );
   } catch {
     return { contracts: [], duplicateIds: [] };
   }
@@ -147,7 +166,8 @@ const readContractsFromDir = (
 
     const promotion = archived ? undefined : extractPromotion(content);
 
-    contracts.push({ id, name, status, version, promotion, fileName: file, archived });
+    const contractType = extractContractType(content);
+    contracts.push({ id, name, status, version, promotion, fileName: file, archived, contractType });
   }
 
   return { contracts, duplicateIds };
@@ -199,6 +219,7 @@ export const syncContracts = () => {
           promotion: undefined,
           fileName: '(no contract file)',
           archived: false,
+          contractType: 'full',
         });
         missingFromContracts++;
       }
@@ -227,8 +248,8 @@ export const syncContracts = () => {
       '',
       '### Active Contracts',
       '',
-      '| Contract | Name | Status | Promotion | Version |',
-      '|----------|------|--------|-----------|---------|',
+      '| Contract | Name | Status | Promotion | Version | Type |',
+      '|----------|------|--------|-----------|---------|------|',
     ];
 
     for (const c of activeContracts) {
@@ -244,8 +265,9 @@ export const syncContracts = () => {
       } else {
         verLabel = 'v1';
       }
+      const typeLabel = c.contractType === 'thin' ? 'thin' : 'full';
       lines.push(
-        `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${promotionLabel} | ${verLabel} |`,
+        `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${promotionLabel} | ${verLabel} | ${typeLabel} |`,
       );
     }
 
@@ -260,15 +282,16 @@ export const syncContracts = () => {
       );
       lines.push('> See `docs/contracts/archived/README.md` for details.');
       lines.push('');
-      lines.push('| Contract | Name | Status | Version |');
-      lines.push('|----------|------|--------|---------|');
+      lines.push('| Contract | Name | Status | Version | Type |');
+      lines.push('|----------|------|--------|---------|------|');
 
       // Show first 20 archived, then count remaining
       const shownArchived = archivedContracts.slice(0, 20);
       for (const c of shownArchived) {
         const label = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
         const verLabel = c.version === 2 ? 'v2' : 'v1';
-        lines.push(`| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${verLabel} |`);
+        const typeLabel = c.contractType === 'thin' ? 'thin' : 'full';
+        lines.push(`| ${c.id.toUpperCase()} | ${c.name} | ${label} | ${verLabel} | ${typeLabel} |`);
       }
 
       if (archivedContracts.length > 20) {
@@ -277,7 +300,7 @@ export const syncContracts = () => {
           .slice(20)
           .map((c) => c.id.toUpperCase())
           .join(', ');
-        lines.push(`| ... | _${remaining} more archived_ | | |`);
+        lines.push(`| ... | _${remaining} more archived_ | | | |`);
         lines.push('');
         lines.push(`<details><summary>All ${archivedContracts.length} archived IDs</summary>`);
         lines.push('');
@@ -326,13 +349,14 @@ export const syncContracts = () => {
       if (sectionContracts.length === 0) {
         promotionLines.push('_None_');
       } else {
-        promotionLines.push('| Contract | Name | Status | Version |');
-        promotionLines.push('|----------|------|--------|---------|');
+        promotionLines.push('| Contract | Name | Status | Version | Type |');
+        promotionLines.push('|----------|------|--------|---------|------|');
         for (const c of sectionContracts) {
           const statusLabel = STATUS_LABELS[c.status] ?? `❓ ${c.status}`;
           const verLabel = c.version === 2 ? 'v2' : 'v1';
+          const typeLabel = c.contractType === 'thin' ? 'thin' : 'full';
           promotionLines.push(
-            `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${verLabel} |`,
+            `| ${c.id.toUpperCase()} | ${c.name} | ${statusLabel} | ${verLabel} | ${typeLabel} |`,
           );
         }
       }

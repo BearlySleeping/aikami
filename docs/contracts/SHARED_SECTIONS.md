@@ -46,6 +46,40 @@ For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Vi
 
 ---
 
+## Thin Contract Mode
+
+Thin contracts are a reduced-section variant for small, well-understood fixes
+(bug fixes, config changes, small refactors, doc corrections with code impact).
+They keep the parts of the template that give value at any size — a stable ID,
+Metadata table, Problem statement, Scope Boundaries, Acceptance Criteria,
+Amendments, and an Execution Report — and drop the sections that only pay off
+at feature scale.
+
+### Thin contract section list (in order)
+
+1. **Metadata** (adds `Type: thin` row)
+2. **Problem & Baseline Evidence**
+3. **User Outcome**
+4. **Scope Boundaries**
+5. **Acceptance Criteria** (AC list only — no per-AC Evidence Matrix/Test Hooks
+   table, just Given/When/Then plus a single **Verification** line per AC)
+6. **Edge Cases & Gotchas** (optional — omit if none)
+7. **Amendments**
+8. **Promotion Lifecycle**
+9. **Status Lifecycle**
+
+### Omitted entirely for thin contracts
+
+Success Measures, Existing System & Reuse Map, Overview, Design Reference,
+Architecture Directives, State & Data Models, Quality Requirements, Migration &
+Rollback, Contract Size & Split Rule, Implementation Sequence, Open Questions.
+
+### When to upgrade to a full contract
+
+- A thin contract accumulates **Open Questions** during drafting → convert to full
+- A thin contract's fix touches **persistent state** (schema/save format) → convert to full
+- The change is not well-understood and needs Design Reference or Migration planning → convert to full
+
 ## Contract Size & Split Rule
 
 Split on **independent mergeability**, not on size. A contract should be split

@@ -59,7 +59,7 @@ When the pipeline sends you back after a bounce:
      attempt, your stage will be automatically failed. You MUST attempt to start/restart
      the service and show the error log before claiming it is unavailable.
 
-2. Read the contract file completely — ACs, Evidence Matrix, Test Hooks, Scope.
+2. Read the contract file completely. If the contract has `contract_type: thin` in its frontmatter, expect ACs with Verification lines instead of Evidence Matrix/Test Hooks. For full contracts, read ACs, Evidence Matrix, Test Hooks, Scope.
 3. Read any execution report — note what the implementer claims.
 4. Check git state:
    ```bash
@@ -71,8 +71,12 @@ When the pipeline sends you back after a bounce:
 
 ## Phase 1: Structural Audit
 
-1. **Required files exist**: Every file in Evidence Matrix + execution report must exist.
-2. **Test files exist**: Every test in Test Hooks must exist.
+1. **Required files exist**: Every file referenced in the contract (Evidence Matrix for full contracts, Verification lines for thin contracts) + execution report must exist.
+2. **Test files exist**: Every test in Test Hooks (full contracts) or referenced in Verification lines (thin contracts) must exist.
+3. **Process thin Verification entries by declared check type**:
+   - **File references** (e.g. `ls path/to/file`): validate the file exists on disk.
+   - **Command references** (e.g. `bun run scripts/...`): execute the command and confirm it exits cleanly.
+   - **Manual checks** (e.g. "visually confirm X"): retain for live verification in Phase 3.
 3. **No placeholders**: No `{TEMPLATE}` markers in contract.
 4. **Scope boundaries**: No files modified outside contract's In Scope.
 5. **Convention audit**: No pixi.js in ViewModels, no app.ticker outside engine, no TypeBox in services.

@@ -40,6 +40,7 @@ type ContractInfo = {
   status: string;
   version: number;
   archived: boolean;
+  contractType: string;
 };
 
 // ── Constants ──────────────────────────────────────────────
@@ -71,11 +72,21 @@ const APPROVED_OR_LATER = new Set([
   'completed',
 ]);
 
+// Sections that thin contracts omit — skip structural-completeness checks for these
+const THIN_SKIP_CHECKS = new Set([
+  'missing-evidence-matrix',
+  'open-questions',
+]);
+
 // ── Helpers ────────────────────────────────────────────────
 
 const readContractFiles = (): string[] =>
   readdirSync(CONTRACTS_DIR).filter(
-    (f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md') && f !== 'TEMPLATE.md',
+    (f) =>
+      /^(C|MIG)-\d+/.test(f) &&
+      f.endsWith('.md') &&
+      f !== 'TEMPLATE.md' &&
+      f !== 'THIN_TEMPLATE.md',
   );
 
 const readArchivedContractFiles = (): string[] => {
@@ -108,6 +119,18 @@ const extractId = (filename: string): string => {
 const extractStatus = (content: string): string => {
   const m = content.match(/\|\s*\*\*Status\*\*\s*\|\s*\*{0,2}([^*|]+?)\*{0,2}\s*\|/i);
   return (m?.[1] ?? 'not_started').trim();
+};
+
+const extractContractType = (content: string): string => {
+  // Read from frontmatter: contract_type: thin | full
+  const fm = content.match(/^---\n[\s\S]*?\n---/);
+  if (fm) {
+    const typeMatch = fm[0].match(/^contract_type:\s*(\S+)$/m);
+    if (typeMatch) {
+      return (typeMatch[1] ?? 'full').trim().toLowerCase();
+    }
+  }
+  return 'full'; // default for existing contracts without the field
 };
 
 const detectVersion = (content: string): number => {
@@ -506,8 +529,12 @@ const lintContract = (info: ContractInfo): LintIssue[] => {
 
   if (info.version === 2 && APPROVED_OR_LATER.has(info.status)) {
     issues.push(...checkDependencies(info));
-    issues.push(...checkEvidenceMatrix(info));
-    issues.push(...checkOpenQuestions(info));
+    if (!THIN_SKIP_CHECKS.has('missing-evidence-matrix') || info.contractType !== 'thin') {
+      issues.push(...checkEvidenceMatrix(info));
+    }
+    if (!THIN_SKIP_CHECKS.has('open-questions') || info.contractType !== 'thin') {
+      issues.push(...checkOpenQuestions(info));
+    }
   }
 
   if (info.version === 2 && IMPLEMENTED_OR_LATER.has(info.status)) {
@@ -607,6 +634,7 @@ const main = () => {
       status: extractStatus(content),
       version: detectVersion(content),
       archived: false,
+      contractType: extractContractType(content),
     });
   }
 
@@ -623,6 +651,7 @@ const main = () => {
       status: extractStatus(content),
       version: detectVersion(content),
       archived: true,
+      contractType: extractContractType(content),
     });
   }
 

@@ -13,7 +13,7 @@ You are an **adversarial reviewer**, not the architect. Your goal is to find eve
 
 ## Phase 1: Read & Understand
 
-1. Read the contract fully — every section.
+1. Read the contract fully — every section. If the contract has `contract_type: thin` in its frontmatter, note that it uses the reduced THIN_TEMPLATE.md format (no Success Measures, Existing System & Reuse Map, Overview, Design Reference, Architecture Directives, State & Data Models, Quality Requirements, Migration & Rollback, Implementation Sequence, or Open Questions). Critique only the sections that exist.
 2. Read the Problem & Baseline Evidence. Can you verify the problem exists from the described reproduction steps?
 3. Read dependencies — then check PROGRESS.md and the dependency contracts themselves. Are all dependencies actually `verified` or `completed`? If a dependency is `draft` or `in_progress`, **flag it as a risk but do NOT block** — the implementer can stub the missing parts. Only block if a dependency is `blocked` or the contract CANNOT be implemented without it at all (not just "it would need refactoring later").
 
@@ -24,10 +24,10 @@ Answer every question honestly. "I don't know" means the contract is underspecif
 ### Problem & Value
 1. **Does this solve a real player/creator/developer problem?** Or is it architecture-for-its-own-sake?
 2. **Is the User Outcome concrete?** Can you picture exactly what the user can now do that they couldn't before?
-3. **Are Success Measures measurable?** "Fast" is not a measure. "Under 500ms" is.
+3. **Are Success Measures measurable?** (Skip for thin contracts — they omit this section by design.) “Fast” is not a measure. “Under 500ms” is.
 
 ### Existing System
-4. **Is existing code being duplicated?** Check the Existing System & Reuse Map. For each capability listed as "replace" — is there a good reason, or is it NIH syndrome?
+4. **Is existing code being duplicated?** Check the Existing System & Reuse Map (skip for thin contracts — they omit this section by design). For each capability listed as “replace” — is there a good reason, or is it NIH syndrome?
 5. **Are there capabilities NOT in the Reuse Map that already exist?** Grep the codebase for keywords related to what this contract builds. If you find them, flag them.
 6. **Does this contract create another sandbox without a production path?** Count the number of `/dev/` routes the project already has. If this adds another isolated sandbox with no production integration, flag it.
 
@@ -38,7 +38,7 @@ Answer every question honestly. "I don't know" means the contract is underspecif
 ### Acceptance Criteria
 9. **Are all ACs observable?** For each AC: can you write a test that definitively proves it's met? If the AC says "the system handles errors gracefully" — that's not observable. What specific error? What specific behavior?
 10. **Can all tests pass while the feature remains unusable?** This is the "green build, broken product" check. If ACs only test isolated units but never the production path, flag it.
-11. **Is the Evidence Matrix complete?** Every AC must have a test artifact and (for user-facing features) a production path. Missing = flag.
+11. **Is the Evidence Matrix complete?** (Skip for thin contracts — they use a Verification line instead.) Every AC must have a test artifact and (for user-facing features) a production path. Missing = flag.
 12. **Is every AC independently verifiable?** Each AC must be provable on its own, without first completing another AC in the same contract. AC *count* is not a problem — a cohesive contract may have 10+. Non-independent ACs are.
 
 ### Quality & Edge Cases
