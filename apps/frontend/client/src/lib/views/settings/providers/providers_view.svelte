@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/settings/providers/providers_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import ConnectionsListView from '$views/settings/connection/connections_list_view.svelte';
 import type { ProvidersViewModelInterface } from './providers_view_model.svelte';
 import AdvancedTab from './tabs/advanced_tab.svelte';

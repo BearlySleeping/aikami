@@ -99,7 +99,6 @@ const headAccessoryVariants = getSlotVariants('head').filter((v) => !isHeadVaria
 
 const getPaletteHex = (slot: string): string => viewModel.paletteOverrides[slot] ?? 'CCCCCC';
 </script>
-
 <div class="space-y-6">
   <h2 class="text-2xl font-bold text-base-content">Describe Your Hero</h2>
 

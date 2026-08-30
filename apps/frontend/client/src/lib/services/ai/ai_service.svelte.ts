@@ -5,15 +5,10 @@
 // Firebase `ai` callable), preserving the original public interface and
 // undefined-on-error semantics. Contract: C-320 AC-2/AC-4.
 
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
 import type { NpcData, PersonaData } from '@aikami/types';
 import { aiGatewayService } from '$services';
-
-export type AIServiceOptions = BaseFrontendClassOptions;
+import type { AiServiceOptions } from '$types';
 
 export type AIServiceInterface = BaseFrontendClassInterface & {
   /**
@@ -32,7 +27,7 @@ export type AIServiceInterface = BaseFrontendClassInterface & {
   createPersona(prompt: string): Promise<PersonaData | undefined>;
 };
 
-export class AIService extends BaseFrontendClass<AIServiceOptions> implements AIServiceInterface {
+class AIService extends BaseFrontendClass<AiServiceOptions> implements AIServiceInterface {
   async createPersona(prompt: string): Promise<PersonaData | undefined> {
     this.log('createPersona', { prompt });
     try {

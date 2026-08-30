@@ -14,7 +14,6 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { ContentPackManifest, PackConfig, PersonaData } from '@aikami/types';
-import { logger } from '$logger';
 import { audioContextManager, equipmentService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
@@ -304,7 +303,7 @@ class GameEngineService
       this.debug('initializeEngine:complete');
     } catch (error) {
       this._initialized = false;
-      logger.debug('GameEngineService:bridge-init-failed', { error: String(error) });
+      this.debug('GameEngineService:bridge-init-failed', { error: String(error) });
     }
   }
 
@@ -984,7 +983,7 @@ class GameEngineService
         return;
       }
     } catch (error) {
-      logger.debug('GameEngineService:loadActivePersona:local-failed', {
+      this.debug('GameEngineService:loadActivePersona:local-failed', {
         error: String(error),
       });
     }
@@ -1000,7 +999,7 @@ class GameEngineService
         }
       }
     } catch (error) {
-      logger.debug('GameEngineService:loadActivePersona:localStorage-failed', {
+      this.debug('GameEngineService:loadActivePersona:localStorage-failed', {
         error: String(error),
       });
     }
@@ -1028,7 +1027,7 @@ class GameEngineService
       }
       await playSfxByName('sfx_hit');
     } catch (error) {
-      logger.debug('GameEngineService:_playHitSfx:failed', { error: String(error) });
+      this.debug('GameEngineService:_playHitSfx:failed', { error: String(error) });
     }
   }
 

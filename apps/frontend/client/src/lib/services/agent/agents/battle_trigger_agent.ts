@@ -5,8 +5,7 @@
 //
 // Contract: C-427 AC-4
 
-import { localTaskPool } from '$lib/services/ai/local_task_pool_service.svelte.ts';
-import { textGenerationService } from '$services';
+import { localTaskPoolService, textGenerationService } from '$services';
 import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
 
 export type BattleTriggerOutput = {
@@ -46,7 +45,7 @@ export const runBattleTriggerAgent = async ({
     let usedLocal = false;
 
     try {
-      const taskResult = await localTaskPool.submit({
+      const taskResult = await localTaskPoolService.pool.submit({
         type: 'battle-trigger',
         payload: {
           prose: aiResponse.slice(0, 2000),

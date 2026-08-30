@@ -19,7 +19,7 @@ import { type TextChatMessage, textGenerationService } from '$services';
 // ---------------------------------------------------------------------------
 
 /** Input required to generate an impersonation draft. */
-export type ImpersonationDraftOptions = {
+type ImpersonationDraftOptions = {
   /** The active persona's display name. */
   personaName: string;
 

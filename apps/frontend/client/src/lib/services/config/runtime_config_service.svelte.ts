@@ -29,7 +29,7 @@ import { RuntimeEngineConfigSchema, schemaCheck } from '@aikami/schemas';
 import type { RuntimeEngineConfig, TtsMode } from '@aikami/types';
 
 /** Where the resolved config came from — logged once at info. */
-export type RuntimeConfigSource = 'localStorage' | 'tauri-file' | 'http' | 'defaults' | 'unset';
+type RuntimeConfigSource = 'localStorage' | 'tauri-file' | 'http' | 'defaults' | 'unset';
 
 export type RuntimeConfigServiceOptions = BaseFrontendClassOptions;
 

@@ -10,8 +10,6 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { configService } from '$lib/services/config/config_service.svelte.ts';
-import { LocalServiceDetector } from '$lib/services/config/local_service_detector.svelte';
 import {
   type AdvancedOverrides,
   buildVerifyHeaders,

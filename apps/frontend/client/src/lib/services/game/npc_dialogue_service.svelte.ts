@@ -45,12 +45,13 @@ import { Value } from 'typebox/value';
 import { FALLBACK_PERSONA_ID, PERSONA_PROMPTS } from '$lib/data/dialogue_personas';
 import { inventoryService, questStateService } from '$services';
 
+export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
 // ---------------------------------------------------------------------------
 // Injected interfaces — all external dependencies passed through configure()
 // ---------------------------------------------------------------------------
 
 /** Content-pack data the orchestrator reads from (NPC entries, dialogues). */
-export type NpcDialogueContentProvider = {
+type NpcDialogueContentProvider = {
   /** Returns the NPC entry for a given NPC ID, or undefined. */
   getNpc(npcId: string):
     | {
@@ -96,7 +97,7 @@ export type NpcDialogueContentProvider = {
  * streaming provider. It is absent for non-streaming callers (authored
  * fallback, test doubles) and optional so those call paths need not supply it.
  */
-export type NpcDialogueTextGenerator = (options: {
+type NpcDialogueTextGenerator = (options: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
   schema?: Record<string, unknown>;
   schemaName?: string;
@@ -112,7 +113,7 @@ export type NpcDialogueTextGenerator = (options: {
  * C-401: the machine enters `streaming` only when the first token actually
  * arrives via `onChunk` — a non-streaming provider never enters `streaming`.
  */
-export type DialogueTurnState =
+type DialogueTurnState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'streaming'; readonly text: string }
   | { readonly kind: 'awaiting_envelope'; readonly text: string }
@@ -141,7 +142,7 @@ export class DialogueTimeoutError extends Error {
  * Implementations dispatch to existing executor services and return
  * true if the command was executed, false if denied at runtime.
  */
-export type NpcDialogueExecutors = {
+type NpcDialogueExecutors = {
   trade(options: { npcId: string; vendorName?: string; vendorInventory?: string }): boolean;
   offerQuest(options: { npcId: string; questId: string }): boolean;
   skillCheck(options: { skill: string; difficultyClass: number }): boolean;
@@ -151,7 +152,7 @@ export type NpcDialogueExecutors = {
 };
 
 /** Context facts projected into the AI system prompt. */
-export type DialogueContextProjection = {
+type DialogueContextProjection = {
   persona: string;
   npcName: string;
   memory: string[];
@@ -367,7 +368,7 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
  * that fires during normal local play is worse than no timeout (AC-4 watch
  * point). Configurable via `configure({ timeoutMs })`.
  */
-export const DEFAULT_DIALOGUE_TIMEOUT_MS = 120_000;
+const DEFAULT_DIALOGUE_TIMEOUT_MS = 120_000;
 
 // ---------------------------------------------------------------------------
 // Implementation

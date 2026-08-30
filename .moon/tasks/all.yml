@@ -140,3 +140,26 @@ tasks:
       cache: false
       runInCI: true
       internal: true
+
+  # Structural guards for frontend View, ViewModel, and service conventions.
+  # Kept out of CI until the existing convention backlog is cleared.
+  guard-mvvm-conventions:
+    command: "bun run src/lib/ops/guard_mvvm_conventions.ts"
+    inputs:
+      - "/scripts/src/lib/ops/guard_mvvm_conventions.ts"
+      - "/apps/frontend/client/src/**/*_view.svelte"
+      - "/apps/frontend/client/src/**/*_view_model.svelte.ts"
+      - "/apps/frontend/hub/src/**/*_view.svelte"
+      - "/apps/frontend/hub/src/**/*_view_model.svelte.ts"
+    options:
+      cache: false
+      runInCI: false
+
+  guard-service-conventions:
+    command: "bun run src/lib/ops/guard_service_conventions.ts"
+    inputs:
+      - "/scripts/src/lib/ops/guard_service_conventions.ts"
+      - "/apps/frontend/client/src/lib/services/**/*_service.svelte.ts"
+    options:
+      cache: false
+      runInCI: false

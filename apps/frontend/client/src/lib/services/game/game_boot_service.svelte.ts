@@ -24,6 +24,7 @@ import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { personaService } from '../persona/persona_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
+import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 
 /** Ordered pipeline stages that execute sequentially during a boot attempt. */
 const bootStageOrder: readonly GameBootStage[] = [
@@ -533,13 +534,6 @@ class GameBootService
       this.debug('stage:validating_save:payload-provided');
 
       // C-334 AC-4: Validate checksum for v2+ payloads
-      const { parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
-        './game_save_service.svelte.ts'
-      );
-      // Check generation after async import
-      if (generation !== this._bootGeneration) {
-        return;
-      }
       const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
         parseSavePayloadEnvelope(input.pendingSavePayload);
 
@@ -578,9 +572,7 @@ class GameBootService
     // Fetch the payload to validate it exists and is parseable
     const slotId = this._campaign.lastSaveSlotId;
     try {
-      const { gameSaveService, parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
-        './game_save_service.svelte.ts'
-      );
+      const { gameSaveService } = await import('./game_save_service.svelte.ts');
       // Check generation after async import
       if (generation !== this._bootGeneration) {
         return;
@@ -702,68 +694,6 @@ class GameBootService
       this.warn('stage:initializing_asset_registry:degraded', { error: String(error) });
     }
   }
-
-  /**
-   * Stage: prefetch the starter content pack tags declared in offline_core.json,
-   * via the shared {@link assetPrefetchService} (C-448 background downloading —
-   * the start-menu screen may already have this in flight or finished, in
-   * which case this resolves immediately). On a fresh install with no
-   * network, this fails with an actionable message.
-   */
-  private _stagePrefetchStarterContent = async (generation: number): Promise<void> => {
-    const t0 = performance.now();
-
-    const { assetPrefetchService } = await import(
-      '$lib/services/assets/asset_prefetch_service.svelte'
-    );
-    if (generation !== this._bootGeneration) {
-      return;
-    }
-
-    const result = await assetPrefetchService.prefetchCore((progress) => {
-      if (generation === this._bootGeneration) {
-        this.bootProgress.detail = `Downloading starter content — ${progress.done}/${progress.total}`;
-      }
-    });
-    if (generation !== this._bootGeneration) {
-      return;
-    }
-
-    const elapsed = performance.now() - t0;
-
-    if (result.requested === 0) {
-      this.debug('stage:prefetching_starter_content:no-core-tags');
-      return;
-    }
-
-    if (result.failedTags.length > 0 && result.fetched === 0 && result.alreadyCached === 0) {
-      // Fresh install with no network — all tags failed
-      const message =
-        'Aikami needs to download starter content the first time you play. ' +
-        'Connect to the internet and try again.';
-      this.warn('stage:prefetching_starter_content:all-failed', {
-        failedTags: result.failedTags,
-        elapsedMs: Math.round(elapsed),
-      });
-      throw new Error(message);
-    }
-
-    if (result.failedTags.length > 0) {
-      // Partial failure — some tags failed but we have enough to proceed
-      this.warn('stage:prefetching_starter_content:partial-failure', {
-        failedTags: result.failedTags,
-        fetched: result.fetched,
-        alreadyCached: result.alreadyCached,
-        elapsedMs: Math.round(elapsed),
-      });
-    } else {
-      this.debug('stage:prefetching_starter_content:complete', {
-        fetched: result.fetched,
-        alreadyCached: result.alreadyCached,
-        elapsedMs: Math.round(elapsed),
-      });
-    }
-  };
 
   /**
    * Stage: deliberate no-op, kept in the pipeline for stage-numbering
@@ -993,7 +923,6 @@ class GameBootService
       // Restore from save snapshot — the payload may be a full envelope
       // ({ ecsSnapshot, serviceSnapshots, map }) or a plain ECS snapshot.
       this.bootProgress.detail = 'Restoring saved world...';
-      const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte.ts');
       const { hydrateAllServices } = await import('./serializable_service');
       // Check generation after async imports
       if (generation !== this._bootGeneration) {
@@ -1566,9 +1495,7 @@ class GameBootService
     }
 
     try {
-      const { gameSaveService, parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
-        './game_save_service.svelte.ts'
-      );
+      const { gameSaveService } = await import('./game_save_service.svelte.ts');
 
       // Fetch all saves for this campaign, sorted newest first
       await gameSaveService.fetchAvailableSaves(this._campaign.id);

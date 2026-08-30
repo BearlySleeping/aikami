@@ -17,16 +17,16 @@ afterAll(() => {
 });
 
 import { runtimeConfigService } from '$services';
+import type {
+  ImageStreamConnection,
+  StreamOrchestratorInterface,
+  StreamOrchestratorOptions,
+  TextStreamConnection,
+} from '$types';
+import type { AudioQueuePlayerInterface } from '../audio/audio_queue_player';
 import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
-import type { AudioQueuePlayerInterface } from './audio_queue_player';
-import type { PixiTextureInjectorInterface } from './pixi_texture_injector';
-import {
-  type ImageStreamConnection,
-  StreamOrchestrator,
-  type StreamOrchestratorInterface,
-  type StreamOrchestratorOptions,
-  type TextStreamConnection,
-} from './stream_orchestrator_service.svelte';
+import type { PixiTextureInjectorInterface } from '../game/pixi_texture_injector';
+import { getStreamOrchestrator } from './stream_orchestrator_service.svelte';
 
 // C-389: the server-TTS endpoint resolves from the runtime config at call
 // time — stub it so the Direct Kokoro HTTP suite exercises the real fetch.
@@ -143,7 +143,7 @@ describe('StreamOrchestrator — AC1: Unified Lifecycle & Abort Management', () 
     internalImage = createMockImageStream();
     audioQueue = createMockAudioQueue();
     textureInjector = createMockTextureInjector();
-    orchestrator = new StreamOrchestrator(createOptions());
+    orchestrator = getStreamOrchestrator(createOptions());
   });
 
   test('should be idle before generation starts', () => {
@@ -269,7 +269,7 @@ describe('StreamOrchestrator — AC2: Progressive Text Consumption', () => {
     internalImage = createMockImageStream();
     audioQueue = createMockAudioQueue();
     textureInjector = createMockTextureInjector();
-    orchestrator = new StreamOrchestrator(createOptions());
+    orchestrator = getStreamOrchestrator(createOptions());
   });
 
   test('should update currentText reactively as SSE chunks arrive', async () => {
@@ -382,7 +382,7 @@ describe('StreamOrchestrator — C-062 AC2: Memory Hook (save on success)', () =
     audioQueue = createMockAudioQueue();
     textureInjector = createMockTextureInjector();
     conversationRepo = createMockConversationStorage();
-    orchestrator = new StreamOrchestrator(createOptions());
+    orchestrator = getStreamOrchestrator(createOptions());
   });
 
   test('should save dialogue turn when text stream completes successfully', async () => {
@@ -449,7 +449,7 @@ describe('StreamOrchestrator — C-062 AC2: Memory Hook (save on success)', () =
   });
 
   test('should NOT save when repository is not provided', async () => {
-    const noRepoOrch = new StreamOrchestrator({
+    const noRepoOrch = getStreamOrchestrator({
       className: 'NoRepoOrchestrator',
       textStream: internalText,
       imageStream: internalImage,
@@ -535,7 +535,7 @@ describe('StreamOrchestrator — C-062 AC3: Abort Exclusion', () => {
     audioQueue = createMockAudioQueue();
     textureInjector = createMockTextureInjector();
     conversationRepo = createMockConversationStorage();
-    orchestrator = new StreamOrchestrator(createOptions());
+    orchestrator = getStreamOrchestrator(createOptions());
   });
 
   test('should NOT save partial text when generation is aborted mid-stream', async () => {
@@ -677,7 +677,7 @@ describe('StreamOrchestrator — C-063 AC1: Emotion Tag Interception', () => {
       return new Promise(() => {});
     };
 
-    orchestrator = new StreamOrchestrator(createOptions());
+    orchestrator = getStreamOrchestrator(createOptions());
   });
 
   afterEach(() => {
@@ -841,7 +841,7 @@ describe('StreamOrchestrator — C-063 AC3/AC4: Hybrid Trigger Pipeline', () => 
       return new Promise(() => {});
     };
 
-    orchestrator = new StreamOrchestrator(createOptions());
+    orchestrator = getStreamOrchestrator(createOptions());
   });
 
   afterEach(() => {
@@ -966,7 +966,7 @@ describe('StreamOrchestrator — C-069 AC3: Direct Kokoro HTTP', () => {
       return new Promise(() => {});
     };
 
-    orchestrator = new StreamOrchestrator(createOptions());
+    orchestrator = getStreamOrchestrator(createOptions());
   });
 
   afterEach(() => {
@@ -1132,7 +1132,7 @@ describe('StreamOrchestrator — C-062 AC4: Gateway Payload', () => {
     internalImage = createMockImageStream();
     audioQueue = createMockAudioQueue();
     textureInjector = createMockTextureInjector();
-    orchestrator = new StreamOrchestrator(createOptions());
+    orchestrator = getStreamOrchestrator(createOptions());
   });
 
   test('should pass messages array to text stream start', async () => {

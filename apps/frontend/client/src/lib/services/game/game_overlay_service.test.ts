@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { OverlayStackEntry } from './game_overlay_service.svelte.ts';
+import type { GameOverlayType, OverlayStackEntry } from '$types';
 
 // $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
 
@@ -351,7 +351,7 @@ describe('GameOverlayService', () => {
   });
 
   test('should push NONE as no-op', () => {
-    service.pushOverlay('NONE' as import('./game_overlay_service.svelte.ts').GameOverlayType);
+    service.pushOverlay('NONE' as GameOverlayType);
     expect(service.stackDepth).toBe(0);
   });
 

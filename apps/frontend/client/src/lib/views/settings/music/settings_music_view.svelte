@@ -6,7 +6,7 @@
 // and preview functionality.
 //
 // Contract: C-249
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { SettingsMusicViewModelInterface } from './settings_music_view_model.svelte';
 
 type Props = {

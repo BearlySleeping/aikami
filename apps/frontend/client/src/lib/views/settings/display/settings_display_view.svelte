@@ -3,7 +3,7 @@
 //
 // Settings > Game > Display sub-tab. Resolution presets and fullscreen
 // toggle wired to the Tauri window API.
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { SettingsDisplayViewModelInterface } from './settings_display_view_model.svelte';
 
 type Props = {

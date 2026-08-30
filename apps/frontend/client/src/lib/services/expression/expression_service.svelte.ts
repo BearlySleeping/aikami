@@ -4,17 +4,12 @@
 // and LPC overlay resolution for character portrait rendering.
 //
 // Contract: C-239 Expression Emotion System
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
 import {
   EXPRESSION_CATALOG,
   getExpressionEntry,
   getKeywordRegex,
 } from '$lib/data/expression_catalog';
-import { logger } from '$logger';
 import { textGenerationService } from '$services';
 import type {
   DetectExpressionOptions,
@@ -23,6 +18,7 @@ import type {
   ExpressionId,
   ExpressionMap,
   ExpressionOverlay,
+  ExpressionServiceOptions,
 } from '$types';
 import type { ExpressionOutput } from '../agent/agent_schemas.ts';
 
@@ -109,7 +105,7 @@ const MOOD_TO_EXPRESSION_ID: Record<string, ExpressionId> = {
 };
 
 class ExpressionService
-  extends BaseFrontendClass<BaseFrontendClassOptions>
+  extends BaseFrontendClass<ExpressionServiceOptions>
   implements ExpressionServiceInterface
 {
   readonly catalogEntries = EXPRESSION_CATALOG.map((entry) => ({
@@ -137,7 +133,7 @@ class ExpressionService
           return agentResult;
         }
       } catch (error) {
-        logger.warn('ExpressionService: agent detection failed, falling back to keyword', {
+        this.warn('ExpressionService: agent detection failed, falling back to keyword', {
           error: (error as Error).message,
         });
       }
@@ -150,7 +146,7 @@ class ExpressionService
   resolveLpcOverlays(expressionId: ExpressionId): ExpressionOverlay {
     const entry = getExpressionEntry(expressionId);
     if (!entry) {
-      logger.warn('ExpressionService: no catalog entry for expression', { expressionId });
+      this.warn('ExpressionService: no catalog entry for expression', { expressionId });
       return {};
     }
     return entry.lpcOverlays;
@@ -224,7 +220,7 @@ class ExpressionService
         // keyword fallback. Return undefined so detectExpression falls
         // through to Tier 2 keyword detection.
         if (!this._isRecognizedMood(char.expression)) {
-          logger.debug(
+          this.debug(
             'ExpressionService: agent returned unrecognized mood — falling back to keyword',
             { expression: char.expression },
           );
@@ -328,7 +324,7 @@ class ExpressionService
 
     // If tie at same position, use neutral
     if (tieDetected) {
-      logger.debug('ExpressionService: keyword tie detected, falling back to neutral', {
+      this.debug('ExpressionService: keyword tie detected, falling back to neutral', {
         messagePreview: message.slice(0, 80),
       });
       return 'neutral';

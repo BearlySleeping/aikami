@@ -1,35 +1,20 @@
 // apps/frontend/client/src/lib/services/ai/stream_orchestrator_service.svelte.ts
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass } from '@aikami/frontend/services';
 import { runtimeConfigService } from '$services';
-import type { AudioQueuePlayerInterface } from '../audio/audio_queue_player';
+import type {
+  ImageStreamConnection,
+  StreamOrchestratorInterface,
+  StreamOrchestratorOptions,
+  TextStreamConnection,
+} from '$types';
 import type { ConversationMessage } from '../chat/context_builder.ts';
-import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
-import type { ExpressionAssetResolverInterface } from '../expression/expression_asset_resolver';
-import type { PixiTextureInjectorInterface } from '../game/pixi_texture_injector';
 import { SentenceBoundaryChunker } from './sentence_boundary_chunker.ts';
 
-// ---------------------------------------------------------------------------
-// Network Connection Interfaces
-// ---------------------------------------------------------------------------
+/** Options accepted by the stream-orchestrator service factory. */
+export type StreamOrchestratorServiceOptions = StreamOrchestratorOptions;
 
-/** SSE-based text stream connection. */
-export type TextStreamConnection = {
-  start(options: {
-    signal: AbortSignal;
-    onChunk: (text: string) => void;
-    messages: ConversationMessage[];
-  }): Promise<void>;
-};
-
-/** WebSocket-based image generation stream connection. */
-export type ImageStreamConnection = {
-  connect(options: { signal: AbortSignal; onComplete: (buffer: ArrayBuffer) => void }): void;
-  close(): void;
-};
+/** Public contract returned by the stream-orchestrator service factory. */
+export type StreamOrchestratorServiceInterface = StreamOrchestratorInterface;
 
 // ---------------------------------------------------------------------------
 // Kokoro TTS Configuration
@@ -42,43 +27,6 @@ type KokoroRequest = {
   voice: string;
   // biome-ignore lint/style/useNamingConvention: API contract field name
   response_format: 'wav';
-};
-
-// ---------------------------------------------------------------------------
-// StreamOrchestrator
-// ---------------------------------------------------------------------------
-
-export type StreamOrchestratorOptions = BaseFrontendClassOptions & {
-  textStream: TextStreamConnection;
-  imageStream: ImageStreamConnection;
-  audioQueuePlayer: AudioQueuePlayerInterface;
-  textureInjector: PixiTextureInjectorInterface;
-  conversationStorage?: ConversationStorageInterface;
-  onEmotionExtracted?: (options: { npcId: string; emotion: string }) => void;
-  tagBufferTimeoutMs?: number;
-  expressionAssetResolver?: ExpressionAssetResolverInterface;
-  expressionGenerator?: (options: {
-    npcId: string;
-    emotion: string;
-    signal: AbortSignal;
-  }) => Promise<ArrayBuffer>;
-};
-
-export type StreamOrchestratorInterface = BaseFrontendClassInterface & {
-  readonly isGenerating: boolean;
-  readonly currentText: string;
-  readonly currentSpeakerId: string | undefined;
-  readonly currentAudioQueueSize: number;
-
-  generateDialogue(options: {
-    prompt: string;
-    npcId: string;
-    personaId: string;
-    messages?: ConversationMessage[];
-    chatId?: string;
-  }): Promise<void>;
-
-  cancelGeneration(): void;
 };
 
 /**
@@ -572,6 +520,7 @@ export class StreamOrchestrator
   }
 }
 
+/** Constructs an instrumented stream orchestrator with the supplied dependencies. */
 export const getStreamOrchestrator = (
   options: StreamOrchestratorOptions,
 ): StreamOrchestratorInterface => StreamOrchestrator.create(options);

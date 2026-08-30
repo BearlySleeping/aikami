@@ -17,6 +17,8 @@ import { registerSerializable } from '../game/serializable_service.ts';
 import { transition } from './boot_state_machine.ts';
 import { campaignStorage } from './campaign_storage.svelte.ts';
 
+/** Options used to construct the campaign lifecycle service. */
+export type CampaignServiceOptions = BaseFrontendClassOptions;
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------

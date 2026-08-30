@@ -8,7 +8,6 @@ import {
   type BaseFrontendClassOptions,
   routerService,
 } from '@aikami/frontend/services';
-import type { NpcSuggestionChip } from '@aikami/types';
 import {
   aiSettingsService,
   audioService,
@@ -18,10 +17,12 @@ import {
   sessionService,
   worldStateService,
 } from '$services';
+import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
 import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
+import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
 import { GameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
@@ -37,40 +38,6 @@ import { timeService } from './time_service.svelte';
 // C-332: Replaces flat active-overlay toggle with an explicit overlay stack.
 // Pressing Escape always pops the top overlay — exactly one layer at a time.
 // ---------------------------------------------------------------------------
-
-export type GameOverlayType =
-  | 'NONE'
-  | 'PAUSE_MENU'
-  | 'DIALOGUE'
-  | 'COMBAT'
-  | 'INVENTORY'
-  | 'QUEST_LOG'
-  | 'GAME_OVER'
-  | 'CHARACTER_DASHBOARD'
-  | 'VENDOR'
-  | 'END_SESSION'
-  | 'SETTINGS'
-  | 'PARTY_ROSTER'
-  | 'TALK_TO_PARTY'
-  | 'REPUTATION';
-
-export type DialogueNpcData = {
-  npcId: string;
-  npcName: string;
-  dialog?: string;
-  personaId?: string;
-  /** Pre-authored suggestion chips shown with the initial greeting. */
-  initialSuggestions?: NpcSuggestionChip[];
-};
-
-export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
-
-/** Entry in the overlay stack. 'NONE' is never pushed — an empty stack means no overlay. */
-export type OverlayStackEntry = {
-  type: GameOverlayType;
-  /** Element that had focus before this overlay opened (for restore on pop). */
-  previousFocus: HTMLElement | undefined;
-};
 
 /**
  * Overlay compatibility matrix — which overlay types can be pushed over
@@ -139,7 +106,7 @@ const OVERLAY_COMPATIBILITY: Record<
   },
 };
 
-export type OverlayEventHandlers = {
+type OverlayEventHandlers = {
   onDialogueStart(npcData: DialogueNpcData): void;
   onDialogueEnd(): void;
   onCombatStart(event: {
@@ -1140,9 +1107,6 @@ export class GameOverlayService
       // Legacy v2/plain payloads fall back to the old full-world restore
       // path (loadGame does its own validation + hydration).
       const rawPayload = await saveService.getRawSavePayload(latestSave.id);
-      const { parseSavePayloadEnvelope, validateEnvelopeChecksum } = await import(
-        './game_save_service.svelte.ts'
-      );
       const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
         parseSavePayloadEnvelope(rawPayload);
 

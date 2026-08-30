@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/routes/dev/sandbox/mode/+page.svelte
 import { untrack } from 'svelte';
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import ModeIndicator from '$lib/components/mode_indicator.svelte';
 import { gameModeService } from '$services';
 import {

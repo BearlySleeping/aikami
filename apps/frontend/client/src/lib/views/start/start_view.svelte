@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/start/start_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import LoginView from '$lib/views/auth/login/login_view.svelte';
 import CreditsModal from './components/credits_modal.svelte';
 import PackBrowserView from './components/pack_browser_view.svelte';

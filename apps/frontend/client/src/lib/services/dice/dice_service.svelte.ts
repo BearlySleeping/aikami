@@ -6,30 +6,9 @@ import {
 } from '@aikami/frontend/services';
 import type { DiceCardData } from '@aikami/types';
 import { createSeedableRng, type SeedableRng } from '@aikami/utils';
+import type { DiceHistoryEntry } from '$types';
 
 export type DiceServiceOptions = BaseFrontendClassOptions;
-
-/** A single entry in the roll history. Optional check context is present only
- * when the roll was made against a DC. */
-export type DiceHistoryEntry = {
-  roll: number;
-  sides: number;
-  modifier: number;
-  total: number;
-  timestamp: Date;
-  /** Raw notation as typed, e.g. "1d20+3" (rollCard only). */
-  notation?: string;
-  /** Difficulty class the roll was made against, if any. */
-  dc?: number;
-  /** Whether the roll met/exceeded the DC, if a check was made. */
-  success?: boolean;
-  /** Natural-20 crit flag (single d20 only). */
-  isCriticalSuccess?: boolean;
-  /** Natural-1 crit flag (single d20 only). */
-  isCriticalFailure?: boolean;
-  /** Optional human label, e.g. "Persuasion". */
-  label?: string;
-};
 
 export type DiceServiceInterface = BaseFrontendClassInterface & {
   readonly history: DiceHistoryEntry[];

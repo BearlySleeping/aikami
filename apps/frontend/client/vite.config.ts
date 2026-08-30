@@ -155,6 +155,7 @@ export default defineConfig(({ mode }) => {
       },
       alias: {
         $appCss: toSrcPath('app.css'),
+        $components: toSrcPath('lib/components'),
         '$components/*': toSrcPath('lib/components/*'),
         $i18n: toSrcPath('lib/utils/i18n'),
         $lib: toPackagesPath('lib'),
@@ -307,7 +308,7 @@ export default defineConfig(({ mode }) => {
         // Tauri APIs are only available at runtime in a Tauri context —
         // externalize them so the web build doesn't fail on dynamic imports
         // like `import('@tauri-apps/api/path')`.
-        external: (id: string) => id.startsWith('@tauri-apps/'),
+        external: [/^@tauri-apps\//],
         // Mute unavoidable warnings from third-party dependencies
         onwarn(warning, warn) {
           // Silence all eval warnings

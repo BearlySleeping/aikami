@@ -15,13 +15,14 @@
 import type { AssetRegistryRepository as AssetRegistryRepositoryClass } from '@aikami/frontend/storage';
 import type { AssetSeedDocument } from '@aikami/types';
 import { withStepTimeout } from '$lib/utils/step_timeout';
-import { logger } from '$logger';
 import type { AssetCacheBackend } from './cache_backend.ts';
 
+/** Options used to construct the shared asset-prefetch service. */
+export type AssetPrefetchServiceOptions = BaseFrontendClassOptions;
 /** Concurrent fetches during the background warm pass — see game_boot_service. */
 const WARM_CONCURRENCY = 8;
 
-export type AssetPrefetchPhase =
+type AssetPrefetchPhase =
   | 'idle'
   | 'preparing'
   | 'prefetching-core'
@@ -30,7 +31,7 @@ export type AssetPrefetchPhase =
   | 'degraded';
 
 /** Result of a starter-content prefetch pass. */
-export type CorePrefetchResult = {
+type CorePrefetchResult = {
   readonly requested: number;
   readonly fetched: number;
   readonly alreadyCached: number;
@@ -94,7 +95,10 @@ export type AssetPrefetchServiceInterface = {
   warmRemaining(onProgress?: (progress: { done: number; total: number }) => void): void;
 };
 
-class AssetPrefetchService implements AssetPrefetchServiceInterface {
+class AssetPrefetchService
+  extends BaseFrontendClass<AssetPrefetchServiceOptions>
+  implements AssetPrefetchServiceInterface
+{
   phase = $state<AssetPrefetchPhase>('idle');
   coreProgress = $state<{ done: number; total: number } | null>(null);
   warmProgress = $state<{ done: number; total: number } | null>(null);
@@ -145,7 +149,7 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
     } catch (err) {
       this.phase = 'degraded';
       this.error = err instanceof Error ? err.message : String(err);
-      logger.warn('assetPrefetchService:pipeline-degraded', { error: this.error });
+      this.warn('assetPrefetchService:pipeline-degraded', { error: this.error });
     }
   }
 
@@ -182,12 +186,12 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
     const seed = assetStore.seed;
 
     if (!seed) {
-      logger.warn('assetPrefetchService:no-seed', {
+      this.warn('assetPrefetchService:no-seed', {
         error: assetStore.error,
         hint: 'Set PUBLIC_ASSETS_BASE_URL or check network connectivity.',
       });
     } else if (await step('isSeeded', () => registry.isSeeded(seed.generatedAt))) {
-      logger.debug('assetPrefetchService:already-seeded');
+      this.debug('assetPrefetchService:already-seeded');
     } else {
       // Deliberately NOT wrapped: seeding thousands of rows on a slow first
       // run can legitimately outlast the step ceiling, and it is the one step
@@ -199,7 +203,7 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
         bundledTags: [...assetStore.coreTags],
         onProgress: onSeedProgress,
       });
-      logger.debug('assetPrefetchService:seeded', { rowCount: seed.rows.length });
+      this.debug('assetPrefetchService:seeded', { rowCount: seed.rows.length });
     }
 
     const backend = createPlatformCacheBackend();
@@ -298,7 +302,7 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
 
       if (toWarm.length === 0) {
         this.phase = 'ready';
-        logger.debug('assetPrefetchService:warm:all-cached');
+        this.debug('assetPrefetchService:warm:all-cached');
         return;
       }
 
@@ -329,7 +333,7 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
       await Promise.all(Array.from({ length: WARM_CONCURRENCY }, runWorker));
 
       this.phase = 'ready';
-      logger.debug('assetPrefetchService:warm:complete', {
+      this.debug('assetPrefetchService:warm:complete', {
         elapsedMs: Math.round(performance.now() - t0),
         warmed,
         failed,
@@ -338,10 +342,12 @@ class AssetPrefetchService implements AssetPrefetchServiceInterface {
     } catch (err) {
       this.phase = 'degraded';
       this.error = err instanceof Error ? err.message : String(err);
-      logger.warn('assetPrefetchService:warm-degraded', { error: this.error });
+      this.warn('assetPrefetchService:warm-degraded', { error: this.error });
     }
   }
 }
 
 /** Shared singleton — the start menu and the boot pipeline both call into this. */
-export const assetPrefetchService: AssetPrefetchServiceInterface = new AssetPrefetchService();
+export const assetPrefetchService: AssetPrefetchServiceInterface = AssetPrefetchService.create({
+  className: 'AssetPrefetchService',
+});

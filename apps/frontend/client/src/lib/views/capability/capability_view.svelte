@@ -1,8 +1,8 @@
 <script lang="ts">
-// apps/frontend/client/src/lib/views/capability/capability_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-import ConnectionEditorPanel from '$views/settings/connection/connection_editor_panel.svelte';
 import VoiceModelDownload from '@aikami/frontend/components/voice-model-download/voice_model_download.svelte';
+// apps/frontend/client/src/lib/views/capability/capability_view.svelte
+import { BaseViewModelContainer } from '$components';
+import ConnectionEditorPanel from '$views/settings/connection/connection_editor_panel.svelte';
 import type { CapabilityViewModelInterface, ConnectionEntry } from './capability_view_model.svelte';
 
 type Props = {

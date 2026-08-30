@@ -14,10 +14,11 @@ import {
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { SaveSlotInfo } from '$types';
 import {
-  hydrateAllServices,
-  type ServiceSnapshot,
-  serializeAllServices,
-} from './serializable_service';
+  parseSavePayloadEnvelope,
+  sha256,
+  validateEnvelopeChecksum,
+} from './game_save_envelope.ts';
+import { hydrateAllServices, serializeAllServices } from './serializable_service';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -26,160 +27,12 @@ import {
 /** Stable key prefix for save entries. */
 const KEY_PREFIX = 'aikami_save_';
 
-/**
- * Computes a SHA-256 hex digest of the given string using the Web Crypto API.
- *
- * Used for save envelope integrity checks. Not a security HMAC — purely for
- * corruption detection.
- */
-export const sha256 = async (input: string): Promise<string> => {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(input);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-};
-
 /** Current save envelope version. */
-export const SAVE_ENVELOPE_VERSION = 3;
-
-/**
- * Map-routing block persisted in the save envelope (v3+).
- *
- * The map file is the source of truth for the world; the save stores only
- * where the player is (map identity + pixel coordinates) so the boot
- * pipeline can re-load the map before overlaying the player snapshot.
- */
-export type SaveMapBlock = {
-  /** Content pack id (e.g. 'emberwatch'). */
-  packId: string;
-  /** Map id within the pack (e.g. 'merchant_shop'). */
-  mapId: string;
-  /** Player X pixel coordinate on the saved map. */
-  playerX: number;
-  /** Player Y pixel coordinate on the saved map. */
-  playerY: number;
-  /** Optional spawn id the player used to enter the map (provenance/debug). */
-  spawnId?: string;
-};
-
-/**
- * Parses a raw save payload into its envelope parts.
- *
- * Handles v3 envelopes (with map block), v2 envelopes
- * ({ ecsSnapshot, serviceSnapshots }), and plain ECS snapshots.
- * Exposed so the game boot pipeline can hydrate domain services on Continue
- * (C-331 AC-2), validate checksums (C-334 AC-4), and route to the saved map
- * (v3 map block).
- *
- * @returns The parsed envelope with version metadata and validation result.
- */
-export const parseSavePayloadEnvelope = (
-  raw: string,
-): {
-  ecsSnapshot: string;
-  serviceSnapshots?: ServiceSnapshot[];
-  /** Envelope version — undefined for pre-v2 payloads. */
-  version?: number;
-  /** Whether the stored checksum matches the computed digest. True for v1/pre-v2. */
-  checksumValid: boolean;
-  /** The raw stored checksum string, if present. */
-  storedChecksum?: string;
-  /** Map-routing block (v3+). Undefined for older payloads. */
-  map?: SaveMapBlock;
-} => {
-  try {
-    const envelope = JSON.parse(raw) as {
-      ecsSnapshot: string;
-      serviceSnapshots?: ServiceSnapshot[];
-      version?: number;
-      checksum?: string;
-      map?: SaveMapBlock;
-    };
-    if (!envelope.ecsSnapshot) {
-      throw new Error('Missing ecsSnapshot');
-    }
-
-    const version = envelope.version;
-
-    // v1 or pre-versioned — no checksum validation
-    if (!version || version < 2 || !envelope.checksum) {
-      return {
-        ecsSnapshot: envelope.ecsSnapshot,
-        serviceSnapshots: envelope.serviceSnapshots,
-        version,
-        checksumValid: true,
-        storedChecksum: envelope.checksum,
-        map: envelope.map,
-      };
-    }
-
-    // v2+ — checksum is stored but validated asynchronously by the caller
-    return {
-      ecsSnapshot: envelope.ecsSnapshot,
-      serviceSnapshots: envelope.serviceSnapshots,
-      version,
-      checksumValid: false, // caller must validate with validateEnvelopeChecksum
-      storedChecksum: envelope.checksum,
-      map: envelope.map,
-    };
-  } catch {
-    // Not valid JSON — treat as plain ECS snapshot
-  }
-  return { ecsSnapshot: raw, version: undefined, checksumValid: true };
-};
-
-/**
- * Validates a v2+ envelope checksum asynchronously.
- *
- * The hashed payload is version-dependent:
- * - v3+: `JSON.stringify({ ecsSnapshot, serviceSnapshots, map })`
- * - v2:  `JSON.stringify({ ecsSnapshot, serviceSnapshots })`
- *
- * @returns true if checksum matches, false on mismatch or error.
- */
-export const validateEnvelopeChecksum = async (options: {
-  ecsSnapshot: string;
-  serviceSnapshots?: ServiceSnapshot[];
-  /** Map block — included in the v3+ digest only. */
-  map?: SaveMapBlock;
-  storedChecksum: string;
-  /** Envelope version. Undefined treats the payload as v2-shaped. */
-  version?: number;
-}): Promise<boolean> => {
-  try {
-    const version = options.version ?? 2;
-    const dataToHash =
-      version >= 3
-        ? JSON.stringify({
-            ecsSnapshot: options.ecsSnapshot,
-            serviceSnapshots: options.serviceSnapshots,
-            map: options.map,
-          })
-        : JSON.stringify({
-            ecsSnapshot: options.ecsSnapshot,
-            serviceSnapshots: options.serviceSnapshots,
-          });
-    const computed = await sha256(dataToHash);
-    return computed === options.storedChecksum;
-  } catch {
-    return false;
-  }
-};
+const SAVE_ENVELOPE_VERSION = 3;
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-/** Internal save document shape persisted to SQLite. */
-export type SaveDocument = {
-  id: string;
-  slotId: string;
-  campaignId: string | null;
-  timestamp: number;
-  mapName: string;
-  payload: string;
-};
 
 /** Options for constructing a {@link GameSaveService}. */
 export type GameSaveServiceOptions = BaseFrontendClassOptions & {

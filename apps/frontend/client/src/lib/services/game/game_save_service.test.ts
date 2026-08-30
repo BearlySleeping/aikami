@@ -62,7 +62,7 @@ const createMockBridge = (): EngineBridge => ({
 
 const getService = async (bridge?: EngineBridge) => {
   const { GameSaveService } = await import('./game_save_service.svelte');
-  return new GameSaveService({
+  return GameSaveService.create({
     className: 'TestSaveService',
     bridge,
   });
@@ -208,7 +208,7 @@ describe('GameSaveService (C-334)', () => {
     const db = await getLocalDatabase();
     // Build a valid v2 envelope: checksum over { ecsSnapshot, serviceSnapshots } only
     const v2Data = JSON.stringify({ ecsSnapshot: MOCK_SNAPSHOT_PAYLOAD, serviceSnapshots: [] });
-    const { sha256 } = await import('./game_save_service.svelte');
+    const { sha256 } = await import('./game_save_envelope');
     const checksum = await sha256(v2Data);
     const v2Payload = JSON.stringify({
       version: 2,
@@ -394,7 +394,7 @@ describe('GameSaveService (C-334)', () => {
   // ── sha256 utility ─────────────────────────────────────────────────
 
   test('sha256 should produce correct hash', async () => {
-    const { sha256 } = await import('./game_save_service.svelte');
+    const { sha256 } = await import('./game_save_envelope');
     const hash = await sha256('hello world');
 
     // Well-known SHA-256 of 'hello world' as hex
@@ -405,7 +405,7 @@ describe('GameSaveService (C-334)', () => {
   // ── parseSavePayloadEnvelope v3 ────────────────────────────────────
 
   test('parseSavePayloadEnvelope should surface map block for v3 payload', async () => {
-    const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte');
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
 
     const raw = JSON.stringify({
       version: 3,
@@ -431,7 +431,7 @@ describe('GameSaveService (C-334)', () => {
   });
 
   test('parseSavePayloadEnvelope surfaces a v3 envelope WITHOUT map (C-378 corrupt-save shape)', async () => {
-    const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte');
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
 
     // The corrupt-save shape: v3 version + checksum but NO map block (the
     // old world-scope fallback wrote exactly this). The boot must NOT
@@ -451,7 +451,7 @@ describe('GameSaveService (C-334)', () => {
   });
 
   test('parseSavePayloadEnvelope should handle v2 payload', async () => {
-    const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte');
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
 
     const raw = JSON.stringify({
       version: 2,
@@ -470,7 +470,7 @@ describe('GameSaveService (C-334)', () => {
   });
 
   test('validateEnvelopeChecksum should be version-aware (v3 includes map, v2 does not)', async () => {
-    const { sha256, validateEnvelopeChecksum } = await import('./game_save_service.svelte');
+    const { sha256, validateEnvelopeChecksum } = await import('./game_save_envelope');
     const ecsSnapshot = '{"entities":[1]}';
     const serviceSnapshots = [];
     const map = { packId: 'emberwatch', mapId: 'village', playerX: 10, playerY: 20 };
@@ -509,7 +509,7 @@ describe('GameSaveService (C-334)', () => {
   });
 
   test('parseSavePayloadEnvelope should handle v1 payload', async () => {
-    const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte');
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
 
     const raw = JSON.stringify({
       ecsSnapshot: '{"entities":[]}',
@@ -523,7 +523,7 @@ describe('GameSaveService (C-334)', () => {
   });
 
   test('parseSavePayloadEnvelope should handle plain snapshot', async () => {
-    const { parseSavePayloadEnvelope } = await import('./game_save_service.svelte');
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
 
     const result = parseSavePayloadEnvelope('plain ecs data');
     expect(result.ecsSnapshot).toBe('plain ecs data');

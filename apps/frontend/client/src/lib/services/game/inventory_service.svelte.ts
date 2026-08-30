@@ -12,12 +12,9 @@
 
 import { MAX_INVENTORY_SLOTS } from '@aikami/constants';
 import type { GameCommand } from '@aikami/frontend/engine/sim';
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
 import type { InventorySnapshot, ItemDefinition } from '@aikami/types';
+import type { InventoryServiceOptions } from '$types';
 import { playerStateService } from './player_state_service.svelte';
 import { registerSerializable, type SerializableService } from './serializable_service';
 
@@ -420,7 +417,7 @@ export type InventoryServiceInterface = BaseFrontendClassInterface & {
 // ---------------------------------------------------------------------------
 
 class InventoryService
-  extends BaseFrontendClass<BaseFrontendClassOptions>
+  extends BaseFrontendClass<InventoryServiceOptions>
   implements InventoryServiceInterface
 {
   inventory = $state<Array<{ itemId: string; quantity: number }>>([]);

@@ -4,7 +4,7 @@
 // Player position is tracked from engine bridge events, not local keyboard state.
 
 import { onMount, tick } from 'svelte';
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { HubWalkSandboxViewModelInterface } from './walk_sandbox_view_model.svelte.ts';
 
 type Props = { viewModel: HubWalkSandboxViewModelInterface };

@@ -3,7 +3,7 @@
 //
 // Settings > Game > Controls sub-tab. Keybinding configuration persisted
 // to localStorage. Click an action to rebind it.
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { SettingsControlsViewModelInterface } from './settings_controls_view_model.svelte';
 
 type Props = {

@@ -1,5 +1,5 @@
 <script lang="ts">
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { AppDialogsViewModelInterface } from '../app_dialogs_view_model.svelte.ts';
 
 type Props = { viewModel: AppDialogsViewModelInterface };

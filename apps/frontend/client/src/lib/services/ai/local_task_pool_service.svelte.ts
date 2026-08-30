@@ -8,6 +8,18 @@
 import { QWEN3_BUNDLE } from '@aikami/constants';
 import { sanitizeJsonResponse, validateAgainstSchema } from '@aikami/frontend/ai-gateway';
 import { LocalTaskPool } from '@aikami/frontend/local-runtime';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import type { LocalTaskPoolServiceOptions } from '$types';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** Public contract for the configured local task-pool singleton. */
+export type LocalTaskPoolServiceInterface = BaseFrontendClassInterface & {
+  /** The underlying LocalTaskPool instance. */
+  readonly pool: LocalTaskPool;
+};
 
 // ---------------------------------------------------------------------------
 // Engine loader for Qwen3
@@ -37,17 +49,33 @@ const qwen3Loader = async (
 };
 
 // ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
+
+class LocalTaskPoolService
+  extends BaseFrontendClass<LocalTaskPoolServiceOptions>
+  implements LocalTaskPoolServiceInterface
+{
+  readonly pool: LocalTaskPool;
+
+  constructor(options: LocalTaskPoolServiceOptions) {
+    super(options);
+    this.pool = new LocalTaskPool({
+      bundle: QWEN3_BUNDLE,
+      loader: qwen3Loader,
+      maxConcurrency: 2,
+      validation: {
+        sanitizeJsonResponse,
+        validateAgainstSchema,
+      },
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Singleton
 // ---------------------------------------------------------------------------
 
-const _taskPool = new LocalTaskPool({
-  bundle: QWEN3_BUNDLE,
-  loader: qwen3Loader,
-  maxConcurrency: 2,
-  validation: {
-    sanitizeJsonResponse,
-    validateAgainstSchema,
-  },
+export const localTaskPoolService: LocalTaskPoolServiceInterface = LocalTaskPoolService.create({
+  className: 'LocalTaskPoolService',
 });
-
-export const localTaskPool = _taskPool;

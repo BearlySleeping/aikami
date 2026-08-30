@@ -13,8 +13,7 @@ import {
 } from '@aikami/frontend/services';
 import { resolveMacros } from '@aikami/parser';
 import type { BridgeContext } from '@aikami/types';
-import { choiceHistoryStore } from '$lib/services/chat/choice_history_store.svelte.ts';
-import { combatService, timeService, worldStateService } from '$services';
+import { choiceHistoryStore, combatService, timeService, worldStateService } from '$services';
 import type { AddressMode } from '$types';
 // Imported directly to break the barrel cycle: the barrel re-exports
 // gm_prompt_service before it re-exports lorebookStore.

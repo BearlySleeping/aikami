@@ -9,8 +9,8 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { type AdvancedOverrides, configService } from '$services';
 import type { GenerationParams, InstructTemplate } from '$types';
+import { type AdvancedOverrides, configService } from '../config/config_service.svelte.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────
 

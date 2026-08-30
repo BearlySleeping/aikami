@@ -3,7 +3,7 @@
 //
 // Roll-history feed (C-421 AC-4) — lists past rolls from DiceService.history
 // with notation, total, timestamp, and where present the DC + success/failure.
-import type { DiceHistoryEntry } from '$lib/services/dice/dice_service.svelte.ts';
+import type { DiceHistoryEntry } from '$types';
 
 type Props = {
   entries: DiceHistoryEntry[];

@@ -3,17 +3,13 @@
 // Combat domain service — owns combat encounter state.
 // UI reads reactive getters; only this service mutates state.
 
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import type { CombatServiceOptions, GameOverlayType } from '$types';
 import { gameEngineService } from './game_engine_service.svelte';
-import type { GameOverlayType } from './game_overlay_service.svelte';
 import { registerSerializable, type SerializableService } from './serializable_service';
 
 /** Serialized shape for save/load. */
-export type CombatState = {
+type CombatState = {
   enemyName: string;
   enemyHp: number;
   enemyMaxHp: number;
@@ -61,7 +57,7 @@ export type CombatServiceInterface = BaseFrontendClassInterface & {
 };
 
 class CombatService
-  extends BaseFrontendClass<BaseFrontendClassOptions>
+  extends BaseFrontendClass<CombatServiceOptions>
   implements CombatServiceInterface, SerializableService<CombatState>
 {
   private _enemyName = $state('Unknown Enemy');

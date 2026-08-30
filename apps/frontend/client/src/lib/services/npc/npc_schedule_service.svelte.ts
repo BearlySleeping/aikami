@@ -11,18 +11,15 @@ import {
   DEFAULT_COOLDOWN_MINUTES,
   DEFAULT_TALKATIVENESS,
 } from '@aikami/constants';
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
 import { NpcScheduleSchema, schemaCheck } from '@aikami/schemas';
 import type { AvailabilityStatus, NpcSchedule } from '@aikami/types';
+import type { NpcScheduleServiceOptions } from '$types';
 import { npcScheduleStorage } from './npc_schedule_storage.svelte.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-export type CurrentStatus = {
+type CurrentStatus = {
   status: AvailabilityStatus;
   activity: string;
 };
@@ -44,7 +41,7 @@ export type NpcScheduleServiceInterface = BaseFrontendClassInterface & {
 // ── Implementation ───────────────────────────────────────────────────────
 
 class NpcScheduleService
-  extends BaseFrontendClass<BaseFrontendClassOptions>
+  extends BaseFrontendClass<NpcScheduleServiceOptions>
   implements NpcScheduleServiceInterface
 {
   private _cache = new Map<string, NpcSchedule>();
