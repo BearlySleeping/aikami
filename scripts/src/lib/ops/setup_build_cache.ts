@@ -43,7 +43,7 @@ export const setupBuildCache = (): void => {
   console.log('\nDone. Cache directories are ready for warm local builds.');
   console.log('Run your build as usual: moon run <app>:build');
   console.log('The second build (no dependency changes) will be measurably faster.');
-}
+};
 
 // Run directly
 if (import.meta.main) {

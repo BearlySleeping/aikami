@@ -9,7 +9,7 @@
 // when they leave, access is revoked.
 
 import { logger } from '@aikami/logger';
-import { type GuildMember, type PartialGuildMember } from 'discord.js';
+import type { GuildMember, PartialGuildMember } from 'discord.js';
 import { CHANNEL_TOOL_ACCESS } from './constants';
 
 // ── Types ────────────────────────────────────────────────────────────────

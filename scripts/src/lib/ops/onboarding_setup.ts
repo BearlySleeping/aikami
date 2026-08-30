@@ -21,12 +21,12 @@ const printHeader = (text: string): void => {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`  ${text}`);
   console.log('='.repeat(60));
-}
+};
 
 const printStep = (num: number, text: string): void => {
   console.log(`\n  Step ${num}: ${text}`);
   console.log(`  ${'-'.repeat(text.length + 10)}`);
-}
+};
 
 const confirmStep = async (promptText: string): Promise<boolean> => {
   console.log(`\n  ${promptText} (y/N)`);
@@ -38,12 +38,12 @@ const confirmStep = async (promptText: string): Promise<boolean> => {
   });
   const answer = result.trim().toLowerCase();
   return answer === 'y' || answer === 'yes';
-}
+};
 
 const checkCommand = (cmd: string): boolean => {
   const result = Bun.spawnSync([cmd, '--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
   return result.exitCode === 0;
-}
+};
 
 // ── Main ─────────────────────────────────────────────────────────────────
 
@@ -159,7 +159,7 @@ const main = async (): Promise<void> => {
     console.error('    • Missing secrets/ directory');
     process.exit(1);
   }
-}
+};
 
 const cloudflareTokenGuide = async (): Promise<void> => {
   console.log('\n  To create a Cloudflare API token:');
@@ -180,7 +180,7 @@ const cloudflareTokenGuide = async (): Promise<void> => {
     console.log('\n  ⚠️  Please create the token and re-run this script.');
     process.exit(1);
   }
-}
+};
 
 const generateAgeKey = async (): Promise<void> => {
   console.log('\n  Generating a new age key for SOPS...\n');
@@ -218,6 +218,6 @@ const generateAgeKey = async (): Promise<void> => {
   if (!done) {
     console.log('\n  ⚠️  Make sure to save the key before continuing.');
   }
-}
+};
 
 await main();

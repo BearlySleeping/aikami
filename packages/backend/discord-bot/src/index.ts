@@ -60,18 +60,30 @@ export async function startDiscordBot(env: DiscordBotEnv): Promise<Client> {
     // Fetch all guild members and re-sync their tool access for this channel
     newChannel.guild?.members
       .fetch()
-      .then((members: import('discord.js').GuildMemberManager['fetch'] extends (...args: never[]) => Promise<infer R> ? R : never) => {
-        for (const [, member] of members) {
-          const permissions = newChannel.permissionsFor(member);
-          const hasAccess = permissions?.has('ViewChannel') ?? false;
-          const channelIds = hasAccess ? [newChannel.id] : [];
-          syncMemberToolAccess(member, channelIds).catch((err: unknown) => {
-            logger.error(`role-sync: channelUpdate sync error for ${member.user.tag}: ${(err as Error).message}`);
-          });
-        }
-      })
+      .then(
+        (
+          members: import('discord.js').GuildMemberManager['fetch'] extends (
+            ...args: never[]
+          ) => Promise<infer R>
+            ? R
+            : never,
+        ) => {
+          for (const [, member] of members) {
+            const permissions = newChannel.permissionsFor(member);
+            const hasAccess = permissions?.has('ViewChannel') ?? false;
+            const channelIds = hasAccess ? [newChannel.id] : [];
+            syncMemberToolAccess(member, channelIds).catch((err: unknown) => {
+              logger.error(
+                `role-sync: channelUpdate sync error for ${member.user.tag}: ${(err as Error).message}`,
+              );
+            });
+          }
+        },
+      )
       .catch((err: unknown) => {
-        logger.error(`role-sync: failed to fetch members on channel update: ${(err as Error).message}`);
+        logger.error(
+          `role-sync: failed to fetch members on channel update: ${(err as Error).message}`,
+        );
       });
   });
 
