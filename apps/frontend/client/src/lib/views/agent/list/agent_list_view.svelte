@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/agent/list/agent_list_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { AgentListViewModelInterface } from './agent_list_view_model.svelte.ts';
 
 type Props = {

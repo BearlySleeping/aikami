@@ -6,7 +6,7 @@
 //
 // Contract: C-245 CYOA Choices Branching Narrative
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import ChoiceButtonsView from './choice_buttons_view.svelte';
 import type { CyoaSandboxViewModelInterface } from './cyoa_sandbox_view_model.svelte.ts';
 

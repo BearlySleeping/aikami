@@ -6,7 +6,7 @@
 // pattern — visibility is persisted (default on) and toggled from
 // Settings > Gameplay or hidden via the ✕ button.
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import {
   getQuestOverlayViewModel,
   type QuestOverlayViewModelInterface,

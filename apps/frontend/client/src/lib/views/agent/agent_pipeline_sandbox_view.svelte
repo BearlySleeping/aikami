@@ -1,7 +1,7 @@
 <script lang="ts">
-import AgentHudDrawer from '$lib/components/agent/agent_hud_drawer.svelte';
 // apps/frontend/client/src/lib/views/agent/agent_pipeline_sandbox_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
+import AgentHudDrawer from '$lib/components/agent/agent_hud_drawer.svelte';
 import type { AgentPipelineSandboxViewModelInterface } from './agent_pipeline_sandbox_view_model.svelte.ts';
 
 type Props = {

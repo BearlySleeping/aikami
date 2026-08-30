@@ -60,9 +60,15 @@ export type PlayerJournalViewModelInterface = BaseViewModelInterface & {
 
   /** Deletes an entry by ID. */
   deleteEntry(options: { id: string }): Promise<void>;
+  /** Closes the editor when the backdrop itself is clicked. */
+  handleEditorBackdropClick(event: MouseEvent): void;
+  /** Closes the editor when Escape is pressed. */
+  handleEditorKeyDown(event: KeyboardEvent): void;
 };
 
-export type PlayerJournalViewModelOptions = BaseViewModelOptions & {};
+export type PlayerJournalViewModelOptions = BaseViewModelOptions & {
+  campaignId: string;
+};
 
 class PlayerJournalViewModel
   extends BaseViewModel<PlayerJournalViewModelOptions>
@@ -78,8 +84,18 @@ class PlayerJournalViewModel
   isSaving = $state(false);
 
   private _editingEntryId: string | null = null;
-  private _campaignId: string | null = null;
+  private _campaignId: string;
   private _sessionNumber = 0;
+
+  constructor(options: PlayerJournalViewModelOptions) {
+    super(options);
+    this._campaignId = options.campaignId;
+  }
+
+  override async initialize(): Promise<void> {
+    await this.loadEntries({ campaignId: this._campaignId });
+    await super.initialize();
+  }
 
   get entries(): PlayerJournalEntry[] {
     return playerJournalService.entries;
@@ -216,6 +232,20 @@ class PlayerJournalViewModel
 
     if (confirmed) {
       await playerJournalService.deleteEntry({ id: options.id });
+    }
+  }
+
+  /** @inheritdoc */
+  handleEditorBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.closeEditor();
+    }
+  }
+
+  /** @inheritdoc */
+  handleEditorKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.closeEditor();
     }
   }
 

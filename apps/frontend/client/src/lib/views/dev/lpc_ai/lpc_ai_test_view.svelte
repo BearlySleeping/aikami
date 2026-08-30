@@ -4,7 +4,7 @@
 // LPC AI Recipe Tester View — paste AI-generated lpcRecipe JSON,
 // preview the character, and get slot-by-slot diagnostics.
 
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import LpcPreviewView from '$views/character/lpc_preview/lpc_preview_view.svelte';
 import {
   getLpcPreviewViewModel,

@@ -7,7 +7,7 @@
 //
 // Contract: C-150 (audio engine), C-249 (music tags)
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import {
   getMusicPlayerViewModel,
   type MusicPlayerViewModelInterface,

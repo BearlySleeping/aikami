@@ -12,9 +12,11 @@ import {
 } from '@aikami/frontend/services';
 import {
   buildMusicSceneContext,
+  gameEngineService,
+  gameOverlayService,
   musicPlayerService,
-} from '$lib/services/audio/music_player_service.svelte';
-import { gameEngineService, gameOverlayService, timeService } from '$services';
+  timeService,
+} from '$services';
 
 // ---------------------------------------------------------------------------
 // Interface

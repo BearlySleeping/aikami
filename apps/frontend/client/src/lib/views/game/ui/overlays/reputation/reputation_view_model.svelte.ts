@@ -42,6 +42,8 @@ export type ReputationViewModelInterface = BaseViewModelInterface & {
   readonly isEmpty: boolean;
 
   /** Close the overlay. */
+  handleBackdropClick(event: MouseEvent): void;
+  handleKeyDown(event: KeyboardEvent): void;
   close(): void;
 };
 
@@ -120,6 +122,20 @@ class ReputationViewModel
 
   get isEmpty(): boolean {
     return this.factions.length === 0 && this.relationships.length === 0;
+  }
+
+  /** Closes the overlay when the backdrop itself is clicked. */
+  handleBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.close();
+    }
+  }
+
+  /** Closes the overlay when Escape is pressed. */
+  handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.close();
+    }
   }
 
   /** @inheritdoc */

@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/combat/combat_view.svelte
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import { imageGenerationService } from '$services';
 import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
 import CombatDiceUi from './components/combat_dice_ui.svelte';

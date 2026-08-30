@@ -11,7 +11,7 @@
 //
 // Contract: C-244 Connected Chats Cross-Mode Bridge
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import ChatView from '$views/chat/chat_view.svelte';
 import ConnectedChatsPanelView from '$views/chat/connected_chats_panel_view.svelte';
 import { getConnectedChatsPanelViewModel } from '$views/chat/connected_chats_panel_view_model.svelte.ts';

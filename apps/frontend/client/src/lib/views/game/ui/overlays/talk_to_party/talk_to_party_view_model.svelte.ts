@@ -36,6 +36,7 @@ export type TalkToPartyViewModelInterface = BaseViewModelInterface & {
 
   sendMessage(): Promise<void>;
   setInput(text: string): void;
+  handleBackdropClick(event: MouseEvent): void;
   handleKeyDown(event: KeyboardEvent): void;
   close(): void;
 };
@@ -154,6 +155,13 @@ class TalkToPartyViewModel
   /** @inheritdoc */
   setInput(text: string): void {
     this.inputText = text;
+  }
+
+  /** Closes the overlay when the backdrop itself is clicked. */
+  handleBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.close();
+    }
   }
 
   /** @inheritdoc */

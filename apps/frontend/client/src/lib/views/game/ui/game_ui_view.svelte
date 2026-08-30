@@ -1,4 +1,5 @@
 <script lang="ts">
+import { BaseViewModelContainer } from '$components';
 import { questOverlayService } from '$services';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
 import InventoryView from '../../inventory/inventory_view.svelte';
@@ -38,150 +39,135 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
   return { destroy: () => {} };
 }
 </script>
-
-<!--
+<BaseViewModelContainer {viewModel}>
+  <!--
   Game UI layer — absolutely positioned over the canvas.
   pointer-events-none allows clicks to pass through to the canvas
   unless a child element explicitly sets pointer-events-auto.
   data-combat attribute enables CSS-driven HUD repositioning (C-332 AC-5).
 -->
-<div
-  class="absolute inset-0 z-10 pointer-events-none"
-  data-combat={viewModel.isCombat ? 'true' : undefined}
-  id="game-ui-layer"
->
-  <!-- ── HUD Bar — Top-Left: HP Bar (C-332 AC-1) ── -->
-  <HpBar hp={viewModel.playerHp} maxHp={viewModel.playerMaxHp} visible={viewModel.showHpBar} />
+  <div
+    class="absolute inset-0 z-10 pointer-events-none"
+    data-combat={viewModel.isCombat ? 'true' : undefined}
+    id="game-ui-layer"
+  >
+    <!-- ── HUD Bar — Top-Left: HP Bar (C-332 AC-1) ── -->
+    <HpBar hp={viewModel.playerHp} maxHp={viewModel.playerMaxHp} visible={viewModel.showHpBar} />
 
-  <!-- ── Party HUD (C-340) ── -->
-  <div class="absolute top-16 left-4 z-50 pointer-events-auto">
-    <PartyHud visible={viewModel.showHpBar} />
-  </div>
-
-  <!-- ── HUD Bar — Top-Right: Clock + Autosave Indicator (C-332 AC-3) ── -->
-  <div class="absolute top-3 right-3 z-50 flex items-center gap-2 pointer-events-none">
-    {#if viewModel.showAutosaveIndicator}
-      <AutosaveIndicator
-        status={viewModel.autoSaveStatus}
-        visible={viewModel.showAutosaveIndicator}
-      />
-    {/if}
-
-    {#if viewModel.showClockHud}
-      <ClockHud
-        gameHour={viewModel.gameHour}
-        gameMinute={viewModel.gameMinute}
-        windVelocity={viewModel.windVelocity}
-        rainIntensity={viewModel.rainIntensity}
-      />
-    {/if}
-  </div>
-
-  <!-- ── HUD Bar — Bottom-Left: Quest Tracker (C-332 AC-1) ── -->
-  <!-- Hidden while the richer Quest Overlay is visible (they show the same info). -->
-  {#if viewModel.showQuestTracker && !questOverlayService.visible}
-    <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
-  {/if}
-
-  <!-- ── Hotbar — Bottom-Center: 6-slot ability bar (C-337) ── -->
-  {#if viewModel.showHotbar}
-    <HotbarView />
-  {/if}
-
-  <!-- ── C-327 AC-2: Interaction prompt HUD ── -->
-  <InteractionPrompt
-    label={viewModel.interactionPromptLabel}
-    visible={viewModel.interactionPromptVisible}
-    reducedMotion={viewModel.reducedMotion}
-  />
-
-  <!-- ── C-327 AC-3 / C-422 AC-3: Onboarding hint toast with progress and skip ── -->
-  <OnboardingHint
-    text={viewModel.onboardingHintText}
-    visible={viewModel.onboardingHintVisible}
-    stepIndex={viewModel.onboardingStepIndex}
-    totalSteps={viewModel.onboardingTotalSteps}
-    reducedMotion={viewModel.reducedMotion}
-    onDismiss={() => viewModel.dismissOnboardingHint()}
-    onSkip={() => viewModel.skipOnboardingHint()}
-  />
-
-  <!-- ── Optional Music Player overlay (toggle in Settings > Audio) ── -->
-  <MusicPlayerOverlay />
-
-  <!-- ── Optional Active Quest overlay (toggle in Settings > Gameplay) ── -->
-  <QuestOverlay />
-
-  <!-- Overlay router -->
-  {#if viewModel.chatLocked}
-    <!-- Chat locked banner (C-240) -->
-    <div
-      class="pointer-events-auto fixed top-0 left-0 right-0 z-50 bg-warning/90 px-4 py-2 text-center text-sm font-semibold text-warning-content"
-      role="alert"
-    >
-      Session ended. Start a new session to continue chatting.
+    <!-- ── Party HUD (C-340) ── -->
+    <div class="absolute top-16 left-4 z-50 pointer-events-auto">
+      <PartyHud visible={viewModel.showHpBar} />
     </div>
-  {/if}
 
-  {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
-    <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
-  {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
-    <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
-  {:else if viewModel.activeOverlay === 'GAME_OVER'}
-    <GameOverOverlay
-      onRespawn={() => viewModel.respawnPlayer()}
-      onLoadLastSave={() => viewModel.loadLastSave()}
+    <!-- ── HUD Bar — Top-Right: Clock + Autosave Indicator (C-332 AC-3) ── -->
+    <div class="absolute top-3 right-3 z-50 flex items-center gap-2 pointer-events-none">
+      {#if viewModel.showAutosaveIndicator}
+        <AutosaveIndicator
+          status={viewModel.autoSaveStatus}
+          visible={viewModel.showAutosaveIndicator}
+        />
+      {/if}
+
+      {#if viewModel.showClockHud}
+        <ClockHud
+          gameHour={viewModel.gameHour}
+          gameMinute={viewModel.gameMinute}
+          windVelocity={viewModel.windVelocity}
+          rainIntensity={viewModel.rainIntensity}
+        />
+      {/if}
+    </div>
+
+    <!-- ── HUD Bar — Bottom-Left: Quest Tracker (C-332 AC-1) ── -->
+    <!-- Hidden while the richer Quest Overlay is visible (they show the same info). -->
+    {#if viewModel.showQuestTracker && !questOverlayService.visible}
+      <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
+    {/if}
+
+    <!-- ── Hotbar — Bottom-Center: 6-slot ability bar (C-337) ── -->
+    {#if viewModel.showHotbar}
+      <HotbarView />
+    {/if}
+
+    <!-- ── C-327 AC-2: Interaction prompt HUD ── -->
+    <InteractionPrompt
+      label={viewModel.interactionPromptLabel}
+      visible={viewModel.interactionPromptVisible}
+      reducedMotion={viewModel.reducedMotion}
     />
-  {:else if viewModel.activeOverlay === 'INVENTORY' && viewModel.inventoryViewModel}
-    <InventoryView viewModel={viewModel.inventoryViewModel} />
-  {:else if viewModel.activeOverlay === 'QUEST_LOG' && viewModel.questViewModel}
-    <!-- svelte-ignore a11y_no_static_element_interactions — backdrop click-to-close with focus trap -->
-    <div
-      class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Quest Log"
-      tabindex="-1"
-      onkeydown={(e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          viewModel.handleKeyDown(e);
-          return;
-        }
-        if (e.key === 'Tab') {
-          e.preventDefault();
-          const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-            'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href]'
-          );
-          if (focusable.length === 0) {
-            return;
-          }
-          const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
-          const direction = e.shiftKey ? -1 : 1;
-          const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
-          focusable[nextIndex].focus();
-        }
-      }}
-      use:focusOnMount
-    >
-      <div class="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl">
-        <QuestView viewModel={viewModel.questViewModel} />
-      </div>
-    </div>
-  {:else if viewModel.activeOverlay === 'CHARACTER_DASHBOARD' && viewModel.dashboardViewModel}
-    <CharacterSheetView viewModel={viewModel.dashboardViewModel} />
-  {:else if viewModel.activeOverlay === 'VENDOR' && viewModel.vendorViewModel}
-    <VendorView viewModel={viewModel.vendorViewModel} />
-  {:else if viewModel.activeOverlay === 'END_SESSION' && viewModel.endSessionViewModel}
-    <EndSessionView viewModel={viewModel.endSessionViewModel} />
-  {:else if viewModel.activeOverlay === 'SETTINGS' && viewModel.settingsOverlayViewModel}
-    <SettingsOverlay viewModel={viewModel.settingsOverlayViewModel} />
-  {:else if viewModel.activeOverlay === 'PARTY_ROSTER' && viewModel.partyRosterViewModel}
-    <PartyRosterView viewModel={viewModel.partyRosterViewModel} />
-  {:else if viewModel.activeOverlay === 'TALK_TO_PARTY' && viewModel.talkToPartyViewModel}
-    <TalkToPartyView viewModel={viewModel.talkToPartyViewModel} />
-  {:else if viewModel.activeOverlay === 'REPUTATION' && viewModel.reputationViewModel}
-    <ReputationView viewModel={viewModel.reputationViewModel} />
-  {/if}
 
-  <TransitionOverlay {viewModel} />
-</div>
+    <!-- ── C-327 AC-3 / C-422 AC-3: Onboarding hint toast with progress and skip ── -->
+    <OnboardingHint
+      text={viewModel.onboardingHintText}
+      visible={viewModel.onboardingHintVisible}
+      stepIndex={viewModel.onboardingStepIndex}
+      totalSteps={viewModel.onboardingTotalSteps}
+      reducedMotion={viewModel.reducedMotion}
+      onDismiss={() => viewModel.dismissOnboardingHint()}
+      onSkip={() => viewModel.skipOnboardingHint()}
+    />
+
+    <!-- ── Optional Music Player overlay (toggle in Settings > Audio) ── -->
+    <MusicPlayerOverlay />
+
+    <!-- ── Optional Active Quest overlay (toggle in Settings > Gameplay) ── -->
+    <QuestOverlay />
+
+    <!-- Overlay router -->
+    {#if viewModel.chatLocked}
+      <!-- Chat locked banner (C-240) -->
+      <div
+        class="pointer-events-auto fixed top-0 left-0 right-0 z-50 bg-warning/90 px-4 py-2 text-center text-sm font-semibold text-warning-content"
+        role="alert"
+      >
+        Session ended. Start a new session to continue chatting.
+      </div>
+    {/if}
+
+    {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
+      <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
+    {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
+      <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
+    {:else if viewModel.activeOverlay === 'GAME_OVER'}
+      <GameOverOverlay
+        onRespawn={() => viewModel.respawnPlayer()}
+        onLoadLastSave={() => viewModel.loadLastSave()}
+      />
+    {:else if viewModel.activeOverlay === 'INVENTORY' && viewModel.inventoryViewModel}
+      <InventoryView viewModel={viewModel.inventoryViewModel} />
+    {:else if viewModel.activeOverlay === 'QUEST_LOG' && viewModel.questViewModel}
+      <div
+        class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Quest Log"
+        tabindex="-1"
+        onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
+        onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
+        use:focusOnMount
+      >
+        <div
+          class="w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-xl bg-base-100 shadow-2xl"
+        >
+          <QuestView viewModel={viewModel.questViewModel} />
+        </div>
+      </div>
+    {:else if viewModel.activeOverlay === 'CHARACTER_DASHBOARD' && viewModel.dashboardViewModel}
+      <CharacterSheetView viewModel={viewModel.dashboardViewModel} />
+    {:else if viewModel.activeOverlay === 'VENDOR' && viewModel.vendorViewModel}
+      <VendorView viewModel={viewModel.vendorViewModel} />
+    {:else if viewModel.activeOverlay === 'END_SESSION' && viewModel.endSessionViewModel}
+      <EndSessionView viewModel={viewModel.endSessionViewModel} />
+    {:else if viewModel.activeOverlay === 'SETTINGS' && viewModel.settingsOverlayViewModel}
+      <SettingsOverlay viewModel={viewModel.settingsOverlayViewModel} />
+    {:else if viewModel.activeOverlay === 'PARTY_ROSTER' && viewModel.partyRosterViewModel}
+      <PartyRosterView viewModel={viewModel.partyRosterViewModel} />
+    {:else if viewModel.activeOverlay === 'TALK_TO_PARTY' && viewModel.talkToPartyViewModel}
+      <TalkToPartyView viewModel={viewModel.talkToPartyViewModel} />
+    {:else if viewModel.activeOverlay === 'REPUTATION' && viewModel.reputationViewModel}
+      <ReputationView viewModel={viewModel.reputationViewModel} />
+    {/if}
+
+    <TransitionOverlay {viewModel} />
+  </div>
+</BaseViewModelContainer>

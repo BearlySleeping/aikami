@@ -342,4 +342,4 @@ class SandboxViewModel
 }
 
 export const getSandboxViewModel = (options: SandboxViewModelOptions): SandboxViewModelInterface =>
-  new SandboxViewModel(options);
+  SandboxViewModel.create(options);

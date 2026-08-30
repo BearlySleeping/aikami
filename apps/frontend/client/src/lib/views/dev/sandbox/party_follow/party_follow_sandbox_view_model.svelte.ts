@@ -451,4 +451,4 @@ class PartyFollowSandboxViewModel
 
 export const getPartyFollowSandboxViewModel = (
   options: PartyFollowSandboxViewModelOptions,
-): PartyFollowSandboxViewModel => new PartyFollowSandboxViewModel(options);
+): PartyFollowSandboxViewModel => PartyFollowSandboxViewModel.create(options);

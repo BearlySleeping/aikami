@@ -7,7 +7,7 @@
 // Contract: C-161 Spatial UI Camera — devtool sandbox
 
 import { onMount } from 'svelte';
-import BaseViewModelContainer from '$components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { CameraSandboxViewModelInterface } from './camera_sandbox_view_model.svelte.ts';
 
 type Props = {

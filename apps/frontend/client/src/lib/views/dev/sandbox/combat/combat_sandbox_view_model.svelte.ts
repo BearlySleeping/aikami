@@ -564,4 +564,4 @@ const _recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => {
  */
 export const getCombatSandboxViewModel = (
   options: CombatSandboxViewModelOptions,
-): CombatSandboxViewModel => new CombatSandboxViewModel(options);
+): CombatSandboxViewModel => CombatSandboxViewModel.create(options);

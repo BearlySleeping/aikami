@@ -31,6 +31,10 @@ export type HotbarSlot = {
   usesRemaining: number | null;
   /** Whether this ability can be used (has uses remaining or is unlimited) */
   canUse: boolean;
+  /** Presentation classes for the slot button. */
+  className: string;
+  /** Accessible hover title for the slot button. */
+  title: string;
 };
 
 // ── Interface ──
@@ -84,15 +88,25 @@ class HotbarViewModel
       const featureId = hotbarSlots[i] || '';
       const filled = featureId.length > 0;
       const usesRemaining = abilityUses[featureId] ?? null;
+      const label = filled ? this._resolveFeatureName(featureId) : '';
+      const filledClassName = filled
+        ? 'border-purple-500/60 bg-purple-500/10 hover:border-purple-500/90 hover:bg-purple-500/20'
+        : 'opacity-50 hover:opacity-70';
+      const availabilityClassName =
+        filled && (usesRemaining === null || usesRemaining > 0)
+          ? ''
+          : 'opacity-40 cursor-not-allowed';
 
       result.push({
         index: i,
         featureId,
-        label: filled ? this._resolveFeatureName(featureId) : '',
+        label,
         keybind: String(i + 1),
         filled,
         usesRemaining,
         canUse: filled && (usesRemaining === null || usesRemaining > 0),
+        className: `w-16 h-16 rounded-lg border-2 border-white/20 bg-white/5 flex flex-col items-center justify-center cursor-pointer relative transition-colors duration-200 hover:border-white/50 hover:bg-white/10 ${filledClassName} ${availabilityClassName}`,
+        title: filled ? label : `Slot ${i + 1} (empty)`,
       });
     }
 

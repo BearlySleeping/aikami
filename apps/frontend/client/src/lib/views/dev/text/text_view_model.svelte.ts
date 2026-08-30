@@ -282,4 +282,4 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
 }
 
 export const getTextViewModel = (options: TextViewModelOptions): TextViewModelInterface =>
-  new TextViewModel(options);
+  TextViewModel.create(options);

@@ -6,7 +6,7 @@
 //
 // Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { GameBootViewModelInterface } from './game_boot_view_model.svelte';
 
 type Props = {

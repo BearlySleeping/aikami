@@ -1,5 +1,5 @@
 <script lang="ts">
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/chat/chat_view.svelte
 import CharacterCard from '$lib/components/chat/character_card.svelte';
 import TypingIndicator from '$lib/components/chat/typing_indicator.svelte';

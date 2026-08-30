@@ -336,4 +336,4 @@ class NpcListViewModel
 }
 
 export const getNpcListViewModel = (options: NpcListViewModelOptions): NpcListViewModelInterface =>
-  new NpcListViewModel(options);
+  NpcListViewModel.create(options);

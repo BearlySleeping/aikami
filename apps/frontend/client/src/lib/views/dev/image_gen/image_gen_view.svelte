@@ -7,7 +7,7 @@
 //
 // Contract: C-242 Image Generation Pipeline
 
-import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
+import { BaseViewModelContainer } from '$components';
 import type { ImageGenViewModelInterface } from './image_gen_view_model.svelte.ts';
 
 type Props = { viewModel: ImageGenViewModelInterface };

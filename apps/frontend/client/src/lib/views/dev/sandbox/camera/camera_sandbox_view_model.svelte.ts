@@ -380,4 +380,4 @@ class CameraSandboxViewModel
 
 export const getCameraSandboxViewModel = (
   options: CameraSandboxViewModelOptions,
-): CameraSandboxViewModelInterface => new CameraSandboxViewModel(options);
+): CameraSandboxViewModelInterface => CameraSandboxViewModel.create(options);

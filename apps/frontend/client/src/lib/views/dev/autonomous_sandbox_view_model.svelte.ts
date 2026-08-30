@@ -35,6 +35,9 @@ export type AutonomousSandboxViewModelInterface = BaseViewModelInterface & {
   readonly isPollerPaused: boolean;
   readonly testLog: string[];
   readonly mockNpcIds: string[];
+  readonly currentTimeLabel: string;
+  readonly dayLabel: string;
+  readonly hourLabel: string;
 
   // --- Schedule editor (sub-component) ---
   readonly scheduleEditorViewModel: ScheduleEditorViewModelInterface;
@@ -96,6 +99,15 @@ class AutonomousSandboxViewModel
   readonly dayLabels = DAY_LABELS;
   readonly statusLabels = AVAILABILITY_STATUS_LABELS;
   readonly statusColors = AVAILABILITY_STATUS_COLORS;
+  currentTimeLabel = $derived(new Date().toLocaleString());
+  dayLabel = $derived.by(() => {
+    const day = new Date().getDay();
+    return `${DAY_LABELS[day]} Day ${day}`;
+  });
+  hourLabel = $derived.by(() => {
+    const hour = new Date().getHours();
+    return `${hour}:00 Hour ${hour}`;
+  });
 
   get idleDurationMs(): number {
     return idleDetectionService.idleDurationMs;

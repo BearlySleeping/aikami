@@ -53,6 +53,8 @@ export type CharacterDashboardViewModelInterface = BaseViewModelInterface & {
   getSlotIcon(slot: EquipmentSlot): string;
 
   /** Closes the dashboard overlay. */
+  handleBackdropClick(event: MouseEvent): void;
+  handleKeyDown(event: KeyboardEvent): void;
   closeDashboard(): void;
 };
 
@@ -156,6 +158,20 @@ class CharacterDashboardViewModel
 
   getSlotIcon(slot: EquipmentSlot): string {
     return EQUIPMENT_SLOT_ICONS[slot];
+  }
+
+  /** Closes the dashboard when the backdrop itself is clicked. */
+  handleBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) {
+      this.closeDashboard();
+    }
+  }
+
+  /** Closes the dashboard when Escape is pressed. */
+  handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.closeDashboard();
+    }
   }
 
   /** @inheritdoc */

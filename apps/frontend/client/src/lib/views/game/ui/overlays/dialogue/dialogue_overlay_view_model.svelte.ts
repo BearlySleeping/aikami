@@ -10,7 +10,6 @@ import type { NpcQuestActivation, NpcSuggestionChip } from '@aikami/types';
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import { mergeInitialSuggestions } from '$lib/data/initial_suggestion_presets';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
-import { expressionService } from '$lib/services/expression/expression_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from '$services';
 import {
   buildGameStateFacts,
