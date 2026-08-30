@@ -68,6 +68,7 @@ type MockPack = {
 };
 
 let mockAvailablePacks: MockPack[] = [];
+let newAdventureCalls: string[] = [];
 
 const PACK_EMBERWATCH: MockPack = {
   id: 'emberwatch',
@@ -133,13 +134,16 @@ const _setupServiceOverrides = (): void => {
   );
 
   (_svcStubs.campaignService as Record<string, unknown>).startNewCampaign = mock(
-    async (options?: { contentPackId?: string }) => ({
-      id: 'camp-new',
-      name: 'New Adventure',
-      state: 'creating',
-      contentPackId: options?.contentPackId ?? 'emberwatch',
-      capabilityProfile: { textProvider: true, imageProvider: false, voiceProvider: false },
-    }),
+    async (options?: { contentPackId?: string }) => {
+      newAdventureCalls.push('start');
+      return {
+        id: 'camp-new',
+        name: 'New Adventure',
+        state: 'creating',
+        contentPackId: options?.contentPackId ?? 'emberwatch',
+        capabilityProfile: { textProvider: true, imageProvider: false, voiceProvider: false },
+      };
+    },
   );
 
   (_svcStubs.campaignService as Record<string, unknown>).getLatestCampaign = mock(() =>
@@ -166,6 +170,9 @@ const _setupServiceOverrides = (): void => {
   );
   (_svcStubs.gameOverlayService as Record<string, unknown>).clearSessionMarker = mock(async () => {
     mockClearSessionMarkerCalls++;
+  });
+  (_svcStubs.gameOverlayService as Record<string, unknown>).saveGame = mock(async () => {
+    newAdventureCalls.push('save');
   });
 
   // ── gameSaveService ──
@@ -257,6 +264,7 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
     mockCampaigns = [];
     routeCalls = [];
     mockAvailablePacks = [];
+    newAdventureCalls = [];
     localStorage.clear();
     _setupServiceOverrides();
   });
@@ -378,7 +386,7 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
   // ── AC-2: New Adventure Always Creates a Fresh Campaign Draft ────────
 
   describe('AC-2: New Adventure', () => {
-    test('creates a fresh campaign and routes to /setup', async () => {
+    test('creates a fresh campaign and routes to personaCreate', async () => {
       const vm = createViewModel();
       await vm.initialize();
 
@@ -404,22 +412,35 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
       expect(routeCalls[0].route).toBe('capability');
     });
 
-    test('works with 0, 1, or 3 existing campaigns (no character-count check)', async () => {
-      // Zero campaigns
+    test('routes directly when no campaigns exist', async () => {
       mockCampaigns = [];
-      let vm = createViewModel();
+      const vm = createViewModel();
       await vm.initialize();
       await vm.startNewAdventure();
-      expect(routeCalls[0].route).toBe('personaCreate');
-      routeCalls = [];
 
-      // One campaign
+      expect(routeCalls[0].route).toBe('personaCreate');
+    });
+
+    test('shows confirmation when one resumable campaign exists', async () => {
       mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
-      vm = createViewModel();
+      const vm = createViewModel();
       await vm.initialize();
-      routeCalls = []; // Clear initialize routes
       await vm.startNewAdventure();
-      // Should show confirmation dialog first, not route
+
+      expect(vm.showNewAdventureConfirm).toBe(true);
+      expect(routeCalls).toHaveLength(0);
+    });
+
+    test('shows confirmation when three campaigns include a resumable campaign', async () => {
+      mockCampaigns = [
+        makeCampaign({ id: 'camp-1', state: 'failed' }),
+        makeCampaign({ id: 'camp-2', state: 'playing' }),
+        makeCampaign({ id: 'camp-3', state: 'creating' }),
+      ];
+      const vm = createViewModel();
+      await vm.initialize();
+      await vm.startNewAdventure();
+
       expect(vm.showNewAdventureConfirm).toBe(true);
       expect(routeCalls).toHaveLength(0);
     });
@@ -446,16 +467,31 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
 
     test('campaignSummaries contains all campaigns sorted newest first', async () => {
       mockCampaigns = [
-        makeCampaign({ id: 'camp-1', name: 'First', state: 'playing' }),
-        makeCampaign({ id: 'camp-2', name: 'Second', state: 'failed' }),
-        makeCampaign({ id: 'camp-3', name: 'Third', state: 'creating' }),
+        makeCampaign({
+          id: 'camp-1',
+          name: 'First',
+          state: 'playing',
+          updatedAt: '2026-01-02T00:00:00.000Z',
+        }),
+        makeCampaign({
+          id: 'camp-2',
+          name: 'Second',
+          state: 'failed',
+          updatedAt: '2026-01-03T00:00:00.000Z',
+        }),
+        makeCampaign({
+          id: 'camp-3',
+          name: 'Third',
+          state: 'creating',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
       ];
       const vm = createViewModel();
       await vm.initialize();
 
       expect(vm.campaignSummaries).toHaveLength(3);
-      expect(vm.campaignSummaries[0].id).toBe('camp-1');
-      expect(vm.campaignSummaries[1].id).toBe('camp-2');
+      expect(vm.campaignSummaries[0].id).toBe('camp-2');
+      expect(vm.campaignSummaries[1].id).toBe('camp-1');
       expect(vm.campaignSummaries[2].id).toBe('camp-3');
     });
 
@@ -472,7 +508,51 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
       const vm = createViewModel();
       await vm.initialize();
 
-      expect(vm.campaignSummaries[0].lastSavedAt).toBeUndefined();
+      expect(vm.campaignSummaries[0].lastSavedLabel).toBe('Not yet saved');
+    });
+
+    test('campaign summary shows "Not yet saved" for an invalid timestamp', async () => {
+      mockCampaigns = [makeCampaign({ id: 'camp-1', lastSavedAt: 'invalid' })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.campaignSummaries[0].lastSavedLabel).toBe('Not yet saved');
+    });
+
+    test('campaign summary formats recent save times as relative labels', async () => {
+      const now = Date.now();
+      mockCampaigns = [
+        makeCampaign({ id: 'just-now', lastSavedAt: new Date(now).toISOString() }),
+        makeCampaign({ id: 'minutes', lastSavedAt: new Date(now - 5 * 60000).toISOString() }),
+        makeCampaign({ id: 'hours', lastSavedAt: new Date(now - 3 * 3600000).toISOString() }),
+        makeCampaign({ id: 'days', lastSavedAt: new Date(now - 2 * 86400000).toISOString() }),
+      ];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      const labels = Object.fromEntries(
+        vm.campaignSummaries.map((campaign) => [campaign.id, campaign.lastSavedLabel]),
+      );
+      expect(labels['just-now']).toBe('Just now');
+      expect(labels.minutes).toBe('5m ago');
+      expect(labels.hours).toBe('3h ago');
+      expect(labels.days).toBe('2d ago');
+    });
+
+    test('campaign summary formats older save times as calendar dates', async () => {
+      const now = new Date();
+      const lastSavedAt = new Date(now.getFullYear() - 1, 0, 2);
+      mockCampaigns = [makeCampaign({ id: 'camp-1', lastSavedAt: lastSavedAt.toISOString() })];
+      const vm = createViewModel();
+      await vm.initialize();
+
+      expect(vm.campaignSummaries[0].lastSavedLabel).toBe(
+        lastSavedAt.toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        }),
+      );
     });
 
     test('campaign summary has correct isResumable for each state', async () => {
@@ -550,7 +630,7 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
       expect(routeCalls).toHaveLength(1); // Routed directly
     });
 
-    test('confirmNewAdventure creates campaign and routes to /setup', async () => {
+    test('confirmNewAdventure saves, creates campaign, and routes to personaCreate', async () => {
       mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
       const vm = createViewModel();
       await vm.initialize();
@@ -563,6 +643,7 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
       expect(vm.showNewAdventureConfirm).toBe(false);
       expect(routeCalls).toHaveLength(1);
       expect(routeCalls[0].route).toBe('personaCreate');
+      expect(newAdventureCalls).toEqual(['save', 'start']);
     });
 
     test('cancelNewAdventure hides dialog without routing', async () => {
@@ -577,57 +658,6 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
 
       expect(vm.showNewAdventureConfirm).toBe(false);
       expect(routeCalls).toHaveLength(0);
-    });
-  });
-
-  // ── AC-5: Keyboard and Gamepad Navigation ────────────────────────────
-
-  describe('AC-5: Focus order', () => {
-    test('menu button order is correct', async () => {
-      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
-      const vm = createViewModel();
-      await vm.initialize();
-
-      // The button hierarchy is:
-      // 1. Continue (when resumable exists)
-      // 2. New Adventure
-      // 3. Load Campaign
-      // 4. Sign In (LoginView)
-      // 5. How to Play
-      // 6. Settings
-      // 7. Credits
-      // 8. Quit (Tauri only)
-
-      expect(vm.latestResumableCampaign).toBeDefined(); // Continue visible
-    });
-
-    test('Continue is hidden when no resumable campaign', async () => {
-      mockCampaigns = [];
-      const vm = createViewModel();
-      await vm.initialize();
-
-      expect(vm.latestResumableCampaign).toBeUndefined();
-    });
-
-    test('Escape closes Load Campaign modal', async () => {
-      const vm = createViewModel();
-      vm.openLoadCampaign();
-      expect(vm.showLoadCampaign).toBe(true);
-
-      vm.closeLoadCampaign();
-      expect(vm.showLoadCampaign).toBe(false);
-    });
-
-    test('Escape closes New Adventure confirmation', async () => {
-      mockCampaigns = [makeCampaign({ id: 'camp-1', state: 'playing' })];
-      const vm = createViewModel();
-      await vm.initialize();
-
-      await vm.startNewAdventure();
-      expect(vm.showNewAdventureConfirm).toBe(true);
-
-      vm.cancelNewAdventure();
-      expect(vm.showNewAdventureConfirm).toBe(false);
     });
   });
 

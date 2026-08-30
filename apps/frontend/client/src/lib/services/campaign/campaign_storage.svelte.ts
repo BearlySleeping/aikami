@@ -10,7 +10,9 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import { getLocalDatabase } from '@aikami/frontend/storage';
+import { CampaignSchema } from '@aikami/schemas';
 import type { Campaign } from '@aikami/types';
+import { Value } from 'typebox/value';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,7 +64,7 @@ class CampaignStorage
       return undefined;
     }
 
-    return JSON.parse(result.rows[0].data as string) as Campaign;
+    return Value.Parse(CampaignSchema, JSON.parse(result.rows[0].data as string));
   }
 
   /** @inheritdoc */
@@ -73,7 +75,7 @@ class CampaignStorage
       args: [],
     });
 
-    return result.rows.map((row) => JSON.parse(row.data as string) as Campaign);
+    return result.rows.map((row) => Value.Parse(CampaignSchema, JSON.parse(row.data as string)));
   }
 
   /** @inheritdoc */

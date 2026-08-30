@@ -48,6 +48,8 @@ export type CampaignSummary = {
   readonly name: string;
   /** ISO timestamp of last save, or undefined if never saved. */
   readonly lastSavedAt: string | undefined;
+  /** Display-ready label for the last save time. */
+  readonly lastSavedLabel: string;
   /** Content pack display label. */
   readonly contentPackLabel: string;
   /** Whether the campaign is resumable (state is playing, paused, or saving). */
@@ -196,16 +198,53 @@ const getContentPackLabel = (contentPackId: string): string =>
   CONTENT_PACK_LABELS[contentPackId] ?? contentPackId;
 
 /** States that count as resumable. */
-const RESUMABLE_STATES = new Set(['playing', 'paused', 'saving']);
+const RESUMABLE_STATES = new Set<Campaign['state']>(['playing', 'paused', 'saving']);
 
 /** Whether a campaign is in a resumable state. */
 const isResumable = (campaign: Campaign): boolean => RESUMABLE_STATES.has(campaign.state);
+
+/** Formats an ISO timestamp to a short relative or absolute date string. */
+const formatLastSavedLabel = (iso: string | undefined): string => {
+  if (!iso) {
+    return 'Not yet saved';
+  }
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return 'Not yet saved';
+  }
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) {
+    return 'Just now';
+  }
+  if (diffMins < 60) {
+    return `${diffMins}m ago`;
+  }
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+  if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+  return date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
+};
 
 /** Builds a CampaignSummary from a Campaign. */
 const toCampaignSummary = (campaign: Campaign): CampaignSummary => ({
   id: campaign.id,
   name: campaign.name,
   lastSavedAt: campaign.lastSavedAt,
+  lastSavedLabel: formatLastSavedLabel(campaign.lastSavedAt),
   contentPackLabel: getContentPackLabel(campaign.contentPackId),
   isResumable: isResumable(campaign),
   capabilities: campaign.capabilityProfile,
@@ -324,6 +363,7 @@ class StartViewModel
   /** @inheritdoc */
   async confirmNewAdventure(): Promise<void> {
     this.showNewAdventureConfirm = false;
+    await gameOverlayService.saveGame();
     await this._doStartNewAdventure();
   }
 
@@ -333,11 +373,21 @@ class StartViewModel
   }
 
   /**
-   * Internal: creates a fresh campaign and routes to /setup for character creation.
+   * Internal: creates a fresh campaign and routes to persona creation.
    * The text provider check remains as a soft advisory, not a hard block.
    */
   private async _doStartNewAdventure(): Promise<void> {
+    await this._startCampaignWithPack({ packId: 'emberwatch', logKey: 'startNewAdventure' });
+  }
+
+  /** Resets game state, creates a campaign for a pack, and routes to persona creation. */
+  private async _startCampaignWithPack(options: {
+    packId: string;
+    logKey: 'startNewAdventure' | '_proceedWithPack';
+  }): Promise<void> {
     try {
+      this.debug(options.logKey, { contentPackId: options.packId });
+
       // Reset game state for a fresh start
       inventoryService.reset();
       worldStateService.reset();
@@ -345,7 +395,7 @@ class StartViewModel
       equipmentService.reset();
       gameModeService.reset();
 
-      await campaignService.startNewCampaign({ contentPackId: 'emberwatch' });
+      await campaignService.startNewCampaign({ contentPackId: options.packId });
 
       await routerService.goToRoute('personaCreate', {
         queryParameters: { onboarding: '1' },
@@ -353,7 +403,7 @@ class StartViewModel
       });
     } catch (error) {
       if (isAiTextProviderRequiredError(error)) {
-        this.warn('startNewAdventure:no-text-provider', { error: String(error) });
+        this.warn(`${options.logKey}:no-text-provider`, { error: String(error) });
         // Soft advisory — route to capability screen instead of blocking
         await routerService.goToRoute('capability', {
           queryParameters: { reason: 'text-provider-required' },
@@ -362,7 +412,7 @@ class StartViewModel
         return;
       }
 
-      this.error('startNewAdventure:failed', error);
+      this.error(`${options.logKey}:failed`, error);
       this.errorMessage = 'Failed to start campaign. Try again.';
     }
   }
@@ -475,7 +525,9 @@ class StartViewModel
 
   /** Refreshes the campaign summary state from the campaign service. */
   private _refreshCampaignState(): void {
-    const campaigns = campaignService.campaigns;
+    const campaigns = [...campaignService.campaigns].sort(
+      (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    );
     this.campaignSummaries = campaigns.map(toCampaignSummary);
 
     // Find the latest resumable campaign (newest first from service)
@@ -637,35 +689,7 @@ class StartViewModel
    * Routes to persona creation (onboarding) for character creation.
    */
   private async _proceedWithPack(packId: string): Promise<void> {
-    try {
-      this.debug('_proceedWithPack', { contentPackId: packId });
-
-      // Reset game state for a fresh start
-      inventoryService.reset();
-      worldStateService.reset();
-      playerStateService.reset();
-      equipmentService.reset();
-      gameModeService.reset();
-
-      await campaignService.startNewCampaign({ contentPackId: packId });
-
-      await routerService.goToRoute('personaCreate', {
-        queryParameters: { onboarding: '1' },
-        pathParameters: undefined,
-      });
-    } catch (error) {
-      if (isAiTextProviderRequiredError(error)) {
-        this.warn('_proceedWithPack:no-text-provider', { error: String(error) });
-        await routerService.goToRoute('capability', {
-          queryParameters: { reason: 'text-provider-required' },
-          pathParameters: undefined,
-        });
-        return;
-      }
-
-      this.error('_proceedWithPack:failed', error);
-      this.errorMessage = 'Failed to start campaign. Try again.';
-    }
+    await this._startCampaignWithPack({ packId, logKey: '_proceedWithPack' });
   }
 }
 

@@ -278,10 +278,9 @@ N/A — no persistent state changes. The `Campaign` schema and IndexedDB store a
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Unit + Integration | `apps/frontend/client/src/lib/views/start/start_view_model.test.ts` (focus order unit test), manual keyboard + gamepad verification | `/` | Filled during verification |
+| AC-5 | Integration | Manual keyboard + gamepad verification | `/` | Pending automated component or E2E coverage |
 
 **Test Hooks**:
-- Moon Task: `bun moon run client:test` (keyboard focus order unit test)
 - Integration: Manual browser check — Tab through all buttons, verify correct order. Press Enter on each, verify correct action. Connect gamepad, verify d-pad navigation and A-button selection.
 - E2E / Visual:
     - **Functional**: `apps/e2e/tests/client/start_menu.spec.ts` — keyboard Tab + Enter to navigate and activate buttons. Gamepad simulation if Playwright supports it.

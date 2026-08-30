@@ -10,32 +10,38 @@ type Props = {
 
 let { campaign, onconfirm, oncancel }: Props = $props();
 
-/** Closes the dialog when the backdrop is clicked. */
-const handleBackdropClick = (e: MouseEvent): void => {
-  if (e.target === e.currentTarget) {
-    oncancel();
-  }
-};
-
 /** Handles keyboard events. */
 const handleKeyDown = (e: KeyboardEvent): void => {
   if (e.key === 'Escape') {
     oncancel();
   }
 };
+
+/** Focuses the dialog as soon as it mounts. */
+const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
+  node.focus();
+  return { destroy: () => {} };
+};
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
+<svelte:window onkeydown={handleKeyDown} />
+
 <div
-  class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+  class="fixed inset-0 z-50 flex items-center justify-center"
   role="dialog"
   aria-modal="true"
   aria-label="Confirm new adventure"
   tabindex="-1"
-  onclick={handleBackdropClick}
-  onkeydown={handleKeyDown}
+  use:focusOnMount
 >
-  <div class="bg-base-200 rounded-box shadow-2xl w-full max-w-sm p-6">
+  <button
+    type="button"
+    class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+    aria-label="Cancel new adventure"
+    tabindex="-1"
+    onclick={oncancel}
+  ></button>
+  <div class="relative bg-base-200 rounded-box shadow-2xl w-full max-w-sm p-6">
     <h2 class="text-lg font-bold mb-2">Start a new adventure?</h2>
     <p class="text-sm text-base-content/70 mb-1">
       Your current progress in <strong>{campaign.name}</strong> will be saved and a new campaign

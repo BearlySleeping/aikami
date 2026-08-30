@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { CampaignSummary } from '../start_view_model.svelte';
 // apps/frontend/client/src/lib/views/start/components/load_campaign_modal.svelte
+import type { CampaignSummary } from '../start_view_model.svelte';
 import CampaignSummaryCard from './campaign_summary_card.svelte';
 
 type Props = {
@@ -11,32 +11,40 @@ type Props = {
 
 let { campaigns, onload, onclose }: Props = $props();
 
-/** Closes the modal when the backdrop is clicked. */
-const handleBackdropClick = (e: MouseEvent): void => {
-  if (e.target === e.currentTarget) {
-    onclose();
-  }
-};
-
 /** Closes the modal on Escape key. */
 const handleKeyDown = (e: KeyboardEvent): void => {
   if (e.key === 'Escape') {
     onclose();
   }
 };
+
+/** Focuses the dialog as soon as it mounts. */
+const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
+  node.focus();
+  return { destroy: () => {} };
+};
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
+<svelte:window onkeydown={handleKeyDown} />
+
 <div
-  class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+  class="fixed inset-0 z-50 flex items-center justify-center"
   role="dialog"
   aria-modal="true"
   aria-label="Load Campaign"
   tabindex="-1"
-  onclick={handleBackdropClick}
-  onkeydown={handleKeyDown}
+  use:focusOnMount
 >
-  <div class="bg-base-200 rounded-box shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+  <button
+    type="button"
+    class="absolute inset-0 bg-black/60 backdrop-blur-sm"
+    aria-label="Close Load Campaign"
+    tabindex="-1"
+    onclick={onclose}
+  ></button>
+  <div
+    class="relative bg-base-200 rounded-box shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col"
+  >
     <!-- Header -->
     <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
       <h2 class="text-lg font-bold">Load Campaign</h2>
