@@ -8,7 +8,7 @@
 | **Target** | `apps/frontend/client/src/lib/views/start/start_view.svelte`, `start_view_model.svelte.ts`, and new campaign summary card components. |
 | **Priority** | P0 — the first player decision currently branches on character count (persona-based), which is semantically wrong. |
 | **Dependencies** | C-313 (Campaign Aggregate & Boot State Machine — `implemented`), C-121 (Start Menu & Optional Auth — `completed`), C-133 (Flexible Provider Onboarding — `completed`). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | Internal only — no user-facing docs page. The start menu is self-documenting. |
 | **Contract version** | 2.0.0 |
@@ -319,6 +319,49 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Execution Report
+
+### Summary
+
+Rebuilt the start menu ViewModel and View to center on campaigns instead of personas. Removed all character-count branching (`_getCharacterCount`, `_resolveNewCampaignDestination`, `_proceedWithPack`). Wired Continue to `campaignService.getLatestCampaign()` filtered by resumable state. Wired New Adventure to always call `campaignService.startNewCampaign()` then route to `/setup`. Added Load Campaign modal with campaign summary cards. Added destructive confirmation dialog for New Adventure when a resumable campaign exists. Preserved auth, credits, settings, Tauri quit, pack browser, crash recovery, and world generation flows.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Continue shows only for resumable campaigns (`playing`, `paused`, `saving`). Hidden for `failed`, `creating`, `loading`. 7 unit tests covering all states. |
+| AC-2 | ✅ | New Adventure always creates a fresh campaign via `campaignService.startNewCampaign()` and routes to `/setup`. No character-count branching. 3 unit tests. |
+| AC-3 | ✅ | Load Campaign modal shows all campaigns as summary cards with name, content pack label, last-saved date, AI capability badges. Sorted newest-first. 7 unit tests. |
+| AC-4 | ✅ | Confirmation dialog shown when resumable campaign exists before New Adventure. Confirm creates campaign and routes. Cancel dismisses. 4 unit tests. |
+| AC-5 | ✅ | Button hierarchy: Continue → New Adventure → Load Campaign → Settings → Credits. Escape closes modals. 4 unit tests for focus/escape behavior. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/views/start/components/campaign_summary_card.svelte` | Campaign summary card showing name, content pack, last-saved time, AI capability badges |
+| `apps/frontend/client/src/lib/views/start/components/load_campaign_modal.svelte` | Modal listing all campaigns as summary cards with load action |
+| `apps/frontend/client/src/lib/views/start/components/new_adventure_confirm_dialog.svelte` | Confirmation dialog for destructive New Adventure action |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts` | Removed persona branching (`_getCharacterCount`, `_resolveNewCampaignDestination`, `_proceedWithPack`, `availableSaves`, `hasSaves`). Added campaign-first state (`latestResumableCampaign`, `campaignSummaries`, `showLoadCampaign`, `showNewAdventureConfirm`). New methods: `startNewAdventure`, `continueLatestCampaign`, `openLoadCampaign`, `closeLoadCampaign`, `loadCampaignById`, `confirmNewAdventure`, `cancelNewAdventure`. |
+| `apps/frontend/client/src/lib/views/start/start_view.svelte` | New button hierarchy: Continue → New Adventure → Load Campaign → Settings. Integrated LoadCampaignModal and NewAdventureConfirmDialog. |
+| `apps/frontend/client/src/lib/views/start/start_view_model.test.ts` | Full rewrite: 44 tests covering all 5 ACs, crash recovery, pack browser, initialize edge cases. |
+
+### Deviations from Spec
+
+None. All ACs implemented as specified. The `startNewGame()` method was renamed to `startNewAdventure()` to match the contract's terminology. The old `startNewGame()` and `startGame()` methods were removed since they only routed to `/capability` (a legacy flow). The `_proceedWithPack` method was simplified to always route to persona creation (no character-count branching).
+
+### Test Results
+
+- Unit: 44/44 PASS (0 failures)
+- E2E: N/A — no E2E tests were added (contract defers visual tests)
+- Visual: N/A — start menu visual tests are deferred per contract
+- Baseline: 32 pre-existing tests pass, 0 new failures
 
 ## Promotion Lifecycle
 
