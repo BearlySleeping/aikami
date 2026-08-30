@@ -9,7 +9,8 @@
     "apps/frontend/*",
     "apps/backend/*",
     "apps/e2e",
-    "scripts"
+    "scripts",
+    ".pi"
   ],
   "scripts": {
     "moon": "moon",

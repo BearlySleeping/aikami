@@ -48,7 +48,6 @@ tasks:
       - '@group(entry)'
     options:
       mergeArgs: 'replace'
-      runInCI: false
 
   lint:
     command: 'bun run lint'
