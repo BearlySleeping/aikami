@@ -276,6 +276,20 @@ export default defineConfig(({ mode }) => {
 
     envPrefix: ['PUBLIC_'],
 
+    resolve: {
+      alias: [
+        {
+          // Tauri native modules are never available in the browser — the code
+          // paths that reach them are guarded by `__TAURI__ in window`. In
+          // production builds the rolldown `external` config handles this; in
+          // dev mode Vite serves native ESM and tries to resolve every import,
+          // so we alias them to a stub module.
+          find: /^@tauri-apps\/.*$/,
+          replacement: toSrcPath('lib/stubs/tauri-stub.ts'),
+        },
+      ],
+    },
+
     customLogger: {
       ...viteLogger,
       warn(msg, options) {

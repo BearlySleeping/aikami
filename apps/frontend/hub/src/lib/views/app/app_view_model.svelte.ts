@@ -121,6 +121,10 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   // --------------------------------------------------------------------------
 
   override async initialize(): Promise<void> {
+    // 0. Reveal the page — the anti-FOUC CSS in app.html hides the body
+    //    until the SPA mounts and adds this class.
+    document.body.classList.add('app-mounted');
+
     // 1. Inject static dependencies into our framework-agnostic service.
     routerService.initialize({ goto, page });
 

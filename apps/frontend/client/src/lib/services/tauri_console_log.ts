@@ -10,8 +10,6 @@
 
 // biome-ignore-all lint/suspicious/noConsole: this module intentionally wraps console for forwarding
 
-import { debug, error, info, trace, warn } from '@tauri-apps/plugin-log';
-
 let _done = false;
 
 /** JSON.stringify replacer that expands Error instances instead of dropping
@@ -45,7 +43,7 @@ const stringifyArg = (value: unknown): string => {
   }
 };
 
-const init = (): void => {
+const init = async (): Promise<void> => {
   if (_done) {
     return;
   }
@@ -54,6 +52,8 @@ const init = (): void => {
   if (typeof window === 'undefined' || !('__TAURI__' in window)) {
     return;
   }
+
+  const { debug, error, info, trace, warn } = await import('@tauri-apps/plugin-log');
 
   const forward = (
     name: 'log' | 'debug' | 'info' | 'warn' | 'error',
