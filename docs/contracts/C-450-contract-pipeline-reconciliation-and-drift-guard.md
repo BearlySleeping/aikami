@@ -2,7 +2,7 @@
 id: C-450
 title: "Contract Pipeline Reconciliation & Status Drift Guard"
 source: "user request — a 2026-08-30 architecture audit found 22 of 26 `approved`/`draft` contracts in docs/contracts/PROGRESS.md already had a merged implementation PR. Verified against the existing `mark_contract_implemented.ts --dry-run` tool (not manual inspection): 4 are a pure historical-backfill-coverage gap, 1 is a frontmatter typo, 17 are missing the Execution Report the tool correctly requires before advancing status."
-status: draft
+status: approved
 github:
     issue_number: null
     issue_url: null
@@ -21,7 +21,7 @@ created_at: "2026-08-30"
 | **Target**           | 4 contract files advanced via `scripts/src/lib/ops/mark_contract_implemented.ts` (no code changes to the script itself), 1 contract file's frontmatter, `docs/contracts/INDEX.md`, `docs/contracts/C-371-*.md`'s title, GitHub Issues on `BearlySleeping/aikami`                          |
 | **Priority**         | P0 — every planning decision made against `PROGRESS.md` or a contract's own status field is currently unreliable; this session re-derived six false "not yet built" premises before catching it by hand. Nothing that plans off the contract pipeline should proceed until this is fixed. |
 | **Dependencies**     | none                                                                                                                                                                                                                                                                                      |
-| **Status**           | draft                                                                                                                                                                                                                                                                                     |
+| **Status** | approved |
 | **Promotion**        | —                                                                                                                                                                                                                                                                                         |
 | **Docs Impact**      | internal — no player-facing surface; contract-pipeline maintainers and future planning sessions are the audience                                                                                                                                                                          |
 | **Contract version** | 2.0.0                                                                                                                                                                                                                                                                                     |
@@ -114,7 +114,7 @@ N/A — no persistent state changes. Feature A/B edit contract markdown files an
     - Feature A: run `mark_contract_implemented.ts` for real against C-388, C-392, C-393, C-418; fix C-445's frontmatter by hand; retire or clearly mark-historical INDEX.md's Phase 1–4 tables; convert the 34 open GitHub issues into contracts (or link them to an existing overlapping contract, per the earlier audit's disposition), closing each issue once ported; fix C-371's placeholder title by adding YAML frontmatter (the H1 heading is already correct — the file lacks frontmatter entirely, so `sync_contracts.ts` cannot extract a title).
     - Feature B: run `mark_contract_implemented.ts --dry-run` against every merged, contract-referencing PR in `gh pr list --state merged` (not a hand-picked subset); for any additional straggler found (same shape as C-388: has an Execution Report, tool confirms `advance`), run it for real.
 - **Out of Scope:**
-    - Writing the 17 missing Execution Reports (C-329 through C-345, C-370, C-422, per the corrected Problem section) — real per-feature documentation work, tracked as its own contract, not a pipeline-tooling fix.
+    - Writing the 17 missing Execution Reports (C-329–C-338, C-340–C-343, C-345, C-370, C-422 — C-339 is already `implemented` and excluded) — real per-feature documentation work, tracked as its own contract, not a pipeline-tooling fix.
     - Deduplicating `contract_resolver.ts:22`'s small copy of the table-status regex against `contract_status.ts`'s shared reader — a minor DRY nit noticed in passing, not a bug (no incorrect behavior traced to it), not worth this contract's scope.
     - Verifying whether every AC of a reclassified contract actually passes — advancing status here reflects "a PR merged with a real Execution Report," matching the existing tool's own bar, not a fresh re-verification.
     - Building thin-contract mode (tracked separately).
@@ -242,7 +242,7 @@ N/A — no persistent state changes. Feature A/B edit contract markdown files an
 
 ## Implementation Sequence
 
-1. **Phase 1 (Feature A — the four known cases + doc/issue cleanup)**: run `mark_contract_implemented.ts` for real against PRs #140 (C-388), #145 (C-392), #146 (C-393), #160 (C-418). Hand-fix C-445's frontmatter. Retire INDEX.md's stale Phase tables. Fix C-371's title. Triage and convert the 34 GitHub issues per the earlier audit's disposition (close superseded, link overlapping, convert genuinely-open ones into contracts).
+1. **Phase 1 (Feature A — the four known cases + doc/issue cleanup)**: run `mark_contract_implemented.ts` for real against PRs #140 (C-388), #145 (C-392), #146 (C-393), #160 (C-418). Hand-fix C-445's frontmatter. Retire INDEX.md's stale Phase tables. Fix C-371's title by adding YAML frontmatter (`id: C-371`, `title: "NPC Interaction Refactor — Free-Text-First with Contextual Chips"`, `status: approved`). Triage and convert the 34 GitHub issues per the earlier audit's disposition (close superseded, link overlapping, convert genuinely-open ones into contracts).
 2. **Phase 2 (Feature B — the full sweep)**: enumerate every merged, contract-referencing PR via `gh pr list`; dry-run each through `mark_contract_implemented.ts`; apply for real wherever it reports `advance`. Record the final tally (how many advanced, how many skipped and why) in this contract's Execution Report.
 3. **Phase 3 (Validation)**: `bun run scripts/src/lib/ops/sync_contracts.ts` to regenerate `PROGRESS.md`/`PROMOTION.md` from the corrected files; `bun run fix && bun moon run :validate && bun run test`.
 
@@ -256,7 +256,7 @@ N/A — no persistent state changes. Feature A/B edit contract markdown files an
 
 Must be resolved before status becomes `approved`:
 
-- **OQ-1**: Should the 17 contracts found missing an Execution Report (Problem & Baseline Evidence, bucket 3) become one batched follow-up contract or several smaller ones? Recommendation: one batch for the 14 Phase-2 RPG-depth contracts (C-329–343, thematically one unit) plus a decision on whether C-345/C-370/C-422 (unrelated features) join it or split off — left for that contract's own drafting, out of scope here.
+- **OQ-1**: Should the 17 contracts found missing an Execution Report (Problem & Baseline Evidence, bucket 3) become one batched follow-up contract or several smaller ones? Recommendation: one batch for the 14 Phase-2 RPG-depth contracts (C-329–C-338, C-340–C-343 — C-339 is already `implemented` and excluded; thematically one unit) plus a decision on whether C-345/C-370/C-422 (unrelated features) join it or split off — left for that contract's own drafting, out of scope here.
 - **OQ-2**: For contracts advanced by this pass, should promotion state also be touched, or left as-is until someone verifies the actual Acceptance Criteria? Recommendation: leave promotion untouched — this contract runs existing status-advance tooling against historical gaps, not a fresh verification pass.
 
 ## Amendments
