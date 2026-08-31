@@ -20,7 +20,7 @@ import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { getBetterAuth } from './better_auth.ts';
 
-type SaveBackupEnv = {
+export type SaveBackupEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
   DB: import('@cloudflare/workers-types').D1Database;
   // biome-ignore lint/style/useNamingConvention: Cloudflare R2 binding name

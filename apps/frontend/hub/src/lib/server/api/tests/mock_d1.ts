@@ -64,13 +64,16 @@ export const createMockD1 = (options: CreateMockD1Options) => {
     [BOUND_QUERY]: () => ({ sql, args }),
   });
 
-  return {
+  const mockD1 = {
     prepare: (sql: string) => prepareStatement(sql),
     exec: async (sql: string) => {
       const startedAt = performance.now();
       await options.execute({ sql, args: [] });
       return { count: 1, duration: performance.now() - startedAt };
     },
+    // biome-ignore lint/suspicious/noExplicitAny: D1Database stub
+    withSession: (_session: any) => mockD1,
+    dump: async () => new ArrayBuffer(0),
     batch: async (statements: MockD1PreparedStatement[]) => {
       const queries = statements.map((statement) => statement[BOUND_QUERY]());
       const results = options.batch
@@ -83,6 +86,7 @@ export const createMockD1 = (options: CreateMockD1Options) => {
       return results.map(toD1Result);
     },
   };
+  return mockD1;
 };
 
 /** Creates a D1-shaped adapter backed by an in-memory libSQL client. */

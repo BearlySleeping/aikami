@@ -9,7 +9,7 @@ import type { Navigation as SvelteKitNavigation } from '@sveltejs/kit';
  * The hub uses SvelteKit 3 ($app/state.Page) while the client uses
  * SvelteKit 2 (@sveltejs/kit.Page). This local type avoids version lock.
  */
-type Page = {
+export type Page = {
   url: URL;
   params: Record<string, string>;
   route: { id: string | null };

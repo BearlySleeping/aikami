@@ -120,7 +120,11 @@ class IdleDetectionService
   };
 
   private _handleVisibilityChange = (): void => {
-    this._isPageVisible = !document.hidden;
+    const isVisible = document.visibilityState !== 'hidden';
+    this._isPageVisible = isVisible;
+    if (isVisible) {
+      this.resetIdle();
+    }
   };
 
   private _startIdleTracking(): void {

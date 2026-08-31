@@ -8,7 +8,14 @@
   "tileSize": 32,
   "atlas": {
     "textureUrl": "/game-data/sprites/tilesets/atlas.webp",
-    "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json"
+    "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json",
+    "provenance": {
+      "license": "MIT",
+      "author": [
+        "Aikami Studio"
+      ],
+      "source": "project"
+    }
   },
   "fallbackTile": "grass.png",
   "terrains": [
@@ -17,7 +24,10 @@
       "precedence": 0,
       "wang": "fill",
       "frameBase": "grass.png",
-      "variants": ["grass_variant.png", "grass_dark.png"],
+      "variants": [
+        "grass_variant.png",
+        "grass_dark.png"
+      ],
       "isWalkable": true
     },
     {
@@ -40,290 +50,626 @@
       "name": "grass",
       "frame": "grass.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "2": {
       "name": "grass_variant",
       "frame": "grass_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "3": {
       "name": "grass_dark",
       "frame": "grass_dark.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "4": {
       "name": "dirt",
       "frame": "dirt.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "5": {
       "name": "path_tough",
       "frame": "path_tough.png",
       "isWalkable": true,
       "isWall": false,
-      "movementCost": 0.8
+      "movementCost": 0.8,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "6": {
       "name": "stone_floor",
       "frame": "stone_floor.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "7": {
       "name": "wood_floor",
       "frame": "wood_floor.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "8": {
       "name": "brick",
       "frame": "brick.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "9": {
       "name": "brick_wall",
       "frame": "brick_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "10": {
       "name": "wood_wall",
       "frame": "wood_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "11": {
       "name": "stone_wall",
       "frame": "stone_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "12": {
       "name": "wall_top",
       "frame": "wall_top.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "13": {
       "name": "roof",
       "frame": "roof.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "14": {
       "name": "water",
       "frame": "water.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "15": {
       "name": "fence",
       "frame": "fence.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "16": {
       "name": "wood_fence",
       "frame": "wood_fence.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "17": {
       "name": "well",
       "frame": "well.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "18": {
       "name": "notice_board",
       "frame": "notice_board.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "19": {
       "name": "village_gate",
       "frame": "village_gate.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "20": {
       "name": "chest",
       "frame": "chest.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "21": {
       "name": "red_chest",
       "frame": "red_chest.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "22": {
       "name": "barrel",
       "frame": "barrel.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "23": {
       "name": "crate",
       "frame": "crate.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "24": {
       "name": "counter",
       "frame": "counter.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "25": {
       "name": "table",
       "frame": "table.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "26": {
       "name": "bed",
       "frame": "bed.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "27": {
       "name": "rug",
       "frame": "rug.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "28": {
       "name": "bookshelf",
       "frame": "bookshelf.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "29": {
       "name": "fireplace",
       "frame": "fireplace.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "30": {
       "name": "candle",
       "frame": "candle.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "31": {
       "name": "plant",
       "frame": "plant.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "32": {
       "name": "anvil",
       "frame": "anvil.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "33": {
       "name": "path_tough_variant",
       "frame": "path_tough_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "34": {
       "name": "stone_floor_variant",
       "frame": "stone_floor_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "35": {
       "name": "wood_floor_variant",
       "frame": "wood_floor_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "36": {
       "name": "sand",
       "frame": "sand.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "37": {
       "name": "grass_edge_n",
       "frame": "grass_edge_n.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "38": {
       "name": "grass_edge_s",
       "frame": "grass_edge_s.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "39": {
       "name": "grass_edge_w",
       "frame": "grass_edge_w.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "40": {
       "name": "grass_edge_e",
       "frame": "grass_edge_e.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "41": {
       "name": "water_edge",
       "frame": "water_edge.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "42": {
       "name": "bridge",
       "frame": "bridge.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "43": {
       "name": "steps",
       "frame": "steps.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "44": {
       "name": "column",
       "frame": "column.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "45": {
       "name": "window",
       "frame": "window.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "46": {
       "name": "wood_door",
       "frame": "wood_door.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "47": {
       "name": "flagstone",
       "frame": "flagstone.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "48": {
       "name": "rug_round",
       "frame": "rug_round.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     }
   },
   "entities": {
@@ -354,6 +700,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
       }
     },
     "notice_board": {
@@ -368,6 +721,13 @@
         "type": "rect",
         "width": 20,
         "height": 10
+      },
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
       }
     },
     "village_gate": {
@@ -377,7 +737,14 @@
         "x": 0.5,
         "y": 1.0
       },
-      "isWalkable": true
+      "isWalkable": true,
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
+      }
     },
     "inn_barrel": {
       "name": "Barrel",
@@ -391,6 +758,13 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
       }
     },
     "inn_barrel_2": {
@@ -405,6 +779,13 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
       }
     },
     "inn_crate": {
@@ -419,6 +800,13 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
       }
     },
     "shop_counter_l": {
@@ -433,6 +821,13 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
       }
     },
     "shop_counter_r": {
@@ -447,6 +842,13 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
       }
     },
     "shop_crate": {
@@ -461,6 +863,13 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "provenance": {
+        "license": "MIT",
+        "author": [
+          "Aikami Studio"
+        ],
+        "source": "project"
       }
     }
   },
@@ -493,33 +902,47 @@
     "village_elder": {
       "name": "Elder Thalia",
       "defaultDialogueKey": "elder_thalia_greeting",
-      "appearanceLayers": [2, 3, 65, 21, 20, 97],
+      "appearanceLayers": [
+        2,
+        3,
+        65,
+        21,
+        20,
+        97
+      ],
       "isVendor": false,
       "initialSuggestions": [
         {
           "id": "elder_ask_ward",
-          "label": "\ud83d\udd6f\ufe0f Ask about the ward",
+          "label": "🕯️ Ask about the ward",
           "intentType": "quest",
-          "prefillText": "The ward is failing, you said \u2014 can you tell me what happened to it?"
+          "prefillText": "The ward is failing, you said — can you tell me what happened to it?"
         },
         {
           "id": "elder_offer_help",
-          "label": "\ud83e\udd1d Offer to help",
+          "label": "🤝 Offer to help",
           "intentType": "quest",
-          "prefillText": "I would like to help Emberwatch \u2014 is there a task you need done?"
+          "prefillText": "I would like to help Emberwatch — is there a task you need done?"
         },
         {
           "id": "elder_ask_wand",
-          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "label": "🪄 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "You mentioned the Ward Wand \u2014 what is it, and where can I find it?"
+          "prefillText": "You mentioned the Ward Wand — what is it, and where can I find it?"
         }
       ]
     },
     "rollo_grasper": {
       "name": "Rollo the Grasper",
       "defaultDialogueKey": "rollo_greeting",
-      "appearanceLayers": [3, 123, 23, 22, 7, 95],
+      "appearanceLayers": [
+        3,
+        123,
+        23,
+        22,
+        7,
+        95
+      ],
       "isVendor": false,
       "combatStats": {
         "hitPoints": 20,
@@ -532,52 +955,59 @@
       "initialSuggestions": [
         {
           "id": "rollo_ask_wand",
-          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "label": "🪄 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "I hear you hold the Ward Wand \u2014 the one Emberwatch needs."
+          "prefillText": "I hear you hold the Ward Wand — the one Emberwatch needs."
         },
         {
           "id": "rollo_persuade",
-          "label": "\ud83d\udde3\ufe0f Reason with him",
+          "label": "🗣️ Reason with him",
           "intentType": "skill_check",
-          "prefillText": "Emberwatch needs that wand to survive \u2014 name your price, please."
+          "prefillText": "Emberwatch needs that wand to survive — name your price, please."
         },
         {
           "id": "rollo_intimidate",
-          "label": "\ud83d\ude21 Intimidate him",
+          "label": "😡 Intimidate him",
           "intentType": "skill_check",
           "prefillText": "Hand over the wand now, or I will take it from you by force."
         },
         {
           "id": "rollo_leave",
-          "label": "\ud83d\udeb6 Turn back",
+          "label": "🚶 Turn back",
           "intentType": "dialogue",
-          "prefillText": "Fine. Keep your trinket for now \u2014 but this is not over."
+          "prefillText": "Fine. Keep your trinket for now — but this is not over."
         }
       ]
     },
     "merchant": {
       "name": "Mara the Merchant",
       "defaultDialogueKey": "merchant_mara_greeting",
-      "appearanceLayers": [3, 91, 127, 22, 19, 95],
+      "appearanceLayers": [
+        3,
+        91,
+        127,
+        22,
+        19,
+        95
+      ],
       "isVendor": true,
       "vendorInventory": "ironSword,steelSword,healthPotion,manaPotion,ironArmor,woodenShield",
       "initialSuggestions": [
         {
           "id": "mara_browse",
-          "label": "\ud83d\udcb0 Browse the wares",
+          "label": "💰 Browse the wares",
           "intentType": "trade",
           "prefillText": "I would like to see what wares you have for sale today."
         },
         {
           "id": "mara_wand",
-          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "label": "🪄 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "A traveling merchant hears everything \u2014 have you heard of the Ward Wand?"
+          "prefillText": "A traveling merchant hears everything — have you heard of the Ward Wand?"
         },
         {
           "id": "mara_news",
-          "label": "\ud83d\uddde\ufe0f Ask for news",
+          "label": "🗞️ Ask for news",
           "intentType": "dialogue",
           "prefillText": "What news have you heard around the village lately?"
         }
@@ -645,24 +1075,24 @@
     }
   },
   "dialogues": {
-    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time \u2014 the ward that has shielded our valley for centuries is fading fast. If it fails, the corruption beyond the hills will pour in, and Emberwatch will fall.",
-    "elder_thalia_offer": "The Ward Wand can renew the ward \u2014 a relic of the Vesperine Order, carved from the heartwood of the first ward tree. With it in my hands I can mend the ward and save the valley. But the wand was lost years ago. Word has it a rogue named Rollo the Grasper took it and now keeps it at the Guttering Candle inn, east of the square. Will you bring it back to me? Emberwatch would be forever in your debt.",
-    "elder_thalia_progress": "Have you found the Ward Wand yet? Rollo the Grasper holds it at the inn, east of the village square. He is a stubborn, slippery sort \u2014 he may need convincing, or a firmer hand than words.",
-    "elder_thalia_decline": "I understand \u2014 the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
-    "elder_thalia_complete": "You found it! The Ward Wand \u2014 I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
-    "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more \u2014 I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
-    "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick \u2014 it's mine. Found it fair and square off a dead man's hands. Now scram.",
-    "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing \u2014 hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
-    "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine \u2014 take the wand. Don't make me regret this.",
-    "rollo_persuasion_failure": "Nice try. I've heard better sob stories from street rats. The wand stays with me. Come back when you have real coin \u2014 or real steel.",
-    "rollo_intimidation_success": "W-wait! Easy now! Fine, fine \u2014 take it! It's not worth dying over a glowing stick. J-just don't hurt me!",
+    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time — the ward that has shielded our valley for centuries is fading fast. If it fails, the corruption beyond the hills will pour in, and Emberwatch will fall.",
+    "elder_thalia_offer": "The Ward Wand can renew the ward — a relic of the Vesperine Order, carved from the heartwood of the first ward tree. With it in my hands I can mend the ward and save the valley. But the wand was lost years ago. Word has it a rogue named Rollo the Grasper took it and now keeps it at the Guttering Candle inn, east of the square. Will you bring it back to me? Emberwatch would be forever in your debt.",
+    "elder_thalia_progress": "Have you found the Ward Wand yet? Rollo the Grasper holds it at the inn, east of the village square. He is a stubborn, slippery sort — he may need convincing, or a firmer hand than words.",
+    "elder_thalia_decline": "I understand — the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
+    "elder_thalia_complete": "You found it! The Ward Wand — I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
+    "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more — I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
+    "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick — it's mine. Found it fair and square off a dead man's hands. Now scram.",
+    "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing — hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
+    "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine — take the wand. Don't make me regret this.",
+    "rollo_persuasion_failure": "Nice try. I've heard better sob stories from street rats. The wand stays with me. Come back when you have real coin — or real steel.",
+    "rollo_intimidation_success": "W-wait! Easy now! Fine, fine — take it! It's not worth dying over a glowing stick. J-just don't hurt me!",
     "rollo_intimidation_failure": "Ha! You think a few harsh words scare me? I've stared down worse than you in alleys across the realm. Try again when you've grown a spine.",
     "rollo_fight_start": "Oh, you want it the hard way? Fine! Let's see how tough you really are!",
-    "rollo_defeated": "Enough! Mercy! Take the wand \u2014 it's yours! Just... just let me keep my teeth.",
-    "rollo_news": "Hear a lot, sitting here. The ward's failing \u2014 everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
-    "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions \u2014 everything an adventurer needs to stay alive out there. What can I get for you today?",
-    "merchant_mara_wand": "The Ward Wand? Oh yes \u2014 Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
-    "merchant_mara_news": "The whole valley's on edge, dear. The ward's fading, the elder's frantic, and that lout Rollo's been bragging at the inn that he holds the one thing that can fix it \u2014 the Ward Wand. If you're planning to deal with him, buy some potions first. You'll need them."
+    "rollo_defeated": "Enough! Mercy! Take the wand — it's yours! Just... just let me keep my teeth.",
+    "rollo_news": "Hear a lot, sitting here. The ward's failing — everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
+    "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions — everything an adventurer needs to stay alive out there. What can I get for you today?",
+    "merchant_mara_wand": "The Ward Wand? Oh yes — Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
+    "merchant_mara_news": "The whole valley's on edge, dear. The ward's fading, the elder's frantic, and that lout Rollo's been bragging at the inn that he holds the one thing that can fix it — the Ward Wand. If you're planning to deal with him, buy some potions first. You'll need them."
   },
   "quests": {
     "fading_ward": {
@@ -677,17 +1107,23 @@
         {
           "text": "Find the Ward Wand's keeper at the inn",
           "completeOnMapEnter": "inn",
-          "prerequisiteIndices": [0]
+          "prerequisiteIndices": [
+            0
+          ]
         },
         {
           "text": "Obtain the Ward Wand from its keeper",
           "completeOnItemPickup": "wardWand",
-          "prerequisiteIndices": [1]
+          "prerequisiteIndices": [
+            1
+          ]
         },
         {
           "text": "Return the Ward Wand to Elder Thalia",
           "completeOnNpcInteract": "village_elder",
-          "prerequisiteIndices": [2]
+          "prerequisiteIndices": [
+            2
+          ]
         }
       ],
       "offerDialogueKey": "elder_thalia_offer",
@@ -707,7 +1143,7 @@
       "endings": {
         "ward_renewed": {
           "title": "The Ward Renewed",
-          "narration": "You place the Ward Wand into Elder Thalia's hands. She raises it toward the sky and speaks the old words of the Vesperine Order. A pulse of warm light rolls outward from the village, and the fading ward blazes bright once more. Emberwatch is saved \u2014 and the valley will remember the one who brought the wand home.",
+          "narration": "You place the Ward Wand into Elder Thalia's hands. She raises it toward the sky and speaks the old words of the Vesperine Order. A pulse of warm light rolls outward from the village, and the fading ward blazes bright once more. Emberwatch is saved — and the valley will remember the one who brought the wand home.",
           "reactionDialogueKey": "elder_thalia_ending_renewed",
           "worldStateFlag": "emberwatch.ending.renewed"
         }
@@ -719,7 +1155,9 @@
       "id": "inn_wand_encounter",
       "mapId": "inn",
       "name": "Rollo the Grasper",
-      "enemyNpcIds": ["rollo_grasper"],
+      "enemyNpcIds": [
+        "rollo_grasper"
+      ],
       "allowNonCombatResolution": true,
       "nonCombatSkillCheck": {
         "skill": "persuasion",
@@ -746,18 +1184,29 @@
     }
   },
   "credits": {
-    "design": ["Aikami Studio"],
-    "writing": ["Aikami Studio"],
-    "art": ["Liberated Pixel Cup (LPC) asset contributors"],
-    "music": ["Chainsmoker \u2014 Exploration Theme"],
-    "thanks": ["The open-source game development community", "The LPC asset artists"]
+    "design": [
+      "Aikami Studio"
+    ],
+    "writing": [
+      "Aikami Studio"
+    ],
+    "art": [
+      "Liberated Pixel Cup (LPC) asset contributors"
+    ],
+    "music": [
+      "Chainsmoker — Exploration Theme"
+    ],
+    "thanks": [
+      "The open-source game development community",
+      "The LPC asset artists"
+    ]
   },
   "onboarding": {
     "steps": [
       {
         "id": "hint_move",
         "action": "move_up",
-        "text": "Use {key} to move \u2014 try walking around!",
+        "text": "Use {key} to move — try walking around!",
         "trigger": "map_loaded"
       },
       {
@@ -823,7 +1272,7 @@
     "emberwatch_citizens": {
       "id": "emberwatch_citizens",
       "name": "Emberwatch Citizens",
-      "description": "The common folk of Emberwatch \u2014 farmers, craftsmen, and merchants who call this village home.",
+      "description": "The common folk of Emberwatch — farmers, craftsmen, and merchants who call this village home.",
       "defaultStanding": 10,
       "standingTiers": [
         {

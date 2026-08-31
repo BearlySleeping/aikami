@@ -13,6 +13,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Client, createClient } from '@libsql/client';
 import { createLibsqlMockD1 } from './mock_d1.ts';
+import type { App } from '../index.ts';
+import type { BetterAuthEnv } from '../better_auth.ts';
+import type { SaveBackupEnv } from '../save_backup.ts';
+import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 
 mock.module('$env/dynamic/private', () => ({
   env: {
@@ -51,20 +55,21 @@ const createMockR2 = () => {
     delete: async (key: string) => {
       store.delete(key);
     },
+    // biome-ignore lint/suspicious/noExplicitAny: R2Bucket stub
+    head: async (_key: string) => null as any,
+    // biome-ignore lint/suspicious/noExplicitAny: R2Bucket stub
+    createMultipartUpload: async (_key: string, _data?: any) => null as any,
+    // biome-ignore lint/suspicious/noExplicitAny: R2Bucket stub
+    resumeMultipartUpload: async (_key: string, _uploadId: string) => null as any,
+    // biome-ignore lint/suspicious/noExplicitAny: R2Bucket stub
+    list: async () => ({ objects: [], truncated: false, delimitedPrefixes: [] }) as any,
   };
 };
 
 let client: Client;
-let setBetterAuthEnv: (
-  env:
-    | {
-        // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-        DB: unknown;
-      }
-    | undefined,
-) => void;
-let setSaveBackupEnv: (env: unknown) => void;
-let app: Awaited<ReturnType<typeof import('../index.ts')>>['app'];
+let setBetterAuthEnv: (env: BetterAuthEnv | undefined) => void;
+let setSaveBackupEnv: (env: SaveBackupEnv | undefined) => void;
+let app: App;
 let r2: ReturnType<typeof createMockR2>;
 
 const applyD1Migrations = async (): Promise<void> => {
@@ -144,16 +149,16 @@ beforeAll(async () => {
   setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
   setBetterAuthEnv({
     // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    DB: createLibsqlMockD1(client),
+    DB: createLibsqlMockD1(client) as unknown as D1Database,
   });
   const saveBackupModule = await import('../save_backup.ts');
   setSaveBackupEnv = saveBackupModule.setSaveBackupEnv;
   r2 = createMockR2();
   setSaveBackupEnv({
     // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    DB: createLibsqlMockD1(client),
+    DB: createLibsqlMockD1(client) as unknown as D1Database,
     // biome-ignore lint/style/useNamingConvention: Cloudflare R2 binding name
-    SAVES_BUCKET: r2,
+    SAVES_BUCKET: r2 as unknown as R2Bucket,
   });
   ({ app } = await import('../index.ts'));
 });

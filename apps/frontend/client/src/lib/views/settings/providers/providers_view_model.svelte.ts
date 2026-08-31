@@ -36,15 +36,13 @@ import type {
   VoiceConfig,
   VoiceOption,
 } from '@aikami/types';
+import { configService } from '$lib/services/config/config_service.svelte.ts';
 import {
-  type CheckpointInfo,
-  configService,
-  fetchOpenRouterModels,
-  imageGenerationService,
   LocalServiceDetector,
   type LocalServiceDetectorInterface,
   type LocalServiceStatus,
-} from '$services';
+} from '$lib/services/config/local_service_detector.svelte';
+import { type CheckpointInfo, fetchOpenRouterModels, imageGenerationService } from '$services';
 import {
   type AuxiliaryModels,
   type GenerationParams,

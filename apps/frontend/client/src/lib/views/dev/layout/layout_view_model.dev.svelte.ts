@@ -106,14 +106,69 @@ const _filePathToRoute = (filePath: string): string => {
   return `/dev/${match[1].replace(/\([^)]+\)\//g, '')}`;
 };
 
+// Bun's test runner executes this module directly (no Vite transform), so
+// `import.meta.glob` is unavailable there. This static snapshot keeps
+// navItems derivable under `bun test` — the live glob below is still the
+// source of truth for dev and production.
+const FALLBACK_DEV_ROUTES = [
+  '/dev/agent-editor',
+  '/dev/agent-pipeline',
+  '/dev/asset-browser',
+  '/dev/audio',
+  '/dev/autonomous',
+  '/dev/character',
+  '/dev/characters',
+  '/dev/character-sheet',
+  '/dev/combat',
+  '/dev/combat-enhancements',
+  '/dev/config',
+  '/dev/connections',
+  '/dev/cyoa',
+  '/dev/dialogs',
+  '/dev/dice',
+  '/dev/export',
+  '/dev/gm-system',
+  '/dev/image',
+  '/dev/image-gen',
+  '/dev/inventory',
+  '/dev/lorebook',
+  '/dev/lpc',
+  '/dev/lpc-ai',
+  '/dev/lpc-inventory',
+  '/dev/lpc-preview',
+  '/dev/lpc-walk',
+  '/dev/macros',
+  '/dev/music',
+  '/dev/quest',
+  '/dev/save_load',
+  '/dev/session',
+  '/dev/settings',
+  '/dev/tauri-test',
+  '/dev/text',
+  '/dev/vendor',
+  '/dev/voice',
+  '/dev/world-gen',
+  '/dev/sandbox/camera',
+  '/dev/sandbox/chat-c424',
+  '/dev/sandbox/combat',
+  '/dev/sandbox/dialogue',
+  '/dev/sandbox/environment',
+  '/dev/sandbox/map',
+  '/dev/sandbox/mode',
+  '/dev/sandbox/party-follow',
+  '/dev/sandbox/vendor',
+  '/dev/sandbox/zone-transition',
+] as const;
+
 const _deriveNavItems = (): readonly DevNavItem[] => {
   // Discover all dev route page files via Vite glob (works in dev & production)
   // Note: parens in route-group dirs must be escaped for fast-glob (extglob syntax)
-  const routeModules = import.meta.glob('/src/routes/\\(dev\\)/dev/**/+page.svelte');
-
-  const allRoutes = Object.keys(routeModules)
-    .map(_filePathToRoute)
-    .filter((r): r is string => r.length > 0 && r !== '/dev');
+  const allRoutes =
+    typeof import.meta.glob === 'function'
+      ? Object.keys(import.meta.glob('/src/routes/\\(dev\\)/dev/**/+page.svelte'))
+          .map(_filePathToRoute)
+          .filter((r): r is string => r.length > 0 && r !== '/dev')
+      : [...FALLBACK_DEV_ROUTES];
 
   // Separate sandbox routes from top-level routes
   const sandboxRoutes = allRoutes.filter((r) => r.startsWith('/dev/sandbox/'));

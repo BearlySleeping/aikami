@@ -14,6 +14,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Client, createClient } from '@libsql/client';
 import { createLibsqlMockD1 } from './mock_d1.ts';
+import type { App } from '../index.ts';
+import type { BetterAuthEnv } from '../better_auth.ts';
+import type { D1Database } from '@cloudflare/workers-types';
 
 // Must be registered before any module that imports $env/dynamic/private
 // (better_auth.ts, the route) is loaded — hence dynamic imports below.
@@ -29,15 +32,8 @@ mock.module('$env/dynamic/private', () => ({
 const BASE_URL = 'http://localhost:5173';
 
 let client: Client;
-let app: Awaited<ReturnType<typeof import('../index.ts')>>['app'];
-let setBetterAuthEnv: (
-  env:
-    | {
-        // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-        DB: unknown;
-      }
-    | undefined,
-) => void;
+let app: App;
+let setBetterAuthEnv: (env: BetterAuthEnv | undefined) => void;
 
 const applyD1Migrations = async (): Promise<void> => {
   const dir = join(
@@ -89,7 +85,7 @@ beforeAll(async () => {
   setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
   setBetterAuthEnv({
     // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    DB: createLibsqlMockD1(client),
+    DB: createLibsqlMockD1(client) as unknown as D1Database,
   });
   ({ app } = await import('../index.ts'));
 });
@@ -180,7 +176,7 @@ describe('hub Better Auth mount (AC-4)', () => {
     } finally {
       setBetterAuthEnv({
         // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-        DB: createLibsqlMockD1(client),
+        DB: createLibsqlMockD1(client) as unknown as D1Database,
       });
     }
   });

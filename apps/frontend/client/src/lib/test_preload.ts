@@ -255,10 +255,49 @@ mock.module(_FRONTEND_SVC_PATH, () => ({
   __esModule: true,
 }));
 
+/**
+ * Creates a callable Proxy stub with a mutable `.fn` property.
+ *
+ * Bun's mock.module() freezes module exports, preventing tests from
+ * reassigning exported mock functions. This wrapper makes the export
+ * callable (via `apply` trap) while also supporting property mutation
+ * through a writable `.fn` on the underlying target object.
+ *
+ * Tests can replace the implementation by mutating `stub.fn = newMock`
+ * instead of trying to reassign an export on the frozen module namespace.
+ */
+const _createCallableStub = () => {
+  const target = { fn: mock(() => {}) as (...args: never) => unknown };
+  return new Proxy(
+    mock(() => {}),
+    {
+      apply(_t, _thisArg, args) {
+        return target.fn(...args);
+      },
+      get(_t, prop) {
+        if (prop === 'fn') {
+          return target.fn;
+        }
+        return Reflect.get(_t, prop);
+      },
+      set(_t, prop, value) {
+        if (prop === 'fn') {
+          target.fn = value as (...args: never) => unknown;
+          return true;
+        }
+        return Reflect.set(_t, prop, value);
+      },
+    },
+  );
+};
+
 // ── Mock @aikami/constants (providers, voice config, etc.) ───────────────
 // ViewModels now import constants directly from @aikami/constants.
 mock.module('@aikami/constants', () => ({
-  TEXT_PROVIDERS: [] as const,
+  TEXT_PROVIDERS: [
+    { id: 'ollama', label: 'Ollama (local)' },
+    { id: 'llamacpp', label: 'llama.cpp (local)' },
+  ] as const,
   VOICE_PROVIDERS: [{ id: 'kokoro', label: 'Kokoro (local)' }] as const,
   IMAGE_PROVIDERS: [] as const,
   MEMORY_TYPES: [] as const,
@@ -295,42 +334,6 @@ const _createServiceStub = () => {
     },
   };
   return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
-};
-
-/**
- * Creates a callable Proxy stub with a mutable `.fn` property.
- *
- * Bun's mock.module() freezes module exports, preventing tests from
- * reassigning exported mock functions. This wrapper makes the export
- * callable (via `apply` trap) while also supporting property mutation
- * through a writable `.fn` on the underlying target object.
- *
- * Tests can replace the implementation by mutating `stub.fn = newMock`
- * instead of trying to reassign an export on the frozen module namespace.
- */
-const _createCallableStub = () => {
-  const target = { fn: mock(() => {}) as (...args: never) => unknown };
-  return new Proxy(
-    mock(() => {}),
-    {
-      apply(_t, _thisArg, args) {
-        return target.fn(...args);
-      },
-      get(_t, prop) {
-        if (prop === 'fn') {
-          return target.fn;
-        }
-        return Reflect.get(_t, prop);
-      },
-      set(_t, prop, value) {
-        if (prop === 'fn') {
-          target.fn = value as (...args: never) => unknown;
-          return true;
-        }
-        return Reflect.set(_t, prop, value);
-      },
-    },
-  );
 };
 
 const _localServicesMock = () => ({
@@ -522,7 +525,9 @@ const _localServicesMock = () => ({
     { id: 'openai-compat', label: 'OpenAI Compatible' },
   ] as const,
   PROVIDER_MODEL_FETCH: {},
-  choiceHistoryStore: _createServiceStub(),
+  choiceHistoryStore: Object.assign(_createServiceStub(), {
+    formatHistorySection: mock(() => ''),
+  }),
   getExpressionAssetResolver: _createCallableStub(),
   sceneToMusicTags: _createCallableStub(),
   styleProfileService: _createServiceStub(),
@@ -538,7 +543,10 @@ const _localServicesMock = () => ({
   MEMORY_TYPES: [] as const,
   EMBEDDING_MODELS: [] as const,
   EMOTION_METHODS: [] as const,
-  TEXT_PROVIDERS: [] as const,
+  TEXT_PROVIDERS: [
+    { id: 'ollama', label: 'Ollama (local)' },
+    { id: 'llamacpp', label: 'llama.cpp (local)' },
+  ] as const,
   VOICE_PROVIDERS: [{ id: 'kokoro', label: 'Kokoro (local)' }] as const,
   PROVIDER_ENDPOINTS: {},
   fetchOpenRouterModels: _createCallableStub(),
@@ -682,6 +690,41 @@ const _localServicesMock = () => ({
   trackRegistryService: _createServiceStub(),
   timeService: { gameHour: 12, gameMinute: 0, windVelocity: 0, rainIntensity: 0 },
   SentenceBoundaryChunker: class {},
+  partyRosterService: Object.assign(_createServiceStub(), {
+    members: [],
+    activeCount: 0,
+    isFull: false,
+    maxSize: 4,
+    formation: 'line',
+    recruit: mock(() => undefined),
+    dismiss: mock(() => false),
+    hasMember: mock(() => false),
+    getMember: mock(() => undefined),
+    adjustApproval: _createCallableStub(),
+    getApproval: mock(() => 0),
+    activatePersonalQuest: _createCallableStub(),
+    deactivatePersonalQuest: _createCallableStub(),
+    isEmpty: mock(() => true),
+    serialize: mock(() => ({ members: [], maxSize: 4, formation: 'line' })),
+    hydrate: _createCallableStub(),
+    reset: _createCallableStub(),
+  }),
+  assetStore: _createServiceStub(),
+  assetPrefetchService: _createServiceStub(),
+  expressionService: Object.assign(_createServiceStub(), {
+    detectExpression: mock(async () => undefined),
+  }),
+  gameBootService: Object.assign(_createServiceStub(), {
+    bootProgress: { stage: 'idle', stageIndex: 0, stageCount: 0 },
+    isBooting: false,
+    lastResult: undefined,
+    boot: mock(async () => undefined),
+    cancelBoot: _createCallableStub(),
+    resetForRetry: _createCallableStub(),
+    teardown: _createCallableStub(),
+  }),
+  localTaskPoolService: _createServiceStub(),
+  partyFollowService: _createServiceStub(),
   __esModule: true,
 });
 
