@@ -14,6 +14,18 @@ export type SaveMapBlock = {
   playerY: number;
   /** Optional spawn identifier used to enter the map. */
   spawnId?: string;
+  /**
+   * Pack version when the save was created (v4+).
+   * Missing = treat as the currently installed version (v3 compatibility).
+   * Contract: C-381 AC-3.
+   */
+  packVersion?: string;
+  /**
+   * Seed for reproducible world generation (v4+).
+   * Missing = derived deterministically from campaign id (v3 compatibility).
+   * Contract: C-381 AC-4 / AC-9.
+   */
+  worldSeed?: string;
 };
 
 /** Parsed representation of a persisted save payload. */
@@ -98,6 +110,10 @@ export const validateEnvelopeChecksum = async (options: {
 }): Promise<boolean> => {
   try {
     const version = options.version ?? 2;
+    // v3+ digests include the map block (which carries packVersion/worldSeed
+    // for v4+ envelopes). v2 payloads hash the two original fields only.
+    // C-381: v4 hashes the same shape as v3 because the enriched map already
+    // contains packVersion and worldSeed — no extra top-level keys needed.
     const dataToHash =
       version >= 3
         ? JSON.stringify({

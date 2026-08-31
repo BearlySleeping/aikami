@@ -6,20 +6,8 @@
 // part of the barrel, so callers must import this module by path.
 
 import { gameEngineService } from './game_engine_service.svelte';
-
-/** Map-routing block persisted in the save envelope (v3+). */
-export type SaveMapBlock = {
-  /** Content pack id (e.g. 'emberwatch'). */
-  packId: string;
-  /** Map id within the pack (e.g. 'merchant_shop'). */
-  mapId: string;
-  /** Player X pixel coordinate on the saved map. */
-  playerX: number;
-  /** Player Y pixel coordinate on the saved map. */
-  playerY: number;
-  /** Optional spawn id the player used to enter the map (provenance/debug). */
-  spawnId?: string;
-};
+import { campaignService } from '../campaign/campaign_service.svelte';
+import type { SaveMapBlock } from './game_save_envelope.ts';
 
 /**
  * Builds the v3+ envelope map block: pack id, current map id, and the
@@ -40,7 +28,33 @@ export const buildSaveMapBlock = async (): Promise<SaveMapBlock | undefined> => 
   if (!mapId || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
     return undefined;
   }
-  return { packId, mapId, playerX: Math.round(pos.x), playerY: Math.round(pos.y) };
+  const campaign = campaignService.activeCampaign;
+
+  // Resolve pack version from the manifest (C-381 AC-3)
+  let packVersion: string | undefined;
+  try {
+    const { loadContentPack } = await import('@aikami/frontend/engine');
+    const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+    const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+    const pack = await loadContentPack({
+      packId,
+      resolveTag: assetTagResolver,
+      releaseUrl: (url: string) => assetManager.releaseUrl(url),
+    });
+    packVersion = pack.manifest.version;
+  } catch {
+    // If we can't resolve the pack, proceed without version pinning
+    packVersion = undefined;
+  }
+
+  return {
+    packId,
+    mapId,
+    playerX: Math.round(pos.x),
+    playerY: Math.round(pos.y),
+    packVersion,
+    worldSeed: campaign?.seed != null ? String(campaign.seed) : undefined,
+  };
 };
 
 /**

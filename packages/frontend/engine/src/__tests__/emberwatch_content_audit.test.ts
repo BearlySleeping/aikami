@@ -19,6 +19,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PackConfig } from '@aikami/types';
 import { buildCollisionGrid, type TilemapData } from '../assets/map_loader.ts';
+import { validatePack, type ContentPackManifest } from '@aikami/schemas';
 
 // ---------------------------------------------------------------------------
 // Fixture paths — the actual committed static content.
@@ -196,6 +197,13 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
     const manifest = readJson<ManifestJson>(join(packDir, 'manifest.json'));
     const packId = manifest.id;
     const maps = Object.values(manifest.maps ?? {});
+
+    // C-381 AC-5: validatePack is the single source of truth for manifest
+    // validation. Assert it passes before running pack-specific checks.
+    test(`[${packId}] validatePack passes`, () => {
+      const result = validatePack({ manifest: manifest as unknown as ContentPackManifest });
+      expect(result.errors, `${packId} validatePack errors`).toHaveLength(0);
+    });
 
     // Every pack: declared map files must exist on disk.
     test(`[${packId}] every manifest maps[].file exists`, () => {
