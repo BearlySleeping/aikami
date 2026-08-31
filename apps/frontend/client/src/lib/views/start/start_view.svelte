@@ -3,6 +3,8 @@
 import { BaseViewModelContainer } from '$components';
 import LoginView from '$lib/views/auth/login/login_view.svelte';
 import CreditsModal from './components/credits_modal.svelte';
+import LoadCampaignModal from './components/load_campaign_modal.svelte';
+import NewAdventureConfirmDialog from './components/new_adventure_confirm_dialog.svelte';
 import PackBrowserView from './components/pack_browser_view.svelte';
 import type { StartViewModelInterface } from './start_view_model.svelte';
 
@@ -60,26 +62,35 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
             </div>
           {/if}
 
-          <!-- Menu Buttons -->
+          <!-- Menu Buttons — Campaign-First Hierarchy (C-317) -->
           <div class="flex flex-col gap-3 w-64 mx-auto">
-            <!-- Continue (only shown when saves exist) -->
-            {#if viewModel.hasSaves}
+            <!-- AC-1: Continue (only shown when a resumable campaign exists) -->
+            {#if viewModel.latestResumableCampaign}
               <button
                 type="button"
                 class="btn btn-primary btn-lg"
-                onclick={() => viewModel.continueGame()}
+                onclick={() => viewModel.continueLatestCampaign()}
               >
                 Continue
               </button>
             {/if}
 
-            <!-- New Game -->
+            <!-- AC-2: New Adventure — always creates a fresh campaign draft -->
             <button
               type="button"
-              class="btn {viewModel.hasSaves ? 'btn-outline' : 'btn-primary'} btn-lg"
-              onclick={() => viewModel.startNewGame()}
+              class="btn {viewModel.latestResumableCampaign ? 'btn-outline' : 'btn-primary'} btn-lg"
+              onclick={() => viewModel.startNewAdventure()}
             >
-              New Game
+              New Adventure
+            </button>
+
+            <!-- AC-3: Load Campaign — browse all campaigns -->
+            <button
+              type="button"
+              class="btn btn-ghost"
+              onclick={() => viewModel.openLoadCampaign()}
+            >
+              Load Campaign
             </button>
 
             <!-- Sign In / Sign Out (shared auth control) -->
@@ -90,9 +101,9 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
               How to Play
             </button>
 
-            <!-- Options -->
+            <!-- Settings -->
             <button type="button" class="btn btn-ghost" onclick={() => viewModel.goToOptions()}>
-              Options
+              Settings
             </button>
 
             <!-- Credits -->
@@ -163,6 +174,24 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
         onselect={(packId: string) => viewModel.selectPack(packId)}
         onconfirm={() => viewModel.confirmPackSelection()}
         oncancel={() => viewModel.closePackBrowser()}
+      />
+    {/if}
+
+    <!-- C-317 AC-3: Load Campaign Modal -->
+    {#if viewModel.showLoadCampaign}
+      <LoadCampaignModal
+        campaigns={viewModel.campaignSummaries}
+        onload={(campaignId: string) => viewModel.loadCampaignById(campaignId)}
+        onclose={() => viewModel.closeLoadCampaign()}
+      />
+    {/if}
+
+    <!-- C-317 AC-4: New Adventure Confirmation Dialog -->
+    {#if viewModel.showNewAdventureConfirm && viewModel.latestResumableCampaign}
+      <NewAdventureConfirmDialog
+        campaign={viewModel.latestResumableCampaign}
+        onconfirm={() => viewModel.confirmNewAdventure()}
+        oncancel={() => viewModel.cancelNewAdventure()}
       />
     {/if}
   {/if}
