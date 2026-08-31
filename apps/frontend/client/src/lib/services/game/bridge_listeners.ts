@@ -7,6 +7,7 @@
 
 import type { EngineBridge } from '@aikami/frontend/engine';
 import type { AudioServiceInterface } from '$services';
+import type { PartyFollowServiceInterface } from '$types';
 import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
 import type { CombatServiceInterface } from './combat_service.svelte';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
@@ -14,7 +15,6 @@ import type { GameOverlayServiceInterface } from './game_overlay_service.svelte'
 import type { InputActionServiceInterface } from './input_action_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import type { OnboardingHintServiceInterface } from './onboarding_hint_service.svelte.ts';
-import type { PartyFollowServiceInterface } from './party_follow_service.svelte.ts';
 import type { TimeServiceInterface } from './time_service.svelte';
 
 // ---------------------------------------------------------------------------

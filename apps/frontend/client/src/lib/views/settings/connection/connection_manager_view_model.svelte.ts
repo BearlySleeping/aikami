@@ -936,8 +936,8 @@ class ConnectionManagerViewModel
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
     try {
-      const url = buildVerifyUrl(endpoint, connection.apiKey);
-      const headers = buildVerifyHeaders(endpoint, connection.apiKey);
+      const url = buildVerifyUrl({ endpoint, apiKey: connection.apiKey });
+      const headers = buildVerifyHeaders({ endpoint, apiKey: connection.apiKey });
       const response = await fetch(url, {
         headers,
         method: endpoint.method,
@@ -1053,8 +1053,8 @@ class ConnectionManagerViewModel
     const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
     try {
-      const url = buildVerifyUrl(endpoint, apiKey);
-      const headers = buildVerifyHeaders(endpoint, apiKey);
+      const url = buildVerifyUrl({ endpoint, apiKey });
+      const headers = buildVerifyHeaders({ endpoint, apiKey });
       this.debug('_testDraftProvider:fetch', { url, method: endpoint.method });
       const response = await fetch(url, {
         headers,

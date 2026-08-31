@@ -57,7 +57,8 @@ export const PROVIDER_ENDPOINTS: Record<string, ProviderEndpoint> = {
 
 /** Builds a verification URL, substituting `{{key}}` placeholders when the key
  *  is passed as a query parameter. */
-export const buildVerifyUrl = (endpoint: ProviderEndpoint, apiKey: string): string => {
+export const buildVerifyUrl = (options: { endpoint: ProviderEndpoint; apiKey: string }): string => {
+  const { endpoint, apiKey } = options;
   if (endpoint.auth.location === 'query') {
     return endpoint.verifyUrl.replace('{{key}}', encodeURIComponent(apiKey));
   }
@@ -65,10 +66,11 @@ export const buildVerifyUrl = (endpoint: ProviderEndpoint, apiKey: string): stri
 };
 
 /** Builds headers for a verification request. */
-export const buildVerifyHeaders = (
-  endpoint: ProviderEndpoint,
-  apiKey: string,
-): Record<string, string> => {
+export const buildVerifyHeaders = (options: {
+  endpoint: ProviderEndpoint;
+  apiKey: string;
+}): Record<string, string> => {
+  const { endpoint, apiKey } = options;
   const headers: Record<string, string> = { ...endpoint.extraHeaders };
 
   if (endpoint.auth.location === 'header') {

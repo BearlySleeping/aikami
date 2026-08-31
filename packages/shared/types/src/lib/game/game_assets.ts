@@ -176,6 +176,7 @@ export type AssetSeedRow = {
   ext: string;
 };
 
+/** Shared prefetch lifecycle: idle, setup, required fetch, cache warming, ready, or usable-but-degraded. */
 export type AssetPrefetchPhase =
   | 'idle'
   | 'preparing'

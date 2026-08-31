@@ -6,7 +6,6 @@
 import {
   buildVerifyHeaders,
   buildVerifyUrl,
-  fetchOpenRouterModels,
   PROVIDER_ENDPOINTS,
   TEXT_PROVIDERS,
 } from '@aikami/constants';
@@ -16,7 +15,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ConfigState, OpenRouterModel } from '@aikami/types';
-import { configService, getOllamaRuntimeEndpoints } from '$services';
+import { configService, fetchOpenRouterModels, getOllamaRuntimeEndpoints } from '$services';
 import { type AuxiliaryModels, INSTRUCT_TEMPLATES, type InstructTemplate } from '$types';
 
 export type TextTabViewModelInterface = BaseViewModelInterface & {
@@ -266,8 +265,8 @@ class TextTabViewModel
     }
     this.verificationStatus = { ...this.verificationStatus, [provider]: 'checking' };
     try {
-      const url = buildVerifyUrl(endpoint, apiKey);
-      const headers = buildVerifyHeaders(endpoint, apiKey);
+      const url = buildVerifyUrl({ endpoint, apiKey });
+      const headers = buildVerifyHeaders({ endpoint, apiKey });
       const response = await fetch(url, { method: endpoint.method, headers });
       this.verificationStatus = {
         ...this.verificationStatus,

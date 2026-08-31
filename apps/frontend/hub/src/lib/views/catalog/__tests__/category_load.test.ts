@@ -254,11 +254,14 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
     } as never)) as Awaited<ReturnType<typeof load>>;
 
     expect(data).toBeDefined();
-    expect(data!.category).toBe('lpc');
-    expect(data!.entries).toHaveLength(2);
+    if (!data) {
+      throw new Error('Expected category load data');
+    }
+    expect(data.category).toBe('lpc');
+    expect(data.entries).toHaveLength(2);
     expect(setHeaders).toHaveBeenCalled();
     // The stats promise is STREAMED — resolving it must yield null with the
     // database unconfigured, and it must never reject (AC-4 watch point).
-    await expect(data!.stats).resolves.toBeNull();
+    await expect(data.stats).resolves.toBeNull();
   });
 });

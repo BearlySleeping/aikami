@@ -7,6 +7,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { partyRosterService } from './party_roster_service.svelte';
+import { hydrateAllServices } from './serializable_service';
 
 describe('PartyRosterService', () => {
   beforeEach(() => {
@@ -115,8 +116,19 @@ describe('PartyRosterService', () => {
     expect(partyRosterService.formation).toBe('spread');
   });
 
-  test('hydrate on a v0 save (no partyState) defaults to an empty roster', () => {
+  test('hydrate preserves an explicit empty party snapshot', () => {
     partyRosterService.hydrate({ members: [], maxSize: 4, formation: 'line' });
+
+    expect(partyRosterService.isEmpty()).toBe(true);
+    expect(partyRosterService.maxSize).toBe(4);
+    expect(partyRosterService.formation).toBe('line');
+  });
+
+  test('loading a save without a party snapshot resets to the default roster', () => {
+    partyRosterService.recruit({ npcId: 'lydia', name: 'Lydia', classId: 'cleric' });
+    partyRosterService.formation = 'spread';
+
+    hydrateAllServices([]);
 
     expect(partyRosterService.isEmpty()).toBe(true);
     expect(partyRosterService.maxSize).toBe(4);

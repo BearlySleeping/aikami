@@ -106,6 +106,9 @@ tasks:
       - "@group(sources)"
       - "@group(configs)"
       - "@group(root-configs)"
+      - "/packages/shared/*/src/**/*"
+      - "/packages/frontend/*/src/**/*"
+      - "/packages/backend/*/src/**/*"
     options:
       cache: true
       runInCI: true

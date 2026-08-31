@@ -12,57 +12,53 @@
 // Contract: C-340 Build Party and Companion Gameplay (AC-3, AC-5)
 
 import { expect, test } from '@playwright/test';
+import { GamePage, PartyRosterPage } from '$pom';
 
 test.describe('Party Roster UI (empty roster)', () => {
+  let game: GamePage;
+  let partyRoster: PartyRosterPage;
+
   test.beforeEach(async ({ page }) => {
-    await page.goto('/game');
-    // Loading overlay covers the canvas until the engine is ready.
-    await page.waitForSelector('#game-canvas-container', { state: 'attached', timeout: 15000 });
-    const loadingText = page.getByText('Loading game engine...');
-    await loadingText.waitFor({ state: 'hidden', timeout: 15000 });
+    game = new GamePage(page);
+    partyRoster = new PartyRosterPage(page);
+    await game.goto();
+    await game.waitForPlayingState();
   });
 
-  test('party HUD widget is hidden when the roster is empty', async ({ page }) => {
-    const hudButton = page.locator('[aria-label="Open party roster"]');
-    await expect(hudButton).not.toBeVisible();
+  test('party HUD widget is hidden when the roster is empty', async () => {
+    await expect(partyRoster.hudButton).not.toBeVisible();
   });
 
-  test('P key opens the party roster overlay showing the empty state', async ({ page }) => {
-    await page.keyboard.press('KeyP');
+  test('P key opens the party roster overlay showing the empty state', async () => {
+    await partyRoster.open();
 
-    const overlay = page.locator('[aria-label="Party Roster"]');
-    await expect(overlay).toBeVisible();
-    await expect(page.getByText('No companions')).toBeVisible();
+    await expect(partyRoster.overlay).toBeVisible();
+    await expect(partyRoster.emptyState).toBeVisible();
   });
 
-  test('Escape closes the party roster overlay', async ({ page }) => {
-    await page.keyboard.press('KeyP');
-    const overlay = page.locator('[aria-label="Party Roster"]');
-    await expect(overlay).toBeVisible();
+  test('Escape closes the party roster overlay', async () => {
+    await partyRoster.open();
+    await expect(partyRoster.overlay).toBeVisible();
 
-    await page.keyboard.press('Escape');
-    await expect(overlay).not.toBeVisible();
+    await partyRoster.close();
+    await expect(partyRoster.overlay).not.toBeVisible();
   });
 
-  test('the overlay can be reopened after closing', async ({ page }) => {
-    const overlay = page.locator('[aria-label="Party Roster"]');
+  test('the overlay can be reopened after closing', async () => {
+    await partyRoster.open();
+    await expect(partyRoster.overlay).toBeVisible();
+    await partyRoster.close();
+    await expect(partyRoster.overlay).not.toBeVisible();
 
-    await page.keyboard.press('KeyP');
-    await expect(overlay).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(overlay).not.toBeVisible();
-
-    await page.keyboard.press('KeyP');
-    await expect(overlay).toBeVisible();
+    await partyRoster.open();
+    await expect(partyRoster.overlay).toBeVisible();
   });
 
-  test('an empty roster still opens cleanly after a page reload', async ({ page }) => {
-    await page.reload();
-    await page.waitForSelector('#game-canvas-container', { state: 'attached', timeout: 15000 });
-    await page.getByText('Loading game engine...').waitFor({ state: 'hidden', timeout: 15000 });
+  test('an empty roster still opens cleanly after a page reload', async () => {
+    await game.reload();
 
-    await page.keyboard.press('KeyP');
-    await expect(page.locator('[aria-label="Party Roster"]')).toBeVisible();
-    await expect(page.getByText('No companions')).toBeVisible();
+    await partyRoster.open();
+    await expect(partyRoster.overlay).toBeVisible();
+    await expect(partyRoster.emptyState).toBeVisible();
   });
 });

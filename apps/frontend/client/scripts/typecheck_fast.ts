@@ -16,7 +16,12 @@
 
 // biome-ignore-all lint/suspicious/noConsole: standalone script, no logger context
 
-const runCheck = async (name: string, cmd: string[]) => {
+type RunCheckOptions = {
+  name: string;
+  cmd: string[];
+};
+
+const runCheck = async ({ name, cmd }: RunCheckOptions) => {
   const proc = Bun.spawn(cmd, {
     cwd: `${import.meta.dir}/..`,
     stdout: 'pipe',
@@ -38,8 +43,8 @@ const runCheck = async (name: string, cmd: string[]) => {
 };
 
 const [checkRsOk, tsgoOk] = await Promise.all([
-  runCheck('svelte-check-rs', ['bun', 'x', 'svelte-check-rs']),
-  runCheck('tsgo', ['bun', 'x', 'tsgo', '--noEmit', '-p', 'tsconfig.json']),
+  runCheck({ name: 'svelte-check-rs', cmd: ['bun', 'x', 'svelte-check-rs'] }),
+  runCheck({ name: 'tsgo', cmd: ['bun', 'x', 'tsgo', '--noEmit', '-p', 'tsconfig.json'] }),
 ]);
 
 process.exit(checkRsOk && tsgoOk ? 0 : 1);

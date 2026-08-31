@@ -16,7 +16,7 @@ const DEFAULT_SANDOX_ICON =
 
 // ── Custom icons for specific routes ────────────────────────────────────
 
-const CUSTOM_ICONS: Record<string, string> = {
+const CUSTOM_ICONS = {
   '/dev/config':
     'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
   '/dev/text': 'M4 6h16M4 12h16M4 18h7',
@@ -43,11 +43,11 @@ const CUSTOM_ICONS: Record<string, string> = {
     'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
   '/dev/vendor':
     'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z',
-};
+} as const satisfies Record<string, string>;
 
 // ── Custom labels for routes that need non-default formatting ───────────
 
-const CUSTOM_LABELS: Record<string, string> = {
+const CUSTOM_LABELS = {
   '/dev/save_load': 'Save/Load',
   '/dev/agent-editor': 'Agent Editor',
   '/dev/agent-pipeline': 'Agent Pipeline',
@@ -67,16 +67,22 @@ const CUSTOM_LABELS: Record<string, string> = {
   '/dev/sandbox/party-follow': 'Party follow',
   '/dev/sandbox/zone-transition': 'Zone transition',
   '/dev/sandbox/chat-c424': 'Chat C424',
-};
+} as const satisfies Record<string, string>;
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
+const _getRouteOverride = (options: {
+  values: Readonly<Record<string, string>>;
+  path: string;
+}): string | undefined => options.values[options.path];
+
 /** Derive a human-readable label from a URL path. */
 const _pathToLabel = (path: string): string => {
-  if (CUSTOM_LABELS[path]) {
-    return CUSTOM_LABELS[path];
+  const customLabel = _getRouteOverride({ values: CUSTOM_LABELS, path });
+  if (customLabel !== undefined) {
+    return customLabel;
   }
-  const segment = path.replace('/dev/', '');
+  const segment = path.replace('/dev/', '').split('/').at(-1) ?? '';
   return segment
     .split(/[-_]/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -118,7 +124,7 @@ const _deriveNavItems = (): readonly DevNavItem[] => {
     .map((path) => ({
       route: path,
       label: _pathToLabel(path),
-      icon: CUSTOM_ICONS[path] ?? DEFAULT_ICON,
+      icon: _getRouteOverride({ values: CUSTOM_ICONS, path }) ?? DEFAULT_ICON,
     }))
     .sort((a, b) => a.route.localeCompare(b.route));
 

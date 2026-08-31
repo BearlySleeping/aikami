@@ -30,8 +30,7 @@ const DEFAULT_NPC_APPEARANCE_LAYERS: readonly number[] = [3, 3, 23, 22, 7, 95];
  * Collision mask for NPCs — other NPCs, walls, and enemies block NPCs,
  * but the player does NOT collide with NPCs (C-402: soft obstacles).
  */
-const NPC_COLLISION_MASK =
-  CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.player | CollisionLayer.enemy;
+const NPC_COLLISION_MASK = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
 
 // ---------------------------------------------------------------------------
 // NPC entity factory

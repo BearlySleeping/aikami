@@ -9,6 +9,7 @@
 
 import type { EngineBridge, GameWorldOptions, LpcLayerRecipe } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
+import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -166,7 +167,7 @@ class CombatSandboxViewModel
   private _canvas: HTMLCanvasElement | undefined;
   /** Resolved map URL (cached from content pack). */
   private _mapUrl: string | undefined;
-  private _assetTagResolver: import('@aikami/frontend/engine/sim').AssetTagResolver | undefined;
+  private _assetTagResolver: AssetTagResolver | undefined;
   private _releaseUrl: ((url: string) => void) | undefined;
 
   // -----------------------------------------------------------------------

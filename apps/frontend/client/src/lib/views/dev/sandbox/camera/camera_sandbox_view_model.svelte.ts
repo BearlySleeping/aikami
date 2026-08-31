@@ -13,6 +13,7 @@ import type {
   LpcLayerRecipe,
 } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld as GW, TextureManager } from '@aikami/frontend/engine';
+import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -113,7 +114,7 @@ class CameraSandboxViewModel
   private _readyCleanup: (() => void) | undefined;
   private _cameraUpdateCleanup: (() => void) | undefined;
   private _initialMapLoaded = false;
-  private _assetTagResolver: import('@aikami/frontend/engine/sim').AssetTagResolver | undefined;
+  private _assetTagResolver: AssetTagResolver | undefined;
   private _releaseUrl: ((url: string) => void) | undefined;
 
   /** Max debug log entries to keep in memory. */

@@ -17,6 +17,7 @@ import type {
   EmotionConfig,
   ImageConfig,
   MemoryConfig,
+  ModelConfigEntry,
   TextConfig,
   VoiceConfig,
 } from '@aikami/types';
@@ -85,9 +86,9 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   /** Sets the preferred model identifier. */
   setPreferredModel(model: string): void;
   /** Replaces the full models array. */
-  setModels(models: ModelConfig[]): void;
+  setModels(models: ModelConfigEntry[]): void;
   /** Updates a single model config by index. */
-  updateModel(index: number, config: Partial<ModelConfig>): void;
+  updateModel(index: number, config: Partial<ModelConfigEntry>): void;
   /** Updates memory config (partial merge). */
   setMemoryConfig(config: Partial<MemoryConfig>): void;
   /** Updates voice config (partial merge). */
@@ -194,7 +195,7 @@ const DEFAULT_TEXT_CONFIG: TextConfig = {
   provider: 'openrouter',
 };
 
-const DEFAULT_MODEL_CONFIGS: ModelConfig[] = [];
+const DEFAULT_MODEL_CONFIGS: ModelConfigEntry[] = [];
 
 const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
   chunkSize: 512,
@@ -477,11 +478,11 @@ class ConfigService
     this.state.preferredModel = model;
   }
 
-  setModels(models: ModelConfig[]): void {
+  setModels(models: ModelConfigEntry[]): void {
     this.state.models = models;
   }
 
-  updateModel(index: number, config: Partial<ModelConfig>): void {
+  updateModel(index: number, config: Partial<ModelConfigEntry>): void {
     if (index < 0 || index >= this.state.models.length) {
       return;
     }

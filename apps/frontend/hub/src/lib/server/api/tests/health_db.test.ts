@@ -7,44 +7,19 @@
 // never contains a credential, connection string, or internal identifier.
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { createMockD1 as createPreparedMockD1 } from './mock_d1.ts';
 
 // ── Mock D1 helpers ─────────────────────────────────────────────────────
 
-const createMockD1 = (shouldThrow: boolean = false): unknown => {
-  const prepareStatement = (_sql: string) => ({
-    bind: (..._params: unknown[]) => ({
-      all: async () => {
-        if (shouldThrow) {
-          throw new Error('D1 query failed');
-        }
-        return { results: [] };
-      },
-      first: async () => {
-        if (shouldThrow) {
-          throw new Error('D1 query failed');
-        }
-        return null;
-      },
-      run: async () => {
-        if (shouldThrow) {
-          throw new Error('D1 query failed');
-        }
-        return {};
-      },
-      raw: async () => {
-        if (shouldThrow) {
-          throw new Error('D1 query failed');
-        }
-        return [];
-      },
-    }),
+const createMockD1 = (shouldThrow: boolean = false): unknown =>
+  createPreparedMockD1({
+    execute: async () => {
+      if (shouldThrow) {
+        throw new Error('D1 query failed');
+      }
+      return { rows: [] };
+    },
   });
-  return {
-    prepare: prepareStatement,
-    exec: async (_sql: string) => {},
-    batch: async (_statements: Array<{ sql: string; params?: unknown[] }>) => [],
-  };
-};
 
 type TestHealthDbEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name

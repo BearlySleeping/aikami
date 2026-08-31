@@ -48,7 +48,8 @@ class AppErrorViewModel
   get errorId() {
     const err = page.error;
     if (err && typeof err === 'object' && 'errorId' in err) {
-      return String(Reflect.get(err, 'errorId')) || undefined;
+      const errorId = Reflect.get(err, 'errorId') as unknown;
+      return typeof errorId === 'string' ? errorId : undefined;
     }
     return undefined;
   }

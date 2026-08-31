@@ -19,6 +19,7 @@
 // With `.mount()` everything is consolidated into this single Elysia app,
 // mounted at /api/[...slugs].
 
+import { AssetStatsSchema, CategoryStatsSchema } from '@aikami/schemas';
 import { Elysia, t } from 'elysia';
 import { handleAsk } from './ask.ts';
 import { getBetterAuth } from './better_auth.ts';
@@ -53,9 +54,12 @@ const dbHealthResponseSchema = t.Union([
 // (C-396 AC-4). Public on purpose: anonymous visitors see exactly what
 // signed-in visitors see on the catalog. Unconfigured/unreachable database
 // resolves to `null` — never a 500.
+type ElysiaCatalogStatsSchema = ReturnType<
+  typeof t.Object<{ packCount: ReturnType<typeof t.Integer> }>
+>;
 const catalogStatsResponseSchema = t.Union([
-  t.Object({ packCount: t.Integer({ minimum: 0, description: 'Public packs in this category' }) }),
-  t.Object({ packCount: t.Integer({ minimum: 0, description: 'Public packs for this asset' }) }),
+  CategoryStatsSchema as unknown as ElysiaCatalogStatsSchema,
+  AssetStatsSchema as unknown as ElysiaCatalogStatsSchema,
   t.Null(),
 ]);
 

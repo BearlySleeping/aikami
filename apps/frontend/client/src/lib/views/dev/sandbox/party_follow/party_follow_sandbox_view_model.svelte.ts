@@ -10,6 +10,7 @@
 import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
 import { projectLpcCatalog } from '@aikami/frontend/engine/content';
+import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -129,9 +130,11 @@ class PartyFollowSandboxViewModel
 
   private _gameWorld: GameWorld | undefined;
   private _bridge: EngineBridge | undefined;
-  private _assetTagResolver: import('@aikami/frontend/engine/sim').AssetTagResolver | undefined;
+  private _assetTagResolver: AssetTagResolver | undefined;
   private _releaseUrl: ((url: string) => void) | undefined;
   private _textureManager: TextureManager | undefined;
+  private _initializationGeneration = 0;
+  private _isInitializing = false;
 
   // -----------------------------------------------------------------------
   // Public API
@@ -139,34 +142,51 @@ class PartyFollowSandboxViewModel
 
   /** @inheritdoc */
   async initializeEngine(canvas: HTMLCanvasElement): Promise<void> {
-    if (this._gameWorld) {
+    if (this._gameWorld || this._isInitializing) {
       return;
     }
 
+    const initializationGeneration = ++this._initializationGeneration;
+    this._isInitializing = true;
+
     try {
       const workerCtor = await _resolveEcsWorker();
+      if (!this._isInitializationActive(initializationGeneration)) {
+        return;
+      }
 
       this._bridge = createEngineBridge();
       this._textureManager = new TextureManager({});
 
       const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+      if (!this._isInitializationActive(initializationGeneration)) {
+        return;
+      }
       const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+      if (!this._isInitializationActive(initializationGeneration)) {
+        return;
+      }
       this._assetTagResolver = assetTagResolver;
       this._releaseUrl = (url: string) => assetManager.releaseUrl(url);
 
       // C-400: project the real LPC catalog and pass it to the worker so
       // both threads resolve appearance layers identically.
       const lpcCatalog = projectLpcCatalog(getLpcCatalog().slots);
+      const bridge = this._bridge;
+      const textureManager = this._textureManager;
+      if (!bridge || !textureManager || !this._isInitializationActive(initializationGeneration)) {
+        return;
+      }
 
       const worldOptions: GameWorldOptions = {
         className: 'PartyFollowSandboxGameWorld',
-        bridge: this._bridge,
+        bridge,
         workerFactory: () => new workerCtor(),
         recipeResolver: sandboxRecipeResolver,
         lpcCatalog,
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
-        textureManager: this._textureManager,
+        textureManager,
         // C-434: registry-backed tag resolver for maps and tilesets.
         resolveTag: this._assetTagResolver,
         releaseUrl: this._releaseUrl,
@@ -178,11 +198,17 @@ class PartyFollowSandboxViewModel
         canvas,
         playerData: { name: 'Adventurer' },
       });
+      if (!this._isInitializationActive(initializationGeneration)) {
+        return;
+      }
 
       this._registerBridgeListeners();
 
       // Load the content pack through the asset manager (R2-backed registry)
       const { loadContentPack } = await import('@aikami/frontend/engine');
+      if (!this._isInitializationActive(initializationGeneration)) {
+        return;
+      }
 
       const pack = await loadContentPack({
         packId: 'emberwatch',
@@ -191,7 +217,7 @@ class PartyFollowSandboxViewModel
       });
 
       // Re-check after async gap — the GameWorld may have been destroyed.
-      if (!this._gameWorld) {
+      if (!this._gameWorld || !this._isInitializationActive(initializationGeneration)) {
         return;
       }
 
@@ -212,8 +238,14 @@ class PartyFollowSandboxViewModel
         this._resolveNpcEntityIds();
       }, 500);
     } catch (error) {
-      this.engineError = error instanceof Error ? error.message : String(error);
+      const engineError = error instanceof Error ? error.message : String(error);
+      this.destroyEngine();
+      this.engineError = engineError;
       this.debug('initializeEngine:error', { error: this.engineError });
+    } finally {
+      if (this._initializationGeneration === initializationGeneration) {
+        this._isInitializing = false;
+      }
     }
   }
 
@@ -243,6 +275,9 @@ class PartyFollowSandboxViewModel
 
   /** @inheritdoc */
   destroyEngine(): void {
+    this._initializationGeneration++;
+    this._isInitializing = false;
+
     if (this._textureManager) {
       this._textureManager.destroy();
       this._textureManager = undefined;
@@ -268,6 +303,10 @@ class PartyFollowSandboxViewModel
   // -----------------------------------------------------------------------
   // Bridge listeners
   // -----------------------------------------------------------------------
+
+  private _isInitializationActive(initializationGeneration: number): boolean {
+    return this._isInitializing && this._initializationGeneration === initializationGeneration;
+  }
 
   private _registerBridgeListeners(): void {
     const bridge = this._bridge;

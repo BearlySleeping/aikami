@@ -87,8 +87,11 @@ describe('streamed stats — C-436 (never blocks first paint)', () => {
       depends: mock(() => {}),
     } as never)) as Awaited<ReturnType<typeof load>>;
 
-    expect(data!.category).toBe('lpc');
-    await expect(data!.stats).resolves.toBeNull();
+    if (!data) {
+      throw new Error('Expected category load data');
+    }
+    expect(data.category).toBe('lpc');
+    await expect(data.stats).resolves.toBeNull();
   });
 
   test('the detail route load stream never rejects — .catch(() => null) guards the page data too', async () => {
@@ -101,8 +104,11 @@ describe('streamed stats — C-436 (never blocks first paint)', () => {
       depends: mock(() => {}),
     } as never)) as Awaited<ReturnType<typeof load>>;
 
-    expect(data!.category).toBe('lpc');
-    expect(data!.entry.tag).toBe('lpc:hat:magic:celestial_adult:thrust');
-    await expect(data!.stats).resolves.toBeNull();
+    if (!data) {
+      throw new Error('Expected asset load data');
+    }
+    expect(data.category).toBe('lpc');
+    expect(data.entry.tag).toBe('lpc:hat:magic:celestial_adult:thrust');
+    await expect(data.stats).resolves.toBeNull();
   });
 });

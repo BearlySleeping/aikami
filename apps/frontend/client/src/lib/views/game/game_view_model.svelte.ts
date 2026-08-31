@@ -78,7 +78,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   }
 
   override async dispose(): Promise<void> {
-    this.log('dispose: stopping music and engine');
+    this.debug('dispose: stopping music and engine');
 
     // Stop background music and any playing audio
     musicPlayerService.stop();

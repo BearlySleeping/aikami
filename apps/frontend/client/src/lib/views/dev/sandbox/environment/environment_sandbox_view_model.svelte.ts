@@ -9,6 +9,7 @@
 
 import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
+import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -82,7 +83,7 @@ class EnvironmentSandboxViewModel
   private _gameWorld: GameWorld | undefined;
   private _bridge: EngineBridge | undefined;
   private _textureManager: TextureManager | undefined;
-  private _assetTagResolver: import('@aikami/frontend/engine/sim').AssetTagResolver | undefined;
+  private _assetTagResolver: AssetTagResolver | undefined;
   private _releaseUrl: ((url: string) => void) | undefined;
 
   // -----------------------------------------------------------------------

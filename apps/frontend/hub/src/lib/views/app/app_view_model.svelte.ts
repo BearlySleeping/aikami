@@ -6,6 +6,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { CurrentUser } from '@aikami/types';
+import type { Page } from '@sveltejs/kit';
 import { untrack } from 'svelte';
 import { goto } from '$app/navigation';
 import { navigating, page } from '$app/state';
@@ -126,7 +127,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     document.body.classList.add('app-mounted');
 
     // 1. Inject static dependencies into our framework-agnostic service.
-    routerService.initialize({ goto, page: page as import('@sveltejs/kit').Page });
+    routerService.initialize({ goto, page: page as unknown as Page });
 
     // 2. Set up our reactive tracking safely attached to the class lifecycle
     this._setupReactiveListeners();
@@ -167,7 +168,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
       // user navigates, Svelte updates the proxies, triggering this effect,
       // and we safely pipe that data into our internal RouterService.
       $effect(() => {
-        routerService.syncNavigation(navigating, page as import('@sveltejs/kit').Page);
+        routerService.syncNavigation(navigating, page as unknown as Page);
       });
 
       // EFFECT 2: The Business Logic Guards

@@ -45,15 +45,6 @@ fileGroups:
     - 'src/**/*.test.ts'
 
 tasks:
-  # Adds the workspace-package inputs the globally inherited `typecheck` task
-  # (.moon/tasks/all.yml) is missing. svelte-check walks the full import graph
-  # including these packages' source, same as `build` below — without this,
-  # a breaking change in a shared package doesn't invalidate the typecheck
-  # cache and `moon run client:typecheck` can report a stale pass.
-  typecheck:
-    inputs:
-      - '/packages/shared/*/src/**/*'
-      - '/packages/frontend/*/src/**/*'
   dev:
     command: 'bun run dev'
     preset: 'server'

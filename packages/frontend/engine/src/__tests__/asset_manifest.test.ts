@@ -36,6 +36,13 @@ const MANIFEST_PATH = join(
   import.meta.dir,
   '../../../../../apps/frontend/client/static/game-data/manifest.json',
 );
+const HASHES_PATH = join(
+  import.meta.dir,
+  '../../../../../apps/frontend/client/static/game-data/asset_hashes.json',
+);
+const manifestTest = existsSync(MANIFEST_PATH) ? test : test.skip;
+const manifestAndHashesTest =
+  existsSync(MANIFEST_PATH) && existsSync(HASHES_PATH) ? test : test.skip;
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -44,19 +51,13 @@ const MANIFEST_PATH = join(
 describe('Asset manifest — AC-6: non-derivable data only', () => {
   let manifest: AssetManifest;
 
-  test('manifest.json exists and parses', () => {
-    if (!existsSync(MANIFEST_PATH)) {
-      return;
-    }
+  manifestTest('manifest.json exists and parses', () => {
     manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8')) as AssetManifest;
     expect(manifest.count).toBeGreaterThan(0);
     expect(typeof manifest.assets).toBe('object');
   });
 
-  test('every tag derives to the same path as the manifest entry', () => {
-    if (!manifest?.assets) {
-      return;
-    }
+  manifestTest('every tag derives to the same path as the manifest entry', () => {
     const entries = Object.values(manifest.assets);
     expect(entries.length).toBeGreaterThan(0);
 
@@ -71,18 +72,8 @@ describe('Asset manifest — AC-6: non-derivable data only', () => {
     expect(mismatches).toHaveLength(0);
   });
 
-  test('every tag has a hash entry in the sidecar', () => {
-    if (!manifest?.assets) {
-      return;
-    }
-    const HashesPath = join(
-      import.meta.dir,
-      '../../../../../apps/frontend/client/static/game-data/asset_hashes.json',
-    );
-    if (!existsSync(HashesPath)) {
-      return;
-    }
-    const hashes = JSON.parse(readFileSync(HashesPath, 'utf-8')) as {
+  manifestAndHashesTest('every tag has a hash entry in the sidecar', () => {
+    const hashes = JSON.parse(readFileSync(HASHES_PATH, 'utf-8')) as {
       hashes: Record<string, { hash: string; sizeBytes: number }>;
     };
 
@@ -96,10 +87,7 @@ describe('Asset manifest — AC-6: non-derivable data only', () => {
     expect(missing).toHaveLength(0);
   });
 
-  test('manifest size is under 1 MB uncompressed', () => {
-    if (!existsSync(MANIFEST_PATH)) {
-      return;
-    }
+  manifestTest('manifest size is under 1 MB uncompressed', () => {
     const stats = readFileSync(MANIFEST_PATH, 'utf-8').length;
     expect(stats).toBeLessThan(1_000_000);
   });

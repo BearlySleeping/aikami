@@ -3,9 +3,6 @@
 // C-426 AC-6/AC-7: Turso save backup/restore to R2, gated by a verified
 // Better Auth session.
 
-// biome-ignore-all lint/style/useNamingConvention: Cloudflare D1 binding name is SCREAMING_SNAKE_CASE
-// biome-ignore-all lint/suspicious/noExplicitAny: test mock bridging libsql and D1 types
-//
 // Uses the same mock D1Database (libsql-backed) as auth.test.ts plus an
 // in-memory mock R2 bucket. Verifies the session guard (401 without a
 // session), the account_backups metadata row written only after the R2 PUT,
@@ -15,56 +12,18 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Client, createClient } from '@libsql/client';
+import { createLibsqlMockD1 } from './mock_d1.ts';
 
 mock.module('$env/dynamic/private', () => ({
   env: {
+    // biome-ignore lint/style/useNamingConvention: environment variable name
     BETTER_AUTH_URL: 'http://localhost:5173',
+    // biome-ignore lint/style/useNamingConvention: environment variable name
     BETTER_AUTH_SECRET: 'test-secret-that-is-long-enough-for-better-auth',
   } as Record<string, string | undefined>,
 }));
 
 const BASE_URL = 'http://localhost:5173';
-
-const createMockD1 = (dbClient: Client) => {
-  const prepareStatement = (sql: string) => ({
-    bind: (...params: unknown[]) => ({
-      all: async () => {
-        const res = await dbClient.execute({ sql, args: params as any });
-        return { results: res.rows };
-      },
-      first: async () => {
-        const res = await dbClient.execute({ sql, args: params as any });
-        return res.rows[0] ?? null;
-      },
-      run: async () => {
-        const res = await dbClient.execute({ sql, args: params as any });
-        return {
-          meta: (res as any).meta ?? {
-            changed_db: true,
-            duration: 0,
-            last_auto_row_id: 0,
-            rows_read: 0,
-            rows_written: 0,
-          },
-        };
-      },
-      raw: async () => {
-        const res = await dbClient.execute({ sql, args: params as any });
-        return res.rows;
-      },
-    }),
-  });
-  return {
-    prepare: prepareStatement,
-    exec: async (sql: string) => {
-      await dbClient.execute(sql);
-    },
-    batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
-      Promise.all(
-        statements.map((s) => dbClient.execute({ sql: s.sql, args: s.params ?? [] } as any)),
-      ),
-  };
-};
 
 // ── Mock R2 bucket (in-memory) ──────────────────────────────────────────
 const createMockR2 = () => {
@@ -99,6 +58,7 @@ let client: Client;
 let setBetterAuthEnv: (
   env:
     | {
+        // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
         DB: unknown;
       }
     | undefined,
@@ -182,11 +142,19 @@ beforeAll(async () => {
   await applyD1Migrations();
   const betterAuthModule = await import('../better_auth.ts');
   setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
-  setBetterAuthEnv({ DB: createMockD1(client) });
+  setBetterAuthEnv({
+    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+    DB: createLibsqlMockD1(client),
+  });
   const saveBackupModule = await import('../save_backup.ts');
   setSaveBackupEnv = saveBackupModule.setSaveBackupEnv;
   r2 = createMockR2();
-  setSaveBackupEnv({ DB: createMockD1(client), SAVES_BUCKET: r2 });
+  setSaveBackupEnv({
+    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+    DB: createLibsqlMockD1(client),
+    // biome-ignore lint/style/useNamingConvention: Cloudflare R2 binding name
+    SAVES_BUCKET: r2,
+  });
   ({ app } = await import('../index.ts'));
 });
 
@@ -219,9 +187,9 @@ describe('save backup/restore (AC-6/AC-7)', () => {
       'SELECT id, r2_key, size_bytes, checksum_sha256 FROM account_backups',
     );
     expect(rows.rows).toHaveLength(1);
-    expect(rows.rows[0].size_bytes).toBe(5);
+    expect(Reflect.get(rows.rows[0], 'size_bytes')).toBe(5);
     // The SHA-256 checksum is persisted, not an empty string.
-    expect(rows.rows[0].checksum_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(Reflect.get(rows.rows[0], 'checksum_sha256')).toMatch(/^[0-9a-f]{64}$/);
     expect(r2.store.size).toBe(1);
   });
 

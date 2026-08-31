@@ -11,7 +11,6 @@ import {
   DEFAULT_VOICE_ARCHETYPES,
   EMBEDDING_MODELS,
   EMOTION_METHODS,
-  fetchOpenRouterModels,
   IMAGE_PROVIDERS,
   KOKORO_VOICES,
   MEMORY_TYPES,
@@ -39,6 +38,7 @@ import type {
 } from '@aikami/types';
 import {
   type CheckpointInfo,
+  fetchOpenRouterModels,
   imageGenerationService,
   type LocalServiceDetectorInterface,
   type LocalServiceStatus,
@@ -511,8 +511,8 @@ export class ProvidersViewModel
     this.verificationStatus = { ...this.verificationStatus, [provider]: 'checking' };
 
     try {
-      const url = buildVerifyUrl(endpoint, apiKey);
-      const headers = buildVerifyHeaders(endpoint, apiKey);
+      const url = buildVerifyUrl({ endpoint, apiKey });
+      const headers = buildVerifyHeaders({ endpoint, apiKey });
 
       const response = await fetch(url, { method: endpoint.method, headers });
 

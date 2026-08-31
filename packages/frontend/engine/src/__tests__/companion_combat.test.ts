@@ -76,6 +76,12 @@ const spawnParticipant = (
   return eid;
 };
 
+/** Places a combat participant for distance-based targeting. */
+const placeParticipant = (world: World, entityId: number, x: number, y: number): void => {
+  addComponent(world, entityId, Position);
+  addComponent(world, entityId, set(Position, { x, y }));
+};
+
 /**
  * Entity IDs given a Companion component this test file has touched.
  * `Companion`'s SoA arrays are module-level state shared across every test
@@ -181,8 +187,12 @@ describe('Companion combat (C-340 AC-4)', () => {
       initiative: 15,
       classId: 'fighter',
     });
-    const enemyId = spawnParticipant(world, { health: 40, maxHealth: 40, initiative: 5 });
-    CombatStats.evasion[enemyId] = 0; // guarantee the companion's hit lands
+    const nearEnemyId = spawnParticipant(world, { health: 40, maxHealth: 40, initiative: 5 });
+    placeParticipant(world, nearEnemyId, 20, 0);
+    CombatStats.evasion[nearEnemyId] = 0; // guarantee the companion's hit lands
+    const farEnemyId = spawnParticipant(world, { health: 40, maxHealth: 40, initiative: 4 });
+    placeParticipant(world, farEnemyId, 200, 0);
+    CombatStats.evasion[farEnemyId] = 0;
 
     initCombat(world, bridge);
     // Player's turn first (highest initiative) — advance to the companion.
@@ -192,7 +202,8 @@ describe('Companion combat (C-340 AC-4)', () => {
       (e) => e.type === 'COMBAT_LOG' && (e as { message: string }).message.includes('attacks'),
     );
     expect(attackLog).toBeDefined();
-    expect(CombatStats.health[enemyId]).toBeLessThan(40);
+    expect(CombatStats.health[nearEnemyId]).toBeLessThan(40);
+    expect(CombatStats.health[farEnemyId]).toBe(40);
   });
 
   test('a cleric companion heals the most damaged ally instead of attacking', () => {
@@ -202,6 +213,12 @@ describe('Companion combat (C-340 AC-4)', () => {
       maxHealth: 30,
       initiative: 15,
       classId: 'cleric',
+    });
+    const lessDamagedAllyId = spawnRecruitedCompanion(world, {
+      health: 10,
+      maxHealth: 30,
+      initiative: 10,
+      classId: 'fighter',
     });
     spawnParticipant(world, { health: 40, maxHealth: 40, initiative: 5 }); // enemy
 
@@ -213,5 +230,6 @@ describe('Companion combat (C-340 AC-4)', () => {
     );
     expect(healLog).toBeDefined();
     expect(CombatStats.health[playerId]).toBeGreaterThan(20);
+    expect(CombatStats.health[lessDamagedAllyId]).toBe(10);
   });
 });
