@@ -13,7 +13,7 @@
 
 services:
   text:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0d23372c0fc7733bb8a937ab46faeb0ba7c64c00889626098b8ab75e68f8ae7c
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:32405ceb06464c46eaaaea0c3423fe751debc1dc308455411235928eb2de9a52
     deploy:
       resources:
         reservations:
@@ -23,7 +23,7 @@ services:
               capabilities: [gpu]
 
   image:
-    image: ghcr.io/leejet/stable-diffusion.cpp:master-cuda@sha256:13a2b7c94d800492661ff4885d85396f0a53ced267e3cbb1c7847be6ae4656be
+    image: ghcr.io/leejet/stable-diffusion.cpp:master-cuda@sha256:e175bed7518c3277dadd44740019ce395133baf36328183e276e043627b78c05
     deploy:
       resources:
         reservations:
