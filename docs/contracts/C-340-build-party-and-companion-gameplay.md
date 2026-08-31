@@ -24,7 +24,7 @@ created_at: "2026-08-31"
 | **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | User-facing — party UI and companion mechanics need documentation in `apps/frontend/docs/src/content/docs/` |
-| **Contract version** | 2.0.0 |
+| **Contract version** | 2.1.0 |
 
 ## Problem & Baseline Evidence
 
@@ -116,7 +116,7 @@ After this contract, a player can recruit companions through dialogue, manage a 
 
 ## Overview
 
-C-340 transforms Aikami from a solo-adventurer game into a party-based RPG. It builds on C-212's existing `SET_ENTITY_VELOCITY` bridge plumbing and party-follow sandbox to deliver a production party system: companions are recruitable NPCs with their own class, combat stats, approval tracking, personal objectives, and persistence. The work spans five tightly integrated subsystems: (1) the data model and ECS components that distinguish companions from regular NPCs, (2) the recruit/dismiss flow wired into the existing AI dialogue overlay, (3) the formation follow system extracted from the C-212 sandbox into a production service, (4) the "Talk to Party" overlay and party panel UI, and (5) companion participation in C-338's multi-actor combat. Each subsystem depends on its predecessor — splitting would produce contracts that cannot be independently verified.
+C-340 transforms Aikami from a solo-adventurer game into a party-based RPG. It builds on C-212's existing `SET_ENTITY_VELOCITY` bridge plumbing and party-follow sandbox to deliver a production party system: companions are recruitable NPCs with their own class, combat stats, approval tracking, personal objectives, persistence, and **assignable party orders** (wait/guard/scavenge) that control companion behavior during exploration and combat. The work spans five tightly integrated subsystems: (1) the data model and ECS components that distinguish companions from regular NPCs, (2) the recruit/dismiss flow wired into the existing AI dialogue overlay, (3) the formation follow system extracted from the C-212 sandbox into a production service, (4) the "Talk to Party" overlay and party panel UI, and (5) companion participation in C-338's multi-actor combat. Each subsystem depends on its predecessor — splitting would produce contracts that cannot be independently verified.
 
 ## Design Reference
 
@@ -168,16 +168,16 @@ C-340 transforms Aikami from a solo-adventurer game into a party-based RPG. It b
 - Modify `game_ui_view.svelte`: add party-related overlay rendering in the overlay router `{#if}` chain.
 - Modify `dialogue_overlay_view_model.svelte.ts` / `dialogue_overlay.svelte`: detect `actionType: 'recruit'` in dialogue responses and render a "Recruit" button that calls `partyRosterService.recruit(npcId)`.
 
+### Party Orders (amendment v2.1.0)
+
+- Add `partyOrder` field to `PartyRosterEntrySchema` in `packages/shared/schemas/src/lib/game/party.ts`: union of `'follow' | 'wait' | 'guard' | 'scavenge'`, default `'follow'`. This is a backward-compatible addition — existing saves without `partyOrder` default to `'follow'` on hydration.
+- Add `setPartyOrder(npcId, order)` method to `party_roster_service.svelte.ts`: updates the `partyOrder` field on the roster entry, writes through to the ECS `Companion` component. Idempotent — setting the same order is a no-op.
+- Add order selector UI to the party roster overlay: a dropdown or button group per companion card showing the current order with options to switch. Follows the existing overlay interaction pattern.
+- **Wait order**: In `party_follow_system.ts`, skip companions whose `partyOrder === 'wait'` in the follow tick. The companion stays at their current position. No ECS component changes needed — the follow system simply does not request a path for them.
+- **Guard order**: Companion stays in place (same as wait). During combat initialization (C-338), companions with `partyOrder === 'guard'` receive a pre-combat detection check: if any enemy is within `GUARD_DETECTION_RADIUS` (configurable, default 200px), the companion auto-initiates combat as if the player had triggered it. Outside combat, guard companions display a visual indicator (e.g., a subtle pulsing ring or icon overhead).
+- **Scavenge order**: After combat ends (victory), companions with `partyOrder === 'scavenge'` pathfind to each lootable corpse within `SCAVENGE_RADIUS` (configurable, default 300px) and trigger the existing loot collection flow. Scavenge companions do not participate in the first round of combat (they were looting) — they join the turn order from round 2. The scavenge path uses the same A* pathfinding as follow, with a tick interval of 500ms (slower than follow to avoid looking frantic).
+
 ## State & Data Models
-
-### Content Pack Companion Extension (TypeBox — `packages/shared/schemas/src/lib/game/content_pack.ts`)
-
-```typescript
-// Extend ContentPackNpcEntrySchema with optional companion fields:
-
-const CompanionFieldsSchema = Type.Object({
-  /** Whether this NPC can be recruited as a companion. */
-  isCompanion: Type.Optional(Type.Boolean({ default: false })),
   /** Dialogue key that triggers the recruit offer. */
   recruitDialogueKey: Type.Optional(Type.String()),
   /** Dialogue key for dismiss conversation. */
@@ -215,6 +215,15 @@ export const PartyRosterEntrySchema = Type.Object({
   personalQuestActive: Type.Boolean({ default: false }),
   /** Equipped item IDs (references C-331 item registry). */
   equipmentSlotIds: Type.Array(Type.String(), { default: [] }),
+  /** Current party order (amendment v2.1.0). Default: 'follow'. */
+  partyOrder: Type.Optional(
+    Type.Union([
+      Type.Literal('follow'),
+      Type.Literal('wait'),
+      Type.Literal('guard'),
+      Type.Literal('scavenge'),
+    ], { default: 'follow' }),
+  ),
 });
 
 export const PartyStateSchema = Type.Object({
@@ -314,6 +323,10 @@ type PartyRosterServiceState = PartyState & {
   - Party state persistence (save/load in Turso via existing player state envelope)
   - Companion personal quest activation through C-339 quest graph
   - Keyboard shortcut for party panel (`P` key)
+  - **Party order assignment** (wait/guard/scavenge) via party roster UI
+  - **Wait order** behavior: companion stays in place, does not follow
+  - **Guard order** behavior: companion stays in place, engages enemies in detection range
+  - **Scavenge order** behavior: companion collects loot from defeated enemies after combat
 
 - **Out of Scope:**
   - Full relationship/faction system with history events (C-341)
@@ -328,12 +341,14 @@ type PartyRosterServiceState = PartyState & {
   - Multiplayer co-op (C-366)
   - Leader switching (player is always the formation leader)
   - Companion-specific skill checks (companions use player's skill check system)
+  - **Patrol/wander order** (companion moves between waypoints — deferred)
+  - **Follow-me toggle** as a separate order (follow is the default; wait is the explicit opt-out)
 
 ## Contract Size & Split Rule
 
 > 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
-**For this contract:** 5 ACs touching 3 project layers (shared schemas/types, engine, client). The subsystems are tightly interwoven — the companion ECS component is meaningless without the recruit flow, which is meaningless without the party roster, which is meaningless without the follow system. Splitting by layer would produce placeholder contracts (e.g., "add Companion component" with no consumer to verify against). The engine changes are small enablers (~3 new/modified components, 2 modified systems) that enable the client-side work but cannot be independently verified. **Single contract, 5 ACs.**
+**For this contract:** 8 ACs touching 3 project layers (shared schemas/types, engine, client). The subsystems are tightly interwoven — the companion ECS component is meaningless without the recruit flow, which is meaningless without the party roster, which is meaningless without the follow system. Splitting by layer would produce placeholder contracts (e.g., "add Companion component" with no consumer to verify against). The engine changes are small enablers (~3 new/modified components, 2 modified systems) that enable the client-side work but cannot be independently verified. Party orders (AC-6–8) share the same data model and service layer as the base party system — they are additive, not separable. **Single contract, 8 ACs.**
 
 ## Acceptance Criteria
 
@@ -452,17 +467,93 @@ type PartyRosterServiceState = PartyState & {
 - If a companion's `npcId` references a content pack NPC that no longer exists (content pack version mismatch), the companion is skipped with a warning log. The rest of the party loads normally.
 - Autosave must include party state (C-334). The autosave trigger conditions (time-based, combat-end, location-change) are unchanged — the party state is just another key in the save payload.
 
+### AC-6: Party Members Can Be Assigned Wait/Guard/Scavenge Orders
+
+**Given** the player has at least one companion in the party roster and the party roster overlay is open (P key)
+**When** the player selects a companion's order dropdown/button group in the party roster overlay and changes the order from `'follow'` to `'wait'`, `'guard'`, or `'scavenge'
+**Then** the companion's `partyOrder` field is updated in the roster, the change is reflected immediately in the UI, the companion's behavior changes to match the new order (wait: stops following, guard: stays in place with detection aura, scavenge: collects loot after combat), and the order persists across save/load. Changing back to `'follow'` restores normal formation follow behavior.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-6 | Unit + E2E | `apps/frontend/client/src/lib/services/game/party_roster_service.test.ts` (extend), `apps/e2e/tests/game/party_orders.spec.ts` (new) | `/game` → recruit companion → P → select order → verify behavior | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run client:test -- --grep "party_roster.*order"`, `bun moon run e2e:test -- --grep "party orders"`
+- Integration: Manual check — recruit 2 companions, open party roster, change companion 1 to 'wait', verify companion 1 stops following and stays in place while companion 2 continues to follow. Change companion 1 to 'guard', verify companion 1 stays in place with guard indicator. Change companion 1 to 'scavenge', verify companion 1 follows but after combat moves to loot corpses.
+- E2E / Visual:
+    - **Functional**: `tests/game/party_orders.spec.ts` — test: recruit companion, open party roster, verify order selector UI renders, change order to 'wait', verify companion stops following (check position before/after player moves), change to 'guard', verify companion stays but detection indicator appears, change to 'scavenge', trigger combat, end combat, verify companion moves to loot corpse.
+    - **Visual**: N/A — order assignment is a functional UI interaction, not visual. The order selector widget appearance is covered by the party roster overlay visual suite (AC-3).
+
+**Watch Points**:
+- Order changes must take effect immediately — no tick delay. When the player changes to 'wait', the companion stops on the next follow tick (max 150ms).
+- The order selector must be disabled during combat (companions are busy fighting).
+- Setting 'wait' or 'guard' while the companion is in the middle of a follow path cancels the path immediately.
+- `partyOrder` defaults to `'follow'` for existing saves that lack the field (backward compatibility).
+
+### AC-7: Wait and Guard Orders Keep Companions Stationary; Guard Engages Enemies
+
+**Given** a companion has `partyOrder` set to `'wait'` or `'guard'
+**When** the player moves away from the companion
+**Then** the companion does not follow the player — they remain at their current position. For `'wait'` order, the companion stays idle indefinitely. For `'guard'` order, the companion also stays in place but displays a visual guard indicator (subtle pulsing ring or icon) and, when an enemy enters `GUARD_DETECTION_RADIUS` (default 200px), the companion auto-initiates combat. If the player is already in combat and a guard companion is within detection range of an enemy, the guard companion joins the combat turn order from round 1. If no enemies are in range, the guard companion remains idle.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-7 | Unit + Visual | `packages/frontend/engine/src/__tests__/party_orders.test.ts` (new), `src/visual/suites/party_guard.visual.ts` (new) | `/game` → recruit companion → set wait/guard → move away → verify stationary | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run engine:test -- --grep "party_orders"`
+- Integration: Manual check — recruit companion, set to 'wait', move player far away, verify companion stays at original position. Set to 'guard', move player away, verify companion stays and guard indicator is visible. Spawn an enemy near the guard companion, verify combat initiates with the guard companion participating.
+- E2E / Visual:
+    - **Functional**: `tests/game/party_orders.spec.ts` (extend AC-6) — test: set companion to 'wait', move player, assert companion position unchanged. Set to 'guard', spawn enemy in detection radius, assert combat initiates with companion in turn order.
+    - **Visual**: `suites/party_guard.visual.ts` — test case: "Guard companion with indicator" at `/game` with companion set to 'guard', verify guard indicator (pulsing ring/icon) is visible above the companion. Criteria: "Score 80+: guard indicator is visible and clearly distinguishable from idle/follow state."
+
+**Watch Points**:
+- `GUARD_DETECTION_RADIUS` must be configurable per content pack (default 200px).
+- Guard detection runs on the same tick as the follow system (100-150ms interval) — no separate tick loop.
+- If the player is already in combat and a guard companion is outside detection range, the guard companion does not teleport to combat — they remain stationary. Only companions within detection range join.
+- Guard companions that auto-initiate combat must not trigger a separate encounter — they join the player's existing combat or start a new one that the player is automatically added to.
+
+### AC-8: Scavenge Order — Companion Collects Loot from Defeated Enemies
+
+**Given** a companion has `partyOrder` set to `'scavenge'` and combat has ended with at least one defeated enemy corpse on the ground
+**When** combat ends (victory)
+**Then** the scavenge companion pathfinds to the nearest lootable corpse within `SCAVENGE_RADIUS` (default 300px), triggers the existing loot collection flow (C-331), and collects all items from the corpse. The companion then moves to the next nearest corpse until all corpses in range are looted. If multiple companions have scavenge order, they distribute corpses among themselves (nearest-corpses-first assignment). The scavenge companion does not participate in the first round of the next combat encounter (they were occupied looting) — they join the turn order from round 2. The scavenge path uses A* pathfinding at 500ms tick interval.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-8 | Unit + E2E | `packages/frontend/engine/src/__tests__/party_orders.test.ts` (extend), `apps/e2e/tests/game/party_scavenge.spec.ts` (new) | `/game` → recruit companion → set scavenge → trigger combat → end combat → verify loot collected | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `bun moon run engine:test -- --grep "party_orders.*scavenge"`, `bun moon run e2e:test -- --grep "party scavenge"`
+- Integration: Manual check — recruit companion, set to 'scavenge', trigger combat with 2+ enemies, defeat all enemies, verify companion moves to first corpse, loots it, moves to second corpse, loots it. Verify companion does not participate in first round of next combat.
+- E2E / Visual:
+    - **Functional**: `tests/game/party_scavenge.spec.ts` — test: recruit companion, set scavenge order, trigger combat with enemy that drops loot (use `SPAWN_NPC` with loot table), defeat enemy, verify companion moves to corpse position, verify loot is transferred to player inventory (or companion inventory).
+    - **Visual**: N/A — scavenge movement is functional, not visual. The companion moving to a corpse is covered by the existing pathfinding visual tests.
+
+**Watch Points**:
+- `SCAVENGE_RADIUS` must be configurable per content pack (default 300px).
+- Scavenge pathfinding uses 500ms tick interval (slower than follow) to avoid the companion looking frantic while looting.
+- If no corpses are present, the scavenge companion returns to follow mode (default behavior) until the next combat ends.
+- Scavenge companions skip round 1 of the next combat (they were looting). This is tracked via a `skipNextRound` flag that resets after round 1.
+- If the player enters combat while the scavenge companion is still pathfinding to a corpse, the companion aborts looting and joins combat (round 1 participation is forfeited by the abort).
+- Looted items go to the player's inventory (C-331) by default. If companion inventory is implemented in a future contract, this behavior can be overridden.
+
 ## Implementation Sequence
 
-1. **Phase 1 (Data & Engine)**: Define `PartyRosterEntrySchema` / `PartyStateSchema` in shared schemas. Add companion fields to `ContentPackNpcEntrySchema`. Derive types. Add `Companion` ECS component + observers. Register in entity spawner for companion NPCs. Modify encounter system to exclude companions. Wire party state into save/load envelope.
+1. **Phase 1 (Data & Engine)**: Define `PartyRosterEntrySchema` / `PartyStateSchema` in shared schemas. Add companion fields to `ContentPackNpcEntrySchema`. Derive types. Add `Companion` ECS component + observers. Register in entity spawner for companion NPCs. Modify encounter system to exclude companions. Wire party state into save/load envelope. **Add `partyOrder` field to `PartyRosterEntrySchema`** (amendment v2.1.0).
 
-2. **Phase 2 (Services)**: Create `party_roster_service.svelte.ts`. Create `party_follow_service.svelte.ts` (extract from C-212 sandbox). Create `party_dialogue_service.svelte.ts`. Modify `npc_dialogue_service` to support recruit response type. Wire services into `$services` barrel.
+2. **Phase 2 (Services)**: Create `party_roster_service.svelte.ts`. Create `party_follow_service.svelte.ts` (extract from C-212 sandbox). Create `party_dialogue_service.svelte.ts`. Modify `npc_dialogue_service` to support recruit response type. Wire services into `$services` barrel. **Add `setPartyOrder()` method to `party_roster_service`**.
 
-3. **Phase 3 (Views & UI)**: Build party roster overlay (ViewModel + View). Build Talk to Party overlay. Add party HUD widget. Modify game UI overlay router. Add recruit button to dialogue overlay.
+3. **Phase 3 (Views & UI)**: Build party roster overlay (ViewModel + View). Build Talk to Party overlay. Add party HUD widget. Modify game UI overlay router. Add recruit button to dialogue overlay. **Add order selector UI to party roster overlay**.
 
 4. **Phase 4 (Combat Integration)**: Modify `turn_manager_system.ts` to include companions in turn order. Add companion AI action selector (deterministic, class-role-based). Modify `combat_stage_system.ts` for companion staging layout. Verify enemy GOAP tactics target companions.
 
-5. **Phase 5 (Validation)**: Run `validate()`. Run all baseline tests. Run new party-specific tests. Manual integration checks at `/game`. Visual suite for formation follow and party roster overlay.
+5. **Phase 5 (Party Orders)**: Implement wait order (skip follow tick). Implement guard order (stationary + detection radius + auto-initiate combat). Implement scavenge order (post-combat loot pathfinding + skip-round-1 flag). Add guard visual indicator.
+
+6. **Phase 6 (Validation)**: Run `validate()`. Run all baseline tests. Run new party-specific tests including party order tests. Manual integration checks at `/game`. Visual suite for guard indicator.
 
 ## Edge Cases & Gotchas
 
@@ -473,6 +564,10 @@ type PartyRosterServiceState = PartyState & {
 - **Talk to Party during combat**: The Talk to Party overlay is disabled during combat (the `TALK_TO_PARTY` overlay type is not in the combat-legal overlay set). Companions are busy fighting.
 - **Approval saturation**: Approval is clamped to [-100, 100]. Events that would push it beyond this range are capped and logged at debug level.
 - **Personal quest already completed**: If a companion's personal quest was completed before the companion is dismissed and re-recruited, `personalQuestActive` must be reset to false and the quest must not re-activate on re-recruitment.
+- **Party order during combat**: Order changes are disabled during combat. The order selector is greyed out. Companions are busy fighting.
+- **Wait order and map transitions**: Companions with wait/guard order are not moved on map transition — they remain on the old map. The player must change their order back to 'follow' before transitioning, or the companion is lost (logged as a warning).
+- **Scavenge + no loot table**: If defeated enemies have no loot table, the scavenge companion pathfinds to the corpse, finds nothing, and returns to follow mode. This is not an error — log at debug level.
+- **Multiple scavenge companions**: Corpses are assigned nearest-first. If two companions are equidistant from a corpse, the one with the lower entity ID gets it. This prevents both companions pathfinding to the same corpse.
 
 ## Open Questions
 
@@ -488,7 +583,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| — | — | — | — |
+| 2.1.0 | 2026-08-31 | Added party orders (wait/guard/scavenge) as AC-6–8. Added `partyOrder` field to `PartyRosterEntrySchema`. Updated In Scope, Out of Scope, Architecture Directives, Implementation Sequence, Edge Cases. Bumped contract version. | TBD — requires user approval |
 
 ## Promotion Lifecycle
 
