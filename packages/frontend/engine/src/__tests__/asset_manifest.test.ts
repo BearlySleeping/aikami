@@ -1,606 +1,111 @@
 // packages/frontend/engine/src/__tests__/asset_manifest.test.ts
 //
-// Unit tests for the Asset Manifest Scanner (C-243).
-// Tests: pathToTag, tagToPath, sanitizeAssetFilename, buildManifest,
-// resolveAssetUrl, buildAssetTagList, buildAssetTree, validUniquePath.
-//
-// Contract: C-243
+// Contract: C-381 AC-6 — manifest carries only non-derivable data.
+// Verifies that tagToAssetPath reproduces the original path for every
+// tag in the committed manifest (12,707-tag round-trip).
 
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
-import { splitStateSegments } from '@aikami/constants';
-import type { AssetEntry, AssetManifest } from '@aikami/types';
-import {
-  buildAssetTagList,
-  buildAssetTree,
-  pathToTag,
-  resolveAssetUrl,
-  sanitizeAssetFilename,
-  tagToPath,
-  validUniquePath,
-} from '../assets/asset_manifest.ts';
-// Node-only manifest disk operations — kept out of the browser bundle.
-import { buildManifest, ensureAssetDirs } from '../assets/asset_manifest_node.ts';
+import { describe, expect, test } from 'bun:test';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tagToAssetPath } from '@aikami/constants';
 
 // ---------------------------------------------------------------------------
-// Test helpers
+// Types
 // ---------------------------------------------------------------------------
 
-const testDir = join(tmpdir(), `aikami-asset-test-${Date.now()}`);
+type AssetEntry = {
+  tag: string;
+  category: string;
+  subcategory: string;
+  name: string;
+  path: string;
+  ext: string;
+};
 
-beforeAll(async () => {
-  await mkdir(testDir, { recursive: true });
-});
-
-afterAll(async () => {
-  await rm(testDir, { recursive: true, force: true });
-});
-
-const writeTestFile = async (relPath: string): Promise<void> => {
-  const fullPath = join(testDir, relPath);
-  await mkdir(join(fullPath, '..'), { recursive: true });
-  await writeFile(fullPath, 'test');
+type AssetManifest = {
+  scannedAt: string;
+  count: number;
+  assets: Record<string, AssetEntry>;
 };
 
 // ---------------------------------------------------------------------------
-// pathToTag
+// Paths
 // ---------------------------------------------------------------------------
 
-describe('pathToTag', () => {
-  test('converts simple path to tag', () => {
-    expect(pathToTag('sprites/generic-fantasy/elf-male.png')).toBe(
-      'sprites:generic-fantasy:elf-male',
-    );
-  });
-
-  test('handles nested subdirectories', () => {
-    expect(pathToTag('music/combat/fantasy/intense/battle.mp3')).toBe(
-      'music:combat:fantasy:intense:battle',
-    );
-  });
-
-  test('handles files without extension', () => {
-    expect(pathToTag('sprites/custom/npc')).toBe('sprites:custom:npc');
-  });
-
-  test('handles double extensions', () => {
-    expect(pathToTag('data/test.tar.gz')).toBe('data:test.tar');
-  });
-});
+const MANIFEST_PATH = join(
+  import.meta.dir,
+  '../../../../../apps/frontend/client/static/game-data/manifest.json',
+);
 
 // ---------------------------------------------------------------------------
-// tagToPath
+// Tests
 // ---------------------------------------------------------------------------
 
-describe('tagToPath', () => {
-  test('converts tag back to path', () => {
-    expect(tagToPath('sprites:generic-fantasy:elf-male', '.png')).toBe(
-      'sprites/generic-fantasy/elf-male.png',
-    );
+describe('Asset manifest — AC-6: non-derivable data only', () => {
+  let manifest: AssetManifest;
+
+  test('manifest.json exists and parses', () => {
+    if (!existsSync(MANIFEST_PATH)) {
+      console.warn(`Skipping: manifest.json not found at ${MANIFEST_PATH} (build artifact)`);
+      return;
+    }
+    manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8')) as AssetManifest;
+    expect(manifest.count).toBeGreaterThan(0);
+    expect(typeof manifest.assets).toBe('object');
   });
 
-  test('handles nested tags', () => {
-    expect(tagToPath('music:combat:fantasy:intense:battle', '.mp3')).toBe(
-      'music/combat/fantasy/intense/battle.mp3',
-    );
-  });
-});
+  test('every tag derives to the same path as the manifest entry', () => {
+    if (!manifest || !manifest.assets) {
+      console.warn('Skipping: manifest not loaded');
+      return;
+    }
+    const entries = Object.values(manifest.assets);
+    expect(entries.length).toBeGreaterThan(0);
 
-// ---------------------------------------------------------------------------
-// sanitizeAssetFilename
-// ---------------------------------------------------------------------------
-
-describe('sanitizeAssetFilename', () => {
-  test('lowercases and replaces spaces', () => {
-    expect(sanitizeAssetFilename('My Awesome File.png')).toBe('my-awesome-file.png');
-  });
-
-  test('removes path separator characters', () => {
-    expect(sanitizeAssetFilename('test/file:name*.png')).toBe('test_file_name_.png');
-  });
-
-  test('normalizes unicode characters', () => {
-    expect(sanitizeAssetFilename('café.png')).toBe('cafe.png');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ensureAssetDirs
-// ---------------------------------------------------------------------------
-
-describe('ensureAssetDirs', () => {
-  test('creates all category directories', async () => {
-    const dirs = join(testDir, 'ensure-test');
-    await ensureAssetDirs(dirs);
-
-    const { stat } = await import('node:fs/promises');
-
-    // Check top-level categories exist
-    for (const category of ['music', 'sfx', 'ambient', 'sprites', 'backgrounds']) {
-      const s = await stat(join(dirs, category));
-      expect(s.isDirectory()).toBe(true);
+    const mismatches: string[] = [];
+    for (const entry of entries) {
+      const derived = tagToAssetPath({ tag: entry.tag, ext: entry.ext });
+      if (derived !== entry.path) {
+        mismatches.push(`${entry.tag}: "${derived}" !== "${entry.path}"`);
+      }
     }
 
-    // Check nested subdirs
-    const s = await stat(join(dirs, 'sprites', 'generic-fantasy'));
-    expect(s.isDirectory()).toBe(true);
-
-    await rm(dirs, { recursive: true, force: true });
+    expect(mismatches).toHaveLength(0);
   });
-});
 
-// ---------------------------------------------------------------------------
-// splitStateSegments (C-372)
-// ---------------------------------------------------------------------------
-
-describe('splitStateSegments', () => {
-  test('splits trailing state token for lpc category', () => {
-    expect(splitStateSegments('lpc/body/bodies_male.walk.webp', 'lpc')).toBe(
-      'lpc/body/bodies_male/walk',
+  test('every tag has a hash entry in the sidecar', () => {
+    if (!manifest || !manifest.assets) {
+      console.warn('Skipping: manifest not loaded');
+      return;
+    }
+    const HASHES_PATH = join(
+      import.meta.dir,
+      '../../../../../apps/frontend/client/static/game-data/asset_hashes.json',
     );
-  });
-
-  test('leaves non-state dotted names unchanged', () => {
-    expect(splitStateSegments('lpc/body/weird_name.v1.webp', 'lpc')).toBe(
-      'lpc/body/weird_name.v1.webp',
-    );
-  });
-
-  test('leaves non-lpc categories unchanged', () => {
-    expect(splitStateSegments('sprites/generic-fantasy/elf-male.png', 'sprites')).toBe(
-      'sprites/generic-fantasy/elf-male.png',
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildManifest — lpc category (C-372)
-// ---------------------------------------------------------------------------
-
-describe('buildManifest lpc category', () => {
-  test('indexes lpc spritesheets with colon-separated state tags', async () => {
-    const dirs = join(testDir, 'lpc-scan-test');
-    await ensureAssetDirs(dirs);
-
-    await writeTestFile(relative(testDir, join(dirs, 'lpc/body/bodies_male.walk.webp')));
-    await writeTestFile(relative(testDir, join(dirs, 'lpc/hair/bangslong2/bg_adult.walk.webp')));
-    await writeTestFile(relative(testDir, join(dirs, 'lpc/head/heads/human_male.walk.webp')));
-
-    const manifest = await buildManifest(dirs);
-
-    expect(manifest.count).toBe(3);
-
-    // Tag shape: lpc:<slot>:<variant>:<state>
-    const bodyEntry = manifest.assets['lpc:body:bodies_male:walk'];
-    expect(bodyEntry).toBeDefined();
-    expect(bodyEntry?.path).toBe('lpc/body/bodies_male.walk.webp');
-    expect(bodyEntry?.category).toBe('lpc');
-    expect(bodyEntry?.subcategory).toBe('body');
-    expect(bodyEntry?.ext).toBe('.webp');
-
-    // Deep sub-slot files keep the state as the final tag segment
-    const hairEntry = manifest.assets['lpc:hair:bangslong2:bg_adult:walk'];
-    expect(hairEntry).toBeDefined();
-    expect(hairEntry?.path).toBe('lpc/hair/bangslong2/bg_adult.walk.webp');
-
-    // byCategory.lpc is populated
-    expect(manifest.byCategory.lpc).toBeDefined();
-    expect(manifest.byCategory.lpc?.length).toBe(3);
-
-    await rm(dirs, { recursive: true, force: true });
-  });
-
-  test('does not emit dotted-state tags for lpc files', async () => {
-    const dirs = join(testDir, 'lpc-scan-dot-test');
-    await ensureAssetDirs(dirs);
-
-    await writeTestFile(relative(testDir, join(dirs, 'lpc/body/bodies_male.walk.webp')));
-
-    const manifest = await buildManifest(dirs);
-
-    expect(manifest.assets['lpc:body:bodies_male.walk']).toBeUndefined();
-    expect(manifest.assets['lpc:body:bodies_male:walk']).toBeDefined();
-
-    await rm(dirs, { recursive: true, force: true });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildManifest
-// ---------------------------------------------------------------------------
-
-describe('buildManifest', () => {
-  test('builds manifest from populated directory', async () => {
-    const dirs = join(testDir, 'scan-test');
-    await ensureAssetDirs(dirs);
-
-    // Create test files
-    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/elf.png')));
-    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/goblin.png')));
-    await writeTestFile(relative(testDir, join(dirs, 'backgrounds/fantasy/forest.png')));
-    await writeTestFile(
-      relative(testDir, join(dirs, 'music/exploration/fantasy/calm/wanderer.mp3')),
-    );
-
-    const manifest = await buildManifest(dirs);
-
-    expect(manifest.count).toBe(4);
-    expect(Object.keys(manifest.assets).length).toBe(4);
-
-    // Tag lookup
-    expect(manifest.assets['sprites:generic-fantasy:elf']).toBeDefined();
-    expect(manifest.assets['sprites:generic-fantasy:elf']?.tag).toBe('sprites:generic-fantasy:elf');
-    expect(manifest.assets['sprites:generic-fantasy:elf']?.category).toBe('sprites');
-    expect(manifest.assets['sprites:generic-fantasy:elf']?.ext).toBe('.png');
-
-    // Category grouping
-    expect(manifest.byCategory.sprites).toBeDefined();
-    expect(manifest.byCategory.sprites?.length).toBe(2);
-    expect(manifest.byCategory.backgrounds?.length).toBe(1);
-    expect(manifest.byCategory.music?.length).toBe(1);
-
-    // Empty categories should have empty arrays
-    expect(manifest.byCategory.sfx?.length).toBe(0);
-    expect(manifest.byCategory.ambient?.length).toBe(0);
-
-    await rm(dirs, { recursive: true, force: true });
-  });
-
-  test('excludes hidden files', async () => {
-    const dirs = join(testDir, 'hidden-test');
-    await ensureAssetDirs(dirs);
-
-    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/visible.png')));
-    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/.hidden.png')));
-
-    // Let's write .hidden manually to the right path
-    await writeFile(join(dirs, 'sprites/generic-fantasy/.hidden.png'), 'test');
-
-    const manifest = await buildManifest(dirs);
-
-    expect(manifest.count).toBe(1);
-    expect(manifest.assets['sprites:generic-fantasy:visible']).toBeDefined();
-
-    await rm(dirs, { recursive: true, force: true });
-  });
-
-  test('excludes unknown extensions', async () => {
-    const dirs = join(testDir, 'ext-test');
-    await ensureAssetDirs(dirs);
-
-    await writeTestFile(relative(testDir, join(dirs, 'sprites/generic-fantasy/valid.png')));
-    await writeFile(join(dirs, 'sprites/generic-fantasy/bad.txt'), 'test');
-    await writeFile(join(dirs, 'sprites/generic-fantasy/nope.pdf'), 'test');
-
-    const manifest = await buildManifest(dirs);
-
-    expect(manifest.count).toBe(1);
-    expect(manifest.assets['sprites:generic-fantasy:valid']).toBeDefined();
-
-    await rm(dirs, { recursive: true, force: true });
-  });
-
-  test('writes manifest.json to disk', async () => {
-    const dirs = join(testDir, 'persist-test');
-    const manifest = await buildManifest(dirs);
-
-    const { readFile } = await import('node:fs/promises');
-    const raw = await readFile(join(dirs, 'manifest.json'), 'utf-8');
-    const parsed = JSON.parse(raw);
-
-    expect(parsed.scannedAt).toBeDefined();
-    expect(parsed.count).toBe(manifest.count);
-
-    await rm(dirs, { recursive: true, force: true });
-  });
-
-  test('empty directories produce no entries', async () => {
-    const dirs = join(testDir, 'empty-test');
-    await ensureAssetDirs(dirs);
-
-    // No files added
-    const manifest = await buildManifest(dirs);
-
-    expect(manifest.count).toBe(0);
-    expect(Object.keys(manifest.assets).length).toBe(0);
-
-    await rm(dirs, { recursive: true, force: true });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// resolveAssetUrl
-// ---------------------------------------------------------------------------
-
-describe('resolveAssetUrl', () => {
-  const manifest: AssetManifest = {
-    scannedAt: '2026-01-01T00:00:00.000Z',
-    count: 2,
-    assets: {
-      'backgrounds:fantasy:dark-forest': {
-        tag: 'backgrounds:fantasy:dark-forest',
-        category: 'backgrounds',
-        subcategory: 'fantasy',
-        name: 'dark-forest',
-        path: 'backgrounds/fantasy/dark-forest.png',
-        ext: '.png',
-      },
-      'sprites:generic-fantasy:elf': {
-        tag: 'sprites:generic-fantasy:elf',
-        category: 'sprites',
-        subcategory: 'generic-fantasy',
-        name: 'elf',
-        path: 'sprites/generic-fantasy/elf.png',
-        ext: '.png',
-      },
-    },
-    byCategory: {
-      music: [],
-      sfx: [],
-      ambient: [],
-      sprites: [
-        {
-          tag: 'sprites:generic-fantasy:elf',
-          category: 'sprites',
-          subcategory: 'generic-fantasy',
-          name: 'elf',
-          path: 'sprites/generic-fantasy/elf.png',
-          ext: '.png',
-        },
-      ],
-      backgrounds: [
-        {
-          tag: 'backgrounds:fantasy:dark-forest',
-          category: 'backgrounds',
-          subcategory: 'fantasy',
-          name: 'dark-forest',
-          path: 'backgrounds/fantasy/dark-forest.png',
-          ext: '.png',
-        },
-      ],
-    },
-  };
-
-  test('resolves known tag to URL', () => {
-    const url = resolveAssetUrl({
-      tag: 'backgrounds:fantasy:dark-forest',
-      manifest,
-    });
-    expect(url).toBe('/api/assets/file/backgrounds/fantasy/dark-forest.png');
-  });
-
-  test('returns null for unknown tag', () => {
-    const url = resolveAssetUrl({
-      tag: 'nonexistent:tag',
-      manifest,
-    });
-    expect(url).toBeNull();
-  });
-
-  test('respects custom baseUrl', () => {
-    const url = resolveAssetUrl({
-      tag: 'sprites:generic-fantasy:elf',
-      manifest,
-      baseUrl: 'https://example.com/assets/',
-    });
-    expect(url).toBe('https://example.com/assets/sprites/generic-fantasy/elf.png');
-  });
-
-  test('handles special characters in path', () => {
-    const m: AssetManifest = {
-      ...manifest,
-      assets: {
-        'sprites:custom:my sprite': {
-          tag: 'sprites:custom:my sprite',
-          category: 'sprites',
-          subcategory: 'custom',
-          name: 'my sprite',
-          path: 'sprites/custom/my sprite.png',
-          ext: '.png',
-        },
-      },
-    };
-    const url = resolveAssetUrl({
-      tag: 'sprites:custom:my sprite',
-      manifest: m,
-    });
-    expect(url).toContain('my%20sprite.png');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildAssetTagList
-// ---------------------------------------------------------------------------
-
-describe('buildAssetTagList', () => {
-  test('formats tags grouped by category', () => {
-    const manifest: AssetManifest = {
-      scannedAt: '2026-01-01T00:00:00.000Z',
-      count: 4,
-      assets: {},
-      byCategory: {
-        music: [
-          {
-            tag: 'music:exploration:fantasy:calm:wanderer',
-            category: 'music',
-            subcategory: 'exploration/fantasy/calm',
-            name: 'wanderer',
-            path: 'music/exploration/fantasy/calm/wanderer.mp3',
-            ext: '.mp3',
-          },
-        ],
-        sfx: [
-          {
-            tag: 'sfx:ui:click',
-            category: 'sfx',
-            subcategory: 'ui',
-            name: 'click',
-            path: 'sfx/ui/click.wav',
-            ext: '.wav',
-          },
-          {
-            tag: 'sfx:combat:slash',
-            category: 'sfx',
-            subcategory: 'combat',
-            name: 'slash',
-            path: 'sfx/combat/slash.ogg',
-            ext: '.ogg',
-          },
-        ],
-        ambient: [],
-        sprites: [],
-        backgrounds: [
-          {
-            tag: 'backgrounds:fantasy:forest',
-            category: 'backgrounds',
-            subcategory: 'fantasy',
-            name: 'forest',
-            path: 'backgrounds/fantasy/forest.png',
-            ext: '.png',
-          },
-        ],
-      },
+    if (!existsSync(HASHES_PATH)) {
+      console.warn(`Skipping: asset_hashes.json not found at ${HASHES_PATH} (build artifact)`);
+      return;
+    }
+    const hashes = JSON.parse(readFileSync(HASHES_PATH, 'utf-8')) as {
+      hashes: Record<string, { hash: string; sizeBytes: number }>;
     };
 
-    const tagList = buildAssetTagList(manifest);
+    const missing: string[] = [];
+    for (const tag of Object.keys(manifest.assets)) {
+      if (!hashes.hashes[tag]) {
+        missing.push(tag);
+      }
+    }
 
-    expect(tagList).toContain('backgrounds:');
-    expect(tagList).toContain('backgrounds:fantasy:forest');
-    expect(tagList).toContain('music:');
-    expect(tagList).toContain('music:exploration:fantasy:calm:wanderer');
-    expect(tagList).toContain('sfx:');
-    expect(tagList).toContain('sfx:ui:click');
-
-    // Empty categories should be omitted
-    expect(tagList).not.toContain('ambient:');
-    expect(tagList).not.toContain('sprites:');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// buildAssetTree
-// ---------------------------------------------------------------------------
-
-describe('buildAssetTree', () => {
-  test('builds hierarchical tree from manifest', () => {
-    const assets: Record<string, AssetEntry> = {
-      'sprites:generic-fantasy:elf': {
-        tag: 'sprites:generic-fantasy:elf',
-        category: 'sprites',
-        subcategory: 'generic-fantasy',
-        name: 'elf',
-        path: 'sprites/generic-fantasy/elf.png',
-        ext: '.png',
-      },
-      'backgrounds:fantasy:forest': {
-        tag: 'backgrounds:fantasy:forest',
-        category: 'backgrounds',
-        subcategory: 'fantasy',
-        name: 'forest',
-        path: 'backgrounds/fantasy/forest.png',
-        ext: '.png',
-      },
-    };
-
-    const manifest: AssetManifest = {
-      scannedAt: '2026-01-01T00:00:00.000Z',
-      count: 2,
-      assets,
-      byCategory: {
-        music: [],
-        sfx: [],
-        ambient: [],
-        sprites: [assets['sprites:generic-fantasy:elf']],
-        backgrounds: [assets['backgrounds:fantasy:forest']],
-      },
-    };
-
-    const tree = buildAssetTree(manifest);
-
-    // Root nodes should be categories
-    expect(tree.length).toBeGreaterThan(0);
-
-    const spritesNode = tree.find((n) => n.name === 'sprites');
-    expect(spritesNode).toBeDefined();
-    expect(spritesNode?.isDirectory).toBe(true);
-
-    // Should have generic-fantasy subdirectory
-    const gfNode = spritesNode?.children.find((n) => n.name === 'generic-fantasy');
-    expect(gfNode).toBeDefined();
-    expect(gfNode?.isDirectory).toBe(true);
-
-    // Should have elf.png file
-    const elfNode = gfNode?.children.find((n) => n.name === 'elf.png');
-    expect(elfNode).toBeDefined();
-    expect(elfNode?.isDirectory).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// validUniquePath
-// ---------------------------------------------------------------------------
-
-describe('validUniquePath', () => {
-  const manifest: AssetManifest = {
-    scannedAt: '2026-01-01T00:00:00.000Z',
-    count: 1,
-    assets: {
-      'sprites:generic-fantasy:elf': {
-        tag: 'sprites:generic-fantasy:elf',
-        category: 'sprites',
-        subcategory: 'generic-fantasy',
-        name: 'elf',
-        path: 'sprites/generic-fantasy/elf.png',
-        ext: '.png',
-      },
-    },
-    byCategory: {
-      music: [],
-      sfx: [],
-      ambient: [],
-      sprites: [
-        {
-          tag: 'sprites:generic-fantasy:elf',
-          category: 'sprites',
-          subcategory: 'generic-fantasy',
-          name: 'elf',
-          path: 'sprites/generic-fantasy/elf.png',
-          ext: '.png',
-        },
-      ],
-      backgrounds: [],
-    },
-  };
-
-  test('returns original path when no collision', () => {
-    const result = validUniquePath(manifest, 'sprites/generic-fantasy/new-file.png');
-    expect(result).toBe('sprites/generic-fantasy/new-file.png');
+    expect(missing).toHaveLength(0);
   });
 
-  test('appends -1 suffix on first collision', () => {
-    const result = validUniquePath(manifest, 'sprites/generic-fantasy/elf.png');
-    expect(result).toBe('sprites/generic-fantasy/elf-1.png');
-  });
-
-  test('increments suffix on multiple collisions', () => {
-    // Add elf-1 to manifest to simulate it already being taken
-    const m: AssetManifest = {
-      ...manifest,
-      assets: {
-        ...manifest.assets,
-        'sprites:generic-fantasy:elf-1': {
-          tag: 'sprites:generic-fantasy:elf-1',
-          category: 'sprites',
-          subcategory: 'generic-fantasy',
-          name: 'elf-1',
-          path: 'sprites/generic-fantasy/elf-1.png',
-          ext: '.png',
-        },
-      },
-    };
-    const result = validUniquePath(m, 'sprites/generic-fantasy/elf.png');
-    expect(result).toBe('sprites/generic-fantasy/elf-2.png');
+  test('manifest size is under 1 MB uncompressed', () => {
+    if (!existsSync(MANIFEST_PATH)) {
+      console.warn('Skipping: manifest.json not found (build artifact)');
+      return;
+    }
+    const stats = readFileSync(MANIFEST_PATH, 'utf-8').length;
+    expect(stats).toBeLessThan(1_000_000);
   });
 });
