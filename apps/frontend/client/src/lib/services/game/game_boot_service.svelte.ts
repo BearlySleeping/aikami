@@ -1012,6 +1012,30 @@ class GameBootService
           return;
         }
 
+        // ── C-381 AC-3: Pack version mismatch detection ──
+        const savedVersion = map.packVersion;
+        const currentVersion = pack.manifest.version;
+        if (savedVersion && currentVersion && savedVersion !== currentVersion) {
+          this.warn('stage:hydrating_snapshot:pack-version-mismatch', {
+            savedVersion,
+            currentVersion,
+            packId: map.packId,
+            hint: 'The pack has been updated since this save was created. If the saved map no longer exists, the starting map will be used instead.',
+          });
+          // Check if the saved map still exists in the current pack
+          if (!pack.manifest.maps[map.mapId]) {
+            this.warn('stage:hydrating_snapshot:map-not-found-in-updated-pack', {
+              mapId: map.mapId,
+              packId: map.packId,
+              fallbackMapId: pack.manifest.startingMapId,
+            });
+            // Fall back to the pack's starting map
+            map.mapId = pack.manifest.startingMapId;
+            map.playerX = pack.getStartingMap()?.defaultX ?? map.playerX;
+            map.playerY = pack.getStartingMap()?.defaultY ?? map.playerY;
+          }
+        }
+
         await gameEngineService.loadMap({
           mapUrl: pack.resolveMapUrl(map.mapId),
           targetX: map.playerX,

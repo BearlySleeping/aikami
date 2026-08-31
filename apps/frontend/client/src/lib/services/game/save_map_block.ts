@@ -54,12 +54,30 @@ export const buildSaveMapBlock = async (): Promise<SaveMapBlock | undefined> => 
     return undefined;
   }
   const campaign = campaignService.activeCampaign;
+
+  // Resolve pack version from the manifest (C-381 AC-3)
+  let packVersion: string | undefined;
+  try {
+    const { loadContentPack } = await import('@aikami/frontend/engine');
+    const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+    const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+    const pack = await loadContentPack({
+      packId,
+      resolveTag: assetTagResolver,
+      releaseUrl: (url: string) => assetManager.releaseUrl(url),
+    });
+    packVersion = pack.manifest.version;
+  } catch {
+    // If we can't resolve the pack, proceed without version pinning
+    packVersion = undefined;
+  }
+
   return {
     packId,
     mapId,
     playerX: Math.round(pos.x),
     playerY: Math.round(pos.y),
-    packVersion: undefined, // resolved from the pack manifest at save time
+    packVersion,
     worldSeed: campaign?.seed != null ? String(campaign.seed) : undefined,
   };
 };
