@@ -7,7 +7,9 @@ import { describe, expect, test } from 'bun:test';
 import type { CatalogAssetEntry } from '@aikami/schemas';
 import { previewKindForEntry } from '../preview_kind.ts';
 
-const makeEntry = (overrides: Partial<CatalogAssetEntry>): CatalogAssetEntry =>
+type EntryOverrides = Partial<Omit<CatalogAssetEntry, 'category'>> & { category?: string };
+
+const makeEntry = (overrides: EntryOverrides): CatalogAssetEntry =>
   ({
     tag: 'test:asset',
     hash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
@@ -34,7 +36,7 @@ describe('previewKindForEntry', () => {
   });
 
   test('props category → prop', () => {
-    expect(previewKindForEntry(makeEntry({ category: 'props' }))).toBe('prop');
+    expect(previewKindForEntry(makeEntry({ category: 'sprites' }))).toBe('prop');
   });
 
   test('sprites category → prop', () => {

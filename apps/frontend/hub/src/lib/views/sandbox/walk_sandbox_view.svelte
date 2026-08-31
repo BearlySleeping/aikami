@@ -3,6 +3,7 @@
 // Walk sandbox view (C-447): mounts WalkSandbox engine with debug overlays and HUD.
 // Player position is tracked from engine bridge events, not local keyboard state.
 
+import type { WalkSandboxViewModelInterface } from '@aikami/frontend-preview/sandbox';
 import { onMount, tick } from 'svelte';
 import { BaseViewModelContainer } from '$components';
 import type { HubWalkSandboxViewModelInterface } from './walk_sandbox_view_model.svelte.ts';
@@ -19,7 +20,7 @@ let loading = $state(true);
 
 onMount(() => {
   let cleanup: (() => void) | undefined;
-  let baseVm: { dispose: () => Promise<void> } | undefined;
+  let baseVm: WalkSandboxViewModelInterface | undefined;
   let disposed = false;
 
   const _mount = async () => {

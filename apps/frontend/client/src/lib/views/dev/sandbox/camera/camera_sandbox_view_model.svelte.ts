@@ -13,6 +13,7 @@ import type {
   LpcLayerRecipe,
 } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld as GW, TextureManager } from '@aikami/frontend/engine';
+import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -113,6 +114,8 @@ class CameraSandboxViewModel
   private _readyCleanup: (() => void) | undefined;
   private _cameraUpdateCleanup: (() => void) | undefined;
   private _initialMapLoaded = false;
+  private _assetTagResolver: AssetTagResolver | undefined;
+  private _releaseUrl: ((url: string) => void) | undefined;
 
   /** Max debug log entries to keep in memory. */
   private static readonly _maxLog = 30;
@@ -201,6 +204,12 @@ class CameraSandboxViewModel
       this._engineBridge.on('MAP_LOADED', () => {
         this.debug('C-161:MAP_LOADED');
         this._addLog('MAP_LOADED');
+        // Guard: the GameWorld may have been destroyed before this async
+        // event arrives (MAP_LOADED is posted via queueMicrotask in the
+        // worker).
+        if (!this._gameWorld) {
+          return;
+        }
         // Read NPC count from the GameWorld (via internal access)
         const gw = this._gameWorld as unknown as { _npcMeta?: Map<number, unknown> };
         this.npcCount = gw._npcMeta?.size ?? 0;
@@ -249,6 +258,11 @@ class CameraSandboxViewModel
         { slot: 'head', assetId: 'head/heads/human_male', hexPalette: paletteBytes },
       ];
 
+      const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+      this._assetTagResolver = assetTagResolver;
+      this._releaseUrl = (url: string) => assetManager.releaseUrl(url);
+
       const worldOptions: GameWorldOptions = {
         className: 'GameWorld',
         bridge: this._engineBridge,
@@ -260,6 +274,9 @@ class CameraSandboxViewModel
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         workerFactory: () => new EcsWorker(),
+        // C-434: registry-backed tag resolver for maps and tilesets.
+        resolveTag: this._assetTagResolver,
+        releaseUrl: this._releaseUrl,
       };
       this._gameWorld = GW.create(worldOptions);
 
@@ -298,13 +315,29 @@ class CameraSandboxViewModel
     }
 
     try {
-      this._addLog('LOAD_MAP', '/game-data/maps/sandbox_zone_a.json');
+      // Load the content pack through the asset manager (R2-backed registry)
+      // instead of hardcoding a static path that no longer exists.
+      const { loadContentPack } = await import('@aikami/frontend/engine');
+
+      const pack = await loadContentPack({
+        packId: 'emberwatch',
+        resolveTag: this._assetTagResolver,
+        releaseUrl: this._releaseUrl,
+      });
+
+      // Re-check after async gap — the GameWorld may have been destroyed.
+      if (!this._gameWorld) {
+        return;
+      }
+
+      const mapUrl = pack.resolveMapUrl('village');
+      this._addLog('LOAD_MAP', mapUrl);
       await this._gameWorld.loadMap({
-        mapUrl: '/game-data/maps/sandbox_zone_a.json',
+        mapUrl,
         targetX: 160,
         targetY: 192,
       });
-      this.currentMap = 'sandbox_zone_a.json';
+      this.currentMap = 'village';
     } catch (err) {
       this._addLog('MAP_ERR', String(err));
     }

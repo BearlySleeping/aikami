@@ -1,30 +1,35 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-07-29
-> Files: 300 across 12 categories
+> Generated: 2026-08-31
+> Files: 386 across 17 categories
 
 ## Quick Start (Read These First)
 
 1. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts
 2. [Contracts Index](contracts/INDEX.md) — active feature contracts
-3. [Architecture](architecture/architecture.md) — system design
+3. [Architecture](guides/ARCHITECTURE.md) — system design
 4. [Tech Stack](guides/STACK.md) — technology stack
 5. [Coding Standards](guides/CODING_STANDARDS.md) — project conventions
 
 ## Main Repo
 
-Monorepo: SvelteKit Client × SvelteKit Hub (SSR on Cloud Run) × Firebase backend × Turso (libSQL, offline-first) × Bun runtime × Moon orchestrator.
+Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrator.
 
 ## architecture/
 
 - [Architecture Overview](architecture/architecture.md)
+- [Data Layer — Target Architecture (ADR)](architecture/data-layer-target-architecture.md)
 - [Known Limitations & TODOs](architecture/limitations.md)
+- [Object Storage Layout — Buckets, Keys, and Enforcement](architecture/object-storage-layout.md)
 - [Architecture](architecture/README.md)
 ## archive/
 
 - [Tickets](archive/tickets/README.md)
 - [[TICKET-ID] : [Short Descriptive Imperative Subject]](archive/tickets/template.md)
+## backlog-format.md/
+
+- [Contract-Ready Backlog Format](backlog-format.md)
 ## contracts/
 
 - [AI vendor directories](contracts/archived/C-001-remove-ai-vendor-dirs.md)
@@ -148,6 +153,7 @@ Monorepo: SvelteKit Client × SvelteKit Hub (SSR on Cloud Run) × Firebase backe
 - [MIG 004 frontend configs](contracts/archived/MIG-004-frontend-configs.md)
 - [Archived Contracts](contracts/archived/README.md)
 - [Contract Audit Report: C-119–C-249](contracts/AUDIT_C-119_C-249.md)
+- [Contract Backlog — C-452 onward](contracts/BACKLOG_C452_PLUS.md)
 - [C 011 blackbox testing](contracts/C-011-blackbox-testing.md)
 - [C 014 database abstraction and dataconnect](contracts/C-014-database-abstraction-and-dataconnect.md)
 - [C 015 ai service abstraction](contracts/C-015-ai-service-abstraction.md)
@@ -290,36 +296,109 @@ Monorepo: SvelteKit Client × SvelteKit Hub (SSR on Cloud Run) × Firebase backe
 - [Contract C-345: Add a Campaign/Content-Pack Browser and a Second Adventure](contracts/C-345-add-a-campaigncontent-pack-browser-and-a-second-adventure.md)
 - [Contract C-370: Fix LPC Paperdoll Base Layering and Neck Alignment](contracts/C-370-fix-lpc-paperdoll-base-layering-and-neck-alignment.md)
 - [Contract C-371: NPC Interaction Refactor — Free-Text-First with Contextual Chips](contracts/C-371.md)
+- [Contract C-372: Fix P0 LPC Asset Resolution & Unify Asset Resolver](contracts/C-372-fix-p0-lpc-asset-resolution-and-unify-resolver.md)
+- [Contract C-373: Turso Asset Registry & Hybrid OPFS Cache Engine](contracts/C-373-turso-asset-registry-opfs-cache.md)
+- [Contract C-374: Hub: Move Persona Data from Firestore to Data Connect](contracts/C-374-hub-firestore-to-dataconnect.md)
+- [Contract C-375: Emberwatch Rendering & Asset Overhaul](contracts/C-375-emberwatch-rendering-and-assets-overhaul.md)
+- [Contract C-376: Emberwatch Solidity & Rendering Architecture Hardening](contracts/C-376-emberwatch-solidity-rendering-architecture-hardening.md)
+- [Contract C-377: Pixel-Art Render Correctness — Filtering, HiDPI, Pixel Snap, Tilemap Repair](contracts/C-377-pixel-art-render-correctness.md)
+- [Contract C-378: Layered Terrain Format & Corner-16 Autotiling](contracts/C-378-layered-terrain-and-autotiling.md)
+- [Contract C-379: Collision & Movement Unification — Terrain Cost Grid, A* Locomotion, Dead-Path Removal](contracts/C-379-collision-and-movement-unification.md)
+- [Contract C-380: Frame Pacing & Point-and-Click Movement](contracts/C-380-frame-pacing-and-click-to-move.md)
+- [Contract C-381: Content Pipeline Hardening — Provenance, Trust, Versioning, Validation, Boot](contracts/C-381-content-pipeline-hardening.md)
+- [Contract C-383: Data Exposure Hardening](contracts/C-383-data-exposure-hardening.md)
+- [Contract C-384: Local SQLite Migration Framework](contracts/C-384-local-sqlite-migration-framework.md)
+- [Contract C-385: Remove Firebase Data Connect](contracts/C-385-remove-data-connect.md)
+- [Contract C-386: Firestore Removal — Client Becomes Local-First](contracts/C-386-firestore-removal-local-first-client.md)
+- [Contract C-387: Local PostgreSQL Development Environment](contracts/C-387-local-postgres-dev-environment.md)
+- [Contract C-388: Image Engine Provider Abstraction (ComfyUI ⇄ sd-server)](contracts/C-388-image-engine-provider-abstraction.md)
+- [Contract C-389: Runtime Engine Configuration, Offline Browser TTS, and Tauri Packaging](contracts/C-389-runtime-engine-config-offline-tts-tauri.md)
+- [Contract C-390: Local Stack v2 — Publishable Compose Topology, Engine Baseline, and Model Store](contracts/C-390-local-stack-v2-publishable-topology.md)
+- [Contract C-391: `stack init` — Hardware Detection, Modality Selection, and Model Recommendation](contracts/C-391-stack-init-hardware-detection-wizard.md)
+- [Contract C-392: Converge the herdr Dev Engine Services with the Local Stack](contracts/C-392-converge-dev-engine-services-with-stack.md)
+- [Contract C-393: Speech-to-Text Backend Service (sherpa-onnx streaming + whisper.cpp batch)](contracts/C-393-speech-to-text-backend-service.md)
+- [Contract C-394: Server Data Plane — Neon PostgreSQL + Drizzle](contracts/C-394-server-data-plane-neon-drizzle.md)
+- [Contract C-395: R2 Asset Origin and Content-Addressed Catalog Index](contracts/C-395-r2-asset-origin-publish-pipeline.md)
+- [Contract C-396: Hub Public Shell and Catalog Browse](contracts/C-396-hub-public-shell-catalog-browse.md)
+- [Contract C-400: Unify LPC Appearance Resolution — No Silent Slot Drops](contracts/C-400-unify-lpc-appearance-resolution.md)
+- [Contract C-401: Stream Dialogue Narrative and Collapse the Two-Call Skill-Check Flow](contracts/C-401-stream-dialogue-narrative.md)
+- [Contract C-402: Fix NPC/Player Movement Deadlock](contracts/C-402-fix-npc-player-movement-deadlock.md)
+- [Contract C-405: Cut World Generation from the Critical Path](contracts/C-405-cut-worldgen-from-critical-path.md)
+- [Contract C-417: P1 Polish Batch — Equipment Sprite Sync, Lighting Readability, Capability Correctness, Dialogue UI, Persona Preview](contracts/C-417-p1-polish-batch.md)
+- [Contract C-418: P2 Consistency, Cleanup, and Infrastructure Batch](contracts/C-418-p2-cleanup-and-infrastructure.md)
+- [Contract C-419: P3 Growth Batch — Character Card Import and Merchant UI Refinement](contracts/C-419-p3-growth-features.md)
+- [Contract C-420: One Choice Affordance](contracts/C-420-guided-choice-chips.md)
+- [Contract C-421: Dice That Actually Roll](contracts/C-421-dice-cards.md)
+- [Contract C-422: Guided First-Session Onboarding Arc](contracts/C-422-onboarding-arc.md)
+- [Contract C-423: Aikami Design North Star](contracts/C-423-design-north-star.md)
+- [Contract C-424: Unified Message Surfaces](contracts/C-424-unified-message-surfaces.md)
+- [Contract C-425: ViewModel Decomposition](contracts/C-425-viewmodel-decomposition.md)
+- [Contract C-426: Cloudflare-Native Identity & Hosting](contracts/C-426-cloudflare-native-identity-and-hosting.md)
+- [Contract C-427: Local Model Runtime](contracts/C-427-local-model-runtime.md)
+- [Contract C-428: LPC Sheet Geometry Unification — Oversize Cells and the Two Renderers](contracts/C-428-lpc-sheet-geometry-unification.md)
+- [Contract C-429: LPC Sheet Coverage Audit — Direction and Geometry Gate](contracts/C-429-lpc-sheet-coverage-audit.md)
+- [Contract C-430: LPC Layer Model — Variable Slots, One Direction-Aware Z-Order](contracts/C-430-lpc-layer-model-and-z-order.md)
+- [Contract C-431: Collect the LPC universal_behind Pass — Weapons Visible in All Four Directions](contracts/C-431-collect-lpc-behind-pass.md)
+- [Contract C-432: Content-Addressed R2 Sources — Make the Client's Remote Origin Work](contracts/C-432-content-addressed-r2-client-sources.md)
+- [Contract C-433: Catalog Coverage — Maps, Tilesets, Audio and Content Packs on R2](contracts/C-433-catalog-coverage-maps-tilesets-packs.md)
+- [Contract C-434: Registry-Backed Maps, Tilesets and Content Packs](contracts/C-434-registry-backed-maps-and-packs.md)
+- [Contract C-435: De-bundle game-data — Ship the Client Without 93 MB of Assets](contracts/C-435-debundle-game-data.md)
+- [Contract C-436: Postgres/Neon Decommission — retire the legacy data plane and the dead cloud surface](contracts/C-436-postgres-decommission.md)
+- [Contract C-437: Local Cloudflare Dev Plane — wrangler dev with D1 and R2 as a first-class dev service](contracts/C-437-local-cloudflare-dev-plane.md)
+- [Contract C-438: Restore PR Checks — a cheap, reliable CI gate for outside contributions](contracts/C-438-restore-pr-checks.md)
+- [Contract C-439: Card Lorebook Import — stop silently dropping `character_book` on V2/V3 import](contracts/C-439-card-lorebook-import.md)
+- [Contract C-440: CI tooling baseline — workflow linting, dependency automation, and AI review](contracts/C-440-ci-tooling-baseline.md)
+- [Contract C-441: SOPS secrets migration — retire GCP Secret Manager and the Redis env relay](contracts/C-441-sops-secrets-migration.md)
+- [Contract C-442: LPC Core Package — One Catalog, Derived From the Published Index](contracts/C-442-lpc-core-package-runtime-catalog.md)
+- [Contract C-443: Engine Subpath Entrypoints — sim / render / content, Enforced](contracts/C-443-engine-subpath-entrypoints.md)
+- [Contract C-444: Asset Resolution Seam — Resolver as Parameter, Two Implementations](contracts/C-444-asset-resolver-seam.md)
+- [Contract C-445: Shared Preview Package — One Set of Asset Preview Surfaces](contracts/C-445-shared-preview-package.md)
+- [Contract C-446: Hub Catalog Asset Previews — LPC, Tilesets, Maps and Props](contracts/C-446-hub-catalog-asset-previews.md)
+- [Contract C-447: Hub Walkable Map Sandbox — Collision, Z-Order and Render Ordering in the Browser](contracts/C-447-hub-walkable-map-sandbox.md)
+- [Contract C-448: De-bundle Content Packs — Move emberwatch Out of static/ and Tell the Truth About Offline](contracts/C-448-debundle-content-packs.md)
+- [Contract C-449: Misc polish batch — settings, capability UX, hub, CI/onboarding, device-link, previews](contracts/C-449-misc-polish-batch.md)
+- [Contract C-450: Contract Pipeline Reconciliation & Status Drift Guard](contracts/C-450-contract-pipeline-reconciliation-and-drift-guard.md)
+- [Contract C-451: Thin Contract Mode for Quick Fixes](contracts/C-451-thin-contract-mode.md)
+- [Contract C-452: Backfill missing Execution Reports on 17 already-implemented contracts](contracts/C-452-backfill-execution-reports.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
+- [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
 - [Contract Implementation Progress](contracts/PROGRESS.md)
 - [Feature Promotion Matrix](contracts/PROMOTION.md)
 - [Contracts](contracts/README.md)
 - [Shared Contract Sections](contracts/SHARED_SECTIONS.md)
 - [Contract {FEATURE_CODE}: {TITLE}](contracts/TEMPLATE.md)
+- [Contract {FEATURE_CODE}: {TITLE}](contracts/THIN_TEMPLATE.md)
 ## decisions/
 
 - [Decisions](decisions/README.md)
 ## design/
 
 - [Design](design/README.md)
+## engineering-hygiene.md/
+
+- [Engineering Hygiene & Maintenance](engineering-hygiene.md)
 ## gotchas/
 
+- [Cross-Origin Isolation & SharedArrayBuffer — Gotchas & Lessons Learned](gotchas/cross-origin-isolation.md)
 - [NPC Interaction & Dialogue — Gotchas & Lessons Learned](gotchas/npc_interaction_dialogue.md)
+- [Worker VM + Cloudflare — Gotchas & Lessons Learned](gotchas/worker-cloudflare-tls.md)
 ## guides/
 
 - [AI Research Findings - April 2026](guides/AI_RESEARCH.md)
-- [CI/CD Pipeline](guides/CI_CD.md)
+- [CI/CD](guides/CI_CD.md)
 - [Client Feature Roadmap](guides/CLIENT_FEATURES.md)
 - [Coding Standards](guides/CODING_STANDARDS.md)
 - [Contract Pipeline — Primary Development Flow](guides/contract-pipeline.md)
+- [Database — The Server Data Plane](guides/database.md)
 - [Developer Workflow](guides/dev-workflow.md)
 - [Aikami Feature Specification](guides/FEATURES.md)
 - [Playwright Tests](guides/PLAYWRIGHT.md)
 - [Guides](guides/README.md)
 - [Technology Stack](guides/STACK.md)
 - [Structure](guides/STRUCTURE.md)
-- [Tauri Desktop App — Development Guide](guides/TAURI.md)
+- [Tauri Desktop Boot Failure — Handoff](guides/TAURI_BOOT_HANDOFF.md)
+- [Tauri Desktop App — Development Guide & Debugging Notes](guides/TAURI.md)
 - [Testing Strategy](guides/TESTING.md)
 - [TODO Moved](guides/TODO.md)
 ## index.md/
@@ -333,12 +412,30 @@ Monorepo: SvelteKit Client × SvelteKit Hub (SSR on Cloud Run) × Firebase backe
 ## README.md/
 
 - [Aikami Documentation](README.md)
+## reference/
+
+- [Completed Contracts](reference/completed-contracts.md)
+- [Definition of Done](reference/definition-of-done.md)
+- [Design Rationale](reference/design-rationale.md)
+- [Project Review: Adopt vs Avoid](reference/project-review.md)
+## research/
+
+- [Aikami Database Architecture — Investigation Summary (for external review)](research/database-architecture-inquiry.md)
+- [Aikami Data Layer — Review & Recommendation](research/database-architecture-recommendation.md)
+- [Game Engine / World Setup — Research Brief for Critical Review](research/game_engine_architecture_brief.md)
+- [Game Engine / World Setup — Critical Review](research/game_engine_architecture_review.md)
 ## scripts/
 
 - [Scripts](scripts/README.md)
+## strategy/
+
+- [Explicitly Deferred / Not MVP](strategy/deferred.md)
+- [Distribution & Onboarding Strategy — 2026-08-19](strategy/distribution-and-onboarding-2026-08-19.md)
+- [MVP Assessment — 2026-08-16](strategy/mvp-assessment-2026-08-16.md)
+- [Aikami Strategy & Architecture](strategy/vision-and-directives.md)
 ## TODO.md/
 
-- [Aikami Unified Product Backlog](TODO.md)
+- [Aikami TODO](TODO.md)
 
 ---
 

@@ -6,44 +6,48 @@
 // and generation parameter configuration.
 
 import {
+  buildVerifyHeaders,
+  buildVerifyUrl,
+  DEFAULT_VOICE_ARCHETYPES,
+  EMBEDDING_MODELS,
+  EMOTION_METHODS,
+  IMAGE_PROVIDERS,
+  KOKORO_VOICES,
+  MEMORY_TYPES,
+  PROVIDER_ENDPOINTS,
+  TEXT_PROVIDERS,
+  VOICE_ENGINES,
+  VOICE_PROVIDERS,
+} from '@aikami/constants';
+import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type {
+  AdvancedOverrides,
+  ConfigState,
+  EmotionConfig,
+  ImageConfig,
+  MemoryConfig,
+  OpenRouterModel,
+  ProviderEndpoint,
+  VoiceArchetype,
+  VoiceConfig,
+  VoiceOption,
+} from '@aikami/types';
+import { configService } from '$lib/services/config/config_service.svelte.ts';
 import {
-  type AdvancedOverrides,
-  buildVerifyHeaders,
-  buildVerifyUrl,
-  type CheckpointInfo,
-  type ConfigState,
-  DEFAULT_VOICE_ARCHETYPES,
-  EMBEDDING_MODELS,
-  EMOTION_METHODS,
-  type EmotionConfig,
-  fetchOpenRouterModels,
-  IMAGE_PROVIDERS,
-  type ImageConfig,
-  imageGenerationService,
-  KOKORO_VOICES,
+  LocalServiceDetector,
   type LocalServiceDetectorInterface,
   type LocalServiceStatus,
-  MEMORY_TYPES,
-  type MemoryConfig,
-  PROVIDER_ENDPOINTS,
-  type ProviderEndpoint,
-  TEXT_PROVIDERS,
-  VOICE_ENGINES,
-  VOICE_PROVIDERS,
-  type VoiceArchetype,
-  type VoiceConfig,
-  type VoiceOption,
-} from '$services';
+} from '$lib/services/config/local_service_detector.svelte';
+import { type CheckpointInfo, fetchOpenRouterModels, imageGenerationService } from '$services';
 import {
   type AuxiliaryModels,
   type GenerationParams,
   INSTRUCT_TEMPLATES,
   type InstructTemplate,
-  type OpenRouterModel,
 } from '$types';
 
 export type { CheckpointInfo, EmotionConfig, ProviderEndpoint };
@@ -263,7 +267,7 @@ export class ProvidersViewModel
   }
 
   get instructTemplate(): InstructTemplate {
-    return configService.state.instructTemplate;
+    return configService.state.instructTemplate as InstructTemplate;
   }
 
   get advancedOverrides(): AdvancedOverrides {
@@ -507,8 +511,8 @@ export class ProvidersViewModel
     this.verificationStatus = { ...this.verificationStatus, [provider]: 'checking' };
 
     try {
-      const url = buildVerifyUrl(endpoint, apiKey);
-      const headers = buildVerifyHeaders(endpoint, apiKey);
+      const url = buildVerifyUrl({ endpoint, apiKey });
+      const headers = buildVerifyHeaders({ endpoint, apiKey });
 
       const response = await fetch(url, { method: endpoint.method, headers });
 

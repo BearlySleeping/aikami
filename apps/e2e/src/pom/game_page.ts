@@ -48,6 +48,13 @@ export class GamePage {
     await this.waitForEngineReady();
   }
 
+  /** Reloads the game route and waits until gameplay is ready again. */
+  async reload(): Promise<void> {
+    await this.page.reload({ waitUntil: 'domcontentloaded' });
+    await this.waitForEngineReady();
+    await this.waitForPlayingState();
+  }
+
   /**
    * Navigate from the start menu, through onboarding, to the game.
    * Simulates the full cold-launch flow: / → start menu → /setup → /game.
@@ -99,12 +106,10 @@ export class GamePage {
   /** Wait for boot to reach the "playing" state (HUD visible, loading overlay gone). */
   async waitForPlayingState(): Promise<void> {
     // Wait for loading overlay to disappear
-    const loadingText = this.page.getByText('Loading game engine...');
-    await loadingText.waitFor({ state: 'hidden', timeout: 30_000 });
+    await this.loadingText.waitFor({ state: 'hidden', timeout: 30_000 });
 
     // Confirm HUD is visible
-    const playerHud = this.page.locator('.bg-base-200\\/80');
-    await playerHud.waitFor({ state: 'visible', timeout: 10_000 });
+    await this.playerHud.waitFor({ state: 'visible', timeout: 10_000 });
   }
 
   // ── Private onboarding helper ─────────────────────────────
@@ -149,6 +154,11 @@ export class GamePage {
   /** The game UI overlay layer (DOM overlays). */
   get uiLayer() {
     return this.page.locator('#game-ui-layer');
+  }
+
+  /** Loading message displayed while the engine boots. */
+  get loadingText() {
+    return this.page.getByText('Loading game engine...');
   }
 
   /** Player HUD — the always-visible bottom-left overlay. */

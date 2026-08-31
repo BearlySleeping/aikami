@@ -24,7 +24,7 @@ import type {
   ContentPackQuestEntry,
   ContentPackQuestObjective,
   QuestObjectiveFailureCondition,
-  QuestObjectiveProgress,
+  QuestObjectiveProgressV1 as QuestObjectiveProgress,
   QuestProgress,
 } from '@aikami/types';
 import { inventoryService } from './inventory_service.svelte';

@@ -149,12 +149,12 @@ type GenerationStage = 'setting' | 'npcs' | 'locations' | 'hudWidgets' | 'partyA
 
 /** Per-stage TypeBox schema used for LLM structured-output validation. */
 const STAGE_SCHEMAS: Record<GenerationStage, Record<string, unknown>> = {
-  setting: WorldGenSettingStageSchema,
-  npcs: WorldGenNpcsStageSchema,
-  locations: WorldGenLocationsStageSchema,
-  hudWidgets: WorldGenHudWidgetsStageSchema,
-  partyArcs: WorldGenPartyArcsStageSchema,
-} as const;
+  setting: WorldGenSettingStageSchema as unknown as Record<string, unknown>,
+  npcs: WorldGenNpcsStageSchema as unknown as Record<string, unknown>,
+  locations: WorldGenLocationsStageSchema as unknown as Record<string, unknown>,
+  hudWidgets: WorldGenHudWidgetsStageSchema as unknown as Record<string, unknown>,
+  partyArcs: WorldGenPartyArcsStageSchema as unknown as Record<string, unknown>,
+};
 
 /** Human-readable label for each stage (used in stage prompts). */
 const STAGE_LABELS: Record<GenerationStage, string> = {

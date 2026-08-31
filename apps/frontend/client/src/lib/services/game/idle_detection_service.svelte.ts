@@ -115,6 +115,18 @@ class IdleDetectionService
 
   // ── Private: Idle tracking ──────────────────────────────────────────
 
+  private _handleInput = (): void => {
+    this.resetIdle();
+  };
+
+  private _handleVisibilityChange = (): void => {
+    const isVisible = document.visibilityState !== 'hidden';
+    this._isPageVisible = isVisible;
+    if (isVisible) {
+      this.resetIdle();
+    }
+  };
+
   private _startIdleTracking(): void {
     // Update idleDurationMs every second
     this._intervalHandle = setInterval(() => {

@@ -285,7 +285,7 @@ export default defineConfig(({ mode }) => {
           // dev mode Vite serves native ESM and tries to resolve every import,
           // so we alias them to a stub module.
           find: /^@tauri-apps\/.*$/,
-          replacement: toSrcPath('lib/stubs/tauri-stub.ts'),
+          replacement: toSrcPath('lib/stubs/tauri_stub.ts'),
         },
       ],
     },
@@ -364,21 +364,21 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       proxy:
         mode === 'emulator'
-          ? {
+          ? ({
               '/api/voice': {
                 target: `http://localhost:${PORTS.emulator.voice}`,
                 changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/api\/voice/, ''),
+                rewrite: (path: string) => path.replace(/^\/api\/voice/, ''),
               },
               '/api/text': {
                 target: `http://localhost:${PORTS.emulator.text}`,
                 changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/api\/text/, ''),
+                rewrite: (path: string) => path.replace(/^\/api\/text/, ''),
               },
               '/api/image': {
                 target: `http://localhost:${PORTS.emulator.image}`,
                 changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/api\/image/, ''),
+                rewrite: (path: string) => path.replace(/^\/api\/image/, ''),
               },
               // C-418 Feature D: proxy hub-hosted auth endpoints (formerly
               // Firebase Callable Functions) to the hub's dev server. The
@@ -387,15 +387,15 @@ export default defineConfig(({ mode }) => {
               '/api/hub': {
                 target: `http://localhost:${PORTS.emulator.hub + emulatorPortOffset}`,
                 changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/api\/hub/, '/api'),
+                rewrite: (path: string) => path.replace(/^\/api\/hub/, '/api'),
               },
               '/api/kokoro-tts': {
                 target: 'http://localhost:8880',
                 changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/api\/kokoro-tts/, ''),
+                rewrite: (path: string) => path.replace(/^\/api\/kokoro-tts/, ''),
               },
-            }
-          : {},
+            } as Record<string, string | import('vite').ProxyOptions>)
+          : ({} as Record<string, string | import('vite').ProxyOptions>),
       watch: {
         ignored: [
           // 1. Tooling & OS Caches (The biggest culprits)

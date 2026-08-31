@@ -17,6 +17,10 @@ import type { ComponentType } from 'svelte';
 import { routerService } from '$services';
 import type { AssetStats, CatalogAssetPageData } from '$types';
 import { formatBytes } from '$utils/catalog.ts';
+
+/** Helper: convert a Svelte component to ComponentType for dynamic rendering. */
+const toComponentType = <T>(component: T): ComponentType => component as unknown as ComponentType;
+
 import { type PreviewKind, previewKindForEntry } from './preview_kind.ts';
 
 // ── LPC slot definition — imported from @aikami/frontend-preview ──
@@ -350,7 +354,7 @@ class CatalogAssetViewModel
           // Build scoped LPC slots from shard entries
           const allSlots = await this.ensureLpcSlotsBuilt();
 
-          this.previewComponent = LpcPreview as ComponentType;
+          this.previewComponent = toComponentType(LpcPreview);
           this.previewProps = {
             resolver,
             allSlots,
@@ -371,7 +375,7 @@ class CatalogAssetViewModel
         }
         case 'tileset': {
           const { TilesetPreview } = await import('@aikami/frontend-preview');
-          this.previewComponent = TilesetPreview as ComponentType;
+          this.previewComponent = toComponentType(TilesetPreview);
           this.previewProps = {
             resolver,
             tag,
@@ -384,13 +388,13 @@ class CatalogAssetViewModel
         }
         case 'map': {
           const { MapPreview } = await import('@aikami/frontend-preview');
-          this.previewComponent = MapPreview as ComponentType;
+          this.previewComponent = toComponentType(MapPreview);
           this.previewProps = { resolver, mapTag: tag, width: 320, height: 320, zoom: 1 };
           break;
         }
         case 'prop': {
           const { PropPreview } = await import('@aikami/frontend-preview');
-          this.previewComponent = PropPreview as ComponentType;
+          this.previewComponent = toComponentType(PropPreview);
           this.previewProps = { resolver, tag, width: 320, height: 320, zoom: 2 };
           break;
         }

@@ -127,7 +127,7 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
             {/if}
           </div>
 
-          <!-- C-405 AC-4: Advanced entry for the world-generation preview -->
+          <!-- C-405 AC-4: Advanced entry — links driven by the view model -->
           <details class="mt-8 text-left">
             <summary
               class="text-xs text-base-content/40 hover:text-base-content/70 cursor-pointer select-none"
@@ -135,26 +135,14 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
               Advanced
             </summary>
             <div class="mt-3 flex flex-col gap-2 w-64 mx-auto">
-              <button
-                type="button"
-                class="btn btn-outline btn-sm"
-                onclick={() => viewModel.startWorldGeneration()}
-              >
-                World Generation (Preview)
-              </button>
-              <p class="text-[11px] text-base-content/60 leading-snug">
-                Generates a world preview that is not yet playable — used to prototype story
-                content. See
-                <a
-                  href="https://github.com/BearlySleeping/aikami/issues/81"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="link link-primary"
-                >
-                  issue #81
-                </a>
-                for the content-pack compiler that will make generated worlds playable.
-              </p>
+              {#each viewModel.advancedLinks as link}
+                <button type="button" class="btn btn-outline btn-sm" onclick={() => link.action()}>
+                  {link.title}
+                </button>
+                <p class="text-[11px] text-base-content/60 leading-snug">
+                  {link.description}
+                </p>
+              {/each}
             </div>
           </details>
         </div>

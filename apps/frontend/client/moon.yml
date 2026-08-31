@@ -45,6 +45,23 @@ fileGroups:
     - 'src/**/*.test.ts'
 
 tasks:
+  # ------------------------------------------------------------------
+  # Paraglide i18n codegen (src/lib/paraglide/{runtime,messages}.js).
+  # Gitignored, and only otherwise produced as a side effect of the Vite
+  # plugin during `dev`/`build` — a fresh checkout has neither, so
+  # `typecheck`/`test-unit` need this to run first instead of racing
+  # `build`'s Vite process (or a bare CI checkout) for the files.
+  # ------------------------------------------------------------------
+  codegen:
+    command: 'bun run paraglide'
+    inputs:
+      - 'project.inlang/**/*'
+      - 'messages/**/*'
+    outputs:
+      - 'src/lib/paraglide'
+    options:
+      cache: true
+
   dev:
     command: 'bun run dev'
     preset: 'server'
@@ -75,6 +92,8 @@ tasks:
       # the original bug. Over-inclusion only costs cache hit rate.
       - '/packages/shared/*/src/**/*'
       - '/packages/frontend/*/src/**/*'
+    deps:
+      - '~:codegen'
     options:
       cache: true
       # C-418 Feature B decision (M5): staging builds intentionally SHIP the
@@ -86,8 +105,13 @@ tasks:
   preview:
     command: 'bun run preview'
     preset: 'server'
+  typecheck:
+    deps:
+      - '~:codegen'
   test:
     command: 'bun run test:unit'
+    deps:
+      - '~:codegen'
     inputs:
       - '@group(unitTests)'
       - '@group(sources)'
@@ -100,6 +124,8 @@ tasks:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test-unit:
     command: 'bun run test:unit'
+    deps:
+      - '~:codegen'
     inputs:
       - '@group(unitTests)'
       - '@group(sources)'

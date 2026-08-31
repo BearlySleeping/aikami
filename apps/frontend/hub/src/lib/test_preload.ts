@@ -13,10 +13,11 @@ import { mock } from 'bun:test';
 
 // ── Svelte 5 runes ──────────────────────────────────────────────────────────
 
-(globalThis as Record<string, unknown>).$state = (value: unknown) => value;
-(globalThis as Record<string, unknown>).$state.raw = (value: unknown) => value;
-(globalThis as Record<string, unknown>).$state.snapshot = (value: unknown) => value;
-(globalThis as Record<string, unknown>).$derived = (value: unknown) => value;
+const _global = globalThis as Record<string, unknown>;
+_global.$state = (value: unknown) => value;
+(_global.$state as Record<string, unknown>).raw = (value: unknown) => value;
+(_global.$state as Record<string, unknown>).snapshot = (value: unknown) => value;
+_global.$derived = (value: unknown) => value;
 
 const effectPolyfill = ((fn: () => void) => {
   fn();
@@ -25,7 +26,7 @@ effectPolyfill.root = (fn: () => void) => {
   fn();
   return () => {};
 };
-(globalThis as Record<string, unknown>).$effect = effectPolyfill;
+_global.$effect = effectPolyfill;
 
 // ── $app/env/private ────────────────────────────────────────────────────────
 // Required by server-side API modules (better_auth.ts, ask.ts, catalog_index.ts)

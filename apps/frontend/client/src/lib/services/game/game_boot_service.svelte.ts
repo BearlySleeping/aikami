@@ -16,6 +16,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { LpcAnimationState } from '@aikami/lpc';
 import type { Campaign, PersonaData } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import { authService, equipmentService } from '$services';
@@ -737,7 +738,9 @@ class GameBootService
    * the game will fetch assets on-demand.
    */
   private async _stagePrefetchStarterContent(generation: number): Promise<void> {
-    const { assetPrefetchService } = await import('$lib/services/assets/asset_prefetch_service.svelte');
+    const { assetPrefetchService } = await import(
+      '$lib/services/assets/asset_prefetch_service.svelte'
+    );
     if (generation !== this._bootGeneration) {
       return;
     }
@@ -878,7 +881,7 @@ class GameBootService
     }
 
     const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
-      getLpcAssetPath(slot, assetId, state as unknown as number),
+      getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
     );
 
     this._gameWorld = (EngineGameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
@@ -1631,8 +1634,7 @@ class GameBootService
     // ── C-332: Unbind from GameEngineService so stale reference doesn't
     // survive teardown. Next boot will re-register via registerWorld(). ──
     gameEngineService.registerWorld(undefined as unknown as GameWorld);
-    gameEngineService.currentMapId = '';
-    gameEngineService.playerScene = 'unknown';
+    gameEngineService.resetEngineState();
 
     this._bridge = undefined;
   }

@@ -17,6 +17,7 @@ import {
   resolveAudioTrackUrl,
 } from '$lib/services/audio/audio_track_catalog';
 import {
+  assetStore,
   audioService,
   diceService,
   getExpressionAssetResolver,
@@ -377,11 +378,15 @@ export class CombatViewModel
 
   isPlayerTurn = $state(true);
 
-  /** Portrait image URL for the player character. */
-  playerPortraitUrl = $state('/assets/images/combat/player_portrait.webp');
+  /** Portrait image URL for the player character — resolved through AssetStore (cache → R2). */
+  playerPortraitUrl = $derived(
+    assetStore.manifest ? (assetStore.resolveUrl('sprites:combat:player_portrait') ?? '') : '',
+  );
 
-  /** Portrait image URL for the enemy character. */
-  enemyPortraitUrl = $state('/assets/images/combat/enemy_portrait.webp');
+  /** Portrait image URL for the enemy character — resolved through AssetStore (cache → R2). */
+  enemyPortraitUrl = $derived(
+    assetStore.manifest ? (assetStore.resolveUrl('sprites:combat:enemy_portrait') ?? '') : '',
+  );
 
   /** Current expression for the player character. */
   playerExpression: ExpressionId = $state('neutral');
@@ -924,8 +929,7 @@ export class CombatViewModel
     this.combatBackgroundImageUrl = null;
     this.isPlayerTakingDamage = false;
     this.isEnemyTakingDamage = false;
-    this.playerPortraitUrl = '/assets/images/combat/player_portrait.webp';
-    this.enemyPortraitUrl = '/assets/images/combat/enemy_portrait.webp';
+    // Portrait URLs are now $derived from assetStore.manifest — no reset needed.
     this.playerExpression = 'neutral';
     this.enemyExpression = 'neutral';
     this.combatLog = [];

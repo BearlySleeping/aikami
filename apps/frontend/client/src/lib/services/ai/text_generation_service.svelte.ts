@@ -25,7 +25,7 @@ import { aiGatewayService } from '$services';
 type ChatMessageRole = 'user' | 'assistant' | 'system';
 
 /** A single chat message in an LLM conversation. */
-type TextChatMessage = {
+export type TextChatMessage = {
   role: ChatMessageRole;
   content: string;
 };

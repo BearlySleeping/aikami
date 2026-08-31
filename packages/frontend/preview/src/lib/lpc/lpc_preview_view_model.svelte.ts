@@ -20,7 +20,8 @@ import { type Application, Container, Graphics, Rectangle, Sprite, Texture } fro
 import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '../../../../engine/src/index.ts';
 import type { LpcRenderer } from './lpc_renderer';
 import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
-import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';
+import type { LpcPreviewState } from './preview_url_state';
+import { encodeLpcPreviewState } from './preview_url_state';
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -739,10 +740,12 @@ class LpcPreviewViewModel
 
   private _applyPreviewState(state: LpcPreviewState): void {
     if (state.layers.length > 0) {
-      this.activeLayers = state.layers.map((entry) => ({
-        slotDefIndex: entry.slotDefIndex,
-        variantIndex: entry.variantIndex,
-      }));
+      this.activeLayers = state.layers.map(
+        (entry: import('./preview_url_state').LpcLayerUrlEntry) => ({
+          slotDefIndex: entry.slotDefIndex,
+          variantIndex: entry.variantIndex,
+        }),
+      );
     }
     this.animationState = state.state;
     this._updateMaxFrame(state.state);

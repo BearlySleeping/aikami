@@ -15,7 +15,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { createStreamBuffer, parseLine, parseStreamChunk, type StreamBuffer } from '@aikami/parser';
-import type { ChatData, CyoaChoice, MessageData, NpcData } from '@aikami/types';
+import type { ChatData, CyoaChoice, MessageData, NpcData, NpcSuggestionChip } from '@aikami/types';
 import {
   aiService,
   authService,

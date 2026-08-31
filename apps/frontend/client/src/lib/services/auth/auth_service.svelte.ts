@@ -344,11 +344,11 @@ export class AuthService
     let delayMs = intervalSeconds * 1000;
     while (Date.now() < deadline) {
       const result = await pollBetterAuthDeviceHandoff(deviceCode);
-      if (result?.user) {
+      if (result && 'user' in result) {
         return result.user;
       }
       // RFC 8628: slow_down increases the required polling delay.
-      if (result?.slowDown) {
+      if (result && 'slowDown' in result) {
         delayMs = Math.max(delayMs + 5000, delayMs * 1.5);
       }
       await new Promise((resolve) => setTimeout(resolve, delayMs));

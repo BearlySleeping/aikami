@@ -1,5 +1,6 @@
 // apps/frontend/hub/src/lib/views/app/app_view_model.svelte.ts
 import { isDevelopmentModePublic } from '@aikami/frontend/configs';
+import type { Page } from '@aikami/frontend/services';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -126,7 +127,10 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     document.body.classList.add('app-mounted');
 
     // 1. Inject static dependencies into our framework-agnostic service.
-    routerService.initialize({ goto, page });
+    routerService.initialize({ goto, page: page as unknown as Page });
+    // The cast `as unknown as Page` bridges SvelteKit's generic Page type
+    // (state: PageState) to the router service's minimal Page interface
+    // (state: Record<string, unknown>).
 
     // 2. Set up our reactive tracking safely attached to the class lifecycle
     this._setupReactiveListeners();
@@ -167,7 +171,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
       // user navigates, Svelte updates the proxies, triggering this effect,
       // and we safely pipe that data into our internal RouterService.
       $effect(() => {
-        routerService.syncNavigation(navigating, page);
+        routerService.syncNavigation(navigating, page as unknown as Page);
       });
 
       // EFFECT 2: The Business Logic Guards

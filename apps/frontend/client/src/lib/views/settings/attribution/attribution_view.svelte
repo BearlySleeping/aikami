@@ -5,9 +5,9 @@ Attribution screen — displays per-asset provenance from the active content pac
 Contract: C-381 AC-1, Quality Requirements (screen-reader accessible).
 -->
 <script lang="ts">
-  import { AttributionViewModel } from './attribution_view_model.svelte.ts';
+import type { AttributionViewModel } from './attribution_view_model.svelte.ts';
 
-  let { viewModel }: { viewModel: AttributionViewModel } = $props();
+let { viewModel }: { viewModel: AttributionViewModel } = $props();
 </script>
 
 <div class="mx-auto max-w-3xl px-4 py-8">
@@ -21,7 +21,7 @@ Contract: C-381 AC-1, Quality Requirements (screen-reader accessible).
       <span>No attribution data available for the current content pack.</span>
     </div>
   {:else}
-    <div class="overflow-x-auto" role="region" aria-label="Asset attributions">
+    <section class="overflow-x-auto" aria-label="Asset attributions">
       <table class="table table-zebra w-full">
         <thead>
           <tr>
@@ -38,7 +38,9 @@ Contract: C-381 AC-1, Quality Requirements (screen-reader accessible).
               <td>
                 {entry.license}
                 {#if entry.shareAlike}
-                  <span class="badge badge-warning badge-xs ml-1" title="Share-alike licence">SA</span>
+                  <span class="badge badge-warning badge-xs ml-1" title="Share-alike licence"
+                    >SA</span
+                  >
                 {/if}
               </td>
               <td>{entry.authors.join(', ')}</td>
@@ -47,11 +49,12 @@ Contract: C-381 AC-1, Quality Requirements (screen-reader accessible).
           {/each}
         </tbody>
       </table>
-    </div>
+    </section>
   {/if}
 
   <div class="mt-8">
     <button
+      type="button"
       class="btn btn-primary"
       onclick={() => viewModel.backToMenu()}
       aria-label="Return to main menu"

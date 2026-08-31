@@ -9,6 +9,7 @@
 
 import type { EngineBridge, GameWorldOptions, LpcLayerRecipe } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
+import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -117,7 +118,6 @@ export type CombatSandboxViewModelOptions = BaseViewModelOptions & {};
 // ---------------------------------------------------------------------------
 
 /** Map URL for the combat sandbox. */
-const COMBAT_MAP_URL = '/game-data/maps/sandbox_combat.json';
 
 /** Player spawn position on the combat map. */
 const PLAYER_SPAWN_X = 100;
@@ -165,6 +165,10 @@ class CombatSandboxViewModel
   private _textureManager: TextureManager | undefined;
   /** Canvas element reference for resize operations (C-164). */
   private _canvas: HTMLCanvasElement | undefined;
+  /** Resolved map URL (cached from content pack). */
+  private _mapUrl: string | undefined;
+  private _assetTagResolver: AssetTagResolver | undefined;
+  private _releaseUrl: ((url: string) => void) | undefined;
 
   // -----------------------------------------------------------------------
   // Public API
@@ -185,6 +189,11 @@ class CombatSandboxViewModel
 
       const { sandboxRecipeResolver } = await import('../shared/lpc_sandbox_resolver');
 
+      const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+      this._assetTagResolver = assetTagResolver;
+      this._releaseUrl = (url: string) => assetManager.releaseUrl(url);
+
       const worldOptions: GameWorldOptions = {
         className: 'CombatSandboxGameWorld',
         bridge: this._bridge,
@@ -193,6 +202,9 @@ class CombatSandboxViewModel
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         textureManager: this._textureManager,
+        // C-434: registry-backed tag resolver for maps and tilesets.
+        resolveTag: this._assetTagResolver,
+        releaseUrl: this._releaseUrl,
       };
 
       this._gameWorld = GameWorld.create(worldOptions);
@@ -206,9 +218,24 @@ class CombatSandboxViewModel
 
       this._registerBridgeListeners();
 
-      // Load the combat sandbox map
+      // Load the content pack through the asset manager (R2-backed registry)
+      const { loadContentPack } = await import('@aikami/frontend/engine');
+
+      const pack = await loadContentPack({
+        packId: 'emberwatch',
+        resolveTag: this._assetTagResolver,
+        releaseUrl: this._releaseUrl,
+      });
+
+      // Re-check after async gap — the GameWorld may have been destroyed.
+      if (!this._gameWorld) {
+        return;
+      }
+
+      this._mapUrl = pack.resolveMapUrl('village');
+
       await this._gameWorld.loadMap({
-        mapUrl: COMBAT_MAP_URL,
+        mapUrl: this._mapUrl,
         targetX: PLAYER_SPAWN_X,
         targetY: PLAYER_SPAWN_Y,
       });
@@ -381,9 +408,9 @@ class CombatSandboxViewModel
     // Unlock input before reloading map
     this._gameWorld?.setInputLocked(false);
 
-    // Reload the combat sandbox map — defeated enemies are filtered
+    // Reload the map — defeated enemies are filtered
     await this._gameWorld?.loadMap({
-      mapUrl: COMBAT_MAP_URL,
+      mapUrl: this._mapUrl ?? 'village',
       targetX: PLAYER_SPAWN_X,
       targetY: PLAYER_SPAWN_Y,
       defeatedEnemies: this.defeatedEnemyIds,
