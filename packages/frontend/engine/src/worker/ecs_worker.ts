@@ -11,6 +11,7 @@ import {
   getComponent,
   hasComponent,
   query,
+  removeComponent,
   removeEntity,
   set,
 } from 'bitecs';
@@ -51,7 +52,7 @@ import {
 import { registerInventoryObservers } from '../components/inventory.ts';
 import { registerMapLocationObservers } from '../components/map_location.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
-import { registerPathFollowObservers } from '../components/path_follow.ts';
+import { PathFollow, registerPathFollowObservers } from '../components/path_follow.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerResistancesObservers } from '../components/resistances.ts';
@@ -73,6 +74,8 @@ import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer, type PlayerCreateOptions } from '../entities/create_player.ts';
 import { createDefaultSandboxAvatar } from '../entities/create_sandbox_avatar.ts';
+import { updateFixedStepAccumulator } from '../frame_pacing.ts';
+import { findPath } from '../math/astar.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import {
   DEFAULT_LPC_SLOT_FALLBACKS,
@@ -99,6 +102,7 @@ import {
 import {
   type CollisionGrid,
   getMapPixelBounds,
+  getTerrainGrid,
   insertIntoSpatialGrid,
   isBlocksSight,
   isCellBlocked,
@@ -139,8 +143,6 @@ import {
   updateMovement,
 } from '../systems/movement_system.ts';
 import { updatePartyFollow } from '../systems/party_follow_system.ts';
-import { findPath } from '../math/astar.ts';
-import { getTerrainGrid } from '../systems/collision_system.ts';
 import { updatePathFollow } from '../systems/path_follow_system.ts';
 import { updatePressurePlates } from '../systems/pressure_plate_system.ts';
 import {
@@ -426,6 +428,15 @@ const handleSpawnNPC = (npcData: NPCSpawnData): void => {
   });
 };
 
+/** Removes every movement producer from the player entity. */
+const clearPlayerMovement = (): void => {
+  if (!world || playerEntityId <= 0) {
+    return;
+  }
+  removeComponent(world, playerEntityId, Velocity);
+  removeComponent(world, playerEntityId, PathFollow);
+};
+
 /**
  * Dispatches an incoming GameCommand from the main thread.
  */
@@ -437,6 +448,10 @@ const handleBridgeCommand = (command: GameCommand): void => {
   }
 
   switch (command.type) {
+    case 'STOP_PLAYER': {
+      clearPlayerMovement();
+      break;
+    }
     case 'SET_PLAYER_VELOCITY': {
       handleSetPlayerVelocity(command.velocity);
       break;
@@ -492,14 +507,20 @@ const handleBridgeCommand = (command: GameCommand): void => {
             // Clear existing velocity
             addComponent(world, playerEntityId, set(Velocity, { x: 0, y: 0 }));
             // Set PathFollow — index 1 skips the start cell
-            addComponent(world, playerEntityId, set(PathFollow, {
-              waypoints,
-              index: 1,
-              length: result.path.length,
-              speed: 150, // default player speed
-              repathAtMs: 0,
-              arriveRadius: command.arriveRadius,
-            }));
+            addComponent(
+              world,
+              playerEntityId,
+              set(PathFollow, {
+                waypoints,
+                index: 1,
+                length: result.path.length,
+                speed: 150, // default player speed
+                repathAtMs: 0,
+                arriveRadius: command.arriveRadius,
+              }),
+            );
+          } else {
+            clearPlayerMovement();
           }
         }
       }
@@ -902,17 +923,6 @@ let isTicking = false;
 const MACRO_TICK_INTERVAL_MS = 500;
 
 /**
- * Hard cap for frame delta time in milliseconds (100ms = 10fps floor).
- *
- * During tab backgrounding, WASM auto-saves, or heavy GC pauses the
- * browser timer may deliver a single callback with a massive delta.
- * Without clamping, velocity × delta propels entities off the map into
- * NaN/Infinity territory. 100ms is the smallest value that still allows
- * a visible frame-rate drop without causing physics tunneling.
- */
-const MAX_FRAME_DELTA_MS = 100;
-
-/**
  * Schedules the next tick via setTimeout.
  *
  * Only called when _running is true and no timer is pending.
@@ -1017,16 +1027,18 @@ const tickLoop = (): void => {
 
     // Cap accumulated time to prevent spiral-of-death catch-up
     // (tab backgrounding, WASM save spikes, GC pauses).
-    _accumulator += Math.min(elapsed, MAX_STEPS_PER_WAKE * FIXED_STEP_MS);
+    const accumulatorUpdate = updateFixedStepAccumulator({
+      accumulatorMs: _accumulator,
+      elapsedMs: elapsed,
+      fixedStepMs: FIXED_STEP_MS,
+      maxStepsPerWake: MAX_STEPS_PER_WAKE,
+    });
+    _accumulator = accumulatorUpdate.accumulatorMs;
 
     // Run zero or more fixed steps
-    let stepsThisWake = 0;
+    const stepsThisWake = accumulatorUpdate.stepCount;
     let environment: ReturnType<typeof stepEnvironment> | undefined;
-    while (_accumulator >= FIXED_STEP_MS) {
-      _accumulator -= FIXED_STEP_MS;
-      stepsThisWake++;
-      stepsThisWake++;
-
+    for (let stepIndex = 0; stepIndex < stepsThisWake; stepIndex++) {
       // Use FIXED_STEP_MS as the delta for all systems
       const deltaMs = FIXED_STEP_MS;
 
@@ -1097,7 +1109,7 @@ const tickLoop = (): void => {
     }
 
     // ── C-380: Skip serialization if no fixed steps ran ──
-    if (stepsThisWake === 0) {
+    if (stepsThisWake === 0 || !environment) {
       return;
     }
 

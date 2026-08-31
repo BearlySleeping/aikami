@@ -27,6 +27,12 @@ import {
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import {
+  computeInterpolationAlpha,
+  copyRenderState,
+  interpolateValue,
+  unprojectScreenPoint,
+} from './frame_pacing.ts';
+import {
   createPixiApp,
   DEFAULT_HEIGHT,
   DEFAULT_WIDTH,
@@ -496,8 +502,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Last hovered cell coordinates (for dirty-checking). */
   private _lastHoverCell: { cellX: number; cellY: number } | undefined;
 
-  /** Current click destination cell. */
-  private _destinationCell: { cellX: number; cellY: number } | undefined;
+  /** Tile size for the active map; undefined until terrain is loaded. */
+  private _activeTileSize: number | undefined;
 
   /** Global uniform group for animation time (C-177). */
   private _tilemapUniforms: UniformGroup | undefined;
@@ -1318,8 +1324,23 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * re-emits bridged events.
    */
   private _handleStateUpdate(message: { type: string } & Record<string, unknown>): void {
+    const newBuffer = message.buffer as ArrayBuffer | undefined;
+
+    // Preserve the old state before applying the incoming camera and timing.
+    // The active buffer is recycled below, so its render data must be copied.
+    if (newBuffer && this._activeRenderView) {
+      this._previousCameraX = this._cameraX;
+      this._previousCameraY = this._cameraY;
+      this._previousSimTimeMs = this._lastStateTiming?.simTimeMs ?? 0;
+      this._previousRenderView = copyRenderState(this._activeRenderView);
+    }
+
     // C-380 AC-1: Store timing info for interpolation
-    if (typeof message.tick === 'number' && typeof message.simTimeMs === 'number' && typeof message.stepMs === 'number') {
+    if (
+      typeof message.tick === 'number' &&
+      typeof message.simTimeMs === 'number' &&
+      typeof message.stepMs === 'number'
+    ) {
       this._lastStateTiming = {
         tick: message.tick as number,
         simTimeMs: message.simTimeMs as number,
@@ -1346,24 +1367,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // worker) carries NO buffer — skip the swap but still process its
     // events below, otherwise the player stays a tinted placeholder square
     // on every portal transition (C-378).
-    const newBuffer = message.buffer as ArrayBuffer | undefined;
     if (newBuffer) {
       this._syncWithBufferCount++;
-
-      // C-380 AC-3: Copy the previous state BEFORE recycling the buffer.
-      // The ArrayBuffer transfer detaches the buffer, so we must copy
-      // the current render view into _previousRenderView before the
-      // outgoing buffer is transferred back to the worker.
-      if (this._activeRenderView) {
-        this._previousCameraX = this._cameraX;
-        this._previousCameraY = this._cameraY;
-        this._previousSimTimeMs = this._lastStateTiming?.simTimeMs ?? 0;
-
-        // Copy the current render view for interpolation
-        const prev = new Float32Array(this._activeRenderView.length);
-        prev.set(this._activeRenderView);
-        this._previousRenderView = prev;
-      }
 
       // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
       // FIFO shift from a ring buffer that has no relation to what the
@@ -2242,9 +2247,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     };
 
     const handlePointerDown = (event: PointerEvent): void => {
-      if (event.button !== 0) { return; }
-      if (this._inputLocked) { return; }
-      if (!this._running || !this._activeRenderView) { return; }
+      if (event.button !== 0) {
+        return;
+      }
+      if (this._inputLocked) {
+        return;
+      }
+      if (!this._running || !this._activeRenderView) {
+        return;
+      }
 
       const { x: screenX, y: screenY } = getCanvasCoords(event);
       const { cellX, cellY } = this.screenToCell(screenX, screenY);
@@ -2267,8 +2278,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     };
 
     const handlePointerMove = (event: PointerEvent): void => {
-      if (this._inputLocked) { return; }
-      if (!this._running || !this._activeRenderView) { return; }
+      if (this._inputLocked) {
+        return;
+      }
+      if (!this._running || !this._activeRenderView) {
+        return;
+      }
 
       const { x: screenX, y: screenY } = getCanvasCoords(event);
       const { cellX, cellY } = this.screenToCell(screenX, screenY);
@@ -2309,9 +2324,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Draws a semi-transparent rectangle at the cell position in world space.
    */
   private _updateHoverHighlight(cellX: number, cellY: number): void {
-    if (!this._hoverHighlight) { return; }
+    if (!this._hoverHighlight) {
+      return;
+    }
 
-    const tileSize = 32; // Standard tile size in world pixels
+    const tileSize = this._activeTileSize ?? 32;
     const worldX = cellX * tileSize;
     const worldY = cellY * tileSize;
 
@@ -2328,11 +2345,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Draws a small crosshair or dot at the cell center.
    */
   private _showDestinationMarker(cellX: number, cellY: number): void {
-    if (!this._destinationMarker) { return; }
+    if (!this._destinationMarker) {
+      return;
+    }
 
-    this._destinationCell = { cellX, cellY };
-
-    const tileSize = 32;
+    const tileSize = this._activeTileSize ?? 32;
     const centerX = cellX * tileSize + tileSize / 2;
     const centerY = cellY * tileSize + tileSize / 2;
 
@@ -2357,7 +2374,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * changes to DIALOGUE/COMBAT/MENU.
    */
   private _cancelClickPath(): void {
-    this._destinationCell = undefined;
     if (this._destinationMarker) {
       this._destinationMarker.visible = false;
     }
@@ -2735,6 +2751,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._renderEntries.clear();
       this._npcMeta.clear();
       this._playerEntityId = 0;
+      this._activeTileSize = undefined;
 
       // 3. Remove old tilemap from the world container.
       //    Destroy with texture:true to free map-specific RenderTextures
@@ -2815,6 +2832,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
             }
           : undefined,
       });
+      this._activeTileSize = terrainGrid.tileSize;
       const spawnPoints = extractSpawnPoints(tilemap);
       const transitionZones = extractTransitionZones(tilemap);
       const spawnPointEntities = extractSpawnPointEntities(tilemap);
@@ -3238,12 +3256,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Blend between the previous and current sim states based on how much
     // wall-clock time has passed since the current state was received.
     // Alpha = elapsedSinceCurrentState / stepMs, clamped to [0, 1].
-    const hasTwoStates = this._previousRenderView !== undefined && this._lastStateTiming !== undefined;
+    const hasTwoStates =
+      this._previousRenderView !== undefined &&
+      this._lastStateTiming !== undefined &&
+      this._previousSimTimeMs < this._lastStateTiming.simTimeMs;
     const stepMs = this._lastStateTiming?.stepMs ?? 16.667;
-    const elapsedSinceCurrent = this._currentStateReceivedAt > 0
-      ? performance.now() - this._currentStateReceivedAt
-      : 0;
-    const alpha = hasTwoStates ? Math.min(1, elapsedSinceCurrent / stepMs) : 1;
+    const elapsedSinceCurrent =
+      this._currentStateReceivedAt > 0 ? performance.now() - this._currentStateReceivedAt : 0;
+    const alpha = hasTwoStates
+      ? computeInterpolationAlpha({ elapsedMs: elapsedSinceCurrent, stepMs })
+      : 1;
     const prevView = this._previousRenderView;
 
     for (const [eid, entry] of this._renderEntries) {
@@ -3258,9 +3280,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         const prevY = prevView[offset + 1];
         const currX = renderView[offset];
         const currY = renderView[offset + 1];
-        if (prevX !== undefined && currX !== undefined && !Number.isNaN(prevX) && !Number.isNaN(currX)) {
-          x = prevX + (currX - prevX) * alpha;
-          y = prevY + (currY - prevY) * alpha;
+        if (
+          prevX !== undefined &&
+          currX !== undefined &&
+          !Number.isNaN(prevX) &&
+          !Number.isNaN(currX)
+        ) {
+          x = interpolateValue({ previous: prevX, current: currX, alpha });
+          y = interpolateValue({ previous: prevY, current: currY, alpha });
         } else {
           x = renderView[offset];
           y = renderView[offset + 1];
@@ -3368,10 +3395,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // Blend the camera position between previous and current states,
       // matching the entity interpolation alpha.
       const interpCameraX = hasTwoStates
-        ? this._previousCameraX + (this._cameraX - this._previousCameraX) * alpha
+        ? interpolateValue({
+            previous: this._previousCameraX,
+            current: this._cameraX,
+            alpha,
+          })
         : this._cameraX;
       const interpCameraY = hasTwoStates
-        ? this._previousCameraY + (this._cameraY - this._previousCameraY) * alpha
+        ? interpolateValue({
+            previous: this._previousCameraY,
+            current: this._cameraY,
+            alpha,
+          })
         : this._cameraY;
 
       // ── C-377 AC-3: device-pixel snap (applied AFTER blending) ──
@@ -3695,9 +3730,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       return { x: screenX, y: screenY };
     }
     const scale = 4 * this._cameraZoom;
-    const worldX = (screenX - this._app.screen.width / 2) / scale + this._cameraX;
-    const worldY = (screenY - this._app.screen.height / 2) / scale + this._cameraY;
-    return { x: worldX, y: worldY };
+    return unprojectScreenPoint({
+      screenX,
+      screenY,
+      screenWidth: this._app.screen.width,
+      screenHeight: this._app.screen.height,
+      cameraX: this._cameraX,
+      cameraY: this._cameraY,
+      scale,
+    });
   }
 
   /**
@@ -3705,11 +3746,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    *
    * @param screenX - Screen-space X in CSS pixels.
    * @param screenY - Screen-space Y in CSS pixels.
-   * @param tileSize - Tile size in world pixels (default 32).
    * @returns The tile cell coordinates.
    */
-  screenToCell(screenX: number, screenY: number, tileSize = 32): { cellX: number; cellY: number } {
+  screenToCell(screenX: number, screenY: number): { cellX: number; cellY: number } {
     const world = this.unprojectScreenToWorld(screenX, screenY);
+    const tileSize = this._activeTileSize ?? 32;
     return {
       cellX: Math.floor(world.x / tileSize),
       cellY: Math.floor(world.y / tileSize),
