@@ -10,7 +10,12 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { authService, getGameCompositionRoot } from '$services';
+import {
+  authService,
+  gameEngineService,
+  getGameCompositionRoot,
+  musicPlayerService,
+} from '$services';
 import type { CombatViewModelInterface } from '../combat/combat_view_model.svelte';
 import type { GameCanvasViewModelInterface } from './canvas/game_canvas_view_model.svelte';
 import { getGameCanvasViewModel } from './canvas/game_canvas_view_model.svelte';
@@ -70,6 +75,18 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     await this.uiViewModel.initialize();
 
     await super.initialize();
+  }
+
+  override async dispose(): Promise<void> {
+    this.log('dispose: stopping music and engine');
+
+    // Stop background music and any playing audio
+    musicPlayerService.stop();
+
+    // Destroy the game engine (PixiJS, ECS worker, bridge listeners)
+    gameEngineService.destroyEngine();
+
+    await super.dispose();
   }
 
   // ── Delegated ──

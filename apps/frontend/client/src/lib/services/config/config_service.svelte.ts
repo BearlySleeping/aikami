@@ -5,12 +5,21 @@
 // non-sensitive settings are stored as plain JSON in localStorage.
 // Firestore sync is optional — works entirely offline for Tauri / local use.
 
-import { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
+import { BUILT_IN_PRESETS, DEFAULT_VOICE_ARCHETYPES, type GenParamPreset } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type {
+  AdvancedOverrides,
+  ConfigState,
+  EmotionConfig,
+  ImageConfig,
+  MemoryConfig,
+  TextConfig,
+  VoiceConfig,
+} from '@aikami/types';
 import { clearVault, decrypt, encrypt } from '$lib/views/utils/crypto_vault';
 import type { ConnectionCapability, Lorebook, LorebookEntry } from '$types';
 import {
@@ -21,248 +30,24 @@ import {
 } from '$types';
 
 // ---------------------------------------------------------------------------
-// Types
+// Re-exports from @aikami/constants and @aikami/types for backward compatibility
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Re-exports from @aikami/constants for backward compatibility
-// ---------------------------------------------------------------------------
+export {
+  BUILT_IN_PRESETS,
+  DEFAULT_VOICE_ARCHETYPES,
+  EMBEDDING_MODELS,
+  EMOTION_METHODS,
+  type GenParamPreset,
+  IMAGE_PROVIDERS,
+  KOKORO_VOICES,
+  MEMORY_TYPES,
+  TEXT_PROVIDERS,
+  VOICE_ENGINES,
+  VOICE_PROVIDERS,
+} from '@aikami/constants';
 
-export { IMAGE_PROVIDERS, TEXT_PROVIDERS, VOICE_PROVIDERS } from '@aikami/constants';
-
-// ---------------------------------------------------------------------------
-// Legacy TextConfig — kept as a stub for backward compatibility.
-// All provider configuration now lives in `connections[]`.
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use `connections[]` instead. */
-type TextConfig = {
-  provider: string;
-};
-
-/** Memory subsystem configuration. */
-type MemoryConfig = {
-  /** Memory type (algorithm). */
-  type: MemoryType;
-  /** Maximum context window size in tokens. */
-  contextWindow: number;
-  /** Maximum number of conversation turns to retain. */
-  maxTurns: number;
-  /** Summarization threshold (turns before summarisation kicks in). */
-  summarizationThreshold: number;
-  /** Whether long-term memory (vector store) is enabled. */
-  longTermMemory: boolean;
-  /** Embedding model provider for vector search. */
-  embeddingModel: EmbeddingModel;
-  /** Custom embedding API endpoint (when embeddingModel is 'custom'). */
-  embeddingUrl?: string;
-  /** API key for custom embedding provider. */
-  embeddingKey?: string;
-  /** Text chunk size for embedding ingestion. */
-  chunkSize: number;
-};
-
-// ---------------------------------------------------------------------------
-// Memory subsystem (C-204: expanded with embedding provider selection)
-// ---------------------------------------------------------------------------
-
-/** Memory subsystem type. */
-export const MEMORY_TYPES = ['none', 'basic', 'hypa-style', 'hanurai'] as const;
-type MemoryType = (typeof MEMORY_TYPES)[number];
-
-/** Embedding model providers. */
-export const EMBEDDING_MODELS = [
-  { id: 'minilm', label: 'MiniLM (local)' },
-  { id: 'nomic', label: 'Nomic Embed' },
-  { id: 'bge', label: 'BGE (BAAI)' },
-  { id: 'openai', label: 'OpenAI Embeddings' },
-  { id: 'voyage', label: 'Voyage AI' },
-  { id: 'custom', label: 'Custom API' },
-] as const;
-
-type EmbeddingModel = (typeof EMBEDDING_MODELS)[number]['id'];
-
-// ---------------------------------------------------------------------------
-// Voice engine selection
-// ---------------------------------------------------------------------------
-
-/** Available TTS engines. */
-export const VOICE_ENGINES = [
-  { id: 'kokoro', label: 'Kokoro (local)', description: 'Local Kokoro TTS via Docker' },
-  { id: 'elevenlabs', label: 'ElevenLabs', description: 'Cloud-based TTS' },
-  { id: 'openai', label: 'OpenAI TTS', description: 'OpenAI cloud TTS' },
-] as const;
-
-/** A voice option displayed in the dropdown. */
-type VoiceOption = {
-  /** Voice identifier (e.g. 'af_heart'). */
-  id: string;
-  /** Human-readable label. */
-  label: string;
-};
-
-/** All known Kokoro voices (mirrors the /v1/voices endpoint). */
-export const KOKORO_VOICES: readonly VoiceOption[] = [
-  // American English — Female
-  { id: 'af_heart', label: 'af_heart — Warm, natural (default)' },
-  { id: 'af_bella', label: 'af_bella — Expressive' },
-  { id: 'af_nova', label: 'af_nova — Clear' },
-  { id: 'af_sky', label: 'af_sky — Neutral, versatile' },
-  { id: 'af_sarah', label: 'af_sarah — Conversational' },
-  { id: 'af_nicole', label: 'af_nicole — Friendly' },
-  { id: 'af_alloy', label: 'af_alloy — Balanced' },
-  { id: 'af_jessica', label: 'af_jessica — Energetic' },
-  { id: 'af_river', label: 'af_river — Calm' },
-  // American English — Male
-  { id: 'am_adam', label: 'am_adam — Deep' },
-  { id: 'am_michael', label: 'am_michael — Clear' },
-  { id: 'am_echo', label: 'am_echo — Neutral' },
-  { id: 'am_eric', label: 'am_eric — Authoritative' },
-  { id: 'am_fenrir', label: 'am_fenrir — Distinctive' },
-  { id: 'am_liam', label: 'am_liam — Conversational' },
-  { id: 'am_onyx', label: 'am_onyx — Rich' },
-  { id: 'am_puck', label: 'am_puck — Expressive' },
-  { id: 'am_santa', label: 'am_santa — Warm' },
-  // British English — Female
-  { id: 'bf_emma', label: 'bf_emma — Clear, professional' },
-  { id: 'bf_isabella', label: 'bf_isabella — Warm' },
-  { id: 'bf_alice', label: 'bf_alice — Crisp' },
-  { id: 'bf_lily', label: 'bf_lily — Soft' },
-  // British English — Male
-  { id: 'bm_george', label: 'bm_george — Authoritative' },
-  { id: 'bm_lewis', label: 'bm_lewis — Smooth' },
-  { id: 'bm_daniel', label: 'bm_daniel — Calm' },
-  { id: 'bm_fable', label: 'bm_fable — Expressive' },
-] as const;
-
-// ---------------------------------------------------------------------------
-// Voice TTS providers — see the re-export from '@aikami/constants' above.
-// ---------------------------------------------------------------------------
-
-/** Voice / TTS subsystem configuration. */
-type VoiceConfig = {
-  /** Selected TTS provider (e.g. 'kokoro', 'elevenlabs'). */
-  provider: VoiceProvider;
-  /** Selected TTS engine (mirrors provider). */
-  engine: string;
-  /** Custom server URL for local providers (voicevox, etc.). */
-  url?: string;
-  /** API key for cloud providers. */
-  apiKey?: string;
-  /** Voice style or speaker ID. */
-  voiceId: string;
-  /** Speech rate multiplier (0.5–2.0). */
-  speed: number;
-  /** Pitch adjustment (-20–20). */
-  pitch: number;
-  /** Auto-speech: automatically generate TTS for NPC dialogue. */
-  autoSpeech: boolean;
-  /** User-editable voice archetype → voice ID mappings. */
-  voiceArchetypes: VoiceArchetype[];
-};
-
-// ---------------------------------------------------------------------------
-// Voice archetypes — human-friendly labels mapped to engine voice IDs
-// ---------------------------------------------------------------------------
-
-/** A named voice archetype mapped to a provider-specific voice ID. */
-type VoiceArchetype = {
-  /** Unique archetype key (e.g. 'female-warm', 'male-deep'). */
-  id: string;
-  /** Human-readable label (e.g. 'Female — Warm'). */
-  label: string;
-  /** Provider-specific voice ID (e.g. 'af_heart' for Kokoro). */
-  voiceId: string;
-};
-
-/** Curated default voice archetypes mapped to Kokoro IDs. */
-export const DEFAULT_VOICE_ARCHETYPES: readonly VoiceArchetype[] = [
-  // ── Female ─────────────────────────────────────────────────────────
-  { id: 'female-warm', label: 'Female — Warm', voiceId: 'af_heart' },
-  { id: 'female-clear', label: 'Female — Clear', voiceId: 'af_nova' },
-  { id: 'female-expressive', label: 'Female — Expressive', voiceId: 'af_bella' },
-  { id: 'female-calm', label: 'Female — Calm', voiceId: 'af_river' },
-  { id: 'female-friendly', label: 'Female — Friendly', voiceId: 'af_nicole' },
-  { id: 'female-professional', label: 'Female — Professional (UK)', voiceId: 'bf_emma' },
-  // ── Male ───────────────────────────────────────────────────────────
-  { id: 'male-warm', label: 'Male — Warm', voiceId: 'am_santa' },
-  { id: 'male-clear', label: 'Male — Clear', voiceId: 'am_michael' },
-  { id: 'male-authoritative', label: 'Male — Authoritative', voiceId: 'bm_george' },
-  { id: 'male-deep', label: 'Male — Deep', voiceId: 'am_adam' },
-  { id: 'male-expressive', label: 'Male — Expressive', voiceId: 'am_puck' },
-  { id: 'male-conversational', label: 'Male — Conversational', voiceId: 'am_liam' },
-  { id: 'male-calm', label: 'Male — Calm (UK)', voiceId: 'bm_daniel' },
-] as const;
-
-// ---------------------------------------------------------------------------
-// Image generation providers — see the re-export from '@aikami/constants' above.
-// ---------------------------------------------------------------------------
-
-/** Image generation subsystem configuration. */
-type ImageConfig = {
-  /** Selected image generation provider. */
-  provider: ImageProvider;
-  /** Selected image generation backend (mirrors provider). */
-  backend: string;
-  /** Custom server URL for local providers. */
-  url?: string;
-  /** API key for cloud providers. */
-  apiKey?: string;
-  /** Default checkpoint / model ID. */
-  checkpoint: string;
-  /** Image width in pixels. */
-  width: number;
-  /** Image height in pixels. */
-  height: number;
-  /** Generation steps. */
-  steps: number;
-  /** CFG guidance scale. */
-  cfgScale: number;
-  /** Sampler name (e.g. 'euler_a', 'dpmpp_2m'). */
-  sampler?: string;
-  /** Whether img2img mode is enabled by default. */
-  enableI2I?: boolean;
-  /** ComfyUI workflow JSON string (provider-specific). */
-  comfyWorkflow?: string;
-  /** NovelAI noise schedule override (provider-specific). */
-  novelAiNoiseSchedule?: string;
-  /** Active style profile ID for the image generation pipeline (C-242). */
-  styleProfileId: string;
-  /** Whether to show a review/edit modal before each image generation (C-242). */
-  reviewBeforeGenerate: boolean;
-};
-
-/** Generic model configuration for a single provider. */
-type ModelConfig = {
-  /** Model identifier (e.g. 'claude-3-opus-20240229'). */
-  model: string;
-  /** Provider this model belongs to. */
-  provider: string;
-  /** Base URL for the API endpoint. */
-  endpoint: string;
-};
-
-// ── Emotion config (C-204) ───────────────────────────────────
-
-/** Emotion resolution methods. */
-export const EMOTION_METHODS = ['submodel', 'embedding'] as const;
-type EmotionMethod = (typeof EMOTION_METHODS)[number];
-
-/** Emotion resolution configuration. */
-type EmotionConfig = {
-  /** How character emotions are resolved. */
-  method: EmotionMethod;
-  /** Target model for emotion extraction (when method is 'submodel'). */
-  targetModel?: string;
-};
-
-// ── AI Generation Settings (absorbed from ai_settings.svelte.ts) ────────
-
-/** Advanced overrides for specific providers. */
-type AdvancedOverrides = {
-  /** Thinking/reasoning level for DeepSeek/Claude models. */
-  thinkingLevel: number;
-};
+import type { Connection, ConnectionId } from '$types';
 
 /** Resolved text generation provider ready for API calls. */
 type ResolvedTextProvider = {
@@ -274,50 +59,6 @@ type ResolvedTextProvider = {
   endpoint: string;
   /** API key for the resolved provider, or undefined if not configured. */
   apiKey: string | undefined;
-};
-
-// ---------------------------------------------------------------------------
-// Re-exports for backward compatibility
-export { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
-
-import type { Connection, ConnectionId } from '$types';
-
-/** Top-level configuration state. */
-type ConfigState = {
-  /** Text generation settings (provider, API keys, URL). */
-  text: TextConfig;
-  /** Preferred text generation model. */
-  preferredModel: string;
-  /** Model configurations (provider-agnostic). */
-  models: ModelConfig[];
-  /** Memory subsystem settings. */
-  memory: MemoryConfig;
-  /** Voice / TTS settings. */
-  voice: VoiceConfig;
-  /** Image generation settings. */
-  image: ImageConfig;
-  /** Emotion resolution settings. */
-  emotion: EmotionConfig;
-  /** AI generation parameter overrides. */
-  generationParams: GenerationParams;
-  /** Selected instruct template format. */
-  instructTemplate: InstructTemplate;
-  /** Advanced provider-specific overrides. */
-  advancedOverrides: AdvancedOverrides;
-  /** Auxiliary model assignments for specialised tasks. */
-  auxiliaryModels: AuxiliaryModels;
-  /** Saved provider connections (C-230). */
-  connections: Connection[];
-  /** ID of the default connection, or null if none set. */
-  defaultConnectionId: ConnectionId | null;
-  /** Per-capability default connection IDs (text, image, voice). */
-  defaultByCapability: Partial<Record<string, ConnectionId | null>>;
-  /** Generation parameter presets (built-in + user-defined). */
-  presets: GenParamPreset[];
-  /** Lorebooks (world info collections) persisted in localStorage. */
-  lorebooks: Lorebook[];
-  /** IDs of lorebooks assigned to the active chat session. */
-  activeLorebookIds: string[];
 };
 
 // ---------------------------------------------------------------------------

@@ -36,7 +36,7 @@ class CatalogLandingViewModel
 {
   private _categories = $state<readonly CatalogCategorySummary[]>([]);
   private _publishedAt = $state<string | undefined>(undefined);
-  private _errorMessage = $state<string | undefined>(undefined);
+
   searchQuery = $state('');
 
   constructor(options: CatalogLandingViewModelOptions) {
@@ -46,7 +46,7 @@ class CatalogLandingViewModel
       this._categories = data.categories;
       this._publishedAt = data.publishedAt;
     } else {
-      this._errorMessage = data.message;
+      this.errorMessage = data.message;
     }
   }
 
@@ -59,11 +59,7 @@ class CatalogLandingViewModel
   }
 
   get hasError() {
-    return this._errorMessage !== undefined;
-  }
-
-  get errorMessage() {
-    return this._errorMessage;
+    return this.errorMessage !== undefined;
   }
 
   get visibleCategories() {

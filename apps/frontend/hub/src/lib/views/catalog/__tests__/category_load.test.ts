@@ -81,12 +81,12 @@ const buildMusicShard = (originUrl: string): CatalogIndexShard => ({
 });
 
 beforeAll(async () => {
-  const server = Bun.serve({
+  const server: Bun.Server = Bun.serve({
     port: 0,
-    fetch(request) {
+    fetch(request: Request): Response | Promise<Response> {
       const url = new URL(request.url);
       requestedPaths.push(url.pathname);
-      const originUrl = server.url.toString().replace(/\/$/, '');
+      const originUrl: string = server.url.toString().replace(/\/$/, '');
       if (url.pathname === '/index/v1/catalog.json') {
         return Response.json(buildRoot(originUrl));
       }
@@ -153,12 +153,12 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
 
   test('split-shard categories merge every `<category>__*` shard', async () => {
     // Add a split shard to the fixture and assert the discovery logic merges it.
-    const server = Bun.serve({
+    const server: Bun.Server = Bun.serve({
       port: 0,
-      fetch(request) {
+      fetch(request: Request): Response | Promise<Response> {
         const url = new URL(request.url);
         requestedPaths.push(url.pathname);
-        const originUrl = server.url.toString().replace(/\/$/, '');
+        const originUrl: string = server.url.toString().replace(/\/$/, '');
         if (url.pathname === '/index/v1/catalog.json') {
           return Response.json({
             schemaVersion: 1,
@@ -247,18 +247,18 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
     const { load } = await import('../../../../routes/(public)/catalog/[category]/+page.server.ts');
     const setHeaders = mock(() => {});
     const depends = mock(() => {});
-    const data = await load({
+    const data = (await load({
       params: { category: 'lpc' },
       setHeaders,
       depends,
-    } as never);
+    } as never)) as Awaited<ReturnType<typeof load>>;
 
     expect(data).toBeDefined();
-    expect(data.category).toBe('lpc');
-    expect(data.entries).toHaveLength(2);
+    expect(data!.category).toBe('lpc');
+    expect(data!.entries).toHaveLength(2);
     expect(setHeaders).toHaveBeenCalled();
     // The stats promise is STREAMED — resolving it must yield null with the
     // database unconfigured, and it must never reject (AC-4 watch point).
-    await expect(data.stats).resolves.toBeNull();
+    await expect(data!.stats).resolves.toBeNull();
   });
 });

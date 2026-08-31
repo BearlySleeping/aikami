@@ -20,7 +20,8 @@ import { type Application, Container, Graphics, Rectangle, Sprite, Texture } fro
 import { createPixiApp, LpcBatchManager, resolveLayerDepth } from '../../../../engine/src/index.ts';
 import type { LpcRenderer } from './lpc_renderer';
 import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
-import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';
+import { encodeLpcPreviewState } from './preview_url_state';
+export type { LpcPreviewState } from './preview_url_state';
 
 // ── Constants ────────────────────────────────────────────────────────────
 

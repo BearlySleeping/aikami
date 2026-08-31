@@ -12,14 +12,16 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { Campaign, CapabilityProfile, PackIndexEntry } from '@aikami/types';
+import type {
+  AssetPrefetchPhase,
+  Campaign,
+  CapabilityProfile,
+  PackIndexEntry,
+} from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
-import {
-  type AssetPrefetchPhase,
-  assetPrefetchService,
-} from '$lib/services/assets/asset_prefetch_service.svelte';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import {
+  assetPrefetchService,
   campaignService,
   equipmentService,
   gameModeService,
@@ -56,7 +58,7 @@ export type CampaignSummary = {
   readonly isResumable: boolean;
   /** AI capability indicators. */
   readonly capabilities: CapabilityProfile;
-});
+};
 
 // ---------------------------------------------------------------------------
 // Advanced link type

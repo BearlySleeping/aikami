@@ -4,26 +4,20 @@
 // Extracted from providers_view_model.svelte.ts for separation of concerns.
 
 import {
+  buildVerifyHeaders,
+  buildVerifyUrl,
+  fetchOpenRouterModels,
+  PROVIDER_ENDPOINTS,
+  TEXT_PROVIDERS,
+} from '@aikami/constants';
+import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import {
-  buildVerifyHeaders,
-  buildVerifyUrl,
-  type ConfigState,
-  configService,
-  fetchOpenRouterModels,
-  getOllamaRuntimeEndpoints,
-  PROVIDER_ENDPOINTS,
-  TEXT_PROVIDERS,
-} from '$services';
-import {
-  type AuxiliaryModels,
-  INSTRUCT_TEMPLATES,
-  type InstructTemplate,
-  type OpenRouterModel,
-} from '$types';
+import type { ConfigState, OpenRouterModel } from '@aikami/types';
+import { configService, getOllamaRuntimeEndpoints } from '$services';
+import { type AuxiliaryModels, INSTRUCT_TEMPLATES, type InstructTemplate } from '$types';
 
 export type TextTabViewModelInterface = BaseViewModelInterface & {
   readonly config: ConfigState;

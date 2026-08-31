@@ -24,6 +24,18 @@ export type NPCSpawnData = {
   personaId?: string;
   /** Dynamic relationship value (-100 to 100). */
   relationshipValue?: number;
+  /**
+   * Optional 6-element LPC appearance layer array (1-indexed engine variant
+   * indices in slot order: body, hair, torso, legs, feet, head).
+   * When omitted, createNPC uses its own default.
+   */
+  appearanceLayers?: readonly number[];
+  /**
+   * When true, the NPC is created with the Companion component so the
+   * party-follow system can path it to formation slots behind the player.
+   * Defaults to false.
+   */
+  isCompanion?: boolean;
 };
 
 // ---------------------------------------------------------------------------

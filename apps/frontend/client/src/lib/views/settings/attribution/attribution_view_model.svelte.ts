@@ -48,10 +48,6 @@ class AttributionViewModel
   entries = $state<readonly AttributionEntry[]>([]);
   packName = $state<string>('');
 
-  constructor(options: AttributionViewModelOptions) {
-    super(options);
-  }
-
   async initialize(): Promise<void> {
     // Load provenance from the active content pack
     try {

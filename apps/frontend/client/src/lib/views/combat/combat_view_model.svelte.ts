@@ -380,16 +380,12 @@ export class CombatViewModel
 
   /** Portrait image URL for the player character — resolved through AssetStore (cache → R2). */
   playerPortraitUrl = $derived(
-    assetStore.manifest
-      ? (assetStore.resolveUrl('sprites:combat:player_portrait') ?? '')
-      : '',
+    assetStore.manifest ? (assetStore.resolveUrl('sprites:combat:player_portrait') ?? '') : '',
   );
 
   /** Portrait image URL for the enemy character — resolved through AssetStore (cache → R2). */
   enemyPortraitUrl = $derived(
-    assetStore.manifest
-      ? (assetStore.resolveUrl('sprites:combat:enemy_portrait') ?? '')
-      : '',
+    assetStore.manifest ? (assetStore.resolveUrl('sprites:combat:enemy_portrait') ?? '') : '',
   );
 
   /** Current expression for the player character. */

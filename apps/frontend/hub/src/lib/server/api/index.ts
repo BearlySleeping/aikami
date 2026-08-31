@@ -19,7 +19,6 @@
 // With `.mount()` everything is consolidated into this single Elysia app,
 // mounted at /api/[...slugs].
 
-import { AssetStatsSchema, CategoryStatsSchema } from '@aikami/schemas';
 import { Elysia, t } from 'elysia';
 import { handleAsk } from './ask.ts';
 import { getBetterAuth } from './better_auth.ts';
@@ -54,7 +53,11 @@ const dbHealthResponseSchema = t.Union([
 // (C-396 AC-4). Public on purpose: anonymous visitors see exactly what
 // signed-in visitors see on the catalog. Unconfigured/unreachable database
 // resolves to `null` — never a 500.
-const catalogStatsResponseSchema = t.Union([CategoryStatsSchema, AssetStatsSchema, t.Null()]);
+const catalogStatsResponseSchema = t.Union([
+  t.Object({ packCount: t.Integer({ minimum: 0, description: 'Public packs in this category' }) }),
+  t.Object({ packCount: t.Integer({ minimum: 0, description: 'Public packs for this asset' }) }),
+  t.Null(),
+]);
 
 // POST /api/ask — the one route in this file meant for a THIRD-PARTY origin
 // (the static landing page, apps/frontend/site) rather than the hub's own
@@ -99,7 +102,7 @@ export const app = new Elysia({
     () => {
       const env = getHealthDbEnv();
       if (!env) {
-        return { status: 'unconfigured' };
+        return { status: 'unconfigured' } as const;
       }
       return handleDbHealth();
     },

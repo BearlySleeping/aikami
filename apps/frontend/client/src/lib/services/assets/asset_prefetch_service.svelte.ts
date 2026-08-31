@@ -12,12 +12,9 @@
 //
 // Contract: C-448 (background downloading, start-menu entry point)
 
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services';
 import type { AssetRegistryRepository as AssetRegistryRepositoryClass } from '@aikami/frontend/storage';
-import type { AssetSeedDocument, AssetSeedRow } from '@aikami/types';
+import type { AssetPrefetchPhase, AssetSeedDocument } from '@aikami/types';
 import { withStepTimeout } from '$lib/utils/step_timeout';
 import type { AssetCacheBackend } from './cache_backend.ts';
 
@@ -25,14 +22,6 @@ import type { AssetCacheBackend } from './cache_backend.ts';
 export type AssetPrefetchServiceOptions = BaseFrontendClassOptions;
 /** Concurrent fetches during the background warm pass — see game_boot_service. */
 const WARM_CONCURRENCY = 8;
-
-type AssetPrefetchPhase =
-  | 'idle'
-  | 'preparing'
-  | 'prefetching-core'
-  | 'warming'
-  | 'ready'
-  | 'degraded';
 
 /** Result of a starter-content prefetch pass. */
 type CorePrefetchResult = {

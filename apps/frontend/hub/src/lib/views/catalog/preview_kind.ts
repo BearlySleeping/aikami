@@ -34,7 +34,6 @@ export const previewKindForEntry = (entry: CatalogAssetEntry): PreviewKind => {
     case 'maps':
       return 'map';
 
-    case 'props':
     case 'sprites':
       return 'prop';
 

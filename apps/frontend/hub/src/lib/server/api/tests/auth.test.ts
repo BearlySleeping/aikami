@@ -4,6 +4,7 @@
 // Elysia app (src/lib/server/api/index.ts) via `.mount()`, backed by D1.
 
 // biome-ignore-all lint/style/useNamingConvention: Cloudflare D1 binding name is SCREAMING_SNAKE_CASE
+// biome-ignore-all lint/suspicious/noExplicitAny: test mock bridging libsql and D1 types
 //
 // The Elysia app is a module singleton; the D1 database is injected via
 // `setBetterAuthEnv` with a mock D1Database backed by an in-memory libsql
@@ -31,23 +32,32 @@ const BASE_URL = 'http://localhost:5173';
 // The drizzle-orm/d1 driver calls prepare(sql).bind(...).all()/.first()/.run()
 // and exec(sql). We map those onto the libsql client's execute().
 
-const createMockD1 = (dbClient: Client): unknown => {
+
+const createMockD1 = (dbClient: Client) => {
   const prepareStatement = (sql: string) => ({
     bind: (...params: unknown[]) => ({
       all: async () => {
-        const res = await dbClient.execute({ sql, args: params });
+        const res = await dbClient.execute({ sql, args: params as any });
         return { results: res.rows };
       },
       first: async () => {
-        const res = await dbClient.execute({ sql, args: params });
+        const res = await dbClient.execute({ sql, args: params as any });
         return res.rows[0] ?? null;
       },
       run: async () => {
-        const res = await dbClient.execute({ sql, args: params });
-        return { meta: res.meta };
+        const res = await dbClient.execute({ sql, args: params as any });
+        return {
+          meta: (res as any).meta ?? {
+            changed_db: true,
+            duration: 0,
+            last_auto_row_id: 0,
+            rows_read: 0,
+            rows_written: 0,
+          },
+        };
       },
       raw: async () => {
-        const res = await dbClient.execute({ sql, args: params });
+        const res = await dbClient.execute({ sql, args: params as any });
         return res.rows;
       },
     }),
@@ -58,7 +68,9 @@ const createMockD1 = (dbClient: Client): unknown => {
       await dbClient.execute(sql);
     },
     batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
-      Promise.all(statements.map((s) => dbClient.execute({ sql: s.sql, args: s.params ?? [] }))),
+      Promise.all(
+        statements.map((s) => dbClient.execute({ sql: s.sql, args: s.params ?? [] } as any)),
+      ),
   };
 };
 

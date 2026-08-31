@@ -255,6 +255,27 @@ mock.module(_FRONTEND_SVC_PATH, () => ({
   __esModule: true,
 }));
 
+// ── Mock @aikami/constants (providers, voice config, etc.) ───────────────
+// ViewModels now import constants directly from @aikami/constants.
+mock.module('@aikami/constants', () => ({
+  TEXT_PROVIDERS: [] as const,
+  VOICE_PROVIDERS: [{ id: 'kokoro', label: 'Kokoro (local)' }] as const,
+  IMAGE_PROVIDERS: [] as const,
+  MEMORY_TYPES: [] as const,
+  EMBEDDING_MODELS: [] as const,
+  EMOTION_METHODS: [] as const,
+  VOICE_ENGINES: [] as const,
+  KOKORO_VOICES: [] as const,
+  DEFAULT_VOICE_ARCHETYPES: [] as const,
+  PROVIDER_ENDPOINTS: {},
+  buildVerifyHeaders: _createCallableStub(),
+  buildVerifyUrl: _createCallableStub(),
+  fetchOpenRouterModels: _createCallableStub(),
+  clearOpenRouterCache: _createCallableStub(),
+  BUILT_IN_PRESETS: [] as const,
+  GenParamPreset: class {},
+}));
+
 // ── Consistent mock for $services (local barrel) ──────────────────────────
 // All ViewModels import from $services. Without a global mock, the first
 // test file that mocks the barrel with mock.module() leaks its partial

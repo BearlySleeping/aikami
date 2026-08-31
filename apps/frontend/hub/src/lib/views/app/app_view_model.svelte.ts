@@ -126,7 +126,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     document.body.classList.add('app-mounted');
 
     // 1. Inject static dependencies into our framework-agnostic service.
-    routerService.initialize({ goto, page });
+    routerService.initialize({ goto, page: page as import('@sveltejs/kit').Page });
 
     // 2. Set up our reactive tracking safely attached to the class lifecycle
     this._setupReactiveListeners();
@@ -167,7 +167,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
       // user navigates, Svelte updates the proxies, triggering this effect,
       // and we safely pipe that data into our internal RouterService.
       $effect(() => {
-        routerService.syncNavigation(navigating, page);
+        routerService.syncNavigation(navigating, page as import('@sveltejs/kit').Page);
       });
 
       // EFFECT 2: The Business Logic Guards

@@ -136,11 +136,7 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
             </summary>
             <div class="mt-3 flex flex-col gap-2 w-64 mx-auto">
               {#each viewModel.advancedLinks as link}
-                <button
-                  type="button"
-                  class="btn btn-outline btn-sm"
-                  onclick={() => link.action()}
-                >
+                <button type="button" class="btn btn-outline btn-sm" onclick={() => link.action()}>
                   {link.title}
                 </button>
                 <p class="text-[11px] text-base-content/60 leading-snug">

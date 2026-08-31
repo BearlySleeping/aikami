@@ -155,7 +155,7 @@ $effect(() => {
               }}
             >
               {#each viewModel.animationStateOptions as state}
-                <option value={state}>{LpcAnimationState[state]}</option>
+                <option value={state}>{LpcAnimationState[state as keyof typeof LpcAnimationState]}</option>
               {/each}
             </select>
           </label>
@@ -171,7 +171,7 @@ $effect(() => {
               }}
             >
               {#each viewModel.directionOptions as dir}
-                <option value={dir}>{LpcDirection[dir]}</option>
+                <option value={dir}>{LpcDirection[dir as keyof typeof LpcDirection]}</option>
               {/each}
             </select>
           </label>

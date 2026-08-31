@@ -6,8 +6,8 @@
 // Contract: C-239 Expression Emotion System
 
 import { BaseViewModelContainer } from '$components';
-import type { ExpressionDevViewModelInterface } from './expression_view_model.svelte.ts';
 import { assetStore } from '$services';
+import type { ExpressionDevViewModelInterface } from './expression_view_model.svelte.ts';
 
 type Props = {
   viewModel: ExpressionDevViewModelInterface;
@@ -17,9 +17,7 @@ const { viewModel }: Props = $props();
 
 /** Portrait base image — resolved through AssetStore (cache → R2), reactive on manifest load. */
 const portraitBaseUrl = $derived(
-  assetStore.manifest
-    ? (assetStore.resolveUrl('sprites:combat:player_portrait') ?? '')
-    : '',
+  assetStore.manifest ? (assetStore.resolveUrl('sprites:combat:player_portrait') ?? '') : '',
 );
 </script>
 
@@ -148,11 +146,7 @@ const portraitBaseUrl = $derived(
           <div
             class="relative w-40 h-[240px] rounded-xl overflow-hidden border-2 border-base-300 bg-base-300"
           >
-            <img
-              src={portraitBaseUrl}
-              alt=""
-              class="w-full h-full object-cover object-top"
-            >
+            <img src={portraitBaseUrl} alt="" class="w-full h-full object-cover object-top">
             {#if overlays.eyes}
               <img
                 src={overlays.eyes}

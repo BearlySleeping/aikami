@@ -3,23 +3,25 @@
 // ViewModel for the Connection Manager — CRUD, testing, preset management,
 // model fetching, provider caching, and per-chat assignment (C-230).
 
-import { TEXT_PROVIDERS } from '@aikami/constants';
+import {
+  buildVerifyHeaders,
+  buildVerifyUrl,
+  IMAGE_PROVIDERS,
+  PROVIDER_ENDPOINTS,
+  TEXT_PROVIDERS,
+  VOICE_PROVIDERS,
+} from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import {
-  buildVerifyHeaders,
-  buildVerifyUrl,
   configService,
   type FetchedModel,
   fetchModelsFromProvider,
   getOllamaRuntimeEndpoints,
-  IMAGE_PROVIDERS,
-  PROVIDER_ENDPOINTS,
   PROVIDER_MODEL_FETCH,
-  VOICE_PROVIDERS,
 } from '$services';
 import type { Connection, ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
 
