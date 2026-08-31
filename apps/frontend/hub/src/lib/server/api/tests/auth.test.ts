@@ -12,11 +12,11 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { type Client, createClient } from '@libsql/client';
-import { createLibsqlMockD1 } from './mock_d1.ts';
-import type { App } from '../index.ts';
-import type { BetterAuthEnv } from '../better_auth.ts';
 import type { D1Database } from '@cloudflare/workers-types';
+import { type Client, createClient } from '@libsql/client';
+import type { BetterAuthEnv } from '../better_auth.ts';
+import type { App } from '../index.ts';
+import { createLibsqlMockD1 } from './mock_d1.ts';
 
 // Must be registered before any module that imports $env/dynamic/private
 // (better_auth.ts, the route) is loaded — hence dynamic imports below.
