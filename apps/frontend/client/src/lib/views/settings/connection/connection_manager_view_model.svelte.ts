@@ -150,7 +150,7 @@ class ConnectionManagerViewModel
   // ── Proxied state ─────────────────────────────────────────────────────
 
   get connections(): readonly Connection[] {
-    return configService.state.connections;
+    return configService.state.connections as unknown as Connection[];
   }
 
   get defaultConnectionId(): ConnectionId | null {

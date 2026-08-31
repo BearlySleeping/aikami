@@ -1,6 +1,12 @@
 // apps/frontend/client/src/lib/services/ai/stream_orchestrator_service.svelte.ts
 import { BaseFrontendClass } from '@aikami/frontend/services';
-import { runtimeConfigService } from '$services';
+import {
+  type AudioQueuePlayerInterface,
+  type ConversationStorageInterface,
+  type ExpressionAssetResolverInterface,
+  type PixiTextureInjectorInterface,
+  runtimeConfigService,
+} from '$services';
 import type {
   ImageStreamConnection,
   StreamOrchestratorInterface,

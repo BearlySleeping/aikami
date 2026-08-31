@@ -352,7 +352,9 @@ class StartViewModel
       case 'warming':
         return 'Downloading all assets for offline play…';
       case 'degraded':
-        return assetPrefetchService.error ?? 'Asset download paused — check your connection.';
+        return (
+          assetPrefetchService.errorMessage ?? 'Asset download paused — check your connection.'
+        );
       default:
         return undefined;
     }
@@ -503,10 +505,13 @@ class StartViewModel
     // Reset onboarding progress and navigate to game with a fresh arc
     onboardingHintService.resetOnboarding();
 
-    await routerService.goToRoute('game', {
-      queryParameters: { tutorial: '1' },
-      pathParameters: undefined,
-    });
+    await routerService.goToRoute(
+      'game' as never,
+      {
+        queryParameters: { tutorial: '1' } as never,
+        pathParameters: undefined,
+      } as never,
+    );
   }
 
   /** @inheritdoc */

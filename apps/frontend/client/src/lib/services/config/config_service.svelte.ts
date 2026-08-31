@@ -395,7 +395,8 @@ class ConfigService
           };
         }
         if (Array.isArray(parsed.lorebooks)) {
-          this.state.lorebooks = parsed.lorebooks as Lorebook[];
+          this.state.lorebooks =
+            parsed.lorebooks as unknown as import('@aikami/types').LorebookEntry[];
         }
         if (Array.isArray(parsed.activeLorebookIds)) {
           this.state.activeLorebookIds = parsed.activeLorebookIds as string[];
@@ -639,14 +640,14 @@ class ConfigService
 
     const now = new Date().toISOString();
     const newId = crypto.randomUUID();
-    const copy: Connection = {
+    const copy = {
       ...original,
       createdAt: now,
       id: newId,
       isDefault: false,
       name: `${original.name} (copy)`,
       updatedAt: now,
-    };
+    } as unknown as import('@aikami/types').ConnectionEntry;
 
     this.state.connections = [...this.state.connections, copy];
     return newId;
@@ -671,11 +672,11 @@ class ConfigService
   }
 
   getConnection(id: ConnectionId): Connection | undefined {
-    return this.state.connections.find((c) => c.id === id);
+    return this.state.connections.find((c) => c.id === id) as Connection | undefined;
   }
 
   getApiKey(provider: string, capability: ConnectionCapability = 'text'): string | undefined {
-    const matches = (c: Connection): boolean =>
+    const matches = (c: import('@aikami/types').ConnectionEntry): boolean =>
       (c.capability ?? 'text') === capability && c.provider === provider;
 
     // Prefer the default connection, but only when it also matches the
@@ -737,7 +738,10 @@ class ConfigService
       createdAt: now,
       updatedAt: now,
     };
-    this.state.lorebooks = [...this.state.lorebooks, lorebook];
+    this.state.lorebooks = [
+      ...this.state.lorebooks,
+      lorebook as unknown as import('@aikami/types').LorebookEntry,
+    ];
     return id;
   }
 
@@ -760,12 +764,12 @@ class ConfigService
   }
 
   getLorebooks(): Lorebook[] {
-    return this.state.lorebooks;
+    return this.state.lorebooks as unknown as Lorebook[];
   }
 
   getLorebook(options: { id: string }): Lorebook | undefined {
     const { id } = options;
-    return this.state.lorebooks.find((lb) => lb.id === id);
+    return this.state.lorebooks.find((lb) => lb.id === id) as Lorebook | undefined;
   }
 
   addEntry(options: {
@@ -782,7 +786,7 @@ class ConfigService
         return lb;
       }
       return { ...lb, entries: [...lb.entries, newEntry], updatedAt: now };
-    });
+    }) as unknown as import('@aikami/types').LorebookEntry[];
     return id;
   }
 
@@ -808,7 +812,7 @@ class ConfigService
         }),
         updatedAt: now,
       };
-    });
+    }) as unknown as import('@aikami/types').LorebookEntry[];
   }
 
   deleteEntry(options: { lorebookId: string; entryId: string }): void {
@@ -824,7 +828,7 @@ class ConfigService
         entries: lb.entries.filter((e) => e.id !== entryId),
         updatedAt: now,
       };
-    });
+    }) as unknown as import('@aikami/types').LorebookEntry[];
   }
 
   reorderEntries(options: { lorebookId: string; entryIds: string[] }): void {
@@ -835,12 +839,13 @@ class ConfigService
       if (lb.id !== lorebookId) {
         return lb;
       }
-      const entryMap = new Map(lb.entries.map((e) => [e.id, e]));
+      const book = lb as unknown as Lorebook;
+      const entryMap = new Map(book.entries.map((e) => [e.id, e]));
       const reordered = entryIds
         .map((id) => entryMap.get(id))
         .filter((e): e is LorebookEntry => e !== undefined);
       return { ...lb, entries: reordered, updatedAt: now };
-    });
+    }) as unknown as import('@aikami/types').LorebookEntry[];
   }
 
   setActiveLorebookIds(options: { ids: string[] }): void {

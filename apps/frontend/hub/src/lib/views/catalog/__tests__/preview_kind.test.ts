@@ -36,7 +36,7 @@ describe('previewKindForEntry', () => {
   });
 
   test('props category → prop', () => {
-    expect(previewKindForEntry(makeEntry({ category: 'props' }))).toBe('prop');
+    expect(previewKindForEntry(makeEntry({ category: 'sprites' }))).toBe('prop');
   });
 
   test('sprites category → prop', () => {

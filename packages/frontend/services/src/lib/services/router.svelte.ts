@@ -18,6 +18,7 @@ type Page = {
   error: unknown;
   data: Record<string, unknown>;
 };
+
 import { untrack } from 'svelte';
 import {
   type AllRoutes,

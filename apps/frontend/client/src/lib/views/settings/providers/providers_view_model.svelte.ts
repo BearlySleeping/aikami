@@ -38,8 +38,10 @@ import type {
 } from '@aikami/types';
 import {
   type CheckpointInfo,
+  configService,
   fetchOpenRouterModels,
   imageGenerationService,
+  LocalServiceDetector,
   type LocalServiceDetectorInterface,
   type LocalServiceStatus,
 } from '$services';
@@ -267,7 +269,7 @@ export class ProvidersViewModel
   }
 
   get instructTemplate(): InstructTemplate {
-    return configService.state.instructTemplate;
+    return configService.state.instructTemplate as InstructTemplate;
   }
 
   get advancedOverrides(): AdvancedOverrides {

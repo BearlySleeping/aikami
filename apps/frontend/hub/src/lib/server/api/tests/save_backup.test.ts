@@ -46,7 +46,7 @@ const createMockR2 = () => {
       if (!bytes) {
         return null;
       }
-      return { body: new Blob([bytes]).stream() };
+      return { body: new Blob([bytes as BlobPart]).stream() };
     },
     delete: async (key: string) => {
       store.delete(key);
@@ -112,7 +112,7 @@ const postBytes = (path: string, bytes: Uint8Array, cookie?: string) =>
   new Request(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: cookie ? { cookie } : {},
-    body: bytes,
+    body: bytes as BodyInit,
   });
 
 const get = (path: string, cookie?: string) =>

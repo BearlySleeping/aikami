@@ -230,9 +230,11 @@ export type ConnectionEntry = {
     contextSize: number;
   };
   isDefault: boolean;
-  source: string;
+  source?: string;
   createdAt: string;
   updatedAt: string;
+  imageOptions?: { checkpoint: string; width: number; height: number; steps: number; cfg: number };
+  voiceOptions?: { voiceId: string; speed: number; pitch: number };
 };
 
 /** A lorebook entry. */
@@ -247,6 +249,9 @@ export type LorebookEntry = {
     content: string;
     createdAt: string;
     updatedAt: string;
+    keywords?: string[];
+    priority?: number;
+    constant?: boolean;
   }>;
   createdAt: string;
   updatedAt: string;

@@ -1,4 +1,5 @@
 // apps/frontend/hub/src/lib/views/catalog/__tests__/streamed_stats.test.ts
+// biome-ignore-all lint/suspicious/noExplicitAny: Bun.Server generic type
 //
 // C-436: D1-backed stats stream in and never block first paint.
 // Ported from the Postgres-backed path (C-396 AC-4).
@@ -23,7 +24,7 @@ const setEnv = (options: { catalogOrigin?: string }): void => {
 };
 
 beforeAll(async () => {
-  const server: Bun.Server = Bun.serve({
+  const server: Bun.Server<any> = Bun.serve({
     port: 0,
     fetch(request: Request): Response | Promise<Response> {
       const url = new URL(request.url);

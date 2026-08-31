@@ -120,7 +120,7 @@ class AttributionViewModel
   }
 
   backToMenu(): void {
-    routerService.navigate('/start');
+    routerService.goToHref('/start');
   }
 }
 

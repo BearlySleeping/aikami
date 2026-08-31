@@ -1,4 +1,5 @@
 // apps/frontend/hub/src/lib/views/catalog/__tests__/category_load.test.ts
+// biome-ignore-all lint/suspicious/noExplicitAny: Bun.Server generic type
 //
 // C-396 AC-2: category pages render from the static index without touching
 // Postgres.
@@ -22,7 +23,12 @@ import type { CatalogIndexRoot, CatalogIndexShard } from '@aikami/schemas';
 const requestedPaths: string[] = [];
 let origin: { url: string; stop: () => void } | undefined;
 
-const makeEntry = (tag: string, category: string, subcategory: string, extra?: object) => ({
+const makeEntry = (
+  tag: string,
+  category: import('@aikami/schemas').CatalogCategory,
+  subcategory: string,
+  extra?: object,
+) => ({
   tag,
   hash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
   sizeBytes: 1024,
@@ -81,7 +87,7 @@ const buildMusicShard = (originUrl: string): CatalogIndexShard => ({
 });
 
 beforeAll(async () => {
-  const server: Bun.Server = Bun.serve({
+  const server: Bun.Server<any> = Bun.serve({
     port: 0,
     fetch(request: Request): Response | Promise<Response> {
       const url = new URL(request.url);
@@ -153,7 +159,7 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
 
   test('split-shard categories merge every `<category>__*` shard', async () => {
     // Add a split shard to the fixture and assert the discovery logic merges it.
-    const server: Bun.Server = Bun.serve({
+    const server: Bun.Server<any> = Bun.serve({
       port: 0,
       fetch(request: Request): Response | Promise<Response> {
         const url = new URL(request.url);

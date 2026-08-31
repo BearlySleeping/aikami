@@ -30,6 +30,7 @@ import { runRelationshipAgent } from './agents/relationship_agent.ts';
 import { runSchedulePlannerAgent } from './agents/schedule_planner_agent.ts';
 import { runWorldStateAgent } from './agents/world_state_agent.ts';
 import { BUILT_IN_AGENTS } from './built_in_agents.ts';
+import { customAgentToConfig, runCustomAgent } from './custom_agent_factory.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
