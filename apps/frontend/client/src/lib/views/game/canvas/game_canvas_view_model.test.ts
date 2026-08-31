@@ -3,7 +3,7 @@
 // Contract: C-381 AC-10 — the canvas ViewModel reads the campaign's pack id
 // instead of hardcoding 'emberwatch'.
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 describe('GameCanvasViewModel — C-381 AC-10', () => {
   test('imports without error', () => {

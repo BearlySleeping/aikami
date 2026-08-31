@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/character/persona/list/persona_list_view.svelte
-import { BaseViewModelContainer } from '$components';
+import { BaseViewModelContainer, Image } from '$components';
 import type { PersonaListViewModelInterface } from './persona_list_view_model.svelte.ts';
 
 type Props = {
@@ -147,11 +147,11 @@ let fileInput = $state<HTMLInputElement>();
                     <!-- Avatar -->
                     <div class="w-20 h-20 rounded-lg bg-base-300 flex-shrink-0 overflow-hidden">
                       {#if persona.avatarUrl}
-                        <img
+                        <Image
                           src={persona.avatarUrl}
                           alt={p.name ?? 'Persona'}
                           class="w-full h-full object-cover"
-                        >
+                        />
                       {:else}
                         <div class="w-full h-full flex items-center justify-center text-3xl">
                           🐉

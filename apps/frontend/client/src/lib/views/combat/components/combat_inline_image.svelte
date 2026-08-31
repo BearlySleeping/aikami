@@ -7,6 +7,8 @@
 //
 // Contract: C-165 Combat Inline Images & Gallery
 
+import { Image } from '$components';
+
 type Props = {
   /** Image URL to display. */
   imageUrl?: string;
@@ -42,14 +44,12 @@ let _isHovered = $state(false);
 {:else if imageUrl}
   <!-- Loaded image with fade-in -->
   <div class="relative my-2 group">
-    <img
+    <Image
       src={imageUrl}
       alt="Combat scene"
-      class="w-full rounded-lg border border-base-300 transition-opacity duration-500"
-      class:opacity-0={!isLoaded}
-      class:opacity-100={isLoaded}
+      class="w-full rounded-lg border border-base-300 transition-opacity duration-500 {isLoaded ? 'opacity-100' : 'opacity-0'}"
       onload={() => (isLoaded = true)}
-    >
+    />
 
     <!-- Hover overlay: Expand + Regenerate (AC-2) — shown via CSS group-hover -->
     <div
@@ -91,11 +91,11 @@ let _isHovered = $state(false);
       >
         ✕
       </button>
-      <img
+      <Image
         src={imageUrl}
         alt="Combat scene (fullscreen)"
         class="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl"
-      >
+      />
     </div>
   {/if}
 {/if}

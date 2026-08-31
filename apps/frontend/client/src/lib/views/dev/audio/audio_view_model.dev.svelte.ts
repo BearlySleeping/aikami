@@ -12,11 +12,9 @@ import {
 } from '@aikami/frontend/services';
 import type { MusicSceneContext, Track } from '@aikami/types';
 import { playSceneBgm, playSfxByName } from '$lib/services/audio/audio_asset_resolver';
-import {
-  buildMusicSceneContext,
-  musicPlayerService,
-} from '$lib/services/audio/music_player_service.svelte';
+import { musicPlayerService } from '$lib/services/audio/music_player_service.svelte';
 import { audioService, trackRegistryService } from '$services';
+import { buildMusicSceneContext } from '$utils/music_utils';
 
 // ---------------------------------------------------------------------------
 // Scene/vibe presets for testing vibe-matched skipping

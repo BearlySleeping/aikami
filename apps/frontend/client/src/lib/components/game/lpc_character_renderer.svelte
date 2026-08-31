@@ -6,8 +6,8 @@
 // via Assets.load() + Spritesheet.parse(), then swaps in the correctly
 // cropped frame once the GPU texture is ready.
 
-import type { LpcBatchManager, TextureManager } from '@aikami/frontend-engine/render';
-import type { LpcLayerRecipe } from '@aikami/frontend-engine/sim';
+import type { LpcBatchManager, TextureManager } from '@aikami/frontend/engine/render';
+import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 // biome-ignore lint/correctness/noUnusedImports: Spritesheet type used in Svelte template
 import { Assets, Sprite, type Spritesheet, Texture } from 'pixi.js';

@@ -1,22 +1,25 @@
 // packages/backend/discord-bot/src/lib/constants.ts
 //
-// Non-sensitive IDs for the Aikami guild's support forum — plain constants
-// rather than Secret Manager fetches, same reasoning as DISCORD_GUILD_ID
-// sitting unencrypted in scripts/.env.example: a channel/role snowflake
-// isn't a credential. Keep these in sync with scripts/src/lib/discord/
-// structure.ts (roles, categories) if the server structure changes.
+// Guild/role/channel/forum-tag ids now live in @aikami/constants
+// (packages/shared/constants/src/lib/discord.ts) — the single source of
+// truth, kept in sync BY HAND with scripts/src/lib/discord/structure.ts
+// (see that file's header comment). This module re-exports the subset this
+// package uses under its existing local names, plus the bot-specific bits
+// (the issue-trigger phrase, the tool-access map) that have no reason to
+// live in a shared package.
 
-export const GUILD_ID = '1326946946136408064';
-export const FORUM_CHANNEL_ID = '1538878867962466364';
-export const MODERATOR_ROLE_ID = '1538729970522652684';
-export const ADMIN_ROLE_ID = '1538729969004449882';
+import {
+  DISCORD_CHANNELS,
+  DISCORD_FORUM_TAG_LABELS,
+  DISCORD_GUILD_ID,
+  DISCORD_ROLES,
+} from '@aikami/constants';
 
-export const FORUM_TAG_LABELS: Record<string, string> = {
-  '1538881560181211219': 'bug', // Bug
-  '1538881560181211220': 'enhancement', // Feature Request
-  // "Question" (1538881560181211221) intentionally has no GitHub label —
-  // most questions never become an issue.
-};
+export const GUILD_ID = DISCORD_GUILD_ID;
+export const FORUM_CHANNEL_ID = DISCORD_CHANNELS.support;
+export const MODERATOR_ROLE_ID = DISCORD_ROLES.moderator;
+export const ADMIN_ROLE_ID = DISCORD_ROLES.admin;
+export const FORUM_TAG_LABELS = DISCORD_FORUM_TAG_LABELS;
 
 /** Case-insensitive phrase a Moderator/Admin mentions the bot with to open a GitHub issue from a thread. */
 export const ISSUE_TRIGGER_REGEX = /github issue/i;
@@ -31,7 +34,7 @@ export const ISSUE_TRIGGER_REGEX = /github issue/i;
 
 export const CHANNEL_TOOL_ACCESS = [
   {
-    // #bugs-features-requests forum channel
+    // #support forum channel (renamed from #bugs-features-requests)
     channelId: FORUM_CHANNEL_ID,
     tools: [{ toolId: 'github-issues', label: 'GitHub Issue Creation' }],
   },

@@ -7,9 +7,10 @@
 // GM guidance so NPCs steer the player toward the current quest objective
 // at a difficulty-appropriate level of explicitness.
 
+import { getItemDefinition } from '$utils/inventory_utils';
 import { equipmentService } from './equipment_service.svelte';
 import { type GameplayDifficulty, getGameplayDifficulty } from './gameplay_settings';
-import { getItemDefinition, inventoryService } from './inventory_service.svelte';
+import { inventoryService } from './inventory_service.svelte';
 import { questStateService } from './quest_state_service.svelte';
 import { relationshipService } from './relationship_service.svelte';
 

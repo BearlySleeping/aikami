@@ -1,5 +1,6 @@
 // apps/frontend/hub/src/hooks.server.ts
 
+import { toUserSessionData } from '@aikami/backend/auth/better-auth';
 import { getCookie } from '@aikami/backend/svelte-kit/cookies.ts';
 import {
   apiMethodGuard,
@@ -13,7 +14,6 @@ import {
   rewriteForwardedHost,
 } from '@aikami/backend/svelte-kit/hooks_helpers';
 import { SSRLogSink } from '@aikami/backend/svelte-kit/log_sink';
-import { toUserSessionData } from '@aikami/backend-auth/better-auth';
 import type { LogContext, UserSessionData } from '@aikami/types';
 import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { getBetterAuth, setBetterAuthEnv } from '$lib/server/api/better_auth.ts';

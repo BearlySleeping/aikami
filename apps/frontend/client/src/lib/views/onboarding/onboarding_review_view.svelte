@@ -6,7 +6,7 @@
 // Mirrors the TWEAK phase UI from PersonaCreateView.
 
 import { onDestroy } from 'svelte';
-import { BaseViewModelContainer } from '$components';
+import { BaseViewModelContainer, Image } from '$components';
 import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
 import {
@@ -87,11 +87,11 @@ const scoreLabels = [
           class="w-48 h-48 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden"
         >
           {#if personaCreationService.avatarUrl}
-            <img
+            <Image
               src={personaCreationService.avatarUrl}
               alt="Persona avatar"
               class="object-cover w-full h-full"
-            >
+            />
           {:else}
             <div class="text-center px-4">
               <p class="text-3xl mb-2">🖼️</p>

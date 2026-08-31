@@ -7,6 +7,8 @@
 //
 // Contract: C-165 Combat Inline Images & Gallery
 
+import { Image } from '$components';
+
 type Props = {
   /** All generated image URLs for this encounter (most recent first). */
   images: readonly string[];
@@ -34,7 +36,7 @@ let expandedUrl = $state<string | null>(null);
         class="mb-2 break-inside-avoid rounded-lg overflow-hidden border border-base-300 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all w-full text-left bg-transparent p-0"
         onclick={() => (expandedUrl = url)}
       >
-        <img src={url} alt="Combat scene" class="w-full h-auto block" loading="lazy">
+        <Image src={url} alt="Combat scene" class="w-full h-auto block" loading="lazy" />
       </button>
     {/each}
   </div>
@@ -56,11 +58,11 @@ let expandedUrl = $state<string | null>(null);
       >
         ✕
       </button>
-      <img
+      <Image
         src={expandedUrl}
         alt="Combat scene (fullscreen)"
         class="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl"
-      >
+      />
     </div>
   {/if}
 {/if}

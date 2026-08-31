@@ -37,6 +37,17 @@ function quote(s: string): string {
   return JSON.stringify(s);
 }
 
+/**
+ * MEMBER-type overwrites (`type: 1` — permissions pinned to one specific
+ * user rather than a role) are invisible to diff.ts/sync.ts FOREVER: there's
+ * no name to declare one by in structure.ts, so a sync can never plan a
+ * change for it (see diff.ts's overwriteKeySet comment). Printing them here
+ * is the only place their drift is visible at all.
+ */
+function memberOverwriteCount(ch: GuildChannel): number {
+  return (ch.permission_overwrites ?? []).filter((o) => o.type === 1).length;
+}
+
 function printStructureSeed(
   categories: GuildChannel[],
   nonCategory: GuildChannel[],
@@ -121,8 +132,12 @@ export async function runAudit(mode: string, format: string): Promise<void> {
       .filter((ch) => ch.parent_id === cat.id)
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     for (const ch of inCategory) {
+      const memberOverwrites = memberOverwriteCount(ch);
       console.log(
-        `    - ${ch.name}  ${c.dim}(${CHANNEL_TYPE_LABEL[ch.type] ?? ch.type}) id=${ch.id}${c.reset}`,
+        `    - ${ch.name}  ${c.dim}(${CHANNEL_TYPE_LABEL[ch.type] ?? ch.type}) id=${ch.id}${c.reset}` +
+          (memberOverwrites > 0
+            ? `  ${c.yellow}⚠ ${memberOverwrites} member-level overwrite(s) — invisible to sync${c.reset}`
+            : ''),
       );
     }
   }
@@ -131,8 +146,12 @@ export async function runAudit(mode: string, format: string): Promise<void> {
   if (uncategorized.length > 0) {
     console.log(`\n${c.bold}Uncategorized${c.reset}`);
     for (const ch of uncategorized) {
+      const memberOverwrites = memberOverwriteCount(ch);
       console.log(
-        `  - ${ch.name}  ${c.dim}(${CHANNEL_TYPE_LABEL[ch.type] ?? ch.type}) id=${ch.id}${c.reset}`,
+        `  - ${ch.name}  ${c.dim}(${CHANNEL_TYPE_LABEL[ch.type] ?? ch.type}) id=${ch.id}${c.reset}` +
+          (memberOverwrites > 0
+            ? `  ${c.yellow}⚠ ${memberOverwrites} member-level overwrite(s) — invisible to sync${c.reset}`
+            : ''),
       );
     }
   }

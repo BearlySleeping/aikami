@@ -12,6 +12,8 @@
 // Contract: C-167 Svelte Native Combat UI MVP
 // Contract: C-239 Expression Emotion System
 
+import { Image } from '$components';
+
 type Props = {
   /** Display state for the player combatant. */
   playerName: string;
@@ -76,36 +78,36 @@ const {
       class:animate-damage-shake={isPlayerTakingDamage}
       class:animate-damage-flash={isPlayerTakingDamage}
     >
-      <img
+      <Image
         src={playerPortraitUrl}
         alt={playerName}
         class="w-full h-full object-cover object-top"
         loading="eager"
-      >
+      />
       <!-- Expression overlays (layered over base portrait) -->
       {#if playerEyesSrc}
-        <img
+        <Image
           src={playerEyesSrc}
           alt=""
           class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
           loading="eager"
-        >
+        />
       {/if}
       {#if playerEyebrowsSrc}
-        <img
+        <Image
           src={playerEyebrowsSrc}
           alt=""
           class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
           loading="eager"
-        >
+        />
       {/if}
       {#if playerMouthSrc}
-        <img
+        <Image
           src={playerMouthSrc}
           alt=""
           class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
           loading="eager"
-        >
+        />
       {/if}
       <!-- Damage flash overlay -->
       {#if isPlayerTakingDamage}
@@ -145,36 +147,36 @@ const {
       class:animate-damage-shake={isEnemyTakingDamage}
       class:animate-damage-flash={isEnemyTakingDamage}
     >
-      <img
+      <Image
         src={enemyPortraitUrl}
         alt={enemyName}
         class="w-full h-full object-cover object-top"
         loading="eager"
-      >
+      />
       <!-- Expression overlays (layered over base portrait) -->
       {#if enemyEyesSrc}
-        <img
+        <Image
           src={enemyEyesSrc}
           alt=""
           class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
           loading="eager"
-        >
+        />
       {/if}
       {#if enemyEyebrowsSrc}
-        <img
+        <Image
           src={enemyEyebrowsSrc}
           alt=""
           class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
           loading="eager"
-        >
+        />
       {/if}
       {#if enemyMouthSrc}
-        <img
+        <Image
           src={enemyMouthSrc}
           alt=""
           class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
           loading="eager"
-        >
+        />
       {/if}
       <!-- Damage flash overlay -->
       {#if isEnemyTakingDamage}

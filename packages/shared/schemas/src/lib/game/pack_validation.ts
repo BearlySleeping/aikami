@@ -5,8 +5,6 @@
 // and the future generation loop (feed errors back to a model for repair).
 // Contract: C-381 Content Pipeline Hardening — AC-5
 //
-// biome-ignore lint/style/useNamingConvention: error codes use dot-notation identifiers
-
 import type { ContentPackManifest } from './content_pack.ts';
 
 // ---------------------------------------------------------------------------
@@ -106,7 +104,8 @@ const VBSCRIPT_SCHEME_RE = /^vbscript:/i;
 // Helpers
 // ---------------------------------------------------------------------------
 
-const isAbsoluteUrl = (s: string): boolean => ABSOLUTE_URL_RE.test(s) || PROTOCOL_RELATIVE_RE.test(s);
+const isAbsoluteUrl = (s: string): boolean =>
+  ABSOLUTE_URL_RE.test(s) || PROTOCOL_RELATIVE_RE.test(s);
 const hasPathTraversal = (s: string): boolean => PATH_TRAVERSAL_RE.test(s);
 const isDataScheme = (s: string): boolean => DATA_SCHEME_RE.test(s);
 const isJavaScriptScheme = (s: string): boolean => JAVASCRIPT_SCHEME_RE.test(s);
@@ -289,12 +288,12 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
    * Checks a provenance block for required fields and valid license.
    * Pushes errors for any missing/invalid fields.
    */
-  const checkProvenance = (options: {
+  const checkProvenance = (provenanceOptions: {
     provenance: { license?: string; author?: string[]; source?: string } | undefined;
     path: string;
     label: string;
   }): void => {
-    const { provenance, path: provenancePath, label } = options;
+    const { provenance, path: provenancePath, label } = provenanceOptions;
     if (!provenance) {
       errors.push({
         code: 'asset.missing-provenance',
@@ -483,4 +482,8 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
  * Used by the hostile-manifest test (AC-2).
  */
 export const isHostileString = (s: string): boolean =>
-  isAbsoluteUrl(s) || hasPathTraversal(s) || isDataScheme(s) || isJavaScriptScheme(s) || isVbScriptScheme(s);
+  isAbsoluteUrl(s) ||
+  hasPathTraversal(s) ||
+  isDataScheme(s) ||
+  isJavaScriptScheme(s) ||
+  isVbScriptScheme(s);

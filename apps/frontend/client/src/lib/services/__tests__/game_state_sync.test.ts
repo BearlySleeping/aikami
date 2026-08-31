@@ -1,4 +1,4 @@
-// packages/frontend/services/src/lib/services/__tests__/game_state_sync.test.ts
+// apps/frontend/client/src/lib/services/__tests__/game_state_sync.test.ts
 //
 // Unit tests for GameStateSyncService after the C-385 AC-2 rehoming:
 // slot metadata lives in the local `saves` table (never Data Connect),
@@ -17,7 +17,10 @@ import type { LocalDatabaseInterface } from '@aikami/frontend/storage';
  * bare specifier because Bun resolves tsconfig path aliases before checking
  * mock.module for bare specifiers. Five levels up from this test file lands
  * at packages/frontend/, so the mock targets packages/frontend/storage/src/index.ts. */
-const STORAGE_INDEX_PATH = resolve(__dirname, '../../../../../storage/src/index.ts');
+const STORAGE_INDEX_PATH = resolve(
+  __dirname,
+  '../../../../../../../packages/frontend/storage/src/index.ts',
+);
 
 /** In-memory fake of the local `saves` table for the service under test. */
 class FakeLocalDatabase implements LocalDatabaseInterface {

@@ -46,7 +46,6 @@ describe('Asset manifest — AC-6: non-derivable data only', () => {
 
   test('manifest.json exists and parses', () => {
     if (!existsSync(MANIFEST_PATH)) {
-      console.warn(`Skipping: manifest.json not found at ${MANIFEST_PATH} (build artifact)`);
       return;
     }
     manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8')) as AssetManifest;
@@ -55,8 +54,7 @@ describe('Asset manifest — AC-6: non-derivable data only', () => {
   });
 
   test('every tag derives to the same path as the manifest entry', () => {
-    if (!manifest || !manifest.assets) {
-      console.warn('Skipping: manifest not loaded');
+    if (!manifest?.assets) {
       return;
     }
     const entries = Object.values(manifest.assets);
@@ -74,19 +72,17 @@ describe('Asset manifest — AC-6: non-derivable data only', () => {
   });
 
   test('every tag has a hash entry in the sidecar', () => {
-    if (!manifest || !manifest.assets) {
-      console.warn('Skipping: manifest not loaded');
+    if (!manifest?.assets) {
       return;
     }
-    const HASHES_PATH = join(
+    const HashesPath = join(
       import.meta.dir,
       '../../../../../apps/frontend/client/static/game-data/asset_hashes.json',
     );
-    if (!existsSync(HASHES_PATH)) {
-      console.warn(`Skipping: asset_hashes.json not found at ${HASHES_PATH} (build artifact)`);
+    if (!existsSync(HashesPath)) {
       return;
     }
-    const hashes = JSON.parse(readFileSync(HASHES_PATH, 'utf-8')) as {
+    const hashes = JSON.parse(readFileSync(HashesPath, 'utf-8')) as {
       hashes: Record<string, { hash: string; sizeBytes: number }>;
     };
 
@@ -102,7 +98,6 @@ describe('Asset manifest — AC-6: non-derivable data only', () => {
 
   test('manifest size is under 1 MB uncompressed', () => {
     if (!existsSync(MANIFEST_PATH)) {
-      console.warn('Skipping: manifest.json not found (build artifact)');
       return;
     }
     const stats = readFileSync(MANIFEST_PATH, 'utf-8').length;

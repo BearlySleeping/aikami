@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/character/persona/create/persona_create_view.svelte
 import { onDestroy } from 'svelte';
-import { BaseViewModelContainer } from '$components';
+import { BaseViewModelContainer, Image } from '$components';
 import LpcPreviewView from '$lib/views/character/lpc_preview/lpc_preview_view.svelte';
 import {
   getLpcPreviewViewModel,
@@ -179,11 +179,11 @@ function handleAvatarUpload(event: Event) {
                 class="w-48 h-48 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden"
               >
                 {#if viewModel.avatarUrl}
-                  <img
+                  <Image
                     src={viewModel.avatarUrl}
                     alt="Persona avatar"
                     class="object-cover w-full h-full"
-                  >
+                  />
                 {:else if viewModel.isImageGenReady}
                   <span class="loading loading-spinner loading-md text-primary"></span>
                 {:else}

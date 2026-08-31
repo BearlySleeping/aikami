@@ -1,4 +1,6 @@
 <script lang="ts">
+import { Image } from '$components';
+
 /**
  * Props for the CharacterCard component.
  * Displays character information including name, avatar, race/class/level, and personality details.
@@ -42,7 +44,9 @@ const {
     <div class="flex items-start gap-4">
       {#if avatarUrl}
         <div class="avatar">
-          <div class="w-16 rounded-lg"><img src={avatarUrl} alt={name}></div>
+          <div class="w-16 rounded-lg">
+            <Image src={avatarUrl} alt={name} />
+          </div>
         </div>
       {/if}
       <div class="flex-1 min-w-0">

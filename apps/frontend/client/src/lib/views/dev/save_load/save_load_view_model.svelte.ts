@@ -9,7 +9,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { SaveSlotEntry } from '@aikami/frontend-services/game-state-sync';
+import type { SaveSlotEntry } from '@aikami/types';
 import { authService, gameStateSyncService } from '$services';
 
 /** Sample ECS snapshot for dev sandbox pre-fill. */

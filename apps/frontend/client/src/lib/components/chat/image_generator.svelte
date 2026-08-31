@@ -1,5 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/components/chat/ImageGenerator.svelte
+import { Image } from '$components';
+
 type Props = {
   isGenerating?: boolean;
   lastImageUrl?: string | null;
@@ -49,7 +51,7 @@ let prompt = $state('');
 
     {#if lastImageUrl}
       <div class="mt-2">
-        <img src={lastImageUrl} alt="Generated" class="rounded-lg w-full max-h-48 object-cover">
+        <Image src={lastImageUrl} alt="Generated" class="rounded-lg w-full max-h-48 object-cover" />
       </div>
     {/if}
   </div>

@@ -3,6 +3,7 @@
 // One catalog grid tile (C-396 AC-1 visual / AC-5): a single-frame thumbnail
 // (never the raw sheet), a display name, and a license badge.
 import type { CatalogAssetEntry } from '@aikami/schemas';
+import { Image } from '$components';
 import { assetDisplayName, hasNoLicense } from '$utils/catalog.ts';
 
 type Props = {
@@ -38,12 +39,12 @@ const isUnknown = $derived(hasNoLicense(entry));
 >
   <div class="flex aspect-square items-center justify-center overflow-hidden bg-muted/30">
     {#if previewUrl}
-      <img
+      <Image
         src={previewUrl}
         alt={`Preview of ${displayName}`}
         loading="lazy"
         class="h-full w-full object-contain transition-transform group-hover:scale-105"
-      >
+      />
     {:else}
       <div
         class="flex h-16 w-16 items-center justify-center rounded-md border border-dashed border-muted-foreground/40 text-muted-foreground"

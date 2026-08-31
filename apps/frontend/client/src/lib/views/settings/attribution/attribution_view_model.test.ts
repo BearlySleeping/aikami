@@ -2,7 +2,7 @@
 //
 // Contract: C-381 AC-1 — attribution screen displays provenance
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { AttributionViewModel } from './attribution_view_model.svelte.ts';
 
 describe('AttributionViewModel — C-381 AC-1', () => {

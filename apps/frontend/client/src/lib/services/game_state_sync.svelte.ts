@@ -1,4 +1,4 @@
-// packages/frontend/services/src/lib/services/game_state_sync.svelte.ts
+// apps/frontend/client/src/lib/services/game_state_sync.svelte.ts
 //
 // Cloud save/load sync service — rehomed from Firebase Data Connect to the
 // local SQLite `saves` table (C-385 AC-2).
@@ -17,48 +17,25 @@
 //
 // Contract: C-385 AC-2, C-321
 
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import { validateEcsSnapshot } from '@aikami/schemas';
-import { BaseClass, type BaseClassInterface } from '@aikami/utils';
+import type { SaveSlotEntry, SaveSlotMetadata } from '@aikami/types';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+/** Options for constructing the GameStateSyncService. */
+export type GameStateSyncServiceOptions = BaseFrontendClassOptions;
 
 /**
- * Metadata stored alongside the ECS blob in the SaveSlot row.
+ * Service interface for the game state sync service.
  */
-export type SaveSlotMetadata = {
-  /** Human-readable location name for the save thumbnail. */
-  lastLocationName?: string;
-  /** Accumulated play time in seconds. */
-  playedTimeSeconds?: number;
-};
-
-/**
- * A hydrated save slot with its metadata and optional blob payload.
- */
-export type SaveSlotEntry = {
-  slotNumber: number;
-  lastLocationName?: string | null;
-  playedTimeSeconds?: number | null;
-  storageRef: string;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-};
-
-/**
- * JSON envelope stored in the local `saves.payload` column for sync slots.
- * Carries the fields the `saves` table has no dedicated columns for.
- */
-type SaveSlotLocalPayload = {
-  /** Accumulated play time in seconds, if tracked. */
-  playedTimeSeconds?: number;
-  /** R2 saves-bucket path of the ECS blob (e.g. `saves/{uid}/slot_1.json`). */
-  storageRef: string;
-};
-
-export type GameStateSyncServiceInterface = BaseClassInterface & {
+export type GameStateSyncServiceInterface = BaseFrontendClassInterface & {
   /**
    * Saves a game state (ECS snapshot) to the R2 saves bucket and upserts the
    * slot metadata row in the local `saves` table.
@@ -97,13 +74,25 @@ export type GameStateSyncServiceInterface = BaseClassInterface & {
   deleteSlot(options: { uid: string; slot: number }): Promise<void>;
 };
 
-export type GameStateSyncServiceOptions = Record<string, never>;
+/**
+ * JSON envelope stored in the local `saves.payload` column for sync slots.
+ * Carries the fields the `saves` table has no dedicated columns for.
+ */
+type SaveSlotLocalPayload = {
+  /** Accumulated play time in seconds, if tracked. */
+  playedTimeSeconds?: number;
+  /** R2 saves-bucket path of the ECS blob (e.g. `saves/{uid}/slot_1.json`). */
+  storageRef: string;
+};
 
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
-class GameStateSyncService extends BaseClass implements GameStateSyncServiceInterface {
+class GameStateSyncService
+  extends BaseFrontendClass<GameStateSyncServiceOptions>
+  implements GameStateSyncServiceInterface
+{
   /**
    * Saves the ECS snapshot payload to the R2 saves bucket and upserts the
    * local `saves` row carrying the slot metadata.

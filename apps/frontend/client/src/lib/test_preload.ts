@@ -484,15 +484,7 @@ const _localServicesMock = () => ({
     setMode: _createCallableStub(),
     reset: _createCallableStub(),
   }),
-  getItemDefinition: mock((itemId: string) => ({
-    label: itemId,
-    itemType: 'misc',
-    attackBonus: 0,
-    defenseBonus: 0,
-    equippable: false,
-    slot: undefined,
-    basePrice: 0,
-  })),
+
   buildGameStateFacts: mock(() => ['Gold: 100', 'Inventory: (empty)', 'Equipped: nothing']),
   imageGenerationService: _createServiceStub(),
   ImageGenerationService: class {},
@@ -511,12 +503,7 @@ const _localServicesMock = () => ({
   narrativeDirectorService: _createServiceStub(),
   buildVerifyHeaders: _createCallableStub(),
   buildVerifyUrl: _createCallableStub(),
-  DEFAULT_VOICE_ARCHETYPES: [] as const,
-  KOKORO_VOICES: [] as const,
-  VOICE_ENGINES: [] as const,
-  MEMORY_TYPES: [] as const,
-  EMBEDDING_MODELS: [] as const,
-  EMOTION_METHODS: [] as const,
+
   TEXT_PROVIDERS: [] as const,
   VOICE_PROVIDERS: [{ id: 'kokoro', label: 'Kokoro (local)' }] as const,
   PROVIDER_ENDPOINTS: {},
@@ -918,7 +905,7 @@ import {
   encodeLpcPreviewState,
 } from '../../../../../packages/frontend/preview/src/lib/lpc/preview_url_state.ts';
 
-mock.module('@aikami/frontend-preview', () => ({
+mock.module('@aikami/frontend/preview', () => ({
   createLpcRenderer: mock(() => ({
     loadSheet: mock(async () => ({})),
     extractFrame: mock(() => null),

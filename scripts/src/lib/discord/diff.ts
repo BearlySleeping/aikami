@@ -1,23 +1,45 @@
 // scripts/src/lib/discord/diff.ts
 //
 // Pure diff: compare structure.ts (desired) against the live guild
-// (channels + roles as returned by the REST API) and produce a Plan.
-// No I/O here — sync.ts fetches the live state and applies the plan; this
-// module only decides WHAT would change, so it's trivial to unit test and
-// to print without touching the network.
+// (channels, roles, guild settings, and AutoMod rules as returned by the
+// REST API) and produce a Plan. No I/O here — sync.ts fetches the live
+// state and applies the plan; this module only decides WHAT would change,
+// so it's trivial to unit test and to print without touching the network.
 //
 // Matching is by name (see structure.ts's "Matching" note).
 
-import { ChannelType } from 'discord-api-types/v10';
 import {
+  AutoModerationActionType,
+  AutoModerationRuleKeywordPresetType,
+  AutoModerationRuleTriggerType,
+  ChannelType,
+  ForumLayoutType,
+  SortOrderType,
+} from 'discord-api-types/v10';
+import {
+  type AutoModKeywordPreset,
+  type AutoModTriggerKind,
+  type DesiredAutoModAction,
+  type DesiredAutoModRule,
   type DesiredCategory,
   type DesiredChannel,
   type DesiredChannelType,
+  type DesiredGuild,
   type DesiredPermissionOverwrite,
   type DesiredRole,
   permissionsToBitfield,
 } from './structure';
-import type { GuildChannel, GuildRole, PermissionOverwrite } from './types';
+import type {
+  AutoModAction,
+  AutoModRule,
+  AutoModRuleBody,
+  AutoModTriggerMetadata,
+  GuildChannel,
+  GuildRole,
+  GuildSettings,
+  GuildUpdateBody,
+  PermissionOverwrite,
+} from './types';
 
 export const CHANNEL_TYPE_MAP: Record<DesiredChannelType, ChannelType> = {
   text: ChannelType.GuildText,
@@ -25,14 +47,62 @@ export const CHANNEL_TYPE_MAP: Record<DesiredChannelType, ChannelType> = {
   announcement: ChannelType.GuildAnnouncement,
   forum: ChannelType.GuildForum,
   stage: ChannelType.GuildStageVoice,
+  media: ChannelType.GuildMedia,
 };
 
-export type LiveState = { channels: GuildChannel[]; roles: GuildRole[] };
+// The ONLY channel-type conversion `PATCH /channels/{id}` supports is text
+// ↔ announcement (both are "message channels" under the hood). Anything
+// else (e.g. text → forum, text → media) is rejected by the API — but only
+// AFTER other changes in the same apply have already landed, which is worse
+// than failing here at plan time. Keyed `"liveType->desiredType"`.
+const ALLOWED_TYPE_CONVERSIONS = new Set([
+  `${ChannelType.GuildText}->${ChannelType.GuildAnnouncement}`,
+  `${ChannelType.GuildAnnouncement}->${ChannelType.GuildText}`,
+]);
+
+const AUTOMOD_TRIGGER_MAP: Record<AutoModTriggerKind, AutoModerationRuleTriggerType> = {
+  spam: AutoModerationRuleTriggerType.Spam,
+  mentionSpam: AutoModerationRuleTriggerType.MentionSpam,
+  keywordPreset: AutoModerationRuleTriggerType.KeywordPreset,
+  keyword: AutoModerationRuleTriggerType.Keyword,
+};
+
+const AUTOMOD_PRESET_MAP: Record<AutoModKeywordPreset, AutoModerationRuleKeywordPresetType> = {
+  profanity: AutoModerationRuleKeywordPresetType.Profanity,
+  sexualContent: AutoModerationRuleKeywordPresetType.SexualContent,
+  slurs: AutoModerationRuleKeywordPresetType.Slurs,
+};
+
+const FORUM_LAYOUT_MAP: Record<'list' | 'gallery', ForumLayoutType> = {
+  list: ForumLayoutType.ListView,
+  gallery: ForumLayoutType.GalleryView,
+};
+
+const FORUM_SORT_MAP: Record<'latestActivity' | 'creationDate', SortOrderType> = {
+  latestActivity: SortOrderType.LatestActivity,
+  creationDate: SortOrderType.CreationDate,
+};
+
+export type LiveState = {
+  channels: GuildChannel[];
+  roles: GuildRole[];
+  guild: GuildSettings;
+  automodRules: AutoModRule[];
+};
 
 export type ChannelUpdate = { id: string; name: string; changes: string[] };
 export type RoleUpdate = { id: string; name: string; changes: string[] };
+export type AutoModRuleUpdate = {
+  id: string;
+  name: string;
+  changes: string[];
+  body: AutoModRuleBody;
+};
+export type GuildUpdate = { changes: string[]; body: GuildUpdateBody };
+export type PositionChange = { id: string; name: string; from: number; to: number };
 
 export type Plan = {
+  guildUpdate: GuildUpdate | null;
   createCategories: DesiredCategory[];
   createChannels: DesiredChannel[];
   createRoles: DesiredRole[];
@@ -41,17 +111,28 @@ export type Plan = {
   /** Live channels/roles with no match in structure.ts. Only deleted with --prune. */
   deleteChannels: { id: string; name: string }[];
   deleteRoles: { id: string; name: string }[];
+  createAutomodRules: { rule: DesiredAutoModRule; body: AutoModRuleBody }[];
+  updateAutomodRules: AutoModRuleUpdate[];
+  deleteAutomodRules: { id: string; name: string }[];
+  roleReorders: PositionChange[];
+  channelReorders: PositionChange[];
 };
 
 export function planIsEmpty(plan: Plan): boolean {
   return (
+    plan.guildUpdate === null &&
     plan.createCategories.length === 0 &&
     plan.createChannels.length === 0 &&
     plan.createRoles.length === 0 &&
     plan.updateChannels.length === 0 &&
     plan.updateRoles.length === 0 &&
     plan.deleteChannels.length === 0 &&
-    plan.deleteRoles.length === 0
+    plan.deleteRoles.length === 0 &&
+    plan.createAutomodRules.length === 0 &&
+    plan.updateAutomodRules.length === 0 &&
+    plan.deleteAutomodRules.length === 0 &&
+    plan.roleReorders.length === 0 &&
+    plan.channelReorders.length === 0
   );
 }
 
@@ -93,9 +174,90 @@ function diffRoles(
     }
   }
 
-  // Discord auto-creates @everyone with the guild — never treat it as "extra".
-  const extra = live.filter((r) => r.name !== '@everyone' && !matched.has(r.id));
+  // Discord auto-creates @everyone with the guild — never treat it as
+  // "extra". A MANAGED role (e.g. the bot's own "AiKami Bot" role) is
+  // outside declarative sync entirely — structure.ts is documented to never
+  // declare one (Discord forbids editing it anyway), so it must never show
+  // up as a deletion candidate either, prune or not.
+  const extra = live.filter((r) => r.name !== '@everyone' && !r.managed && !matched.has(r.id));
   return { create, update, extra };
+}
+
+/**
+ * Roles/channels are declared in hierarchy/display order (see structure.ts's
+ * file header) rather than carrying an explicit numeric position each. This
+ * reassigns the NUMERIC SLOTS a group of live, already-matched entries
+ * already owns, in the order structure.ts declares them — it never invents
+ * a brand-new position number or touches an entry outside the group (e.g.
+ * the managed "AiKami Bot" role, or a category's sibling channels), because
+ * every number it hands out is one the group already held.
+ *
+ * `order` accounts for the two schemes Discord uses for "position": for
+ * ROLES a higher number is higher in the hierarchy, so top-first
+ * declaration order wants the HIGHEST slot first ('desc'); for CHANNELS a
+ * lower number is higher in the on-screen list, so top-first declaration
+ * order wants the LOWEST slot first ('asc').
+ */
+function reassignPositions<T extends { name: string; position?: number }>(
+  desiredOrder: T[],
+  liveByName: Map<string, { id: string; position: number }>,
+  order: 'asc' | 'desc',
+): PositionChange[] {
+  const matched = desiredOrder.filter((entry) => liveByName.has(entry.name));
+  if (matched.length === 0) {
+    return [];
+  }
+  const slots = matched
+    .map((entry) => liveByName.get(entry.name)?.position ?? 0)
+    .sort((a, b) => (order === 'desc' ? b - a : a - b));
+
+  const changes: PositionChange[] = [];
+  matched.forEach((entry, i) => {
+    const live = liveByName.get(entry.name);
+    if (!live) {
+      return;
+    }
+    const want = entry.position ?? slots[i] ?? live.position;
+    if (want !== live.position) {
+      changes.push({ id: live.id, name: entry.name, from: live.position, to: want });
+    }
+  });
+  return changes;
+}
+
+function diffRolePositions(desired: DesiredRole[], live: GuildRole[]): PositionChange[] {
+  const liveByName = new Map(live.map((r) => [r.name, { id: r.id, position: r.position }]));
+  return reassignPositions(desired, liveByName, 'desc');
+}
+
+function diffChannelPositions(
+  desired: DesiredChannel[],
+  live: GuildChannel[],
+  categoryIdByName: Map<string, string>,
+): PositionChange[] {
+  const nonCategory = live.filter((ch) => ch.type !== ChannelType.GuildCategory);
+  // Group desired channels by their resolved (or pending) category name so
+  // siblings only ever get reassigned among themselves.
+  const groups = new Map<string, DesiredChannel[]>();
+  for (const channel of desired) {
+    const key = channel.category ?? '__top_level__';
+    const group = groups.get(key) ?? [];
+    group.push(channel);
+    groups.set(key, group);
+  }
+
+  const changes: PositionChange[] = [];
+  for (const [categoryName, group] of groups) {
+    const parentId =
+      categoryName === '__top_level__' ? null : (categoryIdByName.get(categoryName) ?? null);
+    const liveByName = new Map(
+      nonCategory
+        .filter((ch) => (ch.parent_id ?? null) === parentId)
+        .map((ch) => [ch.name, { id: ch.id, position: ch.position ?? 0 }]),
+    );
+    changes.push(...reassignPositions(group, liveByName, 'asc'));
+  }
+  return changes;
 }
 
 function diffCategories(
@@ -110,7 +272,20 @@ function diffCategories(
   return { create, extra, liveByName };
 }
 
-/** Role-type overwrites only, keyed by "roleName|allow|deny" — order-independent set comparison. */
+/**
+ * Role-type overwrites only, keyed by "roleName|allow|deny" — order-independent set comparison.
+ *
+ * Discord overwrites come in two kinds: `type: 0` (role-scoped, what
+ * structure.ts declares) and `type: 1` (member-scoped — permissions pinned
+ * to one specific user). This filters to `type === 0` ON PURPOSE: a
+ * member overwrite has no name to declare it by, so structure.ts has no way
+ * to represent one and this diff can never plan a change for it. That means
+ * a member overwrite is invisible here FOREVER — it never shows up as
+ * drift, is never reconciled, and a sync never touches it (`sync.ts` only
+ * ever sends the role-type overwrites this function reads). `discord
+ * audit`'s table output prints any live member overwrites it finds so the
+ * drift is at least visible somewhere, even though nothing here acts on it.
+ */
 function overwriteKeySet(
   overwrites: DesiredPermissionOverwrite[] | undefined,
   live: PermissionOverwrite[] | undefined,
@@ -134,6 +309,45 @@ function overwriteKeySet(
 
 function setsEqual(a: Set<string>, b: Set<string>): boolean {
   return a.size === b.size && [...a].every((v) => b.has(v));
+}
+
+/** `"name|moderated|emojiName"` set comparison for forum tags — id-agnostic, order-independent. */
+function forumTagKeySet(
+  desired: { name: string; moderated?: boolean; emojiName?: string }[],
+): Set<string> {
+  return new Set(desired.map((t) => `${t.name}|${Boolean(t.moderated)}|${t.emojiName ?? ''}`));
+}
+
+function liveForumTagKeySet(live: GuildChannel['available_tags']): Set<string> {
+  return new Set((live ?? []).map((t) => `${t.name}|${t.moderated}|${t.emoji_name ?? ''}`));
+}
+
+/** Diffs `channel.forum` against the live channel's forum-only fields; only meaningful for forum/media channels. */
+function diffForumConfig(channel: DesiredChannel, existing: GuildChannel, changes: string[]): void {
+  const forum = channel.forum;
+  if (!forum) {
+    return;
+  }
+  if (!setsEqual(forumTagKeySet(forum.tags), liveForumTagKeySet(existing.available_tags))) {
+    changes.push('forum tags changed');
+  }
+  const desiredReaction = forum.defaultReaction ?? null;
+  const liveReaction = existing.default_reaction_emoji?.emoji_name ?? null;
+  if (desiredReaction !== liveReaction) {
+    changes.push(`forum default reaction ${liveReaction ?? 'none'} → ${desiredReaction ?? 'none'}`);
+  }
+  const desiredLayout = forum.defaultLayout
+    ? FORUM_LAYOUT_MAP[forum.defaultLayout]
+    : ForumLayoutType.NotSet;
+  if (desiredLayout !== (existing.default_forum_layout ?? ForumLayoutType.NotSet)) {
+    changes.push(`forum layout ${existing.default_forum_layout ?? 0} → ${desiredLayout}`);
+  }
+  const desiredSort = forum.defaultSortOrder
+    ? FORUM_SORT_MAP[forum.defaultSortOrder]
+    : SortOrderType.LatestActivity;
+  if (desiredSort !== (existing.default_sort_order ?? SortOrderType.LatestActivity)) {
+    changes.push(`forum sort order ${existing.default_sort_order ?? 0} → ${desiredSort}`);
+  }
 }
 
 function diffChannels(
@@ -185,8 +399,22 @@ function diffChannels(
     }
     matched.add(existing.id);
     const changes: string[] = [];
-    if (CHANNEL_TYPE_MAP[channel.type] !== existing.type) {
-      changes.push(`type ${existing.type} → ${CHANNEL_TYPE_MAP[channel.type]}`);
+    const desiredType = CHANNEL_TYPE_MAP[channel.type];
+    if (desiredType !== existing.type) {
+      // 🔴 Fail at PLAN time, not mid-apply. `PATCH /channels/{id}` only
+      // supports text ↔ announcement — anything else (e.g. text → forum)
+      // is rejected by Discord's API, but only after earlier changes in the
+      // same `sync --apply` run have already landed. See structure.ts fact 2.
+      const key = `${existing.type}->${desiredType}`;
+      if (!ALLOWED_TYPE_CONVERSIONS.has(key)) {
+        throw new Error(
+          `Channel "${channel.name}" cannot change type ${existing.type} → ${desiredType} via ` +
+            'PATCH — Discord only allows text ↔ announcement conversion. Delete and recreate it ' +
+            '(sync --apply --prune to delete, then a normal apply to create) instead of declaring ' +
+            'the type change here.',
+        );
+      }
+      changes.push(`type ${existing.type} → ${desiredType}`);
     }
     const currentParentId = existing.parent_id ?? null;
     if (channel.category) {
@@ -203,12 +431,31 @@ function diffChannels(
       // would leave the channel where it is — see ChannelUpdateBody).
       changes.push('category → top level');
     }
-    if (channel.topic !== undefined && channel.topic !== (existing.topic ?? undefined)) {
-      changes.push(`topic → ${JSON.stringify(channel.topic)}`);
+    // For a forum/media channel, `forum.postGuidelines` IS the topic field
+    // — declaring both would be ambiguous, so forum config wins. Voice/stage
+    // channels have NO topic field at all — Discord rejects any string sent
+    // as one with a generic `CHANNEL_TOPIC_INVALID` (confirmed live: even
+    // plain "test" is rejected), so `channel.topic` is never diffed or sent
+    // for them even if structure.ts declares one for documentation.
+    const effectiveTopic = channel.forum?.postGuidelines ?? channel.topic;
+    const supportsTopic = channel.type !== 'voice' && channel.type !== 'stage';
+    if (
+      supportsTopic &&
+      effectiveTopic !== undefined &&
+      effectiveTopic !== (existing.topic ?? undefined)
+    ) {
+      changes.push(`topic → ${JSON.stringify(effectiveTopic)}`);
     }
     if (channel.nsfw !== undefined && channel.nsfw !== Boolean(existing.nsfw)) {
       changes.push(`nsfw ${Boolean(existing.nsfw)} → ${channel.nsfw}`);
     }
+    if (
+      channel.slowmodeSeconds !== undefined &&
+      channel.slowmodeSeconds !== (existing.rate_limit_per_user ?? 0)
+    ) {
+      changes.push(`slowmode ${existing.rate_limit_per_user ?? 0}s → ${channel.slowmodeSeconds}s`);
+    }
+    diffForumConfig(channel, existing, changes);
     const overwriteSets = overwriteKeySet(
       channel.permissionOverwrites,
       existing.permission_overwrites,
@@ -226,9 +473,257 @@ function diffChannels(
   return { create, update, extra };
 }
 
+function buildAutomodBody(
+  rule: DesiredAutoModRule,
+  roleIdByName: Map<string, string>,
+  channelIdByName: Map<string, string>,
+): AutoModRuleBody {
+  const trigger_metadata: AutoModTriggerMetadata = {};
+  if (rule.mentionTotalLimit !== undefined) {
+    trigger_metadata.mention_total_limit = rule.mentionTotalLimit;
+  }
+  if (rule.mentionRaidProtection !== undefined) {
+    trigger_metadata.mention_raid_protection_enabled = rule.mentionRaidProtection;
+  }
+  if (rule.presets) {
+    trigger_metadata.presets = rule.presets.map((p) => AUTOMOD_PRESET_MAP[p]);
+  }
+  if (rule.keywordFilter) {
+    trigger_metadata.keyword_filter = rule.keywordFilter;
+  }
+  if (rule.regexPatterns) {
+    trigger_metadata.regex_patterns = rule.regexPatterns;
+  }
+
+  const actions: AutoModAction[] = rule.actions.map((action) =>
+    resolveAutomodAction(action, channelIdByName),
+  );
+
+  const exempt_roles = (rule.exemptRoles ?? []).map((name) => {
+    const id = roleIdByName.get(name);
+    if (!id) {
+      throw new Error(
+        `AutoMod rule "${rule.name}" exempts role "${name}", which is not declared in structure.roles.`,
+      );
+    }
+    return id;
+  });
+
+  return {
+    name: rule.name,
+    event_type: 1, // MessageSend — the only event type these trigger kinds support.
+    trigger_type: AUTOMOD_TRIGGER_MAP[rule.trigger],
+    trigger_metadata: Object.keys(trigger_metadata).length > 0 ? trigger_metadata : undefined,
+    actions,
+    enabled: true,
+    exempt_roles,
+  };
+}
+
+function resolveAutomodAction(
+  action: DesiredAutoModAction,
+  channelIdByName: Map<string, string>,
+): AutoModAction {
+  switch (action.type) {
+    case 'blockMessage':
+      return {
+        type: AutoModerationActionType.BlockMessage,
+        metadata: action.customMessage ? { custom_message: action.customMessage } : undefined,
+      };
+    case 'alert': {
+      const channelId = channelIdByName.get(action.channel);
+      if (!channelId) {
+        throw new Error(
+          `AutoMod alert action references channel "${action.channel}", which doesn't exist live.`,
+        );
+      }
+      return {
+        type: AutoModerationActionType.SendAlertMessage,
+        metadata: { channel_id: channelId },
+      };
+    }
+    case 'timeout':
+      return {
+        type: AutoModerationActionType.Timeout,
+        metadata: { duration_seconds: action.durationSeconds },
+      };
+  }
+}
+
+/** JSON-stable comparison after sorting every array field, so declaration order never causes a phantom diff. */
+function normalizedJson(value: unknown): string {
+  const sortArrays = (v: unknown): unknown => {
+    if (Array.isArray(v)) {
+      return [...v]
+        .map(sortArrays)
+        .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    }
+    if (v && typeof v === 'object') {
+      return Object.fromEntries(
+        Object.entries(v as Record<string, unknown>)
+          .filter(([, val]) => val !== undefined)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, val]) => [k, sortArrays(val)]),
+      );
+    }
+    return v;
+  };
+  return JSON.stringify(sortArrays(value));
+}
+
+/**
+ * Discord always echoes `keyword_filter`/`presets`/`regex_patterns`/
+ * `allow_list` back as `[]` on a live rule even when they were never sent —
+ * comparing our desired body (which OMITS a field entirely when we don't
+ * declare it) against that live shape would show a phantom "trigger
+ * metadata changed" on every single diff/sync forever. Filling the same
+ * defaults into BOTH sides before comparing (never into what's actually
+ * sent to the API — only here) makes "we didn't declare it" and "Discord
+ * defaulted it to empty" compare as equal.
+ */
+function canonicalizeTriggerMetadata(
+  metadata: AutoModTriggerMetadata | undefined,
+): AutoModTriggerMetadata {
+  return {
+    keyword_filter: [],
+    presets: [],
+    regex_patterns: [],
+    allow_list: [],
+    ...metadata,
+  };
+}
+
+function diffAutomod(
+  desired: DesiredAutoModRule[],
+  live: AutoModRule[],
+  roleIdByName: Map<string, string>,
+  channelIdByName: Map<string, string>,
+): {
+  create: { rule: DesiredAutoModRule; body: AutoModRuleBody }[];
+  update: AutoModRuleUpdate[];
+  extra: { id: string; name: string }[];
+} {
+  const liveByName = new Map(live.map((r) => [r.name, r]));
+  const create: { rule: DesiredAutoModRule; body: AutoModRuleBody }[] = [];
+  const update: AutoModRuleUpdate[] = [];
+  const matched = new Set<string>();
+
+  for (const rule of desired) {
+    const body = buildAutomodBody(rule, roleIdByName, channelIdByName);
+    const existing = liveByName.get(rule.name);
+    if (!existing) {
+      create.push({ rule, body });
+      continue;
+    }
+    matched.add(existing.id);
+    const changes: string[] = [];
+    if (body.trigger_type !== existing.trigger_type) {
+      changes.push(`trigger ${existing.trigger_type} → ${body.trigger_type}`);
+    }
+    if (
+      normalizedJson(canonicalizeTriggerMetadata(body.trigger_metadata)) !==
+      normalizedJson(canonicalizeTriggerMetadata(existing.trigger_metadata))
+    ) {
+      changes.push('trigger metadata changed');
+    }
+    if (normalizedJson(body.actions) !== normalizedJson(existing.actions)) {
+      changes.push('actions changed');
+    }
+    if (normalizedJson(body.exempt_roles ?? []) !== normalizedJson(existing.exempt_roles ?? [])) {
+      changes.push('exempt roles changed');
+    }
+    if (changes.length > 0) {
+      update.push({ id: existing.id, name: rule.name, changes, body });
+    }
+  }
+
+  const extra = live.filter((r) => !matched.has(r.id)).map((r) => ({ id: r.id, name: r.name }));
+  return { create, update, extra };
+}
+
+const GUILD_LEVEL_FIELDS: {
+  key: keyof DesiredGuild;
+  liveKey: keyof GuildSettings;
+  label: string;
+}[] = [
+  { key: 'verificationLevel', liveKey: 'verification_level', label: 'verificationLevel' },
+  { key: 'mfaLevel', liveKey: 'mfa_level', label: 'mfaLevel' },
+  {
+    key: 'explicitContentFilter',
+    liveKey: 'explicit_content_filter',
+    label: 'explicitContentFilter',
+  },
+  { key: 'description', liveKey: 'description', label: 'description' },
+];
+
+const GUILD_CHANNEL_FIELDS: {
+  key: keyof DesiredGuild;
+  liveKey: keyof GuildSettings;
+  label: string;
+}[] = [
+  { key: 'rulesChannel', liveKey: 'rules_channel_id', label: 'rulesChannel' },
+  {
+    key: 'publicUpdatesChannel',
+    liveKey: 'public_updates_channel_id',
+    label: 'publicUpdatesChannel',
+  },
+  { key: 'safetyAlertsChannel', liveKey: 'safety_alerts_channel_id', label: 'safetyAlertsChannel' },
+  { key: 'systemChannel', liveKey: 'system_channel_id', label: 'systemChannel' },
+];
+
+function diffGuild(
+  desired: DesiredGuild | undefined,
+  live: GuildSettings,
+  channelIdByName: Map<string, string>,
+): GuildUpdate | null {
+  if (!desired) {
+    return null;
+  }
+  const changes: string[] = [];
+  const body: GuildUpdateBody = {};
+
+  for (const field of GUILD_LEVEL_FIELDS) {
+    const desiredValue = desired[field.key];
+    if (desiredValue === undefined) {
+      continue;
+    }
+    const liveValue = live[field.liveKey];
+    if (desiredValue !== liveValue) {
+      changes.push(`${field.label} ${String(liveValue)} → ${String(desiredValue)}`);
+      (body as Record<string, unknown>)[field.liveKey] = desiredValue;
+    }
+  }
+
+  for (const field of GUILD_CHANNEL_FIELDS) {
+    const channelName = desired[field.key];
+    if (channelName === undefined || typeof channelName !== 'string') {
+      continue;
+    }
+    const channelId = channelIdByName.get(channelName);
+    if (!channelId) {
+      throw new Error(
+        `structure.guild.${field.key} references channel "${channelName}", which doesn't exist live.`,
+      );
+    }
+    const liveValue = live[field.liveKey] ?? null;
+    if (channelId !== liveValue) {
+      changes.push(`${field.label} → ${channelName}`);
+      (body as Record<string, unknown>)[field.liveKey] = channelId;
+    }
+  }
+
+  return changes.length > 0 ? { changes, body } : null;
+}
+
 /** Compare `desired` (structure.ts) against `live` (fetched from Discord) and produce a Plan. */
 export function computePlan(
-  desired: { roles: DesiredRole[]; categories: DesiredCategory[]; channels: DesiredChannel[] },
+  desired: {
+    guild?: DesiredGuild;
+    roles: DesiredRole[];
+    categories: DesiredCategory[];
+    channels: DesiredChannel[];
+    automod?: DesiredAutoModRule[];
+  },
   live: LiveState,
 ): Plan {
   const roleDiff = diffRoles(desired.roles, live.roles);
@@ -248,6 +743,13 @@ export function computePlan(
   // includes it — so this map alone resolves permissionOverwrites'
   // `role: '@everyone'` too, no separate guildId parameter needed here.
   const roleNameById = new Map(live.roles.map((r) => [r.id, r.name]));
+  const roleIdByName = new Map(live.roles.map((r) => [r.name, r.id]));
+  const channelIdByName = new Map(
+    live.channels
+      .filter((ch) => ch.type !== ChannelType.GuildCategory)
+      .map((ch) => [ch.name, ch.id]),
+  );
+
   const channelDiff = diffChannels(
     desired.channels,
     live.channels,
@@ -255,8 +757,16 @@ export function computePlan(
     desiredCategoryNames,
     roleNameById,
   );
+  const automodDiff = diffAutomod(
+    desired.automod ?? [],
+    live.automodRules,
+    roleIdByName,
+    channelIdByName,
+  );
+  const guildUpdate = diffGuild(desired.guild, live.guild, channelIdByName);
 
   return {
+    guildUpdate,
     createCategories: categoryDiff.create,
     createChannels: channelDiff.create,
     createRoles: roleDiff.create,
@@ -267,5 +777,10 @@ export function computePlan(
       name: ch.name,
     })),
     deleteRoles: roleDiff.extra.map((r) => ({ id: r.id, name: r.name })),
+    createAutomodRules: automodDiff.create,
+    updateAutomodRules: automodDiff.update,
+    deleteAutomodRules: automodDiff.extra,
+    roleReorders: diffRolePositions(desired.roles, live.roles),
+    channelReorders: diffChannelPositions(desired.channels, live.channels, categoryIdByName),
   };
 }

@@ -38,7 +38,8 @@ import {
   serializeForAi,
   validateSheetJson,
 } from '@aikami/utils';
-import { equipmentService, getItemDefinition, playerStateService } from '$services';
+import { equipmentService, playerStateService } from '$services';
+import { getItemDefinition } from '$utils/inventory_utils';
 
 export type { EquipmentSlot, ItemDefinition };
 
