@@ -44,9 +44,8 @@ function quote(s: string): string {
  * change for it (see diff.ts's overwriteKeySet comment). Printing them here
  * is the only place their drift is visible at all.
  */
-function memberOverwriteCount(ch: GuildChannel): number {
-  return (ch.permission_overwrites ?? []).filter((o) => o.type === 1).length;
-}
+const memberOverwriteCount = (ch: GuildChannel): number =>
+  (ch.permission_overwrites ?? []).filter((o) => o.type === 1).length;
 
 function printStructureSeed(
   categories: GuildChannel[],

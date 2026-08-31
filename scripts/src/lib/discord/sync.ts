@@ -33,12 +33,18 @@ import { getGuild, updateGuild } from './guild';
 import { updateChannelPositions, updateRolePositions } from './positions';
 import { createRole, deleteRole, listRoles, updateRole } from './roles';
 import {
+  type DesiredAutoModRule,
   type DesiredChannel,
   type DesiredPermissionOverwrite,
   permissionsToBitfield,
   structure,
 } from './structure';
-import type { ChannelCreateBody, GuildChannel, PermissionOverwrite } from './types';
+import type {
+  AutoModRuleBody,
+  ChannelUpdateBody,
+  GuildChannel,
+  PermissionOverwrite,
+} from './types';
 
 /**
  * Resolve declared overwrites (by role name) to the {id, type, allow, deny}
@@ -82,7 +88,7 @@ function buildForumFields(
   channel: DesiredChannel,
   liveTagsByName: Map<string, { id: string }>,
 ): Pick<
-  ChannelCreateBody,
+  ChannelUpdateBody,
   | 'topic'
   | 'available_tags'
   | 'default_reaction_emoji'
@@ -98,7 +104,7 @@ function buildForumFields(
     return { topic: supportsTopic ? channel.topic : undefined };
   }
   return {
-    topic: forum.postGuidelines,
+    topic: forum.postGuidelines ?? channel.topic,
     available_tags: forum.tags.map((tag) => ({
       ...(liveTagsByName.has(tag.name) ? { id: liveTagsByName.get(tag.name)?.id } : {}),
       name: tag.name,
@@ -115,6 +121,21 @@ function buildForumFields(
 }
 
 export type SyncOptions = { apply: boolean; prune: boolean };
+
+const resolveAutomodExemptRoles = (options: {
+  rule: DesiredAutoModRule;
+  body: AutoModRuleBody;
+  roleIdByName: Map<string, string>;
+}): AutoModRuleBody => ({
+  ...options.body,
+  exempt_roles: (options.rule.exemptRoles ?? []).map((name) => {
+    const roleId = options.roleIdByName.get(name);
+    if (!roleId) {
+      throw new Error(`AutoMod rule "${options.rule.name}" exempts missing live role "${name}".`);
+    }
+    return roleId;
+  }),
+});
 
 function printPlan(plan: Plan): void {
   const section = (title: string, lines: string[]) => {
@@ -189,9 +210,19 @@ function printPlan(plan: Plan): void {
 }
 
 /** Refuse a --prune that would wipe most of the live server — almost certainly a typo, not intent. */
-function pruneLooksSane(plan: Plan, live: { channels: unknown[]; roles: unknown[] }): boolean {
-  const deleteCount = plan.deleteChannels.length + plan.deleteRoles.length;
-  const liveCount = live.channels.length + live.roles.length;
+function pruneLooksSane(
+  plan: Plan,
+  live: { channels: unknown[]; roles: unknown[]; automodRules: unknown[] },
+): boolean {
+  if (
+    live.automodRules.length > 0 &&
+    plan.deleteAutomodRules.length / live.automodRules.length >= 0.5
+  ) {
+    return false;
+  }
+  const deleteCount =
+    plan.deleteChannels.length + plan.deleteRoles.length + plan.deleteAutomodRules.length;
+  const liveCount = live.channels.length + live.roles.length + live.automodRules.length;
   if (liveCount === 0) {
     return true;
   }
@@ -237,10 +268,12 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
   }
 
   if (options.prune && !pruneLooksSane(plan, live)) {
+    const deleteCount =
+      plan.deleteChannels.length + plan.deleteRoles.length + plan.deleteAutomodRules.length;
+    const liveCount = live.channels.length + live.roles.length + live.automodRules.length;
     error(
-      `--prune would delete ${plan.deleteChannels.length + plan.deleteRoles.length} of ${
-        live.channels.length + live.roles.length
-      } live channels/roles — that's over half the server. Refusing.`,
+      `--prune would delete ${deleteCount} of ${liveCount} live channels/roles/AutoMod rules, ` +
+        "or at least half of the server's AutoMod rules. Refusing.",
     );
     console.log(
       `${c.dim}If this is really intended, delete them individually in Discord instead.${c.reset}`,
@@ -340,8 +373,12 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
       desired,
       liveTagsByChannelName.get(update.name) ?? new Map(),
     );
+    const updatedType =
+      desired.type === 'text' || desired.type === 'announcement'
+        ? CHANNEL_TYPE_MAP[desired.type]
+        : undefined;
     await updateChannel(rest, update.id, {
-      type: CHANNEL_TYPE_MAP[desired.type],
+      type: updatedType,
       // null (not undefined) moves a categorized channel to the top level —
       // diff.ts only plans the update when a real change exists, so when
       // desired declares no category, null is exactly the desired state.
@@ -364,13 +401,23 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
     ok(`Reordered ${plan.channelReorders.length} channel(s)`);
   }
 
-  for (const { body } of plan.createAutomodRules) {
-    await createAutoModRule(rest, guildId, body);
-    ok(`Created AutoMod rule ${body.name}`);
+  for (const { rule, body } of plan.createAutomodRules) {
+    const resolvedBody = resolveAutomodExemptRoles({ rule, body, roleIdByName });
+    await createAutoModRule(rest, guildId, resolvedBody);
+    ok(`Created AutoMod rule ${resolvedBody.name}`);
   }
   for (const update of plan.updateAutomodRules) {
+    const rule = structure.automod?.find((candidate) => candidate.name === update.name);
+    if (!rule) {
+      continue;
+    }
+    const resolvedBody = resolveAutomodExemptRoles({
+      rule,
+      body: update.body,
+      roleIdByName,
+    });
     try {
-      await updateAutoModRule(rest, guildId, update.id, update.body);
+      await updateAutoModRule(rest, guildId, update.id, resolvedBody);
       ok(`Updated AutoMod rule ${update.name}`);
     } catch (err) {
       // Best-effort, not fail-loud like the rest of this file: some

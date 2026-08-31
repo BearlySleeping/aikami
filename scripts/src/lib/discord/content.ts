@@ -5,10 +5,10 @@
 // of posting a duplicate.
 //
 // Identity: no message id is stored anywhere (not in this file, not in a
-// side-channel state file). Instead, each run lists the channel's recent
-// messages and finds the one authored by this bot (`GET /users/@me` for the
-// bot's own id, then a name match against `message.author.id`) — the first
-// one found (Discord orders newest-first) is treated as "ours" and edited;
+// side-channel state file). Instead, each run lists all pinned messages and
+// finds the one authored by this bot (`GET /users/@me` for the bot's own id,
+// then an id match against `message.author.id`) — the first one found is
+// treated as "ours" and edited;
 // if none exists yet, one is posted and pinned. This was chosen over a
 // stored id because a stored id is itself a second source of truth that can
 // drift (channel gets cleared, id file goes stale, wrong mode's id used) —
@@ -35,6 +35,10 @@ const CONTENT: ContentEntry[] = [
 // ─────────────────────────────────────────────────────────────────────────
 
 type DiscordMessage = { id: string; author: { id: string } };
+type DiscordPinPage = {
+  items: { pinned_at: string; message: DiscordMessage }[];
+  has_more: boolean;
+};
 type DiscordUser = { id: string };
 
 async function findOwnMessage(
@@ -42,14 +46,40 @@ async function findOwnMessage(
   channelId: string,
   botUserId: string,
 ): Promise<DiscordMessage | undefined> {
-  const messages = (await rest.get(Routes.channelMessages(channelId), {
-    query: new URLSearchParams({ limit: '50' }),
-  })) as DiscordMessage[];
-  // Newest first — the most recent message we posted here is "ours".
-  return messages.find((m) => m.author.id === botUserId);
+  let before: string | undefined;
+  while (true) {
+    const query = new URLSearchParams({ limit: '50' });
+    if (before) {
+      query.set('before', before);
+    }
+    const page = (await rest.get(Routes.channelMessagesPins(channelId), {
+      query,
+    })) as DiscordPinPage;
+    const ownPin = page.items.find((item) => item.message.author.id === botUserId);
+    if (ownPin) {
+      return ownPin.message;
+    }
+    const lastPin = page.items.at(-1);
+    if (!page.has_more || !lastPin) {
+      return undefined;
+    }
+    before = lastPin.pinned_at;
+  }
 }
 
+/**
+ * Synchronizes configured pinned content for the requested environment mode.
+ * @param mode Environment whose Discord credentials and guild should be used.
+ * @throws When placeholder copy remains or a configured channel does not exist live.
+ */
 export async function runContentSync(mode = 'production'): Promise<void> {
+  const placeholderEntry = CONTENT.find((entry) => entry.body.includes('TODO(copy)'));
+  if (placeholderEntry) {
+    throw new Error(
+      `content:sync refuses placeholder copy in #${placeholderEntry.channel}; replace TODO(copy) first.`,
+    );
+  }
+
   const { rest, guildId } = initDiscordClient(mode);
 
   const [channels, me] = await Promise.all([
@@ -79,7 +109,7 @@ export async function runContentSync(mode = 'production'): Promise<void> {
     const created = (await rest.post(Routes.channelMessages(channelId), {
       body: { content: entry.body },
     })) as DiscordMessage;
-    await rest.put(Routes.channelPin(channelId, created.id));
+    await rest.put(Routes.channelMessagesPin(channelId, created.id));
     ok(`Posted + pinned message in ${c.bold}#${entry.channel}${c.reset}`);
   }
 }

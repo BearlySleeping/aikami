@@ -5,7 +5,7 @@ export {
   type RouterServiceInterface,
   routerService,
 } from '@aikami/frontend/services';
-export type { GameStateSyncServiceInterface, SaveSlotEntry, SaveSlotMetadata } from '@aikami/types';
+export type { SaveSlotEntry, SaveSlotMetadata } from '@aikami/types';
 // ── Agent Pipeline ────────────────────────────────────────────────────
 export {
   AgentPipelineService,
@@ -100,6 +100,7 @@ export * from './game/session_service.svelte';
 export * from './game/time_service.svelte';
 export * from './game/vendor_service.svelte.ts';
 export * from './game/world_state_service.svelte.ts';
+export type { GameStateSyncServiceInterface } from './game_state_sync.svelte.ts';
 export { gameStateSyncService } from './game_state_sync.svelte.ts';
 export * from './gm/gm_prompt_service.svelte.ts';
 export * from './gm/gm_types';

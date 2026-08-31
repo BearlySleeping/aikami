@@ -10,6 +10,7 @@
 
 import {
   AutoModerationActionType,
+  AutoModerationRuleEventType,
   AutoModerationRuleKeywordPresetType,
   AutoModerationRuleTriggerType,
   ChannelType,
@@ -41,14 +42,14 @@ import type {
   PermissionOverwrite,
 } from './types';
 
-export const CHANNEL_TYPE_MAP: Record<DesiredChannelType, ChannelType> = {
+export const CHANNEL_TYPE_MAP = {
   text: ChannelType.GuildText,
   voice: ChannelType.GuildVoice,
   announcement: ChannelType.GuildAnnouncement,
   forum: ChannelType.GuildForum,
   stage: ChannelType.GuildStageVoice,
   media: ChannelType.GuildMedia,
-};
+} as const satisfies Record<DesiredChannelType, ChannelType>;
 
 // The ONLY channel-type conversion `PATCH /channels/{id}` supports is text
 // ↔ announcement (both are "message channels" under the hood). Anything
@@ -477,6 +478,7 @@ function buildAutomodBody(
   rule: DesiredAutoModRule,
   roleIdByName: Map<string, string>,
   channelIdByName: Map<string, string>,
+  desiredRoleNames: Set<string>,
 ): AutoModRuleBody {
   const trigger_metadata: AutoModTriggerMetadata = {};
   if (rule.mentionTotalLimit !== undefined) {
@@ -502,8 +504,23 @@ function buildAutomodBody(
   const exempt_roles = (rule.exemptRoles ?? []).map((name) => {
     const id = roleIdByName.get(name);
     if (!id) {
+      if (desiredRoleNames.has(name)) {
+        throw new Error(
+          `AutoMod rule "${rule.name}" exempts role "${name}", which is declared in ` +
+            'structure.roles but must exist live first.',
+        );
+      }
       throw new Error(
         `AutoMod rule "${rule.name}" exempts role "${name}", which is not declared in structure.roles.`,
+      );
+    }
+    return id;
+  });
+  const exempt_channels = (rule.exemptChannels ?? []).map((name) => {
+    const id = channelIdByName.get(name);
+    if (!id) {
+      throw new Error(
+        `AutoMod rule "${rule.name}" exempts channel "${name}", which doesn't exist live.`,
       );
     }
     return id;
@@ -511,12 +528,13 @@ function buildAutomodBody(
 
   return {
     name: rule.name,
-    event_type: 1, // MessageSend — the only event type these trigger kinds support.
+    event_type: AutoModerationRuleEventType.MessageSend,
     trigger_type: AUTOMOD_TRIGGER_MAP[rule.trigger],
     trigger_metadata: Object.keys(trigger_metadata).length > 0 ? trigger_metadata : undefined,
     actions,
-    enabled: true,
+    enabled: rule.enabled ?? true,
     exempt_roles,
+    exempt_channels,
   };
 }
 
@@ -598,6 +616,7 @@ function diffAutomod(
   live: AutoModRule[],
   roleIdByName: Map<string, string>,
   channelIdByName: Map<string, string>,
+  desiredRoleNames: Set<string>,
 ): {
   create: { rule: DesiredAutoModRule; body: AutoModRuleBody }[];
   update: AutoModRuleUpdate[];
@@ -609,7 +628,7 @@ function diffAutomod(
   const matched = new Set<string>();
 
   for (const rule of desired) {
-    const body = buildAutomodBody(rule, roleIdByName, channelIdByName);
+    const body = buildAutomodBody(rule, roleIdByName, channelIdByName, desiredRoleNames);
     const existing = liveByName.get(rule.name);
     if (!existing) {
       create.push({ rule, body });
@@ -632,6 +651,14 @@ function diffAutomod(
     if (normalizedJson(body.exempt_roles ?? []) !== normalizedJson(existing.exempt_roles ?? [])) {
       changes.push('exempt roles changed');
     }
+    if (
+      normalizedJson(body.exempt_channels ?? []) !== normalizedJson(existing.exempt_channels ?? [])
+    ) {
+      changes.push('exempt channels changed');
+    }
+    if ((body.enabled ?? false) !== existing.enabled) {
+      changes.push(`enabled ${existing.enabled} → ${body.enabled ?? false}`);
+    }
     if (changes.length > 0) {
       update.push({ id: existing.id, name: rule.name, changes, body });
     }
@@ -647,7 +674,6 @@ const GUILD_LEVEL_FIELDS: {
   label: string;
 }[] = [
   { key: 'verificationLevel', liveKey: 'verification_level', label: 'verificationLevel' },
-  { key: 'mfaLevel', liveKey: 'mfa_level', label: 'mfaLevel' },
   {
     key: 'explicitContentFilter',
     liveKey: 'explicit_content_filter',
@@ -757,12 +783,16 @@ export function computePlan(
     desiredCategoryNames,
     roleNameById,
   );
-  const automodDiff = diffAutomod(
-    desired.automod ?? [],
-    live.automodRules,
-    roleIdByName,
-    channelIdByName,
-  );
+  const automodDiff =
+    desired.automod === undefined
+      ? { create: [], update: [], extra: [] }
+      : diffAutomod(
+          desired.automod,
+          live.automodRules,
+          roleIdByName,
+          channelIdByName,
+          new Set(desired.roles.map((role) => role.name)),
+        );
   const guildUpdate = diffGuild(desired.guild, live.guild, channelIdByName);
 
   return {

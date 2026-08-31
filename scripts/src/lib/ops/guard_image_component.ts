@@ -50,13 +50,13 @@ for (const root of SCAN_ROOTS) {
     if (file === ALLOWED_FILE) {
       continue;
     }
-    const lines = readFileSync(file, 'utf8').split('\n');
-    lines.forEach((line, index) => {
-      // Matches an <img tag, not a component like <ImageFoo or <Image.
-      if (/<img[\s/>]/.test(line)) {
-        violations.push({ file: relPath(file), line: index + 1 });
-      }
-    });
+    const source = readFileSync(file, 'utf8');
+    // Matches an <img tag, including multiline tags, but not components like
+    // <ImageFoo or <Image. Derive each report line from the full-source match.
+    for (const match of source.matchAll(/<img[\s/>]/g)) {
+      const line = source.slice(0, match.index).split('\n').length;
+      violations.push({ file: relPath(file), line });
+    }
   }
 }
 

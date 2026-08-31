@@ -31,7 +31,6 @@
 
 import {
   GuildExplicitContentFilter,
-  GuildMFALevel,
   GuildVerificationLevel,
   PermissionFlagsBits,
 } from 'discord-api-types/v10';
@@ -147,7 +146,6 @@ export type DesiredCategory = {
 
 export type DesiredGuild = {
   verificationLevel?: GuildVerificationLevel;
-  mfaLevel?: GuildMFALevel;
   explicitContentFilter?: GuildExplicitContentFilter;
   /** Channel name. Community-feature "Rules or Guidelines" channel. */
   rulesChannel?: string;
@@ -173,6 +171,8 @@ export type DesiredAutoModAction =
 export type DesiredAutoModRule = {
   name: string;
   trigger: AutoModTriggerKind;
+  /** Whether Discord should enforce the rule. Defaults to true. */
+  enabled?: boolean;
   /** mentionSpam only. */
   mentionTotalLimit?: number;
   /** mentionSpam only. */
@@ -185,6 +185,8 @@ export type DesiredAutoModRule = {
   regexPatterns?: string[];
   /** Role names exempt from this rule. */
   exemptRoles?: string[];
+  /** Channel names exempt from this rule. */
+  exemptChannels?: string[];
   actions: DesiredAutoModAction[];
 };
 
@@ -203,7 +205,7 @@ export const structure: DesiredStructure = {
     // Set in Discord UI by Task 1 (Server Settings → Safety Setup); declared
     // here too so a future manual change drifts back via `sync --apply`.
     verificationLevel: GuildVerificationLevel.Medium,
-    mfaLevel: GuildMFALevel.Elevated,
+    // MFA level is read-only and is not managed by declarative sync.
     explicitContentFilter: GuildExplicitContentFilter.AllMembers,
     rulesChannel: 'rules',
     // NOT set: publicUpdatesChannel — Discord silently refuses to change
@@ -493,20 +495,20 @@ export const structure: DesiredStructure = {
       trigger: 'mentionSpam',
       mentionTotalLimit: 8,
       mentionRaidProtection: true,
-      actions: [{ type: 'alert', channel: 'staff' }],
+      actions: [{ type: 'blockMessage' }, { type: 'alert', channel: 'staff' }],
     },
     {
       name: 'Blocked Keyword Presets',
       trigger: 'keywordPreset',
       presets: ['slurs', 'sexualContent'],
-      actions: [{ type: 'alert', channel: 'staff' }],
+      actions: [{ type: 'blockMessage' }, { type: 'alert', channel: 'staff' }],
     },
     {
       name: 'Blocked Invite Links',
       trigger: 'keyword',
       regexPatterns: ['discord\\.gg/', 'discord\\.com/invite/'],
       exemptRoles: ['Admin', 'Moderator', 'Contributor'],
-      actions: [{ type: 'alert', channel: 'staff' }],
+      actions: [{ type: 'blockMessage' }, { type: 'alert', channel: 'staff' }],
     },
   ],
 };

@@ -146,14 +146,29 @@ export async function notifyDiscordRelease(tag: string, mode = 'production'): Pr
  * deploy failure is internal ops noise, not something the public
  * #releases channel should see.
  */
-export async function notifyDiscordFailure(mode: string, runId: string): Promise<void> {
+export const notifyDiscordFailure = async (options: {
+  mode: string;
+  runId: string;
+}): Promise<void> => {
+  const { mode, runId } = options;
   initScriptsEnv(mode);
 
   if (!process.env.DISCORD_STAFF_WEBHOOK_URL) {
     warn('DISCORD_STAFF_WEBHOOK_URL not set — skipping failure notification.');
     return;
   }
-  const webhookUrl = process.env.DISCORD_STAFF_WEBHOOK_URL;
+  const configuredWebhookUrl = process.env.DISCORD_STAFF_WEBHOOK_URL;
+  let webhookUrl: URL;
+  try {
+    webhookUrl = new URL(configuredWebhookUrl);
+  } catch {
+    warn('DISCORD_STAFF_WEBHOOK_URL is not a valid HTTPS URL — skipping failure notification.');
+    return;
+  }
+  if (webhookUrl.protocol !== 'https:') {
+    warn('DISCORD_STAFF_WEBHOOK_URL must use HTTPS — skipping failure notification.');
+    return;
+  }
   const repo = process.env.GITHUB_REPOSITORY || 'BearlySleeping/aikami';
   const runUrl = `https://github.com/${repo}/actions/runs/${runId}`;
 
@@ -168,6 +183,7 @@ export async function notifyDiscordFailure(mode: string, runId: string): Promise
 
   const res = await fetch(webhookUrl, {
     method: 'POST',
+    redirect: 'error',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ embeds: [embed], allowed_mentions: { parse: [] } }),
     signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
@@ -176,7 +192,7 @@ export async function notifyDiscordFailure(mode: string, runId: string): Promise
     throw new Error(`Discord webhook POST failed: ${res.status} ${res.statusText}`);
   }
   ok(`Posted deploy failure notification for ${mode} to Discord.`);
-}
+};
 
 async function main(): Promise<void> {
   const opts = parseCliArgs(Bun.argv.slice(2), {
@@ -193,7 +209,7 @@ async function main(): Promise<void> {
       error('--run-id (or RUN_ID) is required for failure notifications.');
       process.exit(1);
     }
-    await notifyDiscordFailure(mode, runId);
+    await notifyDiscordFailure({ mode, runId });
     return;
   }
 

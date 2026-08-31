@@ -38,10 +38,10 @@ export const DISCORD_CHANNELS = {
   merged: '',
 } as const;
 
-export const DISCORD_FORUM_TAG_LABELS: Record<string, string> = {
+export const DISCORD_FORUM_TAG_LABELS = {
   '1538881560181211219': 'bug', // Bug
   '1538881560181211220': 'enhancement', // Feature Request
   // "Question" (1538881560181211221) intentionally has no GitHub label —
   // most questions never become an issue. Same for the TASK 2 additions
   // "Content" and "Solved" — neither maps to a GitHub label either.
-};
+} as const;

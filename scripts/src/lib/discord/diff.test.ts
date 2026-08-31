@@ -7,7 +7,7 @@
 // these run without any network.
 
 import { describe, expect, it } from 'bun:test';
-import { ChannelType } from 'discord-api-types/v10';
+import { ChannelType, GuildVerificationLevel } from 'discord-api-types/v10';
 import { computePlan, type LiveState } from './diff';
 import type { DesiredCategory, DesiredChannel, DesiredRole } from './structure';
 import type { AutoModRule, GuildChannel, GuildSettings } from './types';
@@ -259,6 +259,14 @@ describe('computePlan — position diffing', () => {
   });
 
   it('reassigns channel positions only among siblings in the same category', () => {
+    let externalPositionReads = 0;
+    const externalChannel: GuildChannel = {
+      ...textChannel('t3', 'external', 'c2'),
+      get position() {
+        externalPositionReads += 1;
+        return 99;
+      },
+    };
     const plan = computePlan(
       structure(
         [{ name: 'Cat' }],
@@ -270,18 +278,86 @@ describe('computePlan — position diffing', () => {
       live(
         [
           category('c1', 'Cat'),
+          category('c2', 'Other'),
           { ...textChannel('t1', 'a', 'c1'), position: 1 },
           { ...textChannel('t2', 'b', 'c1'), position: 0 },
+          externalChannel,
         ],
         [],
       ),
     );
-    expect(plan.channelReorders).toEqual(
-      expect.arrayContaining([
-        { id: 't1', name: 'a', from: 1, to: 0 },
-        { id: 't2', name: 'b', from: 0, to: 1 },
-      ]),
+    expect(plan.channelReorders).toHaveLength(2);
+    expect(plan.channelReorders).toEqual([
+      { id: 't1', name: 'a', from: 1, to: 0 },
+      { id: 't2', name: 'b', from: 0, to: 1 },
+    ]);
+    expect(externalPositionReads).toBe(0);
+    expect(plan.channelReorders.some((change) => change.id === externalChannel.id)).toBe(false);
+  });
+});
+
+describe('computePlan — guild and management boundaries', () => {
+  it('plans a declared guild settings change', () => {
+    const plan = computePlan(
+      {
+        ...structure([], []),
+        guild: { verificationLevel: GuildVerificationLevel.Medium },
+      },
+      live([], []),
     );
+    expect(plan.guildUpdate?.body.verification_level).toBe(GuildVerificationLevel.Medium);
+    expect(plan.guildUpdate?.changes).toContain('verificationLevel 0 → 2');
+  });
+
+  it('throws when guild.rulesChannel cannot be resolved live', () => {
+    expect(() =>
+      computePlan(
+        {
+          ...structure([], []),
+          guild: { rulesChannel: 'missing-rules' },
+        },
+        live([], []),
+      ),
+    ).toThrow(/guild\.rulesChannel.*missing-rules/i);
+  });
+
+  it('plans deletion of an undeclared live AutoMod rule when automod is explicitly empty', () => {
+    const liveRule: AutoModRule = {
+      id: 'rule1',
+      guild_id: 'g1',
+      name: 'Unmanaged rule',
+      event_type: 1,
+      trigger_type: 3,
+      trigger_metadata: {},
+      actions: [],
+      enabled: true,
+      exempt_roles: [],
+      exempt_channels: [],
+    };
+    const plan = computePlan(
+      { ...structure([], []), automod: [] },
+      live([], [], { automodRules: [liveRule] }),
+    );
+    expect(plan.deleteAutomodRules).toEqual([{ id: 'rule1', name: 'Unmanaged rule' }]);
+  });
+
+  it('leaves live AutoMod rules unmanaged when automod is absent', () => {
+    const liveRule: AutoModRule = {
+      id: 'rule1',
+      guild_id: 'g1',
+      name: 'Unmanaged rule',
+      event_type: 1,
+      trigger_type: 3,
+      trigger_metadata: {},
+      actions: [],
+      enabled: true,
+      exempt_roles: [],
+      exempt_channels: [],
+    };
+    const plan = computePlan(structure([], []), live([], [], { automodRules: [liveRule] }));
+    expect(plan.deleteAutomodRules).toHaveLength(0);
+    expect(plan.updateAutomodRules).toHaveLength(0);
+    expect(plan.createAutomodRules).toHaveLength(0);
   });
 });
 
@@ -386,6 +462,77 @@ describe('computePlan — forum diffing', () => {
 });
 
 describe('computePlan — AutoMod', () => {
+  it('diffs the declared enabled state and exempt channels', () => {
+    const liveRule: AutoModRule = {
+      id: 'rule1',
+      guild_id: 'g1',
+      name: 'Spam',
+      event_type: 1,
+      trigger_type: 3,
+      trigger_metadata: {},
+      actions: [{ type: 2, metadata: { channel_id: 'staff-id' } }],
+      enabled: true,
+      exempt_roles: [],
+      exempt_channels: [],
+    };
+    const plan = computePlan(
+      {
+        roles: [],
+        categories: [],
+        channels: [
+          { name: 'staff', type: 'text' },
+          { name: 'general', type: 'text' },
+        ],
+        automod: [
+          {
+            name: 'Spam',
+            trigger: 'spam',
+            enabled: false,
+            exemptChannels: ['general'],
+            actions: [{ type: 'alert', channel: 'staff' }],
+          },
+        ],
+      },
+      live([textChannel('staff-id', 'staff'), textChannel('general-id', 'general')], [], {
+        automodRules: [liveRule],
+      }),
+    );
+    expect(plan.updateAutomodRules[0]?.changes).toContain('enabled true → false');
+    expect(plan.updateAutomodRules[0]?.changes).toContain('exempt channels changed');
+    expect(plan.updateAutomodRules[0]?.body.exempt_channels).toEqual(['general-id']);
+  });
+
+  it('distinguishes a declared exempt role that is not live from an undeclared role', () => {
+    const desiredRule = {
+      name: 'Spam',
+      trigger: 'spam' as const,
+      exemptRoles: ['Moderator'],
+      actions: [{ type: 'alert' as const, channel: 'staff' }],
+    };
+    expect(() =>
+      computePlan(
+        {
+          roles: [{ name: 'Moderator' }],
+          categories: [],
+          channels: [{ name: 'staff', type: 'text' }],
+          automod: [desiredRule],
+        },
+        live([textChannel('staff-id', 'staff')], []),
+      ),
+    ).toThrow(/declared.*must exist live first/i);
+    expect(() =>
+      computePlan(
+        {
+          roles: [],
+          categories: [],
+          channels: [{ name: 'staff', type: 'text' }],
+          automod: [desiredRule],
+        },
+        live([textChannel('staff-id', 'staff')], []),
+      ),
+    ).toThrow(/not declared in structure\.roles/i);
+  });
+
   it('reuses an existing rule matched by name instead of creating a duplicate, and diffs changed metadata', () => {
     const liveRule: AutoModRule = {
       id: 'rule1',
