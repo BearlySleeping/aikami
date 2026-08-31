@@ -27,6 +27,12 @@ import {
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import {
+  computeInterpolationAlpha,
+  copyRenderState,
+  interpolateValue,
+  unprojectScreenPoint,
+} from './frame_pacing.ts';
+import {
   createPixiApp,
   DEFAULT_HEIGHT,
   DEFAULT_WIDTH,
@@ -402,6 +408,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   /** Unsubscribe function for the MAP_LOADED listener. */
   private _mapLoadedUnsubscribe: (() => void) | undefined;
+
+  /** Unsubscribe function for the pointer input listener (C-380). */
+  private _pointerInputTeardown: (() => void) | undefined;
   /** Timestamp of the last pong received from the worker (ms). */
   private _lastPongMs = 0;
   /** Number of consecutive missed heartbeats. */
@@ -455,6 +464,46 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Current camera zoom received from the worker (1.0–1.5). */
   private _cameraZoom = 1.0;
+
+  // -- C-380: Interpolation state window ----------------------------------
+
+  /**
+   * Timing info from the last STATE_UPDATE.
+   * Used to derive the interpolation alpha on the main thread.
+   */
+  private _lastStateTiming: { tick: number; simTimeMs: number; stepMs: number } | undefined;
+
+  /**
+   * Previous state buffer — copied before the active buffer is recycled
+   * so interpolation has two states to blend between.
+   */
+  private _previousRenderView: Float32Array | undefined;
+
+  /**
+   * Camera position from the previous state, for camera interpolation.
+   */
+  private _previousCameraX = 0;
+  private _previousCameraY = 0;
+
+  /** simTimeMs from the previous state. */
+  private _previousSimTimeMs = 0;
+
+  /** Wall-clock timestamp when the current state was received. */
+  private _currentStateReceivedAt = 0;
+
+  // -- C-380 AC-6: Cursor feedback ----------------------------------------
+
+  /** Graphics overlay for the tile hover highlight. */
+  private _hoverHighlight: Graphics | undefined;
+
+  /** Graphics overlay for the click destination marker. */
+  private _destinationMarker: Graphics | undefined;
+
+  /** Last hovered cell coordinates (for dirty-checking). */
+  private _lastHoverCell: { cellX: number; cellY: number } | undefined;
+
+  /** Tile size for the active map; undefined until terrain is loaded. */
+  private _activeTileSize: number | undefined;
 
   /** Global uniform group for animation time (C-177). */
   private _tilemapUniforms: UniformGroup | undefined;
@@ -664,6 +713,21 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Scale everything so pixel-art sprites are visible (4× zoom)
     this._worldContainer.scale.set(4);
 
+    // C-380 AC-6: Create cursor feedback overlays
+    this._hoverHighlight = new Graphics();
+    this._hoverHighlight.label = 'hover-highlight';
+    this._hoverHighlight.zIndex = WORLD_Z_BANDS.zoneOverlays; // Above tilemap, below entities
+    this._hoverHighlight.eventMode = 'none';
+    this._hoverHighlight.visible = false;
+    this._worldContainer.addChild(this._hoverHighlight);
+
+    this._destinationMarker = new Graphics();
+    this._destinationMarker.label = 'destination-marker';
+    this._destinationMarker.zIndex = WORLD_Z_BANDS.zoneOverlays;
+    this._destinationMarker.eventMode = 'none';
+    this._destinationMarker.visible = false;
+    this._worldContainer.addChild(this._destinationMarker);
+
     // Camera centering is handled dynamically in _updateRenderFromBuffer —
     // it follows the player entity every frame. No static offset here.
 
@@ -705,6 +769,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     // ---- 4. Set up keyboard input (main thread) -----------------------
     this._inputTeardown = this._setupKeyboardInput();
+
+    // ---- 4b. Set up pointer input (C-380) ------------------------------
+    this._pointerInputTeardown = this._setupPointerInput();
 
     // ---- 5. Start the render loop (main thread) -----------------------
     const stage = this._app.stage;
@@ -863,6 +930,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     if (this._inputTeardown) {
       this._inputTeardown();
       this._inputTeardown = undefined;
+    }
+
+    // Tear down pointer input (C-380)
+    if (this._pointerInputTeardown) {
+      this._pointerInputTeardown();
+      this._pointerInputTeardown = undefined;
     }
 
     // Terminate the worker
@@ -1251,6 +1324,30 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * re-emits bridged events.
    */
   private _handleStateUpdate(message: { type: string } & Record<string, unknown>): void {
+    const newBuffer = message.buffer as ArrayBuffer | undefined;
+
+    // Preserve the old state before applying the incoming camera and timing.
+    // The active buffer is recycled below, so its render data must be copied.
+    if (newBuffer && this._activeRenderView) {
+      this._previousCameraX = this._cameraX;
+      this._previousCameraY = this._cameraY;
+      this._previousSimTimeMs = this._lastStateTiming?.simTimeMs ?? 0;
+      this._previousRenderView = copyRenderState(this._activeRenderView);
+    }
+
+    // C-380 AC-1: Store timing info for interpolation
+    if (
+      typeof message.tick === 'number' &&
+      typeof message.simTimeMs === 'number' &&
+      typeof message.stepMs === 'number'
+    ) {
+      this._lastStateTiming = {
+        tick: message.tick as number,
+        simTimeMs: message.simTimeMs as number,
+        stepMs: message.stepMs as number,
+      };
+    }
+
     // Store camera position from the worker for use in the render loop
     if (typeof message.cameraX === 'number') {
       this._cameraX = message.cameraX;
@@ -1270,9 +1367,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // worker) carries NO buffer — skip the swap but still process its
     // events below, otherwise the player stays a tinted placeholder square
     // on every portal transition (C-378).
-    const newBuffer = message.buffer as ArrayBuffer | undefined;
     if (newBuffer) {
       this._syncWithBufferCount++;
+
       // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
       // FIFO shift from a ring buffer that has no relation to what the
       // worker actually owns. After INITIALIZE_ENGINE with transferables,
@@ -1285,6 +1382,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       this._activeRenderView = new Float32Array(newBuffer);
+      this._currentStateReceivedAt = performance.now();
     } else {
       this._syncWithoutBufferCount++;
     }
@@ -1666,6 +1764,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Forward SET_GAME_MODE commands (C-140)
     bridgeWithCommands.onCommand('SET_GAME_MODE', (cmd: unknown) => {
       const modeCmd = cmd as { mode: 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT' };
+      // C-380 AC-7: Mode changes cancel click-path
+      if (modeCmd.mode !== 'EXPLORE') {
+        this._cancelClickPath();
+      }
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: {
@@ -2061,6 +2163,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
       if (isMovementKey(key)) {
         event.preventDefault();
+        // C-380 AC-7: Keyboard movement cancels click-path
+        this._cancelClickPath();
         if (!this._activeKeys.has(key)) {
           this._activeKeys.add(key);
           updateVelocity();
@@ -2111,6 +2215,173 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleBlur);
     };
+  }
+
+  // -----------------------------------------------------------------------
+  // C-380 AC-4/5: Pointer input — click-to-move
+  // -----------------------------------------------------------------------
+
+  /**
+   * Sets up a canvas-level pointer listener for click-to-move.
+   *
+   * Uses one canvas-level listener + inverse camera transform instead of
+   * PixiJS hit-testing (the scene is deliberately `eventMode: 'none'`
+   * throughout — C-032).
+   *
+   * On click, unprojects the screen coordinate to a world cell and posts
+   * a MOVE_TO_CELL command to the worker. The worker resolves the actual
+   * intent (walk / interact / portal / reject) from its grids.
+   *
+   * @returns A cleanup function that removes the listener.
+   */
+  private _setupPointerInput(): () => void {
+    const canvas = this._app?.canvas as HTMLCanvasElement | undefined;
+    if (!canvas) {
+      this.warn('[GameWorld] _setupPointerInput:no-canvas');
+      return () => {};
+    }
+
+    const getCanvasCoords = (event: PointerEvent): { x: number; y: number } => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    };
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (event.button !== 0) {
+        return;
+      }
+      if (this._inputLocked) {
+        return;
+      }
+      if (!this._running || !this._activeRenderView) {
+        return;
+      }
+
+      const { x: screenX, y: screenY } = getCanvasCoords(event);
+      const { cellX, cellY } = this.screenToCell(screenX, screenY);
+
+      this.debug('[GameWorld] pointerDown', { screenX, screenY, cellX, cellY });
+
+      // Show destination marker
+      this._showDestinationMarker(cellX, cellY);
+
+      // Post MOVE_TO_CELL to the worker
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'MOVE_TO_CELL',
+          cellX,
+          cellY,
+          arriveRadius: 0,
+        },
+      });
+    };
+
+    const handlePointerMove = (event: PointerEvent): void => {
+      if (this._inputLocked) {
+        return;
+      }
+      if (!this._running || !this._activeRenderView) {
+        return;
+      }
+
+      const { x: screenX, y: screenY } = getCanvasCoords(event);
+      const { cellX, cellY } = this.screenToCell(screenX, screenY);
+
+      // Throttle to cell changes only
+      if (this._lastHoverCell?.cellX === cellX && this._lastHoverCell?.cellY === cellY) {
+        return;
+      }
+      this._lastHoverCell = { cellX, cellY };
+
+      this._updateHoverHighlight(cellX, cellY);
+    };
+
+    const handlePointerLeave = (): void => {
+      this._lastHoverCell = undefined;
+      if (this._hoverHighlight) {
+        this._hoverHighlight.visible = false;
+      }
+    };
+
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerleave', handlePointerLeave);
+
+    return (): void => {
+      canvas.removeEventListener('pointerdown', handlePointerDown);
+      canvas.removeEventListener('pointermove', handlePointerMove);
+      canvas.removeEventListener('pointerleave', handlePointerLeave);
+    };
+  }
+
+  // -----------------------------------------------------------------------
+  // C-380 AC-6: Cursor feedback helpers
+  // -----------------------------------------------------------------------
+
+  /**
+   * Updates the hover highlight to show the target cell.
+   * Draws a semi-transparent rectangle at the cell position in world space.
+   */
+  private _updateHoverHighlight(cellX: number, cellY: number): void {
+    if (!this._hoverHighlight) {
+      return;
+    }
+
+    const tileSize = this._activeTileSize ?? 32;
+    const worldX = cellX * tileSize;
+    const worldY = cellY * tileSize;
+
+    this._hoverHighlight.clear();
+    this._hoverHighlight.rect(worldX, worldY, tileSize, tileSize);
+    this._hoverHighlight.fill({ color: 0xffffff, alpha: 0.2 });
+    this._hoverHighlight.rect(worldX, worldY, tileSize, tileSize);
+    this._hoverHighlight.stroke({ width: 1, color: 0xffffff, alpha: 0.5 });
+    this._hoverHighlight.visible = true;
+  }
+
+  /**
+   * Shows a destination marker at the clicked cell.
+   * Draws a small crosshair or dot at the cell center.
+   */
+  private _showDestinationMarker(cellX: number, cellY: number): void {
+    if (!this._destinationMarker) {
+      return;
+    }
+
+    const tileSize = this._activeTileSize ?? 32;
+    const centerX = cellX * tileSize + tileSize / 2;
+    const centerY = cellY * tileSize + tileSize / 2;
+
+    this._destinationMarker.clear();
+    // Draw a crosshair
+    const crossSize = 6;
+    this._destinationMarker.moveTo(centerX - crossSize, centerY);
+    this._destinationMarker.lineTo(centerX + crossSize, centerY);
+    this._destinationMarker.moveTo(centerX, centerY - crossSize);
+    this._destinationMarker.lineTo(centerX, centerY + crossSize);
+    this._destinationMarker.stroke({ width: 2, color: 0x00ff88, alpha: 0.9 });
+    this._destinationMarker.visible = true;
+  }
+
+  // -----------------------------------------------------------------------
+  // C-380 AC-7: Click-path cancellation
+  // -----------------------------------------------------------------------
+
+  /**
+   * Cancels the active click-to-move path.
+   * Called when the player presses a movement key, or the game mode
+   * changes to DIALOGUE/COMBAT/MENU.
+   */
+  private _cancelClickPath(): void {
+    if (this._destinationMarker) {
+      this._destinationMarker.visible = false;
+    }
+    // Post STOP_PLAYER to clear any active PathFollow goal
+    this._postToWorker({
+      type: 'BRIDGE_COMMAND',
+      command: { type: 'STOP_PLAYER' },
+    });
   }
 
   /**
@@ -2480,6 +2751,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._renderEntries.clear();
       this._npcMeta.clear();
       this._playerEntityId = 0;
+      this._activeTileSize = undefined;
 
       // 3. Remove old tilemap from the world container.
       //    Destroy with texture:true to free map-specific RenderTextures
@@ -2560,6 +2832,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
             }
           : undefined,
       });
+      this._activeTileSize = terrainGrid.tileSize;
       const spawnPoints = extractSpawnPoints(tilemap);
       const transitionZones = extractTransitionZones(tilemap);
       const spawnPointEntities = extractSpawnPointEntities(tilemap);
@@ -2979,11 +3252,50 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     let visibleCount = 0;
     let totalCount = 0;
 
+    // ── C-380 AC-2: Compute interpolation alpha ──
+    // Blend between the previous and current sim states based on how much
+    // wall-clock time has passed since the current state was received.
+    // Alpha = elapsedSinceCurrentState / stepMs, clamped to [0, 1].
+    const hasTwoStates =
+      this._previousRenderView !== undefined &&
+      this._lastStateTiming !== undefined &&
+      this._previousSimTimeMs < this._lastStateTiming.simTimeMs;
+    const stepMs = this._lastStateTiming?.stepMs ?? 16.667;
+    const elapsedSinceCurrent =
+      this._currentStateReceivedAt > 0 ? performance.now() - this._currentStateReceivedAt : 0;
+    const alpha = hasTwoStates
+      ? computeInterpolationAlpha({ elapsedMs: elapsedSinceCurrent, stepMs })
+      : 1;
+    const prevView = this._previousRenderView;
+
     for (const [eid, entry] of this._renderEntries) {
       totalCount++;
       const offset = eid * COMPONENT_STRIDE;
-      const x = renderView[offset];
-      const y = renderView[offset + 1];
+
+      // C-380 AC-2: Interpolate between previous and current state
+      let x: number;
+      let y: number;
+      if (hasTwoStates && prevView) {
+        const prevX = prevView[offset];
+        const prevY = prevView[offset + 1];
+        const currX = renderView[offset];
+        const currY = renderView[offset + 1];
+        if (
+          prevX !== undefined &&
+          currX !== undefined &&
+          !Number.isNaN(prevX) &&
+          !Number.isNaN(currX)
+        ) {
+          x = interpolateValue({ previous: prevX, current: currX, alpha });
+          y = interpolateValue({ previous: prevY, current: currY, alpha });
+        } else {
+          x = renderView[offset];
+          y = renderView[offset + 1];
+        }
+      } else {
+        x = renderView[offset];
+        y = renderView[offset + 1];
+      }
 
       // C-180: Expose player world coordinates for E2E collision testing.
       // Playwright reads window.__AIKAMI_DEBUG__.playerPosition to verify
@@ -3079,21 +3391,36 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         this._worldContainer.scale.set(dynamicScale);
       }
 
-      // ── C-377 AC-3: device-pixel snap ──
+      // ── C-380 AC-2: Interpolated camera position ──
+      // Blend the camera position between previous and current states,
+      // matching the entity interpolation alpha.
+      const interpCameraX = hasTwoStates
+        ? interpolateValue({
+            previous: this._previousCameraX,
+            current: this._cameraX,
+            alpha,
+          })
+        : this._cameraX;
+      const interpCameraY = hasTwoStates
+        ? interpolateValue({
+            previous: this._previousCameraY,
+            current: this._cameraY,
+            alpha,
+          })
+        : this._cameraY;
+
+      // ── C-377 AC-3: device-pixel snap (applied AFTER blending) ──
       // The world container position is the single place where continuous
       // world coordinates become device pixels. Snap the final x/y to whole
       // device pixels (accounting for renderer resolution) so the tile grid
       // does not shimmer while the camera lerps across fractional positions.
-      // The camera's own lerp stays continuous; only the render transform
-      // rounds. At non-integer zoom exact alignment is impossible — snap
-      // anyway for stability (dialogue zoom is transient).
       const resolution = this._app.renderer.resolution || 1;
       this._worldContainer.x = snapToDevicePixels(
-        this._app.screen.width / 2 - this._cameraX * this._worldContainer.scale.x,
+        this._app.screen.width / 2 - interpCameraX * this._worldContainer.scale.x,
         resolution,
       );
       this._worldContainer.y = snapToDevicePixels(
-        this._app.screen.height / 2 - this._cameraY * this._worldContainer.scale.y,
+        this._app.screen.height / 2 - interpCameraY * this._worldContainer.scale.y,
         resolution,
       );
 
@@ -3106,8 +3433,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       if (this._tilemapChunks && this._tilemapChunks.length > 0) {
         const culled = frustumCullChunks(
           this._tilemapChunks,
-          this._cameraX - viewportWorldW / 2,
-          this._cameraY - viewportWorldH / 2,
+          interpCameraX - viewportWorldW / 2,
+          interpCameraY - viewportWorldH / 2,
           viewportWorldW,
           viewportWorldH,
         );
@@ -3381,6 +3708,53 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         }
       }
     }
+  }
+
+  // -----------------------------------------------------------------------
+  // C-380 AC-4: Screen → world unprojection
+  // -----------------------------------------------------------------------
+
+  /**
+   * Converts a screen-space (CSS pixel) coordinate to a world-space pixel
+   * coordinate by inverting the camera transform.
+   *
+   * Uses the UN-SNAPPED camera position — pixel snap is a render-only
+   * adjustment and inverting the snapped value drifts by up to a device pixel.
+   *
+   * @param screenX - Screen-space X in CSS pixels.
+   * @param screenY - Screen-space Y in CSS pixels.
+   * @returns World-space pixel coordinates.
+   */
+  unprojectScreenToWorld(screenX: number, screenY: number): { x: number; y: number } {
+    if (!this._app) {
+      return { x: screenX, y: screenY };
+    }
+    const scale = 4 * this._cameraZoom;
+    return unprojectScreenPoint({
+      screenX,
+      screenY,
+      screenWidth: this._app.screen.width,
+      screenHeight: this._app.screen.height,
+      cameraX: this._cameraX,
+      cameraY: this._cameraY,
+      scale,
+    });
+  }
+
+  /**
+   * Converts a screen-space coordinate to a tile cell (column, row).
+   *
+   * @param screenX - Screen-space X in CSS pixels.
+   * @param screenY - Screen-space Y in CSS pixels.
+   * @returns The tile cell coordinates.
+   */
+  screenToCell(screenX: number, screenY: number): { cellX: number; cellY: number } {
+    const world = this.unprojectScreenToWorld(screenX, screenY);
+    const tileSize = this._activeTileSize ?? 32;
+    return {
+      cellX: Math.floor(world.x / tileSize),
+      cellY: Math.floor(world.y / tileSize),
+    };
   }
 }
 

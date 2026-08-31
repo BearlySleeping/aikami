@@ -11,6 +11,7 @@ import {
   getComponent,
   hasComponent,
   query,
+  removeComponent,
   removeEntity,
   set,
 } from 'bitecs';
@@ -51,7 +52,7 @@ import {
 import { registerInventoryObservers } from '../components/inventory.ts';
 import { registerMapLocationObservers } from '../components/map_location.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
-import { registerPathFollowObservers } from '../components/path_follow.ts';
+import { PathFollow, registerPathFollowObservers } from '../components/path_follow.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerResistancesObservers } from '../components/resistances.ts';
@@ -73,6 +74,8 @@ import type { EngineBridge } from '../engine_bridge.ts';
 import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer, type PlayerCreateOptions } from '../entities/create_player.ts';
 import { createDefaultSandboxAvatar } from '../entities/create_sandbox_avatar.ts';
+import { updateFixedStepAccumulator } from '../frame_pacing.ts';
+import { findPath } from '../math/astar.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import {
   DEFAULT_LPC_SLOT_FALLBACKS,
@@ -99,6 +102,7 @@ import {
 import {
   type CollisionGrid,
   getMapPixelBounds,
+  getTerrainGrid,
   insertIntoSpatialGrid,
   isBlocksSight,
   isCellBlocked,
@@ -424,6 +428,15 @@ const handleSpawnNPC = (npcData: NPCSpawnData): void => {
   });
 };
 
+/** Removes every movement producer from the player entity. */
+const clearPlayerMovement = (): void => {
+  if (!world || playerEntityId <= 0) {
+    return;
+  }
+  removeComponent(world, playerEntityId, Velocity);
+  removeComponent(world, playerEntityId, PathFollow);
+};
+
 /**
  * Dispatches an incoming GameCommand from the main thread.
  */
@@ -435,6 +448,10 @@ const handleBridgeCommand = (command: GameCommand): void => {
   }
 
   switch (command.type) {
+    case 'STOP_PLAYER': {
+      clearPlayerMovement();
+      break;
+    }
     case 'SET_PLAYER_VELOCITY': {
       handleSetPlayerVelocity(command.velocity);
       break;
@@ -462,6 +479,50 @@ const handleBridgeCommand = (command: GameCommand): void => {
     case 'INTERACT': {
       if (world) {
         handleInteract({ world, playerEntityId, bridge: workerBridge });
+      }
+      break;
+    }
+    case 'MOVE_TO_CELL': {
+      // C-380 AC-4: Compute A* path from player's current cell to target
+      // cell and set PathFollow with the waypoints.
+      if (world && playerEntityId > 0) {
+        const pos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
+        const terrain = getTerrainGrid();
+        if (pos && terrain) {
+          const tileSize = terrain.tileSize;
+          const fromX = Math.floor(pos.x / tileSize);
+          const fromY = Math.floor(pos.y / tileSize);
+          const result = findPath({
+            grid: terrain,
+            start: { x: fromX, y: fromY },
+            goal: { x: command.cellX, y: command.cellY },
+          });
+          if (result.path.length > 0) {
+            // Convert grid waypoints to world-pixel waypoints (tile centres).
+            const waypoints = new Float32Array(result.path.length * 2);
+            for (let i = 0; i < result.path.length; i++) {
+              waypoints[i * 2] = result.path[i].x * tileSize + tileSize / 2;
+              waypoints[i * 2 + 1] = result.path[i].y * tileSize + tileSize / 2;
+            }
+            // Clear existing velocity
+            addComponent(world, playerEntityId, set(Velocity, { x: 0, y: 0 }));
+            // Set PathFollow — index 1 skips the start cell
+            addComponent(
+              world,
+              playerEntityId,
+              set(PathFollow, {
+                waypoints,
+                index: 1,
+                length: result.path.length,
+                speed: 150, // default player speed
+                repathAtMs: 0,
+                arriveRadius: command.arriveRadius,
+              }),
+            );
+          } else {
+            clearPlayerMovement();
+          }
+        }
       }
       break;
     }
@@ -811,12 +872,25 @@ const initializeEngine = (
 // -- Tick loop --------------------------------------------------------------
 
 /** Timestamp of the previous tick for computing delta time. */
+/** Fixed timestep in milliseconds (60 Hz). */
+const FIXED_STEP_MS = 1000 / 60;
+
+/**
+ * Maximum number of fixed steps to run per wake-up.
+ * Prevents spiral-of-death catch-up after tab backgrounding.
+ * 6 steps = 100ms at 60Hz, matching the old MAX_FRAME_DELTA_MS.
+ */
+const MAX_STEPS_PER_WAKE = 6;
+
+/** Accumulator for fixed-timestep simulation (C-380 AC-1). */
+let _accumulator = 0;
+
 let lastTickTime = performance.now();
 
 /**
- * Monotonic tick counter — incremented each time tickLoop completes
- * a full simulation frame. Used by the main-thread heartbeat to detect
- * simulation stalls (distinct from message-handler liveness).
+ * Monotonic tick counter — incremented each fixed step.
+ * Used by the main-thread heartbeat to detect simulation stalls
+ * and as the interpolation tick index (C-380 AC-1).
  */
 let tickCount = 0;
 
@@ -847,17 +921,6 @@ let isTicking = false;
 
 /** Macro simulation tick interval in milliseconds (C-196). */
 const MACRO_TICK_INTERVAL_MS = 500;
-
-/**
- * Hard cap for frame delta time in milliseconds (100ms = 10fps floor).
- *
- * During tab backgrounding, WASM auto-saves, or heavy GC pauses the
- * browser timer may deliver a single callback with a massive delta.
- * Without clamping, velocity × delta propels entities off the map into
- * NaN/Infinity territory. 100ms is the smallest value that still allows
- * a visible frame-rate drop without causing physics tunneling.
- */
-const MAX_FRAME_DELTA_MS = 100;
 
 /**
  * Schedules the next tick via setTimeout.
@@ -955,167 +1018,99 @@ const tickLoop = (): void => {
   isTicking = true;
 
   try {
-    // Compute delta time with hard clamp (C-332 — prevents dt explosion)
+    // ── C-380 AC-1: Fixed-timestep accumulator ──
+    // Accumulate real elapsed time, cap to prevent spiral-of-death
+    // catch-up, then consume in fixed steps.
     const now = performance.now();
-    const rawDeltaMs = now - lastTickTime;
+    const elapsed = now - lastTickTime;
     lastTickTime = now;
 
-    // ── HARD CLAMP: never allow delta > 100ms ──
-    // Protects against tab backgrounding, WASM save spikes, and GC pauses.
-    // Minimum floor of 0.001ms prevents division-by-zero in derived rates.
-    const deltaMs = Math.max(0.001, Math.min(rawDeltaMs, MAX_FRAME_DELTA_MS));
-
-    // ── Environment: time-of-day, diurnal colours, weather ──
-    // Contract C-213: Step environment before all other systems so
-    // diurnal and weather UBO data is fresh for this frame.
-    const environment = stepEnvironment({ deltaMs });
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Step 1: Ingestion — process streaming payloads from tool orchestrator
-    //
-    // Drains the macro queue (expression changes, state mask updates) that
-    // arrived via the bridge since the last tick. These must be applied
-    // BEFORE perception so new expression states are visible this frame.
-    // ────────────────────────────────────────────────────────────────────────
-    updateExpressions(world, workerBridge);
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Step 2: Macro Sim — time-gated coarse simulation for inactive zones
-    //
-    // Macro simulation runs independently on a 500ms setInterval (C-194).
-    // This gate tracks the last macro tick for the pipeline sequence — the
-    // actual macro stepping is handled by the interval timer to avoid
-    // per-frame overhead (C-196 Watch Point: Step Multiplier Overlaps).
-    // ────────────────────────────────────────────────────────────────────────
-    if (now - _lastMacroTickMs >= MACRO_TICK_INTERVAL_MS) {
-      _lastMacroTickMs = now;
-      // Macro simulation ticks independently via startMacroSimulation() —
-      // no per-frame call needed. The time-gate solely tracks alignment.
-    }
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Step 3: Perception — spatial hash visibility sweeps
-    //
-    // For each VisionObserver entity, casts DDA ray cones (idle/patrol)
-    // or recursive shadowcasting (suspicious/alert) and writes visibility
-    // bitmasks into VisionVisible.visibleByMask on target entities.
-    // ────────────────────────────────────────────────────────────────────────
-    updateSpatialVision(world);
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Step 4: Cognition — GOAP bitmask evaluations + crime event reactions
-    //
-    // For each GoapAgent, validates/selects/applies actions toward goals
-    // via bitwise precondition/effect evaluation. Processes CrimeEvent
-    // entities for emergent reactions: witnesses go hostile, cache
-    // perpetrator targets, and drop stale behavioral loops.
-    //
-    // C-197: Also runs tactical combat evaluations for enemy combatants —
-    // scores targets and selects optimal tactical actions.
-    // ────────────────────────────────────────────────────────────────────────
-    updateGoapScheduler(world);
-    updateGoapCombatTactics(world, playerEntityId);
-
-    // ── C-379 AC-7: party-follow goal provider (Navigation slot) ──
-    updatePartyFollow(world, playerEntityId);
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Step 5: Navigation — path-follow locomotion
-    //
-    // GOAP movement executor requests paths (goal cell → A* waypoints);
-    // the path-follow system writes Velocity toward the current waypoint.
-    // Runs BEFORE updateMovement in Resolution so the velocity it writes
-    // is resolved the same frame (C-379 AC-7 watch point).
-    // ────────────────────────────────────────────────────────────────────────
-    updateGoapMovement(world);
-    // C-402: pass the player entity so the halt rule can stop NPCs at
-    // their interaction radius (deadlock-class removal).
-    updatePathFollow(world, deltaMs, playerEntityId);
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Step 6: Resolution — movement + collision
-    //
-    // Axis-independent continuous movement with per-entity masks and the
-    // terrain cost grid.
-    // ────────────────────────────────────────────────────────────────────────
-    updateMovement(world, deltaMs);
-
-    // ── C-379 AC-1: GridPosition sync — derived from Position, change-gated.
-    // Runs after movement so perception/cognition consumers on the NEXT
-    // frame read the resolved cell. Occupancy updates happen only on cell
-    // change. ──
-    syncGridPositions(world);
-
-    // ────────────────────────────────────────────────────────────────────────
-    // Post-resolution systems (do not mutate core state)
-    // ────────────────────────────────────────────────────────────────────────
-
-    // Camera: track CameraFocus entity, lerp toward target
-    updateCameraSystem(world, deltaMs);
-
-    // Encounters: check proximity-based combat triggers
-    updateEncounterSystem({ world, playerEntityId, bridge: workerBridge });
-
-    // ── Combat stage setup / teardown (C-166) ──
-    const screen = getScreenSize();
-    if (getEngineGameMode() === 'COMBAT' && !isCombatStageActive()) {
-      setupCombatStage(world, { screenWidth: screen.width, screenHeight: screen.height });
-    } else if (getEngineGameMode() !== 'COMBAT' && isCombatStageActive()) {
-      teardownCombatStage(world);
-    }
-
-    // Dialog triggers: proximity-based NPC dialogue activation
-    updateDialogTriggers(world, playerEntityId, workerBridge);
-
-    // Zoning: portal trigger overlap detection
-    updateZoningSystem(world, playerEntityId, workerBridge);
-
-    // Context: populate spatial hash grid for proximity queries
-    if (spatialGrid && positionBuffer) {
-      populateSpatialGrid(world, spatialGrid, positionBuffer);
-    }
-    if (spatialGrid) {
-      updateContextSystem({
-        world,
-        playerEntityId,
-        bridge: workerBridge,
-        spatialGrid,
-      });
-    }
-
-    // ── C-327 AC-2: Interaction proximity ──
-    // Evaluates the nearest interactable and emits INTERACTION_TARGET_CHANGED
-    // only when the target changes (dirty-checked).
-    updateInteractionProximity({
-      world,
-      playerEntityId,
-      bridge: workerBridge,
+    // Cap accumulated time to prevent spiral-of-death catch-up
+    // (tab backgrounding, WASM save spikes, GC pauses).
+    const accumulatorUpdate = updateFixedStepAccumulator({
+      accumulatorMs: _accumulator,
+      elapsedMs: elapsed,
+      fixedStepMs: FIXED_STEP_MS,
+      maxStepsPerWake: MAX_STEPS_PER_WAKE,
     });
+    _accumulator = accumulatorUpdate.accumulatorMs;
 
-    // ── C-342 AC-3: Pressure plate per-tick overlap detection ──
-    updatePressurePlates({
-      world,
-      playerEntityId,
-      bridge: workerBridge,
-    });
+    // Run zero or more fixed steps
+    const stepsThisWake = accumulatorUpdate.stepCount;
+    let environment: ReturnType<typeof stepEnvironment> | undefined;
+    for (let stepIndex = 0; stepIndex < stepsThisWake; stepIndex++) {
+      // Use FIXED_STEP_MS as the delta for all systems
+      const deltaMs = FIXED_STEP_MS;
 
-    // Compute per-entity animation frame indices from velocity vectors.
-    // Runs right before the uniform buffer flush so that the frame index
-    // is available for any render-path consumers (UBO packing, texture
-    // slicing via TextureManager.getFrameAt, etc.).
-    animateEntitySystem(world);
+      // ── Environment: time-of-day, diurnal colours, weather ──
+      environment = stepEnvironment({ deltaMs });
 
-    // Synchronize bitECS Appearance state into the LPC batch UBO pool.
-    // Handles entity enter/exit lifecycle (slot allocation/free) and
-    // structural fingerprint comparison to skip redundant UBO re-packs.
-    // Uses a headless LpcBatchManager — no GPU Buffers in the worker.
-    if (lpcBatchManager) {
-      syncAppearanceSystem({
-        world,
-        batchManager: lpcBatchManager,
-        recipeResolver: workerRecipeResolver,
-        bridge: workerBridge,
-      });
+      // ── Step 1: Ingestion ──
+      updateExpressions(world, workerBridge);
+
+      // ── Step 2: Macro Sim ──
+      if (now - _lastMacroTickMs >= MACRO_TICK_INTERVAL_MS) {
+        _lastMacroTickMs = now;
+      }
+
+      // ── Step 3: Perception ──
+      updateSpatialVision(world);
+
+      // ── Step 4: Cognition ──
+      updateGoapScheduler(world);
+      updateGoapCombatTactics(world, playerEntityId);
+      updatePartyFollow(world, playerEntityId);
+
+      // ── Step 5: Navigation ──
+      updateGoapMovement(world);
+      updatePathFollow(world, deltaMs, playerEntityId);
+
+      // ── Step 6: Resolution ──
+      updateMovement(world, deltaMs);
+      syncGridPositions(world);
+
+      // ── Post-resolution systems ──
+      updateCameraSystem(world, deltaMs);
+      updateEncounterSystem({ world, playerEntityId, bridge: workerBridge });
+
+      const screen = getScreenSize();
+      if (getEngineGameMode() === 'COMBAT' && !isCombatStageActive()) {
+        setupCombatStage(world, { screenWidth: screen.width, screenHeight: screen.height });
+      } else if (getEngineGameMode() !== 'COMBAT' && isCombatStageActive()) {
+        teardownCombatStage(world);
+      }
+
+      updateDialogTriggers(world, playerEntityId, workerBridge);
+      updateZoningSystem(world, playerEntityId, workerBridge);
+
+      if (spatialGrid && positionBuffer) {
+        populateSpatialGrid(world, spatialGrid, positionBuffer);
+      }
+      if (spatialGrid) {
+        updateContextSystem({ world, playerEntityId, bridge: workerBridge, spatialGrid });
+      }
+
+      updateInteractionProximity({ world, playerEntityId, bridge: workerBridge });
+      updatePressurePlates({ world, playerEntityId, bridge: workerBridge });
+
+      animateEntitySystem(world);
+
+      if (lpcBatchManager) {
+        syncAppearanceSystem({
+          world,
+          batchManager: lpcBatchManager,
+          recipeResolver: workerRecipeResolver,
+          bridge: workerBridge,
+        });
+      }
+
+      // ── Increment monotonic tick counter per fixed step ──
+      tickCount++;
+    }
+
+    // ── C-380: Skip serialization if no fixed steps ran ──
+    if (stepsThisWake === 0 || !environment) {
+      return;
     }
 
     // Validate the writable buffer BEFORE draining events — if none is
@@ -1132,7 +1127,7 @@ const tickLoop = (): void => {
     serializeEntityStates(world, activeWriteView);
 
     // ── Increment monotonic tick counter for liveness detection ──
-    tickCount++;
+    // (tickCount is now incremented inside the while loop per fixed step)
 
     // Collect events to send (buffer confirmed writable above)
     const events = pendingEvents;
@@ -1216,6 +1211,10 @@ const tickLoop = (): void => {
       type: 'STATE_UPDATE',
       buffer: bufferToSend,
       events,
+      // C-380 AC-1: timing info for interpolation on the main thread
+      tick: tickCount,
+      simTimeMs: performance.now(),
+      stepMs: FIXED_STEP_MS,
       cameraX: camera.x,
       cameraY: camera.y,
       zoom,
