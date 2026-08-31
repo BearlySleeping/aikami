@@ -88,12 +88,6 @@ export const routes = {
     routeId: '/personas/create',
     type: 'public',
   },
-  dev: {
-    getPath: () => '/dev',
-    queryParameters: undefined,
-    routeId: '/dev',
-    type: 'public',
-  },
 } as const satisfies Routes;
 
 export const searchParametersToKeep: Readonly<string[]> = [] as const;

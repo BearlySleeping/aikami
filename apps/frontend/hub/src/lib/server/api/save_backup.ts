@@ -20,7 +20,7 @@ import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { getBetterAuth } from './better_auth.ts';
 
-export type SaveBackupEnv = {
+type SaveBackupEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
   DB: import('@cloudflare/workers-types').D1Database;
   // biome-ignore lint/style/useNamingConvention: Cloudflare R2 binding name
@@ -244,7 +244,7 @@ export const handleGetBackup = async (
     });
   }
 
-  return new Response(object.body as unknown as BodyInit, {
+  return new Response(object.body, {
     status: 200,
     headers: { 'content-type': 'application/octet-stream' },
   });

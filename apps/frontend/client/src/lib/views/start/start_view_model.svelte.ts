@@ -12,16 +12,14 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type {
-  AssetPrefetchPhase,
-  Campaign,
-  CapabilityProfile,
-  PackIndexEntry,
-} from '@aikami/types';
+import type { Campaign, CapabilityProfile, PackIndexEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
+import {
+  type AssetPrefetchPhase,
+  assetPrefetchService,
+} from '$lib/services/assets/asset_prefetch_service.svelte';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import {
-  assetPrefetchService,
   campaignService,
   equipmentService,
   gameModeService,
@@ -60,22 +58,6 @@ export type CampaignSummary = {
   readonly capabilities: CapabilityProfile;
 };
 
-// ---------------------------------------------------------------------------
-// Advanced link type
-// ---------------------------------------------------------------------------
-
-/**
- * An entry in the Advanced section of the start menu.
- * Each link has a title, description, and an action to perform on click.
- */
-export type AdvancedLink = {
-  /** Button label. */
-  readonly title: string;
-  /** Description shown below the button. */
-  readonly description: string;
-  /** Click handler. */
-  readonly action: () => Promise<void> | void;
-};
 export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether running inside Tauri (desktop). */
   readonly isTauri: boolean;
@@ -154,12 +136,6 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** C-405 AC-4: Navigates to the world-generation preview (Advanced entry). */
   startWorldGeneration(): Promise<void>;
-
-  /** Navigates to the dev hub. */
-  goToDev(): Promise<void>;
-
-  /** Advanced section links (title, description, action). */
-  readonly advancedLinks: readonly AdvancedLink[];
 
   /** C-422 AC-3: Navigates to the game with a fresh onboarding arc (replay tutorial). */
   replayTutorial(): Promise<void>;
@@ -352,9 +328,7 @@ class StartViewModel
       case 'warming':
         return 'Downloading all assets for offline play…';
       case 'degraded':
-        return (
-          assetPrefetchService.errorMessage ?? 'Asset download paused — check your connection.'
-        );
+        return assetPrefetchService.error ?? 'Asset download paused — check your connection.';
       default:
         return undefined;
     }
@@ -505,13 +479,10 @@ class StartViewModel
     // Reset onboarding progress and navigate to game with a fresh arc
     onboardingHintService.resetOnboarding();
 
-    await routerService.goToRoute(
-      'game' as never,
-      {
-        queryParameters: { tutorial: '1' } as never,
-        pathParameters: undefined,
-      } as never,
-    );
+    await routerService.goToRoute('game', {
+      queryParameters: { tutorial: '1' },
+      pathParameters: undefined,
+    });
   }
 
   /** @inheritdoc */
@@ -720,31 +691,8 @@ class StartViewModel
   private async _proceedWithPack(packId: string): Promise<void> {
     await this._startCampaignWithPack({ packId, logKey: '_proceedWithPack' });
   }
-  /** @inheritdoc */
-  get advancedLinks(): readonly AdvancedLink[] {
-    return [
-      {
-        title: 'World Generation (Preview)',
-        description:
-          'Generates a world preview that is not yet playable — used to prototype story content.',
-        action: () => this.startWorldGeneration(),
-      },
-      {
-        title: 'Dev Hub',
-        description: 'Development tools, sandboxes, and experimental features.',
-        action: () => this.goToDev(),
-      },
-    ];
-  }
-
-  /** @inheritdoc */
-  async goToDev(): Promise<void> {
-    await routerService.goToRoute('dev', {
-      queryParameters: undefined,
-      pathParameters: undefined,
-    });
-  }
 }
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------

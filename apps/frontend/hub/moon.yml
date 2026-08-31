@@ -48,27 +48,6 @@ fileGroups:
     - 'wrangler.jsonc'
 
 tasks:
-  # ------------------------------------------------------------------
-  # SvelteKit codegen ($types, ambient app modules). `typecheck`, `test`,
-  # `test-unit`, and `build` all need `.svelte-kit` populated and all run
-  # in parallel in CI — each used to call `svelte-kit sync` inline, which
-  # raced 3-4 concurrent writers on the same directory (intermittent
-  # "Cannot find module './$types'" / implicit-any failures). Now a single
-  # shared, cached task produces it and the others depend on it instead of
-  # regenerating it themselves.
-  # ------------------------------------------------------------------
-  sync:
-    command: 'bun run sync'
-    inputs:
-      - '@group(configs)'
-      - 'src/routes/**/*'
-      - 'src/app.d.ts'
-      - 'src/hooks.server.ts'
-    outputs:
-      - '.svelte-kit'
-    options:
-      cache: true
-
   dev:
     command: 'bun run dev'
     preset: 'server'
@@ -113,17 +92,11 @@ tasks:
       - '/packages/shared/*/src/**/*'
       - '/packages/frontend/*/src/**/*'
       - '/packages/backend/*/src/**/*'
-    deps:
-      - '~:sync'
     options:
       cache: true
     outputs:
       - '.svelte-kit'
       - 'build'
-
-  typecheck:
-    deps:
-      - '~:sync'
 
   preview:
     command: 'bun run preview'
@@ -142,8 +115,6 @@ tasks:
 
   test:
     command: 'bun run test'
-    deps:
-      - '~:sync'
     inputs:
       - '@group(sources)'
       # 🔴 Load-bearing, same reason as `build` above. The Worker boundary
@@ -158,8 +129,6 @@ tasks:
 
   test-unit:
     command: 'bun run test:unit'
-    deps:
-      - '~:sync'
     inputs:
       - '@group(sources)'
       - '/packages/shared/*/src/**/*'

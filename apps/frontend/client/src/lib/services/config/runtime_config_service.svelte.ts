@@ -248,11 +248,11 @@ class RuntimeConfigService
   // ── Accessors ──────────────────────────────────────────────────────────
 
   getTextUrl(): string | undefined {
-    return this.engineConfig.text?.url ?? undefined;
+    return this.engineConfig.text?.url;
   }
 
   getImageUrl(): string | undefined {
-    return this.engineConfig.image?.url ?? undefined;
+    return this.engineConfig.image?.url;
   }
 
   getVoiceTtsMode(): TtsMode {
@@ -260,15 +260,15 @@ class RuntimeConfigService
   }
 
   getVoiceTtsUrl(): string | undefined {
-    return this.engineConfig.voice?.tts?.url ?? undefined;
+    return this.engineConfig.voice?.tts?.url;
   }
 
   getSttUrl(): string | undefined {
-    return this.engineConfig.voice?.stt?.url ?? undefined;
+    return this.engineConfig.voice?.stt?.url;
   }
 
   getModelsOrigin(): string | undefined {
-    return this.engineConfig.models?.originUrl ?? undefined;
+    return this.engineConfig.models?.originUrl;
   }
 }
 

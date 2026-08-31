@@ -18,8 +18,7 @@ import {
 } from '@aikami/frontend/services';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import { EMULATOR_GOOGLE_PERSONA_DATA, EMULATOR_NPCS, EMULATOR_PERSONA_DATA } from '@aikami/mocks';
-import type { NpcData, PersonaData } from '@aikami/types';
-import type { CustomAgentDefinition } from '$types';
+import type { CustomAgentDefinition, NpcData, PersonaData } from '@aikami/types';
 
 export type EmulatorSeedServiceOptions = BaseFrontendClassOptions & {
   /** Force reseeding even if the tables already have rows (tests). */

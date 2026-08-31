@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-08-31)
+## Status Summary (Auto-generated: 2026-08-30)
 
-**206 active (0 without contract file), 119 archived, 0 duplicates**
+**205 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -119,7 +119,7 @@
 | C-314 | Establish A Production Game Composition Root And Split God S | 🛠️ implemented | ❓ production | v2 | full |
 | C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 🏁 completed | — | v2 | full |
 | C-316 | Build The Authored Emberwatch The Fading Ward Demo Adventure | ✅ verified | — | v2 | full |
-| C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 🛠️ implemented | — | v2 | full |
+| C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | — | v2 | full |
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | — | v2 | full |
 | C-319 | Replace Setup With Fast Character Onboarding | 🛠️ implemented | — | v2 | full |
 | C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🛠️ implemented | — | v2 | full |
@@ -131,24 +131,24 @@
 | C-326 | Make Game Boot Atomic Observable And Content Driven | 🛠️ implemented | — | v2 | full |
 | C-327 | Add In World Onboarding And Unified Interaction Ux | 🛠️ implemented | — | v2 | full |
 | C-328 | Integrate Bounded Ai Npc Dialogue With Authored Fallbacks | 🛠️ implemented | ❓ production — the dialogue overlay is already mounted on the production `/game` journey; this contract hardens it in place (no sandbox promotion step required, dev sandbox at `/dev/sandbox/dialogue` is updated alongside) | v2 | full |
-| C-329 | Integrate The Demo Quest From Offer Through Reward | 🛠️ implemented | — | v2 | full |
-| C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 🛠️ implemented | — | v2 | full |
-| C-331 | Integrate Inventory Equipment Loot And Vendor Into The Demo | 🛠️ implemented | ❓ `integrated` — inventory, vendor, and character-dashboard overlays are already mounted on the production `/game` journey (`game_ui_view.svelte`); this contract hardens them in place. Dev sandboxes `/dev/inventory` and `/dev/vendor` are updated alongside. | v2 | full |
-| C-332 | Redesign The Minimal Game Hud And Overlay Navigation | 🛠️ implemented | ❓ `integrated` — the HUD and overlay navigation already live on the production `/game` route; this contract redesigns them in place. Dev sandboxes are updated alongside. | v2 | full |
-| C-333 | Simplify Settings With Progressive Disclosure | 🛠️ implemented | — | v1 | full |
-| C-334 | Make Local Save Continue Autosave And Recovery Reliable | 🛠️ implemented | — | v2 | full |
-| C-335 | Enforce The Playable Demo Release Gate | 🛠️ implemented | — | v2 | full |
-| C-336 | Extract A Deterministic Rules Kernel And Typed Game Command | 🛠️ implemented | — | v2 | full |
-| C-337 | Complete Character Progression Classes Abilities Skills And | 🛠️ implemented | — | v2 | full |
-| C-338 | Deepen Turn Based Combat With Action Economy Statuses And Ta | 🛠️ implemented | — | v2 | full |
+| C-329 | Integrate The Demo Quest From Offer Through Reward | 👍 approved | — | v2 | full |
+| C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 👍 approved | — | v2 | full |
+| C-331 | Integrate Inventory Equipment Loot And Vendor Into The Demo | 👍 approved | ❓ `integrated` — inventory, vendor, and character-dashboard overlays are already mounted on the production `/game` journey (`game_ui_view.svelte`); this contract hardens them in place. Dev sandboxes `/dev/inventory` and `/dev/vendor` are updated alongside. | v2 | full |
+| C-332 | Redesign The Minimal Game Hud And Overlay Navigation | 👍 approved | ❓ `integrated` — the HUD and overlay navigation already live on the production `/game` route; this contract redesigns them in place. Dev sandboxes are updated alongside. | v2 | full |
+| C-333 | Simplify Settings With Progressive Disclosure | 👍 approved | — | v1 | full |
+| C-334 | Make Local Save Continue Autosave And Recovery Reliable | 👍 approved | — | v2 | full |
+| C-335 | Enforce The Playable Demo Release Gate | 👍 approved | — | v2 | full |
+| C-336 | Extract A Deterministic Rules Kernel And Typed Game Command | 👍 approved | — | v2 | full |
+| C-337 | Complete Character Progression Classes Abilities Skills And | 👍 approved | — | v2 | full |
+| C-338 | Deepen Turn Based Combat With Action Economy Statuses And Ta | 👍 approved | — | v2 | full |
 | C-339 | Complete Quest Graph Journal Objectives And Reward Pipelines | 🛠️ implemented | — | v2 | full |
-| C-340 | Build Party And Companion Gameplay | 🛠️ implemented | — | v2 | full |
-| C-341 | Add Relationships Factions Reputation And Persistent Consequ | 🛠️ implemented | — | v2 | full |
-| C-342 | Add World Interactables Dungeons Puzzles And Loot Tables | 🛠️ implemented | — | v2 | full |
-| C-343 | Promote Rich Chat Ux Into Production Gameplay | 🛠️ implemented | ❓ `integrated` — the production dialogue overlay on `/game` already mounts with streaming AI dialogue (C-328); this contract hardens the rich chat surface in place (no sandbox promotion step) | v2 | full |
+| C-340 | Build Party And Companion Gameplay | 👍 approved | — | v2 | full |
+| C-341 | Add Relationships Factions Reputation And Persistent Consequ | 👍 approved | — | v2 | full |
+| C-342 | Add World Interactables Dungeons Puzzles And Loot Tables | 👍 approved | — | v2 | full |
+| C-343 | Promote Rich Chat Ux Into Production Gameplay | 👍 approved | ❓ `integrated` — the production dialogue overlay on `/game` already mounts with streaming AI dialogue (C-328); this contract hardens the rich chat surface in place (no sandbox promotion step) | v2 | full |
 | C-344 | Complete Session Recaps Checkpoints And Long Campaign Lifecy | 🛠️ implemented | — | v2 | full |
-| C-345 | Add A Campaigncontent Pack Browser And A Second Adventure | 🛠️ implemented | — | v2 | full |
-| C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 🛠️ implemented | — | v2 | full |
+| C-345 | Add A Campaigncontent Pack Browser And A Second Adventure | 👍 approved | — | v2 | full |
+| C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 👍 approved | — | v2 | full |
 | C-371 | C 371 | 👍 approved | — | v2 | full |
 | C-372 | Fix P0 Lpc Asset Resolution And Unify Resolver | 🛠️ implemented | ❓ `integrated` | v2 | full |
 | C-373 | Turso Asset Registry Opfs Cache | 🛠️ implemented | ❓ `integrated` | v2 | full |
@@ -158,8 +158,8 @@
 | C-377 | Pixel Art Render Correctness | 🛠️ implemented | ❓ `integrated` — the production `/game` route + the existing `emberwatch.visual.ts` suite are the evidence | v2 | full |
 | C-378 | Layered Terrain And Autotiling | 🛠️ implemented | ❓ `integrated` — the production `/game` route + `emberwatch.visual.ts` are the evidence | v2 | full |
 | C-379 | Collision And Movement Unification | 🛠️ implemented | ❓ `integrated` — `/game` route, `collision_e2e.spec.ts`, `emergent_world.visual.ts` | v2 | full |
-| C-380 | Frame Pacing And Click To Move | 🛠️ implemented | ❓ `integrated` — `/game` route + a new Playwright spec | v2 | full |
-| C-381 | Content Pipeline Hardening | 🛠️ implemented | ❓ `integrated` — `/game` boot path + hub upload gate | v2 | full |
+| C-380 | Frame Pacing And Click To Move | 📝 draft | ❓ `integrated` — `/game` route + a new Playwright spec | v2 | full |
+| C-381 | Content Pipeline Hardening | 📝 draft | ❓ `integrated` — `/game` boot path + hub upload gate | v2 | full |
 | C-383 | Data Exposure Hardening | 🏁 completed | — | v2 | full |
 | C-384 | Local Sqlite Migration Framework | 🛠️ implemented | — | v2 | full |
 | C-385 | Remove Data Connect | 🛠️ implemented | — | v2 | full |
@@ -183,7 +183,7 @@
 | C-419 | P3 Growth Features | 🛠️ implemented | ❓ `—` | v2 | full |
 | C-420 | Guided Choice Chips | 🛠️ implemented | ❓ `integrated` | v2 | full |
 | C-421 | Dice Cards | 🛠️ implemented | ❓ `integrated` | v2 | full |
-| C-422 | Onboarding Arc | 🛠️ implemented | ❓ `integrated` | v2 | full |
+| C-422 | Onboarding Arc | 👍 approved | ❓ `integrated` | v2 | full |
 | C-423 | Design North Star | 🛠️ implemented | ❓ `integrated` | v2 | full |
 | C-424 | Unified Message Surfaces | 🛠️ implemented | ❓ `integrated` | v2 | full |
 | C-425 | Viewmodel Decomposition | 🛠️ implemented | ❓ `integrated` | v2 | full |
@@ -213,7 +213,6 @@
 | C-449 | Misc Polish Batch | 🛠️ implemented | ❓ `sandbox` | v1 | full |
 | C-450 | Contract Pipeline Reconciliation And Drift Guard | 🛠️ implemented | — | v2 | full |
 | C-451 | Thin Contract Mode | 🛠️ implemented | — | v1 | full |
-| C-452 | Backfill Execution Reports | 🛠️ implemented | ❓ `integrated` — doc-only change, no sandbox route | v2 | full |
 
 ---
 

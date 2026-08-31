@@ -6,6 +6,8 @@ import ProvidersView from '$views/settings/providers/providers_view.svelte';
 const viewModel = getDevProvidersViewModel({
   className: 'DevProvidersViewModel',
 });
+
+viewModel.initialize();
 </script>
 
 <ProvidersView {viewModel} />

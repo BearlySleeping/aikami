@@ -154,7 +154,7 @@ class MockAiClient implements FrontendAiInterface {
     this._checkFailMode();
 
     // Check seeded responses
-    for (const [pattern, response] of this._dialogueSeeds) {
+    for (const [pattern, response] of this.dialogueSeeds) {
       if (context.playerInput.includes(pattern)) {
         return response;
       }
@@ -175,7 +175,7 @@ class MockAiClient implements FrontendAiInterface {
     await this._simulateLatency();
     this._checkFailMode();
 
-    for (const [pattern, response] of this._descriptionSeeds) {
+    for (const [pattern, response] of this.descriptionSeeds) {
       if (prompt.includes(pattern)) {
         return response;
       }
@@ -217,7 +217,7 @@ class MockAiClient implements FrontendAiInterface {
     const schemaName = String((schema as Record<string, unknown>).description) || instruction;
 
     // Check seeded responses
-    for (const [pattern, data] of this._structuredSeeds) {
+    for (const [pattern, data] of this.structuredSeeds) {
       if (schemaName.includes(pattern) || instruction.includes(pattern)) {
         return data as T;
       }

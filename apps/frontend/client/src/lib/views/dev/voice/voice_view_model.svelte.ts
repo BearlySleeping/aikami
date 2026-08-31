@@ -1,12 +1,11 @@
 // apps/frontend/client/src/lib/views/dev/voice/voice_view_model.svelte.ts
 
-import { KOKORO_VOICES, VOICE_ENGINES } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { ttsService } from '$services';
+import { KOKORO_VOICES, ttsService, VOICE_ENGINES } from '$services';
 import type { VoiceInfo } from '$types';
 
 export type { VoiceInfo };

@@ -109,7 +109,7 @@ const hasWebGpu = async (): Promise<boolean> => {
 
 const handleInitialize = async (message: InitializeMessage): Promise<void> => {
   try {
-    const { wasmPath, device, modelId } = message;
+    const { wasmPath, device, modelId, revision } = message;
 
     // Configure the ONNX runtime WebGPU backend before Kokoro creates its
     // session. WASM binaries are vendored (C-389) — never a CDN.
@@ -125,7 +125,10 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
     session = await KokoroTTS.from_pretrained(modelId, {
       dtype: 'q8',
       device: useWebGpu ? 'webgpu' : 'wasm',
-      ...(useWebGpu ? { enableGraphCapture: true } : ({} as Record<string, unknown>)),
+      revision,
+      // @ts-expect-error — enableGraphCapture is passed through to ONNX
+      // runtime but may not be in kokoro-js TS types.
+      ...(useWebGpu ? { enableGraphCapture: true } : {}),
     });
     activeBackend = useWebGpu ? 'webgpu' : 'wasm';
 

@@ -34,7 +34,7 @@ import {
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { CollisionData, registerCollisionDataObservers } from '../components/collision_data.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
-import { Companion, registerCompanionObservers } from '../components/companion.ts';
+import { registerCompanionObservers } from '../components/companion.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
 import {
   createEngineStateEntity,
@@ -60,7 +60,7 @@ import { registerSpatialLinkObservers } from '../components/spatial_link.ts';
 import { registerSpawnPointObservers } from '../components/spawn_point.ts';
 import { registerStatusEffectsObservers } from '../components/status_effects.ts';
 import { registerTransitionObservers } from '../components/transition.ts';
-import { registerTurnOrderObservers, TurnOrder } from '../components/turn_order.ts';
+import { registerTurnOrderObservers } from '../components/turn_order.ts';
 import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
 import { registerVisionObserverObservers } from '../components/vision_observer.ts';
 import { registerVisionVisibleObservers, VisionVisible } from '../components/vision_visible.ts';
@@ -385,37 +385,6 @@ const handleSetEntityVelocity = (entityId: number, velocity: { x: number; y: num
 };
 
 /**
- * Applies a SET_COMPANION_RECRUITED command to an existing companion NPC
- * entity, flipping `Companion.recruited` (and `TurnOrder.isActive`, when the
- * companion has combat stats) so the follow tick and combat turn manager
- * pick the entity up or drop it.
- *
- * Contract: C-340 Build Party and Companion Gameplay
- */
-const handleSetCompanionRecruited = (entityId: number, recruited: boolean): void => {
-  if (!world || entityId === undefined) {
-    return;
-  }
-
-  const companionData = getComponent(world, entityId, Companion);
-  if (!companionData) {
-    return;
-  }
-
-  Companion.recruited[entityId] = recruited;
-
-  if (getComponent(world, entityId, TurnOrder)) {
-    TurnOrder.isActive[entityId] = recruited;
-  }
-
-  if (!recruited) {
-    // Stop following immediately on dismiss so the entity doesn't keep
-    // drifting toward a formation slot it no longer occupies.
-    addComponent(world, entityId, set(Velocity, { x: 0, y: 0 }));
-  }
-};
-
-/**
  * Applies a SET_PLAYER_VELOCITY command to the player entity's velocity.
  *
  * Gates on the current engine game mode — velocity is ignored when the
@@ -489,10 +458,6 @@ const handleBridgeCommand = (command: GameCommand): void => {
     }
     case 'SET_ENTITY_VELOCITY': {
       handleSetEntityVelocity(command.entityId, command.velocity);
-      break;
-    }
-    case 'SET_COMPANION_RECRUITED': {
-      handleSetCompanionRecruited(command.entityId, command.recruited);
       break;
     }
     case 'SPAWN_NPC': {

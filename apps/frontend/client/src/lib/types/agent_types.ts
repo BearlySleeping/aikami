@@ -50,8 +50,6 @@ export type AgentRunResult = {
   error?: string;
   /** Wall-clock duration of agent execution in milliseconds. */
   durationMs: number;
-  /** Arbitrary metadata from the agent run (e.g. which backend was used). */
-  metadata?: Record<string, unknown>;
 };
 
 // ── Pipeline Context ─────────────────────────────────────────────────────

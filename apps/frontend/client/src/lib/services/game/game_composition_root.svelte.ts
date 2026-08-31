@@ -464,26 +464,13 @@ export class GameCompositionRoot
         },
         recruit: (opts) => {
           // Use partyRosterService to recruit the companion (C-340)
-          const npc = contentPack.getNpc(opts.npcId);
           const member = partyRosterService.recruit({
             npcId: opts.npcId,
             name: opts.npcName,
-            classId: npc?.companionClassId ?? 'fighter',
+            classId: 'fighter', // TODO: read from content pack companionClassId
             level: 1,
-            initialApproval: npc?.initialApproval ?? 0,
+            initialApproval: 0,
           });
-          if (member) {
-            // Flip Companion.recruited on the ECS entity so the follow tick
-            // and combat turn manager pick it up (C-340 AC-1).
-            const entityId = gameEngineService.getEntityIdForNpc(opts.npcId);
-            if (entityId !== undefined) {
-              gameEngineService.sendCommand({
-                type: 'SET_COMPANION_RECRUITED',
-                entityId,
-                recruited: true,
-              });
-            }
-          }
           return !!member;
         },
       },

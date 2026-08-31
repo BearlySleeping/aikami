@@ -33,7 +33,7 @@ export type RelationshipServiceOptions = BaseFrontendClassOptions;
  * standing wins. Returns 'neutral' if no tier matches (should not happen
  * with valid definitions).
  */
-export const computeTier = (options: {
+const computeTier = (options: {
   standing: number;
   tiers: FactionStandingTierDefinition[];
 }): FactionStandingTier => {
@@ -56,7 +56,7 @@ export const computeTier = (options: {
 const MAX_FACTS = 5;
 
 /** Builds compact fact strings for dialogue context injection. */
-export const buildFacts = (options: {
+const buildFacts = (options: {
   standings: ReadonlyMap<string, FactionStanding>;
   relationships: ReadonlyMap<string, CharacterRelationship>;
   npcId: string;

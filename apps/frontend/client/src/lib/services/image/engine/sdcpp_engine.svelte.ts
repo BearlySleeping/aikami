@@ -166,19 +166,7 @@ export class SdCppEngine implements ImageEngineClient {
         const inline = this._extractInlineImage(job);
         if (inline) {
           onProgress?.({ fraction: 1, label: 'Complete' });
-          const blob = imageDataToBlob(inline);
-          return {
-            blob,
-            width:
-              ((job as Record<string, unknown>)?.width as number | undefined) ??
-              sanitised.width ??
-              512,
-            height:
-              ((job as Record<string, unknown>)?.height as number | undefined) ??
-              sanitised.height ??
-              512,
-            mimeType: blob.type || 'image/png',
-          };
+          return this._imageResult(inline, sanitised);
         }
         throw new Error('sd-server did not return a job id or image');
       }
@@ -527,10 +515,10 @@ const imageDataToBlob = (imageData: string): Blob => {
   if (imageData.startsWith('data:')) {
     const [meta, base64] = imageData.split(',');
     const mime = /data:(.*?)(?:;|$)/.exec(meta)?.[1] ?? 'image/png';
-    return new Blob([new Uint8Array(base64ToBytes(base64 ?? ''))], { type: mime });
+    return new Blob([base64ToBytes(base64 ?? '')], { type: mime });
   }
   // Raw base64 (A1111 `images: [...]`) — assume PNG.
-  return new Blob([new Uint8Array(base64ToBytes(imageData))], { type: 'image/png' });
+  return new Blob([base64ToBytes(imageData)], { type: 'image/png' });
 };
 
 const base64ToBytes = (base64: string): Uint8Array => {

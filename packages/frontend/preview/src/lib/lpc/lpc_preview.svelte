@@ -10,10 +10,10 @@ import { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';
 import {
   getLpcPreviewViewModel,
+  type LpcPreviewState,
   type LpcPreviewViewModelInterface,
   type LpcSlotDef,
 } from './lpc_preview_view_model.svelte';
-import type { LpcPreviewState } from './preview_url_state';
 
 type Props = {
   resolver: AssetResolver;
@@ -155,9 +155,7 @@ $effect(() => {
               }}
             >
               {#each viewModel.animationStateOptions as state}
-                <option value={state}>
-                  {LpcAnimationState[state as unknown as keyof typeof LpcAnimationState]}
-                </option>
+                <option value={state}>{LpcAnimationState[state]}</option>
               {/each}
             </select>
           </label>
@@ -173,9 +171,7 @@ $effect(() => {
               }}
             >
               {#each viewModel.directionOptions as dir}
-                <option value={dir}>
-                  {LpcDirection[dir as unknown as keyof typeof LpcDirection]}
-                </option>
+                <option value={dir}>{LpcDirection[dir]}</option>
               {/each}
             </select>
           </label>

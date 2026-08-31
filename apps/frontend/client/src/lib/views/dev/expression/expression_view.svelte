@@ -141,7 +141,7 @@ const { viewModel }: Props = $props();
             class="relative w-40 h-[240px] rounded-xl overflow-hidden border-2 border-base-300 bg-base-300"
           >
             <img
-              src={viewModel.portraitBaseUrl}
+              src="/assets/images/combat/player_portrait.webp"
               alt=""
               class="w-full h-full object-cover object-top"
             >

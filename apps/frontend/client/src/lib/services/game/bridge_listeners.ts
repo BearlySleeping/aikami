@@ -7,7 +7,6 @@
 
 import type { EngineBridge } from '@aikami/frontend/engine';
 import type { AudioServiceInterface } from '$services';
-import type { PartyFollowServiceInterface } from '$types';
 import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
 import type { CombatServiceInterface } from './combat_service.svelte';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
@@ -30,7 +29,6 @@ export type SetupBridgeListenersParams = {
   audioService: AudioServiceInterface;
   inputActionService: InputActionServiceInterface;
   onboardingHintService: OnboardingHintServiceInterface;
-  partyFollowService: PartyFollowServiceInterface;
 };
 
 // ---------------------------------------------------------------------------
@@ -47,7 +45,6 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     audioService,
     inputActionService,
     onboardingHintService,
-    partyFollowService,
   } = params;
 
   const { createEngineBridge } = await import('@aikami/frontend/engine');
@@ -164,14 +161,12 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
 
   bridge.on('GAME_READY', () => {
     gameOverlayService.setTransitioning(false);
-    partyFollowService.start();
     void playSceneBgm('explore');
   });
 
   bridge.on('MAP_LOADED', () => {
     gameOverlayService.setTransitioning(false);
     gameOverlayService.onMapLoaded();
-    partyFollowService.onMapLoaded();
     void playSceneBgm('explore');
   });
 

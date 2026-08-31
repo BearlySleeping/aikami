@@ -5,8 +5,8 @@
 // $services barrel) to avoid circular module graphs — gameEngineService is
 // part of the barrel, so callers must import this module by path.
 
-import { campaignService } from '../campaign/campaign_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
+import { campaignService } from '../campaign/campaign_service.svelte';
 import type { SaveMapBlock } from './game_save_envelope.ts';
 
 /**

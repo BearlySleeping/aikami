@@ -9,13 +9,6 @@ declare module '*?worker' {
   export default WorkerFactory;
 }
 
-declare module '*?worker&type=module' {
-  const WorkerFactory: {
-    new (): Worker;
-  };
-  export default WorkerFactory;
-}
-
 declare module '*?worker&inline' {
   const WorkerFactory: {
     new (): Worker;

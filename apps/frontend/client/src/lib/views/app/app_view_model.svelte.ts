@@ -118,7 +118,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     await runtimeConfigService.loadConfig();
 
     // 1. Wire router into SvelteKit primitives.
-    routerService.initialize({ goto, page: page as never });
+    routerService.initialize({ goto, page });
 
     // 2. Set up reactive listeners for routing and auth changes.
     this._setupReactiveListeners();
@@ -170,7 +170,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     this.registerEffectRoot(() => {
       // EFFECT 1: Bridge SvelteKit navigation state into RouterService.
       $effect(() => {
-        routerService.syncNavigation(navigating, page as never);
+        routerService.syncNavigation(navigating, page);
       });
 
       // EFFECT 2: Route transitions on subsequent navigations.
