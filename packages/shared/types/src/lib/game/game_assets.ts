@@ -176,15 +176,6 @@ export type AssetSeedRow = {
   ext: string;
 };
 
-/** Shared prefetch lifecycle: idle, setup, required fetch, cache warming, ready, or usable-but-degraded. */
-export type AssetPrefetchPhase =
-  | 'idle'
-  | 'preparing'
-  | 'prefetching-core'
-  | 'warming'
-  | 'ready'
-  | 'degraded';
-
 /**
  * The compact seed document, replacing manifest.json + asset_hashes.json at boot.
  * Bundled in the client at static/game-data/asset_seed.json (~1-2 MB instead of ~20 MB).

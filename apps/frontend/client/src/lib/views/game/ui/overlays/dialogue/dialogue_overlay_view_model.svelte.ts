@@ -7,7 +7,6 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { NpcQuestActivation, NpcSuggestionChip } from '@aikami/types';
-// @ts-expect-error: Svelte 5 type export
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import { mergeInitialSuggestions } from '$lib/data/initial_suggestion_presets';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
@@ -17,7 +16,6 @@ import {
   combatService,
   diceService,
   draftStore,
-  expressionService,
   gameModeService,
   messageBranchStore,
   playerStateService,

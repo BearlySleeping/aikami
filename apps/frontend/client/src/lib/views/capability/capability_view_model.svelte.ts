@@ -163,7 +163,7 @@ class CapabilityViewModel
 
   /** Tabs with per-tab checkmark when at least one usable provider exists. */
   get tabs(): readonly { id: ConnectionCapability; label: string; hasProvider: boolean }[] {
-    const connections = ((configService.state.connections ?? []) as Connection[]).filter((c) =>
+    const connections = (configService.state.connections ?? []).filter((c) =>
       this._isUsableConnection(c),
     );
     return CAPABILITY_TABS.map((tab) => ({
@@ -174,7 +174,7 @@ class CapabilityViewModel
 
   /** True when at least one usable text connection exists. */
   get hasTextProvider(): boolean {
-    const connections = ((configService.state.connections ?? []) as Connection[]).filter((c) =>
+    const connections = (configService.state.connections ?? []).filter((c) =>
       this._isUsableConnection(c),
     );
     return connections.some((c) => (c.capability ?? 'text') === 'text');
@@ -182,7 +182,7 @@ class CapabilityViewModel
 
   /** True when at least one usable image connection exists. */
   get hasImageProvider(): boolean {
-    const connections = ((configService.state.connections ?? []) as Connection[]).filter((c) =>
+    const connections = (configService.state.connections ?? []).filter((c) =>
       this._isUsableConnection(c),
     );
     return connections.some((c) => (c.capability ?? 'text') === 'image');
@@ -190,7 +190,7 @@ class CapabilityViewModel
 
   /** True when at least one usable voice connection exists. */
   get hasVoiceProvider(): boolean {
-    const connections = ((configService.state.connections ?? []) as Connection[]).filter((c) =>
+    const connections = (configService.state.connections ?? []).filter((c) =>
       this._isUsableConnection(c),
     );
     return connections.some((c) => (c.capability ?? 'text') === 'voice');
@@ -205,7 +205,7 @@ class CapabilityViewModel
     const defaultByCap = configService.state.defaultByCapability ?? {};
     const capDefault = defaultByCap[this.activeTab] ?? null;
 
-    return (connections as Connection[])
+    return connections
       .filter((c) => (c.capability ?? 'text') === this.activeTab)
       .filter((c) => this._isUsableConnection(c))
       .map((connection) => {
@@ -344,10 +344,8 @@ class CapabilityViewModel
       const state = await voiceModelService.download();
       if (state.status === 'ready') {
         this.errorMessage = '';
-      } else if (state.status === 'error') {
-        this.errorMessage = state.message ?? 'Download failed';
       } else {
-        this.errorMessage = 'Download failed';
+        this.errorMessage = state.message ?? 'Download failed';
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -376,7 +374,7 @@ class CapabilityViewModel
     let changed = false;
 
     for (const capability of CAPABILITY_TABS) {
-      const capConnections = (connections as Connection[]).filter(
+      const capConnections = connections.filter(
         (c) => (c.capability ?? 'text') === capability.id && this._isUsableConnection(c),
       );
       if (capConnections.length === 0) {

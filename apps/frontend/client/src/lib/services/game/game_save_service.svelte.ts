@@ -13,12 +13,12 @@ import {
 } from '@aikami/frontend/services';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { SaveSlotInfo } from '$types';
-import type { SaveMapBlock } from './game_save_envelope.ts';
 import {
   parseSavePayloadEnvelope,
   sha256,
   validateEnvelopeChecksum,
 } from './game_save_envelope.ts';
+import type { SaveMapBlock } from './game_save_envelope.ts';
 import { hydrateAllServices, serializeAllServices } from './serializable_service';
 
 // ---------------------------------------------------------------------------
@@ -198,14 +198,7 @@ class GameSaveService
       return;
     }
 
-    const {
-      slotId = 'auto-save',
-      campaignId,
-      mapName = 'World',
-      map,
-      packVersion,
-      worldSeed,
-    } = options;
+    const { slotId = 'auto-save', campaignId, mapName = 'World', map, packVersion, worldSeed } = options;
 
     this.isSaving = true;
 

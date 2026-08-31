@@ -1,5 +1,4 @@
 // apps/frontend/hub/src/lib/views/catalog/__tests__/streamed_stats.test.ts
-// biome-ignore-all lint/suspicious/noExplicitAny: Bun.Server generic type
 //
 // C-436: D1-backed stats stream in and never block first paint.
 // Ported from the Postgres-backed path (C-396 AC-4).
@@ -24,11 +23,11 @@ const setEnv = (options: { catalogOrigin?: string }): void => {
 };
 
 beforeAll(async () => {
-  const server: Bun.Server<any> = Bun.serve({
+  const server = Bun.serve({
     port: 0,
-    fetch(request: Request): Response | Promise<Response> {
+    fetch(request) {
       const url = new URL(request.url);
-      const originUrl: string = server.url.toString().replace(/\/$/, '');
+      const originUrl = server.url.toString().replace(/\/$/, '');
       if (url.pathname === '/index/v1/catalog.json') {
         return Response.json({
           schemaVersion: 1,
@@ -82,15 +81,12 @@ describe('streamed stats — C-436 (never blocks first paint)', () => {
 
   test('the category load stream never rejects — .catch(() => null) guards the page data', async () => {
     const { load } = await import('../../../../routes/(public)/catalog/[category]/+page.server.ts');
-    const data = (await load({
+    const data = await load({
       params: { category: 'lpc' },
       setHeaders: mock(() => {}),
       depends: mock(() => {}),
-    } as never)) as Awaited<ReturnType<typeof load>>;
+    } as never);
 
-    if (!data) {
-      throw new Error('Expected category load data');
-    }
     expect(data.category).toBe('lpc');
     await expect(data.stats).resolves.toBeNull();
   });
@@ -99,15 +95,12 @@ describe('streamed stats — C-436 (never blocks first paint)', () => {
     const { load } = await import(
       '../../../../routes/(public)/catalog/[category]/[tag]/+page.server.ts'
     );
-    const data = (await load({
+    const data = await load({
       params: { category: 'lpc', tag: 'lpc:hat:magic:celestial_adult:thrust' },
       setHeaders: mock(() => {}),
       depends: mock(() => {}),
-    } as never)) as Awaited<ReturnType<typeof load>>;
+    } as never);
 
-    if (!data) {
-      throw new Error('Expected asset load data');
-    }
     expect(data.category).toBe('lpc');
     expect(data.entry.tag).toBe('lpc:hat:magic:celestial_adult:thrust');
     await expect(data.stats).resolves.toBeNull();

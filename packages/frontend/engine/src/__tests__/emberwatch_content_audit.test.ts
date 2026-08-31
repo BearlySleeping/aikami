@@ -17,9 +17,9 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { type ContentPackManifest, validatePack } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
 import { buildCollisionGrid, type TilemapData } from '../assets/map_loader.ts';
+import { validatePack, type ContentPackManifest } from '@aikami/schemas';
 
 // ---------------------------------------------------------------------------
 // Fixture paths — the actual committed static content.

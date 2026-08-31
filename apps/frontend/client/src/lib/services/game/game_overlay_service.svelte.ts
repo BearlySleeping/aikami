@@ -28,7 +28,6 @@ import { GameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
-import { partyFollowService } from './party_follow_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
 import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
 import { timeService } from './time_service.svelte';
@@ -100,11 +99,8 @@ const OVERLAY_COMPATIBILITY: Record<
   SETTINGS: {},
   PARTY_ROSTER: {
     PAUSE_MENU: 'allow',
-    TALK_TO_PARTY: 'allow',
   },
-  TALK_TO_PARTY: {
-    PAUSE_MENU: 'allow',
-  },
+  TALK_TO_PARTY: {},
   REPUTATION: {
     PAUSE_MENU: 'allow',
   },
@@ -169,11 +165,6 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   // ── Party Roster (C-340) ──
   openPartyRoster(): void;
   closePartyRoster(): void;
-
-  // ── Talk to Party (C-340) ──
-  openTalkToParty(options: { npcId: string; name: string }): void;
-  closeTalkToParty(): void;
-  readonly talkToPartyOptions: { npcId: string; name: string } | undefined;
 
   // ── Reputation (C-341) ──
   openReputation(): void;
@@ -342,7 +333,6 @@ export class GameOverlayService
       audioService,
       inputActionService,
       onboardingHintService,
-      partyFollowService,
     });
   }
 
@@ -650,9 +640,6 @@ export class GameOverlayService
   vendorSessionOptions = $state<
     { vendorId: string; vendorName: string; vendorInventory: string } | undefined
   >(undefined);
-
-  /** Stores the companion the Talk to Party overlay was opened for (C-340). */
-  talkToPartyOptions = $state<{ npcId: string; name: string } | undefined>(undefined);
 
   /** Interaction prompt state (C-327 AC-2). */
   interactionPromptLabel = $state<string>('');
@@ -1274,27 +1261,6 @@ export class GameOverlayService
       gameModeService.setMode('EXPLORE');
       this._engineService?.resumeEngine();
     }
-  }
-
-  // ── Talk to Party (C-340) ──
-
-  openTalkToParty(options: { npcId: string; name: string }): void {
-    const success = this.pushOverlay('TALK_TO_PARTY');
-    if (!success) {
-      return;
-    }
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
-    this.talkToPartyOptions = options;
-  }
-
-  closeTalkToParty(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
-    this.talkToPartyOptions = undefined;
   }
 
   // ── Reputation (C-341) ──

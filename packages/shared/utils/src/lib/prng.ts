@@ -35,9 +35,13 @@ export const createSeededRng = (seed: number) => {
   return {
     next,
     /** Returns a random integer in [min, max] (inclusive). */
-    int: (min: number, max: number): number => Math.floor(next() * (max - min + 1)) + min,
+    int: (min: number, max: number): number => {
+      return Math.floor(next() * (max - min + 1)) + min;
+    },
     /** Picks a random element from an array. */
-    pick: <T>(arr: readonly T[]): T => arr[Math.floor(next() * arr.length)] as T,
+    pick: <T>(arr: readonly T[]): T => {
+      return arr[Math.floor(next() * arr.length)] as T;
+    },
     /** Fisher-Yates shuffle in-place. Returns the same array reference. */
     shuffle: <T>(arr: T[]): T[] => {
       for (let i = arr.length - 1; i > 0; i--) {

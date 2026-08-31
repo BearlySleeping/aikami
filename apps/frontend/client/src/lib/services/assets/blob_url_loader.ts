@@ -34,8 +34,8 @@ const _register = (): void => {
       priority: LoaderParserPriority.High,
     },
     test: (url: string): boolean => url.startsWith('blob:'),
-    load: async (blobUrl: string): Promise<Texture> => {
-      const response = await fetch(blobUrl);
+    load: async (url: string): Promise<Texture> => {
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Blob URL fetch failed: ${response.status} ${response.statusText}`);
       }
@@ -54,10 +54,7 @@ const _register = (): void => {
           throw error;
         }
       }
-      // Fallback: create an object URL for Blob-based textures.
-      const objectUrl = URL.createObjectURL(blob);
-      const texture = Texture.from(objectUrl);
-      URL.revokeObjectURL(objectUrl);
+      const texture = Texture.from(blob);
       texture.source.scaleMode = 'nearest';
       return texture;
     },

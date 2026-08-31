@@ -255,6 +255,27 @@ mock.module(_FRONTEND_SVC_PATH, () => ({
   __esModule: true,
 }));
 
+// ── Consistent mock for $services (local barrel) ──────────────────────────
+// All ViewModels import from $services. Without a global mock, the first
+// test file that mocks the barrel with mock.module() leaks its partial
+// mock to all subsequent test files. Provide a comprehensive stub barrel
+// here so every test sees a consistent set of functional stubs.
+
+const _LOCAL_SVC_PATH = '$lib/services/index.ts';
+
+const _createServiceStub = () => {
+  const handler: ProxyHandler<Record<string, unknown>> = {
+    get(_target, prop) {
+      if (!(prop in _target)) {
+        // Auto-create mock functions for any missing method
+        (_target as Record<string, unknown>)[prop] = mock(() => {});
+      }
+      return (_target as Record<string, unknown>)[prop];
+    },
+  };
+  return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
+};
+
 /**
  * Creates a callable Proxy stub with a mutable `.fn` property.
  *
@@ -289,51 +310,6 @@ const _createCallableStub = () => {
       },
     },
   );
-};
-
-// ── Mock @aikami/constants (providers, voice config, etc.) ───────────────
-// ViewModels now import constants directly from @aikami/constants.
-mock.module('@aikami/constants', () => ({
-  TEXT_PROVIDERS: [
-    { id: 'ollama', label: 'Ollama (local)' },
-    { id: 'llamacpp', label: 'llama.cpp (local)' },
-  ] as const,
-  VOICE_PROVIDERS: [{ id: 'kokoro', label: 'Kokoro (local)' }] as const,
-  IMAGE_PROVIDERS: [] as const,
-  MEMORY_TYPES: [] as const,
-  EMBEDDING_MODELS: [] as const,
-  EMOTION_METHODS: [] as const,
-  VOICE_ENGINES: [] as const,
-  KOKORO_VOICES: [] as const,
-  DEFAULT_VOICE_ARCHETYPES: [] as const,
-  PROVIDER_ENDPOINTS: {},
-  buildVerifyHeaders: _createCallableStub(),
-  buildVerifyUrl: _createCallableStub(),
-  fetchOpenRouterModels: _createCallableStub(),
-  clearOpenRouterCache: _createCallableStub(),
-  BUILT_IN_PRESETS: [] as const,
-  GenParamPreset: class {},
-}));
-
-// ── Consistent mock for $services (local barrel) ──────────────────────────
-// All ViewModels import from $services. Without a global mock, the first
-// test file that mocks the barrel with mock.module() leaks its partial
-// mock to all subsequent test files. Provide a comprehensive stub barrel
-// here so every test sees a consistent set of functional stubs.
-
-const _LOCAL_SVC_PATH = '$lib/services/index.ts';
-
-const _createServiceStub = () => {
-  const handler: ProxyHandler<Record<string, unknown>> = {
-    get(_target, prop) {
-      if (!(prop in _target)) {
-        // Auto-create mock functions for any missing method
-        (_target as Record<string, unknown>)[prop] = mock(() => {});
-      }
-      return (_target as Record<string, unknown>)[prop];
-    },
-  };
-  return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
 };
 
 const _localServicesMock = () => ({
@@ -525,9 +501,7 @@ const _localServicesMock = () => ({
     { id: 'openai-compat', label: 'OpenAI Compatible' },
   ] as const,
   PROVIDER_MODEL_FETCH: {},
-  choiceHistoryStore: Object.assign(_createServiceStub(), {
-    formatHistorySection: mock(() => ''),
-  }),
+  choiceHistoryStore: _createServiceStub(),
   getExpressionAssetResolver: _createCallableStub(),
   sceneToMusicTags: _createCallableStub(),
   styleProfileService: _createServiceStub(),
@@ -543,10 +517,7 @@ const _localServicesMock = () => ({
   MEMORY_TYPES: [] as const,
   EMBEDDING_MODELS: [] as const,
   EMOTION_METHODS: [] as const,
-  TEXT_PROVIDERS: [
-    { id: 'ollama', label: 'Ollama (local)' },
-    { id: 'llamacpp', label: 'llama.cpp (local)' },
-  ] as const,
+  TEXT_PROVIDERS: [] as const,
   VOICE_PROVIDERS: [{ id: 'kokoro', label: 'Kokoro (local)' }] as const,
   PROVIDER_ENDPOINTS: {},
   fetchOpenRouterModels: _createCallableStub(),
@@ -690,41 +661,6 @@ const _localServicesMock = () => ({
   trackRegistryService: _createServiceStub(),
   timeService: { gameHour: 12, gameMinute: 0, windVelocity: 0, rainIntensity: 0 },
   SentenceBoundaryChunker: class {},
-  partyRosterService: Object.assign(_createServiceStub(), {
-    members: [],
-    activeCount: 0,
-    isFull: false,
-    maxSize: 4,
-    formation: 'line',
-    recruit: mock(() => undefined),
-    dismiss: mock(() => false),
-    hasMember: mock(() => false),
-    getMember: mock(() => undefined),
-    adjustApproval: _createCallableStub(),
-    getApproval: mock(() => 0),
-    activatePersonalQuest: _createCallableStub(),
-    deactivatePersonalQuest: _createCallableStub(),
-    isEmpty: mock(() => true),
-    serialize: mock(() => ({ members: [], maxSize: 4, formation: 'line' })),
-    hydrate: _createCallableStub(),
-    reset: _createCallableStub(),
-  }),
-  assetStore: _createServiceStub(),
-  assetPrefetchService: _createServiceStub(),
-  expressionService: Object.assign(_createServiceStub(), {
-    detectExpression: mock(async () => undefined),
-  }),
-  gameBootService: Object.assign(_createServiceStub(), {
-    bootProgress: { stage: 'idle', stageIndex: 0, stageCount: 0 },
-    isBooting: false,
-    lastResult: undefined,
-    boot: mock(async () => undefined),
-    cancelBoot: _createCallableStub(),
-    resetForRetry: _createCallableStub(),
-    teardown: _createCallableStub(),
-  }),
-  localTaskPoolService: _createServiceStub(),
-  partyFollowService: _createServiceStub(),
   __esModule: true,
 });
 

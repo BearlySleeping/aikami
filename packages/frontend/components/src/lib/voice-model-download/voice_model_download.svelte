@@ -5,13 +5,13 @@
 // (idle, downloading/verifying, ready, error) based on the provided state
 // and delegates user actions via callbacks.
 
-import type { LocalModelState } from '@aikami/types';
+import type { VoiceModelState } from '@aikami/types';
 
 type Props = {
   /** Whether to show this section at all. */
   show: boolean;
   /** Current voice model download state. */
-  state: LocalModelState;
+  state: VoiceModelState;
   /** Download progress (0–100). */
   progress: number;
   /** Human-readable model size label (e.g. "88.2 MB"). */

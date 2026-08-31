@@ -65,7 +65,7 @@ const TAURI_WEBVIEW_ORIGINS = [
  * exposes `.handler` (a fetch handler) to mount at `/api/auth/*` and
  * `.api.getSession()` for server-side session checks.
  */
-export const createBetterAuth = (db: object, env: BetterAuthEnv) => {
+export const createBetterAuth = (db: Record<string, unknown>, env: BetterAuthEnv) => {
   // When cookieDomain is set (production cross-subdomain SSO) and no explicit
   // trustedOrigins are configured, default to allowing all subdomains of the
   // cookie domain (e.g. https://*.bearlysleeping.com).

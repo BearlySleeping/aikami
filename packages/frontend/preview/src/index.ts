@@ -27,10 +27,8 @@ export {
   type LpcSheetLayout,
 } from './lib/lpc/lpc_renderer';
 export {
-  createDefaultLpcPreviewState,
   decodeLpcPreviewState,
   encodeLpcPreviewState,
-  type LpcLayerUrlEntry,
   type LpcPreviewState,
 } from './lib/lpc/preview_url_state';
 export { default as MapPreview } from './lib/map/map_preview.svelte';

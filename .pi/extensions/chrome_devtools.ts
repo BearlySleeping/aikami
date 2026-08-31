@@ -40,10 +40,6 @@ const CDP_BASE = `http://localhost:${CDP_PORT}`;
 /** PID of the Chromium we spawned (null when reusing an existing instance). */
 let spawnedChromePid: number | null = null;
 
-const BROWSER_LOCK = Symbol('browser-lock');
-type BrowserLock = typeof BROWSER_LOCK;
-let browserLockTail = Promise.resolve();
-
 // ── Helpers ───────────────────────────────────────────────────────────
 
 function getMode(): string {
@@ -52,94 +48,6 @@ function getMode(): string {
 
 function getRoot(): string {
   return process.env.AIKAMI_ROOT || process.cwd();
-}
-
-async function withBrowserLock<T>(action: (lock: BrowserLock) => Promise<T>): Promise<T> {
-  const previous = browserLockTail;
-  let release = () => {};
-  browserLockTail = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-
-  await previous;
-  try {
-    return await action(BROWSER_LOCK);
-  } finally {
-    release();
-  }
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function waitForProcessExit(options: { pid: number; timeoutMs?: number }): Promise<boolean> {
-  const deadline = options.timeoutMs === undefined ? undefined : Date.now() + options.timeoutMs;
-  while (isProcessAlive(options.pid)) {
-    if (deadline !== undefined && Date.now() >= deadline) {
-      return false;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  return true;
-}
-
-function signalBrowserProcessGroup(options: { pid: number; signal: NodeJS.Signals }): void {
-  try {
-    process.kill(-options.pid, options.signal);
-  } catch {
-    try {
-      process.kill(options.pid, options.signal);
-    } catch {
-      // already gone
-    }
-  }
-}
-
-async function stopSpawnedBrowser(): Promise<number | null> {
-  const pid = spawnedChromePid;
-  if (pid === null) {
-    return null;
-  }
-
-  signalBrowserProcessGroup({ pid, signal: 'SIGTERM' });
-  const exited = await waitForProcessExit({ pid, timeoutMs: 5000 });
-  if (!exited) {
-    signalBrowserProcessGroup({ pid, signal: 'SIGKILL' });
-    await waitForProcessExit({ pid });
-  }
-  spawnedChromePid = null;
-  return pid;
-}
-
-function removeOwnedSingletonLocks(options: { userDataDir: string; managedPid: number }): void {
-  const singletonLock = path.join(options.userDataDir, 'SingletonLock');
-  const lockBelongsToManagedBrowser = (): boolean => {
-    try {
-      const lockTarget = fs.readlinkSync(singletonLock);
-      return Number(lockTarget.match(/-(\d+)$/)?.[1]) === options.managedPid;
-    } catch {
-      return false;
-    }
-  };
-
-  // Keep SingletonLock until last so ownership can be rechecked before each
-  // unlink. If another Chromium claims the profile, cleanup stops immediately.
-  for (const name of ['SingletonSocket', 'SingletonCookie', 'SingletonLock']) {
-    if (!lockBelongsToManagedBrowser()) {
-      return;
-    }
-    try {
-      fs.unlinkSync(path.join(options.userDataDir, name));
-    } catch {
-      // best-effort cleanup of a lock owned by our exited Chromium process
-    }
-  }
 }
 
 /** Set by herdr_adapter.ts for contract-scoped pipeline runs — same offset
@@ -193,12 +101,7 @@ function findChromium(): string | null {
 }
 
 /** Launch headless Chromium with CDP enabled. */
-async function ensureBrowser(options: {
-  app: string;
-  lock: BrowserLock;
-}): Promise<{ ok: boolean; message: string }> {
-  void options.app;
-  void options.lock;
+async function ensureBrowser(_app: string): Promise<{ ok: boolean; message: string }> {
   if (await isCdpAlive()) {
     return { ok: true, message: 'Chromium already running with CDP.' };
   }
@@ -216,11 +119,6 @@ async function ensureBrowser(options: {
 
   const userDataDir = path.join(getRoot(), '.pi', '.chromium-profile');
   fs.mkdirSync(userDataDir, { recursive: true });
-
-  const previousPid = await stopSpawnedBrowser();
-  if (previousPid !== null) {
-    removeOwnedSingletonLocks({ userDataDir, managedPid: previousPid });
-  }
 
   const args = [
     '--headless=new',
@@ -466,62 +364,60 @@ export default function (pi: ExtensionAPI) {
           ),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-          return withBrowserLock(async (lock) => {
-            const app = params.app ?? 'client';
+          const app = params.app ?? 'client';
 
-            // Ensure browser is running
-            const launch = await ensureBrowser({ app, lock });
-            if (!launch.ok) {
-              return {
-                content: [{ type: 'text', text: launch.message }],
-                details: { success: false },
-              };
-            }
+          // Ensure browser is running
+          const launch = await ensureBrowser(app);
+          if (!launch.ok) {
+            return {
+              content: [{ type: 'text', text: launch.message }],
+              details: { success: false },
+            };
+          }
 
-            // Navigate if URL provided
-            const targetUrl = params.url ?? getAppUrl(app);
-            await navigateAndWait(targetUrl);
+          // Navigate if URL provided
+          const targetUrl = params.url ?? getAppUrl(app);
+          await navigateAndWait(targetUrl);
 
-            // Get DOM snapshot
-            let domScript = 'document.documentElement.outerHTML.slice(0, 50000)';
-            if (params.selector) {
-              domScript = `(() => {
+          // Get DOM snapshot
+          let domScript = 'document.documentElement.outerHTML.slice(0, 50000)';
+          if (params.selector) {
+            domScript = `(() => {
               const el = document.querySelector(${JSON.stringify(params.selector)});
               return el ? el.outerHTML.slice(0, 30000) : 'Selector not found: ${params.selector}';
             })()`;
-            }
+          }
 
-            const domResult = (await cdpSend('Runtime.evaluate', {
-              expression: domScript,
-              returnByValue: true,
-            })) as { result?: { value?: string } };
+          const domResult = (await cdpSend('Runtime.evaluate', {
+            expression: domScript,
+            returnByValue: true,
+          })) as { result?: { value?: string } };
 
-            // Get page title and URL
-            const titleResult = (await cdpSend('Runtime.evaluate', {
-              expression:
-                'JSON.stringify({ title: document.title, url: location.href, readyState: document.readyState })',
-              returnByValue: true,
-            })) as { result?: { value?: string } };
+          // Get page title and URL
+          const titleResult = (await cdpSend('Runtime.evaluate', {
+            expression:
+              'JSON.stringify({ title: document.title, url: location.href, readyState: document.readyState })',
+            returnByValue: true,
+          })) as { result?: { value?: string } };
 
-            const meta = titleResult?.result?.value
-              ? JSON.parse(titleResult.result.value)
-              : { title: 'unknown', url: targetUrl };
-            const dom = domResult?.result?.value ?? 'Failed to capture DOM';
+          const meta = titleResult?.result?.value
+            ? JSON.parse(titleResult.result.value)
+            : { title: 'unknown', url: targetUrl };
+          const dom = domResult?.result?.value ?? 'Failed to capture DOM';
 
-            const output = [
-              `🔍 Page: ${meta.title}`,
-              `   URL: ${meta.url}`,
-              `   State: ${meta.readyState}`,
-              '',
-              '── DOM ──',
-              dom,
-            ].join('\n');
+          const output = [
+            `🔍 Page: ${meta.title}`,
+            `   URL: ${meta.url}`,
+            `   State: ${meta.readyState}`,
+            '',
+            '── DOM ──',
+            dom,
+          ].join('\n');
 
-            return {
-              content: [{ type: 'text', text: output }],
-              details: { success: true, ...meta },
-            };
-          });
+          return {
+            content: [{ type: 'text', text: output }],
+            details: { success: true, ...meta },
+          };
         },
       }),
       defineAction({
@@ -544,71 +440,69 @@ export default function (pi: ExtensionAPI) {
           ),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-          return withBrowserLock(async (lock) => {
-            const app = params.app ?? 'client';
-            const launch = await ensureBrowser({ app, lock });
-            if (!launch.ok) {
-              return {
-                content: [{ type: 'text', text: launch.message }],
-                details: { success: false },
-              };
-            }
-
-            if (params.url) {
-              await navigateAndWait(params.url);
-            } else {
-              await navigateAndWait(getAppUrl(app));
-            }
-
-            // Capture screenshot
-            const captureParams: Record<string, unknown> = { format: 'png' };
-            if (params.fullPage) {
-              // Get full page dimensions
-              const metrics = (await cdpSend('Page.getLayoutMetrics')) as {
-                contentSize?: { width: number; height: number };
-              };
-              if (metrics?.contentSize) {
-                await cdpSend('Emulation.setDeviceMetricsOverride', {
-                  width: metrics.contentSize.width,
-                  height: metrics.contentSize.height,
-                  deviceScaleFactor: 1,
-                  mobile: false,
-                });
-                captureParams.captureBeyondViewport = true;
-              }
-            }
-
-            const screenshot = (await cdpSend('Page.captureScreenshot', captureParams)) as {
-              data?: string;
-            };
-
-            if (!screenshot?.data) {
-              return {
-                content: [{ type: 'text', text: '❌ Failed to capture screenshot' }],
-                details: { success: false },
-              };
-            }
-
-            // Save to disk
-            const screenshotsDir = path.join(getRoot(), '.pi', '.screenshots');
-            fs.mkdirSync(screenshotsDir, { recursive: true });
-            const filename = `${app}-${Date.now()}.png`;
-            const filepath = path.join(screenshotsDir, filename);
-            fs.writeFileSync(filepath, Buffer.from(screenshot.data, 'base64'));
-
-            // Optimise the screenshot for AI consumption (shared pipeline)
-            await optimizeImage({ filepath });
-
+          const app = params.app ?? 'client';
+          const launch = await ensureBrowser(app);
+          if (!launch.ok) {
             return {
-              content: [
-                {
-                  type: 'text',
-                  text: `📸 Screenshot saved: ${filepath}\n   Size: ${Math.round((screenshot.data.length * 0.75) / 1024)}KB`,
-                },
-              ],
-              details: { success: true, filepath, filename },
+              content: [{ type: 'text', text: launch.message }],
+              details: { success: false },
             };
-          });
+          }
+
+          if (params.url) {
+            await navigateAndWait(params.url);
+          } else {
+            await navigateAndWait(getAppUrl(app));
+          }
+
+          // Capture screenshot
+          const captureParams: Record<string, unknown> = { format: 'png' };
+          if (params.fullPage) {
+            // Get full page dimensions
+            const metrics = (await cdpSend('Page.getLayoutMetrics')) as {
+              contentSize?: { width: number; height: number };
+            };
+            if (metrics?.contentSize) {
+              await cdpSend('Emulation.setDeviceMetricsOverride', {
+                width: metrics.contentSize.width,
+                height: metrics.contentSize.height,
+                deviceScaleFactor: 1,
+                mobile: false,
+              });
+              captureParams.captureBeyondViewport = true;
+            }
+          }
+
+          const screenshot = (await cdpSend('Page.captureScreenshot', captureParams)) as {
+            data?: string;
+          };
+
+          if (!screenshot?.data) {
+            return {
+              content: [{ type: 'text', text: '❌ Failed to capture screenshot' }],
+              details: { success: false },
+            };
+          }
+
+          // Save to disk
+          const screenshotsDir = path.join(getRoot(), '.pi', '.screenshots');
+          fs.mkdirSync(screenshotsDir, { recursive: true });
+          const filename = `${app}-${Date.now()}.png`;
+          const filepath = path.join(screenshotsDir, filename);
+          fs.writeFileSync(filepath, Buffer.from(screenshot.data, 'base64'));
+
+          // Optimise the screenshot for AI consumption (shared pipeline)
+          await optimizeImage({ filepath });
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `📸 Screenshot saved: ${filepath}\n   Size: ${Math.round((screenshot.data.length * 0.75) / 1024)}KB`,
+              },
+            ],
+            details: { success: true, filepath, filename },
+          };
         },
       }),
       defineAction({
@@ -632,187 +526,185 @@ export default function (pi: ExtensionAPI) {
           ),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-          return withBrowserLock(async (lock) => {
-            const app = params.app ?? 'client';
-            const launch = await ensureBrowser({ app, lock });
-            if (!launch.ok) {
-              return {
-                content: [{ type: 'text', text: launch.message }],
-                details: { success: false },
-              };
-            }
+          const app = params.app ?? 'client';
+          const launch = await ensureBrowser(app);
+          if (!launch.ok) {
+            return {
+              content: [{ type: 'text', text: launch.message }],
+              details: { success: false },
+            };
+          }
 
-            // Navigate (waits for load + network idle) first, then capture
-            // console events via CDP.
-            const targetUrl = getAppUrl(app);
-            await navigateAndWait(targetUrl);
+          // Navigate (waits for load + network idle) first, then capture
+          // console events via CDP.
+          const targetUrl = getAppUrl(app);
+          await navigateAndWait(targetUrl);
 
-            const target = await _getPageTarget();
+          const target = await _getPageTarget();
 
-            // Collect console entries via CDP events over a persistent WebSocket.
-            const entries: Array<{
-              level: string;
-              args: string[];
-              ts: number;
-              stack: string;
-            }> = [];
+          // Collect console entries via CDP events over a persistent WebSocket.
+          const entries: Array<{
+            level: string;
+            args: string[];
+            ts: number;
+            stack: string;
+          }> = [];
 
-            let pageUrl = targetUrl;
-            let readyState = 'complete';
+          let pageUrl = targetUrl;
+          let readyState = 'complete';
 
-            const ws = new WebSocket(target.webSocketDebuggerUrl);
+          const ws = new WebSocket(target.webSocketDebuggerUrl);
 
-            await new Promise<void>((resolve, reject) => {
-              const timer = setTimeout(() => resolve(), 8000);
+          await new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(() => resolve(), 8000);
 
-              ws.onopen = () => {
-                ws.send(JSON.stringify({ id: 1, method: 'Runtime.enable' }));
-              };
+            ws.onopen = () => {
+              ws.send(JSON.stringify({ id: 1, method: 'Runtime.enable' }));
+            };
 
-              ws.onmessage = (event) => {
-                const msg = JSON.parse(String(event.data));
+            ws.onmessage = (event) => {
+              const msg = JSON.parse(String(event.data));
 
-                // Handle console API calls
-                if (msg.method === 'Runtime.consoleAPICalled') {
-                  const entry = msg.params as {
-                    type: string;
-                    args: Array<{ value?: string; description?: string }>;
-                    timestamp: number;
-                    stackTrace?: {
-                      callFrames: Array<{ functionName: string; url: string; lineNumber: number }>;
-                    };
+              // Handle console API calls
+              if (msg.method === 'Runtime.consoleAPICalled') {
+                const entry = msg.params as {
+                  type: string;
+                  args: Array<{ value?: string; description?: string }>;
+                  timestamp: number;
+                  stackTrace?: {
+                    callFrames: Array<{ functionName: string; url: string; lineNumber: number }>;
                   };
-                  const entryLevel = entry.type;
-                  const args: string[] = entry.args.map((a: { value?: string }) => {
-                    try {
-                      return typeof a.value === 'object'
-                        ? JSON.stringify(a.value).slice(0, 500)
-                        : String(a.value ?? '').slice(0, 500);
-                    } catch {
-                      return '[unserializable]';
-                    }
-                  });
-                  const stack =
-                    entry.stackTrace?.callFrames
+                };
+                const entryLevel = entry.type;
+                const args: string[] = entry.args.map((a: { value?: string }) => {
+                  try {
+                    return typeof a.value === 'object'
+                      ? JSON.stringify(a.value).slice(0, 500)
+                      : String(a.value ?? '').slice(0, 500);
+                  } catch {
+                    return '[unserializable]';
+                  }
+                });
+                const stack =
+                  entry.stackTrace?.callFrames
+                    ?.map(
+                      (f: { functionName: string; url: string; lineNumber: number }) =>
+                        `    at ${f.functionName || '(anonymous)'} (${f.url}:${f.lineNumber})`,
+                    )
+                    .join('\n') ?? '';
+                entries.push({ level: entryLevel, args, ts: entry.timestamp, stack });
+              }
+
+              // Handle exceptions
+              if (msg.method === 'Runtime.exceptionThrown') {
+                const details = msg.params.exceptionDetails as {
+                  text?: string;
+                  url?: string;
+                  lineNumber?: number;
+                  stackTrace?: {
+                    callFrames: Array<{ functionName: string; url: string; lineNumber: number }>;
+                  };
+                };
+                entries.push({
+                  level: 'error',
+                  args: [
+                    details.text ?? 'Uncaught exception',
+                    `at ${details.url ?? ''}:${details.lineNumber ?? '?'}`,
+                  ],
+                  ts: msg.params.timestamp,
+                  stack:
+                    details.stackTrace?.callFrames
                       ?.map(
                         (f: { functionName: string; url: string; lineNumber: number }) =>
                           `    at ${f.functionName || '(anonymous)'} (${f.url}:${f.lineNumber})`,
                       )
-                      .join('\n') ?? '';
-                  entries.push({ level: entryLevel, args, ts: entry.timestamp, stack });
-                }
-
-                // Handle exceptions
-                if (msg.method === 'Runtime.exceptionThrown') {
-                  const details = msg.params.exceptionDetails as {
-                    text?: string;
-                    url?: string;
-                    lineNumber?: number;
-                    stackTrace?: {
-                      callFrames: Array<{ functionName: string; url: string; lineNumber: number }>;
-                    };
-                  };
-                  entries.push({
-                    level: 'error',
-                    args: [
-                      details.text ?? 'Uncaught exception',
-                      `at ${details.url ?? ''}:${details.lineNumber ?? '?'}`,
-                    ],
-                    ts: msg.params.timestamp,
-                    stack:
-                      details.stackTrace?.callFrames
-                        ?.map(
-                          (f: { functionName: string; url: string; lineNumber: number }) =>
-                            `    at ${f.functionName || '(anonymous)'} (${f.url}:${f.lineNumber})`,
-                        )
-                        .join('\n') ?? '',
-                  });
-                }
-              };
-
-              ws.onerror = (err) => {
-                clearTimeout(timer);
-                reject(new Error(`WebSocket error: ${err}`));
-              };
-            });
-
-            ws.close();
-
-            // Fetch page metadata
-            if (entries.length > 0) {
-              try {
-                const metaResult = (await cdpSend('Runtime.evaluate', {
-                  expression:
-                    'JSON.stringify({ title: document.title, url: location.href, readyState: document.readyState })',
-                  returnByValue: true,
-                })) as { result?: { value?: string } };
-                const meta = metaResult?.result?.value
-                  ? JSON.parse(metaResult.result.value)
-                  : { title: 'unknown', url: targetUrl, readyState: 'unknown' };
-                pageUrl = meta.url;
-                readyState = meta.readyState;
-              } catch {
-                // Use defaults
+                      .join('\n') ?? '',
+                });
               }
-            }
+            };
 
-            const levelFilter = params.level ?? 'all';
-            let filtered: typeof entries;
-            if (levelFilter === 'all') {
-              filtered = entries;
-            } else if (levelFilter === 'warning') {
-              filtered = entries.filter((e) => e.level === 'warn' || e.level === 'error');
-            } else {
-              filtered = entries.filter((e) => e.level === levelFilter);
-            }
-
-            const lines: string[] = [
-              `🖥  Console — ${app} (${pageUrl})`,
-              `   State: ${readyState}`,
-              `   Buffered: ${filtered.length} entries shown${entries.length !== filtered.length ? ` (${entries.length} total, filtered by level: ${levelFilter})` : ''}`,
-              `   Interceptor: ✅ CDP native event capture`,
-              '',
-            ];
-
-            if (filtered.length === 0) {
-              lines.push('No console output captured.');
-              if (entries.length === 0) {
-                lines.push('');
-                lines.push(
-                  '💡 The page may not have generated console output, or it loaded too quickly.',
-                );
-                lines.push('   Try triggering an action on the page and check again.');
-              }
-            } else {
-              lines.push('── Console Entries (newest last) ──');
-              for (const entry of filtered.slice(-50)) {
-                let icon: string;
-                if (entry.level === 'error') {
-                  icon = '❌';
-                } else if (entry.level === 'warn') {
-                  icon = '⚠️ ';
-                } else {
-                  icon = '📋';
-                }
-                const time = new Date(entry.ts).toISOString().slice(11, 23);
-                lines.push(`  ${icon} [${time}] ${entry.level}: ${entry.args.join(' ')}`);
-                if (entry.stack && (entry.level === 'error' || entry.level === 'warn')) {
-                  for (const frame of entry.stack.split('\n').slice(0, 3)) {
-                    lines.push(`       ${frame.trim()}`);
-                  }
-                }
-              }
-            }
-
-            return {
-              content: [{ type: 'text', text: lines.join('\n') }],
-              details: {
-                success: true,
-                total: entries.length,
-                filtered: filtered.length,
-              },
+            ws.onerror = (err) => {
+              clearTimeout(timer);
+              reject(new Error(`WebSocket error: ${err}`));
             };
           });
+
+          ws.close();
+
+          // Fetch page metadata
+          if (entries.length > 0) {
+            try {
+              const metaResult = (await cdpSend('Runtime.evaluate', {
+                expression:
+                  'JSON.stringify({ title: document.title, url: location.href, readyState: document.readyState })',
+                returnByValue: true,
+              })) as { result?: { value?: string } };
+              const meta = metaResult?.result?.value
+                ? JSON.parse(metaResult.result.value)
+                : { title: 'unknown', url: targetUrl, readyState: 'unknown' };
+              pageUrl = meta.url;
+              readyState = meta.readyState;
+            } catch {
+              // Use defaults
+            }
+          }
+
+          const levelFilter = params.level ?? 'all';
+          let filtered: typeof entries;
+          if (levelFilter === 'all') {
+            filtered = entries;
+          } else if (levelFilter === 'warning') {
+            filtered = entries.filter((e) => e.level === 'warn' || e.level === 'error');
+          } else {
+            filtered = entries.filter((e) => e.level === levelFilter);
+          }
+
+          const lines: string[] = [
+            `🖥  Console — ${app} (${pageUrl})`,
+            `   State: ${readyState}`,
+            `   Buffered: ${filtered.length} entries shown${entries.length !== filtered.length ? ` (${entries.length} total, filtered by level: ${levelFilter})` : ''}`,
+            `   Interceptor: ✅ CDP native event capture`,
+            '',
+          ];
+
+          if (filtered.length === 0) {
+            lines.push('No console output captured.');
+            if (entries.length === 0) {
+              lines.push('');
+              lines.push(
+                '💡 The page may not have generated console output, or it loaded too quickly.',
+              );
+              lines.push('   Try triggering an action on the page and check again.');
+            }
+          } else {
+            lines.push('── Console Entries (newest last) ──');
+            for (const entry of filtered.slice(-50)) {
+              let icon: string;
+              if (entry.level === 'error') {
+                icon = '❌';
+              } else if (entry.level === 'warn') {
+                icon = '⚠️ ';
+              } else {
+                icon = '📋';
+              }
+              const time = new Date(entry.ts).toISOString().slice(11, 23);
+              lines.push(`  ${icon} [${time}] ${entry.level}: ${entry.args.join(' ')}`);
+              if (entry.stack && (entry.level === 'error' || entry.level === 'warn')) {
+                for (const frame of entry.stack.split('\n').slice(0, 3)) {
+                  lines.push(`       ${frame.trim()}`);
+                }
+              }
+            }
+          }
+
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: {
+              success: true,
+              total: entries.length,
+              filtered: filtered.length,
+            },
+          };
         },
       }),
       defineAction({
@@ -835,24 +727,23 @@ export default function (pi: ExtensionAPI) {
           ),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-          return withBrowserLock(async (lock) => {
-            const app = params.app ?? 'client';
-            const launch = await ensureBrowser({ app, lock });
-            if (!launch.ok) {
-              return {
-                content: [{ type: 'text', text: launch.message }],
-                details: { success: false },
-              };
-            }
+          const app = params.app ?? 'client';
+          const launch = await ensureBrowser(app);
+          if (!launch.ok) {
+            return {
+              content: [{ type: 'text', text: launch.message }],
+              details: { success: false },
+            };
+          }
 
-            await navigateAndWait(getAppUrl(app));
+          await navigateAndWait(getAppUrl(app));
 
-            // Use Performance API to get resource timing
-            const duration = params.durationMs ?? 5000;
-            await new Promise((r) => setTimeout(r, duration));
+          // Use Performance API to get resource timing
+          const duration = params.durationMs ?? 5000;
+          await new Promise((r) => setTimeout(r, duration));
 
-            const networkResult = (await cdpSend('Runtime.evaluate', {
-              expression: `JSON.stringify(
+          const networkResult = (await cdpSend('Runtime.evaluate', {
+            expression: `JSON.stringify(
               performance.getEntriesByType('resource')
                 .slice(-50)
                 .map(e => ({
@@ -863,33 +754,32 @@ export default function (pi: ExtensionAPI) {
                   duration: Math.round(e.duration),
                 }))
             )`,
-              returnByValue: true,
-            })) as { result?: { value?: string } };
+            returnByValue: true,
+          })) as { result?: { value?: string } };
 
-            const entries = networkResult?.result?.value
-              ? JSON.parse(networkResult.result.value)
-              : [];
+          const entries = networkResult?.result?.value
+            ? JSON.parse(networkResult.result.value)
+            : [];
 
-            const lines: string[] = [
-              `🌐 Network — ${app} (${entries.length} requests captured)`,
-              '',
-              '  STATUS  TYPE       DURATION  SIZE      URL',
-              '  ─────  ────       ────────  ────      ───',
-            ];
+          const lines: string[] = [
+            `🌐 Network — ${app} (${entries.length} requests captured)`,
+            '',
+            '  STATUS  TYPE       DURATION  SIZE      URL',
+            '  ─────  ────       ────────  ────      ───',
+          ];
 
-            for (const e of entries) {
-              const status = e.status ? String(e.status).padEnd(5) : '  ?  ';
-              const type = (e.type ?? 'other').padEnd(10);
-              const dur = `${e.duration}ms`.padEnd(9);
-              const size = e.size ? `${Math.round(e.size / 1024)}KB`.padEnd(9) : '   ?     ';
-              lines.push(`  ${status} ${type} ${dur} ${size} ${e.name}`);
-            }
+          for (const e of entries) {
+            const status = e.status ? String(e.status).padEnd(5) : '  ?  ';
+            const type = (e.type ?? 'other').padEnd(10);
+            const dur = `${e.duration}ms`.padEnd(9);
+            const size = e.size ? `${Math.round(e.size / 1024)}KB`.padEnd(9) : '   ?     ';
+            lines.push(`  ${status} ${type} ${dur} ${size} ${e.name}`);
+          }
 
-            return {
-              content: [{ type: 'text', text: lines.join('\n') }],
-              details: { success: true, requestCount: entries.length },
-            };
-          });
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { success: true, requestCount: entries.length },
+          };
         },
       }),
       defineAction({
@@ -907,26 +797,25 @@ export default function (pi: ExtensionAPI) {
           url: Type.Optional(Type.String({ description: 'Specific URL to audit.' })),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-          return withBrowserLock(async (lock) => {
-            const app = params.app ?? 'client';
-            const launch = await ensureBrowser({ app, lock });
-            if (!launch.ok) {
-              return {
-                content: [{ type: 'text', text: launch.message }],
-                details: { success: false },
-              };
-            }
-
-            const targetUrl = params.url ?? getAppUrl(app);
-            await navigateAndWait(targetUrl, { settleMs: 1500 });
-
-            // Collect performance metrics via CDP and Performance API
-            const perfMetrics = (await cdpSend('Performance.getMetrics')) as {
-              metrics?: Array<{ name: string; value: number }>;
+          const app = params.app ?? 'client';
+          const launch = await ensureBrowser(app);
+          if (!launch.ok) {
+            return {
+              content: [{ type: 'text', text: launch.message }],
+              details: { success: false },
             };
+          }
 
-            const webVitals = (await cdpSend('Runtime.evaluate', {
-              expression: `(() => {
+          const targetUrl = params.url ?? getAppUrl(app);
+          await navigateAndWait(targetUrl, { settleMs: 1500 });
+
+          // Collect performance metrics via CDP and Performance API
+          const perfMetrics = (await cdpSend('Performance.getMetrics')) as {
+            metrics?: Array<{ name: string; value: number }>;
+          };
+
+          const webVitals = (await cdpSend('Runtime.evaluate', {
+            expression: `(() => {
               const result = { lcp: null, cls: null, fcp: null, domContentLoaded: null, load: null };
 
               // Navigation timing
@@ -979,77 +868,76 @@ export default function (pi: ExtensionAPI) {
                 formsWithoutLabels,
               });
             })()`,
-              returnByValue: true,
-            })) as { result?: { value?: string } };
+            returnByValue: true,
+          })) as { result?: { value?: string } };
 
-            const data = webVitals?.result?.value ? JSON.parse(webVitals.result.value) : {};
+          const data = webVitals?.result?.value ? JSON.parse(webVitals.result.value) : {};
 
-            // Format CDP metrics
-            const cdpMetricMap: Record<string, number> = {};
-            if (perfMetrics?.metrics) {
-              for (const m of perfMetrics.metrics) {
-                cdpMetricMap[m.name] = m.value;
-              }
+          // Format CDP metrics
+          const cdpMetricMap: Record<string, number> = {};
+          if (perfMetrics?.metrics) {
+            for (const m of perfMetrics.metrics) {
+              cdpMetricMap[m.name] = m.value;
             }
+          }
 
-            const lines: string[] = [
-              `🏁 Lightweight Audit — ${app}`,
-              `   URL: ${targetUrl}`,
-              '',
-              '── Performance ──',
-              `  FCP:                ${data.fcp ? `${data.fcp}ms` : 'n/a'}`,
-              `  DOM Content Loaded: ${data.domContentLoaded ? `${data.domContentLoaded}ms` : 'n/a'}`,
-              `  Load Event:         ${data.load ? `${data.load}ms` : 'n/a'}`,
-              `  JS Heap Used:       ${cdpMetricMap.JSHeapUsedSize ? `${Math.round(cdpMetricMap.JSHeapUsedSize / 1024 / 1024)}MB` : 'n/a'}`,
-              `  DOM Nodes:          ${data.domNodes ?? 'n/a'}`,
-              `  Resources:          ${data.totalCount ?? 0} (${data.totalSize ? `${Math.round(data.totalSize / 1024)}KB` : '?KB'} transferred)`,
-              '',
-              '── Accessibility Quick Check ──',
-            ];
+          const lines: string[] = [
+            `🏁 Lightweight Audit — ${app}`,
+            `   URL: ${targetUrl}`,
+            '',
+            '── Performance ──',
+            `  FCP:                ${data.fcp ? `${data.fcp}ms` : 'n/a'}`,
+            `  DOM Content Loaded: ${data.domContentLoaded ? `${data.domContentLoaded}ms` : 'n/a'}`,
+            `  Load Event:         ${data.load ? `${data.load}ms` : 'n/a'}`,
+            `  JS Heap Used:       ${cdpMetricMap.JSHeapUsedSize ? `${Math.round(cdpMetricMap.JSHeapUsedSize / 1024 / 1024)}MB` : 'n/a'}`,
+            `  DOM Nodes:          ${data.domNodes ?? 'n/a'}`,
+            `  Resources:          ${data.totalCount ?? 0} (${data.totalSize ? `${Math.round(data.totalSize / 1024)}KB` : '?KB'} transferred)`,
+            '',
+            '── Accessibility Quick Check ──',
+          ];
 
-            // a11y checks with pass/fail indicators
-            const a11yChecks = [
-              {
-                label: 'Single <h1>',
-                pass: data.h1Count === 1,
-                detail: `found ${data.h1Count ?? 0}`,
-              },
-              {
-                label: 'Images have alt text',
-                pass: data.imagesWithoutAlt === 0,
-                detail: `${data.imagesWithoutAlt ?? 0} missing`,
-              },
-              {
-                label: 'Buttons have type',
-                pass: data.buttonsWithoutType === 0,
-                detail: `${data.buttonsWithoutType ?? 0} missing`,
-              },
-              {
-                label: 'Links have href',
-                pass: data.linksWithoutHref === 0,
-                detail: `${data.linksWithoutHref ?? 0} missing`,
-              },
-              {
-                label: 'Inputs have labels',
-                pass: data.formsWithoutLabels === 0,
-                detail: `${data.formsWithoutLabels ?? 0} missing`,
-              },
-            ];
+          // a11y checks with pass/fail indicators
+          const a11yChecks = [
+            {
+              label: 'Single <h1>',
+              pass: data.h1Count === 1,
+              detail: `found ${data.h1Count ?? 0}`,
+            },
+            {
+              label: 'Images have alt text',
+              pass: data.imagesWithoutAlt === 0,
+              detail: `${data.imagesWithoutAlt ?? 0} missing`,
+            },
+            {
+              label: 'Buttons have type',
+              pass: data.buttonsWithoutType === 0,
+              detail: `${data.buttonsWithoutType ?? 0} missing`,
+            },
+            {
+              label: 'Links have href',
+              pass: data.linksWithoutHref === 0,
+              detail: `${data.linksWithoutHref ?? 0} missing`,
+            },
+            {
+              label: 'Inputs have labels',
+              pass: data.formsWithoutLabels === 0,
+              detail: `${data.formsWithoutLabels ?? 0} missing`,
+            },
+          ];
 
-            for (const check of a11yChecks) {
-              lines.push(`  ${check.pass ? '✅' : '❌'} ${check.label} (${check.detail})`);
-            }
+          for (const check of a11yChecks) {
+            lines.push(`  ${check.pass ? '✅' : '❌'} ${check.label} (${check.detail})`);
+          }
 
-            lines.push('');
-            lines.push(
-              `💡 For a full Lighthouse audit, run: bunx lighthouse ${targetUrl} --output json`,
-            );
+          lines.push('');
+          lines.push(
+            `💡 For a full Lighthouse audit, run: bunx lighthouse ${targetUrl} --output json`,
+          );
 
-            return {
-              content: [{ type: 'text', text: lines.join('\n') }],
-              details: { success: true, metrics: data },
-            };
-          });
+          return {
+            content: [{ type: 'text', text: lines.join('\n') }],
+            details: { success: true, metrics: data },
+          };
         },
       }),
     ],
@@ -1076,8 +964,20 @@ export default function (pi: ExtensionAPI) {
 
   // ── Kill the Chromium we spawned when the session ends ─────────────
   pi.on('session_shutdown', async () => {
-    await withBrowserLock(async () => {
-      await stopSpawnedBrowser();
-    });
+    if (spawnedChromePid === null) {
+      return;
+    }
+    try {
+      // Negative PID kills the whole detached process group (renderer,
+      // gpu-process, zygote children) — not just the main process.
+      process.kill(-spawnedChromePid, 'SIGTERM');
+    } catch {
+      try {
+        process.kill(spawnedChromePid, 'SIGTERM');
+      } catch {
+        // already gone
+      }
+    }
+    spawnedChromePid = null;
   });
 }

@@ -79,7 +79,7 @@ class AppErrorViewModel
   }
 
   get errorId() {
-    return (page.error as unknown as CustomError | undefined)?.errorId;
+    return (page.error as CustomError | undefined)?.errorId;
   }
 
   get metadata() {
@@ -171,7 +171,7 @@ class AppErrorViewModel
    */
   private _getErrorType(): ErrorType {
     const status = page.status;
-    const error = page.error as unknown as CustomError;
+    const error = page.error as CustomError;
     const type = error?.type;
     const pathname = this.pathname;
 

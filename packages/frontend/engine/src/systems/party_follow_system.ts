@@ -17,7 +17,7 @@
 //     path — never every tick.
 
 import type { World } from 'bitecs';
-import { addComponent, getComponent, query, removeComponent, set } from 'bitecs';
+import { addComponent, getComponent, query, set } from 'bitecs';
 import { Companion } from '../components/companion.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { PathFollow } from '../components/path_follow.ts';
@@ -99,30 +99,9 @@ export const updatePartyFollow = (world: World, playerEid: number): void => {
       continue;
     }
 
-    // Live path — keep it unless the formation slot drifted more than one
-    // tile from the path's final waypoint (the player kept walking).
-    // Without this check, followers walk to where the player WAS and only
-    // then re-path, which reads as rubber-banding.
+    // Live path already — let the path-follow system finish it.
     if (hasActivePath(world, eid)) {
-      const pathLength = PathFollow.length[eid] ?? 0;
-      const waypoints = PathFollow.waypoints[eid];
-      const finalX = waypoints?.[(pathLength - 1) * 2];
-      const finalY = waypoints?.[(pathLength - 1) * 2 + 1];
-      if (finalX !== undefined && finalY !== undefined) {
-        const driftX = slotX - finalX;
-        const driftY = slotY - finalY;
-        if (driftX * driftX + driftY * driftY <= tileSize * tileSize) {
-          // Goal still within one tile — keep the current path.
-          continue;
-        }
-        // Goal drifted more than one tile — invalidate the stale path so
-        // the fall-through below re-requests a fresh one (the repathAtMs
-        // backoff check still gates the request, so this cannot storm).
-        removeComponent(world, eid, PathFollow);
-        PathFollow.repathAtMs[eid] = 0;
-      } else {
-        continue;
-      }
+      continue;
     }
 
     // Repath backoff — a failed request (impassable slot cell or

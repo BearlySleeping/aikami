@@ -4,19 +4,26 @@
 // Extracted from providers_view_model.svelte.ts for separation of concerns.
 
 import {
-  buildVerifyHeaders,
-  buildVerifyUrl,
-  PROVIDER_ENDPOINTS,
-  TEXT_PROVIDERS,
-} from '@aikami/constants';
-import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { ConfigState, OpenRouterModel } from '@aikami/types';
-import { configService, fetchOpenRouterModels, getOllamaRuntimeEndpoints } from '$services';
-import { type AuxiliaryModels, INSTRUCT_TEMPLATES, type InstructTemplate } from '$types';
+import {
+  buildVerifyHeaders,
+  buildVerifyUrl,
+  type ConfigState,
+  configService,
+  fetchOpenRouterModels,
+  getOllamaRuntimeEndpoints,
+  PROVIDER_ENDPOINTS,
+  TEXT_PROVIDERS,
+} from '$services';
+import {
+  type AuxiliaryModels,
+  INSTRUCT_TEMPLATES,
+  type InstructTemplate,
+  type OpenRouterModel,
+} from '$types';
 
 export type TextTabViewModelInterface = BaseViewModelInterface & {
   readonly config: ConfigState;
@@ -265,8 +272,8 @@ class TextTabViewModel
     }
     this.verificationStatus = { ...this.verificationStatus, [provider]: 'checking' };
     try {
-      const url = buildVerifyUrl({ endpoint, apiKey });
-      const headers = buildVerifyHeaders({ endpoint, apiKey });
+      const url = buildVerifyUrl(endpoint, apiKey);
+      const headers = buildVerifyHeaders(endpoint, apiKey);
       const response = await fetch(url, { method: endpoint.method, headers });
       this.verificationStatus = {
         ...this.verificationStatus,

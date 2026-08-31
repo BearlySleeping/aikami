@@ -40,18 +40,3 @@ declare namespace App {
     };
   }
 }
-
-// Vite worker import type declarations (used by @aikami/frontend-engine)
-declare module '*?worker' {
-  const WorkerFactory: {
-    new (): Worker;
-  };
-  export default WorkerFactory;
-}
-
-declare module '*?worker&type=module' {
-  const WorkerFactory: {
-    new (): Worker;
-  };
-  export default WorkerFactory;
-}

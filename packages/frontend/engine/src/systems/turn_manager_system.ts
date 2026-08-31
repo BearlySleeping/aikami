@@ -1431,7 +1431,7 @@ const _processCompanionTurn = (
 /** Finds the most damaged ally (player or companion) for healing. */
 const _findMostDamagedAlly = (world: World, sourceId: number): number => {
   let bestAlly = 0;
-  let greatestMissingHealth = 0;
+  let lowestHp = Number.MAX_SAFE_INTEGER;
 
   for (const eid of turnOrderList) {
     if (eid === sourceId) {
@@ -1443,9 +1443,8 @@ const _findMostDamagedAlly = (world: World, sourceId: number): number => {
     }
     const isCompanion = Companion.recruited[eid] === true;
     const isPlayer = eid === 1;
-    const missingHealth = stats.maxHealth - stats.health;
-    if ((isCompanion || isPlayer) && missingHealth > greatestMissingHealth) {
-      greatestMissingHealth = missingHealth;
+    if ((isCompanion || isPlayer) && stats.health < lowestHp) {
+      lowestHp = stats.health;
       bestAlly = eid;
     }
   }

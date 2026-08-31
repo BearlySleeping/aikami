@@ -12,9 +12,12 @@
 //
 // Contract: C-448 (background downloading, start-menu entry point)
 
-import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import type { AssetRegistryRepository as AssetRegistryRepositoryClass } from '@aikami/frontend/storage';
-import type { AssetPrefetchPhase, AssetSeedDocument } from '@aikami/types';
+import type { AssetSeedDocument, AssetSeedRow } from '@aikami/types';
 import { withStepTimeout } from '$lib/utils/step_timeout';
 import type { AssetCacheBackend } from './cache_backend.ts';
 
@@ -22,6 +25,14 @@ import type { AssetCacheBackend } from './cache_backend.ts';
 export type AssetPrefetchServiceOptions = BaseFrontendClassOptions;
 /** Concurrent fetches during the background warm pass — see game_boot_service. */
 const WARM_CONCURRENCY = 8;
+
+type AssetPrefetchPhase =
+  | 'idle'
+  | 'preparing'
+  | 'prefetching-core'
+  | 'warming'
+  | 'ready'
+  | 'degraded';
 
 /** Result of a starter-content prefetch pass. */
 type CorePrefetchResult = {
@@ -45,7 +56,7 @@ export type AssetPrefetchServiceInterface = {
   /** Progress over the full-catalog background warm pass. */
   readonly warmProgress: { readonly done: number; readonly total: number } | null;
   /** Set when the pipeline degraded (network/storage failure) — non-fatal. */
-  readonly errorMessage: string | undefined;
+  readonly error: string | undefined;
 
   /** Whether {@link warmRemaining} has been triggered this session. */
   readonly warmStarted: boolean;
@@ -95,7 +106,7 @@ class AssetPrefetchService
   phase = $state<AssetPrefetchPhase>('idle');
   coreProgress = $state<{ done: number; total: number } | null>(null);
   warmProgress = $state<{ done: number; total: number } | null>(null);
-  errorMessage = $state<string | undefined>(undefined);
+  error = $state<string | undefined>(undefined);
 
   /**
    * Per-step ceiling for registry init. Below the boot pipeline's 30s stage
@@ -132,7 +143,7 @@ class AssetPrefetchService
 
       if (result.failedTags.length > 0 && result.fetched === 0 && result.alreadyCached === 0) {
         this.phase = 'degraded';
-        this.errorMessage = 'Unable to download starter content — check your connection.';
+        this.error = 'Unable to download starter content — check your connection.';
         return;
       }
 
@@ -141,8 +152,8 @@ class AssetPrefetchService
       this.phase = 'ready';
     } catch (err) {
       this.phase = 'degraded';
-      this.errorMessage = err instanceof Error ? err.message : String(err);
-      this.warn('assetPrefetchService:pipeline-degraded', { error: this.errorMessage });
+      this.error = err instanceof Error ? err.message : String(err);
+      this.warn('assetPrefetchService:pipeline-degraded', { error: this.error });
     }
   }
 
@@ -203,6 +214,9 @@ class AssetPrefetchService
         coreCount: coreSeedRows.length,
         lazyCount: lazySeedRows.length,
       });
+
+      // Store the lazy rows for on-demand registration
+      this._lazySeedRows = lazySeedRows;
     }
 
     const backend = createPlatformCacheBackend();
@@ -340,8 +354,8 @@ class AssetPrefetchService
       });
     } catch (err) {
       this.phase = 'degraded';
-      this.errorMessage = err instanceof Error ? err.message : String(err);
-      this.warn('assetPrefetchService:warm-degraded', { error: this.errorMessage });
+      this.error = err instanceof Error ? err.message : String(err);
+      this.warn('assetPrefetchService:warm-degraded', { error: this.error });
     }
   }
 }

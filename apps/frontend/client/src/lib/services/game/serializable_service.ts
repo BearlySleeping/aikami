@@ -14,9 +14,6 @@ export type SerializableService<T> = {
 
   /** Restores the service's state from a previously serialized payload. */
   hydrate(data: T): void;
-
-  /** Restores defaults when an older save has no snapshot for this service. */
-  reset?(): void;
 };
 
 /** Payload shape for a single service's serialized state. */
@@ -60,7 +57,6 @@ export const hydrateAllServices = (snapshots: ServiceSnapshot[]): void => {
   for (const { key, service } of _registry) {
     const data = map.get(key);
     if (data === undefined) {
-      service.reset?.();
       continue;
     }
     if (typeof service.hydrate !== 'function') {

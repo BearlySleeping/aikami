@@ -9,9 +9,8 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { AdvancedOverrides } from '@aikami/types';
 import type { GenerationParams, InstructTemplate } from '$types';
-import { configService } from '../config/config_service.svelte.ts';
+import { type AdvancedOverrides, configService } from '../config/config_service.svelte.ts';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -103,7 +102,7 @@ class AISettingsService
   }
 
   get instructTemplate(): InstructTemplate {
-    return configService.state.instructTemplate as InstructTemplate;
+    return configService.state.instructTemplate;
   }
 
   get isLoaded(): boolean {

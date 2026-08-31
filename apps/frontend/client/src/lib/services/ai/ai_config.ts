@@ -77,7 +77,6 @@ function getAiClientOptions(apiClient?: GameApiClientInterface): AiClientOptions
       // C-389: no baked-in engine URL — resolved from the runtime config
       // chain; undefined fails fast instead of probing localhost (AC-1).
       baseUrl: runtimeConfigService.getImageUrl(),
-      workflowId: 'default',
     },
     localTts: {
       rate: 1.0,

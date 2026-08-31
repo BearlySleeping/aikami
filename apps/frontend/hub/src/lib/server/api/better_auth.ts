@@ -37,7 +37,7 @@ import {
 } from '$app/env/private';
 import { logger } from '$logger';
 
-export type BetterAuthEnv = {
+type BetterAuthEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
   DB: import('@cloudflare/workers-types').D1Database;
 };

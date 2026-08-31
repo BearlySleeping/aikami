@@ -82,10 +82,7 @@ tasks:
 
   # ------------------------------------------------------------------
   # Format Check
-  # Checks formatting without writing changes. Not run in CI — formatting
-  # is enforced locally by the `moon sync hooks` pre-commit hook (runs
-  # `moon run :fix`), so a format-only failure should never reach a PR.
-  # Still runnable on demand via `moon run :format` / `moon check`.
+  # Checks formatting without writing changes.
   # ------------------------------------------------------------------
   format:
     command: "bun"
@@ -96,7 +93,7 @@ tasks:
       - "@group(root-configs)"
     options:
       cache: true
-      runInCI: false
+      runInCI: true
 
   # ------------------------------------------------------------------
   # Type Check
@@ -109,9 +106,6 @@ tasks:
       - "@group(sources)"
       - "@group(configs)"
       - "@group(root-configs)"
-      - "/packages/shared/*/src/**/*"
-      - "/packages/frontend/*/src/**/*"
-      - "/packages/backend/*/src/**/*"
     options:
       cache: true
       runInCI: true
@@ -134,14 +128,13 @@ tasks:
 
   # ------------------------------------------------------------------
   # Validate
-  # Meta-task: runs lint + typecheck in sequence. Format is deliberately
-  # excluded — it's enforced locally by the pre-commit hook (`moon sync
-  # hooks`), not re-checked in CI. Run `moon run :format` directly if you
-  # need to check it on demand.
+  # Meta-task: runs lint + format + typecheck in sequence.
+  # Useful for pre-commit hooks and CI gates.
   # ------------------------------------------------------------------
   validate:
     deps:
       - "~:lint"
+      - "~:format"
       - "~:typecheck"
     options:
       cache: false

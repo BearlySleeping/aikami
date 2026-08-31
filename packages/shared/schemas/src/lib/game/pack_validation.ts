@@ -5,6 +5,7 @@
 // and the future generation loop (feed errors back to a model for repair).
 // Contract: C-381 Content Pipeline Hardening — AC-5
 //
+// biome-ignore lint/style/useNamingConvention: error codes use dot-notation identifiers
 
 import type { ContentPackManifest } from './content_pack.ts';
 
@@ -105,8 +106,7 @@ const VBSCRIPT_SCHEME_RE = /^vbscript:/i;
 // Helpers
 // ---------------------------------------------------------------------------
 
-const isAbsoluteUrl = (s: string): boolean =>
-  ABSOLUTE_URL_RE.test(s) || PROTOCOL_RELATIVE_RE.test(s);
+const isAbsoluteUrl = (s: string): boolean => ABSOLUTE_URL_RE.test(s) || PROTOCOL_RELATIVE_RE.test(s);
 const hasPathTraversal = (s: string): boolean => PATH_TRAVERSAL_RE.test(s);
 const isDataScheme = (s: string): boolean => DATA_SCHEME_RE.test(s);
 const isJavaScriptScheme = (s: string): boolean => JAVASCRIPT_SCHEME_RE.test(s);
@@ -289,12 +289,12 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
    * Checks a provenance block for required fields and valid license.
    * Pushes errors for any missing/invalid fields.
    */
-  const _checkProvenance = (args: {
+  const checkProvenance = (options: {
     provenance: { license?: string; author?: string[]; source?: string } | undefined;
     path: string;
     label: string;
   }): void => {
-    const { provenance, path: provenancePath, label } = args;
+    const { provenance, path: provenancePath, label } = options;
     if (!provenance) {
       errors.push({
         code: 'asset.missing-provenance',
@@ -339,7 +339,7 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
 
   // Check atlas provenance
   if (manifest.atlas) {
-    _checkProvenance({
+    checkProvenance({
       provenance: manifest.atlas.provenance,
       path: '/atlas/provenance',
       label: 'Atlas texture',
@@ -349,7 +349,7 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
   // Check tile provenance
   if (manifest.tiles) {
     for (const [tileId, tileDef] of Object.entries(manifest.tiles)) {
-      _checkProvenance({
+      checkProvenance({
         provenance: tileDef.provenance,
         path: `/tiles/${tileId}/provenance`,
         label: `Tile "${tileId}"`,
@@ -360,7 +360,7 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
   // Check prop provenance
   if (manifest.props) {
     for (const [propId, propDef] of Object.entries(manifest.props)) {
-      _checkProvenance({
+      checkProvenance({
         provenance: propDef.provenance,
         path: `/props/${propId}/provenance`,
         label: `Prop "${propId}"`,
@@ -483,8 +483,4 @@ export const validatePack = (options: ValidatePackOptions): PackValidationResult
  * Used by the hostile-manifest test (AC-2).
  */
 export const isHostileString = (s: string): boolean =>
-  isAbsoluteUrl(s) ||
-  hasPathTraversal(s) ||
-  isDataScheme(s) ||
-  isJavaScriptScheme(s) ||
-  isVbScriptScheme(s);
+  isAbsoluteUrl(s) || hasPathTraversal(s) || isDataScheme(s) || isJavaScriptScheme(s) || isVbScriptScheme(s);

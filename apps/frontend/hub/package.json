@@ -16,13 +16,13 @@
     "preview-hub": "bun run ../../../scripts/src/lib/ops/preview_hub.ts",
     "db:migrate:local": "bun run ../../../scripts/src/lib/ops/d1_migrate_local.ts",
     "db:seed:local": "bun run ../../../scripts/src/lib/ops/d1_seed_local.ts",
+    "check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "lint": "biome lint src",
     "format": "biome format src",
-    "sync": "svelte-kit sync",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental",
     "fix": "biome check --write src",
     "test": "bun run test:unit",
-    "test:unit": "bun run scripts/write_test_tsconfig.ts && bun test --isolate --preload ./src/lib/test_preload.ts --tsconfig-override=tsconfig.test.json src/lib",
+    "test:unit": "bunx svelte-kit sync && bun run scripts/write_test_tsconfig.ts && bun test --isolate --preload ./src/lib/test_preload.ts --tsconfig-override=tsconfig.test.json src/lib",
     "deploy": "bun run scripts/deploy.ts"
   },
   "devDependencies": {
@@ -39,6 +39,7 @@
     "rollup-plugin-visualizer": "7.1.1",
     "svelte": "5.57.0",
     "svelte-check": "4.7.6",
+    "svelte-fast-check": "^0.4.5",
     "tailwindcss": "4.3.3",
     "vite": "8.2.2",
     "vite-plugin-devtools-json": "1.1.0"

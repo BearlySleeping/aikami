@@ -28,7 +28,7 @@
 // resolved through `moduleResolution: "bundler"`. Upgrading starlight
 // may introduce new type errors from upstream .ts changes.
 
-import { spawnSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -231,11 +231,7 @@ const starlightVersion = findCurrentStarlightVersion();
 console.log(`🔒 Pinning @astrojs/starlight to ${starlightVersion}`);
 
 try {
-  bunAddInWorkspace(
-    '@aikami/docs',
-    'apps/frontend/docs',
-    `@astrojs/starlight@${starlightVersion} --exact`,
-  );
+  bunAddInWorkspace('@aikami/docs', 'apps/frontend/docs', `@astrojs/starlight@${starlightVersion} --exact`);
   console.log(`✅ Pinned @astrojs/starlight@${starlightVersion} in apps/frontend/docs`);
 } catch (err) {
   console.error(

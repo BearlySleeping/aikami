@@ -1,17 +1,96 @@
 // apps/frontend/client/src/lib/services/config/openrouter_models.ts
 //
-// Browser cache wrapper around the runtime-neutral shared fetch utility.
+// Utility for fetching available models from OpenRouter's API.
+// Models are cached in localStorage to avoid repeated fetches and
+// rate-limit issues.
 
-import { fetchOpenRouterModels as fetchOpenRouterModelsUncached } from '@aikami/constants';
-import type { OpenRouterModel } from '@aikami/types';
+import { logger } from '$logger';
+import type { OpenRouterModel } from '$types';
+
+/** Response shape from OpenRouter GET /api/v1/models. */
+type OpenRouterModelsResponse = {
+  data: OpenRouterModel[];
+};
+
+// ---------------------------------------------------------------------------
+// localStorage keys
+// ---------------------------------------------------------------------------
 
 const CACHE_KEY = 'aikami_openrouter_models';
-const CACHE_TTL_MS = 30 * 60 * 1000;
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+// ---------------------------------------------------------------------------
+// Cached entry shape
+// ---------------------------------------------------------------------------
 
 type CachedModels = {
   timestamp: number;
   models: OpenRouterModel[];
 };
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches available models from OpenRouter, using a cached response when
+ * available and fresh.
+ *
+ * Falls back to an empty array on network errors, CORS issues, or invalid
+ * API keys — the caller should handle the empty case gracefully.
+ *
+ * @param apiKey - A valid OpenRouter API key.
+ */
+export const fetchOpenRouterModels = async (apiKey: string): Promise<OpenRouterModel[]> => {
+  // Check cache first
+  const cached = _readCache();
+  if (cached) {
+    logger.debug('fetchOpenRouterModels: cache hit', {
+      count: cached.length,
+    });
+    return cached;
+  }
+
+  logger.debug('fetchOpenRouterModels: fetching from API');
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      method: 'GET',
+      headers: {
+        // biome-ignore lint/style/useNamingConvention: HTTP header name
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      logger.warn('fetchOpenRouterModels: non-OK response', {
+        status: response.status,
+      });
+      return [];
+    }
+
+    const json = (await response.json()) as OpenRouterModelsResponse;
+    const models = json.data ?? [];
+
+    _writeCache(models);
+    return models;
+  } catch (error) {
+    logger.warn('fetchOpenRouterModels: fetch failed', error);
+    return [];
+  }
+};
+
+/**
+ * Clears the cached model list from localStorage.
+ */
+export const clearOpenRouterCache = (): void => {
+  localStorage.removeItem(CACHE_KEY);
+};
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
 
 const _readCache = (): OpenRouterModel[] | undefined => {
   try {
@@ -19,42 +98,28 @@ const _readCache = (): OpenRouterModel[] | undefined => {
     if (!raw) {
       return undefined;
     }
+
     const cached = JSON.parse(raw) as CachedModels;
     if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
       localStorage.removeItem(CACHE_KEY);
       return undefined;
     }
+
     return cached.models;
   } catch {
+    localStorage.removeItem(CACHE_KEY);
     return undefined;
   }
 };
 
 const _writeCache = (models: OpenRouterModel[]): void => {
   try {
-    const cached: CachedModels = { models, timestamp: Date.now() };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(cached));
+    const entry: CachedModels = {
+      models,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
   } catch {
-    // Storage may be unavailable or full; fetching still succeeds.
-  }
-};
-
-/** Fetches OpenRouter models, reusing a fresh browser-local response. */
-export const fetchOpenRouterModels = async (apiKey: string): Promise<OpenRouterModel[]> => {
-  const cached = _readCache();
-  if (cached) {
-    return cached;
-  }
-  const models = await fetchOpenRouterModelsUncached(apiKey);
-  _writeCache(models);
-  return models;
-};
-
-/** Clears the browser-local OpenRouter model cache. */
-export const clearOpenRouterCache = (): void => {
-  try {
-    localStorage.removeItem(CACHE_KEY);
-  } catch {
-    // Storage may be unavailable in tests or restricted browser contexts.
+    // localStorage full or unavailable — silently skip
   }
 };

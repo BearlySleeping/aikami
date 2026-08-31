@@ -3,6 +3,8 @@
 // C-426 AC-4: the hub's login flow is served by Better Auth mounted inside the
 // Elysia app (src/lib/server/api/index.ts) via `.mount()`, backed by D1.
 
+// biome-ignore-all lint/style/useNamingConvention: Cloudflare D1 binding name is SCREAMING_SNAKE_CASE
+//
 // The Elysia app is a module singleton; the D1 database is injected via
 // `setBetterAuthEnv` with a mock D1Database backed by an in-memory libsql
 // instance (the same SQLite engine D1 uses, with the generated D1 migration
@@ -12,28 +14,57 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { D1Database } from '@cloudflare/workers-types';
 import { type Client, createClient } from '@libsql/client';
-import type { BetterAuthEnv } from '../better_auth.ts';
-import type { App } from '../index.ts';
-import { createLibsqlMockD1 } from './mock_d1.ts';
 
 // Must be registered before any module that imports $env/dynamic/private
 // (better_auth.ts, the route) is loaded — hence dynamic imports below.
 mock.module('$env/dynamic/private', () => ({
   env: {
-    // biome-ignore lint/style/useNamingConvention: environment variable name
     BETTER_AUTH_URL: 'http://localhost:5173',
-    // biome-ignore lint/style/useNamingConvention: environment variable name
     BETTER_AUTH_SECRET: 'test-secret-that-is-long-enough-for-better-auth',
   } as Record<string, string | undefined>,
 }));
 
 const BASE_URL = 'http://localhost:5173';
 
+// ── Mock D1Database backed by libsql ────────────────────────────────────
+// The drizzle-orm/d1 driver calls prepare(sql).bind(...).all()/.first()/.run()
+// and exec(sql). We map those onto the libsql client's execute().
+
+const createMockD1 = (dbClient: Client): unknown => {
+  const prepareStatement = (sql: string) => ({
+    bind: (...params: unknown[]) => ({
+      all: async () => {
+        const res = await dbClient.execute({ sql, args: params });
+        return { results: res.rows };
+      },
+      first: async () => {
+        const res = await dbClient.execute({ sql, args: params });
+        return res.rows[0] ?? null;
+      },
+      run: async () => {
+        const res = await dbClient.execute({ sql, args: params });
+        return { meta: res.meta };
+      },
+      raw: async () => {
+        const res = await dbClient.execute({ sql, args: params });
+        return res.rows;
+      },
+    }),
+  });
+  return {
+    prepare: prepareStatement,
+    exec: async (sql: string) => {
+      await dbClient.execute(sql);
+    },
+    batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
+      Promise.all(statements.map((s) => dbClient.execute({ sql: s.sql, args: s.params ?? [] }))),
+  };
+};
+
 let client: Client;
-let app: App;
-let setBetterAuthEnv: (env: BetterAuthEnv | undefined) => void;
+let app: Awaited<ReturnType<typeof import('../index.ts')>>['app'];
+let setBetterAuthEnv: (env: { DB: unknown } | undefined) => void;
 
 const applyD1Migrations = async (): Promise<void> => {
   const dir = join(
@@ -83,10 +114,7 @@ beforeAll(async () => {
   await applyD1Migrations();
   const betterAuthModule = await import('../better_auth.ts');
   setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
-  setBetterAuthEnv({
-    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    DB: createLibsqlMockD1(client) as unknown as D1Database,
-  });
+  setBetterAuthEnv({ DB: createMockD1(client) });
   ({ app } = await import('../index.ts'));
 });
 
@@ -174,26 +202,18 @@ describe('hub Better Auth mount (AC-4)', () => {
       expect(betterAuthModule.getBetterAuth()).toBeUndefined();
       expect(res.status).toBe(503);
     } finally {
-      setBetterAuthEnv({
-        // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-        DB: createLibsqlMockD1(client) as unknown as D1Database,
-      });
+      setBetterAuthEnv({ DB: createMockD1(client) });
     }
   });
 
   test('device mount handles /api/auth/device/code requests (AC-5)', async () => {
-    const res = await app.handle(
-      post('/api/auth/device/code', {
-        // biome-ignore lint/style/useNamingConvention: Better Auth wire-format field
-        client_id: 'aikami-client',
-      }),
-    );
+    const res = await app.handle(post('/api/auth/device/code', { client_id: 'aikami-client' }));
     // Device-code request succeeds (not 404) and returns a device_code + user_code.
     expect(res.status).not.toBe(404);
     if (res.status === 200) {
-      const body = (await res.json()) as Partial<Record<'device_code' | 'user_code', string>>;
-      expect(Reflect.get(body, 'device_code')).toBeDefined();
-      expect(Reflect.get(body, 'user_code')).toBeDefined();
+      const body = (await res.json()) as { device_code?: string; user_code?: string };
+      expect(body.device_code).toBeDefined();
+      expect(body.user_code).toBeDefined();
     }
   });
 });

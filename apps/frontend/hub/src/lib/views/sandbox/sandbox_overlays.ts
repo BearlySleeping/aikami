@@ -394,9 +394,7 @@ export const createSpawnsOverlay = (options: {
       // Label
       ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
       ctx.font = '9px monospace';
-      const label = spawn.properties?.name
-        ? String(spawn.properties.name)
-        : `Spawn (${spawn.x}, ${spawn.y})`;
+      const label = spawn.name ?? `Spawn (${spawn.x}, ${spawn.y})`;
       ctx.fillText(label, sx + 12, sy + 4);
     }
   };

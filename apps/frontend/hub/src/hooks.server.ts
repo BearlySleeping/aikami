@@ -15,7 +15,7 @@ import {
 import { SSRLogSink } from '@aikami/backend/svelte-kit/log_sink';
 import { toUserSessionData } from '@aikami/backend-auth/better-auth';
 import type { LogContext, UserSessionData } from '@aikami/types';
-import type { Handle, RequestEvent } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
 import { getBetterAuth, setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { logger } from '$logger';
 import { logContextStore } from '$loggerServer';
@@ -109,11 +109,8 @@ void logger.write({ logLevel: 'DEBUG', logType: 'debug', message: 'ssr-logger-in
  * SvelteKit handleError hook: log the error with SSR context (session,
  * user, IP, route) and return a safe error payload.
  */
-export const handleError = ({ error, event }: { error: unknown; event: RequestEvent }) => {
-  const pwaError: { message?: string; type?: string } | undefined =
-    typeof error === 'object' && error !== null
-      ? { message: Reflect.get(error, 'message'), type: Reflect.get(error, 'type') }
-      : undefined;
+export const handleError = (({ error, event }) => {
+  const pwaError = error as App.Error | undefined;
   const sessionId =
     event.locals.sessionId ?? getCookie('aikamiSessionId', { cookies: event.cookies }) ?? 'unknown';
 
@@ -139,7 +136,8 @@ export const handleError = ({ error, event }: { error: unknown; event: RequestEv
     message: pwaError?.message ?? 'Internal Server Error',
     type: pwaError?.type ?? 'unknown-error',
   };
-};
+}) satisfies HandleServerError;
+
 export const handle: Handle = async ({ event, resolve }) => {
   // ── 1. Rewrite event URL for the hosting proxy ──
   event = rewriteForwardedHost(event);

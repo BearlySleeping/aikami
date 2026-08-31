@@ -9,6 +9,11 @@ import { routerService } from '$services';
 
 type ErrorType = 'page-not-found' | 'access-denied' | 'server-error' | 'unknown-error';
 
+interface CustomError extends Error {
+  errorId?: string;
+  type?: string;
+}
+
 type ErrorMetaTags = {
   title: string;
   description: string;
@@ -46,12 +51,7 @@ class AppErrorViewModel
   }
 
   get errorId() {
-    const err = page.error;
-    if (err && typeof err === 'object' && 'errorId' in err) {
-      const errorId = Reflect.get(err, 'errorId') as unknown;
-      return typeof errorId === 'string' ? errorId : undefined;
-    }
-    return undefined;
+    return (page.error as CustomError | undefined)?.errorId;
   }
 
   get metadata() {
@@ -136,11 +136,8 @@ class AppErrorViewModel
 
   private _getErrorType(): ErrorType {
     const status = page.status;
-    const error = page.error;
-    const type: string | undefined =
-      error && typeof error === 'object' && 'type' in error
-        ? String(Reflect.get(error, 'type'))
-        : undefined;
+    const error = page.error as CustomError;
+    const type = error?.type;
     const pathname = this.pathname;
 
     if (typeof type === 'string' && this._isValidErrorType(type)) {

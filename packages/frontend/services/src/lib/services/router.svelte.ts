@@ -2,23 +2,7 @@
 import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants';
 import type { Listener } from '@aikami/types';
 import { BaseClass, toAppError } from '@aikami/utils';
-import type { Navigation as SvelteKitNavigation } from '@sveltejs/kit';
-
-/**
- * Minimal Page interface compatible with both SvelteKit 2 and 3.
- * The hub uses SvelteKit 3 ($app/state.Page) while the client uses
- * SvelteKit 2 (@sveltejs/kit.Page). This local type avoids version lock.
- */
-export type Page = {
-  url: URL;
-  params: Record<string, string>;
-  route: { id: string | null };
-  state: Record<string, unknown>;
-  status: number;
-  error: unknown;
-  data: Record<string, unknown>;
-};
-
+import type { Page, Navigation as SvelteKitNavigation } from '@sveltejs/kit';
 import { untrack } from 'svelte';
 import {
   type AllRoutes,

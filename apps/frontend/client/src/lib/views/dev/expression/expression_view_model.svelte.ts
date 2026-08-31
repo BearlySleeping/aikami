@@ -12,7 +12,7 @@ import {
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services';
 import { EXPRESSION_CATALOG } from '$lib/data/expression_catalog';
-import { assetStore, expressionService, getExpressionAssetResolver } from '$services';
+import { expressionService, getExpressionAssetResolver } from '$services';
 import type { DetectExpressionResult, ExpressionId, ExpressionOverlay } from '$types';
 
 // ── Interfaces ───────────────────────────────────────────────────────────
@@ -42,8 +42,6 @@ export type ExpressionDevViewModelInterface = BaseDevViewModelInterface & {
   selectExpression(expressionId: ExpressionId): void;
   /** LPC overlay paths for the selected expression. */
   readonly selectedOverlays: ExpressionOverlay;
-  /** Resolved portrait base image URL. */
-  readonly portraitBaseUrl: string;
   /** Character name input for detection scoping. */
   readonly characterNames: string;
   /** Sets the character names input. */
@@ -80,13 +78,6 @@ class ExpressionDevViewModel
 
   get selectedOverlays(): ExpressionOverlay {
     return this._resolver.resolveLpcOverlays(this.selectedExpressionId);
-  }
-
-  get portraitBaseUrl(): string {
-    if (!assetStore.manifest) {
-      return '';
-    }
-    return assetStore.resolveUrl('sprites:combat:player_portrait') ?? '';
   }
 
   setInputText(text: string): void {
