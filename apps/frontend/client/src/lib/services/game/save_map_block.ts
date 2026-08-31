@@ -7,32 +7,7 @@
 
 import { gameEngineService } from './game_engine_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
-
-/** Map-routing block persisted in the save envelope (v3+). */
-export type SaveMapBlock = {
-  /** Content pack id (e.g. 'emberwatch'). */
-  packId: string;
-  /** Map id within the pack (e.g. 'merchant_shop'). */
-  mapId: string;
-  /** Player X pixel coordinate on the saved map. */
-  playerX: number;
-  /** Player Y pixel coordinate on the saved map. */
-  playerY: number;
-  /** Optional spawn id the player used to enter the map (provenance/debug). */
-  spawnId?: string;
-  /**
-   * Pack version when the save was created (v4+).
-   * Missing = treat as the currently installed version (v3 compatibility).
-   * Contract: C-381 AC-3.
-   */
-  packVersion?: string;
-  /**
-   * Seed for reproducible world generation (v4+).
-   * Missing = derived deterministically from campaign id (v3 compatibility).
-   * Contract: C-381 AC-4 / AC-9.
-   */
-  worldSeed?: string;
-};
+import type { SaveMapBlock } from './game_save_envelope.ts';
 
 /**
  * Builds the v3+ envelope map block: pack id, current map id, and the

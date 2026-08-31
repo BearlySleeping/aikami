@@ -5,7 +5,7 @@
 // and the future generation loop (feed errors back to a model for repair).
 // Contract: C-381 Content Pipeline Hardening — AC-5
 //
-// biome-ignore-all lint/style/useNamingConvention: error codes use dot-notation identifiers
+// biome-ignore lint/style/useNamingConvention: error codes use dot-notation identifiers
 
 import type { ContentPackManifest } from './content_pack.ts';
 
@@ -57,6 +57,17 @@ export type PackValidationFix = {
   description: string;
 };
 
+export type ValidatePackOptions = {
+  /** The parsed content pack manifest. */
+  manifest: ContentPackManifest;
+  /** Optional filesystem root for map-file-exists checks. */
+  packRoot?: string;
+  /** Optional set of atlas frame names for frame-exists checks. */
+  atlasFrames?: Set<string>;
+  /** Optional record of map file paths keyed by map ID. */
+  mapFiles?: Record<string, string>;
+};
+
 export type PackValidationResult = {
   packId: string;
   errors: PackValidationIssue[];
@@ -68,25 +79,38 @@ export type PackValidationResult = {
 // SPDX license set
 // ---------------------------------------------------------------------------
 
-
+const SPDX_LICENSES = new Set([
+  'MIT',
+  'Apache-2.0',
+  'GPL-2.0',
+  'GPL-3.0',
+  'CC-BY-4.0',
+  'CC-BY-SA-4.0',
+  'CC-BY-SA-3.0',
+  'OGA-BY-3.0',
+  'proprietary',
+]);
 
 // ---------------------------------------------------------------------------
 // URL pattern checks
 // ---------------------------------------------------------------------------
 
-const ABSOLUTE_URL_RE = /^https?:\/\//i;
-const PATH_TRAVERSAL_RE = /\.\.\//;
+const ABSOLUTE_URL_RE = /^(https?|file|blob):\/\//i;
+const PROTOCOL_RELATIVE_RE = /^\/\//;
+const PATH_TRAVERSAL_RE = /(\.\.\/|\.\.\\|(?<!\.)\.\.(?!\.))/;
 const DATA_SCHEME_RE = /^data:/i;
 const JAVASCRIPT_SCHEME_RE = /^javascript:/i;
+const VBSCRIPT_SCHEME_RE = /^vbscript:/i;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const isAbsoluteUrl = (s: string): boolean => ABSOLUTE_URL_RE.test(s);
+const isAbsoluteUrl = (s: string): boolean => ABSOLUTE_URL_RE.test(s) || PROTOCOL_RELATIVE_RE.test(s);
 const hasPathTraversal = (s: string): boolean => PATH_TRAVERSAL_RE.test(s);
 const isDataScheme = (s: string): boolean => DATA_SCHEME_RE.test(s);
 const isJavaScriptScheme = (s: string): boolean => JAVASCRIPT_SCHEME_RE.test(s);
+const isVbScriptScheme = (s: string): boolean => VBSCRIPT_SCHEME_RE.test(s);
 
 // ---------------------------------------------------------------------------
 // validatePack
@@ -95,19 +119,14 @@ const isJavaScriptScheme = (s: string): boolean => JAVASCRIPT_SCHEME_RE.test(s);
 /**
  * Validates a content pack manifest and returns structured results.
  *
- * @param manifest - The parsed content pack manifest.
- * @param packRoot - Optional filesystem root for map-file-exists checks.
- * @param atlasFrames - Optional set of atlas frame names for frame-exists checks.
+ * @param options.manifest - The parsed content pack manifest.
+ * @param options.packRoot - Optional filesystem root for map-file-exists checks.
+ * @param options.atlasFrames - Optional set of atlas frame names for frame-exists checks.
+ * @param options.mapFiles - Optional record of map file paths keyed by map ID.
  * @returns Structured validation result with errors, warnings, and auto-fixes.
  */
-export const validatePack = (
-  manifest: ContentPackManifest,
-  options?: {
-    packRoot?: string;
-    atlasFrames?: Set<string>;
-    mapFiles?: Record<string, string>;
-  },
-): PackValidationResult => {
+export const validatePack = (options: ValidatePackOptions): PackValidationResult => {
+  const { manifest, atlasFrames, mapFiles } = options;
   const errors: PackValidationIssue[] = [];
   const warnings: PackValidationIssue[] = [];
   const autoFixes: PackValidationFix[] = [];
@@ -145,10 +164,10 @@ export const validatePack = (
 
   // ── Map existence checks ──
 
-  if (manifest.maps && options?.mapFiles) {
+  if (manifest.maps && mapFiles) {
     for (const [mapId, mapEntry] of Object.entries(manifest.maps)) {
       const expectedFile = mapEntry.file;
-      if (expectedFile && !options.mapFiles[mapId]) {
+      if (expectedFile && mapFiles[mapId] !== expectedFile) {
         errors.push({
           code: 'manifest.map-file-not-found',
           path: `/maps/${mapId}/file`,
@@ -172,8 +191,8 @@ export const validatePack = (
 
   // ── Atlas frame checks ──
 
-  if (options?.atlasFrames && manifest.atlas) {
-    const frames = options.atlasFrames;
+  if (atlasFrames && manifest.atlas) {
+    const frames = atlasFrames;
 
     // Check tiles
     if (manifest.tiles) {
@@ -216,8 +235,8 @@ export const validatePack = (
 
   // ── Terrain checks ──
 
-  if (manifest.terrains && options?.atlasFrames) {
-    const frames = options.atlasFrames;
+  if (manifest.terrains && atlasFrames) {
+    const frames = atlasFrames;
     for (const terrain of manifest.terrains) {
       if (!terrain.frameBase) {
         errors.push({
@@ -266,48 +285,168 @@ export const validatePack = (
 
   // ── Provenance checks (AC-1) ──
 
-  // Check atlas URLs for hostile content (AC-2)
-  if (manifest.atlas) {
-    const checkUrl = (url: string | undefined, path: string): void => {
-      if (!url) {
-        return;
-      }
-      if (isAbsoluteUrl(url)) {
-        errors.push({
-          code: 'asset.absolute-url',
-          path,
-          message: `URL "${url}" is an absolute URL — packs must reference assets by hash through the registry.`,
-          hint: 'Replace the absolute URL with a registry tag reference.',
-        });
-      }
-      if (hasPathTraversal(url)) {
-        errors.push({
-          code: 'asset.path-traversal',
-          path,
-          message: `URL "${url}" contains path traversal — rejected.`,
-          hint: 'Remove "../" sequences from the path.',
-        });
-      }
-      if (isDataScheme(url)) {
-        errors.push({
-          code: 'asset.data-scheme',
-          path,
-          message: `URL "${url}" uses data: scheme — rejected.`,
-          hint: 'Remove the data: URI and use a registry tag instead.',
-        });
-      }
-      if (isJavaScriptScheme(url)) {
-        errors.push({
-          code: 'asset.javascript-scheme',
-          path,
-          message: `URL "${url}" uses javascript: scheme — rejected.`,
-          hint: 'Remove the javascript: URI.',
-        });
-      }
-    };
+  /**
+   * Checks a provenance block for required fields and valid license.
+   * Pushes errors for any missing/invalid fields.
+   */
+  const checkProvenance = (options: {
+    provenance: { license?: string; author?: string[]; source?: string } | undefined;
+    path: string;
+    label: string;
+  }): void => {
+    const { provenance, path: provenancePath, label } = options;
+    if (!provenance) {
+      errors.push({
+        code: 'asset.missing-provenance',
+        path: provenancePath,
+        message: `${label} is missing provenance (license, author, source).`,
+        hint: `Add a provenance block with license, author, and source to this asset.`,
+      });
+      return;
+    }
+    if (!provenance.license) {
+      errors.push({
+        code: 'asset.missing-license',
+        path: `${provenancePath}/license`,
+        message: `${label} is missing a license field.`,
+        hint: `Add an SPDX license identifier (e.g. "CC-BY-SA-4.0") or "proprietary".`,
+      });
+    } else if (!SPDX_LICENSES.has(provenance.license)) {
+      errors.push({
+        code: 'asset.invalid-license',
+        path: `${provenancePath}/license`,
+        message: `${label} has an unrecognized license "${provenance.license}".`,
+        hint: `Use one of: ${[...SPDX_LICENSES].join(', ')}`,
+      });
+    }
+    if (!provenance.author || provenance.author.length === 0) {
+      errors.push({
+        code: 'asset.missing-author',
+        path: `${provenancePath}/author`,
+        message: `${label} is missing author attribution.`,
+        hint: `Add at least one author name to the author array.`,
+      });
+    }
+    if (!provenance.source) {
+      errors.push({
+        code: 'asset.missing-source',
+        path: `${provenancePath}/source`,
+        message: `${label} is missing a source field.`,
+        hint: `Add a source URL, "generated:<provider>", or "original".`,
+      });
+    }
+  };
 
+  // Check atlas provenance
+  if (manifest.atlas) {
+    checkProvenance({
+      provenance: manifest.atlas.provenance,
+      path: '/atlas/provenance',
+      label: 'Atlas texture',
+    });
+  }
+
+  // Check tile provenance
+  if (manifest.tiles) {
+    for (const [tileId, tileDef] of Object.entries(manifest.tiles)) {
+      checkProvenance({
+        provenance: tileDef.provenance,
+        path: `/tiles/${tileId}/provenance`,
+        label: `Tile "${tileId}"`,
+      });
+    }
+  }
+
+  // Check prop provenance
+  if (manifest.props) {
+    for (const [propId, propDef] of Object.entries(manifest.props)) {
+      checkProvenance({
+        provenance: propDef.provenance,
+        path: `/props/${propId}/provenance`,
+        label: `Prop "${propId}"`,
+      });
+    }
+  }
+
+  // ── URL hostile content checks (AC-2) ──
+
+  const checkUrl = (url: string | undefined, path: string): void => {
+    if (!url) {
+      return;
+    }
+    if (isAbsoluteUrl(url)) {
+      errors.push({
+        code: 'asset.absolute-url',
+        path,
+        message: `URL "${url}" is an absolute URL — packs must reference assets by hash through the registry.`,
+        hint: 'Replace the absolute URL with a registry tag reference.',
+      });
+    }
+    if (hasPathTraversal(url)) {
+      errors.push({
+        code: 'asset.path-traversal',
+        path,
+        message: `URL "${url}" contains path traversal — rejected.`,
+        hint: 'Remove "../" sequences from the path.',
+      });
+    }
+    if (isDataScheme(url)) {
+      errors.push({
+        code: 'asset.data-scheme',
+        path,
+        message: `URL "${url}" uses data: scheme — rejected.`,
+        hint: 'Remove the data: URI and use a registry tag instead.',
+      });
+    }
+    if (isJavaScriptScheme(url)) {
+      errors.push({
+        code: 'asset.javascript-scheme',
+        path,
+        message: `URL "${url}" uses javascript: scheme — rejected.`,
+        hint: 'Remove the javascript: URI.',
+      });
+    }
+    if (isVbScriptScheme(url)) {
+      errors.push({
+        code: 'asset.javascript-scheme',
+        path,
+        message: `URL "${url}" uses vbscript: scheme — rejected.`,
+        hint: 'Remove the vbscript: URI.',
+      });
+    }
+  };
+
+  if (manifest.atlas) {
     checkUrl(manifest.atlas.textureUrl, '/atlas/textureUrl');
     checkUrl(manifest.atlas.spritesheetUrl, '/atlas/spritesheetUrl');
+  }
+
+  // Check map file paths for hostile content (AC-2)
+  if (manifest.maps) {
+    for (const [mapId, mapEntry] of Object.entries(manifest.maps)) {
+      checkUrl(mapEntry.file, `/maps/${mapId}/file`);
+    }
+  }
+
+  // Check tile frame references for hostile content (AC-2)
+  if (manifest.tiles) {
+    for (const [tileId, tileDef] of Object.entries(manifest.tiles)) {
+      checkUrl(tileDef.frame, `/tiles/${tileId}/frame`);
+    }
+  }
+
+  // Check prop frame references for hostile content (AC-2)
+  if (manifest.props) {
+    for (const [propId, propDef] of Object.entries(manifest.props)) {
+      checkUrl(propDef.frame, `/props/${propId}/frame`);
+    }
+  }
+
+  // Check entity frame references for hostile content (AC-2)
+  if (manifest.entities) {
+    for (const [entityId, entityDef] of Object.entries(manifest.entities)) {
+      checkUrl(entityDef.frame, `/entities/${entityId}/frame`);
+    }
   }
 
   // ── Share-alike compatibility warning ──
@@ -343,6 +482,5 @@ export const validatePack = (
  * would make it a network origin or filesystem escape.
  * Used by the hostile-manifest test (AC-2).
  */
-export const isHostileString = (s: string): boolean => {
-  return isAbsoluteUrl(s) || hasPathTraversal(s) || isDataScheme(s) || isJavaScriptScheme(s);
-};
+export const isHostileString = (s: string): boolean =>
+  isAbsoluteUrl(s) || hasPathTraversal(s) || isDataScheme(s) || isJavaScriptScheme(s) || isVbScriptScheme(s);

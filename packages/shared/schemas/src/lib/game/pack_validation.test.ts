@@ -18,7 +18,7 @@ const minimalManifest = (overrides?: Partial<ContentPackManifest>): ContentPackM
   updatedAt: '2026-01-01T00:00:00Z',
   startingMapId: 'start_map',
   maps: {
-    start_map: { file: 'maps/start.json', name: 'Start' },
+    ['start_map']: { file: 'maps/start.json', name: 'Start' },
   },
   npcs: {},
   items: {},
@@ -32,7 +32,7 @@ const minimalManifest = (overrides?: Partial<ContentPackManifest>): ContentPackM
 
 describe('validatePack — AC-5: structured validation', () => {
   test('returns { errors, warnings, autoFixes } with packId', () => {
-    const result = validatePack(minimalManifest());
+    const result = validatePack({ manifest: minimalManifest() });
     expect(result).toHaveProperty('packId');
     expect(result).toHaveProperty('errors');
     expect(result).toHaveProperty('warnings');
@@ -43,34 +43,42 @@ describe('validatePack — AC-5: structured validation', () => {
   });
 
   test('passes a valid minimal manifest', () => {
-    const result = validatePack(minimalManifest());
+    const result = validatePack({ manifest: minimalManifest() });
     expect(result.errors).toHaveLength(0);
   });
 
   test('detects missing id', () => {
-    const result = validatePack(minimalManifest({ id: '' as unknown as undefined }));
+    const result = validatePack({ manifest: minimalManifest({ id: '' as unknown as undefined }) });
     expect(result.errors.some((e) => e.code === 'manifest.missing-id')).toBe(true);
   });
 
   test('detects missing version', () => {
-    const result = validatePack(minimalManifest({ version: '' as unknown as undefined }));
+    const result = validatePack({ manifest: minimalManifest({ version: '' as unknown as undefined }) });
     expect(result.errors.some((e) => e.code === 'manifest.missing-version')).toBe(true);
   });
 
   test('detects missing startingMapId', () => {
-    const result = validatePack(minimalManifest({ startingMapId: '' as unknown as undefined }));
+    const result = validatePack({ manifest: minimalManifest({ startingMapId: '' as unknown as undefined }) });
     expect(result.errors.some((e) => e.code === 'manifest.missing-starting-map')).toBe(true);
   });
 
   test('detects starting map not in maps block', () => {
-    const result = validatePack(
-      minimalManifest({ startingMapId: 'nonexistent', maps: { other: { file: 'other.json', name: 'Other' } } }),
-    );
+    const result = validatePack({
+      manifest: minimalManifest({ startingMapId: 'nonexistent', maps: { other: { file: 'other.json', name: 'Other' } } }),
+    });
     expect(result.errors.some((e) => e.code === 'manifest.map-entry-not-found')).toBe(true);
   });
 
+  test('detects map file mismatch when supplied mapFiles differ from declared', () => {
+    const result = validatePack({
+      manifest: minimalManifest(),
+      mapFiles: { ['start_map']: 'maps/other.json' },
+    });
+    expect(result.errors.some((e) => e.code === 'manifest.map-file-not-found')).toBe(true);
+  });
+
   test('errors have stable machine codes and JSON-pointer paths', () => {
-    const result = validatePack(minimalManifest({ id: '' as unknown as undefined }));
+    const result = validatePack({ manifest: minimalManifest({ id: '' as unknown as undefined }) });
     for (const err of result.errors) {
       expect(typeof err.code).toBe('string');
       expect(err.code).toMatch(/^[a-z]+\.[a-z-]+$/);
@@ -88,8 +96,8 @@ describe('validatePack — AC-5: structured validation', () => {
 
 describe('validatePack — AC-1: provenance', () => {
   test('warns when pack credits mention LPC content', () => {
-    const result = validatePack(
-      minimalManifest({
+    const result = validatePack({
+      manifest: minimalManifest({
         credits: {
           art: ['Liberated Pixel Cup (LPC) asset contributors'],
           design: [],
@@ -98,13 +106,13 @@ describe('validatePack — AC-1: provenance', () => {
           thanks: [],
         },
       }),
-    );
+    });
     expect(result.warnings.some((w) => w.code === 'asset.share-alike-mismatch')).toBe(true);
   });
 
   test('passes without warnings for non-LPC credits', () => {
-    const result = validatePack(
-      minimalManifest({
+    const result = validatePack({
+      manifest: minimalManifest({
         credits: {
           art: ['Original studio art'],
           design: ['Designer'],
@@ -113,7 +121,7 @@ describe('validatePack — AC-1: provenance', () => {
           thanks: [],
         },
       }),
-    );
+    });
     expect(result.warnings.filter((w) => w.code === 'asset.share-alike-mismatch')).toHaveLength(0);
   });
 });
@@ -124,73 +132,107 @@ describe('validatePack — AC-1: provenance', () => {
 
 describe('validatePack — AC-2: hostile manifest', () => {
   test('rejects absolute URL in atlas textureUrl', () => {
-    const result = validatePack(
-      minimalManifest({
+    const result = validatePack({
+      manifest: minimalManifest({
         atlas: {
           textureUrl: 'https://evil.example.com/tileset.png',
         },
       }),
-    );
+    });
     expect(result.errors.some((e) => e.code === 'asset.absolute-url')).toBe(true);
   });
 
   test('rejects path traversal in atlas textureUrl', () => {
-    const result = validatePack(
-      minimalManifest({
+    const result = validatePack({
+      manifest: minimalManifest({
         atlas: {
           textureUrl: '../../etc/passwd',
         },
       }),
-    );
+    });
     expect(result.errors.some((e) => e.code === 'asset.path-traversal')).toBe(true);
   });
 
   test('rejects data: scheme in atlas textureUrl', () => {
-    const result = validatePack(
-      minimalManifest({
+    const result = validatePack({
+      manifest: minimalManifest({
         atlas: {
           textureUrl: 'data:image/png;base64,iVBORw0KGgo=',
         },
       }),
-    );
+    });
     expect(result.errors.some((e) => e.code === 'asset.data-scheme')).toBe(true);
   });
 
   test('rejects javascript: scheme in atlas textureUrl', () => {
-    const result = validatePack(
-      minimalManifest({
+    const result = validatePack({
+      manifest: minimalManifest({
         atlas: {
           textureUrl: 'javascript:alert(1)',
         },
       }),
-    );
+    });
     expect(result.errors.some((e) => e.code === 'asset.javascript-scheme')).toBe(true);
   });
 
   test('rejects multiple hostile patterns simultaneously', () => {
-    const result = validatePack(
-      minimalManifest({
+    const result = validatePack({
+      manifest: minimalManifest({
         atlas: {
           textureUrl: 'https://evil.com/tileset.png',
           spritesheetUrl: '../../escape.json',
         },
       }),
-    );
+    });
     const codes = result.errors.map((e) => e.code);
     expect(codes).toContain('asset.absolute-url');
     expect(codes).toContain('asset.path-traversal');
   });
 
   test('passes relative paths without hostile patterns', () => {
-    const result = validatePack(
-      minimalManifest({
+    const result = validatePack({
+      manifest: minimalManifest({
         atlas: {
           textureUrl: 'sprites/tileset.png',
           spritesheetUrl: 'sprites/atlas.json',
+          provenance: { license: 'CC-BY-SA-4.0', author: ['Test'], source: 'original' },
         },
       }),
-    );
+    });
     expect(result.errors.filter((e) => e.code.startsWith('asset.'))).toHaveLength(0);
+  });
+
+  test('rejects absolute URL in map file path', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        maps: {
+          ['start_map']: { file: 'https://evil.com/map.json', name: 'Start' },
+        },
+      }),
+    });
+    expect(result.errors.some((e) => e.code === 'asset.absolute-url')).toBe(true);
+  });
+
+  test('rejects path traversal in tile frame', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        tiles: {
+          ['1']: { name: 'evil', frame: '../../etc/passwd', isWalkable: true },
+        },
+      }),
+    });
+    expect(result.errors.some((e) => e.code === 'asset.path-traversal')).toBe(true);
+  });
+
+  test('rejects data: scheme in prop frame', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        props: {
+          ['evil_prop']: { name: 'Evil', frame: 'data:image/png;base64,evil', isWalkable: false },
+        },
+      }),
+    });
+    expect(result.errors.some((e) => e.code === 'asset.data-scheme')).toBe(true);
   });
 });
 
@@ -234,17 +276,18 @@ describe('isHostileString — AC-2', () => {
 describe('validatePack — AC-5: performance', () => {
   test('completes in under 100ms for a large manifest', () => {
     // Build a manifest with ~100 tiles, ~50 props, ~20 maps
-    const tiles: Record<string, { name: string; frame: string; isWalkable: boolean }> = {};
+    const provenance = { license: 'CC-BY-SA-4.0', author: ['Test'], source: 'original' };
+    const tiles: Record<string, { name: string; frame: string; isWalkable: boolean; provenance?: typeof provenance }> = {};
     for (let i = 1; i <= 100; i++) {
-      tiles[String(i)] = { name: `tile_${i}`, frame: `tile_${i}.png`, isWalkable: true };
+      tiles[String(i)] = { name: `tile_${i}`, frame: `tile_${i}.png`, isWalkable: true, provenance };
     }
-    const props: Record<string, { name: string; frame: string; isWalkable: boolean }> = {};
+    const props: Record<string, { name: string; frame: string; isWalkable: boolean; provenance?: typeof provenance }> = {};
     for (let i = 1; i <= 50; i++) {
-      props[`prop_${i}`] = { name: `prop_${i}`, frame: `prop_${i}.png`, isWalkable: false };
+      props[`prop_${i}`] = { name: `prop_${i}`, frame: `prop_${i}.png`, isWalkable: false, provenance };
     }
     // Include start_map so startingMapId resolves
     const maps: Record<string, { file: string; name: string }> = {
-      start_map: { file: 'maps/start.json', name: 'Start' },
+      ['start_map']: { file: 'maps/start.json', name: 'Start' },
     };
     for (let i = 1; i <= 20; i++) {
       maps[`map_${i}`] = { file: `maps/map_${i}.json`, name: `Map ${i}` };
@@ -257,7 +300,7 @@ describe('validatePack — AC-5: performance', () => {
     });
 
     const start = performance.now();
-    const result = validatePack(manifest);
+    const result = validatePack({ manifest });
     const elapsed = performance.now() - start;
 
     expect(elapsed).toBeLessThan(100);
@@ -265,15 +308,4 @@ describe('validatePack — AC-5: performance', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Type import for test
-// ---------------------------------------------------------------------------
 
-type ContentPackMapEntry = {
-  file: string;
-  name: string;
-  defaultSpawnId?: string;
-  defaultX?: number;
-  defaultY?: number;
-  interior?: boolean;
-};

@@ -18,6 +18,7 @@ import {
   sha256,
   validateEnvelopeChecksum,
 } from './game_save_envelope.ts';
+import type { SaveMapBlock } from './game_save_envelope.ts';
 import { hydrateAllServices, serializeAllServices } from './serializable_service';
 
 // ---------------------------------------------------------------------------
@@ -224,18 +225,21 @@ class GameSaveService
       const serviceSnapshots = serializeAllServices();
       const savedAt = new Date().toISOString();
 
-      // Compute SHA-256 checksum of the data portion (C-334).
-      // v3 digests include the map block so tampering with map routing is
-      // detected; v2 payloads hash the two original fields only.
-      const dataToHash = JSON.stringify({ ecsSnapshot, serviceSnapshots, map });
-      const checksum = await sha256(dataToHash);
-
       // v4 envelope (C-381, pack version pinning + world seed)
+      // Build the enriched map FIRST so the checksum covers the same shape
+      // that gets persisted — including packVersion and worldSeed.
       const mapWithVersion = {
         ...map,
         ...(packVersion ? { packVersion } : {}),
         ...(worldSeed ? { worldSeed } : {}),
       };
+
+      // Compute SHA-256 checksum of the data portion (C-334).
+      // v3+ digests include the map block (with v4 fields when present) so
+      // tampering with map routing is detected; v2 payloads hash the two
+      // original fields only.
+      const dataToHash = JSON.stringify({ ecsSnapshot, serviceSnapshots, map: mapWithVersion });
+      const checksum = await sha256(dataToHash);
       const payload = JSON.stringify({
         version: SAVE_ENVELOPE_VERSION,
         checksum,

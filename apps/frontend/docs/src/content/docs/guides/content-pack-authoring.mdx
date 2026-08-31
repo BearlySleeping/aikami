@@ -37,8 +37,9 @@ The manifest is validated against `ContentPackManifestSchema`. Key fields:
 
 ## Per-Asset Provenance (C-381)
 
-Every asset in a pack must carry provenance information: licence, author, and
-source. This is required by the pack validator and enforced at load time.
+Every asset in a pack should carry provenance information: licence, author, and
+source. The provenance fields are optional in the schema but the pack validator
+will warn about missing provenance and reject packs with invalid licence values.
 
 ### Adding Provenance to Tiles
 
@@ -147,7 +148,8 @@ Before a pack can be loaded, it must pass validation. The `validatePack()`
 service returns structured results:
 
 ```typescript
-const result = validatePack(manifest, {
+const result = validatePack({
+  manifest,
   atlasFrames: new Set([...atlasFrameKeys]),
   mapFiles: { start: 'maps/start.json' },
 });
@@ -175,8 +177,9 @@ if (result.errors.length > 0) {
 | `manifest.prop-frame-missing` | Prop frame not found in atlas |
 | `terrain.frame-missing-in-atlas` | Terrain frame not found in atlas |
 
-## Attribution Screen
+## Attribution Screen (Planned)
 
-Provenance data feeds the in-game attribution screen, which displays licence
-and author information for every asset used in the current pack. This screen
-is reachable from the main menu and is screen-reader accessible.
+Provenance data is stored in the manifest schema for future use in an
+attribution screen. The screen itself is not yet implemented — provenance
+information is available programmatically via the manifest for authors who
+need to verify licence compliance.

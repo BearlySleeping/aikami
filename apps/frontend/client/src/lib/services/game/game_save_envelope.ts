@@ -110,25 +110,21 @@ export const validateEnvelopeChecksum = async (options: {
 }): Promise<boolean> => {
   try {
     const version = options.version ?? 2;
+    // v3+ digests include the map block (which carries packVersion/worldSeed
+    // for v4+ envelopes). v2 payloads hash the two original fields only.
+    // C-381: v4 hashes the same shape as v3 because the enriched map already
+    // contains packVersion and worldSeed — no extra top-level keys needed.
     const dataToHash =
-      version >= 4
+      version >= 3
         ? JSON.stringify({
             ecsSnapshot: options.ecsSnapshot,
             serviceSnapshots: options.serviceSnapshots,
             map: options.map,
-            packVersion: options.map?.packVersion,
-            worldSeed: options.map?.worldSeed,
           })
-        : version >= 3
-          ? JSON.stringify({
-              ecsSnapshot: options.ecsSnapshot,
-              serviceSnapshots: options.serviceSnapshots,
-              map: options.map,
-            })
-          : JSON.stringify({
-              ecsSnapshot: options.ecsSnapshot,
-              serviceSnapshots: options.serviceSnapshots,
-            });
+        : JSON.stringify({
+            ecsSnapshot: options.ecsSnapshot,
+            serviceSnapshots: options.serviceSnapshots,
+          });
     const computed = await sha256(dataToHash);
     return computed === options.storedChecksum;
   } catch {
