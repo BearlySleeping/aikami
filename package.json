@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "moon": "moon",
-    "postinstall": "moon sync",
+    "postinstall": "moon sync && moon sync hooks",
     "dev": "moon run client:dev",
     "build": "moon run :build",
     "build:affected": "moon run :build --affected",

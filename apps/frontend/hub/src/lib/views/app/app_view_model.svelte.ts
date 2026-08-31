@@ -1,12 +1,12 @@
 // apps/frontend/hub/src/lib/views/app/app_view_model.svelte.ts
 import { isDevelopmentModePublic } from '@aikami/frontend/configs';
+import type { Page } from '@aikami/frontend/services';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { CurrentUser } from '@aikami/types';
-import type { Page } from '@aikami/frontend/services';
 import { untrack } from 'svelte';
 import { goto } from '$app/navigation';
 import { navigating, page } from '$app/state';
@@ -128,9 +128,9 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
 
     // 1. Inject static dependencies into our framework-agnostic service.
     routerService.initialize({ goto, page: page as unknown as Page });
-// The cast `as unknown as Page` bridges SvelteKit's generic Page type
-// (state: PageState) to the router service's minimal Page interface
-// (state: Record<string, unknown>).
+    // The cast `as unknown as Page` bridges SvelteKit's generic Page type
+    // (state: PageState) to the router service's minimal Page interface
+    // (state: Record<string, unknown>).
 
     // 2. Set up our reactive tracking safely attached to the class lifecycle
     this._setupReactiveListeners();
