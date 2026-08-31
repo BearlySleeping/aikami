@@ -596,46 +596,46 @@ Changes to ACs or scope require a version bump and user approval.
 ## Execution Report
 
 ### Summary
-Implemented party and companion gameplay with recruit/dismiss via NPC dialogue, formation following during exploration, party roster overlay and HUD panel, AI-controlled companion turns in combat, and persistent party state across save/load. 15 files modified.
+Extended party and companion gameplay implementation: added `partyOrder` field to PartyRosterEntrySchema, `setPartyOrder()` method to PartyRosterService, created PartyFollowService with formation offsets and order-aware follow behavior, added order selector UI to party roster overlay, and created unit tests (24 pass) and E2E tests. Party orders (wait/guard/scavenge) are wired into the data model, service layer, and UI — behavior implementation in follow tick is partial (wait/guard skip follow, scavenge uses slower tick).
 
 ### AC Status
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | Recruit/dismiss companions through NPC dialogue with approval tracking |
-| AC-2 | ✅ | Companions follow in formation during exploration with pathfinding |
-| AC-3 | ✅ | Party roster overlay and party panel HUD with companion status |
-| AC-4 | ✅ | Companions participate in turn-based combat with AI-controlled turns |
-| AC-5 | ✅ | Party state (companions, approval, personal quests) persists across save/load |
+| AC-1 | ✅ | Recruit/dismiss through NPC dialogue with approval tracking — existing implementation verified |
+| AC-2 | ✅ | PartyFollowService created with formation offsets (line/column/spread) and follow tick |
+| AC-3 | ✅ | Party roster overlay, HUD widget, Talk to Party overlay — existing UI verified |
+| AC-4 | ⚠️ | Companion combat staging and AI turns — existing engine integration, needs E2E verification |
+| AC-5 | ✅ | Party state persistence via registerSerializable — existing save/load integration |
+| AC-6 | ✅ | Party order assignment via order selector UI in roster overlay, setPartyOrder() in service |
+| AC-7 | ⚠️ | Wait/guard order behavior — follow tick skips wait/guard companions; guard detection radius and auto-initiate combat need engine integration |
+| AC-8 | ⚠️ | Scavenge order — slower tick interval (500ms) configured; loot collection needs C-331 integration |
 
 ### Files Created
 | File | Purpose |
 |---|---|
-| `apps/frontend/client/src/lib/services/game/party_service.svelte.ts` | Party roster management with recruit/dismiss |
-| `apps/frontend/client/src/lib/services/game/party_service.test.ts` | Party service unit tests |
-| `apps/frontend/client/src/lib/services/game/companion_ai_service.svelte.ts` | Companion AI for combat and exploration |
-| `apps/frontend/client/src/lib/services/game/companion_ai_service.test.ts` | Companion AI unit tests |
-| `apps/frontend/client/src/lib/views/party/party_roster_view.svelte` | Party roster overlay component |
-| `apps/frontend/client/src/lib/views/party/party_roster_view_model.svelte.ts` | Party roster ViewModel |
-| `apps/frontend/client/src/lib/views/party/party_panel_view.svelte` | Party panel HUD component |
-| `apps/frontend/client/src/lib/views/party/party_panel_view_model.svelte.ts` | Party panel HUD ViewModel |
-| `apps/e2e/tests/client/party.spec.ts` | E2E tests for party functionality |
+| `apps/frontend/client/src/lib/services/game/party_follow_service.svelte.ts` | Party follow service with formation offsets and order-aware behavior |
+| `apps/frontend/client/src/lib/services/game/party_follow_service.test.ts` | Party follow service unit tests (7 tests) |
+| `apps/frontend/client/src/lib/services/game/party_roster_service.test.ts` | Party roster service unit tests (17 tests) |
+| `apps/e2e/tests/client/party.spec.ts` | E2E tests for party UI and persistence |
 
 ### Files Modified
 | File | Change |
 |---|---|
-| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Added recruit/dismiss dialogue commands |
-| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | Wired party and companion AI services |
-| `apps/frontend/client/src/lib/services/combat/combat_service.svelte.ts` | Integrated companion turns in combat |
-| `apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts` | Added party state to save envelope |
-| `packages/shared/schemas/src/lib/game/party_schemas.ts` | Party and companion state schemas |
+| `packages/shared/schemas/src/lib/game/party.ts` | Added `partyOrder` field to PartyRosterEntrySchema (union of follow/wait/guard/scavenge) |
+| `apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts` | Added `setPartyOrder()` and `getPartyOrder()` methods; set default partyOrder on recruit |
+| `apps/frontend/client/src/lib/services/index.ts` | Added party follow service export |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/party_roster/party_roster_view_model.svelte.ts` | Added `setPartyOrder()` and `getPartyOrder()` to ViewModel |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/party_roster/party_roster_view.svelte` | Added order selector button group per companion card |
+| `apps/frontend/client/src/lib/test_preload.ts` | Added partyRosterService and partyFollowService stubs for test environment |
 
 ### Deviations from Spec
-None. All 5 ACs fully implemented.
+- AC-4 (combat integration): Existing engine changes from previous implementation are in place (Companion component, combat_stage_system, turn_manager_system modifications) but not verified via new tests
+- AC-7/AC-8 (guard/scavenge behavior): Partial implementation — guard detection radius and auto-initiate combat need engine-side integration; scavenge loot collection needs C-331 loot system
+- Party dialogue service: Talk to Party overlay exists as a separate ViewModel/View pair, not as a standalone `party_dialogue_service.svelte.ts`
 
 ### Test Results
-- Unit: 44/44 PASS (0 failures) including 22 new party/companion tests
-- E2E: 1 spec passing
-- Client typecheck: PASS
-- Baseline: 0 pre-existing failures, 0 new failures
+- Unit: 24/24 PASS (0 failures) — 17 party roster + 7 party follow tests
+- E2E: 1 spec (4 tests) — party UI and persistence
+- Baseline: 470 pre-existing failures (unchanged), 0 new failures
 
 ---
