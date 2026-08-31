@@ -120,6 +120,22 @@ async function ensureBrowser(_app: string): Promise<{ ok: boolean; message: stri
   const userDataDir = path.join(getRoot(), '.pi', '.chromium-profile');
   fs.mkdirSync(userDataDir, { recursive: true });
 
+  // ── Stale Singleton lock cleanup ───────────────────────────────────
+  // Chromium leaves SingletonLock/SingletonSocket symlinks behind after a
+  // crash or unclean shutdown. On next launch it sees these, tries to
+  // connect to the old socket (which no longer exists), and hangs — CDP
+  // never starts. Remove them so Chromium starts fresh.
+  for (const name of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+    try {
+      const p = path.join(userDataDir, name);
+      if (fs.existsSync(p) || fs.lstatSync(p).isSymbolicLink()) {
+        fs.unlinkSync(p);
+      }
+    } catch {
+      // best-effort
+    }
+  }
+
   const args = [
     '--headless=new',
     `--remote-debugging-port=${CDP_PORT}`,

@@ -141,6 +141,13 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
    */
   getPlayerPosition(): { x: number; y: number } | undefined;
 
+  /**
+   * Resolves the ECS entity ID for a spawned NPC by its content-pack npcId.
+   * Returns undefined if the engine hasn't booted or the NPC isn't spawned
+   * on the current map (C-340 — party follow / recruit sync).
+   */
+  getEntityIdForNpc(npcId: string): number | undefined;
+
   /** Destroys the engine and resets all state (on route navigation). */
   destroyEngine(): void;
 
@@ -421,6 +428,19 @@ class GameEngineService
   /** @inheritdoc */
   getPlayerPosition(): { x: number; y: number } | undefined {
     return this._gameWorld?.getPlayerPosition();
+  }
+
+  /** @inheritdoc */
+  getEntityIdForNpc(npcId: string): number | undefined {
+    if (!this._gameWorld) {
+      return undefined;
+    }
+    for (const [eid, entry] of this._gameWorld.npcMeta) {
+      if (entry.npcId === npcId) {
+        return eid;
+      }
+    }
+    return undefined;
   }
 
   /** @inheritdoc */

@@ -14,6 +14,7 @@ import type { GameOverlayServiceInterface } from './game_overlay_service.svelte'
 import type { InputActionServiceInterface } from './input_action_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import type { OnboardingHintServiceInterface } from './onboarding_hint_service.svelte.ts';
+import type { PartyFollowServiceInterface } from './party_follow_service.svelte.ts';
 import type { TimeServiceInterface } from './time_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,7 @@ export type SetupBridgeListenersParams = {
   audioService: AudioServiceInterface;
   inputActionService: InputActionServiceInterface;
   onboardingHintService: OnboardingHintServiceInterface;
+  partyFollowService: PartyFollowServiceInterface;
 };
 
 // ---------------------------------------------------------------------------
@@ -45,6 +47,7 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     audioService,
     inputActionService,
     onboardingHintService,
+    partyFollowService,
   } = params;
 
   const { createEngineBridge } = await import('@aikami/frontend/engine');
@@ -161,12 +164,14 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
 
   bridge.on('GAME_READY', () => {
     gameOverlayService.setTransitioning(false);
+    partyFollowService.start();
     void playSceneBgm('explore');
   });
 
   bridge.on('MAP_LOADED', () => {
     gameOverlayService.setTransitioning(false);
     gameOverlayService.onMapLoaded();
+    partyFollowService.onMapLoaded();
     void playSceneBgm('explore');
   });
 

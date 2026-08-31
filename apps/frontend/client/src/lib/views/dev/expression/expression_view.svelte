@@ -7,12 +7,20 @@
 
 import { BaseViewModelContainer } from '$components';
 import type { ExpressionDevViewModelInterface } from './expression_view_model.svelte.ts';
+import { assetStore } from '$services';
 
 type Props = {
   viewModel: ExpressionDevViewModelInterface;
 };
 
 const { viewModel }: Props = $props();
+
+/** Portrait base image — resolved through AssetStore (cache → R2), reactive on manifest load. */
+const portraitBaseUrl = $derived(
+  assetStore.manifest
+    ? (assetStore.resolveUrl('sprites:combat:player_portrait') ?? '')
+    : '',
+);
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -141,7 +149,7 @@ const { viewModel }: Props = $props();
             class="relative w-40 h-[240px] rounded-xl overflow-hidden border-2 border-base-300 bg-base-300"
           >
             <img
-              src="/assets/images/combat/player_portrait.webp"
+              src={portraitBaseUrl}
               alt=""
               class="w-full h-full object-cover object-top"
             >

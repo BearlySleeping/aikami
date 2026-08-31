@@ -6,7 +6,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { gameBootService, gameEngineService, gameModeService } from '$services';
+import { gameBootService, gameEngineService, gameModeService, partyFollowService } from '$services';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -145,6 +145,7 @@ class GameCanvasViewModel
           // teardown() always destroys the game world even after boot completes;
           // cancelBoot() is only effective during an active boot pipeline.
           gameBootService.teardown();
+          partyFollowService.stop();
           gameEngineService.destroyEngine();
         };
       });

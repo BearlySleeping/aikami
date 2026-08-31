@@ -58,6 +58,21 @@ export type GameCommand =
       velocity: { x: number; y: number };
     }
   | {
+      /**
+       * Flips the Companion.recruited flag (and TurnOrder.isActive, when
+       * present) on an existing companion NPC entity. Sent when the player
+       * recruits or dismisses a companion through dialogue or the party
+       * roster overlay — the entity already exists in the world (spawned
+       * with `isCompanion: true`), this just activates/deactivates it.
+       *
+       * Contract: C-340 Build Party and Companion Gameplay
+       */
+      type: 'SET_COMPANION_RECRUITED';
+      /** The companion's ECS entity ID (resolved via GameWorld.npcMeta). */
+      entityId: number;
+      recruited: boolean;
+    }
+  | {
       type: 'INTERACT';
       targetEntityId: string;
     }

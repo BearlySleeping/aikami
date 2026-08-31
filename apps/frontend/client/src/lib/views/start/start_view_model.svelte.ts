@@ -56,8 +56,24 @@ export type CampaignSummary = {
   readonly isResumable: boolean;
   /** AI capability indicators. */
   readonly capabilities: CapabilityProfile;
-};
+});
 
+// ---------------------------------------------------------------------------
+// Advanced link type
+// ---------------------------------------------------------------------------
+
+/**
+ * An entry in the Advanced section of the start menu.
+ * Each link has a title, description, and an action to perform on click.
+ */
+export type AdvancedLink = {
+  /** Button label. */
+  readonly title: string;
+  /** Description shown below the button. */
+  readonly description: string;
+  /** Click handler. */
+  readonly action: () => Promise<void> | void;
+};
 export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether running inside Tauri (desktop). */
   readonly isTauri: boolean;
@@ -136,6 +152,12 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** C-405 AC-4: Navigates to the world-generation preview (Advanced entry). */
   startWorldGeneration(): Promise<void>;
+
+  /** Navigates to the dev hub. */
+  goToDev(): Promise<void>;
+
+  /** Advanced section links (title, description, action). */
+  readonly advancedLinks: readonly AdvancedLink[];
 
   /** C-422 AC-3: Navigates to the game with a fresh onboarding arc (replay tutorial). */
   replayTutorial(): Promise<void>;
@@ -691,8 +713,31 @@ class StartViewModel
   private async _proceedWithPack(packId: string): Promise<void> {
     await this._startCampaignWithPack({ packId, logKey: '_proceedWithPack' });
   }
-}
+  /** @inheritdoc */
+  get advancedLinks(): readonly AdvancedLink[] {
+    return [
+      {
+        title: 'World Generation (Preview)',
+        description:
+          'Generates a world preview that is not yet playable — used to prototype story content.',
+        action: () => this.startWorldGeneration(),
+      },
+      {
+        title: 'Dev Hub',
+        description: 'Development tools, sandboxes, and experimental features.',
+        action: () => this.goToDev(),
+      },
+    ];
+  }
 
+  /** @inheritdoc */
+  async goToDev(): Promise<void> {
+    await routerService.goToRoute('dev', {
+      queryParameters: undefined,
+      pathParameters: undefined,
+    });
+  }
+}
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
