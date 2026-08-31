@@ -156,6 +156,13 @@ class GameBootService
    */
   private _effectiveRecipe: Record<string, string> | undefined;
 
+  /**
+   * Background handle for the asset registry stage.
+   * Set during loading_campaign, awaited during initializing_asset_registry.
+   * C-381 AC-8: registry is non-fatal and runs in the background.
+   */
+  private _registryPromise: Promise<void> | undefined;
+
   // ── Public API ──
 
   /** @inheritdoc */
@@ -191,9 +198,12 @@ class GameBootService
         continue;
       }
       this._setStage(stage, i);
+      const stageStart = performance.now();
 
       try {
         await this._runStageWithTimeout(stage);
+        const stageElapsed = performance.now() - stageStart;
+        this.debug('boot:stage-timing', { stage, elapsedMs: Math.round(stageElapsed) });
 
         // Check cancellation immediately after each stage completes
         if (this._cancelled) {
@@ -249,7 +259,13 @@ class GameBootService
 
     // All stages passed — persist campaign state before declaring success
     const elapsed = performance.now() - t0;
-    this.debug('boot:complete', { elapsedMs: elapsed, renderer: this._renderer });
+    this.debug('boot:complete', {
+      elapsedMs: Math.round(elapsed),
+      renderer: this._renderer,
+      // C-381 AC-8: registry backgrounded — the elapsed time excludes
+      // registry seeding if it overlapped with later stages.
+      registryBackgrounded: true,
+    });
 
     // Drive campaign state machine to playing (loading → playing via LOAD_COMPLETE).
     // Skip if campaign is already playing (e.g., new game via completeSetup, or
@@ -300,6 +316,9 @@ class GameBootService
     }
     this.debug('boot:cancelling');
     this._cancelled = true;
+    // Clear the background registry promise so its completion doesn't
+    // write to the asset manager after supersession (C-381 AC-8).
+    this._registryPromise = undefined;
   }
 
   /** @inheritdoc */
@@ -381,12 +400,28 @@ class GameBootService
     switch (stage) {
       case 'loading_campaign':
         await this._stageLoadCampaign(input, generation);
+        // Start registry in the background immediately after campaign loads
+        // so it can seed while we validate the save (C-381 AC-8).
+        if (generation === this._bootGeneration) {
+          this._registryPromise = this._stageInitializeAssetRegistry(generation);
+        }
         break;
       case 'validating_save':
         await this._stageValidateSave(input, generation);
         break;
       case 'initializing_asset_registry':
-        await this._stageInitializeAssetRegistry(generation);
+        // Already started in background — await the promise so errors surface
+        // at a predictable point, but the stage is non-fatal so we catch.
+        if (this._registryPromise) {
+          try {
+            await this._registryPromise;
+          } catch (error) {
+            this.warn('stage:initializing_asset_registry:background-failed', {
+              error: String(error),
+            });
+          }
+          this._registryPromise = undefined;
+        }
         break;
       case 'prefetching_starter_content':
         await this._stagePrefetchStarterContent(generation);
@@ -977,6 +1012,30 @@ class GameBootService
           return;
         }
 
+        // ── C-381 AC-3: Pack version mismatch detection ──
+        const savedVersion = map.packVersion;
+        const currentVersion = pack.manifest.version;
+        if (savedVersion && currentVersion && savedVersion !== currentVersion) {
+          this.warn('stage:hydrating_snapshot:pack-version-mismatch', {
+            savedVersion,
+            currentVersion,
+            packId: map.packId,
+            hint: 'The pack has been updated since this save was created. If the saved map no longer exists, the starting map will be used instead.',
+          });
+          // Check if the saved map still exists in the current pack
+          if (!pack.manifest.maps[map.mapId]) {
+            this.warn('stage:hydrating_snapshot:map-not-found-in-updated-pack', {
+              mapId: map.mapId,
+              packId: map.packId,
+              fallbackMapId: pack.manifest.startingMapId,
+            });
+            // Fall back to the pack's starting map
+            map.mapId = pack.manifest.startingMapId;
+            map.playerX = pack.getStartingMap()?.defaultX ?? map.playerX;
+            map.playerY = pack.getStartingMap()?.defaultY ?? map.playerY;
+          }
+        }
+
         await gameEngineService.loadMap({
           mapUrl: pack.resolveMapUrl(map.mapId),
           targetX: map.playerX,
@@ -1551,6 +1610,9 @@ class GameBootService
 
   /** Destroys engine resources (bridge, world, resize handler). */
   private _teardownEngineResources(): void {
+    // Clear background registry promise (C-381 AC-8)
+    this._registryPromise = undefined;
+
     if (this._resizeCleanup) {
       this._resizeCleanup();
       this._resizeCleanup = undefined;

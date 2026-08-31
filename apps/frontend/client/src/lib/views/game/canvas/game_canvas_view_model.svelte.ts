@@ -6,7 +6,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { gameBootService, gameEngineService, gameModeService, partyFollowService } from '$services';
+import {
+  campaignService,
+  gameBootService,
+  gameEngineService,
+  gameModeService,
+  partyFollowService,
+} from '$services';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -132,7 +138,8 @@ class GameCanvasViewModel
         if (canvas && !gameBootService.isBooting && progress.stage === 'idle') {
           // Boot service resolves campaign/persona from already-initialized services.
           // Only the canvas element is forwarded from the View.
-          void gameBootService.boot({ canvas, contentPackId: 'emberwatch' });
+          const contentPackId = campaignService.activeCampaign?.contentPackId ?? 'emberwatch';
+          void gameBootService.boot({ canvas, contentPackId });
         }
       });
     });

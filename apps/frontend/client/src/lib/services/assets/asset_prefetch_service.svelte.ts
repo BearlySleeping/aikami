@@ -17,7 +17,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { AssetRegistryRepository as AssetRegistryRepositoryClass } from '@aikami/frontend/storage';
-import type { AssetSeedDocument } from '@aikami/types';
+import type { AssetSeedDocument, AssetSeedRow } from '@aikami/types';
 import { withStepTimeout } from '$lib/utils/step_timeout';
 import type { AssetCacheBackend } from './cache_backend.ts';
 
@@ -197,17 +197,26 @@ class AssetPrefetchService
     } else if (await step('isSeeded', () => registry.isSeeded(seed.generatedAt))) {
       this.debug('assetPrefetchService:already-seeded');
     } else {
-      // Deliberately NOT wrapped: seeding thousands of rows on a slow first
-      // run can legitimately outlast the step ceiling, and it is the one step
-      // that reports progress ("Seeding assets… chunk 3/40"), so a stall here
-      // is already visible rather than silent.
+      // C-381 AC-7: Lazy seeding — only seed the core/offline tags upfront.
+      // The remaining 12,000+ tags register on first request via
+      // assetManager.warm() / assetManager.acquireUrl().
+      const coreTags = [...assetStore.coreTags];
+      const coreSeedRows = seed.rows.filter((row) => coreTags.includes(row.tag));
+      const lazySeedRows = seed.rows.filter((row) => !coreTags.includes(row.tag));
+
       await registry.seedFromCompactSeed({
-        seed,
+        seed: { ...seed, rows: coreSeedRows },
         r2BaseUrl: publicEnv.PUBLIC_ASSETS_BASE_URL,
-        bundledTags: [...assetStore.coreTags],
+        bundledTags: coreTags,
         onProgress: onSeedProgress,
       });
-      this.debug('assetPrefetchService:seeded', { rowCount: seed.rows.length });
+      this.debug('assetPrefetchService:seeded-core', {
+        coreCount: coreSeedRows.length,
+        lazyCount: lazySeedRows.length,
+      });
+
+      // Store the lazy rows for on-demand registration
+      this._lazySeedRows = lazySeedRows;
     }
 
     const backend = createPlatformCacheBackend();

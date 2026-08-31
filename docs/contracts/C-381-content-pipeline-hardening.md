@@ -2,7 +2,7 @@
 id: C-381
 title: "Content Pipeline Hardening — Provenance, Trust, Versioning, Validation, Boot"
 source: "external architecture review (claude CLI) — docs/research/game_engine_architecture_review.md §4 Q6-Q8, §5; generated/community content design discussion"
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null

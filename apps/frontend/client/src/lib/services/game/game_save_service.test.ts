@@ -314,9 +314,9 @@ describe('GameSaveService (C-334)', () => {
     const payload = await service.getSavePayload('test');
     expect(typeof payload).toBe('string');
 
-    // Should be valid JSON with v3 envelope
+    // Should be valid JSON with v4 envelope
     const parsed = JSON.parse(payload);
-    expect(parsed.version).toBe(3);
+    expect(parsed.version).toBe(4);
     expect(typeof parsed.checksum).toBe('string');
     expect(parsed.checksum.length).toBe(64); // SHA-256 hex
   });
