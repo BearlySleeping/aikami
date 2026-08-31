@@ -18,12 +18,9 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { EquipmentSlot, EquipmentSnapshot } from '@aikami/types';
+import { findItemIdByLpcAsset, getItemDefinition } from '$utils/inventory_utils';
 import type { InventoryServiceInterface } from './inventory_service.svelte';
-import {
-  findItemIdByLpcAsset,
-  getItemDefinition,
-  inventoryService,
-} from './inventory_service.svelte';
+import { inventoryService } from './inventory_service.svelte';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
 import { playerStateService } from './player_state_service.svelte';
 import { registerSerializable, type SerializableService } from './serializable_service';

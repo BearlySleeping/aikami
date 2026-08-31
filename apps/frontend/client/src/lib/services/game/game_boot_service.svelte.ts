@@ -737,7 +737,9 @@ class GameBootService
    * the game will fetch assets on-demand.
    */
   private async _stagePrefetchStarterContent(generation: number): Promise<void> {
-    const { assetPrefetchService } = await import('$lib/services/assets/asset_prefetch_service.svelte');
+    const { assetPrefetchService } = await import(
+      '$lib/services/assets/asset_prefetch_service.svelte'
+    );
     if (generation !== this._bootGeneration) {
       return;
     }

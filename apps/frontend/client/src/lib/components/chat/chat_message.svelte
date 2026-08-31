@@ -1,4 +1,5 @@
 <script lang="ts">
+import { Image } from '$components';
 import type { ChatMessage as ChatMessageType } from '$services';
 import { ttsService } from '$services';
 
@@ -63,7 +64,9 @@ const bubbleClass = $derived.by(() => {
 <div class="chat {message.sender === 'user' ? 'chat-end' : 'chat-start'}">
   {#if message.sender === 'ai' && avatarUrl && !isAction}
     <div class="chat-image avatar">
-      <div class="w-8 rounded-full"><img src={avatarUrl} alt={characterName}></div>
+      <div class="w-8 rounded-full">
+        <Image src={avatarUrl} alt={characterName} />
+      </div>
     </div>
   {/if}
   <div class="chat-header opacity-70 text-xs mb-1">

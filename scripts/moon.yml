@@ -24,6 +24,22 @@ fileGroups:
     - 'src/index.ts'
 
 tasks:
+  # Aggregates every guard-* structural check into one target: `bun run
+  # guard` (root), `moon run scripts:guard`, or `moon run :guard` (only this
+  # project defines it, so the wildcard just runs it here). All of them live
+  # in this project because their `bun run src/lib/ops/guard_*.ts` commands
+  # are relative to it, even though most scan apps/frontend/client and
+  # apps/frontend/hub, not scripts' own source.
+  guard:
+    deps:
+      - '~:guard-mvvm-conventions'
+      - '~:guard-service-conventions'
+      - '~:guard-image-component'
+      - '~:guard-data-plane'
+    options:
+      cache: false
+      runInCI: false
+
   test:
     command: 'bun test'
     inputs:
@@ -84,6 +100,44 @@ tasks:
       - 'src/lib/ops/guard_data_plane.ts'
       - '/apps/frontend/hub/src/**/*'
       - '/packages/backend/database/**/*'
+    options:
+      cache: false
+      runInCI: true
+
+  # Structural guards for frontend View, ViewModel, and service conventions
+  # (.pi/skills/svelte-conventions/SKILL.md). Currently failing against a
+  # pre-existing backlog (80 / 9 violations as of C-455). Keep the task
+  # available locally, but out of CI until that backlog is cleared.
+  guard-mvvm-conventions:
+    command: 'bun run src/lib/ops/guard_mvvm_conventions.ts'
+    inputs:
+      - 'src/lib/ops/guard_mvvm_conventions.ts'
+      - '/apps/frontend/client/src/**/*_view.svelte'
+      - '/apps/frontend/client/src/**/*_view_model.svelte.ts'
+      - '/apps/frontend/hub/src/**/*_view.svelte'
+      - '/apps/frontend/hub/src/**/*_view_model.svelte.ts'
+    options:
+      cache: false
+      runInCI: false
+
+  guard-service-conventions:
+    command: 'bun run src/lib/ops/guard_service_conventions.ts'
+    inputs:
+      - 'src/lib/ops/guard_service_conventions.ts'
+      - '/apps/frontend/client/src/lib/services/**/*_service.svelte.ts'
+    options:
+      cache: false
+      runInCI: true
+
+  # Enforces the shared <Image> component ($components) over raw <img> tags
+  # (C-455) — see .pi/skills/aikami-ui/SKILL.md.
+  guard-image-component:
+    command: 'bun run src/lib/ops/guard_image_component.ts'
+    inputs:
+      - 'src/lib/ops/guard_image_component.ts'
+      - '/apps/frontend/client/src/**/*.svelte'
+      - '/apps/frontend/hub/src/**/*.svelte'
+      - '/packages/frontend/components/src/lib/image/image.svelte'
     options:
       cache: false
       runInCI: true

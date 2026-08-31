@@ -16,7 +16,7 @@
 // src/lib/server/api/index.ts), which runs the handler before Elysia parses
 // the request body.
 
-import { createBetterAuth } from '@aikami/backend-auth/better-auth';
+import { createBetterAuth } from '@aikami/backend/auth/better-auth';
 import {
   accountBackups,
   accounts,

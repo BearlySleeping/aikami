@@ -1,5 +1,5 @@
 <script lang="ts">
-import { BaseViewModelContainer } from '$components';
+import { BaseViewModelContainer, Image } from '$components';
 import { getAppBarViewModel } from './app_bar_view_model.svelte.ts';
 
 const viewModel = getAppBarViewModel({ className: 'AppBarViewModel' });
@@ -71,11 +71,11 @@ $effect(() => {
           class="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           {#if viewModel.currentUser?.photoURL}
-            <img
+            <Image
               src={viewModel.currentUser.photoURL}
               alt="Profile"
               class="h-full w-full rounded-full object-cover"
-            >
+            />
           {:else}
             <svg
               role="img"

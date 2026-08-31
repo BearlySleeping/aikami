@@ -12,6 +12,7 @@
 // GuidedComposer components. Surface-specific concerns (skill-check dice,
 // portrait row, spatial speech bubble, suggestion chips, combat escalation)
 // are preserved here via snippets.
+import { Image } from '$components';
 import GameDice from '$lib/components/game/game_dice.svelte';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
@@ -122,12 +123,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           ? 'border-warning shadow-warning/30'
           : 'border-base-content/10'}"
         >
-          <img
+          <Image
             src={viewModel.npcAvatarUrl}
             alt={viewModel.npcName}
             class="h-full w-full object-contain"
             loading="lazy"
-          >
+          />
         </div>
       </div>
 
@@ -135,12 +136,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       <div class="flex items-end gap-2">
         {#if viewModel.showPartyUi}
           <div class="h-20 w-20 overflow-hidden border-2 border-info/30 shadow-lg">
-            <img
+            <Image
               src="/assets/npc/gandalf/neutral.webp"
               alt="Companion"
               class="h-full w-full object-contain opacity-70"
               loading="lazy"
-            >
+            />
           </div>
         {/if}
         <div
@@ -151,12 +152,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
             ? 'border-primary shadow-primary/30'
             : 'border-base-content/10'}"
           >
-            <img
+            <Image
               src={viewModel.playerAvatarUrl}
               alt="You"
               class="h-full w-full object-contain"
               loading="lazy"
-            >
+            />
           </div>
         </div>
       </div>
@@ -209,12 +210,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           <div class="skeleton h-48 w-64 rounded-xl"></div>
         {:else if image.status === 'done' && image.url}
           <div class="overflow-hidden rounded-xl shadow-md max-w-xs">
-            <img
+            <Image
               src={image.url}
               alt="Generated scene"
               class="w-full h-auto object-cover"
               loading="lazy"
-            >
+            />
           </div>
         {:else if image.status === 'error'}
           <span class="text-xs text-error italic">Image generation failed</span>

@@ -18,12 +18,14 @@
 //   bun run scripts -- discord sync --apply --prune         (also delete)
 //   bun run scripts -- discord commands:sync                (register /bug /feature /ask)
 //   bun run scripts -- discord endpoint:sync                (register the deployed Interactions Endpoint URL)
+//   bun run scripts -- discord content:sync                 (post/update pinned #welcome, #rules, #faq text — see content.ts)
 //
 // Or via root package.json: bun run discord:audit / discord:diff / discord:sync
 
 import { c, error, parseCliArgs } from '../cli_utils';
 import { runAudit } from './audit';
 import { syncDiscordCommands } from './commands';
+import { runContentSync } from './content';
 import { syncInteractionsEndpointUrl } from './endpoint';
 import { runSync } from './sync';
 
@@ -54,9 +56,12 @@ async function main(): Promise<void> {
     case 'endpoint:sync':
       await syncInteractionsEndpointUrl(mode);
       return;
+    case 'content:sync':
+      await runContentSync(mode);
+      return;
     default:
       error(
-        `Unknown subcommand "${subcommand ?? ''}". Use: audit | diff | sync | commands:sync | endpoint:sync`,
+        `Unknown subcommand "${subcommand ?? ''}". Use: audit | diff | sync | commands:sync | endpoint:sync | content:sync`,
       );
       console.log(`${c.dim}See scripts/src/lib/discord/index.ts header for usage.${c.reset}`);
       process.exit(1);

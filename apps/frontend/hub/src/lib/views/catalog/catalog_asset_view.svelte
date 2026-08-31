@@ -6,7 +6,7 @@
 // orchestration lives in the ViewModel's loadPreview() method. The view
 // retains only the mount trigger and template bindings.
 import { onMount } from 'svelte';
-import { BaseViewModelContainer } from '$components';
+import { BaseViewModelContainer, Image } from '$components';
 import type { CatalogAssetViewModelInterface } from './catalog_asset_view_model.svelte.ts';
 
 type Props = { viewModel: CatalogAssetViewModelInterface };
@@ -55,13 +55,13 @@ onMount(() => {
     >
       {#if viewModel.previewUrl}
         <!-- Server-rendered thumbnail — always visible; hidden by preview canvas -->
-        <img
+        <Image
           src={viewModel.previewUrl}
           alt={`Preview of ${viewModel.displayName}`}
           class="h-full w-full object-contain"
           class:hidden={viewModel.previewMounted}
           data-testid="catalog-asset-preview"
-        >
+        />
       {:else}
         <div
           class="flex flex-col items-center gap-2 p-6 text-center text-muted-foreground"

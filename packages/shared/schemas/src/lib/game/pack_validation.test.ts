@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { ContentPackManifest } from './content_pack.ts';
-import { validatePack, isHostileString } from './pack_validation.ts';
+import { isHostileString, validatePack } from './pack_validation.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -16,9 +16,9 @@ const minimalManifest = (overrides?: Partial<ContentPackManifest>): ContentPackM
   name: 'Test Pack',
   version: '1.0.0',
   updatedAt: '2026-01-01T00:00:00Z',
-  startingMapId: 'start_map',
+  startingMapId: 'startMap',
   maps: {
-    ['start_map']: { file: 'maps/start.json', name: 'Start' },
+    startMap: { file: 'maps/start.json', name: 'Start' },
   },
   npcs: {},
   items: {},
@@ -53,18 +53,25 @@ describe('validatePack — AC-5: structured validation', () => {
   });
 
   test('detects missing version', () => {
-    const result = validatePack({ manifest: minimalManifest({ version: '' as unknown as undefined }) });
+    const result = validatePack({
+      manifest: minimalManifest({ version: '' as unknown as undefined }),
+    });
     expect(result.errors.some((e) => e.code === 'manifest.missing-version')).toBe(true);
   });
 
   test('detects missing startingMapId', () => {
-    const result = validatePack({ manifest: minimalManifest({ startingMapId: '' as unknown as undefined }) });
+    const result = validatePack({
+      manifest: minimalManifest({ startingMapId: '' as unknown as undefined }),
+    });
     expect(result.errors.some((e) => e.code === 'manifest.missing-starting-map')).toBe(true);
   });
 
   test('detects starting map not in maps block', () => {
     const result = validatePack({
-      manifest: minimalManifest({ startingMapId: 'nonexistent', maps: { other: { file: 'other.json', name: 'Other' } } }),
+      manifest: minimalManifest({
+        startingMapId: 'nonexistent',
+        maps: { other: { file: 'other.json', name: 'Other' } },
+      }),
     });
     expect(result.errors.some((e) => e.code === 'manifest.map-entry-not-found')).toBe(true);
   });
@@ -72,7 +79,7 @@ describe('validatePack — AC-5: structured validation', () => {
   test('detects map file mismatch when supplied mapFiles differ from declared', () => {
     const result = validatePack({
       manifest: minimalManifest(),
-      mapFiles: { ['start_map']: 'maps/other.json' },
+      mapFiles: { startMap: 'maps/other.json' },
     });
     expect(result.errors.some((e) => e.code === 'manifest.map-file-not-found')).toBe(true);
   });
@@ -206,7 +213,7 @@ describe('validatePack — AC-2: hostile manifest', () => {
     const result = validatePack({
       manifest: minimalManifest({
         maps: {
-          ['start_map']: { file: 'https://evil.com/map.json', name: 'Start' },
+          startMap: { file: 'https://evil.com/map.json', name: 'Start' },
         },
       }),
     });
@@ -217,7 +224,7 @@ describe('validatePack — AC-2: hostile manifest', () => {
     const result = validatePack({
       manifest: minimalManifest({
         tiles: {
-          ['1']: { name: 'evil', frame: '../../etc/passwd', isWalkable: true },
+          '1': { name: 'evil', frame: '../../etc/passwd', isWalkable: true },
         },
       }),
     });
@@ -228,7 +235,7 @@ describe('validatePack — AC-2: hostile manifest', () => {
     const result = validatePack({
       manifest: minimalManifest({
         props: {
-          ['evil_prop']: { name: 'Evil', frame: 'data:image/png;base64,evil', isWalkable: false },
+          evilProp: { name: 'Evil', frame: 'data:image/png;base64,evil', isWalkable: false },
         },
       }),
     });
@@ -277,17 +284,33 @@ describe('validatePack — AC-5: performance', () => {
   test('completes in under 100ms for a large manifest', () => {
     // Build a manifest with ~100 tiles, ~50 props, ~20 maps
     const provenance = { license: 'CC-BY-SA-4.0', author: ['Test'], source: 'original' };
-    const tiles: Record<string, { name: string; frame: string; isWalkable: boolean; provenance?: typeof provenance }> = {};
+    const tiles: Record<
+      string,
+      { name: string; frame: string; isWalkable: boolean; provenance?: typeof provenance }
+    > = {};
     for (let i = 1; i <= 100; i++) {
-      tiles[String(i)] = { name: `tile_${i}`, frame: `tile_${i}.png`, isWalkable: true, provenance };
+      tiles[String(i)] = {
+        name: `tile_${i}`,
+        frame: `tile_${i}.png`,
+        isWalkable: true,
+        provenance,
+      };
     }
-    const props: Record<string, { name: string; frame: string; isWalkable: boolean; provenance?: typeof provenance }> = {};
+    const props: Record<
+      string,
+      { name: string; frame: string; isWalkable: boolean; provenance?: typeof provenance }
+    > = {};
     for (let i = 1; i <= 50; i++) {
-      props[`prop_${i}`] = { name: `prop_${i}`, frame: `prop_${i}.png`, isWalkable: false, provenance };
+      props[`prop_${i}`] = {
+        name: `prop_${i}`,
+        frame: `prop_${i}.png`,
+        isWalkable: false,
+        provenance,
+      };
     }
     // Include start_map so startingMapId resolves
     const maps: Record<string, { file: string; name: string }> = {
-      ['start_map']: { file: 'maps/start.json', name: 'Start' },
+      startMap: { file: 'maps/start.json', name: 'Start' },
     };
     for (let i = 1; i <= 20; i++) {
       maps[`map_${i}`] = { file: `maps/map_${i}.json`, name: `Map ${i}` };
@@ -307,5 +330,3 @@ describe('validatePack — AC-5: performance', () => {
     expect(result.errors).toHaveLength(0);
   });
 });
-
-

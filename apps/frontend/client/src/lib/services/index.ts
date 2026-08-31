@@ -5,18 +5,7 @@ export {
   type RouterServiceInterface,
   routerService,
 } from '@aikami/frontend/services';
-
-// GameStateSyncService is a client-only service backed by the local SQLite
-// (turso) database — it is intentionally NOT re-exported from the shared
-// services barrel (which the server-side hub imports) so the hub never
-// bundles the turso adapter. Import it from the dedicated subpath.
-export {
-  type GameStateSyncServiceInterface,
-  gameStateSyncService,
-  type SaveSlotEntry,
-  type SaveSlotMetadata,
-} from '@aikami/frontend-services/game-state-sync';
-
+export type { SaveSlotEntry, SaveSlotMetadata } from '@aikami/types';
 // ── Agent Pipeline ────────────────────────────────────────────────────
 export {
   AgentPipelineService,
@@ -111,6 +100,8 @@ export * from './game/session_service.svelte';
 export * from './game/time_service.svelte';
 export * from './game/vendor_service.svelte.ts';
 export * from './game/world_state_service.svelte.ts';
+export type { GameStateSyncServiceInterface } from './game_state_sync.svelte.ts';
+export { gameStateSyncService } from './game_state_sync.svelte.ts';
 export * from './gm/gm_prompt_service.svelte.ts';
 export * from './gm/gm_types';
 export * from './gm/impersonation_service.svelte.ts';

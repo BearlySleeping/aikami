@@ -1,4 +1,5 @@
 <script lang="ts">
+import { Image } from '$components';
 // apps/frontend/client/src/lib/components/chat/MessageBubble.svelte
 import type { ChatMessage as ChatMessageType } from '$services';
 import { ttsService } from '$services';
@@ -89,7 +90,9 @@ const bubbleClass = $derived.by(() => {
 <div class="chat {message.sender === 'user' ? 'chat-end' : 'chat-start'}">
   {#if isAi && avatarUrl && !isAction}
     <div class="chat-image avatar">
-      <div class="w-8 rounded-full"><img src={avatarUrl} alt={characterName}></div>
+      <div class="w-8 rounded-full">
+        <Image src={avatarUrl} alt={characterName} />
+      </div>
     </div>
   {/if}
 

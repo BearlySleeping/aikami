@@ -7,6 +7,7 @@
 //
 // Contract: C-242 Image Generation Pipeline
 
+import { Image } from '$components';
 import type { GalleryViewModelInterface } from './gallery_view_model.svelte.ts';
 
 type Props = { viewModel: GalleryViewModelInterface };
@@ -27,12 +28,12 @@ const { viewModel }: Props = $props();
         class="mb-2 break-inside-avoid rounded-lg overflow-hidden border border-base-300 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all w-full text-left bg-transparent p-0"
         onclick={() => viewModel.expandImage(image.url)}
       >
-        <img
+        <Image
           src={image.url}
           alt={image.prompt.slice(0, 40)}
           class="w-full h-auto block"
           loading="lazy"
-        >
+        />
         <div class="p-1.5">
           <span class="text-[10px] font-mono text-base-content/50 truncate block"
             >{image.prompt.slice(0, 50)}</span
@@ -58,11 +59,11 @@ const { viewModel }: Props = $props();
       >
         ✕
       </button>
-      <img
+      <Image
         src={viewModel.expandedImageUrl}
         alt="Generated visual (fullscreen)"
         class="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl"
-      >
+      />
       <button
         type="button"
         class="absolute bottom-4 right-4 btn btn-sm btn-error"

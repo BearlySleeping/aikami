@@ -15,7 +15,10 @@
     "security": {
       "csp": "default-src 'self' tauri: asset:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' tauri: asset: blob: data: ipc: http://ipc.localhost https://hub.bearlysleeping.com https://hub.stg.bearlysleeping.com https://assets.bearlysleeping.com http://localhost:11434 http://localhost:8188 http://localhost:8089 http://localhost:6006 http://localhost:5276 https://aihorde.net https://api.anthropic.com https://api.cohere.ai https://api.deepinfra.com https://api.deepseek.com https://api.elevenlabs.io https://api.mistral.ai https://api.novelai.net https://api.openai.com https://api.stability.ai https://fal.run https://generativelanguage.googleapis.com https://image.novelai.net https://nano-gpt.com https://openrouter.ai https://* http://localhost:* http://127.0.0.1:*; img-src 'self' data: blob: tauri: asset: https://assets.bearlysleeping.com http://localhost:8188; font-src 'self' data:; worker-src 'self' blob:",
       "dangerousDisableAssetCspModification": ["style-src"],
-      "headers": {}
+      "headers": {
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp"
+      }
     }
   },
   "bundle": {

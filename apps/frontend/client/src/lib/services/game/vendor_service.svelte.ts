@@ -21,8 +21,9 @@ import {
 } from '$lib/data/ai_prompts/vendor_action_schema';
 import { textGenerationService } from '$services';
 import type { VendorSessionOptions } from '$types';
+import { getItemDefinition } from '$utils/inventory_utils';
 import { playSfxByName } from '../audio/audio_asset_resolver';
-import { getItemDefinition, inventoryService } from './inventory_service.svelte';
+import { inventoryService } from './inventory_service.svelte';
 
 /** Options used to construct the vendor transaction service. */
 export type VendorServiceOptions = BaseFrontendClassOptions;

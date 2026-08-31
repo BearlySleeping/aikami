@@ -2,7 +2,7 @@
 // apps/frontend/client/src/lib/views/character/npc/list/npc_list_view.svelte
 
 import type { NpcData } from '@aikami/types';
-import { BaseViewModelContainer } from '$components';
+import { BaseViewModelContainer, Image } from '$components';
 import t from '$i18n';
 import type { NpcListViewModelInterface, NpcTab } from './npc_list_view_model.svelte.ts';
 
@@ -142,7 +142,7 @@ function handleUrlSubmit() {
             >
               <div class="bg-base-300 relative h-48">
                 {#if npc.avatarUrl}
-                  <img src={npc.avatarUrl} alt={npc.name} class="h-full w-full object-cover">
+                  <Image src={npc.avatarUrl} alt={npc.name} class="h-full w-full object-cover" />
                 {:else}
                   <div
                     class="flex h-full w-full items-center justify-center text-4xl text-base-content/30"

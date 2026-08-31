@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/image/image_view.svelte
-import { BaseViewModelContainer } from '$components';
+import { BaseViewModelContainer, Image } from '$components';
 import type { ImageViewModelInterface } from './image_view_model.svelte.ts';
 import { EXPRESSIONS, SAMPLERS, SCHEDULERS } from './image_view_model.svelte.ts';
 
@@ -384,11 +384,11 @@ const onMaskChange = (e: Event) => {
             </h2>
             {#if hasInputImage}
               <div class="flex items-start gap-4">
-                <img
+                <Image
                   src={viewModel.inputImageDataUrl ?? ''}
                   alt="Input"
                   class="w-24 h-24 rounded object-cover border border-white/10"
-                >
+                />
                 <div class="flex-1">
                   <p class="text-xs text-base-content/70 mb-2">{viewModel.inputImageName}</p>
                   <button
@@ -467,11 +467,11 @@ const onMaskChange = (e: Event) => {
                   class="w-full aspect-square rounded bg-base-300 flex items-center justify-center overflow-hidden"
                 >
                   {#if viewModel.expressionResults[expr.id]}
-                    <img
+                    <Image
                       src={viewModel.expressionResults[expr.id]}
                       alt={expr.label}
                       class="w-full h-full object-cover"
-                    >
+                    />
                   {:else}
                     <span class="text-xs text-base-content/30"
                       >{viewModel.isGenerating ? '...' : '—'}</span
@@ -496,11 +496,11 @@ const onMaskChange = (e: Event) => {
             </h2>
             {#if hasInputImage}
               <div class="flex items-start gap-4">
-                <img
+                <Image
                   src={viewModel.inputImageDataUrl ?? ''}
                   alt="Input"
                   class="w-24 h-24 rounded object-cover border border-white/10"
-                >
+                />
                 <div class="flex-1">
                   <p class="text-xs text-base-content/70 mb-2">{viewModel.inputImageName}</p>
                   <button
@@ -637,11 +637,11 @@ const onMaskChange = (e: Event) => {
                 </h3>
                 {#if viewModel.inputMaskDataUrl}
                   <div class="flex items-start gap-4">
-                    <img
+                    <Image
                       src={viewModel.inputMaskDataUrl}
                       alt="Mask"
                       class="w-16 h-16 rounded object-cover border border-white/10"
-                    >
+                    />
                     <div class="flex-1">
                       <p class="text-xs text-base-content/70 mb-2">{viewModel.inputMaskName}</p>
                       <button
@@ -758,11 +758,11 @@ const onMaskChange = (e: Event) => {
                 class="grid gap-2 {viewModel.results.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}"
               >
                 {#each viewModel.results as url, i}
-                  <img
+                  <Image
                     src={url}
                     alt="Result {i + 1}"
                     class="w-full rounded object-contain max-h-96 bg-base-200"
-                  >
+                  />
                 {/each}
               </div>
             {:else}

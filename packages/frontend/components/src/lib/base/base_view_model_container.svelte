@@ -1,9 +1,9 @@
 <script lang="ts">
-// apps/frontend/client/src/lib/components/base_view_model_container.svelte
+// packages/frontend/components/src/lib/base_view_model_container.svelte
 import type { BaseViewModelInterface } from '@aikami/frontend/services';
 import type { Snippet } from 'svelte';
 import { onMount } from 'svelte';
-import AppLoading from './app_loading.svelte';
+import AppLoading from '../loading/app_loading.svelte';
 
 type Props = {
   viewModel: BaseViewModelInterface;

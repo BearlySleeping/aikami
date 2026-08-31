@@ -8,8 +8,9 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { STARTER_KIT } from '@aikami/constants';
+import { getItemDefinition } from '$utils/inventory_utils';
 import { equipmentService } from './equipment_service.svelte';
-import { getItemDefinition, inventoryService } from './inventory_service.svelte';
+import { inventoryService } from './inventory_service.svelte';
 import { playerStateService } from './player_state_service.svelte';
 
 /** Mirrors persona_create_view_model.enterWorld() seeding. */

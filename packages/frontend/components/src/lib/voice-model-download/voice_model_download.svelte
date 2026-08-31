@@ -22,14 +22,7 @@ type Props = {
   oncancel?: () => void;
 };
 
-let {
-  show,
-  state,
-  progress,
-  sizeLabel,
-  ondownload,
-  oncancel,
-}: Props = $props();
+let { show, state, progress, sizeLabel, ondownload, oncancel }: Props = $props();
 </script>
 
 {#if show}
@@ -40,17 +33,9 @@ let {
       <span class="text-xs text-base-content/50">{sizeLabel}</span>
     </div>
     {#if state.status === 'downloading' || state.status === 'verifying'}
-      <progress
-        class="progress progress-primary w-full"
-        value={progress}
-        max="100"
-      ></progress>
+      <progress class="progress progress-primary w-full" value={progress} max="100"></progress>
       <div class="flex gap-2">
-        <button
-          type="button"
-          class="btn btn-sm btn-outline flex-1"
-          onclick={oncancel}
-        >
+        <button type="button" class="btn btn-sm btn-outline flex-1" onclick={oncancel}>
           Cancel
         </button>
       </div>
@@ -59,11 +44,7 @@ let {
     {:else if state.status === 'error'}
       <p class="text-xs text-error">{state.message || 'Download failed'}</p>
     {:else}
-      <button
-        type="button"
-        class="btn btn-sm btn-primary"
-        onclick={ondownload}
-      >
+      <button type="button" class="btn btn-sm btn-primary" onclick={ondownload}>
         Download Voice Model
       </button>
     {/if}

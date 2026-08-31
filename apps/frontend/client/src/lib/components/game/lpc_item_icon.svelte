@@ -116,6 +116,10 @@ $effect(() => {
   // state for a URL that is no longer current.
   let active = true;
   const img = new Image();
+  // R2 (assets.bearlysleeping.com) sends Access-Control-Allow-Origin: *, so
+  // requesting the load as CORS keeps canvas sampling untainted and keeps
+  // the fetch COEP-compatible (see C-455) without needing a CORP header.
+  img.crossOrigin = 'anonymous';
   img.onload = () => {
     if (!active) {
       return;

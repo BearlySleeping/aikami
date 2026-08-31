@@ -15,6 +15,7 @@
 //
 // Contract: C-424 Unified Message Surfaces
 import type { Snippet } from 'svelte';
+import { Image } from '$components';
 import ChatMessage from '$lib/components/chat/chat_message.svelte';
 import MessageActionBar from '$lib/components/chat/message_action_bar.svelte';
 import MessageSwipeControls from '$lib/components/chat/message_swipe_controls.svelte';
@@ -204,12 +205,12 @@ const handleSwipeRight = () => {
       {:else}
         {#if showPartyUi}
           <div class="flex items-center gap-1.5 mb-0.5">
-            <img
+            <Image
               src={avatarUrlFor()}
               alt={senderName || (isPlayer ? 'You' : characterName)}
               class="h-5 w-5 rounded-full object-cover"
               loading="lazy"
-            >
+            />
             <span class="text-xs font-medium text-base-content/50">
               {senderName || (isPlayer ? 'You' : characterName)}
             </span>
