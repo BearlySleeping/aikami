@@ -24,6 +24,8 @@
     "format": "moon run :format",
     "fix": "moon run :fix",
     "typecheck": "moon run :typecheck",
+    "validate": "moon run :validate",
+    "guard": "moon run scripts:guard",
     "ci": "bun run validate && bun run test",
     "scripts": "bun run scripts/src/index.ts",
     "setup": "bun run scripts/src/lib/local_setup/index.ts",

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@aikami/backend-project-ai": "workspace:*",
+    "@aikami/constants": "workspace:*",
     "@aikami/logger": "workspace:*",
     "@aikami/utils": "workspace:*",
     "discord.js": "14.27.0",

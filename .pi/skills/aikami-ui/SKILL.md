@@ -317,12 +317,12 @@ Screen readers already announce "image" — don't repeat it in alt text.
 
 ```svelte
 <!-- ❌ WRONG -->
-<img src={url} alt="Gallery image">
-<img src={url} alt="Picture of a dragon">
+<Image src={url} alt="Gallery image" />
+<Image src={url} alt="Picture of a dragon" />
 
 <!-- ✅ CORRECT -->
-<img src={url} alt="Generated artwork">
-<img src={url} alt="Red dragon breathing fire">
+<Image src={url} alt="Generated artwork" />
+<Image src={url} alt="Red dragon breathing fire" />
 ```
 
 ### 7g: Fullscreen image modals
@@ -340,8 +340,8 @@ Screen readers already announce "image" — don't repeat it in alt text.
     <button type="button"
       class="absolute top-4 right-4 btn btn-sm btn-ghost text-white text-xl"
       onclick={() => (expandedUrl = null)}>✕</button>
-    <img src={expandedUrl} alt="Combat scene (fullscreen)"
-      class="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl">
+    <Image src={expandedUrl} alt="Combat scene (fullscreen)"
+      class="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl" />
   </div>
 {/if}
 ```
@@ -368,3 +368,39 @@ must be a `<button>` (not `<div>`):
 
 Note: DaisyUI `.modal-backdrop` on a `<button>` needs `border-none bg-transparent p-0`
 to reset default button styling.
+
+### 7i: Always use `<Image>`, never a raw `<img>` (C-455)
+
+`Image` (`packages/frontend/components/src/lib/image/image.svelte`, exported
+from both apps' `$components` barrel) is the single source of truth for
+`<img>` rendering. Import it like any other shared component:
+
+```svelte
+import { Image } from '$components';
+```
+
+```svelte
+<!-- ❌ WRONG -->
+<img src={npc.avatarUrl} alt={npc.name} class="h-full w-full object-cover">
+
+<!-- ✅ CORRECT -->
+<Image src={npc.avatarUrl} alt={npc.name} class="h-full w-full object-cover" />
+```
+
+**Why**: the Tauri desktop app sets `Cross-Origin-Opener-Policy: same-origin`
++ `Cross-Origin-Embedder-Policy: require-corp` (`tauri.conf.json`), and any
+cross-origin image load that isn't explicitly requested as CORS gets silently
+blocked under COEP. `Image` defaults `crossorigin="anonymous"` so every R2/
+hub-issued avatar and generated-art URL keeps loading — this is a no-op for
+same-origin and `blob:` URLs, so it's always safe to use. `Image` accepts
+every native `<img>` attribute (`class`, `loading`, `onload`, `onerror`,
+`data-testid`, `class:` directives, ...) via pass-through props, plus an
+optional `crossOrigin` override for the rare image known to reject CORS-mode
+requests.
+
+The one exception is code that constructs an `HTMLImageElement` directly via
+`new Image()` for canvas/pixel access (e.g. `lpc_item_icon.svelte`) — set
+`img.crossOrigin = 'anonymous'` by hand there; there's no JSX-like tag to
+swap. `scripts/src/lib/ops/guard_image_component.ts` (wired into `moon run
+:guard-image-component`, part of CI) fails the build on any raw `<img>` tag
+in `apps/frontend/client` or `apps/frontend/hub`.

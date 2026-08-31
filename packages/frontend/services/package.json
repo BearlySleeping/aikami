@@ -3,8 +3,7 @@
   "license": "MIT",
   "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./game-state-sync": "./src/lib/services/game_state_sync.svelte.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "lint": "biome lint .",

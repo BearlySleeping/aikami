@@ -214,11 +214,11 @@ export default defineConfig(({ mode }) => {
         '@aikami/types': toPackagesPath('shared/types/src'),
         '@aikami/utils': toPackagesPath('shared/utils/src'),
       },
-    }) as PluginOption,
+    }),
     paraglideVitePlugin({
       project: './project.inlang',
       outdir: './src/lib/paraglide',
-    }) as PluginOption,
+    }),
     {
       name: 'internal-logging-endpoint',
       configureServer(server) {
@@ -246,7 +246,7 @@ export default defineConfig(({ mode }) => {
           });
         });
       },
-    } as PluginOption,
+    },
   ];
 
   if (mode === 'staging' && process.env.DEBUG === '1') {
@@ -285,7 +285,7 @@ export default defineConfig(({ mode }) => {
           // dev mode Vite serves native ESM and tries to resolve every import,
           // so we alias them to a stub module.
           find: /^@tauri-apps\/.*$/,
-          replacement: toSrcPath('lib/stubs/tauri-stub.ts'),
+          replacement: toSrcPath('lib/stubs/tauri_stub.ts'),
         },
       ],
     },

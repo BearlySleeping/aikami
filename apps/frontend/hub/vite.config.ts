@@ -127,6 +127,7 @@ export default defineConfig(({ mode }) => {
 
         '@aikami/backend/svelte-kit/*': toPackagesPath('backend/svelte-kit/src/lib/*'),
         '@aikami/backend/auth': toPackagesPath('backend/auth/src'),
+        '@aikami/backend/auth/better-auth': toPackagesPath('backend/auth/src/lib/better_auth.ts'),
         '@aikami/backend/auth/*': toPackagesPath('backend/auth/src/lib/*'),
         '@aikami/backend/utils/*': toPackagesPath('backend/utils/src/lib/*'),
         '@aikami/backend/configs/*': toPackagesPath('backend/configs/src/lib/*'),

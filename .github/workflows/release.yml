@@ -715,4 +715,4 @@ jobs:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           RUN_ID: ${{ github.run_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DISCORD_RELEASES_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASES_WEBHOOK_URL }}
+          DISCORD_STAFF_WEBHOOK_URL: ${{ secrets.DISCORD_STAFF_WEBHOOK_URL }}

@@ -97,16 +97,22 @@
               {
                 "group": [
                   "@aikami/backend-*",
+                  "@aikami/backend-*/**",
                   "!@aikami/backend-project-ai",
+                  "!@aikami/backend-project-ai/**",
                   "!@aikami/backend-database",
-                  "!@aikami/backend-discord-bot"
+                  "!@aikami/backend-database/**",
+                  "!@aikami/backend-discord-bot",
+                  "!@aikami/backend-discord-bot/**"
                 ],
                 "message": "Use @aikami/backend/<name> instead (e.g. @aikami/backend/auth)"
               },
               {
                 "group": [
                   "@aikami/frontend-*",
-                  "!@aikami/frontend-preview"
+                  "@aikami/frontend-*/**",
+                  "!@aikami/frontend-preview",
+                  "!@aikami/frontend-preview/**"
                 ],
                 "message": "Use @aikami/frontend/<name> instead (e.g. @aikami/frontend/configs)"
               }

@@ -64,6 +64,7 @@ bun install
 ## Dependencies
 
 - `@aikami/backend-project-ai` — shared `askProjectAi`/`chatCompletion`
+- `@aikami/constants` — shared Discord guild/channel/role/forum-tag ids
 - `@aikami/logger` — logging
 - `discord.js` — the only Gateway-connected client in this repo; everything
   else under `scripts/src/lib/discord/` deliberately uses `@discordjs/rest`
@@ -110,5 +111,10 @@ src/
 ```
 
 Non-sensitive IDs (guild, forum channel, Moderator/Admin roles, forum tags)
-live in `lib/constants.ts` as plain constants — keep them in sync with
-`scripts/src/lib/discord/structure.ts` if the server structure changes.
+now live in `@aikami/constants` (`packages/shared/constants/src/lib/discord.ts`)
+— `lib/constants.ts` just re-exports the subset this package uses under its
+existing local names, plus the bot-specific bits (issue-trigger phrase,
+tool-access map). `@aikami/constants`'s `discord.ts` is itself kept in sync
+BY HAND with `scripts/src/lib/discord/structure.ts` (the declarative source
+of truth for the server layout) — update it there when the server structure
+changes.

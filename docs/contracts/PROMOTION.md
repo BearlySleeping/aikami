@@ -1,6 +1,6 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-08-30
+> Auto-generated: 2026-08-31
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
@@ -134,7 +134,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-311 | Swarm Socket Orchestration | ⏳ not_started | v1 | full |
 | C-315 | Define A Versioned Campaign Content Pack And Atomic Loader | 🏁 completed | v2 | full |
 | C-316 | Build The Authored Emberwatch The Fading Ward Demo Adventure | ✅ verified | v2 | full |
-| C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 👍 approved | v2 | full |
+| C-317 | Rebuild The Start Menu Around Campaigns Not Personas | 🛠️ implemented | v2 | full |
 | C-318 | Add One Screen Capability Setup And An Offline Demo Fallback | 🛠️ implemented | v2 | full |
 | C-319 | Replace Setup With Fast Character Onboarding | 🛠️ implemented | v2 | full |
 | C-320 | Build The Unified Ai Provider Gateway Offline Byok Service | 🛠️ implemented | v2 | full |
@@ -144,21 +144,21 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-325 | Ship Real Time Lpc Appearance Preview With Safe Defaults | 🛠️ implemented | v2 | full |
 | C-326 | Make Game Boot Atomic Observable And Content Driven | 🛠️ implemented | v2 | full |
 | C-327 | Add In World Onboarding And Unified Interaction Ux | 🛠️ implemented | v2 | full |
-| C-329 | Integrate The Demo Quest From Offer Through Reward | 👍 approved | v2 | full |
-| C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 👍 approved | v2 | full |
-| C-333 | Simplify Settings With Progressive Disclosure | 👍 approved | v1 | full |
-| C-334 | Make Local Save Continue Autosave And Recovery Reliable | 👍 approved | v2 | full |
-| C-335 | Enforce The Playable Demo Release Gate | 👍 approved | v2 | full |
-| C-336 | Extract A Deterministic Rules Kernel And Typed Game Command | 👍 approved | v2 | full |
-| C-337 | Complete Character Progression Classes Abilities Skills And | 👍 approved | v2 | full |
-| C-338 | Deepen Turn Based Combat With Action Economy Statuses And Ta | 👍 approved | v2 | full |
+| C-329 | Integrate The Demo Quest From Offer Through Reward | 🛠️ implemented | v2 | full |
+| C-330 | Integrate Deterministic Demo Combat And Declared Skill Check | 🛠️ implemented | v2 | full |
+| C-333 | Simplify Settings With Progressive Disclosure | 🛠️ implemented | v1 | full |
+| C-334 | Make Local Save Continue Autosave And Recovery Reliable | 🛠️ implemented | v2 | full |
+| C-335 | Enforce The Playable Demo Release Gate | 🛠️ implemented | v2 | full |
+| C-336 | Extract A Deterministic Rules Kernel And Typed Game Command | 🛠️ implemented | v2 | full |
+| C-337 | Complete Character Progression Classes Abilities Skills And | 🛠️ implemented | v2 | full |
+| C-338 | Deepen Turn Based Combat With Action Economy Statuses And Ta | 🛠️ implemented | v2 | full |
 | C-339 | Complete Quest Graph Journal Objectives And Reward Pipelines | 🛠️ implemented | v2 | full |
-| C-340 | Build Party And Companion Gameplay | 👍 approved | v2 | full |
-| C-341 | Add Relationships Factions Reputation And Persistent Consequ | 👍 approved | v2 | full |
-| C-342 | Add World Interactables Dungeons Puzzles And Loot Tables | 👍 approved | v2 | full |
+| C-340 | Build Party And Companion Gameplay | 🛠️ implemented | v2 | full |
+| C-341 | Add Relationships Factions Reputation And Persistent Consequ | 🛠️ implemented | v2 | full |
+| C-342 | Add World Interactables Dungeons Puzzles And Loot Tables | 🛠️ implemented | v2 | full |
 | C-344 | Complete Session Recaps Checkpoints And Long Campaign Lifecy | 🛠️ implemented | v2 | full |
-| C-345 | Add A Campaigncontent Pack Browser And A Second Adventure | 👍 approved | v2 | full |
-| C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 👍 approved | v2 | full |
+| C-345 | Add A Campaigncontent Pack Browser And A Second Adventure | 🛠️ implemented | v2 | full |
+| C-370 | Fix Lpc Paperdoll Base Layering And Neck Alignment | 🛠️ implemented | v2 | full |
 | C-371 | C 371 | 👍 approved | v2 | full |
 | C-383 | Data Exposure Hardening | 🏁 completed | v2 | full |
 | C-384 | Local Sqlite Migration Framework | 🛠️ implemented | v2 | full |
