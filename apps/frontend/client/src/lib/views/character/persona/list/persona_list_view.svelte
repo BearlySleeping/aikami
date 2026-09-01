@@ -63,7 +63,7 @@ let fileInput = $state<HTMLInputElement>();
             <button
               type="button"
               class="btn btn-outline btn-sm"
-              onclick={() => fileInput.click()}
+              onclick={() => fileInput?.click()}
               disabled={viewModel.isImporting}
             >
               {viewModel.isImporting ? 'Importing…' : 'Import Card'}

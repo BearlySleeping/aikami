@@ -107,8 +107,8 @@ class NpcStorage extends BaseFrontendClass<NpcStorageOptions> implements NpcStor
       id: npcId,
       creatorUid: uid,
       visibility: data.visibility ?? 'private',
-      createdAt: data.createdAt ?? new Date(),
-      updatedAt: data.updatedAt ?? new Date(),
+      createdAt: (data as Record<string, unknown>).createdAt ?? new Date(),
+      updatedAt: (data as Record<string, unknown>).updatedAt ?? new Date(),
     } as NpcData;
 
     const db = await getLocalDatabase();

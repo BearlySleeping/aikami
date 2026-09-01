@@ -171,7 +171,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
     executeCommand: () => true,
     /** Turn state owned by the dev mock (C-401) — mirrors the real service. */
     get turnState() {
-      return mockTurnState;
+      return mockTurnState as { readonly kind: 'idle' } | { readonly kind: 'streaming'; readonly text: string } | { readonly kind: 'awaiting_envelope'; readonly text: string } | { readonly kind: 'complete'; readonly text: string } | { readonly kind: 'failed'; readonly reason: 'timeout' | 'aborted' | 'provider_error' | 'malformed'; readonly fallbackOffered: boolean };
     },
     analyzeIntent: async (opts: {
       npcId: string;

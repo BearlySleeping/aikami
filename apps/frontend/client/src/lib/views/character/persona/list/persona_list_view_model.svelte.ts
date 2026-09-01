@@ -281,7 +281,7 @@ class PersonaListViewModel
           // Roll back the lorebook if it was created but entry insertion failed
           if (lorebookId) {
             try {
-              lorebookStore.deleteLorebook(lorebookId);
+              lorebookStore.deleteLorebook({ id: lorebookId });
             } catch (rollbackError) {
               this.warn('handleFileImport:lorebook-rollback-failed', rollbackError);
             }

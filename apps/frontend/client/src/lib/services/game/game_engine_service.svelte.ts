@@ -13,6 +13,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { LpcAnimationState } from '@aikami/lpc';
 import type { ContentPackManifest, PackConfig, PersonaData } from '@aikami/types';
 import { audioContextManager, equipmentService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
@@ -736,7 +737,7 @@ class GameEngineService
       const textureManager = new TextureManager();
 
       const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
-        getLpcAssetPath(slot, assetId, state as unknown as number),
+        getLpcAssetPath(slot, assetId, state),
       );
 
       const playerData = this._buildPlayerData();
@@ -804,7 +805,7 @@ class GameEngineService
           import.meta.env?.PUBLIC_EXTENDED_ONBOARDING_ARC === '1';
 
         const onboarding = extendedArcEnabled
-          ? this._extendOnboardingArc(pack.manifest.onboarding)
+          ? (this._extendOnboardingArc(pack.manifest.onboarding) as typeof pack.manifest.onboarding)
           : pack.manifest.onboarding;
 
         svc.loadOnboarding({
@@ -959,7 +960,7 @@ class GameEngineService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    getLpcAssetPath: (_slot: string, assetId: string, state: string) => string | null,
+    getLpcAssetPath: (_slot: string, assetId: string, state: LpcAnimationState) => string | null,
   ) {
     // C-400: single source of truth — the engine's shared createLpcPipeline
     // (projected catalog + pure resolver + asset URL resolver). The
@@ -968,7 +969,11 @@ class GameEngineService
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
       catalog: projectLpcCatalog(generatedLpcSlots),
-      getLpcAssetPath,
+      getLpcAssetPath: getLpcAssetPath as unknown as (
+        slot: string,
+        assetId: string,
+        state: string,
+      ) => string | null,
     });
   }
 

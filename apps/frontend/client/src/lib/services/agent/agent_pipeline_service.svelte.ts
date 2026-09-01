@@ -19,6 +19,7 @@ import type {
   CustomAgentDefinition,
 } from '$types';
 import { agentRegistryService } from './agent_registry_service.svelte.ts';
+import { customAgentToConfig, runCustomAgent } from './custom_agent_factory.ts';
 import { runBattleTriggerAgent } from './agents/battle_trigger_agent.ts';
 import { runCyoaAgent } from './agents/cyoa_agent.ts';
 import { runExpressionAgent } from './agents/expression_agent.ts';

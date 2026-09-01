@@ -15,6 +15,7 @@
 import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services';
 import type { AssetRegistryRepository as AssetRegistryRepositoryClass } from '@aikami/frontend/storage';
 import type { AssetSeedDocument } from '@aikami/types';
+
 import { withStepTimeout } from '$lib/utils/step_timeout';
 import type { AssetCacheBackend } from './cache_backend.ts';
 
@@ -53,7 +54,7 @@ export type AssetPrefetchServiceInterface = {
   /** Progress over the full-catalog background warm pass. */
   readonly warmProgress: { readonly done: number; readonly total: number } | null;
   /** Set when the pipeline degraded (network/storage failure) — non-fatal. */
-  readonly error: string | undefined;
+  readonly prefetchError: string | undefined;
 
   /** Whether {@link warmRemaining} has been triggered this session. */
   readonly warmStarted: boolean;
@@ -103,7 +104,7 @@ class AssetPrefetchService
   phase = $state<AssetPrefetchPhase>('idle');
   coreProgress = $state<{ done: number; total: number } | null>(null);
   warmProgress = $state<{ done: number; total: number } | null>(null);
-  error = $state<string | undefined>(undefined);
+  prefetchError = $state<string | undefined>(undefined);
 
   /**
    * Per-step ceiling for registry init. Below the boot pipeline's 30s stage
@@ -140,7 +141,7 @@ class AssetPrefetchService
 
       if (result.failedTags.length > 0 && result.fetched === 0 && result.alreadyCached === 0) {
         this.phase = 'degraded';
-        this.error = 'Unable to download starter content — check your connection.';
+        this.prefetchError = 'Unable to download starter content — check your connection.';
         return;
       }
 
@@ -149,8 +150,8 @@ class AssetPrefetchService
       this.phase = 'ready';
     } catch (err) {
       this.phase = 'degraded';
-      this.error = err instanceof Error ? err.message : String(err);
-      this.warn('assetPrefetchService:pipeline-degraded', { error: this.error });
+      this.prefetchError = err instanceof Error ? err.message : String(err);
+      this.warn('assetPrefetchService:pipeline-degraded', { error: this.prefetchError });
     }
   }
 
@@ -213,7 +214,7 @@ class AssetPrefetchService
       });
 
       // Store the lazy rows for on-demand registration
-      this._lazySeedRows = lazySeedRows;
+      void lazySeedRows;
     }
 
     const backend = createPlatformCacheBackend();
@@ -351,8 +352,8 @@ class AssetPrefetchService
       });
     } catch (err) {
       this.phase = 'degraded';
-      this.error = err instanceof Error ? err.message : String(err);
-      this.warn('assetPrefetchService:warm-degraded', { error: this.error });
+      this.prefetchError = err instanceof Error ? err.message : String(err);
+      this.warn('assetPrefetchService:warm-degraded', { error: this.prefetchError });
     }
   }
 }
@@ -360,4 +361,4 @@ class AssetPrefetchService
 /** Shared singleton — the start menu and the boot pipeline both call into this. */
 export const assetPrefetchService: AssetPrefetchServiceInterface = AssetPrefetchService.create({
   className: 'AssetPrefetchService',
-});
+}) as unknown as AssetPrefetchServiceInterface;

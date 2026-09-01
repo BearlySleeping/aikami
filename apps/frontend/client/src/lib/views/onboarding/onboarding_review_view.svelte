@@ -31,9 +31,9 @@ onDestroy(() => {
 });
 
 $effect(() => {
-  const persona = viewModel.persona;
-  if (persona?.appearance?.lpcRecipe) {
-    const recipe = persona.appearance.lpcRecipe as Record<string, string>;
+  const _persona = viewModel.persona;
+  if (viewModel.lpcRecipe && Object.keys(viewModel.lpcRecipe).length > 0) {
+    const recipe = viewModel.lpcRecipe;
     const engineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'];
     const recipes = engineSlots
       .filter((slot) => recipe[slot])
@@ -108,7 +108,7 @@ const scoreLabels = [
         </div>
 
         <!-- LPC Sprite Preview -->
-        {#if viewModel.persona?.appearance?.lpcRecipe}
+        {#if viewModel.lpcRecipe && Object.keys(viewModel.lpcRecipe).length > 0}
           <div class="divider text-xs text-base-content/40 my-0">LPC Sprite</div>
           <div class="w-full">
             <LpcPreviewView viewModel={previewVm} />

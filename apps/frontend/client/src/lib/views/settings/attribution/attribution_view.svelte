@@ -5,9 +5,9 @@ Attribution screen — displays per-asset provenance from the active content pac
 Contract: C-381 AC-1, Quality Requirements (screen-reader accessible).
 -->
 <script lang="ts">
-import type { AttributionViewModel } from './attribution_view_model.svelte.ts';
+import type { AttributionViewModelInterface } from './attribution_view_model.svelte.ts';
 
-let { viewModel }: { viewModel: AttributionViewModel } = $props();
+let { viewModel }: { viewModel: AttributionViewModelInterface } = $props();
 </script>
 
 <div class="mx-auto max-w-3xl px-4 py-8">

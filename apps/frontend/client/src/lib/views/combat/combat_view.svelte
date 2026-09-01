@@ -16,13 +16,13 @@ const { viewModel }: Props = $props();
 let customActionInput = $state('');
 </script>
 
-<BaseViewModelContainer
-  {viewModel}
+<div
   class="relative flex-1"
   style={viewModel.combatBackgroundImageUrl
     ? `background-image: url(${viewModel.combatBackgroundImageUrl}); background-size: cover; background-position: center;`
     : ''}
 >
+<BaseViewModelContainer {viewModel}>
   <!-- Dark semi-transparent overlay so UI remains readable over background image -->
   {#if viewModel.combatBackgroundImageUrl}
     <div class="absolute inset-0 bg-black/60 z-0"></div>
@@ -295,3 +295,4 @@ let customActionInput = $state('');
     {/if}
   </div>
 </BaseViewModelContainer>
+</div>
