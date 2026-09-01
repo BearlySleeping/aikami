@@ -251,8 +251,21 @@ jobs:
           # own gate (`contains(...)`), so it never needs to be in
           # DEPLOY_APPS/resolve_plan.ts's app list at all — strip it here
           # rather than force every manual run to remember to omit it.
-          FILTERED=$(echo "$APPS" | tr ' ' '\n' | grep -v '^worker$' | tr '\n' ' ' | sed 's/ $//')
-          echo "DEPLOY_APPS=$FILTERED" >> "$GITHUB_ENV"
+          #
+          # A `grep -v`-based filter would work EXCEPT for the case that
+          # matters most here (apps=worker alone): filtering out every line
+          # leaves grep with zero matches, which is itself a non-zero exit
+          # ("no lines selected") — and this step runs under `pipefail`, so
+          # that "correctly filtered everything out" outcome would look
+          # exactly like a real failure and kill the step. A plain bash
+          # word-split loop has no such match-count-dependent exit code.
+          FILTERED=""
+          for app in $APPS; do
+            if [ "$app" != "worker" ]; then
+              FILTERED="$FILTERED $app"
+            fi
+          done
+          echo "DEPLOY_APPS=${FILTERED# }" >> "$GITHUB_ENV"
 
       - name: Default DEPLOY_APPS for workflow_dispatch (no apps given)
         if: github.event_name == 'workflow_dispatch' && inputs.apps == ''
