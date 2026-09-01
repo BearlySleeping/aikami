@@ -321,12 +321,13 @@ bun run unlighthouse       # performance + a11y audit
 cd ../e2e && bun run test:site
 ```
 
-## Firebase Deployment
+## Deployment
 
-`deploy.ts` handles mode-aware deployment. The site is deployed to Firebase
-Hosting with security headers (HSTS, CSP, COOP, nosniff). Cache headers
-are set for immutable assets (`_astro/` → 1 year) and static files
-(images/fonts → 30 days).
+`scripts/deploy.ts` delegates to the shared Cloudflare deploy CLI helper
+(`deployCloudflareApp('site')`, see `scripts/src/lib/deploy/cloudflare.ts`).
+The site is deployed to a Cloudflare Worker with security headers (HSTS,
+CSP, COOP, nosniff). Cache headers are set for immutable assets (`_astro/`
+→ 1 year) and static files (images/fonts → 30 days).
 
 ```bash
 # Deploy via moon

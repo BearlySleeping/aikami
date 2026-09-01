@@ -18,7 +18,7 @@ These rules govern how AI agents spawn commands for this project.
 ### 1. Long-Running Processes → Herdr
 
 **Always prefer `bun run herdr:start <service>` for processes that stay alive**
-(dev servers, firebase, watchers). Never use `moon_run_task client:dev` or
+(dev servers, watchers). Never use `moon_run_task client:dev` or
 `moon_run_task image:dev` — these start foreground processes that block the
 agent indefinitely.
 
@@ -26,7 +26,7 @@ agent indefinitely.
 # ✅ CORRECT — background herdr workspace
 bun run herdr:start client          # Client dev server in herdr
 bun run herdr:start all             # Full stack
-bun run herdr:start firebase        # Firebase emulators
+bun run herdr:start hub             # Hub SSR dev server
 
 # ❌ WRONG — foreground dev server blocks agent
 bun moon run client:dev
@@ -69,7 +69,7 @@ bun run herdr:start client
 bun run herdr:start all --force     # Kill + recreate
 
 # Join to inspect
-bun run herdr:join firebase
+bun run herdr:join hub
 
 # Cleanup when done
 bun run herdr:stop client
@@ -256,7 +256,7 @@ The root `package.json` provides shortcuts for common operations:
 
 | Herdr Script     | Command                                    | Purpose                                                     |
 | --------------- | ------------------------------------------ | ----------------------------------------------------------- |
-| `herdr:start`    | `bun run scripts/src/lib/herdr/start.ts`    | Start a herdr workspace (firebase/client/image/text/voice/all) |
+| `herdr:start`    | `bun run scripts/src/lib/herdr/start.ts`    | Start a herdr workspace (client/hub/hub-worker/image/text/voice/all) |
 | `herdr:join`     | `bun run scripts/src/lib/herdr/join.ts`     | Attach to a running herdr workspace                            |
 | `herdr:stop`     | `bun run scripts/src/lib/herdr/stop.ts`     | Stop a herdr workspace                                         |
 | `herdr:stop-all` | `bun run scripts/src/lib/herdr/stop_all.ts` | Stop all aikami herdr workspaces                               |
@@ -284,10 +284,8 @@ The root `package.json` provides shortcuts for common operations:
 
 | Script               | Command                                 | Purpose                       |
 | -------------------- | --------------------------------------- | ----------------------------- |
-| `setup`              | `bun run scripts/setup/project.ts`      | Interactive project bootstrap |
-| `setup:firebase`     | `bun run scripts/setup/firebase.ts`     | Firebase config setup         |
-| `setup:gmail-oauth`  | `bun run scripts/setup/gmail_oauth.ts`  | Gmail OAuth setup             |
-| `setup:gmail-client` | `bun run scripts/setup/gmail_client.ts` | Store OAuth credentials       |
+<!-- TODO(stale): this whole Setup table could not be verified against package.json — it lists `setup` at `scripts/setup/project.ts` and three `setup:firebase`/`setup:gmail-*` scripts, but package.json's actual "setup" script points to `scripts/src/lib/local_setup/index.ts` and defines no `setup:firebase`/`setup:gmail-oauth`/`setup:gmail-client` scripts at all. Out of the Firebase-purge scope for this pass — needs a full re-verification against package.json, not a word-swap. -->
+| `setup`              | `bun run scripts/src/lib/local_setup/index.ts` | Interactive project bootstrap |
 
 ### Operations (Daily)
 
@@ -310,29 +308,24 @@ bun run scripts -- logs <app> [flags]
 
 | App(s)                          | Behavior                                                                 |
 | -------------------------------- | ------------------------------------------------------------------------ |
-| `hub`                             | Cloud Run SSR service — direct `gcloud logging read`/`tail`              |
-| `firebase`                        | Firebase Functions (gen2 = Cloud Run under the hood) — pass `--only <fn>` to scope to one function, else all functions in the region interleave |
-| `client`                          | Static Firebase Hosting, no server — transparently redirected to hub's log stream, filtered to `jsonPayload.app="client"` (its browser logger forwards there cross-origin) |
-| `site`, `docs`, `client-tauri`   | No server-side logs at all (static hosting / desktop release) — command says so |
-| `image`, `text`, `voice`          | Self-hosted GPU boxes, not on Cloud Run yet — command says so; once their `serviceType` moves to a Cloud Run type in `deployment_config.ts`, this picks them up automatically |
+| `hub`, `client`, `site`, `docs`   | `cloudflare-worker` serviceType — logs are live-tail only via `bunx wrangler tail <workerName>` (Cloudflare Workers Observability is not queryable via `gcloud`) |
+| `client-tauri`                   | No server-side logs at all (desktop release) — command says so |
+| `image`, `text`, `voice`          | Self-hosted GPU boxes, not on Cloud Run — command says so; once their `serviceType` moves to a Cloud Run type in `deployment_config.ts`, this picks them up automatically |
 
 | Flag                | Purpose                                                        |
 | -------------------- | --------------------------------------------------------------- |
 | `--mode`             | `staging` \| `production` (default: `$AIKAMI_MODE` or staging) |
-| `--tail`              | Stream live instead of a one-shot read                          |
-| `--since <dur>`       | e.g. `1h`, `30m`, `2d`                                          |
+| `--tail`              | Stream live (required for Cloudflare Worker apps — no one-shot read) |
+| `--since <dur>`       | e.g. `1h`, `30m`, `2d` (Cloud Run targets only; maps to `gcloud --freshness`) |
 | `--lines <n>`         | Max entries for a one-shot read (default 50)                    |
 | `--severity <lvl>`    | `DEBUG`\|`INFO`\|`WARNING`\|`ERROR`\|`CRITICAL` — filters `severity>=lvl` |
-| `--only <name>`       | Function name — required to scope `firebase` to one function    |
 | `--message <text>`    | Substring match against the log message                         |
-| `--filter <raw>`      | Raw Cloud Logging filter fragment, ANDed onto the base filter    |
+| `--filter <raw>`      | Raw Cloud Logging filter fragment, ANDed onto the base filter (Cloud Run targets only) |
 | `--json`              | Full structured JSON instead of the compact default              |
 
 ```bash
 bun run scripts -- logs hub --mode staging --tail
-bun run scripts -- logs firebase --only pollGmail --since 1h
-bun run scripts -- logs client --mode production --severity ERROR
-bun run scripts -- logs client --filter 'jsonPayload.sessionId="abc-123"'
+bun run scripts -- logs client --mode production --tail
 ```
 
 ### CI / Build
@@ -366,9 +359,106 @@ bun run scripts -- logs client --filter 'jsonPayload.sessionId="abc-123"'
 | `dep-graph`     | `moon project-graph`  | View project dependency graph |
 | `action-graph`  | `moon action-graph`   | View action graph             |
 | `affected`      | `moon run --affected` | Run affected tasks            |
-| `moon:check`    | `moon check`          | Check moon configuration      |
+| `moon:check`    | `moon check`          | Run build + test tasks (not lint/typecheck — use `bun run validate`) |
 | `moon:sync`     | `moon sync`           | Sync moon projects            |
 | `moon:projects` | `moon query projects` | List all projects             |
+
+---
+
+## Moon Commands (quick reference)
+
+Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_affected` before tests.
+
+```bash
+bun moon run client:dev              # Start Client dev server (defaults to emulator mode)
+bun moon run client:dev:staging   # Start Client in staging mode
+bun moon run client:dev:production    # Start Client in production mode
+bun moon run :typecheck            # Type-check all projects
+bun moon run :lint                 # Lint all projects
+bun moon run :fix                  # Auto-fix lint issues
+bun moon run :test                 # Run all tests
+bun moon run :validate             # Full CI validation
+```
+
+---
+
+## Direnv Development Environment
+
+### 🔴 CRITICAL: Mode-Aware Dev Server Commands
+
+**`bun run dev` and `moon run client:dev` now default to emulator mode.**
+Emulator is the primary development environment (90% of dev time).
+Use explicit mode scripts when you need a different backend.
+
+```bash
+# ✅ Default — emulator mode (primary dev environment)
+cd apps/frontend/client && bun run dev
+bun moon run client:dev
+bun run herdr:start client
+
+# ✅ Explicit mode override when needed
+cd apps/frontend/client && bun run dev:staging
+cd apps/frontend/client && bun run dev:production
+
+# ❌ None — dev now defaults to emulator, no footgun
+```
+
+**How to check** (from the Client package.json):
+
+```json
+{
+	"dev": "vite dev --mode emulator",
+	"dev:staging": "vite dev --mode staging",
+	"dev:emulator": "vite dev --mode emulator",
+	"dev:production": "vite dev --mode production"
+}
+```
+
+The `--mode` flag tells Vite which `.env.{mode}` file to load, which sets
+`PUBLIC_FIREBASE_PROJECT_ID`, `PUBLIC_MODE`, and other environment-specific
+variables.
+
+---
+
+The project uses direnv for deterministic, zero-setup development. Environment
+variables are always available via the loaded `.envrc`. All pi extensions
+inherit this environment.
+
+| Variable                   | Source                  | Purpose                               |
+| --------------------------- | ----------------------- | ------------------------------------- |
+| `AIKAMI_MODE`              | `.env.local` or default | emulator / staging / production       |
+| `AIKAMI_PROJECT_ID`        | Resolved from mode      | GCP project id for current mode       |
+| `AIKAMI_IS_EMULATOR`       | Resolved from mode      | "1" = local emulators, "0" = live GCP |
+| `AIKAMI_NIX_READY`         | flake.nix shellHook     | "1" when Nix devShell loaded          |
+| `GEMINI_API_KEY`           | GSM or mock             | Gemini API key for AI features        |
+| `PLAYWRIGHT_BROWSERS_PATH` | Nix flake               | Playwright browsers from Nix          |
+
+### Mode Switching
+
+| Mode         | Project                | What it means                                                                                                                                             |
+| ------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `emulator`   | `demo-aikami-emulator` | Fully local — Firebase emulators, no GCP. Safe to break.                                                                                                  |
+| `staging`    | `aikami-staging`       | Live GCP project with real deployed services. Can also run locally against live backend. |
+| `production` | `aikami-production`    | Live production. Deploy with care.                                                                                                                        |
+
+<!-- TODO(stale): could not confirm whether "deployed Cloud Functions, live Firestore data" is still accurate for the staging project, given the Data Planes table elsewhere in this repo's CLAUDE.md says Firebase/Firestore/Cloud Run are decommissioned while packages/shared/constants/src/lib/project.ts still models GCP project ids, CLOUD_FUNCTIONS_REGION, and firestack-based emulation as live. Flagging rather than guessing which is current. -->
+
+Source of truth for the mode → project-id mapping: `packages/shared/constants/src/lib/project.ts` (`MODE_PROJECT_MAP`).
+
+```bash
+aikami_switch emulator     # Local emulators, no GCP
+aikami_switch staging  # Live staging (aikami-staging)
+aikami_switch production   # Live production (aikami-production)
+```
+
+### Adding Tools
+
+When the LLM needs a CLI tool not in the Nix devShell:
+
+```bash
+direnv_add_package python3   # Adds to flake.nix, triggers direnv reload
+direnv_add_package ffmpeg
+```
 
 ---
 
@@ -401,8 +491,8 @@ curl -s http://localhost:3000/health
 # Test webhook locally (simulate Telegram)
 bun run scripts -- test-webhook
 
-# Test Firestore trigger locally
-bun test apps/backend/functions/src/controllers/firestore/**/*.ts
+# Test a hub server/api route locally
+bun test apps/frontend/hub/src/lib/server/api/tests/**/*.ts
 ```
 
 ### Blackbox tests
@@ -426,7 +516,7 @@ All herdr workspaces use a unified naming convention: `aikami-{mode}`.
 | Variable  | Values                                                |
 | --------- | ----------------------------------------------------- |
 | `mode`    | `emulator`, `staging`, `production`                   |
-| `service` | `firebase`, `client`, `image`, `text`, `voice`, `preview-client`, `all` |
+| `service` | `client`, `hub`, `hub-worker`, `image`, `text`, `voice`, `preview-client`, `all` |
 
 ### Root package.json scripts
 
@@ -445,21 +535,21 @@ Use `--force` with `herdr:start` to kill and recreate an existing workspace.
 
 ```bash
 # Start services (mode from $AIKAMI_MODE, defaults to emulator)
-bun run herdr:start firebase          # Firebase emulators only
+bun run herdr:start hub               # Hub SSR dev server only
 bun run herdr:start client            # Client dev server
 bun run herdr:start image             # Image generation (ComfyUI Docker)
 bun run herdr:start text              # Text generation (Ollama Docker)
 bun run herdr:start voice             # Voice synthesis (Kokoro TTS Docker)
-bun run herdr:start all               # Full stack (firebase + client + image + text + voice)
+bun run herdr:start all               # Full stack (client + hub + image + text + voice)
 
 # Override mode
-bun run herdr:start firebase --mode staging
+bun run herdr:start hub --mode staging
 
 # Force recreate
 bun run herdr:start all --force
 
 # Join / watch
-bun run herdr:join firebase          # Attach to firebase tab
+bun run herdr:join hub               # Attach to hub tab
 bun run herdr:join all                # Attach to full stack workspace
 
 # Manage

@@ -5,12 +5,22 @@
 // non-sensitive settings are stored as plain JSON in localStorage.
 // Firestore sync is optional — works entirely offline for Tauri / local use.
 
-import { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
+import { BUILT_IN_PRESETS, DEFAULT_VOICE_ARCHETYPES, type GenParamPreset } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type {
+  AdvancedOverrides,
+  ConfigState,
+  EmotionConfig,
+  ImageConfig,
+  MemoryConfig,
+  ModelConfigEntry,
+  TextConfig,
+  VoiceConfig,
+} from '@aikami/types';
 import { clearVault, decrypt, encrypt } from '$lib/views/utils/crypto_vault';
 import type { ConnectionCapability, Lorebook, LorebookEntry } from '$types';
 import {
@@ -21,166 +31,24 @@ import {
 } from '$types';
 
 // ---------------------------------------------------------------------------
-// Types
+// Re-exports from @aikami/constants and @aikami/types for backward compatibility
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Re-exports from @aikami/constants for backward compatibility
-// ---------------------------------------------------------------------------
+export {
+  BUILT_IN_PRESETS,
+  DEFAULT_VOICE_ARCHETYPES,
+  EMBEDDING_MODELS,
+  EMOTION_METHODS,
+  type GenParamPreset,
+  IMAGE_PROVIDERS,
+  KOKORO_VOICES,
+  MEMORY_TYPES,
+  TEXT_PROVIDERS,
+  VOICE_ENGINES,
+  VOICE_PROVIDERS,
+} from '@aikami/constants';
 
-export { IMAGE_PROVIDERS, TEXT_PROVIDERS, VOICE_PROVIDERS } from '@aikami/constants';
-
-// ---------------------------------------------------------------------------
-// Legacy TextConfig — kept as a stub for backward compatibility.
-// All provider configuration now lives in `connections[]`.
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use `connections[]` instead. */
-type TextConfig = {
-  provider: string;
-};
-
-/** Memory subsystem configuration. */
-type MemoryConfig = {
-  /** Memory type (algorithm). */
-  type: MemoryType;
-  /** Maximum context window size in tokens. */
-  contextWindow: number;
-  /** Maximum number of conversation turns to retain. */
-  maxTurns: number;
-  /** Summarization threshold (turns before summarisation kicks in). */
-  summarizationThreshold: number;
-  /** Whether long-term memory (vector store) is enabled. */
-  longTermMemory: boolean;
-  /** Embedding model provider for vector search. */
-  embeddingModel: EmbeddingModel;
-  /** Custom embedding API endpoint (when embeddingModel is 'custom'). */
-  embeddingUrl?: string;
-  /** API key for custom embedding provider. */
-  embeddingKey?: string;
-  /** Text chunk size for embedding ingestion. */
-  chunkSize: number;
-};
-
-// ---------------------------------------------------------------------------
-// Memory subsystem (C-204: expanded with embedding provider selection)
-// ---------------------------------------------------------------------------
-
-/** Memory subsystem type. */
-type MemoryType = (typeof MEMORY_TYPES)[number];
-type EmbeddingModel = (typeof EMBEDDING_MODELS)[number]['id'];
-
-// ---------------------------------------------------------------------------
-// Voice engine selection
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Voice TTS providers — see the re-export from '@aikami/constants' above.
-// ---------------------------------------------------------------------------
-
-/** Voice / TTS subsystem configuration. */
-type VoiceConfig = {
-  /** Selected TTS provider (e.g. 'kokoro', 'elevenlabs'). */
-  provider: VoiceProvider;
-  /** Selected TTS engine (mirrors provider). */
-  engine: string;
-  /** Custom server URL for local providers (voicevox, etc.). */
-  url?: string;
-  /** API key for cloud providers. */
-  apiKey?: string;
-  /** Voice style or speaker ID. */
-  voiceId: string;
-  /** Speech rate multiplier (0.5–2.0). */
-  speed: number;
-  /** Pitch adjustment (-20–20). */
-  pitch: number;
-  /** Auto-speech: automatically generate TTS for NPC dialogue. */
-  autoSpeech: boolean;
-  /** User-editable voice archetype → voice ID mappings. */
-  voiceArchetypes: VoiceArchetype[];
-};
-
-// ---------------------------------------------------------------------------
-// Voice archetypes — human-friendly labels mapped to engine voice IDs
-// ---------------------------------------------------------------------------
-
-/** A named voice archetype mapped to a provider-specific voice ID. */
-type VoiceArchetype = {
-  /** Unique archetype key (e.g. 'female-warm', 'male-deep'). */
-  id: string;
-  /** Human-readable label (e.g. 'Female — Warm'). */
-  label: string;
-  /** Provider-specific voice ID (e.g. 'af_heart' for Kokoro). */
-  voiceId: string;
-};
-
-// ---------------------------------------------------------------------------
-// Image generation providers — see the re-export from '@aikami/constants' above.
-// ---------------------------------------------------------------------------
-
-/** Image generation subsystem configuration. */
-type ImageConfig = {
-  /** Selected image generation provider. */
-  provider: ImageProvider;
-  /** Selected image generation backend (mirrors provider). */
-  backend: string;
-  /** Custom server URL for local providers. */
-  url?: string;
-  /** API key for cloud providers. */
-  apiKey?: string;
-  /** Default checkpoint / model ID. */
-  checkpoint: string;
-  /** Image width in pixels. */
-  width: number;
-  /** Image height in pixels. */
-  height: number;
-  /** Generation steps. */
-  steps: number;
-  /** CFG guidance scale. */
-  cfgScale: number;
-  /** Sampler name (e.g. 'euler_a', 'dpmpp_2m'). */
-  sampler?: string;
-  /** Whether img2img mode is enabled by default. */
-  enableI2I?: boolean;
-  /** ComfyUI workflow JSON string (provider-specific). */
-  comfyWorkflow?: string;
-  /** NovelAI noise schedule override (provider-specific). */
-  novelAiNoiseSchedule?: string;
-  /** Active style profile ID for the image generation pipeline (C-242). */
-  styleProfileId: string;
-  /** Whether to show a review/edit modal before each image generation (C-242). */
-  reviewBeforeGenerate: boolean;
-};
-
-/** Generic model configuration for a single provider. */
-type ModelConfig = {
-  /** Model identifier (e.g. 'claude-3-opus-20240229'). */
-  model: string;
-  /** Provider this model belongs to. */
-  provider: string;
-  /** Base URL for the API endpoint. */
-  endpoint: string;
-};
-
-// ── Emotion config (C-204) ───────────────────────────────────
-
-type EmotionMethod = (typeof EMOTION_METHODS)[number];
-
-/** Emotion resolution configuration. */
-type EmotionConfig = {
-  /** How character emotions are resolved. */
-  method: EmotionMethod;
-  /** Target model for emotion extraction (when method is 'submodel'). */
-  targetModel?: string;
-};
-
-// ── AI Generation Settings (absorbed from ai_settings.svelte.ts) ────────
-
-/** Advanced overrides for specific providers. */
-type AdvancedOverrides = {
-  /** Thinking/reasoning level for DeepSeek/Claude models. */
-  thinkingLevel: number;
-};
+import type { Connection, ConnectionId } from '$types';
 
 /** Resolved text generation provider ready for API calls. */
 type ResolvedTextProvider = {
@@ -192,50 +60,6 @@ type ResolvedTextProvider = {
   endpoint: string;
   /** API key for the resolved provider, or undefined if not configured. */
   apiKey: string | undefined;
-};
-
-// ---------------------------------------------------------------------------
-// Re-exports for backward compatibility
-export { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
-
-import type { Connection, ConnectionId } from '$types';
-
-/** Top-level configuration state. */
-type ConfigState = {
-  /** Text generation settings (provider, API keys, URL). */
-  text: TextConfig;
-  /** Preferred text generation model. */
-  preferredModel: string;
-  /** Model configurations (provider-agnostic). */
-  models: ModelConfig[];
-  /** Memory subsystem settings. */
-  memory: MemoryConfig;
-  /** Voice / TTS settings. */
-  voice: VoiceConfig;
-  /** Image generation settings. */
-  image: ImageConfig;
-  /** Emotion resolution settings. */
-  emotion: EmotionConfig;
-  /** AI generation parameter overrides. */
-  generationParams: GenerationParams;
-  /** Selected instruct template format. */
-  instructTemplate: InstructTemplate;
-  /** Advanced provider-specific overrides. */
-  advancedOverrides: AdvancedOverrides;
-  /** Auxiliary model assignments for specialised tasks. */
-  auxiliaryModels: AuxiliaryModels;
-  /** Saved provider connections (C-230). */
-  connections: Connection[];
-  /** ID of the default connection, or null if none set. */
-  defaultConnectionId: ConnectionId | null;
-  /** Per-capability default connection IDs (text, image, voice). */
-  defaultByCapability: Partial<Record<string, ConnectionId | null>>;
-  /** Generation parameter presets (built-in + user-defined). */
-  presets: GenParamPreset[];
-  /** Lorebooks (world info collections) persisted in localStorage. */
-  lorebooks: Lorebook[];
-  /** IDs of lorebooks assigned to the active chat session. */
-  activeLorebookIds: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -262,9 +86,9 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   /** Sets the preferred model identifier. */
   setPreferredModel(model: string): void;
   /** Replaces the full models array. */
-  setModels(models: ModelConfig[]): void;
+  setModels(models: ModelConfigEntry[]): void;
   /** Updates a single model config by index. */
-  updateModel(index: number, config: Partial<ModelConfig>): void;
+  updateModel(index: number, config: Partial<ModelConfigEntry>): void;
   /** Updates memory config (partial merge). */
   setMemoryConfig(config: Partial<MemoryConfig>): void;
   /** Updates voice config (partial merge). */
@@ -371,7 +195,7 @@ const DEFAULT_TEXT_CONFIG: TextConfig = {
   provider: 'openrouter',
 };
 
-const DEFAULT_MODEL_CONFIGS: ModelConfig[] = [];
+const DEFAULT_MODEL_CONFIGS: ModelConfigEntry[] = [];
 
 const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
   chunkSize: 512,
@@ -571,7 +395,7 @@ class ConfigService
           };
         }
         if (Array.isArray(parsed.lorebooks)) {
-          this.state.lorebooks = parsed.lorebooks as Lorebook[];
+          this.state.lorebooks = parsed.lorebooks.map(this._normalizeLorebook);
         }
         if (Array.isArray(parsed.activeLorebookIds)) {
           this.state.activeLorebookIds = parsed.activeLorebookIds as string[];
@@ -644,6 +468,26 @@ class ConfigService
     };
   }
 
+  /** Normalizes a persisted lorebook from the shared storage shape to the client-local Lorebook type. */
+  private _normalizeLorebook(lb: import('@aikami/types').LorebookEntry): Lorebook {
+    return {
+      id: lb.id,
+      name: lb.name,
+      description: lb.description,
+      entries: (lb.entries ?? []).map((e) => ({
+        id: e.id,
+        keywords: e.keywords ?? [],
+        content: e.content,
+        priority: e.priority ?? 0,
+        constant: e.constant ?? false,
+        createdAt: e.createdAt,
+        updatedAt: e.updatedAt,
+      })),
+      createdAt: lb.createdAt,
+      updatedAt: lb.updatedAt,
+    };
+  }
+
   // ── Mutators ──────────────────────────────────────────────────────────
 
   setTextProvider(provider: string): void {
@@ -654,11 +498,11 @@ class ConfigService
     this.state.preferredModel = model;
   }
 
-  setModels(models: ModelConfig[]): void {
+  setModels(models: ModelConfigEntry[]): void {
     this.state.models = models;
   }
 
-  updateModel(index: number, config: Partial<ModelConfig>): void {
+  updateModel(index: number, config: Partial<ModelConfigEntry>): void {
     if (index < 0 || index >= this.state.models.length) {
       return;
     }
@@ -815,14 +659,14 @@ class ConfigService
 
     const now = new Date().toISOString();
     const newId = crypto.randomUUID();
-    const copy: Connection = {
+    const copy = {
       ...original,
       createdAt: now,
       id: newId,
       isDefault: false,
       name: `${original.name} (copy)`,
       updatedAt: now,
-    };
+    } as unknown as import('@aikami/types').ConnectionEntry;
 
     this.state.connections = [...this.state.connections, copy];
     return newId;
@@ -847,11 +691,11 @@ class ConfigService
   }
 
   getConnection(id: ConnectionId): Connection | undefined {
-    return this.state.connections.find((c) => c.id === id);
+    return this.state.connections.find((c) => c.id === id) as Connection | undefined;
   }
 
   getApiKey(provider: string, capability: ConnectionCapability = 'text'): string | undefined {
-    const matches = (c: Connection): boolean =>
+    const matches = (c: import('@aikami/types').ConnectionEntry): boolean =>
       (c.capability ?? 'text') === capability && c.provider === provider;
 
     // Prefer the default connection, but only when it also matches the
@@ -940,8 +784,7 @@ class ConfigService
   }
 
   getLorebook(options: { id: string }): Lorebook | undefined {
-    const { id } = options;
-    return this.state.lorebooks.find((lb) => lb.id === id);
+    return this.state.lorebooks.find((lb) => lb.id === options.id);
   }
 
   addEntry(options: {
@@ -1011,7 +854,8 @@ class ConfigService
       if (lb.id !== lorebookId) {
         return lb;
       }
-      const entryMap = new Map(lb.entries.map((e) => [e.id, e]));
+      const book = lb as unknown as Lorebook;
+      const entryMap = new Map(book.entries.map((e) => [e.id, e]));
       const reordered = entryIds
         .map((id) => entryMap.get(id))
         .filter((e): e is LorebookEntry => e !== undefined);

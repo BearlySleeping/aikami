@@ -21,13 +21,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
-import {
-  equipmentService,
-  gameOverlayService,
-  getItemDefinition,
-  inventoryService,
-  playSfxByName,
-} from '$services';
+import { equipmentService, gameOverlayService, inventoryService, playSfxByName } from '$services';
+import { getItemDefinition } from '$utils/inventory_utils';
 
 export type EquippedItemView = {
   slot: EquipmentSlot;

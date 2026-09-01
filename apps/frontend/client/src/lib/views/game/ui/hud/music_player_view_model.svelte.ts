@@ -10,15 +10,17 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { gameEngineService, gameOverlayService, musicPlayerService, timeService } from '$services';
-import { buildMusicSceneContext } from '$utils/music_utils';
+import {
+  buildMusicSceneContext,
+  gameEngineService,
+  gameOverlayService,
+  musicPlayerService,
+  timeService,
+} from '$services';
 
 // ---------------------------------------------------------------------------
 // Interface
 // ---------------------------------------------------------------------------
-
-/** Base configuration used to create the music-player HUD ViewModel. */
-export type MusicPlayerViewModelOptions = BaseViewModelOptions;
 
 export type MusicPlayerViewModelInterface = BaseViewModelInterface & {
   /** Whether the overlay is visible (persisted toggle). */

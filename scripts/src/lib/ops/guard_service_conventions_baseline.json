@@ -1,0 +1,54 @@
+{
+  "apps/frontend/client/src/lib/services/assets/asset_prefetch_service.svelte.ts": {
+    "s11": 0,
+    "s12": 7
+  },
+  "apps/frontend/client/src/lib/services/auth/auth_service.svelte.ts": {
+    "s11": 1,
+    "s12": 1
+  },
+  "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": {
+    "s11": 1,
+    "s12": 0
+  },
+  "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
+    "s11": 1,
+    "s12": 25
+  },
+  "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
+    "s11": 0,
+    "s12": 13
+  },
+  "apps/frontend/client/src/lib/services/game/game_mode_service.svelte.ts": {
+    "s11": 0,
+    "s12": 1
+  },
+  "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
+    "s11": 0,
+    "s12": 7
+  },
+  "apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts": {
+    "s11": 0,
+    "s12": 4
+  },
+  "apps/frontend/client/src/lib/services/game/inventory_service.svelte.ts": {
+    "s11": 0,
+    "s12": 1
+  },
+  "apps/frontend/client/src/lib/services/game/player_state_service.svelte.ts": {
+    "s11": 0,
+    "s12": 1
+  },
+  "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": {
+    "s11": 0,
+    "s12": 2
+  },
+  "apps/frontend/client/src/lib/services/game/session_service.svelte.ts": {
+    "s11": 0,
+    "s12": 3
+  },
+  "apps/frontend/client/src/lib/services/game/world_state_service.svelte.ts": {
+    "s11": 0,
+    "s12": 1
+  }
+}

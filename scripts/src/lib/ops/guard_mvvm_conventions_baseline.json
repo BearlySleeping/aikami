@@ -1,0 +1,302 @@
+{
+  "apps/frontend/client/src/lib/views/app/app_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 1
+  },
+  "apps/frontend/client/src/lib/views/app/dialogs/app_dialogs_view.svelte": {
+    "v6": 1,
+    "v7": 0,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/asset-browser/asset_browser_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 2
+  },
+  "apps/frontend/client/src/lib/views/capability/capability_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 2,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view.svelte": {
+    "v6": 1,
+    "v7": 0,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/character/persona/create/persona_create_view.svelte": {
+    "v6": 2,
+    "v7": 1,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 1,
+    "m9": 1
+  },
+  "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 1
+  },
+  "apps/frontend/client/src/lib/views/dev/autonomous_sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 1,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/character_sheet_sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 1,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/export_sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 1,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/lpc_ai/lpc_ai_test_view.svelte": {
+    "v6": 1,
+    "v7": 0,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/lpc_inventory/lpc_inventory_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 2,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/camera/camera_sandbox_view.svelte": {
+    "v6": 0,
+    "v7": 1,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/camera/camera_sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 1
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view.svelte": {
+    "v6": 2,
+    "v7": 0,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 4
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view.svelte": {
+    "v6": 1,
+    "v7": 0,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 2
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view.svelte": {
+    "v6": 1,
+    "v7": 0,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 1
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view.svelte": {
+    "v6": 0,
+    "v7": 1,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 2
+  },
+  "apps/frontend/client/src/lib/views/dev/text/text_view.svelte": {
+    "v6": 1,
+    "v7": 0,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/game/game_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 5,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/game/menu/menu_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 1
+  },
+  "apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 18,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 1,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte": {
+    "v6": 1,
+    "v7": 0,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/game/ui/overlays/settings/settings_overlay_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 3,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/onboarding/onboarding_appearance_step_view.svelte": {
+    "v6": 2,
+    "v7": 1,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/onboarding/onboarding_chat_view.svelte": {
+    "v6": 2,
+    "v7": 1,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 2,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/onboarding/onboarding_review_view.svelte": {
+    "v6": 1,
+    "v7": 1,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/settings/attribution/attribution_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 3
+  },
+  "apps/frontend/client/src/lib/views/settings/autonomous/autonomous_settings_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 2,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/settings/display/settings_display_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 3
+  },
+  "apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 10,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/setup/setup_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 2,
+    "m9": 0
+  },
+  "apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 1
+  },
+  "apps/frontend/client/src/lib/views/vendor/vendor_view.svelte": {
+    "v6": 3,
+    "v7": 0,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/map/map_sandbox_route_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 2
+  },
+  "apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/mode/mode_sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 2
+  },
+  "apps/frontend/client/src/routes/(dev)/dev/lpc-walk/lpc_walk_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 1
+  },
+  "apps/frontend/client/src/routes/(dev)/dev/tauri-test/tauri_test_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 4
+  },
+  "apps/frontend/hub/src/lib/views/app/app_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 1,
+    "m9": 1
+  },
+  "apps/frontend/hub/src/lib/views/catalog/catalog_asset_view.svelte": {
+    "v6": 0,
+    "v7": 1,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/hub/src/lib/views/catalog/catalog_asset_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 5
+  },
+  "apps/frontend/hub/src/lib/views/sandbox/walk_sandbox_view.svelte": {
+    "v6": 0,
+    "v7": 1,
+    "m8": 0,
+    "m9": 0
+  },
+  "apps/frontend/hub/src/lib/views/sandbox/walk_sandbox_view_model.svelte.ts": {
+    "v6": 0,
+    "v7": 0,
+    "m8": 0,
+    "m9": 2
+  }
+}

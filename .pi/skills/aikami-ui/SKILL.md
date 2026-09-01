@@ -66,7 +66,7 @@ Never import business logic, ViewModels, or services into the component library.
 | `extends BaseViewModel` or `extends BaseClass` | Extend nothing (pure Svelte component) |
 | `import { ... } from '$services'`         | Accept everything via `$props()`         |
 | `$state()` / `$derived()` / `$effect()` for business state | `$props()` only; Svelte runes for internal UI state (open/closed) OK |
-| Direct Firebase SDK, repository, or service calls | Callbacks: `onchange`, `onclose`, etc. |
+| Direct repository, database, or service calls | Callbacks: `onchange`, `onclose`, etc. |
 | `onMount()` with data fetching            | Consumer ViewModel fetches, passes via props |
 
 Components in this library are the "Shadcn layer" — pure template wrappers

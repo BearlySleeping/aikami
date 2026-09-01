@@ -7,10 +7,11 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import { playSceneBgm } from '$lib/services/audio/audio_asset_resolver';
 import {
   audioService,
   musicPlayerService,
-  playSceneBgm,
+  runtimeConfigService,
   ttsService,
   voiceModelService,
 } from '$services';
@@ -249,8 +250,13 @@ class SettingsAudioViewModel
           await ttsService.initialize().catch(() => {});
         }
         this.feedback = 'Voice model downloaded successfully.';
-      } else {
+      } else if (state.status === 'error') {
         this.feedback = state.message ?? 'Download failed';
+      } else if (state.status === 'not-downloaded') {
+        // Cancellation or idle — not an error.
+        this.feedback = '';
+      } else {
+        this.feedback = 'Download failed';
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

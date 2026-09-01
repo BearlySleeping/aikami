@@ -9,7 +9,8 @@ import { onMount } from 'svelte';
 import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 
 let resolver: import('@aikami/types').AssetResolver | undefined = $state(undefined);
-let allSlots: import('@aikami/frontend/preview').LpcSlotDef[] | undefined = $state(undefined);
+let allSlots: readonly import('@aikami/frontend/preview').LpcSlotDef[] | undefined =
+  $state(undefined);
 
 onMount(async () => {
   const { createRegistryAssetResolver } = await import(

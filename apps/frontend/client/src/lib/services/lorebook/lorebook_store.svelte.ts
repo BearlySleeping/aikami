@@ -90,7 +90,7 @@ class LorebookStore
   implements LorebookStoreInterface
 {
   /** Reactive list of all lorebooks from ConfigService. */
-  get lorebooks(): Lorebook[] {
+  get lorebooks(): import('@aikami/types').LorebookEntry[] {
     return configService.state.lorebooks;
   }
 

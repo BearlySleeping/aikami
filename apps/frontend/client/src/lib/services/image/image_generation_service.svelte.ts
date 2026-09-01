@@ -28,7 +28,7 @@ import type {
 } from './engine/types.ts';
 
 /** Descriptor for a checkpoint/model returned by the model listing. */
-type CheckpointInfo = {
+export type CheckpointInfo = {
   readonly id: string;
   readonly description: string;
 };

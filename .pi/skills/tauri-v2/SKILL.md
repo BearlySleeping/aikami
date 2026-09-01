@@ -296,9 +296,9 @@ if (isTauri()) {
 ## 9. Gotchas
 
 ### 9.1 CSP Restrictions
-Tauri's webview enforces CSP. External API calls, WebSocket connections, and inline scripts/styles must be allowlisted in `tauri.conf.json` → `app.security.csp`. Example for Firebase:
+Tauri's webview enforces CSP. External API calls, WebSocket connections, and inline scripts/styles must be allowlisted in `tauri.conf.json` → `app.security.csp`. Real example (`apps/frontend/client/src-tauri/tauri.conf.json`), trimmed:
 ```json
-"csp": "default-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com; style-src 'self' 'unsafe-inline'; script-src 'self'"
+"csp": "default-src 'self' tauri: asset:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' tauri: asset: blob: data: ipc: https://hub.bearlysleeping.com https://assets.bearlysleeping.com http://localhost:11434 https://api.openai.com ...; img-src 'self' data: blob: tauri: asset: https://assets.bearlysleeping.com; worker-src 'self' blob:"
 ```
 
 ### 9.2 Tauri v2 vs v1 Differences

@@ -178,17 +178,24 @@ A contract is NOT ready for handoff without:
 
 See `.pi/skills/testing/SKILL.md` for suite/POM patterns and run commands.
 
-## Callable Functions (4-layer typed pattern)
+## Hub API Routes (Elysia + TypeBox, typed end-to-end)
 
-1. Types: `packages/shared/types/src/lib/api/{name}.ts`
-2. Registry: `callable_functions.ts`
-3. Controller: `apps/backend/firebase/src/controllers/callable/{name}.ts`
-4. Frontend: `firebaseFunctionsService.getTypedCallable('name')`
+1. Schema (if cross-project): `packages/shared/schemas/src/lib/api/{name}.ts`
+2. D1 table (if new persisted data): `packages/backend/database/src/lib/schema.ts`
+3. Route handler: `apps/frontend/hub/src/lib/server/api/{name}.ts` — verify the
+   Better Auth session before touching D1/R2 (see `backend-conventions`)
+4. Register the route on the shared app in
+   `apps/frontend/hub/src/lib/server/api/index.ts`
+5. Frontend: call it through the Eden treaty client
+   (`apps/frontend/hub/src/lib/client/services/api/internal.svelte.ts`'s
+   `api` export) — its type is inferred from the server's `App` type
+   (`import type { App } from '$lib/server/api'`), so the client gets full
+   type safety with zero server code bundled in.
 
 ## Contract → Location Mapping
 
 Use this decision tree BEFORE writing Architecture Directives in a contract.
-Not every endpoint belongs in Firebase Functions.
+Not every endpoint belongs in the hub's server/api layer.
 
 ```
 Is the logic…
@@ -198,22 +205,24 @@ Is the logic…
 ├─ Heavy local processing (AI inference, image gen, TTS)?
 │  → apps/backend/{image,text,voice}/ (local microservices)
 │
-├─ Business logic that needs Firebase Auth + Firestore/Storage?
-│  ├─ Called by signed-in client? → controllers/callable/
-│  ├─ Called by external services (webhooks, public API)? → controllers/api/
-│  └─ Triggered by Firestore/Auth/Storage events? → controllers/firestore|auth|storage/
+├─ Business logic that needs Better Auth + D1/R2?
+│  ├─ Called by the hub's own signed-in client? → apps/frontend/hub/src/lib/server/api/
+│  └─ Always-on / long-lived connection (Discord Gateway, etc.)? → apps/backend/worker/
 │
 ├─ Shared types, schemas, constants (no runtime)?
 │  → packages/shared/{types,schemas,constants}/
 │
 └─ Backend library code (reusable across services)?
-   → packages/backend/{ai,auth,chat,database,utils}/
+   → packages/backend/{auth,chat,configs,database,utils}/
 ```
 
-🔴 **Golden rule**: If the operation touches `fs.readdirSync`, `writeFileSync`,
-`createReadStream` on a non-`/tmp` path, or serves binary files from a local
-directory — it CANNOT go in `apps/backend/firebase/src/controllers/`. Cloud
-Functions are stateless and ephemeral; they have no persistent filesystem.
+🔴 **Golden rule**: `apps/frontend/hub/src/lib/server/api/` runs on a
+Cloudflare Worker — stateless per request, with D1/R2 bindings injected
+per-request (see `backend-conventions` rule 4 on never holding bindings in
+module scope). It has no filesystem access at all. Anything that touches
+`fs.readdirSync`, `writeFileSync`, or serves binary files from local disk
+belongs in `apps/backend/worker/` (persistent VM) or a local microservice,
+never in a hub route handler.
 
 Static mapping (legacy reference):
 
@@ -221,8 +230,8 @@ Static mapping (legacy reference):
 client-*    → apps/frontend/client/src/
 site-*      → apps/frontend/site/src/
 shared-*    → packages/shared/{types,schemas,constants}/
-backend-*   → packages/backend/{ai,auth,chat,database,utils}/
-firebase-*  → apps/backend/firebase/src/
+backend-*   → packages/backend/{auth,chat,configs,database,utils}/
+hub-*       → apps/frontend/hub/src/lib/server/api/
 ```
 
 ## Key Rules

@@ -5,7 +5,7 @@
   "compilerOptions": {
     "rootDir": "../..",
     "paths": {
-      "$logger": ["../../shared/logger/src/lib/logger_aws.ts"]
+      "$logger": ["../../../packages/shared/logger/src/index.ts"]
     }
   },
   "include": ["scripts/**/*"],

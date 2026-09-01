@@ -326,7 +326,7 @@ Then add to `apps/e2e/src/pom/index.ts` barrel export.
 ## Debugging Workflow
 
 **Code-first debugging.** Most issues are solved by reading source files, herdr logs, and
-checking the Firestore emulator data. Browser tools are a LAST resort — they are expensive
+checking the D1 data. Browser tools are a LAST resort — they are expensive
 in tokens and time.
 
 ### Debugging Priority (use in order)
@@ -335,7 +335,7 @@ in tokens and time.
 | -------- | -------------------- | ------------------------------------------------ |
 | 1        | `read` source files  | Always — understand the code FIRST               |
 | 2        | `herdr_session read`  | Check live server logs for errors                |
-| 3        | `firestore_query`    | Verify data state in the emulator                |
+<!-- TODO(stale): `firestore_query` (a pi extension tool) was removed from this row — could not confirm whether a D1-equivalent query tool exists; verify against the live .pi extension list before relying on this row. -->
 | 4        | `browser_inspect`    | UI rendering bug, 404, blank page, env var check |
 | 5        | `browser_console`    | Evidence of a JS runtime error in the browser    |
 | 6        | `browser_network`    | Specific hypothesis about a failing API call     |
@@ -345,7 +345,7 @@ in tokens and time.
 
 1. **`browser_inspect`** — Use ONCE with a focused `selector`. Exposes `PUBLIC_*` env vars. Do NOT inspect the same page repeatedly.
 2. **`browser_console`** — Only after browser_inspect, only when you suspect JS errors.
-3. **`browser_network`** — Only with a SPECIFIC hypothesis about a failing API call. Does NOT capture Firestore gRPC.
+3. **`browser_network`** — Only with a SPECIFIC hypothesis about a failing API call.
 4. **`browser_screenshot`** — Only when user asks to see the page, or final verification.
 5. **`browser_lighthouse`** — Specialized audit tool. Only for performance/accessibility questions.
 
@@ -364,7 +364,7 @@ browser_inspect selector="body"
 # Pattern: "API call is failing"
 # Step 1: Read service/repository code
 # Step 2: Check herdr logs for backend errors
-# Step 3: browser_network ONLY if XHR/fetch (not Firestore gRPC)
+# Step 3: browser_network ONLY if XHR/fetch
 ```
 
 ### Debugging loop prevention

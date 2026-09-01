@@ -4,7 +4,7 @@
     "enabled": true,
     "clientKind": "git",
     "useIgnoreFile": true,
-    "defaultBranch": "master"
+    "defaultBranch": "main"
   },
   "files": {
     "ignoreUnknown": true,
@@ -188,6 +188,153 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "packages/backend/**",
+        "apps/backend/**",
+        "apps/frontend/hub/src/lib/server/**",
+        "!**/*.test.ts",
+        "!**/tests/**",
+        "!**/__tests__/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "window": "Server-plane code has no DOM. Pass values in explicitly.",
+                  "document": "Server-plane code has no DOM.",
+                  "localStorage": "Server-plane code has no DOM — use D1/R2 via the repository layer.",
+                  "sessionStorage": "Server-plane code has no DOM.",
+                  "navigator": "Server-plane code has no DOM.",
+                  "alert": "Server-plane code has no DOM."
+                }
+              }
+            },
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@sinclair/typebox": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas",
+                  "zod": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas"
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "svelte",
+                      "svelte/**",
+                      "@sveltejs/kit/**",
+                      "$lib/views/**",
+                      "$views/**",
+                      "@aikami/frontend/**",
+                      "@aikami/frontend-*"
+                    ],
+                    "message": "Server-plane code must not import frontend modules."
+                  },
+                  {
+                    "group": [
+                      "@aikami/backend-*",
+                      "@aikami/backend-*/**",
+                      "!@aikami/backend-project-ai",
+                      "!@aikami/backend-project-ai/**",
+                      "!@aikami/backend-database",
+                      "!@aikami/backend-database/**",
+                      "!@aikami/backend-discord-bot",
+                      "!@aikami/backend-discord-bot/**"
+                    ],
+                    "message": "Use @aikami/backend/<name> instead (e.g. @aikami/backend/auth)"
+                  },
+                  {
+                    "group": [
+                      "@aikami/frontend-*",
+                      "@aikami/frontend-*/**",
+                      "!@aikami/frontend-preview",
+                      "!@aikami/frontend-preview/**"
+                    ],
+                    "message": "Use @aikami/frontend/<name> instead (e.g. @aikami/frontend/configs)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "packages/frontend/**",
+        "apps/frontend/client/src/**",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/tests/**",
+        "!**/__tests__/**",
+        "!**/test_preload.ts",
+        "!**/*_node.ts",
+        "!**/src/node.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": {
+              "level": "error",
+              "options": {
+                "deniedGlobals": {
+                  "Bun": "Frontend runs in a browser/Tauri webview — there is no Bun runtime.",
+                  "process": "Frontend has no `process` — use import.meta.env or a Tauri command."
+                }
+              }
+            },
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@sinclair/typebox": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas",
+                  "zod": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas"
+                },
+                "patterns": [
+                  {
+                    "group": ["node:*", "node:*/**"],
+                    "message": "Frontend runs in a browser/Tauri webview — no Node builtins. Use a Tauri command or a Web API."
+                  },
+                  {
+                    "group": ["@aikami/backend/**", "@aikami/backend-*"],
+                    "message": "Frontend must not import backend packages — cross the boundary via HTTP or a repository."
+                  },
+                  {
+                    "group": [
+                      "@aikami/backend-*",
+                      "@aikami/backend-*/**",
+                      "!@aikami/backend-project-ai",
+                      "!@aikami/backend-project-ai/**",
+                      "!@aikami/backend-database",
+                      "!@aikami/backend-database/**",
+                      "!@aikami/backend-discord-bot",
+                      "!@aikami/backend-discord-bot/**"
+                    ],
+                    "message": "Use @aikami/backend/<name> instead (e.g. @aikami/backend/auth)"
+                  },
+                  {
+                    "group": [
+                      "@aikami/frontend-*",
+                      "@aikami/frontend-*/**",
+                      "!@aikami/frontend-preview",
+                      "!@aikami/frontend-preview/**"
+                    ],
+                    "message": "Use @aikami/frontend/<name> instead (e.g. @aikami/frontend/configs)"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.svelte"],
+      "linter": { "rules": { "style": { "noRestrictedGlobals": "off" } } }
     }
   ]
 }
