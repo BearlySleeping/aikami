@@ -59,6 +59,10 @@ const DEPLOY_ROLES: Array<{ role: string; why: string }> = [
     role: 'roles/storage.objectAdmin',
     why: 'Firebase Hosting/Functions staging buckets + asset uploads',
   },
+  {
+    role: 'roles/compute.instanceAdmin.v1',
+    why: 'gcloud compute instances update-container — redeploy the aikami-worker VM (scripts/src/lib/worker/deploy.ts)',
+  },
 ];
 
 /**
