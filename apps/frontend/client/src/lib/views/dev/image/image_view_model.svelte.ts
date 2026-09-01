@@ -13,8 +13,9 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { CheckpointInfo, ImageEngineId, ImageType } from '@aikami/types';
+import type { ImageEngineId, ImageType } from '@aikami/types';
 import {
+  type CheckpointInfo,
   compileImagePrompt,
   getConfiguredImageEngineId,
   type ImageEngineCapabilities,

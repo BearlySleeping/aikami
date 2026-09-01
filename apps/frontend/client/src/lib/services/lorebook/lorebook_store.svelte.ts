@@ -91,7 +91,7 @@ class LorebookStore
 {
   /** Reactive list of all lorebooks from ConfigService. */
   get lorebooks(): Lorebook[] {
-    return configService.state.lorebooks;
+    return configService.state.lorebooks as unknown as Lorebook[];
   }
 
   /** Reactive list of active lorebook IDs. */

@@ -28,7 +28,7 @@ import type {
 } from './engine/types.ts';
 
 /** Descriptor for a checkpoint/model returned by the model listing. */
-type CheckpointInfo = {
+export type CheckpointInfo = {
   readonly id: string;
   readonly description: string;
 };
@@ -443,7 +443,7 @@ export class ImageGenerationService
    * disposed — the URL returned for the active result is revoked only by
    * the caller once it is done displaying it.
    */
-  dispose(): void {
+  async dispose(): Promise<void> {
     this._clearProgressResetTimer();
     this._revokeObjectUrls();
     this._abortController?.abort();
