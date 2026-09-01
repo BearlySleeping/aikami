@@ -7,7 +7,7 @@
 //
 // Contract: C-242 Image Generation Pipeline
 
-import { BaseViewModelContainer, Image } from '$components';
+import { BaseViewModelContainer } from '$components';
 import type { ImageGenViewModelInterface } from './image_gen_view_model.svelte.ts';
 
 type Props = { viewModel: ImageGenViewModelInterface };
@@ -443,12 +443,12 @@ const TRIGGER_EVENTS = [
                   class="mb-2 break-inside-avoid rounded-lg overflow-hidden border border-base-300 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all w-full text-left bg-transparent p-0"
                   onclick={() => viewModel.expandGalleryImage(image.url)}
                 >
-                  <Image
+                  <img
                     src={image.url}
                     alt="Generated artwork"
                     class="w-full h-auto block"
                     loading="lazy"
-                  />
+                  >
                   <div class="p-1.5">
                     <span class="text-[10px] font-mono text-base-content/50 truncate block"
                       >{image.prompt.slice(0, 40)}</span
@@ -476,11 +476,11 @@ const TRIGGER_EVENTS = [
               >
                 ✕
               </button>
-              <Image
+              <img
                 src={viewModel.galleryExpandedUrl}
                 alt="Generated artwork (fullscreen)"
                 class="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl"
-              />
+              >
             </div>
           {/if}
         </div>

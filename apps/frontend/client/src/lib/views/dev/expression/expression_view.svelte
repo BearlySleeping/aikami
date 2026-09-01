@@ -5,7 +5,7 @@
 //
 // Contract: C-239 Expression Emotion System
 
-import { BaseViewModelContainer, Image } from '$components';
+import { BaseViewModelContainer } from '$components';
 import type { ExpressionDevViewModelInterface } from './expression_view_model.svelte.ts';
 
 type Props = {
@@ -140,31 +140,31 @@ const { viewModel }: Props = $props();
           <div
             class="relative w-40 h-[240px] rounded-xl overflow-hidden border-2 border-base-300 bg-base-300"
           >
-            <Image
-              src="/assets/images/combat/player_portrait.webp"
+            <img
+              src={viewModel.portraitBaseUrl}
               alt=""
               class="w-full h-full object-cover object-top"
-            />
+            >
             {#if overlays.eyes}
-              <Image
+              <img
                 src={overlays.eyes}
                 alt=""
                 class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
-              />
+              >
             {/if}
             {#if overlays.eyebrows}
-              <Image
+              <img
                 src={overlays.eyebrows}
                 alt=""
                 class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
-              />
+              >
             {/if}
             {#if overlays.mouth}
-              <Image
+              <img
                 src={overlays.mouth}
                 alt=""
                 class="absolute inset-0 w-full h-full object-cover object-top pointer-events-none"
-              />
+              >
             {/if}
           </div>
 

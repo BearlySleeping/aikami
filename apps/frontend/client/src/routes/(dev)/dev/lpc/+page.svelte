@@ -4,7 +4,7 @@
 // Dev route — wraps the shared LpcPreview component.
 // Supplies the registry resolver and catalog from the client's asset store.
 
-import { LpcPreview } from '@aikami/frontend/preview';
+import { LpcPreview } from '@aikami/frontend-preview';
 import { onMount } from 'svelte';
 import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 
