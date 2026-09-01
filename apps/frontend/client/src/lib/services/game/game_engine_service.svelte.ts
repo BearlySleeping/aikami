@@ -14,7 +14,12 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { LpcAnimationState } from '@aikami/lpc';
-import type { ContentPackManifest, PackConfig, PersonaData } from '@aikami/types';
+import type {
+  ContentPackManifest,
+  OnboardingSection,
+  PackConfig,
+  PersonaData,
+} from '@aikami/types';
 import { audioContextManager, equipmentService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
@@ -60,6 +65,9 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
    * e.g. "emberwatch_village"). Empty before the first map load.
    */
   readonly currentMapId: string;
+
+  /** Resets engine state (map ID, scene) for teardown. */
+  resetEngineState(): void;
 
   /** Whether the PixiJS game engine has initialized and is running. */
   readonly isGameReady: boolean;
@@ -141,6 +149,13 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
    * envelope map block (v3+).
    */
   getPlayerPosition(): { x: number; y: number } | undefined;
+
+  /**
+   * Resolves the ECS entity ID for a spawned NPC by its content-pack npcId.
+   * Returns undefined if the engine hasn't booted or the NPC isn't spawned
+   * on the current map (C-340 — party follow / recruit sync).
+   */
+  getEntityIdForNpc(npcId: string): number | undefined;
 
   /** Destroys the engine and resets all state (on route navigation). */
   destroyEngine(): void;
@@ -230,6 +245,17 @@ class GameEngineService
   private _propFrameResolverHandle:
     | import('@aikami/frontend/engine').PropFrameResolverHandle
     | undefined;
+
+  /** Resets engine reactive state (map ID, scene, etc.) for teardown. */
+  resetEngineState(): void {
+    this.isGameReady = false;
+    this.playerScene = 'unknown';
+    this.currentMapId = '';
+    this.gameError = undefined;
+    this.activeContexts = [];
+    this.floatingTexts = [];
+    this.combatantScreenStates = [];
+  }
 
   /** Content pack ID set by the composition root before boot. */
   contentPackId = $state<string>('emberwatch');
@@ -425,6 +451,19 @@ class GameEngineService
   }
 
   /** @inheritdoc */
+  getEntityIdForNpc(npcId: string): number | undefined {
+    if (!this._gameWorld) {
+      return undefined;
+    }
+    for (const [eid, entry] of this._gameWorld.npcMeta) {
+      if (entry.npcId === npcId) {
+        return eid;
+      }
+    }
+    return undefined;
+  }
+
+  /** @inheritdoc */
   destroyEngine(): void {
     this.debug('destroyEngine:start', { wasReady: this.isGameReady });
 
@@ -442,13 +481,7 @@ class GameEngineService
     this._propFrameResolverHandle?.clearCache();
     this._propFrameResolverHandle = undefined;
 
-    this.isGameReady = false;
-    this.playerScene = 'unknown';
-    this.currentMapId = '';
-    this.gameError = undefined;
-    this.activeContexts = [];
-    this.floatingTexts = [];
-    this.combatantScreenStates = [];
+    this.resetEngineState();
 
     if (this._shakeTimeout) {
       clearTimeout(this._shakeTimeout);
@@ -737,7 +770,7 @@ class GameEngineService
       const textureManager = new TextureManager();
 
       const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
-        getLpcAssetPath(slot, assetId, state),
+        getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
       );
 
       const playerData = this._buildPlayerData();
@@ -804,9 +837,11 @@ class GameEngineService
           typeof import.meta !== 'undefined' &&
           import.meta.env?.PUBLIC_EXTENDED_ONBOARDING_ARC === '1';
 
-        const onboarding = extendedArcEnabled
-          ? (this._extendOnboardingArc(pack.manifest.onboarding) as typeof pack.manifest.onboarding)
-          : pack.manifest.onboarding;
+        const onboarding = (
+          extendedArcEnabled
+            ? this._extendOnboardingArc(pack.manifest.onboarding)
+            : pack.manifest.onboarding
+        ) as OnboardingSection;
 
         svc.loadOnboarding({
           packId: this.contentPackId,

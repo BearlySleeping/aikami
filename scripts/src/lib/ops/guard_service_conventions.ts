@@ -45,7 +45,7 @@
 // --update-baseline.
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const APP_ROOTS = [
@@ -65,8 +65,61 @@ const emptyCounts = (): RatchetCounts => ({ s11: 0, s12: 0 });
 const violations: Violation[] = [];
 const ratchetViolations: Violation[] = [];
 
-const relPath = (file: string): string => file.replace(`${ROOT}/`, '');
+const relPath = (file: string): string => file.replace(`${ROOT}/`, '').split(sep).join('/');
 
+// Blanks out comments and string/template literal contents (preserving
+// newlines) so regex matches never fire inside a comment or a string.
+const stripStringsAndComments = (source: string): string => {
+  let result = '';
+  let i = 0;
+  const n = source.length;
+  while (i < n) {
+    const c = source[i];
+    const c2 = source[i + 1];
+    if (c === '/' && c2 === '/') {
+      while (i < n && source[i] !== '\n') {
+        result += ' ';
+        i++;
+      }
+      continue;
+    }
+    if (c === '/' && c2 === '*') {
+      result += '  ';
+      i += 2;
+      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
+        result += source[i] === '\n' ? '\n' : ' ';
+        i++;
+      }
+      if (i < n) {
+        result += '  ';
+        i += 2;
+      }
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      const quote = c;
+      result += ' ';
+      i++;
+      while (i < n && source[i] !== quote) {
+        if (source[i] === '\\') {
+          result += '  ';
+          i += 2;
+          continue;
+        }
+        result += source[i] === '\n' ? '\n' : ' ';
+        i++;
+      }
+      if (i < n) {
+        result += ' ';
+        i++;
+      }
+      continue;
+    }
+    result += c;
+    i++;
+  }
+  return result;
+};
 const walk = (dir: string, matches: (name: string) => boolean): string[] => {
   const out: string[] = [];
   if (!existsSync(dir)) {
@@ -240,8 +293,26 @@ const checkService = (file: string): void => {
     });
   }
 
-  const dynamicImportCount = content.match(/\bawait\s+import\s*\(/g)?.length ?? 0;
-  for (let i = 0; i < dynamicImportCount; i++) {
+  const strippedContent = stripStringsAndComments(content);
+  // S12 allowlist: dynamic imports that are explicitly permitted.
+  // See svelte-conventions/SKILL.md dynamic-import table.
+  const allowlistPatterns = [
+    /@aikami\/frontend\/engine/,
+    /onnxruntime-web/,
+    /kokoro-js/,
+    /pixi\.js/,
+    /@tauri-apps/,
+    /\?worker&type=module/,
+    /eruda/,
+  ];
+  const dynamicImportMatches = strippedContent.match(/\bawait\s+import\s*\(/g) ?? [];
+  const dynamicImportCount = dynamicImportMatches.length;
+  const allowlistedCount = allowlistPatterns.reduce((count, pattern) => {
+    const matches = strippedContent.match(pattern);
+    return count + (matches ? matches.length : 0);
+  }, 0);
+  const effectiveCount = Math.max(0, dynamicImportCount - allowlistedCount);
+  for (let i = 0; i < effectiveCount; i++) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'S12',

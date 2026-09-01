@@ -50,8 +50,6 @@ type InitializeMessage = {
   device: 'webgpu' | 'wasm';
   /** HF model id — pinned by the main thread. */
   modelId: string;
-  /** Pinned revision, never `main`. */
-  revision: string;
 };
 
 type SynthesizeMessage = {

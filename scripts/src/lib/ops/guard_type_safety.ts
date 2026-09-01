@@ -37,7 +37,7 @@
 // improvement (below baseline).
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const SCAN_ROOTS = ['apps', 'packages', 'scripts'].map((dir) => resolve(ROOT, dir));
@@ -227,7 +227,7 @@ const updateBaseline = Bun.argv.includes('--update-baseline');
 const fileViolations = new Map<string, Violation[]>();
 for (const root of SCAN_ROOTS) {
   for (const file of walk(root)) {
-    const relPath = relative(ROOT, file);
+    const relPath = relative(ROOT, file).split(sep).join('/');
     const rawContent = readFileSync(file, 'utf8');
     const violations = findViolations({ rawContent, relPath });
     if (violations.length > 0) {

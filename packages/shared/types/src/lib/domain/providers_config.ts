@@ -171,8 +171,8 @@ export type OpenRouterModel = {
   context_length: number;
   /** Pricing information per token. */
   pricing: {
-    prompt: number;
-    completion: number;
+    prompt: string;
+    completion: string;
   };
 };
 
@@ -284,7 +284,7 @@ export type ConfigState = {
     contextSize: number;
   };
   /** Selected instruct template format. */
-  instructTemplate: string;
+  instructTemplate: 'chatml' | 'alpaca' | 'vicuna' | 'llama3' | 'mistral';
   /** Advanced provider-specific overrides. */
   advancedOverrides: AdvancedOverrides;
   /** Auxiliary model assignments for specialised tasks. */

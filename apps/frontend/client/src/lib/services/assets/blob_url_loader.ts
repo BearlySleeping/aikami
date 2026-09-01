@@ -55,11 +55,17 @@ const _register = (): void => {
         }
       }
       const objectUrl = URL.createObjectURL(blob);
-      const texture = Texture.from(objectUrl);
-      texture.source.scaleMode = 'nearest';
-      // Revoke the object URL after the texture has loaded its source.
-      texture.source.once('destroy', () => URL.revokeObjectURL(objectUrl));
-      return texture;
+      try {
+        const texture = Texture.from(objectUrl);
+        texture.source.scaleMode = 'nearest';
+        // Revoke the object URL after the texture has loaded its source.
+        texture.source.once('destroy', () => URL.revokeObjectURL(objectUrl));
+        return texture;
+      } catch (error) {
+        // Revoke the object URL if texture creation or config fails synchronously.
+        URL.revokeObjectURL(objectUrl);
+        throw error;
+      }
     },
     unload: (texture: Texture): void => {
       texture.destroy(true);

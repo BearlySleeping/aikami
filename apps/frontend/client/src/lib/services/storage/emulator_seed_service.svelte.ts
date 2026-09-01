@@ -110,12 +110,12 @@ class EmulatorSeedService
 
     for (const npc of EMULATOR_NPCS) {
       const id = npc.name.toLowerCase().replace(/\s+/g, '-');
-      const data = {
-        ...(npc as NpcCreateData),
+      const data: NpcCreateData = {
+        ...(npc as object),
         id,
         createdAt: new Date(),
         updatedAt: new Date(),
-      } as NpcCreateData & { id: string; updatedAt: Date };
+      } as NpcCreateData;
       await db.execute({
         sql: "INSERT OR REPLACE INTO npcs (id, name, data, updated_at) VALUES (?, ?, ?, datetime('now'))",
         args: [id, data.name ?? 'Unnamed', JSON.stringify(data)],

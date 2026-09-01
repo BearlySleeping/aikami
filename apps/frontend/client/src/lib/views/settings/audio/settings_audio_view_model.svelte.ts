@@ -252,6 +252,10 @@ class SettingsAudioViewModel
         this.feedback = 'Voice model downloaded successfully.';
       } else if (state.status === 'error') {
         this.feedback = state.message ?? 'Download failed';
+      } else if (state.status === 'not-downloaded') {
+        // Cancellation or idle — not an error.
+        this.feedback = '';
+      } else {
       } else {
         this.feedback = 'Download failed';
       }
