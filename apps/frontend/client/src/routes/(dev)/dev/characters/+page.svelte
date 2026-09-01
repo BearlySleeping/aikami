@@ -2,7 +2,6 @@
 import type { PersonaData } from '@aikami/types';
 // apps/frontend/client/src/routes/(dev)/dev/characters/+page.svelte
 import { browser } from '$app/env';
-import { Image } from '$components';
 import { routerService } from '$services';
 
 type SavedCharacter = {
@@ -75,11 +74,11 @@ if (browser) {
                 <!-- Avatar -->
                 <div class="w-20 h-20 rounded-lg bg-base-300 flex-shrink-0 overflow-hidden">
                   {#if char.avatarUrl}
-                    <Image
+                    <img
                       src={char.avatarUrl}
                       alt={char.persona.name ?? 'Character'}
                       class="w-full h-full object-cover"
-                    />
+                    >
                   {:else}
                     <div class="w-full h-full flex items-center justify-center text-3xl">🐉</div>
                   {/if}

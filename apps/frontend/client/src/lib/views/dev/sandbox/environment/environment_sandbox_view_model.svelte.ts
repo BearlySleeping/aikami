@@ -9,6 +9,7 @@
 
 import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
 import { createEngineBridge, GameWorld, TextureManager } from '@aikami/frontend/engine';
+import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -58,7 +59,6 @@ export type EnvironmentSandboxViewModelOptions = BaseViewModelOptions & {};
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAP_URL = '/game-data/maps/sandbox_zone_a.json';
 const PLAYER_SPAWN_X = 160;
 const PLAYER_SPAWN_Y = 192;
 
@@ -83,6 +83,8 @@ class EnvironmentSandboxViewModel
   private _gameWorld: GameWorld | undefined;
   private _bridge: EngineBridge | undefined;
   private _textureManager: TextureManager | undefined;
+  private _assetTagResolver: AssetTagResolver | undefined;
+  private _releaseUrl: ((url: string) => void) | undefined;
 
   // -----------------------------------------------------------------------
   // Public API
@@ -104,6 +106,11 @@ class EnvironmentSandboxViewModel
 
       const { sandboxRecipeResolver } = await import('../shared/lpc_sandbox_resolver');
 
+      const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
+      this._assetTagResolver = assetTagResolver;
+      this._releaseUrl = (url: string) => assetManager.releaseUrl(url);
+
       const worldOptions: GameWorldOptions = {
         className: 'EnvironmentSandboxGameWorld',
         bridge: this._bridge,
@@ -112,6 +119,9 @@ class EnvironmentSandboxViewModel
         assetUrlResolver: (slot, assetId, state) =>
           getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
         textureManager: this._textureManager,
+        // C-434: registry-backed tag resolver for maps and tilesets.
+        resolveTag: this._assetTagResolver,
+        releaseUrl: this._releaseUrl,
       };
 
       this._gameWorld = GameWorld.create(worldOptions);
@@ -123,8 +133,22 @@ class EnvironmentSandboxViewModel
 
       this._registerBridgeListeners();
 
+      // Load the content pack through the asset manager (R2-backed registry)
+      const { loadContentPack } = await import('@aikami/frontend/engine');
+
+      const pack = await loadContentPack({
+        packId: 'emberwatch',
+        resolveTag: this._assetTagResolver,
+        releaseUrl: this._releaseUrl,
+      });
+
+      // Re-check after async gap — the GameWorld may have been destroyed.
+      if (!this._gameWorld) {
+        return;
+      }
+
       await this._gameWorld.loadMap({
-        mapUrl: MAP_URL,
+        mapUrl: pack.resolveMapUrl('village'),
         targetX: PLAYER_SPAWN_X,
         targetY: PLAYER_SPAWN_Y,
       });

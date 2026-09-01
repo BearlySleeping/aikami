@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/asset-browser/asset_browser_view.svelte
-import { BaseViewModelContainer, Image } from '$components';
+import { BaseViewModelContainer } from '$components';
 import type { AssetBrowserViewModelInterface } from './asset_browser_view_model.svelte';
 
 type Props = { viewModel: AssetBrowserViewModelInterface };
@@ -519,11 +519,11 @@ const handleGlobalClick = () => {
               </audio>
             {/if}
           {:else if viewModel.previewUrl}
-            <Image
+            <img
               src={viewModel.previewUrl}
               alt={viewModel.previewAsset.name}
               class="max-w-full rounded"
-            />
+            >
           {/if}
         {:else}
           <div class="flex flex-col items-center justify-center py-8 text-base-content/40 gap-2">
