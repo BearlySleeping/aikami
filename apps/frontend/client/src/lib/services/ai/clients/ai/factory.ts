@@ -48,7 +48,7 @@ async function createAiClient(
     case 'comfyui': {
       const { ComfyUiClient } = await import('./clients/comfyui_client.ts');
 
-      return new ComfyUiClient(options.comfyui ?? {} as ComfyUiClientOptions);
+      return new ComfyUiClient(options.comfyui ?? ({} as ComfyUiClientOptions));
     }
 
     case 'local-tts': {

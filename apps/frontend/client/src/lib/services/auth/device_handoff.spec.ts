@@ -69,7 +69,10 @@ describe('Better Auth device handoff (AC-5)', () => {
 
   test('pollDeviceHandoff adopts the session on approval', async () => {
     // get-session is reached with the token adopted from /device/token.
-    spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+    spyOn(globalThis, 'fetch').mockImplementation(((
+      url: string | URL | Request,
+      _init?: RequestInit,
+    ): Promise<Response> => {
       const u = String(url);
       if (u.includes('/device/token')) {
         return Promise.resolve(
@@ -105,29 +108,30 @@ describe('Better Auth device handoff (AC-5)', () => {
   test('the approved token is sent as a bearer header on the follow-up get-session', async () => {
     const seen: { url: string; authorization: string | null }[] = [];
 
-    spyOn(globalThis, 'fetch').mockImplementation(
-      ((url: string | URL | Request, init?: RequestInit): Promise<Response> => {
-        const u = String(url);
-        seen.push({
-          url: u,
-          authorization: new Headers(init?.headers).get('authorization'),
-        });
-        if (u.includes('/device/token')) {
-          return Promise.resolve(
-            jsonResponse({ access_token: 'session-token-abc', expires_in: 3600 }),
-          );
-        }
-        if (u.includes('/auth/get-session')) {
-          return Promise.resolve(
-            jsonResponse({
-              user: { id: 'u1', email: 'a@example.com' },
-              session: { id: 's1', expiresAt: new Date(Date.now() + 3600_000).toISOString() },
-            }),
-          );
-        }
-        return Promise.resolve(jsonResponse({}, 404));
-      }) as unknown as typeof fetch,
-    );
+    spyOn(globalThis, 'fetch').mockImplementation(((
+      url: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const u = String(url);
+      seen.push({
+        url: u,
+        authorization: new Headers(init?.headers).get('authorization'),
+      });
+      if (u.includes('/device/token')) {
+        return Promise.resolve(
+          jsonResponse({ access_token: 'session-token-abc', expires_in: 3600 }),
+        );
+      }
+      if (u.includes('/auth/get-session')) {
+        return Promise.resolve(
+          jsonResponse({
+            user: { id: 'u1', email: 'a@example.com' },
+            session: { id: 's1', expiresAt: new Date(Date.now() + 3600_000).toISOString() },
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}, 404));
+    }) as unknown as typeof fetch);
 
     await pollDeviceHandoff('dev-123');
 

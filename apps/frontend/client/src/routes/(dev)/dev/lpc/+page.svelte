@@ -21,7 +21,8 @@ onMount(async () => {
   const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
   await assetStore.fetchManifest();
 
-  allSlots = getLpcCatalog().slots as unknown as readonly import('@aikami/frontend/preview').LpcSlotDef[];
+  allSlots = getLpcCatalog()
+    .slots as unknown as readonly import('@aikami/frontend/preview').LpcSlotDef[];
 });
 </script>
 
@@ -30,7 +31,11 @@ onMount(async () => {
 </svelte:head>
 
 {#if resolver && allSlots}
-  <LpcPreview {resolver} allSlots={allSlots as import('@aikami/frontend/preview').LpcSlotDef[]} controls={true} />
+  <LpcPreview
+    {resolver}
+    allSlots={allSlots as import('@aikami/frontend/preview').LpcSlotDef[]}
+    controls={true}
+  />
 {:else}
   <div class="flex items-center justify-center h-64 text-base-content/40">
     Loading LPC preview...

@@ -7,7 +7,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { playSceneBgm } from '$lib/services/audio/audio_asset_resolver';
+import { playSceneBgm } from '$services';
 import {
   audioService,
   musicPlayerService,
@@ -255,7 +255,6 @@ class SettingsAudioViewModel
       } else if (state.status === 'not-downloaded') {
         // Cancellation or idle — not an error.
         this.feedback = '';
-      } else {
       } else {
         this.feedback = 'Download failed';
       }

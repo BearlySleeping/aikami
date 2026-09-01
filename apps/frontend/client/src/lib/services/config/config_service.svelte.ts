@@ -395,8 +395,7 @@ class ConfigService
           };
         }
         if (Array.isArray(parsed.lorebooks)) {
-          this.state.lorebooks = parsed.lorebooks.map(this._normalizeLorebook);
-        }
+          this.state.lorebooks = parsed.lorebooks.map(this._normalizeLorebook) as unknown as import('@aikami/types').LorebookEntry[];
         }
         if (Array.isArray(parsed.activeLorebookIds)) {
           this.state.activeLorebookIds = parsed.activeLorebookIds as string[];
@@ -788,8 +787,7 @@ class ConfigService
   }
 
   getLorebook(options: { id: string }): Lorebook | undefined {
-    return this.state.lorebooks.find((lb) => lb.id === options.id);
-  }
+    return this.state.lorebooks.find((lb) => lb.id === options.id) as unknown as Lorebook | undefined;
   }
 
   addEntry(options: {

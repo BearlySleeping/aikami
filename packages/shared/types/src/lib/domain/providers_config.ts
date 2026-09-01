@@ -284,7 +284,7 @@ export type ConfigState = {
     contextSize: number;
   };
   /** Selected instruct template format. */
-  instructTemplate: 'chatml' | 'alpaca' | 'vicuna' | 'llama3' | 'mistral';
+  instructTemplate: 'chatml' | 'alpaca' | 'vicuna' | 'llama3' | 'mistral' | 'deepseek' | 'custom';
   /** Advanced provider-specific overrides. */
   advancedOverrides: AdvancedOverrides;
   /** Auxiliary model assignments for specialised tasks. */

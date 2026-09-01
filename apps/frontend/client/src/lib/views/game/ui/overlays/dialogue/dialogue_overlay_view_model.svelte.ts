@@ -452,13 +452,9 @@ class DialogueOverlayViewModel
     }
     let onRoll: (() => void) | undefined;
     if (s.phase === 'awaiting_click') {
-      onRoll = () => {
-        void this.rollDice();
-      };
+      onRoll = this._boundDiceRoll;
     } else if (s.phase === 'declared') {
-      onRoll = () => {
-        this.acknowledgeDeclaration();
-      };
+      onRoll = this._boundDiceDeclaration;
     } else {
       onRoll = undefined;
     }
@@ -548,7 +544,18 @@ class DialogueOverlayViewModel
 
   private readonly _chunker = new SentenceBoundaryChunker();
 
+  private readonly _boundDiceRoll: () => void = this._handleDiceRoll.bind(this);
+  private readonly _boundDiceDeclaration: () => void = this._handleDiceDeclaration.bind(this);
+
   private _ttsInitialized = false;
+
+  private _handleDiceRoll(): void {
+    void this.rollDice();
+  }
+
+  private _handleDiceDeclaration(): void {
+    this.acknowledgeDeclaration();
+  }
 
   // ── C-401 Streaming helpers ───────────────────────────────────────────
 

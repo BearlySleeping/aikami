@@ -326,7 +326,9 @@ class StartViewModel
       case 'warming':
         return 'Downloading all assets for offline play…';
       case 'degraded':
-        return assetPrefetchService.prefetchError ?? 'Asset download paused — check your connection.';
+        return (
+          assetPrefetchService.prefetchError ?? 'Asset download paused — check your connection.'
+        );
       default:
         return undefined;
     }

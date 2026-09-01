@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 // apps/frontend/client/src/lib/components/game/lpc_animation_debug_panel.svelte
 //
 // Reusable LPC animation debug controls: state + direction dropdowns and a
@@ -7,7 +8,6 @@
 // shared by /dev/lpc (LpcViewModel) and /dev/lpc-inventory
 // (LpcPreviewViewModel).
 import type { LpcAnimationDebugController } from './lpc_animation_debug_controller';
-import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 
 type Props = {
   controller: LpcAnimationDebugController;

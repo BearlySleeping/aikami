@@ -18,7 +18,8 @@
       "!**/tmp/*",
       "!**/dist/*",
       "!**/build/*",
-      "!apps/frontend/client/static/**"
+      "!apps/frontend/client/static",
+      "!**/*.svelte.ts"
     ]
   },
   "formatter": {

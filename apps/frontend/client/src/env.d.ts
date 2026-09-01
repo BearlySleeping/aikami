@@ -37,5 +37,6 @@ declare module '$app/env/public' {
 
 declare module '$appCss' {
   const _: string;
+
   export {};
 }

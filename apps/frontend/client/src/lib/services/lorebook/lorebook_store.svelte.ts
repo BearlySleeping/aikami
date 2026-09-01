@@ -90,9 +90,8 @@ class LorebookStore
   implements LorebookStoreInterface
 {
   /** Reactive list of all lorebooks from ConfigService. */
-  get lorebooks(): import('@aikami/types').LorebookEntry[] {
-    return configService.state.lorebooks;
-  }
+  get lorebooks(): Lorebook[] {
+    return configService.state.lorebooks as Lorebook[];
   }
 
   /** Reactive list of active lorebook IDs. */
@@ -114,7 +113,7 @@ class LorebookStore
     const entries: LorebookEntry[] = [];
     for (const lb of this.lorebooks) {
       if (activeIds.has(lb.id)) {
-        entries.push(...lb.entries);
+        entries.push(...lb.entries as unknown as LorebookEntry[]);
       }
     }
 

@@ -47,7 +47,7 @@ export type OpenRouterModel = {
   context_length: number;
   /** Pricing information per token. */
   pricing: {
-    prompt: number;
-    completion: number;
+    prompt: string;
+    completion: string;
   };
 };

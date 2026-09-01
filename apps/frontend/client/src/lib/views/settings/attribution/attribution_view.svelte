@@ -5,12 +5,13 @@ Attribution screen — displays per-asset provenance from the active content pac
 Contract: C-381 AC-1, Quality Requirements (screen-reader accessible).
 -->
 <script lang="ts">
+import { BaseViewModelContainer } from '$components';
 import type { AttributionViewModelInterface } from './attribution_view_model.svelte.ts';
 
 let { viewModel }: { viewModel: AttributionViewModelInterface } = $props();
 </script>
 
-<div class="mx-auto max-w-3xl px-4 py-8">
+<BaseViewModelContainer {viewModel} class="mx-auto max-w-3xl px-4 py-8">
   <h1 class="mb-2 text-2xl font-bold">Attributions</h1>
   <p class="text-base-content/70 mb-6">
     Licence and attribution information for assets in <strong>{viewModel.packName}</strong>.
@@ -62,4 +63,4 @@ let { viewModel }: { viewModel: AttributionViewModelInterface } = $props();
       Back to Menu
     </button>
   </div>
-</div>
+</BaseViewModelContainer>

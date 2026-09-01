@@ -18,6 +18,8 @@ import type { ConfigState, OpenRouterModel } from '@aikami/types';
 import { configService, fetchOpenRouterModels, getOllamaRuntimeEndpoints } from '$services';
 import { type AuxiliaryModels, INSTRUCT_TEMPLATES, type InstructTemplate } from '$types';
 
+export type TextTabViewModelOptions = BaseViewModelOptions;
+
 export type TextTabViewModelInterface = BaseViewModelInterface & {
   readonly config: ConfigState;
   readonly textProvider: string;
