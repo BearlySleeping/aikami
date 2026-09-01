@@ -256,6 +256,7 @@ class SettingsAudioViewModel
         // Cancellation or idle — not an error.
         this.feedback = '';
       } else {
+      } else {
         this.feedback = 'Download failed';
       }
     } catch (error) {

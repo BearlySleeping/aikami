@@ -9,6 +9,10 @@ import type {
 } from '$types';
 import type { ConversationMessage } from '../chat/context_builder.ts';
 import { SentenceBoundaryChunker } from './sentence_boundary_chunker.ts';
+import type { AudioQueuePlayerInterface } from '../audio/audio_queue_player';
+import type { PixiTextureInjectorInterface } from '../game/pixi_texture_injector';
+import type { ConversationStorageInterface } from '../chat/conversation_storage.svelte.ts';
+import type { ExpressionAssetResolverInterface } from '../expression/expression_asset_resolver';
 
 /** Options accepted by the stream-orchestrator service factory. */
 export type StreamOrchestratorServiceOptions = StreamOrchestratorOptions;

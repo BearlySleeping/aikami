@@ -7,6 +7,7 @@
 // shared by /dev/lpc (LpcViewModel) and /dev/lpc-inventory
 // (LpcPreviewViewModel).
 import type { LpcAnimationDebugController } from './lpc_animation_debug_controller';
+import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 
 type Props = {
   controller: LpcAnimationDebugController;
@@ -28,7 +29,7 @@ let { controller }: Props = $props();
         value={controller.animationState}
         onchange={(e: Event) => {
           const target = e.target as HTMLSelectElement;
-          controller.setAnimationState(Number.parseInt(target.value, 10) as number);
+          controller.setAnimationState(Number.parseInt(target.value, 10) as unknown as LpcAnimationState);
         }}
       >
         {#each controller.animationStateOptions as option}
@@ -44,7 +45,7 @@ let { controller }: Props = $props();
         value={controller.facingDirection}
         onchange={(e: Event) => {
           const target = e.target as HTMLSelectElement;
-          controller.setFacingDirection(Number.parseInt(target.value, 10) as number);
+          controller.setFacingDirection(Number.parseInt(target.value, 10) as unknown as LpcDirection);
         }}
       >
         {#each controller.directionOptions as option}

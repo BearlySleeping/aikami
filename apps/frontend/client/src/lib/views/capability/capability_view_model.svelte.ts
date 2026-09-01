@@ -350,6 +350,7 @@ class CapabilityViewModel
         // Cancellation or idle — not an error.
         this.errorMessage = '';
       } else {
+      } else {
         this.errorMessage = 'Download failed';
       }
     } catch (error) {

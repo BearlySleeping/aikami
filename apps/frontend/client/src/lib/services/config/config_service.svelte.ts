@@ -397,6 +397,7 @@ class ConfigService
         if (Array.isArray(parsed.lorebooks)) {
           this.state.lorebooks = parsed.lorebooks.map(this._normalizeLorebook);
         }
+        }
         if (Array.isArray(parsed.activeLorebookIds)) {
           this.state.activeLorebookIds = parsed.activeLorebookIds as string[];
         }
@@ -757,7 +758,10 @@ class ConfigService
       createdAt: now,
       updatedAt: now,
     };
-    this.state.lorebooks = [...this.state.lorebooks, lorebook];
+    this.state.lorebooks = [
+      ...this.state.lorebooks,
+      lorebook as unknown as import('@aikami/types').LorebookEntry,
+    ];
     return id;
   }
 
@@ -780,11 +784,12 @@ class ConfigService
   }
 
   getLorebooks(): Lorebook[] {
-    return this.state.lorebooks;
+    return this.state.lorebooks as unknown as Lorebook[];
   }
 
   getLorebook(options: { id: string }): Lorebook | undefined {
     return this.state.lorebooks.find((lb) => lb.id === options.id);
+  }
   }
 
   addEntry(options: {
@@ -801,7 +806,7 @@ class ConfigService
         return lb;
       }
       return { ...lb, entries: [...lb.entries, newEntry], updatedAt: now };
-    });
+    }) as unknown as import('@aikami/types').LorebookEntry[];
     return id;
   }
 
@@ -827,7 +832,7 @@ class ConfigService
         }),
         updatedAt: now,
       };
-    });
+    }) as unknown as import('@aikami/types').LorebookEntry[];
   }
 
   deleteEntry(options: { lorebookId: string; entryId: string }): void {
@@ -843,7 +848,7 @@ class ConfigService
         entries: lb.entries.filter((e) => e.id !== entryId),
         updatedAt: now,
       };
-    });
+    }) as unknown as import('@aikami/types').LorebookEntry[];
   }
 
   reorderEntries(options: { lorebookId: string; entryIds: string[] }): void {
@@ -860,7 +865,7 @@ class ConfigService
         .map((id) => entryMap.get(id))
         .filter((e): e is LorebookEntry => e !== undefined);
       return { ...lb, entries: reordered, updatedAt: now };
-    });
+    }) as unknown as import('@aikami/types').LorebookEntry[];
   }
 
   setActiveLorebookIds(options: { ids: string[] }): void {

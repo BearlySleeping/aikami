@@ -35,7 +35,7 @@ afterEach(() => {
 describe('Better Auth device handoff (AC-5)', () => {
   test('startDeviceHandoff requests a device code from /device/code', async () => {
     const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
-      (_url: string | URL | Request, _init?: RequestInit) =>
+      ((_url: string | URL | Request, _init?: RequestInit): Promise<Response> =>
         Promise.resolve(
           jsonResponse({
             device_code: 'dev-123',
@@ -45,7 +45,7 @@ describe('Better Auth device handoff (AC-5)', () => {
             expires_in: 1800,
             interval: 5,
           }),
-        ),
+        )) as unknown as typeof fetch,
     );
 
     const result = await startDeviceHandoff();
@@ -56,10 +56,11 @@ describe('Better Auth device handoff (AC-5)', () => {
   });
 
   test('pollDeviceHandoff returns undefined while pending (400 authorization_pending)', async () => {
-    spyOn(globalThis, 'fetch').mockImplementation(() =>
-      Promise.resolve(
-        jsonResponse({ error: 'authorization_pending', error_description: 'pending' }, 400),
-      ),
+    spyOn(globalThis, 'fetch').mockImplementation(
+      ((): Promise<Response> =>
+        Promise.resolve(
+          jsonResponse({ error: 'authorization_pending', error_description: 'pending' }, 400),
+        )) as unknown as typeof fetch,
     );
 
     const result = await pollDeviceHandoff('dev-123');
@@ -68,7 +69,7 @@ describe('Better Auth device handoff (AC-5)', () => {
 
   test('pollDeviceHandoff adopts the session on approval', async () => {
     // get-session is reached with the token adopted from /device/token.
-    spyOn(globalThis, 'fetch').mockImplementation((url: string | URL | Request) => {
+    spyOn(globalThis, 'fetch').mockImplementation(((url: string | URL | Request, _init?: RequestInit): Promise<Response> => {
       const u = String(url);
       if (u.includes('/device/token')) {
         return Promise.resolve(
@@ -88,11 +89,11 @@ describe('Better Auth device handoff (AC-5)', () => {
         );
       }
       return Promise.resolve(jsonResponse({}, 404));
-    });
+    }) as unknown as typeof fetch);
 
     const result = await pollDeviceHandoff('dev-123');
-    expect(result?.user?.id).toBe('u1');
-    expect(result?.user?.email).toBe('a@example.com');
+    expect(result && 'user' in result ? result.user.id : undefined).toBe('u1');
+    expect(result && 'user' in result ? result.user.email : undefined).toBe('a@example.com');
   });
 
   // The desktop app cannot authenticate with a cookie: its webview origin is
@@ -105,7 +106,7 @@ describe('Better Auth device handoff (AC-5)', () => {
     const seen: { url: string; authorization: string | null }[] = [];
 
     spyOn(globalThis, 'fetch').mockImplementation(
-      (url: string | URL | Request, init?: RequestInit) => {
+      ((url: string | URL | Request, init?: RequestInit): Promise<Response> => {
         const u = String(url);
         seen.push({
           url: u,
@@ -125,7 +126,7 @@ describe('Better Auth device handoff (AC-5)', () => {
           );
         }
         return Promise.resolve(jsonResponse({}, 404));
-      },
+      }) as unknown as typeof fetch,
     );
 
     await pollDeviceHandoff('dev-123');
@@ -145,7 +146,7 @@ describe('Better Auth device handoff (AC-5)', () => {
     const user = toCurrentUser({ id: 'u1', name: 'Alice', email: 'a@example.com' }, 'google');
     expect(user.id).toBe('u1');
     expect(user.currentSignInProvider).toBe('google');
-    expect(user.signInProviders).toEqual(['google']);
+    expect((user as { signInProviders?: string[] }).signInProviders).toEqual(['google']);
     expect(user.userRole).toBe('member');
   });
 });

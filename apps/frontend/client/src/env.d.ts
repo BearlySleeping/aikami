@@ -34,3 +34,8 @@ declare module '$app/env/public' {
   /** Build version string (injected at build time). */
   export const APP_VERSION: string | undefined;
 }
+
+declare module '$appCss' {
+  const _: string;
+  export {};
+}

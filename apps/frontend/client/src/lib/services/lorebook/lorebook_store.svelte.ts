@@ -93,6 +93,7 @@ class LorebookStore
   get lorebooks(): import('@aikami/types').LorebookEntry[] {
     return configService.state.lorebooks;
   }
+  }
 
   /** Reactive list of active lorebook IDs. */
   get activeLorebookIds(): string[] {

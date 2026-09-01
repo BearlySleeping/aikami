@@ -995,7 +995,7 @@ class GameEngineService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    getLpcAssetPath: (_slot: string, assetId: string, state: string) => string | null,
+    getLpcAssetPath: (_slot: string, assetId: string, state: LpcAnimationState) => string | null,
   ) {
     // C-400: single source of truth — the engine's shared createLpcPipeline
     // (projected catalog + pure resolver + asset URL resolver). The
@@ -1004,7 +1004,11 @@ class GameEngineService
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
       catalog: projectLpcCatalog(generatedLpcSlots),
-      getLpcAssetPath,
+      getLpcAssetPath: getLpcAssetPath as unknown as (
+        slot: string,
+        assetId: string,
+        state: string,
+      ) => string | null,
     });
   }
 

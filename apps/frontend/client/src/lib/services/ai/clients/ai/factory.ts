@@ -1,7 +1,7 @@
 // packages/frontend/engine/src/ai_clients/ai/factory.ts
 
 import type { FrontendAiInterface } from './frontend_ai_interface.ts';
-import type { AiClientOptions, AiProvider } from './types.ts';
+import type { AiClientOptions, AiProvider, ComfyUiClientOptions } from './types.ts';
 
 /**
  * Creates the appropriate AI client for the given provider type.
@@ -48,7 +48,7 @@ async function createAiClient(
     case 'comfyui': {
       const { ComfyUiClient } = await import('./clients/comfyui_client.ts');
 
-      return new ComfyUiClient(options.comfyui);
+      return new ComfyUiClient(options.comfyui ?? {} as ComfyUiClientOptions);
     }
 
     case 'local-tts': {

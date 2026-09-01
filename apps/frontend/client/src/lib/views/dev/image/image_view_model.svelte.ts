@@ -142,6 +142,7 @@ export type ImageViewModelInterface = BaseViewModelInterface & {
 
   // ── Engine selector (C-388) ─────────────────────────────────────────
   readonly engineId: string | undefined;
+  selectedEngine: string | undefined;
   readonly engineOptions: readonly { id: string; label: string }[];
   readonly isAutoDetect: boolean;
   /** Control ids the active engine supports — drives UI affordances (AC-5). */
