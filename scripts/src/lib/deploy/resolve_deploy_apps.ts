@@ -186,6 +186,25 @@ function main(): void {
     throw new Error('--base and --head are required for --event=push');
   }
 
+  // GitHub sets `before` to the all-zeros SHA on a branch's first-ever push
+  // (nothing to diff against — the branch didn't exist a moment ago). A
+  // `paths:` filter used to hide this case from us entirely by declining to
+  // trigger the workflow at all; removing that filter (see release.yml's
+  // header comment on why) means this script now has to handle it directly
+  // instead of handing `git diff`/moon a commit object that doesn't exist —
+  // `moon query projects --affected` would hard-fail with "fatal: bad
+  // object" on it. Nothing meaningfully "changed" for a brand-new branch,
+  // so the safe, conservative answer is the same one the path filter used
+  // to produce: nothing to deploy.
+  if (/^0+$/.test(base)) {
+    log(
+      `  ${c.dim}First push on a new branch (before=${base}) — nothing to diff, nothing to deploy.${c.reset}`,
+    );
+    emitDeployApps([]);
+    emitForce(false);
+    return;
+  }
+
   const affectedProjects = queryMoonAffectedProjects(base, head);
   log(`  moon-affected projects: ${affectedProjects.map((p) => p.id).join(', ') || '(none)'}`);
 

@@ -311,7 +311,12 @@ jobs:
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.event.after }}
         run: |
-          if git diff --name-only "$BEFORE" "$AFTER" | grep -q '^apps/backend/worker/'; then
+          # BEFORE is the all-zeros SHA on a branch's first-ever push (see
+          # resolve_deploy_apps.ts's comment on the same case) — there's no
+          # commit object to diff against, so `git diff` on it fails outright.
+          if [[ "$BEFORE" =~ ^0+$ ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BEFORE" "$AFTER" | grep -q '^apps/backend/worker/'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
