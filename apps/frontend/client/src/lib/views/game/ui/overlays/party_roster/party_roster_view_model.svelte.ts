@@ -11,7 +11,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { PartyRosterEntry } from '@aikami/types';
-import { gameOverlayService, partyRosterService } from '$services';
+import { gameEngineService, gameOverlayService, partyRosterService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -79,7 +79,19 @@ class PartyRosterViewModel
   /** @inheritdoc */
   confirmDismiss(): void {
     if (this.confirmDismissNpcId) {
-      partyRosterService.dismiss(this.confirmDismissNpcId);
+      const dismissed = partyRosterService.dismiss(this.confirmDismissNpcId);
+      if (dismissed) {
+        // Strip Companion.recruited on the ECS entity so it stops following
+        // and drops out of the combat turn order (C-340 AC-1).
+        const entityId = gameEngineService.getEntityIdForNpc(this.confirmDismissNpcId);
+        if (entityId !== undefined) {
+          gameEngineService.sendCommand({
+            type: 'SET_COMPANION_RECRUITED',
+            entityId,
+            recruited: false,
+          });
+        }
+      }
     }
     this.showConfirmDismiss = false;
     this.confirmDismissNpcId = '';
@@ -94,9 +106,9 @@ class PartyRosterViewModel
   }
 
   /** @inheritdoc */
-  talkToCompanion(_options: { npcId: string; name: string }): void {
-    // TODO(C-340): Open Talk to Party overlay with this companion
-    this.debug('talkToCompanion', { npcId: _options.npcId });
+  talkToCompanion(options: { npcId: string; name: string }): void {
+    gameOverlayService.openTalkToParty(options);
+    this.debug('talkToCompanion', { npcId: options.npcId });
   }
 
   /** @inheritdoc */
