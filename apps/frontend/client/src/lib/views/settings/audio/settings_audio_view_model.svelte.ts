@@ -11,6 +11,7 @@ import {
   audioService,
   musicPlayerService,
   playSceneBgm,
+  runtimeConfigService,
   ttsService,
   voiceModelService,
 } from '$services';

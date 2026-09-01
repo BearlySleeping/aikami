@@ -16,6 +16,7 @@ import {
   combatService,
   diceService,
   draftStore,
+  expressionService,
   gameModeService,
   messageBranchStore,
   playerStateService,
@@ -52,6 +53,18 @@ export type GeneratedImage = {
   status: 'generating' | 'done' | 'error';
   /** Message this image was created after; null = created before any message. */
   afterMessageId: string | null;
+};
+
+/** Non-null skill check state shape for dice roll resolution. */
+type SkillCheckState = {
+  checkType: string;
+  difficultyClass: number;
+  statModifier: string;
+  statModifierValue: number;
+  targetNumber: number;
+  rollValue: number | null;
+  phase: 'declared' | 'awaiting_click' | 'rolling' | 'revealed';
+  isSuccess: boolean | null;
 };
 
 export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {

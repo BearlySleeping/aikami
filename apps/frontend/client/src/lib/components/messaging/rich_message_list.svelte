@@ -19,11 +19,11 @@ type Props = {
   /** Rendered rows, keyed by id. */
   messages: RichMessage[];
   /** Renders a single message row. */
-  renderRow: (message: RichMessage, index: number) => Snippet;
+  renderRow: (message: RichMessage, index: number) => Snippet<[]>;
   /** Content rendered before the messages, inside the scroll container. */
-  before?: Snippet;
+  before?: Snippet<[]>;
   /** Content rendered after the messages, inside the scroll container. */
-  after?: Snippet;
+  after?: Snippet<[]>;
   /** Empty-state text shown when there are no messages. */
   emptyText?: string;
   /** CSS classes for the scrollable container. */

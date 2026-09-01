@@ -29,9 +29,6 @@ your task:
 | UI styling                        | `aikami-ui`                                     |
 | Game engine                       | `pixijs-v8`                                     |
 | Tauri desktop                     | `tauri-v2`                                      |
-| Firestore collections             | `firestore-collection`                          |
-| Data Connect                      | `dataconnect`                                   |
-| Functions deploy/emulators        | `firestack`                                     |
 | New SvelteKit page                | `svelte-page`                                   |
 
 ---
@@ -61,9 +58,8 @@ fetching is client-side only. `adapter-static` is the only adapter.
 **✅ REQUIRED** data fetching patterns:
 
 ```typescript
-// ✅ Client-side Firebase SDKs
-import { doc, getDoc, collection, query } from "firebase/firestore";
-import { getAuth, signInWithPopup } from "firebase/auth";
+// ✅ Client-side data access via the repository layer (Turso/libSQL on device)
+import { getLocalDatabase } from "@aikami/frontend-storage";
 
 // ✅ Standard fetch to external microservices (voice, image, text)
 const response = await fetch("http://localhost:3001/tts", {
@@ -98,7 +94,7 @@ in `packages/shared/` and are consumed via `@aikami/*` imports.
 export type Agent = { id: string; name: string; role: string };
 
 // ❌ WRONG — schema defined in backend code
-// apps/backend/firebase/src/features/agent/schema.ts
+// apps/backend/worker/src/features/agent/schema.ts
 import { z } from "zod";
 export const agentSchema = z.object({ id: z.string(), name: z.string() });
 
@@ -170,10 +166,10 @@ import { logger } from "@aikami/logger";
 
 | Environment            | `$logger` resolves to                       |
 | ---------------------- | ------------------------------------------- |
-| SvelteKit (Client)     | `shared/logger/src/lib/svelte_kit.ts`       |
-| Firebase Functions     | `shared/logger/src/lib/logger_functions.ts` |
+| SvelteKit (Client, hub) | `shared/logger/src/lib/svelte_kit.ts` — dynamically loads `logger_svelte_kit_ssr.ts` when `import.meta.env.SSR` (server, incl. the hub's Cloudflare Worker) or `logger_browser.ts` otherwise |
 | Browser (client, site) | `shared/logger/src/lib/logger_browser.ts`   |
-| AWS / Node.js          | `shared/logger/src/lib/logger_aws.ts`       |
+<!-- TODO(stale): "AWS / Node.js -> logger_aws.ts" row removed — packages/shared/logger/src/lib has no logger_aws.ts. Backend/Node targets (apps/backend/worker, etc.) resolve $logger to logger_basic.ts via the package's src/index.ts barrel; could not confirm whether logger_functions.ts is still reachable from any live tsconfig path without deeper investigation. -->
+| Node.js (scripts, worker) | `shared/logger/src/lib/logger_basic.ts` (via `@aikami/logger` barrel) |
 
 **Why**: Each environment configures `$logger` in its own `tsconfig.json` `paths`
 (or `svelte.config.js`). `@aikami/logger` is a NPM package alias — it doesn't
@@ -245,7 +241,7 @@ these specific justifications applies:
 
 | Reason                       | Example                                                                           | Applies To |
 | ---------------------------- | --------------------------------------------------------------------------------- | ---------- |
-| **Import-time side effects** | Firebase config modules (`getAnalytics(app)` crashes in emulator without `appId`) | Client     |
+| **Import-time side effects** | `@tauri-apps/api` modules that throw outside a Tauri webview (browser-only dev) | Client     |
 | **Massive library** (>500KB) | `onnxruntime-web`, `kokoro-js`, `pixi.js` Assets                                  | Client     |
 | **Conditional provider**     | AI client factory — only the chosen provider's SDK loads                          | Client     |
 | **Platform-specific code**   | `@tauri-apps/api` (Tauri-only), `IndexedDB` vs `localStorage`                     | Client     |
@@ -264,7 +260,7 @@ these specific justifications applies:
 | **"Performance"** in a static SPA   | Vite bundles everything regardless. Dynamic imports create MORE network requests, not fewer.         | Static `import`                                                      |
 | **Circular dependency workaround**  | Dynamic imports mask architectural problems. Fix the dependency graph instead.                       | Restructure modules, introduce interfaces, or use a composition root |
 | **"SSR guard"**                     | Client is `ssr: false` — there is no SSR to guard against                                            | Remove the guard, static import                                      |
-| **"Cold start" in Functions**       | Firebase Functions bundle is deployed whole — no tree-shaking. Dynamic import adds runtime overhead. | Static `import` (unless it's a genuinely optional heavy dependency)  |
+| **"Cold start" in the Worker**      | The hub's Cloudflare Worker bundle is deployed whole — no tree-shaking. Dynamic import adds runtime overhead. | Static `import` (unless it's a genuinely optional heavy dependency)  |
 
 ```typescript
 // ❌ WRONG — service-to-service dynamic import (no side effects, not circular)
@@ -312,7 +308,7 @@ location, your code will be rejected.
 | ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **1. Constants & Labels** | `packages/shared/constants/src/`                            | Provider registries, enum-like arrays, default configs, display labels, error codes, routing paths, feature flags | Runtime state, computed values, configs from external APIs (those go in `apps/.../data/`), ViewModel-local UI strings                                    |
 | **2. Type Definitions**   | `packages/shared/types/src/`                                | Cross-project domain types, API request/response shapes, entity interfaces                                        | Single-app-local types (go in `apps/<app>/src/lib/types/`), single-function-internal types (go inline), ViewModel interface types (go in ViewModel file) |
-| **3. Runtime Schemas**    | `packages/shared/schemas/src/` (TypeBox)                    | All cross-boundary data validation shapes (API inputs, Firestore documents, EngineBridge payloads)                | Zod schemas (use TypeBox), validation logic for a single function (inline guard), backend-only validation that never crosses to client                   |
+| **3. Runtime Schemas**    | `packages/shared/schemas/src/` (TypeBox)                    | All cross-boundary data validation shapes (API inputs, D1 rows, R2 objects, EngineBridge payloads)                | Zod schemas (use TypeBox), validation logic for a single function (inline guard), backend-only validation that never crosses to client                   |
 | **4. UI State Flags**     | `apps/frontend/client/src/lib/views/*_view_model.svelte.ts` | See `svelte-conventions` § UI State Flags                                                                         | —                                                                                                                                                        |
 
 **🔴 Violations**:
@@ -403,7 +399,7 @@ const config = { api_key: "xyz", max_retries: 3 };
 - **Environment variable names** — `.env` keys, `process.env.X` access,
   and values read via `$env/static/*` or `$env/dynamic/*` follow
   `SCREAMING_SNAKE_CASE` by platform convention (`AIKAMI_MODE`,
-  `PUBLIC_FIREBASE_PROJECT_ID`) and are **exempt** from this rule.
+  `PUBLIC_ASSETS_BASE_URL`) and are **exempt** from this rule.
 
 ### 5. Private Members: Underscore `_` Prefix
 
@@ -469,6 +465,24 @@ pleasantries, hedging. Fragments are OK. Every word must earn its place.
 | Exporting single-use types | Define near/inside the function that uses it |
 | `function` declarations    | Arrow functions (`const fn = () => {}`)      |
 
+### 🔴 Type Assertions Are Guarded
+
+`as unknown as X`, `as any`, and `@ts-ignore` are blocked by `guard-type-safety`
+(`bun run guard`). The guard is a ratchet: counts may only go down, and any NEW
+occurrence fails CI.
+
+If you reach for one, **the type is wrong** — fix the type instead:
+
+- **Unknown external data** → write `parseX(value: unknown): X | undefined` that
+  validates against the TypeBox schema in `@aikami/schemas` and returns `undefined`
+  on mismatch.
+- **Narrowing a union you've already checked** → a type guard
+  (`const isX = (v: unknown): v is X => ...`), not an assertion.
+- **A library's types are wrong** → `@ts-expect-error` with a one-line comment
+  explaining why, so it fails loudly when the library is fixed.
+- **Plain `as X` is acceptable** only to narrow a union you have already
+  discriminated in the same scope.
+
 ### ❌ Forbidden Patterns
 
 - **Chained arguments** — Functions with more than 1 argument must use an options object `{...}`
@@ -488,7 +502,14 @@ pleasantries, hedging. Fragments are OK. Every word must earn its place.
   function (`onclick={() => viewModel.open()}`).
 - **Escape Early** — Return-early pattern to avoid deep nesting
 - **Extract Logic** — If a section within a function can stand alone, extract it into a separate private function (with `_` prefix: `_extractedHelper()`)
-- **JSDoc Everything** — All exported functions, types, and complex internals must have JSDoc comments
+- **JSDoc Everything** — All exported classes, interfaces, functions, types, and complex internals must have a JSDoc comment. Explain the *why*, not the *what* — don't state the obvious:
+  ```typescript
+  /**
+   * Synchronizes the bitECS game state with the SvelteKit UI.
+   * This runs on a separate worker thread to avoid blocking the main PixiJS loop.
+   */
+  export class EngineBridge { ... }
+  ```
 
 ### Options Object Pattern
 
@@ -515,6 +536,37 @@ export const findById = (id: string): Promise<User | undefined> => {
 export const createUser = (email: string, displayName: string, role?: string) => { ... };
 ```
 
+### Class Member Order
+
+Whenever you write a class, organize its members in this order:
+
+1. **Static Fields**
+2. **Instance Fields** (private first, then public)
+3. **Constructor**
+4. **Public Methods** (core API first, then getters/setters)
+5. **Private / Protected Methods**
+
+```typescript
+export class ExampleService extends BaseClass implements ExampleServiceInterface {
+  // 1. Static Fields
+  private static _instanceCount = 0;
+
+  // 2. Instance Fields
+  private readonly _cache = new Map<string, State>();
+  state: State = 'initialized';
+
+  // 3. Public Methods
+  async initialize(): Promise<void> {
+    await this._setupDatabase();
+  }
+
+  // 4. Private Methods
+  private async _setupDatabase(): Promise<void> {
+    // ...
+  }
+}
+```
+
 ### Class Instantiation — Always `ClassName.create()`, Never `new`
 
 All classes extending `BaseClass` must be instantiated with the static `create()`
@@ -524,7 +576,7 @@ factory method. It auto-logs every public method call — **no manual
 ```typescript
 // ✅ CORRECT — ClassName.create() factory (enables auto-logging)
 export const service = MyService.create({ className: "MyService" });
-export const authService = FirebaseAuthService.create({ className: "FirebaseAuthService" });
+export const authService = AuthService.create({ className: "AuthService" });
 
 // ❌ WRONG — raw `new` bypasses auto-logging
 export const service = new MyService({ className: "MyService" });
@@ -591,6 +643,16 @@ const CONFIG = {
 
 ## Import Path Rules
 
+### Import Order
+
+1. Node/Bun built-ins (e.g., `node:fs`)
+2. External dependencies (e.g., `pixi.js`, `svelte`)
+3. Internal shared packages (e.g., `@aikami/types`)
+4. Absolute project paths (e.g., `$lib/...`)
+5. Relative paths (e.g., `./utils.ts`)
+
+Let Biome's `organizeImports` handle the sorting automatically where possible.
+
 ### Always Import from Package Root
 
 When importing from any `@aikami/*` package, import from the **package root**
@@ -602,7 +664,7 @@ import type { CommandNode, MacroNode, TextNode } from "@aikami/schemas";
 import { CommandNodeSchema } from "@aikami/schemas";
 import type { User, Session } from "@aikami/types";
 import { toAppError } from "@aikami/utils";
-import { FIREBASE_REGION } from "@aikami/constants";
+import { WORKER_URL } from "@aikami/constants";
 
 // ❌ WRONG — never import from lib/ sub-paths
 import type { CommandNode } from "@aikami/schemas/lib/parser";
@@ -643,7 +705,7 @@ import { ChatService } from "@aikami/backend-chat";
 This applies to:
 
 - `apps/frontend/client/svelte.config.js` — Vite/SvelteKit aliases
-- `apps/backend/firebase/tsconfig.json` — Functions tsconfig paths
+- `apps/backend/worker/tsconfig.json` — worker tsconfig paths
 - All `import` statements referencing these packages
 
 The pattern `@aikami/backend/<name>` keeps sub-package imports consistent
@@ -756,121 +818,13 @@ export type User = Static<typeof userSchema>;
 ```
 
 TypeBox schemas provide runtime validation + static type inference. They work
-on both server (Firebase Functions) and client — no separate validation
+on both server (Cloudflare Worker) and client — no separate validation
 library needed.
 
 ---
 
-## Project Structure
-
-```
-aikami/
-  apps/
-    frontend/client/       — SvelteKit Client (SvelteKit + PixiJS + Tauri)
-    frontend/site/         — Public site (Astro)
-    frontend/docs/         — Documentation site (Astro Starlight)
-    backend/firebase/      — Firebase Cloud Functions v2 + Data Connect
-    backend/image|text|voice/ — Local AI microservices
-    e2e/                   — E2E test suite
-  packages/
-    shared/                — constants, logger, mocks, parser, schemas, types, utils
-    backend/               — ai, auth, chat, configs, database, image, svelte-kit, utils
-    frontend/              — components, configs, dataconnect, engine, repositories, services, utils
-  scripts/                 — CI, setup, ops scripts
-```
-
----
-
-## Moon Commands
-
-Use extension tools: `validate()` for fix+typecheck+build+test, `moon_detect_affected` before tests.
-
-```bash
-bun moon run client:dev              # Start Client dev server (defaults to emulator mode)
-bun moon run client:dev:staging   # Start Client in staging mode
-bun moon run client:dev:production    # Start Client in production mode
-bun moon run :typecheck            # Type-check all projects
-bun moon run :lint                 # Lint all projects
-bun moon run :fix                  # Auto-fix lint issues
-bun moon run :test                 # Run all tests
-bun moon run :validate             # Full CI validation
-```
-
----
-
-## Direnv Development Environment
-
-### 🔴 CRITICAL: Mode-Aware Dev Server Commands
-
-**`bun run dev` and `moon run client:dev` now default to emulator mode.**
-Emulator is the primary development environment (90% of dev time).
-Use explicit mode scripts when you need a different backend.
-
-```bash
-# ✅ Default — emulator mode (primary dev environment)
-cd apps/frontend/client && bun run dev
-bun moon run client:dev
-bun run herdr:start client
-
-# ✅ Explicit mode override when needed
-cd apps/frontend/client && bun run dev:staging
-cd apps/frontend/client && bun run dev:production
-
-# ❌ None — dev now defaults to emulator, no footgun
-```
-
-**How to check** (from the Client package.json):
-
-```json
-{
-	"dev": "vite dev --mode emulator",
-	"dev:staging": "vite dev --mode staging",
-	"dev:emulator": "vite dev --mode emulator",
-	"dev:production": "vite dev --mode production"
-}
-```
-
-The `--mode` flag tells Vite which `.env.{mode}` file to load, which sets
-`PUBLIC_FIREBASE_PROJECT_ID`, `PUBLIC_MODE`, and other environment-specific
-variables.
-
----
-
-The project uses direnv for deterministic, zero-setup development. Environment
-variables are always available via the loaded `.envrc`. All pi extensions
-inherit this environment.
-
-| Variable                   | Source                  | Purpose                               |
-| -------------------------- | ----------------------- | ------------------------------------- |
-| `AIKAMI_MODE`              | `.env.local` or default | emulator / staging / production       |
-| `AIKAMI_PROJECT_ID`        | Resolved from mode      | GCP project id for current mode       |
-| `AIKAMI_IS_EMULATOR`       | Resolved from mode      | "1" = local emulators, "0" = live GCP |
-| `AIKAMI_NIX_READY`         | flake.nix shellHook     | "1" when Nix devShell loaded          |
-| `GEMINI_API_KEY`           | GSM or mock             | Gemini API key for AI features        |
-| `PLAYWRIGHT_BROWSERS_PATH` | Nix flake               | Playwright browsers from Nix          |
-
-### Mode Switching
-
-| Mode         | Project                | What it means                                                                                                                                             |
-| ------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `emulator`   | `demo-aikami-emulator` | Fully local — Firebase emulators, no GCP. Safe to break.                                                                                                  |
-| `staging`    | `aikami-dev`           | Live GCP project with real deployed services. Acts as staging — deployed Cloud Functions, live Firestore data. Can also run locally against live backend. |
-| `production` | `aikami-prod`          | Live production. Deploy with care.                                                                                                                        |
-
-```bash
-aikami_switch emulator     # Local emulators, no GCP
-aikami_switch staging  # Live staging (aikami-dev)
-aikami_switch production   # Live production (aikami-prod)
-```
-
-### Adding Tools
-
-When the LLM needs a CLI tool not in the Nix devShell:
-
-```bash
-direnv_add_package python3   # Adds to flake.nix, triggers direnv reload
-direnv_add_package ffmpeg
-```
+> Project structure: see AGENTS.md's directory-layout table.
+> Moon commands, direnv modes, and mode switching: see the `project-commands` skill.
 
 ---
 

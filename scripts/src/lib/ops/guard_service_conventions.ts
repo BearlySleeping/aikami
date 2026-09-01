@@ -25,19 +25,45 @@
 //     S10 No exported types besides `*ServiceOptions`/`*ServiceInterface`
 //         (including re-exports) — domain types belong in @aikami/types|
 //         schemas or a local types/ folder.
+//     S11 Services may not import from `$lib/views/**` or `$views/**` —
+//         services must not depend upward on Views/ViewModels. RATCHET
+//         (see below) — 3 pre-existing violations.
+//     S12 No `await import()` outside the documented allowlist
+//         (svelte-conventions/SKILL.md's dynamic-import table). RATCHET —
+//         12 pre-existing violations.
 //
-// Usage: bun scripts/src/lib/ops/guard_service_conventions.ts
-// Exits non-zero on any violation.
+// S11 and S12 are RATCHETS, not hard-zero gates — see guard_type_safety.ts
+// for the identical mechanism. Per-file counts are captured in
+// guard_service_conventions_baseline.json and may only go DOWN. S1–S10 have
+// zero pre-existing violations and stay hard gates.
+//
+// Usage:
+//   bun scripts/src/lib/ops/guard_service_conventions.ts
+//   bun scripts/src/lib/ops/guard_service_conventions.ts --update-baseline
+// Exits non-zero on any hard-rule violation, any ratchet exceeding its
+// baseline, or any ratchet improvement not yet locked in via
+// --update-baseline.
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
-const APP_ROOTS = [resolve(ROOT, 'apps/frontend/client/src/lib/services')];
+const APP_ROOTS = [
+  resolve(ROOT, 'apps/frontend/client/src/lib/services'),
+  resolve(ROOT, 'apps/frontend/hub/src/lib/client/services'),
+];
+const BASELINE_PATH = resolve(import.meta.dir, 'guard_service_conventions_baseline.json');
 
 type Violation = { file: string; rule: string; message: string };
+type RatchetRule = 's11' | 's12';
+type RatchetCounts = Record<RatchetRule, number>;
+type Baseline = Record<string, RatchetCounts>;
+
+const RATCHET_RULES: RatchetRule[] = ['s11', 's12'];
+const emptyCounts = (): RatchetCounts => ({ s11: 0, s12: 0 });
 
 const violations: Violation[] = [];
+const ratchetViolations: Violation[] = [];
 
 const relPath = (file: string): string => file.replace(`${ROOT}/`, '');
 
@@ -204,6 +230,44 @@ const checkService = (file: string): void => {
       message: `exports type \`${name}\` — move it to @aikami/types|schemas or a local types/ folder`,
     });
   }
+
+  const viewImportCount = content.match(/from ['"]\$lib\/views\/|from ['"]\$views\//g)?.length ?? 0;
+  for (let i = 0; i < viewImportCount; i++) {
+    ratchetViolations.push({
+      file: relPath(file),
+      rule: 'S11',
+      message: 'imports from Views/ViewModels — services must not depend upward',
+    });
+  }
+
+  const dynamicImportCount = content.match(/\bawait\s+import\s*\(/g)?.length ?? 0;
+  for (let i = 0; i < dynamicImportCount; i++) {
+    ratchetViolations.push({
+      file: relPath(file),
+      rule: 'S12',
+      message:
+        'uses `await import()` — only valid per the allowlist in svelte-conventions/SKILL.md',
+    });
+  }
+};
+
+// ── Ratchet baseline I/O ─────────────────────────────────────────────────
+
+const loadBaseline = (): Baseline => {
+  if (!existsSync(BASELINE_PATH)) {
+    return {};
+  }
+  return JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Baseline;
+};
+
+const countsOf = (relPathValue: string): RatchetCounts => {
+  const counts = emptyCounts();
+  for (const v of ratchetViolations) {
+    if (v.file === relPathValue) {
+      counts[v.rule.toLowerCase() as RatchetRule]++;
+    }
+  }
+  return counts;
 };
 
 // ── Main ─────────────────────────────────────────────────────────────────
@@ -226,8 +290,57 @@ if (violations.length > 0) {
     }
   }
   console.error(
-    `\n🔴 service-conventions guard failed — ${violations.length} violation(s) across ${byFile.size} file(s)`,
+    `\n🔴 service-conventions guard failed — ${violations.length} hard violation(s) across ${byFile.size} file(s)`,
   );
+  process.exit(1);
+}
+
+const updateBaseline = Bun.argv.includes('--update-baseline');
+const ratchetFiles = [...new Set(ratchetViolations.map((v) => v.file))].sort();
+
+if (updateBaseline) {
+  const baseline: Baseline = {};
+  for (const file of ratchetFiles) {
+    baseline[file] = countsOf(file);
+  }
+  writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
+  console.log(`✅ Baseline updated: ${ratchetFiles.length} file(s) with ratcheted violations`);
+  process.exit(0);
+}
+
+const baseline = loadBaseline();
+const allRatchetPaths = new Set([...ratchetFiles, ...Object.keys(baseline)]);
+
+let ratchetFailed = false;
+for (const file of [...allRatchetPaths].sort()) {
+  const current = countsOf(file);
+  const expected = baseline[file] ?? emptyCounts();
+  const lines: string[] = [];
+
+  for (const rule of RATCHET_RULES) {
+    if (current[rule] > expected[rule]) {
+      ratchetFailed = true;
+      lines.push(
+        `[${rule.toUpperCase()}] ${current[rule]} found, baseline allows ${expected[rule]}`,
+      );
+    } else if (current[rule] < expected[rule]) {
+      ratchetFailed = true;
+      lines.push(
+        `[${rule.toUpperCase()}] improved to ${current[rule]} (baseline ${expected[rule]}) — run --update-baseline to lock this in`,
+      );
+    }
+  }
+
+  if (lines.length > 0) {
+    console.error(`❌ ${file}`);
+    for (const line of lines) {
+      console.error(`      ${line}`);
+    }
+  }
+}
+
+if (ratchetFailed) {
+  console.error('\n🔴 service-conventions ratchet guard failed — see violations above');
   process.exit(1);
 }
 

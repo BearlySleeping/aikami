@@ -5,7 +5,16 @@
 // non-sensitive settings are stored as plain JSON in localStorage.
 // Firestore sync is optional — works entirely offline for Tauri / local use.
 
-import { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
+import {
+  BUILT_IN_PRESETS,
+  DEFAULT_VOICE_ARCHETYPES,
+  type EMBEDDING_MODELS,
+  type EMOTION_METHODS,
+  type GenParamPreset,
+  type ImageProvider,
+  type MEMORY_TYPES,
+  type VoiceProvider,
+} from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -177,7 +186,7 @@ type EmotionConfig = {
 // ── AI Generation Settings (absorbed from ai_settings.svelte.ts) ────────
 
 /** Advanced overrides for specific providers. */
-type AdvancedOverrides = {
+export type AdvancedOverrides = {
   /** Thinking/reasoning level for DeepSeek/Claude models. */
   thinkingLevel: number;
 };
@@ -201,7 +210,7 @@ export { BUILT_IN_PRESETS, type GenParamPreset } from '@aikami/constants';
 import type { Connection, ConnectionId } from '$types';
 
 /** Top-level configuration state. */
-type ConfigState = {
+export type ConfigState = {
   /** Text generation settings (provider, API keys, URL). */
   text: TextConfig;
   /** Preferred text generation model. */

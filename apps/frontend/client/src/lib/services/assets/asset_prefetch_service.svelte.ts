@@ -23,7 +23,7 @@ export type AssetPrefetchServiceOptions = BaseFrontendClassOptions;
 /** Concurrent fetches during the background warm pass — see game_boot_service. */
 const WARM_CONCURRENCY = 8;
 
-type AssetPrefetchPhase =
+export type AssetPrefetchPhase =
   | 'idle'
   | 'preparing'
   | 'prefetching-core'

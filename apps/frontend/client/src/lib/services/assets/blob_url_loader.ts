@@ -54,8 +54,11 @@ const _register = (): void => {
           throw error;
         }
       }
-      const texture = Texture.from(blob);
+      const objectUrl = URL.createObjectURL(blob);
+      const texture = Texture.from(objectUrl);
       texture.source.scaleMode = 'nearest';
+      // Revoke the object URL after the texture has loaded its source.
+      texture.source.once('destroy', () => URL.revokeObjectURL(objectUrl));
       return texture;
     },
     unload: (texture: Texture): void => {

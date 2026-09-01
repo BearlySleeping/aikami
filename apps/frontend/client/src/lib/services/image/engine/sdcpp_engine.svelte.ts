@@ -342,7 +342,10 @@ export class SdCppEngine implements ImageEngineClient {
 
   // ── Private: result extraction ───────────────────────────────────────
 
-  private _imageResult(job: SdCppJob, request: ImageGenerationRequest): ImageGenerationResult {
+  private _imageResult(
+    job: SdCppJob | string,
+    request: ImageGenerationRequest,
+  ): ImageGenerationResult {
     const imageData = this._extractInlineImage(job);
     if (!imageData) {
       throw new Error('sd-server job completed without returning an image');
@@ -353,8 +356,9 @@ export class SdCppEngine implements ImageEngineClient {
       blob,
       // Prefer the dimensions reported by the job payload; fall back to the
       // requested dimensions (then 512) only when the job omits them.
-      width: job.width ?? request.width ?? 512,
-      height: job.height ?? request.height ?? 512,
+      width: typeof job === 'string' ? (request.width ?? 512) : (job.width ?? request.width ?? 512),
+      height:
+        typeof job === 'string' ? (request.height ?? 512) : (job.height ?? request.height ?? 512),
       mimeType: blob.type || 'image/png',
     };
   }
@@ -515,10 +519,10 @@ const imageDataToBlob = (imageData: string): Blob => {
   if (imageData.startsWith('data:')) {
     const [meta, base64] = imageData.split(',');
     const mime = /data:(.*?)(?:;|$)/.exec(meta)?.[1] ?? 'image/png';
-    return new Blob([base64ToBytes(base64 ?? '')], { type: mime });
+    return new Blob([base64ToBytes(base64 ?? '').buffer], { type: mime });
   }
   // Raw base64 (A1111 `images: [...]`) — assume PNG.
-  return new Blob([base64ToBytes(imageData)], { type: 'image/png' });
+  return new Blob([base64ToBytes(imageData).buffer], { type: 'image/png' });
 };
 
 const base64ToBytes = (base64: string): Uint8Array => {

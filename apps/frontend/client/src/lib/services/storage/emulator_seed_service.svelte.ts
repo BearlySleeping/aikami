@@ -18,7 +18,8 @@ import {
 } from '@aikami/frontend/services';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import { EMULATOR_GOOGLE_PERSONA_DATA, EMULATOR_NPCS, EMULATOR_PERSONA_DATA } from '@aikami/mocks';
-import type { CustomAgentDefinition, NpcData, PersonaData } from '@aikami/types';
+import type { NpcCreateData, PersonaData } from '@aikami/types';
+import type { CustomAgentDefinition } from '$types';
 
 export type EmulatorSeedServiceOptions = BaseFrontendClassOptions & {
   /** Force reseeding even if the tables already have rows (tests). */
@@ -109,12 +110,12 @@ class EmulatorSeedService
 
     for (const npc of EMULATOR_NPCS) {
       const id = npc.name.toLowerCase().replace(/\s+/g, '-');
-      const data: NpcData = {
+      const data: NpcCreateData = {
         ...(npc as object),
         id,
         createdAt: new Date(),
         updatedAt: new Date(),
-      } as NpcData;
+      } as NpcCreateData;
       await db.execute({
         sql: "INSERT OR REPLACE INTO npcs (id, name, data, updated_at) VALUES (?, ?, ?, datetime('now'))",
         args: [id, data.name ?? 'Unnamed', JSON.stringify(data)],

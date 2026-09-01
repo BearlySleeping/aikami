@@ -114,7 +114,6 @@ imports are faster, simpler, and eliminate unnecessary async cascading.
 
 | Pattern | Why dynamic |
 |---|---|
-| **Firebase config modules** | Have import-time side effects (`getAnalytics(app)`, `getAuth(app)`, etc.). Analytics crashes in emulator without `appId`. Offline-first — Firebase only activates when needed. |
 | **`@aikami/frontend/engine`** | Heavy PixiJS bundle. Deferred until game engine initializes. |
 | **AI client factory** | Only the chosen provider's SDK loads (`openai` vs `ollama` vs `gemini`). |
 | **Massive libs** | `onnxruntime-web` (~10MB), `kokoro-js`, `pixi.js` Assets module |
@@ -133,7 +132,7 @@ must be a direct property access on the ViewModel.
 
 **ViewModels are thin bridges to services** — orchestrate service calls, expose
 state to the view, but never contain heavy business logic, import repositories,
-or call API/firebase functions directly. That belongs in services.
+or call server API endpoints directly. That belongs in services.
 
 ### 🔴 CRITICAL: View Structural Constraints
 
@@ -384,6 +383,43 @@ belong in `packages/shared/constants/` — never hardcoded in ViewModels.
 | `$views`    | `$lib/views`                                                      |
 
 `$services` is a barrel, never a directory — always import from root.
+
+---
+
+## Node-Only Code in a Frontend Package
+
+A `packages/frontend/*` package's browser bundle must never pull in Node
+builtins (`node:fs`, `node:path`, etc.) — enforced by Biome's
+`noRestrictedImports` on `packages/frontend/**` (`biome.json`). When a
+package genuinely needs Node-only code (filesystem scanning, disk I/O for
+build/dev tooling), isolate it behind a **separate Node entrypoint**, not a
+scattered import:
+
+- Node-only source files are named `*_node.ts` (e.g.
+  `packages/frontend/engine/src/assets/asset_manifest_node.ts`).
+- They're reachable only through a dedicated entrypoint (e.g.
+  `packages/frontend/engine/src/node.ts`), never re-exported from the
+  package's browser barrel (`src/index.ts`).
+- The split is enforced by a boundary test (e.g.
+  `packages/frontend/engine/src/__tests__/entrypoint_boundary.test.ts`), not
+  just convention.
+
+`*_node.ts` / `src/node.ts` files are exempt from the frontend `node:*`
+import restriction for exactly this reason (see the `packages/frontend/**`
+override's `includes` in `biome.json`) — it's a named escape valve with a
+test behind it, not a suppression.
+
+---
+
+## Cross-Origin Isolation & Web Workers
+
+When using `SharedArrayBuffer` for Web Workers, the document MUST be cross-origin isolated by returning `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`.
+
+**CRITICAL LIMITATION**: SvelteKit's `adapter-static` combined with `vite preview` or production servers often bypass Vite's standard `preview.headers` configuration for static JS chunks.
+
+- If a Web Worker script chunk lacks the `COEP` header, the browser will silently abort the worker execution (resulting in an empty `ErrorEvent` with no message) under `ERR_BLOCKED_BY_RESPONSE`.
+- **Solution**: Always use a global middleware plugin in `vite.config.ts` (using `configureServer` and `configurePreviewServer`) to explicitly force the COOP/COEP headers on *all* responses.
+- When dynamically importing a worker via `?worker`, ensure you set `worker: { format: 'es' }` in `vite.config.ts` so that it bundles cleanly as an ES Module instead of falling back to an IIFE that might violate strict isolation contexts.
 
 ---
 
