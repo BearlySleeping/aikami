@@ -164,9 +164,9 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
     path: 'apps/frontend/client',
     shortName: 'client',
     prefix: 'CLIENT',
-    // Staging domain intentionally omitted — not recorded anywhere in the repo.
     customDomains: {
       production: 'aikami.bearlysleeping.com',
+      staging: 'aikami.stg.bearlysleeping.com',
     },
     cloudflare: {
       workerName: (mode) => (mode === 'production' ? 'aikami-client' : `aikami-${mode}-client`),
@@ -175,6 +175,7 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       compatibilityDate: '2026-08-21',
       routes: {
         production: 'aikami.bearlysleeping.com',
+        staging: 'aikami.stg.bearlysleeping.com',
       },
       headersSource: 'static/_headers',
       notFoundHandling: 'single-page-application',
@@ -227,14 +228,17 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       assetsDir: 'build/client',
       compatibilityDate: '2026-08-21',
       compatibilityFlags: ['nodejs_compat'],
+      // Separate D1 databases per mode (staging provisioned 2026-09-02) —
+      // isolates Better Auth user data and save-backup metadata so a
+      // staging deploy can never read/write production's real users.
       d1Databases: (mode) => [
         {
           binding: 'DB',
           databaseName: mode === 'production' ? 'aikami-hub' : `aikami-${mode}-hub`,
-          // TODO: Provision separate D1 databases for staging and production to isolate
-          // Better Auth user data and save-backup metadata across environments. For now,
-          // both modes share the production database (bf77e365-058f-408f-871c-4a0567c9aa10).
-          databaseId: 'bf77e365-058f-408f-871c-4a0567c9aa10',
+          databaseId:
+            mode === 'production'
+              ? 'bf77e365-058f-408f-871c-4a0567c9aa10'
+              : '83bfee84-e656-4d37-b5f5-035e126e0981',
         },
       ],
       r2Buckets: (mode) => [
