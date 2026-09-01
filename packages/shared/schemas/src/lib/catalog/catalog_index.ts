@@ -48,6 +48,7 @@ export const CatalogCategorySchema = Type.Union(
     Type.Literal('tilesets'),
     Type.Literal('contentPacks'),
     Type.Literal('portraits'),
+    Type.Literal('props'),
   ],
   { description: 'Catalog category — one of the ten scan categories' },
 );

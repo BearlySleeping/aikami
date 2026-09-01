@@ -26,21 +26,21 @@ const BASE_URL = 'http://localhost:5173';
 
 const createMockD1 = (dbClient: Client): unknown => {
   const prepareStatement = (sql: string) => ({
-    bind: (...params: unknown[]) => ({
+    bind: (...params: never[]) => ({
       all: async () => {
-        const res = await dbClient.execute({ sql, args: params });
+        const res = await dbClient.execute({ sql, args: params as never[] });
         return { results: res.rows };
       },
       first: async () => {
-        const res = await dbClient.execute({ sql, args: params });
+        const res = await dbClient.execute({ sql, args: params as never[] });
         return res.rows[0] ?? null;
       },
       run: async () => {
-        const res = await dbClient.execute({ sql, args: params });
-        return { meta: res.meta };
+        const _res = await dbClient.execute({ sql, args: params as never[] });
+        return { meta: { last_row_id: 0, changes: 0 } };
       },
       raw: async () => {
-        const res = await dbClient.execute({ sql, args: params });
+        const res = await dbClient.execute({ sql, args: params as never[] });
         return res.rows;
       },
     }),
@@ -51,7 +51,9 @@ const createMockD1 = (dbClient: Client): unknown => {
       await dbClient.execute(sql);
     },
     batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
-      Promise.all(statements.map((s) => client.execute({ sql: s.sql, args: s.params ?? [] }))),
+      Promise.all(
+        statements.map((s) => client.execute({ sql: s.sql, args: (s.params ?? []) as never[] })),
+      ),
   };
 };
 
@@ -64,7 +66,7 @@ const createMockR2 = () => {
     failPut: (v: boolean) => {
       failPut = v;
     },
-    put: async (key: string, value: ArrayBuffer | Uint8Array) => {
+    put: async (key: string, value: ArrayBuffer | Uint8Array<ArrayBufferLike>) => {
       if (failPut) {
         throw new Error('R2 put failed');
       }
@@ -76,7 +78,7 @@ const createMockR2 = () => {
       if (!bytes) {
         return null;
       }
-      return { body: new Blob([bytes]).stream() };
+      return { body: new Blob([bytes as BlobPart]).stream() };
     },
     delete: async (key: string) => {
       store.delete(key);
@@ -85,15 +87,17 @@ const createMockR2 = () => {
 };
 
 let client: Client;
-let setBetterAuthEnv: (
-  env:
-    | {
-        DB: unknown;
-      }
-    | undefined,
-) => void;
-let setSaveBackupEnv: (env: unknown) => void;
-let app: Awaited<ReturnType<typeof import('../index.ts')>>['app'];
+type BetterAuthEnv = {
+  DB: import('@cloudflare/workers-types').D1Database;
+};
+type SaveBackupEnv = {
+  DB: import('@cloudflare/workers-types').D1Database;
+  SAVES_BUCKET: import('@cloudflare/workers-types').R2Bucket;
+};
+
+let setBetterAuthEnv: (env: BetterAuthEnv | undefined) => void;
+let setSaveBackupEnv: (env: SaveBackupEnv | undefined) => void;
+let app: import('../index.ts').App;
 let r2: ReturnType<typeof createMockR2>;
 
 const applyD1Migrations = async (): Promise<void> => {
@@ -141,7 +145,7 @@ const postBytes = (path: string, bytes: Uint8Array, cookie?: string) =>
   new Request(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: cookie ? { cookie } : {},
-    body: bytes,
+    body: bytes as unknown as BodyInit,
   });
 
 const get = (path: string, cookie?: string) =>
@@ -171,11 +175,16 @@ beforeAll(async () => {
   await applyD1Migrations();
   const betterAuthModule = await import('../better_auth.ts');
   setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
-  setBetterAuthEnv({ DB: createMockD1(client) });
+  setBetterAuthEnv({
+    DB: createMockD1(client) as unknown as import('@cloudflare/workers-types').D1Database,
+  });
   const saveBackupModule = await import('../save_backup.ts');
   setSaveBackupEnv = saveBackupModule.setSaveBackupEnv;
   r2 = createMockR2();
-  setSaveBackupEnv({ DB: createMockD1(client), SAVES_BUCKET: r2 });
+  setSaveBackupEnv({
+    DB: createMockD1(client) as unknown as import('@cloudflare/workers-types').D1Database,
+    SAVES_BUCKET: r2 as unknown as import('@cloudflare/workers-types').R2Bucket,
+  });
   ({ app } = await import('../index.ts'));
 });
 

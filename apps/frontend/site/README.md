@@ -1,7 +1,7 @@
 # Aikami Site
 
 Public marketing site for [Aikami](https://aikami.dev) — an AI-powered 2D RPG.
-Built with **Astro 7** + **Tailwind CSS v4**, deployed to **Firebase Hosting**.
+Built with **Astro 7** + **Tailwind CSS v4**, deployed to **Cloudflare Workers**.
 
 ## Quick Start
 
@@ -34,7 +34,7 @@ bun moon run site:dev
 | `bun run preview` | Preview production build locally |
 | `bun run typecheck` | `astro sync && astro check` |
 | `bun run lint` / `fix` | Biome linting / auto-fix |
-| `bun run deploy` | Deploy to Firebase Hosting (via `scripts/deploy.ts`) |
+| `bun run deploy` | Deploy to Cloudflare Workers (via `scripts/deploy.ts`) |
 | `bun run preview:chromium` | Open site in Chromium app window |
 | `bun run unlighthouse` | Full Lighthouse audit (build + analyze) |
 
@@ -48,7 +48,7 @@ bun run build:production    # production build
 
 ## Deployment
 
-Deployment is handled by `scripts/deploy.ts`, which reads the current mode from `AIKAMI_MODE` (or `MODE`) and resolves the correct Firebase project + hosting site ID.
+Deployment is handled by `scripts/deploy.ts`, which reads the current mode from `AIKAMI_MODE` (or `MODE`) and deploys to Cloudflare Workers.
 
 ```bash
 # Deploy to staging
@@ -58,11 +58,7 @@ AIKAMI_MODE=staging bun run deploy
 bun run scripts/deploy.ts -- --mode staging
 ```
 
-The script:
-1. Reads `firebase.json`
-2. Injects the resolved `hosting.site` ID
-3. Runs `firebase deploy --only hosting`
-4. Cleans up the temp config
+The script delegates to the shared Cloudflare deploy helper in `scripts/src/lib/deploy/cloudflare.ts`, which handles argument parsing, app config resolution, and deployment invocation.
 
 ## Architecture
 
@@ -257,14 +253,9 @@ bun run scripts/src/lib/ops/generate_brand_assets.ts --skip-svg
 bun run scripts/src/lib/ops/convert_image_to_svg.ts
 ```
 
-## Firebase Config
+## Security Headers
 
-`firebase.json` includes production-grade security headers:
-- HSTS (max-age=2 years, preload)
-- CSP (strict allowlist)
-- X-Frame-Options: DENY
-- X-Content-Type-Options: nosniff
-- Cache-Control for immutable assets (`_astro/`) and static files
+Security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Cache-Control) are configured in the Cloudflare Worker deployment config.
 
 ## Environment Variables
 
@@ -275,6 +266,6 @@ Defined in `astro.config.ts` env schema:
 | `PUBLIC_GOOGLE_ANALYTICS_ID` | client | No (default: `""`) |
 | `PUBLIC_MICROSOFT_CLARITY_ID` | client | No (default: `""`) |
 | `PUBLIC_SITE_URL` | client | No |
-| `PUBLIC_FIREBASE_*` | client | No |
+| `PUBLIC_CLOUDFLARE_*` | client | No |
 | `PUBLIC_RECAPTCHA_SITE_KEY` | client | No |
 | `PUBLIC_MODE` | client | No |

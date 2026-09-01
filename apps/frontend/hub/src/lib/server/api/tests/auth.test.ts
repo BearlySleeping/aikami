@@ -35,19 +35,19 @@ const createMockD1 = (dbClient: Client): unknown => {
   const prepareStatement = (sql: string) => ({
     bind: (...params: unknown[]) => ({
       all: async () => {
-        const res = await dbClient.execute({ sql, args: params });
+        const res = await dbClient.execute({ sql, args: params as never[] });
         return { results: res.rows };
       },
       first: async () => {
-        const res = await dbClient.execute({ sql, args: params });
+        const res = await dbClient.execute({ sql, args: params as never[] });
         return res.rows[0] ?? null;
       },
       run: async () => {
-        const res = await dbClient.execute({ sql, args: params });
-        return { meta: res.meta };
+        const _res = await dbClient.execute({ sql, args: params as never[] });
+        return { meta: { last_row_id: 0, changes: 0 } };
       },
       raw: async () => {
-        const res = await dbClient.execute({ sql, args: params });
+        const res = await dbClient.execute({ sql, args: params as never[] });
         return res.rows;
       },
     }),
@@ -58,13 +58,19 @@ const createMockD1 = (dbClient: Client): unknown => {
       await dbClient.execute(sql);
     },
     batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
-      Promise.all(statements.map((s) => dbClient.execute({ sql: s.sql, args: s.params ?? [] }))),
+      Promise.all(
+        statements.map((s) => dbClient.execute({ sql: s.sql, args: (s.params ?? []) as never[] })),
+      ),
   };
 };
 
 let client: Client;
-let app: Awaited<ReturnType<typeof import('../index.ts')>>['app'];
-let setBetterAuthEnv: (env: { DB: unknown } | undefined) => void;
+let app: import('../index.ts').App;
+type BetterAuthEnv = {
+  DB: import('@cloudflare/workers-types').D1Database;
+};
+
+let setBetterAuthEnv: (env: BetterAuthEnv | undefined) => void;
 
 const applyD1Migrations = async (): Promise<void> => {
   const dir = join(
@@ -114,7 +120,9 @@ beforeAll(async () => {
   await applyD1Migrations();
   const betterAuthModule = await import('../better_auth.ts');
   setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
-  setBetterAuthEnv({ DB: createMockD1(client) });
+  setBetterAuthEnv({
+    DB: createMockD1(client) as unknown as import('@cloudflare/workers-types').D1Database,
+  });
   ({ app } = await import('../index.ts'));
 });
 
@@ -202,7 +210,9 @@ describe('hub Better Auth mount (AC-4)', () => {
       expect(betterAuthModule.getBetterAuth()).toBeUndefined();
       expect(res.status).toBe(503);
     } finally {
-      setBetterAuthEnv({ DB: createMockD1(client) });
+      setBetterAuthEnv({
+        DB: createMockD1(client) as unknown as import('@cloudflare/workers-types').D1Database,
+      });
     }
   });
 

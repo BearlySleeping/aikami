@@ -62,10 +62,16 @@ describe('previewKindForEntry', () => {
   });
 
   test('unknown category → none', () => {
-    expect(previewKindForEntry(makeEntry({ category: 'unknown_category' }))).toBe('none');
+    expect(
+      previewKindForEntry(
+        makeEntry({ category: 'unknown_category' as CatalogAssetEntry['category'] }),
+      ),
+    ).toBe('none');
   });
 
   test('empty category → none', () => {
-    expect(previewKindForEntry(makeEntry({ category: '' }))).toBe('none');
+    expect(previewKindForEntry(makeEntry({ category: '' as CatalogAssetEntry['category'] }))).toBe(
+      'none',
+    );
   });
 });

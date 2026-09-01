@@ -48,6 +48,7 @@ export type AppServiceInterface = BaseFrontendClassInterface & {
   toggleNotificationDrawer(value?: boolean): void;
 
   setLogLevel(logLevel: LogLevel): void;
+  sessionId: string | undefined;
 };
 
 export class AppService
@@ -65,6 +66,7 @@ export class AppService
 
   isDevelopment = $state(isDevelopmentModePublic());
   initialized = $state(false);
+  sessionId = $state<string | undefined>(undefined);
 
   setCurrentDevice(device: DeviceData): void {
     this._currentDevice = device;

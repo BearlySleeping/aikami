@@ -350,7 +350,7 @@ class CatalogAssetViewModel
           // Build scoped LPC slots from shard entries
           const allSlots = await this.ensureLpcSlotsBuilt();
 
-          this.previewComponent = LpcPreview as ComponentType;
+          this.previewComponent = LpcPreview as unknown as ComponentType;
           this.previewProps = {
             resolver,
             allSlots,
@@ -371,7 +371,7 @@ class CatalogAssetViewModel
         }
         case 'tileset': {
           const { TilesetPreview } = await import('@aikami/frontend-preview');
-          this.previewComponent = TilesetPreview as ComponentType;
+          this.previewComponent = TilesetPreview as unknown as ComponentType;
           this.previewProps = {
             resolver,
             tag,
@@ -384,13 +384,13 @@ class CatalogAssetViewModel
         }
         case 'map': {
           const { MapPreview } = await import('@aikami/frontend-preview');
-          this.previewComponent = MapPreview as ComponentType;
+          this.previewComponent = MapPreview as unknown as ComponentType;
           this.previewProps = { resolver, mapTag: tag, width: 320, height: 320, zoom: 1 };
           break;
         }
         case 'prop': {
           const { PropPreview } = await import('@aikami/frontend-preview');
-          this.previewComponent = PropPreview as ComponentType;
+          this.previewComponent = PropPreview as unknown as ComponentType;
           this.previewProps = { resolver, tag, width: 320, height: 320, zoom: 2 };
           break;
         }

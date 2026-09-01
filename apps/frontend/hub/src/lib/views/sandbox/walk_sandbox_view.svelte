@@ -19,7 +19,13 @@ let loading = $state(true);
 
 onMount(() => {
   let cleanup: (() => void) | undefined;
-  let baseVm: { dispose: () => Promise<void> } | undefined;
+  let baseVm:
+    | {
+        dispose: () => Promise<void>;
+        initialize: () => Promise<void>;
+        initializeEngine: (canvas: HTMLCanvasElement) => Promise<void>;
+      }
+    | undefined;
   let disposed = false;
 
   const _mount = async () => {

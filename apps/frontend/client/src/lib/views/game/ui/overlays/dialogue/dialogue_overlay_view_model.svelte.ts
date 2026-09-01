@@ -446,10 +446,14 @@ class DialogueOverlayViewModel
   /** Resolve the onRoll callback based on skill check phase. */
   private _resolveDiceOnRoll(s: SkillCheckState): (() => void) | undefined {
     if (s.phase === 'awaiting_click') {
-      return (): void => { void this.rollDice(); };
+      return (): void => {
+        void this.rollDice();
+      };
     }
     if (s.phase === 'declared') {
-      return (): void => { this.acknowledgeDeclaration(); };
+      return (): void => {
+        this.acknowledgeDeclaration();
+      };
     }
     return undefined;
   }

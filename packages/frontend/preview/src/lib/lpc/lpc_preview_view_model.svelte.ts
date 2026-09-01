@@ -22,6 +22,8 @@ import type { LpcRenderer } from './lpc_renderer';
 import { createLpcRenderer, detectLpcSheetLayout, getLpcSpriteAnchor } from './lpc_renderer';
 import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state';
 
+export type { LpcPreviewState };
+
 // ── Constants ────────────────────────────────────────────────────────────
 
 const MaxLayers = 8;

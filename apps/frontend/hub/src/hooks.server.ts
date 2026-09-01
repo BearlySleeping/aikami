@@ -135,7 +135,7 @@ export const handleError = (({ error, event }) => {
     errorId: sessionId,
     message: pwaError?.message ?? 'Internal Server Error',
     type: pwaError?.type ?? 'unknown-error',
-  };
+  } as unknown as ReturnType<HandleServerError>;
 }) satisfies HandleServerError;
 
 export const handle: Handle = async ({ event, resolve }) => {

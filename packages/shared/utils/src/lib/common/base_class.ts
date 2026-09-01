@@ -1,6 +1,7 @@
 // packages/shared/utils/src/lib/common/base_class.ts
-import { type LogEntry, logger } from '$logger';
+
 import type { LogLevel } from '@aikami/types';
+import { type LogEntry, logger } from '$logger';
 import {
   createLiteObserver,
   createObserver,
@@ -185,8 +186,6 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
   get _className(): string {
     return this._options.className;
   }
-
-
 
   // --- Public Methods ---
 

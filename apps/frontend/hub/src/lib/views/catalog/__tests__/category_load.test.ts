@@ -13,7 +13,7 @@
 // to null — the page still renders completely, with stats absent.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { CatalogIndexRoot, CatalogIndexShard } from '@aikami/schemas';
+import type { CatalogAssetEntry, CatalogIndexRoot, CatalogIndexShard } from '@aikami/schemas';
 
 // ---------------------------------------------------------------------------
 // Fixture origin — a tiny local HTTP server that records requested paths
@@ -22,18 +22,19 @@ import type { CatalogIndexRoot, CatalogIndexShard } from '@aikami/schemas';
 const requestedPaths: string[] = [];
 let origin: { url: string; stop: () => void } | undefined;
 
-const makeEntry = (tag: string, category: string, subcategory: string, extra?: object) => ({
-  tag,
-  hash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
-  sizeBytes: 1024,
-  category,
-  subcategory,
-  ext: '.webp',
-  licenses: ['CC-BY-SA 3.0', 'GPL 3.0'],
-  authors: ['Fixture Author'],
-  sourceUrls: ['https://example.com/credits'],
-  ...extra,
-});
+const makeEntry = (tag: string, category: string, subcategory: string, extra?: object) =>
+  ({
+    tag,
+    hash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+    sizeBytes: 1024,
+    category,
+    subcategory,
+    ext: '.webp',
+    licenses: ['CC-BY-SA 3.0', 'GPL 3.0'],
+    authors: ['Fixture Author'],
+    sourceUrls: ['https://example.com/credits'],
+    ...extra,
+  }) as CatalogAssetEntry;
 
 const buildRoot = (originUrl: string): CatalogIndexRoot => ({
   schemaVersion: 1,
@@ -81,12 +82,12 @@ const buildMusicShard = (originUrl: string): CatalogIndexShard => ({
 });
 
 beforeAll(async () => {
-  const server = Bun.serve({
+  const server: { url: URL; port: number | undefined; stop: (hard?: boolean) => void } = Bun.serve({
     port: 0,
     fetch(request) {
       const url = new URL(request.url);
       requestedPaths.push(url.pathname);
-      const originUrl = server.url.toString().replace(/\/$/, '');
+      const originUrl = `http://127.0.0.1:${server.port}`;
       if (url.pathname === '/index/v1/catalog.json') {
         return Response.json(buildRoot(originUrl));
       }
@@ -103,7 +104,7 @@ beforeAll(async () => {
       return new Response('not found', { status: 404 });
     },
   });
-  origin = { url: server.url.toString().replace(/\/$/, ''), stop: () => server.stop(true) };
+  origin = { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
 });
 
 afterAll(() => {
@@ -153,64 +154,63 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
 
   test('split-shard categories merge every `<category>__*` shard', async () => {
     // Add a split shard to the fixture and assert the discovery logic merges it.
-    const server = Bun.serve({
-      port: 0,
-      fetch(request) {
-        const url = new URL(request.url);
-        requestedPaths.push(url.pathname);
-        const originUrl = server.url.toString().replace(/\/$/, '');
-        if (url.pathname === '/index/v1/catalog.json') {
-          return Response.json({
-            schemaVersion: 1,
-            publishedAt: '2026-08-15T00:00:00.000Z',
-            originUrl,
-            totalCount: 3,
-            categories: [
-              { id: 'lpc__hat-magic', count: 1 },
-              { id: 'lpc__body', count: 1 },
-              { id: 'lpcx', count: 1 },
-              { id: 'music', count: 1 },
-            ],
-          });
-        }
-        if (url.pathname === '/index/v1/lpc__hat-magic.json') {
-          return Response.json({
-            schemaVersion: 1,
-            publishedAt: '2026-08-15T00:00:00.000Z',
-            originUrl,
-            id: 'lpc__hat-magic',
-            category: 'lpc',
-            entries: [makeEntry('lpc:hat:magic:celestial_adult:thrust', 'lpc', 'hat/magic')],
-          });
-        }
-        if (url.pathname === '/index/v1/lpc__body.json') {
-          return Response.json({
-            schemaVersion: 1,
-            publishedAt: '2026-08-15T00:00:00.000Z',
-            originUrl,
-            id: 'lpc__body',
-            category: 'lpc',
-            entries: [makeEntry('lpc:body:body:male_adult:walk', 'lpc', 'body/body')],
-          });
-        }
-        if (url.pathname === '/index/v1/lpcx.json') {
-          // A sibling category whose id is a PREFIX of "lpc" (lpcx !== lpc,
-          // lpcx does not start with "lpc__") — discovery must NEVER fetch it.
-          return Response.json({
-            schemaVersion: 1,
-            publishedAt: '2026-08-15T00:00:00.000Z',
-            originUrl,
-            id: 'lpcx',
-            category: 'lpc',
-            entries: [makeEntry('lpcx:test:asset', 'lpc', 'test')],
-          });
-        }
-        return new Response('not found', { status: 404 });
-      },
-    });
+    const server: { url: URL; port: number | undefined; stop: (hard?: boolean) => void } =
+      Bun.serve({
+        port: 0,
+        fetch(request) {
+          const url = new URL(request.url);
+          requestedPaths.push(url.pathname);
+          const originUrl = `http://127.0.0.1:${server.port}`;
+          if (url.pathname === '/index/v1/catalog.json') {
+            return Response.json({
+              schemaVersion: 1,
+              publishedAt: '2026-08-15T00:00:00.000Z',
+              originUrl,
+              totalCount: 3,
+              categories: [
+                { id: 'lpc__hat-magic', count: 1 },
+                { id: 'lpc__body', count: 1 },
+                { id: 'lpcx', count: 1 },
+                { id: 'music', count: 1 },
+              ],
+            });
+          }
+          if (url.pathname === '/index/v1/lpc__hat-magic.json') {
+            return Response.json({
+              schemaVersion: 1,
+              publishedAt: '2026-08-15T00:00:00.000Z',
+              originUrl,
+              id: 'lpc__hat-magic',
+              category: 'lpc',
+              entries: [makeEntry('lpc:hat:magic:celestial_adult:thrust', 'lpc', 'hat/magic')],
+            });
+          }
+          if (url.pathname === '/index/v1/lpc__body.json') {
+            return Response.json({
+              schemaVersion: 1,
+              publishedAt: '2026-08-15T00:00:00.000Z',
+              originUrl,
+              id: 'lpc__body',
+              category: 'lpc',
+              entries: [makeEntry('lpc:body:body:male_adult:walk', 'lpc', 'body/body')],
+            });
+          }
+          if (url.pathname === '/index/v1/lpcx.json') {
+            return Response.json({
+              schemaVersion: 1,
+              publishedAt: '2026-08-15T00:00:00.000Z',
+              originUrl,
+              id: 'lpcx',
+              category: 'lpc',
+              entries: [makeEntry('lpcx:test:asset', 'lpc', 'test')],
+            });
+          }
+          return new Response('not found', { status: 404 });
+        },
+      });
 
     try {
-      setEnv({ catalogOrigin: server.url.toString().replace(/\/$/, '') });
+      setEnv({ catalogOrigin: `http://127.0.0.1:${server.port}` });
       const { getCategoryEntries } = await import('$lib/server/catalog/catalog_index.ts');
       const result = await getCategoryEntries('lpc');
       expect(result?.entries).toHaveLength(2);
@@ -254,11 +254,12 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
     } as never);
 
     expect(data).toBeDefined();
-    expect(data.category).toBe('lpc');
-    expect(data.entries).toHaveLength(2);
+    const pageData = data as { category: string; entries: unknown[]; stats: Promise<unknown> };
+    expect(pageData.category).toBe('lpc');
+    expect(pageData.entries).toHaveLength(2);
     expect(setHeaders).toHaveBeenCalled();
     // The stats promise is STREAMED — resolving it must yield null with the
     // database unconfigured, and it must never reject (AC-4 watch point).
-    await expect(data.stats).resolves.toBeNull();
+    await expect(pageData.stats).resolves.toBeNull();
   });
 });
