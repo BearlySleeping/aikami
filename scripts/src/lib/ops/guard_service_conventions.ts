@@ -27,10 +27,10 @@
 //         schemas or a local types/ folder.
 //     S11 Services may not import from `$lib/views/**` or `$views/**` —
 //         services must not depend upward on Views/ViewModels. RATCHET
-//         (see below) — 3 pre-existing violations.
+//         (see below) — 3 violations across 3 files.
 //     S12 No `await import()` outside the documented allowlist
 //         (svelte-conventions/SKILL.md's dynamic-import table). RATCHET —
-//         12 pre-existing violations.
+//         66 violations across 12 files.
 //
 // S11 and S12 are RATCHETS, not hard-zero gates — see guard_type_safety.ts
 // for the identical mechanism. Per-file counts are captured in

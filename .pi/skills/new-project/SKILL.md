@@ -688,9 +688,10 @@ Tree-shaking handles unused exports — `lib/` is an implementation detail.
 
 ### ❌ Using `interface` Instead of `type`
 
-Use `type` aliases everywhere. Only use `interface` for polymorphic OOP
-contracts (e.g., `BaseDatabaseService` interface implemented by multiple
-engine-specific classes).
+Use `type` aliases everywhere — including polymorphic contracts implemented by
+several classes (`type FooServiceInterface = { ... }`). Biome's
+`useConsistentTypeDefinitions` is set to `error` with no exemption outside
+`*.d.ts`, so an `interface` anywhere in `src/` fails the build.
 
 ```typescript
 // ✅ CORRECT

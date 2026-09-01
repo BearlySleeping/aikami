@@ -480,7 +480,7 @@ const dataUrlToBlob = (dataUrl: string): Blob => {
 
   // Safari/older browsers lack atob-free binary conversion; fetch() of a
   // data URL is the most portable path in the browser.
-  return new Blob([base64ToBytes(base64).buffer], { type: mime });
+  return new Blob([new Uint8Array(base64ToBytes(base64))], { type: mime });
 };
 
 const base64ToBytes = (base64: string): Uint8Array => {

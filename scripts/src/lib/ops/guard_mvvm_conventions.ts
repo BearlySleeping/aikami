@@ -21,9 +21,9 @@
 //     V5  No <style> block — prefer Tailwind utility classes.
 //
 //     V6  No `$effect` — Views are completely logicless (Pillar 3).
-//         RATCHET (see below) — 13 pre-existing violations.
+//         RATCHET (see below) — 19 pre-existing violations across 13 files.
 //     V7  No `onMount` / `onDestroy` — lifecycle belongs to
-//         BaseViewModelContainer. RATCHET — 8 pre-existing violations.
+//         BaseViewModelContainer. RATCHET — 8 violations across 8 files.
 //
 //   ViewModel rules (*_view_model.svelte.ts):
 //     M1  Exports a `${Name}ViewModelOptions` type.
@@ -37,10 +37,10 @@
 //     M7  No arrow-function class-field methods — regular methods only, so
 //         `this`/`super` and create()'s auto-logging keep working.
 //     M8  A ViewModel may not import another ViewModel — stops the VM graph
-//         collapsing into spaghetti. RATCHET — 15 pre-existing violations.
+//         collapsing into spaghetti. RATCHET — 52 violations across 15 files.
 //     M9  No `await import()` outside the documented allowlist
 //         (svelte-conventions/SKILL.md's dynamic-import table). RATCHET —
-//         20 pre-existing violations.
+//         RATCHET — 40 violations across 20 files.
 //
 // V6, V7, M8, M9 are RATCHETS, not hard-zero gates: each has pre-existing
 // violations that are weeks of rewrite work, not a one-sitting fix. Per-file

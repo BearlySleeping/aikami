@@ -2,452 +2,251 @@
 name: aikami-conventions
 description: >-
     🔴 LOAD BEFORE writing ANY Aikami code — universal TypeScript and monorepo
-    conventions: critical violations (logger, imports, types), strict TS rules,
-    import path discipline, arrow functions, `as const` / `satisfies`, error
-    handling, validation boundaries, project structure, private member naming,
-    file naming, output style, and direnv environment. For frontend load
-    svelte-conventions; for backend load backend-conventions.
-version: 5.0.0
+    conventions: architecture pillars, logger, import discipline, dynamic
+    imports, where types/schemas/constants live, strict TS rules, guarded type
+    assertions, arrow functions, class structure, `as const` / `satisfies`,
+    error handling, naming, and file-path comments. For frontend load
+    svelte-conventions; for backend load backend-conventions; for commands and
+    dev environment load project-commands.
+version: 6.0.0
 tags: ["aikami", "conventions", "typescript", "monorepo", "critical", "monorepo-boundaries"]
 ---
 
 # Aikami Conventions
 
 **🔴 READ BEFORE WRITING ANY CODE.** These rules are non-negotiable. Violations
-break the build, cause esbuild/aliasing errors, or produce code that won't
-compile. Load this skill first, before touching any file.
+break the build, cause esbuild/aliasing errors, or fail a guard in CI. If you
+hit an esbuild error about a missing module, **the fix is never to bypass the
+convention. The convention is the fix.**
 
-This skill contains ONLY universal rules. Load the layer-specific skill for
-your task:
+This skill contains ONLY universal rules. Also load:
 
-| Working on…                       | Load                                            |
-| --------------------------------- | ----------------------------------------------- |
-| **Frontend (client, Svelte)**     | `svelte-conventions` — runes, Views/ViewModels, |
-|                                   | services, `$services` barrel, aliases           |
-| **Backend (functions, packages)** | `backend-conventions` — controller/service/     |
-|                                   | repository layers, testing                      |
-| UI styling                        | `aikami-ui`                                     |
-| Game engine                       | `pixijs-v8`                                     |
-| Tauri desktop                     | `tauri-v2`                                      |
-| New SvelteKit page                | `svelte-page`                                   |
+| Working on…                    | Load                                                          |
+| ------------------------------ | ------------------------------------------------------------- |
+| **Frontend (client, Svelte)**  | `svelte-conventions` — runes, Views/ViewModels, `$services`   |
+| **Backend (server plane)**     | `backend-conventions` — D1/Drizzle, R2, Better Auth, worker   |
+| UI styling                     | `aikami-ui`                                                   |
+| Game engine                    | `pixijs-v8`                                                   |
+| Tauri desktop                  | `tauri-v2`                                                    |
+| New SvelteKit page             | `svelte-page`                                                 |
+| Commands, moon, direnv, modes  | `project-commands`                                            |
 
 ---
 
 ## 🔴 ARCHITECTURE PILLARS
 
-These four pillars govern all code generation in the Aikami monorepo.
-Violating any of them produces code that will be rejected in review and
-blocked by CI. Pillars 1–2 are enforced here; Pillars 3–4 are enforced in
+Four pillars govern all code. Pillars 1–2 are enforced here; 3–4 in
 `svelte-conventions`.
 
 ### Pillar 1: Tauri SPA — No Server Routes
 
-Aikami's frontend is a **static Single-Page Application** wrapped in Tauri v2.
-There is no SvelteKit server running in production. All rendering and data
-fetching is client-side only. `adapter-static` is the only adapter.
+The client is a **static SPA** (`adapter-static`) in Tauri v2. No SvelteKit
+server exists in production. These files must **never** appear under
+`apps/frontend/client/src/routes/` — CI rejects any PR containing them:
 
-**🔴 PROHIBITED** — these files must **never** exist anywhere in
-`apps/frontend/client/src/routes/`:
+`+server.ts` · `+page.server.ts` · `+layout.server.ts`
 
-| Forbidden File Pattern | Why                                     |
-| ---------------------- | --------------------------------------- |
-| `+server.ts`           | SvelteKit API routes — no server in SPA |
-| `+page.server.ts`      | Server-side page data loading           |
-| `+layout.server.ts`    | Server-side layout data loading         |
+Data comes from the repository layer (Turso/libSQL on device), `fetch` to the
+local microservices, browser APIs, or Tauri commands.
 
-**✅ REQUIRED** data fetching patterns:
-
-```typescript
-// ✅ Client-side data access via the repository layer (Turso/libSQL on device)
-import { getLocalDatabase } from "@aikami/frontend-storage";
-
-// ✅ Standard fetch to external microservices (voice, image, text)
-const response = await fetch("http://localhost:3001/tts", {
-	method: "POST",
-	body: JSON.stringify({ text }),
-});
-
-// ✅ Browser APIs (localStorage, IndexedDB, Web Audio, etc.)
-localStorage.getItem("session-key");
-```
-
-**Enforcement**: CI rejects any PR containing `+server.ts`, `+page.server.ts`,
-or `+layout.server.ts` under `apps/frontend/client/src/routes/`.
+> The hub (`apps/frontend/hub`) is a different app — it *is* SSR on a
+> Cloudflare Worker and server routes are correct there.
 
 ### Pillar 2: Monorepo Boundaries — Shared Packages Only
 
-Domain types, validation schemas, Zod definitions, and global constants
-**must never** be defined inside application packages (`apps/`). They belong
-in `packages/shared/` and are consumed via `@aikami/*` imports.
+**Domain types, schemas, and global constants must never be defined inside
+`apps/**`.** They live in `packages/shared/` and are consumed via `@aikami/*`.
 
-| ❌ FORBIDDEN — defined in `apps/**`   | ✅ REQUIRED — import from shared package                                 |
-| ------------------------------------- | ------------------------------------------------------------------------ |
-| `type Agent = { id: string; ... }`    | `import type { Agent } from "@aikami/types"`                             |
-| `const agentSchema = z.object({...})` | `import { agentSchema } from "@aikami/schemas"`                          |
-| `const MAX_RETRIES = 3`               | `import { MAX_RETRIES } from "@aikami/constants"`                        |
-| TypeBox schema in `apps/backend/**`   | `import { Type } from "@sinclair/typebox"` in `packages/shared/schemas/` |
-| `apps/frontend/client/src/lib/types/` | `packages/shared/types/src/lib/`                                         |
+#### 🔴 Allocation Truth Matrix — exactly ONE canonical location each
+
+| What                          | Lives in                                    | Import as           | Does NOT belong there                                            |
+| ----------------------------- | ------------------------------------------- | ------------------- | ---------------------------------------------------------------- |
+| Constants, labels, registries | `packages/shared/constants/`                | `@aikami/constants` | Runtime state, computed values, ViewModel-local UI strings       |
+| Cross-project domain types    | `packages/shared/types/`                    | `@aikami/types`     | Single-app types, single-function types, ViewModel interfaces    |
+| Runtime schemas (TypeBox)     | `packages/shared/schemas/`                  | `@aikami/schemas`   | Zod (banned), single-function inline guards                      |
+| Single-app types              | `apps/<app>/src/lib/types/`                 | `$types` (client)   | Anything a second package imports                                |
+| App-local data configs        | `apps/<app>/src/lib/data/`                  | relative            | Anything shared across apps                                      |
+| UI state flags                | the ViewModel — see `svelte-conventions`    | —                   | —                                                                |
+| Single-use types              | inline, next to the function that uses it   | —                   | Exported anywhere                                                |
 
 ```typescript
-// ❌ WRONG — domain type defined in app-level code
-// apps/frontend/client/src/lib/types/agent.ts
-export type Agent = { id: string; name: string; role: string };
+// ❌ WRONG — domain type or schema defined under apps/**
+export type Agent = { id: string; name: string };
+export const agentSchema = z.object({ id: z.string() });
 
-// ❌ WRONG — schema defined in backend code
-// apps/backend/worker/src/features/agent/schema.ts
-import { z } from "zod";
-export const agentSchema = z.object({ id: z.string(), name: z.string() });
-
-// ✅ CORRECT — import from shared package
+// ✅ CORRECT
 import type { Agent } from "@aikami/types";
 import { agentSchema } from "@aikami/schemas";
 import { MAX_RETRIES } from "@aikami/constants";
 ```
 
-**If a type is missing**: Add it to `packages/shared/types/` first. If it
-crosses project boundaries (e.g., backend ↔ frontend), also add a TypeBox
-schema to `packages/shared/schemas/`. Never define it locally as a shortcut.
+**If a type is missing**, add it to `packages/shared/types/` first. If it
+crosses a boundary (backend ↔ frontend), add the TypeBox schema too. Never
+define it locally as a shortcut.
 
 ### Pillars 3 & 4: Svelte MVVM + Dev Sandboxes
 
-Enforced in the `svelte-conventions` skill — load it for any client work.
-
-| Pillar | Rule                                                          |
-| ------ | ------------------------------------------------------------- |
-| 3      | Views are completely logicless; state and business logic in   |
-|        | `_view_model.svelte.ts`                                       |
-| 4      | `routes/(dev)/` sandboxes use `DevViewModel` override pattern |
+Enforced in `svelte-conventions`. Pillar 3: Views are completely logicless —
+state and logic live in `_view_model.svelte.ts`. Pillar 4: `routes/(dev)/`
+sandboxes use the `DevViewModel` override pattern.
 
 ---
 
-## 🔴 CRITICAL VIOLATIONS — DO NOT BREAK THESE
-
-These are the most common mistakes. Check this list before every import or type
-definition. If you get an esbuild error about a missing module, **the fix is
-never to bypass the convention.** The convention is the fix.
+## 🔴 CRITICAL VIOLATIONS
 
 ### 1. Logger: `this.debug()` in Classes, `$logger` in Module Functions
 
-Two-tier rule:
+1. **Inside any `BaseClass`/`BaseViewModel` subclass** — use the inherited
+   `this.debug()` / `.info()` / `.warn()` / `.error()` / `.log()`. **Never**
+   import `$logger` in these files; the inherited methods prefix the class
+   name and integrate with `create()` auto-logging.
+2. **Module-level code** (standalone arrow functions, utils, scripts) —
+   `import { logger } from "$logger"`.
 
-1. **Inside any `BaseClass`/`BaseViewModel` subclass (services, ViewModels,
-   repositories)** — use the inherited methods: `this.debug()`, `this.info()`,
-   `this.warn()`, `this.error()`, `this.log()`. NEVER import `$logger` in
-   these files. The inherited methods prefix the class name and integrate
-   with `create()` auto-logging.
-2. **Module-level code (standalone arrow functions, utils, scripts)** — import
-   from `$logger`, NEVER from `@aikami/logger`.
+**Never `import { logger } from "@aikami/logger"`** — it bypasses
+environment-specific resolution and breaks builds.
 
 ```typescript
-// ✅ CORRECT — class code uses inherited logging
-class UploadService extends BaseClass {
-	async upload(): Promise<void> {
-		this.debug("upload:start");
-	}
+// ✅ class code                          // ✅ module-level
+class UploadService extends BaseClass {   import { logger } from "$logger";
+  async upload(): Promise<void> {         const parseManifest = (raw: string) => {
+    this.debug("upload:start");             logger.debug("parseManifest");
+  }                                       };
 }
-
-// ✅ CORRECT — module-level function uses $logger
-import { logger } from "$logger";
-const parseManifest = (raw: string) => {
-	logger.debug("parseManifest");
-};
-
-// ❌ WRONG — $logger inside a BaseClass subclass
-import { logger } from "$logger";
-class UploadService extends BaseClass {
-	async upload(): Promise<void> {
-		logger.debug("upload"); // loses className prefix
-	}
-}
-
-// ❌ WRONG — bypasses environment-specific resolution, breaks builds
-import { logger } from "@aikami/logger";
 ```
 
-| Environment            | `$logger` resolves to                       |
-| ---------------------- | ------------------------------------------- |
-| SvelteKit (Client, hub) | `shared/logger/src/lib/svelte_kit.ts` — dynamically loads `logger_svelte_kit_ssr.ts` when `import.meta.env.SSR` (server, incl. the hub's Cloudflare Worker) or `logger_browser.ts` otherwise |
-| Browser (client, site) | `shared/logger/src/lib/logger_browser.ts`   |
-<!-- TODO(stale): "AWS / Node.js -> logger_aws.ts" row removed — packages/shared/logger/src/lib has no logger_aws.ts. Backend/Node targets (apps/backend/worker, etc.) resolve $logger to logger_basic.ts via the package's src/index.ts barrel; could not confirm whether logger_functions.ts is still reachable from any live tsconfig path without deeper investigation. -->
-| Node.js (scripts, worker) | `shared/logger/src/lib/logger_basic.ts` (via `@aikami/logger` barrel) |
-
-**Why**: Each environment configures `$logger` in its own `tsconfig.json` `paths`
-(or `svelte.config.js`). `@aikami/logger` is a NPM package alias — it doesn't
-know which environment you're in and will resolve to the wrong implementation.
+**Why**: each environment maps `$logger` in its own `tsconfig.json` `paths`
+(or `svelte.config.js`) to a different implementation — browser, SSR, or
+basic. `@aikami/logger` is a package alias and can't know which you're in.
 
 ### 2. Import from Package ROOT, Never `lib/` Sub-Paths
 
 ```typescript
-// ✅ CORRECT — import from package root (maps to src/index.ts)
+// ✅ CORRECT — package root maps to src/index.ts
 import type { User, Session } from "@aikami/types";
 import { toAppError } from "@aikami/utils";
-import { userSchema } from "@aikami/schemas";
+import type { Connection } from "$types";
 
-// ❌ WRONG — never import from lib/ sub-paths
+// ❌ WRONG — lib/ is an implementation detail
 import type { User } from "@aikami/types/lib/user";
-import type { CommandNode } from "@aikami/schemas/lib/parser";
+import type { Connection } from "$types/lib/connection";
 ```
 
-**Why**: `src/index.ts` is the public API surface. `lib/` is an implementation
-detail. Tree-shaking removes unused exports. Importing from `lib/` bypasses
-barrel exports and can miss re-exports or renamed symbols.
+`src/index.ts` is the public API surface. Importing from `lib/` bypasses the
+barrel and can miss re-exports or renamed symbols.
 
-### 2b. Always Import Types at the Top of the File, Never Inline `import()`
+**Backend sub-packages use a forward slash, never a hyphen** — enforced by
+Biome `noRestrictedImports`:
 
 ```typescript
-// ✅ CORRECT — import type at top of file
+import { ChatService } from "@aikami/backend/chat";   // ✅
+import { ChatService } from "@aikami/backend-chat";   // ❌
+```
+
+Same for `@aikami/frontend/<name>`. This applies to `import` statements and to
+the alias maps in `svelte.config.js` and each `tsconfig.json`.
+
+### 2b. Import Types at the Top, Never Inline `import()`
+
+```typescript
+// ✅                                        // ❌
 import type { ItemDefinition } from "@aikami/types";
-
-export type MyInterface = {
-	getItem(id: string): ItemDefinition;
-};
-
-class MyClass {
-	getItem(id: string): ItemDefinition {
-		return {} as ItemDefinition;
-	}
-}
-
-// ❌ WRONG — inline import() type reference
-import type { ItemDefinition } from "@aikami/types";
-
-export type MyInterface = {
-	getItem(id: string): import("@aikami/types").ItemDefinition;
-};
-
-class MyClass {
-	getItem(id: string): import("@aikami/types").ItemDefinition {
-		return {} as import("@aikami/types").ItemDefinition;
-	}
-}
+getItem(id: string): ItemDefinition;         getItem(id: string): import("@aikami/types").ItemDefinition;
 ```
 
-**Exception**: Dynamic runtime imports (`await import('...')`) for SSR-incompatible
-modules (PixiJS, engine code) are allowed — this rule only applies to **type-level**
-`import()` expressions.
+Applies to **type-level** `import()` only — runtime `await import()` is
+governed by the next rule.
 
-### 🔴 Dynamic Imports: `await import()` — Avoid Unless Proven Necessary
+### 🔴 3. Dynamic Imports: `await import()` — Avoid Unless Proven Necessary
 
-Aikami's client is a **static SPA** (`ssr: false, prerender: false`). All code
-is bundled into a single build — dynamic imports do NOT reduce bundle size
-(Vite includes everything regardless). They fragment the bundle into
-micro-chunks, add async overhead, and force `async`/`await` cascading
-through call stacks.
+The client is a static SPA. Dynamic imports do **not** reduce bundle size —
+Vite bundles everything regardless. They fragment the bundle, add async
+overhead, and cascade `async`/`await` through call stacks. **The default is a
+static `import`.**
 
-The **default is a static `import`**. Only use `await import()` when one of
-these specific justifications applies:
+Ratcheted by `guard-mvvm-conventions` (M9) and `guard-service-conventions`
+(S12): new occurrences outside this allowlist fail CI.
 
-#### ✅ Valid Reasons for `await import()`
+| ✅ Valid reason              | Example                                                    |
+| ---------------------------- | ---------------------------------------------------------- |
+| Import-time side effects     | `@tauri-apps/api` — throws outside a Tauri webview         |
+| Massive library (>500KB)     | `onnxruntime-web`, `kokoro-js`, `pixi.js` Assets           |
+| Conditional provider         | AI client factory — only the chosen SDK loads              |
+| Platform-specific code       | Tauri-only APIs, IndexedDB vs localStorage                 |
+| Build-time branch            | `import.meta.env.SSR` — Vite tree-shakes the dead branch   |
+| Web Worker                   | `?worker&type=module` — Vite requires it                   |
+| Lazy data (>100KB JSON)      | Country lists, password dictionaries                       |
+| Dev-only tools               | `eruda` — must never ship to production                    |
+| Node built-ins               | `node:fs/promises` in CLI/build scripts only               |
+| Optional native backends     | `@tursodatabase/database`                                  |
 
-| Reason                       | Example                                                                           | Applies To |
-| ---------------------------- | --------------------------------------------------------------------------------- | ---------- |
-| **Import-time side effects** | `@tauri-apps/api` modules that throw outside a Tauri webview (browser-only dev) | Client     |
-| **Massive library** (>500KB) | `onnxruntime-web`, `kokoro-js`, `pixi.js` Assets                                  | Client     |
-| **Conditional provider**     | AI client factory — only the chosen provider's SDK loads                          | Client     |
-| **Platform-specific code**   | `@tauri-apps/api` (Tauri-only), `IndexedDB` vs `localStorage`                     | Client     |
-| **Build-time branch**        | `import.meta.env.SSR` — Vite tree-shakes the dead branch at build time            | Client     |
-| **Web Worker**               | `?worker&type=module` — Vite requires dynamic import for workers                  | Client     |
-| **Lazy data** (>100KB JSON)  | Country lists, weak password dictionaries                                         | Client     |
-| **Dev-only tools**           | `eruda` debug console — must never ship to production                             | Client     |
-| **Node.js built-ins**        | `node:fs/promises`, `node:path` — only in CLI/build scripts, not browser          | Shared     |
-| **External native packages** | `pg`, `@tursodatabase/database` — optional backends                               | Backend    |
+| ❌ NOT a valid reason         | Why                                                        |
+| ----------------------------- | ---------------------------------------------------------- |
+| Service-to-service lazy load  | Singletons, no import-time side effects. False async boundary. |
+| "Performance" in a static SPA | More requests, not fewer                                   |
+| Circular-dependency workaround| Masks an architecture problem — fix the graph               |
+| "SSR guard" in the client     | Client is `ssr: false`; there is nothing to guard          |
+| "Cold start" in the Worker    | The Worker bundle deploys whole — no tree-shaking          |
 
-#### ❌ NOT Valid Reasons — Use Static `import` Instead
+### 4. Never Export Data, Types, or Schemas from Service Files
 
-| Anti-pattern                        | Why It's Wrong                                                                                       | Fix                                                                  |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **Service-to-service** lazy loading | Services are pure singletons, no side effects at import time. Creates false async boundaries.        | Static `import { otherService } from '$services'`                    |
-| **"Performance"** in a static SPA   | Vite bundles everything regardless. Dynamic imports create MORE network requests, not fewer.         | Static `import`                                                      |
-| **Circular dependency workaround**  | Dynamic imports mask architectural problems. Fix the dependency graph instead.                       | Restructure modules, introduce interfaces, or use a composition root |
-| **"SSR guard"**                     | Client is `ssr: false` — there is no SSR to guard against                                            | Remove the guard, static import                                      |
-| **"Cold start" in the Worker**      | The hub's Cloudflare Worker bundle is deployed whole — no tree-shaking. Dynamic import adds runtime overhead. | Static `import` (unless it's a genuinely optional heavy dependency)  |
+Services hold **business logic and state only**. A specific case of Pillar 2.
+Enforced by `guard-service-conventions` (S9, S10).
 
-```typescript
-// ❌ WRONG — service-to-service dynamic import (no side effects, not circular)
-class AutonomousMessageService extends BaseClass {
-	async _generateMessage(): Promise<void> {
-		const { textGenerationService } = await import("../ai/text_generation_service.svelte.ts");
-		// ...
-	}
-}
-
-// ✅ CORRECT — static import (both are pure singletons)
-import { textGenerationService } from "$services";
-
-class AutonomousMessageService extends BaseClass {
-	async _generateMessage(): Promise<void> {
-		// use textGenerationService directly
-	}
-}
-```
-
-### 3. Never Export Data, Types, or Schemas from Service Files
-
-Services are for **business logic and state management only**. Data, types, and
-schemas are **data shapes** — they belong in dedicated packages. This is a
-specific instance of **Pillar 2 (Monorepo Boundaries)** — see above for the
-full rule.
-
-#### What Goes Where
-
-| Category                  | Location                                                  | Example                                            |
-| ------------------------- | --------------------------------------------------------- | -------------------------------------------------- |
-| **Shared constants/data** | `packages/shared/constants/`                              | `TEXT_PROVIDERS`, `DEFAULT_*`, provider registries |
-| **Shared types**          | `packages/shared/types/` (derived from `@aikami/schemas`) | Cross-project domain types                         |
-| **Shared schemas**        | `packages/shared/schemas/` (TypeBox)                      | Data validation shapes                             |
-| **Client-local data**     | `apps/frontend/client/src/lib/data/`                      | Provider endpoint configs                          |
-| **Client-local types**    | `apps/frontend/client/src/lib/types/`                     | `Connection`, `ConnectionTestResult`               |
-
-#### 🔴 Domain Structure Allocation Truth Matrix
-
-Every data entity, type, label, and UI state flag has exactly ONE canonical
-location. No duplication across packages. No shortcuts. If you add to the wrong
-location, your code will be rejected.
-
-| Layer                     | Canonical Location                                          | What Belongs                                                                                                      | What Does NOT Belong                                                                                                                                     |
-| ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1. Constants & Labels** | `packages/shared/constants/src/`                            | Provider registries, enum-like arrays, default configs, display labels, error codes, routing paths, feature flags | Runtime state, computed values, configs from external APIs (those go in `apps/.../data/`), ViewModel-local UI strings                                    |
-| **2. Type Definitions**   | `packages/shared/types/src/`                                | Cross-project domain types, API request/response shapes, entity interfaces                                        | Single-app-local types (go in `apps/<app>/src/lib/types/`), single-function-internal types (go inline), ViewModel interface types (go in ViewModel file) |
-| **3. Runtime Schemas**    | `packages/shared/schemas/src/` (TypeBox)                    | All cross-boundary data validation shapes (API inputs, D1 rows, R2 objects, EngineBridge payloads)                | Zod schemas (use TypeBox), validation logic for a single function (inline guard), backend-only validation that never crosses to client                   |
-| **4. UI State Flags**     | `apps/frontend/client/src/lib/views/*_view_model.svelte.ts` | See `svelte-conventions` § UI State Flags                                                                         | —                                                                                                                                                        |
-
-**🔴 Violations**:
-
-- Labels/translations hardcoded in app code → extract to `packages/shared/constants/`
-- Types defined in `apps/` that another package needs → move to `packages/shared/types/`
-- Validation in service files → create TypeBox schema in `packages/shared/schemas/`
-
-```typescript
-// ❌ WRONG — data/type/schema defined in a service file
-// apps/frontend/client/src/lib/services/config/config_service.svelte.ts
-export const TEXT_PROVIDERS = [{ id: 'openrouter', ... }] as const;
-export type Connection = { id: string; name: string; ... };
-
-// ❌ WRONG — type/schema defined in a service file
-// apps/frontend/client/src/lib/client/services/game/game_state_service.ts
-export type ActiveContextEntry = { entityId: string; ... };
-export const ActiveSessionSchema = z.object({ ... });
-
-// ✅ CORRECT — data from @aikami/constants
-// apps/frontend/client/src/lib/services/config/config_service.svelte.ts
-import { TEXT_PROVIDERS } from '@aikami/constants';
-
-// ✅ CORRECT — client-local type from $types
-import type { Connection, ConnectionId } from '$types';
-
-// ✅ CORRECT — schema from shared package
-import { ActiveSessionSchema } from "@aikami/schemas";
-```
-
-**🔴 NEVER create and export data, types, or schemas from service files.** The
-ONLY exception: the service's own **interface and options type**:
+The **only** permitted exports are the service's own interface, options type,
+and singleton:
 
 ```typescript
 export type MyServiceInterface = BaseClassInterface & { ... };
 export type MyServiceOptions = { ... };
+export const myService: MyServiceInterface = MyService.create({ className: "MyService" });
 ```
 
-Re-exporting from the correct source is acceptable for backward compatibility:
+Re-exporting from the canonical source is acceptable for compatibility:
 
 ```typescript
-// ✅ OK — re-export from the proper source (not defining locally)
-export { TEXT_PROVIDERS, type TextProvider } from "@aikami/constants";
+export { TEXT_PROVIDERS, type TextProvider } from "@aikami/constants"; // ✅
 ```
 
-### 4. File Naming: snake_case ONLY
+### 5. File Naming: snake_case ONLY
 
-All source files use `snake_case`. Enforced by Biome `useFilenamingConvention`.
+Enforced by Biome `useFilenamingConvention`.
 
 ```
-✅ auth_service.ts      ✅ poll_gmail.ts        ✅ user_repository.ts
-✅ view_model.svelte.ts  ✅ base_view.svelte
-
-❌ authService.ts       ❌ pollGmail.ts          ❌ UserRepository.ts
-❌ ViewModel.svelte.ts   ❌ BaseView.svelte
+✅ auth_service.ts   view_model.svelte.ts   base_view.svelte
+❌ authService.ts    ViewModel.svelte.ts    BaseView.svelte
 ```
 
-### 4b. Variable & Property Naming: camelCase ONLY
+### 5b. Identifiers: camelCase ONLY
 
-Rule 4 governs **file names only**. Identifiers — variables, function names,
-object/interface keys, parameters, and class members — are governed by this
-rule (4b) and must always be `camelCase`. Enforced by Biome
-`useNamingConvention`.
+Rule 5 governs **file names**. Variables, functions, parameters, object keys,
+and class members are `camelCase` — enforced by Biome `useNamingConvention`.
 
 ```typescript
-// ✅ CORRECT — camelCase identifiers
-const userId = "abc123";
-const getUserName = (options: { displayName: string }): string => options.displayName;
-const config = { apiKey: "xyz", maxRetries: 3 };
-class UserService {
-  private readonly _userRepository: UserRepository;
-  async findById(id: string): Promise<User | undefined> { /* ... */ }
-}
-
-// ❌ WRONG — snake_case identifiers
-const user_id = "abc123";
-const get_user_name = (options: { display_name: string }): string => options.display_name;
-const config = { api_key: "xyz", max_retries: 3 };
+const userId = "abc";                    // ✅
+const user_id = "abc";                   // ❌
+const config = { apiKey: "x" };          // ✅   { api_key: "x" }  ❌
 ```
 
-**Exceptions**:
+**Exceptions**: top-level constants use `UPPER_SNAKE_CASE` (`MAX_RETRIES`);
+private class members take a single `_` prefix (Rule 6); environment variable
+names (`AIKAMI_MODE`, `PUBLIC_ASSETS_BASE_URL`) follow platform convention and
+are exempt.
 
-- **UPPER_SNAKE_CASE / CONSTANT_CASE** — top-level constants use
-  `MAX_RETRIES`, `TEXT_PROVIDERS`, etc. (see Rule 5 and `as const`
-  patterns).
-- **Private member underscore prefix** — single leading `_` for private
-  class members per Rule 5 (e.g. `_userRepository`).
-- **Environment variable names** — `.env` keys, `process.env.X` access,
-  and values read via `$env/static/*` or `$env/dynamic/*` follow
-  `SCREAMING_SNAKE_CASE` by platform convention (`AIKAMI_MODE`,
-  `PUBLIC_ASSETS_BASE_URL`) and are **exempt** from this rule.
+### 6. Private Members: Underscore `_` Prefix
 
-### 5. Private Members: Underscore `_` Prefix
-
-All `private` class members (fields, methods, getters, setters) must use an
-underscore `_` prefix. This visually distinguishes them from public members
-and prevents accidental access from outside the class.
+Every `private` field, method, getter, and setter takes a `_` prefix.
 
 ```typescript
-// ✅ CORRECT — private members prefixed with _
 class UserService {
   private readonly _userRepository: UserRepository;
   private _cache = new Map<string, User>();
-  private readonly _collection = "users";
-
-  async findById(id: string): Promise<User | undefined> {
-    return this._userRepository.findById(id);
-  }
-
-  private _normalizeEmail(email: string): string {
-    return email.toLowerCase().trim();
-  }
-}
-
-// ❌ WRONG — private members without underscore prefix
-class UserService {
-  private readonly userRepository: UserRepository;
-  private cache = new Map<string, User>();
-
-  private normalizeEmail(email: string): string { ... }
+  private _normalizeEmail(email: string): string { ... }
 }
 ```
 
-**Exception**: ViewModel `$state` fields are public by design (see
-`svelte-conventions`). Do NOT prefix public `$state` fields with `_`.
-
----
-
-## Output Style
-
-**Terse. Technical substance only. No fluff.** Drop articles, filler,
-pleasantries, hedging. Fragments are OK. Every word must earn its place.
-
-- **Artifacts to files** — Never inline large generated content. Return: file
-  path + 1-line description.
-- **Auto-expand only for**: security warnings, irreversible actions, user
-  confusion.
-- **After validate**: 3-4 line summary — what changed, results, suggested
-  commit message. Nothing more.
+**Exception**: ViewModel `$state` fields are public by design — never prefix
+them.
 
 ---
 
@@ -455,413 +254,198 @@ pleasantries, hedging. Fragments are OK. Every word must earn its place.
 
 ### ❌ Forbidden — Use the Alternative
 
-| Forbidden                  | Use Instead                                  |
+| Forbidden                  | Use instead                                  |
 | -------------------------- | -------------------------------------------- |
 | `any`                      | `unknown` + type guards                      |
 | `null`                     | `undefined` everywhere                       |
-| `!` (non-null assertion)   | Early returns or optional chaining           |
-| `as unknown as Type`       | Proper data transformation functions         |
+| `!` (non-null assertion)   | Early return or optional chaining            |
 | `interface`                | `type` alias                                 |
-| Exporting single-use types | Define near/inside the function that uses it |
-| `function` declarations    | Arrow functions (`const fn = () => {}`)      |
+| `function` declaration     | Arrow function (`const fn = () => {}`)       |
+| Exporting single-use types | Define next to the function that uses it     |
+| Chained arguments (2+)     | An options object                            |
+| Single-line `if`           | Always braces                                |
+| Abbreviations              | Full words — `options` not `opts`            |
+| Nested ternaries           | `if`/`else` or a helper                      |
 
 ### 🔴 Type Assertions Are Guarded
 
-`as unknown as X`, `as any`, and `@ts-ignore` are blocked by `guard-type-safety`
-(`bun run guard`). The guard is a ratchet: counts may only go down, and any NEW
-occurrence fails CI.
+`as unknown as X`, `as any`, and `@ts-ignore` are blocked by
+`guard-type-safety` (`bun run guard`). It is a **ratchet**: counts may only go
+down, and any NEW occurrence fails CI.
 
-If you reach for one, **the type is wrong** — fix the type instead:
+If you reach for one, **the type is wrong** — fix the type:
 
-- **Unknown external data** → write `parseX(value: unknown): X | undefined` that
-  validates against the TypeBox schema in `@aikami/schemas` and returns `undefined`
-  on mismatch.
-- **Narrowing a union you've already checked** → a type guard
+- **Unknown external data** → `parseX(value: unknown): X | undefined` that
+  validates against the TypeBox schema and returns `undefined` on mismatch.
+- **Narrowing a checked union** → a type guard
   (`const isX = (v: unknown): v is X => ...`), not an assertion.
-- **A library's types are wrong** → `@ts-expect-error` with a one-line comment
-  explaining why, so it fails loudly when the library is fixed.
-- **Plain `as X` is acceptable** only to narrow a union you have already
-  discriminated in the same scope.
-
-### ❌ Forbidden Patterns
-
-- **Chained arguments** — Functions with more than 1 argument must use an options object `{...}`
-- **Single-line `if`** — Always use curly braces `{}` even for a single statement
-- **Abbreviations** — Write out full words (`options` not `opts`, `functionName` not `fnName`)
-- **Nested ternaries** — Use `if/else` or extract to a helper function
+- **A library's types are wrong** → `@ts-expect-error` **with** a one-line
+  reason, so it fails loudly once the library is fixed.
+- **Plain `as X`** is acceptable only to narrow a union already discriminated
+  in the same scope.
 
 ### ✅ Required Patterns
 
-- **Arrow Functions** — Use arrow functions everywhere. The sole exception is class methods: use regular method syntax (`methodName() {}` instead of `methodName = () => {}`) so that `this` and `super` work correctly.
-- **Interface/type method members use method shorthand** — declare
-  `closeUploadInfo(): void`, never `closeUploadInfo: () => void`. Method
-  signatures mirror the regular-method implementation and stay bivariant for
-  interface compatibility.
-- **Callers must preserve `this`** — never pass an unbound method reference
-  (`onclick={viewModel.open}`, `array.map(service.format)`); wrap in an arrow
-  function (`onclick={() => viewModel.open()}`).
-- **Escape Early** — Return-early pattern to avoid deep nesting
-- **Extract Logic** — If a section within a function can stand alone, extract it into a separate private function (with `_` prefix: `_extractedHelper()`)
-- **JSDoc Everything** — All exported classes, interfaces, functions, types, and complex internals must have a JSDoc comment. Explain the *why*, not the *what* — don't state the obvious:
+- **Arrow functions everywhere.** Sole exception: class methods use regular
+  method syntax (`methodName() {}`, never `methodName = () => {}`) so `this`
+  and `super` work and `create()` auto-logging can see them.
+- **Method shorthand in interfaces** — `closeUploadInfo(): void`, never
+  `closeUploadInfo: () => void`.
+- **Callers preserve `this`** — never pass an unbound method reference. Use
+  `onclick={() => viewModel.open()}`, not `onclick={viewModel.open}`.
+- **Escape early** — return-early instead of deep nesting.
+- **Extract logic** — a self-contained block becomes a `_prefixed` private
+  helper.
+- **JSDoc every export** — classes, functions, types, and complex internals.
+  Explain the *why*, not the *what*:
   ```typescript
   /**
-   * Synchronizes the bitECS game state with the SvelteKit UI.
-   * This runs on a separate worker thread to avoid blocking the main PixiJS loop.
+   * Synchronizes the bitECS game state with the SvelteKit UI. Runs on a
+   * worker thread so it never blocks the PixiJS loop.
    */
   export class EngineBridge { ... }
   ```
 
 ### Options Object Pattern
 
-When a function has more than 1 argument, always group them into an options object:
+More than one argument → group into an options object.
 
 ```typescript
-// ✅ CORRECT — options object for 2+ arguments
 export const createUser = (options: {
   email: string;
   displayName: string;
   role?: string;
-}): Promise<User> => {
-  logger.debug("createUser", options);
-  // ...
-};
+}): Promise<User> => { ... };                          // ✅
 
-// ✅ OK — single argument, no options object needed
-export const findById = (id: string): Promise<User | undefined> => {
-  logger.debug("findById", { id });
-  // ...
-};
-
-// ❌ WRONG — multiple positional arguments
-export const createUser = (email: string, displayName: string, role?: string) => { ... };
+export const findById = (id: string): Promise<User | undefined> => { ... };  // ✅ single arg
+export const createUser = (email: string, displayName: string) => { ... };   // ❌
 ```
 
 ### Class Member Order
 
-Whenever you write a class, organize its members in this order:
-
-1. **Static Fields**
-2. **Instance Fields** (private first, then public)
-3. **Constructor**
-4. **Public Methods** (core API first, then getters/setters)
-5. **Private / Protected Methods**
-
-```typescript
-export class ExampleService extends BaseClass implements ExampleServiceInterface {
-  // 1. Static Fields
-  private static _instanceCount = 0;
-
-  // 2. Instance Fields
-  private readonly _cache = new Map<string, State>();
-  state: State = 'initialized';
-
-  // 3. Public Methods
-  async initialize(): Promise<void> {
-    await this._setupDatabase();
-  }
-
-  // 4. Private Methods
-  private async _setupDatabase(): Promise<void> {
-    // ...
-  }
-}
-```
+1. Static fields → 2. Instance fields (private first) → 3. Constructor →
+4. Public methods (core API, then getters/setters) → 5. Private/protected
+methods.
 
 ### Class Instantiation — Always `ClassName.create()`, Never `new`
 
-All classes extending `BaseClass` must be instantiated with the static `create()`
-factory method. It auto-logs every public method call — **no manual
-`this.debug()` at method entry is needed.**
+Every `BaseClass` subclass is built through the static `create()` factory.
 
 ```typescript
-// ✅ CORRECT — ClassName.create() factory (enables auto-logging)
-export const service = MyService.create({ className: "MyService" });
-export const authService = AuthService.create({ className: "AuthService" });
-
-// ❌ WRONG — raw `new` bypasses auto-logging
-export const service = new MyService({ className: "MyService" });
+export const authService: AuthServiceInterface = AuthService.create({ className: "AuthService" }); // ✅
+export const authService = new AuthService({ className: "AuthService" });                          // ❌
 ```
 
-**Auto-logging mechanism**: `create()` shadows every public prototype method
-on the instance with a shim that logs `methodName + args` before delegating
-(prototype shadowing, not an ES6 Proxy — Svelte 5 `$state` breaks under
-custom Proxies). Only regular class methods participate — arrow-function
-fields are invisible to it (one more reason arrow methods are banned). In
-production the wrapping is skipped for zero overhead.
+**Auto-logging**: `create()` shadows each public prototype method with a shim
+that logs `methodName + args` before delegating (prototype shadowing, not a
+Proxy — Svelte 5 `$state` breaks under custom Proxies). Only regular methods
+participate, which is one more reason arrow-function fields are banned. In
+production the wrapping is skipped entirely.
 
-**Mid-method debug logging** for state transitions or error conditions is still
-acceptable:
+So **no manual `this.debug()` at method entry**. Mid-method logging for state
+transitions and error branches is still right:
 
 ```typescript
-class MyService extends BaseClass {
-	async process(options: { id: string }) {
-		// create() auto-logs: debug('process', options)
-		// No manual this.debug() needed here
-
-		const result = await this._fetch(options.id);
-		if (!result) {
-			this.debug("process:not-found", { id: options.id }); // ✅ contextual
-			return;
-		}
-		this.debug("process:complete", { id: options.id }); // ✅ contextual
-	}
+async process(options: { id: string }) {
+  // create() already logged: debug('process', options)
+  const result = await this._fetch(options.id);
+  if (!result) {
+    this.debug("process:not-found", { id: options.id });   // ✅ contextual
+    return;
+  }
 }
 ```
 
-**Arrow functions** that are NOT class methods should still use `logger.debug()`
-from `$logger` at entry since they don't participate in auto-logging:
-
-```typescript
-// ✅ Arrow functions still manually log
-const loadItems = async (options: { filter: string }) => {
-	logger.debug("loadItems", options);
-	// ...
-};
-```
+Standalone arrow functions don't participate — they still call
+`logger.debug()` at entry.
 
 ### `as const` and `satisfies`
 
-Prefer `as const` on object literals to infer the narrowest types. Use
-`satisfies` to validate against a type without widening:
-
 ```typescript
-// ✅ as const for narrow inference
-const PATTERNS = {
-	command: /^\/([\w-]+)(?:\s+(.+))?$/s,
-	macro: /\{\{([\w-]+)(?::\s*([^}]*))?\}\}/g,
-} as const;
-
-// ✅ satisfies for type-checking without widening
-const CONFIG = {
-	timeout: 5000,
-	retries: 3,
-	endpoint: "/api/v2",
-} as const satisfies Record<string, string | number>;
+const PATTERNS = { command: /^\/([\w-]+)/s } as const;                     // narrow inference
+const CONFIG = { timeout: 5000, endpoint: "/api/v2" } as const
+  satisfies Record<string, string | number>;                               // check without widening
 ```
 
 ---
 
-## Import Path Rules
+## Import Order
 
-### Import Order
+1. Node/Bun built-ins (`node:fs`) → 2. External deps (`pixi.js`, `svelte`) →
+3. Shared packages (`@aikami/types`) → 4. Absolute aliases (`$lib/...`) →
+5. Relative (`./utils.ts`).
 
-1. Node/Bun built-ins (e.g., `node:fs`)
-2. External dependencies (e.g., `pixi.js`, `svelte`)
-3. Internal shared packages (e.g., `@aikami/types`)
-4. Absolute project paths (e.g., `$lib/...`)
-5. Relative paths (e.g., `./utils.ts`)
-
-Let Biome's `organizeImports` handle the sorting automatically where possible.
-
-### Always Import from Package Root
-
-When importing from any `@aikami/*` package, import from the **package root**
-— never from `lib/` sub-paths:
-
-```typescript
-// ✅ CORRECT — import from package root (maps to src/index.ts)
-import type { CommandNode, MacroNode, TextNode } from "@aikami/schemas";
-import { CommandNodeSchema } from "@aikami/schemas";
-import type { User, Session } from "@aikami/types";
-import { toAppError } from "@aikami/utils";
-import { WORKER_URL } from "@aikami/constants";
-
-// ❌ WRONG — never import from lib/ sub-paths
-import type { CommandNode } from "@aikami/schemas/lib/parser";
-import { toAppError } from "@aikami/utils/lib/errors";
-```
-
-### Same Rule for Local Aliases
-
-```typescript
-// ✅ CORRECT
-import type { Connection } from "$types"; // client-local types barrel
-import { userSchema } from "@aikami/schemas"; // maps to src/index.ts
-
-// ❌ WRONG
-import type { Connection } from "$types/lib/connection";
-import { userSchema } from "@aikami/schemas/lib/user";
-```
-
-Note: in the client, `$types` maps to `apps/frontend/client/src/lib/types`
-(app-local types) — cross-project types come from `@aikami/types`.
-
-### Backend Package Aliases: Forward Slash, Never Hyphen
-
-Backend package imports use forward slash (`/`) between `backend` and the
-sub-package name — never hyphens:
-
-```typescript
-// ✅ CORRECT
-import { AgentService } from "@aikami/backend/agent";
-import { ChatService } from "@aikami/backend/chat";
-import { onboardingFlow } from "@aikami/backend/onboarding";
-
-// ❌ WRONG
-import { AgentService } from "@aikami/backend-agent";
-import { ChatService } from "@aikami/backend-chat";
-```
-
-This applies to:
-
-- `apps/frontend/client/svelte.config.js` — Vite/SvelteKit aliases
-- `apps/backend/worker/tsconfig.json` — worker tsconfig paths
-- All `import` statements referencing these packages
-
-The pattern `@aikami/backend/<name>` keeps sub-package imports consistent
-with `@aikami/backend/auth/*`, `@aikami/backend/configs/*`, etc.
-
-### Wildcard Imports (Only When Needed)
-
-```typescript
-// ✅ Only use wildcard when you genuinely need multiple sub-module exports
-import { Type, type Static } from "@sinclair/typebox";
-```
+Let Biome's `organizeImports` sort it. Use a wildcard import only when you
+genuinely need several sub-module exports.
 
 ---
 
-## Type Definitions — Where Types and Schemas Live
+## Types & Schemas — Schema-First
 
-See **Pillar 2 (Monorepo Boundaries)** above. Additional details:
-
-| Location                    | What goes there                                 |
-| --------------------------- | ----------------------------------------------- |
-| `packages/shared/schemas/`  | TypeBox schemas (cross-project data validation) |
-| `packages/shared/types/`    | Cross-project types (used by 2+ apps/packages)  |
-| `apps/<app>/src/lib/types/` | Single-app types (100% specific to one app)     |
-| Inline / top of file        | Single-method type used in exactly one function |
-
-### Schema-First: Derive Types from TypeBox Schemas
-
-When data crosses project boundaries (service ↔ ViewModel, backend ↔ frontend),
-define a TypeBox schema in `@aikami/schemas` first, then derive the TypeScript
-type from it:
+🔴 **TypeBox Static Inference Law**: when a TypeBox schema exists for a shape,
+the TypeScript type MUST be derived via `Static<typeof Schema>` — never
+hand-written. `@aikami/schemas` is the source of truth; `@aikami/types`
+re-exports the inferred type.
 
 ```typescript
 // packages/shared/schemas/src/lib/api/chat.ts
-import { Type, type Static } from "@sinclair/typebox";
-
 export const ChatMessageSchema = Type.Object({
-	id: Type.String(),
-	text: Type.String(),
-	timestamp: Type.Number(),
+  id: Type.String(),
+  text: Type.String(),
 });
 
 // packages/shared/types/src/lib/api/chat.ts
-import type { Static } from "@sinclair/typebox";
-import { ChatMessageSchema } from "@aikami/schemas";
+export type ChatMessage = Static<typeof ChatMessageSchema>;   // ✅ derived
 
-export type ChatMessage = Static<typeof ChatMessageSchema>;
+export type ChatMessage = { id: string; text: string };       // ❌ drifts silently
 ```
 
-This ensures runtime validation and TypeScript types are always in sync. The
-schema in `@aikami/schemas` is the source of truth; `@aikami/types` re-exports
-the inferred type.
+**Why**: a hand-written duplicate lets the runtime validator and the static
+type diverge without a compiler error. Deriving guarantees lockstep.
 
-🔴 **TypeBox Static Inference Law**: TypeBox schemas are the **single source of
-truth** for all cross-boundary types. When a TypeBox schema exists for a data
-shape, the corresponding TypeScript type in `packages/shared/types/` MUST be
-inferred via `Static<typeof Schema>` — NEVER recreate the interface manually.
-
-```typescript
-// ✅ CORRECT — infer from schema (single source of truth)
-// packages/shared/types/src/lib/user.ts
-import type { Static } from "@sinclair/typebox";
-import { UserSchema } from "@aikami/schemas";
-export type User = Static<typeof UserSchema>;
-
-// ❌ WRONG — manual interface duplicates the schema
-// packages/shared/types/src/lib/user.ts
-export type User = {
-	id: string;
-	email: string;
-	displayName: string;
-};
-```
-
-**Why**: Manual duplication causes schema-drift — the runtime validator and
-the TypeScript type diverge silently. `Static<typeof Schema>` guarantees they
-stay in lockstep. If you need the type, derive it. Never write it by hand.
-
-**Rule of thumb**: If a type is passed from one project to another, it should
-exist as a TypeBox schema in `@aikami/schemas` and be re-exported as a type from
-`@aikami/types`.
+**Rule of thumb**: if a type crosses a project boundary, it needs a TypeBox
+schema in `@aikami/schemas` and a derived re-export from `@aikami/types`.
+TypeBox validates at runtime and infers statically on both the Worker and the
+client — no second validation library. **Zod is banned** (Biome
+`noRestrictedImports`).
 
 ---
 
 ## Error Handling
 
-Use `AppError` from `@aikami/utils`:
-
 ```typescript
 import { toAppError } from "@aikami/utils";
-
 throw toAppError("not-found", "Resource not found");
-throw toAppError("invalid-argument", "Invalid email");
-throw toAppError("unauthorized", "User not logged in");
 ```
 
-Valid types: `not-found`, `invalid-argument`, `unauthorized`, `unauthenticated`, `internal`, `captcha-required`.
-
----
-
-## Validation
-
-All runtime validation uses **TypeBox** from `@aikami/schemas`:
-
-```typescript
-import { Type, type Static } from "@sinclair/typebox";
-import { userSchema } from "@aikami/schemas";
-
-// Use Static<> to derive the type from the schema
-export type User = Static<typeof userSchema>;
-```
-
-TypeBox schemas provide runtime validation + static type inference. They work
-on both server (Cloudflare Worker) and client — no separate validation
-library needed.
-
----
-
-> Project structure: see AGENTS.md's directory-layout table.
-> Moon commands, direnv modes, and mode switching: see the `project-commands` skill.
-
----
-
-## Commit & Push Policy
-
-**Never commit or push without explicit user instruction.** Default: keep all
-changes in the working tree. Present a summary after `validate()` and offer:
-"Commit? Commit+push? Continue?" Let the user decide.
+Valid types: `not-found`, `invalid-argument`, `unauthorized`,
+`unauthenticated`, `internal`, `captcha-required`.
 
 ---
 
 ## File Path Comments
 
-Every source file must include its relative path from the monorepo root as a
-comment at the very top of the file.
-
-**TypeScript / Svelte `.ts` files** — line 1, before any imports:
+Every source file opens with its repo-relative path.
 
 ```typescript
-// apps/frontend/client/src/lib/views/feature/view_model.svelte.ts
-import { BaseViewModel } from "$lib/components/BaseViewModel.svelte";
+// apps/frontend/client/src/lib/views/feature/feature_view_model.svelte.ts
+import { BaseViewModel } from "$components";
 ```
 
-**Svelte `.svelte` files** — first line inside `<script>`:
-
-```svelte
-<script lang="ts">
-  // apps/frontend/client/src/lib/views/feature/feature_view.svelte
-  import { BaseViewModelContainer } from '$components';
-</script>
-```
+In `.svelte` files it is the first line **inside** `<script lang="ts">`.
 
 ---
 
-## Layer-Specific Conventions
+## Output Style
 
-- **Frontend (Svelte/SvelteKit)** → load `svelte-conventions` (runes-only,
-  zero-logic Views, ViewModel pattern, services architecture, client aliases)
-- **Backend (Functions, packages/backend)** → load `backend-conventions`
-  (controller → service → repository → BaseDatabaseService, testing rules)
+**Terse. Technical substance only.** Drop articles, filler, hedging. Fragments
+are fine. Write large generated content to a file and return the path plus a
+one-line description rather than inlining it. Expand only for security
+warnings, irreversible actions, or genuine user confusion. After validating,
+give a 3–4 line summary: what changed, results, suggested commit message.
+
+---
+
+> **Commands, moon tasks, direnv modes, mode switching, commit & push policy**:
+> see the `project-commands` skill.
+> **Directory layout**: see the table in `AGENTS.md`.
