@@ -1104,7 +1104,7 @@ class QuestStateService
    * Returns true when the objective completed on this increment.
    */
   private _advanceObjective(
-    progressEntry: QuestObjectiveProgress,
+    progressEntry: QuestObjectiveProgress & { status?: string },
     objectiveDef: ContentPackQuestObjective,
   ): boolean {
     progressEntry.current = Math.min(progressEntry.current + 1, objectiveDef.maxCount ?? 1);

@@ -47,14 +47,13 @@ class QuestOverlayService
   }
 
   /** @inheritdoc */
-  override async initialize(): Promise<void> {
+  async initialize(): Promise<void> {
     // Restore persisted visibility (default: visible).
     try {
       this.visible = localStorage.getItem(QUEST_OVERLAY_VISIBLE_KEY) !== '0';
     } catch {
       // keep default
     }
-    await super.initialize();
   }
 }
 

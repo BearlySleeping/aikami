@@ -37,7 +37,7 @@ type Props = {
   /** Called when a message action is invoked (chat variant). */
   onAction?: (messageId: string, action: MessageAction) => void;
   /** Surface-specific extras rendered under this message. */
-  renderFooter?: (messageId: string) => Snippet;
+  renderFooter?: Snippet<[messageId: string]>;
   /** Row variant — 'chat' (default) or 'dialogue'. */
   variant?: 'chat' | 'dialogue';
   // ── dialogue-specific ──────────────────────────────────────────────

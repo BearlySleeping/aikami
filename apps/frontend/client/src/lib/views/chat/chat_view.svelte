@@ -89,8 +89,8 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
             {#snippet renderRow(message)}
               <RichMessageRow
                 {message}
-                characterName={viewModel.npc.name}
-                avatarUrl={viewModel.npc.avatarUrl}
+                characterName={viewModel.npc?.name ?? ''}
+                avatarUrl={viewModel.npc?.avatarUrl}
                 onAction={viewModel.handleMessageAction}
                 onSwipe={(id, direction) => viewModel.swipeAlternative(id, direction)}
               />
@@ -98,7 +98,7 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
             {#snippet after()}
               <TypingIndicator
                 visible={viewModel.isTyping}
-                label="{viewModel.npc.name} is typing..."
+                label="{viewModel.npc?.name ?? 'NPC'} is typing..."
               />
               <!-- CYOA choice buttons below the latest AI message (C-245) -->
               <ChoiceButtonsView viewModel={viewModel.choiceButtonsViewModel} />

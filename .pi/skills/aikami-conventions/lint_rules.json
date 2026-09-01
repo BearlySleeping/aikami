@@ -394,7 +394,7 @@
         "id": "LLM-002",
         "name": "ViewModel Boundary Audit",
         "prompt": "Audit ViewModels for boundary violations: direct database references, repository imports, or API calls that should be delegated to services.",
-        "failOn": "ViewModel imports from repositories, database layers, or makes direct API/firebase calls"
+        "failOn": "ViewModel imports from repositories, database layers, or makes direct API calls"
       },
       {
         "id": "LLM-003",

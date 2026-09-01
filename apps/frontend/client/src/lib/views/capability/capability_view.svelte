@@ -3,7 +3,7 @@ import VoiceModelDownload from '@aikami/frontend/components/voice-model-download
 // apps/frontend/client/src/lib/views/capability/capability_view.svelte
 import { BaseViewModelContainer } from '$components';
 import ConnectionEditorPanel from '$views/settings/connection/connection_editor_panel.svelte';
-import type { CapabilityViewModelInterface, ConnectionEntry } from './capability_view_model.svelte';
+import type { CapabilityViewModelInterface } from './capability_view_model.svelte';
 
 type Props = {
   viewModel: CapabilityViewModelInterface;
@@ -13,24 +13,6 @@ const { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel}>
-  {#snippet ConnectionRow(entry: ConnectionEntry)}
-    <button
-      type="button"
-      class="btn btn-lg w-full {entry.isDefault ? 'btn-primary' : 'btn-outline'} justify-start gap-2 h-auto py-3"
-      onclick={() => viewModel.setDefaultConnection(entry.connection.id)}
-    >
-      <span class="shrink-0">{entry.icon}</span>
-      <span class="font-mono text-sm truncate">{entry.connection.name}</span>
-      <span
-        class="badge badge-sm ml-auto shrink-0 {entry.isDefault ? 'badge-accent' : 'badge-ghost'}"
-      >
-        {entry.providerLabel}
-      </span>
-      {#if entry.connection.model}
-        <span class="badge badge-sm badge-outline shrink-0">{entry.connection.model}</span>
-      {/if}
-    </button>
-  {/snippet}
   <div class="flex min-h-screen items-center justify-center bg-base-200 p-4">
     <div class="card bg-base-100 w-full max-w-lg shadow-xl">
       <div class="card-body gap-6">
@@ -71,7 +53,24 @@ const { viewModel }: Props = $props();
           {#each viewModel.connectionEntries as entry}
             <div class="flex items-center gap-2">
               <div class="flex-1">
-                {@render ConnectionRow(entry)}
+                <button
+                  type="button"
+                  class="btn btn-lg w-full {entry.isDefault ? 'btn-primary' : 'btn-outline'} justify-start gap-2 h-auto py-3"
+                  onclick={() => viewModel.setDefaultConnection(entry.connection.id)}
+                >
+                  <span class="shrink-0">{entry.icon}</span>
+                  <span class="font-mono text-sm truncate">{entry.connection.name}</span>
+                  <span
+                    class="badge badge-sm ml-auto shrink-0 {entry.isDefault ? 'badge-accent' : 'badge-ghost'}"
+                  >
+                    {entry.providerLabel}
+                  </span>
+                  {#if entry.connection.model}
+                    <span class="badge badge-sm badge-outline shrink-0"
+                      >{entry.connection.model}</span
+                    >
+                  {/if}
+                </button>
               </div>
               <button
                 type="button"

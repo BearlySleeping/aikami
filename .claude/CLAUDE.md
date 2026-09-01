@@ -1,6 +1,6 @@
 # Aikami Monorepo Developer Guide
 
-**tl;dr**: Bun monorepo orchestrated by Moon. Run `moon check` to typecheck + lint everything. Read `.pi/skills/` for detailed conventions.
+**tl;dr**: Bun monorepo orchestrated by Moon. Run `bun run validate` to typecheck + lint everything. Read `.pi/skills/` for detailed conventions.
 
 ---
 
@@ -32,7 +32,7 @@ This is a **Bun + Moon monorepo** with strict TypeScript and Biome linting.
 bun install
 
 # Type-check + lint + format (local, fast)
-moon check
+bun run validate
 
 # Run dev server (frontend)
 moon run frontend:dev
@@ -151,7 +151,7 @@ bun test --watch packages/backend/auth/
 
 ```bash
 # Check everything
-moon check
+bun run validate
 
 # Just TypeScript
 tsc --noEmit

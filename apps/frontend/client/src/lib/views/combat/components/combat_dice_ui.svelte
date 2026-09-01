@@ -50,7 +50,7 @@ const card = $derived.by((): DiceCardData | null => {
 
 {#if activeDiceRoll?.isRolling}
   <GameDice {dice} />
-{:else if card}
+{:else if card && activeDiceRoll}
   <div class="flex flex-col items-center gap-2">
     <DiceCard {card} />
     <span

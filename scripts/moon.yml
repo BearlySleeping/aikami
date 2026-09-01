@@ -36,9 +36,10 @@ tasks:
       - '~:guard-service-conventions'
       - '~:guard-image-component'
       - '~:guard-data-plane'
+      - '~:guard-type-safety'
     options:
       cache: false
-      runInCI: false
+      runInCI: true
 
   test:
     command: 'bun test'
@@ -83,6 +84,16 @@ tasks:
       cache: false
       runInCI: false
 
+  # Extends the inherited validate (lint + format + typecheck from
+  # .moon/tasks/all.yml) with the structural guards. Moon appends these deps
+  # to the inherited ones, so `moon run :validate` now covers guards too.
+  validate:
+    deps:
+      - '~:guard'
+    options:
+      cache: false
+      runInCI: true
+
   lint-contracts:
     command: 'bun run lint-contracts'
     inputs:
@@ -105,26 +116,27 @@ tasks:
       runInCI: true
 
   # Structural guards for frontend View, ViewModel, and service conventions
-  # (.pi/skills/svelte-conventions/SKILL.md). Currently failing against a
-  # pre-existing backlog (80 / 9 violations as of C-455). Keep the task
-  # available locally, but out of CI until that backlog is cleared.
+  # (.pi/skills/svelte-conventions/SKILL.md).
   guard-mvvm-conventions:
     command: 'bun run src/lib/ops/guard_mvvm_conventions.ts'
     inputs:
       - 'src/lib/ops/guard_mvvm_conventions.ts'
+      - 'src/lib/ops/guard_mvvm_conventions_baseline.json'
       - '/apps/frontend/client/src/**/*_view.svelte'
       - '/apps/frontend/client/src/**/*_view_model.svelte.ts'
       - '/apps/frontend/hub/src/**/*_view.svelte'
       - '/apps/frontend/hub/src/**/*_view_model.svelte.ts'
     options:
       cache: false
-      runInCI: false
+      runInCI: true
 
   guard-service-conventions:
     command: 'bun run src/lib/ops/guard_service_conventions.ts'
     inputs:
       - 'src/lib/ops/guard_service_conventions.ts'
+      - 'src/lib/ops/guard_service_conventions_baseline.json'
       - '/apps/frontend/client/src/lib/services/**/*_service.svelte.ts'
+      - '/apps/frontend/hub/src/lib/client/services/**/*_service.svelte.ts'
     options:
       cache: false
       runInCI: true
@@ -151,6 +163,19 @@ tasks:
       - 'src/lib/ops/validate_content_appearance.ts'
       - '/apps/frontend/client/static/content-packs/**/*'
       - '/apps/frontend/client/src/lib/data/lpc_asset_catalog_generated.ts'
+    options:
+      cache: false
+      runInCI: true
+
+  # Ratchet guard on the type-safety escape hatches (as unknown as / as any /
+  # @ts-ignore). Counts may only go down; see guard_type_safety_baseline.json.
+  guard-type-safety:
+    command: 'bun run src/lib/ops/guard_type_safety.ts'
+    inputs:
+      - 'src/lib/ops/guard_type_safety.ts'
+      - 'src/lib/ops/guard_type_safety_baseline.json'
+      - '/apps/**/*'
+      - '/packages/**/*'
     options:
       cache: false
       runInCI: true

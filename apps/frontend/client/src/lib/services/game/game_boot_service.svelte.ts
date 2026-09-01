@@ -16,6 +16,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { LpcAnimationState } from '@aikami/lpc';
 import type { Campaign, PersonaData } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import { authService, equipmentService } from '$services';
@@ -880,7 +881,7 @@ class GameBootService
     }
 
     const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
-      getLpcAssetPath(slot, assetId, state as unknown as number),
+      getLpcAssetPath(slot, assetId, state),
     );
 
     this._gameWorld = (EngineGameWorld.create as (opts: Record<string, unknown>) => GameWorld)({
@@ -1256,7 +1257,7 @@ class GameBootService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    getLpcAssetPath: (_slot: string, assetId: string, state: string) => string | null,
+    getLpcAssetPath: (_slot: string, assetId: string, state: LpcAnimationState) => string | null,
   ) {
     // C-400: single source of truth — the engine's shared createLpcPipeline
     // (projected catalog + pure resolver + asset URL resolver). This is the
@@ -1265,7 +1266,11 @@ class GameBootService
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
       catalog: projectLpcCatalog(generatedLpcSlots),
-      getLpcAssetPath,
+      getLpcAssetPath: getLpcAssetPath as unknown as (
+        slot: string,
+        assetId: string,
+        state: string,
+      ) => string | null,
     });
   }
 
@@ -1633,8 +1638,9 @@ class GameBootService
     // ── C-332: Unbind from GameEngineService so stale reference doesn't
     // survive teardown. Next boot will re-register via registerWorld(). ──
     gameEngineService.registerWorld(undefined as unknown as GameWorld);
-    gameEngineService.currentMapId = '';
-    gameEngineService.playerScene = 'unknown';
+    // Reset engine state through the public API instead of assigning
+    // readonly properties directly.
+    gameEngineService.destroyEngine();
 
     this._bridge = undefined;
   }

@@ -93,6 +93,17 @@ class IdleDetectionService
     }
   }
 
+  private _handleInput = (): void => {
+    this.resetIdle();
+  };
+
+  private _handleVisibilityChange = (): void => {
+    this._isPageVisible = document.visibilityState === 'visible';
+    if (this._isPageVisible) {
+      this.resetIdle();
+    }
+  };
+
   private _bindInputEvents(): void {
     for (const event of INPUT_EVENTS) {
       document.addEventListener(event, this._handleInput, { passive: true });

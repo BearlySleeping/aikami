@@ -92,7 +92,7 @@ tags:
 
 project:
     name: "backend-database"
-    description: "Database services and utilities for Firestore operations."
+    description: "Database services and utilities for Cloudflare D1 (Drizzle) operations."
     channel: "#backend"
     owner: "Backend Team"
 
@@ -206,79 +206,56 @@ tasks:
 - Define `outputs:` for build tasks so moon can cache them
 - Use `toolchains: javascript: false` when the project uses its own bundler (Vite, Astro, etc.) and should not be processed by moon's JS toolchain
 
-### Firebase Functions App
+### Docker-Deployed Backend App (real example: `apps/backend/worker`)
 
 ```yaml
-# apps/backend/firebase/moon.yml
-$schema: "https://moonrepo.dev/schemas/project.json"
+# apps/backend/worker/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
 
-language: "typescript"
-layer: "application"
+language: 'typescript'
+layer: 'application'
 tags:
-    - "firebase"
-    - "application"
+  - 'worker'
+  - 'backend'
+  - 'application'
+  - 'container'
 
 project:
-    name: "firebase"
-    description: "Backend Firebase project: Cloud Functions, Firestore Rules, and Data Connect."
-    channel: "#backend"
-    owner: "Backend Team"
+  name: 'worker'
+  description: 'Generic always-on background-worker host — a single Compute Engine VM (Always Free e2-micro) for processes that need a persistent connection (Gateway-style), unlike a pay-per-invocation platform. Currently starts @aikami/backend-discord-bot; not Discord-specific by design, so future always-on workers share this same VM instead of each needing their own.'
+  channel: '#backend'
+  owner: 'Backend Team'
 
 dependsOn:
-    - "backend-configs"
-    - "backend-utils"
-    - "backend-database"
-    - "schemas"
-    - "types"
-    - "constants"
-    - "logger"
+  - 'backend-discord-bot'
+  - 'logger'
 
 fileGroups:
-    sources:
-        - "src/**/*"
-        - "scripts/**/*"
-    configs:
-        - "firestack.json"
-        - "*.ts"
-    tests:
-        - "tests/**/*"
-    deployment:
-        - "functions_cache.ts"
+  sources:
+    - 'src/**/*'
+  configs:
+    - 'package.json'
+    - 'tsconfig.json'
+    - 'Dockerfile'
 
 tasks:
-    deploy:
-        command: "bun run deploy"
-        inputs:
-            - "@group(deployment)"
-        options:
-            cache: false
-            runInCI: true
-    test:
-        command: "bun run test"
-        inputs:
-            - "@group(sources)"
-            - "@group(tests)"
-            - "@group(configs)"
-    test-rules:
-        command: "bun run test:rules"
-        inputs:
-            - "@group(sources)"
-            - "@group(tests)"
-            - "@group(configs)"
-    emulate:
-        command: "bun run emulate"
-        options:
-            cache: false
-            runInCI: false
-    scripts:
-        command: "bun run scripts"
-        options:
-            cache: false
-            runInCI: false
-    logs:
-        command: "bun run logs"
-        options:
-            cache: false
+  build:
+    command: 'bun run build'
+    inputs:
+      - '@group(sources)'
+    outputs:
+      - 'dist'
+```
+
+### Cloudflare-Worker-Deployed App (hub, client, site, docs)
+
+These apps deploy via `deployCloudflareApp('<appId>')`
+(`scripts/src/lib/deploy/cloudflare.ts`), driven by that app's entry in
+`scripts/src/lib/deploy/deployment_config.ts`'s `APP_CONFIG`
+(`serviceType: 'cloudflare-worker'`). See `apps/frontend/site/scripts/deploy.ts`
+for the minimal deploy-script shape (`await deployCloudflareApp('site')`).
+Server-only route handlers for the hub live in
+`apps/frontend/hub/src/lib/server/api/` (see `backend-conventions`).
             runInCI: false
 ```
 
@@ -501,10 +478,9 @@ Choose the right implementation:
 
 | Environment             | Implementation file                         |
 | ----------------------- | ------------------------------------------- |
-| SvelteKit (Client)         | `shared/logger/src/lib/svelte_kit.ts`       |
-| Firebase Functions      | `shared/logger/src/lib/logger_functions.ts` |
+| SvelteKit (Client, hub) | `shared/logger/src/lib/svelte_kit.ts` — dynamically loads `logger_svelte_kit_ssr.ts` on the server or `logger_browser.ts` in the browser |
 | Browser (game, landing) | `shared/logger/src/lib/logger_browser.ts`   |
-| AWS / Node.js           | `shared/logger/src/lib/logger_aws.ts`       |
+| Node.js (scripts, worker) | `shared/logger/src/lib/logger_basic.ts` (via `@aikami/logger` barrel) |
 
 ```typescript
 // ✅ ALWAYS — use the $logger alias
@@ -712,9 +688,10 @@ Tree-shaking handles unused exports — `lib/` is an implementation detail.
 
 ### ❌ Using `interface` Instead of `type`
 
-Use `type` aliases everywhere. Only use `interface` for polymorphic OOP
-contracts (e.g., `BaseDatabaseService` interface implemented by multiple
-engine-specific classes).
+Use `type` aliases everywhere — including polymorphic contracts implemented by
+several classes (`type FooServiceInterface = { ... }`). Biome's
+`useConsistentTypeDefinitions` is set to `error` with no exemption outside
+`*.d.ts`, so an `interface` anywhere in `src/` fails the build.
 
 ```typescript
 // ✅ CORRECT

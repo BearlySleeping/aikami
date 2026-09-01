@@ -9,7 +9,8 @@ import { onMount } from 'svelte';
 import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 
 let resolver: import('@aikami/types').AssetResolver | undefined = $state(undefined);
-let allSlots: import('@aikami/frontend-preview').LpcSlotDef[] | undefined = $state(undefined);
+let allSlots: readonly import('@aikami/frontend/preview').LpcSlotDef[] | undefined =
+  $state(undefined);
 
 onMount(async () => {
   const { createRegistryAssetResolver } = await import(
@@ -20,7 +21,7 @@ onMount(async () => {
   const { assetStore } = await import('$lib/services/assets/asset_store.svelte');
   await assetStore.fetchManifest();
 
-  allSlots = getLpcCatalog().slots;
+  allSlots = getLpcCatalog().slots as unknown as readonly import('@aikami/frontend/preview').LpcSlotDef[];
 });
 </script>
 
@@ -29,7 +30,7 @@ onMount(async () => {
 </svelte:head>
 
 {#if resolver && allSlots}
-  <LpcPreview {resolver} {allSlots} controls={true} />
+  <LpcPreview {resolver} allSlots={allSlots as import('@aikami/frontend/preview').LpcSlotDef[]} controls={true} />
 {:else}
   <div class="flex items-center justify-center h-64 text-base-content/40">
     Loading LPC preview...
