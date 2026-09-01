@@ -29,7 +29,7 @@ export type NPCSpawnData = {
    * indices in slot order: body, hair, torso, legs, feet, head).
    * When omitted, createNPC uses its own default.
    */
-  appearanceLayers?: readonly number[];
+  appearanceLayers?: readonly [number, number, number, number, number, number];
   /**
    * When true, the NPC is created with the Companion component so the
    * party-follow system can path it to formation slots behind the player.

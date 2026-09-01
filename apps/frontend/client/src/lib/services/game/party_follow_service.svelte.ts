@@ -9,10 +9,28 @@
 //
 // Contract: C-340 Build Party and Companion Gameplay (AC-2)
 
-import { BaseFrontendClass } from '@aikami/frontend/services';
-import type { PartyFollowServiceInterface, PartyFollowServiceOptions } from '$types';
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
 import { gameEngineService } from './game_engine_service.svelte';
 import { partyRosterService } from './party_roster_service.svelte.ts';
+
+/** Construction options for the party-follow lifecycle service. */
+export type PartyFollowServiceOptions = BaseFrontendClassOptions;
+
+/** Client lifecycle contract for synchronizing party membership with the engine. */
+export type PartyFollowServiceInterface = BaseFrontendClassInterface & {
+  /** Whether party-follow synchronization is active. */
+  readonly isRunning: boolean;
+  /** Enables party-follow synchronization. */
+  start(): void;
+  /** Disables party-follow synchronization. */
+  stop(): void;
+  /** Re-applies recruited party members after a map load. */
+  onMapLoaded(): void;
+};
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -43,6 +61,10 @@ class PartyFollowService
 
   /** @inheritdoc */
   onMapLoaded(): void {
+    if (!this.isRunning) {
+      return;
+    }
+
     this._lastKnownEids.clear();
 
     for (const member of partyRosterService.members) {

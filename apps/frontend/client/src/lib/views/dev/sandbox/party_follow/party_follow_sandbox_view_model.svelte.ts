@@ -53,7 +53,7 @@ export type PartyMember = {
   /** ECS entity ID (resolved from ENTITY_CREATED or npcMeta after spawn). */
   eid: number;
   /** 6-element LPC appearance layer array (engine variant indices). */
-  readonly appearanceLayers: readonly number[];
+  readonly appearanceLayers: readonly [number, number, number, number, number, number];
 };
 
 export type PartyFollowSandboxViewModelInterface = BaseViewModelInterface & {
@@ -238,6 +238,10 @@ class PartyFollowSandboxViewModel
         this._resolveNpcEntityIds();
       }, 500);
     } catch (error) {
+      if (!this._isInitializationActive(initializationGeneration)) {
+        return;
+      }
+
       const engineError = error instanceof Error ? error.message : String(error);
       this.destroyEngine();
       this.engineError = engineError;
@@ -382,6 +386,15 @@ class PartyFollowSandboxViewModel
       for (const [eid, entry] of gw.npcMeta) {
         if (entry.npcId === member.id) {
           this.debug('resolved-eid', { npcId: member.id, eid });
+
+          if (member.active && this._bridge) {
+            this._bridge.send({
+              type: 'SET_COMPANION_RECRUITED',
+              entityId: eid,
+              recruited: true,
+            });
+          }
+
           return { ...member, eid };
         }
       }

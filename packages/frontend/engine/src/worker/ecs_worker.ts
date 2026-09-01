@@ -411,6 +411,7 @@ const handleSetCompanionRecruited = (entityId: number, recruited: boolean): void
   if (!recruited) {
     // Stop following immediately on dismiss so the entity doesn't keep
     // drifting toward a formation slot it no longer occupies.
+    removeComponent(world, entityId, PathFollow);
     addComponent(world, entityId, set(Velocity, { x: 0, y: 0 }));
   }
 };

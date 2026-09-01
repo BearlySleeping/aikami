@@ -16,7 +16,7 @@ const validMember = {
   recruitedAt: '2026-01-01T00:00:00.000Z',
   personalQuestActive: false,
   equipmentSlotIds: [],
-};
+} as const;
 
 describe('PartyRosterEntrySchema', () => {
   test('validates a well-formed roster entry', () => {
