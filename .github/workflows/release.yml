@@ -166,6 +166,14 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          # The "Set DEPLOY_APPS for push events" and "Detect worker
+          # changes" steps below `git diff` github.event.before against the
+          # checked-out HEAD — a shallow (default depth-1) clone doesn't
+          # contain `before`'s commit object at all, so that diff fails hard
+          # with "fatal: bad object <sha>" (this was the actual cause behind
+          # every prior push-triggered Release run failing on main).
+          fetch-depth: 0
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
