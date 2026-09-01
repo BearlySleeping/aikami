@@ -24,6 +24,18 @@ export type NPCSpawnData = {
   personaId?: string;
   /** Dynamic relationship value (-100 to 100). */
   relationshipValue?: number;
+  /**
+   * Optional 6-element LPC appearance layer array (1-indexed engine variant
+   * indices in slot order: body, hair, torso, legs, feet, head).
+   * When omitted, createNPC uses its own default.
+   */
+  appearanceLayers?: readonly number[];
+  /**
+   * When true, the NPC is created with the Companion component so the
+   * party-follow system can path it to formation slots behind the player.
+   * Defaults to false.
+   */
+  isCompanion?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -56,6 +68,21 @@ export type GameCommand =
       entityId: number;
       /** Velocity vector in pixels per second. */
       velocity: { x: number; y: number };
+    }
+  | {
+      /**
+       * Flips the Companion.recruited flag (and TurnOrder.isActive, when
+       * present) on an existing companion NPC entity. Sent when the player
+       * recruits or dismisses a companion through dialogue or the party
+       * roster overlay — the entity already exists in the world (spawned
+       * with `isCompanion: true`), this just activates/deactivates it.
+       *
+       * Contract: C-340 Build Party and Companion Gameplay
+       */
+      type: 'SET_COMPANION_RECRUITED';
+      /** The companion's ECS entity ID (resolved via GameWorld.npcMeta). */
+      entityId: number;
+      recruited: boolean;
     }
   | {
       type: 'INTERACT';

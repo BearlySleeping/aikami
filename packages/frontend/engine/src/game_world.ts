@@ -1091,7 +1091,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     } else {
       if (!this._workerConstructor) {
         try {
-          // @ts-expect-error - Vite worker import syntax (?worker&type=module) not recognized by stable tsc
           const workerModule = await import('./worker/ecs_worker_bootstrap.ts?worker&type=module');
           this._workerConstructor = workerModule.default as EcsWorkerConstructor;
         } catch (error) {

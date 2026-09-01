@@ -13,5 +13,6 @@ export { ImageGenPage } from './image_gen_page';
 export { InventoryPage } from './inventory_page';
 export { MacroSystemPage } from './macro_system_page';
 export { MapSandboxPage } from './map_sandbox_page';
+export { PartyRosterPage } from './party_roster_page';
 export { SandboxPage } from './sandbox_page';
 export { SessionMgmtPage } from './session_mgmt_page';
