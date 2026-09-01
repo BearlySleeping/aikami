@@ -1,6 +1,5 @@
 <script lang="ts">
 import { BaseViewModelContainer } from '$components';
-import { questOverlayService } from '$services';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
 import InventoryView from '../../inventory/inventory_view.svelte';
 import QuestView from '../../quest/quest_view.svelte';
@@ -33,11 +32,10 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
-/** Focus action: focuses the element when it mounts. */
-function focusOnMount(node: HTMLElement): { destroy: () => void } {
+const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
   node.focus();
   return { destroy: () => {} };
-}
+};
 </script>
 <BaseViewModelContainer {viewModel}>
   <!--
@@ -80,7 +78,7 @@ function focusOnMount(node: HTMLElement): { destroy: () => void } {
 
     <!-- ── HUD Bar — Bottom-Left: Quest Tracker (C-332 AC-1) ── -->
     <!-- Hidden while the richer Quest Overlay is visible (they show the same info). -->
-    {#if viewModel.showQuestTracker && !questOverlayService.visible}
+    {#if viewModel.showQuestTracker && !viewModel.questOverlayVisible}
       <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
     {/if}
 

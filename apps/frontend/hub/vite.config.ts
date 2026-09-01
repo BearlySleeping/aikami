@@ -106,9 +106,7 @@ export default defineConfig(({ mode }) => {
       compilerOptions: {
         warningFilter: (warning: { code: string }) => warning.code !== 'state_referenced_locally',
       },
-      adapter: adapter({
-        out: 'build',
-      }),
+      adapter: adapter(),
       alias: {
         $components: toSrcPath('lib/components'),
         '$components/*': toSrcPath('lib/components/*'),

@@ -18,6 +18,7 @@ import sharp from 'sharp';
 const ROOT = path.resolve(import.meta.dir, '../../../..');
 const SOURCE_LOGO = path.join(ROOT, 'assets/default.webp');
 const SOURCE_SVG = path.join(ROOT, 'assets/default.svg');
+const SOURCE_OG_BG = path.join(ROOT, 'assets/site_image.webp');
 
 type FrontendTarget = {
   /** Human-readable name */
@@ -175,23 +176,12 @@ const generateForTarget = async (target: FrontendTarget): Promise<void> => {
 
   // --- Open Graph image (1200×630) ---
   try {
-    const ogPath = path.join(imagesDir, 'og-image.jpg');
-    const logoOverlay = await sharp(SOURCE_LOGO)
-      .resize(400, 400, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-      .toBuffer();
-
-    await sharp({
-      create: {
-        width: 1200,
-        height: 630,
-        channels: 3,
-        background: BRANDING.themeColor,
-      },
-    })
-      .composite([{ input: logoOverlay, gravity: 'center' }])
-      .jpeg({ quality: 85 })
+    const ogPath = path.join(imagesDir, 'og_image.webp');
+    await sharp(SOURCE_OG_BG)
+      .resize(1200, 630, { fit: 'cover', position: 'center' })
+      .webp({ quality: 85 })
       .toFile(ogPath);
-    console.log(`  ${green('✓')} og-image.jpg`);
+    console.log(`  ${green('✓')} og_image.webp`);
   } catch (err) {
     console.warn(`  ⚠  OG image generation failed:`, (err as Error).message);
   }
@@ -231,7 +221,7 @@ const generateForTarget = async (target: FrontendTarget): Promise<void> => {
     'favicon.ico',
     'favicon.svg',
     'site.webmanifest',
-    path.join(target.imagesSubdir || '.', 'og-image.jpg'),
+    path.join(target.imagesSubdir || '.', 'og_image.webp'),
   ];
   console.log(`  ${dim(`(${generatedFiles.length} files generated)`)}`);
 };

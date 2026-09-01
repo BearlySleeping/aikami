@@ -20,6 +20,10 @@ plain `@mention` requires a persistent connection (`THREAD_CREATE` /
 - **In-thread conversational replies** — anyone who replies to one of the
   bot's own messages gets a grounded LLM answer (same `.context/llms.txt`
   grounding as `/ask`), with recent thread history for continuity.
+- **Plain `@AiKami` mentions anywhere else** the bot can read (not just the
+  forum) get the same grounded reply, minus thread history — same per-user
+  cooldown bucket as the in-thread reply above, so mixing the two doesn't
+  double the rate limit.
 
 **Interactions Endpoint** (`discordInteractions`) — Discord's stateless HTTP
 webhook delivery for slash commands. Handles `/ask`. This used to be its own
@@ -33,6 +37,14 @@ mounted by whatever HTTP server the host runs.
 Both surfaces share the same underlying "ask about Aikami" logic
 (`@aikami/backend-project-ai`'s `askProjectAi`), grounded in
 `.context/llms.txt`.
+
+**Removed** (Discord revamp TASK 3c): `lib/role_sync.ts` and its test —
+C-449 AC-5's channel → tool access mapping. `grantToolAccess`/
+`revokeToolAccess` only ever logged (no real tool integration existed), and
+its `ChannelUpdate` handler called `guild.members.fetch()` — every member —
+on every single channel permission edit. Removed along with the
+`GatewayIntentBits.GuildMembers` privileged intent that existed only to
+serve it (nothing else in this package needs the member list).
 
 This package has **no opinion on hosting or env sourcing** — it exports
 `startDiscordBot(env)` / `discordInteractions(env)` plus the env shapes each
@@ -113,8 +125,8 @@ src/
 Non-sensitive IDs (guild, forum channel, Moderator/Admin roles, forum tags)
 now live in `@aikami/constants` (`packages/shared/constants/src/lib/discord.ts`)
 — `lib/constants.ts` just re-exports the subset this package uses under its
-existing local names, plus the bot-specific bits (issue-trigger phrase,
-tool-access map). `@aikami/constants`'s `discord.ts` is itself kept in sync
+existing local names, plus the bot-specific bits (issue-trigger phrase).
+`@aikami/constants`'s `discord.ts` is itself kept in sync
 BY HAND with `scripts/src/lib/discord/structure.ts` (the declarative source
 of truth for the server layout) — update it there when the server structure
 changes.

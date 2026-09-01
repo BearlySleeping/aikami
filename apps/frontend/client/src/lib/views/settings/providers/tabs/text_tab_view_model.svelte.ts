@@ -25,6 +25,9 @@ import {
   type OpenRouterModel,
 } from '$types';
 
+/** Base configuration used to create the text-provider tab ViewModel. */
+export type TextTabViewModelOptions = BaseViewModelOptions;
+
 export type TextTabViewModelInterface = BaseViewModelInterface & {
   readonly config: ConfigState;
   readonly textProvider: string;

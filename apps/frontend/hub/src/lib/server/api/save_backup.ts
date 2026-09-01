@@ -244,7 +244,7 @@ export const handleGetBackup = async (
     });
   }
 
-  return new Response(object.body, {
+  return new Response(object.body as unknown as ReadableStream, {
     status: 200,
     headers: { 'content-type': 'application/octet-stream' },
   });

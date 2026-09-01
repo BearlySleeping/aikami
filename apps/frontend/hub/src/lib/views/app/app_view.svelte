@@ -1,7 +1,6 @@
 <script lang="ts">
 import type { Snippet } from 'svelte';
-import { BaseViewModelContainer } from '$components';
-import AppLoading from '$components/app_loading.svelte';
+import { AppLoading, BaseViewModelContainer } from '$components';
 import type { AppViewModelInterface } from './app_view_model.svelte.ts';
 import AppBar from './bar/app_bar.svelte';
 import NavigationDrawer from './drawer/navigation/navigation_drawer.svelte';
@@ -40,8 +39,8 @@ let { viewModel, children }: Props = $props();
       </main>
     </div>
   </div>
-</BaseViewModelContainer>
 
-{#await import('./dialogs/app_dialogs_view.svelte') then { default: AppDialogsView }}
-  <AppDialogsView />
-{/await}
+  {#await import('./dialogs/app_dialogs_view.svelte') then { default: AppDialogsView }}
+    <AppDialogsView />
+  {/await}
+</BaseViewModelContainer>

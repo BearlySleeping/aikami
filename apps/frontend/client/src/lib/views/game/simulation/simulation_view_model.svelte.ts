@@ -190,7 +190,7 @@ class SimulationViewModel
   // ── Construction ────────────────────────────────────────────────────
 
   /**
-   * Do NOT use `new SimulationViewModel()`. Use the exported factory
+   * Do NOT use the constructor directly. Use the exported factory
    * function {@link getSimulationViewModel} instead.
    */
   constructor(options: SimulationViewModelOptions) {

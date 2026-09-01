@@ -13,9 +13,16 @@ import { mock } from 'bun:test';
 
 // ── Svelte 5 runes ──────────────────────────────────────────────────────────
 
-(globalThis as Record<string, unknown>).$state = (value: unknown) => value;
-(globalThis as Record<string, unknown>).$state.raw = (value: unknown) => value;
-(globalThis as Record<string, unknown>).$state.snapshot = (value: unknown) => value;
+type RunePolyfill = {
+  (value: unknown): unknown;
+  raw: (value: unknown) => unknown;
+  snapshot: (value: unknown) => unknown;
+};
+
+(globalThis as unknown as Record<string, RunePolyfill>).$state = Object.assign(
+  (value: unknown) => value,
+  { raw: (value: unknown) => value, snapshot: (value: unknown) => value },
+) as RunePolyfill;
 (globalThis as Record<string, unknown>).$derived = (value: unknown) => value;
 
 const effectPolyfill = ((fn: () => void) => {

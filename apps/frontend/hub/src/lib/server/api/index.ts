@@ -54,7 +54,11 @@ const dbHealthResponseSchema = t.Union([
 // (C-396 AC-4). Public on purpose: anonymous visitors see exactly what
 // signed-in visitors see on the catalog. Unconfigured/unreachable database
 // resolves to `null` — never a 500.
-const catalogStatsResponseSchema = t.Union([CategoryStatsSchema, AssetStatsSchema, t.Null()]);
+const catalogStatsResponseSchema = t.Union([
+  CategoryStatsSchema,
+  AssetStatsSchema,
+  t.Null(),
+] as unknown as Parameters<typeof t.Union>[0]);
 
 // POST /api/ask — the one route in this file meant for a THIRD-PARTY origin
 // (the static landing page, apps/frontend/site) rather than the hub's own
@@ -99,7 +103,7 @@ export const app = new Elysia({
     () => {
       const env = getHealthDbEnv();
       if (!env) {
-        return { status: 'unconfigured' };
+        return { status: 'unconfigured' as const };
       }
       return handleDbHealth();
     },
@@ -166,9 +170,18 @@ export const app = new Elysia({
     () => {
       const env = getCatalogStatsEnv();
       if (!env) {
-        return null;
+        return new Response(JSON.stringify(null), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
       }
-      return handleCatalogStats();
+      return handleCatalogStats().then(
+        (result) =>
+          new Response(JSON.stringify(result), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
     },
     {
       response: catalogStatsResponseSchema,

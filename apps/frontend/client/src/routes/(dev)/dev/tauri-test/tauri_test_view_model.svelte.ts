@@ -52,6 +52,9 @@ const format = (value: unknown): string => {
   return String(value);
 };
 
+/** Development-route configuration used to create the Tauri integration test ViewModel. */
+export type TauriTestViewModelOptions = BaseDevViewModelOptions;
+
 export type TauriTestViewModelInterface = BaseDevViewModelInterface & {
   readonly groups: ProbeGroup[];
   readonly running: boolean;

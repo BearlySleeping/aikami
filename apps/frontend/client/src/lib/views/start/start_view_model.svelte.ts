@@ -14,12 +14,10 @@ import {
 } from '@aikami/frontend/services';
 import type { Campaign, CapabilityProfile, PackIndexEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
+import { isTauri } from '$lib/views/utils/is_tauri';
 import {
   type AssetPrefetchPhase,
   assetPrefetchService,
-} from '$lib/services/assets/asset_prefetch_service.svelte';
-import { isTauri } from '$lib/views/utils/is_tauri';
-import {
   campaignService,
   equipmentService,
   gameModeService,

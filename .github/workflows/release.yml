@@ -603,7 +603,8 @@ jobs:
   # manifest can now exit non-zero on a partial manifest (see
   # updater_manifest.ts) while still having published real download links,
   # and that shouldn't block the announcement. discord_notify.ts itself
-  # no-ops when DISCORD_RELEASES_WEBHOOK_URL isn't configured for the mode.
+  # no-ops when WORKER_NOTIFY_SECRET isn't configured for the mode (TASK 4 —
+  # posts through the worker VM's /notify relay now, not a webhook URL).
   notify-discord:
     name: Announce Release (Discord)
     runs-on: ubuntu-latest
@@ -715,4 +716,4 @@ jobs:
           MODE: ${{ github.event.inputs.mode || 'production' }}
           RUN_ID: ${{ github.run_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DISCORD_STAFF_WEBHOOK_URL: ${{ secrets.DISCORD_STAFF_WEBHOOK_URL }}
+          WORKER_NOTIFY_SECRET: ${{ secrets.WORKER_NOTIFY_SECRET }}

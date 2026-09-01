@@ -124,4 +124,7 @@ class AttributionViewModel
   }
 }
 
-export { AttributionViewModel };
+/** Creates the attribution ViewModel that loads pack provenance and returns to the start menu. */
+export const getAttributionViewModel = (
+  options: AttributionViewModelOptions,
+): AttributionViewModelInterface => AttributionViewModel.create(options);

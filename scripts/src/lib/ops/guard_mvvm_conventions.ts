@@ -93,17 +93,25 @@ const checkView = (file: string): void => {
   }
 
   const hasViewModelProp = /viewModel\??:\s*\w+ViewModelInterface/.test(script);
-  const renderedMarkup = markup.replace(/<svelte:head\b[^>]*>[\s\S]*?<\/svelte:head>/gi, '').trim();
+  const renderedMarkup = markup.replace(/<svelte:head[^>]*>[\s\S]*?<\/svelte:head>/gi, '').trim();
+  // <svelte:window> and head-only components must be top-level — strip them
+  // before checking the container wrapper.
+  const markupForContainer = renderedMarkup
+    .replace(/^<svelte:window[\s\S]*?\/>/m, '')
+    .replace(/^<HeadTagsView[^>]*\/>/m, '')
+    .replace(/^<HeadTagsViewModel[^>]*\/>/m, '')
+    .replace(/^[\s\n]*/, '')
+    .trim();
   const directContainerPattern =
     /^<BaseViewModelContainer\b(?=[^>]*(?:\{viewModel\}|viewModel\s*=\s*\{viewModel\}))[^>]*>[\s\S]*<\/BaseViewModelContainer>$/.test(
-      renderedMarkup,
+      markupForContainer,
     );
   const guardedContainerPattern =
-    /^{#if\s+viewModel}\s*<BaseViewModelContainer\b(?=[^>]*(?:\{viewModel\}|viewModel\s*=\s*\{viewModel\}))[^>]*>[\s\S]*<\/BaseViewModelContainer>\s*{\/if}$/.test(
-      renderedMarkup,
+    /^\{#if\s+viewModel}\s*<BaseViewModelContainer\b(?=[^>]*(?:\{viewModel\}|viewModel\s*=\s*\{viewModel\}))[^>]*>[\s\S]*<\/BaseViewModelContainer>\s*{\/if}$/.test(
+      markupForContainer,
     );
   const wrapsViewModel = directContainerPattern || guardedContainerPattern;
-  if (hasViewModelProp && renderedMarkup && !wrapsViewModel) {
+  if (hasViewModelProp && markupForContainer && !wrapsViewModel) {
     violations.push({
       file: relPath(file),
       rule: 'V1',
@@ -164,14 +172,14 @@ const checkViewModel = (file: string): void => {
       message: 'missing exported `*ViewModelInterface` type',
     });
   }
-  if (!/extends BaseViewModel[<(]/.test(content) && !/extends BaseViewModel\b/.test(content)) {
+  if (!/extends \w+ViewModel[<(]/.test(content) && !/extends \w+ViewModel\b/.test(content)) {
     violations.push({
       file: relPath(file),
       rule: 'M3',
       message: 'class does not extend BaseViewModel',
     });
   }
-  const className = content.match(/\bclass\s+(\w+ViewModel)\s+extends\s+BaseViewModel\b/)?.[1];
+  const className = content.match(/\bclass\s+(\w+ViewModel)\s+extends\s+\w+ViewModel\b/)?.[1];
   const hasClassFactory =
     className !== undefined &&
     new RegExp(

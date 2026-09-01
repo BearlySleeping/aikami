@@ -7,9 +7,15 @@
 // Contract: C-240 Session Management
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
-import { BaseViewModel, type BaseViewModelInterface } from '@aikami/frontend/services';
-import { gameOverlayService } from '$services';
-import { sessionService } from '$services/game/session_service.svelte';
+import {
+  BaseViewModel,
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from '@aikami/frontend/services';
+import { gameOverlayService, sessionService } from '$services';
+
+/** Base configuration used to create the end-session overlay ViewModel. */
+export type EndSessionViewModelOptions = BaseViewModelOptions;
 
 export type EndSessionViewModelInterface = BaseViewModelInterface & {
   /** Current phase: 'confirm' → 'summarizing' → 'preview' → 'editing' → 'locked'. */

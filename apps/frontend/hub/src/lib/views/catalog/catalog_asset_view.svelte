@@ -55,13 +55,14 @@ onMount(() => {
     >
       {#if viewModel.previewUrl}
         <!-- Server-rendered thumbnail — always visible; hidden by preview canvas -->
-        <Image
-          src={viewModel.previewUrl}
-          alt={`Preview of ${viewModel.displayName}`}
-          class="h-full w-full object-contain"
-          class:hidden={viewModel.previewMounted}
-          data-testid="catalog-asset-preview"
-        />
+        <div class:hidden={viewModel.previewMounted} class="h-full w-full">
+          <Image
+            src={viewModel.previewUrl}
+            alt={`Preview of ${viewModel.displayName}`}
+            class="h-full w-full object-contain"
+            data-testid="catalog-asset-preview"
+          />
+        </div>
       {:else}
         <div
           class="flex flex-col items-center gap-2 p-6 text-center text-muted-foreground"

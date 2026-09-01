@@ -13,15 +13,24 @@ import type {
   APIGuildForumChannel,
   APIGuildForumDefaultReactionEmoji,
   APIGuildForumTag,
+  APIGuildOnboarding,
+  APIGuildOnboardingPrompt,
+  APIGuildOnboardingPromptOption,
+  APIGuildWelcomeScreen,
+  APIGuildWelcomeScreenChannel,
   APIOverwrite,
   APIRole,
+  RESTAPIGuildOnboardingPrompt,
+  RESTAPIGuildOnboardingPromptOption,
   RESTPatchAPIAutoModerationRuleJSONBody,
   RESTPatchAPIChannelJSONBody,
   RESTPatchAPIGuildJSONBody,
   RESTPatchAPIGuildRoleJSONBody,
+  RESTPatchAPIGuildWelcomeScreenJSONBody,
   RESTPostAPIAutoModerationRuleJSONBody,
   RESTPostAPIGuildChannelJSONBody,
   RESTPostAPIGuildRoleJSONBody,
+  RESTPutAPIGuildOnboardingJSONBody,
 } from 'discord-api-types/v10';
 
 export type PermissionOverwrite = APIOverwrite;
@@ -90,6 +99,7 @@ export type RoleUpdateBody = RESTPatchAPIGuildRoleJSONBody;
 export type GuildSettings = Pick<
   APIGuild,
   | 'id'
+  | 'features'
   | 'verification_level'
   | 'mfa_level'
   | 'explicit_content_filter'
@@ -123,3 +133,26 @@ export type AutoModRule = Omit<APIAutoModerationRule, 'creator_id'>;
 export type AutoModRuleBody = RESTPostAPIAutoModerationRuleJSONBody;
 
 export type AutoModRuleUpdateBody = RESTPatchAPIAutoModerationRuleJSONBody;
+
+// ── Onboarding (onboarding.ts) ──────────────────────────────────────────
+
+export type Onboarding = APIGuildOnboarding;
+export type OnboardingPrompt = APIGuildOnboardingPrompt;
+export type OnboardingPromptOption = APIGuildOnboardingPromptOption;
+
+export type OnboardingBody = RESTPutAPIGuildOnboardingJSONBody;
+/**
+ * The published type marks `id` optional on both of these — CONTEXT fact 4
+ * (confirmed live) says otherwise: omitting `id` on a prompt or option is a
+ * 400, even for a brand-new one (use a placeholder snowflake that doesn't
+ * exist yet, e.g. "0"/"1" — see onboarding.ts). Always set it regardless of
+ * what the type permits.
+ */
+export type OnboardingPromptBody = RESTAPIGuildOnboardingPrompt;
+export type OnboardingPromptOptionBody = RESTAPIGuildOnboardingPromptOption;
+
+// ── Welcome screen (welcome_screen.ts) ──────────────────────────────────
+
+export type WelcomeScreen = APIGuildWelcomeScreen;
+export type WelcomeScreenChannel = APIGuildWelcomeScreenChannel;
+export type WelcomeScreenBody = RESTPatchAPIGuildWelcomeScreenJSONBody;

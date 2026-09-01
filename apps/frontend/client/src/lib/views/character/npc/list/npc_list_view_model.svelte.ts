@@ -12,6 +12,18 @@ export type NpcListViewModelOptions = BaseViewModelOptions;
 
 export type NpcTab = 'all' | 'mine' | 'public' | 'system' | 'chats';
 
+/** Typed edit-field update accepted by the NPC list ViewModel. */
+export type NpcFieldUpdate =
+  | {
+      field: 'name' | 'occupation' | 'race' | 'class' | 'personality' | 'notes';
+      value: string;
+    }
+  | { field: 'level'; value: number }
+  | { field: 'visibility'; value: 'private' | 'public' };
+
+/** Tab metadata rendered by the NPC list view. */
+export type NpcTabItem = { key: NpcTab; label: string };
+
 export type NpcListViewModelInterface = BaseViewModelInterface & {
   readonly npcs: NpcData[];
   readonly systemNpcs: NpcData[];
@@ -22,16 +34,37 @@ export type NpcListViewModelInterface = BaseViewModelInterface & {
   readonly isImporting: boolean;
   readonly activeTab: NpcTab;
   readonly editingNpc: NpcData | undefined;
+  readonly tabs: readonly NpcTabItem[];
+  urlInput: string;
+  showUrlModal: boolean;
+  showCreateModal: boolean;
+  editName: string;
+  editRace: string;
+  editClass: string;
+  editLevel: number;
+  editOccupation: string;
+  editPersonality: string;
+  editNotes: string;
+  editVisibility: 'private' | 'public';
   setActiveTab(tab: NpcTab): void;
-  handleFileImport(options: { event: Event }): Promise<void>;
-  handleUrlImport(options: { url: string }): Promise<void>;
+  getTabCount(tab: NpcTab): number;
+  handleFileChange(options: { event: Event }): Promise<void>;
+  handleUrlSubmit(): Promise<void>;
+  openUrlModal(): void;
+  closeUrlModal(): void;
+  openCreateModal(): void;
+  closeCreateModal(): void;
+  handleUrlModalKeydown(options: { event: KeyboardEvent }): void;
+  handleCreateModalKeydown(options: { event: KeyboardEvent }): void;
+  handleEditModalKeydown(options: { event: KeyboardEvent }): void;
   createNpc(options: { data: Partial<NpcCreateData> }): Promise<void>;
   handleForkNpc(options: { npcId: string }): Promise<void>;
   handleDeleteNpc(options: { npcId: string }): Promise<void>;
   handleDeleteChat(options: { chatId: string }): Promise<void>;
   navigateToChat(options: { npcId: string; chatId?: string }): Promise<void>;
-  openEditModal(options: { npc: NpcData }): void;
+  openEditForm(options: { npc: NpcData }): void;
   closeEditModal(): void;
+  saveField(options: NpcFieldUpdate): Promise<void>;
   saveNpc(options: { data: Partial<NpcData> }): Promise<void>;
   getOrCreateChat(options: { npcId: string }): Promise<{ id: string }>;
 };
@@ -49,6 +82,25 @@ class NpcListViewModel
   isImporting = $state<boolean>(false);
   activeTab = $state<NpcTab>('all');
   editingNpc = $state<NpcData | undefined>(undefined);
+  urlInput = $state('');
+  showUrlModal = $state(false);
+  showCreateModal = $state(false);
+  editName = $state('');
+  editRace = $state('');
+  editClass = $state('');
+  editLevel = $state(1);
+  editOccupation = $state('');
+  editPersonality = $state('');
+  editNotes = $state('');
+  editVisibility = $state<'private' | 'public'>('private');
+  private _isSaving = false;
+
+  readonly tabs: readonly NpcTabItem[] = [
+    { key: 'all', label: 'All' },
+    { key: 'mine', label: 'My NPCs' },
+    { key: 'public', label: 'Public' },
+    { key: 'system', label: 'System' },
+  ];
 
   get currentUserId(): string | undefined {
     return authService.currentUser?.id;
@@ -90,7 +142,22 @@ class NpcListViewModel
     this.npcs = this._getFilteredNpcs();
   }
 
-  async handleFileImport(options: { event: Event }): Promise<void> {
+  getTabCount(tab: NpcTab): number {
+    switch (tab) {
+      case 'all':
+        return this.systemNpcs.length + this.userNpcs.length;
+      case 'mine':
+        return this.userNpcs.length;
+      case 'public':
+        return this.publicNpcs.length;
+      case 'system':
+        return this.systemNpcs.length;
+      default:
+        return 0;
+    }
+  }
+
+  async handleFileChange(options: { event: Event }): Promise<void> {
     const { event } = options;
     const target = event.target as HTMLInputElement;
 
@@ -112,9 +179,9 @@ class NpcListViewModel
       }
 
       await this._refreshNpcs();
-      this.log('handleFileImport', 'NPCs imported successfully');
+      this.log('handleFileChange', 'NPCs imported successfully');
     } catch (error) {
-      this.error('handleFileImport failed', error);
+      this.error('handleFileChange failed', error);
       const appError = toAppErrorFromUnknownError(error);
       this.errorMessage = appError.message;
     } finally {
@@ -123,8 +190,13 @@ class NpcListViewModel
     }
   }
 
-  async handleUrlImport(options: { url: string }): Promise<void> {
-    const { url } = options;
+  async handleUrlSubmit(): Promise<void> {
+    const url = this.urlInput.trim();
+    if (!url) {
+      return;
+    }
+    this.urlInput = '';
+    this.showUrlModal = false;
 
     const uid = this.currentUserId;
     if (!uid) {
@@ -144,6 +216,40 @@ class NpcListViewModel
       this.errorMessage = appError.message;
     } finally {
       this.isImporting = false;
+    }
+  }
+
+  openUrlModal(): void {
+    this.showUrlModal = true;
+  }
+
+  closeUrlModal(): void {
+    this.showUrlModal = false;
+  }
+
+  openCreateModal(): void {
+    this.showCreateModal = true;
+  }
+
+  closeCreateModal(): void {
+    this.showCreateModal = false;
+  }
+
+  handleUrlModalKeydown(options: { event: KeyboardEvent }): void {
+    if (options.event.key === 'Enter') {
+      this.closeUrlModal();
+    }
+  }
+
+  handleCreateModalKeydown(options: { event: KeyboardEvent }): void {
+    if (options.event.key === 'Enter') {
+      this.closeCreateModal();
+    }
+  }
+
+  handleEditModalKeydown(options: { event: KeyboardEvent }): void {
+    if (options.event.key === 'Enter') {
+      this.closeEditModal();
     }
   }
 
@@ -271,12 +377,33 @@ class NpcListViewModel
     });
   }
 
-  openEditModal(options: { npc: NpcData }): void {
-    this.editingNpc = options.npc;
+  openEditForm(options: { npc: NpcData }): void {
+    const { npc } = options;
+    this.editName = npc.name || '';
+    this.editRace = npc.race || '';
+    this.editClass = npc.class || '';
+    this.editLevel = npc.level || 1;
+    this.editOccupation = npc.occupation || '';
+    this.editPersonality = npc.personality || '';
+    this.editNotes = npc.notes || '';
+    this.editVisibility = npc.visibility || 'private';
+    this.editingNpc = npc;
   }
 
   closeEditModal(): void {
     this.editingNpc = undefined;
+  }
+
+  async saveField(options: NpcFieldUpdate): Promise<void> {
+    if (this._isSaving) {
+      return;
+    }
+    this._isSaving = true;
+    try {
+      await this.saveNpc({ data: { [options.field]: options.value } });
+    } finally {
+      this._isSaving = false;
+    }
   }
 
   async saveNpc(options: { data: Partial<NpcData> }): Promise<void> {

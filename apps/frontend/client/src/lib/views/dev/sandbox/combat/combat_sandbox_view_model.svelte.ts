@@ -16,12 +16,11 @@ import {
 } from '@aikami/frontend/services';
 import type { LpcAnimationState } from '@aikami/lpc';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import { playSfxByName } from '$lib/services/audio/audio_asset_resolver';
 import {
   CombatDevViewModel,
   type CombatDevViewModelOptions,
 } from '$lib/views/combat/combat_view_model.dev.svelte.ts';
-import { gameModeService, ttsService } from '$services';
+import { gameModeService, playSfxByName, ttsService } from '$services';
 
 /** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
 let _ecsWorkerCtor: (new () => Worker) | undefined;

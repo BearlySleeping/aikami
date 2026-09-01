@@ -13,11 +13,10 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
-/** Focus action: focuses the element when it mounts. */
-function focusOnMount(node: HTMLElement): { destroy: () => void } {
+const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
   node.focus();
   return { destroy: () => {} };
-}
+};
 </script>
 <BaseViewModelContainer {viewModel}>
   <div

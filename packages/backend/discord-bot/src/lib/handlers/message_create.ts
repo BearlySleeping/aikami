@@ -1,17 +1,22 @@
 // packages/backend/discord-bot/src/lib/handlers/message_create.ts
 //
-// Two things happen in a #bugs-features-requests thread:
+// Two things happen in a #support forum thread:
 //  1. A Moderator/Admin @mentions the bot with "github issue" → summarize
 //     the thread and file a GitHub issue (ISSUE_TRIGGER_REGEX).
 //  2. Anyone replies to one of the bot's own messages → a grounded,
 //     conversational LLM reply (same idea as /ask), with recent thread
 //     history for continuity.
-// Everything else in the thread (and every message outside the forum) is
-// ignored — this bot never speaks unprompted except the new-thread
-// auto-reply (thread_create.ts).
+// Everything else in the thread is ignored — this bot never speaks
+// unprompted in the forum except the new-thread auto-reply
+// (thread_create.ts), which stays scoped to the forum.
+//
+// Everywhere ELSE the bot can read (any channel it has View+Send on), a
+// plain `@AiKami` mention gets a grounded askProjectAi reply — same
+// per-user CHAT_REPLY_COOLDOWN_MS cooldown bucket as the forum's
+// conversational reply, so a user can't dodge the limit by mixing the two.
 
 import { logger } from '@aikami/logger';
-import { tryReserve } from '@aikami/utils/rate_limit';
+import { toAppErrorFromUnknownError, tryReserve } from '@aikami/utils';
 import type { Client, Message, ThreadChannel } from 'discord.js';
 import { askProjectAi, summarizeThreadAsIssue, type ThreadMessage } from '../ai_chat';
 import {
@@ -118,6 +123,35 @@ async function handleConversationalReply(
   }
 }
 
+/** Strips every `@mention` token so the LLM sees a clean question, not raw `<@123>` markup. */
+const stripMentions = (content: string): string => content.replaceAll(/<@!?\d+>/g, '').trim();
+
+const handlePlainMentionReply = async (options: {
+  message: Message;
+  env: DiscordBotEnv;
+}): Promise<void> => {
+  const { message, env } = options;
+  // Same cooldown BUCKET as the forum's conversational reply (not a
+  // separate one) — a user mentioning the bot in #general right after
+  // replying to it in a #support thread shouldn't get two free answers.
+  if (!tryReserve(`chat:${message.author.id}`, CHAT_REPLY_COOLDOWN_MS)) {
+    return;
+  }
+
+  try {
+    const answer = await askProjectAi({
+      question: stripMentions(message.content),
+      apiKey: env.OPENROUTER_API_KEY,
+      model: env.OPENROUTER_MODEL,
+    });
+    await message.reply(answer);
+  } catch (error) {
+    const appError = toAppErrorFromUnknownError(error);
+    logger.error(`discord-bot/message_create: plain-mention reply failed: ${appError.message}`);
+    await message.reply("Sorry, I couldn't get an answer — try again in a bit.");
+  }
+};
+
 export async function handleMessageCreate(
   message: Message,
   client: Client,
@@ -126,28 +160,36 @@ export async function handleMessageCreate(
   if (message.author.bot || !message.inGuild()) {
     return;
   }
-  const channel = message.channel;
-  if (!channel.isThread() || channel.parentId !== FORUM_CHANNEL_ID) {
-    return;
-  }
-  const thread = channel as ThreadChannel;
-
   const botId = client.user?.id;
-  if (
-    botId &&
-    message.mentions.users.has(botId) &&
-    ISSUE_TRIGGER_REGEX.test(message.content) &&
-    (message.member?.roles.cache.has(MODERATOR_ROLE_ID) ||
-      message.member?.roles.cache.has(ADMIN_ROLE_ID))
-  ) {
-    await handleIssueTrigger(message, thread, env);
+  const channel = message.channel;
+
+  if (channel.isThread() && channel.parentId === FORUM_CHANNEL_ID) {
+    // #support forum thread — issue-trigger and conversational-reply
+    // dispatch, EXACTLY as before this change.
+    const thread = channel;
+
+    if (
+      botId &&
+      message.mentions.users.has(botId) &&
+      ISSUE_TRIGGER_REGEX.test(message.content) &&
+      (message.member?.roles.cache.has(MODERATOR_ROLE_ID) ||
+        message.member?.roles.cache.has(ADMIN_ROLE_ID))
+    ) {
+      await handleIssueTrigger(message, thread, env);
+      return;
+    }
+
+    if (message.reference?.messageId) {
+      const referenced = await message.fetchReference().catch(() => null);
+      if (referenced && botId && referenced.author.id === botId) {
+        await handleConversationalReply(message, thread, env);
+      }
+    }
     return;
   }
 
-  if (message.reference?.messageId) {
-    const referenced = await message.fetchReference().catch(() => null);
-    if (referenced && botId && referenced.author.id === botId) {
-      await handleConversationalReply(message, thread, env);
-    }
+  // Anywhere else the bot can read: a plain @mention gets a grounded reply.
+  if (botId && message.mentions.users.has(botId)) {
+    await handlePlainMentionReply({ message, env });
   }
 }

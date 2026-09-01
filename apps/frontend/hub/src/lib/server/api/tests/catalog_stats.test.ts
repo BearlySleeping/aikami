@@ -50,7 +50,7 @@ const createMockD1 = (shouldThrow: boolean = false): unknown => {
 
 type TestCatalogStatsEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-  DB: unknown;
+  DB: import('@cloudflare/workers-types').D1Database;
 };
 
 let setCatalogStatsEnv: (env: TestCatalogStatsEnv | undefined) => void;
@@ -75,15 +75,19 @@ describe('catalog stats — C-436 AC-3 (D1, degradation intact)', () => {
   });
 
   test('throwing D1 binding → resolves null, never rejects', async () => {
-    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    setCatalogStatsEnv({ DB: createMockD1(true) });
+    setCatalogStatsEnv({
+      // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+      DB: createMockD1(true) as unknown as import('@cloudflare/workers-types').D1Database,
+    });
     const { loadPackStats } = await import('../catalog_stats.ts');
     await expect(loadPackStats()).resolves.toBeNull();
   });
 
   test('healthy D1 binding → returns packCount shape', async () => {
-    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    setCatalogStatsEnv({ DB: createMockD1(false) });
+    setCatalogStatsEnv({
+      // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+      DB: createMockD1(false) as unknown as import('@cloudflare/workers-types').D1Database,
+    });
     const { loadPackStats } = await import('../catalog_stats.ts');
     const stats = await loadPackStats();
     expect(stats).toEqual(expect.objectContaining({ packCount: expect.any(Number) }));
@@ -95,8 +99,10 @@ describe('catalog stats — C-436 AC-3 (D1, degradation intact)', () => {
   });
 
   test('handleCatalogStats returns stats when binding present', async () => {
-    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    setCatalogStatsEnv({ DB: createMockD1(false) });
+    setCatalogStatsEnv({
+      // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+      DB: createMockD1(false) as unknown as import('@cloudflare/workers-types').D1Database,
+    });
     const { handleCatalogStats } = await import('../catalog_stats.ts');
     const stats = await handleCatalogStats();
     expect(stats).toEqual(expect.objectContaining({ packCount: expect.any(Number) }));

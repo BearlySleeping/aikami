@@ -1,49 +1,37 @@
 #!/usr/bin/env bun
 // scripts/src/lib/deploy/discord_notify.ts
 //
-// Posts a release announcement embed to Discord via a webhook, once desktop
-// artifacts are live on a GitHub Release. Read-only w.r.t. the release itself
+// Posts a release announcement embed to Discord, once desktop artifacts
+// are live on a GitHub Release. Read-only w.r.t. the release itself
 // (fetches title/notes via `gh release view`) — safe to re-run.
 //
-// Also supports --failure mode: posts a deploy-failure notification with the
-// workflow run URL so the team knows immediately when a production deploy
-// fails (see release.yml's notify-failure job). That mode posts to
-// DISCORD_STAFF_WEBHOOK_URL (a staff-only channel), not
-// DISCORD_RELEASES_WEBHOOK_URL — failures are internal ops noise, not
-// something the public #releases channel should see.
+// Also supports --failure mode: posts a deploy-failure notification with
+// the workflow run URL so the team knows immediately when a production
+// deploy fails (see release.yml's notify-failure job) — posts to
+// `channel: 'staff'`, not the public #releases channel.
 //
-// This is a webhook (message-posting only). For managing the server itself
-// (channels/roles) see ../discord/ — that uses a bot token instead, since a
-// webhook has no permission to touch server structure.
-//
-// Silently no-ops when DISCORD_RELEASES_WEBHOOK_URL isn't configured, so this never
-// blocks a release for anyone who hasn't set up the webhook.
-//
-// Exported as notifyDiscordRelease() so BOTH the CI job (release.yml calls
-// this file directly via `bun scripts/.../discord_notify.ts --tag=...`) AND
-// a local `bun run deploy ... client-tauri` (tauri_release.ts's
-// deployTauriRelease imports the function) announce the same way — CI's
-// desktop matrix has its own dedicated job since it needs to wait for every
-// platform leg, but a local deploy publishes straight to a release with no
-// matrix to wait for, so it calls this in-process right after upload.
+// TASK 4 ("one bot, one voice"): both paths go through
+// scripts/src/lib/discord/post.ts's postToDiscord(), which relays through
+// the worker VM's /notify endpoint so the message appears as AiKami Bot —
+// this file no longer holds a per-channel webhook URL. postToDiscord is
+// itself best-effort (warns and returns on any failure), so this never
+// blocks a release for anyone who hasn't set up WORKER_NOTIFY_SECRET.
 //
 // Usage (CLI):
 //   bun scripts/src/lib/deploy/discord_notify.ts --tag=v0.1.0
 //   bun scripts/src/lib/deploy/discord_notify.ts --tag=v0.1.0 --mode=staging
 //   bun scripts/src/lib/deploy/discord_notify.ts --failure --mode=production --run-id=12345
-//   env: DISCORD_RELEASES_WEBHOOK_URL for release announcements,
-//        DISCORD_STAFF_WEBHOOK_URL for --failure (via scripts/.env.{mode},
-//        loaded through scripts_env.ts's initScriptsEnv — works identically
-//        in CI and local)
+//   env: WORKER_NOTIFY_SECRET (via scripts/.env.{mode}, loaded through
+//        scripts_env.ts's initScriptsEnv — works identically in CI and local)
+import type { APIEmbed } from 'discord-api-types/v10';
 import { c, error, log, ok, parseCliArgs, warn } from '../cli_utils';
+import { postToDiscord } from '../discord/post';
 import { initScriptsEnv } from '../env/scripts_env';
 
 type ReleaseInfo = { name: string; body: string; url: string };
 
 /** Max wall-clock for the `gh release view` probe — never block a release on it. */
 const GH_PROBE_TIMEOUT_MS = 15_000;
-/** Max wall-clock for the Discord webhook POST. */
-const WEBHOOK_TIMEOUT_MS = 10_000;
 
 async function fetchRelease(tag: string): Promise<ReleaseInfo> {
   // Run `gh release view` with a hard timeout so a stalled gh process (or a
@@ -75,14 +63,13 @@ function truncateNotes(notes: string, max = 500): string {
   return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}…`;
 }
 
-async function postToDiscord(options: {
-  webhookUrl: string;
+const releaseEmbed = (options: {
   tag: string;
   release: ReleaseInfo;
   downloadBase: string;
-}): Promise<void> {
-  const { webhookUrl, tag, release, downloadBase } = options;
-  const embed = {
+}): APIEmbed => {
+  const { tag, release, downloadBase } = options;
+  return {
     title: `Aikami ${release.name || tag} released`,
     url: release.url,
     description: truncateNotes(release.body),
@@ -97,52 +84,46 @@ async function postToDiscord(options: {
     footer: { text: 'Aikami Desktop' },
     timestamp: new Date().toISOString(),
   };
-
-  const res = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ embeds: [embed], allowed_mentions: { parse: [] } }),
-    signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`Discord webhook POST failed: ${res.status} ${res.statusText}`);
-  }
-}
+};
 
 /**
- * Announce a published release to Discord. No-ops (returns without throwing)
- * when DISCORD_RELEASES_WEBHOOK_URL isn't set for `mode` — safe to call unconditionally
- * after any real release upload, CI or local.
+ * Announce a published release to Discord. No-ops (returns without
+ * throwing) when WORKER_NOTIFY_SECRET isn't set for `mode` — safe to call
+ * unconditionally after any real release upload, CI or local.
  */
-export async function notifyDiscordRelease(tag: string, mode = 'production'): Promise<void> {
+export const notifyDiscordRelease = async (options: {
+  tag: string;
+  mode?: string;
+}): Promise<void> => {
+  const { tag, mode = 'production' } = options;
   initScriptsEnv(mode);
-
-  if (!process.env.DISCORD_RELEASES_WEBHOOK_URL) {
-    warn('DISCORD_RELEASES_WEBHOOK_URL not set — skipping Discord announcement.');
-    return;
-  }
-  const webhookUrl = process.env.DISCORD_RELEASES_WEBHOOK_URL;
-
-  const repo = process.env.GITHUB_REPOSITORY || 'BearlySleeping/aikami';
-  const downloadBase = `https://github.com/${repo}/releases/latest/download`;
 
   log(`\n${c.bold}📣 Announcing ${tag} to Discord${c.reset}`);
   try {
+    const repo = process.env.GITHUB_REPOSITORY || 'BearlySleeping/aikami';
+    const downloadBase = `https://github.com/${repo}/releases/latest/download`;
     const release = await fetchRelease(tag);
-    await postToDiscord({ webhookUrl, tag, release, downloadBase });
-    ok(`Posted release announcement for ${tag} to Discord.`);
+    const posted = await postToDiscord({
+      channel: 'releases',
+      embed: releaseEmbed({ tag, release, downloadBase }),
+      roleMention: 'releasePings',
+      mode,
+    });
+    if (posted) {
+      ok(`Posted release announcement for ${tag} to Discord.`);
+    }
   } catch (err) {
-    // Discord announcement is best-effort: a timeout (gh probe or webhook
-    // POST) or any other failure must never fail a local deploy or leave it
-    // pending. Warn and continue.
+    // Discord announcement is best-effort: a timeout on the gh probe (or
+    // any other failure) must never fail a local deploy or leave it
+    // pending. Warn and continue. postToDiscord itself is ALSO
+    // best-effort — this catch is for fetchRelease's gh call.
     warn(`Discord announcement skipped: ${(err as Error).message}`);
   }
-}
+};
 
 /**
  * Post a deploy-failure notification to Discord. Used by release.yml's
- * notify-failure job (if: failure()). Posts to DISCORD_STAFF_WEBHOOK_URL
- * (a staff-only channel) rather than DISCORD_RELEASES_WEBHOOK_URL — a
+ * notify-failure job (if: failure()). Posts to `channel: 'staff'` — a
  * deploy failure is internal ops noise, not something the public
  * #releases channel should see.
  */
@@ -153,26 +134,10 @@ export const notifyDiscordFailure = async (options: {
   const { mode, runId } = options;
   initScriptsEnv(mode);
 
-  if (!process.env.DISCORD_STAFF_WEBHOOK_URL) {
-    warn('DISCORD_STAFF_WEBHOOK_URL not set — skipping failure notification.');
-    return;
-  }
-  const configuredWebhookUrl = process.env.DISCORD_STAFF_WEBHOOK_URL;
-  let webhookUrl: URL;
-  try {
-    webhookUrl = new URL(configuredWebhookUrl);
-  } catch {
-    warn('DISCORD_STAFF_WEBHOOK_URL is not a valid HTTPS URL — skipping failure notification.');
-    return;
-  }
-  if (webhookUrl.protocol !== 'https:') {
-    warn('DISCORD_STAFF_WEBHOOK_URL must use HTTPS — skipping failure notification.');
-    return;
-  }
   const repo = process.env.GITHUB_REPOSITORY || 'BearlySleeping/aikami';
   const runUrl = `https://github.com/${repo}/actions/runs/${runId}`;
 
-  const embed = {
+  const embed: APIEmbed = {
     title: `❌ Deploy failed (${mode})`,
     url: runUrl,
     description: `Workflow run [#${runId}](${runUrl}) failed. Check the Actions tab for details.`,
@@ -181,20 +146,13 @@ export const notifyDiscordFailure = async (options: {
     timestamp: new Date().toISOString(),
   };
 
-  const res = await fetch(webhookUrl, {
-    method: 'POST',
-    redirect: 'error',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ embeds: [embed], allowed_mentions: { parse: [] } }),
-    signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`Discord webhook POST failed: ${res.status} ${res.statusText}`);
+  const posted = await postToDiscord({ channel: 'staff', embed, mode });
+  if (posted) {
+    ok(`Posted deploy failure notification for ${mode} to Discord.`);
   }
-  ok(`Posted deploy failure notification for ${mode} to Discord.`);
 };
 
-async function main(): Promise<void> {
+const main = async (): Promise<void> => {
   const opts = parseCliArgs(Bun.argv.slice(2), {
     tag: { type: 'string' },
     mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
@@ -219,8 +177,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  await notifyDiscordRelease(tag, opts.mode ?? 'production');
-}
+  await notifyDiscordRelease({ tag, mode: opts.mode ?? 'production' });
+};
 
 // Only run the CLI when invoked directly — notifyDiscordRelease() is also
 // imported by tauri_release.ts for the local-deploy path.

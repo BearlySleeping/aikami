@@ -24,25 +24,9 @@ export const FORUM_TAG_LABELS = DISCORD_FORUM_TAG_LABELS;
 /** Case-insensitive phrase a Moderator/Admin mentions the bot with to open a GitHub issue from a thread. */
 export const ISSUE_TRIGGER_REGEX = /github issue/i;
 
-// ── C-449 AC-5: Channel → tool access mapping ───────────────────────────
-//
-// When a Discord member has access to a channel listed here, they are granted
-// access to the associated third-party tool(s). When they lose access, the
-// grant is revoked.
-//
-// This is the source of truth — update it when channels or tools change.
-
-export const CHANNEL_TOOL_ACCESS = [
-  {
-    // #support forum channel (renamed from #bugs-features-requests)
-    channelId: FORUM_CHANNEL_ID,
-    tools: [{ toolId: 'github-issues', label: 'GitHub Issue Creation' }],
-  },
-  // Future mappings:
-  // {
-  //   channelId: '...llm-beta-channel...',
-  //   tools: [
-  //     { toolId: 'llm-chat', label: 'LLM Chat Access' },
-  //   ],
-  // },
-] as const;
+// C-449 AC-5's channel → tool access mapping (CHANNEL_TOOL_ACCESS) and its
+// role_sync.ts consumer were removed in TASK 3c of the Discord revamp:
+// grantToolAccess/revokeToolAccess only ever wrote log lines (no real tool
+// was ever wired up), and the ChannelUpdate handler that drove it called
+// guild.members.fetch() — every member — on every single channel
+// permission edit. Dead weight, not a real feature to preserve.

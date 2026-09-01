@@ -17,7 +17,7 @@
 //     live channels/roles in one shot; that's almost always a name typo or
 //     a stale structure.ts, not intent.
 
-import { ChannelType } from 'discord-api-types/v10';
+import { ChannelType, GuildOnboardingMode, GuildOnboardingPromptType } from 'discord-api-types/v10';
 import { c, error, log, ok, warn } from '../cli_utils';
 import {
   createAutoModRule,
@@ -30,11 +30,14 @@ import { initDiscordClient } from './client';
 import type { Plan } from './diff';
 import { CHANNEL_TYPE_MAP, computePlan, planIsEmpty } from './diff';
 import { getGuild, updateGuild } from './guild';
+import { getOnboarding, updateOnboarding } from './onboarding';
 import { updateChannelPositions, updateRolePositions } from './positions';
+import { resolveIds } from './resolve_ids';
 import { createRole, deleteRole, listRoles, updateRole } from './roles';
 import {
   type DesiredAutoModRule,
   type DesiredChannel,
+  type DesiredOnboarding,
   type DesiredPermissionOverwrite,
   permissionsToBitfield,
   structure,
@@ -43,8 +46,12 @@ import type {
   AutoModRuleBody,
   ChannelUpdateBody,
   GuildChannel,
+  Onboarding,
+  OnboardingBody,
+  OnboardingPromptBody,
   PermissionOverwrite,
 } from './types';
+import { getWelcomeScreen, updateWelcomeScreen } from './welcome_screen';
 
 /**
  * Resolve declared overwrites (by role name) to the {id, type, allow, deny}
@@ -120,6 +127,99 @@ function buildForumFields(
   };
 }
 
+const ONBOARDING_MODE_TO_API: Record<'default' | 'advanced', GuildOnboardingMode> = {
+  default: GuildOnboardingMode.OnboardingDefault,
+  advanced: GuildOnboardingMode.OnboardingAdvanced,
+};
+
+/**
+ * Builds the COMPLETE onboarding body `PUT /guilds/{id}/onboarding` needs
+ * (it replaces the whole config, not just what changed — see diff.ts's
+ * diffOnboarding comment). Every prompt/option needs an `id`: reuse the
+ * live one (matched by title, same name-based philosophy as everything
+ * else here) so a re-apply doesn't duplicate it, or fall back to a
+ * placeholder snowflake that doesn't exist yet — CONTEXT fact 4, omitting
+ * `id` entirely is a 400. Placeholders are small sequential integers
+ * ("0", "1", ...), which can never collide with a real (huge) snowflake.
+ */
+function buildOnboardingBody(
+  desired: DesiredOnboarding,
+  live: Onboarding,
+  channelIdByName: Map<string, string>,
+  roleIdByName: Map<string, string>,
+): OnboardingBody {
+  const livePromptByTitle = new Map(live.prompts.map((p) => [p.title, p]));
+  let nextPlaceholder = 0;
+  const placeholderId = () => String(nextPlaceholder++);
+
+  const prompts: OnboardingPromptBody[] = desired.prompts.map((prompt) => {
+    const liveMatch = livePromptByTitle.get(prompt.title);
+    const liveOptionByTitle = new Map((liveMatch?.options ?? []).map((o) => [o.title, o]));
+    return {
+      id: liveMatch?.id ?? placeholderId(),
+      title: prompt.title,
+      single_select: Boolean(prompt.singleSelect),
+      required: Boolean(prompt.required),
+      in_onboarding: prompt.inOnboarding ?? true,
+      type: GuildOnboardingPromptType.MultipleChoice,
+      options: prompt.options.map((option) => {
+        const liveOption = liveOptionByTitle.get(option.title);
+        return {
+          id: liveOption?.id ?? placeholderId(),
+          title: option.title,
+          description: option.description ?? null,
+          channel_ids: resolveIds(
+            option.channels,
+            channelIdByName,
+            `onboarding prompt "${prompt.title}" option "${option.title}"`,
+            'channel',
+          ),
+          role_ids: resolveIds(
+            option.roles,
+            roleIdByName,
+            `onboarding prompt "${prompt.title}" option "${option.title}"`,
+            'role',
+          ),
+          emoji_name: option.emojiName,
+          emoji_id: null,
+          emoji_animated: false,
+        };
+      }),
+    };
+  });
+
+  return {
+    enabled: desired.enabled,
+    mode: ONBOARDING_MODE_TO_API[desired.mode],
+    default_channel_ids: resolveIds(
+      desired.defaultChannels,
+      channelIdByName,
+      'onboarding.defaultChannels',
+      'channel',
+    ),
+    prompts,
+  };
+}
+
+/** Splits onboarding.defaultChannels into @everyone-writable vs read-only, for a below_requirements error message. */
+function defaultChannelWritability(desired: DesiredOnboarding): {
+  writable: string[];
+  readOnly: string[];
+} {
+  const writable: string[] = [];
+  const readOnly: string[] = [];
+  for (const name of desired.defaultChannels) {
+    const channel = structure.channels.find((ch) => ch.name === name);
+    const deniesEveryone = channel?.permissionOverwrites?.some(
+      (o) =>
+        o.role === '@everyone' &&
+        (o.deny?.includes('SendMessages') || o.deny?.includes('ViewChannel')),
+    );
+    (deniesEveryone ? readOnly : writable).push(name);
+  }
+  return { writable, readOnly };
+}
+
 export type SyncOptions = { apply: boolean; prune: boolean };
 
 const resolveAutomodExemptRoles = (options: {
@@ -185,6 +285,18 @@ function printPlan(plan: Plan): void {
     'Update AutoMod rules',
     plan.updateAutomodRules.map((r) => `${c.cyan}~${c.reset} ${r.name}: ${r.changes.join(', ')}`),
   );
+  if (plan.onboardingUpdate) {
+    section(
+      'Update onboarding',
+      plan.onboardingUpdate.map((change) => `${c.cyan}~${c.reset} ${change}`),
+    );
+  }
+  if (plan.welcomeScreenUpdate) {
+    section(
+      'Update welcome screen',
+      plan.welcomeScreenUpdate.changes.map((change) => `${c.cyan}~${c.reset} ${change}`),
+    );
+  }
   section(
     'Reorder roles',
     plan.roleReorders.map((r) => `${c.cyan}~${c.reset} ${r.name}: position ${r.from} → ${r.to}`),
@@ -233,13 +345,15 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
   const { rest, guildId } = initDiscordClient(mode);
 
   log(`Fetching live guild state (${guildId})...`);
-  const [channels, roles, guild, automodRules] = await Promise.all([
+  const [channels, roles, guild, automodRules, onboarding, welcomeScreen] = await Promise.all([
     listChannels(rest, guildId),
     listRoles(rest, guildId),
     getGuild(rest, guildId),
     listAutoModRules(rest, guildId),
+    getOnboarding(rest, guildId),
+    getWelcomeScreen(rest, guildId),
   ]);
-  const live = { channels, roles, guild, automodRules };
+  const live = { channels, roles, guild, automodRules, onboarding, welcomeScreen };
 
   const plan = computePlan(structure, live);
 
@@ -349,9 +463,19 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
     ]),
   );
 
+  // Seeded from live, then grown as channels are created below — onboarding
+  // and the welcome screen (applied further down) can reference a channel
+  // created earlier in this SAME sync (e.g. #showcase), so this must
+  // reflect creates, not just what was already live.
+  const channelIdByName = new Map(
+    live.channels
+      .filter((ch) => ch.type !== ChannelType.GuildCategory)
+      .map((ch) => [ch.name, ch.id]),
+  );
+
   for (const channel of plan.createChannels) {
     const forumFields = buildForumFields(channel, new Map());
-    await createChannel(rest, guildId, {
+    const created = await createChannel(rest, guildId, {
       name: channel.name,
       type: CHANNEL_TYPE_MAP[channel.type],
       parent_id: channel.category ? categoryIdByName.get(channel.category) : undefined,
@@ -362,6 +486,7 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
         : undefined,
       ...forumFields,
     });
+    channelIdByName.set(channel.name, created.id);
     ok(`Created channel ${channel.name}`);
   }
   for (const update of plan.updateChannels) {
@@ -431,6 +556,46 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
           'edit it by hand in Server Settings → Safety Setup → AutoMod.',
       );
     }
+  }
+
+  if (plan.onboardingUpdate && structure.onboarding) {
+    const body = buildOnboardingBody(
+      structure.onboarding,
+      live.onboarding,
+      channelIdByName,
+      roleIdByName,
+    );
+    try {
+      await updateOnboarding(rest, guildId, body);
+      ok('Updated onboarding');
+    } catch (err) {
+      // Fail LOUD here, unlike the AutoMod best-effort case above — an
+      // onboarding failure (most likely below_requirements) means the
+      // config never applied at all, not "applied except one field", so
+      // there's nothing safe to continue past.
+      const message = (err as Error).message;
+      if (message.includes('below_requirements')) {
+        const { writable, readOnly } = defaultChannelWritability(structure.onboarding);
+        error(
+          'Onboarding update failed: below_requirements — Discord needs ≥7 default channels ' +
+            'and ≥5 of them writable by @everyone.',
+        );
+        console.log(
+          `${c.dim}@everyone-writable defaults: ${writable.join(', ') || '(none)'}${c.reset}`,
+        );
+        console.log(`${c.dim}Read-only defaults: ${readOnly.join(', ') || '(none)'}${c.reset}`);
+        console.log(
+          `${c.dim}Remove the @everyone SendMessages deny from one of the read-only channels above, or add another writable default channel.${c.reset}`,
+        );
+        process.exit(1);
+      }
+      throw err;
+    }
+  }
+
+  if (plan.welcomeScreenUpdate) {
+    await updateWelcomeScreen(rest, guildId, plan.welcomeScreenUpdate.body);
+    ok('Updated welcome screen');
   }
 
   if (!options.prune) {

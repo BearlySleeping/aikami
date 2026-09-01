@@ -84,7 +84,7 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
       },
     });
     const cookieDomain = deriveCookieDomain();
-    _auth = createBetterAuth(db, {
+    _auth = createBetterAuth(db as unknown as Record<string, unknown>, {
       baseURL: baseURL ?? 'http://localhost:5173',
       secret: secret ?? 'dev-secret-not-for-production',
       googleClientId: GOOGLE_CLIENT_ID,

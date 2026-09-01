@@ -21,12 +21,12 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
-import { playSfxByName } from '$lib/services/audio/audio_asset_resolver';
 import {
   equipmentService,
   gameOverlayService,
   getItemDefinition,
   inventoryService,
+  playSfxByName,
 } from '$services';
 
 export type EquippedItemView = {
@@ -34,6 +34,9 @@ export type EquippedItemView = {
   itemId: string;
   definition: ItemDefinition;
 };
+
+/** Base configuration used to create the inventory ViewModel. */
+export type InventoryViewModelOptions = BaseViewModelOptions;
 
 export type InventoryViewModelInterface = BaseViewModelInterface & {
   readonly items: Array<{ itemId: string; quantity: number }>;

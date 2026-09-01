@@ -1,7 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/combat/combat_view.svelte
 import { BaseViewModelContainer } from '$components';
-import { imageGenerationService } from '$services';
 import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
 import CombatDiceUi from './components/combat_dice_ui.svelte';
 import CombatPortraitStage from './components/combat_portrait_stage.svelte';
@@ -17,7 +16,8 @@ const { viewModel }: Props = $props();
 let customActionInput = $state('');
 </script>
 
-<div
+<BaseViewModelContainer
+  {viewModel}
   class="relative flex-1"
   style={viewModel.combatBackgroundImageUrl
     ? `background-image: url(${viewModel.combatBackgroundImageUrl}); background-size: cover; background-position: center;`
@@ -28,7 +28,7 @@ let customActionInput = $state('');
     <div class="absolute inset-0 bg-black/60 z-0"></div>
   {/if}
 
-  <BaseViewModelContainer {viewModel} class="relative">
+  <div class="relative">
     <!-- Animated d20 dice overlay (C-148) -->
     <CombatDiceUi activeDiceRoll={viewModel.activeDiceRoll} />
 
@@ -238,11 +238,11 @@ let customActionInput = $state('');
               type="button"
               class="btn btn-ghost btn-sm"
               onclick={() => viewModel.generateSceneImage()}
-              disabled={viewModel.isResolvingAiAction || imageGenerationService.isGenerating}
-              title={imageGenerationService.isGenerating ? imageGenerationService.generationStatus : 'Generate Scene Image'}
+              disabled={viewModel.isResolvingAiAction || viewModel.isGeneratingImage}
+              title={viewModel.isGeneratingImage ? viewModel.generationStatus : 'Generate Scene Image'}
               data-testid="combat-generate-scene-btn"
             >
-              {#if imageGenerationService.isGenerating}
+              {#if viewModel.isGeneratingImage}
                 <span class="loading loading-spinner loading-xs"></span>
               {:else}
                 🖼️
@@ -251,19 +251,17 @@ let customActionInput = $state('');
           </div>
 
           <!-- Image generation progress bar (C-148) -->
-          {#if imageGenerationService.isGenerating}
+          {#if viewModel.isGeneratingImage}
             <div class="rounded-lg border border-warning/30 bg-warning/5 p-3">
               <div class="mb-1 flex items-center gap-3">
-                <span class="text-xs text-base-content/70"
-                  >{imageGenerationService.generationStatus}</span
-                >
+                <span class="text-xs text-base-content/70">{viewModel.generationStatus}</span>
                 <span class="ml-auto text-xs text-base-content/50 font-mono tabular-nums"
-                  >{imageGenerationService.generationProgress}%</span
+                  >{viewModel.generationProgress}%</span
                 >
               </div>
               <progress
                 class="progress progress-warning w-full"
-                value={imageGenerationService.generationProgress}
+                value={viewModel.generationProgress}
                 max="100"
               ></progress>
             </div>
@@ -295,5 +293,5 @@ let customActionInput = $state('');
         </div>
       </div>
     {/if}
-  </BaseViewModelContainer>
-</div>
+  </div>
+</BaseViewModelContainer>

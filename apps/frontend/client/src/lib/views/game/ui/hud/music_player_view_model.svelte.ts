@@ -17,6 +17,9 @@ import { buildMusicSceneContext } from '$utils/music_utils';
 // Interface
 // ---------------------------------------------------------------------------
 
+/** Base configuration used to create the music-player HUD ViewModel. */
+export type MusicPlayerViewModelOptions = BaseViewModelOptions;
+
 export type MusicPlayerViewModelInterface = BaseViewModelInterface & {
   /** Whether the overlay is visible (persisted toggle). */
   readonly visible: boolean;

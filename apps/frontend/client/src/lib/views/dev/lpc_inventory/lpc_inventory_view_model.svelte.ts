@@ -16,7 +16,10 @@ import {
   getLpcPreviewViewModel,
   type LpcPreviewViewModelInterface,
 } from '$views/character/lpc_preview/lpc_preview_view_model.svelte';
-import { InventoryViewModel } from '../../inventory/inventory_view_model.svelte';
+import {
+  InventoryViewModel,
+  type InventoryViewModelInterface,
+} from '../../inventory/inventory_view_model.svelte';
 
 /** Empty palette — equipment sprites render with their authored colours. */
 const EMPTY_PALETTE = new Uint8Array(1024);
@@ -44,7 +47,18 @@ const SANDBOX_BAG: ReadonlyArray<{ itemId: string; quantity: number }> = [
   { itemId: 'healthPotion', quantity: 2 },
 ] as const;
 
-export class LpcInventoryViewModel extends InventoryViewModel {
+/** Base configuration used to create the LPC inventory sandbox ViewModel. */
+export type LpcInventoryViewModelOptions = BaseViewModelOptions;
+
+/** Inventory ViewModel contract extended with LPC sandbox controls. */
+export type LpcInventoryViewModelInterface = InventoryViewModelInterface & {
+  readonly lpcPreview: LpcPreviewViewModelInterface;
+};
+
+export class LpcInventoryViewModel
+  extends InventoryViewModel
+  implements LpcInventoryViewModelInterface
+{
   /** Live LPC character preview driven by base + equipment recipes. */
   readonly lpcPreview: LpcPreviewViewModelInterface;
 

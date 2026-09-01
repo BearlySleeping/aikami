@@ -12,6 +12,9 @@ import {
   type ExportViewModelOptions,
 } from '$views/settings/export/export_view_model.svelte';
 
+/** Production export configuration reused by the export sandbox ViewModel. */
+export type ExportSandboxViewModelOptions = ExportViewModelOptions;
+
 export type ExportSandboxViewModelInterface = ExportViewModelInterface;
 
 class ExportSandboxViewModel extends ExportViewModel implements ExportSandboxViewModelInterface {

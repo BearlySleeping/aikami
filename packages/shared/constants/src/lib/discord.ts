@@ -20,6 +20,9 @@ export const DISCORD_ROLES = {
   admin: '1538729969004449882',
   moderator: '1538729970522652684',
   contributor: '1538729972204703845',
+  // Created by TASK 2's structure.ts sync — TASK 4's /notify relay
+  // @-mentions this role for a release announcement (roleMention: 'releasePings').
+  releasePings: '1544109362426150922',
 } as const;
 
 export const DISCORD_CHANNELS = {
@@ -31,17 +34,15 @@ export const DISCORD_CHANNELS = {
   support: '1538878867962466364',
   // Renamed from "moderator-only" to "staff" (Task 1); the id is unchanged.
   staff: '1536406570882174980',
-  // TODO: not live yet — created by TASK 2's structure.ts sync (`#dev`,
-  // `#pull-requests`, `#merged` under the new "Developers" category). Fill
-  // these in with `bun run scripts -- discord audit` once that sync has run.
-  pullRequests: '',
-  merged: '',
+  // Created by TASK 2's structure.ts sync (Developers category).
+  pullRequests: '1544109881643114568',
+  merged: '1544109883324899400',
 } as const;
 
-export const DISCORD_FORUM_TAG_LABELS = {
+export const DISCORD_FORUM_TAG_LABELS: Partial<Record<string, string>> = {
   '1538881560181211219': 'bug', // Bug
   '1538881560181211220': 'enhancement', // Feature Request
   // "Question" (1538881560181211221) intentionally has no GitHub label —
   // most questions never become an issue. Same for the TASK 2 additions
   // "Content" and "Solved" — neither maps to a GitHub label either.
-} as const;
+};

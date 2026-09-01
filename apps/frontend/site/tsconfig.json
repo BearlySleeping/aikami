@@ -20,7 +20,6 @@
       "$sections/*": ["./src/lib/components/sections/*"],
       "$styles/*": ["./src/lib/styles/*"],
       "$data/*": ["./src/lib/data/*"],
-      "$firebase/*": ["./src/lib/firebase/*"],
       "$types": ["./src/lib/types"],
       "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],
       "@aikami/constants/*": ["../../../packages/shared/constants/src/*"],

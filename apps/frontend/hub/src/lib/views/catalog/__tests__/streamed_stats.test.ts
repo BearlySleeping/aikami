@@ -23,11 +23,11 @@ const setEnv = (options: { catalogOrigin?: string }): void => {
 };
 
 beforeAll(async () => {
-  const server = Bun.serve({
+  const server: { url: URL; port: number | undefined; stop: (hard?: boolean) => void } = Bun.serve({
     port: 0,
     fetch(request) {
       const url = new URL(request.url);
-      const originUrl = server.url.toString().replace(/\/$/, '');
+      const originUrl = `http://127.0.0.1:${server.port}`;
       if (url.pathname === '/index/v1/catalog.json') {
         return Response.json({
           schemaVersion: 1,
@@ -62,7 +62,7 @@ beforeAll(async () => {
       return new Response('not found', { status: 404 });
     },
   });
-  origin = { url: server.url.toString().replace(/\/$/, ''), stop: () => server.stop(true) };
+  origin = { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
 });
 
 afterAll(() => {
@@ -81,11 +81,11 @@ describe('streamed stats — C-436 (never blocks first paint)', () => {
 
   test('the category load stream never rejects — .catch(() => null) guards the page data', async () => {
     const { load } = await import('../../../../routes/(public)/catalog/[category]/+page.server.ts');
-    const data = await load({
+    const data = (await load({
       params: { category: 'lpc' },
       setHeaders: mock(() => {}),
       depends: mock(() => {}),
-    } as never);
+    } as never)) as { category: string; stats: Promise<unknown> };
 
     expect(data.category).toBe('lpc');
     await expect(data.stats).resolves.toBeNull();
@@ -95,11 +95,11 @@ describe('streamed stats — C-436 (never blocks first paint)', () => {
     const { load } = await import(
       '../../../../routes/(public)/catalog/[category]/[tag]/+page.server.ts'
     );
-    const data = await load({
+    const data = (await load({
       params: { category: 'lpc', tag: 'lpc:hat:magic:celestial_adult:thrust' },
       setHeaders: mock(() => {}),
       depends: mock(() => {}),
-    } as never);
+    } as never)) as { category: string; entry: { tag: string }; stats: Promise<unknown> };
 
     expect(data.category).toBe('lpc');
     expect(data.entry.tag).toBe('lpc:hat:magic:celestial_adult:thrust');

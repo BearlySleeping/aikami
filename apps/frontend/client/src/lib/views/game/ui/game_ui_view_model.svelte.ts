@@ -16,6 +16,7 @@ import {
   npcDialogueService,
   onboardingHintService,
   playerStateService,
+  questOverlayService,
   sessionService,
   timeService,
 } from '$services';
@@ -108,6 +109,8 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly showHpBar: boolean;
   /** Whether to show the quest tracker (explore only). */
   readonly showQuestTracker: boolean;
+  /** Whether the quest overlay is visible (persisted setting). */
+  readonly questOverlayVisible: boolean;
   /** Whether to show the autosave indicator (hidden during pause menu, game over, end session). */
   readonly showAutosaveIndicator: boolean;
   /** Whether to show the hotbar (C-337) — visible during exploration, hidden during overlays/combat. */
@@ -327,6 +330,10 @@ class GameUIViewModel
   get showQuestTracker(): boolean {
     const overlay = gameOverlayService.activeOverlay;
     return overlay === 'NONE';
+  }
+
+  get questOverlayVisible(): boolean {
+    return questOverlayService.visible;
   }
 
   /** Autosave indicator: visible during EXPLORE, hidden during PAUSE_MENU, GAME_OVER, END_SESSION. */

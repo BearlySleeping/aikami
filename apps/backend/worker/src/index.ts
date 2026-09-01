@@ -29,7 +29,9 @@
 import {
   DISCORD_BOT_REQUIRED_ENV_KEYS,
   DISCORD_INTERACTIONS_REQUIRED_ENV_KEYS,
+  DISCORD_NOTIFY_REQUIRED_ENV_KEYS,
   discordInteractions,
+  discordNotify,
   startDiscordBot,
 } from '@aikami/backend-discord-bot';
 import { logger } from '@aikami/logger';
@@ -50,14 +52,19 @@ async function resolveTls(): Promise<{ cert: string; key: string } | undefined> 
 
 async function main(): Promise<void> {
   const discordBotEnv = await loadEnv(DISCORD_BOT_REQUIRED_ENV_KEYS);
-  await startDiscordBot(discordBotEnv);
+  const discordClient = await startDiscordBot(discordBotEnv);
 
   const interactionsEnv = await loadEnv(DISCORD_INTERACTIONS_REQUIRED_ENV_KEYS);
+  const notifyEnv = await loadEnv(DISCORD_NOTIFY_REQUIRED_ENV_KEYS);
   const tls = await resolveTls();
   const port = Number(process.env.PORT ?? (tls ? 443 : 8080));
   const app = new Elysia()
     .get('/health', () => ({ status: 'ok' }))
-    .use(discordInteractions(interactionsEnv));
+    .use(discordInteractions(interactionsEnv))
+    // Posts through the SAME live Client the Gateway bot above already
+    // holds, so a relayed message appears as AiKami Bot — see TASK 4 and
+    // notify/handler.ts's header comment.
+    .use(discordNotify({ client: discordClient, env: notifyEnv }));
 
   if (tls) {
     app.listen({ port, tls });

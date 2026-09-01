@@ -11,17 +11,15 @@ import {
   type CombatActionIntent,
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
-import { playSceneBgm } from '$lib/services/audio/audio_asset_resolver';
-import {
-  getTracksByMood as getCatalogTracksByMood,
-  resolveAudioTrackUrl,
-} from '$lib/services/audio/audio_track_catalog';
 import {
   audioService,
   diceService,
+  getTracksByMood as getCatalogTracksByMood,
   getExpressionAssetResolver,
   imageGenerationService,
   inventoryService,
+  playSceneBgm,
+  resolveAudioTrackUrl,
   textGenerationService,
   ttsService,
   worldGenSeedingService,
@@ -327,6 +325,11 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    * Dispatches END_TURN via the engine bridge.
    */
   endTurn(): void;
+
+  // ── Image generation state (exposed from service) ──
+  readonly isGeneratingImage: boolean;
+  readonly generationStatus: string;
+  readonly generationProgress: number;
 };
 
 /**
@@ -345,6 +348,16 @@ export class CombatViewModel
   extends BaseViewModel<CombatViewModelOptions>
   implements CombatViewModelInterface
 {
+  // ── Image generation state (delegated from service) ──
+  get isGeneratingImage(): boolean {
+    return imageGenerationService.isGenerating;
+  }
+  get generationStatus(): string {
+    return imageGenerationService.generationStatus;
+  }
+  get generationProgress(): number {
+    return imageGenerationService.generationProgress;
+  }
   activeEntities: number[] = $state([]);
 
   currentTurnEntity: number | null = $state(null);

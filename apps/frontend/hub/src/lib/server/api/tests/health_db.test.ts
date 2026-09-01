@@ -48,7 +48,7 @@ const createMockD1 = (shouldThrow: boolean = false): unknown => {
 
 type TestHealthDbEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-  DB: unknown;
+  DB: import('@cloudflare/workers-types').D1Database;
 };
 
 let setHealthDbEnv: (env: TestHealthDbEnv | undefined) => void;
@@ -71,8 +71,10 @@ describe('DB health — C-436 AC-4 (D1 binding)', () => {
   });
 
   test('healthy D1 → { status: ok, roundTripMs }', async () => {
-    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    setHealthDbEnv({ DB: createMockD1(false) });
+    setHealthDbEnv({
+      // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+      DB: createMockD1(false) as unknown as import('@cloudflare/workers-types').D1Database,
+    });
     const { handleDbHealth } = await import('../health_db.ts');
     const result = await handleDbHealth();
     expect(result).toEqual(
@@ -81,16 +83,20 @@ describe('DB health — C-436 AC-4 (D1 binding)', () => {
   });
 
   test('throwing D1 → { status: unreachable }', async () => {
-    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    setHealthDbEnv({ DB: createMockD1(true) });
+    setHealthDbEnv({
+      // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+      DB: createMockD1(true) as unknown as import('@cloudflare/workers-types').D1Database,
+    });
     const { handleDbHealth } = await import('../health_db.ts');
     const result = await handleDbHealth();
     expect(result).toEqual({ status: 'unreachable' });
   });
 
   test('response never contains a credential or connection string', async () => {
-    // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
-    setHealthDbEnv({ DB: createMockD1(false) });
+    setHealthDbEnv({
+      // biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
+      DB: createMockD1(false) as unknown as import('@cloudflare/workers-types').D1Database,
+    });
     const { handleDbHealth } = await import('../health_db.ts');
     const result = await handleDbHealth();
     const json = JSON.stringify(result);

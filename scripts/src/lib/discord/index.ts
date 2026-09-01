@@ -16,7 +16,7 @@
 //   bun run scripts -- discord sync                        (same as diff — no writes)
 //   bun run scripts -- discord sync --apply                 (create/update)
 //   bun run scripts -- discord sync --apply --prune         (also delete)
-//   bun run scripts -- discord commands:sync                (register /bug /feature /ask)
+//   bun run scripts -- discord commands:sync                (register /ask as a guild command)
 //   bun run scripts -- discord endpoint:sync                (register the deployed Interactions Endpoint URL)
 //   bun run scripts -- discord content:sync                 (post/update pinned #welcome, #rules, #faq text — see content.ts)
 //

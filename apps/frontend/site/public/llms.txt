@@ -7,9 +7,9 @@
 - [NPC Generator](https://bearlysleeping.com/#npc-generator): Procedural D&D stat blocks, archetypes, and lore generation powered by local LLMs.
 - [Character Sheets](https://bearlysleeping.com/#rpg-mechanics): Full D&D 5e character sheets with dynamic attribute checks and skill rolls.
 - [AI Game Master](https://bearlysleeping.com/#ai-cognition): Persistent dual-track memory graph (short-term + long-term world state), combat orchestration, and storylet branching.
-- [Cross-Platform Engine](https://bearlysleeping.com/tech#cross-platform): Svelte 5 + PixiJS v8 web client and Tauri v2 native desktop app sharing the same world state via Firebase Realtime Sync.
+- [Cross-Platform Engine](https://bearlysleeping.com/tech#cross-platform): Svelte 5 + PixiJS v8 web client and Tauri v2 native desktop app sharing the same world state via Cloudflare D1 + Turso sync.
 - [Desktop App](https://bearlysleeping.com/#download): Native Tauri v2 client for macOS, Linux, and Windows with offline support and local AI.
-- [Self-Hosted AI](https://bearlysleeping.com/tech#your-realm): Deploy anywhere — Docker, Ollama, vLLM, or Firebase Cloud Functions. Offline-first by default.
+- [Self-Hosted AI](https://bearlysleeping.com/tech#your-realm): Deploy anywhere — Docker, Ollama, vLLM. Offline-first by default.
 
 ## Quickstart
 
@@ -24,7 +24,7 @@ docker compose up
 - **Frontend**: Svelte 5 (runes mode), PixiJS v8 WebGL renderer, bitECS entity-component-system
 - **Desktop**: Tauri v2 (Rust backend), Turso/libSQL for offline persistence
 - **AI Pipeline**: Ollama / vLLM for text, ComfyUI for images, Kokoro for TTS
-- **Sync**: Firebase (optional) for multi-device cloud saves
+- **Sync**: Cloudflare D1 + Turso (optional) for multi-device cloud saves
 - **Sprites**: Procedural LPC (Liberated Pixel Cup) character generation
 
 ## Documentation & Links

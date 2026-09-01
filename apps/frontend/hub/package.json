@@ -19,14 +19,14 @@
     "check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "lint": "biome lint src",
     "format": "biome format src",
-    "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental",
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "fix": "biome check --write src",
     "test": "bun run test:unit",
     "test:unit": "bunx svelte-kit sync && bun run scripts/write_test_tsconfig.ts && bun test --isolate --preload ./src/lib/test_preload.ts --tsconfig-override=tsconfig.test.json src/lib",
     "deploy": "bun run scripts/deploy.ts"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260830.1",
+    "@cloudflare/workers-types": "5.20260831.1",
     "@inlang/paraglide-js": "2.25.0",
     "@libsql/client": "^0.17.4",
     "@sveltejs/adapter-cloudflare": "8.0.0-next.6",
@@ -39,7 +39,6 @@
     "rollup-plugin-visualizer": "7.1.1",
     "svelte": "5.57.0",
     "svelte-check": "4.7.6",
-    "svelte-fast-check": "^0.4.5",
     "tailwindcss": "4.3.3",
     "vite": "8.2.2",
     "vite-plugin-devtools-json": "1.1.0"

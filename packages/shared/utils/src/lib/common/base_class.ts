@@ -1,4 +1,6 @@
 // packages/shared/utils/src/lib/common/base_class.ts
+
+import type { LogLevel } from '@aikami/types';
 import { type LogEntry, logger } from '$logger';
 import {
   createLiteObserver,
@@ -69,6 +71,13 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
 {
   // --- Static Properties ---
   private static readonly _logger = logger;
+
+  // --- Static Methods (Logger Configuration) ---
+
+  /** Configure the global log level. Delegates to the underlying logger. */
+  static setLogLevel(level: LogLevel): void {
+    BaseClass._logger.setLogLevel(level);
+  }
 
   // --- Static Methods ---
 

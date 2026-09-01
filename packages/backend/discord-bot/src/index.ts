@@ -14,7 +14,6 @@ import { logger } from '@aikami/logger';
 import { Client, Events, GatewayIntentBits, Partials } from 'discord.js';
 import { handleMessageCreate } from './lib/handlers/message_create';
 import { handleThreadCreate } from './lib/handlers/thread_create';
-import { handleGuildMemberUpdate, syncMemberToolAccess } from './lib/role_sync';
 import type { DiscordBotEnv } from './lib/types';
 
 export { discordInteractions } from './lib/interactions/handler';
@@ -22,6 +21,12 @@ export {
   DISCORD_INTERACTIONS_REQUIRED_ENV_KEYS,
   type DiscordInteractionsEnv,
 } from './lib/interactions/types';
+export { discordNotify } from './lib/notify/handler';
+export {
+  DISCORD_NOTIFY_REQUIRED_ENV_KEYS,
+  type DiscordChannelKey,
+  type DiscordNotifyEnv,
+} from './lib/notify/types';
 export { DISCORD_BOT_REQUIRED_ENV_KEYS, type DiscordBotEnv } from './lib/types';
 
 /**
@@ -35,56 +40,17 @@ export async function startDiscordBot(env: DiscordBotEnv): Promise<Client> {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
-      // Privileged intent: requires Discord Developer Portal enablement and,
-      // for verified bots with >100 servers, bot verification approval.
-      GatewayIntentBits.GuildMembers,
+      // No GatewayIntentBits.GuildMembers: that privileged intent (Developer
+      // Portal enablement + bot verification for >100 servers) only ever
+      // existed to serve the C-449 AC-5 role-sync stub removed in TASK 3c
+      // (packages/backend/discord-bot/src/lib/role_sync.ts) — nothing here
+      // needs the member list.
     ],
     partials: [Partials.Message, Partials.Channel],
   });
 
   client.once(Events.ClientReady, (c) => {
     logger.info(`discord-bot: logged in as ${c.user.tag}`);
-  });
-
-  client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
-    handleGuildMemberUpdate(oldMember, newMember).catch((err) => {
-      logger.error(`discord-bot: unhandled guildMemberUpdate error: ${(err as Error).message}`);
-    });
-  });
-
-  // C-449 AC-5: re-sync tool access when channel permissions change
-  client.on(Events.ChannelUpdate, (_oldChannel, newChannel) => {
-    if (!newChannel.isTextBased() || newChannel.isDMBased()) {
-      return;
-    }
-    // Fetch all guild members and re-sync their tool access for this channel
-    newChannel.guild?.members
-      .fetch()
-      .then(
-        (
-          members: import('discord.js').GuildMemberManager['fetch'] extends (
-            ...args: never[]
-          ) => Promise<infer R>
-            ? R
-            : never,
-        ) => {
-          for (const [, member] of members) {
-            const permissions = newChannel.permissionsFor(member);
-            const hasAccess = permissions?.has('ViewChannel') ?? false;
-            const channelIds = hasAccess ? [newChannel.id] : [];
-            syncMemberToolAccess(member, channelIds).catch((err: unknown) => {
-              logger.error(
-                `role-sync: channelUpdate sync error for ${member.user.tag}: ${(err as Error).message}`,
-              );
-            });
-          }
-        },
-      )
-      .catch((err: unknown) => {
-        logger.error(
-          `role-sync: failed to fetch members on channel update: ${(err as Error).message}`,
-        );
-      });
   });
 
   client.on(Events.ThreadCreate, (thread, newlyCreated) => {
