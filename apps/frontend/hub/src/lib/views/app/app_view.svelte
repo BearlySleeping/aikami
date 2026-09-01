@@ -40,8 +40,8 @@ let { viewModel, children }: Props = $props();
       </main>
     </div>
   </div>
-</BaseViewModelContainer>
 
-{#await import('./dialogs/app_dialogs_view.svelte') then { default: AppDialogsView }}
-  <AppDialogsView />
-{/await}
+  {#await import('./dialogs/app_dialogs_view.svelte') then { default: AppDialogsView }}
+    <AppDialogsView />
+  {/await}
+</BaseViewModelContainer>

@@ -15,7 +15,11 @@ import {
   type TextChatMessage,
   textGenerationService,
 } from '$services';
-import { ChatViewModel, type ChatViewModelOptions } from './chat_view_model.svelte.ts';
+import {
+  ChatViewModel,
+  type ChatViewModelInterface,
+  type ChatViewModelOptions,
+} from './chat_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -88,6 +92,9 @@ const MOCK_BOT_REPLIES = [
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
+
+export type ChatModesSandboxViewModelOptions = ChatViewModelOptions;
+export type ChatModesSandboxViewModelInterface = ChatViewModelInterface;
 
 export class ChatModesSandboxViewModel extends ChatViewModel {
   /** When true, outgoing messages use mock replies instead of LLM. */

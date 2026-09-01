@@ -1,30 +1,38 @@
 name: Discord Dev Notifications
 
-# Posts PR/issue activity to a dev-activity Discord channel — separate from
-# release.yml's notify-discord job (that's release announcements, this is
-# day-to-day "someone opened a PR" noise). See
-# scripts/src/lib/deploy/discord_dev_notify.ts.
+# Posts a "PR merged" summary to #merged — separate from release.yml's
+# notify-discord job (that's release announcements, this is "here's what
+# shipped" for day-to-day merges). See scripts/src/lib/deploy/discord_dev_notify.ts.
+#
+# TASK 4 narrowed this to `pull_request: [closed]` only (was
+# opened/closed/reopened for both PRs and issues): the #pull-requests
+# firehose covering every PR action — including ones from forks, which this
+# workflow can't see secrets for either way — is now GitHub's own native
+# Discord integration (TASK 4d's setup checklist), not this workflow. This
+# one only needs to fire once, when a PR actually merges, to post the
+# curated summary to #merged.
 #
 # Deliberately plain `pull_request` (not `pull_request_target`): secrets
-# aren't available to workflows triggered by a PR from a fork, so a fork PR
-# just silently doesn't get announced (discord_dev_notify.ts no-ops without
-# DISCORD_GITHUB_FEED_WEBHOOK_URL). That's an acceptable gap in exchange for never
-# running with elevated secrets alongside untrusted PR content —
-# `pull_request_target` is the wrong tool even though this workflow never
-# checks out the PR's code, since it's easy to misuse later.
+# aren't available to workflows triggered by a PR from a fork, so a merged
+# fork PR just silently doesn't get a #merged summary
+# (discord_dev_notify.ts no-ops without WORKER_NOTIFY_SECRET). That gap is
+# now acceptable in a way it wasn't before TASK 4d — #pull-requests' native
+# integration already shows that PR's full lifecycle (including its merge)
+# regardless of fork origin, so #merged missing a fork-authored entry is a
+# curation gap, not a visibility gap. `pull_request_target` remains the
+# wrong tool to close it even so, since it's easy to misuse later.
 on:
   pull_request:
-    types: [opened, closed, reopened]
-  issues:
-    types: [opened, closed, reopened]
+    types: [closed]
 
 permissions:
   contents: read
 jobs:
   notify:
-    name: Announce to Discord
+    name: Announce Merged PR
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    if: github.event.pull_request.merged == true
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -36,27 +44,16 @@ jobs:
         with:
           bun-version-file: .bun-version
 
-      - name: Announce PR activity
-        if: github.event_name == 'pull_request'
+      - name: Announce merged PR
         shell: bash
-        run: bun scripts/src/lib/deploy/discord_dev_notify.ts --kind=pr
+        run: bun scripts/src/lib/deploy/discord_dev_notify.ts
         env:
-          DISCORD_GITHUB_FEED_WEBHOOK_URL: ${{ secrets.DISCORD_GITHUB_FEED_WEBHOOK_URL }}
-          GH_ACTION: ${{ github.event.action }}
-          GH_MERGED: ${{ github.event.pull_request.merged }}
+          WORKER_NOTIFY_SECRET: ${{ secrets.WORKER_NOTIFY_SECRET }}
           GH_NUMBER: ${{ github.event.pull_request.number }}
           GH_TITLE: ${{ github.event.pull_request.title }}
           GH_URL: ${{ github.event.pull_request.html_url }}
           GH_AUTHOR: ${{ github.event.pull_request.user.login }}
-
-      - name: Announce issue activity
-        if: github.event_name == 'issues'
-        shell: bash
-        run: bun scripts/src/lib/deploy/discord_dev_notify.ts --kind=issue
-        env:
-          DISCORD_GITHUB_FEED_WEBHOOK_URL: ${{ secrets.DISCORD_GITHUB_FEED_WEBHOOK_URL }}
-          GH_ACTION: ${{ github.event.action }}
-          GH_NUMBER: ${{ github.event.issue.number }}
-          GH_TITLE: ${{ github.event.issue.title }}
-          GH_URL: ${{ github.event.issue.html_url }}
-          GH_AUTHOR: ${{ github.event.issue.user.login }}
+          GH_FILES_CHANGED: ${{ github.event.pull_request.changed_files }}
+          GH_ADDITIONS: ${{ github.event.pull_request.additions }}
+          GH_DELETIONS: ${{ github.event.pull_request.deletions }}
+          GH_MERGE_COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.merge_commit_sha }}

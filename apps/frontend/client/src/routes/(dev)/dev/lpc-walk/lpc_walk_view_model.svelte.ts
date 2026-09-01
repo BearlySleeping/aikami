@@ -10,6 +10,8 @@ import {
 } from '@aikami/frontend/services';
 import type { AssetResolver } from '@aikami/types';
 
+export type LpcWalkViewModelOptions = BaseDevViewModelOptions;
+
 export type LpcWalkViewModelInterface = BaseDevViewModelInterface & {
   readonly resolver: AssetResolver | undefined;
   readonly loading: boolean;

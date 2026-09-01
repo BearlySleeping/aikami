@@ -10,6 +10,8 @@ import {
 } from '@aikami/frontend/services';
 import type { AssetResolver } from '@aikami/types';
 
+export type MapSandboxRouteViewModelOptions = BaseDevViewModelOptions;
+
 export type MapSandboxRouteViewModelInterface = BaseDevViewModelInterface & {
   readonly resolver: AssetResolver | undefined;
   readonly loading: boolean;

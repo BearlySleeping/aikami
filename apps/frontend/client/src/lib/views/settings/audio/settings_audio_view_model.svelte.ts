@@ -7,8 +7,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { playSceneBgm } from '$lib/services/audio/audio_asset_resolver';
-import { audioService, musicPlayerService, ttsService, voiceModelService } from '$services';
+import {
+  audioService,
+  musicPlayerService,
+  playSceneBgm,
+  ttsService,
+  voiceModelService,
+} from '$services';
 import type { VoiceModelState } from '$types';
 
 // ---------------------------------------------------------------------------

@@ -45,13 +45,13 @@ $effect(() => {
   }
 });
 
-function handleAvatarUpload(event: Event) {
+const handleAvatarUpload = (event: Event) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (file) {
     viewModel.uploadAvatar(file);
   }
-}
+};
 </script>
 
 <svelte:head>

@@ -25,6 +25,8 @@ import {
   type OpenRouterModel,
 } from '$types';
 
+export type TextTabViewModelOptions = BaseViewModelOptions;
+
 export type TextTabViewModelInterface = BaseViewModelInterface & {
   readonly config: ConfigState;
   readonly textProvider: string;

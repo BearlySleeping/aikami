@@ -7,6 +7,8 @@ import {
 } from '@aikami/frontend/services';
 import { combatService, gameOverlayService } from '$services';
 
+export type GameOverViewModelOptions = BaseViewModelOptions;
+
 export type GameOverViewModelInterface = BaseViewModelInterface & {
   readonly canRetry: boolean;
   respawnPlayer(): Promise<void>;

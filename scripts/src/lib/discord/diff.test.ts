@@ -7,10 +7,10 @@
 // these run without any network.
 
 import { describe, expect, it } from 'bun:test';
-import { ChannelType, GuildVerificationLevel } from 'discord-api-types/v10';
+import { ChannelType, GuildOnboardingMode, GuildVerificationLevel } from 'discord-api-types/v10';
 import { computePlan, type LiveState } from './diff';
 import type { DesiredCategory, DesiredChannel, DesiredRole } from './structure';
-import type { AutoModRule, GuildChannel, GuildSettings } from './types';
+import type { AutoModRule, GuildChannel, GuildSettings, Onboarding, WelcomeScreen } from './types';
 
 const category = (id: string, name: string): GuildChannel => ({
   id,
@@ -43,16 +43,33 @@ const FAKE_GUILD: GuildSettings = {
   description: null,
 };
 
-/** Fills in the guild/automodRules boilerplate every LiveState needs but most tests don't care about. */
+const FAKE_ONBOARDING: Onboarding = {
+  guild_id: 'g1',
+  prompts: [],
+  default_channel_ids: [],
+  enabled: false,
+  mode: GuildOnboardingMode.OnboardingDefault,
+};
+
+const FAKE_WELCOME_SCREEN: WelcomeScreen = {
+  description: null,
+  welcome_channels: [],
+};
+
+/** Fills in the guild/automodRules/onboarding/welcomeScreen boilerplate every LiveState needs but most tests don't care about. */
 const live = (
   channels: GuildChannel[],
   roles: LiveState['roles'],
-  overrides: Partial<Pick<LiveState, 'guild' | 'automodRules'>> = {},
+  overrides: Partial<
+    Pick<LiveState, 'guild' | 'automodRules' | 'onboarding' | 'welcomeScreen'>
+  > = {},
 ): LiveState => ({
   channels,
   roles,
   guild: overrides.guild ?? FAKE_GUILD,
   automodRules: overrides.automodRules ?? [],
+  onboarding: overrides.onboarding ?? FAKE_ONBOARDING,
+  welcomeScreen: overrides.welcomeScreen ?? FAKE_WELCOME_SCREEN,
 });
 
 describe('computePlan — channel category handling', () => {
@@ -606,5 +623,183 @@ describe('computePlan — AutoMod', () => {
       live([textChannel('staff-id', 'staff')], [], { automodRules: [liveRule] }),
     );
     expect(plan.updateAutomodRules).toHaveLength(0);
+  });
+
+  it('does not report drift for a blockMessage action whose metadata Discord echoes as {} but we never declared', () => {
+    // Discord always echoes a blockMessage action's metadata back as {}
+    // even when we sent no metadata key at all — confirmed live (same class
+    // of phantom-diff as the trigger_metadata case above, one level down).
+    const liveRule: AutoModRule = {
+      id: 'rule1',
+      guild_id: 'g1',
+      name: 'Blocked Invite Links',
+      event_type: 1,
+      trigger_type: 1, // Keyword
+      trigger_metadata: { regex_patterns: ['discord\\.gg/'], keyword_filter: [], allow_list: [] },
+      actions: [
+        { type: 1, metadata: {} },
+        { type: 2, metadata: { channel_id: 'staff-id' } },
+      ],
+      enabled: true,
+      exempt_roles: [],
+      exempt_channels: [],
+    };
+    const plan = computePlan(
+      {
+        roles: [],
+        categories: [],
+        channels: [{ name: 'staff', type: 'text' }],
+        automod: [
+          {
+            name: 'Blocked Invite Links',
+            trigger: 'keyword',
+            regexPatterns: ['discord\\.gg/'],
+            actions: [{ type: 'blockMessage' }, { type: 'alert', channel: 'staff' }],
+          },
+        ],
+      },
+      live([textChannel('staff-id', 'staff')], [], { automodRules: [liveRule] }),
+    );
+    expect(plan.updateAutomodRules).toHaveLength(0);
+  });
+});
+
+describe('computePlan — onboarding', () => {
+  const desiredOnboarding = {
+    enabled: true,
+    mode: 'advanced' as const,
+    defaultChannels: ['general'],
+    prompts: [
+      {
+        title: 'What brings you?',
+        singleSelect: false,
+        required: false,
+        inOnboarding: true,
+        options: [{ emojiName: '🎮', title: 'Playing', roles: ['Player'] }],
+      },
+    ],
+  };
+
+  it('plans an update when onboarding is not yet enabled live', () => {
+    const plan = computePlan(
+      {
+        roles: [{ name: 'Player' }],
+        categories: [],
+        channels: [{ name: 'general', type: 'text' }],
+        onboarding: desiredOnboarding,
+      },
+      live(
+        [textChannel('g1', 'general')],
+        [
+          {
+            id: 'r1',
+            name: 'Player',
+            color: 0,
+            hoist: false,
+            mentionable: false,
+            permissions: '0',
+            position: 0,
+          },
+        ],
+      ),
+    );
+    expect(plan.onboardingUpdate).not.toBeNull();
+    expect(plan.onboardingUpdate).toContain('enabled false → true');
+  });
+
+  it('reports no change when live onboarding already matches by title (ids ignored)', () => {
+    const plan = computePlan(
+      {
+        roles: [{ name: 'Player' }],
+        categories: [],
+        channels: [{ name: 'general', type: 'text' }],
+        onboarding: desiredOnboarding,
+      },
+      live(
+        [textChannel('g1', 'general')],
+        [
+          {
+            id: 'r1',
+            name: 'Player',
+            color: 0,
+            hoist: false,
+            mentionable: false,
+            permissions: '0',
+            position: 0,
+          },
+        ],
+        {
+          onboarding: {
+            guild_id: 'g1',
+            enabled: true,
+            mode: 1,
+            default_channel_ids: ['g1'],
+            prompts: [
+              {
+                id: '999999999999999999',
+                title: 'What brings you?',
+                single_select: false,
+                required: false,
+                in_onboarding: true,
+                type: 0,
+                options: [
+                  {
+                    id: '888888888888888888',
+                    title: 'Playing',
+                    description: null,
+                    channel_ids: [],
+                    role_ids: ['r1'],
+                    emoji: { id: null, name: '🎮', animated: false },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ),
+    );
+    expect(plan.onboardingUpdate).toBeNull();
+  });
+});
+
+describe('computePlan — welcome screen', () => {
+  it('plans an update when the live welcome screen is empty', () => {
+    const plan = computePlan(
+      {
+        roles: [],
+        categories: [],
+        channels: [{ name: 'welcome', type: 'text' }],
+        welcomeScreen: {
+          description: 'Hello',
+          channels: [{ channel: 'welcome', description: 'Start here', emojiName: '👋' }],
+        },
+      },
+      live([textChannel('w1', 'welcome')], []),
+    );
+    expect(plan.welcomeScreenUpdate).not.toBeNull();
+    expect(plan.welcomeScreenUpdate?.changes).toContain('welcome channels changed');
+  });
+
+  it('reports no change when live welcome screen already matches, same order', () => {
+    const plan = computePlan(
+      {
+        roles: [],
+        categories: [],
+        channels: [{ name: 'welcome', type: 'text' }],
+        welcomeScreen: {
+          description: 'Hello',
+          channels: [{ channel: 'welcome', description: 'Start here', emojiName: '👋' }],
+        },
+      },
+      live([textChannel('w1', 'welcome')], [], {
+        welcomeScreen: {
+          description: 'Hello',
+          welcome_channels: [
+            { channel_id: 'w1', description: 'Start here', emoji_id: null, emoji_name: '👋' },
+          ],
+        },
+      }),
+    );
+    expect(plan.welcomeScreenUpdate).toBeNull();
   });
 });

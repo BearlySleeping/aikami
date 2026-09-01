@@ -9,7 +9,7 @@ import type { CurrentUser } from '@aikami/types';
 import { untrack } from 'svelte';
 import { goto } from '$app/navigation';
 import { navigating, page } from '$app/state';
-import { logger } from '$logger';
+
 import type { RouteName } from '$router';
 import { routeTypeOf } from '$routes';
 import { appService, authService, routerService } from '$services';
@@ -54,21 +54,11 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     }
 
     if (logLevel) {
-      logger.setLogLevel(logLevel);
-    }
-
-    if (userSession) {
-      logger.setContext?.({
-        userId: userSession.id,
-      });
-    }
-
-    if (device) {
-      logger.setContext?.({ device });
+      BaseViewModel.setLogLevel(logLevel);
     }
 
     if (sessionId) {
-      logger.setContext?.({ sessionId });
+      appService.sessionId = sessionId;
     }
   }
 

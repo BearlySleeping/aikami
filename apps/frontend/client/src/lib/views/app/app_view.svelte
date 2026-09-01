@@ -15,8 +15,8 @@ type Props = {
 let { viewModel, children }: Props = $props();
 </script>
 
-<HeadTagsViewModel />
-
-<BaseViewModelContainer {viewModel}> {@render children()} </BaseViewModelContainer>
-
-<AppDialogsView />
+<BaseViewModelContainer {viewModel}>
+  <HeadTagsViewModel />
+  {@render children()}
+  <AppDialogsView />
+</BaseViewModelContainer>

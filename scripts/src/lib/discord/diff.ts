@@ -15,6 +15,7 @@ import {
   AutoModerationRuleTriggerType,
   ChannelType,
   ForumLayoutType,
+  GuildOnboardingMode,
   SortOrderType,
 } from 'discord-api-types/v10';
 import {
@@ -26,8 +27,11 @@ import {
   type DesiredChannel,
   type DesiredChannelType,
   type DesiredGuild,
+  type DesiredOnboarding,
+  type DesiredOnboardingPrompt,
   type DesiredPermissionOverwrite,
   type DesiredRole,
+  type DesiredWelcomeScreen,
   permissionsToBitfield,
 } from './structure';
 import type {
@@ -39,7 +43,11 @@ import type {
   GuildRole,
   GuildSettings,
   GuildUpdateBody,
+  Onboarding,
+  OnboardingPrompt,
   PermissionOverwrite,
+  WelcomeScreen,
+  WelcomeScreenBody,
 } from './types';
 
 export const CHANNEL_TYPE_MAP = {
@@ -89,6 +97,8 @@ export type LiveState = {
   roles: GuildRole[];
   guild: GuildSettings;
   automodRules: AutoModRule[];
+  onboarding: Onboarding;
+  welcomeScreen: WelcomeScreen;
 };
 
 export type ChannelUpdate = { id: string; name: string; changes: string[] };
@@ -101,6 +111,7 @@ export type AutoModRuleUpdate = {
 };
 export type GuildUpdate = { changes: string[]; body: GuildUpdateBody };
 export type PositionChange = { id: string; name: string; from: number; to: number };
+export type WelcomeScreenUpdate = { changes: string[]; body: WelcomeScreenBody };
 
 export type Plan = {
   guildUpdate: GuildUpdate | null;
@@ -117,6 +128,15 @@ export type Plan = {
   deleteAutomodRules: { id: string; name: string }[];
   roleReorders: PositionChange[];
   channelReorders: PositionChange[];
+  /**
+   * Just change descriptions, not a body — `PUT /guilds/{id}/onboarding`
+   * replaces prompts/options wholesale and each needs an `id` that either
+   * reuses a live one (matched by title) or is a fresh placeholder, which
+   * can only be resolved against live data at APPLY time (sync.ts's
+   * buildOnboardingBody), not here.
+   */
+  onboardingUpdate: string[] | null;
+  welcomeScreenUpdate: WelcomeScreenUpdate | null;
 };
 
 export function planIsEmpty(plan: Plan): boolean {
@@ -133,7 +153,9 @@ export function planIsEmpty(plan: Plan): boolean {
     plan.updateAutomodRules.length === 0 &&
     plan.deleteAutomodRules.length === 0 &&
     plan.roleReorders.length === 0 &&
-    plan.channelReorders.length === 0
+    plan.channelReorders.length === 0 &&
+    plan.onboardingUpdate === null &&
+    plan.welcomeScreenUpdate === null
   );
 }
 
@@ -611,6 +633,17 @@ function canonicalizeTriggerMetadata(
   };
 }
 
+/**
+ * Same phantom-diff problem as canonicalizeTriggerMetadata above, one level
+ * down: Discord always echoes an action's `metadata` back as `{}` even when
+ * we sent no `metadata` key at all (confirmed live — a bare `blockMessage`
+ * action compares `{type:1}` desired vs `{type:1,metadata:{}}` live
+ * forever). Only used for comparison, never for what's actually sent.
+ */
+function canonicalizeActions(actions: AutoModAction[]): AutoModAction[] {
+  return actions.map((action) => ({ ...action, metadata: action.metadata ?? {} }));
+}
+
 function diffAutomod(
   desired: DesiredAutoModRule[],
   live: AutoModRule[],
@@ -645,7 +678,10 @@ function diffAutomod(
     ) {
       changes.push('trigger metadata changed');
     }
-    if (normalizedJson(body.actions) !== normalizedJson(existing.actions)) {
+    if (
+      normalizedJson(canonicalizeActions(body.actions)) !==
+      normalizedJson(canonicalizeActions(existing.actions))
+    ) {
       changes.push('actions changed');
     }
     if (normalizedJson(body.exempt_roles ?? []) !== normalizedJson(existing.exempt_roles ?? [])) {
@@ -741,6 +777,219 @@ function diffGuild(
   return changes.length > 0 ? { changes, body } : null;
 }
 
+const ONBOARDING_MODE_MAP: Record<'default' | 'advanced', GuildOnboardingMode> = {
+  default: GuildOnboardingMode.OnboardingDefault,
+  advanced: GuildOnboardingMode.OnboardingAdvanced,
+};
+
+function resolveIds(
+  names: string[] | undefined,
+  idByName: Map<string, string>,
+  context: string,
+  kind: 'channel' | 'role',
+): string[] {
+  return (names ?? []).map((name) => {
+    const id = idByName.get(name);
+    if (!id) {
+      throw new Error(`${context} references ${kind} "${name}", which doesn't exist live.`);
+    }
+    return id;
+  });
+}
+
+/** A prompt's structural fingerprint, WITHOUT ids — comparison only, never sent to the API. */
+function normalizedPrompt(prompt: {
+  title: string;
+  single_select: boolean;
+  required: boolean;
+  in_onboarding: boolean;
+  options: {
+    title: string;
+    description: string | null;
+    channel_ids: readonly string[];
+    role_ids: readonly string[];
+    emoji_name: string | null;
+  }[];
+}): string {
+  return normalizedJson({
+    title: prompt.title,
+    single_select: prompt.single_select,
+    required: prompt.required,
+    in_onboarding: prompt.in_onboarding,
+    options: [...prompt.options]
+      .map((o) => ({
+        title: o.title,
+        description: o.description ?? '',
+        channel_ids: [...o.channel_ids].sort(),
+        role_ids: [...o.role_ids].sort(),
+        emoji_name: o.emoji_name ?? '',
+      }))
+      .sort((a, b) => a.title.localeCompare(b.title)),
+  });
+}
+
+/**
+ * The live GET response nests an option's emoji under `emoji: { name, id }`
+ * (CONTEXT fact 4's other half — this is the shape the PUT body must NOT
+ * use, but it IS what reading a live rule back gives you). Converts to the
+ * same flat `emoji_name` shape normalizedPrompt/desiredToComparablePrompt
+ * use so both sides compare like-for-like.
+ */
+function liveToComparablePrompt(prompt: OnboardingPrompt) {
+  return {
+    title: prompt.title,
+    single_select: prompt.single_select,
+    required: prompt.required,
+    in_onboarding: prompt.in_onboarding,
+    options: prompt.options.map((option) => ({
+      title: option.title,
+      description: option.description,
+      channel_ids: option.channel_ids,
+      role_ids: option.role_ids,
+      emoji_name: option.emoji?.name ?? null,
+    })),
+  };
+}
+
+function desiredToComparablePrompt(
+  prompt: DesiredOnboardingPrompt,
+  channelIdByName: Map<string, string>,
+  roleIdByName: Map<string, string>,
+) {
+  return {
+    title: prompt.title,
+    single_select: Boolean(prompt.singleSelect),
+    required: Boolean(prompt.required),
+    in_onboarding: prompt.inOnboarding ?? true,
+    options: prompt.options.map((option) => ({
+      title: option.title,
+      description: option.description ?? null,
+      channel_ids: resolveIds(
+        option.channels,
+        channelIdByName,
+        `onboarding prompt "${prompt.title}" option "${option.title}"`,
+        'channel',
+      ),
+      role_ids: resolveIds(
+        option.roles,
+        roleIdByName,
+        `onboarding prompt "${prompt.title}" option "${option.title}"`,
+        'role',
+      ),
+      emoji_name: option.emojiName,
+    })),
+  };
+}
+
+/**
+ * Coarse-grained on purpose: `PUT /guilds/{id}/onboarding` replaces the
+ * whole config in one call regardless of what changed, so there's no
+ * per-field PATCH to target — a human reading "prompts changed" already
+ * knows to look at structure.ts's onboarding block, the single source of
+ * truth, rather than needing a field-by-field diff of a config that gets
+ * fully re-sent either way.
+ */
+function diffOnboarding(
+  desired: DesiredOnboarding | undefined,
+  live: Onboarding,
+  channelIdByName: Map<string, string>,
+  roleIdByName: Map<string, string>,
+): string[] | null {
+  if (!desired) {
+    return null;
+  }
+  const changes: string[] = [];
+
+  if (desired.enabled !== live.enabled) {
+    changes.push(`enabled ${live.enabled} → ${desired.enabled}`);
+  }
+  const desiredMode = ONBOARDING_MODE_MAP[desired.mode];
+  if (desiredMode !== live.mode) {
+    changes.push(`mode ${live.mode} → ${desiredMode}`);
+  }
+  const desiredDefaultIds = resolveIds(
+    desired.defaultChannels,
+    channelIdByName,
+    'onboarding.defaultChannels',
+    'channel',
+  );
+  if (!setsEqual(new Set(desiredDefaultIds), new Set(live.default_channel_ids))) {
+    changes.push('defaultChannels changed');
+  }
+
+  const desiredPrompts = desired.prompts.map((p) =>
+    desiredToComparablePrompt(p, channelIdByName, roleIdByName),
+  );
+  const desiredTitles = new Set(desiredPrompts.map((p) => p.title));
+  const liveTitles = new Set(live.prompts.map((p: OnboardingPrompt) => p.title));
+  if (!setsEqual(desiredTitles, liveTitles)) {
+    changes.push('prompts added/removed');
+  } else {
+    const liveByTitle = new Map(live.prompts.map((p: OnboardingPrompt) => [p.title, p]));
+    for (const prompt of desiredPrompts) {
+      const liveMatch = liveByTitle.get(prompt.title);
+      if (
+        liveMatch &&
+        normalizedPrompt(prompt) !== normalizedPrompt(liveToComparablePrompt(liveMatch))
+      ) {
+        changes.push(`prompt "${prompt.title}" changed`);
+      }
+    }
+  }
+
+  return changes.length > 0 ? changes : null;
+}
+
+/**
+ * Unlike onboarding, welcome-screen channel ORDER is meaningful (it's a
+ * displayed list) — comparison here deliberately does NOT go through
+ * normalizedJson (which sorts arrays for order-independent comparison).
+ */
+function diffWelcomeScreen(
+  desired: DesiredWelcomeScreen | undefined,
+  live: WelcomeScreen,
+  channelIdByName: Map<string, string>,
+): WelcomeScreenUpdate | null {
+  if (!desired) {
+    return null;
+  }
+  const desiredChannels = desired.channels.map((ch) => {
+    const channelId = channelIdByName.get(ch.channel);
+    if (!channelId) {
+      throw new Error(
+        `welcomeScreen references channel "${ch.channel}", which doesn't exist live.`,
+      );
+    }
+    return {
+      channel_id: channelId,
+      description: ch.description,
+      emoji_id: null,
+      emoji_name: ch.emojiName ?? null,
+    };
+  });
+  const body: WelcomeScreenBody = {
+    enabled: true,
+    description: desired.description,
+    welcome_channels: desiredChannels,
+  };
+
+  const fingerprint = (
+    channels: { channel_id: string; description: string; emoji_name: string | null }[],
+  ) => JSON.stringify(channels.map((c) => [c.channel_id, c.description, c.emoji_name ?? '']));
+
+  const changes: string[] = [];
+  if ((live.description ?? '') !== desired.description) {
+    changes.push(
+      `description ${JSON.stringify(live.description)} → ${JSON.stringify(desired.description)}`,
+    );
+  }
+  if (fingerprint(desiredChannels) !== fingerprint(live.welcome_channels ?? [])) {
+    changes.push('welcome channels changed');
+  }
+
+  return changes.length > 0 ? { changes, body } : null;
+}
+
 /** Compare `desired` (structure.ts) against `live` (fetched from Discord) and produce a Plan. */
 export function computePlan(
   desired: {
@@ -749,6 +998,8 @@ export function computePlan(
     categories: DesiredCategory[];
     channels: DesiredChannel[];
     automod?: DesiredAutoModRule[];
+    onboarding?: DesiredOnboarding;
+    welcomeScreen?: DesiredWelcomeScreen;
   },
   live: LiveState,
 ): Plan {
@@ -794,9 +1045,22 @@ export function computePlan(
           new Set(desired.roles.map((role) => role.name)),
         );
   const guildUpdate = diffGuild(desired.guild, live.guild, channelIdByName);
+  const onboardingUpdate = diffOnboarding(
+    desired.onboarding,
+    live.onboarding,
+    channelIdByName,
+    roleIdByName,
+  );
+  const welcomeScreenUpdate = diffWelcomeScreen(
+    desired.welcomeScreen,
+    live.welcomeScreen,
+    channelIdByName,
+  );
 
   return {
     guildUpdate,
+    onboardingUpdate,
+    welcomeScreenUpdate,
     createCategories: categoryDiff.create,
     createChannels: channelDiff.create,
     createRoles: roleDiff.create,

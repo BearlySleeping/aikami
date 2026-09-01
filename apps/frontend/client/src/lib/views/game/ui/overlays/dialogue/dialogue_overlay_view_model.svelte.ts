@@ -443,24 +443,24 @@ class DialogueOverlayViewModel
    */
   private _isAutoRolling = false;
 
+  /** Resolve the onRoll callback based on skill check phase. */
+  private _resolveDiceOnRoll(s: SkillCheckState): (() => void) | undefined {
+    if (s.phase === 'awaiting_click') {
+      return (): void => { void this.rollDice(); };
+    }
+    if (s.phase === 'declared') {
+      return (): void => { this.acknowledgeDeclaration(); };
+    }
+    return undefined;
+  }
+
   /** Unified dice state mapping for the shared GameDice component. */
   get diceState(): DiceState | null {
     const s = this.skillCheckState;
     if (!s) {
       return null;
     }
-    let onRoll: (() => void) | undefined;
-    if (s.phase === 'awaiting_click') {
-      onRoll = () => {
-        void this.rollDice();
-      };
-    } else if (s.phase === 'declared') {
-      onRoll = () => {
-        this.acknowledgeDeclaration();
-      };
-    } else {
-      onRoll = undefined;
-    }
+    const onRoll = this._resolveDiceOnRoll(s);
     return {
       phase: s.phase === 'awaiting_click' || s.phase === 'declared' ? 'interactive' : s.phase,
       value: s.rollValue,

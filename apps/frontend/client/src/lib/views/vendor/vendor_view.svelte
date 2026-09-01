@@ -2,8 +2,6 @@
 // apps/frontend/client/src/lib/views/vendor/vendor_view.svelte
 import { BaseViewModelContainer } from '$components';
 import LpcItemIcon from '$lib/components/game/lpc_item_icon.svelte';
-import { logger } from '$logger';
-import { gameModeService } from '$services';
 import type { VendorViewModelInterface } from './vendor_view_model.svelte';
 
 type Props = {
@@ -12,7 +10,6 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
-/** Price-trend text color: discounted (success), penalized (error), else warning. */
 const priceColorClass = (isDiscounted: boolean, isPenalized: boolean): string => {
   if (isDiscounted) {
     return 'text-success';
@@ -23,32 +20,17 @@ const priceColorClass = (isDiscounted: boolean, isPenalized: boolean): string =>
   return 'text-warning';
 };
 
-/** Reference to the scrollable message container for auto-scroll. */
 let messageContainer = $state<HTMLDivElement>();
-
-/** Reference to the textarea for mode-aware autofocus. */
 let inputElement = $state<HTMLTextAreaElement>();
-
-/** Reference to the sell confirmation dialog. */
 let sellDialogElement = $state<HTMLDialogElement>();
-
-/** Reference to the triggering Sell button for focus restoration. */
 let lastSellButtonElement = $state<HTMLButtonElement>();
-
-/** Reference to the Confirm Sale button for focus management. */
 let confirmSaleButtonElement = $state<HTMLButtonElement>();
-
-/** Player's current haggling text. */
 let haggleInput = $state('');
 
-// ── Toast system for purchase notifications ──────────────────────────
-
-/** Toast entries shown after purchases. Each auto-dismisses after 2.5s. */
 const toasts = $state<
   Array<{ id: string; message: string; itemId: string; type: 'success' | 'error' }>
 >([]);
 
-/** Adds a toast notification and removes it after 2.5 seconds. */
 const _showToast = (message: string, itemId: string, type: 'success' | 'error') => {
   const id = crypto.randomUUID();
   toasts.push({ id, message, itemId, type });
@@ -60,32 +42,9 @@ const _showToast = (message: string, itemId: string, type: 'success' | 'error') 
   }, 2500);
 };
 
-// ── Purchase wrapper with toast ──────────────────────────────────────
-
-/**
- * Wraps the ViewModel's buyItem with a toast notification.
- * The ViewModel handles transaction messages internally via the
- * inline bar — this adds a floating toast for extra visibility.
- */
 const buyItemWithToast = async (itemId: string, label: string) => {
-  logger.debug('[vendor_view] buyItemWithToast:click', {
-    itemId,
-    label,
-    playerGold: viewModel.playerGold,
-    isBuying: viewModel.isBuying,
-    refusesToSell: viewModel.refusesToSell,
-    isHaggling: viewModel.isHaggling,
-  });
   const goldBefore = viewModel.playerGold;
   await viewModel.buyItem(itemId);
-  logger.debug('[vendor_view] buyItemWithToast:after-buyItem', {
-    itemId,
-    goldBefore,
-    goldAfter: viewModel.playerGold,
-    delta: viewModel.playerGold - goldBefore,
-    isBuying: viewModel.isBuying,
-  });
-  // If gold decreased, the purchase likely succeeded (or at least was attempted)
   if (viewModel.playerGold < goldBefore) {
     _showToast(`Purchased ${label}!`, itemId, 'success');
   } else if (viewModel.playerGold === goldBefore && !viewModel.refusesToSell) {
@@ -93,43 +52,32 @@ const buyItemWithToast = async (itemId: string, label: string) => {
   }
 };
 
-/** Submit the haggling message and clear the input. */
 const submitHaggle = async () => {
   const text = haggleInput.trim();
   if (!text || viewModel.isHaggling || viewModel.refusesToSell) {
-    logger.debug('[vendor_view] submitHaggle:blocked', {
-      text: !!text,
-      isHaggling: viewModel.isHaggling,
-      refusesToSell: viewModel.refusesToSell,
-    });
     return;
   }
-  logger.debug('[vendor_view] submitHaggle:sending', { text: text.slice(0, 50) });
   haggleInput = '';
   await viewModel.haggle(text);
 };
 
-/** Opens the sell confirmation dialog and manages focus. */
 const requestSellWithDialog = (itemId: string, buttonElement: HTMLButtonElement) => {
   lastSellButtonElement = buttonElement;
   viewModel.requestSell(itemId);
 };
 
-/** Confirms the sale and closes the dialog with focus restoration. */
 const confirmSellWithDialog = () => {
   viewModel.confirmSell();
   sellDialogElement?.close();
   lastSellButtonElement?.focus();
 };
 
-/** Cancels the sale and closes the dialog with focus restoration. */
 const cancelSellWithDialog = () => {
   viewModel.cancelSell();
   sellDialogElement?.close();
   lastSellButtonElement?.focus();
 };
 
-/** Handle Enter key for submit (Shift+Enter for newline). */
 const handleKeyDown = (event: KeyboardEvent) => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
@@ -145,7 +93,6 @@ const handleKeyDown = (event: KeyboardEvent) => {
     }
     return;
   }
-  // Focus trap — Tab/Shift+Tab cycle within the dialog
   if (event.key === 'Tab') {
     event.preventDefault();
     const dialog = event.currentTarget as HTMLElement;
@@ -162,14 +109,12 @@ const handleKeyDown = (event: KeyboardEvent) => {
   }
 };
 
-/** Mode-aware autofocus: focus the textarea when MENU/game mode is active. */
 $effect(() => {
-  if (gameModeService.currentMode === 'MENU' && inputElement) {
+  if (viewModel.currentMode === 'MENU' && inputElement) {
     inputElement.focus();
   }
 });
 
-/** Auto-scroll to the bottom when new messages arrive or AI is streaming. */
 $effect(() => {
   const count = viewModel.messages.length;
   const haggling = viewModel.isHaggling;
@@ -180,16 +125,12 @@ $effect(() => {
   }
 });
 
-/** Focus the Confirm Sale button when the sell dialog opens. */
 $effect(() => {
   if (viewModel.pendingSellItemId && confirmSaleButtonElement) {
     confirmSaleButtonElement.focus();
   }
 });
 
-// ── Item icon mapping ────────────────────────────────────────────────
-
-/** Returns a representative emoji icon for a given item ID. */
 const _itemIcon = (itemId: string): string => {
   if (itemId.includes('sword') || itemId.includes('blade')) {
     return '⚔️';

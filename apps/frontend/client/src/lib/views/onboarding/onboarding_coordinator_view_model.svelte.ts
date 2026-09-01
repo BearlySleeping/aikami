@@ -102,6 +102,8 @@ export type OnboardingCoordinatorViewModelInterface = BaseViewModelInterface & {
   readonly hasPersona: boolean;
   /** The current persona data from personaCreationService. */
   readonly persona: PersonaData | undefined;
+  /** Avatar URL from personaCreationService. */
+  readonly avatarUrl: string;
 
   // Manual creation step state
   readonly step: OnboardingStep;
@@ -248,6 +250,10 @@ class OnboardingCoordinatorViewModel
 
   get persona(): PersonaData | undefined {
     return personaCreationService.persona;
+  }
+
+  get avatarUrl(): string {
+    return personaCreationService.avatarUrl;
   }
 
   get stepIndex(): number {

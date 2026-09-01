@@ -12,6 +12,8 @@ import {
   type ExportViewModelOptions,
 } from '$views/settings/export/export_view_model.svelte';
 
+export type ExportSandboxViewModelOptions = ExportViewModelOptions;
+
 export type ExportSandboxViewModelInterface = ExportViewModelInterface;
 
 class ExportSandboxViewModel extends ExportViewModel implements ExportSandboxViewModelInterface {

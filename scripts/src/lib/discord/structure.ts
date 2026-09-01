@@ -190,12 +190,58 @@ export type DesiredAutoModRule = {
   actions: DesiredAutoModAction[];
 };
 
+export type DesiredOnboardingOption = {
+  /** Unicode emoji shown next to the option, e.g. '🎮'. */
+  emojiName: string;
+  title: string;
+  description?: string;
+  /** Role names granted when a member selects this option. */
+  roles?: string[];
+  /** Channel names a member is opted into when they select this option. */
+  channels?: string[];
+};
+
+export type DesiredOnboardingPrompt = {
+  title: string;
+  /** Members may pick only one option. Defaults to false (multi-select). */
+  singleSelect?: boolean;
+  /** Must be answered before onboarding completes. Defaults to false. */
+  required?: boolean;
+  /** Shown in the onboarding flow itself, not just Channels & Roles. Defaults to true. */
+  inOnboarding?: boolean;
+  options: DesiredOnboardingOption[];
+};
+
+export type DesiredOnboarding = {
+  enabled: boolean;
+  /** 'default' counts only defaultChannels toward Discord's eligibility requirements; 'advanced' also counts prompts. */
+  mode: 'default' | 'advanced';
+  /** Channel names every member is opted into automatically. */
+  defaultChannels: string[];
+  prompts: DesiredOnboardingPrompt[];
+};
+
+export type DesiredWelcomeChannel = {
+  /** Channel name. */
+  channel: string;
+  description: string;
+  /** Unicode emoji shown to the left of the channel, e.g. '👋'. */
+  emojiName?: string;
+};
+
+export type DesiredWelcomeScreen = {
+  description: string;
+  channels: DesiredWelcomeChannel[];
+};
+
 export type DesiredStructure = {
   guild?: DesiredGuild;
   roles: DesiredRole[];
   categories: DesiredCategory[];
   channels: DesiredChannel[];
   automod?: DesiredAutoModRule[];
+  onboarding?: DesiredOnboarding;
+  welcomeScreen?: DesiredWelcomeScreen;
 };
 
 // ─── Edit below this line ───────────────────────────────────────────────
@@ -224,7 +270,7 @@ export const structure: DesiredStructure = {
     // below already route every rule's alert action to #staff directly —
     // the equivalent notification without the public-channel requirement.
     systemChannel: 'welcome',
-    description: 'TODO(copy): one-line server description for the Discord discovery card.',
+    description: 'An open-source, AI-native RPG. Plays offline. Yours to modify.',
   },
   roles: [
     // Hierarchy order, highest first (see the file header on positions).
@@ -286,28 +332,28 @@ export const structure: DesiredStructure = {
       name: 'welcome',
       type: 'text',
       category: 'Start here',
-      topic: 'TODO(copy): welcome message topic.',
+      topic: 'Start here — say hello, then check #rules and #faq.',
       permissionOverwrites: [{ role: '@everyone', deny: ['SendMessages'] }],
     },
     {
       name: 'rules',
       type: 'text',
       category: 'Start here',
-      topic: 'TODO(copy): six-line rules summary.',
+      topic: 'Please read before posting.',
       permissionOverwrites: [{ role: '@everyone', deny: ['SendMessages'] }],
     },
     {
       name: 'announcements',
       type: 'announcement',
       category: 'Start here',
-      topic: 'TODO(copy): announcements topic.',
+      topic: 'Official Aikami announcements — read-only.',
       permissionOverwrites: [{ role: '@everyone', deny: ['SendMessages'] }],
     },
     {
       name: 'releases',
       type: 'announcement',
       category: 'Start here',
-      topic: 'TODO(copy): desktop release announcements topic.',
+      topic: 'Desktop build announcements — read-only.',
       permissionOverwrites: [{ role: '@everyone', deny: ['SendMessages'] }],
     },
     // ── Community ────────────────────────────────────────────────────
@@ -315,7 +361,7 @@ export const structure: DesiredStructure = {
       name: 'general',
       type: 'text',
       category: 'Community',
-      topic: 'TODO(copy): general chat topic.',
+      topic: 'General chat about Aikami — the game, the code, anything else.',
     },
     // NEW. Declared 'media' in the plan (matching the task spec), but
     // Discord's REST API rejects `type: 16` (GuildMedia) channel creation
@@ -331,8 +377,18 @@ export const structure: DesiredStructure = {
       type: 'forum',
       category: 'Community',
       forum: {
-        tags: [],
-        postGuidelines: 'TODO(copy): showcase guidelines — screenshots, builds, art.',
+        tags: [
+          { name: 'Character', emojiName: '🧑' },
+          { name: 'World', emojiName: '🗺️' },
+          { name: 'Art', emojiName: '🎨' },
+          { name: 'Pack', emojiName: '📦' },
+          { name: 'Video', emojiName: '🎥' },
+        ],
+        postGuidelines:
+          'Share your characters, worlds, art, and builds. One post per creation — screenshots or clips welcome.',
+        // Set manually in Discord's UI (not part of the original plan) —
+        // declared here so a future sync doesn't wipe it back to none.
+        defaultReaction: '💪',
         defaultLayout: 'gallery',
       },
     },
@@ -340,7 +396,7 @@ export const structure: DesiredStructure = {
       name: 'off-topic',
       type: 'text',
       category: 'Community',
-      topic: 'TODO(copy): off-topic chat topic.',
+      topic: 'Anything not about Aikami.',
     },
     // Voice channels have no # prefix in TASK 2's channel table (that's a
     // display convention, not a rename instruction) — kept at their live
@@ -350,20 +406,20 @@ export const structure: DesiredStructure = {
       name: 'Lounge',
       type: 'voice',
       category: 'Community',
-      topic: 'TODO(copy): lounge voice topic.',
+      topic: 'Casual voice hangout.',
     },
     {
       name: 'Meeting Room',
       type: 'voice',
       category: 'Community',
-      topic: 'TODO(copy): meeting-room voice topic.',
+      topic: 'Voice channel for scheduled meetings and pairing sessions.',
     },
     // ── Build & play ────────────────────────────────────────────────
     {
       name: 'faq',
       type: 'text',
       category: 'Build & play',
-      topic: 'TODO(copy): FAQ topic.',
+      topic: 'Frequently asked questions — read-only, curated by staff.',
       permissionOverwrites: [{ role: '@everyone', deny: ['SendMessages'] }],
     },
     // Renamed from "bugs-features-requests" in Task 1. Keeps the three
@@ -380,8 +436,11 @@ export const structure: DesiredStructure = {
           { name: 'Content', emojiName: '🎨' },
           { name: 'Solved', emojiName: '✅', moderated: true },
         ],
-        postGuidelines: 'TODO(copy): support forum post guidelines.',
-        defaultReaction: '👍',
+        postGuidelines:
+          'Bug reports, feature requests, and questions. One thread per topic. Include steps to reproduce for bugs. A moderator will follow up.',
+        // Set manually in Discord's UI (was 👍) — declared here so a future
+        // sync doesn't revert it.
+        defaultReaction: '✅',
         defaultLayout: 'list',
         defaultSortOrder: 'latestActivity',
       },
@@ -401,7 +460,7 @@ export const structure: DesiredStructure = {
       name: 'dev',
       type: 'text',
       category: 'Developers',
-      topic: 'TODO(copy): dev chat topic.',
+      topic: 'Development discussion for contributors.',
       permissionOverwrites: [
         { role: '@everyone', deny: ['ViewChannel'] },
         { role: 'Developer', allow: ['ViewChannel'] },
@@ -415,7 +474,7 @@ export const structure: DesiredStructure = {
       name: 'pull-requests',
       type: 'text',
       category: 'Developers',
-      topic: 'TODO(copy): pull-requests firehose topic.',
+      topic: 'Live PR firehose from GitHub — read-only.',
       permissionOverwrites: [
         { role: '@everyone', deny: ['ViewChannel'] },
         { role: 'Developer', allow: ['ViewChannel'], deny: ['SendMessages'] },
@@ -431,7 +490,7 @@ export const structure: DesiredStructure = {
       name: 'merged',
       type: 'text',
       category: 'Developers',
-      topic: 'TODO(copy): merged-PR firehose topic.',
+      topic: 'Merged PRs — what shipped, and when.',
       permissionOverwrites: [
         { role: '@everyone', deny: ['ViewChannel'] },
         { role: 'Developer', allow: ['ViewChannel'], deny: ['SendMessages'] },
@@ -445,7 +504,7 @@ export const structure: DesiredStructure = {
       name: 'releases-staging',
       type: 'text',
       category: 'Developers',
-      topic: 'TODO(copy): pre-release build announcements topic.',
+      topic: 'Pre-release desktop builds for beta testers — things here might be broken.',
       permissionOverwrites: [
         { role: '@everyone', deny: ['ViewChannel'] },
         { role: 'Beta Tester', allow: ['ViewChannel'] },
@@ -459,7 +518,7 @@ export const structure: DesiredStructure = {
       name: 'staff',
       type: 'text',
       category: 'Staff',
-      topic: 'TODO(copy): staff chat + alerts topic.',
+      topic: 'Staff-only chat and moderation alerts.',
       permissionOverwrites: [
         { role: '@everyone', deny: ['ViewChannel'] },
         { role: 'Moderator', allow: ['ViewChannel', 'SendMessages'] },
@@ -474,7 +533,7 @@ export const structure: DesiredStructure = {
       name: 'admin',
       type: 'text',
       category: 'Staff',
-      topic: 'TODO(copy): admin-only topic.',
+      topic: 'Admin-only.',
       permissionOverwrites: [
         { role: '@everyone', deny: ['ViewChannel'] },
         { role: 'Admin', allow: ['ViewChannel'] },
@@ -497,12 +556,10 @@ export const structure: DesiredStructure = {
       mentionRaidProtection: true,
       actions: [{ type: 'blockMessage' }, { type: 'alert', channel: 'staff' }],
     },
-    {
-      name: 'Blocked Keyword Presets',
-      trigger: 'keywordPreset',
-      presets: ['slurs', 'sexualContent'],
-      actions: [{ type: 'blockMessage' }, { type: 'alert', channel: 'staff' }],
-    },
+    // Intentionally NOT declared: a keyword-preset rule blocking Discord's
+    // built-in slurs/sexual-content wordlists. Reject on sight if it comes
+    // back in a future edit — that's a deliberate moderation-policy call,
+    // not an oversight.
     {
       name: 'Blocked Invite Links',
       trigger: 'keyword',
@@ -511,4 +568,87 @@ export const structure: DesiredStructure = {
       actions: [{ type: 'blockMessage' }, { type: 'alert', channel: 'staff' }],
     },
   ],
+  onboarding: {
+    enabled: true,
+    mode: 'advanced',
+    // 10 defaults; exactly 5 are @everyone-writable (general, showcase,
+    // off-topic, support, Lounge — the other 5 deny @everyone SendMessages
+    // above), matching Discord's "≥7 defaults, ≥5 writable" minimum with no
+    // slack to spare. If `sync --apply` for onboarding ever fails with
+    // `below_requirements`, that's the constraint to check first.
+    defaultChannels: [
+      'welcome',
+      'rules',
+      'announcements',
+      'releases',
+      'general',
+      'showcase',
+      'off-topic',
+      'faq',
+      'support',
+      'Lounge',
+    ],
+    prompts: [
+      {
+        title: 'What brings you to Aikami?',
+        singleSelect: false,
+        required: false,
+        inOnboarding: true,
+        options: [
+          {
+            emojiName: '🎮',
+            title: 'Playing the game',
+            description: "I'm here to play, and to see what other people build.",
+            roles: ['Player'],
+          },
+          {
+            emojiName: '🎨',
+            title: 'Making content',
+            description: 'Characters, worlds, art, packs for the hub.',
+            roles: ['Creator'],
+            channels: ['showcase'],
+          },
+          {
+            emojiName: '💻',
+            title: 'Building Aikami',
+            description: 'Reading and writing the code.',
+            roles: ['Developer'],
+            channels: ['dev', 'pull-requests', 'merged'],
+          },
+        ],
+      },
+      {
+        title: 'Want a ping when a build ships?',
+        singleSelect: true,
+        required: false,
+        inOnboarding: true,
+        options: [
+          {
+            emojiName: '🔔',
+            title: 'Stable releases',
+            description: 'A ping when a desktop build goes out.',
+            roles: ['Release Pings'],
+            channels: ['releases'],
+          },
+          {
+            emojiName: '🧪',
+            title: 'Stable and pre-release',
+            description: 'Everything, including the builds that might be broken.',
+            roles: ['Release Pings', 'Beta Tester'],
+            channels: ['releases', 'releases-staging'],
+          },
+        ],
+      },
+    ],
+  },
+  welcomeScreen: {
+    description: 'An open-source, AI-native RPG. Plays offline. Yours to modify.',
+    channels: [
+      { channel: 'welcome', description: 'Start here', emojiName: '👋' },
+      { channel: 'rules', description: 'Six lines', emojiName: '📜' },
+      { channel: 'general', description: 'Say hello', emojiName: '💬' },
+      { channel: 'showcase', description: 'See what people made', emojiName: '🖼️' },
+      { channel: 'support', description: 'Bugs, ideas, questions', emojiName: '🐛' },
+    ],
+  },
 };

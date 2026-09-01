@@ -52,6 +52,8 @@ const format = (value: unknown): string => {
   return String(value);
 };
 
+export type TauriTestViewModelOptions = BaseDevViewModelOptions;
+
 export type TauriTestViewModelInterface = BaseDevViewModelInterface & {
   readonly groups: ProbeGroup[];
   readonly running: boolean;

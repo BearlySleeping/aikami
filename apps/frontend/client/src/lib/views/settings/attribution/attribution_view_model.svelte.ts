@@ -124,4 +124,6 @@ class AttributionViewModel
   }
 }
 
-export { AttributionViewModel };
+export const getAttributionViewModel = (
+  options: AttributionViewModelOptions,
+): AttributionViewModelInterface => AttributionViewModel.create(options);

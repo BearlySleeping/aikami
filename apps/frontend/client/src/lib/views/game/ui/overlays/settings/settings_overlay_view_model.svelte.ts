@@ -26,6 +26,8 @@ import { gameOverlayService } from '$services';
 // Types
 // ---------------------------------------------------------------------------
 
+export type SettingsOverlayViewModelOptions = BaseViewModelOptions;
+
 export type SettingsOverlayTab = 'controls' | 'audio' | 'display';
 
 // ---------------------------------------------------------------------------

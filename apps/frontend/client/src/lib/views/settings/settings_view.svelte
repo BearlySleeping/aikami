@@ -46,11 +46,10 @@ const iconMap: Record<string, string> = {
 
 const getIconPath = (icon: string): string => iconMap[icon] ?? iconMap.cog;
 
-// ── Auto-focus search on mount ──
-function focusOnMount(node: HTMLInputElement): { destroy: () => void } {
+const focusOnMount = (node: HTMLInputElement): { destroy: () => void } => {
   node.focus();
   return { destroy: () => {} };
-}
+};
 </script>
 
 <BaseViewModelContainer {viewModel} class="min-h-screen bg-base-200">

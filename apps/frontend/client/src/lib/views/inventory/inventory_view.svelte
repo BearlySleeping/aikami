@@ -14,7 +14,6 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
-/** Paperdoll grid placement per slot (3-column grid, 3 rows). */
 const SLOT_GRID_CLASS: Record<EquipmentSlot, string> = {
   head: 'col-start-2 row-start-1',
   leftHand: 'col-start-1 row-start-2',
@@ -23,11 +22,10 @@ const SLOT_GRID_CLASS: Record<EquipmentSlot, string> = {
   feet: 'col-start-2 row-start-3',
 };
 
-/** Focus action: focuses the element when it mounts. */
-function focusOnMount(node: HTMLElement): { destroy: () => void } {
+const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
   node.focus();
   return { destroy: () => {} };
-}
+};
 </script>
 <BaseViewModelContainer {viewModel}>
   <div

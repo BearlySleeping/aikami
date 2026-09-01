@@ -11,7 +11,7 @@ import {
 import { LpcAnimationState } from '@aikami/lpc';
 import type { ItemDefinition } from '@aikami/types';
 import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import { gameOverlayService, vendorService } from '$services';
+import { gameModeService, gameOverlayService, vendorService } from '$services';
 import type { VendorSessionOptions as _VendorSessionOptions } from '$types';
 
 // Re-export for consumers
@@ -56,6 +56,8 @@ export type VendorViewModelInterface = BaseViewModelInterface & {
   expandHagglePanel(): void;
   /** Resolves content-pack art URL for an item, or undefined when none (C-419 AC-4). */
   getItemArtUrl(itemId: string): string | undefined;
+  /** Current game mode (for autofocus logic). */
+  readonly currentMode: string;
 };
 
 export type VendorViewModelOptions = BaseViewModelOptions & _VendorSessionOptions;
@@ -75,6 +77,10 @@ class VendorViewModel
       vendorName: options.vendorName,
       vendorInventory: options.vendorInventory,
     });
+  }
+
+  get currentMode(): string {
+    return gameModeService.currentMode;
   }
 
   get vendorName(): string {

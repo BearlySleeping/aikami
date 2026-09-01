@@ -14,11 +14,11 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ImageEngineId, ImageType } from '@aikami/types';
-import { getConfiguredImageEngineId } from '$lib/services/image/engine/image_engine_factory.svelte.ts';
-import type { ImageEngineCapabilities } from '$lib/services/image/engine/types.ts';
 import {
   type CheckpointInfo,
   compileImagePrompt,
+  getConfiguredImageEngineId,
+  type ImageEngineCapabilities,
   imageGenerationService,
   styleProfileService,
 } from '$services';

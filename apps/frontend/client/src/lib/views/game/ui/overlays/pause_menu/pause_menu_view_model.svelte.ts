@@ -8,6 +8,8 @@ import {
 import { diceService, gameOverlayService } from '$services';
 import type { DiceHistoryEntry } from '$types';
 
+export type PauseMenuViewModelOptions = BaseViewModelOptions;
+
 export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   readonly isSaving: boolean;
   readonly saveMessage: string | undefined;

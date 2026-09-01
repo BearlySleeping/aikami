@@ -31,6 +31,13 @@ Besides the Gateway bot, this VM also runs a small Elysia HTTP server
   it shares a host with the Gateway bot instead of a separate deploy
   target. Rate-limited to one `/ask` per Discord user per 10s
   (`@aikami/utils`'s `tryReserve`, in-memory — fine for a single process).
+- `POST /notify` — TASK 4's relay ("one bot, one voice"), from
+  `@aikami/backend-discord-bot`'s `discordNotify` plugin. Lets CI (which
+  never holds `DISCORD_BOT_TOKEN`) post a message that appears as AiKami
+  Bot, by posting through the SAME live `discord.js` `Client` the Gateway
+  bot above already runs. Auth is a shared-secret HMAC
+  (`WORKER_NOTIFY_SECRET`, 5-minute replay window) — see
+  `scripts/src/lib/discord/post.ts` for the caller.
 
 Reachable at `https://worker.bearlysleeping.com`, proxied through
 Cloudflare (`worker` A record → the VM's **static** external IP
@@ -114,7 +121,7 @@ bun install
 
 Bun auto-loads `.env.{mode}` (see `.env.example` for the full key list —
 `DISCORD_BOT_TOKEN`, `GITHUB_ISSUES_TOKEN`, `OPENROUTER_API_KEY`,
-`OPENROUTER_MODEL`, `DISCORD_PUBLIC_KEY`). Generate one from the
+`OPENROUTER_MODEL`, `DISCORD_PUBLIC_KEY`, `WORKER_NOTIFY_SECRET`). Generate one from the
 SOPS-encrypted bundle (`secrets/{mode}.enc.env`, C-441) with the repo's
 standard scripts (this app is registered in
 `scripts/src/lib/deploy/deployment_config.ts`'s `APP_CONFIG` for exactly
@@ -164,9 +171,12 @@ ever sits in VM instance metadata.
 - Service account: `worker@aikami-production.iam.gserviceaccount.com` —
   `roles/secretmanager.secretAccessor` scoped to just the secrets it needs
   (`DISCORD_BOT_TOKEN`, `GITHUB_ISSUES_TOKEN`, `OPENROUTER_API_KEY`,
-  `OPENROUTER_MODEL`, `DISCORD_PUBLIC_KEY`, `WORKER_TLS_CERT`,
-  `WORKER_TLS_KEY`), `roles/artifactregistry.reader` on the
-  `aikami-worker` repo
+  `OPENROUTER_MODEL`, `DISCORD_PUBLIC_KEY`, `WORKER_NOTIFY_SECRET`,
+  `WORKER_TLS_CERT`, `WORKER_TLS_KEY`), `roles/artifactregistry.reader` on
+  the `aikami-worker` repo — a NEW secret needs an explicit
+  `gcloud secrets add-iam-policy-binding` grant to this service account, or
+  `loadEnv`'s Secret Manager fallback 403s for it in production even though
+  the secret itself exists
 - Artifact Registry: `aikami-worker` (Docker, `us-central1`)
 - Firewall: inbound `tcp:443` allowed **only** from Cloudflare's published
   IP ranges (network tag `aikami-worker`) — see "HTTP surface" above for the

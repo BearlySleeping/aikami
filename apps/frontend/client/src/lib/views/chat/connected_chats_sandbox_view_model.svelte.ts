@@ -11,7 +11,11 @@
 import { parseBridgeTags } from '@aikami/frontend/engine/sim';
 import type { NpcData } from '@aikami/types';
 import { type ChatMessage, chatService, connectedChatsService } from '$services';
-import { ChatViewModel, type ChatViewModelOptions } from './chat_view_model.svelte.ts';
+import {
+  ChatViewModel,
+  type ChatViewModelInterface,
+  type ChatViewModelOptions,
+} from './chat_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Mock data — game chat
@@ -104,6 +108,9 @@ const MOCK_OOC_REPLIES = [
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
+
+export type ConnectedChatsSandboxViewModelOptions = ChatViewModelOptions;
+export type ConnectedChatsSandboxViewModelInterface = ChatViewModelInterface;
 
 export class ConnectedChatsSandboxViewModel extends ChatViewModel {
   /** When true, uses mock replies instead of LLM. */

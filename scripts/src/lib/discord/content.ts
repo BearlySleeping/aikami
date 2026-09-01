@@ -28,9 +28,53 @@ type ContentEntry = { channel: string; body: string };
 
 // ─── Edit below this line ───────────────────────────────────────────────
 const CONTENT: ContentEntry[] = [
-  { channel: 'welcome', body: 'TODO(copy): welcome message.' },
-  { channel: 'rules', body: 'TODO(copy): six-line rules summary.' },
-  { channel: 'faq', body: 'TODO(copy): frequently asked questions.' },
+  {
+    channel: 'welcome',
+    body: [
+      '👋 **Welcome to Aikami** — an open-source, AI-native RPG that plays offline and is yours to modify.',
+      '',
+      'Start here:',
+      '📜 Read the rules in #rules',
+      '💬 Say hello in #general',
+      '🖼️ Share what you make in #showcase',
+      '🐛 Got a bug, idea, or question? Post in #support',
+      '',
+      'Enjoy your stay!',
+    ].join('\n'),
+  },
+  {
+    channel: 'rules',
+    body: [
+      '**Rules**',
+      '1. Be respectful — no harassment, hate speech, or personal attacks.',
+      '2. Keep NSFW content out of every channel.',
+      '3. No spam, self-promotion without asking, or unsolicited DMs.',
+      '4. Use the right channel — bugs/questions go in #support, chat in #general.',
+      '5. Listen to Moderators and Admins.',
+      '6. Have fun, and help others enjoy Aikami too.',
+    ].join('\n'),
+  },
+  {
+    channel: 'faq',
+    body: [
+      '**Frequently Asked Questions**',
+      '',
+      '**Is Aikami free?**',
+      "Yes — it's free and open-source.",
+      '',
+      '**Does it need an internet connection?**',
+      'No — after the first-time download it plays fully offline.',
+      '',
+      '**Can I modify it?**',
+      'Yes — the game and its content are yours to modify.',
+      '',
+      '**Where do I report a bug or request a feature?**',
+      'Post in #support — a moderator will follow up.',
+      '',
+      '**How do I get a role like Developer, Creator, or Player?**',
+      'Pick it during onboarding, or ask a moderator to update your roles.',
+    ].join('\n'),
+  },
 ];
 // ─────────────────────────────────────────────────────────────────────────
 

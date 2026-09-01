@@ -13,6 +13,9 @@ import {
   type ChatViewModelOptions,
 } from './chat_view_model.svelte.ts';
 
+export type ChatEnhancementsSandboxViewModelOptions = ChatViewModelOptions;
+export type ChatEnhancementsSandboxViewModelInterface = ChatViewModelInterface;
+
 // ── Mock data ─────────────────────────────────────────────────────────────
 
 const MOCK_MESSAGES = [
@@ -73,18 +76,15 @@ const seedAlternatives = () => {
 
 // ── Dev ViewModel ─────────────────────────────────────────────────────────
 
-export const getChatEnhancementsSandboxViewModel = (
-  options: ChatViewModelOptions,
-): ChatViewModelInterface => {
-  // Seed alternatives before creating the VM so messages getter picks them up
-  seedAlternatives();
+class ChatEnhancementsSandboxViewModel extends ChatViewModel {
+  constructor(options: ChatViewModelOptions) {
+    super(options);
+    seedAlternatives();
+  }
 
-  const vm = ChatViewModel.create(options) as ChatViewModel;
-
-  // Override initialize to skip real NPC/chat loading
-  vm.initialize = async () => {
+  override async initialize(): Promise<void> {
     // Skip real backend calls — directly set mock state
-    (vm as unknown as Record<string, unknown>).npc = {
+    (this as unknown as Record<string, unknown>).npc = {
       id: 'dev-npc-wyrm',
       name: 'Loremaster Wyrm',
       avatarUrl: 'https://placehold.co/400x400/2a1a5a/c9d8f8?text=Wyrm',
@@ -95,12 +95,11 @@ export const getChatEnhancementsSandboxViewModel = (
       background: 'Keeper of the ancient archives.',
     };
 
-    // Load mock messages into chatService
-    (vm as unknown as Record<string, unknown>).chatData = {
+    (this as unknown as Record<string, unknown>).chatData = {
       affection: 5,
       stats: {},
     };
-    (vm as unknown as Record<string, unknown>).showGreeting = false;
+    (this as unknown as Record<string, unknown>).showGreeting = false;
 
     chatService.setMessages(
       MOCK_MESSAGES.map((m) => ({
@@ -111,45 +110,39 @@ export const getChatEnhancementsSandboxViewModel = (
       })),
     );
 
-    // Override sendMessage to just append mock AI replies
-    // Override sendMessage to just append mock AI replies
-    vm.sendMessage = async (text: string) => {
-      // Add user message locally
-      chatService.addMessage({
-        id: crypto.randomUUID(),
-        text,
-        sender: 'user',
-        timestamp: new Date(),
-      });
-
-      // Clear input
-      vm.inputText = '';
-
-      // Simulate brief typing delay
-      chatService.setTyping(true);
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      chatService.setTyping(false);
-
-      // Add mock AI response
-      const mockReply =
-        'Interesting... The ancient scrolls speak of such things. Let me consult my records.';
-      chatService.appendAIMessage(mockReply);
-
-      // Feed through chunker for streaming TTS (if enabled)
-      if (vm.streamingTtsEnabled) {
-        const chunker = (
-          vm as unknown as Record<string, { feed: (t: string) => void; close: () => void }>
-        )._chunker;
-        chunker?.feed(mockReply);
-        chunker?.close();
-      }
-
-      // Don't clear draft in mock mode — keep it for draft demo
-    };
-
-    // Mock mode: skip real init
     return Promise.resolve();
-  };
+  }
 
-  return vm;
-};
+  override async sendMessage(text: string): Promise<void> {
+    // Add user message locally
+    chatService.addMessage({
+      id: crypto.randomUUID(),
+      text,
+      sender: 'user',
+      timestamp: new Date(),
+    });
+
+    this.inputText = '';
+
+    chatService.setTyping(true);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    chatService.setTyping(false);
+
+    const mockReply =
+      'Interesting... The ancient scrolls speak of such things. Let me consult my records.';
+    chatService.appendAIMessage(mockReply);
+
+    if (this.streamingTtsEnabled) {
+      const chunker = (
+        this as unknown as Record<string, { feed: (t: string) => void; close: () => void }>
+      )._chunker;
+      chunker?.feed(mockReply);
+      chunker?.close();
+    }
+  }
+}
+
+export const getChatEnhancementsSandboxViewModel = (
+  options: ChatViewModelOptions,
+): ChatViewModelInterface =>
+  ChatEnhancementsSandboxViewModel.create(options) as ChatEnhancementsSandboxViewModel;

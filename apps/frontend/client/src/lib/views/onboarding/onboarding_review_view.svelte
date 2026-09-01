@@ -13,7 +13,6 @@ import {
   getLpcPreviewViewModel,
   type LpcPreviewViewModelInterface,
 } from '$lib/views/character/lpc_preview/lpc_preview_view_model.svelte';
-import { personaCreationService } from '$services';
 import type { OnboardingCoordinatorViewModelInterface } from './onboarding_coordinator_view_model.svelte';
 
 type Props = {
@@ -31,10 +30,8 @@ onDestroy(() => {
   previewVm.dispose();
 });
 
-// Sync LPC recipes from the persona's lpcRecipe
-// Validates asset IDs against the catalog to prevent missing-asset errors.
 $effect(() => {
-  const persona = personaCreationService.persona;
+  const persona = viewModel.persona;
   if (persona?.appearance?.lpcRecipe) {
     const recipe = persona.appearance.lpcRecipe as Record<string, string>;
     const engineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'];
@@ -43,7 +40,6 @@ $effect(() => {
       .map((slot) => {
         const assetId = recipe[slot];
         const validIds = getLpcCatalog().assetIdsBySlot[slot];
-        // Fall back to default if the asset ID is not in the catalog
         const validId = validIds?.includes(assetId)
           ? assetId
           : viewModel.defaultLpcRecipe[slot as keyof typeof viewModel.defaultLpcRecipe];
@@ -59,15 +55,14 @@ $effect(() => {
   }
 });
 
-function handleAvatarUpload(event: Event) {
+const handleAvatarUpload = (event: Event) => {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (file) {
     viewModel.chatViewModel.uploadAvatar(file);
   }
-}
+};
 
-// ── Score labels (mirrors PersonaCreateViewModel) ──────────────────────
 const scoreLabels = [
   { key: 'strength' as const, label: 'STR', desc: 'Strength' },
   { key: 'dexterity' as const, label: 'DEX', desc: 'Dexterity' },
@@ -86,9 +81,9 @@ const scoreLabels = [
         <div
           class="w-48 h-48 rounded-xl bg-base-300 flex items-center justify-center overflow-hidden"
         >
-          {#if personaCreationService.avatarUrl}
+          {#if viewModel.avatarUrl}
             <Image
-              src={personaCreationService.avatarUrl}
+              src={viewModel.avatarUrl}
               alt="Persona avatar"
               class="object-cover w-full h-full"
             />
@@ -113,7 +108,7 @@ const scoreLabels = [
         </div>
 
         <!-- LPC Sprite Preview -->
-        {#if personaCreationService.persona?.appearance?.lpcRecipe}
+        {#if viewModel.persona?.appearance?.lpcRecipe}
           <div class="divider text-xs text-base-content/40 my-0">LPC Sprite</div>
           <div class="w-full">
             <LpcPreviewView viewModel={previewVm} />
@@ -130,8 +125,8 @@ const scoreLabels = [
       <div class="card-body gap-4">
         <h2 class="card-title text-lg">Persona Details</h2>
 
-        {#if personaCreationService.persona}
-          {@const p = personaCreationService.persona}
+        {#if viewModel.persona}
+          {@const p = viewModel.persona}
 
           <!-- Name -->
           <label class="form-control w-full">
@@ -396,8 +391,8 @@ const scoreLabels = [
       <div class="card-body gap-4">
         <h2 class="card-title text-lg">Ability Scores</h2>
 
-        {#if personaCreationService.persona?.abilityScores}
-          {@const scores = personaCreationService.persona.abilityScores}
+        {#if viewModel.persona?.abilityScores}
+          {@const scores = viewModel.persona.abilityScores}
           <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
             {#each scoreLabels as stat}
               <div class="form-control">

@@ -27,6 +27,8 @@ import {
 
 // ── Types ────────────────────────────────────────────────────────────────
 
+export type AutonomousSandboxViewModelOptions = BaseViewModelOptions;
+
 export type AutonomousSandboxViewModelInterface = BaseViewModelInterface & {
   // --- Reactive state ---
   readonly idleDurationMs: number;

@@ -27,7 +27,7 @@ let editNotes = $state('');
 let editVisibility = $state<'private' | 'public'>('private');
 let isSaving = $state(false);
 
-async function saveField(field: string, value: unknown) {
+const saveField = async (field: string, value: unknown) => {
   if (isSaving) {
     return;
   }
@@ -37,9 +37,9 @@ async function saveField(field: string, value: unknown) {
   } finally {
     isSaving = false;
   }
-}
+};
 
-function openEditForm(npc: NpcData) {
+const openEditForm = (npc: NpcData) => {
   editName = npc.name || '';
   editRace = npc.race || '';
   editClass = npc.class || '';
@@ -49,7 +49,7 @@ function openEditForm(npc: NpcData) {
   editNotes = npc.notes || '';
   editVisibility = npc.visibility || 'private';
   viewModel.openEditModal({ npc });
-}
+};
 
 const tabs: { key: NpcTab; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -58,7 +58,7 @@ const tabs: { key: NpcTab; label: string }[] = [
   { key: 'system', label: 'System' },
 ];
 
-function getTabCount(tab: NpcTab): number {
+const getTabCount = (tab: NpcTab): number => {
   switch (tab) {
     case 'all':
       return viewModel.systemNpcs.length + viewModel.userNpcs.length;
@@ -71,19 +71,19 @@ function getTabCount(tab: NpcTab): number {
     default:
       return 0;
   }
-}
+};
 
-function handleFileChange(event: Event) {
+const handleFileChange = (event: Event) => {
   viewModel.handleFileImport({ event });
-}
+};
 
-function handleUrlSubmit() {
+const handleUrlSubmit = () => {
   if (urlInput.trim()) {
     viewModel.handleUrlImport({ url: urlInput.trim() });
     urlInput = '';
     showUrlModal = false;
   }
-}
+};
 </script>
 
 <BaseViewModelContainer {viewModel}>

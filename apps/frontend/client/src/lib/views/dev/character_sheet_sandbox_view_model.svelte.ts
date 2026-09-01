@@ -19,6 +19,8 @@ import {
   type CharacterSheetViewModelOptions,
 } from '$views/game/dashboard/character_sheet_view_model.svelte';
 
+export type CharacterSheetSandboxViewModelOptions = CharacterSheetViewModelOptions;
+
 export type CharacterSheetSandboxViewModelInterface = CharacterSheetViewModelInterface & {
   readonly isSandbox: boolean;
 };
