@@ -4,12 +4,22 @@
     "t2": 0,
     "t3": 0
   },
+  "apps/frontend/client/src/lib/components/game/lpc_animation_debug_panel.svelte": {
+    "t1": 2,
+    "t2": 0,
+    "t3": 0
+  },
   "apps/frontend/client/src/lib/services/agent/agent_registry_storage.svelte.ts": {
     "t1": 2,
     "t2": 0,
     "t3": 0
   },
   "apps/frontend/client/src/lib/services/agent/agents/schedule_planner_agent.ts": {
+    "t1": 1,
+    "t2": 0,
+    "t3": 0
+  },
+  "apps/frontend/client/src/lib/services/assets/asset_prefetch_service.svelte.ts": {
     "t1": 1,
     "t2": 0,
     "t3": 0
@@ -54,6 +64,11 @@
     "t2": 0,
     "t3": 0
   },
+  "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": {
+    "t1": 10,
+    "t2": 0,
+    "t3": 0
+  },
   "apps/frontend/client/src/lib/services/config/runtime_config_service.svelte.ts": {
     "t1": 3,
     "t2": 0,
@@ -80,7 +95,7 @@
     "t3": 0
   },
   "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
-    "t1": 7,
+    "t1": 8,
     "t2": 0,
     "t3": 0
   },
@@ -149,6 +164,11 @@
     "t2": 0,
     "t3": 0
   },
+  "apps/frontend/client/src/lib/services/lorebook/lorebook_store.svelte.ts": {
+    "t1": 1,
+    "t2": 0,
+    "t3": 0
+  },
   "apps/frontend/client/src/lib/services/npc/npc_storage.svelte.ts": {
     "t1": 2,
     "t2": 0,
@@ -161,6 +181,11 @@
   },
   "apps/frontend/client/src/lib/test_preload.ts": {
     "t1": 1,
+    "t2": 0,
+    "t3": 0
+  },
+  "apps/frontend/client/src/lib/views/app/error/app_error_view_model.svelte.ts": {
+    "t1": 2,
     "t2": 0,
     "t3": 0
   },
@@ -220,12 +245,17 @@
     "t3": 0
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view_model.svelte.ts": {
-    "t1": 3,
+    "t1": 2,
     "t2": 0,
     "t3": 0
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts": {
     "t1": 2,
+    "t2": 0,
+    "t3": 0
+  },
+  "apps/frontend/client/src/lib/views/dev/text/text_view_model.svelte.ts": {
+    "t1": 1,
     "t2": 0,
     "t3": 0
   },
@@ -259,13 +289,18 @@
     "t2": 0,
     "t3": 0
   },
+  "apps/frontend/client/src/lib/views/settings/connection/connection_manager_view_model.svelte.ts": {
+    "t1": 1,
+    "t2": 0,
+    "t3": 0
+  },
   "apps/frontend/client/src/lib/views/vendor/vendor_view_model.dev.svelte.ts": {
     "t1": 1,
     "t2": 0,
     "t3": 0
   },
   "apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view_model.svelte.ts": {
-    "t1": 1,
+    "t1": 6,
     "t2": 0,
     "t3": 0
   },
@@ -276,6 +311,11 @@
   },
   "apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/zone-transition/+page.svelte": {
     "t1": 2,
+    "t2": 0,
+    "t3": 0
+  },
+  "apps/frontend/client/src/routes/(dev)/dev/lpc/+page.svelte": {
+    "t1": 1,
     "t2": 0,
     "t3": 0
   },

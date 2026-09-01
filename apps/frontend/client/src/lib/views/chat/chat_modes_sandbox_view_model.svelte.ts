@@ -9,12 +9,8 @@
 // Contract: C-241 Chat Modes Address System
 
 import type { NpcData } from '@aikami/types';
-import {
-  type ChatMessage,
-  chatService,
-  type TextChatMessage,
-  textGenerationService,
-} from '$services';
+import { type ChatMessage, chatService, textGenerationService } from '$services';
+import type { TextChatMessage } from '$types';
 import {
   ChatViewModel,
   type ChatViewModelInterface,

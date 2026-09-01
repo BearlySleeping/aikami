@@ -26,6 +26,7 @@
     "typecheck": "moon run :typecheck",
     "validate": "moon run :validate",
     "guard": "moon run scripts:guard",
+    "guard:all": "moon run scripts:guard-mvvm-conventions scripts:guard-service-conventions scripts:guard-image-component scripts:guard-data-plane scripts:guard-type-safety",
     "ci": "bun run validate && bun run test",
     "scripts": "bun run scripts/src/index.ts",
     "setup": "bun run scripts/src/lib/local_setup/index.ts",

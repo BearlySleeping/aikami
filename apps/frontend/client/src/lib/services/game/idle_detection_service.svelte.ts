@@ -93,35 +93,38 @@ class IdleDetectionService
     }
   }
 
-  private _handleInput = (): void => {
-    this.resetIdle();
-  };
+  private _boundHandleInput = this._handleInput.bind(this);
+  private _boundHandleVisibilityChange = this._handleVisibilityChange.bind(this);
 
-  private _handleVisibilityChange = (): void => {
+  private _handleInput(): void {
+    this.resetIdle();
+  }
+
+  private _handleVisibilityChange(): void {
     this._isPageVisible = document.visibilityState === 'visible';
     if (this._isPageVisible) {
       this.resetIdle();
     }
-  };
+  }
 
   private _bindInputEvents(): void {
     for (const event of INPUT_EVENTS) {
-      document.addEventListener(event, this._handleInput, { passive: true });
+      document.addEventListener(event, this._boundHandleInput, { passive: true });
     }
   }
 
   private _unbindInputEvents(): void {
     for (const event of INPUT_EVENTS) {
-      document.removeEventListener(event, this._handleInput);
+      document.removeEventListener(event, this._boundHandleInput);
     }
   }
 
   private _bindVisibilityChange(): void {
-    document.addEventListener('visibilitychange', this._handleVisibilityChange);
+    document.addEventListener('visibilitychange', this._boundHandleVisibilityChange);
   }
 
   private _unbindVisibilityChange(): void {
-    document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+    document.removeEventListener('visibilitychange', this._boundHandleVisibilityChange);
   }
 
   // ── Private: Idle tracking ──────────────────────────────────────────

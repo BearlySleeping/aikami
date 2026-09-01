@@ -16,7 +16,6 @@ import type { Campaign, CapabilityProfile, PackIndexEntry } from '@aikami/types'
 import { isAiTextProviderRequiredError } from '@aikami/utils';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import {
-  type AssetPrefetchPhase,
   assetPrefetchService,
   campaignService,
   equipmentService,
@@ -30,6 +29,7 @@ import {
   routerService,
   worldStateService,
 } from '$services';
+import type { AssetPrefetchPhase } from '$types';
 import { CREDIT_GROUPS, type CreditGroup } from './credits_data';
 
 // ---------------------------------------------------------------------------

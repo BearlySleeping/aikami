@@ -4,12 +4,8 @@
 // NEVER import this file from production code or non-(dev) routes.
 
 import type { NpcData } from '@aikami/types';
-import {
-  type ChatMessage,
-  chatService,
-  type TextChatMessage,
-  textGenerationService,
-} from '$services';
+import { type ChatMessage, chatService, textGenerationService } from '$services';
+import type { TextChatMessage } from '$types';
 import { ChatViewModel, type ChatViewModelOptions } from './chat_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------

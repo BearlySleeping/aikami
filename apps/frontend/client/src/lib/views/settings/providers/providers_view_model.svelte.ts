@@ -42,7 +42,8 @@ import {
   type LocalServiceDetectorInterface,
   type LocalServiceStatus,
 } from '$services';
-import { type CheckpointInfo, fetchOpenRouterModels, imageGenerationService } from '$services';
+import { fetchOpenRouterModels, imageGenerationService } from '$services';
+import type { CheckpointInfo } from '$types';
 import {
   type AuxiliaryModels,
   type GenerationParams,

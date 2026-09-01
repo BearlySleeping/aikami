@@ -53,8 +53,16 @@ function main(): void {
   const deployableSet = new Set(DEPLOYABLE_APPS);
 
   let apps: string[];
-  if (raw === 'all' || raw === '') {
+  if (raw === 'all') {
     apps = [...DEPLOYABLE_APPS];
+  } else if (raw === '') {
+    // Empty means "nothing to deploy" (e.g. resolve_deploy_apps.ts decided
+    // no app is affected by this push), NOT "deploy everything" — that
+    // used to be the default here, which is exactly backwards for an
+    // automated CI decision: an empty/unset signal should be the SAFEST
+    // outcome (skip), not the most expensive and highest-blast-radius one.
+    // Explicit "all" is still required to deploy everything.
+    apps = [];
   } else {
     const requested = raw.split(/\s+/).filter(Boolean);
     const unknown = requested.filter((a) => !deployableSet.has(a));
@@ -76,7 +84,7 @@ function main(): void {
   }
 
   log(`\n${c.bold}📋 Resolving deploy plan${c.reset}`);
-  log(`  DEPLOY_APPS: ${raw || '(empty → all)'}`);
+  log(`  DEPLOY_APPS: ${raw || '(empty → nothing)'}`);
   log(`  Resolved:    ${apps.join(', ') || '(none)'}`);
 
   const buckets: Record<string, string[]> = {

@@ -15,13 +15,13 @@ import {
 } from '@aikami/frontend/services';
 import type { ImageEngineId, ImageType } from '@aikami/types';
 import {
-  type CheckpointInfo,
   compileImagePrompt,
   getConfiguredImageEngineId,
   type ImageEngineCapabilities,
   imageGenerationService,
   styleProfileService,
 } from '$services';
+import type { CheckpointInfo } from '$types';
 
 export type { CheckpointInfo };
 

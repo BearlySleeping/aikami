@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { c, log, warn } from '../cli_utils';
 import { getScriptsEnv } from '../env/scripts_env';
 import type { AppConfig } from './deployment_config';
+import { resolveTransitiveSourcePaths } from './moon_graph';
 import { dirtyTreeHash, isVerbose, run } from './utils';
 
 // ── Upstash Redis config ─────────────────────────────────────────────────
@@ -83,6 +84,31 @@ function gitTreeHash(dirPath: string): string {
   }
 }
 
+/**
+ * Combined git tree hash across an app's own directory AND every project it
+ * transitively depends on (per moon's project graph — see moon_graph.ts).
+ *
+ * 🔴 Load-bearing. A checksum built from `config.path` alone (the app's own
+ * directory) is blind to shared-package changes: editing
+ * packages/shared/logger doesn't touch apps/frontend/hub's own git tree, so
+ * a plain per-app hash would report a cache HIT and checkDeployCache would
+ * skip the deploy — even though hub's actual build output (which bundles
+ * that package from source) would differ. apps/frontend/hub/moon.yml's
+ * `build` task input list carries a first-hand account of exactly this
+ * failure mode (a stale cache once shipped /api/logs to prod after
+ * logger_browser.ts changed) for moon's OWN build cache; this closes the
+ * same gap one layer up, for the "should we even attempt a deploy" checksum.
+ */
+function transitiveSourceHash(appPath: string): string {
+  const sourcePaths = resolveTransitiveSourcePaths(appPath);
+  // Sorted so the combined hash doesn't depend on graph traversal order.
+  const hashes = sourcePaths
+    .slice()
+    .sort()
+    .map((path) => `${path}:${gitTreeHash(path)}`);
+  return sha256(hashes.join('|'));
+}
+
 /** Generate a UTC datetime version string, chronologically orderable. */
 export function generateVersionString(): string {
   const now = new Date();
@@ -118,8 +144,9 @@ export function computeAppChecksum(
 ): string {
   const appPath = join(rootDir, config.path);
 
-  // Source code state (git captures everything under version control)
-  const sourceHash = gitTreeHash(config.path);
+  // Source code state — the app's own directory PLUS every project it
+  // transitively depends on (see transitiveSourceHash's comment above).
+  const sourceHash = transitiveSourceHash(config.path);
 
   // Dockerfile (for Docker-based apps; hosting/functions skip)
   const dockerfilePath = join(appPath, 'Dockerfile');
@@ -153,7 +180,7 @@ export function computeAppChecksum(
 
   if (isVerbose()) {
     log(`  Checksum inputs for ${appName}:`);
-    log(`    source (git tree):    ${sourceHash.slice(0, 16)}...`);
+    log(`    source (+ transitive deps): ${sourceHash.slice(0, 16)}...`);
     log(`    dirty tree:           ${dirtyHash ? `${dirtyHash.slice(0, 16)}...` : '(clean)'}`);
     log(`    dockerfile:           ${dockerfileHash.slice(0, 16)}...`);
     log(`    deploy config:        ${sha256(deployConfig).slice(0, 16)}...`);

@@ -2,6 +2,8 @@
 export { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '../data/connection_defaults.ts';
 export { INSTRUCT_TEMPLATES, type InstructTemplate } from '../data/provider_constants.ts';
 export type * from './agent_types.ts';
+export type * from './asset_prefetch.ts';
+export type * from './checkpoint.ts';
 export type * from './combat_rendering.ts';
 export type * from './compacted_campaign_summary.ts';
 export type * from './connection.ts';
@@ -22,6 +24,7 @@ export type * from './service_options.ts';
 export type * from './session.ts';
 export type * from './session_checkpoint.ts';
 export type * from './stream_orchestrator.ts';
+export type * from './text_chat.ts';
 export type * from './vendor.ts';
 export type * from './voice.ts';
 export type * from './voice_model.ts';

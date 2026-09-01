@@ -1,10 +1,30 @@
 name: Release
 
 # ── Config ──────────────────────────────────────────────────────────────
-# DEPLOY_APPS controls which apps this pipeline touches:
-#   "client-tauri"                      → desktop release only (default)
-#   "client client-tauri site hub docs" → desktop + web
-#   "all"                                → everything in DEPLOYABLE_APPS
+# DEPLOY_APPS controls which apps this pipeline touches. It is NEVER
+# hardcoded at the workflow level (a prior version defaulted to
+# "client-tauri" unconditionally, which silently kicked off a desktop
+# build even for pushes that only touched this workflow file, and had
+# nothing to do with the actual DEPLOY_APPS resolution below) — every
+# event resolves it explicitly, in resolve-plan:
+#   workflow_dispatch, apps input set  → exactly those apps (or "all")
+#   workflow_dispatch, apps input blank→ "client-tauri" (manual desktop rebuild)
+#   push (production/staging)          → moon's dependency-graph-aware
+#                                         affected-project detection
+#                                         (scripts/.../resolve_deploy_apps.ts),
+#                                         MINUS client-tauri — desktop
+#                                         releases stay deliberate, never an
+#                                         automatic side effect of a web push.
+#   release: published                 → "client-tauri" (a GitHub Release
+#                                         IS the desktop cut)
+#   any event, commit message contains
+#   `deploy[...]` (see commit_parser.ts)→ that override wins over all of the
+#                                         above. `deploy[all]`,
+#                                         `deploy[client,site]`,
+#                                         `deploy[all force]` (space- or
+#                                         comma-separated app ids, optional
+#                                         `force` token to bypass the
+#                                         checksum-cache skip).
 #
 # Triggers:
 #   release: published    → real production cut. Desktop artifacts are
@@ -17,9 +37,13 @@ name: Release
 #                            retention) — visible to the team, not the public.
 #   push: [production,
 #          staging]        → auto-deploy web apps (client, site, docs, hub),
-#                            D1 migrations, and the worker VM. Gated by path
-#                            filters. `main` is deliberately NOT a trigger —
-#                            it's the PR-review branch (CodeRabbit only
+#                            D1 migrations, and the worker VM — whichever of
+#                            those moon says are actually affected (see
+#                            resolve-plan; deliberately no workflow-level
+#                            `paths:` filter, so a shared-package change
+#                            still reaches that decision). `main` is
+#                            deliberately NOT a trigger — it's the PR-review
+#                            branch (CodeRabbit only
 #                            reviews PRs targeting main); a deploy happens by
 #                            promoting main into `production` or `staging`
 #                            (merge/PR), never on every PR merge to main.
@@ -33,11 +57,12 @@ name: Release
 #                      so every job below
 #                      is gated at the JOB level (`if: needs.resolve-plan...`)
 #                      instead of skipping steps one at a time inside a
-#                      monolithic job. Deploying only "client-tauri" (the
-#                      default) schedules NOTHING beyond the desktop jobs —
-#                      the whole point is that the rest of the stack still
-#                      deploys fine locally (`bun run deploy`) and doesn't
-#                      need to burn Action minutes on every desktop release.
+#                      monolithic job. Deploying only "client-tauri" (e.g. a
+#                      release: published run) schedules NOTHING beyond the
+#                      desktop jobs — the whole point is that the rest of
+#                      the stack still deploys fine locally (`bun run
+#                      deploy`) and doesn't need to burn Action minutes on
+#                      every desktop release.
 #   decrypt-secrets → decrypts SOPS-encrypted env files locally (C-441).
 #                      No GCP auth, no Redis relay. Each job that needs
 #                      secrets decrypts independently; the operation is
@@ -68,9 +93,6 @@ name: Release
 #   secret needed is SOPS_AGE_KEY. No GCP auth, no Redis relay, no
 #   env_share.ts.
 # ────────────────────────────────────────────────────────────────────────
-env:
-  # Default: desktop only. Overridden per-event in resolve-plan.
-  DEPLOY_APPS: "client-tauri"
 
 on:
   release:
@@ -81,14 +103,18 @@ on:
     # A deploy happens by promoting main into `production` (or `staging`),
     # via a merge/PR, same as any other push to those branches.
     branches: [production, staging]
-    paths:
-      - "apps/frontend/docs/**"
-      - "apps/frontend/site/**"
-      - "apps/frontend/hub/**"
-      - "apps/frontend/client/**"
-      - "apps/backend/worker/**"
-      - "packages/backend/database/drizzle-d1/**"
-      - ".github/workflows/release.yml"
+    # Deliberately NO `paths:` filter — a static allowlist here would
+    # undermine the whole point of resolve-plan's moon-affected detection.
+    # A shared-package-only push (packages/shared/logger, say) has to reach
+    # resolve-plan for `moon query projects --affected --downstream=deep` to
+    # even get a chance to notice every app that transitively depends on it;
+    # a path filter that only knew about apps/frontend/{docs,site,hub,client}
+    # would silently exclude exactly that case. resolve-plan itself is cheap
+    # (~15-30s) and correctly resolves to "nothing to deploy" (empty
+    # DEPLOY_APPS) for a push that touches nothing any app's build depends
+    # on, at which point every downstream job's `if:` gate skips for free —
+    # so the cost of removing this filter is one lightweight job, not a
+    # runaway pipeline.
   workflow_dispatch:
     inputs:
       mode:
@@ -163,6 +189,7 @@ jobs:
       database_migration_apps: ${{ steps.resolve.outputs.database_migration_apps }}
       mode: ${{ steps.mode.outputs.mode }}
       worker_changed: ${{ steps.worker-changed.outputs.changed }}
+      force: ${{ steps.deploy-apps.outputs.force }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -177,6 +204,11 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+        with:
+          # resolve_deploy_apps.ts shells out to `bun moon query …`, which
+          # resolves through node_modules/.bin/moon (@moonrepo/cli) — needs
+          # a real install, not just the global moon toolchain.
+          install-deps: "true"
 
       # Single source of truth for "mode" downstream jobs read via
       # `needs.resolve-plan.outputs.mode` — keep in sync with the
@@ -202,33 +234,43 @@ jobs:
           echo "  Resolved mode: $MODE"
           echo "mode=$MODE" >> "$GITHUB_OUTPUT"
 
-      - name: Set DEPLOY_APPS for push events
-        if: github.event_name == 'push'
-        shell: bash
-        env:
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.event.after }}
-        run: |
-          CHANGED=$(git diff --name-only "$BEFORE" "$AFTER" | \
-            while read -r file; do
-              case "$file" in
-                apps/frontend/docs/*)   echo "docs" ;;
-                apps/frontend/site/*)   echo "site" ;;
-                apps/frontend/hub/*)    echo "hub" ;;
-                apps/frontend/client/*) echo "client" ;;
-                packages/backend/database/drizzle-d1/*) echo "database" ;;
-              esac
-            done | sort -u | tr '\n' ' ' | sed 's/ $//')
-          if [ -n "$CHANGED" ]; then
-            echo "DEPLOY_APPS=$CHANGED" >> "$GITHUB_ENV"
-          fi
-
+      # Explicit workflow_dispatch input always wins — the person running it
+      # typed exactly what they want deployed. `force` for this path is
+      # handled downstream by the existing `inputs.force` checkbox (see
+      # FORCE_FLAG in deploy-cloudflare/deploy-desktop), not by this job's
+      # `force` output — that output is only for the commit-message override.
       - name: Set DEPLOY_APPS for workflow_dispatch
         if: github.event_name == 'workflow_dispatch' && inputs.apps != ''
         shell: bash
         env:
           APPS: ${{ inputs.apps }}
         run: echo "DEPLOY_APPS=$APPS" >> "$GITHUB_ENV"
+
+      - name: Default DEPLOY_APPS for workflow_dispatch (no apps given)
+        if: github.event_name == 'workflow_dispatch' && inputs.apps == ''
+        shell: bash
+        run: echo "DEPLOY_APPS=client-tauri" >> "$GITHUB_ENV"
+
+      # push/release: resolve_deploy_apps.ts — see the header comment block
+      # at the top of this file for the full precedence rules (commit-message
+      # `deploy[...]` override, then moon's dependency-graph-aware affected-
+      # project detection for push, then the client-tauri default for
+      # release). Writes DEPLOY_APPS to $GITHUB_ENV (consumed by the next
+      # step) and this job's `force` output.
+      - name: Resolve DEPLOY_APPS (push/release)
+        if: github.event_name == 'push' || github.event_name == 'release'
+        id: deploy-apps
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            bun scripts/src/lib/deploy/resolve_deploy_apps.ts --event=push --base="$BEFORE" --head="$AFTER"
+          else
+            bun scripts/src/lib/deploy/resolve_deploy_apps.ts --event=release
+          fi
 
       - name: Resolve deploy plan
         id: resolve
@@ -311,6 +353,10 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-environment
         with:
+          # computeAppChecksum() now shells out to `bun moon query projects`
+          # (moon_graph.ts) to fold in every project client-tauri
+          # transitively depends on — needs node_modules/.bin/moon.
+          install-deps: "true"
           sops: "true"
 
       - name: Decrypt secrets from SOPS
@@ -370,7 +416,7 @@ jobs:
           CACHED_VERSION: ${{ needs.plan-desktop.outputs.cached_version }}
           PLATFORMS: ${{ github.event.inputs.platforms }}
           BUNDLES: ${{ github.event.inputs.bundles }}
-          FORCE_FLAG: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
+          FORCE_FLAG: ${{ (github.event.inputs.force == 'true' || needs.resolve-plan.outputs.force == 'true') && '--force' || '' }}
           RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -749,7 +795,7 @@ jobs:
         shell: bash
         env:
           MODE: ${{ needs.resolve-plan.outputs.mode }}
-          FORCE_FLAG: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
+          FORCE_FLAG: ${{ (github.event.inputs.force == 'true' || needs.resolve-plan.outputs.force == 'true') && '--force' || '' }}
           CLOUDFLARE_APPS: ${{ needs.resolve-plan.outputs.cloudflare_apps }}
           CI: "true"
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -759,9 +805,13 @@ jobs:
 
   # ── D1 Database Migrations (C-436, C-394 AC-5) ─────────────────────
   # Independently invocable — never a side effect of deploying the hub.
-  # Gated on resolve-plan actually including the `database` app (only true
-  # when packages/backend/database/drizzle-d1/** changed on a push, or it
-  # was explicitly requested via workflow_dispatch `apps`/`all`).
+  # Gated on resolve-plan actually including the `database` app: true when
+  # moon considers `packages/backend/database` (moon project
+  # `backend-database`) affected by a push, or it was explicitly requested
+  # via a commit-message `deploy[...]` override or workflow_dispatch
+  # `apps`/`all`. `wrangler d1 migrations apply` is idempotent and a no-op
+  # when nothing is pending, so a broader trigger than "only the SQL
+  # migration files changed" is safe, not wasteful-in-a-harmful-way.
   deploy-database:
     name: D1 Database Migrations
     runs-on: ubuntu-latest

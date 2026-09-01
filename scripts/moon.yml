@@ -111,6 +111,7 @@ tasks:
       - 'src/lib/ops/guard_data_plane.ts'
       - '/apps/frontend/hub/src/**/*'
       - '/packages/backend/database/**/*'
+      - '!/packages/backend/database/node_modules/**'
     options:
       cache: false
       runInCI: true
@@ -175,7 +176,14 @@ tasks:
       - 'src/lib/ops/guard_type_safety.ts'
       - 'src/lib/ops/guard_type_safety_baseline.json'
       - '/apps/**/*'
+      - '!/apps/**/node_modules/**'
+      - '!/apps/**/.svelte-kit/**'
+      - '!/apps/**/dist/**'
+      - '!/apps/**/build/**'
       - '/packages/**/*'
+      - '!/packages/**/node_modules/**'
+      - '!/packages/**/dist/**'
+      - '!/packages/**/build/**'
     options:
       cache: false
       runInCI: true

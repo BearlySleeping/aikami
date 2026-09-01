@@ -11,7 +11,7 @@
 
 import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
 import type { ImageEngineId } from '@aikami/types';
-import type { ImageGenerationServiceOptions } from '$types';
+import type { CheckpointInfo, ImageGenerationServiceOptions } from '$types';
 import { configService } from '../config/config_service.svelte.ts';
 import {
   getConfiguredImageEngineId,
@@ -26,12 +26,6 @@ import type {
   ImageProgress,
   ResolvedImageEngineId,
 } from './engine/types.ts';
-
-/** Descriptor for a checkpoint/model returned by the model listing. */
-export type CheckpointInfo = {
-  readonly id: string;
-  readonly description: string;
-};
 
 type ImageGenerationResult = {
   url: string;

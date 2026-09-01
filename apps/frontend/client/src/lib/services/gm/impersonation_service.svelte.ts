@@ -12,7 +12,8 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { type TextChatMessage, textGenerationService } from '$services';
+import { textGenerationService } from '$services';
+import type { TextChatMessage } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types

@@ -10,13 +10,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import {
-  buildMusicSceneContext,
-  gameEngineService,
-  gameOverlayService,
-  musicPlayerService,
-  timeService,
-} from '$services';
+import { gameEngineService, gameOverlayService, musicPlayerService, timeService } from '$services';
+import { buildMusicSceneContext } from '$lib/utils/music_utils';
 
 // ---------------------------------------------------------------------------
 // Options

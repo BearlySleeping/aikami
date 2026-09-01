@@ -16,19 +16,7 @@ import {
 } from '@aikami/frontend/services';
 import type { AiModeResolution } from '@aikami/types';
 import { aiGatewayService } from '$services';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-/** Role of a chat message participant. */
-type ChatMessageRole = 'user' | 'assistant' | 'system';
-
-/** A single chat message in an LLM conversation. */
-export type TextChatMessage = {
-  role: ChatMessageRole;
-  content: string;
-};
+import type { TextChatMessage } from '$types';
 
 // ---------------------------------------------------------------------------
 // Service interface
