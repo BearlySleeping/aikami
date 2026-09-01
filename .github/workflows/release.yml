@@ -244,7 +244,15 @@ jobs:
         shell: bash
         env:
           APPS: ${{ inputs.apps }}
-        run: echo "DEPLOY_APPS=$APPS" >> "$GITHUB_ENV"
+        run: |
+          # `worker` isn't in DEPLOYABLE_APPS (see deployment_config.ts) —
+          # resolve_plan.ts's strict validation would hard-error on it.
+          # deploy-worker reads github.event.inputs.apps directly for its
+          # own gate (`contains(...)`), so it never needs to be in
+          # DEPLOY_APPS/resolve_plan.ts's app list at all — strip it here
+          # rather than force every manual run to remember to omit it.
+          FILTERED=$(echo "$APPS" | tr ' ' '\n' | grep -v '^worker$' | tr '\n' ' ' | sed 's/ $//')
+          echo "DEPLOY_APPS=$FILTERED" >> "$GITHUB_ENV"
 
       - name: Default DEPLOY_APPS for workflow_dispatch (no apps given)
         if: github.event_name == 'workflow_dispatch' && inputs.apps == ''
