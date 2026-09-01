@@ -858,14 +858,14 @@ jobs:
   # see scripts/src/lib/worker/deploy.ts's header comment).
   #
   # Needs a real GCP credential, unlike every other job in this workflow
-  # (C-441 removed GCP auth entirely for the SOPS-backed apps). Deliberately
-  # NOT routed through the SOPS-encrypted secrets/<mode>.enc.env bundle —
-  # same reasoning as TAURI_SIGNING_PRIVATE_KEY in deploy-desktop: this key
-  # can reprovision the VM's container, a blast radius big enough to keep it
-  # a plain GitHub Actions secret instead. Requires a repo/environment
-  # secret named GCP_SA_KEY_PRODUCTION: a GCP service-account JSON key,
-  # base64-encoded, scoped to Artifact Registry writer (aikami-worker repo,
-  # us-central1) + Compute Instance Admin on the aikami-worker VM only.
+  # (C-441 removed GCP auth entirely for the SOPS-backed apps). Routed
+  # through the SOPS-encrypted secrets/<mode>.enc.env bundle like every
+  # other deploy credential here — apps/backend/worker/.env.example's
+  # GCP_SA_KEY_JSON (base64-encoded service-account JSON, scoped to
+  # Artifact Registry Writer on the aikami-worker repo + Compute Instance
+  # Admin on the aikami-worker VM only). Decrypting it only requires the
+  # `worker` project explicitly (not part of $ALL_APPS — see resolve-plan),
+  # so it's never pulled into any other job's decrypt step.
   deploy-worker:
     name: Deploy Worker VM
     runs-on: ubuntu-latest
@@ -887,18 +887,28 @@ jobs:
         uses: ./.github/actions/setup-environment
         with:
           install-deps: "true"
+          sops: "true"
+
+      - name: Decrypt secrets from SOPS
+        shell: bash
+        env:
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict worker
 
       - name: Write GCP service-account key
         shell: bash
         env:
-          GCP_SA_KEY_PRODUCTION: ${{ secrets.GCP_SA_KEY_PRODUCTION }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
         run: |
-          if [ -z "$GCP_SA_KEY_PRODUCTION" ]; then
-            echo "❌ GCP_SA_KEY_PRODUCTION secret is not set — see this job's header comment." >&2
+          GCP_SA_KEY_JSON=$(grep '^GCP_SA_KEY_JSON=' "apps/backend/worker/.env.$MODE" | cut -d= -f2-)
+          if [ -z "$GCP_SA_KEY_JSON" ]; then
+            echo "❌ GCP_SA_KEY_JSON is empty in apps/backend/worker/.env.$MODE — see this job's header comment." >&2
             exit 1
           fi
           mkdir -p .secrets
-          echo "$GCP_SA_KEY_PRODUCTION" | base64 -d > .secrets/gcp_sa_key.production.json
+          echo "$GCP_SA_KEY_JSON" | base64 -d > ".secrets/gcp_sa_key.$MODE.json"
 
       - name: Deploy worker VM
         shell: bash

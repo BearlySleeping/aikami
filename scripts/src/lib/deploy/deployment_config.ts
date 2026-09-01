@@ -243,9 +243,20 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
           bucketName: mode === 'production' ? 'aikami-saves' : `aikami-${mode}-saves`,
         },
       ],
-      // Public catalog origin the hub reads the static index from (C-396).
-      // Injected as a plain var (not a secret) — it's a public CDN URL.
-      vars: () => ({ CATALOG_ORIGIN_URL: 'https://assets.bearlysleeping.com' }),
+      // Public catalog origin the hub reads the static index from (C-396),
+      // and the Better Auth cookie-scope domain — both plain vars (not
+      // secrets), and both public strings anyone can already see in the
+      // deployed HTML/response headers. BETTER_AUTH_COOKIE_DOMAIN used to
+      // live in secrets/{mode}.enc.env as a "secret", which (a) it never
+      // meaningfully was, and (b) didn't even work: cloudflare.ts only
+      // injects `cloudflare.vars` into the deployed Worker's runtime env —
+      // .env.{mode} feeds the Vite build only, so the "secret" value never
+      // reached the running Worker regardless of whether it was set.
+      vars: (mode) => ({
+        CATALOG_ORIGIN_URL: 'https://assets.bearlysleeping.com',
+        BETTER_AUTH_COOKIE_DOMAIN:
+          mode === 'production' ? 'bearlysleeping.com' : 'stg.bearlysleeping.com',
+      }),
       routes: {
         production: 'hub.bearlysleeping.com',
         staging: 'hub.stg.bearlysleeping.com',
