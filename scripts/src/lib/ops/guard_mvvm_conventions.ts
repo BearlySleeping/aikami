@@ -52,9 +52,12 @@
 // Usage:
 //   bun scripts/src/lib/ops/guard_mvvm_conventions.ts
 //   bun scripts/src/lib/ops/guard_mvvm_conventions.ts --update-baseline
+//   bun scripts/src/lib/ops/guard_mvvm_conventions.ts --show-all
 // Exits non-zero on any hard-rule violation, any ratchet exceeding its
 // baseline, or any ratchet improvement not yet locked in via
-// --update-baseline.
+// --update-baseline. --show-all ignores the baseline entirely (as if it
+// were empty) so every current ratchet violation prints, including ones
+// already accepted into the baseline. It never writes the baseline file.
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
@@ -424,6 +427,7 @@ if (violations.length > 0) {
 }
 
 const updateBaseline = Bun.argv.includes('--update-baseline');
+const showAll = Bun.argv.includes('--show-all');
 const ratchetFiles = [...new Set(ratchetViolations.map((v) => v.file))].sort();
 
 if (updateBaseline) {
@@ -436,7 +440,7 @@ if (updateBaseline) {
   process.exit(0);
 }
 
-const baseline = loadBaseline();
+const baseline = showAll ? {} : loadBaseline();
 const allRatchetPaths = new Set([...ratchetFiles, ...Object.keys(baseline)]);
 
 let ratchetFailed = false;

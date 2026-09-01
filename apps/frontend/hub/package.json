@@ -34,7 +34,7 @@
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.4.0",
-    "daisyui": "5.7.22",
+    "daisyui": "5.7.23",
     "playwright": "1.62.1",
     "rollup-plugin-visualizer": "7.1.1",
     "svelte": "5.57.0",

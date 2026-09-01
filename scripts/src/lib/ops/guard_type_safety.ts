@@ -32,9 +32,14 @@
 // Usage:
 //   bun run scripts/src/lib/ops/guard_type_safety.ts
 //   bun run scripts/src/lib/ops/guard_type_safety.ts --update-baseline
+//   bun run scripts/src/lib/ops/guard_type_safety.ts --show-all
 //
 // Exits non-zero on any violation (exceeds baseline) or any unlocked
-// improvement (below baseline).
+// improvement (below baseline). --show-all ignores the baseline entirely
+// (as if it were empty) so every current violation in the repo prints,
+// including ones already accepted into the baseline — useful for seeing
+// the true state of the repo, not just what changed since the last commit.
+// It never writes the baseline file.
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
@@ -223,6 +228,7 @@ const countsOf = (violations: Violation[]): RuleCounts => {
 // ── Main ─────────────────────────────────────────────────────────────────
 
 const updateBaseline = Bun.argv.includes('--update-baseline');
+const showAll = Bun.argv.includes('--show-all');
 
 const fileViolations = new Map<string, Violation[]>();
 for (const root of SCAN_ROOTS) {
@@ -253,7 +259,7 @@ if (updateBaseline) {
   process.exit(0);
 }
 
-const baseline = loadBaseline();
+const baseline = showAll ? {} : loadBaseline();
 const allPaths = new Set([...fileViolations.keys(), ...Object.keys(baseline)]);
 
 let failed = false;
