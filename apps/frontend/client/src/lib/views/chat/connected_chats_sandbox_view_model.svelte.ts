@@ -109,7 +109,9 @@ const MOCK_OOC_REPLIES = [
 // Implementation
 // ---------------------------------------------------------------------------
 
+/** Configuration inherited from the production chat ViewModel for connected-chat demos. */
 export type ConnectedChatsSandboxViewModelOptions = ChatViewModelOptions;
+/** Public chat ViewModel contract exposed by the connected-chats sandbox. */
 export type ConnectedChatsSandboxViewModelInterface = ChatViewModelInterface;
 
 export class ConnectedChatsSandboxViewModel extends ChatViewModel {

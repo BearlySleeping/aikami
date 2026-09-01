@@ -13,7 +13,9 @@ import {
   type ChatViewModelOptions,
 } from './chat_view_model.svelte.ts';
 
+/** Configuration inherited from the production chat ViewModel for the enhancements sandbox. */
 export type ChatEnhancementsSandboxViewModelOptions = ChatViewModelOptions;
+/** Public chat ViewModel contract exposed by the enhancements sandbox. */
 export type ChatEnhancementsSandboxViewModelInterface = ChatViewModelInterface;
 
 // ── Mock data ─────────────────────────────────────────────────────────────

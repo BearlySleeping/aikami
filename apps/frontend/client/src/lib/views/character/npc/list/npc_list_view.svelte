@@ -1,102 +1,27 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/character/npc/list/npc_list_view.svelte
 
-import type { NpcData } from '@aikami/types';
 import { BaseViewModelContainer, Image } from '$components';
 import t from '$i18n';
-import type { NpcListViewModelInterface, NpcTab } from './npc_list_view_model.svelte.ts';
+import type { NpcListViewModelInterface } from './npc_list_view_model.svelte.ts';
 
 type Props = {
   viewModel: NpcListViewModelInterface;
 };
 const { viewModel }: Props = $props();
-
-let fileInput: HTMLInputElement;
-let urlInput = $state('');
-let showUrlModal = $state(false);
-let showCreateModal = $state(false);
-
-// Edit modal state
-let editName = $state('');
-let editRace = $state('');
-let editClass = $state('');
-let editLevel = $state(1);
-let editOccupation = $state('');
-let editPersonality = $state('');
-let editNotes = $state('');
-let editVisibility = $state<'private' | 'public'>('private');
-let isSaving = $state(false);
-
-const saveField = async (field: string, value: unknown) => {
-  if (isSaving) {
-    return;
-  }
-  isSaving = true;
-  try {
-    await viewModel.saveNpc({ data: { [field]: value } });
-  } finally {
-    isSaving = false;
-  }
-};
-
-const openEditForm = (npc: NpcData) => {
-  editName = npc.name || '';
-  editRace = npc.race || '';
-  editClass = npc.class || '';
-  editLevel = npc.level || 1;
-  editOccupation = npc.occupation || '';
-  editPersonality = npc.personality || '';
-  editNotes = npc.notes || '';
-  editVisibility = npc.visibility || 'private';
-  viewModel.openEditModal({ npc });
-};
-
-const tabs: { key: NpcTab; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'mine', label: 'My NPCs' },
-  { key: 'public', label: 'Public' },
-  { key: 'system', label: 'System' },
-];
-
-const getTabCount = (tab: NpcTab): number => {
-  switch (tab) {
-    case 'all':
-      return viewModel.systemNpcs.length + viewModel.userNpcs.length;
-    case 'mine':
-      return viewModel.userNpcs.length;
-    case 'public':
-      return viewModel.publicNpcs.length;
-    case 'system':
-      return viewModel.systemNpcs.length;
-    default:
-      return 0;
-  }
-};
-
-const handleFileChange = (event: Event) => {
-  viewModel.handleFileImport({ event });
-};
-
-const handleUrlSubmit = () => {
-  if (urlInput.trim()) {
-    viewModel.handleUrlImport({ url: urlInput.trim() });
-    urlInput = '';
-    showUrlModal = false;
-  }
-};
 </script>
 
 <BaseViewModelContainer {viewModel}>
   <div class="p-4">
     <header class="mb-6 flex items-center justify-between">
       <h1 class="text-2xl font-bold">{t.nonPlayerCharacters()}</h1>
-      <button type="button" class="btn btn-primary" onclick={() => (showCreateModal = true)}>
+      <button type="button" class="btn btn-primary" onclick={() => viewModel.openCreateModal()}>
         Create NPC
       </button>
     </header>
 
     <div class="tabs tabs-boxed mb-4">
-      {#each tabs as tab}
+      {#each viewModel.tabs as tab}
         <button
           type="button"
           class="tab"
@@ -104,24 +29,22 @@ const handleUrlSubmit = () => {
           onclick={() => viewModel.setActiveTab(tab.key)}
         >
           {tab.label}
-          <span class="badge badge-sm ml-2">{getTabCount(tab.key)}</span>
+          <span class="badge badge-sm ml-2">{viewModel.getTabCount(tab.key)}</span>
         </button>
       {/each}
     </div>
 
     <div class="mb-4 flex gap-2">
-      <button type="button" class="btn btn-outline btn-sm" onclick={() => fileInput.click()}>
-        Import PNG/JSON
-      </button>
-      <button type="button" class="btn btn-outline btn-sm" onclick={() => (showUrlModal = true)}>
+      <label class="btn btn-outline btn-sm" for="npc-file-import"> Import PNG/JSON </label>
+      <button type="button" class="btn btn-outline btn-sm" onclick={() => viewModel.openUrlModal()}>
         Import from URL
       </button>
       <input
-        bind:this={fileInput}
+        id="npc-file-import"
         type="file"
         accept=".png,.json"
         class="hidden"
-        onchange={handleFileChange}
+        onchange={(event) => viewModel.handleFileChange({ event })}
       >
     </div>
 
@@ -181,7 +104,7 @@ const handleUrlSubmit = () => {
                 <button
                   type="button"
                   class="btn btn-xs btn-outline"
-                  onclick={() => openEditForm(npc)}
+                  onclick={() => viewModel.openEditForm({ npc })}
                 >
                   Edit
                 </button>
@@ -207,7 +130,7 @@ const handleUrlSubmit = () => {
   </div>
 
   <!-- URL Import Modal -->
-  {#if showUrlModal}
+  {#if viewModel.showUrlModal}
     <div class="modal modal-open">
       <div class="modal-box">
         <h3 class="font-bold text-lg">Import from URL</h3>
@@ -216,33 +139,35 @@ const handleUrlSubmit = () => {
           type="text"
           placeholder="https://chub.ai/characters/..."
           class="input input-bordered w-full"
-          bind:value={urlInput}
+          bind:value={viewModel.urlInput}
         >
         <div class="modal-action">
-          <button type="button" class="btn btn-ghost" onclick={() => (showUrlModal = false)}>
+          <button type="button" class="btn btn-ghost" onclick={() => viewModel.closeUrlModal()}>
             Cancel
           </button>
-          <button type="button" class="btn btn-primary" onclick={handleUrlSubmit}>Import</button>
+          <button type="button" class="btn btn-primary" onclick={() => viewModel.handleUrlSubmit()}>
+            Import
+          </button>
         </div>
       </div>
       <button
         class="modal-backdrop border-none bg-transparent p-0"
         type="button"
-        onclick={() => (showUrlModal = false)}
-        onkeydown={(e) => { if (e.key === 'Enter') { showUrlModal = false; } }}
+        onclick={() => viewModel.closeUrlModal()}
+        onkeydown={(event) => viewModel.handleUrlModalKeydown({ event })}
         aria-label="Close"
       ></button>
     </div>
   {/if}
 
   <!-- Create NPC Modal (Placeholder) -->
-  {#if showCreateModal}
+  {#if viewModel.showCreateModal}
     <div class="modal modal-open">
       <div class="modal-box">
         <h3 class="font-bold text-lg">Create New NPC</h3>
         <p class="py-4">NPC creation form coming soon!</p>
         <div class="modal-action">
-          <button type="button" class="btn btn-ghost" onclick={() => (showCreateModal = false)}>
+          <button type="button" class="btn btn-ghost" onclick={() => viewModel.closeCreateModal()}>
             Close
           </button>
         </div>
@@ -250,8 +175,8 @@ const handleUrlSubmit = () => {
       <button
         class="modal-backdrop border-none bg-transparent p-0"
         type="button"
-        onclick={() => (showCreateModal = false)}
-        onkeydown={(e) => { if (e.key === 'Enter') { showCreateModal = false; } }}
+        onclick={() => viewModel.closeCreateModal()}
+        onkeydown={(event) => viewModel.handleCreateModalKeydown({ event })}
         aria-label="Close"
       ></button>
     </div>
@@ -267,55 +192,55 @@ const handleUrlSubmit = () => {
             <span class="label-text">Name</span>
             <input
               type="text"
-              bind:value={editName}
+              bind:value={viewModel.editName}
               class="input input-bordered w-full"
-              onblur={() => saveField('name', editName)}
+              onblur={() => viewModel.saveField({ field: 'name', value: viewModel.editName })}
             >
           </label>
           <label class="form-control w-full">
             <span class="label-text">Occupation</span>
             <input
               type="text"
-              bind:value={editOccupation}
+              bind:value={viewModel.editOccupation}
               class="input input-bordered w-full"
-              onblur={() => saveField('occupation', editOccupation)}
+              onblur={() => viewModel.saveField({ field: 'occupation', value: viewModel.editOccupation })}
             >
           </label>
           <label class="form-control w-full">
             <span class="label-text">Race</span>
             <input
               type="text"
-              bind:value={editRace}
+              bind:value={viewModel.editRace}
               class="input input-bordered w-full"
-              onblur={() => saveField('race', editRace)}
+              onblur={() => viewModel.saveField({ field: 'race', value: viewModel.editRace })}
             >
           </label>
           <label class="form-control w-full">
             <span class="label-text">Class</span>
             <input
               type="text"
-              bind:value={editClass}
+              bind:value={viewModel.editClass}
               class="input input-bordered w-full"
-              onblur={() => saveField('class', editClass)}
+              onblur={() => viewModel.saveField({ field: 'class', value: viewModel.editClass })}
             >
           </label>
           <label class="form-control w-full">
             <span class="label-text">Level</span>
             <input
               type="number"
-              bind:value={editLevel}
+              bind:value={viewModel.editLevel}
               class="input input-bordered w-full"
               min="1"
               max="20"
-              onblur={() => saveField('level', editLevel)}
+              onblur={() => viewModel.saveField({ field: 'level', value: viewModel.editLevel })}
             >
           </label>
           <label class="form-control w-full">
             <span class="label-text">Visibility</span>
             <select
-              bind:value={editVisibility}
+              bind:value={viewModel.editVisibility}
               class="select select-bordered w-full"
-              onchange={() => saveField('visibility', editVisibility)}
+              onchange={() => viewModel.saveField({ field: 'visibility', value: viewModel.editVisibility })}
             >
               <option value="private">Private</option>
               <option value="public">Public</option>
@@ -324,19 +249,19 @@ const handleUrlSubmit = () => {
           <label class="form-control w-full col-span-2">
             <span class="label-text">Personality (for AI roleplay)</span>
             <textarea
-              bind:value={editPersonality}
+              bind:value={viewModel.editPersonality}
               class="textarea textarea-bordered w-full"
               rows="3"
-              onblur={() => saveField('personality', editPersonality)}
+              onblur={() => viewModel.saveField({ field: 'personality', value: viewModel.editPersonality })}
             ></textarea>
           </label>
           <label class="form-control w-full col-span-2">
             <span class="label-text">Notes</span>
             <textarea
-              bind:value={editNotes}
+              bind:value={viewModel.editNotes}
               class="textarea textarea-bordered w-full"
               rows="3"
-              onblur={() => saveField('notes', editNotes)}
+              onblur={() => viewModel.saveField({ field: 'notes', value: viewModel.editNotes })}
             ></textarea>
           </label>
         </div>
@@ -350,7 +275,7 @@ const handleUrlSubmit = () => {
         class="modal-backdrop border-none bg-transparent p-0"
         type="button"
         onclick={() => viewModel.closeEditModal()}
-        onkeydown={(e) => { if (e.key === 'Enter') { viewModel.closeEditModal(); } }}
+        onkeydown={(event) => viewModel.handleEditModalKeydown({ event })}
         aria-label="Close"
       ></button>
     </div>

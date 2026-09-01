@@ -15,9 +15,11 @@ import {
   AutoModerationRuleTriggerType,
   ChannelType,
   ForumLayoutType,
+  GuildFeature,
   GuildOnboardingMode,
   SortOrderType,
 } from 'discord-api-types/v10';
+import { resolveIds } from './resolve_ids';
 import {
   type AutoModKeywordPreset,
   type AutoModTriggerKind,
@@ -111,6 +113,7 @@ export type AutoModRuleUpdate = {
 };
 export type GuildUpdate = { changes: string[]; body: GuildUpdateBody };
 export type PositionChange = { id: string; name: string; from: number; to: number };
+/** Planned welcome-screen changes and the complete Discord update payload. */
 export type WelcomeScreenUpdate = { changes: string[]; body: WelcomeScreenBody };
 
 export type Plan = {
@@ -782,21 +785,6 @@ const ONBOARDING_MODE_MAP: Record<'default' | 'advanced', GuildOnboardingMode> =
   advanced: GuildOnboardingMode.OnboardingAdvanced,
 };
 
-function resolveIds(
-  names: string[] | undefined,
-  idByName: Map<string, string>,
-  context: string,
-  kind: 'channel' | 'role',
-): string[] {
-  return (names ?? []).map((name) => {
-    const id = idByName.get(name);
-    if (!id) {
-      throw new Error(`${context} references ${kind} "${name}", which doesn't exist live.`);
-    }
-    return id;
-  });
-}
-
 /** A prompt's structural fingerprint, WITHOUT ids — comparison only, never sent to the API. */
 function normalizedPrompt(prompt: {
   title: string;
@@ -949,6 +937,7 @@ function diffWelcomeScreen(
   desired: DesiredWelcomeScreen | undefined,
   live: WelcomeScreen,
   channelIdByName: Map<string, string>,
+  guildFeatures: GuildSettings['features'],
 ): WelcomeScreenUpdate | null {
   if (!desired) {
     return null;
@@ -985,6 +974,9 @@ function diffWelcomeScreen(
   }
   if (fingerprint(desiredChannels) !== fingerprint(live.welcome_channels ?? [])) {
     changes.push('welcome channels changed');
+  }
+  if (!guildFeatures.includes(GuildFeature.WelcomeScreenEnabled)) {
+    changes.push('welcome screen disabled');
   }
 
   return changes.length > 0 ? { changes, body } : null;
@@ -1055,6 +1047,7 @@ export function computePlan(
     desired.welcomeScreen,
     live.welcomeScreen,
     channelIdByName,
+    live.guild.features,
   );
 
   return {

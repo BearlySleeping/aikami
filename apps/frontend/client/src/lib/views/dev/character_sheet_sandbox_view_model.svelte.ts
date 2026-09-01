@@ -19,6 +19,7 @@ import {
   type CharacterSheetViewModelOptions,
 } from '$views/game/dashboard/character_sheet_view_model.svelte';
 
+/** Production character-sheet configuration reused by its mock-data sandbox. */
 export type CharacterSheetSandboxViewModelOptions = CharacterSheetViewModelOptions;
 
 export type CharacterSheetSandboxViewModelInterface = CharacterSheetViewModelInterface & {

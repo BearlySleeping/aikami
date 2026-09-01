@@ -63,11 +63,11 @@ function truncateNotes(notes: string, max = 500): string {
   return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}…`;
 }
 
-function releaseEmbed(options: {
+const releaseEmbed = (options: {
   tag: string;
   release: ReleaseInfo;
   downloadBase: string;
-}): APIEmbed {
+}): APIEmbed => {
   const { tag, release, downloadBase } = options;
   return {
     title: `Aikami ${release.name || tag} released`,
@@ -84,14 +84,18 @@ function releaseEmbed(options: {
     footer: { text: 'Aikami Desktop' },
     timestamp: new Date().toISOString(),
   };
-}
+};
 
 /**
  * Announce a published release to Discord. No-ops (returns without
  * throwing) when WORKER_NOTIFY_SECRET isn't set for `mode` — safe to call
  * unconditionally after any real release upload, CI or local.
  */
-export async function notifyDiscordRelease(tag: string, mode = 'production'): Promise<void> {
+export const notifyDiscordRelease = async (options: {
+  tag: string;
+  mode?: string;
+}): Promise<void> => {
+  const { tag, mode = 'production' } = options;
   initScriptsEnv(mode);
 
   log(`\n${c.bold}📣 Announcing ${tag} to Discord${c.reset}`);
@@ -115,7 +119,7 @@ export async function notifyDiscordRelease(tag: string, mode = 'production'): Pr
     // best-effort — this catch is for fetchRelease's gh call.
     warn(`Discord announcement skipped: ${(err as Error).message}`);
   }
-}
+};
 
 /**
  * Post a deploy-failure notification to Discord. Used by release.yml's
@@ -148,7 +152,7 @@ export const notifyDiscordFailure = async (options: {
   }
 };
 
-async function main(): Promise<void> {
+const main = async (): Promise<void> => {
   const opts = parseCliArgs(Bun.argv.slice(2), {
     tag: { type: 'string' },
     mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
@@ -173,8 +177,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  await notifyDiscordRelease(tag, opts.mode ?? 'production');
-}
+  await notifyDiscordRelease({ tag, mode: opts.mode ?? 'production' });
+};
 
 // Only run the CLI when invoked directly — notifyDiscordRelease() is also
 // imported by tauri_release.ts for the local-deploy path.

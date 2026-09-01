@@ -7,7 +7,12 @@
 // these run without any network.
 
 import { describe, expect, it } from 'bun:test';
-import { ChannelType, GuildOnboardingMode, GuildVerificationLevel } from 'discord-api-types/v10';
+import {
+  ChannelType,
+  GuildFeature,
+  GuildOnboardingMode,
+  GuildVerificationLevel,
+} from 'discord-api-types/v10';
 import { computePlan, type LiveState } from './diff';
 import type { DesiredCategory, DesiredChannel, DesiredRole } from './structure';
 import type { AutoModRule, GuildChannel, GuildSettings, Onboarding, WelcomeScreen } from './types';
@@ -33,6 +38,7 @@ const structure = (
 
 const FAKE_GUILD: GuildSettings = {
   id: 'g1',
+  features: [GuildFeature.WelcomeScreenEnabled],
   verification_level: 0,
   mfa_level: 0,
   explicit_content_filter: 0,
@@ -801,5 +807,63 @@ describe('computePlan — welcome screen', () => {
       }),
     );
     expect(plan.welcomeScreenUpdate).toBeNull();
+  });
+
+  it('plans an update when matching live welcome channels are in the opposite order', () => {
+    const plan = computePlan(
+      {
+        roles: [],
+        categories: [],
+        channels: [
+          { name: 'welcome', type: 'text' },
+          { name: 'rules', type: 'text' },
+        ],
+        welcomeScreen: {
+          description: 'Hello',
+          channels: [
+            { channel: 'welcome', description: 'Start here', emojiName: '👋' },
+            { channel: 'rules', description: 'Read the rules', emojiName: '📜' },
+          ],
+        },
+      },
+      live([textChannel('w1', 'welcome'), textChannel('r1', 'rules')], [], {
+        welcomeScreen: {
+          description: 'Hello',
+          welcome_channels: [
+            { channel_id: 'r1', description: 'Read the rules', emoji_id: null, emoji_name: '📜' },
+            { channel_id: 'w1', description: 'Start here', emoji_id: null, emoji_name: '👋' },
+          ],
+        },
+      }),
+    );
+
+    expect(plan.welcomeScreenUpdate).not.toBeNull();
+    expect(plan.welcomeScreenUpdate?.changes).toContain('welcome channels changed');
+  });
+
+  it('plans an update when a matching welcome screen is disabled', () => {
+    const plan = computePlan(
+      {
+        roles: [],
+        categories: [],
+        channels: [{ name: 'welcome', type: 'text' }],
+        welcomeScreen: {
+          description: 'Hello',
+          channels: [{ channel: 'welcome', description: 'Start here', emojiName: '👋' }],
+        },
+      },
+      live([textChannel('w1', 'welcome')], [], {
+        guild: { ...FAKE_GUILD, features: [] },
+        welcomeScreen: {
+          description: 'Hello',
+          welcome_channels: [
+            { channel_id: 'w1', description: 'Start here', emoji_id: null, emoji_name: '👋' },
+          ],
+        },
+      }),
+    );
+
+    expect(plan.welcomeScreenUpdate?.changes).toContain('welcome screen disabled');
+    expect(plan.welcomeScreenUpdate?.body.enabled).toBe(true);
   });
 });

@@ -35,6 +35,7 @@ export type EquippedItemView = {
   definition: ItemDefinition;
 };
 
+/** Base configuration used to create the inventory ViewModel. */
 export type InventoryViewModelOptions = BaseViewModelOptions;
 
 export type InventoryViewModelInterface = BaseViewModelInterface & {

@@ -10,6 +10,7 @@ import {
 } from '@aikami/frontend/services';
 import type { AssetResolver } from '@aikami/types';
 
+/** Development-route configuration used to create the LPC walk ViewModel. */
 export type LpcWalkViewModelOptions = BaseDevViewModelOptions;
 
 export type LpcWalkViewModelInterface = BaseDevViewModelInterface & {

@@ -17,6 +17,7 @@ import { buildMusicSceneContext } from '$utils/music_utils';
 // Interface
 // ---------------------------------------------------------------------------
 
+/** Base configuration used to create the music-player HUD ViewModel. */
 export type MusicPlayerViewModelOptions = BaseViewModelOptions;
 
 export type MusicPlayerViewModelInterface = BaseViewModelInterface & {

@@ -27,6 +27,7 @@ import {
 
 // ── Types ────────────────────────────────────────────────────────────────
 
+/** Base configuration used to create the autonomous-messaging sandbox ViewModel. */
 export type AutonomousSandboxViewModelOptions = BaseViewModelOptions;
 
 export type AutonomousSandboxViewModelInterface = BaseViewModelInterface & {

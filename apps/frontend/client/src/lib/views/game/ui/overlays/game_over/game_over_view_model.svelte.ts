@@ -7,6 +7,7 @@ import {
 } from '@aikami/frontend/services';
 import { combatService, gameOverlayService } from '$services';
 
+/** Base configuration used to create the game-over overlay ViewModel. */
 export type GameOverViewModelOptions = BaseViewModelOptions;
 
 export type GameOverViewModelInterface = BaseViewModelInterface & {

@@ -14,6 +14,13 @@ const UNKNOWN_WELCOME_SCREEN_CODE = 10069;
 /** A guild with no welcome screen configured yet — the state diffOnboarding/diffWelcomeScreen diff against. */
 const NOT_CONFIGURED: WelcomeScreen = { description: null, welcome_channels: [] };
 
+/**
+ * Fetches a guild's welcome screen, mapping Discord error 10069 to an unconfigured screen.
+ *
+ * @param rest Authenticated Discord REST client.
+ * @param guildId Guild whose welcome screen is requested.
+ * @returns The configured welcome screen, or an empty projection when none exists.
+ */
 export async function getWelcomeScreen(rest: REST, guildId: string): Promise<WelcomeScreen> {
   try {
     return (await rest.get(Routes.guildWelcomeScreen(guildId))) as WelcomeScreen;
@@ -25,6 +32,14 @@ export async function getWelcomeScreen(rest: REST, guildId: string): Promise<Wel
   }
 }
 
+/**
+ * Applies a guild welcome-screen update.
+ *
+ * @param rest Authenticated Discord REST client.
+ * @param guildId Guild whose welcome screen is updated.
+ * @param body Complete welcome-screen update payload.
+ * @returns Discord's updated welcome-screen representation.
+ */
 export async function updateWelcomeScreen(
   rest: REST,
   guildId: string,

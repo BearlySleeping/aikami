@@ -8,6 +8,7 @@ import {
 import { diceService, gameOverlayService } from '$services';
 import type { DiceHistoryEntry } from '$types';
 
+/** Base configuration used to create the pause-menu ViewModel. */
 export type PauseMenuViewModelOptions = BaseViewModelOptions;
 
 export type PauseMenuViewModelInterface = BaseViewModelInterface & {

@@ -14,6 +14,7 @@ import {
 } from '@aikami/frontend/services';
 import { gameOverlayService, sessionService } from '$services';
 
+/** Base configuration used to create the end-session overlay ViewModel. */
 export type EndSessionViewModelOptions = BaseViewModelOptions;
 
 export type EndSessionViewModelInterface = BaseViewModelInterface & {

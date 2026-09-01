@@ -15,11 +15,11 @@ import { Elysia } from 'elysia';
 import type { DiscordChannelKey, DiscordNotifyEnv, NotifyRequestBody } from './types';
 import { verifyNotifySignature } from './verify';
 
-function isKnownChannelKey(value: string): value is DiscordChannelKey {
-  return value in DISCORD_CHANNELS;
-}
+const isKnownChannelKey = (value: string): value is DiscordChannelKey => value in DISCORD_CHANNELS;
 
-export function discordNotify(client: Client, env: DiscordNotifyEnv) {
+/** Creates the authenticated `/notify` relay backed by an active Discord client. */
+export const discordNotify = (options: { client: Client; env: DiscordNotifyEnv }) => {
+  const { client, env } = options;
   return new Elysia().post('/notify', async ({ request, set }) => {
     // Read the exact raw bytes the caller signed — do not go through
     // Elysia's parsed `body`, which would re-serialize and break the HMAC
@@ -87,4 +87,4 @@ export function discordNotify(client: Client, env: DiscordNotifyEnv) {
       return 'failed to post';
     }
   });
-}
+};

@@ -7,16 +7,17 @@ import { verifyNotifySignature } from './verify';
 const SECRET = 'test-secret';
 const BODY = Buffer.from(JSON.stringify({ channel: 'staff', embed: { title: 'hi' } }), 'utf8');
 
-function sign(timestamp: string, rawBody: Buffer, secret = SECRET): string {
+const sign = (options: { timestamp: string; rawBody: Buffer; secret?: string }): string => {
+  const { timestamp, rawBody, secret = SECRET } = options;
   const message = Buffer.concat([Buffer.from(`${timestamp}.`, 'utf8'), rawBody]);
   return `sha256=${createHmac('sha256', secret).update(message).digest('hex')}`;
-}
+};
 
 describe('verifyNotifySignature', () => {
   it('accepts a correctly signed request within the replay window', () => {
     const now = Date.now();
     const timestamp = String(now);
-    const signature = sign(timestamp, BODY);
+    const signature = sign({ timestamp, rawBody: BODY });
 
     expect(
       verifyNotifySignature({ signature, timestamp, rawBody: BODY, secret: SECRET, now }),
@@ -26,7 +27,7 @@ describe('verifyNotifySignature', () => {
   it('rejects a signature computed with the wrong secret', () => {
     const now = Date.now();
     const timestamp = String(now);
-    const signature = sign(timestamp, BODY, 'wrong-secret');
+    const signature = sign({ timestamp, rawBody: BODY, secret: 'wrong-secret' });
 
     expect(
       verifyNotifySignature({ signature, timestamp, rawBody: BODY, secret: SECRET, now }),
@@ -36,7 +37,7 @@ describe('verifyNotifySignature', () => {
   it('rejects a signature computed over a different body (tampered payload)', () => {
     const now = Date.now();
     const timestamp = String(now);
-    const signature = sign(timestamp, BODY);
+    const signature = sign({ timestamp, rawBody: BODY });
     const tamperedBody = Buffer.from(JSON.stringify({ channel: 'admin', embed: {} }), 'utf8');
 
     expect(
@@ -53,7 +54,7 @@ describe('verifyNotifySignature', () => {
   it('rejects a timestamp older than the 5-minute replay window', () => {
     const now = Date.now();
     const timestamp = String(now - 6 * 60 * 1000);
-    const signature = sign(timestamp, BODY);
+    const signature = sign({ timestamp, rawBody: BODY });
 
     expect(
       verifyNotifySignature({ signature, timestamp, rawBody: BODY, secret: SECRET, now }),
@@ -63,7 +64,7 @@ describe('verifyNotifySignature', () => {
   it('rejects a timestamp from the future beyond the replay window (clock skew abuse)', () => {
     const now = Date.now();
     const timestamp = String(now + 6 * 60 * 1000);
-    const signature = sign(timestamp, BODY);
+    const signature = sign({ timestamp, rawBody: BODY });
 
     expect(
       verifyNotifySignature({ signature, timestamp, rawBody: BODY, secret: SECRET, now }),
@@ -73,7 +74,7 @@ describe('verifyNotifySignature', () => {
   it('accepts a timestamp right at the edge of the replay window', () => {
     const now = Date.now();
     const timestamp = String(now - 4 * 60 * 1000 - 59 * 1000); // 4m59s old
-    const signature = sign(timestamp, BODY);
+    const signature = sign({ timestamp, rawBody: BODY });
 
     expect(
       verifyNotifySignature({ signature, timestamp, rawBody: BODY, secret: SECRET, now }),
@@ -88,14 +89,14 @@ describe('verifyNotifySignature', () => {
   });
 
   it('rejects a missing timestamp header', () => {
-    const signature = sign(String(Date.now()), BODY);
+    const signature = sign({ timestamp: String(Date.now()), rawBody: BODY });
     expect(
       verifyNotifySignature({ signature, timestamp: undefined, rawBody: BODY, secret: SECRET }),
     ).toBe(false);
   });
 
   it('rejects a non-numeric timestamp', () => {
-    const signature = sign('not-a-number', BODY);
+    const signature = sign({ timestamp: 'not-a-number', rawBody: BODY });
     expect(
       verifyNotifySignature({
         signature,

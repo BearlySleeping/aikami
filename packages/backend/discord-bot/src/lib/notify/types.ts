@@ -12,6 +12,7 @@ import type { APIEmbed } from 'discord.js';
 /** Same purpose keys as @aikami/constants' DISCORD_CHANNELS — computed from it so the two can never drift apart. */
 export type DiscordChannelKey = keyof typeof DISCORD_CHANNELS;
 
+/** JSON payload accepted by the authenticated `/notify` relay. */
 export type NotifyRequestBody = {
   channel: DiscordChannelKey;
   embed: APIEmbed;
@@ -21,4 +22,5 @@ export type NotifyRequestBody = {
 
 export const DISCORD_NOTIFY_REQUIRED_ENV_KEYS = ['WORKER_NOTIFY_SECRET'] as const;
 
+/** Environment credentials required to authenticate notify relay requests. */
 export type DiscordNotifyEnv = Record<(typeof DISCORD_NOTIFY_REQUIRED_ENV_KEYS)[number], string>;

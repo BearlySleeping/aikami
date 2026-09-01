@@ -10,6 +10,13 @@ import type { REST } from '@discordjs/rest';
 import { Routes } from 'discord-api-types/v10';
 import type { Onboarding, OnboardingBody } from './types';
 
+/**
+ * Fetches a guild's current onboarding configuration.
+ *
+ * @param rest Authenticated Discord REST client.
+ * @param guildId Guild whose onboarding configuration is requested.
+ * @returns Discord's current onboarding representation.
+ */
 export async function getOnboarding(rest: REST, guildId: string): Promise<Onboarding> {
   return (await rest.get(Routes.guildOnboarding(guildId))) as Onboarding;
 }
@@ -18,6 +25,11 @@ export async function getOnboarding(rest: REST, guildId: string): Promise<Onboar
  * `PUT /guilds/{id}/onboarding` — despite the verb, this REPLACES the whole
  * onboarding config in one call (not a partial patch): `body` must be the
  * COMPLETE desired state (all prompts, all options), not just what changed.
+ *
+ * @param rest Authenticated Discord REST client.
+ * @param guildId Guild whose onboarding configuration is replaced.
+ * @param body Complete desired onboarding configuration.
+ * @returns Discord's updated onboarding representation.
  */
 export async function updateOnboarding(
   rest: REST,

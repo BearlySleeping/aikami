@@ -111,7 +111,7 @@ const checkView = (file: string): void => {
       markupForContainer,
     );
   const wrapsViewModel = directContainerPattern || guardedContainerPattern;
-  if (hasViewModelProp && renderedMarkup && !wrapsViewModel) {
+  if (hasViewModelProp && markupForContainer && !wrapsViewModel) {
     violations.push({
       file: relPath(file),
       rule: 'V1',

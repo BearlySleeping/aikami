@@ -10,6 +10,7 @@ import {
 } from '@aikami/frontend/services';
 import type { AssetResolver } from '@aikami/types';
 
+/** Development-route configuration used to create the map sandbox ViewModel. */
 export type MapSandboxRouteViewModelOptions = BaseDevViewModelOptions;
 
 export type MapSandboxRouteViewModelInterface = BaseDevViewModelInterface & {

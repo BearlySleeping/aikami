@@ -64,7 +64,7 @@ async function main(): Promise<void> {
     // Posts through the SAME live Client the Gateway bot above already
     // holds, so a relayed message appears as AiKami Bot — see TASK 4 and
     // notify/handler.ts's header comment.
-    .use(discordNotify(discordClient, notifyEnv));
+    .use(discordNotify({ client: discordClient, env: notifyEnv }));
 
   if (tls) {
     app.listen({ port, tls });

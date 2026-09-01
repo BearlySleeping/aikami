@@ -30,6 +30,7 @@ import { c, log, ok, parseCliArgs } from '../cli_utils';
 import { postToDiscord } from '../discord/post';
 import { initScriptsEnv } from '../env/scripts_env';
 
+/** Merged pull-request payload populated from GitHub Actions event fields. */
 export type MergedPrInput = {
   number: string;
   title: string;
@@ -41,27 +42,29 @@ export type MergedPrInput = {
   mergeCommitUrl: string;
 };
 
-function mergedPrEmbed(input: MergedPrInput): APIEmbed {
-  return {
-    title: `🟣 PR merged #${input.number}: ${input.title}`,
-    url: input.url,
-    color: 0x8250df,
-    fields: [
-      { name: 'Files changed', value: String(input.filesChanged), inline: true },
-      { name: 'Additions', value: `+${input.additions}`, inline: true },
-      { name: 'Deletions', value: `−${input.deletions}`, inline: true },
-      { name: 'Merge commit', value: `[view](${input.mergeCommitUrl})` },
-    ],
-    footer: { text: `@${input.author}` },
-    timestamp: new Date().toISOString(),
-  };
-}
+const mergedPrEmbed = (input: MergedPrInput): APIEmbed => ({
+  title: `🟣 PR merged #${input.number}: ${input.title}`,
+  url: input.url,
+  color: 0x8250df,
+  fields: [
+    { name: 'Files changed', value: String(input.filesChanged), inline: true },
+    { name: 'Additions', value: `+${input.additions}`, inline: true },
+    { name: 'Deletions', value: `−${input.deletions}`, inline: true },
+    { name: 'Merge commit', value: `[view](${input.mergeCommitUrl})` },
+  ],
+  footer: { text: `@${input.author}` },
+  timestamp: new Date().toISOString(),
+});
 
 /**
  * Announce a merged PR to #merged. No-ops when WORKER_NOTIFY_SECRET isn't
  * set for `mode` — same safety property as notifyDiscordRelease.
  */
-export async function notifyMergedPr(input: MergedPrInput, mode = 'production'): Promise<void> {
+export const notifyMergedPr = async (options: {
+  input: MergedPrInput;
+  mode?: string;
+}): Promise<void> => {
+  const { input, mode = 'production' } = options;
   initScriptsEnv(mode);
 
   log(`\n${c.bold}📣 Announcing merged PR #${input.number} to Discord${c.reset}`);
@@ -69,15 +72,15 @@ export async function notifyMergedPr(input: MergedPrInput, mode = 'production'):
   if (posted) {
     ok(`Posted merged PR #${input.number} to Discord.`);
   }
-}
+};
 
-async function main(): Promise<void> {
+const main = async (): Promise<void> => {
   const opts = parseCliArgs(Bun.argv.slice(2), {
     mode: { type: 'string', map: { prod: 'production', stg: 'staging' } },
   });
 
-  await notifyMergedPr(
-    {
+  await notifyMergedPr({
+    input: {
       number: process.env.GH_NUMBER ?? '?',
       title: process.env.GH_TITLE ?? '(untitled)',
       url: process.env.GH_URL ?? '',
@@ -87,9 +90,9 @@ async function main(): Promise<void> {
       deletions: Number(process.env.GH_DELETIONS ?? '0'),
       mergeCommitUrl: process.env.GH_MERGE_COMMIT_URL ?? '',
     },
-    opts.mode ?? 'production',
-  );
-}
+    mode: opts.mode ?? 'production',
+  });
+};
 
 if (import.meta.main) {
   await main();

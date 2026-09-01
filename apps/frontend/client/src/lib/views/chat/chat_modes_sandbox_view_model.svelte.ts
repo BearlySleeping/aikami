@@ -93,7 +93,9 @@ const MOCK_BOT_REPLIES = [
 // Implementation
 // ---------------------------------------------------------------------------
 
+/** Configuration inherited from the production chat ViewModel for the modes sandbox. */
 export type ChatModesSandboxViewModelOptions = ChatViewModelOptions;
+/** Public chat ViewModel contract exposed by the modes sandbox. */
 export type ChatModesSandboxViewModelInterface = ChatViewModelInterface;
 
 export class ChatModesSandboxViewModel extends ChatViewModel {

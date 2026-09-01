@@ -190,6 +190,7 @@ export type DesiredAutoModRule = {
   actions: DesiredAutoModAction[];
 };
 
+/** A selectable onboarding answer and the access it grants. */
 export type DesiredOnboardingOption = {
   /** Unicode emoji shown next to the option, e.g. '🎮'. */
   emojiName: string;
@@ -201,6 +202,7 @@ export type DesiredOnboardingOption = {
   channels?: string[];
 };
 
+/** A question presented to new members during guild onboarding. */
 export type DesiredOnboardingPrompt = {
   title: string;
   /** Members may pick only one option. Defaults to false (multi-select). */
@@ -212,6 +214,7 @@ export type DesiredOnboardingPrompt = {
   options: DesiredOnboardingOption[];
 };
 
+/** Declarative guild onboarding configuration. */
 export type DesiredOnboarding = {
   enabled: boolean;
   /** 'default' counts only defaultChannels toward Discord's eligibility requirements; 'advanced' also counts prompts. */
@@ -221,6 +224,7 @@ export type DesiredOnboarding = {
   prompts: DesiredOnboardingPrompt[];
 };
 
+/** A channel featured on the guild welcome screen. */
 export type DesiredWelcomeChannel = {
   /** Channel name. */
   channel: string;
@@ -229,6 +233,7 @@ export type DesiredWelcomeChannel = {
   emojiName?: string;
 };
 
+/** Declarative guild welcome-screen content and channel order. */
 export type DesiredWelcomeScreen = {
   description: string;
   channels: DesiredWelcomeChannel[];
@@ -645,7 +650,7 @@ export const structure: DesiredStructure = {
     description: 'An open-source, AI-native RPG. Plays offline. Yours to modify.',
     channels: [
       { channel: 'welcome', description: 'Start here', emojiName: '👋' },
-      { channel: 'rules', description: 'Six lines', emojiName: '📜' },
+      { channel: 'rules', description: 'Read the rules', emojiName: '📜' },
       { channel: 'general', description: 'Say hello', emojiName: '💬' },
       { channel: 'showcase', description: 'See what people made', emojiName: '🖼️' },
       { channel: 'support', description: 'Bugs, ideas, questions', emojiName: '🐛' },

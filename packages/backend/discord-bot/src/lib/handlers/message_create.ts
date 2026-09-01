@@ -16,7 +16,7 @@
 // conversational reply, so a user can't dodge the limit by mixing the two.
 
 import { logger } from '@aikami/logger';
-import { tryReserve } from '@aikami/utils/rate_limit';
+import { toAppErrorFromUnknownError, tryReserve } from '@aikami/utils';
 import type { Client, Message, ThreadChannel } from 'discord.js';
 import { askProjectAi, summarizeThreadAsIssue, type ThreadMessage } from '../ai_chat';
 import {
@@ -124,11 +124,13 @@ async function handleConversationalReply(
 }
 
 /** Strips every `@mention` token so the LLM sees a clean question, not raw `<@123>` markup. */
-function stripMentions(content: string): string {
-  return content.replaceAll(/<@!?\d+>/g, '').trim();
-}
+const stripMentions = (content: string): string => content.replaceAll(/<@!?\d+>/g, '').trim();
 
-async function handlePlainMentionReply(message: Message, env: DiscordBotEnv): Promise<void> {
+const handlePlainMentionReply = async (options: {
+  message: Message;
+  env: DiscordBotEnv;
+}): Promise<void> => {
+  const { message, env } = options;
   // Same cooldown BUCKET as the forum's conversational reply (not a
   // separate one) — a user mentioning the bot in #general right after
   // replying to it in a #support thread shouldn't get two free answers.
@@ -143,13 +145,12 @@ async function handlePlainMentionReply(message: Message, env: DiscordBotEnv): Pr
       model: env.OPENROUTER_MODEL,
     });
     await message.reply(answer);
-  } catch (err) {
-    logger.error(
-      `discord-bot/message_create: plain-mention reply failed: ${(err as Error).message}`,
-    );
+  } catch (error) {
+    const appError = toAppErrorFromUnknownError(error);
+    logger.error(`discord-bot/message_create: plain-mention reply failed: ${appError.message}`);
     await message.reply("Sorry, I couldn't get an answer — try again in a bit.");
   }
-}
+};
 
 export async function handleMessageCreate(
   message: Message,
@@ -189,6 +190,6 @@ export async function handleMessageCreate(
 
   // Anywhere else the bot can read: a plain @mention gets a grounded reply.
   if (botId && message.mentions.users.has(botId)) {
-    await handlePlainMentionReply(message, env);
+    await handlePlainMentionReply({ message, env });
   }
 }

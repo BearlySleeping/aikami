@@ -32,6 +32,7 @@ import { CHANNEL_TYPE_MAP, computePlan, planIsEmpty } from './diff';
 import { getGuild, updateGuild } from './guild';
 import { getOnboarding, updateOnboarding } from './onboarding';
 import { updateChannelPositions, updateRolePositions } from './positions';
+import { resolveIds } from './resolve_ids';
 import { createRole, deleteRole, listRoles, updateRole } from './roles';
 import {
   type DesiredAutoModRule,
@@ -131,21 +132,6 @@ const ONBOARDING_MODE_TO_API: Record<'default' | 'advanced', GuildOnboardingMode
   advanced: GuildOnboardingMode.OnboardingAdvanced,
 };
 
-function resolveNames(
-  names: string[] | undefined,
-  idByName: Map<string, string>,
-  context: string,
-  kind: 'channel' | 'role',
-): string[] {
-  return (names ?? []).map((name) => {
-    const id = idByName.get(name);
-    if (!id) {
-      throw new Error(`${context} references ${kind} "${name}", which doesn't exist live.`);
-    }
-    return id;
-  });
-}
-
 /**
  * Builds the COMPLETE onboarding body `PUT /guilds/{id}/onboarding` needs
  * (it replaces the whole config, not just what changed — see diff.ts's
@@ -182,13 +168,13 @@ function buildOnboardingBody(
           id: liveOption?.id ?? placeholderId(),
           title: option.title,
           description: option.description ?? null,
-          channel_ids: resolveNames(
+          channel_ids: resolveIds(
             option.channels,
             channelIdByName,
             `onboarding prompt "${prompt.title}" option "${option.title}"`,
             'channel',
           ),
-          role_ids: resolveNames(
+          role_ids: resolveIds(
             option.roles,
             roleIdByName,
             `onboarding prompt "${prompt.title}" option "${option.title}"`,
@@ -205,7 +191,7 @@ function buildOnboardingBody(
   return {
     enabled: desired.enabled,
     mode: ONBOARDING_MODE_TO_API[desired.mode],
-    default_channel_ids: resolveNames(
+    default_channel_ids: resolveIds(
       desired.defaultChannels,
       channelIdByName,
       'onboarding.defaultChannels',
@@ -481,7 +467,11 @@ export async function runSync(mode: string, options: SyncOptions): Promise<void>
   // and the welcome screen (applied further down) can reference a channel
   // created earlier in this SAME sync (e.g. #showcase), so this must
   // reflect creates, not just what was already live.
-  const channelIdByName = new Map(live.channels.map((ch) => [ch.name, ch.id]));
+  const channelIdByName = new Map(
+    live.channels
+      .filter((ch) => ch.type !== ChannelType.GuildCategory)
+      .map((ch) => [ch.name, ch.id]),
+  );
 
   for (const channel of plan.createChannels) {
     const forumFields = buildForumFields(channel, new Map());

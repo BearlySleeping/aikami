@@ -17,20 +17,25 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 /** Requests older (or newer — clock skew) than this are rejected, even with a valid signature. */
 const REPLAY_WINDOW_MS = 5 * 60 * 1000;
 
-function computeSignature(options: { timestamp: string; rawBody: Buffer; secret: string }): string {
+const computeSignature = (options: {
+  timestamp: string;
+  rawBody: Buffer;
+  secret: string;
+}): string => {
   const { timestamp, rawBody, secret } = options;
   const message = Buffer.concat([Buffer.from(`${timestamp}.`, 'utf8'), rawBody]);
   return `sha256=${createHmac('sha256', secret).update(message).digest('hex')}`;
-}
+};
 
-export function verifyNotifySignature(options: {
+/** Verifies relay authenticity and rejects signatures outside the replay window. */
+export const verifyNotifySignature = (options: {
   signature: string | undefined;
   timestamp: string | undefined;
   rawBody: Buffer;
   secret: string;
   /** Injectable for tests — defaults to the real clock. */
   now?: number;
-}): boolean {
+}): boolean => {
   const { signature, timestamp, rawBody, secret, now = Date.now() } = options;
   if (!signature || !timestamp) {
     return false;
@@ -51,4 +56,4 @@ export function verifyNotifySignature(options: {
     return false;
   }
   return timingSafeEqual(expectedBuf, providedBuf);
-}
+};

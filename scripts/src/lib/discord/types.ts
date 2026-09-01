@@ -99,6 +99,7 @@ export type RoleUpdateBody = RESTPatchAPIGuildRoleJSONBody;
 export type GuildSettings = Pick<
   APIGuild,
   | 'id'
+  | 'features'
   | 'verification_level'
   | 'mfa_level'
   | 'explicit_content_filter'

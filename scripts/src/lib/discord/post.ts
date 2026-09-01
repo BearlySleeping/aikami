@@ -30,13 +30,13 @@ const REQUEST_TIMEOUT_MS = 10_000;
  * failure — never throws. Returns whether the post actually went through,
  * so a caller can decide whether to log success or just move on.
  */
-export async function postToDiscord(options: {
+export const postToDiscord = async (options: {
   channel: DiscordChannelKey;
   embed: APIEmbed;
   /** The only role this relay is allowed to @-mention — see structure.ts's "Release Pings" role. */
   roleMention?: 'releasePings';
   mode?: string;
-}): Promise<boolean> {
+}): Promise<boolean> => {
   const { channel, embed, roleMention, mode = 'production' } = options;
   initScriptsEnv(mode);
 
@@ -62,6 +62,7 @@ export async function postToDiscord(options: {
         'x-aikami-signature': signature,
       },
       body: bodyJson,
+      redirect: 'error',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!res.ok) {
@@ -72,4 +73,4 @@ export async function postToDiscord(options: {
     warn(`Discord notification skipped: ${(err as Error).message}`);
     return false;
   }
-}
+};

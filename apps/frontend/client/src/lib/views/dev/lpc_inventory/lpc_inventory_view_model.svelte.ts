@@ -47,8 +47,10 @@ const SANDBOX_BAG: ReadonlyArray<{ itemId: string; quantity: number }> = [
   { itemId: 'healthPotion', quantity: 2 },
 ] as const;
 
+/** Base configuration used to create the LPC inventory sandbox ViewModel. */
 export type LpcInventoryViewModelOptions = BaseViewModelOptions;
 
+/** Inventory ViewModel contract extended with LPC sandbox controls. */
 export type LpcInventoryViewModelInterface = InventoryViewModelInterface & {
   readonly lpcPreview: LpcPreviewViewModelInterface;
 };

@@ -416,7 +416,7 @@ export async function deployTauriRelease(
     // already succeeded — the release itself is what matters.
     if (process.env.CI !== 'true') {
       try {
-        await notifyDiscordRelease(releaseTag, mode);
+        await notifyDiscordRelease({ tag: releaseTag, mode });
       } catch (err) {
         warn(
           `Discord announcement failed (release itself is unaffected): ${(err as Error).message}`,

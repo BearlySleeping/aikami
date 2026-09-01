@@ -8,13 +8,14 @@
 // filed as posts in the #support forum instead — see
 // scripts/src/lib/discord/structure.ts — not through a slash command.
 //
-// GUILD-scoped (Routes.applicationGuildCommands), not global
-// (Routes.applicationCommands): a global command registration takes up to
+// Command registration is GUILD-scoped (Routes.applicationGuildCommands),
+// after clearing any stale global commands left by older deployments. A global
+// command registration takes up to
 // an hour to propagate everywhere, which only matters for a bot living in
 // many guilds — Aikami's bot lives in exactly one (DISCORD_GUILD_ID from
 // @aikami/constants), where a guild command propagates near-instantly
-// instead. Switch back to Routes.applicationCommands(appId) (and drop the
-// guildId argument) if this bot ever needs to serve more than one guild.
+// instead. Switch the registration PUT below to Routes.applicationCommands(appId)
+// (and drop the guildId argument) if this bot ever needs to serve more than one guild.
 //
 // Registration needs DISCORD_BOT_TOKEN + DISCORD_APP_ID — it's a PUT
 // against the application's command list for one specific guild.
@@ -53,6 +54,8 @@ export async function syncDiscordCommands(mode = 'production'): Promise<void> {
   }
 
   const rest = new REST({ version: '10' }).setToken(token);
+  // Remove stale global commands once before registering the guild-scoped source of truth.
+  await rest.put(Routes.applicationCommands(appId), { body: [] });
   // A full PUT replaces the ENTIRE guild command list with COMMANDS —
   // intentional (this file is the single source of truth for the app's
   // commands), but means any command registered outside of this file gets

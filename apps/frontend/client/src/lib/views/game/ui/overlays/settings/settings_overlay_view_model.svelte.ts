@@ -26,6 +26,7 @@ import { gameOverlayService } from '$services';
 // Types
 // ---------------------------------------------------------------------------
 
+/** Base configuration used to create the in-game settings overlay ViewModel. */
 export type SettingsOverlayViewModelOptions = BaseViewModelOptions;
 
 export type SettingsOverlayTab = 'controls' | 'audio' | 'display';
