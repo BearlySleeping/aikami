@@ -346,6 +346,9 @@ class CapabilityViewModel
         this.errorMessage = '';
       } else if (state.status === 'error') {
         this.errorMessage = state.message ?? 'Download failed';
+      } else if (state.status === 'not-downloaded') {
+        // Cancellation or idle — not an error.
+        this.errorMessage = '';
       } else {
         this.errorMessage = 'Download failed';
       }

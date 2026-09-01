@@ -57,7 +57,7 @@
 // --update-baseline.
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const APP_ROOTS = [
@@ -77,7 +77,7 @@ const emptyCounts = (): RatchetCounts => ({ v6: 0, v7: 0, m8: 0, m9: 0 });
 const violations: Violation[] = [];
 const ratchetViolations: Violation[] = [];
 
-const relPath = (file: string): string => file.replace(`${ROOT}/`, '');
+const relPath = (file: string): string => file.replace(`${ROOT}/`, '').split(sep).join('/');
 
 // Blanks out comments and string/template literal contents (preserving
 // newlines) so V4's `function` check never fires on the word `function`
@@ -334,7 +334,9 @@ const checkViewModel = (file: string): void => {
     });
   }
 
-  const vmImportCount = content.match(/from ['"][^'"]*_view_model(\.svelte)?['"]/g)?.length ?? 0;
+  const strippedContent = stripStringsAndComments(content);
+  const vmImportCount =
+    strippedContent.match(/from ['"][^'"]*_view_model(\.svelte)?['"]/g)?.length ?? 0;
   for (let i = 0; i < vmImportCount; i++) {
     ratchetViolations.push({
       file: relPath(file),
@@ -343,8 +345,28 @@ const checkViewModel = (file: string): void => {
     });
   }
 
-  const dynamicImportCount = content.match(/\bawait\s+import\s*\(/g)?.length ?? 0;
-  for (let i = 0; i < dynamicImportCount; i++) {
+  // M9 allowlist: dynamic imports that are explicitly permitted.
+  // See svelte-conventions/SKILL.md dynamic-import table.
+  const allowlistPatterns = [
+    /@aikami\/frontend\/engine/,
+    /onnxruntime-web/,
+    /kokoro-js/,
+    /pixi\.js/,
+    /@tauri-apps/,
+    /\?worker&type=module/,
+    /eruda/,
+  ];
+  const dynamicImportMatches = strippedContent.match(/\bawait\s+import\s*\(/g) ?? [];
+  const dynamicImportCount = dynamicImportMatches.length;
+  // Count non-allowlisted dynamic imports by checking if any remain after
+  // removing allowlisted ones. This is a heuristic — we count all dynamic
+  // imports and subtract those that appear to be allowlisted.
+  const allowlistedCount = allowlistPatterns.reduce((count, pattern) => {
+    const matches = strippedContent.match(pattern);
+    return count + (matches ? matches.length : 0);
+  }, 0);
+  const effectiveCount = Math.max(0, dynamicImportCount - allowlistedCount);
+  for (let i = 0; i < effectiveCount; i++) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'M9',

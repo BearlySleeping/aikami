@@ -103,7 +103,7 @@ class AISettingsService
   }
 
   get instructTemplate(): InstructTemplate {
-    return configService.state.instructTemplate as InstructTemplate;
+    return configService.state.instructTemplate;
   }
 
   get isLoaded(): boolean {

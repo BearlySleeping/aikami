@@ -12,7 +12,19 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["vite/client"]
+    "rootDir": "../../..",
+    "types": ["vite/client"],
+    "paths": {
+      "@aikami/frontend/services": ["../../frontend/services/src"],
+      "@aikami/frontend-engine": ["../../frontend/engine/src"],
+      "@aikami/frontend-configs": ["../configs/src"],
+      "@aikami/frontend/utils": ["../utils/src"],
+      "@aikami/types": ["../../shared/types/src"],
+      "@aikami/utils": ["../../shared/utils/src"],
+      "@aikami/constants": ["../../shared/constants/src"],
+      "@aikami/schemas": ["../../shared/schemas/src"],
+      "@aikami/mocks": ["../../shared/mocks/src"]
+    }
   },
   "include": ["src/**/*.d.ts", "src/**/*.ts", "src/**/*.js", "src/**/*.svelte"]
 }

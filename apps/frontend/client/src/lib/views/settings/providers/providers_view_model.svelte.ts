@@ -267,7 +267,7 @@ export class ProvidersViewModel
   }
 
   get instructTemplate(): InstructTemplate {
-    return configService.state.instructTemplate as InstructTemplate;
+    return configService.state.instructTemplate;
   }
 
   get advancedOverrides(): AdvancedOverrides {

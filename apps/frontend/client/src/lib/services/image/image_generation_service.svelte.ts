@@ -443,7 +443,7 @@ export class ImageGenerationService
    * disposed — the URL returned for the active result is revoked only by
    * the caller once it is done displaying it.
    */
-  async dispose(): Promise<void> {
+  dispose(): void {
     this._clearProgressResetTimer();
     this._revokeObjectUrls();
     this._abortController?.abort();

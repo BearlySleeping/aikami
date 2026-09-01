@@ -19,7 +19,7 @@ type Props = {
   /** Rendered rows, keyed by id. */
   messages: RichMessage[];
   /** Renders a single message row. */
-  renderRow: (message: RichMessage, index: number) => Snippet<[]>;
+  renderRow: Snippet<[message: RichMessage, index: number]>;
   /** Content rendered before the messages, inside the scroll container. */
   before?: Snippet<[]>;
   /** Content rendered after the messages, inside the scroll container. */

@@ -45,9 +45,16 @@ export const fetchOpenRouterModels = async (apiKey: string): Promise<OpenRouterM
   if (cached) {
     return cached;
   }
-  const models = await fetchOpenRouterModelsUncached(apiKey);
-  _writeCache(models);
-  return models;
+  try {
+    const models = await fetchOpenRouterModelsUncached(apiKey);
+    _writeCache(models);
+    return models;
+  } catch {
+    // Let the caller surface the error in the UI.
+    throw new Error(
+      'Failed to fetch OpenRouter models. Check your API key and network connection.',
+    );
+  }
 };
 
 /** Clears the browser-local OpenRouter model cache. */

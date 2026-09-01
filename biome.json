@@ -217,6 +217,10 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
+                "paths": {
+                  "@sinclair/typebox": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas",
+                  "zod": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas"
+                },
                 "patterns": [
                   {
                     "group": [
@@ -229,6 +233,28 @@
                       "@aikami/frontend-*"
                     ],
                     "message": "Server-plane code must not import frontend modules."
+                  },
+                  {
+                    "group": [
+                      "@aikami/backend-*",
+                      "@aikami/backend-*/**",
+                      "!@aikami/backend-project-ai",
+                      "!@aikami/backend-project-ai/**",
+                      "!@aikami/backend-database",
+                      "!@aikami/backend-database/**",
+                      "!@aikami/backend-discord-bot",
+                      "!@aikami/backend-discord-bot/**"
+                    ],
+                    "message": "Use @aikami/backend/<name> instead (e.g. @aikami/backend/auth)"
+                  },
+                  {
+                    "group": [
+                      "@aikami/frontend-*",
+                      "@aikami/frontend-*/**",
+                      "!@aikami/frontend-preview",
+                      "!@aikami/frontend-preview/**"
+                    ],
+                    "message": "Use @aikami/frontend/<name> instead (e.g. @aikami/frontend/configs)"
                   }
                 ]
               }
@@ -264,6 +290,10 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
+                "paths": {
+                  "@sinclair/typebox": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas",
+                  "zod": "Define schemas in packages/shared/schemas/ and import from @aikami/schemas"
+                },
                 "patterns": [
                   {
                     "group": ["node:*", "node:*/**"],
@@ -272,6 +302,28 @@
                   {
                     "group": ["@aikami/backend/**", "@aikami/backend-*"],
                     "message": "Frontend must not import backend packages — cross the boundary via HTTP or a repository."
+                  },
+                  {
+                    "group": [
+                      "@aikami/backend-*",
+                      "@aikami/backend-*/**",
+                      "!@aikami/backend-project-ai",
+                      "!@aikami/backend-project-ai/**",
+                      "!@aikami/backend-database",
+                      "!@aikami/backend-database/**",
+                      "!@aikami/backend-discord-bot",
+                      "!@aikami/backend-discord-bot/**"
+                    ],
+                    "message": "Use @aikami/backend/<name> instead (e.g. @aikami/backend/auth)"
+                  },
+                  {
+                    "group": [
+                      "@aikami/frontend-*",
+                      "@aikami/frontend-*/**",
+                      "!@aikami/frontend-preview",
+                      "!@aikami/frontend-preview/**"
+                    ],
+                    "message": "Use @aikami/frontend/<name> instead (e.g. @aikami/frontend/configs)"
                   }
                 ]
               }
