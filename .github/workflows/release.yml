@@ -7,16 +7,25 @@ name: Release
 #   "all"                                → everything in DEPLOYABLE_APPS
 #
 # Triggers:
-#   release: published  → real production cut. Desktop artifacts are
-#                          uploaded straight to the GitHub Release that
-#                          triggered this run (`gh release upload`).
-#   workflow_dispatch    → manual run (staging QA, re-deploy, force
-#                          rebuild). No public Release exists to attach to,
-#                          so desktop artifacts are attached to the
-#                          *workflow run* instead (Actions tab, 14-day
-#                          retention) — visible to the team, not the public.
-#   push: [main]         → auto-deploy docs and site (static Workers,
-#                          seconds to deploy). Gated by path filters.
+#   release: published    → real production cut. Desktop artifacts are
+#                            uploaded straight to the GitHub Release that
+#                            triggered this run (`gh release upload`).
+#   workflow_dispatch      → manual run (staging QA, re-deploy, force
+#                            rebuild). No public Release exists to attach to,
+#                            so desktop artifacts are attached to the
+#                            *workflow run* instead (Actions tab, 14-day
+#                            retention) — visible to the team, not the public.
+#   push: [production,
+#          staging]        → auto-deploy web apps (client, site, docs, hub),
+#                            D1 migrations, and the worker VM. Gated by path
+#                            filters. `main` is deliberately NOT a trigger —
+#                            it's the PR-review branch (CodeRabbit only
+#                            reviews PRs targeting main); a deploy happens by
+#                            promoting main into `production` or `staging`
+#                            (merge/PR), never on every PR merge to main.
+#                            Mode is derived from the branch name, not
+#                            hardcoded — see resolve-plan's "Resolve
+#                            deployment mode" step.
 #
 # Pipeline shape:
 #   resolve-plan     → groups DEPLOY_APPS by serviceType (desktop,
@@ -67,11 +76,18 @@ on:
   release:
     types: [published]
   push:
-    branches: [main]
+    # main is PR-review-only (CodeRabbit's base_branches in .coderabbit.yaml
+    # is main, and it can only review PRs targeting main) — it never deploys.
+    # A deploy happens by promoting main into `production` (or `staging`),
+    # via a merge/PR, same as any other push to those branches.
+    branches: [production, staging]
     paths:
       - "apps/frontend/docs/**"
       - "apps/frontend/site/**"
       - "apps/frontend/hub/**"
+      - "apps/frontend/client/**"
+      - "apps/backend/worker/**"
+      - "packages/backend/database/drizzle-d1/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
@@ -105,8 +121,8 @@ on:
 # Two independent queues, because the two trigger kinds want opposite
 # behaviour:
 #
-#   push to main  → a web deploy. Ten merges in an hour must NOT become a
-#                   multi-hour backlog of deploys that were already
+#   push to production/staging → a web deploy. Ten merges in an hour must NOT
+#                   become a multi-hour backlog of deploys that were already
 #                   superseded. Deploying an intermediate commit is pointless
 #                   when the next one lands seconds later, so cancel.
 #   release/manual → a real production cut, including desktop legs that
@@ -116,7 +132,12 @@ on:
 # Separate groups matter as much as the flag: with one shared group a routine
 # push would sit behind (or cancel) a desktop release cut.
 concurrency:
-  group: deploy-${{ github.event.inputs.mode || 'production' }}-${{ github.event_name == 'push' && 'web' || 'release' }}
+  # Mode here must be computable from workflow-trigger context alone — the
+  # `needs.resolve-plan.outputs.mode` job output isn't available yet at
+  # concurrency-evaluation time. release/workflow_dispatch match
+  # resolve-plan's own logic (production default, or the dispatch input);
+  # push derives it from the branch name, same as resolve-plan does.
+  group: deploy-${{ github.event.inputs.mode || (github.event_name == 'push' && github.ref_name == 'staging' && 'staging') || 'production' }}-${{ github.event_name == 'push' && 'web' || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
 permissions:
@@ -139,12 +160,39 @@ jobs:
       all_apps: ${{ steps.resolve.outputs.all_apps }}
       desktop_apps: ${{ steps.resolve.outputs.desktop_apps }}
       cloudflare_apps: ${{ steps.resolve.outputs.cloudflare_apps }}
+      database_migration_apps: ${{ steps.resolve.outputs.database_migration_apps }}
+      mode: ${{ steps.mode.outputs.mode }}
+      worker_changed: ${{ steps.worker-changed.outputs.changed }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+
+      # Single source of truth for "mode" downstream jobs read via
+      # `needs.resolve-plan.outputs.mode` — keep in sync with the
+      # workflow-context-only expression in the `concurrency:` group above.
+      - name: Resolve deployment mode
+        id: mode
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_MODE: ${{ github.event.inputs.mode }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            MODE="$INPUT_MODE"
+          elif [ "$EVENT_NAME" = "release" ]; then
+            MODE="production"
+          elif [ "$REF_NAME" = "production" ] || [ "$REF_NAME" = "staging" ]; then
+            MODE="$REF_NAME"
+          else
+            echo "❌ Cannot resolve a deploy mode for event=$EVENT_NAME ref=$REF_NAME" >&2
+            exit 1
+          fi
+          echo "  Resolved mode: $MODE"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
 
       - name: Set DEPLOY_APPS for push events
         if: github.event_name == 'push'
@@ -160,6 +208,7 @@ jobs:
                 apps/frontend/site/*)   echo "site" ;;
                 apps/frontend/hub/*)    echo "hub" ;;
                 apps/frontend/client/*) echo "client" ;;
+                packages/backend/database/drizzle-d1/*) echo "database" ;;
               esac
             done | sort -u | tr '\n' ' ' | sed 's/ $//')
           if [ -n "$CHANGED" ]; then
@@ -178,6 +227,25 @@ jobs:
         shell: bash
         run: bun scripts/src/lib/deploy/resolve_plan.ts
 
+      # `worker` is `enabled: false` in deployment_config.ts (its own
+      # build→push→restart script, not the generic per-service-type
+      # pipeline resolve_plan.ts groups above) so it's never part of
+      # DEPLOY_APPS/all_apps — gate its dedicated job on a plain path check
+      # instead, same idea as the DEPLOY_APPS detection above but standalone.
+      - name: Detect worker changes (push only)
+        if: github.event_name == 'push'
+        id: worker-changed
+        shell: bash
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          if git diff --name-only "$BEFORE" "$AFTER" | grep -q '^apps/backend/worker/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # ── Download secrets: decrypt SOPS-encrypted env files (C-441) ─────
   # Every job below needs the same .env.{mode} files. With the SOPS backend,
   # decryption is a local operation — no GCP auth, no Redis relay.
@@ -189,7 +257,7 @@ jobs:
     timeout-minutes: 5
     needs: [resolve-plan]
     environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
+      name: ${{ needs.resolve-plan.outputs.mode }}
     if: needs.resolve-plan.outputs.all_apps != ''
     steps:
       - name: Checkout repository
@@ -203,7 +271,7 @@ jobs:
       - name: Decrypt secrets from SOPS
         shell: bash
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
@@ -218,7 +286,7 @@ jobs:
     timeout-minutes: 15
     needs: [resolve-plan, decrypt-secrets]
     environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
+      name: ${{ needs.resolve-plan.outputs.mode }}
     if: needs.resolve-plan.outputs.desktop_apps != ''
     outputs:
       checksum: ${{ steps.plan.outputs.checksum }}
@@ -240,7 +308,7 @@ jobs:
       - name: Decrypt secrets from SOPS
         shell: bash
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
@@ -252,7 +320,7 @@ jobs:
         shell: bash
         run: bun scripts/src/lib/deploy/ci_planning.ts --mode="$MODE"
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
 
   # ── Plan-matrix: build/skip/reuse decisions → the JSON matrix ─────
@@ -263,7 +331,7 @@ jobs:
     name: Decide Desktop Matrix
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [plan-desktop]
+    needs: [resolve-plan, plan-desktop]
     outputs:
       matrix: ${{ steps.decide.outputs.matrix }}
       needs_build: ${{ steps.decide.outputs.needs_build }}
@@ -286,7 +354,7 @@ jobs:
             --cached-version="$CACHED_VERSION" \
             --platforms="$PLATFORMS" --bundles="$BUNDLES" $FORCE_FLAG
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           CHECKSUM: ${{ needs.plan-desktop.outputs.checksum }}
           VERSION: ${{ needs.plan-desktop.outputs.version }}
           CACHED_CHECKSUM: ${{ needs.plan-desktop.outputs.cached_checksum }}
@@ -307,7 +375,7 @@ jobs:
     timeout-minutes: 30
     needs: [resolve-plan, plan-desktop, plan-matrix]
     environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
+      name: ${{ needs.resolve-plan.outputs.mode }}
     if: needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.needs_build == 'true'
     steps:
       - name: Checkout repository
@@ -325,7 +393,7 @@ jobs:
       - name: Decrypt secrets from SOPS
         shell: bash
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
@@ -335,7 +403,7 @@ jobs:
       - name: Build web bundle
         shell: bash
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           PUBLIC_APP_VERSION: ${{ needs.plan-desktop.outputs.version }}
           # MOON_TOOLCHAIN_FORCE_GLOBALS is set by setup-environment composite action.
         run: |
@@ -365,7 +433,7 @@ jobs:
     timeout-minutes: 45
     needs: [resolve-plan, plan-desktop, plan-matrix, build-web]
     environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
+      name: ${{ needs.resolve-plan.outputs.mode }}
     if: needs.plan-matrix.result == 'success' && needs.plan-matrix.outputs.matrix != '[]'
     strategy:
       fail-fast: false
@@ -466,7 +534,7 @@ jobs:
       - name: Decrypt secrets from SOPS
         shell: bash
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
@@ -493,7 +561,7 @@ jobs:
         id: run-leg
         shell: bash
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           VERSION: ${{ needs.plan-desktop.outputs.version }}
           CHECKSUM: ${{ needs.plan-desktop.outputs.checksum }}
           LEG: ${{ toJson(matrix) }}
@@ -623,7 +691,7 @@ jobs:
       - name: Decrypt secrets from SOPS
         shell: bash
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
@@ -644,7 +712,7 @@ jobs:
     timeout-minutes: 30
     needs: [resolve-plan, decrypt-secrets]
     environment:
-      name: ${{ github.event.inputs.mode || 'production' }}
+      name: ${{ needs.resolve-plan.outputs.mode }}
     if: needs.resolve-plan.outputs.cloudflare_apps != ''
     steps:
       - name: Checkout repository
@@ -662,7 +730,7 @@ jobs:
       - name: Decrypt secrets from SOPS
         shell: bash
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: |
@@ -672,7 +740,7 @@ jobs:
       - name: Run Web Deploy Pipeline (Cloudflare)
         shell: bash
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           FORCE_FLAG: ${{ github.event.inputs.force == 'true' && '--force' || '' }}
           CLOUDFLARE_APPS: ${{ needs.resolve-plan.outputs.cloudflare_apps }}
           CI: "true"
@@ -680,6 +748,103 @@ jobs:
         run: |
           bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" $FORCE_FLAG \
             $CLOUDFLARE_APPS
+
+  # ── D1 Database Migrations (C-436, C-394 AC-5) ─────────────────────
+  # Independently invocable — never a side effect of deploying the hub.
+  # Gated on resolve-plan actually including the `database` app (only true
+  # when packages/backend/database/drizzle-d1/** changed on a push, or it
+  # was explicitly requested via workflow_dispatch `apps`/`all`).
+  deploy-database:
+    name: D1 Database Migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [resolve-plan, decrypt-secrets]
+    environment:
+      name: ${{ needs.resolve-plan.outputs.mode }}
+    if: needs.resolve-plan.outputs.database_migration_apps != ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+        with:
+          install-deps: "true"
+          sops: "true"
+
+      - name: Decrypt secrets from SOPS
+        shell: bash
+        env:
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
+          ALL_APPS: ${{ needs.resolve-plan.outputs.all_apps }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+        run: |
+          bun scripts/src/lib/ops/decrypt_secrets.ts --mode="$MODE" --strict scripts \
+            $ALL_APPS
+
+      - name: Apply D1 migrations
+        shell: bash
+        env:
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          bun scripts/src/lib/deploy/index.ts --yes --mode="$MODE" database
+
+  # ── Worker VM (apps/backend/worker) ─────────────────────────────────
+  # NOT part of the generic per-service-type pipeline above (`worker` is
+  # `enabled: false` in deployment_config.ts — see the comment there) — it
+  # has its own build→push→restart script against a single always-on
+  # Compute Engine VM. Production only, always (there is no staging VM;
+  # see scripts/src/lib/worker/deploy.ts's header comment).
+  #
+  # Needs a real GCP credential, unlike every other job in this workflow
+  # (C-441 removed GCP auth entirely for the SOPS-backed apps). Deliberately
+  # NOT routed through the SOPS-encrypted secrets/<mode>.enc.env bundle —
+  # same reasoning as TAURI_SIGNING_PRIVATE_KEY in deploy-desktop: this key
+  # can reprovision the VM's container, a blast radius big enough to keep it
+  # a plain GitHub Actions secret instead. Requires a repo/environment
+  # secret named GCP_SA_KEY_PRODUCTION: a GCP service-account JSON key,
+  # base64-encoded, scoped to Artifact Registry writer (aikami-worker repo,
+  # us-central1) + Compute Instance Admin on the aikami-worker VM only.
+  deploy-worker:
+    name: Deploy Worker VM
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [resolve-plan]
+    environment:
+      name: production
+    if: >-
+      needs.resolve-plan.outputs.mode == 'production' &&
+      (
+        (github.event_name == 'push' && needs.resolve-plan.outputs.worker_changed == 'true') ||
+        (github.event_name == 'workflow_dispatch' && contains(github.event.inputs.apps, 'worker'))
+      )
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+        with:
+          install-deps: "true"
+
+      - name: Write GCP service-account key
+        shell: bash
+        env:
+          GCP_SA_KEY_PRODUCTION: ${{ secrets.GCP_SA_KEY_PRODUCTION }}
+        run: |
+          if [ -z "$GCP_SA_KEY_PRODUCTION" ]; then
+            echo "❌ GCP_SA_KEY_PRODUCTION secret is not set — see this job's header comment." >&2
+            exit 1
+          fi
+          mkdir -p .secrets
+          echo "$GCP_SA_KEY_PRODUCTION" | base64 -d > .secrets/gcp_sa_key.production.json
+
+      - name: Deploy worker VM
+        shell: bash
+        run: bun scripts/src/lib/worker/deploy.ts
 
   # ── Failure notification ──────────────────────────────────────────────
   # Posts to Discord when any deploy job fails. Uses `if: failure()` which
@@ -699,6 +864,8 @@ jobs:
       - update-manifest
       - notify-discord
       - deploy-cloudflare
+      - deploy-database
+      - deploy-worker
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -713,7 +880,7 @@ jobs:
             --mode="$MODE" \
             --run-id="$RUN_ID"
         env:
-          MODE: ${{ github.event.inputs.mode || 'production' }}
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           RUN_ID: ${{ github.run_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WORKER_NOTIFY_SECRET: ${{ secrets.WORKER_NOTIFY_SECRET }}

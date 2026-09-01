@@ -28,7 +28,13 @@
 
 import { join } from 'node:path';
 import { c, error, log, ok } from '../cli_utils';
-import { authenticateDocker, resolveProjectId, run, shortSha } from '../deploy/utils';
+import {
+  authenticateDocker,
+  ensureGcloudAuth,
+  resolveProjectId,
+  run,
+  shortSha,
+} from '../deploy/utils';
 
 const REGION = 'us-central1';
 const ZONE = 'us-central1-a';
@@ -39,13 +45,21 @@ const IMAGE_NAME = 'worker';
 async function main(): Promise<void> {
   const mode = 'production';
   const projectId = resolveProjectId(mode);
-  const appDir = join(import.meta.dirname, '../../../../apps/backend/worker');
+  const rootDir = join(import.meta.dirname, '../../../..');
+  const appDir = join(rootDir, 'apps/backend/worker');
   const registry = `${REGION}-docker.pkg.dev/${projectId}/${ARTIFACT_REPO}/${IMAGE_NAME}`;
   const tag = `${registry}:${shortSha()}`;
   const latestTag = `${registry}:latest`;
 
   log(`\n${c.bold}🚀 Deploying worker to ${VM_NAME} (${projectId})${c.reset}`);
   log(`  Image: ${tag}\n`);
+
+  log('🔑 Ensuring gcloud auth...');
+  // No-op when the caller already has `gcloud auth login` user credentials
+  // (local dev); activates .secrets/gcp_sa_key.production.json otherwise
+  // (CI — see the "Write GCP service-account key" step in release.yml's
+  // deploy-worker job).
+  ensureGcloudAuth(mode, projectId, rootDir);
 
   log('📦 Building bundle...');
   run('bun run build', { cwd: appDir });

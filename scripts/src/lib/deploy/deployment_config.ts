@@ -309,8 +309,11 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
    * Endpoint) — see apps/backend/worker/README.md. Own build→push→restart
    * script (scripts/src/lib/worker/deploy.ts), NOT the generic docker-release
    * gcloud flow this service type otherwise implies — `enabled: false` is
-   * what skips that. Listed here purely so decrypt-secrets/encrypt-secrets
-   * manage its .env.{mode} — same shape as image/text/voice above.
+   * what skips that (and why it's absent from resolve_plan.ts's app
+   * buckets). Listed here purely so decrypt-secrets/encrypt-secrets manage
+   * its .env.{mode} — same shape as image/text/voice above. release.yml's
+   * `deploy-worker` job invokes the script directly, gated on its own path
+   * check (apps/backend/worker/**), not on DEPLOY_APPS.
    */
   worker: {
     serviceType: 'docker-release',
@@ -503,6 +506,7 @@ export function resolveCloudRunServiceId(appId: AppId): string | undefined {
 const BRANCH_MODE_MAP: Record<string, string> = {
   master: 'production',
   main: 'production',
+  production: 'production',
   staging: 'staging',
   dev: 'staging',
 } as const;
