@@ -23,7 +23,7 @@ created_at: "2026-09-02"
 | **Type** | full |
 | **Priority** | P2 |
 | **Dependencies** | [C-456](C-456-group-chat-and-systemic-npc-interactions.md) (shares the `gatherContext()` seam — sequence after or alongside it); should stay in sync with [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) since both touch the same prompt-budget problem from opposite sides |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal (prompt quality, not new UI) |
 | **Contract version** | 1.0.0 |
@@ -197,7 +197,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| — | — | — | — |
+| 1.1.0 | 2026-09-02 | Implementation: budget enforcement, placeholder wiring, drop logging | C-457 pipeline |
 
 ## Promotion Lifecycle
 
@@ -208,3 +208,38 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Implemented priority-tiered byte-budget enforcement in `assemblePrompt()` — the 6144-byte cap is now enforced (not just warned), with `required` sections (address-mode header, system instructions) always included and `low`/`medium`/`high` sections dropped in priority order when over budget. Wired `gatherContext()` placeholder fields (`playerCharacter`, `locationName`, `locationDescription`) to real services (`playerStateService`, `worldStateService`, `characterService`, `CLASS_REGISTRY`). Added drop-logging via `this.warn()` for observability. Also fixed the `choiceHistoryStore.formatHistorySection()` null-safety edge case.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Oversized prompts are truncated with lowest-priority sections dropped first. `required` sections survive truncation. |
+| AC-2 | ✅ | `gatherContext()` reads real data from `worldStateService.currentLocation`, `playerStateService`, `characterService.selectedCharacter`, `CLASS_REGISTRY` with graceful fallbacks. |
+| AC-3 | ✅ | Dropped sections logged via `this.warn('assemblePrompt:sections-dropped', ...)` with section names and byte sizes. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/gm/gm_prompt_service.test.ts` | Unit tests for AC-1, AC-2, AC-3: truncation, real data wiring, drop observability, regression checks |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/gm/gm_types.ts` | Added `PromptSectionPriority` and `PromptSection` types |
+| `apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts` | Added `PROMPT_BUDGET_CAP` constant, `_buildSections()` with priority tiers, byte-budget enforcement in `assemblePrompt()`, wired `gatherContext()` to real services, added drop logging |
+| `apps/frontend/client/src/lib/test_preload.ts` | Added `mock.module` for `lorebook_store.svelte.ts` (needed to break `config_service` dependency chain in worktree test env) |
+
+### Deviations from Spec
+- The `choiceHistoryStore.formatHistorySection()` could return `undefined` (null-safety issue). Added a `historySection &&` guard in `_buildSections()` to handle this gracefully.
+- No scope changes. All ACs implemented as specified.
+
+### Test Results
+- Unit: 22/22 PASS (0 failures) — new test file
+- Existing GM tests: 10/10 PASS — `gm_prompt_assembler.test.ts` regression suite passes
+- Full GM suite: 80/81 PASS (1 pre-existing failure in `cyoa_history_injection.test.ts` due to worktree path resolution)
+- Baseline: Pre-existing `cyoa_history_injection.test.ts` failure unrelated to this contract
+
