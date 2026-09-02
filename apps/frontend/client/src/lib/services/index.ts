@@ -119,6 +119,7 @@ export * from './image/style_profile_service.svelte';
 export * from './lorebook/keyword_scanner';
 export { lorebookStore } from './lorebook/lorebook_store.svelte.ts';
 export * from './npc/autonomous_message_service.svelte.ts';
+export * from './npc/npc_awareness_service.svelte.ts';
 export * from './npc/npc_schedule_service.svelte.ts';
 export * from './npc/npc_service.svelte.ts';
 export * from './npc/npc_storage.svelte.ts';

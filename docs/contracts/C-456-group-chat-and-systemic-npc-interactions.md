@@ -23,7 +23,7 @@ created_at: "2026-09-02"
 | **Type** | full |
 | **Priority** | P2 |
 | **Dependencies** | [C-340](C-340-build-party-and-companion-gameplay.md) (party roster + data model — implemented); builds on [C-235](C-235-gm-narrative-director.md) (address-mode prompt shape — done) and [C-248](C-248-autonomous-npc-behavior-schedules.md) (idle-chat cooldown/talkativeness — completed) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
 | **Contract version** | 1.1.0 |
