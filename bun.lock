@@ -280,6 +280,16 @@
     "packages/backend/project-ai": {
       "name": "@aikami/backend-project-ai",
     },
+    "packages/backend/storage": {
+      "name": "@aikami/backend-storage",
+      "dependencies": {
+        "@aikami/constants": "workspace:*",
+        "@aikami/schemas": "workspace:*",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "5.20260831.1",
+      },
+    },
     "packages/backend/svelte-kit": {
       "name": "@aikami/backend-svelte-kit",
       "dependencies": {

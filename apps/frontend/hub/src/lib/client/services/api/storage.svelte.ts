@@ -1,3 +1,4 @@
+import { userObjectKey } from '@aikami/schemas';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -32,7 +33,8 @@ class StorageService
       const { file, uid } = options;
       const extension = file.type.split('/')[1] || 'jpg';
       const fileName = `avatar.${extension}`;
-      const path = `users/${uid}/${fileName}`;
+      // C-454: uses the shared userObjectKey spec instead of inline template literal.
+      const path = userObjectKey.build({ uid, filename: fileName });
 
       this.log('uploadAvatar', { path });
 

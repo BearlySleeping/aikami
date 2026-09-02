@@ -16,6 +16,10 @@
 //        (peer-depends on the OLD scoped @sinclair/typebox); and
 //        @sinclair/typebox must never be added as a direct dependency.
 //
+//   I-11 @aikami/schemas has no CLI/generator/wrangler surface — no
+//        reference to `wrangler`, `drizzle-kit`, or `node:child_process`
+//        anywhere in its source or package.json dependencies (C-454 AC-7).
+//
 // Usage: bun scripts/src/lib/ops/guard_data_plane.ts
 // Exits non-zero on any violation.
 
@@ -119,6 +123,20 @@ const WORKSPACE_TREES = [
 ];
 const SOURCE_EXTS = ['.ts', '.tsx', '.svelte', '.js', '.mjs'];
 
+type ForbiddenPattern = {
+  label: string;
+  re: RegExp;
+};
+
+type ParsedPackageManifest = {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  bundledDependencies?: string[] | boolean;
+  bundleDependencies?: string[] | boolean;
+};
+
 const guardNeonDependencies = (): void => {
   // 1. pg, postgres, @neondatabase/serverless anywhere in workspace sources
   //    (excluding this guard's own source, which names the packages in its docs).
@@ -172,13 +190,78 @@ const guardNeonDependencies = (): void => {
   }
 };
 
+// ── I-11: @aikami/schemas has no CLI/generator/wrangler surface ─────────
+
+/**
+ * Guard that @aikami/schemas has no reference to wrangler, drizzle-kit, or
+ * node:child_process anywhere in its source or package.json dependencies.
+ * Enforces AC-7 of C-454: "@aikami/schemas gets no CLI, no generator, no
+ * wrangler" structurally, not by convention.
+ */
+const guardSchemasNoCli = (): void => {
+  const SCHEMAS_DIR = resolve(ROOT, 'packages/shared/schemas');
+  const SCHEMAS_SRC = resolve(SCHEMAS_DIR, 'src');
+  const SCHEMAS_PKG = resolve(SCHEMAS_DIR, 'package.json');
+
+  // 1. Scan source files for forbidden references
+  const sourceFiles = walk(SCHEMAS_SRC, SOURCE_EXTS);
+  const FORBIDDEN_PATTERNS = [
+    { label: 'wrangler', re: /\bwrangler\b/ },
+    { label: 'drizzle-kit', re: /\bdrizzle-kit\b/ },
+    { label: 'node:child_process', re: /['"`]node:child_process['"`]/ },
+  ] as const satisfies readonly ForbiddenPattern[];
+  const sourceHits: string[] = [];
+  for (const file of sourceFiles) {
+    const content = readFileSync(file, 'utf8');
+    const matched = FORBIDDEN_PATTERNS.filter(({ re }) => re.test(content)).map(
+      ({ label }) => label,
+    );
+    if (matched.length > 0) {
+      sourceHits.push(`${file.replace(`${ROOT}/`, '')} (${matched.join(', ')})`);
+    }
+  }
+  if (sourceHits.length > 0) {
+    fail(
+      'I-11: @aikami/schemas source references forbidden CLI/generator/wrangler:\n' +
+        sourceHits.map((f) => `      ${f}`).join('\n'),
+    );
+  } else {
+    ok('I-11: @aikami/schemas source has no CLI/generator/wrangler references');
+  }
+
+  // 2. Scan package.json dependencies
+  if (existsSync(SCHEMAS_PKG)) {
+    const pkg = JSON.parse(readFileSync(SCHEMAS_PKG, 'utf8')) as ParsedPackageManifest;
+    const dependencyNames = [
+      ...Object.keys(pkg.dependencies ?? {}),
+      ...Object.keys(pkg.devDependencies ?? {}),
+      ...Object.keys(pkg.peerDependencies ?? {}),
+      ...Object.keys(pkg.optionalDependencies ?? {}),
+      ...(Array.isArray(pkg.bundledDependencies) ? pkg.bundledDependencies : []),
+      ...(Array.isArray(pkg.bundleDependencies) ? pkg.bundleDependencies : []),
+    ];
+    const forbiddenDeps = dependencyNames.filter(
+      (dep) => dep === 'wrangler' || dep === 'drizzle-kit',
+    );
+    if (forbiddenDeps.length > 0) {
+      fail(
+        'I-11: @aikami/schemas package.json depends on forbidden package(s): ' +
+          forbiddenDeps.join(', '),
+      );
+    } else {
+      ok('I-11: @aikami/schemas package.json has no forbidden CLI/generator deps');
+    }
+  }
+};
+
 // ── Main ────────────────────────────────────────────────────────────────
 
 guardServerOnlyImports();
 guardNeonDependencies();
+guardSchemasNoCli();
 
 if (failures > 0) {
   console.error(`\n🔴 data-plane guard failed with ${failures} violation(s)`);
   process.exit(1);
 }
-console.log('\n✅ data-plane guard passed (I-1 source + I-9)');
+console.log('\n✅ data-plane guard passed (I-1 source + I-9 + I-11)');

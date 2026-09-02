@@ -8,7 +8,14 @@
 // Objects live at `users/{uid}/{filename}` in the SAVES_BUCKET R2 bucket.
 // Every read/write is session-verified — a signed-out or session-invalid
 // request is rejected with 401 and never reaches R2.
+//
+// C-454: key construction uses the shared userObjectKey spec from
+// @aikami/schemas instead of inline template literals. The read-path
+// authorization check uses parse() to validate key shape, then compares
+// the parsed uid against the session's accountId explicitly (ownership is
+// proven by the session, not by the key shape alone).
 
+import { userObjectKey } from '@aikami/schemas';
 import { getBetterAuth } from './better_auth.ts';
 
 type StorageEnv = {
@@ -71,7 +78,9 @@ export const handleStorageUpload = async (request: Request, env: StorageEnv): Pr
 
   // Scope every object under the signed-in user's prefix so one user can
   // never read/write another's objects.
-  const scopedPath = `users/${accountId}/${path.replace(/^users\/[^/]+\//, '')}`;
+  // C-454: uses the shared userObjectKey spec instead of inline template literal.
+  const sanitizedPath = path.replace(/^users\/[^/]+\//, '');
+  const scopedPath = userObjectKey.build({ uid: accountId, filename: sanitizedPath });
 
   const contentLength = Number(request.headers.get('content-length') ?? 0);
   if (contentLength > MAX_STORAGE_BYTES) {
@@ -121,8 +130,12 @@ export const handleStorageUrl = async (request: Request, env: StorageEnv): Promi
     return badRequest('invalid-argument');
   }
 
-  // Only allow resolving objects under the signed-in user's prefix.
-  if (!path.startsWith(`users/${accountId}/`)) {
+  // C-454: use schema parse to validate key shape, then compare the parsed
+  // uid against the session's accountId (ownership is proven by the session,
+  // not by the key shape alone — a parse success for a different uid must
+  // still be rejected).
+  const parsed = userObjectKey.parse(path);
+  if (!parsed || parsed.uid !== accountId) {
     return unauthorized();
   }
 

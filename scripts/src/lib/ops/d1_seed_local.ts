@@ -14,14 +14,17 @@
 // Usage:
 //   bun run scripts/src/lib/ops/d1_seed_local.ts
 //   bun run db:seed:local  (from apps/frontend/hub)
+//
+// C-454: DB_NAME sourced from D1_DATABASES.hub.production (the canonical
+// source of truth) instead of a hardcoded literal.
 
 import { resolve } from 'node:path';
-import { PORTS } from '@aikami/constants';
+import { D1_DATABASES, PORTS } from '@aikami/constants';
 import { c, error, info, ok } from '../cli_utils.ts';
 
 const ROOT = resolve(import.meta.dirname, '../../../..');
 const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
-const DB_NAME = 'aikami-hub';
+const DB_NAME = D1_DATABASES.hub.production.databaseName;
 const HUB_WORKER_PORT = Number(process.env.PORT) || PORTS.emulator.hubWorker;
 const HUB_WORKER_URL = `http://127.0.0.1:${HUB_WORKER_PORT}`;
 

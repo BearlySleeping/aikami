@@ -14,8 +14,12 @@
 // the hub mediates the upload/download behind the session guard. This is the
 // Worker-native equivalent of a presigned URL: the object is never public or
 // guessable, and every request is authenticated.
+//
+// C-454: key construction uses the shared saveBackupKey spec from
+// @aikami/schemas instead of inline template literals.
 
 import { accountBackups } from '@aikami/backend-database';
+import { saveBackupKey } from '@aikami/schemas';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { getBetterAuth } from './better_auth.ts';
@@ -46,13 +50,20 @@ export const MAX_BACKUPS_PER_ACCOUNT = 20;
 /**
  * R2 object key for a given account. The backup UUID is embedded so each
  * upload gets a collision-resistant key even within the same millisecond.
+ * C-454: delegates to the shared saveBackupKey spec.
  */
-export const saveKeyFor = (
-  accountId: string,
-  timestamp: number,
-  filename: string,
-  backupId: string,
-): string => `saves/${accountId}/${timestamp}-${backupId}-${filename}`;
+export const saveKeyFor = (options: {
+  accountId: string;
+  timestamp: number;
+  filename: string;
+  backupId: string;
+}): string =>
+  saveBackupKey.build({
+    accountId: options.accountId,
+    timestamp: String(options.timestamp),
+    backupId: options.backupId,
+    filename: options.filename,
+  });
 
 /** SHA-256 hex digest of the uploaded bytes (for the checksum column). */
 const sha256Hex = async (bytes: ArrayBuffer): Promise<string> => {
@@ -140,7 +151,7 @@ export const handleCreateBackup = async (
 
   const backupId = crypto.randomUUID();
   const timestamp = Date.now();
-  const r2Key = saveKeyFor(accountId, timestamp, filename, backupId);
+  const r2Key = saveKeyFor({ accountId, timestamp, filename, backupId });
 
   // Upload to R2 first — only on success do we write the metadata row.
   await env.SAVES_BUCKET.put(r2Key, bytes, {

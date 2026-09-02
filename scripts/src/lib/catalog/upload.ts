@@ -17,8 +17,9 @@
 //     LAST by the publish orchestrator, so a partial publish never produces
 //     an index pointing at missing bytes.
 
+import { ASSET_CACHE_CONTROL } from '@aikami/schemas';
 import type { CatalogConfig } from './config.ts';
-import { ASSET_CACHE_CONTROL, contentTypeForExt } from './config.ts';
+import { contentTypeForExt } from './config.ts';
 
 // ---------------------------------------------------------------------------
 // Client abstraction (test seam)

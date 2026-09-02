@@ -1,0 +1,19 @@
+# packages/backend/storage/moon.yml
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'typescript'
+layer: 'library'
+tags:
+  - 'storage'
+  - 'backend'
+  - 'library'
+
+project:
+  name: 'backend-storage'
+  description: 'ObjectStore — typed R2 key management with Worker-binding and Bun.S3Client drivers (C-454).'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn:
+  - 'schemas'
+  - 'constants'

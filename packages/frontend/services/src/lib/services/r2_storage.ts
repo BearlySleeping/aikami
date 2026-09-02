@@ -9,6 +9,10 @@
 //
 // The interface exposes `upload(path, file)` and `getDownloadURL(...)` so
 // the existing `StorageService.uploadAvatar` works unchanged.
+//
+// C-454: key construction is delegated to callers who import the shared
+// userObjectKey spec — this driver accepts the already-built path string
+// and does not build keys itself.
 
 import { toAppError } from '@aikami/utils';
 
@@ -20,7 +24,9 @@ export type R2UploadResult = {
 export type R2StorageInterface = {
   /**
    * Uploads a file to the R2 saves bucket at the given path.
-   * @param path The object key, e.g. `users/{uid}/avatar.png`.
+   * @param path The object key. Should be built from the shared
+   *   `userObjectKey` spec (from @aikami/schemas) — e.g.
+   *   `userObjectKey.build({ uid, filename: 'avatar.png' })`.
    * @param file The file/blob bytes.
    * @returns The object path (for getDownloadURL).
    */

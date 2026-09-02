@@ -14,12 +14,7 @@ project:
   channel: '#backend'
   owner: 'Backend Team'
 
-dependsOn:
-  - 'constants'
-  - 'logger'
-  - 'schemas'
-  - 'types'
-  - 'utils'
+dependsOn: []
 
 fileGroups:
   sources:

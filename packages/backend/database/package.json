@@ -11,11 +11,6 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "@aikami/constants": "workspace:*",
-    "@aikami/logger": "workspace:*",
-    "@aikami/schemas": "workspace:*",
-    "@aikami/types": "workspace:*",
-    "@aikami/utils": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {

@@ -16,6 +16,7 @@
  *   database-migration   → Apply server-plane migrations against Cloudflare D1
  */
 
+import { D1_DATABASES, R2_BUCKETS } from '@aikami/constants';
 import { MODE_PROJECT_MAP, modes } from '../../../../packages/shared/constants/src/lib/project.ts';
 import type { AppId } from '../../../../packages/shared/types/src/index.ts';
 
@@ -218,25 +219,35 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       assetsDir: 'build/client',
       compatibilityDate: '2026-08-21',
       compatibilityFlags: ['nodejs_compat'],
+      // C-454: D1/R2 identities sourced from @aikami/constants.
       // Separate D1 databases per mode (staging provisioned 2026-09-02) —
       // isolates Better Auth user data and save-backup metadata so a
       // staging deploy can never read/write production's real users.
-      d1Databases: (mode) => [
-        {
-          binding: 'DB',
-          databaseName: mode === 'production' ? 'aikami-hub' : `aikami-${mode}-hub`,
-          databaseId:
-            mode === 'production'
-              ? 'bf77e365-058f-408f-871c-4a0567c9aa10'
-              : '83bfee84-e656-4d37-b5f5-035e126e0981',
-        },
-      ],
-      r2Buckets: (mode) => [
-        {
-          binding: 'SAVES_BUCKET',
-          bucketName: mode === 'production' ? 'aikami-saves' : `aikami-${mode}-saves`,
-        },
-      ],
+      d1Databases: (mode) => {
+        const entry = D1_DATABASES.hub[mode as keyof typeof D1_DATABASES.hub];
+        if (!entry) {
+          return [];
+        }
+        return [
+          {
+            binding: entry.binding,
+            databaseName: entry.databaseName,
+            databaseId: entry.databaseId,
+          },
+        ];
+      },
+      r2Buckets: (mode) => {
+        const savesBucket = R2_BUCKETS.saves[mode as keyof typeof R2_BUCKETS.saves];
+        if (!savesBucket) {
+          return [];
+        }
+        return [
+          {
+            binding: savesBucket.binding,
+            bucketName: savesBucket.bucketName,
+          },
+        ];
+      },
       // Public catalog origin the hub reads the static index from (C-396),
       // and the Better Auth cookie-scope domain — both plain vars (not
       // secrets), and both public strings anyone can already see in the

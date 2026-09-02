@@ -9,13 +9,17 @@
 // Usage:
 //   bun run scripts/src/lib/ops/d1_migrate_local.ts
 //   bun run db:migrate:local  (from apps/frontend/hub)
+//
+// C-454: DB_NAME sourced from D1_DATABASES.hub.production (the canonical
+// source of truth) instead of a hardcoded literal.
 
 import { resolve } from 'node:path';
+import { D1_DATABASES } from '@aikami/constants';
 import { error, info, ok } from '../cli_utils.ts';
 
 const ROOT = resolve(import.meta.dirname, '../../../..');
 const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
-const DB_NAME = 'aikami-hub';
+const DB_NAME = D1_DATABASES.hub.production.databaseName;
 
 info(`Applying D1 migrations to local database "${DB_NAME}"...`);
 info(`CWD: ${HUB_DIR}`);
