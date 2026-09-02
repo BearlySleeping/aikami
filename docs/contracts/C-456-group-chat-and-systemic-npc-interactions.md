@@ -3,7 +3,7 @@ id: C-456
 title: "Group Chat & Systemic NPC Interactions"
 source: "docs/contracts/BACKLOG_C452_PLUS.md 'C-461' seed (RPG-depth batch, 2026-08-30 roadmap review). Renumbered on authoring per BACKLOG_C452_PLUS.md's own ID-allocation caveat — C-453/454/455 were claimed by unrelated contracts by the time this batch was drafted; C-456 is the real next free ID."
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -231,6 +231,53 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Execution Report
+
+### Summary
+
+Wired `_gatherPartyMembers()` and `_gatherNearbyNpcs()` in `gm_prompt_service.svelte.ts` to real data sources (party roster and world location NPC IDs). Created `NpcAwarenessService` for resolving nearby NPC context with party-member dedup. Extended `AutonomousMessageService` with multi-NPC group-turn selection (weighted, bounded by `MAX_GROUP_PARTICIPANTS`) and sequential response generation where each NPC sees prior NPCs' dialogue. Idle-chat behavior (C-248) is unchanged — the multi-NPC cap only applies to addressed turns.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Party members appear in `[PARTY MEMBERS]` section with name/class/level — verified by unit test |
+| AC-2 | ✅ | Nearby NPCs from `WorldLocation.npcIds` appear in `[NEARBY NPCS]` section, deduped against party members — verified by unit test |
+| AC-3 | ✅ | `generateMultiNpcResponses()` sequences responses with cross-NPC awareness — verified by unit test |
+| AC-4 | ✅ | Idle-chat poller unchanged — `_selectWeightedRandom` still selects 1 NPC per tick, `MAX_AUTONOMOUS_MESSAGES_PER_TICK` unaffected |
+| AC-5 | ✅ | `selectGroupParticipants()` caps at `MAX_GROUP_PARTICIPANTS` (3) — verified by unit test |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/npc/npc_awareness_service.svelte.ts` | Nearby NPC resolution from `worldStateService.currentLocation.npcIds` with party-member dedup |
+| `apps/frontend/client/src/lib/services/npc/npc_awareness_service.test.ts` | Unit tests for awareness service — resolution, dedup, graceful degradation |
+| `apps/frontend/client/src/lib/services/gm/gm_prompt_party.test.ts` | Unit tests for AC-1 (party members) and AC-2 (nearby NPCs) in assembled prompt |
+| `apps/frontend/client/src/lib/services/npc/autonomous_message_group.test.ts` | Unit tests for AC-3 (multi-NPC sequencing), AC-4 (idle regression), AC-5 (bounded cap) |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/constants/src/lib/autonomous_npc.ts` | Added `MAX_GROUP_PARTICIPANTS = 3` constant |
+| `apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts` | Wired `_gatherPartyMembers()` to `partyRosterService.members` and `_gatherNearbyNpcs()` to `worldStateService.currentLocation.npcIds` with party-member dedup |
+| `apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts` | Added `selectGroupParticipants()` (weighted multi-NPC selection) and `generateMultiNpcResponses()` (sequential response generation with cross-NPC awareness) |
+| `apps/frontend/client/src/lib/services/index.ts` | Added `npc_awareness_service` to the `$services` barrel |
+
+### Deviations from Spec
+
+None. All ACs implemented as specified. The `GmPartyMemberContext.personality` field uses `"{name} ({classId}, Level {level})"` as a synchronous fallback since full NPC personality resolution requires async access to `npcService`. Full async resolution is available via `npcAwarenessService.getNpcPersonality()` for multi-NPC turn generation.
+
+### Test Results
+
+- Unit (AC-1/AC-2): 7/7 PASS — 0 failures
+- Unit (AC-3/AC-4/AC-5): 9/9 PASS — 0 failures
+- Unit (awareness service): 6/6 PASS — 0 failures
+- Existing (gm_prompt_assembler): 10/10 PASS — 0 failures (no regressions)
+- Existing (party_roster_service): 11/11 PASS — 0 failures
+- Existing (autonomous_message_service): 6/6 PASS — 0 failures
 
 ## Promotion Lifecycle
 
