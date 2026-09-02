@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 134 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 139 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -196,5 +196,10 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-451 | Thin Contract Mode | 🛠️ implemented | v1 | full |
 | C-453 | Moon Remote Build Cache Cloudflare Workers R2 | 📝 draft | v2 | full |
 | C-454 | D1 R2 Infrastructure Constants Storage Package | 🛠️ implemented | v2 | full |
-| C-455 | Apps Backend Cloudflare One Home For Cloudflare Operations | 📝 draft | v2 | full |
+| C-455 | Apps Backend Cloudflare One Home For Cloudflare Operations | 🛠️ implemented | v2 | full |
+| C-456 | Group Chat And Systemic Npc Interactions | 📝 draft | v1 | full |
+| C-457 | Gm Prompt Assembly Upgrade | 📝 draft | v1 | full |
+| C-458 | In House Memory And Lore Retrieval System | 📝 draft | v1 | full |
+| C-459 | Ai Gm Narrative Director Enhancements | 📝 draft | v1 | full |
+| C-460 | Npc Behavioral Autonomy Layer | 📝 draft | v1 | full |
 

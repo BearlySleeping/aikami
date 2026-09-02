@@ -29,7 +29,6 @@ import {
   routerService,
   worldStateService,
 } from '$services';
-import type { AssetPrefetchPhase } from '$types';
 import { CREDIT_GROUPS, type CreditGroup } from './credits_data';
 
 // ---------------------------------------------------------------------------
@@ -70,6 +69,29 @@ export type AdvancedEntry = {
   readonly action: () => void;
 };
 
+/** What the start menu is currently saying about the asset download. */
+export type AssetDownloadStatusKind =
+  /** Work is in flight — starter content or the full offline catalog. */
+  | 'progress'
+  /** Everything required to play is cached; the full catalog is opt-in. */
+  | 'offer'
+  /** The full catalog is cached — the game runs with no network at all. */
+  | 'complete'
+  /** The pipeline degraded (network/storage); retrying is worth a shot. */
+  | 'error';
+
+/** Display-ready asset-download state for the start menu's status strip. */
+export type AssetDownloadStatus = {
+  /** Which of the four shapes to render. */
+  readonly kind: AssetDownloadStatusKind;
+  /** Sentence shown to the player. */
+  readonly label: string;
+  /** Completion as 0-1, or undefined while the work is indeterminate. */
+  readonly fraction: number | undefined;
+  /** Display-ready percentage (e.g. `"42%"`), or undefined when indeterminate. */
+  readonly percentLabel: string | undefined;
+};
+
 export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether running inside Tauri (desktop). */
   readonly isTauri: boolean;
@@ -85,6 +107,12 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** C-317 AC-3: All campaigns as display-ready summaries (newest first). */
   readonly campaignSummaries: readonly CampaignSummary[];
+
+  /** Whether any campaign exists — gates the Load Campaign entry. */
+  readonly hasCampaigns: boolean;
+
+  /** DaisyUI classes for New Adventure — primary only when it is the hero action. */
+  readonly newAdventureButtonClass: string;
 
   /** C-317 AC-3: Whether the Load Campaign modal is visible. */
   readonly showLoadCampaign: boolean;
@@ -184,29 +212,35 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   // ── Background asset download (C-448) ──
 
-  /** Current phase of the shared asset-download pipeline. */
-  readonly downloadPhase: AssetPrefetchPhase;
-
-  /** Download progress as a 0-1 fraction, or undefined when not in progress. */
-  readonly downloadProgressFraction: number | undefined;
-
-  /** Human-readable label for the current download phase, or undefined when idle/ready. */
-  readonly downloadLabel: string | undefined;
-
   /**
-   * Whether to offer the explicit "download everything for offline" action.
-   * True once the required-to-play core is ready and the player hasn't
-   * already started a full-catalog download.
+   * The asset-download state worth showing, or undefined while there is
+   * nothing to say. Stays undefined until the pipeline has settled, so the
+   * strip never flashes through the transient boot phases on a returning
+   * player's instant load.
    */
-  readonly canDownloadAllAssets: boolean;
+  readonly downloadStatus: AssetDownloadStatus | undefined;
 
   /** Starts downloading every remaining catalog asset for offline play. */
   downloadAllAssets(): void;
+
+  /** Restarts the asset pipeline after it degraded. */
+  retryAssetDownload(): void;
 };
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * How long the start menu waits before it is willing to talk about the asset
+ * download at all. The pipeline runs idle → preparing → prefetching-core →
+ * ready, and on a returning player with a warm cache that whole sequence
+ * finishes in a few frames — rendering each step would flash three different
+ * strings and shift the menu. Nothing is shown until the pipeline has had
+ * this long to reach a state worth reporting; after that the strip tracks
+ * the pipeline live.
+ */
+const DOWNLOAD_STATUS_SETTLE_MS = 600;
 
 /** Maps a content pack ID to a human-readable label. */
 const CONTENT_PACK_LABELS: Record<string, string> = {
@@ -258,6 +292,17 @@ const formatLastSavedLabel = (iso: string | undefined): string => {
   });
 };
 
+/** Turns a done/total pair into the display fields of an AssetDownloadStatus. */
+const toProgressLabels = (
+  progress: { readonly done: number; readonly total: number } | null,
+): { fraction: number | undefined; percentLabel: string | undefined } => {
+  if (!progress || progress.total === 0) {
+    return { fraction: undefined, percentLabel: undefined };
+  }
+  const fraction = progress.done / progress.total;
+  return { fraction, percentLabel: `${Math.round(fraction * 100)}%` };
+};
+
 /** Builds a CampaignSummary from a Campaign. */
 const toCampaignSummary = (campaign: Campaign): CampaignSummary => ({
   id: campaign.id,
@@ -279,6 +324,12 @@ class StartViewModel
 {
   /** Initialization error message — null when initialization succeeded. */
   private _initError = $state<string | null>(null);
+
+  /** Whether the asset-download strip is allowed to render — see the constant. */
+  private _downloadStatusSettled = $state(false);
+
+  /** Handle for the settle timer so dispose() can cancel a pending reveal. */
+  private _settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** Whether the credits modal is currently visible. */
   showCredits = $state(false);
@@ -321,48 +372,76 @@ class StartViewModel
   }
 
   /** @inheritdoc */
-  get downloadPhase(): AssetPrefetchPhase {
-    return assetPrefetchService.phase;
+  get hasCampaigns(): boolean {
+    return this.campaignSummaries.length > 0;
   }
 
   /** @inheritdoc */
-  get downloadProgressFraction(): number | undefined {
-    const progress =
-      assetPrefetchService.phase === 'prefetching-core'
-        ? assetPrefetchService.coreProgress
-        : assetPrefetchService.warmProgress;
-    if (!progress || progress.total === 0) {
+  get newAdventureButtonClass(): string {
+    // With a resumable campaign, Continue owns the primary slot and New
+    // Adventure steps down to an outline so the two never compete.
+    return this.latestResumableCampaign
+      ? 'btn btn-outline btn-block'
+      : 'btn btn-primary btn-lg btn-block';
+  }
+
+  /** @inheritdoc */
+  get downloadStatus(): AssetDownloadStatus | undefined {
+    if (!this._downloadStatusSettled) {
       return undefined;
     }
-    return progress.done / progress.total;
-  }
 
-  /** @inheritdoc */
-  get downloadLabel(): string | undefined {
     switch (assetPrefetchService.phase) {
-      case 'preparing':
-        return 'Preparing assets…';
       case 'prefetching-core':
-        return 'Downloading starter content…';
+        return {
+          kind: 'progress',
+          label: 'Downloading starter content…',
+          ...toProgressLabels(assetPrefetchService.coreProgress),
+        };
       case 'warming':
-        return 'Downloading all assets for offline play…';
+        return {
+          kind: 'progress',
+          label: 'Downloading everything for offline play…',
+          ...toProgressLabels(assetPrefetchService.warmProgress),
+        };
       case 'degraded':
-        return (
-          assetPrefetchService.prefetchError ?? 'Asset download paused — check your connection.'
-        );
+        return {
+          kind: 'error',
+          label:
+            assetPrefetchService.prefetchError ?? 'Asset download paused — check your connection.',
+          fraction: undefined,
+          percentLabel: undefined,
+        };
+      case 'ready':
+        // warmRemaining() flips the phase to 'warming' synchronously, so a
+        // 'ready' phase with warming already requested means it finished.
+        return assetPrefetchService.warmStarted
+          ? {
+              kind: 'complete',
+              label: 'Ready for offline play',
+              fraction: 1,
+              percentLabel: undefined,
+            }
+          : {
+              kind: 'offer',
+              label: 'Download everything for offline play',
+              fraction: undefined,
+              percentLabel: undefined,
+            };
       default:
+        // 'idle' / 'preparing' — the pipeline has nothing to report yet.
         return undefined;
     }
   }
 
   /** @inheritdoc */
-  get canDownloadAllAssets(): boolean {
-    return assetPrefetchService.phase === 'ready' && !assetPrefetchService.warmStarted;
+  downloadAllAssets(): void {
+    assetPrefetchService.warmRemaining();
   }
 
   /** @inheritdoc */
-  downloadAllAssets(): void {
-    assetPrefetchService.warmRemaining();
+  retryAssetDownload(): void {
+    assetPrefetchService.ensureStarted();
   }
 
   /** @inheritdoc */
@@ -541,6 +620,13 @@ class StartViewModel
     // C-448: start (or observe) the required-to-play (offline-core) download
     assetPrefetchService.ensureStarted();
 
+    // Hold the download strip back until the pipeline has settled — see
+    // DOWNLOAD_STATUS_SETTLE_MS. After it opens, downloadStatus tracks the
+    // pipeline live so the player's own opt-in reacts immediately.
+    this._settleTimer = setTimeout(() => {
+      this._downloadStatusSettled = true;
+    }, DOWNLOAD_STATUS_SETTLE_MS);
+
     // Load campaigns from IndexedDB
     try {
       await campaignService.refreshCampaigns();
@@ -605,6 +691,13 @@ class StartViewModel
   /** @inheritdoc */
   hideCreditsModal(): void {
     this.showCredits = false;
+  }
+
+  /** @inheritdoc */
+  override async dispose(): Promise<void> {
+    clearTimeout(this._settleTimer);
+    this._settleTimer = undefined;
+    await super.dispose();
   }
 
   /** @inheritdoc */

@@ -107,7 +107,8 @@ class AssetPrefetchService
 
   private _registryReadyPromise: Promise<RegistryHandle> | undefined;
   private _corePrefetchPromise: Promise<CorePrefetchResult> | undefined;
-  private _warmStarted = false;
+  /** Reactive so the start menu's offer flips the moment the player opts in. */
+  private _warmStarted = $state(false);
 
   /** @inheritdoc */
   get warmStarted(): boolean {
@@ -120,7 +121,12 @@ class AssetPrefetchService
 
   private async _runPipeline(): Promise<void> {
     try {
-      this.phase = this.phase === 'idle' ? 'preparing' : this.phase;
+      // A retry after a failure re-enters here: clear the stale error and
+      // restart from 'preparing' so the UI reflects a fresh attempt.
+      if (this.phase === 'idle' || this.phase === 'degraded') {
+        this.prefetchError = undefined;
+        this.phase = 'preparing';
+      }
       const { seed } = await this.ensureRegistryReady();
       if (!seed) {
         this.phase = 'degraded';
@@ -225,7 +231,20 @@ class AssetPrefetchService
   prefetchCore(
     onProgress?: (progress: { done: number; total: number }) => void,
   ): Promise<CorePrefetchResult> {
-    this._corePrefetchPromise ??= this._doPrefetchCore(onProgress);
+    this._corePrefetchPromise ??= this._doPrefetchCore(onProgress)
+      .then((result) => {
+        // A pass where nothing landed at all is a network failure, not a
+        // finished download. Memoizing it would wedge the session with no
+        // way back — drop it so a retry actually re-runs.
+        if (result.fetched === 0 && result.alreadyCached === 0 && result.failedTags.length > 0) {
+          this._corePrefetchPromise = undefined;
+        }
+        return result;
+      })
+      .catch((error: unknown) => {
+        this._corePrefetchPromise = undefined;
+        throw error;
+      });
     return this._corePrefetchPromise;
   }
 
@@ -282,6 +301,11 @@ class AssetPrefetchService
       return;
     }
     this._warmStarted = true;
+    // Flip the phase synchronously: the opt-in comes from a click, and the
+    // background pass below only reaches its first `await` a tick later —
+    // without this the UI would sit on 'ready' after the player asked for
+    // the download.
+    this.phase = 'warming';
     void this._warmInBackground(onProgress);
   }
 
@@ -310,7 +334,6 @@ class AssetPrefetchService
         return;
       }
 
-      this.phase = 'warming';
       let warmed = 0;
       let failed = 0;
       let cursor = 0;

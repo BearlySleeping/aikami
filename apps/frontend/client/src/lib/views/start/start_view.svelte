@@ -1,11 +1,22 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/start/start_view.svelte
+//
+// The start menu. Hierarchy, top to bottom: title → the one action the
+// player most likely wants (Continue, or New Adventure on a fresh install) →
+// supporting campaign actions → a quiet text row for everything else. The
+// account control sits in the top-right rather than in the menu stack: the
+// game is fully playable signed out, so sign-in must not read as a step on
+// the way to playing.
 import { BaseViewModelContainer } from '$components';
 import LoginView from '$lib/views/auth/login/login_view.svelte';
+import AssetDownloadStatus from './components/asset_download_status.svelte';
+import ContinueCampaignCard from './components/continue_campaign_card.svelte';
+import CrashRecoveryDialog from './components/crash_recovery_dialog.svelte';
 import CreditsModal from './components/credits_modal.svelte';
 import LoadCampaignModal from './components/load_campaign_modal.svelte';
 import NewAdventureConfirmDialog from './components/new_adventure_confirm_dialog.svelte';
 import PackBrowserView from './components/pack_browser_view.svelte';
+import StartBackdrop from './components/start_backdrop.svelte';
 import type { StartViewModelInterface } from './start_view_model.svelte';
 
 let { viewModel }: { viewModel: StartViewModelInterface } = $props();
@@ -29,134 +40,146 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
       </div>
     </div>
   {:else}
-    <div class="hero min-h-screen bg-base-200" data-testid="start-menu">
-      <div class="hero-content text-center">
-        <div class="max-w-md">
-          <!-- Title -->
-          <h1 class="text-5xl font-bold mb-2">Aikami</h1>
-          <p class="text-base-content/60 mb-8">A living world, powered by AI</p>
+    <div
+      class="relative flex min-h-screen flex-col items-center overflow-hidden bg-base-100 px-4 py-6"
+      data-testid="start-menu"
+    >
+      <StartBackdrop />
 
-          <!-- C-448: background asset download indicator -->
-          {#if viewModel.downloadLabel}
-            <div class="w-64 mx-auto mb-6 text-left" data-testid="download-indicator">
-              <p class="text-xs text-base-content/60 mb-1">{viewModel.downloadLabel}</p>
-              {#if viewModel.downloadProgressFraction !== undefined}
-                <progress
-                  class="progress progress-primary w-full"
-                  value={viewModel.downloadProgressFraction}
-                  max="1"
-                ></progress>
-              {:else}
-                <progress class="progress progress-primary w-full"></progress>
-              {/if}
-            </div>
-          {:else if viewModel.canDownloadAllAssets}
-            <div class="w-64 mx-auto mb-6 text-center">
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs"
-                onclick={() => viewModel.downloadAllAssets()}
-              >
-                Download all assets for offline play
-              </button>
-            </div>
+      <!-- Account control — optional, so it stays out of the play path. -->
+      <div class="relative z-10 flex w-full max-w-sm justify-end">
+        <LoginView buttonClass="btn btn-ghost btn-sm font-normal text-base-content/60" />
+      </div>
+
+      <div class="relative z-10 flex w-full max-w-sm flex-1 flex-col justify-center py-4">
+        <!-- Title -->
+        <header class="rise mb-8 text-center">
+          <h1
+            class="bg-gradient-to-b from-base-content via-base-content to-primary bg-clip-text pl-[0.12em] text-6xl font-bold tracking-[0.12em] text-transparent sm:text-7xl"
+          >
+            Aikami
+          </h1>
+          <div class="mt-3 flex items-center justify-center gap-3 text-primary/50">
+            <span class="h-px w-14 bg-gradient-to-r from-transparent to-current"></span>
+            <span class="h-1.5 w-1.5 rotate-45 bg-current"></span>
+            <span class="h-px w-14 bg-gradient-to-l from-transparent to-current"></span>
+          </div>
+          <p class="mt-3 text-sm tracking-wide text-base-content/50">
+            A living world, powered by AI
+          </p>
+        </header>
+
+        <!-- Primary actions -->
+        <div class="rise rise-1 flex flex-col gap-3">
+          {#if viewModel.latestResumableCampaign}
+            <ContinueCampaignCard
+              campaign={viewModel.latestResumableCampaign}
+              onclick={() => viewModel.continueLatestCampaign()}
+            />
           {/if}
 
-          <!-- Menu Buttons — Campaign-First Hierarchy (C-317) -->
-          <div class="flex flex-col gap-3 w-64 mx-auto">
-            <!-- AC-1: Continue (only shown when a resumable campaign exists) -->
-            {#if viewModel.latestResumableCampaign}
-              <button
-                type="button"
-                class="btn btn-primary btn-lg"
-                onclick={() => viewModel.continueLatestCampaign()}
-              >
-                Continue
-              </button>
-            {/if}
+          <button
+            type="button"
+            class={viewModel.newAdventureButtonClass}
+            onclick={() => viewModel.startNewAdventure()}
+          >
+            New Adventure
+          </button>
 
-            <!-- AC-2: New Adventure — always creates a fresh campaign draft -->
+          {#if viewModel.hasCampaigns}
             <button
               type="button"
-              class="btn {viewModel.latestResumableCampaign ? 'btn-outline' : 'btn-primary'} btn-lg"
-              onclick={() => viewModel.startNewAdventure()}
-            >
-              New Adventure
-            </button>
-
-            <!-- AC-3: Load Campaign — browse all campaigns -->
-            <button
-              type="button"
-              class="btn btn-ghost"
+              class="btn btn-ghost btn-block font-normal text-base-content/70 hover:text-base-content"
               onclick={() => viewModel.openLoadCampaign()}
             >
               Load Campaign
             </button>
+          {/if}
+        </div>
 
-            <!-- Sign In / Sign Out (shared auth control) -->
-            <LoginView />
+        <!-- Secondary actions — one quiet row, not five more buttons. -->
+        <nav class="rise rise-2 mt-6 flex items-center justify-center gap-1 text-sm">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm font-normal text-base-content/60 hover:text-base-content"
+            onclick={() => viewModel.replayTutorial()}
+          >
+            How to Play
+          </button>
+          <span class="text-base-content/20" aria-hidden="true">·</span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm font-normal text-base-content/60 hover:text-base-content"
+            onclick={() => viewModel.goToOptions()}
+          >
+            Settings
+          </button>
+          <span class="text-base-content/20" aria-hidden="true">·</span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm font-normal text-base-content/60 hover:text-base-content"
+            onclick={() => viewModel.showCreditsModal()}
+          >
+            Credits
+          </button>
+        </nav>
 
-            <!-- How to Play / Replay Tutorial (C-422 AC-3) -->
-            <button type="button" class="btn btn-ghost" onclick={() => viewModel.replayTutorial()}>
-              How to Play
-            </button>
-
-            <!-- Settings -->
-            <button type="button" class="btn btn-ghost" onclick={() => viewModel.goToOptions()}>
-              Settings
-            </button>
-
-            <!-- Credits -->
-            <button
-              type="button"
-              class="btn btn-ghost"
-              onclick={() => viewModel.showCreditsModal()}
-            >
-              Credits
-            </button>
-
-            <!-- Quit (Tauri only) -->
-            {#if viewModel.isTauri}
-              <button
-                type="button"
-                class="btn btn-ghost btn-sm mt-4"
-                onclick={() => viewModel.quitApp()}
-              >
-                Quit
-              </button>
-            {/if}
-          </div>
-
-          <!-- C-405 AC-4: Advanced section — entries driven by the view model -->
-          <details class="mt-8 text-left">
-            <summary
-              class="text-xs text-base-content/40 hover:text-base-content/70 cursor-pointer select-none"
-            >
-              Advanced
-            </summary>
-            <div class="mt-3 flex flex-col gap-2 w-64 mx-auto">
-              {#each viewModel.advancedItems as item}
-                <button type="button" class="btn btn-outline btn-sm" onclick={item.action}>
-                  {item.label}
-                </button>
-                <p class="text-[11px] text-base-content/60 leading-snug">
-                  {item.description}
-                  {#if item.href}
-                    <a
-                      href={item.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="link link-primary"
-                    >
-                      {item.hrefLabel}
-                    </a>
-                  {/if}
-                </p>
-              {/each}
-            </div>
-          </details>
+        <!--
+          C-448: fixed-height slot. The strip appears once the pipeline has
+          settled, and reserving its space keeps the menu from jumping when
+          it does.
+        -->
+        <div class="rise rise-3 mt-5 flex h-9 items-center justify-center">
+          {#if viewModel.downloadStatus}
+            <AssetDownloadStatus
+              status={viewModel.downloadStatus}
+              ondownload={() => viewModel.downloadAllAssets()}
+              onretry={() => viewModel.retryAssetDownload()}
+            />
+          {/if}
         </div>
       </div>
+
+      <!-- C-405 AC-4: Advanced section — entries driven by the view model -->
+      <footer class="relative z-10 flex w-full max-w-sm flex-col items-center gap-3 pb-2">
+        <details class="w-full text-left">
+          <summary
+            class="cursor-pointer select-none text-center text-xs text-base-content/30 transition-colors hover:text-base-content/60"
+          >
+            Advanced
+          </summary>
+          <div class="mt-3 flex flex-col gap-2">
+            {#each viewModel.advancedItems as item}
+              <button type="button" class="btn btn-outline btn-sm" onclick={item.action}>
+                {item.label}
+              </button>
+              <p class="text-[11px] leading-snug text-base-content/50">
+                {item.description}
+                {#if item.href}
+                  <a
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="link link-primary"
+                  >
+                    {item.hrefLabel}
+                  </a>
+                {/if}
+              </p>
+            {/each}
+          </div>
+        </details>
+
+        {#if viewModel.isTauri}
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs font-normal text-base-content/30 hover:text-base-content/70"
+            onclick={() => viewModel.quitApp()}
+          >
+            Quit
+          </button>
+        {/if}
+      </footer>
     </div>
 
     <!-- Credits Modal -->
@@ -192,5 +215,50 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
         oncancel={() => viewModel.cancelNewAdventure()}
       />
     {/if}
+
+    <!-- C-334 AC-5: Crash recovery prompt -->
+    {#if viewModel.showRecoveryPrompt}
+      <CrashRecoveryDialog
+        isRecovering={viewModel.isRecovering}
+        onaccept={() => viewModel.acceptRecovery()}
+        ondecline={() => viewModel.declineRecovery()}
+      />
+    {/if}
   {/if}
 </BaseViewModelContainer>
+
+<style>
+/* Staggered entrance — the menu assembles instead of snapping into place. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise {
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.rise-1 {
+  animation-delay: 0.08s;
+}
+
+.rise-2 {
+  animation-delay: 0.16s;
+}
+
+.rise-3 {
+  animation-delay: 0.24s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+}
+</style>
