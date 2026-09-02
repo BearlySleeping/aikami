@@ -43,6 +43,17 @@ mock.module('../gm/session_summary_service.svelte', () => ({
   },
 }));
 
+// Mock $logger to avoid Bun resolution issues
+mock.module('$logger', () => ({
+  logger: {
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    log: () => {},
+  },
+}));
+
 // Now safe to import the service under test
 import { LocalEmbeddingBackend } from './local_embedding_backend';
 
