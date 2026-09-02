@@ -13,12 +13,19 @@ import {
 } from '@aikami/frontend/services';
 import { resolveMacros } from '@aikami/parser';
 import type { BridgeContext } from '@aikami/types';
-import { choiceHistoryStore, combatService, timeService, worldStateService } from '$services';
+import { choiceHistoryStore, combatService, timeService } from '$services';
+// Direct imports to break the barrel cycle: the barrel re-exports
+// gm_prompt_service before it re-exports these services.
+import { partyRosterService } from '../game/party_roster_service.svelte.ts';
+import { worldStateService } from '../game/world_state_service.svelte.ts';
+import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
 import type { AddressMode } from '$types';
 // Imported directly to break the barrel cycle: the barrel re-exports
 // gm_prompt_service before it re-exports lorebookStore.
 import { lorebookStore } from '../lorebook/lorebook_store.svelte.ts';
 import type { GmCombatContext, GmPromptContext } from './gm_types';
+
+const MAX_PROMPT_BYTES = 6144;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,18 +123,9 @@ class GmPromptService
       lines.push('[/ACTIVE QUESTS]');
     }
 
-    // ── Nearby NPCs ─────────────────────────────────────────────────
-    if (context.nearbyNpcs.length > 0) {
-      lines.push('');
-      lines.push('[NEARBY NPCS]');
-      for (const npc of context.nearbyNpcs) {
-        lines.push(`- ${npc.name} (${npc.persona}): ${npc.currentActivity}`);
-        if (npc.relationship) {
-          lines.push(`  Relationship: ${npc.relationship}`);
-        }
-      }
-      lines.push('[/NEARBY NPCS]');
-    }
+    // Nearby NPC context is inserted after all other sections are assembled so
+    // location NPC IDs cannot push the final prompt over its byte budget.
+    const nearbyNpcInsertionIndex = lines.length;
 
     // ── Party members (Party mode multi-character voice) ───────────
     if (mode === 'party' && context.partyMembers.length > 0) {
@@ -227,19 +225,12 @@ class GmPromptService
       }
     }
 
-    const prompt = lines.join('\n');
-
-    // Enforce < 6 KB constraint
-    const encoder = new TextEncoder();
-    const byteLength = encoder.encode(prompt).length;
-    if (byteLength > 6144) {
-      this.warn('assemblePrompt:prompt-exceeds-6kb', {
-        byteLength,
-        mode,
-      });
-    }
-
-    return prompt;
+    return this._fitPromptToByteLimit({
+      lines,
+      nearbyNpcs: context.nearbyNpcs,
+      nearbyNpcInsertionIndex,
+      mode,
+    });
   }
 
   /** @inheritdoc */
@@ -289,6 +280,82 @@ class GmPromptService
   }
 
   // ── Private helpers ────────────────────────────────────────────────
+
+  /**
+   * Fits nearby NPC entries into the remaining prompt budget, preserving their
+   * source order and omitting only trailing entries that do not fit.
+   */
+  private _fitPromptToByteLimit(options: {
+    lines: readonly string[];
+    nearbyNpcs: GmPromptContext['nearbyNpcs'];
+    nearbyNpcInsertionIndex: number;
+    mode: AddressMode;
+  }): string {
+    const { lines, nearbyNpcs, nearbyNpcInsertionIndex, mode } = options;
+    const encoder = new TextEncoder();
+    const buildPrompt = (npcCount: number): string => {
+      const nearbyNpcLines: string[] = [];
+      if (npcCount > 0) {
+        nearbyNpcLines.push('', '[NEARBY NPCS]');
+        for (const npc of nearbyNpcs.slice(0, npcCount)) {
+          nearbyNpcLines.push(`- ${npc.name} (${npc.persona}): ${npc.currentActivity}`);
+          if (npc.relationship) {
+            nearbyNpcLines.push(`  Relationship: ${npc.relationship}`);
+          }
+        }
+        nearbyNpcLines.push('[/NEARBY NPCS]');
+      }
+
+      return [
+        ...lines.slice(0, nearbyNpcInsertionIndex),
+        ...nearbyNpcLines,
+        ...lines.slice(nearbyNpcInsertionIndex),
+      ].join('\n');
+    };
+
+    const completePrompt = buildPrompt(nearbyNpcs.length);
+    const completeByteLength = encoder.encode(completePrompt).length;
+    if (completeByteLength <= MAX_PROMPT_BYTES) {
+      return completePrompt;
+    }
+
+    let lowerBound = 0;
+    let upperBound = nearbyNpcs.length;
+    while (lowerBound < upperBound) {
+      const candidateCount = Math.ceil((lowerBound + upperBound) / 2);
+      const candidateByteLength = encoder.encode(buildPrompt(candidateCount)).length;
+      if (candidateByteLength <= MAX_PROMPT_BYTES) {
+        lowerBound = candidateCount;
+      } else {
+        upperBound = candidateCount - 1;
+      }
+    }
+
+    const fittedPrompt = buildPrompt(lowerBound);
+    this.warn('assemblePrompt:prompt-truncated-to-6kb', {
+      byteLength: completeByteLength,
+      mode,
+      nearbyNpcCount: nearbyNpcs.length,
+      retainedNearbyNpcCount: lowerBound,
+    });
+
+    return this._truncateUtf8({ value: fittedPrompt, maxBytes: MAX_PROMPT_BYTES });
+  }
+
+  /** Truncates without splitting a multi-byte UTF-8 code point. */
+  private _truncateUtf8(options: { value: string; maxBytes: number }): string {
+    const { value, maxBytes } = options;
+    const encoded = new TextEncoder().encode(value);
+    if (encoded.length <= maxBytes) {
+      return value;
+    }
+
+    let end = maxBytes;
+    while (end > 0 && (encoded[end] & 0xc0) === 0x80) {
+      end--;
+    }
+    return new TextDecoder().decode(encoded.slice(0, end));
+  }
 
   /**
    * Builds the address-mode header line for the prompt.
@@ -355,7 +422,27 @@ class GmPromptService
    * Gathers nearby NPC context from the game state.
    */
   private _gatherNearbyNpcs(): GmPromptContext['nearbyNpcs'] {
-    return []; // TODO: wire to actual NPC awareness system
+    // Returns empty synchronously — the awareness service is async.
+    // For synchronous prompt assembly, expose the IDs from current location.
+    const location = worldStateService.currentLocation;
+    if (!location?.npcIds || location.npcIds.length === 0) {
+      return [];
+    }
+
+    const partyNpcIds = new Set(partyRosterService.members.map((m) => m.npcId));
+
+    // Build minimal context from location data — full resolution with
+    // NPC personalities is available via npcAwarenessService.getNearbyNpcContext()
+    // for the async path (multi-NPC turn generation).
+    return location.npcIds
+      .filter((id) => !partyNpcIds.has(id))
+      .map((id) => ({
+        id,
+        name: id,
+        persona: 'Unknown',
+        relationship: 'Unknown',
+        currentActivity: 'Present',
+      }));
   }
 
   /**
@@ -363,7 +450,18 @@ class GmPromptService
    * Returns an empty array when no party data is available.
    */
   private _gatherPartyMembers(): GmPromptContext['partyMembers'] {
-    return []; // TODO: wire to actual party member system
+    const members = partyRosterService.members;
+    if (members.length === 0) {
+      return [];
+    }
+
+    return members.map((member) => ({
+      id: member.npcId,
+      name: member.name,
+      // Personality from class description — the NPC's full personality
+      // is resolved asynchronously via npcAwarenessService for multi-NPC turns.
+      personality: `${member.name} (${member.classId}, Level ${member.level})`,
+    }));
   }
 }
 
