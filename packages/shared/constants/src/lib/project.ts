@@ -68,11 +68,6 @@ export const MODE_PROJECT_MAP = {
 } as const satisfies Record<(typeof modes)[number], string>;
 
 /**
- * GCP region where Cloud Functions and Cloud Run services are deployed.
- */
-export const CLOUD_FUNCTIONS_REGION = 'europe-west4' as const;
-
-/**
  * Public HTTPS base URL for the `worker` app's Elysia server
  * (apps/backend/worker) — a Cloudflare-proxied subdomain in front of the
  * VM's plain HTTP port, not a GCP-managed domain (see that app's README,

@@ -5,7 +5,7 @@
 # Uses "bun run <name>" to delegate to package.json scripts.
 # =============================================================================
 
-$schema: 'https://moonrepo.dev/schemas/tasks.json'
+$schema: 'https://moonrepo.dev/schemas/v2/tasks.json'
 
 fileGroups:
   sources:

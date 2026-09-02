@@ -160,8 +160,6 @@ export function computeAppChecksum(
     serviceType: config.serviceType,
     cloudRunServiceId: config.cloudRunServiceId ?? `aikami-${config.shortName}`,
     shortName: config.shortName,
-    vpcConnector: config.vpcConnector ?? '',
-    cloudSqlInstance: config.cloudSqlInstance ?? '',
     needsDist: config.needsDist ?? true,
     imageName: config.imageName ?? `aikami/${config.shortName}`,
     dockerContext: config.dockerContext ?? config.path,
@@ -177,6 +175,9 @@ export function computeAppChecksum(
   // Working tree dirty state — captures uncommitted changes that
   // don't appear in git ls-tree but DO affect the Docker build.
   const dirtyHash = dirtyTreeHash();
+  if (dirtyHash) {
+    warn('dirty tree — this cache entry will not match CI after you commit');
+  }
 
   if (isVerbose()) {
     log(`  Checksum inputs for ${appName}:`);

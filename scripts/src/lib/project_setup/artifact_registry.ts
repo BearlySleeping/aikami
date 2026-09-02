@@ -1,14 +1,19 @@
 #!/usr/bin/env bun
 // scripts/src/lib/project_setup/artifact_registry.ts
 //
-// Create Artifact Registry Docker repository for Aikami.
+// Create the Artifact Registry Docker repository for the aikami-worker VM
+// (us-central1 — same region as the VM, so pulls stay within GCP's Always
+// Free tier; see apps/backend/worker/README.md and
+// scripts/src/lib/worker/deploy.ts). The `aikami` repo this used to default
+// to (europe-west1) was for the Firebase/Cloud Run era's image/text/voice
+// services, which are all `enabled: false` in deployment_config.ts.
 //
 // Usage:
 //   bun run scripts/src/lib/project_setup/artifact_registry.ts --mode=staging
 //   bun run scripts/src/lib/project_setup/artifact_registry.ts --mode=production --dry-run
 
 import { fmt, parseCliArgs, run } from '../cli_utils';
-import { CLOUD_FUNCTIONS_REGION, MODE_PROJECT_MAP } from '../deploy/deployment_config';
+import { MODE_PROJECT_MAP } from '../deploy/deployment_config';
 
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
 
@@ -16,7 +21,7 @@ export const setupArtifactRegistry = async (
   projectId: string,
   region: string,
   dryRun: boolean,
-  repoName = 'aikami',
+  repoName = 'aikami-worker',
 ): Promise<{ checks: Check[] }> => {
   const checks: Check[] = [];
   console.log(fmt.section('Artifact Registry'));
@@ -80,7 +85,7 @@ if (import.meta.main) {
   });
   const mode = (opts.mode as string) ?? 'staging';
   const dryRun = opts['dry-run'] as boolean;
-  const region = (opts.region as string) ?? CLOUD_FUNCTIONS_REGION;
+  const region = (opts.region as string) ?? 'us-central1';
   const projectId = MODE_PROJECT_MAP[mode as keyof typeof MODE_PROJECT_MAP];
   if (!projectId) {
     console.error('Unknown mode');

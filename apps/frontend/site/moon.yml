@@ -1,5 +1,5 @@
 # apps/frontend/landing_page/moon.yml
-$schema: 'https://moonrepo.dev/schemas/project.json'
+$schema: 'https://moonrepo.dev/schemas/v2/project.json'
 
 language: 'typescript'
 layer: 'application'

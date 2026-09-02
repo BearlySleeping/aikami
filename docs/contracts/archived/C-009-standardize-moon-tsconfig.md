@@ -19,7 +19,7 @@ Standardize every project's `moon.yml` and `tsconfig.json` to follow the aikami 
 **Aikami `moon.yml` pattern** (library):
 
 ```yaml
-$schema: "https://moonrepo.dev/schemas/project.json"
+$schema: "https://moonrepo.dev/schemas/v2/project.json"
 
 language: "typescript"
 layer: "library"
@@ -63,7 +63,7 @@ dependsOn:
 **Aikami `moon.yml` pattern** (application):
 
 ```yaml
-$schema: "https://moonrepo.dev/schemas/project.json"
+$schema: "https://moonrepo.dev/schemas/v2/project.json"
 
 language: "typescript"
 layer: "application"

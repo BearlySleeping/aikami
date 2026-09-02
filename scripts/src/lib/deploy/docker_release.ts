@@ -68,7 +68,7 @@ export async function deployDockerRelease(
   }
 
   // 1. Authenticate Docker with Artifact Registry
-  authenticateDocker();
+  authenticateDocker(region);
 
   // 2. Build & push Docker image with layer caching
   log('🐳 Building & pushing Docker image (with layer cache)...');

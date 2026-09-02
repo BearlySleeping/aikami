@@ -2,53 +2,13 @@
 /**
  * Cloudflare Worker deploy script for the hub app.
  *
- * Delegates to the shared Cloudflare deploy module (single source of truth in
- * scripts/src/lib/deploy/cloudflare.ts). Per-app config (worker name, route,
- * build output dir, headers) lives in deployment_config.ts.
+ * Delegates to the shared Cloudflare deploy CLI helper (single source of
+ * truth in scripts/src/lib/deploy/cloudflare.ts), which owns argument
+ * parsing, the APP_CONFIG guard, deployment invocation, and error handling.
+ * Per-app config (worker name, route, build output dir, headers) lives in
+ * deployment_config.ts.
  */
 
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
-import { logger } from '@aikami/logger';
-import { toMode } from '@aikami/utils';
-import { generateVersionString } from '../../../../scripts/src/lib/deploy/cache';
-import { deployCloudflareWorker } from '../../../../scripts/src/lib/deploy/cloudflare';
-import { APP_CONFIG } from '../../../../scripts/src/lib/deploy/deployment_config';
+import { deployCloudflareApp } from '../../../../scripts/src/lib/deploy/cloudflare';
 
-// Repo root = 4 levels up from apps/frontend/hub/scripts/deploy.ts
-const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
-
-// 1. Parse incoming arguments
-const { values } = parseArgs({
-  args: Bun.argv,
-  options: {
-    mode: { type: 'string' },
-    verbose: { type: 'boolean', default: false },
-  },
-  strict: false,
-  allowPositionals: true,
-});
-
-const mode = toMode(values.mode || process.env.MODE);
-
-if (!mode) {
-  logger.error('Missing --mode argument or MODE env var');
-  process.exit(1);
-}
-
-const appName = 'hub';
-const config = APP_CONFIG[appName];
-
-if (!config?.cloudflare) {
-  logger.error('No cloudflare config for hub');
-  process.exit(1);
-}
-
-try {
-  await deployCloudflareWorker(config, appName, mode, ROOT_DIR, generateVersionString(), false);
-} catch (error) {
-  const err = error as { stderr?: string; stdout?: string; message?: string };
-  logger.error(err.stderr ?? err.message ?? String(error));
-  process.exit(1);
-}
+await deployCloudflareApp('hub');

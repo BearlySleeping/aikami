@@ -13,7 +13,7 @@
  *   cloudflare-worker    → Build → `wrangler deploy` → Cloudflare Worker (client, site, docs)
  *   tauri-release        → Build Tauri desktop app → release artifacts
  *   docker-release       → Docker build + push only (image, text, voice)
- *   database-migration   → Apply server-plane migrations against Neon
+ *   database-migration   → Apply server-plane migrations against Cloudflare D1
  */
 
 import { MODE_PROJECT_MAP, modes } from '../../../../packages/shared/constants/src/lib/project.ts';
@@ -125,16 +125,6 @@ export type AppConfig = {
   memory?: string;
   /** Cloud Run service ID override. Defaults to `aikami-${shortName}`. */
   cloudRunServiceId?: string;
-  /**
-   * Firebase Hosting site ID override per mode. Defaults to
-   * `{projectId}-{shortName}` (or `{projectId}` for the default site).
-   * Needed when the derived name is globally unavailable.
-   */
-  hostingSiteIds?: Partial<Record<LiveMode, string>>;
-  /** VPC connector for Cloud SQL access (Cloud Run). */
-  vpcConnector?: string;
-  /** Cloud SQL instance for the Auth Proxy (Cloud Run). */
-  cloudSqlInstance?: string;
   /** Whether to expect a dist/ directory after moon build. Default true. */
   needsDist?: boolean;
   /** Docker image name override. Defaults to aikami/${shortName}. */
@@ -341,8 +331,8 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
   /**
    * Server-data-plane migrations (C-394 AC-5). Not a service — this app
    * runs `wrangler d1 migrations apply` against the D1 database (C-436).
-   * unpooled endpoint — DDL under PgBouncer transaction pooling breaks).
    *
+
    * The AppConfig hosting fields (shortName, imageName, customDomains …)
    * are meaningless for a migration job and are deliberately left unset.
    * `needsDist: false` keeps the deploy pipeline from attempting a moon
@@ -443,12 +433,6 @@ export const PROJECT_ENV_CONFIG: Readonly<Record<string, ProjectSecretConfig>> =
   } satisfies ProjectSecretConfig,
 };
 
-/**
- * GCP region where Cloud Functions and Cloud Run services are deployed.
- * Must match the region used by the deploy pipeline.
- */
-export const CLOUD_FUNCTIONS_REGION = 'europe-west1' as const;
-
 export function resolveEnvFile(mode: string): string {
   return `.env.${mode}`;
 }
@@ -456,39 +440,6 @@ export function resolveEnvFile(mode: string): string {
 export function resolveSecretName(key: string, config: SecretNameConfig): string {
   const needsPrefix = config.prefix && APP_SPECIFIC_KEYS_FOR_PREFIX.has(key);
   return needsPrefix ? `${config.prefix}_${key}` : key;
-}
-
-/**
- * Reverse-resolves a live mode from a project ID. Returns undefined for the
- * emulator (which has no Hosting sites) or an unknown project.
- */
-export function resolveModeFromProjectId(projectId: string): LiveMode | undefined {
-  return liveModes.find((mode) => MODE_PROJECT_MAP[mode] === projectId);
-}
-
-/**
- * Resolves the Firebase Hosting site ID for an app.
- *
- * Defaults to `{projectId}-{shortName}`, or `{projectId}` for the app that
- * owns the project's default site (site). Because Hosting site IDs are
- * globally unique across every Firebase project, the derived name is
- * sometimes unavailable — `hostingSiteIds` supplies a per-mode override in
- * that case (see the docs app).
- */
-export function resolveHostingSiteId(appId: AppId, projectId: string): string | undefined {
-  const config = APP_CONFIG[appId];
-  if (!config) {
-    return undefined;
-  }
-  const mode = resolveModeFromProjectId(projectId);
-  const override = mode ? config.hostingSiteIds?.[mode] : undefined;
-  if (override) {
-    return override;
-  }
-  if (!config.shortName) {
-    return projectId;
-  }
-  return `${projectId}-${config.shortName}`;
 }
 
 /**
@@ -509,13 +460,6 @@ export function resolveCloudflareRoute(appId: AppId, mode: string): string | und
   const cf = APP_CONFIG[appId]?.cloudflare;
   const liveMode = mode as LiveMode;
   return cf?.routes?.[liveMode];
-}
-
-/**
- * Resolves the Cloud Run service ID for an app, if configured.
- */
-export function resolveCloudRunServiceId(appId: AppId): string | undefined {
-  return APP_CONFIG[appId]?.cloudRunServiceId;
 }
 
 const BRANCH_MODE_MAP: Record<string, string> = {

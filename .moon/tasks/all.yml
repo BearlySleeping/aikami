@@ -13,7 +13,7 @@
 # dependency ordering, and CI gating.
 # =============================================================================
 
-$schema: "https://moonrepo.dev/schemas/tasks.json"
+$schema: "https://moonrepo.dev/schemas/v2/tasks.json"
 
 # ============================================================
 # File Groups

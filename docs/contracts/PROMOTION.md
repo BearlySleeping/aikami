@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 131 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 132 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -194,4 +194,5 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-448 | Debundle Content Packs | 🛠️ implemented | v1 | full |
 | C-450 | Contract Pipeline Reconciliation And Drift Guard | 🛠️ implemented | v2 | full |
 | C-451 | Thin Contract Mode | 🛠️ implemented | v1 | full |
+| C-453 | Moon Remote Build Cache Cloudflare Workers R2 | 📝 draft | v2 | full |
 

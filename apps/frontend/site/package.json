@@ -21,8 +21,8 @@
     "format": "biome format src/ scripts/ astro.config.ts",
     "typecheck": "astro sync && astro check",
     "test": "true",
-    "logs": "bun run ../../../scripts/ops/logs.ts site",
-    "logs:tail": "bun run ../../../scripts/ops/logs.ts site --tail"
+    "logs": "bun run ../../../scripts/src/lib/ops/logs.ts site",
+    "logs:tail": "bun run ../../../scripts/src/lib/ops/logs.ts site --tail"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

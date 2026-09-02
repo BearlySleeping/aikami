@@ -8,9 +8,7 @@
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
     "fix": "biome check --write . --error-on-warnings",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

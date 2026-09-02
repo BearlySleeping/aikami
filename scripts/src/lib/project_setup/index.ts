@@ -3,30 +3,33 @@
 /**
  * Aikami Project Setup Wizard
  *
- * One-time GCP project setup — orchestrates GCP APIs, Storage, Artifact Registry, IAM, Secrets.
+ * One-time GCP project setup for the aikami-worker Compute Engine VM —
+ * orchestrates GCP APIs, Artifact Registry, IAM, and Secret Manager. See
+ * apps/backend/worker/README.md for what this VM is and why it's the only
+ * thing left on GCP (everything else moved to Cloudflare Workers/D1/R2).
  *
  * 🔴 This is PROJECT (cloud infrastructure) setup, NOT local machine setup.
  * For local developer environment setup, run: bun run setup
  *
  * Usage:
  *   bun run project:setup                    # Full interactive setup
- *   bun run project:setup --mode=staging     # Target specific mode
- *   bun run project:setup --mode=staging --dry-run   # Check only, no changes
+ *   bun run project:setup --mode=production  # Target specific mode (worker is production-only)
+ *   bun run project:setup --mode=production --dry-run   # Check only, no changes
  *
  * Individual steps:
- *   bun run scripts/src/lib/project_setup/gcp_apis.ts --mode=staging
- *   bun run scripts/src/lib/project_setup/artifact_registry.ts --mode=staging
- *   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=staging
- *   bun run scripts/src/lib/project_setup/github.ts --mode=staging
+ *   bun run scripts/src/lib/project_setup/gcp_apis.ts --mode=production
+ *   bun run scripts/src/lib/project_setup/artifact_registry.ts --mode=production
+ *   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=production
  */
 
 import { c, fmt, parseCliArgs } from '../cli_utils';
-import { CLOUD_FUNCTIONS_REGION, MODE_PROJECT_MAP } from '../deploy/deployment_config';
+import { MODE_PROJECT_MAP } from '../deploy/deployment_config';
 import { setupArtifactRegistry } from './artifact_registry';
-import { setupCdnHosting } from './cdn_hosting_setup';
 import { setupGcpApis } from './gcp_apis';
 import { setupIam } from './iam';
 import { setupSecrets } from './secrets_manager';
+
+const WORKER_REGION = 'us-central1';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
@@ -76,8 +79,8 @@ async function checkProject(projectId: string): Promise<boolean> {
 
 // ─── Main ─────────────────────────────────────────────────────────────────
 /**
- * Interactive project setup wizard: runs each setup step (APIs, IAM,
- * secrets, hosting, registry, CDN) in sequence, honoring dry-run.
+ * Interactive project setup wizard: runs each setup step (APIs, Artifact
+ * Registry, IAM, Secret Manager) in sequence, honoring dry-run.
  */
 async function main() {
   console.log(fmt.head('Aikami Project Setup'));
@@ -107,7 +110,7 @@ async function main() {
   }
 
   console.log(
-    `  Mode: ${c.bold}${mode}${c.reset}   Project: ${c.bold}${projectId}${c.reset}   Region: ${c.bold}${CLOUD_FUNCTIONS_REGION}${c.reset}`,
+    `  Mode: ${c.bold}${mode}${c.reset}   Project: ${c.bold}${projectId}${c.reset}   Region: ${c.bold}${WORKER_REGION}${c.reset}`,
   );
 
   const projOk = await checkProject(projectId);
@@ -129,27 +132,21 @@ async function main() {
 
   // ── Artifact Registry ─────────────────────────────────────────────
   {
-    const { checks } = await setupArtifactRegistry(projectId, CLOUD_FUNCTIONS_REGION, DRY_RUN);
+    const { checks } = await setupArtifactRegistry(projectId, WORKER_REGION, DRY_RUN);
     allChecks.push(...checks);
   }
 
-  // ── IAM (deploy service account roles) ────────────────────────────
+  // ── IAM (deploy + runtime service account roles) ───────────────────
   {
-    const saEmail = `firebase-adminsdk-fbsvc@${projectId}.iam.gserviceaccount.com`;
-    const { checks } = await setupIam(projectId, saEmail, DRY_RUN);
+    const deploySaEmail = `firebase-adminsdk-fbsvc@${projectId}.iam.gserviceaccount.com`;
+    const runtimeSaEmail = `worker@${projectId}.iam.gserviceaccount.com`;
+    const { checks } = await setupIam(projectId, deploySaEmail, DRY_RUN, runtimeSaEmail);
     allChecks.push(...checks);
   }
 
   // ── Secret Manager ────────────────────────────────────────────────
   {
     const { checks, manualSteps } = await setupSecrets(projectId, DRY_RUN);
-    allChecks.push(...checks);
-    allManualSteps.push(...manualSteps);
-  }
-
-  // ── CDN Hosting (Tauri download redirects) ────────────────────────
-  {
-    const { checks, manualSteps } = await setupCdnHosting(DRY_RUN);
     allChecks.push(...checks);
     allManualSteps.push(...manualSteps);
   }
@@ -182,7 +179,7 @@ async function main() {
     allManualSteps.push({
       title: 'Enable billing on the project',
       url: `https://console.cloud.google.com/billing/linkedaccount?project=${projectId}`,
-      detail: 'Required for: Cloud Run, Cloud Build, Artifact Registry, Secret Manager',
+      detail: 'Required for: Compute Engine, Artifact Registry, Secret Manager',
     });
   }
 

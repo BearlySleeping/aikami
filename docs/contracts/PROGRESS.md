@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-02)
 
-**206 active (0 without contract file), 119 archived, 0 duplicates**
+**207 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -214,6 +214,7 @@
 | C-450 | Contract Pipeline Reconciliation And Drift Guard | 🛠️ implemented | — | v2 | full |
 | C-451 | Thin Contract Mode | 🛠️ implemented | — | v1 | full |
 | C-452 | Backfill Execution Reports | 🛠️ implemented | ❓ `integrated` — doc-only change, no sandbox route | v2 | full |
+| C-453 | Moon Remote Build Cache Cloudflare Workers R2 | 📝 draft | — | v2 | full |
 
 ---
 
