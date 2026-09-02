@@ -161,7 +161,7 @@ class SessionService
 
   constructor(options: SessionServiceOptions) {
     super(options);
-    registerSerializable('session', this as unknown as SerializableService<unknown>);
+    registerSerializable('session', this as unknown as SerializableService<unknown>); // guard-ignore lint/type-safety/casting: registerSerializable(this) - service class implements SerializableService
   }
 
   // ── Public API ──────────────────────────────────────────────────────

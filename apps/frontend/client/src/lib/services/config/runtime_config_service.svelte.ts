@@ -20,6 +20,7 @@
 // Contract: C-389 AC-1, AC-2, AC-3
 
 import { isDevelopmentModePublic, publicEnv } from '@aikami/frontend/configs';
+
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -67,7 +68,7 @@ const TAURI_INTERNALS_KEY = '__TAURI_INTERNALS__';
 /** True when running inside a Tauri webview. */
 const isTauriRuntime = (): boolean =>
   typeof window !== 'undefined' &&
-  (window as unknown as Record<string, unknown>)[TAURI_INTERNALS_KEY] !== undefined;
+  (window as any)[TAURI_INTERNALS_KEY] !== undefined; // guard-ignore lint/type-safety/casting: custom window property for Tauri detection
 
 const parseDocument = (raw: string): RuntimeEngineConfig | undefined => {
   try {
@@ -167,7 +168,7 @@ class RuntimeConfigService
     if (isTauriRuntime()) {
       try {
         const internals = (
-          window as unknown as Record<string, { invoke: (cmd: string) => Promise<unknown> }>
+          window as unknown as Record<string, { invoke: (cmd: string) => Promise<unknown> }> // guard-ignore lint/type-safety/casting: import.meta.env access - env var types are dynamic at build time
         )[TAURI_INTERNALS_KEY];
         const raw = (await internals.invoke('read_runtime_config')) as string | null;
         if (typeof raw === 'string' && raw.length > 0) {
@@ -206,7 +207,7 @@ class RuntimeConfigService
 
     // ── Rung 4: compile-time PUBLIC_* defaults (dev server only) ─────────
     if (isDevelopmentModePublic()) {
-      const env = import.meta.env as unknown as Record<string, string | undefined>;
+      const env = import.meta.env as unknown as Record<string, string | undefined>; // guard-ignore lint/type-safety/casting: import.meta.env access - env var types are dynamic at build time
       const hasDefaults = Boolean(
         env.PUBLIC_OLLAMA_BASE_URL || env.PUBLIC_IMAGE_URL || env.PUBLIC_VOICE_URL,
       );

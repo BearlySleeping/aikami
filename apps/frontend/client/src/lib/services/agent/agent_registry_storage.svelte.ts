@@ -94,7 +94,7 @@ class AgentRegistryStorage
     if (result.rows.length === 0) {
       return undefined;
     }
-    return this._parseAgent(result.rows[0] as unknown as CustomAgentRow);
+    return this._parseAgent(result.rows[0] as unknown as CustomAgentRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
   }
 
   /** @inheritdoc */
@@ -113,7 +113,7 @@ class AgentRegistryStorage
 
     const agents: CustomAgentDefinition[] = [];
     for (const row of result.rows) {
-      const agent = this._parseAgent(row as unknown as CustomAgentRow);
+      const agent = this._parseAgent(row as unknown as CustomAgentRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
       if (agent) {
         agents.push(agent);
       }

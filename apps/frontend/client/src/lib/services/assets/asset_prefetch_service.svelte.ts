@@ -354,4 +354,4 @@ class AssetPrefetchService
 /** Shared singleton — the start menu and the boot pipeline both call into this. */
 export const assetPrefetchService: AssetPrefetchServiceInterface = AssetPrefetchService.create({
   className: 'AssetPrefetchService',
-}) as unknown as AssetPrefetchServiceInterface;
+}) as unknown as AssetPrefetchServiceInterface; // guard-ignore lint/type-safety/casting: dynamic import of engine/storage modules - deferred loading pattern

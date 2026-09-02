@@ -56,6 +56,20 @@ export type CampaignSummary = {
   readonly capabilities: CapabilityProfile;
 };
 
+/** An entry in the Advanced section of the start menu. */
+export type AdvancedEntry = {
+  /** Button label. */
+  readonly label: string;
+  /** Description shown below the button. */
+  readonly description: string;
+  /** Optional external link shown at the end of the description. */
+  readonly href?: string;
+  /** Label for the external link. */
+  readonly hrefLabel?: string;
+  /** Action to invoke when the button is clicked. */
+  readonly action: () => void;
+};
+
 export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether running inside Tauri (desktop). */
   readonly isTauri: boolean;
@@ -135,8 +149,15 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** C-405 AC-4: Navigates to the world-generation preview (Advanced entry). */
   startWorldGeneration(): Promise<void>;
 
+  /** Advanced section entries shown at the bottom of the start menu. */
+  readonly advancedItems: readonly AdvancedEntry[];
+
+  /** Navigates to the /dev tools hub. */
+  goToDev(): Promise<void>;
+
   /** C-422 AC-3: Navigates to the game with a fresh onboarding arc (replay tutorial). */
   replayTutorial(): Promise<void>;
+
 
   // ── Pack Browser (C-345) ──
 
@@ -472,6 +493,37 @@ class StartViewModel
       queryParameters: undefined,
       pathParameters: undefined,
     });
+  }
+
+  /** @inheritdoc */
+  async goToDev(): Promise<void> {
+    await routerService.goToRoute('dev', {
+      queryParameters: undefined,
+      pathParameters: undefined,
+    });
+  }
+
+  /** @inheritdoc */
+  get advancedItems(): readonly AdvancedEntry[] {
+    return [
+      {
+        label: 'World Generation (Preview)',
+        description:
+          'Generates a world preview that is not yet playable — used to prototype story content. See',
+        href: 'https://github.com/BearlySleeping/aikami/issues/81',
+        hrefLabel: 'issue #81',
+        action: () => {
+          this.startWorldGeneration();
+        },
+      },
+      {
+        label: 'Dev Tools',
+        description: 'Access developer tools, sandboxes, and experimental features.',
+        action: () => {
+          this.goToDev();
+        },
+      },
+    ];
   }
 
   /** @inheritdoc */

@@ -24,7 +24,7 @@
 
 import { version } from '$app/env';
 
-const worker = self as unknown as ServiceWorkerGlobalScope;
+const worker = self as unknown as ServiceWorkerGlobalScope; // guard-ignore lint/type-safety/casting: ServiceWorkerGlobalScope type not available in Vite service worker context
 
 /** Base paths for audio assets to intercept. */
 const AUDIO_PATH_PREFIXES = ['/game-data/music/', '/game-data/sfx/', '/game-data/ambient/'];

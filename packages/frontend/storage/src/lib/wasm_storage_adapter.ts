@@ -193,7 +193,7 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     // disablePageSizeChange)'. Provide the internal object explicitly so
     // the kvvfs VFS works outside test mode (page-size changes are disabled
     // — kvvfs uses a fixed page size internally).
-    const kvvfs = (sqlite3 as unknown as { kvvfs?: { internal?: object } }).kvvfs;
+    const kvvfs = (sqlite3 as unknown as { kvvfs?: { internal?: object } }).kvvfs; // guard-ignore lint/type-safety/casting: sqlite3 WASM C API bindings have untyped function surface
     if (kvvfs && !kvvfs.internal) {
       kvvfs.internal = { disablePageSizeChange: true };
     }
@@ -448,8 +448,8 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       return;
     }
     try {
-      const capi = (this._sqlite3 as unknown as { capi?: Record<string, unknown> }).capi;
-      const db = this._db as unknown as { pointer: number };
+      const capi = (this._sqlite3 as unknown as { capi?: Record<string, unknown> }).capi; // guard-ignore lint/type-safety/casting: sqlite3 WASM C API bindings have untyped function surface
+      const db = this._db as unknown as { pointer: number }; // guard-ignore lint/type-safety/casting: sqlite3 WASM C API bindings have untyped function surface
       const exportFn = capi?.['sqlite3_js_db_export'] as
         | ((pDb: number, schema?: number) => Uint8Array)
         | undefined;
@@ -470,11 +470,11 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
     if (!this._db || !this._sqlite3) {
       return;
     }
-    const capi = (this._sqlite3 as unknown as { capi?: Record<string, unknown> }).capi;
-    const wasm = (this._sqlite3 as unknown as { wasm?: Record<string, unknown> }).wasm;
+    const capi = (this._sqlite3 as unknown as { capi?: Record<string, unknown> }).capi; // guard-ignore lint/type-safety/casting: sqlite3 WASM C API bindings have untyped function surface
+    const wasm = (this._sqlite3 as unknown as { wasm?: Record<string, unknown> }).wasm; // guard-ignore lint/type-safety/casting: sqlite3 WASM C API bindings have untyped function surface
     // capi constants mirror the sqlite3-wasm C API surface (UPPER_SNAKE_CASE
     // keys are the real property names), so access them via bracket notation.
-    const sqlite3 = this._sqlite3 as unknown as { capi?: Record<string, number | undefined> };
+    const sqlite3 = this._sqlite3 as unknown as { capi?: Record<string, number | undefined> }; // guard-ignore lint/type-safety/casting: sqlite3 WASM C API bindings have untyped function surface
     const deserialize = capi?.['sqlite3_deserialize'] as
       | ((
           pDb: number,
@@ -492,7 +492,7 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       return;
     }
 
-    const db = this._db as unknown as { pointer: number };
+    const db = this._db as unknown as { pointer: number }; // guard-ignore lint/type-safety/casting: sqlite3 WASM C API bindings have untyped function surface
     const pData = allocFromTypedArray(bytes);
     const flags =
       (sqlite3.capi?.['SQLITE_DESERIALIZE_FREEONCLOSE'] ?? 1) |

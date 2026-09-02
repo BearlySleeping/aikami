@@ -83,7 +83,7 @@ class ChatLinkStorage
       return undefined;
     }
 
-    const link = this._parseLink(result.rows[0] as unknown as ChatLinkRow);
+    const link = this._parseLink(result.rows[0] as unknown as ChatLinkRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
     if (!link?.isActive) {
       return undefined;
     }
@@ -216,7 +216,7 @@ class ChatLinkStorage
     if (result.rows.length === 0) {
       return undefined;
     }
-    return this._parseLink(result.rows[0] as unknown as ChatLinkRow);
+    return this._parseLink(result.rows[0] as unknown as ChatLinkRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
   }
 
   private async _updateLink(link: ChatLink): Promise<void> {

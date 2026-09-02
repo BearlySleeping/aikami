@@ -69,7 +69,7 @@ class SessionSummaryService
 
   constructor(options: SessionSummaryServiceOptions) {
     super(options);
-    registerSerializable('sessionSummary', this as unknown as SerializableService<unknown>);
+    registerSerializable('sessionSummary', this as unknown as SerializableService<unknown>); // guard-ignore lint/type-safety/casting: registerSerializable call - service typed as SerializableService at runtime
   }
 
   get currentSummary(): SessionSummary | null {

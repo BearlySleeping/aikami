@@ -113,7 +113,7 @@ class LorebookStore
     const entries: LorebookEntry[] = [];
     for (const lb of this.lorebooks) {
       if (activeIds.has(lb.id)) {
-        entries.push(...lb.entries as unknown as LorebookEntry[]);
+        entries.push(...lb.entries as unknown as LorebookEntry[]); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
       }
     }
 

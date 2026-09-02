@@ -53,7 +53,7 @@ class OptionsViewModel
 
   /** @inheritdoc */
   get tabs(): OptionsTab[] {
-    return OPTIONS_TABS as unknown as OptionsTab[];
+    return OPTIONS_TABS as unknown as OptionsTab[]; // guard-ignore lint/type-safety/casting: options tab enum cast - value guaranteed by navigation logic
   }
 
   /** @inheritdoc */

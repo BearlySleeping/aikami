@@ -10,7 +10,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { authService, getGameCompositionRoot } from '$services';
+import { gameCompositionRoot } from '$services';
 import type { CombatViewModelInterface } from '../combat/combat_view_model.svelte';
 import type { GameCanvasViewModelInterface } from './canvas/game_canvas_view_model.svelte';
 import { getGameCanvasViewModel } from './canvas/game_canvas_view_model.svelte';
@@ -37,9 +37,6 @@ export type GameViewModelInterface = BaseViewModelInterface & {
 // ---------------------------------------------------------------------------
 
 class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameViewModelInterface {
-  /** Tracks whether composition root initialization has been attempted. */
-  private _compositionRootInitialized = false;
-
   /** Canvas ViewModel — created eagerly in constructor, no async init needed. */
   canvasViewModel = $state<GameCanvasViewModelInterface>(
     getGameCanvasViewModel({ className: 'GameCanvasViewModel' }),
@@ -61,8 +58,8 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   // ── Lifecycle ──
 
   async initialize(): Promise<void> {
-    // Boot the composition root (idempotent — safe across remounts)
-    await this._ensureCompositionRootBoot();
+    // Boot the composition root — idempotent, safe to call across remounts.
+    await gameCompositionRoot.initialize();
 
     // Initialize child ViewModels — GameCanvasViewModel starts the engine,
     // GameUIViewModel sets up overlay effects and keyboard handling
@@ -78,24 +75,11 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     this.uiViewModel.handleKeyDown(event);
   }
 
-  // ── Private ──
-
-  /**
-   * Boots the game composition root exactly once.
-   * The composition root handles idempotency internally —
-   * calling initialize() twice returns the already-initialized state.
-   */
-  private async _ensureCompositionRootBoot(): Promise<void> {
-    if (this._compositionRootInitialized) {
-      return;
-    }
-    this._compositionRootInitialized = true;
-
-    const compositionRoot = getGameCompositionRoot({
-      className: 'GameCompositionRoot',
-      uid: authService.uid ?? 'anonymous',
-    });
-    await compositionRoot.initialize();
+override async dispose(): Promise<void> {
+    await this.canvasViewModel.dispose();
+    await this.uiViewModel.dispose();
+    await gameCompositionRoot.dispose();
+    await super.dispose();
   }
 }
 

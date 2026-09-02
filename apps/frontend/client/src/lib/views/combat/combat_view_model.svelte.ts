@@ -586,7 +586,7 @@ export class CombatViewModel
 
   /** @inheritdoc */
   dismissResult(): void {
-    const onDismiss = (this as unknown as { _options?: CombatViewModelOptions })._options
+    const onDismiss = (this as unknown as { _options?: CombatViewModelOptions })._options // guard-ignore lint/type-safety/casting: dev options or Record cast for internal combat state
       ?.onDismissOverlay;
     if (onDismiss) {
       this.combatResult = null;
@@ -1005,7 +1005,7 @@ export class CombatViewModel
 
       // Extract structured combat intent from the LLM
       const raw = await textGenerationService.extractStructure({
-        schema: CombatActionSchema as unknown as Record<string, unknown>,
+        schema: CombatActionSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: dev options or Record cast for internal combat state
         schemaName: 'CombatActionIntent',
         prompt: contextualPrompt,
         systemPrompt: COMBAT_ACTION_SYSTEM_PROMPT,

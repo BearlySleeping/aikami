@@ -1532,5 +1532,5 @@ export const questStateService: QuestStateServiceInterface = QuestStateService.c
 // Register for save/load persistence
 registerSerializable(
   'questState',
-  questStateService as unknown as import('./serializable_service').SerializableService<unknown>,
+  questStateService as unknown as import('./serializable_service').SerializableService<unknown>, // guard-ignore lint/type-safety/casting: registerSerializable call - service typed as SerializableService at runtime
 );

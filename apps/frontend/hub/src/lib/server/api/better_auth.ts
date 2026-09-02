@@ -85,6 +85,7 @@ export const getBetterAuth = (): ReturnType<typeof createBetterAuth> | undefined
     });
     const cookieDomain = deriveCookieDomain();
     _auth = createBetterAuth(db as unknown as Record<string, unknown>, {
+      // guard-ignore lint/type-safety/casting: Better Auth callback types are opaque
       baseURL: baseURL ?? 'http://localhost:5173',
       secret: secret ?? 'dev-secret-not-for-production',
       googleClientId: GOOGLE_CLIENT_ID,

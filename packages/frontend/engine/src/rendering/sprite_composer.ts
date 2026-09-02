@@ -473,7 +473,7 @@ export class SpriteComposer {
     //
     // Store the instance index as a custom property on the container
     // for downstream consumers (render system, debug overlay).
-    (sprite as unknown as Record<string, unknown>)._lpcInstanceIndex = instanceIndex;
+    (sprite as unknown as Record<string, unknown>)._lpcInstanceIndex = instanceIndex; // guard-ignore lint/type-safety/casting: _lpcInstanceIndex is custom property not on PixiJS Container type
   }
 
   /**
@@ -484,7 +484,7 @@ export class SpriteComposer {
    * @returns The instance index, or -1 if not set.
    */
   static getInstanceIndex(sprite: Container): number {
-    const idx = (sprite as unknown as Record<string, unknown>)._lpcInstanceIndex;
+    const idx = (sprite as unknown as Record<string, unknown>)._lpcInstanceIndex; // guard-ignore lint/type-safety/casting: _lpcInstanceIndex is custom property not on PixiJS Container type
     return typeof idx === 'number' ? idx : -1;
   }
 }

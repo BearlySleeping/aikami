@@ -206,7 +206,7 @@ class VendorService
     try {
       const prompt = this._buildHagglePrompt(message);
       const raw = await textGenerationService.extractStructure({
-        schema: VendorActionSchema as unknown as Record<string, unknown>,
+        schema: VendorActionSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope - TSchema not assignable to Record
         schemaName: 'VendorActionIntent',
         prompt,
         systemPrompt: VENDOR_ACTION_SYSTEM_PROMPT,

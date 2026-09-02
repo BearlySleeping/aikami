@@ -103,7 +103,7 @@ class CombatService
 
   constructor(options: BaseFrontendClassOptions) {
     super(options);
-    registerSerializable('combat', this as unknown as SerializableService<unknown>);
+    registerSerializable('combat', this as unknown as SerializableService<unknown>); // guard-ignore lint/type-safety/casting: registerSerializable(this) - service class implements SerializableService but this reference loses the type
   }
 
   get lastCombatOptions(): CombatServiceInterface['lastCombatOptions'] {

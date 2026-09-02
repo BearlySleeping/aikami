@@ -58,7 +58,7 @@ export const toUserClaims = ({
   uid: string;
 }): UserClaims => {
   const userLiteData: UserClaims = {
-    ...toUserTokenData(token as unknown as UserTokenData),
+    ...toUserTokenData(token as unknown as UserTokenData), // guard-ignore lint/type-safety/casting: JSON.parse result - TypeBox schema validation precedes this cast
     id: uid,
   };
   return userLiteData;

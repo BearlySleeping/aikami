@@ -91,7 +91,7 @@ export abstract class BaseClass<Options extends BaseClassOptions = BaseClassOpti
     //    projects (parser, frontend-utils) that don't have Vite's
     //    ImportMeta augmentation.
     if (typeof import.meta !== 'undefined') {
-      const metaEnv = (import.meta as unknown as Record<string, unknown>).env;
+      const metaEnv = (import.meta as unknown as Record<string, unknown>).env; // guard-ignore lint/type-safety/casting: import.meta.env access for dev mode detection
       if (metaEnv && typeof metaEnv === 'object' && 'DEV' in metaEnv) {
         return String((metaEnv as Record<string, unknown>).DEV) === 'true';
       }

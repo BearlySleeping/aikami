@@ -81,7 +81,7 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
       this._join = join as (...paths: string[]) => Promise<string>;
       this._dir = await join(base, 'aikami-assets');
       await fs.mkdir(this._dir, { recursive: true });
-      this._fs = fs as unknown as TauriFsModule;
+      this._fs = fs as unknown as TauriFsModule; // guard-ignore lint/type-safety/casting: Tauri fs API types not available in browser; runtime type guaranteed by Tauri plugin
       this.isAvailable = true;
       logger.debug('TauriFSCacheBackend.init:ready', { dir: this._dir });
     } catch (error) {
@@ -120,7 +120,7 @@ export class TauriFSCacheBackend implements AssetCacheBackend {
     }
     try {
       const bytes = await this._fs.readFile(await this._path(hash));
-      return new Blob([bytes as unknown as ArrayBuffer]);
+      return new Blob([bytes as unknown as ArrayBuffer]); // guard-ignore lint/type-safety/casting: Tauri fs API types not available in browser; runtime type guaranteed by Tauri plugin
     } catch {
       return undefined;
     }

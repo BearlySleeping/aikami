@@ -109,11 +109,10 @@ const TERRAIN_PROMPT = [
 // ENVIRONMENT_UPDATED confirms the requested hour, or immediately on a normal
 // boot). Shared by both cases so the readiness contract stays in one place.
 const waitForVisualReady = async (page: Page): Promise<void> => {
-  await page.waitForFunction(
-    () => (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ === true,
-    undefined,
-    { timeout: 10_000 },
-  );
+  await page.waitForFunction(() => (window as any).__AIKAMI_VISUAL_READY__ === true, undefined, {
+    // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+    timeout: 10_000,
+  });
 };
 
 const NPC_BODIES_PROMPT = [

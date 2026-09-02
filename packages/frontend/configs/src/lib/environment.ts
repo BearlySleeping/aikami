@@ -11,7 +11,7 @@ import Type from 'typebox';
 // dev server connects to its own per-contract emulator instance instead of
 // colliding with another concurrently-running contract. 0 in normal dev.
 const emulatorPortOffset = Number(
-  (import.meta.env as unknown as Record<string, string | undefined>).PUBLIC_EMULATOR_PORT_OFFSET ||
+  (import.meta.env as unknown as Record<string, string | undefined>).PUBLIC_EMULATOR_PORT_OFFSET || // guard-ignore lint/type-safety/casting: import.meta.env access - env var types are dynamic at build time
     0,
 );
 export const EMULATOR_PORTS = withPortOffset(BASE_EMULATOR_PORTS, emulatorPortOffset);
@@ -52,7 +52,7 @@ const APP_REQUIREMENTS: Record<AppID, (keyof MasterEnv)[]> = {
  * built-in validation in v1.x. We validate presence of required fields manually.
  */
 const validateEnv = (): MasterEnv => {
-  const rawEnv = import.meta.env as unknown as Record<string, string | undefined>;
+  const rawEnv = import.meta.env as unknown as Record<string, string | undefined>; // guard-ignore lint/type-safety/casting: import.meta.env access - env var types are dynamic at build time
 
   if (!rawEnv) {
     throw toAppError({

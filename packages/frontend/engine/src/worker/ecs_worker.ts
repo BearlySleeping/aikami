@@ -1224,7 +1224,7 @@ const tickLoop = (): void => {
       // Transfer the OLD buffer (the one we just finished writing to),
       // NOT the new one — otherwise the transfer detaches activeWriteView.
       bufferToSend = bufferPool[oldIndex] as ArrayBuffer;
-      bufferPool[oldIndex] = null as unknown as ArrayBuffer;
+      bufferPool[oldIndex] = null as unknown as ArrayBuffer; // guard-ignore lint/type-safety/casting: buffer pool slot marker; null means slot not in use
       activeBufferIndex = nextWritableIndex;
       activeWriteView = new Float32Array(bufferPool[nextWritableIndex] as ArrayBuffer);
     }

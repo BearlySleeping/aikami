@@ -107,7 +107,7 @@ export const createPropFrameResolver = (
       if (!spritesheetUrl) {
         const loaded: unknown = await Assets.load(textureUrl);
         if (loaded && typeof loaded === 'object' && 'textures' in loaded) {
-          return loaded as unknown as PropSpritesheet;
+          return loaded as unknown as PropSpritesheet; // guard-ignore lint/type-safety/casting: PropSpritesheet type not exported from pixi.js; runtime check on line above confirms shape
         }
         logger.error('prop-frame-resolver:load-unexpected', {
           loadUrl: textureUrl,
@@ -140,7 +140,7 @@ export const createPropFrameResolver = (
 
       const sheet = new Spritesheet(texture, sheetData);
       await sheet.parse();
-      return sheet as unknown as PropSpritesheet;
+      return sheet as unknown as PropSpritesheet; // guard-ignore lint/type-safety/casting: PropSpritesheet type not exported from pixi.js; runtime check on line above confirms shape
     });
 
   let _sheet: PropSpritesheet | null | undefined;

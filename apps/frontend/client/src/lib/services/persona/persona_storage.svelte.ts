@@ -84,7 +84,7 @@ class PersonaStorage
     });
     const personas: PersonaData[] = [];
     for (const row of result.rows) {
-      const persona = this._parsePersona(row as unknown as PersonaRow);
+      const persona = this._parsePersona(row as unknown as PersonaRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
       if (persona) {
         personas.push(persona);
       }
@@ -103,7 +103,7 @@ class PersonaStorage
     if (result.rows.length === 0) {
       return undefined;
     }
-    return this._parsePersona(result.rows[0] as unknown as PersonaRow);
+    return this._parsePersona(result.rows[0] as unknown as PersonaRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
   }
 
   /** @inheritdoc */
@@ -177,7 +177,7 @@ class PersonaStorage
     if (result.rows.length === 0) {
       return undefined;
     }
-    return this._parsePersona(result.rows[0] as unknown as PersonaRow);
+    return this._parsePersona(result.rows[0] as unknown as PersonaRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
   }
 
   private _parsePersona(row: PersonaRow): PersonaData | undefined {

@@ -272,7 +272,7 @@ export class AuthService
       }
       // The page navigates away; the caller reacts to authService.isLoggedIn
       // after the callback route resolves, so this placeholder is never read.
-      return { status: 'exitingUser', payload: this.currentUser as unknown as CurrentUser };
+      return { status: 'exitingUser', payload: this.currentUser as unknown as CurrentUser }; // guard-ignore lint/type-safety/casting: Better Auth client returns CurrentUser as unknown; schema validated upstream
     }
     return this._betterAuthDeviceHandoff();
   }

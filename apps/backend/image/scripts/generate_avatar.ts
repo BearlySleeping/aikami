@@ -129,7 +129,7 @@ const extractJobId = (job: SdCppJob): string | undefined => {
   if (job.id && job.id.length > 0) {
     return job.id;
   }
-  const nested = (job as unknown as Record<string, unknown>).job;
+  const nested = (job as unknown as Record<string, unknown>).job; // guard-ignore lint/type-safety/casting: AI provider response parsed as unknown; schema validated at API boundary
   if (nested && typeof nested === 'object') {
     const nestedId = (nested as Record<string, unknown>).id;
     if (typeof nestedId === 'string') {

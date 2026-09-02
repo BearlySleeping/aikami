@@ -39,7 +39,7 @@ export const buildItemCatalogFromPack = (options: {
     if (entry.type === 'consumable') {
       def.effect = entry.effect;
     }
-    catalog[itemId] = def as unknown as ItemDefinition;
+    catalog[itemId] = def as unknown as ItemDefinition; // guard-ignore lint/type-safety/casting: catalog item definition cast - runtime type guaranteed by pack format
   }
   return catalog;
 };

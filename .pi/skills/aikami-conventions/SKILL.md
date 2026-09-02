@@ -284,6 +284,16 @@ If you reach for one, **the type is wrong** — fix the type:
 - **Plain `as X`** is acceptable only to narrow a union already discriminated
   in the same scope.
 
+If a T1/T2 cast is genuinely unavoidable — not just inconvenient to fix —
+add `// guard-ignore lint/type-safety/casting: <reason>` on the cast's own
+line (or alone on the line above it), mirroring Biome's own
+`// biome-ignore lint/<group>/<rule>: <reason>` convention, and the guard
+excludes it entirely, no baseline entry needed. The reason after the colon
+is mandatory; a bare `guard-ignore lint/type-safety/casting:` does not
+suppress. This is a narrow escape hatch for real boundary casts, not a
+substitute for a type guard — do not reach for it as the default way to
+clear a violation.
+
 ### ✅ Required Patterns
 
 - **Arrow functions everywhere.** Sole exception: class methods use regular

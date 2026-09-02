@@ -91,7 +91,7 @@ export default defineConfig({
       setupHook: async (page) => {
         const sample = (): Promise<Record<string, { x: number; y: number }>> =>
           page.evaluate(() => {
-            const d = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+            const d = (window as any).__AIKAMI_DEBUG__ as // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
               | { entityPositions?: Record<string, { x: number; y: number }> }
               | undefined;
             return d?.entityPositions ?? {};
@@ -100,9 +100,7 @@ export default defineConfig({
         await page.waitForTimeout(2000);
         const after = await sample();
         const playerEid = await page.evaluate(() => {
-          const d = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
-            | { playerEid?: number }
-            | undefined;
+          const d = (window as any).__AIKAMI_DEBUG__ as { playerEid?: number } | undefined; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
           return d?.playerEid ?? 0;
         });
         let npcMoved = false;

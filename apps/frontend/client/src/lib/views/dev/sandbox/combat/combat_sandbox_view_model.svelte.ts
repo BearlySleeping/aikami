@@ -30,7 +30,7 @@ const _resolveEcsWorker = async (): Promise<new () => Worker> => {
     return _ecsWorkerCtor;
   }
   const mod = await import('@aikami/frontend/engine/worker/ecs_worker.ts?worker&type=module');
-  _ecsWorkerCtor = mod.default as unknown as new () => Worker;
+  _ecsWorkerCtor = mod.default as unknown as new () => Worker; // guard-ignore lint/type-safety/casting: LPC animation state enum cast - value guaranteed by upstream
   return _ecsWorkerCtor;
 };
 
@@ -190,7 +190,7 @@ class CombatSandboxViewModel
         workerFactory: () => new workerCtor(),
         recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState), // guard-ignore lint/type-safety/casting: LPC animation state enum cast - value guaranteed by upstream
         textureManager: this._textureManager,
       };
 

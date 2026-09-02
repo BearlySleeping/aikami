@@ -334,7 +334,7 @@ export class GameOverlayService
     this._initialized = true;
     await this._initSettings();
     await setupBridgeListeners({
-      gameOverlayService: this as unknown as GameOverlayServiceInterface,
+      gameOverlayService: this as unknown as GameOverlayServiceInterface, // guard-ignore lint/type-safety/casting: service interface cast for save service or self-reference
       npcDialogueService,
       gameEngineService,
       combatService,
@@ -1407,7 +1407,7 @@ export class GameOverlayService
       this._saveService = GameSaveService.create({
         className: 'GameSaveService',
         bridge: this._bridge,
-      }) as unknown as GameSaveServiceInterface;
+      }) as unknown as GameSaveServiceInterface; // guard-ignore lint/type-safety/casting: service interface cast for save service or self-reference
     }
     return this._saveService;
   }

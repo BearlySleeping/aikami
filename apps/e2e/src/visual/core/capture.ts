@@ -11,6 +11,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EMULATOR_PORTS } from '@aikami/constants';
+
 import { DEFAULT_LANCZOS_SIZE, optimizePng, resizeLanczos, toBase64DataUri } from '@scripts/ai';
 import { chromium, type Page } from 'playwright';
 import type { TSchema } from 'typebox';
@@ -133,9 +134,7 @@ const getChromiumPath = (): string | undefined => {
  */
 const _waitForPixiLoaded = async (page: Page, timeout = 15_000): Promise<void> => {
   await page.waitForFunction(
-    () =>
-      (window as unknown as Record<string, unknown>).__PIXI_LOADED__ === true ||
-      (window as unknown as Record<string, unknown>).__GAME_READY__ === true,
+    () => (window as any).__PIXI_LOADED__ === true || (window as any).__GAME_READY__ === true, // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
     undefined,
     { timeout },
   );
@@ -169,7 +168,7 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
       }
 
       // E2E test mode — engine state exposed on window (C-217)
-      const engineState = (window as unknown as Record<string, unknown>).__AIKAMI_ENGINE_STATE__ as
+      const engineState = (window as any).__AIKAMI_ENGINE_STATE__ as // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
         | Record<string, unknown>
         | undefined;
       if (engineState?.frozen === true) {

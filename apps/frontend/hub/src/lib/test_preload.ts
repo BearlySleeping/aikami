@@ -20,6 +20,7 @@ type RunePolyfill = {
 };
 
 (globalThis as unknown as Record<string, RunePolyfill>).$state = Object.assign(
+  // guard-ignore lint/type-safety/casting: rune polyfill registration - Svelte 5 runes not available in test env
   (value: unknown) => value,
   { raw: (value: unknown) => value, snapshot: (value: unknown) => value },
 ) as RunePolyfill;
@@ -27,7 +28,7 @@ type RunePolyfill = {
 
 const effectPolyfill = ((fn: () => void) => {
   fn();
-}) as unknown as Record<string, unknown>;
+}) as unknown as Record<string, unknown>; // guard-ignore lint/type-safety/casting: rune polyfill registration - Svelte 5 runes not available in test env
 effectPolyfill.root = (fn: () => void) => {
   fn();
   return () => {};

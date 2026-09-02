@@ -63,7 +63,7 @@ export const isE2ETestMode = (): boolean => {
   } catch {
     // window.location may be unavailable (SSR)
   }
-  return !!(window as unknown as Record<string, unknown>).__AIKAMI_E2E_TEST_MODE__;
+  return !!(window as unknown as Record<string, unknown>).__AIKAMI_E2E_TEST_MODE__; // guard-ignore lint/type-safety/casting: E2E test mode flag on window, not in Window type
 };
 
 /**

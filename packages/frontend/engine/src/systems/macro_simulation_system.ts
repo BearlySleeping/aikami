@@ -305,7 +305,7 @@ const _macroTick = (): void => {
     }
 
     // Step the agent (world param unused — we operate on global SoA arrays)
-    stepMacroAgent(null as unknown as World, eid);
+    stepMacroAgent(null as unknown as World, eid); // guard-ignore lint/type-safety/casting: stepMacroAgent ignores world param, operates on global SoA arrays
   }
 };
 

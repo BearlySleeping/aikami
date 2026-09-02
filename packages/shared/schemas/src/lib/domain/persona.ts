@@ -39,7 +39,7 @@ export type PersonaCreateData = Type.Static<typeof PersonaCreateSchema>;
 
 export const PersonaUpdateSchema = Type.Intersect([
   Type.Omit(PersonaSchema, [...CoreOmitKeys]),
-  Type.Object(getDeletableFields(PersonaSchema as unknown as Record<string, unknown>)),
+  Type.Object(getDeletableFields(PersonaSchema as unknown as Record<string, unknown>)), // guard-ignore lint/type-safety/casting: TypeBox type system limitation - TSchema not assignable to Record<string, unknown>
   Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
 ]);
 

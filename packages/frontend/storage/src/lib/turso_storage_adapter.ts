@@ -238,7 +238,7 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
       // @tursodatabase/database sync API uses the sync() method on the
       // database handle. If the library version doesn't support it, this
       // degrades gracefully.
-      const db = this._db as unknown as Record<string, unknown>;
+      const db = this._db as unknown as Record<string, unknown>; // guard-ignore lint/type-safety/casting: libSQL DB row type is unknown at driver boundary
       if (typeof db.sync === 'function') {
         await (db.sync as () => Promise<void>)();
       } else {

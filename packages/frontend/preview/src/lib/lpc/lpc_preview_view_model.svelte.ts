@@ -4,6 +4,7 @@
 // Manages layer selection, animation state, palette overrides, and PixiJS rendering.
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
+
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -576,7 +577,7 @@ class LpcPreviewViewModel
           layerRole: recipe.layerRole ?? 'front',
           direction: 2,
         });
-        (sprite as unknown as Record<string, unknown>)._originalIndex = i;
+        (sprite as unknown as Record<string, unknown>)._originalIndex = i; // guard-ignore lint/type-safety/casting: Record cast for dynamic LPC layer data from asset store
 
         const effectiveColor =
           this.layerOverrides[i] && this.paletteColors[i] ? this.paletteColors[i] : this.globalTint;
@@ -609,8 +610,8 @@ class LpcPreviewViewModel
         if (a.zIndex !== b.zIndex) {
           return a.zIndex - b.zIndex;
         }
-        const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number;
-        const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number;
+        const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number; // guard-ignore lint/type-safety/casting: Record cast for dynamic LPC layer data from asset store
+        const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number; // guard-ignore lint/type-safety/casting: Record cast for dynamic LPC layer data from asset store
         return aIdx - bIdx;
       });
 
@@ -861,7 +862,7 @@ class LpcPreviewViewModel
       this._setStatus('LPC preview initialized.', 'info');
 
       if (typeof window !== 'undefined') {
-        (window as unknown as Record<string, unknown>).__PIXI_LOADED__ = true;
+        (window as any).__PIXI_LOADED__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

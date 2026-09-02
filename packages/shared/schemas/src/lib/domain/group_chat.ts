@@ -36,7 +36,7 @@ export const GroupChatCreateSchema = Type.Intersect([
 export type GroupChatCreate = Type.Static<typeof GroupChatCreateSchema>;
 export const GroupChatUpdateSchema = Type.Intersect([
   Type.Omit(GroupChatSchema, [...CoreOmitKeys]),
-  Type.Object(getDeletableFields(GroupChatSchema as unknown as Record<string, unknown>)),
+  Type.Object(getDeletableFields(GroupChatSchema as unknown as Record<string, unknown>)), // guard-ignore lint/type-safety/casting: TypeBox type system limitation - TSchema not assignable to Record<string, unknown>
   Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
 ]);
 

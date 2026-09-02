@@ -86,7 +86,7 @@ class ChatEnhancementsSandboxViewModel extends ChatViewModel {
 
   override async initialize(): Promise<void> {
     // Skip real backend calls — directly set mock state
-    (this as unknown as Record<string, unknown>).npc = {
+    (this as unknown as Record<string, unknown>).npc = { // guard-ignore lint/type-safety/casting: sandbox VM accessing private service internals for dev visualization
       id: 'dev-npc-wyrm',
       name: 'Loremaster Wyrm',
       avatarUrl: 'https://placehold.co/400x400/2a1a5a/c9d8f8?text=Wyrm',
@@ -97,11 +97,11 @@ class ChatEnhancementsSandboxViewModel extends ChatViewModel {
       background: 'Keeper of the ancient archives.',
     };
 
-    (this as unknown as Record<string, unknown>).chatData = {
+    (this as unknown as Record<string, unknown>).chatData = { // guard-ignore lint/type-safety/casting: sandbox VM accessing private service internals for dev visualization
       affection: 5,
       stats: {},
     };
-    (this as unknown as Record<string, unknown>).showGreeting = false;
+    (this as unknown as Record<string, unknown>).showGreeting = false; // guard-ignore lint/type-safety/casting: sandbox VM accessing private service internals for dev visualization
 
     chatService.setMessages(
       MOCK_MESSAGES.map((m) => ({
@@ -136,7 +136,7 @@ class ChatEnhancementsSandboxViewModel extends ChatViewModel {
 
     if (this.streamingTtsEnabled) {
       const chunker = (
-        this as unknown as Record<string, { feed: (t: string) => void; close: () => void }>
+        this as unknown as Record<string, { feed: (t: string) => void; close: () => void }> // guard-ignore lint/type-safety/casting: sandbox VM accessing private service internals for dev visualization
       )._chunker;
       chunker?.feed(mockReply);
       chunker?.close();

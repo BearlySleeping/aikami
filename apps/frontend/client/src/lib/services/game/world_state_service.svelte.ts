@@ -557,4 +557,4 @@ export const worldStateService: WorldStateServiceInterface = WorldStateService.c
 });
 
 // Register world pickup/loot/defeated-enemy flags for save/load (C-331 AC-2/AC-5)
-registerSerializable('worldState', worldStateService as unknown as SerializableService<unknown>);
+registerSerializable('worldState', worldStateService as unknown as SerializableService<unknown>); // guard-ignore lint/type-safety/casting: registerSerializable call - service typed as SerializableService at runtime

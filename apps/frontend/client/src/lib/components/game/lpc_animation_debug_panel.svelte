@@ -29,7 +29,7 @@ let { controller }: Props = $props();
         value={controller.animationState}
         onchange={(e: Event) => {
           const target = e.target as HTMLSelectElement;
-          controller.setAnimationState(Number.parseInt(target.value, 10) as unknown as LpcAnimationState);
+          controller.setAnimationState(Number.parseInt(target.value, 10) as unknown as LpcAnimationState); // guard-ignore lint/type-safety/casting: LPC animation enum cast for debug panel - value guaranteed by animation system
         }}
       >
         {#each controller.animationStateOptions as option}
@@ -45,7 +45,7 @@ let { controller }: Props = $props();
         value={controller.facingDirection}
         onchange={(e: Event) => {
           const target = e.target as HTMLSelectElement;
-          controller.setFacingDirection(Number.parseInt(target.value, 10) as unknown as LpcDirection);
+          controller.setFacingDirection(Number.parseInt(target.value, 10) as unknown as LpcDirection); // guard-ignore lint/type-safety/casting: LPC animation enum cast for debug panel - value guaranteed by animation system
         }}
       >
         {#each controller.directionOptions as option}

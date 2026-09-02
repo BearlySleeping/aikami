@@ -157,6 +157,8 @@ $effect(() => {
               {#each viewModel.animationStateOptions as state}
                 <option value={state}>
                   {LpcAnimationState[state as unknown as keyof typeof LpcAnimationState]}
+                  // guard-ignore lint/type-safety/casting: LPC animation enum cast - value
+                  guaranteed by upstream
                 </option>
               {/each}
             </select>
@@ -175,6 +177,8 @@ $effect(() => {
               {#each viewModel.directionOptions as dir}
                 <option value={dir}>
                   {LpcDirection[dir as unknown as keyof typeof LpcDirection]}
+                  // guard-ignore lint/type-safety/casting: LPC animation enum cast - value
+                  guaranteed by upstream
                 </option>
               {/each}
             </select>

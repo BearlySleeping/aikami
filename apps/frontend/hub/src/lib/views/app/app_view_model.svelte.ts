@@ -118,7 +118,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     // 1. Inject static dependencies into our framework-agnostic service.
     routerService.initialize({
       goto,
-      page: page as unknown as Parameters<typeof routerService.initialize>[0]['page'],
+      page: page as unknown as Parameters<typeof routerService.initialize>[0]['page'], // guard-ignore lint/type-safety/casting: router service parameter cast - runtime type guaranteed by SvelteKit router
     });
 
     // 2. Set up our reactive tracking safely attached to the class lifecycle
@@ -162,7 +162,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
       $effect(() => {
         routerService.syncNavigation(
           navigating,
-          page as unknown as Parameters<typeof routerService.syncNavigation>[1],
+          page as unknown as Parameters<typeof routerService.syncNavigation>[1], // guard-ignore lint/type-safety/casting: router service parameter cast - runtime type guaranteed by SvelteKit router
         );
       });
 

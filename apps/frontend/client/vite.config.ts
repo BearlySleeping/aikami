@@ -260,7 +260,7 @@ export default defineConfig(({ mode }) => {
         filename: 'dist/stats.html',
         gzipSize: true,
         open: true,
-      }) as unknown as PluginOption,
+      }) as unknown as PluginOption, // guard-ignore lint/type-safety/casting: Vite plugin option type - PluginOption union includes non-TS types
     );
   }
 

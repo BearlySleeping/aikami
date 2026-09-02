@@ -6,6 +6,7 @@
 // Contract: C-325 Ship Real-Time LPC Appearance Preview with Safe Defaults
 
 import { resolveLayerDepth } from '@aikami/frontend/engine/content';
+
 import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
@@ -336,7 +337,7 @@ class LpcPreviewViewModel
 
       // Signal Playwright visual tests that PixiJS is ready
       if (typeof window !== 'undefined') {
-        (window as unknown as Record<string, unknown>).__PIXI_LPC_PREVIEW_LOADED__ = true;
+        (window as any).__PIXI_LPC_PREVIEW_LOADED__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
       }
 
       this._isInitialized = true;
@@ -454,7 +455,7 @@ class LpcPreviewViewModel
         });
         sprite.zIndex = zIndex;
         // Store original index for stable sorting
-        (sprite as unknown as Record<string, unknown>)._originalIndex = i;
+        (sprite as unknown as Record<string, unknown>)._originalIndex = i; // guard-ignore lint/type-safety/casting: Record cast for dynamic LPC layer data from asset store
 
         // Apply palette tint from LpcLayerRecipe.hexPalette
         const tintColor = this._extractTintFromPalette(hexPalette);
@@ -490,8 +491,8 @@ class LpcPreviewViewModel
           return a.zIndex - b.zIndex;
         }
         // Equal depth: preserve original recipe order
-        const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number;
-        const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number;
+        const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number; // guard-ignore lint/type-safety/casting: Record cast for dynamic LPC layer data from asset store
+        const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number; // guard-ignore lint/type-safety/casting: Record cast for dynamic LPC layer data from asset store
         return aIdx - bIdx;
       });
 

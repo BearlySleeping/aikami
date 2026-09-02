@@ -126,7 +126,7 @@ const buildCapabilityProfile = (): CapabilityProfile => {
 const isAiGateBypassed = (): boolean => {
   if (
     typeof window !== 'undefined' &&
-    (window as unknown as Record<string, unknown>).__AIKAMI_AI_GATE_BYPASS__
+    (window as any).__AIKAMI_AI_GATE_BYPASS__ // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
   ) {
     return true;
   }

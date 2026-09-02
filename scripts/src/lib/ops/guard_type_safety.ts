@@ -29,6 +29,18 @@
 // must not trip the guard); T3 is the opposite — it only ever matches
 // inside a comment, since the ts-ignore directive IS a comment.
 //
+// A T1/T2 violation on a line carrying a
+// `// guard-ignore lint/type-safety/casting: <reason>` comment (trailing on
+// the same line, or alone on the line directly above — mirrors Biome's own
+// `// biome-ignore lint/<group>/<rule>: <reason>` convention) is excluded
+// entirely — it never counts toward the baseline and never prints. The
+// reason after the colon is mandatory: a bare
+// `guard-ignore lint/type-safety/casting:` with nothing after it does NOT
+// suppress. This is an escape hatch for casts that are genuinely
+// unavoidable at a typed/untyped boundary — it is not a replacement for
+// fixing the type or writing a real guard, so use it sparingly and say why
+// in the reason.
+//
 // Usage:
 //   bun run scripts/src/lib/ops/guard_type_safety.ts
 //   bun run scripts/src/lib/ops/guard_type_safety.ts --update-baseline
@@ -165,17 +177,47 @@ const lineOf = (source: string, index: number): number => {
 const T1_PATTERN = /\bas\s+unknown\s+as\s+\S/g;
 const T2_PATTERN = /\bas\s+any\b/g;
 const T3_PATTERN = /(?:\/\/|\/\*)\s*@ts-ignore\b/g;
+const GUARD_IGNORE_CASTING_PATTERN = /\/\/\s*guard-ignore\s+lint\/type-safety\/casting:\s*\S.*$/;
+
+// Line numbers (1-indexed) carrying a valid
+// `guard-ignore lint/type-safety/casting: <reason>` comment, either
+// trailing on the line itself or alone on the line above.
+const findIgnoredCastingLines = (rawContent: string): Set<number> => {
+  const ignored = new Set<number>();
+  const lines = rawContent.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!GUARD_IGNORE_CASTING_PATTERN.test(line)) {
+      continue;
+    }
+    const lineNo = i + 1;
+    const beforeComment = line.slice(0, line.indexOf('//')).trim();
+    if (beforeComment.length === 0) {
+      // Standalone comment line — covers the cast on the line below it.
+      ignored.add(lineNo + 1);
+    } else {
+      // Trailing comment on a code line — covers only that line.
+      ignored.add(lineNo);
+    }
+  }
+  return ignored;
+};
 
 const findViolations = (options: { rawContent: string; relPath: string }): Violation[] => {
   const { rawContent, relPath } = options;
   const violations: Violation[] = [];
 
   if (!isTestExempt(relPath)) {
+    const ignoredLines = findIgnoredCastingLines(rawContent);
     const stripped = stripCommentsAndStrings(rawContent);
     for (const match of stripped.matchAll(T1_PATTERN)) {
+      const line = lineOf(rawContent, match.index);
+      if (ignoredLines.has(line)) {
+        continue;
+      }
       violations.push({
         rule: 't1',
-        line: lineOf(rawContent, match.index),
+        line,
         snippet: rawContent
           .slice(match.index, match.index + 40)
           .split('\n')[0]
@@ -183,9 +225,13 @@ const findViolations = (options: { rawContent: string; relPath: string }): Viola
       });
     }
     for (const match of stripped.matchAll(T2_PATTERN)) {
+      const line = lineOf(rawContent, match.index);
+      if (ignoredLines.has(line)) {
+        continue;
+      }
       violations.push({
         rule: 't2',
-        line: lineOf(rawContent, match.index),
+        line,
         snippet: rawContent
           .slice(match.index, match.index + 40)
           .split('\n')[0]

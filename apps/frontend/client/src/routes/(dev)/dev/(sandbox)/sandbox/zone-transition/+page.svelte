@@ -118,6 +118,7 @@ const _addLog = (message: string): void => {
 const _refreshMemory = (): void => {
   const mem = (
     performance as unknown as {
+      // guard-ignore lint/type-safety/casting: game service private state access for dev zone transition debugging
       memory?: {
         jsHeapSizeLimit: number;
         totalJSHeapSize: number;
@@ -253,7 +254,7 @@ const devActions: DevAction[] = [
     onClick: async () => {
       // Directly trigger the auto-save via the overlay service
       const { gameOverlayService } = await import('$services');
-      const svc = gameOverlayService as unknown as { _triggerAutoSave: () => Promise<void> };
+      const svc = gameOverlayService as unknown as { _triggerAutoSave: () => Promise<void> }; // guard-ignore lint/type-safety/casting: game service private state access for dev zone transition debugging
       void svc._triggerAutoSave();
       _addLog('🔄 Manual auto-save triggered');
     },

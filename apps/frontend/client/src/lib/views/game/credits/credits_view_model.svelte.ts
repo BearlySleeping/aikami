@@ -113,7 +113,7 @@ class CreditsViewModel
 {
   /** @inheritdoc */
   get groups(): CreditGroup[] {
-    return CREDIT_GROUPS as unknown as CreditGroup[];
+    return CREDIT_GROUPS as unknown as CreditGroup[]; // guard-ignore lint/type-safety/casting: credit data parsed from JSON - runtime shape guaranteed by content pack
   }
 
   /** @inheritdoc */

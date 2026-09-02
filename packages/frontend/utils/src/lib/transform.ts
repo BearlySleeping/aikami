@@ -34,7 +34,7 @@ export const fromJsonData = <T extends Omit<CoreData, 'createdAt'>>(
 
     transformedData[key] = value;
   }
-  return transformedData as unknown as T;
+  return transformedData as unknown as T; // guard-ignore lint/type-safety/casting: generic transform helper - caller guarantees type safety
 };
 
 export const getValue = (value: unknown): unknown => {

@@ -684,7 +684,7 @@ export class PersonaCreateViewModel
 
     try {
       const extracted = await textGenerationService.extractStructure({
-        schema: CharacterExtractionSchema as unknown as Record<string, unknown>,
+        schema: CharacterExtractionSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: Record cast for AI-generated persona data
         schemaName: 'CharacterExtraction',
         prompt: compiledHistory,
         systemPrompt: buildCharacterExtractionPrompt(getLpcCatalog()),

@@ -1,5 +1,6 @@
 // apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts
 import {
+
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
@@ -15,7 +16,7 @@ export type TtsServiceOptions = TtsOptions;
 /** True when running inside a Tauri webview. */
 const isTauriRuntime = (): boolean =>
   typeof window !== 'undefined' &&
-  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined;
+  (window as any).__TAURI_INTERNALS__ !== undefined; // guard-ignore lint/type-safety/casting: custom window property for Tauri detection
 
 /**
  * Local engine hosts the packaged Tauri CSP admits (AC-9 — connect-src

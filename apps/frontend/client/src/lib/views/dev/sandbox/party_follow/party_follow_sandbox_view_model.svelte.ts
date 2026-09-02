@@ -31,7 +31,7 @@ const _resolveEcsWorker = async (): Promise<new () => Worker> => {
     return _ecsWorkerCtor;
   }
   const mod = await import('@aikami/frontend/engine/worker/ecs_worker.ts?worker&type=module');
-  _ecsWorkerCtor = mod.default as unknown as new () => Worker;
+  _ecsWorkerCtor = mod.default as unknown as new () => Worker; // guard-ignore lint/type-safety/casting: LPC animation state enum cast - value guaranteed by upstream
   return _ecsWorkerCtor;
 };
 
@@ -185,7 +185,7 @@ class PartyFollowSandboxViewModel
         recipeResolver: sandboxRecipeResolver,
         lpcCatalog,
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState), // guard-ignore lint/type-safety/casting: LPC animation state enum cast - value guaranteed by upstream
         textureManager,
         // C-434: registry-backed tag resolver for maps and tilesets.
         resolveTag: this._assetTagResolver,

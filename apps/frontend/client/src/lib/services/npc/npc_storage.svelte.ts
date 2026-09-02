@@ -94,7 +94,7 @@ class NpcStorage extends BaseFrontendClass<NpcStorageOptions> implements NpcStor
     if (result.rows.length === 0) {
       return undefined;
     }
-    return this._parseNpc(result.rows[0] as unknown as NpcRow);
+    return this._parseNpc(result.rows[0] as unknown as NpcRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
   }
 
   /** @inheritdoc */
@@ -178,7 +178,7 @@ class NpcStorage extends BaseFrontendClass<NpcStorageOptions> implements NpcStor
     });
     const npcs: NpcData[] = [];
     for (const row of result.rows) {
-      const npc = this._parseNpc(row as unknown as NpcRow);
+      const npc = this._parseNpc(row as unknown as NpcRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
       if (npc) {
         npcs.push(npc);
       }

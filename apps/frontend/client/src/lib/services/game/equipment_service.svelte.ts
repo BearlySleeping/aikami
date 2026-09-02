@@ -383,4 +383,4 @@ export const equipmentService: EquipmentServiceInterface = EquipmentService.crea
 });
 
 // Register for save/load persistence (C-331 AC-2)
-registerSerializable('equipment', equipmentService as unknown as SerializableService<unknown>);
+registerSerializable('equipment', equipmentService as unknown as SerializableService<unknown>); // guard-ignore lint/type-safety/casting: registerSerializable call - service typed as SerializableService at runtime

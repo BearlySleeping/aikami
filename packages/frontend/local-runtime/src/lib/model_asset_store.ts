@@ -46,11 +46,12 @@ const sha256Hex = async (buffer: ArrayBuffer): Promise<string> => {
 
 const isTauriRuntime = (): boolean =>
   typeof window !== 'undefined' &&
-  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined;
+  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined; // guard-ignore lint/type-safety/casting: custom window property for Tauri detection
 
 const tauriInvoke = (cmd: string, args?: Record<string, unknown>): Promise<unknown> => {
   const internals = (
     window as unknown as {
+      // guard-ignore lint/type-safety/casting: window global for model asset store registration
       // biome-ignore lint/style/useNamingConvention: Tauri global API name
       __TAURI_INTERNALS__: { invoke: (c: string, a?: unknown) => Promise<unknown> };
     }
@@ -211,6 +212,7 @@ export class TauriAssetTransport implements AssetTransport {
   ): Promise<() => void> {
     const eventApi = (
       window as unknown as {
+        // guard-ignore lint/type-safety/casting: window global for model asset store registration
         // biome-ignore lint/style/useNamingConvention: Tauri global event API name
         __TAURI_EVENT__?: {
           listen: (

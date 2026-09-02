@@ -176,23 +176,24 @@ const createPixiApp = async (options: PixiAppOptions): Promise<PixiAppInstance> 
   if (typeof import.meta !== 'undefined' && (import.meta.env?.DEV || isEmulatorModePublic())) {
     // Primary bridge — used by the official PixiJS DevTools extension
     (window as unknown as Record<string, unknown>).__PIXI_DEVTOOLS__ = {
+      // guard-ignore lint/type-safety/casting: dynamic PixiJS devtools globals on window, not in Window type
       app,
       stage: app.stage,
       renderer: app.renderer,
     };
 
     // Legacy backup locator — used by older devtool revisions
-    (window as unknown as Record<string, unknown>).__PIXI_APP__ = app;
+    (window as unknown as Record<string, unknown>).__PIXI_APP__ = app; // guard-ignore lint/type-safety/casting: dynamic PixiJS devtools globals on window, not in Window type
 
     // Notify the devtools wrapper that the PixiJS globals are now
     // available. The extension inject script caches its initial scan
     // result, so we must explicitly reset / re-initialize after the
     // Application is ready (timing issue: inject runs before onMount).
-    const devtoolsWrapper = (window as unknown as Record<string, unknown>)
+    const devtoolsWrapper = (window as unknown as Record<string, unknown>) // guard-ignore lint/type-safety/casting: dynamic PixiJS devtools globals on window, not in Window type
       .__PIXI_DEVTOOLS_WRAPPER__ as { reset?: () => void } | undefined;
     devtoolsWrapper?.reset?.();
 
-    const appInit = (window as unknown as Record<string, unknown>).__PIXI_APP_INIT__ as
+    const appInit = (window as unknown as Record<string, unknown>).__PIXI_APP_INIT__ as // guard-ignore lint/type-safety/casting: dynamic PixiJS devtools globals on window, not in Window type
       | ((app: unknown, version: string) => void)
       | undefined;
     appInit?.(app, '8.x');

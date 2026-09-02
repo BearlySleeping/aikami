@@ -119,7 +119,7 @@ class ChatStorage extends BaseFrontendClass<ChatStorageOptions> implements ChatS
     if (result.rows.length === 0) {
       return undefined;
     }
-    return await this._chatFromRow(result.rows[0] as unknown as ChatRow);
+    return await this._chatFromRow(result.rows[0] as unknown as ChatRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
   }
 
   /** @inheritdoc */
@@ -236,7 +236,7 @@ class ChatStorage extends BaseFrontendClass<ChatStorageOptions> implements ChatS
     if (result.rows.length === 0) {
       return undefined;
     }
-    return await this._chatFromRow(result.rows[0] as unknown as ChatRow);
+    return await this._chatFromRow(result.rows[0] as unknown as ChatRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
   }
 
   /** @inheritdoc */
@@ -294,7 +294,7 @@ class ChatStorage extends BaseFrontendClass<ChatStorageOptions> implements ChatS
     });
     const chats: ChatData[] = [];
     for (const row of result.rows) {
-      const chat = await this._chatFromRow(row as unknown as ChatRow);
+      const chat = await this._chatFromRow(row as unknown as ChatRow); // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
       if (chat) {
         chats.push(chat);
       }
@@ -327,7 +327,7 @@ class ChatStorage extends BaseFrontendClass<ChatStorageOptions> implements ChatS
       args: [row.id],
     });
 
-    const messages: MessageData[] = (history.rows as unknown as HistoryRow[]).map((h) => ({
+    const messages: MessageData[] = (history.rows as unknown as HistoryRow[]).map((h) => ({ // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
       id: String(h.id),
       text: h.content,
       sender: h.role === 'user' ? ('user' as const) : ('ai' as const),

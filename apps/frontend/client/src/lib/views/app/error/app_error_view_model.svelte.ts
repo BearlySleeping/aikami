@@ -79,7 +79,7 @@ class AppErrorViewModel
   }
 
   get errorId() {
-    return (page.error as unknown as CustomError | undefined)?.errorId;
+    return (page.error as unknown as CustomError | undefined)?.errorId; // guard-ignore lint/type-safety/casting: error data from unknown source; runtime type check precedes cast
   }
 
   get metadata() {
@@ -171,7 +171,7 @@ class AppErrorViewModel
    */
   private _getErrorType(): ErrorType {
     const status = page.status;
-    const error = page.error as unknown as CustomError;
+    const error = page.error as unknown as CustomError; // guard-ignore lint/type-safety/casting: error data from unknown source; runtime type check precedes cast
     const type = error?.type;
     const pathname = this.pathname;
 

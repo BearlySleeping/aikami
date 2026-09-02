@@ -34,7 +34,7 @@ const PERSISTENT_COMPONENTS: Array<[string, Record<string, Array<unknown>>]> = [
   // C-430: Appearance has a Map field (layers) — cast to Record for
   // serializer backward compat. The Map entries are skipped by
   // _extractComponentSlice (source[eid] on a Map returns undefined).
-  ['Appearance', Appearance as unknown as Record<string, Array<unknown>>],
+  ['Appearance', Appearance as unknown as Record<string, Array<unknown>>], // guard-ignore lint/type-safety/casting: bitECS component records have untyped SoA structure; Map fields need explicit cast
   ['CombatStats', CombatStats],
   ['Visual', Visual],
 ];
@@ -69,6 +69,7 @@ const _extractComponentSlice = (
 
   // Special handling for Appearance.layers Map field
   if (component === (Appearance as unknown as Record<string, Array<unknown>>)) {
+    // guard-ignore lint/type-safety/casting: bitECS component records have untyped SoA structure; Map fields need explicit cast
     const layersMap = Appearance.layers;
     const layersValues: Array<string | undefined> = [];
     for (const eid of eids) {
@@ -85,7 +86,7 @@ const _extractComponentSlice = (
     // Skip the Map field itself (it's not enumerable anyway)
     if (
       field === 'layers' &&
-      component === (Appearance as unknown as Record<string, Array<unknown>>)
+      component === (Appearance as unknown as Record<string, Array<unknown>>) // guard-ignore lint/type-safety/casting: bitECS component records have untyped SoA structure; Map fields need explicit cast
     ) {
       continue;
     }
@@ -134,6 +135,7 @@ const _restoreComponentSlice = (
 ): void => {
   // Special handling for Appearance.layers Map field
   if (component === (Appearance as unknown as Record<string, Array<unknown>>)) {
+    // guard-ignore lint/type-safety/casting: bitECS component records have untyped SoA structure; Map fields need explicit cast
     const layersValues = slice.layers;
     if (layersValues) {
       for (let i = 0; i < eids.length; i++) {
@@ -157,7 +159,7 @@ const _restoreComponentSlice = (
     // Skip the serialized layers field for Appearance (already handled above)
     if (
       field === 'layers' &&
-      component === (Appearance as unknown as Record<string, Array<unknown>>)
+      component === (Appearance as unknown as Record<string, Array<unknown>>) // guard-ignore lint/type-safety/casting: bitECS component records have untyped SoA structure; Map fields need explicit cast
     ) {
       continue;
     }

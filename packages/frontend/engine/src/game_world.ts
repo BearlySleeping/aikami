@@ -999,7 +999,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     } catch {
       // window.location may be unavailable (SSR)
     }
-    return !!(window as unknown as Record<string, unknown>).__AIKAMI_E2E_TEST_MODE__;
+    return !!(window as unknown as Record<string, unknown>).__AIKAMI_E2E_TEST_MODE__; // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
   }
 
   /**
@@ -1046,7 +1046,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       cameraX: this._cameraX,
       cameraY: this._cameraY,
     } as const;
-    (window as unknown as Record<string, unknown>).__AIKAMI_ENGINE_STATE__ = state;
+    (window as unknown as Record<string, unknown>).__AIKAMI_ENGINE_STATE__ = state; // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
   }
 
   /**
@@ -1401,7 +1401,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     if (typeof message.playerVisibleByMask === 'number') {
       this._playerVisibleByMask = message.playerVisibleByMask;
       if (typeof window !== 'undefined') {
-        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
           | Record<string, unknown>
           | undefined;
         if (debug) {
@@ -1705,6 +1705,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _setupCommandForwarding(): void {
     // Use the bridge's internal onCommand to intercept commands
     const bridgeWithCommands = this._bridge as unknown as {
+      // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
       onCommand: (type: string, handler: (cmd: unknown) => void) => () => void;
     };
 
@@ -1855,6 +1856,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private _setupSnapshotHandlers(): void {
     const bridgeWithHandlers = this._bridge as unknown as {
+      // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
       setSnapshotHandler: (handler: (scope?: 'player' | 'world') => Promise<string>) => void;
       setRestoreHandler: (handler: (snapshot: string) => Promise<void>) => void;
     };
@@ -3305,6 +3307,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // player's VisionVisible.visibleByMask, forwarded from the worker).
       if (eid === this._playerEntityId && typeof window !== 'undefined') {
         (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ = {
+          // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
           playerX: x,
           playerY: y,
           playerEid: eid,
@@ -3319,7 +3322,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // assert NPCs/companions actually moved (emergent-world integration
       // spec reads this to verify distributed positions over time).
       if (typeof window !== 'undefined') {
-        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
           | Record<string, unknown>
           | undefined;
         if (debug) {

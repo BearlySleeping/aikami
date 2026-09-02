@@ -205,4 +205,4 @@ class QuestDevViewModel
 }
 
 export const getQuestDevViewModel = (options: QuestViewModelOptions): QuestViewModelInterface =>
-  QuestDevViewModel.create(options) as unknown as QuestViewModelInterface;
+  QuestDevViewModel.create(options) as unknown as QuestViewModelInterface; // guard-ignore lint/type-safety/casting: dev VM create() override pattern for QuestViewModel

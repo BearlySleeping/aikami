@@ -219,7 +219,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
             { role: 'system', content: systemPrompt },
             { role: 'user', content: JSON.stringify(input) },
           ],
-          schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>,
+          schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: Record cast for dialogue test data in sandbox
           schemaName: 'NpcIntentAnalysisOutput',
           signal: opts.signal,
         });

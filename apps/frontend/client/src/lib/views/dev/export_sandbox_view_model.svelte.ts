@@ -60,7 +60,7 @@ class ExportSandboxViewModel extends ExportViewModel implements ExportSandboxVie
         visibility: 'private',
         affection: 5,
         stats: {},
-      } as unknown as ChatData,
+      } as unknown as ChatData, // guard-ignore lint/type-safety/casting: chat data serialization for export - runtime shape guaranteed
       {
         id: 'chat-2',
         npcName: 'Garrick Stonefist',
@@ -79,7 +79,7 @@ class ExportSandboxViewModel extends ExportViewModel implements ExportSandboxVie
         visibility: 'private',
         affection: 3,
         stats: {},
-      } as unknown as ChatData,
+      } as unknown as ChatData, // guard-ignore lint/type-safety/casting: chat data serialization for export - runtime shape guaranteed
       {
         id: 'chat-3',
         npcName: 'Old Empty Chat',
@@ -90,7 +90,7 @@ class ExportSandboxViewModel extends ExportViewModel implements ExportSandboxVie
         visibility: 'private',
         affection: 0,
         stats: {},
-      } as unknown as ChatData,
+      } as unknown as ChatData, // guard-ignore lint/type-safety/casting: chat data serialization for export - runtime shape guaranteed
     ];
 
     // ── Mock characters ──

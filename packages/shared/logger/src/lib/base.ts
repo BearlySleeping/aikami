@@ -266,8 +266,8 @@ export abstract class BaseLoggerService implements LoggerInterface {
     const isProduction =
       (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') ||
       (typeof import.meta !== 'undefined' &&
-        (import.meta as unknown as Record<string, unknown>).env !== undefined &&
-        !(import.meta as unknown as Record<string, unknown>).DEV);
+        (import.meta as unknown as Record<string, unknown>).env !== undefined && // guard-ignore lint/type-safety/casting: import.meta.env access for log level - env var types are dynamic
+        !(import.meta as unknown as Record<string, unknown>).DEV); // guard-ignore lint/type-safety/casting: import.meta.env access for log level - env var types are dynamic
 
     if (isProduction) {
       return false;

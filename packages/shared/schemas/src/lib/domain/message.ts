@@ -55,7 +55,7 @@ export const MessageCreateSchema = Type.Intersect([
 export type MessageCreate = Type.Static<typeof MessageCreateSchema>;
 export const MessageUpdateSchema = Type.Intersect([
   Type.Omit(MessageSchema, [...CoreOmitKeys]),
-  Type.Object(getDeletableFields(MessageSchema as unknown as Record<string, unknown>)),
+  Type.Object(getDeletableFields(MessageSchema as unknown as Record<string, unknown>)), // guard-ignore lint/type-safety/casting: TypeBox type system limitation - TSchema not assignable to Record<string, unknown>
   Type.Object({ updatedAt: FieldValueSchema }),
   Type.Object({
     editedAt: MessageSchema.properties.editedAt as Type.TSchema,

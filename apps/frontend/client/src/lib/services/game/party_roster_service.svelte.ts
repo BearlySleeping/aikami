@@ -252,5 +252,5 @@ export const partyRosterService: PartyRosterServiceInterface = PartyRosterServic
 // Register for save/load persistence (C-340 AC-5)
 registerSerializable(
   'party',
-  partyRosterService as unknown as { serialize(): unknown; hydrate(data: unknown): void },
+  partyRosterService as unknown as { serialize(): unknown; hydrate(data: unknown): void }, // guard-ignore lint/type-safety/casting: registerSerializable call - service typed as SerializableService at runtime
 );

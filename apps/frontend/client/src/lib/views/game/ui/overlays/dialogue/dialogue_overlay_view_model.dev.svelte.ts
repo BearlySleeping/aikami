@@ -278,7 +278,7 @@ export class DialogueDevViewModel
    */
   private _applyNpcPreset(preset: DevNpcPreset): void {
     const info = MOCK_PERSONA_INFO[preset];
-    const self = this as unknown as {
+    const self = this as unknown as { // guard-ignore lint/type-safety/casting: rAF polyfill or dev VM internals access
       _npcData: { npcId: string; npcName: string; dialog: string; personaId: string };
       messages: Array<{ id: string; role: string; content: string }>;
     };

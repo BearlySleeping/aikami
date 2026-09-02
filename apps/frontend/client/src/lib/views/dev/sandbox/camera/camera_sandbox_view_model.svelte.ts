@@ -31,7 +31,7 @@ const _resolveEcsWorker = async (): Promise<new () => Worker> => {
     return _ecsWorkerCtor;
   }
   const mod = await import('@aikami/frontend/engine/worker/ecs_worker.ts?worker&type=module');
-  _ecsWorkerCtor = mod.default as unknown as new () => Worker;
+  _ecsWorkerCtor = mod.default as unknown as new () => Worker; // guard-ignore lint/type-safety/casting: game world private state access for dev sandbox visualization
   return _ecsWorkerCtor;
 };
 
@@ -211,7 +211,7 @@ class CameraSandboxViewModel
           return;
         }
         // Read NPC count from the GameWorld (via internal access)
-        const gw = this._gameWorld as unknown as { _npcMeta?: Map<number, unknown> };
+        const gw = this._gameWorld as unknown as { _npcMeta?: Map<number, unknown> }; // guard-ignore lint/type-safety/casting: game world private state access for dev sandbox visualization
         this.npcCount = gw._npcMeta?.size ?? 0;
         this._addLog('NPC_COUNT', String(this.npcCount));
 
@@ -272,7 +272,7 @@ class CameraSandboxViewModel
             .map((id, idx) => (id > 0 ? SandboxRecipes[idx] : null))
             .filter(Boolean) as LpcLayerRecipe[],
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState), // guard-ignore lint/type-safety/casting: game world private state access for dev sandbox visualization
         workerFactory: () => new EcsWorker(),
         // C-434: registry-backed tag resolver for maps and tilesets.
         resolveTag: this._assetTagResolver,

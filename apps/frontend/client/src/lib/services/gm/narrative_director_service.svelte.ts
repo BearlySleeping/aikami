@@ -93,7 +93,7 @@ class NarrativeDirectorService
 
   constructor(options: NarrativeDirectorServiceOptions) {
     super(options);
-    registerSerializable('narrativeDirector', this as unknown as SerializableService<unknown>);
+    registerSerializable('narrativeDirector', this as unknown as SerializableService<unknown>); // guard-ignore lint/type-safety/casting: registerSerializable call - service typed as SerializableService at runtime
   }
 
   get isRunning(): boolean {

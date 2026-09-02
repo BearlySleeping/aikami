@@ -59,7 +59,7 @@ const sessionFilePath = async (): Promise<{ fs: TauriFsModule; path: string } | 
       import('@tauri-apps/plugin-fs'),
     ]);
     return {
-      fs: fs as unknown as TauriFsModule,
+      fs: fs as unknown as TauriFsModule, // guard-ignore lint/type-safety/casting: Tauri fs API types not available in browser; runtime type guaranteed by Tauri plugin
       path: await join(await appDataDir(), SESSION_FILE),
     };
   } catch (error) {

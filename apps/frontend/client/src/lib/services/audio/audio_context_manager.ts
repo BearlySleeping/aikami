@@ -18,7 +18,7 @@ class AudioContextManager {
   get context(): AudioContext {
     if (!this._context) {
       const Ctor = (window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }) // guard-ignore lint/type-safety/casting: webkitAudioContext polyfill - browser-specific API not in TS types
           .webkitAudioContext) as typeof AudioContext;
 
       this._context = new Ctor();

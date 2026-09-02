@@ -381,4 +381,4 @@ export const inventoryService: InventoryServiceInterface = InventoryService.crea
 });
 
 // Register for save/load persistence (C-331 AC-2)
-registerSerializable('inventory', inventoryService as unknown as SerializableService<unknown>);
+registerSerializable('inventory', inventoryService as unknown as SerializableService<unknown>); // guard-ignore lint/type-safety/casting: registerSerializable call - service typed as SerializableService at runtime

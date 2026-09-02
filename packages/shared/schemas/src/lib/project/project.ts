@@ -32,6 +32,7 @@ export type Mode = Type.Static<typeof ModeSchema>;
  */
 export const ProjectIdSchema = Type.Union(
   Object.values(MODE_PROJECT_MAP).map((id) => Type.Literal(id)) as unknown as [
+    // guard-ignore lint/type-safety/casting: TypeBox type system limitation - TSchema not assignable to Record<string, unknown>
     ReturnType<typeof Type.Literal>,
     ...ReturnType<typeof Type.Literal>[],
   ],

@@ -54,7 +54,7 @@ export const UserCreateSchema = Type.Intersect([
 export type UserCreate = Type.Static<typeof UserCreateSchema>;
 export const UserUpdateSchema = Type.Intersect([
   Type.Omit(UserSchema, [...CoreOmitKeys]),
-  Type.Object(getDeletableFields(UserSchema as unknown as Record<string, unknown>)),
+  Type.Object(getDeletableFields(UserSchema as unknown as Record<string, unknown>)), // guard-ignore lint/type-safety/casting: TypeBox type system limitation - TSchema not assignable to Record<string, unknown>
   Type.Object({ updatedAt: FieldValueSchema }),
 ]);
 

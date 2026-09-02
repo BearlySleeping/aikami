@@ -17,7 +17,6 @@ describe('GameCompositionRoot (unit)', () => {
     GameCompositionRoot = mod.GameCompositionRoot;
     root = GameCompositionRoot.create({
       className: 'TestGameCompositionRoot',
-      uid: 'test-user-123',
     });
   });
 
@@ -188,7 +187,6 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
     GameCompositionRoot = mod.GameCompositionRoot;
     root = GameCompositionRoot.create({
       className: 'TestGameCompositionRoot',
-      uid: 'test-user-123',
     });
   });
 

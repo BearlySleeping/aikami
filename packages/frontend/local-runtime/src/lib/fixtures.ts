@@ -182,6 +182,7 @@ let _originalDigest: typeof crypto.subtle.digest | undefined;
 export const pinDigestBySize = (): void => {
   _originalDigest ??= crypto.subtle.digest.bind(crypto.subtle);
   (crypto.subtle as unknown as Record<string, unknown>).digest = async (data: BufferSource) => {
+    // guard-ignore lint/type-safety/casting: test fixture data cast - shape guaranteed by fixture definition
     const size = (data as ArrayBuffer).byteLength;
     const hex =
       SIZE_TO_HASH[size] ?? '0000000000000000000000000000000000000000000000000000000000000000';
@@ -195,7 +196,7 @@ export const pinDigestBySize = (): void => {
 
 export const unpinDigestBySize = (): void => {
   if (_originalDigest) {
-    (crypto.subtle as unknown as Record<string, unknown>).digest = _originalDigest;
+    (crypto.subtle as unknown as Record<string, unknown>).digest = _originalDigest; // guard-ignore lint/type-safety/casting: test fixture data cast - shape guaranteed by fixture definition
     _originalDigest = undefined;
   }
 };

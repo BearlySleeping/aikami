@@ -172,7 +172,7 @@ export default defineConfig(({ mode }) => {
         filename: 'dist/stats.html',
         gzipSize: true,
         open: true,
-      }) as unknown as PluginOption,
+      }) as unknown as PluginOption, // guard-ignore lint/type-safety/casting: Vite plugin option type - PluginOption union includes non-TS types
     );
   }
 
@@ -277,7 +277,7 @@ export default defineConfig(({ mode }) => {
           }
           return false;
         },
-      }) as unknown as string[],
+      }) as unknown as string[], // guard-ignore lint/type-safety/casting: Vite plugin option type - PluginOption union includes non-TS types
       noExternal: BUNDLE_ONLY_PACKAGES,
     },
 

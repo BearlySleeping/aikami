@@ -24,7 +24,7 @@ const _resolveEcsWorker = async (): Promise<new () => Worker> => {
     return _ecsWorkerCtor;
   }
   const mod = await import('@aikami/frontend/engine/worker/ecs_worker.ts?worker&type=module');
-  _ecsWorkerCtor = mod.default as unknown as new () => Worker;
+  _ecsWorkerCtor = mod.default as unknown as new () => Worker; // guard-ignore lint/type-safety/casting: worker constructor cast - Vite worker import type is opaque
   return _ecsWorkerCtor;
 };
 
@@ -150,7 +150,7 @@ class SandboxViewModel
         textureManager: tm,
         recipeResolver: sandboxRecipeResolver,
         assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState),
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState), // guard-ignore lint/type-safety/casting: worker constructor cast - Vite worker import type is opaque
         workerFactory: () => new EcsWorker(),
       };
       this._gameWorld = GameWorld.create(worldOptions);

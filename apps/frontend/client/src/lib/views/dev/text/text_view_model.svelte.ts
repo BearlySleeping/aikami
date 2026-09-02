@@ -129,7 +129,7 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   // ── Public: lifecycle ─────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    const url = new URL(page.url as unknown as string);
+    const url = new URL(page.url as unknown as string); // guard-ignore lint/type-safety/casting: URL constructor cast - value guaranteed to be string by runtime
     const instantParam = url.searchParams.get('instant') ?? url.searchParams.get('instant-start');
 
     const endpointParam = url.searchParams.get('endpoint');

@@ -1,7 +1,7 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-01
+> Generated: 2026-09-02
 > Files: 386 across 17 categories
 
 ## Quick Start (Read These First)

@@ -17,7 +17,7 @@ export const mergeSchemas = (schemas: TObject[]): TObject => {
   for (let i = 1; i < schemas.length; i++) {
     const next = schemas[i];
     if (next) {
-      result = Composite(result, next) as unknown as TObject;
+      result = Composite(result, next) as unknown as TObject; // guard-ignore lint/type-safety/casting: TypeBox type system limitation - TSchema not assignable to Record<string, unknown>
     }
   }
   return result;

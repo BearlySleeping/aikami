@@ -61,7 +61,7 @@ class TimeService
 
   constructor(options: BaseFrontendClassOptions) {
     super(options);
-    registerSerializable('time', this as unknown as SerializableService<unknown>);
+    registerSerializable('time', this as unknown as SerializableService<unknown>); // guard-ignore lint/type-safety/casting: registerSerializable(this) - service class implements SerializableService
   }
 
   updateEnvironment(options: {

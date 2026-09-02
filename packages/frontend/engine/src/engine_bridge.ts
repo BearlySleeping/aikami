@@ -396,7 +396,7 @@ export class MockEngineBridge implements EngineBridge {
 
   /** Returns the number of registered event listeners. */
   listenerCount(): number {
-    return (this._impl as unknown as { _listeners: Map<number, unknown> })._listeners.size;
+    return (this._impl as unknown as { _listeners: Map<number, unknown> })._listeners.size; // guard-ignore lint/type-safety/casting: private bridge internals not on public EngineBridge interface
   }
 }
 

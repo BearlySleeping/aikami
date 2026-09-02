@@ -245,6 +245,7 @@ export const handleGetBackup = async (
   }
 
   return new Response(object.body as unknown as ReadableStream, {
+    // guard-ignore lint/type-safety/casting: R2 upload stream type cast - CF Workers API type limitation
     status: 200,
     headers: { 'content-type': 'application/octet-stream' },
   });

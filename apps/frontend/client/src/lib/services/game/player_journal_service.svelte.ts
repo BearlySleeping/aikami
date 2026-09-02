@@ -80,7 +80,7 @@ class PlayerJournalService
 
   constructor(options: PlayerJournalServiceOptions) {
     super(options);
-    registerSerializable('playerJournal', this as unknown as SerializableService<unknown>);
+    registerSerializable('playerJournal', this as unknown as SerializableService<unknown>); // guard-ignore lint/type-safety/casting: registerSerializable(this) - service class implements SerializableService
   }
 
   /** @inheritdoc */

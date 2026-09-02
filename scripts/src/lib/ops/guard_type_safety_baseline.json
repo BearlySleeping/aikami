@@ -34,22 +34,12 @@
     "t2": 0,
     "t3": 0
   },
-  "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
   "apps/frontend/client/src/lib/services/auth/auth_service.svelte.ts": {
     "t1": 1,
     "t2": 0,
     "t3": 0
   },
   "apps/frontend/client/src/lib/services/auth/desktop_session_store.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts": {
     "t1": 1,
     "t2": 0,
     "t3": 0
@@ -70,7 +60,7 @@
     "t3": 0
   },
   "apps/frontend/client/src/lib/services/config/runtime_config_service.svelte.ts": {
-    "t1": 3,
+    "t1": 2,
     "t2": 0,
     "t3": 0
   },
@@ -95,7 +85,7 @@
     "t3": 0
   },
   "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
-    "t1": 8,
+    "t1": 5,
     "t2": 0,
     "t3": 0
   },
@@ -190,7 +180,7 @@
     "t3": 0
   },
   "apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.svelte.ts": {
-    "t1": 4,
+    "t1": 3,
     "t2": 0,
     "t3": 0
   },
@@ -221,11 +211,6 @@
   },
   "apps/frontend/client/src/lib/views/dev/export_sandbox_view_model.svelte.ts": {
     "t1": 3,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/lpc_inventory/lpc_inventory_view_model.svelte.ts": {
-    "t1": 1,
     "t2": 0,
     "t3": 0
   },
@@ -440,12 +425,12 @@
     "t3": 0
   },
   "packages/frontend/local-runtime/src/lib/model_asset_store.ts": {
-    "t1": 3,
+    "t1": 2,
     "t2": 0,
     "t3": 0
   },
   "packages/frontend/preview/src/lib/lpc/lpc_preview_view_model.svelte.ts": {
-    "t1": 4,
+    "t1": 3,
     "t2": 0,
     "t3": 0
   },

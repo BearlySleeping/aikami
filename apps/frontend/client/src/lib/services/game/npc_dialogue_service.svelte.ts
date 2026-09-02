@@ -948,7 +948,7 @@ export class NpcDialogueService
           this._extractEnvelope({
             narrative,
             systemPrompt: extractionSystemPrompt,
-            schema: NpcDialogueAiEnvelopeSchema as unknown as Record<string, unknown>,
+            schema: NpcDialogueAiEnvelopeSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
             schemaName: 'NpcDialogueAiEnvelope',
             signal,
             path: 'turn-envelope',
@@ -1174,7 +1174,7 @@ export class NpcDialogueService
       typeof requestAnimationFrame === 'function'
         ? requestAnimationFrame
         : (callback: FrameRequestCallback) =>
-            setTimeout(() => callback(0), 16) as unknown as typeof requestAnimationFrame;
+            setTimeout(() => callback(0), 16) as unknown as typeof requestAnimationFrame; // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
     raf(() => {
       this._streamFlushScheduled = false;
       // Only update while still streaming — never regress complete/failed.
@@ -1659,7 +1659,7 @@ export class NpcDialogueService
             // requiresRoll decision survives extraction.
             narrative: `${input.playerInput}\n\n${narrative}`,
             systemPrompt: extractionSystemPrompt,
-            schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>,
+            schema: NpcIntentAnalysisOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
             schemaName: 'NpcIntentAnalysisOutput',
             signal: options.signal,
             path: 'intent-envelope',
@@ -1815,7 +1815,7 @@ export class NpcDialogueService
           this._extractEnvelope({
             narrative: `${userPrompt}\n\n${narrative}`,
             systemPrompt: extractionSystemPrompt,
-            schema: NpcRollResolutionOutputSchema as unknown as Record<string, unknown>,
+            schema: NpcRollResolutionOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
             schemaName: 'NpcRollResolutionOutput',
             signal: options.signal,
             path: 'roll-envelope',

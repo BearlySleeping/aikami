@@ -1266,7 +1266,7 @@ class GameBootService
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
       catalog: projectLpcCatalog(generatedLpcSlots),
-      getLpcAssetPath: getLpcAssetPath as unknown as (
+      getLpcAssetPath: getLpcAssetPath as unknown as ( // guard-ignore lint/type-safety/casting: callback type narrowing for asset path resolver
         slot: string,
         assetId: string,
         state: string,
@@ -1637,7 +1637,7 @@ class GameBootService
 
     // ── C-332: Unbind from GameEngineService so stale reference doesn't
     // survive teardown. Next boot will re-register via registerWorld(). ──
-    gameEngineService.registerWorld(undefined as unknown as GameWorld);
+    gameEngineService.registerWorld(undefined as unknown as GameWorld); // guard-ignore lint/type-safety/casting: callback type narrowing for asset path resolver
     // Reset engine state through the public API instead of assigning
     // readonly properties directly.
     gameEngineService.destroyEngine();

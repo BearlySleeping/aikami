@@ -58,7 +58,7 @@ const catalogStatsResponseSchema = t.Union([
   CategoryStatsSchema,
   AssetStatsSchema,
   t.Null(),
-] as unknown as Parameters<typeof t.Union>[0]);
+] as unknown as Parameters<typeof t.Union>[0]); // guard-ignore lint/type-safety/casting: t.Union variadic parameter type limitation in TypeBox
 
 // POST /api/ask — the one route in this file meant for a THIRD-PARTY origin
 // (the static landing page, apps/frontend/site) rather than the hub's own

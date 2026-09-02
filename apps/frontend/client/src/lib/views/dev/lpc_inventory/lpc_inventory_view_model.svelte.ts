@@ -9,6 +9,7 @@
 // current equipment whenever the equipment slots change.
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
+
 import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import type { BaseViewModelOptions } from '@aikami/frontend/services';
 import { equipmentService, inventoryService } from '$services';
@@ -119,7 +120,7 @@ export class LpcInventoryViewModel
     // Iron Armour plate) on equip and reverts on unequip — mirrors the
     // existing __PIXI_LPC_PREVIEW_LOADED__ window hook pattern.
     if (typeof window !== 'undefined') {
-      (window as unknown as Record<string, unknown>).__LPC_PREVIEW_RECIPES__ = recipes.map(
+      (window as any).__LPC_PREVIEW_RECIPES__ = recipes.map( // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
         (recipe) => ({ slot: recipe.slot, assetId: recipe.assetId }),
       );
     }

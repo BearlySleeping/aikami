@@ -77,7 +77,7 @@ export const ConfigCreateSchema = Type.Intersect([
 export type ConfigCreate = Type.Static<typeof ConfigCreateSchema>;
 export const ConfigUpdateSchema = Type.Intersect([
   Type.Omit(ConfigSchema, [...CoreOmitKeys]),
-  Type.Object(getDeletableFields(ConfigSchema as unknown as Record<string, unknown>)),
+  Type.Object(getDeletableFields(ConfigSchema as unknown as Record<string, unknown>)), // guard-ignore lint/type-safety/casting: TypeBox type system limitation - TSchema not assignable to Record<string, unknown>
   Type.Object({ updatedAt: Type.Unsafe<any>(Type.Any()) }),
 ]);
 

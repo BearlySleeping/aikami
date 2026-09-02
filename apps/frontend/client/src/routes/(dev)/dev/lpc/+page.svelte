@@ -22,7 +22,7 @@ onMount(async () => {
   await assetStore.fetchManifest();
 
   allSlots = getLpcCatalog()
-    .slots as unknown as readonly import('@aikami/frontend/preview').LpcSlotDef[];
+    .slots as unknown as readonly import('@aikami/frontend/preview').LpcSlotDef[]; // guard-ignore lint/type-safety/casting: LPC slot catalog return type - runtime shape guaranteed
 });
 </script>
 

@@ -89,7 +89,7 @@ export const runSchedulePlannerAgent = async ({
       schemaName: 'SchedulePlanner',
       prompt,
       systemPrompt: 'Generate fantasy RPG NPC schedules. JSON only. No markdown, no explanations.',
-    })) as unknown as SchedulePlannerOutput;
+    })) as unknown as SchedulePlannerOutput; // guard-ignore lint/type-safety/casting: AI provider output parsed as unknown; schema validated at parse boundary
 
     return {
       agentId: config.id,

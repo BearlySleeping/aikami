@@ -574,7 +574,7 @@ class DialogueOverlayViewModel
         typeof requestAnimationFrame === 'function'
           ? requestAnimationFrame
           : (callback: FrameRequestCallback) =>
-              setTimeout(() => callback(0), 16) as unknown as typeof requestAnimationFrame;
+              setTimeout(() => callback(0), 16) as unknown as typeof requestAnimationFrame; // guard-ignore lint/type-safety/casting: rAF polyfill or dev VM internals access
       raf(() => {
         this._streamFrameScheduled = false;
         if (epoch !== this._streamEpoch) {
@@ -1866,7 +1866,7 @@ class DialogueOverlayViewModel
           kind,
           npcId: this._npcData.npcId,
           npcName: this._npcData.npcName,
-          command: command as unknown as Parameters<
+          command: command as unknown as Parameters< // guard-ignore lint/type-safety/casting: rAF polyfill or dev VM internals access
             NpcDialogueServiceInterface['executeCommand']
           >[0]['command'],
         });
@@ -1882,7 +1882,7 @@ class DialogueOverlayViewModel
           kind,
           npcId: this._npcData.npcId,
           npcName: this._npcData.npcName,
-          command: command as unknown as Parameters<
+          command: command as unknown as Parameters< // guard-ignore lint/type-safety/casting: rAF polyfill or dev VM internals access
             NpcDialogueServiceInterface['executeCommand']
           >[0]['command'],
         });

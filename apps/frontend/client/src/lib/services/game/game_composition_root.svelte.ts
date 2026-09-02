@@ -48,9 +48,7 @@ import { worldStateService } from './world_state_service.svelte';
 // Types
 // ---------------------------------------------------------------------------
 
-export type GameCompositionRootOptions = BaseFrontendClassOptions & {
-  uid: string;
-};
+export type GameCompositionRootOptions = BaseFrontendClassOptions;
 
 export type GameCompositionRootInterface = BaseFrontendClassInterface & {
   readonly isInitialized: boolean;
@@ -584,6 +582,10 @@ export class GameCompositionRoot
 
     const t0 = performance.now();
 
+    // Stop BGM — the composition root owns the music player's lifecycle
+    // alongside every other game runtime service (mirrors initialize()).
+    musicPlayerService.stop();
+
     // Remove composition-root-owned bridge listeners (C-331 loot)
     for (const unsubscribe of this._bridgeUnsubscribers) {
       try {
@@ -623,6 +625,7 @@ export class GameCompositionRoot
   }
 }
 
-export const getGameCompositionRoot = (
-  options: GameCompositionRootOptions,
-): GameCompositionRootInterface => GameCompositionRoot.create(options);
+/** Single owner of all game runtime services (C-314) — a module-level singleton. */
+export const gameCompositionRoot: GameCompositionRootInterface = GameCompositionRoot.create({
+  className: 'GameCompositionRoot',
+});
