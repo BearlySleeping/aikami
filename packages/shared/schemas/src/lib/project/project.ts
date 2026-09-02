@@ -53,8 +53,8 @@ export type ProjectIdMap = Type.Static<typeof ProjectIdMapSchema>;
 // appIds, backendAppIds, frontendAppIds are spread from constants
 // backendAppIds = ['image', 'text', 'voice', 'worker'] as const
 // frontendAppIds = ['docs', 'site', 'client', 'client-tauri', 'hub'] as const
-// 'database' belongs to NEITHER — it is the migration-deploy app (C-394 AC-5),
-// not a backend service or a frontend app.
+// 'database' and 'storage' belong to NEITHER — they are the migration-deploy
+// apps (C-394 AC-5, C-455), not backend services or frontend apps.
 export const AppIdSchema = Type.Union([
   Type.Literal('image'),
   Type.Literal('text'),
@@ -66,6 +66,7 @@ export const AppIdSchema = Type.Union([
   Type.Literal('client-tauri'),
   Type.Literal('hub'),
   Type.Literal('database'),
+  Type.Literal('storage'),
 ]);
 
 export type AppId = Type.Static<typeof AppIdSchema>;

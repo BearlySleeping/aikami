@@ -21,14 +21,28 @@
     ".pi": {
       "name": "pi",
       "dependencies": {
-        "@hypabolic/hypa": "latest",
-        "@modelcontextprotocol/sdk": "latest",
+        "@hypabolic/hypa": "^0.1.14",
+        "@modelcontextprotocol/sdk": "^1.30.0",
       },
       "devDependencies": {
-        "@earendil-works/pi-agent-core": "latest",
-        "@earendil-works/pi-ai": "latest",
-        "@earendil-works/pi-coding-agent": "latest",
-        "@types/bun": "latest",
+        "@earendil-works/pi-agent-core": "^0.84.4",
+        "@earendil-works/pi-ai": "^0.84.4",
+        "@earendil-works/pi-coding-agent": "^0.84.4",
+        "@types/bun": "^1.4.0",
+      },
+    },
+    "apps/backend/cloudflare": {
+      "name": "@aikami/cloudflare",
+      "dependencies": {
+        "@aikami/backend-database": "workspace:*",
+        "@aikami/constants": "workspace:*",
+        "@aikami/logger": "workspace:*",
+        "@aikami/schemas": "workspace:*",
+        "@aikami/types": "workspace:*",
+        "@aikami/utils": "workspace:*",
+      },
+      "devDependencies": {
+        "wrangler": "4.127.1",
       },
     },
     "apps/backend/image": {
@@ -253,11 +267,6 @@
     "packages/backend/database": {
       "name": "@aikami/backend-database",
       "dependencies": {
-        "@aikami/constants": "workspace:*",
-        "@aikami/logger": "workspace:*",
-        "@aikami/schemas": "workspace:*",
-        "@aikami/types": "workspace:*",
-        "@aikami/utils": "workspace:*",
         "drizzle-orm": "^0.45.2",
       },
       "devDependencies": {
@@ -537,11 +546,15 @@
 
     "@aikami/backend-project-ai": ["@aikami/backend-project-ai@workspace:packages/backend/project-ai"],
 
+    "@aikami/backend-storage": ["@aikami/backend-storage@workspace:packages/backend/storage"],
+
     "@aikami/backend-svelte-kit": ["@aikami/backend-svelte-kit@workspace:packages/backend/svelte-kit"],
 
     "@aikami/backend-utils": ["@aikami/backend-utils@workspace:packages/backend/utils"],
 
     "@aikami/client": ["@aikami/client@workspace:apps/frontend/client"],
+
+    "@aikami/cloudflare": ["@aikami/cloudflare@workspace:apps/backend/cloudflare"],
 
     "@aikami/constants": ["@aikami/constants@workspace:packages/shared/constants"],
 

@@ -1,0 +1,13 @@
+$schema: 'https://moonrepo.dev/schemas/v2/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'cloudflare'
+  - 'ops'
+
+project:
+  name: 'cloudflare'
+  description: 'Single home for Cloudflare operations — D1, R2, DNS, and Worker management.'
+  channel: '#general'
+  owner: 'Core Team'

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Cloudflare Operations",
+  "extends": "../../../config/tsconfig/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../..",
+    "outDir": "dist",
+    "types": ["bun"],
+    "paths": {
+      "@aikami/constants": ["../../../packages/shared/constants/src/index.ts"],
+      "@aikami/constants/*": ["../../../packages/shared/constants/src/lib/*"],
+      "@aikami/schemas": ["../../../packages/shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../../../packages/shared/schemas/src/lib/*"],
+      "@aikami/types": ["../../../packages/shared/types/src/index.ts"],
+      "@aikami/types/*": ["../../../packages/shared/types/src/lib/*"],
+      "@aikami/utils": ["../../../packages/shared/utils/src/index.ts"],
+      "@aikami/utils/*": ["../../../packages/shared/utils/src/lib/*"],
+      "@aikami/logger": ["../../../packages/shared/logger/src/index.ts"],
+      "@aikami/logger/*": ["../../../packages/shared/logger/src/lib/*"],
+      "@aikami/backend-database": ["../../../packages/backend/database/src/index.ts"],
+      "@aikami/backend-database/*": ["../../../packages/backend/database/src/lib/*"],
+      "$logger": ["../../../packages/shared/logger/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

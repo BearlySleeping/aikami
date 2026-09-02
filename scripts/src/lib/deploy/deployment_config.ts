@@ -13,7 +13,7 @@
  *   cloudflare-worker    → Build → `wrangler deploy` → Cloudflare Worker (client, site, docs)
  *   tauri-release        → Build Tauri desktop app → release artifacts
  *   docker-release       → Docker build + push only (image, text, voice)
- *   database-migration   → Apply server-plane migrations against Cloudflare D1
+ *   infra               → Apply server-plane migrations against Cloudflare D1 (was database-migration)
  */
 
 import { D1_DATABASES, R2_BUCKETS } from '@aikami/constants';
@@ -24,7 +24,7 @@ export const ALL_SERVICE_TYPES = [
   'cloudflare-worker',
   'tauri-release',
   'docker-release',
-  'database-migration',
+  'infra',
 ] as const;
 
 export type ServiceType = (typeof ALL_SERVICE_TYPES)[number];
@@ -106,8 +106,7 @@ export type CloudflareAppConfig =
       vars?: Record<string, string> | ((mode: string) => Record<string, string>);
     };
 
-export type AppConfig = {
-  serviceType: ServiceType;
+type AppConfigBase = {
   /** Relative path from repo root */
   path: string;
   /** Short identifier used in docker tags, URLs, etc. Empty string = default hosting. */
@@ -148,6 +147,22 @@ export type AppConfig = {
    */
   cloudflare?: CloudflareAppConfig;
 };
+
+/** Supported one-shot operations for infra deployment apps. */
+export type InfraTarget = 'd1-migrate' | 'r2-reconcile';
+
+/** Deployment metadata, with a required supported target for infra apps. */
+export type AppConfig = AppConfigBase &
+  (
+    | {
+        serviceType: 'infra';
+        target: InfraTarget;
+      }
+    | {
+        serviceType: Exclude<ServiceType, 'infra'>;
+        target?: never;
+      }
+  );
 
 export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
   client: {
@@ -352,8 +367,17 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
    * removed when Data Connect stopped riding along with Firebase deploys.
    */
   database: {
-    serviceType: 'database-migration',
-    path: 'packages/backend/database',
+    serviceType: 'infra',
+    path: 'apps/backend/cloudflare',
+    target: 'd1-migrate',
+    shortName: '',
+    prefix: 'HUB',
+    needsDist: false,
+  },
+  storage: {
+    serviceType: 'infra',
+    path: 'apps/backend/cloudflare',
+    target: 'r2-reconcile',
     shortName: '',
     prefix: 'HUB',
     needsDist: false,
