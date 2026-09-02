@@ -219,6 +219,10 @@ cloud call a boot dependency for sign-in.
 - ❌ Import from another app (e.g., `apps/frontend/hub/src/` into `apps/frontend/client/`)
 - ❌ Define a schema anywhere under `apps/**`
 
+**C-455 boundary rules**:
+- `scripts/` may import from `apps/backend/cloudflare/src/lib/` — it is the deploy orchestrator's operations library. No other app may be imported from anywhere.
+- Apps get `dev` / `build` / `deploy`. Packages get `build` / `test`. Nothing runs a deploy from a library.
+
 ---
 
 ## Tauri SPA Architecture

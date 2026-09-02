@@ -35,6 +35,10 @@ bun install
 | `format` | `biome format .` | Format code with Biome |
 | `fix` | `biome check --write .` | Auto-fix lint & format issues |
 
+`bun run build` routes through `moon run docs:build` so it shares moon's
+hashing and remote cache with CI. If the cache is wrong and you need to bypass
+it, run the underlying command directly with `bun run build:app`.
+
 ## Project Structure
 
 ```

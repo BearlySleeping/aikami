@@ -26,6 +26,7 @@ export * from './lib/game_assets.ts';
 export * from './lib/game_economy.ts';
 export * from './lib/image_style_profiles.ts';
 export * from './lib/impersonation.ts';
+export * from './lib/infrastructure.ts';
 export * from './lib/input_device.ts';
 export * from './lib/local_models.ts';
 export * from './lib/locale_codes.ts';

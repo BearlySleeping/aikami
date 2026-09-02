@@ -31,13 +31,15 @@ onMount(async () => {
 </svelte:head>
 
 {#if resolver && allSlots}
-  <LpcPreview
-    {resolver}
-    allSlots={allSlots as import('@aikami/frontend/preview').LpcSlotDef[]}
-    controls={true}
-  />
+  <div class="-m-4 flex flex-col h-[calc(100dvh-4rem)] min-h-0">
+    <LpcPreview
+      {resolver}
+      allSlots={allSlots as import('@aikami/frontend/preview').LpcSlotDef[]}
+      controls={true}
+    />
+  </div>
 {:else}
-  <div class="flex items-center justify-center h-64 text-base-content/40">
+  <div class="flex items-center justify-center h-[calc(100dvh-4rem)] -m-4 text-base-content/40">
     Loading LPC preview...
   </div>
 {/if}

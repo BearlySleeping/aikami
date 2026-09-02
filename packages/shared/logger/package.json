@@ -10,7 +10,7 @@
     "fix": "biome check --write . --error-on-warnings"
   },
   "devDependencies": {
-    "@types/node": "26.4.0",
+    "@types/node": "26.4.1",
     "vite": "8.2.2"
   },
   "dependencies": {

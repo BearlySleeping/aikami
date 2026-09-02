@@ -11,6 +11,15 @@
 # scripts. This makes them universally inheritable — projects control the
 # actual command via their scripts, while moon handles caching, inputs,
 # dependency ordering, and CI gating.
+#
+# Exception: `build`. There the wrapper direction is inverted per-project —
+# package.json's `build` script calls back into `moon run <project>:build`,
+# and the project's moon.yml `build` task runs the real command via a
+# `build:app` script. This makes `bun run build` inside an app directory go
+# through moon (hashing, remote cache, output capture) instead of skipping it,
+# while `bun run build:app` stays as the direct escape hatch when the cache is
+# wrong. See apps/frontend/client/moon.yml (and its package.json) for the
+# reference implementation.
 # =============================================================================
 
 $schema: "https://moonrepo.dev/schemas/v2/tasks.json"

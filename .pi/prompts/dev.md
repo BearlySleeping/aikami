@@ -20,6 +20,51 @@ bypass a convention. Re-read the 🔴 CRITICAL VIOLATIONS section in
 
 ---
 
+## 🔴 WORKSPACE BOUNDARY — read before running any git command
+
+**Your workspace is the directory you started in. Never operate outside it.**
+
+If your cwd is under `~/.herdr/worktrees/`, you are in an **isolated worktree**.
+The main checkout (`~/Development/Projects/passion/aikami`) is **OFF LIMITS** —
+it is the human's live workspace and normally has uncommitted work in it.
+
+Against any path outside your own worktree, NEVER:
+
+- `cd` into it, or pass it as `--cwd` / `-C`
+- `git checkout`, `git switch`, `git stash`, `git pull`, `git merge`, `git reset`
+- edit, create or delete a file
+- run a build, test, typecheck, lint or dev server
+
+This is not a style preference. On 2026-09-02 an agent in a worktree pane
+decided on its own to compare typecheck errors against `main`, did it by
+operating on the main checkout, and left a merge conflict that disrupted
+unrelated in-flight development.
+
+### Comparing against `main` — do this instead
+
+Every reasonable version of "what does `main` look like?" reads a **ref**, and
+refs are readable from inside your worktree without touching another checkout:
+
+```bash
+git show main:path/to/file.ts     # file contents on main
+git diff main -- path/to/file.ts  # your changes vs main
+git log main..HEAD                # commits you added
+git fetch origin main             # refresh the ref (safe, no checkout)
+```
+
+For a baseline typecheck, `git stash` **inside your own worktree**, measure,
+then `git stash pop`. Or create a second worktree of your own. Never the main
+checkout.
+
+If a question genuinely cannot be answered without another checkout: say so in
+your report and move on. Disrupting the human's workspace is never the right
+trade.
+
+**Exception**: a session explicitly started in root mode (`--root`), where no
+worktree exists and the repo you started in *is* your workspace.
+
+---
+
 ## Output Style
 
 **Terse. Technical substance only. Drop articles, filler, pleasantries.**

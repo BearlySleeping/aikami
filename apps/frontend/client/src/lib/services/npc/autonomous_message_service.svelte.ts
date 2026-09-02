@@ -10,6 +10,8 @@ import {
   AUTONOMOUS_CONTEXT_MESSAGE_COUNT,
   DEFAULT_IDLE_THRESHOLD_MS,
   DEFAULT_POLLER_INTERVAL_MS,
+  MAX_AUTONOMOUS_MESSAGES_PER_TICK,
+  MAX_GROUP_PARTICIPANTS,
   MOBILE_LOW_BATTERY_THRESHOLD,
 } from '@aikami/constants';
 import {
@@ -50,6 +52,35 @@ export type AutonomousMessageServiceInterface = BaseFrontendClassInterface & {
 
   /** Resumes the poller. */
   resume(): void;
+
+  /**
+   * Selects up to `count` NPCs from the given pool using
+   * talkativeness-weighted random selection. Used for group-addressed
+   * turns where multiple NPCs should respond.
+   *
+   * @param npcIds - Pool of eligible NPC IDs.
+   * @param count - Maximum number to select (default: MAX_GROUP_PARTICIPANTS).
+   * @returns Selected NPC IDs in weighted sampling order.
+   */
+  selectGroupParticipants(options: {
+    npcIds: readonly string[];
+    count?: number;
+  }): string[];
+
+  /**
+   * Generates responses for multiple NPCs in sequence, so each
+   * subsequent NPC sees the previous NPCs' dialogue in context.
+   *
+   * @param npcIds - NPCs to generate responses for, in order.
+   * @param playerMessage - The player's message that triggered the turn.
+   * @param recentChat - Recent chat messages for context.
+   * @returns Array of generated response texts, same order as npcIds.
+   */
+  generateMultiNpcResponses(options: {
+    npcIds: readonly string[];
+    playerMessage: string;
+    recentChat: readonly string[];
+  }): Promise<readonly string[]>;
 };
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -318,12 +349,193 @@ class AutonomousMessageService
   }
 
   /**
+   * Selects up to `count` NPCs from the pool using talkativeness-weighted
+   * random without replacement. Higher talkativeness = higher probability.
+   *
+   * For group-addressed turns, this replaces the single-NPC selection
+   * used by the idle poller.
+   */
+  private _selectWeightedRandomN(
+    npcIds: string[],
+    count: number,
+  ): string[] {
+    if (npcIds.length === 0 || count <= 0) {
+      return [];
+    }
+
+    const pool = [...new Set(npcIds)];
+    const selected: string[] = [];
+    const targetCount = Math.min(count, pool.length);
+
+    for (let i = 0; i < targetCount; i++) {
+      // Build weighted array from remaining pool
+      const weighted: Array<{ npcId: string; weight: number }> = [];
+      for (const npcId of pool) {
+        const schedule = this._getCachedSchedule(npcId);
+        weighted.push({ npcId, weight: schedule.talkativeness });
+      }
+
+      const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
+      if (totalWeight <= 0) {
+        // Fall back to first available
+        selected.push(pool[0]);
+        pool.splice(0, 1);
+        continue;
+      }
+
+      // Weighted random selection
+      let random = Math.random() * totalWeight;
+      let chosenIndex = 0;
+      for (let j = 0; j < weighted.length; j++) {
+        random -= weighted[j].weight;
+        if (random <= 0) {
+          chosenIndex = j;
+          break;
+        }
+      }
+
+      selected.push(pool[chosenIndex]);
+      pool.splice(chosenIndex, 1);
+    }
+
+    return selected;
+  }
+
+  // ── Public: Group-addressed turn API (C-456) ─────────────────────
+
+  /** @inheritdoc */
+  selectGroupParticipants(options: {
+    npcIds: readonly string[];
+    count?: number;
+  }): string[] {
+    const { npcIds, count = MAX_GROUP_PARTICIPANTS } = options;
+
+    if (npcIds.length === 0 || count <= 0) {
+      return [];
+    }
+
+    const clampedCount = Math.min(count, MAX_GROUP_PARTICIPANTS);
+    const selected = this._selectWeightedRandomN([...npcIds], clampedCount);
+    this.debug('selectGroupParticipants', {
+      poolSize: npcIds.length,
+      count: clampedCount,
+      selected,
+    });
+
+    return selected;
+  }
+
+  /** @inheritdoc */
+  async generateMultiNpcResponses(options: {
+    npcIds: readonly string[];
+    playerMessage: string;
+    recentChat: readonly string[];
+  }): Promise<readonly string[]> {
+    const { npcIds, playerMessage, recentChat } = options;
+    const limitedNpcIds = npcIds.slice(0, MAX_GROUP_PARTICIPANTS);
+
+    if (limitedNpcIds.length === 0) {
+      return [];
+    }
+
+    const responses: string[] = [];
+
+    for (let i = 0; i < limitedNpcIds.length; i++) {
+      const npcId = limitedNpcIds[i];
+
+      // Build context from prior NPC responses so this NPC is aware
+      // of what the others have already said.
+      const priorNpcDialogue = responses
+        .map((text, idx) => `[${limitedNpcIds[idx]}]: ${text}`)
+        .join('\n');
+
+      const contextBlock = recentChat.join('\n');
+
+      const prompt = [
+        `You are NPC "${npcId}" in a group conversation.`,
+        'The player just said:',
+        playerMessage,
+        '',
+      ];
+
+      if (priorNpcDialogue) {
+        prompt.push('Other NPCs have already responded:');
+        prompt.push(priorNpcDialogue);
+        prompt.push('');
+        prompt.push(
+          'React naturally to what they said — your response should show awareness of their dialogue.',
+        );
+      }
+
+      prompt.push('');
+      prompt.push('Recent conversation context:');
+      prompt.push(contextBlock || '(no recent conversation)');
+      prompt.push('');
+      prompt.push('Your response:');
+
+      const systemPrompt = `You are NPC "${npcId}" in a group conversation. Respond in character, under 3 sentences.`;
+
+      // Generate this NPC's response
+      let fullText = '';
+
+      try {
+        await this._generateNpcResponse({
+          npcId,
+          systemPrompt,
+          userPrompt: prompt.join('\n'),
+          onChunk: (chunk: string) => {
+            fullText += chunk;
+          },
+        });
+      } catch (error) {
+        this.error('generateMultiNpcResponses:failed', { npcId, error });
+        // Don't stop the sequence — other NPCs can still respond
+        responses.push('');
+        continue;
+      }
+
+      if (fullText.trim().length > 0) {
+        responses.push(fullText.trim());
+        this.debug('generateMultiNpcResponses:response', {
+          npcId,
+          index: i,
+          total: limitedNpcIds.length,
+        });
+      } else {
+        responses.push('');
+      }
+    }
+
+    return responses;
+  }
+
+  /**
+   * Generates a single NPC response via the text generation service.
+   * Extracted to allow subclasses/test overrides.
+   */
+  private async _generateNpcResponse(options: {
+    npcId: string;
+    systemPrompt: string;
+    userPrompt: string;
+    onChunk: (chunk: string) => void;
+  }): Promise<void> {
+    const { systemPrompt, userPrompt, onChunk } = options;
+
+    await textGenerationService.streamChat({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      onChunk,
+    });
+  }
+
+  /**
    * Synchronously returns a cached schedule, or falls back to defaults.
    * The caller must have already queried getSchedule() for the NPC.
    */
   private _getCachedSchedule(npcId: string): NpcSchedule {
-    // Return fallback defaults — the talkativeness is the key value here
-    return {
+    return npcScheduleService.getCachedSchedule(npcId) ?? {
       npcId,
       days: [],
       autonomousEnabled: true,

@@ -8,10 +8,11 @@
     "dev:emulator": "astro dev --mode emulator",
     "dev:staging": "astro dev --mode staging",
     "dev:production": "astro dev --mode production",
-    "build": "astro build",
-    "build:emulator": "astro build --mode emulator",
-    "build:staging": "astro build --mode staging",
-    "build:production": "astro build --mode production",
+    "build": "moon run site:build --",
+    "build:emulator": "moon run site:build -- --mode emulator",
+    "build:staging": "moon run site:build -- --mode staging",
+    "build:production": "moon run site:build -- --mode production",
+    "build:app": "astro build",
     "deploy": "bun run scripts/deploy.ts",
     "preview": "astro preview",
     "preview:chromium": "bun run scripts/launch_chromium.ts",
@@ -47,6 +48,6 @@
     "lighthouse": "13.4.1",
     "tailwindcss": "4.3.3",
     "vite": "8.2.2",
-    "wrangler": "4.127.1"
+    "wrangler": "4.128.0"
   }
 }

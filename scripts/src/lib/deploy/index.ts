@@ -47,11 +47,12 @@ import { dirname, resolve } from 'node:path';
 import { stdin as processStdin, stdout as processStdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { applyMigrations } from '../../../../apps/backend/cloudflare/src/lib/db/migrate.ts';
+import { reconcileBucket } from '../../../../apps/backend/cloudflare/src/lib/storage/sync.ts';
 import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString } from './cache';
 import { deployCloudflareWorker } from './cloudflare';
-import { deployDatabaseMigration } from './database_migration';
 import {
   APP_CONFIG,
   type AppConfig,
@@ -167,11 +168,19 @@ async function deployApp(
         preflightChecksum,
       );
       return 'success';
-    case 'database-migration':
-      // Migrations never need a moon build, docker push or Cloud Run
-      // deploy — just an explicit, idempotent apply (AC-5).
-      await deployDatabaseMigration({ mode, rootDir });
-      return 'success';
+    case 'infra':
+      // Infra apps (database, storage) never need a moon build, docker
+      // push or Cloud Run deploy — just an explicit, idempotent operation.
+      switch (config.target) {
+        case 'd1-migrate':
+          await applyMigrations({ mode, isLocal: mode === 'emulator' });
+          return 'success';
+        case 'r2-reconcile':
+          await reconcileBucket({ mode, isLocal: mode === 'emulator', bucketKey: 'saves' });
+          return 'success';
+        default:
+          throw new Error(`Unsupported infra target for ${appName}`);
+      }
     default:
       warn(`Unknown service type "${(config as AppConfig).serviceType}" for ${appName}. Skipping.`);
       return 'success';
@@ -349,7 +358,7 @@ async function main(): Promise<void> {
 
     // database-migration doesn't use checksum caching — migrations are
     // idempotent, and a cache hit must never silently skip a pending migration.
-    if (config.serviceType === 'database-migration') {
+    if (config.serviceType === 'infra') {
       continue;
     }
 

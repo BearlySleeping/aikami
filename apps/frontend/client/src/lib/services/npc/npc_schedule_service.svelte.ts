@@ -28,6 +28,9 @@ export type NpcScheduleServiceInterface = BaseFrontendClassInterface & {
   /** Retrieves the schedule for a given NPC, or the default if none exists. */
   getSchedule(npcId: string): Promise<NpcSchedule>;
 
+  /** Returns the latest in-memory schedule without starting asynchronous storage access. */
+  getCachedSchedule(npcId: string): NpcSchedule | undefined;
+
   /** Persists a schedule to the local database. */
   setSchedule(npcId: string, schedule: NpcSchedule): Promise<void>;
 
@@ -95,6 +98,10 @@ class NpcScheduleService
 
     this._cache.set(npcId, stored);
     return stored;
+  }
+
+  getCachedSchedule(npcId: string): NpcSchedule | undefined {
+    return this._cache.get(npcId);
   }
 
   async setSchedule(npcId: string, schedule: NpcSchedule): Promise<void> {

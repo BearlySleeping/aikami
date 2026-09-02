@@ -44,7 +44,10 @@ tasks:
     command: 'bun run start'
     preset: 'server'
   build:
-    command: 'bun run build'
+    # `bun run build` in package.json wraps back to `moon run site:build` so
+    # direct calls still hit this task's cache/hashing. Real command is the
+    # `build:app` script.
+    command: 'bun run build:app'
     inputs:
       - '@group(sources)'
       - '@group(configs)'

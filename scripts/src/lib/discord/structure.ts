@@ -398,10 +398,16 @@ export const structure: DesiredStructure = {
       },
     },
     {
-      name: 'off-topic',
+      name: 'ai-stuff',
       type: 'text',
       category: 'Community',
-      topic: 'Anything not about Aikami.',
+      topic: 'AI news, tools, and anything interesting from the world of AI.',
+    },
+    {
+      name: 'tavern-dwellers',
+      type: 'text',
+      category: 'Community',
+      topic: 'No landlubbers allowed.',
     },
     // Voice channels have no # prefix in TASK 2's channel table (that's a
     // display convention, not a rename instruction) — kept at their live
@@ -577,7 +583,7 @@ export const structure: DesiredStructure = {
     enabled: true,
     mode: 'advanced',
     // 10 defaults; exactly 5 are @everyone-writable (general, showcase,
-    // off-topic, support, Lounge — the other 5 deny @everyone SendMessages
+    // ai-stuff, support, Lounge — the other 5 deny @everyone SendMessages
     // above), matching Discord's "≥7 defaults, ≥5 writable" minimum with no
     // slack to spare. If `sync --apply` for onboarding ever fails with
     // `below_requirements`, that's the constraint to check first.
@@ -588,7 +594,7 @@ export const structure: DesiredStructure = {
       'releases',
       'general',
       'showcase',
-      'off-topic',
+      'ai-stuff',
       'faq',
       'support',
       'Lounge',

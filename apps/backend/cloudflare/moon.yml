@@ -1,0 +1,26 @@
+$schema: 'https://moonrepo.dev/schemas/v2/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'cloudflare'
+  - 'ops'
+
+project:
+  name: 'cloudflare'
+  description: 'Single home for Cloudflare operations — D1, R2, DNS, and Worker management.'
+  channel: '#general'
+  owner: 'Core Team'
+
+tasks:
+  build:
+    # `bun run build` in package.json wraps back to `moon run cloudflare:build`
+    # so direct calls still hit this task's cache/hashing. This CLI tool has
+    # no compile step — `build:app` is a no-op placeholder.
+    command: 'bun run build:app'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(root-configs)'
+    options:
+      cache: true

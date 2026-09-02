@@ -82,7 +82,10 @@ export const userObjectKey = {
   },
   parse: (key: string): UserObjectKeyParams | undefined => {
     const match = /^users\/([^/]+)\/(.+)$/s.exec(key);
-    return match ? { uid: match[1], filename: match[2] } : undefined;
+    if (!match) {
+      return undefined;
+    }
+    return { uid: match[1] as string, filename: match[2] as string };
   },
 } as const satisfies KeySpec<UserObjectKeyParams, UserObjectKeyPrefixParams>;
 
@@ -126,14 +129,15 @@ export const saveBackupKey = {
       /^saves\/([^/]+)\/(\d+)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(.+)$/is.exec(
         key,
       );
-    return match
-      ? {
-          accountId: match[1],
-          timestamp: match[2],
-          backupId: match[3],
-          filename: match[4],
-        }
-      : undefined;
+    if (!match) {
+      return undefined;
+    }
+    return {
+      accountId: match[1] as string,
+      timestamp: match[2] as string,
+      backupId: match[3] as string,
+      filename: match[4] as string,
+    };
   },
 } as const satisfies KeySpec<SaveBackupKeyParams, SaveBackupKeyPrefixParams>;
 
@@ -159,7 +163,10 @@ export const assetKey = {
   buildPrefix: (_params: Record<never, never>): string => 'assets/',
   parse: (key: string): AssetKeyParams | undefined => {
     const match = /^assets\/([a-f0-9]+)(\.[a-z0-9]+)$/i.exec(key);
-    return match ? { sha256: match[1], ext: match[2] } : undefined;
+    if (!match) {
+      return undefined;
+    }
+    return { sha256: match[1] as string, ext: match[2] as string };
   },
 } as const satisfies KeySpec<AssetKeyParams, Record<never, never>>;
 
@@ -202,6 +209,9 @@ export const seedKey = {
   buildPrefix: (_params: Record<never, never>): string => 'seed/',
   parse: (key: string): SeedKeyParams | undefined => {
     const match = /^seed\/(.+)$/s.exec(key);
-    return match ? { name: match[1] } : undefined;
+    if (!match) {
+      return undefined;
+    }
+    return { name: match[1] as string };
   },
 } as const satisfies KeySpec<SeedKeyParams, Record<never, never>>;

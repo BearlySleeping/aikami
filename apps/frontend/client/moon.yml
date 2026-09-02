@@ -53,7 +53,10 @@ tasks:
       # when CI sets NODE_ENV=production (the gate strips them otherwise).
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   build:
-    command: 'bun run build'
+    # `bun run build` in package.json wraps back to `moon run client:build`
+    # so direct calls still hit this task's cache/hashing. The real command
+    # lives in the `build:app` script — see that script for `--mode` handling.
+    command: 'bun run build:app'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
