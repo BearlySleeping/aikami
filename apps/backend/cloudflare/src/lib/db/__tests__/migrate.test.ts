@@ -20,7 +20,6 @@ describe('migrate (AC-1)', () => {
       'No D1 database configured',
     );
   });
-
 });
 
 describe('AC-1 structural: old files deleted', () => {
@@ -37,7 +36,9 @@ describe('AC-1 structural: old files deleted', () => {
   });
 
   test('scripts/src/lib/ops/d1_migrate_local.ts no longer exists', async () => {
-    const exists = await Bun.file(resolve(ROOT, 'scripts/src/lib/ops/d1_migrate_local.ts')).exists();
+    const exists = await Bun.file(
+      resolve(ROOT, 'scripts/src/lib/ops/d1_migrate_local.ts'),
+    ).exists();
     expect(exists).toBe(false);
   });
 

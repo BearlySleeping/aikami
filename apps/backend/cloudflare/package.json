@@ -6,7 +6,8 @@
   "main": "src/cli.ts",
   "scripts": {
     "start": "bun run src/cli.ts",
-    "build": "true",
+    "build": "moon run cloudflare:build --",
+    "build:app": "true",
     "typecheck": "tsgo --noEmit",
     "lint": "biome lint .",
     "format": "biome format .",

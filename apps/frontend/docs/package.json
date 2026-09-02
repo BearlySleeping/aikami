@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro start",
-    "build": "astro build",
+    "build": "moon run docs:build --",
+    "build:app": "astro build",
     "preview": "astro preview",
     "astro": "astro",
     "lint": "biome lint .",

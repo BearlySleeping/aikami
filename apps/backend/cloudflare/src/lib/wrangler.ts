@@ -153,9 +153,7 @@ export type ResolveD1BindingOptions = {
 };
 
 /** Resolve a D1 binding for the given mode from @aikami/constants. */
-export const resolveD1Binding = (
-  options: ResolveD1BindingOptions,
-): D1DatabaseEntry | undefined => {
+export const resolveD1Binding = (options: ResolveD1BindingOptions): D1DatabaseEntry | undefined => {
   const { mode, dbKey = 'hub' } = options;
   const db = D1_DATABASES[dbKey];
   const entry = db[mode as keyof typeof db];

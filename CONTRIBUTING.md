@@ -30,6 +30,12 @@ Cloudflare login, no agent tooling.
 > which runs the real Workers runtime with local D1 and R2.
 > See [docs/guides/dev-workflow.md](docs/guides/dev-workflow.md#local-cloudflare-runtime).
 
+> **Build caching:** `bun run build` in an app directory (client, hub, site,
+> docs, `apps/backend/cloudflare`) routes through `moon run <project>:build`,
+> so it shares moon's hashing and remote cache with CI. If the cache is wrong
+> and you need to bypass it, run the underlying command directly with
+> `bun run build:app` in that app's directory.
+
 ---
 
 ## What you actually need

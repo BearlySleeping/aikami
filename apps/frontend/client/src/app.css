@@ -9,6 +9,7 @@
   --font-mono: "JetBrains Mono", monospace;
   --font-sans: "Inter", sans-serif;
   --animate-shake: shake 0.35s ease-in-out;
+  --animate-rise: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes shake {
@@ -68,6 +69,18 @@
 
 .animate-shake {
   animation: shake 0.3s ease-in-out;
+}
+
+/* Staggered entrance — the menu assembles instead of snapping into place. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Hide the default emulator warning banner — replaced by our custom ModeIndicator component. */

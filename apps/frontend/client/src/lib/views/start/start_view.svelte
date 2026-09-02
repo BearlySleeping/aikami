@@ -53,7 +53,7 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
 
       <div class="relative z-10 flex w-full max-w-sm flex-1 flex-col justify-center py-4">
         <!-- Title -->
-        <header class="rise mb-8 text-center">
+        <header class="animate-rise motion-reduce:animate-none mb-8 text-center">
           <h1
             class="bg-gradient-to-b from-base-content via-base-content to-primary bg-clip-text pl-[0.12em] text-6xl font-bold tracking-[0.12em] text-transparent sm:text-7xl"
           >
@@ -70,7 +70,9 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
         </header>
 
         <!-- Primary actions -->
-        <div class="rise rise-1 flex flex-col gap-3">
+        <div
+          class="animate-rise motion-reduce:animate-none [animation-delay:0.08s] flex flex-col gap-3"
+        >
           {#if viewModel.latestResumableCampaign}
             <ContinueCampaignCard
               campaign={viewModel.latestResumableCampaign}
@@ -98,7 +100,9 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
         </div>
 
         <!-- Secondary actions — one quiet row, not five more buttons. -->
-        <nav class="rise rise-2 mt-6 flex items-center justify-center gap-1 text-sm">
+        <nav
+          class="animate-rise motion-reduce:animate-none [animation-delay:0.16s] mt-6 flex items-center justify-center gap-1 text-sm"
+        >
           <button
             type="button"
             class="btn btn-ghost btn-sm font-normal text-base-content/60 hover:text-base-content"
@@ -129,7 +133,9 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
           settled, and reserving its space keeps the menu from jumping when
           it does.
         -->
-        <div class="rise rise-3 mt-5 flex h-9 items-center justify-center">
+        <div
+          class="animate-rise motion-reduce:animate-none [animation-delay:0.24s] mt-5 flex h-9 items-center justify-center"
+        >
           {#if viewModel.downloadStatus}
             <AssetDownloadStatus
               status={viewModel.downloadStatus}
@@ -226,39 +232,3 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
     {/if}
   {/if}
 </BaseViewModelContainer>
-
-<style>
-/* Staggered entrance — the menu assembles instead of snapping into place. */
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.rise {
-  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.rise-1 {
-  animation-delay: 0.08s;
-}
-
-.rise-2 {
-  animation-delay: 0.16s;
-}
-
-.rise-3 {
-  animation-delay: 0.24s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rise {
-    animation: none;
-  }
-}
-</style>

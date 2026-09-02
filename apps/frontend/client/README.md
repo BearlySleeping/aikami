@@ -41,6 +41,10 @@ bun install
 | `test` | `playwright test` | Run Playwright tests |
 | `test-ci` | `bun run test:ci` | Run tests for CI |
 
+`bun run build` routes through `moon run client:build` so it shares moon's
+hashing and remote cache with CI. If the cache is wrong and you need to bypass
+it, run the underlying command directly with `bun run build:app`.
+
 ## Project Structure
 
 ```

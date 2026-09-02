@@ -3,9 +3,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "aikami-hub",
   "compatibility_date": "2026-08-21",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "main": "build/_worker.js",
   "assets": {
     "binding": "ASSETS",

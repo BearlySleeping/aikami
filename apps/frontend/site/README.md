@@ -46,6 +46,11 @@ bun run build:staging       # staging build
 bun run build:production    # production build
 ```
 
+`bun run build` (and the mode-specific variants above) route through
+`moon run site:build` so they share moon's hashing and remote cache with CI.
+If the cache is wrong and you need to bypass it, run the underlying command
+directly with `bun run build:app` (accepts the same `--mode` flag).
+
 ## Deployment
 
 Deployment is handled by `scripts/deploy.ts`, which reads the current mode from `AIKAMI_MODE` (or `MODE`) and deploys to Cloudflare Workers.
