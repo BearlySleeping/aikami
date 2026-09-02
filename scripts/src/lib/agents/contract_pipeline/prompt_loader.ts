@@ -50,6 +50,44 @@ export const feedbackMessage = (options: {
   return options.feedback;
 };
 
+/**
+ * The one boundary every pipeline role shares: the worktree is yours, the
+ * main checkout is the human's.
+ *
+ * 🔴 2026-09-02: an agent running in a worktree pane decided, unprompted, to
+ * compare its typecheck errors against `main`. It did that by operating on
+ * the MAIN checkout — which is a live developer workspace with uncommitted
+ * work in it. The checkout it ran there produced a merge conflict and
+ * disrupted unrelated in-flight development.
+ *
+ * The rule is stated with its escape hatch attached, because the underlying
+ * goal (see what `main` looks like) is legitimate and cheap to satisfy from
+ * inside the worktree — `git show`, `git diff` and `git fetch` all read other
+ * refs without touching another checkout's working tree. An agent told only
+ * "don't" will improvise; one told "don't, do this instead" complies.
+ *
+ * Appended to every role prompt via loadRolePrompt's EXECUTION RULES.
+ */
+export const WORKSPACE_BOUNDARY_RULES: readonly string[] = [
+  '- 🔴 **Your workspace is the directory you started in — never operate outside it.**',
+  '  If your cwd is under `~/.herdr/worktrees/`, you are in an isolated worktree and',
+  '  the main checkout (e.g. `~/Development/.../aikami`) is OFF LIMITS. It is the',
+  "  human's live workspace and normally holds uncommitted work.",
+  '  NEVER, against any path outside your worktree: `cd` into it, `git checkout`,',
+  '  `git switch`, `git stash`, `git pull`, `git merge`, `git reset`, edit a file,',
+  '  or run a build/test/typecheck there.',
+  '- 🔴 **To compare against `main`, stay inside your worktree.** Everything you',
+  '  need reads from refs, not from another checkout:',
+  '  `git show main:<path>` (file contents), `git diff main -- <path>` (your changes),',
+  '  `git log main..HEAD`, `git fetch origin main` (refresh the ref).',
+  '  A baseline typecheck belongs on `git stash` **within your own worktree**, or on a',
+  '  second worktree you create — never on the main checkout.',
+  '  If you truly cannot answer a question without another checkout, report it in your',
+  "  findings and move on. Disrupting the human's workspace is never the right trade.",
+  '- The ONLY exception is a run explicitly started in root mode (`--root`), where no',
+  '  worktree exists and the repo you started in IS your workspace.',
+];
+
 export const loadRolePrompt = (options: {
   role: ContractWorkerRole;
   contractPath: string;
@@ -149,6 +187,7 @@ export const loadRolePrompt = (options: {
     '\n## 🔴 EXECUTION RULES',
     '- For moon/test/build: use `moon_run_task` or `validate()` — built-in timeouts.',
     '- For any shell >10s: use `ctx_execute` or `bash` with explicit `timeout`.',
+    ...WORKSPACE_BOUNDARY_RULES,
   ]
     .filter((s) => s.length > 0)
     .join('\n');

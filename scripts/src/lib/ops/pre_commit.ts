@@ -2,17 +2,52 @@
 // scripts/src/lib/ops/pre_commit.ts
 //
 // Centralized pre-commit hook. Run from .moon/workspace.yml via `bun run pre-commit`.
-// In contract pipeline worktrees (CONTRACT_PIPELINE_WORKTREE=1), skips knowledge:sync.
-// Formatting and typechecking always run.
+// In a linked git worktree (contract pipeline), skips knowledge:sync.
+// Formatting and typechecking always run, everywhere.
 
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runStream } from '../cli_utils.ts';
+import { isOutsideAgentWorkspace } from './guard_workspace_boundary.ts';
 import { isSopsEncrypted } from './secrets_backend.ts';
 import { syncContracts } from './sync_contracts.ts';
 
-const isWorktree = !!process.env.CONTRACT_PIPELINE_WORKTREE;
+/**
+ * True in any linked git worktree — the contract pipeline's or a developer's.
+ *
+ * 🔴 This must NOT rely on CONTRACT_PIPELINE_WORKTREE alone. That variable is
+ * exported by `commitAll` (git_worktree.ts) for the orchestrator's own
+ * sweep-up commit, which passes `--no-verify` and therefore never reaches
+ * this file. The commits that DO run this hook inside a worktree are the ones
+ * the implementer agent makes itself — and those carry no such variable.
+ *
+ * Getting this wrong is not cosmetic. With `isWorktree` false in a worktree,
+ * the knowledge:sync block below runs `syncContracts()` and then
+ * `git add docs/contracts/`, staging the contract file into the agent's
+ * commit. The contract is deliberately skip-worktree'd and owned by `main`
+ * (see isolateContractInWorktree / pullContractFromWorktree) precisely so it
+ * never rides along in a PR diff and never conflicts on `git pull` after a
+ * merge.
+ *
+ * `--git-dir` differs from `--git-common-dir` only in a linked worktree, so
+ * this detects the condition itself rather than trusting the caller.
+ */
+const inLinkedWorktree = (): boolean => {
+  try {
+    const gitDir = execSync('git rev-parse --absolute-git-dir', { encoding: 'utf8' }).trim();
+    const commonDir = execSync('git rev-parse --path-format=absolute --git-common-dir', {
+      encoding: 'utf8',
+    }).trim();
+    return gitDir !== commonDir;
+  } catch {
+    // Cannot tell — assume worktree, i.e. take the conservative branch that
+    // does NOT mutate shared dashboard files.
+    return true;
+  }
+};
+
+const isWorktree = !!process.env.CONTRACT_PIPELINE_WORKTREE || inLinkedWorktree();
 
 // ── Plaintext secret guard (AC-5) ─────────────────────────────────────
 // Reject commits that contain unencrypted .env.production / .env.staging
@@ -81,7 +116,43 @@ export function checkPlaintextSecrets(): void {
   }
 }
 
+// 🔴 Boundary guard FIRST — before any expensive step. If a pipeline agent is
+// committing into a repository that is not its own worktree, nothing else
+// about this commit matters. See guard_workspace_boundary.ts.
+if (
+  isOutsideAgentWorkspace({
+    workspacePath: process.env.CONTRACT_PIPELINE_WORKSPACE_PATH,
+    role: process.env.CONTRACT_PIPELINE_ROLE,
+    repositoryRoot: ROOT_DIR,
+  })
+) {
+  execSync('bun run scripts/src/lib/ops/guard_workspace_boundary.ts', { stdio: 'inherit' });
+  process.exit(1);
+}
+
 checkPlaintextSecrets();
+
+/**
+ * `git add` a path list, tolerating paths that no longer exist.
+ *
+ * execFileSync with an argv array rather than a shell string: paths reach git
+ * verbatim, so a filename containing a space or a quote cannot split into two
+ * arguments or escape into the command line.
+ */
+const stage = (paths: string[]): void => {
+  if (paths.length === 0) {
+    return;
+  }
+  try {
+    execFileSync('git', ['add', '--', ...paths], {
+      cwd: ROOT_DIR,
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  } catch {
+    // Best-effort: a path a formatter deleted, or nothing left to add.
+  }
+};
 
 const sh = async (cmd: string): Promise<void> => {
   const parts = cmd.split(' ').filter(Boolean);
@@ -110,12 +181,22 @@ if (!isWorktree) {
   await sh('bun run scripts/src/lib/ops/generate_llms_txt.ts');
 
   // 6. Stage files modified by sync
-  await runStream(['sh', '-c', 'git add .context/llms.txt docs/contracts/ 2>/dev/null || true']);
+  stage(['.context/llms.txt', 'docs/contracts/']);
 }
 
-// 7. Re-stage files that formatters may have modified
-await runStream([
-  'sh',
-  '-c',
-  'git diff -z --name-only --cached | xargs -0 -r git add 2>/dev/null || true',
-]);
+// 7. Re-stage files that formatters may have modified in place.
+// 🔴 Read the staged list into the process and re-add it here rather than
+// piping `git diff | xargs git add` through `sh -c`: there is no `sh` on a
+// stock Windows machine, so that spelling failed silently and left Biome's
+// reformatting out of the commit for Windows contributors.
+try {
+  const staged = execSync('git diff -z --name-only --cached', {
+    encoding: 'utf8',
+    cwd: ROOT_DIR,
+  })
+    .split('\0')
+    .filter(Boolean);
+  stage(staged);
+} catch {
+  // Nothing staged, or git unavailable — neither is worth blocking a commit.
+}

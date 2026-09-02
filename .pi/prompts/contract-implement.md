@@ -226,6 +226,8 @@ Decide from the contract's Target/Overview:
 - 🔴 **In worktrees, always restart services before testing**: `herdr_session restart client firebase voice image text`. The main repo's dev servers are running the wrong code — you must restart from the worktree CWD.
 - 🔴 Route groups: literal `(dev)` — a `\(dev\)` directory breaks the route tree
 - 🔴 **Retry: when the verifier bounces changes back**, your task message includes the findings under "🔴 Verifier requested changes". Read them, fix each issue, run the affected tests, then call `contract_stage_complete`. Do NOT re-call without making code changes.
+- 🔴 **NEVER call `contract_stage_complete` with `passed` before you have written code.** `passed` means the implementation exists in the worktree — not that your preflight succeeded and you are about to start. If Phase 0 turns up a blocker, report `blocked` with the reason. If you are mid-way and out of budget, report `blocked` with what is done and what remains.
+  The orchestrator independently diffs the worktree before and after your session: a `passed` with **zero observable change** (no edits, no commits) is overridden to `blocked` and escalated, regardless of what you put in `filesTouched` or `diffHash`. Reporting `passed` early does not advance the run — it burns the run's one escalation. (C-457, 2026-09-02.)
 - Report failures honestly — a partial implementation with a truthful report beats a fake ✅
 - End at `implemented`, never `completed` — the verifier handles the rest
 - Scope changes without an Amendment entry prevent `verified` status
