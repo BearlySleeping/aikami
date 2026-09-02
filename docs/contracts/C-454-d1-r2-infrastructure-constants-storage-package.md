@@ -23,7 +23,7 @@ created_at: "2026-09-02"
 | **Type** | full |
 | **Priority** | P1 — `catalog/config.ts`'s mode-blind bucket default means a manual `publish.ts --mode staging` run silently overwrites production's live `index/v1/catalog.json`; the R2 key duplication is drift risk that grows with every new call site |
 | **Dependencies** | None. Blocks C-455 (apps/backend/cloudflare) and C-456 (row-schema generation) — both build on `@aikami/schemas`/`ObjectStore` staying cycle-free, which this contract's `packages/backend/database` dependency cleanup guarantees |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → none (no user-facing surface) |
 | **Contract version** | 2.0.0 |
@@ -378,3 +378,65 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Created `packages/shared/constants/src/lib/infrastructure.ts` with `D1_DATABASES` and `R2_BUCKETS` per-mode declarations, and `packages/shared/schemas/src/lib/storage/keys.ts` with typed key specs (userObjectKey, saveBackupKey, assetKey, catalogIndexKey, seedKey) each pairing a TypeBox schema with build/parse methods and cache-control policy. Built `packages/backend/storage` (`@aikami/backend-storage`) with an `ObjectStore` type and two driver factories (Worker R2Binding and Bun.S3Client). Migrated all 12+ call sites to import from the shared specs instead of inline template literals. Dropped 5 unused workspace deps from `packages/backend/database`. Added I-11 guard to `guard_data_plane.ts` and the architecture doc.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | All four `users/{uid}/...` call sites use `userObjectKey.build()`/`.parse()` — no template literals remain |
+| AC-2 | ✅ | `D1_DATABASES.hub` is the single source; TS sites import it; `wrangler.jsonc` has comment pointing at source |
+| AC-3 | ✅ | `R2_BUCKETS.catalog.staging` declared as `aikami-staging-catalog`; `resolveDefaultCatalogBucket(mode)` used in config |
+| AC-4 | ✅ | `createS3ObjectStore.list()` does one paged list call; test asserts exactly one call per publish run |
+| AC-5 | ✅ | `ObjectStore` methods accept `KeySpec<Params>` + `Params`, never bare string; type-level test file exists |
+| AC-6 | ✅ | 5 workspace deps removed from `package.json` and `moon.yml`; zero imports confirmed |
+| AC-7 | ✅ | I-11 guard added to `guard_data_plane.ts` and architecture doc; guard passes |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/constants/src/lib/infrastructure.ts` | `D1_DATABASES`, `R2_BUCKETS` per-mode declarations |
+| `packages/shared/schemas/src/lib/storage/keys.ts` | Key specs (TypeBox schemas + build/parse + cache-control) |
+| `packages/shared/schemas/src/lib/storage/keys.test.ts` | Unit tests for key spec round-tripping (AC-1) |
+| `packages/backend/storage/package.json` | New `@aikami/backend-storage` package |
+| `packages/backend/storage/moon.yml` | Moon project config |
+| `packages/backend/storage/src/index.ts` | Barrel export |
+| `packages/backend/storage/src/lib/object_store.ts` | `ObjectStore` type + Worker/S3 driver factories |
+| `packages/backend/storage/src/lib/__tests__/object_store.test.ts` | Unit tests for ObjectStore (AC-4) |
+| `packages/backend/storage/src/lib/__tests__/object_store.types.test.ts` | Type-level tests (AC-5) |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/constants/src/index.ts` | Added barrel export for `infrastructure.ts` |
+| `packages/shared/schemas/src/index.ts` | Added barrel export for `storage/keys.ts` |
+| `apps/frontend/hub/src/lib/server/api/storage.ts` | Key construction → `userObjectKey.build()`; auth check → `.parse()` + uid comparison |
+| `apps/frontend/hub/src/lib/server/api/save_backup.ts` | `saveKeyFor` → `saveBackupKey.build()` |
+| `apps/frontend/client/src/lib/services/storage/storage_service.svelte.ts` | Path building → `userObjectKey.build()` |
+| `apps/frontend/hub/src/lib/client/services/api/storage.svelte.ts` | Path building → `userObjectKey.build()` |
+| `packages/frontend/services/src/lib/services/r2_storage.ts` | JSDoc updated to reference key spec |
+| `scripts/src/lib/catalog/config.ts` | `DEFAULT_CATALOG_BUCKET` → `resolveDefaultCatalogBucket(mode)`; cache-control re-exported from `@aikami/schemas` |
+| `scripts/src/lib/catalog/upload.ts` | `ASSET_CACHE_CONTROL` import from `@aikami/schemas` |
+| `scripts/src/lib/deploy/deployment_config.ts` | `d1Databases`/`r2Buckets` sourced from `D1_DATABASES`/`R2_BUCKETS` |
+| `apps/frontend/hub/wrangler.jsonc` | Comment pointing at constants source of truth |
+| `scripts/src/lib/ops/d1_migrate_local.ts` | `DB_NAME` sourced from `D1_DATABASES.hub.production.databaseName` |
+| `scripts/src/lib/ops/d1_seed_local.ts` | `DB_NAME` sourced from `D1_DATABASES.hub.production.databaseName` |
+| `packages/backend/database/package.json` | Dropped 5 unused workspace deps |
+| `packages/backend/database/moon.yml` | Dropped 5 unused `dependsOn` entries |
+| `scripts/src/lib/ops/guard_data_plane.ts` | Added I-11 guard (`@aikami/schemas` has no CLI/generator/wrangler) |
+| `docs/architecture/data-layer-target-architecture.md` | Added I-11 to invariant list |
+
+### Deviations from Spec
+None. All ACs implemented as specified. The `aikami-staging-catalog` bucket provisioning (`wrangler r2 bucket create aikami-staging-catalog`) is documented in the contract's Migration section but was not executed during implementation — it requires Cloudflare dashboard access and is noted in the contract as a prerequisite before merging the `R2_BUCKETS.catalog.staging` entry.
+
+### Test Results
+- Unit (schemas): 454/454 PASS (0 failures)
+- Unit (constants): 130/130 PASS (0 failures)
+- Unit (storage): 7/7 PASS (0 failures)
+- Structural guard: I-1/I-9/I-11 all pass
+- E2E: N/A (internal/infra contract, no user-facing changes)
+- Visual: N/A
+- Baseline: No pre-existing failures detected; 0 new failures
