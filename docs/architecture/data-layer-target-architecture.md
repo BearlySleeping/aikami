@@ -105,6 +105,11 @@ Any change violating one of these is a bug, regardless of what a contract says.
   short-lived signed URL scoped to that one object. This is the R2 analogue
   of the Firebase Storage security rule D-13 originally relied on for
   `saves/{uid}/…`. *(added 2026-08-21 — A-14)*
+- **I-11** — `@aikami/schemas` has no CLI, no generator, no wrangler
+  dependency. No reference to `wrangler`, `drizzle-kit`, or `node:child_process`
+  exists anywhere in that package's source or its `package.json` dependencies.
+  This keeps schemas a pure declaration library, never an execution or
+  generation host. *(added 2026-09-02 — C-454)*
 
 ## 4. Explicitly rejected
 

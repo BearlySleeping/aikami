@@ -19,15 +19,21 @@
 // the index (zero re-uploads, objects are content-addressed).
 
 import { resolve } from 'node:path';
-import { AUDIO_MIME_MAP, IMAGE_MIME_MAP } from '@aikami/constants';
+import { AUDIO_MIME_MAP, IMAGE_MIME_MAP, R2_BUCKETS } from '@aikami/constants';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env.ts';
 
 // ---------------------------------------------------------------------------
 // Bucket / index layout constants
 // ---------------------------------------------------------------------------
 
-/** Default R2 bucket for the catalog origin. Override via CATALOG_BUCKET. */
-export const DEFAULT_CATALOG_BUCKET = 'aikami-catalog';
+/**
+ * Default R2 bucket for the catalog origin. Override via CATALOG_BUCKET env var.
+ * C-454: mode-aware resolution from R2_BUCKETS.catalog.
+ * Returns 'aikami-catalog' for production, 'aikami-staging-catalog' for staging,
+ * and falls back to 'aikami-catalog' for emulator/testing (local-only).
+ */
+export const resolveDefaultCatalogBucket = (mode: string): string =>
+  R2_BUCKETS.catalog[mode as keyof typeof R2_BUCKETS.catalog]?.bucketName ?? 'aikami-catalog';
 
 /** Asset object key prefix (content-addressed, immutable). */
 export const ASSET_KEY_PREFIX = 'assets/';
@@ -38,14 +44,18 @@ export const INDEX_KEY_PREFIX = 'index/v1/';
 /** Root index object key. */
 export const ROOT_INDEX_KEY = `${INDEX_KEY_PREFIX}catalog.json`;
 
-/** One-year immutable cache for asset bytes. */
-export const ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
-
-/** Short cache for seed/metadata JSON files (mutable, refreshed on publish). */
-export const SEED_CACHE_CONTROL = 'public, max-age=300';
-
-/** Short cache for the index (AC-3: 60s or less). */
-export const INDEX_CACHE_CONTROL = 'public, max-age=60';
+/**
+ * Cache-control constants moved to @aikami/schemas (C-454).
+ * Re-exported for backward compatibility during migration.
+ *
+ * TODO(C-454): Update callers to import from @aikami/schemas directly,
+ * then remove these re-exports.
+ */
+export {
+  ASSET_CACHE_CONTROL,
+  INDEX_CACHE_CONTROL,
+  SEED_CACHE_CONTROL,
+} from '@aikami/schemas';
 
 /**
  * Seed/metadata object key prefix (mutable, short cache).
@@ -97,7 +107,9 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
   const secretAccessKey = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY') ?? '';
   const endpoint = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT') ?? '';
   const originUrlRaw = getScriptsEnv('CATALOG_ORIGIN_URL') ?? '';
-  const bucket = getScriptsEnv('CATALOG_BUCKET') ?? DEFAULT_CATALOG_BUCKET;
+  // C-454: CATALOG_BUCKET env var override takes precedence (local testing),
+  // otherwise resolve from R2_BUCKETS.catalog by mode.
+  const bucket = getScriptsEnv('CATALOG_BUCKET') ?? resolveDefaultCatalogBucket(mode);
 
   const missing: string[] = [];
   if (!accessKeyId) {

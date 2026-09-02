@@ -14,6 +14,12 @@
 // create / r2 bucket create) and filled in by the deploy pipeline or a
 // maintainer before the first deploy.
 //
+// C-454: The values below are the production entries from the shared
+// D1_DATABASES and R2_BUCKETS constants in
+// packages/shared/constants/src/lib/infrastructure.ts.
+// wrangler.jsonc cannot import TypeScript, so if you change the production
+// values there, update them here too.
+//
 // `migrations_dir` points wrangler at the Drizzle-generated migration SQL
 // in packages/backend/database/drizzle-d1 (the schema source of truth) so
 // `wrangler d1 migrations apply` works without a local copy under this app.

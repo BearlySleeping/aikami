@@ -14,7 +14,11 @@
 // the hub mediates the upload/download behind the session guard. This is the
 // Worker-native equivalent of a presigned URL: the object is never public or
 // guessable, and every request is authenticated.
+//
+// C-454: key construction uses the shared saveBackupKey spec from
+// @aikami/schemas instead of inline template literals.
 
+import { saveBackupKey } from '@aikami/schemas';
 import { accountBackups } from '@aikami/backend-database';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
@@ -46,13 +50,20 @@ export const MAX_BACKUPS_PER_ACCOUNT = 20;
 /**
  * R2 object key for a given account. The backup UUID is embedded so each
  * upload gets a collision-resistant key even within the same millisecond.
+ * C-454: delegates to the shared saveBackupKey spec.
  */
 export const saveKeyFor = (
   accountId: string,
   timestamp: number,
   filename: string,
   backupId: string,
-): string => `saves/${accountId}/${timestamp}-${backupId}-${filename}`;
+): string =>
+  saveBackupKey.build({
+    accountId,
+    timestamp: String(timestamp),
+    backupId,
+    filename,
+  });
 
 /** SHA-256 hex digest of the uploaded bytes (for the checksum column). */
 const sha256Hex = async (bytes: ArrayBuffer): Promise<string> => {

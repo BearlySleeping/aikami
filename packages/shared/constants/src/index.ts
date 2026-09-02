@@ -16,6 +16,7 @@ export * from './lib/emulator.ts';
 export * from './lib/equipment.ts';
 export * from './lib/export.ts';
 export * from './lib/feature_flags.ts';
+export * from './lib/infrastructure.ts';
 export * from './lib/game/classes.ts';
 export * from './lib/game/damage_types.ts';
 export * from './lib/game/npc_interaction.ts';
