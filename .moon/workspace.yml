@@ -59,9 +59,9 @@ vcs:
     pre-commit:
       - "bun run pre-commit"
     post-merge:
-      - "bunx moon sync"
+      - "if [ -x node_modules/.bin/moon ]; then bunx moon sync; fi"
     post-checkout:
-      - "bunx moon sync"
+      - "if [ -x node_modules/.bin/moon ]; then bunx moon sync; fi"
 
 constraints:
   enforceLayerRelationships: false
