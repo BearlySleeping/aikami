@@ -22,8 +22,10 @@ import { worldStateService } from '../game/world_state_service.svelte.ts';
 // Types
 // ---------------------------------------------------------------------------
 
+/** Construction options for the NPC awareness service singleton. */
 export type NpcAwarenessServiceOptions = BaseFrontendClassOptions;
 
+/** Public contract for resolving nearby NPC identities and prompt context. */
 export type NpcAwarenessServiceInterface = BaseFrontendClassInterface & {
   /**
    * Returns NPC IDs present in the current scene/location.

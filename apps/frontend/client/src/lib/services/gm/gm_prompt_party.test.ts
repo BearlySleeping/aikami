@@ -5,7 +5,8 @@
 //
 // Contract: C-456 Group Chat & Systemic NPC Interactions (AC-1, AC-2)
 
-import { describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { GmPromptServiceInterface } from './gm_prompt_service.svelte.ts';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
@@ -33,17 +34,19 @@ mock.module('../game/time_service.svelte.ts', () => ({
   },
 }));
 
+const currentLocation = {
+  id: 'town_square',
+  name: 'Town Square',
+  description: 'A bustling town square',
+  connections: [],
+  npcIds: ['npc_merchant', 'npc_guard'],
+};
+
 mock.module('../game/world_state_service.svelte.ts', () => ({
   worldStateService: {
     worldGenOutput: undefined,
     quests: [],
-    currentLocation: {
-      id: 'town_square',
-      name: 'Town Square',
-      description: 'A bustling town square',
-      connections: [],
-      npcIds: ['npc_merchant', 'npc_guard'],
-    },
+    currentLocation,
   },
 }));
 
@@ -89,7 +92,12 @@ mock.module('../npc/npc_awareness_service.svelte.ts', () => ({
   },
 }));
 
-import { gmPromptService } from './gm_prompt_service.svelte.ts';
+let gmPromptService: GmPromptServiceInterface;
+
+beforeEach(async () => {
+  currentLocation.npcIds = ['npc_merchant', 'npc_guard'];
+  ({ gmPromptService } = await import('./gm_prompt_service.svelte.ts'));
+});
 
 describe('GmPromptService — AC-1 (Party Members in Prompt)', () => {
   test('party mode includes [PARTY MEMBERS] section with companion names', () => {
@@ -144,5 +152,18 @@ describe('GmPromptService — AC-2 (Nearby NPCs)', () => {
     const encoder = new TextEncoder();
     const byteLength = encoder.encode(prompt).length;
     expect(byteLength).toBeLessThanOrEqual(6144);
+  });
+
+  test('truncates trailing nearby NPC IDs to keep the prompt within 6 KB', () => {
+    currentLocation.npcIds = Array.from(
+      { length: 300 },
+      (_, index) => `npc_${index}_${'x'.repeat(40)}`,
+    );
+
+    const prompt = gmPromptService.assemblePrompt({ mode: 'party' });
+
+    expect(new TextEncoder().encode(prompt).length).toBeLessThanOrEqual(6144);
+    expect(prompt).toContain(currentLocation.npcIds[0]);
+    expect(prompt).not.toContain(currentLocation.npcIds.at(-1));
   });
 });

@@ -25,6 +25,8 @@ import type { AddressMode } from '$types';
 import { lorebookStore } from '../lorebook/lorebook_store.svelte.ts';
 import type { GmCombatContext, GmPromptContext } from './gm_types';
 
+const MAX_PROMPT_BYTES = 6144;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -121,18 +123,9 @@ class GmPromptService
       lines.push('[/ACTIVE QUESTS]');
     }
 
-    // ── Nearby NPCs ─────────────────────────────────────────────────
-    if (context.nearbyNpcs.length > 0) {
-      lines.push('');
-      lines.push('[NEARBY NPCS]');
-      for (const npc of context.nearbyNpcs) {
-        lines.push(`- ${npc.name} (${npc.persona}): ${npc.currentActivity}`);
-        if (npc.relationship) {
-          lines.push(`  Relationship: ${npc.relationship}`);
-        }
-      }
-      lines.push('[/NEARBY NPCS]');
-    }
+    // Nearby NPC context is inserted after all other sections are assembled so
+    // location NPC IDs cannot push the final prompt over its byte budget.
+    const nearbyNpcInsertionIndex = lines.length;
 
     // ── Party members (Party mode multi-character voice) ───────────
     if (mode === 'party' && context.partyMembers.length > 0) {
@@ -232,19 +225,12 @@ class GmPromptService
       }
     }
 
-    const prompt = lines.join('\n');
-
-    // Enforce < 6 KB constraint
-    const encoder = new TextEncoder();
-    const byteLength = encoder.encode(prompt).length;
-    if (byteLength > 6144) {
-      this.warn('assemblePrompt:prompt-exceeds-6kb', {
-        byteLength,
-        mode,
-      });
-    }
-
-    return prompt;
+    return this._fitPromptToByteLimit({
+      lines,
+      nearbyNpcs: context.nearbyNpcs,
+      nearbyNpcInsertionIndex,
+      mode,
+    });
   }
 
   /** @inheritdoc */
@@ -294,6 +280,82 @@ class GmPromptService
   }
 
   // ── Private helpers ────────────────────────────────────────────────
+
+  /**
+   * Fits nearby NPC entries into the remaining prompt budget, preserving their
+   * source order and omitting only trailing entries that do not fit.
+   */
+  private _fitPromptToByteLimit(options: {
+    lines: readonly string[];
+    nearbyNpcs: GmPromptContext['nearbyNpcs'];
+    nearbyNpcInsertionIndex: number;
+    mode: AddressMode;
+  }): string {
+    const { lines, nearbyNpcs, nearbyNpcInsertionIndex, mode } = options;
+    const encoder = new TextEncoder();
+    const buildPrompt = (npcCount: number): string => {
+      const nearbyNpcLines: string[] = [];
+      if (npcCount > 0) {
+        nearbyNpcLines.push('', '[NEARBY NPCS]');
+        for (const npc of nearbyNpcs.slice(0, npcCount)) {
+          nearbyNpcLines.push(`- ${npc.name} (${npc.persona}): ${npc.currentActivity}`);
+          if (npc.relationship) {
+            nearbyNpcLines.push(`  Relationship: ${npc.relationship}`);
+          }
+        }
+        nearbyNpcLines.push('[/NEARBY NPCS]');
+      }
+
+      return [
+        ...lines.slice(0, nearbyNpcInsertionIndex),
+        ...nearbyNpcLines,
+        ...lines.slice(nearbyNpcInsertionIndex),
+      ].join('\n');
+    };
+
+    const completePrompt = buildPrompt(nearbyNpcs.length);
+    const completeByteLength = encoder.encode(completePrompt).length;
+    if (completeByteLength <= MAX_PROMPT_BYTES) {
+      return completePrompt;
+    }
+
+    let lowerBound = 0;
+    let upperBound = nearbyNpcs.length;
+    while (lowerBound < upperBound) {
+      const candidateCount = Math.ceil((lowerBound + upperBound) / 2);
+      const candidateByteLength = encoder.encode(buildPrompt(candidateCount)).length;
+      if (candidateByteLength <= MAX_PROMPT_BYTES) {
+        lowerBound = candidateCount;
+      } else {
+        upperBound = candidateCount - 1;
+      }
+    }
+
+    const fittedPrompt = buildPrompt(lowerBound);
+    this.warn('assemblePrompt:prompt-truncated-to-6kb', {
+      byteLength: completeByteLength,
+      mode,
+      nearbyNpcCount: nearbyNpcs.length,
+      retainedNearbyNpcCount: lowerBound,
+    });
+
+    return this._truncateUtf8({ value: fittedPrompt, maxBytes: MAX_PROMPT_BYTES });
+  }
+
+  /** Truncates without splitting a multi-byte UTF-8 code point. */
+  private _truncateUtf8(options: { value: string; maxBytes: number }): string {
+    const { value, maxBytes } = options;
+    const encoded = new TextEncoder().encode(value);
+    if (encoded.length <= maxBytes) {
+      return value;
+    }
+
+    let end = maxBytes;
+    while (end > 0 && (encoded[end] & 0xc0) === 0x80) {
+      end--;
+    }
+    return new TextDecoder().decode(encoded.slice(0, end));
+  }
 
   /**
    * Builds the address-mode header line for the prompt.

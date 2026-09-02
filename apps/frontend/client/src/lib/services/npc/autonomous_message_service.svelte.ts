@@ -60,7 +60,7 @@ export type AutonomousMessageServiceInterface = BaseFrontendClassInterface & {
    *
    * @param npcIds - Pool of eligible NPC IDs.
    * @param count - Maximum number to select (default: MAX_GROUP_PARTICIPANTS).
-   * @returns Selected NPC IDs, ordered by weight descending.
+   * @returns Selected NPC IDs in weighted sampling order.
    */
   selectGroupParticipants(options: {
     npcIds: readonly string[];
@@ -363,7 +363,7 @@ class AutonomousMessageService
       return [];
     }
 
-    const pool = [...npcIds];
+    const pool = [...new Set(npcIds)];
     const selected: string[] = [];
     const targetCount = Math.min(count, pool.length);
 
@@ -414,10 +414,11 @@ class AutonomousMessageService
       return [];
     }
 
-    const selected = this._selectWeightedRandomN([...npcIds], count);
+    const clampedCount = Math.min(count, MAX_GROUP_PARTICIPANTS);
+    const selected = this._selectWeightedRandomN([...npcIds], clampedCount);
     this.debug('selectGroupParticipants', {
       poolSize: npcIds.length,
-      count,
+      count: clampedCount,
       selected,
     });
 
@@ -431,20 +432,21 @@ class AutonomousMessageService
     recentChat: readonly string[];
   }): Promise<readonly string[]> {
     const { npcIds, playerMessage, recentChat } = options;
+    const limitedNpcIds = npcIds.slice(0, MAX_GROUP_PARTICIPANTS);
 
-    if (npcIds.length === 0) {
+    if (limitedNpcIds.length === 0) {
       return [];
     }
 
     const responses: string[] = [];
 
-    for (let i = 0; i < npcIds.length; i++) {
-      const npcId = npcIds[i];
+    for (let i = 0; i < limitedNpcIds.length; i++) {
+      const npcId = limitedNpcIds[i];
 
       // Build context from prior NPC responses so this NPC is aware
       // of what the others have already said.
       const priorNpcDialogue = responses
-        .map((text, idx) => `[${npcIds[idx]}]: ${text}`)
+        .map((text, idx) => `[${limitedNpcIds[idx]}]: ${text}`)
         .join('\n');
 
       const contextBlock = recentChat.join('\n');
@@ -497,7 +499,7 @@ class AutonomousMessageService
         this.debug('generateMultiNpcResponses:response', {
           npcId,
           index: i,
-          total: npcIds.length,
+          total: limitedNpcIds.length,
         });
       } else {
         responses.push('');
@@ -533,8 +535,7 @@ class AutonomousMessageService
    * The caller must have already queried getSchedule() for the NPC.
    */
   private _getCachedSchedule(npcId: string): NpcSchedule {
-    // Return fallback defaults — the talkativeness is the key value here
-    return {
+    return npcScheduleService.getCachedSchedule(npcId) ?? {
       npcId,
       days: [],
       autonomousEnabled: true,
