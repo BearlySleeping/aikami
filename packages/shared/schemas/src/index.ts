@@ -28,6 +28,7 @@ export * from './lib/domain/item.ts';
 export * from './lib/domain/knowledge_graph.ts';
 export * from './lib/domain/lorebook.ts';
 export * from './lib/domain/memory.ts';
+export * from './lib/domain/memory_retrieval.ts';
 export * from './lib/domain/message.ts';
 export * from './lib/domain/notification.ts';
 export * from './lib/domain/npc.ts';
