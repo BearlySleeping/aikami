@@ -37,15 +37,11 @@ const main = (): void => {
   }
 
   try {
-    execFileSync(
-      'bunx',
-      ['wrangler', 'r2', 'object', 'get', entry.bucketName, key, '--pipe'],
-      {
-        cwd: HUB_DIR,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 30_000,
-      },
-    );
+    execFileSync('bunx', ['wrangler', 'r2', 'object', 'get', entry.bucketName, key, '--pipe'], {
+      cwd: HUB_DIR,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30_000,
+    });
   } catch {
     process.exit(1);
   }

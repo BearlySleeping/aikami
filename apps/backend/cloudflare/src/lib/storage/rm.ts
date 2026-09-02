@@ -48,15 +48,11 @@ const main = async (): Promise<void> => {
   }
 
   try {
-    execFileSync(
-      'bunx',
-      ['wrangler', 'r2', 'object', 'delete', entry.bucketName, key],
-      {
-        cwd: HUB_DIR,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 30_000,
-      },
-    );
+    execFileSync('bunx', ['wrangler', 'r2', 'object', 'delete', entry.bucketName, key], {
+      cwd: HUB_DIR,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30_000,
+    });
   } catch {
     process.exit(1);
   }

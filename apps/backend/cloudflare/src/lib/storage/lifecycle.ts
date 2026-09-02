@@ -36,15 +36,11 @@ const main = async (): Promise<void> => {
   }
 
   try {
-    execFileSync(
-      'bunx',
-      ['wrangler', 'r2', 'bucket', 'lifecycle', 'list', entry.bucketName],
-      {
-        cwd: HUB_DIR,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 30_000,
-      },
-    );
+    execFileSync('bunx', ['wrangler', 'r2', 'bucket', 'lifecycle', 'list', entry.bucketName], {
+      cwd: HUB_DIR,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30_000,
+    });
   } catch {
     process.exit(1);
   }

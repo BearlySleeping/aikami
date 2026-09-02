@@ -39,17 +39,13 @@ export const reconcileBucket = async (options: SyncOptions): Promise<{ checked: 
     listArgs.push('--prefix', prefix);
   }
 
-  try {
-    const output = execFileSync('bunx', ['wrangler', ...listArgs], {
-      cwd: HUB_DIR,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 30_000,
-    });
-    const objects = output.toString().trim().split('\n').filter(Boolean);
-    return { checked: objects.length };
-  } catch (error) {
-    throw error;
-  }
+  const output = execFileSync('bunx', ['wrangler', ...listArgs], {
+    cwd: HUB_DIR,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 30_000,
+  });
+  const objects = output.toString().trim().split('\n').filter(Boolean);
+  return { checked: objects.length };
 };
 
 // ── CLI entry ──────────────────────────────────────────────────────────
