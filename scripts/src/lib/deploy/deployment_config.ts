@@ -106,12 +106,9 @@ export type CloudflareAppConfig =
       vars?: Record<string, string> | ((mode: string) => Record<string, string>);
     };
 
-export type AppConfig = {
-  serviceType: ServiceType;
+type AppConfigBase = {
   /** Relative path from repo root */
   path: string;
-  /** Target subcommand for infra apps (d1-migrate, r2-reconcile). Optional. */
-  target?: string;
   /** Short identifier used in docker tags, URLs, etc. Empty string = default hosting. */
   shortName: string;
   /** Set to false to exclude from deployment. Default: true. */
@@ -150,6 +147,22 @@ export type AppConfig = {
    */
   cloudflare?: CloudflareAppConfig;
 };
+
+/** Supported one-shot operations for infra deployment apps. */
+export type InfraTarget = 'd1-migrate' | 'r2-reconcile';
+
+/** Deployment metadata, with a required supported target for infra apps. */
+export type AppConfig = AppConfigBase &
+  (
+    | {
+        serviceType: 'infra';
+        target: InfraTarget;
+      }
+    | {
+        serviceType: Exclude<ServiceType, 'infra'>;
+        target?: never;
+      }
+  );
 
 export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
   client: {

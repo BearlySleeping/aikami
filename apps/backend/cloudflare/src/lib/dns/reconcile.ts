@@ -7,17 +7,20 @@
 
 import { execFileSync } from 'node:child_process';
 
-const main = (): void => {
+/** Verify that the Cloudflare DNS CLI required for reconciliation is available. */
+export const reconcileDns = (): void => {
   // Check if cf CLI is available
   try {
     execFileSync('which', ['cf'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 5_000,
     });
-  } catch {}
+  } catch {
+    process.exit(1);
+  }
 };
 
 const isMainModule = import.meta.path === Bun.main;
 if (isMainModule) {
-  main();
+  reconcileDns();
 }

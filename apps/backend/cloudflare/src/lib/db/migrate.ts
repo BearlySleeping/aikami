@@ -13,6 +13,7 @@
 
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { D1_DATABASES } from '@aikami/constants';
 import {
   confirmProduction,
   getHubDir,
@@ -23,24 +24,31 @@ import {
   writeThrowawayD1Config,
 } from '../wrangler.ts';
 
+/** Mode and locality used when applying D1 migrations. */
+export type ApplyMigrationsOptions = {
+  /** Deployment mode whose database should be migrated. */
+  mode: string;
+  /** Whether Wrangler should use the hub's local D1 state. */
+  isLocal: boolean;
+};
+
 /**
  * Apply pending D1 migrations for the given mode.
  * @returns The number of migrations applied.
  */
-export const applyMigrations = async (options: {
-  mode: string;
-  isLocal: boolean;
-}): Promise<{ applied: number }> => {
+export const applyMigrations = async (
+  options: ApplyMigrationsOptions,
+): Promise<{ applied: number }> => {
   const { mode, isLocal } = options;
 
-  const dbBinding = resolveD1Binding(mode);
+  const dbBinding = isLocal ? D1_DATABASES.hub.production : resolveD1Binding({ mode });
   if (!dbBinding) {
     throw new Error(`No D1 database configured for hub in mode "${mode}"`);
   }
 
   // Production guard: interactive confirm or --yes for non-TTY
   if (mode === 'production') {
-    const isYes = Bun.argv.includes('--yes');
+    const isYes = Bun.argv.includes('--yes') || Bun.argv.includes('-y');
     if (!process.stdin.isTTY) {
       if (!isYes) {
         process.exit(1);
@@ -53,13 +61,15 @@ export const applyMigrations = async (options: {
   const dbDir = getHubDir();
   const migrationsDir = getMigrationsDir();
 
-  const tmpConfigPath = writeThrowawayD1Config({
-    mode,
-    isLocal,
-    dbDir,
-    dbBinding,
-    migrationsDir,
-  });
+  const configPath = isLocal
+    ? resolve(dbDir, 'wrangler.jsonc')
+    : writeThrowawayD1Config({
+        mode,
+        isLocal,
+        dbDir,
+        dbBinding,
+        migrationsDir,
+      });
 
   const args = [
     'd1',
@@ -67,7 +77,7 @@ export const applyMigrations = async (options: {
     'apply',
     dbBinding.binding,
     '--config',
-    tmpConfigPath,
+    configPath,
     isLocal ? '--local' : '--remote',
   ];
 
@@ -78,12 +88,13 @@ export const applyMigrations = async (options: {
     const applied = (outputStr.match(/Applied\s+/g) ?? []).length;
     return { applied };
   } finally {
-    // Clean up the temp config directory
-    const tmpDir = resolve(tmpConfigPath, '..');
-    try {
-      rmSync(tmpDir, { recursive: true, force: true });
-    } catch {
-      // ignore cleanup failure
+    if (!isLocal) {
+      const tmpDir = resolve(configPath, '..');
+      try {
+        rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup failure
+      }
     }
   }
 };

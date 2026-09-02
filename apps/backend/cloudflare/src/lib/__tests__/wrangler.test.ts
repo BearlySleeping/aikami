@@ -14,7 +14,11 @@ describe('resolveModeGuard (AC-4)', () => {
   });
 
   afterEach(() => {
-    process.env.CLOUDFLARE_API_TOKEN = ORIGINAL_TOKEN;
+    if (ORIGINAL_TOKEN === undefined) {
+      delete process.env.CLOUDFLARE_API_TOKEN;
+    } else {
+      process.env.CLOUDFLARE_API_TOKEN = ORIGINAL_TOKEN;
+    }
   });
 
   test('--local returns emulator mode with isLocal=true', async () => {
@@ -71,7 +75,11 @@ describe('checkLocalMode (AC-4)', () => {
   const Orig = process.env.CLOUDFLARE_API_TOKEN;
 
   afterEach(() => {
-    process.env.CLOUDFLARE_API_TOKEN = Orig;
+    if (Orig === undefined) {
+      delete process.env.CLOUDFLARE_API_TOKEN;
+    } else {
+      process.env.CLOUDFLARE_API_TOKEN = Orig;
+    }
   });
 
   test('refuses when CLOUDFLARE_API_TOKEN is set', async () => {

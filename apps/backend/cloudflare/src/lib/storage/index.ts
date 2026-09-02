@@ -2,35 +2,42 @@
 //
 // C-455: R2 bucket operations subcommand router.
 
+import { runEnsureCommand } from './ensure.ts';
+import { runGetCommand } from './get.ts';
+import { runLifecycleCommand } from './lifecycle.ts';
+import { runListCommand } from './ls.ts';
+import { runPutCommand } from './put.ts';
+import { runRemoveCommand } from './rm.ts';
+import { runStatCommand } from './stat.ts';
+import { runSyncCommand } from './sync.ts';
+
 const storageSubcommand = Bun.argv[3];
 
 switch (storageSubcommand) {
   case 'ls':
-    await import('./ls.ts');
+    runListCommand();
     break;
   case 'get':
-    await import('./get.ts');
+    runGetCommand();
     break;
   case 'put':
-    await import('./put.ts');
+    runPutCommand();
     break;
   case 'rm':
-    await import('./rm.ts');
+    await runRemoveCommand();
     break;
   case 'stat':
-    await import('./stat.ts');
+    runStatCommand();
     break;
   case 'sync':
-    await import('./sync.ts');
+    await runSyncCommand();
     break;
   case 'lifecycle':
-    await import('./lifecycle.ts');
+    await runLifecycleCommand();
     break;
   case 'ensure':
-    await import('./ensure.ts');
+    await runEnsureCommand();
     break;
   default:
     process.exit(1);
 }
-
-export {};

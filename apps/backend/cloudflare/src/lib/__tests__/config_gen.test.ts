@@ -25,13 +25,13 @@ describe('config_gen (AC-2)', () => {
     expect(config).toContain('@aikami/constants');
   });
 
-  test('no hardcoded production database_id outside @aikami/constants', () => {
+  test('no hardcoded production database_id outside @aikami/constants', async () => {
     // The config_gen.ts itself should reference constants, not hardcode IDs
     const configGenContent = Bun.file(`${import.meta.dir}/../config_gen.ts`);
     // This test verifies that config_gen.ts imports from constants
     // rather than hardcoding the IDs directly
-    const content = configGenContent.text();
-    // The test file doesn't need to do the grep; it's structural
-    expect(content).toBeDefined();
+    const content = await configGenContent.text();
+    expect(content).toContain("from '@aikami/constants'");
+    expect(content).not.toContain('bf77e365-058f-408f-871c-4a0567c9aa10');
   });
 });

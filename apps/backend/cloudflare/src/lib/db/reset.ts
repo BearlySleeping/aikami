@@ -3,6 +3,7 @@
 // C-455: Reset local D1 database state (delete .wrangler/state and re-apply migrations).
 // Thin wrapper over wrangler local state management.
 
+import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { checkLocalMode, resolveModeGuard } from '../wrangler.ts';
 
@@ -18,6 +19,7 @@ const main = async (): Promise<void> => {
   }
 
   checkLocalMode();
+  rmSync(resolve(HUB_DIR, '.wrangler/state'), { recursive: true, force: true });
   const proc = Bun.spawn(['bunx', 'wrangler', 'd1', 'migrations', 'apply', 'DB', '--local'], {
     cwd: HUB_DIR,
     stdout: 'inherit',

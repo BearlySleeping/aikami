@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { AppId } from '@aikami/types';
-import { resolveModeGuard } from '../wrangler.ts';
+import { confirmProduction, resolveModeGuard } from '../wrangler.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../../../..');
 
@@ -18,7 +18,7 @@ const ROOT = resolve(import.meta.dir, '../../../../../..');
  * Deploy a Cloudflare Worker using wrangler.
  * Simplified entry point that delegates to wrangler deploy.
  */
-const main = async (): Promise<void> => {
+export const deployWorker = async (): Promise<void> => {
   const args = Bun.argv.slice(3);
   const { mode, isLocal: _isLocal } = resolveModeGuard(args);
 
@@ -35,6 +35,17 @@ const main = async (): Promise<void> => {
 
   if (!existsSync(outputDir)) {
     process.exit(1);
+  }
+
+  if (!_isLocal && mode === 'production') {
+    const isYes = args.includes('--yes') || args.includes('-y');
+    if (!process.stdin.isTTY) {
+      if (!isYes) {
+        process.exit(1);
+      }
+    } else if (!(await confirmProduction())) {
+      process.exit(1);
+    }
   }
 
   try {
@@ -54,5 +65,5 @@ const main = async (): Promise<void> => {
 
 const isMainModule = import.meta.path === Bun.main;
 if (isMainModule) {
-  main();
+  deployWorker();
 }

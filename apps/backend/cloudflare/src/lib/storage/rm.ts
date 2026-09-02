@@ -11,7 +11,8 @@ import { confirmProduction, resolveModeGuard } from '../wrangler.ts';
 const ROOT = resolve(import.meta.dir, '../../../../../..');
 const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
 
-const main = async (): Promise<void> => {
+/** Parse CLI arguments and remove one R2 object. */
+export const runRemoveCommand = async (): Promise<void> => {
   const args = Bun.argv.slice(3);
   const { mode, isLocal: _isLocal } = resolveModeGuard(args);
 
@@ -60,5 +61,5 @@ const main = async (): Promise<void> => {
 
 const isMainModule = import.meta.path === Bun.main;
 if (isMainModule) {
-  main();
+  runRemoveCommand();
 }

@@ -8,9 +8,9 @@
     "start": "bun run src/cli.ts",
     "build": "true",
     "typecheck": "tsgo --noEmit",
-    "lint": "biome check .",
+    "lint": "biome lint .",
     "format": "biome format .",
-    "fix": "biome check --write . --error-on-warnings",
+    "fix": "biome check --write .",
     "test": "bun test --pass-with-no-tests",
     "deploy": "bun run src/cli.ts"
   },

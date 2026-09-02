@@ -82,7 +82,7 @@ export function resolveLogTarget(appId: AppId, mode: string): LogTarget | { unsu
       return {
         unsupported:
           `${appId} is a one-shot infra job (C-394/C-455) with no runtime — ` +
-          'there are no server logs to stream. Run it via `bun run deploy database --mode=production`.',
+          `there are no server logs to stream. Run it via \`bun run deploy ${appId} --mode=production\`.`,
       };
 
     case 'docker-release':
@@ -94,7 +94,7 @@ export function resolveLogTarget(appId: AppId, mode: string): LogTarget | { unsu
       };
 
     default:
-      return { unsupported: `Unknown service type for ${appId}: ${config.serviceType}` };
+      return { unsupported: `Unknown service type for ${appId}` };
   }
 }
 

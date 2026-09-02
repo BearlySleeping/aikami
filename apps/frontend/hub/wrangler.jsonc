@@ -16,7 +16,7 @@
       "binding": "DB",
       "database_name": "aikami-hub",
       "database_id": "bf77e365-058f-408f-871c-4a0567c9aa10",
-      "migrations_dir": "../../packages/backend/database/drizzle-d1"
+      "migrations_dir": "../../../packages/backend/database/drizzle-d1"
     }
   ],
   "r2_buckets": [

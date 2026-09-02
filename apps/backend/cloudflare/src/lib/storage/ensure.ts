@@ -12,9 +12,13 @@ import { confirmProduction, resolveModeGuard } from '../wrangler.ts';
 const ROOT = resolve(import.meta.dir, '../../../../../..');
 const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
 
+/** Options that identify the declared R2 bucket an ensure operation should provision. */
 export type EnsureBucketOptions = {
+  /** Deployment mode whose bucket declaration should be used. */
   mode: string;
+  /** Whether the operation is constrained to local Cloudflare state. */
   isLocal: boolean;
+  /** R2 bucket declaration to ensure. */
   bucketKey: keyof typeof R2_BUCKETS;
 };
 
@@ -59,7 +63,8 @@ export const ensureBucket = async (options: EnsureBucketOptions): Promise<{ crea
 
 // ── CLI entry ──────────────────────────────────────────────────────────
 
-const main = async (): Promise<void> => {
+/** Parse CLI arguments and ensure the selected R2 bucket exists. */
+export const runEnsureCommand = async (): Promise<void> => {
   const args = Bun.argv.slice(3);
   const { mode, isLocal: _isLocal } = resolveModeGuard(args);
 
@@ -87,5 +92,5 @@ const main = async (): Promise<void> => {
 
 const isMainModule = import.meta.path === Bun.main;
 if (isMainModule) {
-  main();
+  runEnsureCommand();
 }

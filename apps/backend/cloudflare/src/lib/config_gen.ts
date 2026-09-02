@@ -47,7 +47,7 @@ export const generateHubWranglerConfig = (): string => {
         // biome-ignore lint/style/useNamingConvention: wrangler.jsonc uses snake_case
         database_id: prodD1.databaseId,
         // biome-ignore lint/style/useNamingConvention: wrangler.jsonc uses snake_case
-        migrations_dir: '../../packages/backend/database/drizzle-d1',
+        migrations_dir: '../../../packages/backend/database/drizzle-d1',
       },
     ],
     // biome-ignore lint/style/useNamingConvention: wrangler.jsonc uses snake_case

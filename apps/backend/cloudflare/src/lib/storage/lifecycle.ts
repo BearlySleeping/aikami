@@ -10,13 +10,17 @@ import { confirmProduction, resolveModeGuard } from '../wrangler.ts';
 const ROOT = resolve(import.meta.dir, '../../../../../..');
 const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
 
-const main = async (): Promise<void> => {
+/** Parse CLI arguments and list lifecycle rules for a declared R2 bucket. */
+export const runLifecycleCommand = async (): Promise<void> => {
   const args = Bun.argv.slice(3);
   const { mode, isLocal: _isLocal } = resolveModeGuard(args);
 
   const bucketIdx = args.indexOf('--bucket');
   const bucketKey = (bucketIdx !== -1 ? args[bucketIdx + 1] : 'saves') as keyof typeof R2_BUCKETS;
   const bucket = R2_BUCKETS[bucketKey];
+  if (!bucket) {
+    process.exit(1);
+  }
   const entry = bucket[mode as keyof typeof bucket];
 
   if (!entry) {
@@ -36,11 +40,16 @@ const main = async (): Promise<void> => {
   }
 
   try {
-    execFileSync('bunx', ['wrangler', 'r2', 'bucket', 'lifecycle', 'list', entry.bucketName], {
-      cwd: HUB_DIR,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 30_000,
-    });
+    const output = execFileSync(
+      'bunx',
+      ['wrangler', 'r2', 'bucket', 'lifecycle', 'list', entry.bucketName],
+      {
+        cwd: HUB_DIR,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 30_000,
+      },
+    );
+    process.stdout.write(output);
   } catch {
     process.exit(1);
   }
@@ -48,5 +57,5 @@ const main = async (): Promise<void> => {
 
 const isMainModule = import.meta.path === Bun.main;
 if (isMainModule) {
-  main();
+  runLifecycleCommand();
 }

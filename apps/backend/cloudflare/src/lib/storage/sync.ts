@@ -4,29 +4,27 @@
 // Lists objects once, diffs in memory, and applies changes.
 // Preserves the list-once-diff-in-memory strategy from catalog/upload.ts.
 
-import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
 import { R2_BUCKETS } from '@aikami/constants';
 import { confirmProduction, resolveModeGuard } from '../wrangler.ts';
 
-const ROOT = resolve(import.meta.dir, '../../../../../..');
-const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
-
+/** Options that select the R2 desired state a reconciliation should apply. */
 export type SyncOptions = {
+  /** Deployment mode whose bucket declaration should be reconciled. */
   mode: string;
+  /** Whether reconciliation is constrained to local Cloudflare state. */
   isLocal: boolean;
+  /** R2 bucket declaration to reconcile. */
   bucketKey: keyof typeof R2_BUCKETS;
+  /** Optional object-key prefix that limits reconciliation scope. */
   prefix?: string;
 };
 
 /**
- * Reconcile R2 bucket contents. Lists remote objects, diffs against
- * the declared set, and applies changes.
- * Currently a scaffold that verifies the bucket is accessible and lists contents.
- * Full reconciliation logic will be added in follow-up work.
+ * Refuse the deployment target until a desired-object manifest exists.
+ * Returning success after list-only work would falsely mark R2 as reconciled.
  */
-export const reconcileBucket = async (options: SyncOptions): Promise<{ checked: number }> => {
-  const { mode, isLocal: _isLocal, bucketKey, prefix } = options;
+export const reconcileBucket = async (options: SyncOptions): Promise<never> => {
+  const { mode, bucketKey } = options;
 
   const bucket = R2_BUCKETS[bucketKey];
   const entry = bucket[mode as keyof typeof bucket];
@@ -34,23 +32,15 @@ export const reconcileBucket = async (options: SyncOptions): Promise<{ checked: 
     throw new Error(`No bucket configured for ${bucketKey} in mode "${mode}"`);
   }
 
-  const listArgs = ['r2', 'object', 'list', entry.bucketName];
-  if (prefix) {
-    listArgs.push('--prefix', prefix);
-  }
-
-  const output = execFileSync('bunx', ['wrangler', ...listArgs], {
-    cwd: HUB_DIR,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 30_000,
-  });
-  const objects = output.toString().trim().split('\n').filter(Boolean);
-  return { checked: objects.length };
+  throw new Error(
+    `R2 reconciliation is unsupported for ${entry.bucketName}: no desired-object manifest is defined`,
+  );
 };
 
 // ── CLI entry ──────────────────────────────────────────────────────────
 
-const main = async (): Promise<void> => {
+/** Parse CLI arguments and attempt the guarded R2 reconciliation target. */
+export const runSyncCommand = async (): Promise<void> => {
   const args = Bun.argv.slice(3);
   const { mode, isLocal: _isLocal } = resolveModeGuard(args);
 
@@ -80,5 +70,5 @@ const main = async (): Promise<void> => {
 
 const isMainModule = import.meta.path === Bun.main;
 if (isMainModule) {
-  main();
+  runSyncCommand();
 }

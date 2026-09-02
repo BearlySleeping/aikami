@@ -39,7 +39,7 @@ const TYPE_LABEL: Record<string, string> = {
   'tauri-release': 'Tauri Release',
   'docker-release': 'Docker Release',
   infra: 'Infra (D1/R2)',
-};
+} as const;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

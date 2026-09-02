@@ -3,7 +3,30 @@
 // C-455 AC-5: `deploy database` and `deploy storage` gate independently.
 
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { ALL_SERVICE_TYPES, APP_CONFIG, DEPLOYABLE_APPS } from '../deployment_config.ts';
+
+const runResolvePlan = (deployApps: string): string => {
+  const fixtureDir = mkdtempSync(join(tmpdir(), 'aikami-resolve-plan-'));
+  const outputPath = join(fixtureDir, 'github-output.txt');
+
+  try {
+    const result = Bun.spawnSync(
+      [process.execPath, resolve(import.meta.dir, '../resolve_plan.ts')],
+      {
+        env: { ...process.env, DEPLOY_APPS: deployApps, GITHUB_OUTPUT: outputPath },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
+    expect(result.exitCode).toBe(0);
+    return readFileSync(outputPath, 'utf8');
+  } finally {
+    rmSync(fixtureDir, { recursive: true, force: true });
+  }
+};
 
 describe('infra service type (AC-5)', () => {
   test('infra is a registered service type (replaces database-migration)', () => {
@@ -45,22 +68,31 @@ describe('infra service type (AC-5)', () => {
 });
 
 describe('resolve_plan output key mapping (AC-5)', () => {
-  test('infra maps to database_migration_apps output key', async () => {
-    // The SERVICE_TYPE_OUTPUT_KEY is not exported, but we verify the mapping
-    // by checking that all service types in ALL_SERVICE_TYPES have a
-    // corresponding output key in resolve_plan.ts
-    const content = await Bun.file(`${import.meta.dir}/../resolve_plan.ts`).text();
-    // Verify 'infra' maps to 'database_migration_apps'
-    expect(content).toContain("infra: 'database_migration_apps'");
+  test('infra fixtures map to database_migration_apps independently', () => {
+    const fixtures = [
+      { deployApps: 'database', expected: 'database' },
+      { deployApps: 'storage', expected: 'storage' },
+      { deployApps: 'database storage', expected: 'database storage' },
+    ];
+
+    for (const fixture of fixtures) {
+      const output = runResolvePlan(fixture.deployApps);
+      expect(output).toContain(`database_migration_apps=${fixture.expected}\n`);
+    }
   });
 
-  test('all service types have a corresponding output key mapping', async () => {
-    const content = await Bun.file(`${import.meta.dir}/../resolve_plan.ts`).text();
-    for (const st of ALL_SERVICE_TYPES) {
-      // Each service type should have a mapping like `'infra': '...'`
-      // Keys with hyphens are quoted in the source; plain identifiers are not
-      const pattern = st.includes('-') ? `'${st}':` : `${st}:`;
-      expect(content).toContain(pattern);
+  test('all service types emit their deployment output key', () => {
+    const output = runResolvePlan('all');
+    const expectedKeys = [
+      'desktop_apps=',
+      'cloudflare_apps=',
+      'docker_release_apps=',
+      'database_migration_apps=',
+    ];
+
+    expect(expectedKeys).toHaveLength(ALL_SERVICE_TYPES.length);
+    for (const key of expectedKeys) {
+      expect(output).toContain(key);
     }
   });
 });

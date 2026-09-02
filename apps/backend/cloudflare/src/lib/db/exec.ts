@@ -17,7 +17,7 @@ const main = async (): Promise<void> => {
     process.exit(1);
   }
 
-  const dbBinding = resolveD1Binding(mode);
+  const dbBinding = resolveD1Binding({ mode });
   if (!dbBinding) {
     throw new Error(`No D1 database configured for hub in mode "${mode}"`);
   }

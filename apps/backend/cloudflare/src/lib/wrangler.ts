@@ -11,8 +11,11 @@ import { join, resolve } from 'node:path';
 import type { D1DatabaseEntry } from '@aikami/constants';
 import { D1_DATABASES } from '@aikami/constants';
 
+/** Mode and locality resolved for a guarded Wrangler command. */
 export type WranglerModeGuard = {
+  /** Deployment mode selected for the command. */
   mode: string;
+  /** Whether Wrangler must operate exclusively on local state. */
   isLocal: boolean;
 };
 
@@ -66,11 +69,17 @@ export const confirmProduction = async (): Promise<boolean> => {
   return normalized === 'y' || normalized === 'yes';
 };
 
+/** Options for writing a mode-scoped temporary D1 configuration. */
 export type WriteConfigOptions = {
+  /** Deployment mode represented by the temporary config. */
   mode: string;
+  /** Whether the consuming Wrangler command targets local state. */
   isLocal: boolean;
+  /** Working directory containing the hub Worker configuration. */
   dbDir: string;
+  /** D1 binding to place in the temporary config. */
   dbBinding: D1DatabaseEntry;
+  /** Absolute directory containing D1 migration files. */
   migrationsDir: string;
 };
 
@@ -105,10 +114,15 @@ export const writeThrowawayD1Config = (options: WriteConfigOptions): string => {
   return tmpConfigPath;
 };
 
+/** Options for a bounded Wrangler subprocess invocation. */
 export type RunWranglerOptions = {
+  /** Wrangler arguments, excluding the executable name. */
   args: string[];
+  /** Working directory for the Wrangler process. */
   cwd: string;
+  /** Maximum process duration in milliseconds. */
   timeout?: number;
+  /** Standard I/O configuration passed to the subprocess. */
   stdio?: ExecSyncOptions['stdio'];
 };
 
@@ -130,13 +144,19 @@ export const runWrangler = (options: RunWranglerOptions): Buffer => {
   }
 };
 
-/**
- * Resolve D1 binding for the given mode from @aikami/constants.
- */
+/** Options for resolving a declared D1 binding. */
+export type ResolveD1BindingOptions = {
+  /** Deployment mode whose binding should be resolved. */
+  mode: string;
+  /** Declared database key; defaults to the hub database. */
+  dbKey?: keyof typeof D1_DATABASES;
+};
+
+/** Resolve a D1 binding for the given mode from @aikami/constants. */
 export const resolveD1Binding = (
-  mode: string,
-  dbKey: keyof typeof D1_DATABASES = 'hub',
+  options: ResolveD1BindingOptions,
 ): D1DatabaseEntry | undefined => {
+  const { mode, dbKey = 'hub' } = options;
   const db = D1_DATABASES[dbKey];
   const entry = db[mode as keyof typeof db];
   if (!entry) {

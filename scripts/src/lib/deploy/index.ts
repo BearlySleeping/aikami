@@ -48,6 +48,7 @@ import { stdin as processStdin, stdout as processStdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { applyMigrations } from '../../../../apps/backend/cloudflare/src/lib/db/migrate.ts';
+import { reconcileBucket } from '../../../../apps/backend/cloudflare/src/lib/storage/sync.ts';
 import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString } from './cache';
@@ -170,17 +171,16 @@ async function deployApp(
     case 'infra':
       // Infra apps (database, storage) never need a moon build, docker
       // push or Cloud Run deploy — just an explicit, idempotent operation.
-      if (config.target === 'd1-migrate') {
-        await applyMigrations({ mode, isLocal: mode === 'emulator' });
-      } else if (config.target === 'r2-reconcile') {
-        const { reconcileBucket } = await import(
-          '../../../../apps/backend/cloudflare/src/lib/storage/sync.ts'
-        );
-        await reconcileBucket({ mode, isLocal: mode === 'emulator', bucketKey: 'saves' });
-      } else {
-        console.warn(`Unknown infra target "${config.target}" for ${appName}. Skipping.`);
+      switch (config.target) {
+        case 'd1-migrate':
+          await applyMigrations({ mode, isLocal: mode === 'emulator' });
+          return 'success';
+        case 'r2-reconcile':
+          await reconcileBucket({ mode, isLocal: mode === 'emulator', bucketKey: 'saves' });
+          return 'success';
+        default:
+          throw new Error(`Unsupported infra target for ${appName}`);
       }
-      return 'success';
     default:
       warn(`Unknown service type "${(config as AppConfig).serviceType}" for ${appName}. Skipping.`);
       return 'success';

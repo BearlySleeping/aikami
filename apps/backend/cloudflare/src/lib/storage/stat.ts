@@ -10,7 +10,8 @@ import { resolveModeGuard } from '../wrangler.ts';
 const ROOT = resolve(import.meta.dir, '../../../../../..');
 const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
 
-const main = (): void => {
+/** Parse CLI arguments and fetch metadata for one R2 object. */
+export const runStatCommand = (): void => {
   const args = Bun.argv.slice(3);
   const { mode } = resolveModeGuard(args);
 
@@ -37,11 +38,15 @@ const main = (): void => {
   }
 
   try {
-    execFileSync('bunx', ['wrangler', 'r2', 'object', 'get', entry.bucketName, key, '--pipe'], {
-      cwd: HUB_DIR,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 30_000,
-    });
+    execFileSync(
+      'bunx',
+      ['wrangler', 'r2', 'object', 'get', `${entry.bucketName}/${key}`, '--pipe'],
+      {
+        cwd: HUB_DIR,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 30_000,
+      },
+    );
   } catch {
     process.exit(1);
   }
@@ -49,5 +54,5 @@ const main = (): void => {
 
 const isMainModule = import.meta.path === Bun.main;
 if (isMainModule) {
-  main();
+  runStatCommand();
 }

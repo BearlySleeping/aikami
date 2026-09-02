@@ -33,7 +33,7 @@ export const listMigrations = async (options: {
 }): Promise<{ total: number; pending: number }> => {
   const { mode, isLocal } = options;
 
-  const dbBinding = resolveD1Binding(mode);
+  const dbBinding = resolveD1Binding({ mode });
   if (!dbBinding) {
     throw new Error(`No D1 database configured for hub in mode "${mode}"`);
   }
@@ -83,7 +83,8 @@ const main = async (): Promise<void> => {
   const { mode, isLocal } = resolveModeGuard(args);
 
   try {
-    await listMigrations({ mode, isLocal });
+    const result = await listMigrations({ mode, isLocal });
+    process.stdout.write(`Migrations: ${result.total} total, ${result.pending} pending\n`);
   } catch (_error) {
     process.exit(1);
   }
