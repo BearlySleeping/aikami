@@ -3,7 +3,7 @@ id: C-456
 title: "Group Chat & Systemic NPC Interactions"
 source: "docs/contracts/BACKLOG_C452_PLUS.md 'C-461' seed (RPG-depth batch, 2026-08-30 roadmap review). Renumbered on authoring per BACKLOG_C452_PLUS.md's own ID-allocation caveat — C-453/454/455 were claimed by unrelated contracts by the time this batch was drafted; C-456 is the real next free ID."
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -22,18 +22,18 @@ created_at: "2026-09-02"
 | **Target** | `apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts`, `apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts`, a new NPC-awareness source under `apps/frontend/client/src/lib/services/npc/`, `packages/shared/constants/src/lib/autonomous_npc.ts` |
 | **Type** | full |
 | **Priority** | P2 |
-| **Dependencies** | [C-340](C-340-party-and-companion-gameplay.md) amendment (party orders — data model only, not a hard blocker); builds on [C-235](C-235-gm-narrative-director.md) (address-mode prompt shape) and [C-248](C-248-autonomous-npc-idle-chat.md) (idle-chat cooldown/talkativeness) |
-| **Status** | draft |
+| **Dependencies** | [C-340](C-340-build-party-and-companion-gameplay.md) (party roster + data model — implemented); builds on [C-235](C-235-gm-narrative-director.md) (address-mode prompt shape — done) and [C-248](C-248-autonomous-npc-behavior-schedules.md) (idle-chat cooldown/talkativeness — completed) |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
-| **Contract version** | 1.0.0 |
+| **Contract version** | 1.1.0 |
 
 ## Problem & Baseline Evidence
 
 - **Current behavior**: `gm_prompt_service.svelte.ts`'s `'party'` address mode already formats multi-character voice instructions ("Each party member speaks in their own distinct voice… prefix with **Name**: dialogue.", `_buildAddressModeInstruction`) and already gates a `[PARTY MEMBERS]` block into the assembled prompt — but the two functions that populate that data, `_gatherNearbyNpcs()` and `_gatherPartyMembers()`, are stub TODOs that unconditionally `return []`. So the prompt *shape* for group scenes exists and is unused: no real party member or nearby-NPC context ever reaches the LLM today, and NPCs never participate in a turn alongside other NPCs — only isolated 1:1 player↔NPC exchanges work end to end.
 - **Reproduction**: Enter `'party'` address mode with 2+ recruited companions in `party_roster_service.svelte.ts`'s `members` state and send a message — the assembled prompt's `[PARTY MEMBERS]` section is empty because `_gatherPartyMembers()` returns `[]` regardless of roster state.
 - **Existing implementation to reuse**: `AddressMode` type + `_buildAddressModeHeader`/`_buildAddressModeInstruction` (address-mode prompt formatting, C-235) — reuse as-is. `party_roster_service.svelte.ts`'s reactive `members: PartyRosterEntry[]` state (C-340) — the real data source `_gatherPartyMembers()` should read from. `autonomous_npc.ts` constants (talkativeness, cooldown, `MAX_AUTONOMOUS_MESSAGES_PER_TICK`) and the idle-chat poller (C-248) — extend for multi-NPC turns instead of building a parallel scheduling system.
-- **Known gaps**: No nearby-NPC awareness source exists at all (not a stub to wire, a system to build) — there is currently no concept of "which NPCs are present in this scene" outside of party membership. `MAX_AUTONOMOUS_MESSAGES_PER_TICK = 1` in C-248's idle-chat constants hard-caps autonomous chat to one NPC per tick, which is fine for idle ambiance but wrong for an active group conversation where the player addressed multiple NPCs at once.
+- **Known gaps**: No nearby-NPC awareness source is wired into `gm_prompt_service.svelte.ts` — `_gatherNearbyNpcs()` is a stub. However, the underlying data already exists: `worldStateService.currentLocation` exposes `WorldLocation` which has an `npcIds` field (`packages/shared/schemas/src/lib/domain/world.ts`). The gap is reading that field and resolving NPC details (name, persona) into `GmNpcContext`, not building new spatial state. `MAX_AUTONOMOUS_MESSAGES_PER_TICK = 1` in C-248's idle-chat constants hard-caps autonomous chat to one NPC per tick, which is fine for idle ambiance but wrong for an active group conversation where the player addressed multiple NPCs at once.
 - **Baseline tests**: `gm_prompt_service.test.ts` (party/scene/gm mode assembly), `party_roster_service.svelte.test.ts`, any existing `autonomous_message_service.svelte.ts` tests — run before starting; both stub functions currently have no test asserting non-empty output, so "returns `[]`" is not caught as a regression today.
 
 ## User Outcome
@@ -75,20 +75,15 @@ Follow `gm_prompt_service.svelte.ts`'s existing section-assembly pattern (`gathe
 ## State & Data Models
 
 ```typescript
-// apps/frontend/client/src/lib/services/gm/gm_types.ts — extend existing shapes, no new schema package needed
-type GmPartyMemberContext = {
-  npcId: string;
-  name: string;
-  classId: string;
-  level: number;
-  // existing fields from PartyRosterEntry as needed by prompt formatting
-};
-
-type GmNearbyNpcContext = {
-  npcId: string;
-  name: string;
-  disposition?: string; // from relationship/faction state where available; optional, not a hard dependency
-};
+// apps/frontend/client/src/lib/services/gm/gm_types.ts — use existing shapes, no new schema package needed
+// GmPartyMemberContext already exists:
+//   id: string; name: string; personality: string;
+// Map PartyRosterEntry fields (npcId, name, classId, level) into this shape.
+// The `personality` field should be populated from the NPC's persona/class description.
+//
+// GmNpcContext already exists for nearby NPCs:
+//   id: string; name: string; persona: string; relationship: string; currentActivity: string;
+// Populate from WorldLocation.npcIds + NPC data sources; no new type needed.
 ```
 
 No `packages/shared` schema changes — this contract wires existing client-local GM types to existing party/scene state, per `gm_types.ts`'s documented decision to keep GM prompt context app-local.
@@ -139,9 +134,11 @@ N/A — no persistent state changes. Rollback is reverting the two stub function
 - Don't regress `'scene'`/`'gm'` mode prompts, which should not include the party block.
 
 ### AC-2: Nearby NPCs are addressable without being party members
-**Given** an NPC present in the current scene but not recruited
-**When** the player addresses the group in party or scene mode
+**Given** an NPC present in the current scene (via `WorldLocation.npcIds`) but not recruited
+**When** the player addresses the group in party mode
 **Then** that NPC's context is included via `_gatherNearbyNpcs()` and it can respond
+
+**Note**: The `[NEARBY NPCS]` section is already assembled for all modes; `[PARTY MEMBERS]` is party-mode-only. AC-2 specifically tests that a non-party NPC appears in the party-mode prompt context.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -173,6 +170,7 @@ N/A — no persistent state changes. Rollback is reverting the two stub function
 
 **Watch Points**:
 - Bound the participant cap explicitly (see Open Questions) — an unbounded cascade is both a cost and a latency risk.
+- The multi-NPC generation sequencing must not change the idle-chat poller's `MAX_AUTONOMOUS_MESSAGES_PER_TICK` behavior (see AC-4).
 
 ### AC-4: Idle-chat (non-addressed) behavior is unchanged
 **Given** no player message (idle tick), C-248's existing poller
@@ -191,6 +189,21 @@ N/A — no persistent state changes. Rollback is reverting the two stub function
 
 **Watch Points**:
 - This is a regression guard — the risk is the multi-NPC turn logic accidentally sharing code paths with the idle poller and loosening its cap.
+
+### AC-5: Group-addressed multi-NPC turn has a bounded cap
+**Given** a group-addressed turn with N+ present NPCs where N exceeds the configured participant cap
+**When** the GM generates responses
+**Then** the number of responding NPCs is bounded by the configured cap (see Open Questions), not by the idle-chat `MAX_AUTONOMOUS_MESSAGES_PER_TICK`
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-5 | Unit + Integration | new multi-NPC selection test | `/game` party-mode with N+ present NPCs | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run client:test`
+- Integration: script a group turn with 5 NPCs present, cap=3, confirm only 3 respond
+- E2E / Visual: N/A
 
 ## Implementation Sequence
 
