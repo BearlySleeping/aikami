@@ -39,7 +39,7 @@ export async function deployDockerRelease(
 ): Promise<void> {
   const projectId = resolveProjectId(mode);
   const imageName = config.imageName ?? `aikami/${config.shortName}`;
-  const region = resolveRegion(mode, config.region);
+  const region = resolveRegion({ configOverride: config.region });
   const tag = `${region}-docker.pkg.dev/${projectId}/${imageName}:${shortSha()}`;
   // Build context defaults to repo root (monorepo deps); Dockerfile lives in the app dir.
   const dockerContext = config.dockerContext ? join(rootDir, config.dockerContext) : rootDir;
@@ -68,7 +68,7 @@ export async function deployDockerRelease(
   }
 
   // 1. Authenticate Docker with Artifact Registry
-  authenticateDocker();
+  authenticateDocker(region);
 
   // 2. Build & push Docker image with layer caching
   log('🐳 Building & pushing Docker image (with layer cache)...');

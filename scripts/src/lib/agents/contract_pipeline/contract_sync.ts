@@ -216,11 +216,33 @@ export const isolateContractInWorktree = (options: {
  * (a contract not yet committed for the first time).
  */
 const readMainRef = (repoRoot: string): string => {
-  try {
-    runGit('fetch origin main', { cwd: repoRoot, timeoutMs: 30_000 });
-  } catch {
-    // Non-fatal — may not have a remote configured, or be offline. Fall
-    // back to whatever local main already has.
+  // 🔴 One retry, not zero. `repoRoot` is normally the human's actual working
+  // directory (see module doc above) — concurrent git activity there (a
+  // human running `git status`/`git commit`, another pipeline's own sync)
+  // can transiently lock `.git/refs/remotes/origin/main.lock` and fail this
+  // fetch. A single silent failure used to fall straight back to whatever
+  // `refs/remotes/origin/main` already had (or `refs/heads/main`, further
+  // stale still) with no signal that happened — the precondition check would
+  // then report a contract as `draft` when `origin/main` had already been
+  // approved, and every retry repeated the exact same silent failure. Retry
+  // once before giving up, and log when both attempts fail so a stale read
+  // is visible in the pipeline log instead of masquerading as ground truth.
+  let fetchError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      runGit('fetch origin main', { cwd: repoRoot, timeoutMs: 30_000 });
+      fetchError = undefined;
+      break;
+    } catch (error: unknown) {
+      fetchError = error;
+    }
+  }
+  if (fetchError !== undefined) {
+    const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+    console.warn(
+      `⚠️  Could not fetch origin/main after 2 attempts (${msg.slice(0, 200)}) — ` +
+        'falling back to the last known ref, which may be stale.',
+    );
   }
   try {
     runGit('rev-parse --verify refs/remotes/origin/main', { cwd: repoRoot, timeoutMs: 5000 });

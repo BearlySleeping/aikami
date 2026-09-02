@@ -1,25 +1,42 @@
 #!/usr/bin/env bun
 // scripts/src/lib/project_setup/secrets_manager.ts
 //
-// Create GCP Secret Manager secrets from .env.example discovery.
+// Create GCP Secret Manager placeholders for the aikami-worker VM's
+// runtime secrets, discovered from apps/backend/worker/.env.example.
+//
+// This is the ONLY app that still reads secrets from GCP Secret Manager —
+// apps/backend/worker/src/secrets.ts fetches them at runtime via the VM's
+// own service-account identity (see that app's README). Every other app's
+// secrets moved to the SOPS/age-encrypted bundle (C-441) and never touch
+// GCP. Deliberately scoped to `worker` rather than iterating
+// PROJECT_ENV_CONFIG (which also includes long-gone Cloud Run/Firebase
+// apps and, worse, is keyed off `enabled` — `worker` itself is
+// `enabled: false` in deployment_config.ts for unrelated reasons, so that
+// loop would silently skip the one app that actually needs this).
+//
+// GCP_SA_KEY_JSON and the WORKER_TLS_CERT/WORKER_TLS_KEY pair are
+// deliberately not covered here — see the file header comments in
+// apps/backend/worker/.env.example for why (deploy-time-only credential,
+// and multi-line PEM values respectively).
 //
 // Usage:
-//   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=staging
+//   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=production
 //   bun run scripts/src/lib/project_setup/secrets_manager.ts --mode=production --dry-run
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fmt, parseCliArgs, run } from '../cli_utils';
-import {
-  MODE_PROJECT_MAP,
-  PROJECT_ENV_CONFIG,
-  resolveSecretName,
-} from '../deploy/deployment_config';
+import { MODE_PROJECT_MAP } from '../deploy/deployment_config';
 
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
 type ManualStep = { title: string; url?: string; commands?: string[]; detail?: string };
 
 const ROOT = join(import.meta.dir, '../../../..');
+const WORKER_APP_PATH = 'apps/backend/worker';
+const DIRECT_SECRET_MANAGER_KEYS = ['WORKER_TLS_CERT', 'WORKER_TLS_KEY'] as const;
+
+/** Keys the worker never reads from Secret Manager, even though they appear in its .env.example. */
+const NON_SECRET_MANAGER_KEYS = new Set(['GCP_SA_KEY_JSON']);
 
 function discoverSecretKeys(appPath: string): string[] {
   const envPath = join(ROOT, appPath, '.env.example');
@@ -38,12 +55,17 @@ function discoverSecretKeys(appPath: string): string[] {
       continue;
     }
     const key = trimmed.slice(0, eq);
-    if (!key.startsWith('PUBLIC_') && key !== 'FIREBASE_SERVICE_ACCOUNT') {
+    if (!key.startsWith('PUBLIC_') && !NON_SECRET_MANAGER_KEYS.has(key)) {
       keys.push(key);
     }
   }
   return [...new Set(keys)];
 }
+
+/** Secret Manager IDs the worker runtime service account must be able to read. */
+export const getWorkerRuntimeSecretIds = (): string[] => [
+  ...new Set([...discoverSecretKeys(WORKER_APP_PATH), ...DIRECT_SECRET_MANAGER_KEYS]),
+];
 
 async function checkSecret(projectId: string, secretId: string): Promise<boolean> {
   const { code } = await run([
@@ -89,16 +111,9 @@ export const setupSecrets = async (
 
   console.log(fmt.section('Secret Manager'));
 
-  const allGsmNames = new Set<string>();
-  for (const config of Object.values(PROJECT_ENV_CONFIG)) {
-    if (!config.enabled) {
-      continue;
-    }
-    const keys = discoverSecretKeys(config.path);
-    for (const key of keys) {
-      allGsmNames.add(resolveSecretName(key, config));
-    }
-  }
+  // Worker secrets are read back by their raw .env.example key name — see
+  // src/secrets.ts's fetchSecret(name) — no prefix is ever applied.
+  const allGsmNames = new Set(discoverSecretKeys(WORKER_APP_PATH));
 
   for (const secretId of allGsmNames) {
     const exists = await checkSecret(projectId, secretId);

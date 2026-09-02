@@ -1,7 +1,11 @@
 #!/usr/bin/env bun
 // scripts/src/lib/project_setup/gcp_apis.ts
 //
-// Enable required GCP APIs for the Aikami project.
+// Enable the GCP APIs the aikami-worker Compute Engine VM depends on
+// (build/push/rollout + its runtime Secret Manager reads). The
+// Firebase/Firestore/Cloud Functions/Cloud Run/Hosting era APIs that used
+// to live in this list are gone along with that infrastructure — see
+// apps/backend/worker/README.md for what's actually still running on GCP.
 //
 // Usage:
 //   bun run scripts/src/lib/project_setup/gcp_apis.ts --mode=staging
@@ -13,21 +17,12 @@ import { MODE_PROJECT_MAP } from '../deploy/deployment_config';
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
 
 const REQUIRED_APIS = [
-  'firebase.googleapis.com',
-  'firestore.googleapis.com',
-  'firebaserules.googleapis.com',
-  'storage.googleapis.com',
-  'cloudfunctions.googleapis.com',
-  'cloudbuild.googleapis.com',
-  'run.googleapis.com',
+  'compute.googleapis.com',
   'artifactregistry.googleapis.com',
   'iam.googleapis.com',
   'iamcredentials.googleapis.com',
   'secretmanager.googleapis.com',
-  'eventarc.googleapis.com',
-  'cloudscheduler.googleapis.com',
   'cloudbilling.googleapis.com',
-  'identitytoolkit.googleapis.com',
 ] as const;
 
 const getEnabledApis = async (projectId: string): Promise<Set<string>> => {

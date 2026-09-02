@@ -79,15 +79,24 @@ bun run setup
 ### Project Setup (`src/lib/project_setup/`)
 
 🔴 GCP cloud infrastructure setup — NOT local machine setup. Orchestrates
-GCP APIs, IAM roles, Secret Manager, Firebase Hosting sites, Artifact
-Registry, and CDN hosting for the Aikami cloud project.
+GCP APIs, Artifact Registry, IAM roles, and Secret Manager for the
+`aikami-worker` Compute Engine VM (see `apps/backend/worker/README.md`) —
+the only thing still running on GCP after the Cloudflare Workers/D1/R2
+migration. Production only; there is no staging worker VM.
 
 ```bash
-bun run project:setup                      # Full interactive wizard
-bun run project:setup --mode=staging       # Target specific mode
+bun run project:setup --mode=production             # Full interactive wizard (production)
+bun run project:setup --mode=production --dry-run   # Check only, no changes
 bun run project:setup:iam                  # IAM roles only
 ```
 
 ### Testing (`src/lib/test_blackbox/`)
 
 Blackbox integration test runner harness.
+
+## Operator tooling
+
+The `cf` devDependency (Cloudflare CLI) has no source imports on purpose.
+It is driven interactively — `bun cf --help` — for DNS, Origin Rules and
+certificate management, i.e. everything wrangler cannot reach. Do not
+prune it as unused.

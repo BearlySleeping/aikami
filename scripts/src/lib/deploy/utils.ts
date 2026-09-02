@@ -4,29 +4,24 @@
  */
 
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { c, error, log } from '../cli_utils';
-import {
-  type AppConfig,
-  CLOUD_FUNCTIONS_REGION,
-  liveModes,
-  MODE_PROJECT_MAP,
-} from './deployment_config';
+import { MODE_PROJECT_MAP } from './deployment_config';
 
-// ── Constants ────────────────────────────────────────────────────────────
-
-/** Default region (staging). Use resolveRegion() for mode-aware resolution. */
-export const GCP_REGION = CLOUD_FUNCTIONS_REGION;
-export const REGISTRY = `${GCP_REGION}-docker.pkg.dev`;
-
-/** Resolve the GCP region based on deployment mode and optional per-app override. */
-export function resolveRegion(_mode: string, configOverride?: string): string {
-  if (configOverride) {
-    return configOverride;
+/**
+ * Resolve the GCP region for an app. There is no project-wide default
+ * region anymore (the old CLOUD_FUNCTIONS_REGION was Cloud Functions/Cloud
+ * Run era) — every docker-release app must set its own `region`.
+ */
+export const resolveRegion = (options: { configOverride?: string }): string => {
+  const { configOverride } = options;
+  if (!configOverride) {
+    throw new Error('resolveRegion: AppConfig.region is required (no project-wide default).');
   }
-  return GCP_REGION;
-}
+  return configOverride;
+};
 
 // ── Shell ────────────────────────────────────────────────────────────────
 
@@ -185,13 +180,21 @@ export function isTreeDirty(): boolean {
   return status.length > 0;
 }
 
-/** Returns a hash of the working tree diff (including staged changes). Empty string if clean. */
-export function dirtyTreeHash(): string {
+/**
+ * Returns a hash of the working tree diff (including staged changes). Empty
+ * string if clean.
+ *
+ * Hashes the diff text in-process with node:crypto rather than shelling out
+ * to `sha256sum` — that binary doesn't exist on macOS, and the desktop
+ * release matrix runs macOS and Windows legs.
+ */
+export const dirtyTreeHash = (): string => {
   if (!isTreeDirty()) {
     return '';
   }
-  return run("(git diff HEAD && git diff --cached) | sha256sum | cut -d' ' -f1", { quiet: true });
-}
+  const diff = run('git diff HEAD', { quiet: true }) + run('git diff --cached', { quiet: true });
+  return createHash('sha256').update(diff).digest('hex');
+};
 
 // ── GCP / Deploy ─────────────────────────────────────────────────────────
 
@@ -202,32 +205,17 @@ export function resolveProjectId(mode: string): string {
   return MODE_PROJECT_MAP[mode as keyof typeof MODE_PROJECT_MAP] || MODE_PROJECT_MAP.staging;
 }
 
-/**
- * Fully-qualified Artifact Registry image tag for an app config:
- * {region}-docker.pkg.dev/{projectId}/aikami/{shortName}:{tag}.
- */
-export function dockerImageTag(
-  config: AppConfig,
-  projectId: string,
-  sha?: string,
-  mode: string = liveModes[0],
-): string {
-  const imageName = `aikami/${config.shortName}`;
-  const tag = sha ?? shortSha();
-  const region = resolveRegion(mode, config.region);
-  return `${region}-docker.pkg.dev/${projectId}/${imageName}:${tag}`;
-}
-
 /** GCP Artifact Registry auth — authenticates the Docker registry.
  *  Idempotent per region: only configures a region once per process.
- *  @param region Region of the Artifact Registry to configure; defaults to the global region. */
-export function authenticateDocker(region: string = GCP_REGION): void {
+ *  @param region Region of the Artifact Registry to configure. No project-wide
+ *  default exists anymore — every caller must pass its own region explicitly. */
+export const authenticateDocker = (region: string): void => {
   if (_dockerAuthenticated.has(region)) {
     return;
   }
   _dockerAuthenticated.add(region);
   run(`gcloud auth configure-docker ${region}-docker.pkg.dev --quiet`, { quiet: true });
-}
+};
 
 /**
  * Ensures gcloud is authenticated — user credentials first, then fall back

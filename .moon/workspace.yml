@@ -1,5 +1,5 @@
 # .moon/workspace.yml
-$schema: "https://moonrepo.dev/schemas/workspace.json"
+$schema: "https://moonrepo.dev/schemas/v2/workspace.json"
 
 projects:
   pi: ".pi"
@@ -59,9 +59,9 @@ vcs:
     pre-commit:
       - "bun run pre-commit"
     post-merge:
-      - "bunx moon sync"
+      - "if [ -x node_modules/.bin/moon ]; then bunx moon sync; fi"
     post-checkout:
-      - "bunx moon sync"
+      - "if [ -x node_modules/.bin/moon ]; then bunx moon sync; fi"
 
 constraints:
   enforceLayerRelationships: false

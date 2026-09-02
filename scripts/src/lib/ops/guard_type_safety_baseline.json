@@ -1,330 +1,15 @@
 {
-  "apps/backend/image/scripts/generate_avatar.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/components/game/lpc_animation_debug_panel.svelte": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/agent/agent_registry_storage.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/agent/agents/schedule_planner_agent.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/assets/asset_prefetch_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/assets/tauri_fs_cache_backend.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/audio/audio_context_manager.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/auth/auth_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/auth/desktop_session_store.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/chat/chat_link_storage.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/chat/chat_storage.svelte.ts": {
-    "t1": 4,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": {
-    "t1": 10,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/config/runtime_config_service.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/combat_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/content_pack_catalog.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
-    "t1": 5,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/inventory_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts": {
-    "t1": 4,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/player_journal_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/relationship_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/session_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/time_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/vendor_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/game/world_state_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/gm/narrative_director_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/gm/session_summary_service.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/lorebook/lorebook_store.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/npc/npc_storage.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/services/persona/persona_storage.svelte.ts": {
-    "t1": 3,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/test_preload.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/app/error/app_error_view_model.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.svelte.ts": {
-    "t1": 3,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/chat/chat_enhancements_sandbox_view_model.svelte.ts": {
-    "t1": 4,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts": {
-    "t1": 6,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts": {
-    "t1": 11,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/export_sandbox_view_model.svelte.ts": {
-    "t1": 3,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/sandbox/camera/camera_sandbox_view_model.svelte.ts": {
-    "t1": 3,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view_model.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view_model.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view_model.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/text/text_view_model.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/game/credits/credits_view_model.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/game/options/options_view_model.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
   "apps/frontend/client/src/lib/views/game/simulation/simulation_view_model.svelte.ts": {
     "t1": 0,
     "t2": 1,
     "t3": 0
   },
-  "apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts": {
-    "t1": 3,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/quest/quest_view_model.dev.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/settings/connection/connection_manager_view_model.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/vendor/vendor_view_model.dev.svelte.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view_model.svelte.ts": {
-    "t1": 6,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/dialogue/+page.svelte": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
   "apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/zone-transition/+page.svelte": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/routes/(dev)/dev/lpc/+page.svelte": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/src/service-worker.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/client/vite.config.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/hub/src/hooks.server.ts": {
     "t1": 1,
     "t2": 0,
     "t3": 0
   },
   "apps/frontend/hub/src/lib/server/api/better_auth.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/hub/src/lib/server/api/index.ts": {
     "t1": 1,
     "t2": 0,
     "t3": 0
@@ -335,27 +20,7 @@
     "t3": 0
   },
   "apps/frontend/hub/src/lib/test_preload.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/hub/src/lib/views/app/app_view_model.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/hub/src/lib/views/app/error/app_error_view_model.svelte.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/hub/src/lib/views/catalog/catalog_asset_view_model.svelte.ts": {
-    "t1": 4,
-    "t2": 0,
-    "t3": 0
-  },
-  "apps/frontend/hub/vite.config.ts": {
-    "t1": 2,
+    "t1": 1,
     "t2": 0,
     "t3": 0
   },
@@ -369,58 +34,23 @@
     "t2": 0,
     "t3": 1
   },
-  "packages/frontend/configs/src/lib/environment.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/frontend/engine/src/engine_bridge.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
   "packages/frontend/engine/src/game_world.ts": {
-    "t1": 7,
+    "t1": 3,
     "t2": 0,
     "t3": 0
   },
   "packages/frontend/engine/src/pixi_app.ts": {
-    "t1": 4,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/frontend/engine/src/pixi_init_options.ts": {
     "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/frontend/engine/src/rendering/prop_texture_resolver.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/frontend/engine/src/rendering/sprite_composer.ts": {
-    "t1": 2,
     "t2": 0,
     "t3": 0
   },
   "packages/frontend/engine/src/serialization/ecs_serializer.ts": {
-    "t1": 5,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/frontend/engine/src/systems/macro_simulation_system.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/frontend/engine/src/worker/ecs_worker.ts": {
-    "t1": 1,
+    "t1": 2,
     "t2": 0,
     "t3": 0
   },
   "packages/frontend/local-runtime/src/lib/fixtures.ts": {
-    "t1": 2,
+    "t1": 1,
     "t2": 0,
     "t3": 0
   },
@@ -429,23 +59,8 @@
     "t2": 0,
     "t3": 0
   },
-  "packages/frontend/preview/src/lib/lpc/lpc_preview_view_model.svelte.ts": {
-    "t1": 3,
-    "t2": 0,
-    "t3": 0
-  },
   "packages/frontend/preview/src/lib/lpc/lpc_preview.svelte": {
     "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/frontend/storage/src/lib/turso_storage_adapter.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/frontend/storage/src/lib/wasm_storage_adapter.ts": {
-    "t1": 7,
     "t2": 0,
     "t3": 0
   },
@@ -454,62 +69,7 @@
     "t2": 2,
     "t3": 0
   },
-  "packages/frontend/utils/src/lib/transform.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/logger/src/lib/base.ts": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/schemas/src/lib/common/helpers.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/schemas/src/lib/domain/chat.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/schemas/src/lib/domain/config.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/schemas/src/lib/domain/group_chat.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/schemas/src/lib/domain/message.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/schemas/src/lib/domain/persona.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/schemas/src/lib/domain/user.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
   "packages/shared/schemas/src/lib/project/project.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/utils/src/lib/common/base_class.ts": {
-    "t1": 1,
-    "t2": 0,
-    "t3": 0
-  },
-  "packages/shared/utils/src/lib/form/auth.ts": {
     "t1": 1,
     "t2": 0,
     "t3": 0

@@ -33,6 +33,7 @@ import { parseArgs } from 'node:util';
 import { toMode } from '@aikami/utils';
 import type { AppId } from '../../../../packages/shared/types/src/index.ts';
 import { c, log, ok } from '../cli_utils';
+import { initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString, saveDeployCache } from './cache';
 import {
   APP_CONFIG,
@@ -471,6 +472,12 @@ export async function deployCloudflareApp(appName: AppId): Promise<void> {
     console.error('Missing --mode argument or MODE env var');
     process.exit(1);
   }
+
+  // getScriptsEnv otherwise auto-initialises from AIKAMI_MODE (direnv sets
+  // this to 'emulator' locally), so a `--mode production` deploy would read
+  // its secrets (e.g. REDIS_URL/REDIS_TOKEN) out of scripts/.env.emulator
+  // instead of scripts/.env.production.
+  initScriptsEnv(mode);
 
   const config = APP_CONFIG[appName];
   if (!config?.cloudflare) {

@@ -1,28 +1,25 @@
 #!/usr/bin/env bun
 // scripts/src/lib/project_setup/iam.ts
 //
-// Grant IAM roles to the Aikami deploy + runtime service accounts.
-//
-// Identity model (deploy-time vs runtime):
-//   - Deploy SA  — authenticates `bun run deploy` locally (via
-//     .secrets/gcp_sa_key.{mode}.json) and in CI (GCP_SA_KEY). Needs
-//     deployment permissions only.
-//   - Runtime SA — the identity Cloud Run runs AS (derived from
-//     FIREBASE_SERVICE_ACCOUNT's client_email in hub's .env.{mode}).
-//     Needs runtime permissions only (secret reads, log writes, Firebase
-//     Admin SDK).
-//
-// Today both default to the same account
-// (firebase-adminsdk-fbsvc@<project>.iam.gserviceaccount.com) so the
-// current keys/CI secret keep working unchanged. To actually split them,
-// create a deployment-only SA key (e.g. --sa-id=aikami-deploy), save it
-// as .secrets/gcp_sa_key.{mode}.json + CI GCP_SA_KEY, and re-run this
-// script — deployment roles are granted only to the deploy SA, runtime
-// roles only to the runtime SA, and roles/iam.serviceAccountUser is
-// scoped to the runtime SA resource rather than the whole project.
+// Grant IAM roles to the two service accounts behind the aikami-worker
+// Compute Engine VM (see apps/backend/worker/README.md, "Infra"):
+//   - Deploy SA  — firebase-adminsdk-fbsvc@<project>.iam.gserviceaccount.com.
+//     Authenticates `scripts/src/lib/worker/deploy.ts` locally (via
+//     .secrets/gcp_sa_key.{mode}.json) and in CI (release.yml's
+//     deploy-worker job, from the SOPS-encrypted GCP_SA_KEY_JSON). Needs
+//     just enough to build/push the image and roll the VM's container.
+//     Still the pre-Cloudflare-migration Firebase Admin SDK key — kept as
+//     the deploy identity rather than rotated, since it already has no
+//     other live consumer.
+//   - Runtime SA — worker@<project>.iam.gserviceaccount.com. The identity
+//     the VM itself runs as (apps/backend/worker/src/secrets.ts fetches
+//     Secret Manager values through it via the metadata server).
+//     roles/secretmanager.secretAccessor is intentionally NOT granted
+//     project-wide here. This setup scopes it to every secret the worker
+//     reads so the SA can't access unrelated secrets.
 //
 // Usage:
-//   bun run scripts/src/lib/project_setup/iam.ts --mode=staging
+//   bun run scripts/src/lib/project_setup/iam.ts --mode=production
 //   bun run scripts/src/lib/project_setup/iam.ts --mode=production --dry-run
 //   bun run scripts/src/lib/project_setup/iam.ts --mode=production --sa-id=custom-deploy-sa
 //   bun run scripts/src/lib/project_setup/iam.ts --mode=production --runtime-sa-id=custom-runtime-sa
@@ -32,86 +29,36 @@
 
 import { c, fmt, parseCliArgs, run } from '../cli_utils';
 import { liveModes, MODE_PROJECT_MAP } from '../deploy/deployment_config';
+import { getWorkerRuntimeSecretIds } from './secrets_manager';
 
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
 
 /**
- * Roles the deploy pipeline needs (Docker push, Cloud Run/Functions/
- * Hosting deploys, storage). Granted to the DEPLOY service account on the
- * project. See scripts/src/lib/deploy/*.ts for where each is exercised.
+ * Roles the deploy SA needs to build/push the worker's Docker image and
+ * roll out the aikami-worker VM. See scripts/src/lib/worker/deploy.ts.
  */
 const DEPLOY_ROLES: Array<{ role: string; why: string }> = [
   {
     role: 'roles/artifactregistry.writer',
-    why: 'docker push/pull to Artifact Registry (hub, image, text, voice, client)',
-  },
-  { role: 'roles/run.developer', why: 'gcloud run deploy — deploy/update Cloud Run services' },
-  {
-    role: 'roles/cloudfunctions.developer',
-    why: 'deploy Firebase Functions (firestack, --deploy-engine gcloud)',
-  },
-  {
-    role: 'roles/cloudbuild.builds.editor',
-    why: 'Cloud Build jobs created during Functions deploys',
-  },
-  { role: 'roles/firebasehosting.admin', why: 'deploy Firebase Hosting sites (site, docs)' },
-  {
-    role: 'roles/storage.objectAdmin',
-    why: 'Firebase Hosting/Functions staging buckets + asset uploads',
+    why: 'docker push to the aikami-worker Artifact Registry repo',
   },
   {
     role: 'roles/compute.instanceAdmin.v1',
-    why: 'gcloud compute instances update-container — redeploy the aikami-worker VM (scripts/src/lib/worker/deploy.ts)',
+    why: 'gcloud compute instances update-container — redeploy the aikami-worker VM',
   },
 ];
 
 /**
- * Roles the Cloud Run RUNTIME needs (the identity deployed services run
- * as). Granted to the RUNTIME service account on the project — kept
- * deliberately smaller than the deploy role set.
+ * Roles the runtime SA needs on the project as a whole. Kept minimal —
+ * see the file header for why secretmanager.secretAccessor is deliberately
+ * excluded (granted per-secret instead).
  */
 const RUNTIME_ROLES: Array<{ role: string; why: string }> = [
-  { role: 'roles/logging.logWriter', why: 'Cloud Run runtime writes logs' },
   {
-    role: 'roles/firebase.admin',
-    why: 'Firebase Admin SDK permissions (token/session-cookie verification) — usually pre-granted',
+    role: 'roles/artifactregistry.reader',
+    why: 'the VM pulls its own container image from the aikami-worker repo',
   },
 ];
-
-/**
- * Impersonation role: lets the deploy SA act as the runtime SA when
- * deploying Cloud Run services (gcloud run deploy --service-account).
- * Scoped to the runtime SA resource instead of the whole project.
- */
-const SERVICE_ACCOUNT_USER_ROLE = {
-  role: 'roles/iam.serviceAccountUser',
-  why: 'act as the runtime SA when deploying Cloud Run services',
-} as const;
-
-/**
- * Token creator role for the runtime SA: lets it sign JWTs via IAM
- * (iam.serviceAccounts.signBlob) for Admin SDK createCustomToken.
- * Scoped to the runtime SA resource itself (self-impersonation).
- */
-const RUNTIME_SA_TOKEN_CREATOR_ROLE = {
-  role: 'roles/iam.serviceAccountTokenCreator',
-  why: 'Admin SDK createCustomToken signs JWTs via IAM (iam.serviceAccounts.signBlob) — required for device-link handoff tokens',
-} as const;
-
-/**
- * Token creator role for the Cloud Functions runtime SA. 2nd-gen Cloud
- * Functions run as the project's compute default SA
- * (`<projectNumber>-compute@developer.gserviceaccount.com`) unless a
- * serviceAccount is set on the function — so this separate grant is what
- * actually fixes `createCustomToken` in the deployed callables (auth,
- * poll_device_handoff), which sign JWTs through IAM
- * (`iam.serviceAccounts.signBlob`). Scoped to the compute SA resource
- * itself (self-impersonation).
- */
-const FUNCTIONS_RUNTIME_SA_TOKEN_CREATOR_ROLE = {
-  role: 'roles/iam.serviceAccountTokenCreator',
-  why: 'Cloud Functions runtime SA (compute default) signs custom tokens via Admin SDK createCustomToken (iam.serviceAccounts.signBlob)',
-} as const;
 
 /** Project-level IAM bindings where `memberEmail` appears. */
 const getProjectRoles = async (projectId: string, memberEmail: string): Promise<Set<string>> => {
@@ -206,6 +153,58 @@ const addSaIamBinding = async (
   return code === 0;
 };
 
+/** Roles granted on a Secret Manager secret to a service account. */
+const getSecretRoles = async (options: {
+  projectId: string;
+  secretId: string;
+  memberEmail: string;
+}): Promise<Set<string>> => {
+  const { projectId, secretId, memberEmail } = options;
+  const { out, code } = await run([
+    'gcloud',
+    'secrets',
+    'get-iam-policy',
+    secretId,
+    `--project=${projectId}`,
+    '--flatten=bindings[].members',
+    `--filter=bindings.members:serviceAccount:${memberEmail}`,
+    '--format=json',
+    '--quiet',
+  ]);
+  if (code !== 0) {
+    return new Set();
+  }
+  try {
+    const policies = JSON.parse(out) as Array<{ bindings?: { role: string; members: string[] } }>;
+    return new Set(
+      policies.flatMap((policy) => (policy.bindings?.role ? [policy.bindings.role] : [])),
+    );
+  } catch {
+    return new Set();
+  }
+};
+
+/** Grant a service account access to one Secret Manager secret. */
+const addSecretIamBinding = async (options: {
+  projectId: string;
+  secretId: string;
+  memberEmail: string;
+  role: string;
+}): Promise<boolean> => {
+  const { projectId, secretId, memberEmail, role } = options;
+  const { code } = await run([
+    'gcloud',
+    'secrets',
+    'add-iam-policy-binding',
+    secretId,
+    `--project=${projectId}`,
+    `--member=serviceAccount:${memberEmail}`,
+    `--role=${role}`,
+    '--quiet',
+  ]);
+  return code === 0;
+};
+
 /** Does the service account exist in the project? */
 const saExists = async (projectId: string, saEmail: string): Promise<boolean> => {
   const { code } = await run([
@@ -232,12 +231,10 @@ type Grant = {
 /**
  * Grant the deploy + runtime service accounts their IAM roles.
  *
- * Deploy roles go to {@link deploySaEmail} on the project; runtime roles
- * go to {@link runtimeSaEmail} on the project; and
- * roles/iam.serviceAccountUser is granted on the runtime SA resource
- * (scoped) so the deploy SA can act as the runtime SA when deploying
- * Cloud Run services. Defaults both identities to the same account to
- * preserve the current single-key setup.
+ * Deploy roles go to {@link deploySaEmail} on the project. Runtime project
+ * roles and per-secret access go to {@link runtimeSaEmail}. `runtimeSaEmail`
+ * defaults to `deploySaEmail` only when the caller doesn't pass one — in
+ * practice the two are different accounts for the worker VM.
  */
 export const setupIam = async (
   projectId: string,
@@ -262,28 +259,6 @@ export const setupIam = async (
       return { checks };
     }
   }
-
-  // Cloud Functions default runtime SA = compute default SA
-  // (<projectNumber>-compute@developer.gserviceaccount.com). Resolved
-  // dynamically so it stays correct if the project number ever changes.
-  const { out: projectNumberRaw, code: projectNumberCode } = await run([
-    'gcloud',
-    'projects',
-    'describe',
-    projectId,
-    '--format=value(projectNumber)',
-    '--quiet',
-  ]);
-  const projectNumber = projectNumberRaw.trim();
-  if (projectNumberCode !== 0 || !/^\d+$/.test(projectNumber)) {
-    console.log(
-      fmt.err(`Could not resolve project number for ${projectId} (got "${projectNumber}")`),
-    );
-    checks.push({ name: 'Functions runtime SA: project number', status: 'error' });
-    return { checks };
-  }
-  const functionsRuntimeSaEmail = `${projectNumber}-compute@developer.gserviceaccount.com`;
-  console.log(`  Functions runtime SA: ${functionsRuntimeSaEmail}`);
 
   // ── Caller permission check ─────────────────────────────────────────
   const { code: policyCode } = await run([
@@ -320,24 +295,6 @@ export const setupIam = async (
       member: runtimeSaEmail,
       resource: 'project' as const,
     })),
-    {
-      role: SERVICE_ACCOUNT_USER_ROLE.role,
-      why: SERVICE_ACCOUNT_USER_ROLE.why,
-      member: deploySaEmail,
-      resource: { serviceAccount: runtimeSaEmail },
-    },
-    {
-      role: RUNTIME_SA_TOKEN_CREATOR_ROLE.role,
-      why: RUNTIME_SA_TOKEN_CREATOR_ROLE.why,
-      member: runtimeSaEmail,
-      resource: { serviceAccount: runtimeSaEmail },
-    },
-    {
-      role: FUNCTIONS_RUNTIME_SA_TOKEN_CREATOR_ROLE.role,
-      why: FUNCTIONS_RUNTIME_SA_TOKEN_CREATOR_ROLE.why,
-      member: functionsRuntimeSaEmail,
-      resource: { serviceAccount: functionsRuntimeSaEmail },
-    },
   ];
 
   for (const grant of grants) {
@@ -378,6 +335,43 @@ export const setupIam = async (
     }
   }
 
+  // ── Per-secret runtime access ───────────────────────────────────────
+  console.log(fmt.section('Secret Manager Access'));
+  const secretAccessorRole = 'roles/secretmanager.secretAccessor';
+  for (const secretId of getWorkerRuntimeSecretIds()) {
+    const existing = await getSecretRoles({ projectId, secretId, memberEmail: runtimeSaEmail });
+    if (existing.has(secretAccessorRole)) {
+      console.log(fmt.ok(`${secretAccessorRole} on ${secretId}`));
+      checks.push({ name: `IAM: ${secretAccessorRole} on ${secretId}`, status: 'ok' });
+      continue;
+    }
+
+    console.log(fmt.fix(`Granting ${secretAccessorRole} on ${secretId}...`));
+    if (dryRun) {
+      console.log(fmt.fix('Would grant (dry-run)'));
+      checks.push({ name: `IAM: ${secretAccessorRole} on ${secretId}`, status: 'missing' });
+      continue;
+    }
+
+    const ok = await addSecretIamBinding({
+      projectId,
+      secretId,
+      memberEmail: runtimeSaEmail,
+      role: secretAccessorRole,
+    });
+    if (ok) {
+      console.log(fmt.ok(`Role ${secretAccessorRole} granted on ${secretId}`));
+      checks.push({
+        name: `IAM: ${secretAccessorRole} on ${secretId}`,
+        status: 'missing',
+        fixed: true,
+      });
+    } else {
+      console.log(fmt.err(`Failed to grant ${secretAccessorRole} on ${secretId}`));
+      checks.push({ name: `IAM: ${secretAccessorRole} on ${secretId}`, status: 'error' });
+    }
+  }
+
   return { checks };
 };
 
@@ -392,7 +386,7 @@ if (import.meta.main) {
   const mode = (opts.mode as string) ?? 'staging';
   const dryRun = opts['dry-run'] as boolean;
   const saId = (opts['sa-id'] as string) ?? 'firebase-adminsdk-fbsvc';
-  const runtimeSaId = (opts['runtime-sa-id'] as string) ?? saId;
+  const runtimeSaId = (opts['runtime-sa-id'] as string) ?? 'worker';
 
   if (!liveModes.includes(mode as (typeof liveModes)[number])) {
     console.error(fmt.err(`Unknown live mode: ${mode}. Valid: ${liveModes.join(', ')}`));
