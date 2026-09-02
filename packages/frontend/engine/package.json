@@ -31,6 +31,6 @@
     "bitecs": "^0.4.0",
     "jsonchunk": "^0.1.0",
     "pixi.js": "8.20.1",
-    "typebox": "1.3.23"
+    "typebox": "1.3.24"
   }
 }

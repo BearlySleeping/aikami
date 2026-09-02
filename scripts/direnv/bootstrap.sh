@@ -74,6 +74,23 @@ _aikami_setup_nix_direnv
 # ── 2. Load Nix flake devShell ─────────────────────────────────────────
 use flake
 
+# ── 2.1 Bun version drift guard ────────────────────────────────────────
+# .bun-version is the source of truth CI's setup-bun action and moon's
+# toolchain read. flake.nix pins nixpkgs' bun to match it. If they drift,
+# a local `bun install` writes a bun.lock shaped by the wrong bun and CI's
+# `bun install --frozen-lockfile` rejects it with "lockfile had changes,
+# but lockfile is frozen" — see docs/guides/CI_CD.md.
+if command -v bun &>/dev/null && [ -f "$AIKAMI_ROOT/.bun-version" ]; then
+  _aikami_pinned_bun="$(cat "$AIKAMI_ROOT/.bun-version" | tr -d '[:space:]')"
+  _aikami_active_bun="$(bun --version)"
+  if [ "$_aikami_pinned_bun" != "$_aikami_active_bun" ]; then
+    echo "⚠️  bun version drift: active bun is $_aikami_active_bun, .bun-version pins $_aikami_pinned_bun"
+    echo "   flake.nix's bun overlay is out of sync — bump it and 'direnv reload', or"
+    echo "   bun install will write a lockfile CI's frozen install rejects."
+  fi
+  unset _aikami_pinned_bun _aikami_active_bun
+fi
+
 # ── 3. Mode resolution ─────────────────────────────────────────────────
 
 declare -A _AIKAMI_PROJECT_MAP=(

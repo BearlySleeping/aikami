@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-02)
 
-**208 active (0 without contract file), 119 archived, 0 duplicates**
+**209 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -216,6 +216,7 @@
 | C-452 | Backfill Execution Reports | 🛠️ implemented | ❓ `integrated` — doc-only change, no sandbox route | v2 | full |
 | C-453 | Moon Remote Build Cache Cloudflare Workers R2 | 📝 draft | — | v2 | full |
 | C-454 | D1 R2 Infrastructure Constants Storage Package | 🛠️ implemented | — | v2 | full |
+| C-455 | Apps Backend Cloudflare One Home For Cloudflare Operations | 📝 draft | — | v2 | full |
 
 ---
 

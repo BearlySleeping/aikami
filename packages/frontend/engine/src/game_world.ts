@@ -1835,6 +1835,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         },
       });
     });
+
+    // Forward SET_COMPANION_RECRUITED commands (C-212, C-340)
+    bridgeWithCommands.onCommand('SET_COMPANION_RECRUITED', (cmd: unknown) => {
+      const recruitCmd = cmd as { entityId: number; recruited: boolean };
+      this._postToWorker({
+        type: 'BRIDGE_COMMAND',
+        command: {
+          type: 'SET_COMPANION_RECRUITED',
+          entityId: recruitCmd.entityId,
+          recruited: recruitCmd.recruited,
+        },
+      });
+    });
   }
 
   /**

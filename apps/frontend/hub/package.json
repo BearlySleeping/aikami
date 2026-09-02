@@ -26,7 +26,7 @@
     "deploy": "bun run scripts/deploy.ts"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260831.1",
+    "@cloudflare/workers-types": "5.20260901.1",
     "@inlang/paraglide-js": "2.25.0",
     "@libsql/client": "^0.17.4",
     "@sveltejs/adapter-cloudflare": "8.0.0-next.6",
@@ -34,7 +34,7 @@
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.4.0",
-    "daisyui": "5.7.23",
+    "daisyui": "5.7.25",
     "playwright": "1.62.1",
     "rollup-plugin-visualizer": "7.1.1",
     "svelte": "5.57.0",

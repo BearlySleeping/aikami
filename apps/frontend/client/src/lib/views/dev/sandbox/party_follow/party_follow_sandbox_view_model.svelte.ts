@@ -347,6 +347,9 @@ class PartyFollowSandboxViewModel
       return;
     }
 
+    // ⚠️ Spread appearanceLayers into a plain array to strip Svelte 5
+    // $state proxies — postMessage's structured clone algorithm cannot
+    // clone Proxy objects ("Proxy object could not be cloned").
     for (const npc of this.partyMembers) {
       bridge.send({
         type: 'SPAWN_NPC',
@@ -360,13 +363,14 @@ class PartyFollowSandboxViewModel
           interactionRadius: 64,
           personaId: 'companion',
           relationshipValue: 0,
-          appearanceLayers: npc.appearanceLayers,
+          appearanceLayers: [...npc.appearanceLayers],
           isCompanion: true,
         },
       });
       this.debug('spawn-npc', { id: npc.id, name: npc.name });
     }
   }
+
 
   /**
    * Resolves ECS entity IDs for spawned NPCs by scanning the GameWorld's

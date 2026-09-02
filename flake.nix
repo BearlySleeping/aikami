@@ -19,6 +19,33 @@
     flake-utils.lib.eachDefaultSystem (system: let
       overlay = final: prev: {
         inherit (playwright-flake.packages.${system}) playwright-test playwright-driver;
+
+        # nixpkgs' bun lags oven-sh's releases. Pin it here to match
+        # .bun-version (the source of truth for CI's setup-bun action and
+        # moon's toolchain) so a local `bun install` never writes a
+        # bun.lock that a different bun version then rejects with
+        # "lockfile had changes, but lockfile is frozen" in CI.
+        # Bump both together; hashes via:
+        #   nix-prefetch-url --type sha256 <release-zip-url>
+        #   nix hash convert --to sri sha256:<result>
+        bun = prev.bun.overrideAttrs (_old: rec {
+          version = "1.4.0";
+          passthru.sources = {
+            "aarch64-darwin" = prev.fetchurl {
+              url = "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-darwin-aarch64.zip";
+              hash = "sha256-xmnpf2Fk4cluBwF0jbmN+ndJKQjL2DlMdVcTSnNd44E=";
+            };
+            "aarch64-linux" = prev.fetchurl {
+              url = "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-aarch64.zip";
+              hash = "sha256-SxozLuhhmD65O8/m93D/+U4+MbLDiL2uo8jtNeWO7Q4=";
+            };
+            "x86_64-linux" = prev.fetchurl {
+              url = "https://github.com/oven-sh/bun/releases/download/bun-v${version}/bun-linux-x64.zip";
+              hash = "sha256-LQP7X7g6yLVnrKCigbLOGhoZ1Ij1bClo2Iw/Jekv5FI=";
+            };
+          };
+          src = passthru.sources.${prev.stdenv.hostPlatform.system};
+        });
       };
       pkgs = import nixpkgs {
         inherit system;
