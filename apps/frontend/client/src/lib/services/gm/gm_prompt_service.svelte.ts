@@ -108,7 +108,16 @@ class GmPromptService
 
     // Assemble with budget enforcement
     const encoder = new TextEncoder();
+    const separatorBytes = encoder.encode('\n').length;
     let totalBytes = 0;
+    let remainingRequiredBytes = sections.reduce(
+      (total, section) =>
+        section.priority === 'required' ? total + encoder.encode(section.content).length : total,
+      0,
+    );
+    let remainingRequiredSections = sections.filter(
+      (section) => section.priority === 'required',
+    ).length;
     const assembledLines: string[] = [];
     const droppedSections: Array<{ name: string; bytes: number }> = [];
 
@@ -116,20 +125,33 @@ class GmPromptService
 
     for (const section of sections) {
       const sectionBytes = encoder.encode(section.content).length;
+      const leadingSeparatorBytes = assembledLines.length > 0 ? separatorBytes : 0;
 
-      // Always include "required" sections, even if over budget
-      if (section.priority !== 'required' && totalBytes + sectionBytes > PROMPT_BUDGET_CAP) {
+      if (section.priority === 'required') {
+        remainingRequiredBytes -= sectionBytes;
+        remainingRequiredSections -= 1;
+        assembledLines.push(section.content);
+        totalBytes += leadingSeparatorBytes + sectionBytes;
+        continue;
+      }
+
+      const reservedRequiredBytes =
+        remainingRequiredBytes + remainingRequiredSections * separatorBytes;
+      const availableContentBytes =
+        PROMPT_BUDGET_CAP - totalBytes - leadingSeparatorBytes - reservedRequiredBytes;
+
+      if (sectionBytes > availableContentBytes) {
         // A list-backed section contributes what fits rather than vanishing.
         const fitted = section.partial
           ? this._fitPartialSection({
               partial: section.partial,
-              remainingBytes: PROMPT_BUDGET_CAP - totalBytes,
+              remainingBytes: Math.max(0, availableContentBytes),
               encoder,
             })
           : undefined;
         if (fitted) {
           assembledLines.push(fitted.content);
-          totalBytes += fitted.bytes;
+          totalBytes += leadingSeparatorBytes + fitted.bytes;
           trimmedSections.push({
             name: section.name,
             kept: fitted.entryCount,
@@ -142,7 +164,7 @@ class GmPromptService
       }
 
       assembledLines.push(section.content);
-      totalBytes += sectionBytes;
+      totalBytes += leadingSeparatorBytes + sectionBytes;
     }
 
     if (trimmedSections.length > 0) {

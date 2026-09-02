@@ -10,6 +10,33 @@
 //     src/lib/services/gm/gm_prompt_service.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { GmPromptServiceInterface } from './gm_prompt_service.svelte.ts';
+
+const warnMock = mock((..._args: unknown[]) => {});
+
+class MockBaseFrontendClass {
+  static create<Options, Service>(
+    this: new (
+      options: Options,
+    ) => Service,
+    options: Options,
+  ): Service {
+    return new this(options);
+  }
+
+  protected debug(..._args: unknown[]): void {}
+  protected info(..._args: unknown[]): void {}
+  protected log(..._args: unknown[]): void {}
+  protected warn(...args: unknown[]): void {
+    warnMock(...args);
+  }
+  protected error(..._args: unknown[]): void {}
+}
+
+mock.module('@aikami/frontend/services', () => ({
+  // biome-ignore lint/style/useNamingConvention: mirrors the real module's exported PascalCase class name
+  BaseFrontendClass: MockBaseFrontendClass,
+}));
 
 // ── Mock service dependencies ─────────────────────────────────────
 // Config service pulls in crypto_vault which can't be resolved in Bun test env.
@@ -46,18 +73,29 @@ mock.module('../game/world_state_service.svelte.ts', () => ({
 }));
 
 // Import after mocks are registered
-import { playerStateService } from '$services';
-import { gmPromptService } from './gm_prompt_service.svelte.ts';
+import { characterService, choiceHistoryStore, playerStateService } from '$services';
 
 // We need to access the CLASS_REGISTRY mock - it's a package import,
 // so we mock it at the barrel level via test_preload globals.
 // For characterService, the global mock is a stub with no selectedCharacter.
 
+let gmPromptService: GmPromptServiceInterface;
+
 describe('GmPromptService — C-457', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    const serviceModule = await import('./gm_prompt_service.svelte.ts');
+    gmPromptService = serviceModule.gmPromptService;
+
     // Reset mocked services to baseline state
     worldStateMock.currentLocation = undefined;
     worldStateMock.quests = [];
+    Object.defineProperty(characterService, 'selectedCharacter', {
+      configurable: true,
+      value: undefined,
+      writable: true,
+    });
+    choiceHistoryStore.formatHistorySection = mock(() => '');
+    warnMock.mockClear();
 
     // Player state defaults (matches test_preload)
     playerStateService.playerLevel = 1;
@@ -122,11 +160,16 @@ describe('GmPromptService — C-457', () => {
     });
 
     test('gatherContext uses real character name when selectedCharacter is set', () => {
+      const characterName = 'Seraphina';
+      Object.defineProperty(characterService, 'selectedCharacter', {
+        configurable: true,
+        value: { name: characterName },
+        writable: true,
+      });
+
       const ctx = gmPromptService.gatherContext();
 
-      // With the default global mock (characterService stub returns mock fn),
-      // the fallback 'Hero' is used since mock fns are truthy but have empty name.
-      expect(typeof ctx.playerCharacter.name).toBe('string');
+      expect(ctx.playerCharacter.name).toBe(characterName);
     });
 
     test('assemblePrompt includes real player data in the assembled prompt', () => {
@@ -180,20 +223,26 @@ describe('GmPromptService — C-457', () => {
     });
 
     test('required sections (SYSTEM INSTRUCTIONS) are never dropped', () => {
-      // Push well over budget with huge quest data
-      worldStateMock.quests = Array.from({ length: 50 }, (_, i) => ({
-        id: `q-${i}`,
-        title: `Quest ${i} with an extremely long title that wastes bytes`,
-        description: 'X'.repeat(1500),
-        status: 'active' as const,
-      }));
+      // This optional section fits before SYSTEM INSTRUCTIONS is considered,
+      // but must be dropped once the later required section is reserved.
+      worldStateMock.quests = [
+        {
+          id: 'q-required-reservation',
+          title: 'Quest that nearly fills the prompt',
+          description: 'X'.repeat(5700),
+          status: 'active' as const,
+        },
+      ];
 
       const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
+      const byteLength = new TextEncoder().encode(prompt).length;
 
       // System instructions must always be present
+      expect(byteLength).toBeLessThanOrEqual(6144);
       expect(prompt).toContain('[SYSTEM INSTRUCTIONS]');
       expect(prompt).toContain('You are an AI Game Master for a fantasy RPG.');
       expect(prompt).toContain('[/SYSTEM INSTRUCTIONS]');
+      expect(prompt).not.toContain('Quest that nearly fills the prompt');
     });
 
     test('prompt with userMessage and chatId still respects budget', () => {
@@ -220,10 +269,6 @@ describe('GmPromptService — C-457', () => {
 
   describe('AC-3: Dropped sections are observable via logging', () => {
     test('warn is called when sections are dropped due to budget', () => {
-      // The singleton's `warn` is bound inside the factory, so it cannot be
-      // spied on from here. Assert the observable consequence instead: that
-      // truncation happened and the budget was enforced.
-
       // Create an oversized prompt scenario
       worldStateMock.quests = Array.from({ length: 30 }, (_, i) => ({
         id: `q-${i}`,
@@ -242,6 +287,14 @@ describe('GmPromptService — C-457', () => {
       // System instructions survived truncation
       expect(prompt).toContain('[SYSTEM INSTRUCTIONS]');
       expect(prompt).toContain('[/SYSTEM INSTRUCTIONS]');
+      expect(warnMock).toHaveBeenCalledWith(
+        'assemblePrompt:sections-dropped',
+        expect.objectContaining({
+          droppedSections: expect.arrayContaining([
+            expect.objectContaining({ name: 'ACTIVE QUESTS' }),
+          ]),
+        }),
+      );
     });
 
     test('normal-sized prompts do not trigger warnings', () => {
@@ -252,6 +305,7 @@ describe('GmPromptService — C-457', () => {
 
       // Normal prompt fits comfortably under budget
       expect(byteLength).toBeLessThan(6144);
+      expect(warnMock).not.toHaveBeenCalled();
     });
 
     test('address mode header is always present (required priority)', () => {
@@ -260,23 +314,42 @@ describe('GmPromptService — C-457', () => {
     });
 
     test('CYOA history and bridge context are low priority and get dropped first', () => {
-      // Fill budget mostly with required+high sections so low-priority items get dropped
-      worldStateMock.quests = Array.from({ length: 25 }, (_, i) => ({
-        id: `q-${i}`,
-        title: `Quest ${i}`,
-        description: 'C'.repeat(1000),
-        status: 'active' as const,
-      }));
+      const cyoaMarker = 'CHOSE THE MOONLIT PATH';
+      const noteMarker = 'REMEMBER THE SILVER OATH';
+      const influenceMarker = 'TRUST THE HOODED GUIDE';
+      choiceHistoryStore.formatHistorySection = mock(
+        () => `[CYOA HISTORY]\n- ${cyoaMarker}: ${'H'.repeat(1000)}`,
+      );
+      worldStateMock.quests = [
+        {
+          id: 'quest-priority',
+          title: 'The Higher Priority Quest',
+          description: 'C'.repeat(4800),
+          status: 'active' as const,
+        },
+      ];
 
       const prompt = gmPromptService.assemblePrompt({
         mode: 'scene',
-        userMessage: 'test message',
         chatId: 'chat-123',
+        bridgeContext: {
+          durableNotes: [`${noteMarker}: ${'N'.repeat(1000)}`],
+          turnInfluences: [`${influenceMarker}: ${'I'.repeat(1000)}`],
+          recentGameContext: 'The party entered the ruins.',
+        },
       });
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(prompt).length;
 
       expect(byteLength).toBeLessThanOrEqual(6144);
+      expect(prompt).toContain('[ADDRESS MODE: Scene');
+      expect(prompt).toContain('[WORLD STATE]');
+      expect(prompt).toContain('[PLAYER CHARACTER]');
+      expect(prompt).toContain('[ACTIVE QUESTS]');
+      expect(prompt).toContain('[SYSTEM INSTRUCTIONS]');
+      expect(prompt).not.toContain(cyoaMarker);
+      expect(prompt).not.toContain(noteMarker);
+      expect(prompt).not.toContain(influenceMarker);
     });
   });
 
