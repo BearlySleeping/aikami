@@ -6,7 +6,9 @@
 // server-assigned timestamps and the auth-provider identifier. TypeBox owns
 // the wire boundary, Drizzle owns storage. The C-426 AC-1 coverage in
 // packages/backend/database/tests/d1_schema.test.ts verifies D1 persistence
-// only; detecting row-to-wire drift still requires a dedicated conformance test.
+// only; the row-schema conformance test at
+// packages/shared/schemas/src/lib/db/db_schemas_conformance.test.ts verifies
+// that every generated row schema matches its Drizzle $inferSelect counterpart.
 
 import { type Static, Type } from 'typebox';
 

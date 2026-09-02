@@ -23,6 +23,9 @@ switch (dbSubcommand) {
   case 'studio':
     await import('./studio.ts');
     break;
+  case 'generate':
+    await import('./generate_schemas.ts');
+    break;
   default:
     process.exit(1);
 }
