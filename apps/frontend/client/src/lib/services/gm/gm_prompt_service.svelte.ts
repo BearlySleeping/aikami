@@ -13,7 +13,12 @@ import {
 } from '@aikami/frontend/services';
 import { resolveMacros } from '@aikami/parser';
 import type { BridgeContext } from '@aikami/types';
-import { choiceHistoryStore, combatService, timeService, worldStateService } from '$services';
+import { choiceHistoryStore, combatService, timeService } from '$services';
+// Direct imports to break the barrel cycle: the barrel re-exports
+// gm_prompt_service before it re-exports these services.
+import { partyRosterService } from '../game/party_roster_service.svelte.ts';
+import { worldStateService } from '../game/world_state_service.svelte.ts';
+import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
 import type { AddressMode } from '$types';
 // Imported directly to break the barrel cycle: the barrel re-exports
 // gm_prompt_service before it re-exports lorebookStore.
@@ -355,7 +360,27 @@ class GmPromptService
    * Gathers nearby NPC context from the game state.
    */
   private _gatherNearbyNpcs(): GmPromptContext['nearbyNpcs'] {
-    return []; // TODO: wire to actual NPC awareness system
+    // Returns empty synchronously — the awareness service is async.
+    // For synchronous prompt assembly, expose the IDs from current location.
+    const location = worldStateService.currentLocation;
+    if (!location?.npcIds || location.npcIds.length === 0) {
+      return [];
+    }
+
+    const partyNpcIds = new Set(partyRosterService.members.map((m) => m.npcId));
+
+    // Build minimal context from location data — full resolution with
+    // NPC personalities is available via npcAwarenessService.getNearbyNpcContext()
+    // for the async path (multi-NPC turn generation).
+    return location.npcIds
+      .filter((id) => !partyNpcIds.has(id))
+      .map((id) => ({
+        id,
+        name: id,
+        persona: 'Unknown',
+        relationship: 'Unknown',
+        currentActivity: 'Present',
+      }));
   }
 
   /**
@@ -363,7 +388,18 @@ class GmPromptService
    * Returns an empty array when no party data is available.
    */
   private _gatherPartyMembers(): GmPromptContext['partyMembers'] {
-    return []; // TODO: wire to actual party member system
+    const members = partyRosterService.members;
+    if (members.length === 0) {
+      return [];
+    }
+
+    return members.map((member) => ({
+      id: member.npcId,
+      name: member.name,
+      // Personality from class description — the NPC's full personality
+      // is resolved asynchronously via npcAwarenessService for multi-NPC turns.
+      personality: `${member.name} (${member.classId}, Level ${member.level})`,
+    }));
   }
 }
 
