@@ -2,12 +2,17 @@
 // biome-ignore-all lint/style/useNamingConvention: contract statuses and stages are persisted domain values
 
 /**
- * 🔴 SINGLE SOURCE OF TRUTH: default base branch for contract pipeline PRs
- * and Git Worktree base revisions.
+ * 🔴 SINGLE SOURCE OF TRUTH: the PR target for every contract pipeline run.
  *
  * Currently `main` — early development, and CodeRabbit only reviews PRs
  * targeting main. Change this one constant (or set CONTRACT_PIPELINE_BASE_BRANCH)
  * to retarget the whole pipeline (e.g. back to `dev` later).
+ *
+ * This is NOT the source a worktree is checked out from — that is the
+ * operator's current branch by default (see `_worktreeSourceBranch` in
+ * herdr_adapter.ts), so launching from a feature branch still hands the
+ * worker that branch's code. Only the eventual PR always targets this
+ * constant.
  */
 export const PIPELINE_BASE_BRANCH = process.env.CONTRACT_PIPELINE_BASE_BRANCH ?? 'main';
 

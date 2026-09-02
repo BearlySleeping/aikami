@@ -529,7 +529,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const w = await createWorktree({
       slug: this._runId,
       branch,
-      base: PIPELINE_BASE_BRANCH,
+      base: this._worktreeSourceBranch(),
       label,
       repoRoot: this._repoRoot,
     });
@@ -773,6 +773,37 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
   }
 
   /** Base branch name for this run's worktree (no collision suffix). */
+
+  /**
+   * Source ref the herdr worktree is checked out from — deliberately NOT
+   * `PIPELINE_BASE_BRANCH` (that constant is the pipeline's *PR target*,
+   * always `main`; see its doc comment in types.ts).
+   *
+   * Launching a contract from a feature branch should hand the worker a
+   * checkout of THAT branch's current code, not silently rebase them onto
+   * `origin/main` — otherwise the implementer/verifier never see your
+   * in-flight branch work, and the run diverges from what you were doing
+   * when you launched it. `createWorktree()` itself already defaults to the
+   * repo root's current branch when `base` is omitted (see
+   * `herdr/worktree.ts`'s `createWorktree`) — this mirrors that so the
+   * pipeline stops overriding it with a hardcoded `main`.
+   *
+   * `CONTRACT_PIPELINE_BASE_BRANCH`, when set, is an explicit operator
+   * choice and wins over the current branch. Detached HEAD (rare — a CI
+   * checkout, a rebase in progress) falls back to `PIPELINE_BASE_BRANCH`
+   * since there is no current branch to read.
+   */
+  private _worktreeSourceBranch(): string {
+    if (process.env.CONTRACT_PIPELINE_BASE_BRANCH) {
+      return PIPELINE_BASE_BRANCH;
+    }
+    try {
+      const current = runGit('rev-parse --abbrev-ref HEAD', { cwd: this._repoRoot });
+      return current === 'HEAD' ? PIPELINE_BASE_BRANCH : current;
+    } catch {
+      return PIPELINE_BASE_BRANCH;
+    }
+  }
 
   /**
    * Remove checkouts left behind by EARLIER runs of this same contract.
