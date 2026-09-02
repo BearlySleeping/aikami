@@ -15,10 +15,8 @@
 //     the VM itself runs as (apps/backend/worker/src/secrets.ts fetches
 //     Secret Manager values through it via the metadata server).
 //     roles/secretmanager.secretAccessor is intentionally NOT granted
-//     project-wide here — the real setup scopes it per-secret
-//     (`gcloud secrets add-iam-policy-binding <secret> ...`) so this SA
-//     can't read secrets it has no business reading. Grant new secrets to
-//     it individually; see the worker README for the current list.
+//     project-wide here. This setup scopes it to every secret the worker
+//     reads so the SA can't access unrelated secrets.
 //
 // Usage:
 //   bun run scripts/src/lib/project_setup/iam.ts --mode=production
@@ -31,6 +29,7 @@
 
 import { c, fmt, parseCliArgs, run } from '../cli_utils';
 import { liveModes, MODE_PROJECT_MAP } from '../deploy/deployment_config';
+import { getWorkerRuntimeSecretIds } from './secrets_manager';
 
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
 
@@ -154,6 +153,58 @@ const addSaIamBinding = async (
   return code === 0;
 };
 
+/** Roles granted on a Secret Manager secret to a service account. */
+const getSecretRoles = async (options: {
+  projectId: string;
+  secretId: string;
+  memberEmail: string;
+}): Promise<Set<string>> => {
+  const { projectId, secretId, memberEmail } = options;
+  const { out, code } = await run([
+    'gcloud',
+    'secrets',
+    'get-iam-policy',
+    secretId,
+    `--project=${projectId}`,
+    '--flatten=bindings[].members',
+    `--filter=bindings.members:serviceAccount:${memberEmail}`,
+    '--format=json',
+    '--quiet',
+  ]);
+  if (code !== 0) {
+    return new Set();
+  }
+  try {
+    const policies = JSON.parse(out) as Array<{ bindings?: { role: string; members: string[] } }>;
+    return new Set(
+      policies.flatMap((policy) => (policy.bindings?.role ? [policy.bindings.role] : [])),
+    );
+  } catch {
+    return new Set();
+  }
+};
+
+/** Grant a service account access to one Secret Manager secret. */
+const addSecretIamBinding = async (options: {
+  projectId: string;
+  secretId: string;
+  memberEmail: string;
+  role: string;
+}): Promise<boolean> => {
+  const { projectId, secretId, memberEmail, role } = options;
+  const { code } = await run([
+    'gcloud',
+    'secrets',
+    'add-iam-policy-binding',
+    secretId,
+    `--project=${projectId}`,
+    `--member=serviceAccount:${memberEmail}`,
+    `--role=${role}`,
+    '--quiet',
+  ]);
+  return code === 0;
+};
+
 /** Does the service account exist in the project? */
 const saExists = async (projectId: string, saEmail: string): Promise<boolean> => {
   const { code } = await run([
@@ -180,10 +231,10 @@ type Grant = {
 /**
  * Grant the deploy + runtime service accounts their IAM roles.
  *
- * Deploy roles go to {@link deploySaEmail} on the project; runtime roles go
- * to {@link runtimeSaEmail} on the project. `runtimeSaEmail` defaults to
- * `deploySaEmail` only when the caller doesn't pass one — in practice the
- * two are different accounts for the worker VM (see the file header).
+ * Deploy roles go to {@link deploySaEmail} on the project. Runtime project
+ * roles and per-secret access go to {@link runtimeSaEmail}. `runtimeSaEmail`
+ * defaults to `deploySaEmail` only when the caller doesn't pass one — in
+ * practice the two are different accounts for the worker VM.
  */
 export const setupIam = async (
   projectId: string,
@@ -281,6 +332,43 @@ export const setupIam = async (
     } else {
       console.log(fmt.err(`Failed to grant ${grant.role}`));
       checks.push({ name: `IAM: ${grant.role}`, status: 'error' });
+    }
+  }
+
+  // ── Per-secret runtime access ───────────────────────────────────────
+  console.log(fmt.section('Secret Manager Access'));
+  const secretAccessorRole = 'roles/secretmanager.secretAccessor';
+  for (const secretId of getWorkerRuntimeSecretIds()) {
+    const existing = await getSecretRoles({ projectId, secretId, memberEmail: runtimeSaEmail });
+    if (existing.has(secretAccessorRole)) {
+      console.log(fmt.ok(`${secretAccessorRole} on ${secretId}`));
+      checks.push({ name: `IAM: ${secretAccessorRole} on ${secretId}`, status: 'ok' });
+      continue;
+    }
+
+    console.log(fmt.fix(`Granting ${secretAccessorRole} on ${secretId}...`));
+    if (dryRun) {
+      console.log(fmt.fix('Would grant (dry-run)'));
+      checks.push({ name: `IAM: ${secretAccessorRole} on ${secretId}`, status: 'missing' });
+      continue;
+    }
+
+    const ok = await addSecretIamBinding({
+      projectId,
+      secretId,
+      memberEmail: runtimeSaEmail,
+      role: secretAccessorRole,
+    });
+    if (ok) {
+      console.log(fmt.ok(`Role ${secretAccessorRole} granted on ${secretId}`));
+      checks.push({
+        name: `IAM: ${secretAccessorRole} on ${secretId}`,
+        status: 'missing',
+        fixed: true,
+      });
+    } else {
+      console.log(fmt.err(`Failed to grant ${secretAccessorRole} on ${secretId}`));
+      checks.push({ name: `IAM: ${secretAccessorRole} on ${secretId}`, status: 'error' });
     }
   }
 

@@ -50,7 +50,7 @@ Building everything cold costs 20.4s. The setup-environment comment says the moo
 | **Status**           | draft                                                                                                                                                                                                                                                        |
 | **Promotion**        | —                                                                                                                                                                                                                                                            |
 | **Docs Impact**      | internal → none (no user-facing surface)                                                                                                                                                                                                                     |
-| **Contract version** | 2.0.0                                                                                                                                                                                                                                                        |
+| **Contract version** | 2.1.0                                                                                                                                                                                                                                                        |
 
 ## Problem & Baseline Evidence
 
@@ -66,7 +66,7 @@ After this contract, a developer or a CI job that runs a moon task with unchange
 
 ## Success Measures
 
-- **Time/latency target**: A cold CI run (no `actions/cache` hit) restoring `client:build` from the remote cache must be measurably faster than the current `actions/cache` baseline restore+rebuild. Both numbers are recorded in this contract's execution report (AC-3) before the cutover AC (AC-5) is attempted.
+- **Time/latency target**: On equivalent clean runners, a primed remote-cache hit for `client:build` must be measurably faster than a remote-disabled baseline where `actions/cache` is disabled or guaranteed to miss. Record every duration from repeated comparisons and both median timings in this contract's execution report (AC-3) before the cutover AC (AC-5) is attempted.
 - **Offline/degraded behavior**: N/A for CI (network is always available in GitHub Actions). For local developer use, `MOON_REMOTE_HOST` unset is offline-equivalent — moon falls back to the local-only cache with zero behavior change from today.
 - **Production journey enabled**: N/A — this is internal build tooling only, not a player/creator-facing path. No production game journey depends on it.
 
@@ -75,14 +75,14 @@ After this contract, a developer or a CI job that runs a moon task with unchange
 | Capability                                  | Existing source                                                                                    | Reuse / modify / replace                                                                                                                      |
 | ------------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Cloudflare Worker deploy pipeline           | `scripts/src/lib/deploy/deployment_config.ts` `cloudflare-worker` serviceType, `APP_CONFIG`        | reuse — add `aikami-cache` entry following the `client`/`site`/`hub` pattern                                                                  |
-| Secrets distribution (env-var-named tokens) | C-441 SOPS/age pipeline                                                                            | reuse — add `MOON_CACHE_TOKEN` (read-write) and a read-only token as new secrets                                                              |
+| Secrets distribution (env-var-named tokens) | C-441 SOPS/age pipeline                                                                            | reuse — add `MOON_CACHE_TOKEN` (read-write) and `MOON_CACHE_READ_TOKEN` (read-only) as separate secrets                                       |
 | CI moon cache restore/save                  | `.github/actions/setup-environment/action.yml` `moon-cache` / `moon-cache-save` inputs, prune step | modify — becomes remote-cache env wiring; the `actions/cache` restore/save steps and the prune step are removed only after AC-3 passes (AC-5) |
-| Moon workspace config                       | `.moon/workspace.yml`                                                                              | modify — add `aikami-cache` project entry and top-level `remote:` block                                                                       |
+| Moon workspace config                       | `.moon/workspace.yml` + Moon's `MOON_REMOTE_*` overrides                                           | add the `aikami-cache` project entry, but keep committed config local-only; enable the remote exclusively through validated environment variables |
 | AppId schema (TypeBox)                      | `packages/shared/schemas/src/lib/project/project.ts` `AppIdSchema`                                 | modify — add `'aikami-cache'` literal to the TypeBox union                                                                                    |
 
 ## Overview
 
-Stand up a small Cloudflare Worker, `aikami-cache`, backed by a dedicated R2 bucket, that speaks moon's HTTP remote-cache protocol (`GET`/`PUT /ac/<hash>` for action results, `GET`/`PUT /cas/<hash>` for output blobs). Point moon at it via the `remote:` config key, gated entirely behind the `MOON_REMOTE_HOST` environment variable so rollout and rollback are a single env-var flip. Once CI-observed speedups are proven, retire the rolling-key `actions/cache` restore/save and prune steps from `setup-environment/action.yml`.
+Stand up a small Cloudflare Worker, `aikami-cache`, backed by a dedicated R2 bucket, that speaks Moon's HTTP remote-cache protocol (`GET`/`PUT /ac/<hash>` for action results, `GET`/`PUT /cas/<hash>` for output blobs). Point Moon at it exclusively through `MOON_REMOTE_*` environment overrides, gated by `MOON_REMOTE_HOST`, so committed configuration remains local-only and rollout or rollback is a single environment change. Once CI-observed speedups are proven, retire the rolling-key `actions/cache` restore/save and prune steps from `setup-environment/action.yml`.
 
 ## Design Reference
 
@@ -90,7 +90,7 @@ Stand up a small Cloudflare Worker, `aikami-cache`, backed by a dedicated R2 buc
 - `.github/actions/setup-environment/action.yml` — existing moon-cache restore/save/prune steps this contract's AC-5 removes.
 - `packages/shared/schemas/src/lib/project/project.ts` — `AppIdSchema` TypeBox union; `'aikami-cache'` must be added as a new literal member (follows the `'database'` pattern — added to the schema but not to `appIds`/`backendAppIds`/`frontendAppIds` arrays).
 - Worker Cloudflare infra memory: the Discord gateway bot already runs on a free-tier e2-micro VM — `aikami-cache` is a _separate_ Worker, not colocated with that VM; it exists only to host the R2-backed cache endpoint.
-- moon 2.5.3 `remote:` config was verified directly against the installed binary — the published JSON Schema at `moonrepo.dev/schemas/workspace.json` is still v1 and disagrees with this shape. Do not trust the schema; trust the binary's actual accepted config (re-verify with `moon --version` and a scratch `remote:` block + `moon ci --dry-run` equivalent if the pinned moon version changes).
+- Moon 2.5.3's `MOON_REMOTE_*` overrides were verified directly against the installed binary — the published JSON Schema at `moonrepo.dev/schemas/workspace.json` is still v1 and does not describe environment-only activation. Trust the binary's accepted environment mapping and re-verify it if the pinned Moon version changes.
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
@@ -113,20 +113,8 @@ Stand up a small Cloudflare Worker, `aikami-cache`, backed by a dedicated R2 buc
     - `assetsOnly: false` with an empty/no-op assets directory, or
     - A custom build step that handles this Worker type differently.
       Confirm the approach during implementation and update `writeWranglerConfig` accordingly. The `ensureHeadersFile` call also needs to be skipped for Workers with no static assets.
-- `.moon/workspace.yml`: add the `remote:` block exactly as verified:
-    ```yaml
-    remote:
-        api: "http"
-        host: "${MOON_REMOTE_HOST}" # unset = local-only cache, this is the kill switch
-        auth:
-            token: "MOON_CACHE_TOKEN" # env var NAME, not the value
-        cache:
-            compression: "zstd"
-            localReadOnly: false
-            verifyIntegrity: true
-    ```
-    Confirm at implementation time whether `host` in moon 2.5.3 accepts direct env-var interpolation or must be left unset in committed config with `MOON_REMOTE_HOST` supplying it purely from the environment (this is the actual rollout gate per the source brief — do not commit a literal `host` value if the binary requires the env var to be the sole source).
-- Two Worker secrets: `MOON_CACHE_TOKEN` (read-write — CI and the maintainer's primary machine only) and a read-only token (everyone else, if/when broader local adoption happens). Distributed via the existing C-441 SOPS pipeline as new secret entries.
+- `.moon/workspace.yml`: omit the `remote` block entirely. Moon 2.5.3 supports environment overrides for every required setting, so remote caching is configured only when the job supplies `MOON_REMOTE_HOST`, `MOON_REMOTE_API=http`, `MOON_REMOTE_AUTH_TOKEN=<token-variable-name>`, `MOON_REMOTE_CACHE_COMPRESSION=zstd`, `MOON_REMOTE_CACHE_LOCAL_READ_ONLY=false`, and `MOON_REMOTE_CACHE_VERIFY_INTEGRITY=true`. `http` selects Moon's HTTP cache protocol; `MOON_REMOTE_HOST` itself must be an `https://` URL. The setup step must reject any other scheme before exporting `MOON_REMOTE_AUTH_TOKEN` or exposing either cache token to the Moon process. If `MOON_REMOTE_HOST` is unset, do not attach an auth setting or token and leave all remote variables unset.
+- Two Worker secrets: `MOON_CACHE_TOKEN` (read-write) and `MOON_CACHE_READ_TOKEN` (read-only). Expose the read-write token only to trusted push-to-main or release jobs that are allowed to populate the cache. Both `validate` and `heavy` in `pr-checks.yml` use only `MOON_CACHE_READ_TOKEN` and set `MOON_REMOTE_AUTH_TOKEN=MOON_CACHE_READ_TOKEN`; they never receive `MOON_CACHE_TOKEN`. Pull requests for which the read-only secret is unavailable run local-only rather than falling back to read-write credentials. Distribute both through the existing C-441 SOPS pipeline as separate secret entries.
 - R2 bucket lifecycle rule: expire objects after 14 days (no other GC exists in moon's HTTP mode).
 
 ## State & Data Models
@@ -145,7 +133,7 @@ No `packages/shared/schemas` or `packages/shared/types` entries are needed — t
 - **Offline/degraded mode**: `MOON_REMOTE_HOST` unset → moon silently uses local-only cache, identical to pre-contract behavior. No code path should require the remote cache to be reachable.
 - **Accessibility/input**: N/A — no UI.
 - **Performance budget**: Cloudflare Workers free plan caps request bodies at 100 MB. `client:build`'s output tarball must be measured before rollout (see Risks); `client:tauri-build` is already `cache: false` and never touches this path.
-- **Security/privacy**: Bearer-token auth, two-tier (read-only vs. read-write) specifically to bound the blast radius of `localReadOnly: false` — a laptop-built artifact must not be able to reach production via CI without going through the write-token holders (CI + maintainer's primary machine). `verifyIntegrity: true` catches corruption, not malicious intent — the token split is the actual mitigation for that.
+- **Security/privacy**: Bearer-token auth, two-tier (read-only vs. read-write) specifically to bound the blast radius of `localReadOnly: false`. Only trusted push/release jobs hold the write token; PR-gate `validate` and `heavy` jobs are read-only. `verifyIntegrity: true` catches corruption, not malicious intent — the token split and negative `PUT` tests are the actual mitigation.
 - **Persistence/migration**: R2 objects are cache entries, not source-of-truth data — the 14-day lifecycle rule is deliberate GC, not a migration concern.
 - **Cancellation/retry/idempotency**: `PUT` writes are idempotent by content hash (same hash → same content, by construction of moon's action-hash/CAS design). No retry logic needed beyond what moon's own client does.
 - **Observability**: Worker should log auth failures (401/403) and basic request counts via standard Cloudflare Worker logging (`wrangler tail` / Workers Logs) — no new logging package needed given `@aikami/logger` is a Node/Bun-side package, not deployed into the Worker runtime.
@@ -165,7 +153,7 @@ No `packages/shared/schemas` or `packages/shared/types` entries are needed — t
     - Adding `'aikami-cache'` to the `AppIdSchema` TypeBox union in `packages/shared/schemas/src/lib/project/project.ts`.
     - Adding `aikami-cache` project entry to `.moon/workspace.yml`.
     - `deployment_config.ts` `APP_CONFIG` entry for `aikami-cache`.
-    - `.moon/workspace.yml` `remote:` config block.
+    - Environment-only `MOON_REMOTE_*` wiring with HTTPS-host validation; no committed `remote.host` or `remote` block.
     - Two-tier token issuance and distribution via C-441 SOPS pipeline.
     - R2 14-day lifecycle expiry rule.
     - `moon query hash-diff` staging-vs-production collision proof (AC-4).
@@ -222,57 +210,57 @@ No `packages/shared/schemas` or `packages/shared/types` entries are needed — t
 **Test Hooks**:
 
 - Moon Task: same as AC-1
-- Integration: `curl -X PUT` with each token against a scratch hash key, then `curl -X GET` to confirm round-trip
+- Integration: `curl -X PUT` with each token against scratch `/ac/` and `/cas/` hash keys, then `curl -X GET` to confirm read-write round-trips. Repeat the rejected `PUT` checks using the exact `MOON_CACHE_READ_TOKEN` credential wired to both PR-gate jobs in `pr-checks.yml`.
 - E2E / Visual: N/A
 
 **Watch Points**:
 
 - Confirm the read-only token genuinely cannot escalate — test against both `/ac/` and `/cas/` independently, not just one.
 
-### AC-3: Cold CI run is measurably faster via remote cache than the current `actions/cache` baseline
+### AC-3: Remote-cache hits are measurably faster than a guaranteed-cold baseline
 
-**Given** `MOON_REMOTE_HOST` set for a CI job, with a task whose local `.moon/cache` is empty (simulating a fresh runner) but whose remote cache already holds the result from a prior run
-**When** that CI job runs the task
-**Then** it restores from `cache.bearlysleeping.com` and completes faster than a comparable run restoring from the current rolling-key `actions/cache` entry — both wall-clock numbers are recorded in this contract's execution report
+**Given** equivalent clean CI runners using the same runner image, commit, workflow, and task inputs, with local `.moon/cache` empty on every run; the remote-hit arm has a primed remote result and `actions/cache` disabled or guaranteed to miss, while the baseline arm has remote caching disabled and `actions/cache` disabled or guaranteed to miss
+**When** each arm runs the same task in at least three matched repetitions
+**Then** the remote-hit arm restores from `cache.bearlysleeping.com` and its median wall-clock duration is measurably faster than the guaranteed-cold baseline; every raw duration and both medians are recorded in this contract's execution report before AC-3 is used as the AC-5 gate
 
 **Evidence Matrix**:
 
 | AC   | Test Level  | Required Artifact                          | Production Path | Evidence                                                                         |
 | ---- | ----------- | ------------------------------------------ | --------------- | -------------------------------------------------------------------------------- |
-| AC-3 | Integration | CI workflow run logs (two comparison runs) | GitHub Actions  | Filled during verification — must include both timing numbers, not just "faster" |
+| AC-3 | Integration | CI workflow logs for at least three matched remote-hit/baseline pairs | GitHub Actions  | Filled during verification — record every duration and both medians, not just "faster" |
 
 **Test Hooks**:
 
-- Moon Task: `moon run client:build` (or the chosen benchmark task) timed both ways
-- Integration: Two back-to-back CI runs on the same commit — one with `MOON_REMOTE_HOST` set, one without — compare job step durations from Actions logs
+- Moon Task: `moon run client:build` (or the chosen benchmark task) timed in both arms on clean runners
+- Integration: Run at least three matched pairs on the same commit and runner image. For the remote-hit arm, prime the remote entry and disable or force a miss in `actions/cache`; for the baseline arm, unset every `MOON_REMOTE_*` variable and disable or force a miss in `actions/cache`. Capture task-step wall-clock durations from Actions logs.
 - E2E / Visual: N/A
 
 **Watch Points**:
 
 - This AC is the gate for AC-5. Do not remove the old cache path until this evidence exists and shows a real improvement, not a wash.
-- Network variance between runs — run more than once if the first comparison is noisy.
+- Do not compare against a runner carrying either non-target cache. A remote-hit sample with an `actions/cache` hit, or a baseline sample with remote caching enabled, is invalid and must be repeated.
 
-### AC-4: Staging and production task hashes do not collide
+### AC-4: Staging and production hashes differ for every mode-sensitive cached task
 
-**Given** the same moon task run with `-- --mode staging` and `-- --mode production` passthrough args
-**When** `moon query hash-diff` is run comparing the two task hashes
-**Then** the hashes differ, proving the remote cache will not serve a staging-built artifact for a production request or vice versa; if they collide, a per-mode `remote.cache.instanceName` is added and this AC is re-verified against the fallback config
+**Given** every cached Moon task whose outputs depend on the mode argument, including `client:build` and `hub:build`, run with `-- --mode staging` and `-- --mode production` passthrough args
+**When** `moon query hash-diff` compares the staging and production hashes for each task
+**Then** both tasks' hashes differ, proving the remote cache will not serve a staging-built artifact for a production request or vice versa. If any mode-sensitive task collides, set a distinct `MOON_REMOTE_CACHE_INSTANCE_NAME` for staging and production whenever remote caching is enabled, repeat every hash comparison, then unset `MOON_REMOTE_HOST` and verify both modes still use the unchanged local-only fallback.
 
 **Evidence Matrix**:
 
 | AC   | Test Level  | Required Artifact                                               | Production Path | Evidence                   |
 | ---- | ----------- | --------------------------------------------------------------- | --------------- | -------------------------- |
-| AC-4 | Integration | `moon query hash-diff` output, captured in the execution report | N/A             | Filled during verification |
+| AC-4 | Integration | `moon query hash-diff` output for `client:build`, `hub:build`, and any other mode-sensitive cached task, captured in the execution report | N/A | Filled during verification |
 
 **Test Hooks**:
 
-- Moon Task: `moon query hash-diff client:build -- --mode staging` vs `client:build -- --mode production` (exact invocation to be confirmed against moon 2.5.3's actual `hash-diff` CLI signature at implementation time)
-- Integration: manual — capture and paste raw hash-diff output into the contract's execution report
+- Moon Task: compare staging vs. production with `moon query hash-diff` for both `client:build` and `hub:build`, plus every other cached task whose outputs depend on `--mode` (exact invocation to be confirmed against moon 2.5.3's actual `hash-diff` CLI signature at implementation time)
+- Integration: manual — capture each raw hash-diff in the execution report. If an instance-name fallback is required, capture the repeated comparisons and a local-only run for each mode with `MOON_REMOTE_HOST` and `MOON_REMOTE_CACHE_INSTANCE_NAME` unset.
 - E2E / Visual: N/A
 
 **Watch Points**:
 
-- This must be proven, not assumed, even though passthrough args are expected to hash differently — the source brief is explicit that this needs verification before relying on one shared cache instance for both modes.
+- This must be proven for every mode-sensitive cached task, not inferred from `client:build` alone, before relying on one shared cache instance for both modes.
 
 ### AC-5: Old `actions/cache` moon-cache path is removed, gated on AC-3
 
@@ -300,8 +288,8 @@ No `packages/shared/schemas` or `packages/shared/types` entries are needed — t
 ## Implementation Sequence
 
 1. **Phase 1 (Worker + R2)**: Build the `aikami-cache` Worker at `apps/backend/aikami-cache/` (four routes, bearer-token auth, two-tier tokens), update `AppIdSchema` in `packages/shared/schemas/src/lib/project/project.ts`, add project entry to `.moon/workspace.yml`, provision the dedicated R2 bucket with the 14-day lifecycle rule, add the `APP_CONFIG` entry, adapt `writeWranglerConfig` for pure API Workers (no static assets), deploy via the existing `cloudflare-worker` pipeline to `cache.bearlysleeping.com`. Measure `client:build`'s output tarball size against the 100 MB body cap. Verify AC-1 and AC-2.
-2. **Phase 2 (moon wiring)**: Add the `remote:` block to `.moon/workspace.yml`, distribute `MOON_CACHE_TOKEN` (and the read-only token) via C-441 SOPS, wire `MOON_REMOTE_HOST` into CI as an opt-in env var (not yet replacing the old cache steps). Verify AC-4 (`moon query hash-diff`) before any shared-instance reliance.
-3. **Phase 3 (measurement)**: Run the AC-3 comparison — cold CI run via remote cache vs. current `actions/cache` baseline — record both numbers in the execution report.
+2. **Phase 2 (moon wiring)**: Keep `.moon/workspace.yml` free of a `remote` block; distribute `MOON_CACHE_TOKEN` and `MOON_CACHE_READ_TOKEN` via C-441 SOPS, validate that `MOON_REMOTE_HOST` uses `https://`, and set the remaining `MOON_REMOTE_*` overrides only in remote-enabled jobs. Wire PR-gate jobs read-only and trusted push/release jobs read-write. Verify AC-2 and AC-4 before any shared-instance reliance.
+3. **Phase 3 (measurement)**: Run at least three AC-3 matched comparisons on equivalent clean runners — primed remote hit versus remote-disabled, `actions/cache`-disabled-or-miss baseline — and record every duration plus both medians in the execution report.
 4. **Phase 4 (cutover, only if AC-3 passes)**: Remove the `actions/cache` moon-cache restore/save and prune steps from `setup-environment/action.yml`. Run `moon ci --affected` and a full PR-gate CI pass to confirm AC-5.
 
 ## Edge Cases & Gotchas
@@ -309,7 +297,7 @@ No `packages/shared/schemas` or `packages/shared/types` entries are needed — t
 - **JSON Schema drift**: `moonrepo.dev/schemas/workspace.json` disagrees with the installed moon 2.5.3 binary's accepted `remote:` shape (still v1). Do not let an editor's schema-validation red squiggles drive config changes — trust `moon` itself (e.g. `moon --version`, and whatever `moon ci`/task-run output says about config parsing).
 - **100 MB body cap**: Cloudflare Workers free plan caps request bodies at 100 MB. Measure `client:build`'s actual output tarball size before rollout — if it exceeds this, that task either needs `cache: false` (like `client:tauri-build` already has) or the Worker needs a paid-plan body-size increase, which is a cost/scope decision to flag back, not silently work around.
 - **No batching**: moon's HTTP remote-cache API has no batch endpoint — a cold restore is one HTTP request per blob. A task with many small output files could see request-count overhead dominate; this is expected and accepted per the source brief, not a bug to fix here.
-- **`host` config vs. env var**: Confirm at implementation time whether `remote.host` in committed `.moon/workspace.yml` can safely be left templated/unset so that `MOON_REMOTE_HOST` alone gates activation, versus needing a literal value that would defeat the "unset env var = fully local" kill switch. If moon requires a committed host value, the kill switch story changes and must be re-verified before this contract can claim AC-5's rollback story holds.
+- **Environment-only activation**: Moon 2.5.3 maps `MOON_REMOTE_HOST`, `MOON_REMOTE_API`, `MOON_REMOTE_AUTH_TOKEN`, and `MOON_REMOTE_CACHE_*` directly to remote settings. Do not commit a `remote.host` interpolation or a partial `remote` block; validate an `https://` host first, then attach the appropriate token-variable name in the job environment.
 
 ## Open Questions
 
@@ -323,7 +311,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
 | ------- | ---- | ------ | ----------- |
-| —       | —    | —      | —           |
+| 2.1.0   | 2026-09-02 | Use validated environment-only HTTPS configuration, split PR read credentials from trusted write credentials, and harden AC-3/AC-4 evidence. | User request |
 
 ## Promotion Lifecycle
 

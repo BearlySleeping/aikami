@@ -4,10 +4,9 @@
 //
 // Deliberately a projection of the `accounts` Drizzle row: it omits the
 // server-assigned timestamps and the auth-provider identifier. TypeBox owns
-// the wire boundary, Drizzle owns storage — drift is caught by the
-// type-level conformance test in
-// packages/backend/database/tests/d1_schema.test.ts (AC-4.3), pending a dedicated wire-to-row conformance test, not by
-// generating one from the other.
+// the wire boundary, Drizzle owns storage. The C-426 AC-1 coverage in
+// packages/backend/database/tests/d1_schema.test.ts verifies D1 persistence
+// only; detecting row-to-wire drift still requires a dedicated conformance test.
 
 import { type Static, Type } from 'typebox';
 

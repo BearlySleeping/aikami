@@ -17,6 +17,15 @@ import { MODE_PROJECT_MAP } from '../deploy/deployment_config';
 
 type Check = { name: string; status: 'ok' | 'missing' | 'error'; detail?: string; fixed?: boolean };
 
+/**
+ * Ensures the worker Docker repository exists in Artifact Registry.
+ *
+ * @param projectId GCP project that owns the repository.
+ * @param region Artifact Registry location.
+ * @param dryRun Whether to report required changes without applying them.
+ * @param repoName Repository name to check or create.
+ * @returns Promise resolving to checks for existing, missing, fixed, or failed configuration.
+ */
 export const setupArtifactRegistry = async (
   projectId: string,
   region: string,

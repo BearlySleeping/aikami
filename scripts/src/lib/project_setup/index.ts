@@ -123,6 +123,8 @@ async function main() {
 
   const allChecks: Check[] = [];
   const allManualSteps: ManualStep[] = [];
+  const deploySaEmail = `firebase-adminsdk-fbsvc@${projectId}.iam.gserviceaccount.com`;
+  const runtimeSaEmail = `worker@${projectId}.iam.gserviceaccount.com`;
 
   // ── GCP APIs ─────────────────────────────────────────────────────
   {
@@ -136,19 +138,17 @@ async function main() {
     allChecks.push(...checks);
   }
 
-  // ── IAM (deploy + runtime service account roles) ───────────────────
-  {
-    const deploySaEmail = `firebase-adminsdk-fbsvc@${projectId}.iam.gserviceaccount.com`;
-    const runtimeSaEmail = `worker@${projectId}.iam.gserviceaccount.com`;
-    const { checks } = await setupIam(projectId, deploySaEmail, DRY_RUN, runtimeSaEmail);
-    allChecks.push(...checks);
-  }
-
   // ── Secret Manager ────────────────────────────────────────────────
   {
     const { checks, manualSteps } = await setupSecrets(projectId, DRY_RUN);
     allChecks.push(...checks);
     allManualSteps.push(...manualSteps);
+  }
+
+  // ── IAM (deploy + runtime service account roles) ───────────────────
+  {
+    const { checks } = await setupIam(projectId, deploySaEmail, DRY_RUN, runtimeSaEmail);
+    allChecks.push(...checks);
   }
 
   // ── Billing check ────────────────────────────────────────────────────

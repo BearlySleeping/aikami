@@ -15,12 +15,13 @@ import { MODE_PROJECT_MAP } from './deployment_config';
  * region anymore (the old CLOUD_FUNCTIONS_REGION was Cloud Functions/Cloud
  * Run era) — every docker-release app must set its own `region`.
  */
-export function resolveRegion(_mode: string, configOverride?: string): string {
+export const resolveRegion = (options: { configOverride?: string }): string => {
+  const { configOverride } = options;
   if (!configOverride) {
     throw new Error('resolveRegion: AppConfig.region is required (no project-wide default).');
   }
   return configOverride;
-}
+};
 
 // ── Shell ────────────────────────────────────────────────────────────────
 
@@ -187,13 +188,13 @@ export function isTreeDirty(): boolean {
  * to `sha256sum` — that binary doesn't exist on macOS, and the desktop
  * release matrix runs macOS and Windows legs.
  */
-export function dirtyTreeHash(): string {
+export const dirtyTreeHash = (): string => {
   if (!isTreeDirty()) {
     return '';
   }
   const diff = run('git diff HEAD', { quiet: true }) + run('git diff --cached', { quiet: true });
   return createHash('sha256').update(diff).digest('hex');
-}
+};
 
 // ── GCP / Deploy ─────────────────────────────────────────────────────────
 
@@ -208,13 +209,13 @@ export function resolveProjectId(mode: string): string {
  *  Idempotent per region: only configures a region once per process.
  *  @param region Region of the Artifact Registry to configure. No project-wide
  *  default exists anymore — every caller must pass its own region explicitly. */
-export function authenticateDocker(region: string): void {
+export const authenticateDocker = (region: string): void => {
   if (_dockerAuthenticated.has(region)) {
     return;
   }
   _dockerAuthenticated.add(region);
   run(`gcloud auth configure-docker ${region}-docker.pkg.dev --quiet`, { quiet: true });
-}
+};
 
 /**
  * Ensures gcloud is authenticated — user credentials first, then fall back

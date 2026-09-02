@@ -17,6 +17,8 @@ import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { c, error, log, ok } from './lib/cli_utils';
 
+export { deployCloudflareApp } from './lib/deploy/cloudflare';
+
 // ---------------------------------------------------------------------------
 // Short name → relative path from src/lib/
 // ---------------------------------------------------------------------------
@@ -203,15 +205,17 @@ ${c.bold}╚══════════════════════�
 // Entry
 // ---------------------------------------------------------------------------
 
-const args = Bun.argv.slice(2); // ['bun', 'index.ts', ...]
+if (import.meta.main) {
+  const args = Bun.argv.slice(2); // ['bun', 'index.ts', ...]
 
-if (args.length === 0) {
-  await interactiveMode();
-} else {
-  // Direct mode: first arg is script name/path, rest are script args
-  const scriptName = args[0];
-  const scriptArgs = args.slice(1);
-  const scriptPath = resolveScriptPath(scriptName);
+  if (args.length === 0) {
+    await interactiveMode();
+  } else {
+    // Direct mode: first arg is script name/path, rest are script args
+    const scriptName = args[0];
+    const scriptArgs = args.slice(1);
+    const scriptPath = resolveScriptPath(scriptName);
 
-  await runScript(scriptPath, scriptArgs);
+    await runScript(scriptPath, scriptArgs);
+  }
 }

@@ -33,6 +33,7 @@ type ManualStep = { title: string; url?: string; commands?: string[]; detail?: s
 
 const ROOT = join(import.meta.dir, '../../../..');
 const WORKER_APP_PATH = 'apps/backend/worker';
+const DIRECT_SECRET_MANAGER_KEYS = ['WORKER_TLS_CERT', 'WORKER_TLS_KEY'] as const;
 
 /** Keys the worker never reads from Secret Manager, even though they appear in its .env.example. */
 const NON_SECRET_MANAGER_KEYS = new Set(['GCP_SA_KEY_JSON']);
@@ -60,6 +61,11 @@ function discoverSecretKeys(appPath: string): string[] {
   }
   return [...new Set(keys)];
 }
+
+/** Secret Manager IDs the worker runtime service account must be able to read. */
+export const getWorkerRuntimeSecretIds = (): string[] => [
+  ...new Set([...discoverSecretKeys(WORKER_APP_PATH), ...DIRECT_SECRET_MANAGER_KEYS]),
+];
 
 async function checkSecret(projectId: string, secretId: string): Promise<boolean> {
   const { code } = await run([

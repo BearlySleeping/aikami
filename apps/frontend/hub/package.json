@@ -51,6 +51,7 @@
     "@aikami/frontend-preview": "workspace:*",
     "@aikami/frontend-theme": "workspace:*",
     "@aikami/schemas": "workspace:*",
+    "@aikami/scripts": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
     "@elysiajs/eden": "^1.4.9",

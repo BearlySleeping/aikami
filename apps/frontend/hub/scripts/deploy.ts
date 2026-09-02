@@ -9,6 +9,6 @@
  * deployment_config.ts.
  */
 
-import { deployCloudflareApp } from '../../../../scripts/src/lib/deploy/cloudflare';
+import { deployCloudflareApp } from '@aikami/scripts';
 
 await deployCloudflareApp('hub');

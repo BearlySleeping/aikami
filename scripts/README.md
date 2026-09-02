@@ -85,8 +85,8 @@ the only thing still running on GCP after the Cloudflare Workers/D1/R2
 migration. Production only; there is no staging worker VM.
 
 ```bash
-bun run project:setup                      # Full interactive wizard (production)
-bun run project:setup --dry-run            # Check only, no changes
+bun run project:setup --mode=production             # Full interactive wizard (production)
+bun run project:setup --mode=production --dry-run   # Check only, no changes
 bun run project:setup:iam                  # IAM roles only
 ```
 
