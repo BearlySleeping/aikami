@@ -3,7 +3,7 @@ id: C-454
 title: "Declare D1 and R2 once: infrastructure constants, key schemas, storage package"
 source: "Audit of R2 key construction and D1 identity ahead of C-455/C-456"
 contract_type: full
-status: approved
+status: implemented
 github:
     issue_number: null
     issue_url: null
