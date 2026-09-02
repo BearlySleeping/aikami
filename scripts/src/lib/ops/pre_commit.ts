@@ -57,17 +57,18 @@ const ROOT_DIR = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' })
 
 const PLAINTEXT_PATTERNS = ['.env.production', '.env.staging'];
 
-export function checkPlaintextSecrets(): void {
-  try {
-    // Get staged files
-    const staged = execSync('git diff --cached --name-only', {
-      encoding: 'utf8',
-      cwd: ROOT_DIR,
-    })
-      .trim()
-      .split('\n')
-      .filter(Boolean);
+/** Staged file paths, relative to ROOT_DIR. Computed once and reused. */
+const getStagedFiles = (): string[] =>
+  execSync('git diff --cached --name-only', {
+    encoding: 'utf8',
+    cwd: ROOT_DIR,
+  })
+    .trim()
+    .split('\n')
+    .filter(Boolean);
 
+export function checkPlaintextSecrets(staged: string[]): void {
+  try {
     const violations: string[] = [];
 
     for (const file of staged) {
@@ -130,7 +131,17 @@ if (
   process.exit(1);
 }
 
-checkPlaintextSecrets();
+let stagedAtStart: string[];
+try {
+  stagedAtStart = getStagedFiles();
+} catch (err) {
+  // 🔴 Fail closed — see checkPlaintextSecrets below for why an inspection
+  // failure must block the commit rather than pass it through silently.
+  console.error('\n❌ PRE-COMMIT BLOCKED: could not inspect staged files');
+  console.error(`   ${err instanceof Error ? err.message : String(err)}`);
+  process.exit(1);
+}
+checkPlaintextSecrets(stagedAtStart);
 
 /**
  * `git add` a path list, tolerating paths that no longer exist.
@@ -173,11 +184,21 @@ await sh('bun moon run :fix --affected --status=staged --concurrency 8');
 // 3. Typecheck affected projects
 await sh('bun moon run :typecheck --affected --status=staged --concurrency 8');
 
-if (!isWorktree) {
-  // 4. Sync contract dashboard files (PROGRESS.md, PROMOTION.md)
-  syncContracts();
+// Both generators walk all of docs/ and rewrite their outputs regardless of
+// what actually changed, so they're only worth paying for when a commit
+// could plausibly affect their content. Skip them otherwise — the common
+// case (a commit that touches no docs) shouldn't pay a full docs/ tree walk.
+const stagedDocsFiles = stagedAtStart.filter((f) => f.startsWith('docs/'));
 
-  // 5. Generate .context/llms.txt
+if (!isWorktree && stagedDocsFiles.length > 0) {
+  // 4. Sync contract dashboard files (PROGRESS.md, PROMOTION.md) — reads
+  //    docs/contracts/*.md and cross-references docs/TODO.md (parse_backlog.ts).
+  if (stagedDocsFiles.some((f) => f.startsWith('docs/contracts/') || f === 'docs/TODO.md')) {
+    syncContracts();
+  }
+
+  // 5. Generate .context/llms.txt — reflects docs/, so any docs/ change
+  //    can affect it.
   await sh('bun run scripts/src/lib/ops/generate_llms_txt.ts');
 
   // 6. Stage files modified by sync

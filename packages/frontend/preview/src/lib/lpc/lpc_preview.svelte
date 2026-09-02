@@ -6,7 +6,7 @@
 // Takes a resolver, catalog slots, and optional initial state.
 // Renders a canvas with PixiJS for the character + control panel.
 
-import { LpcAnimationState, LpcDirection } from '@aikami/lpc';
+import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';
 import {
   getLpcPreviewViewModel,
@@ -29,8 +29,6 @@ type Props = {
 let {
   resolver,
   allSlots,
-  width = 960,
-  height = 540,
   zoom = 1,
   initialState,
   onStateChange,
@@ -43,24 +41,54 @@ let viewModel = $state<LpcPreviewViewModelInterface | undefined>(undefined);
 // initial value (svelte/state_referenced_locally); $derived tracks it.
 const showControls = $derived(controls);
 
+// ── Responsive sizing ───────────────────────────────────────────────────
+// Observe the canvas wrapper to size the PixiJS canvas dynamically.
+let canvasWrapperEl: HTMLDivElement | undefined = $state(undefined);
+// Dynamically sized by ResizeObserver. Initial fallback to props in case observer fires late.
+let canvasWidth = $state(960);
+let canvasHeight = $state(540);
+
+$effect(() => {
+  const wrapper = canvasWrapperEl;
+  if (!wrapper) {
+    return;
+  }
+
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const { inlineSize, blockSize } = entry.borderBoxSize?.[0] ?? entry.contentRect;
+      if (inlineSize > 0 && blockSize > 0) {
+        canvasWidth = Math.floor(inlineSize);
+        canvasHeight = Math.floor(blockSize);
+      }
+    }
+  });
+  observer.observe(wrapper);
+  return () => observer.disconnect();
+});
+
 // Create ViewModel with zoom wired in
 $effect(() => {
-  const vm = getLpcPreviewViewModel({
-    className: 'LpcPreview',
-    resolver,
-    allSlots,
-    initialState,
-    onStateChange,
-    zoom,
-  });
-  viewModel = vm;
-  void vm.initialize();
-  // Return sync cleanup function (not async)
-  return () => {
-    void vm.dispose().catch(() => {
-      // dispose silently
+  try {
+    const vm = getLpcPreviewViewModel({
+      className: 'LpcPreview',
+      resolver,
+      allSlots,
+      initialState,
+      onStateChange,
+      zoom,
     });
-  };
+    viewModel = vm;
+    void vm.initialize();
+    // Return sync cleanup function (not async)
+    return () => {
+      void vm.dispose().catch(() => {
+        // dispose silently
+      });
+    };
+  } catch {
+    // ViewModel stays undefined — template shows nothing, which is safer than a half-broken UI
+  }
 });
 
 // Bind canvas element once available
@@ -69,12 +97,17 @@ $effect(() => {
     viewModel.setCanvasElement(canvasEl);
   }
 });
+
+// Resize the PixiJS canvas when the container dimensions change
+$effect(() => {
+  if (!viewModel || canvasWidth <= 0 || canvasHeight <= 0) {
+    return;
+  }
+  viewModel.resize(canvasWidth, canvasHeight);
+});
 </script>
 
-<div
-  class="flex flex-col bg-base-200 text-base-content font-sans rounded-box overflow-hidden"
-  style="width: {width}px;"
->
+<div class="flex flex-col flex-1 min-h-0 bg-base-200 text-base-content font-sans overflow-hidden">
   <!-- Status Banner -->
   {#if viewModel?.statusBanner}
     <div
@@ -95,14 +128,17 @@ $effect(() => {
     </div>
   {/if}
 
-  <div class="flex {showControls ? 'flex-row' : 'flex-col'}">
+  <div class="flex flex-row flex-1 min-h-0">
     <!-- Canvas -->
-    <div class="flex-1 flex items-center justify-center bg-base-300" style="min-height: {height}px">
+    <div
+      bind:this={canvasWrapperEl}
+      class="flex-1 flex items-center justify-center bg-base-300 min-h-0"
+    >
       <canvas
         bind:this={canvasEl}
         class="block [image-rendering:pixelated]"
-        {width}
-        {height}
+        width={canvasWidth}
+        height={canvasHeight}
         aria-label="LPC character preview"
       ></canvas>
     </div>
@@ -110,7 +146,7 @@ $effect(() => {
     <!-- Controls -->
     {#if showControls && viewModel}
       <div
-        class="w-72 bg-base-200 border-l border-base-300 flex flex-col overflow-y-auto p-3 gap-3"
+        class="w-72 shrink-0 bg-base-200 border-l border-base-300 flex flex-col overflow-y-auto p-3 gap-3"
       >
         <!-- Animation Controls -->
         <fieldset class="border-0 p-0 m-0">
@@ -154,12 +190,8 @@ $effect(() => {
                 viewModel?.setAnimationState(val as LpcAnimationState);
               }}
             >
-              {#each viewModel.animationStateOptions as state}
-                <option value={state}>
-                  {LpcAnimationState[state as unknown as keyof typeof LpcAnimationState]}
-                  // guard-ignore lint/type-safety/casting: LPC animation enum cast - value
-                  guaranteed by upstream
-                </option>
+              {#each viewModel.animationStateOptions as { value, label }}
+                <option {value}>{label}</option>
               {/each}
             </select>
           </label>
@@ -174,12 +206,8 @@ $effect(() => {
                 viewModel?.setFacingDirection(val as LpcDirection);
               }}
             >
-              {#each viewModel.directionOptions as dir}
-                <option value={dir}>
-                  {LpcDirection[dir as unknown as keyof typeof LpcDirection]}
-                  // guard-ignore lint/type-safety/casting: LPC animation enum cast - value
-                  guaranteed by upstream
-                </option>
+              {#each viewModel.directionOptions as { value, label }}
+                <option {value}>{label}</option>
               {/each}
             </select>
           </label>
@@ -212,14 +240,25 @@ $effect(() => {
             <div class="card bg-base-300 rounded-lg p-2 flex flex-col gap-1 mb-1">
               <div class="flex justify-between items-center">
                 <span class="text-xs font-semibold">Layer {i}</span>
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs"
-                  onclick={() => viewModel?.removeLayer(i)}
-                  aria-label="Remove layer {i}"
-                >
-                  ✕
-                </button>
+                <div class="flex gap-1">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs {viewModel.isolateLayerIndex === i ? 'btn-primary' : ''}"
+                    onclick={() => viewModel?.setIsolateLayerIndex(viewModel.isolateLayerIndex === i ? -1 : i)}
+                    aria-label="{viewModel.isolateLayerIndex === i ? 'Un-Isolate' : 'Isolate'} layer {i}"
+                    title="{viewModel.isolateLayerIndex === i ? 'Un-Isolate' : 'Isolate'} layer"
+                  >
+                    👁
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    onclick={() => viewModel?.removeLayer(i)}
+                    aria-label="Remove layer {i}"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
               <label class="flex flex-col gap-1 text-xs text-base-content/60">
@@ -266,6 +305,79 @@ $effect(() => {
           >
             + Add Layer
           </button>
+        </fieldset>
+
+        <!-- Diagnostics -->
+        <fieldset class="border-0 p-0 m-0">
+          <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
+            Diagnostics
+          </legend>
+
+          <label class="flex flex-col gap-1 text-xs text-base-content/60 mb-1">
+            Speed: {viewModel.playbackFps} FPS
+            <input
+              type="range"
+              class="range range-sm range-primary w-full mt-1"
+              min="1"
+              max="60"
+              step="1"
+              value={viewModel.playbackFps}
+              oninput={(e: Event) => {
+                const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
+                viewModel?.setPlaybackFps(val);
+              }}
+            >
+          </label>
+
+          <label class="flex items-center gap-2 text-xs text-base-content/60 cursor-pointer mb-1">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-sm checkbox-primary"
+              checked={viewModel.showGridOverlay}
+              onchange={() => viewModel?.setShowGridOverlay(!viewModel.showGridOverlay)}
+            >
+            Grid Overlay
+          </label>
+        </fieldset>
+
+        <!-- Palette & Tint -->
+        <fieldset class="border-0 p-0 m-0">
+          <legend class="text-xs font-semibold text-primary/70 uppercase tracking-wider mb-2">
+            Palette
+          </legend>
+
+          <label class="flex items-center gap-2 text-xs text-base-content/60 mb-1">
+            Global Tint
+            <input
+              type="color"
+              class="input input-sm input-bordered w-12 h-7 p-0.5"
+              value={viewModel.globalTint || '#ffffff'}
+              oninput={(e: Event) => {
+                viewModel?.setGlobalTint((e.target as HTMLInputElement).value);
+              }}
+            >
+          </label>
+
+          {#each viewModel.activeLayers as layer, i (i)}
+            <label class="flex items-center gap-2 text-xs text-base-content/60 mb-1">
+              Layer {i} color
+              <input
+                type="checkbox"
+                class="checkbox checkbox-xs checkbox-primary"
+                checked={viewModel.layerOverrides[i] ?? false}
+                onchange={() => viewModel?.toggleLayerOverride(i)}
+              >
+              <input
+                type="color"
+                class="input input-sm input-bordered w-10 h-6 p-0.5"
+                value={viewModel.paletteColors[i] || '#ffffff'}
+                disabled={!viewModel.layerOverrides[i]}
+                oninput={(e: Event) => {
+                  viewModel?.setLayerColor(i, (e.target as HTMLInputElement).value);
+                }}
+              >
+            </label>
+          {/each}
         </fieldset>
 
         <!-- Zoom -->

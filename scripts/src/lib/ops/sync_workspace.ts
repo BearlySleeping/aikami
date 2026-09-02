@@ -1,6 +1,16 @@
 // scripts/src/lib/ops/sync_workspace.ts
 //
-// `moon sync` for the post-checkout / post-merge git hooks.
+// `moon sync` for the post-checkout / post-merge git hooks, and for
+// `postinstall`.
+//
+// 🔴 Why `postinstall` needs this instead of calling `moon sync` directly.
+//
+// A bare `moon sync` in `postinstall` writes/inspects `.git/hooks`, which a
+// git-restricted sandbox (AI coding agents included — see CodeRabbit's
+// autofix logs) denies. `bun install` doesn't hard-fail on a nonzero
+// postinstall script, but it does surface the failure as an error that then
+// has to be manually triaged and re-confirmed harmless every time. Routing
+// through this script's try/catch makes that install silent instead.
 //
 // 🔴 Why this is a script and not a shell one-liner in .moon/workspace.yml.
 //

@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "moon": "moon",
-    "postinstall": "moon sync",
+    "postinstall": "bun run scripts/src/lib/ops/sync_workspace.ts",
     "dev": "moon run client:dev",
     "build": "moon run :build",
     "build:affected": "moon run :build --affected",

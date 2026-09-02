@@ -198,8 +198,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-454 | D1 R2 Infrastructure Constants Storage Package | 🛠️ implemented | v2 | full |
 | C-455 | Apps Backend Cloudflare One Home For Cloudflare Operations | 🛠️ implemented | v2 | full |
 | C-456 | Group Chat And Systemic Npc Interactions | 👍 approved | v1 | full |
-| C-457 | Gm Prompt Assembly Upgrade | 👍 approved | v1 | full |
-| C-458 | In House Memory And Lore Retrieval System | 👍 approved | v1 | full |
+| C-457 | Gm Prompt Assembly Upgrade | 🛠️ implemented | v1 | full |
+| C-458 | In House Memory And Lore Retrieval System | 🛠️ implemented | v1 | full |
 | C-459 | Ai Gm Narrative Director Enhancements | 📝 draft | v1 | full |
 | C-460 | Npc Behavioral Autonomy Layer | 📝 draft | v1 | full |
 

@@ -35,11 +35,27 @@ const EntityY = CanvasHeight / 2 - 32;
 
 // ── Template constants exposed via the interface ──────────────────────────
 
-// LpcAnimationState/LpcDirection are plain `as const` objects (no reverse
-// string mapping like a real TS enum), so Object.values already yields only
-// their numeric literal values — no filter needed.
-export const ANIMATION_STATE_OPTIONS = Object.values(LpcAnimationState);
-export const DIRECTION_OPTIONS = Object.values(LpcDirection);
+// LpcAnimationState/LpcDirection are `as const` objects (not real TS enums),
+// so there's no reverse string mapping. Build the label pairs once here.
+const STATE_LABELS: Record<number, string> = {
+  [LpcAnimationState.Spellcast]: 'Spellcast',
+  [LpcAnimationState.Thrust]: 'Thrust',
+  [LpcAnimationState.Walk]: 'Walk',
+  [LpcAnimationState.Slash]: 'Slash',
+  [LpcAnimationState.Shoot]: 'Shoot',
+  [LpcAnimationState.Die]: 'Die',
+};
+const DIR_LABELS: Record<number, string> = {
+  [LpcDirection.Up]: 'Up',
+  [LpcDirection.Down]: 'Down',
+  [LpcDirection.Left]: 'Left',
+  [LpcDirection.Right]: 'Right',
+};
+
+export const ANIMATION_STATE_OPTIONS: readonly { value: number; label: string }[] =
+  Object.values(LpcAnimationState).map((value) => ({ value, label: STATE_LABELS[value] ?? String(value) }));
+export const DIRECTION_OPTIONS: readonly { value: number; label: string }[] =
+  Object.values(LpcDirection).map((value) => ({ value, label: DIR_LABELS[value] ?? String(value) }));
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -84,8 +100,8 @@ export type LpcPreviewViewModelInterface = BaseViewModelInterface & {
   readonly statusBanner: { message: string; level: 'info' | 'warn' | 'error' } | undefined;
 
   // Template logic exposed for the view
-  readonly animationStateOptions: readonly number[];
-  readonly directionOptions: readonly number[];
+  readonly animationStateOptions: readonly { value: number; label: string }[];
+  readonly directionOptions: readonly { value: number; label: string }[];
 
   togglePlayback(): void;
   stepNext(): void;
@@ -105,6 +121,9 @@ export type LpcPreviewViewModelInterface = BaseViewModelInterface & {
 
   /** Serialises current state to URLSearchParams. */
   getStateParams(): URLSearchParams;
+
+  /** Resize the PixiJS canvas to new dimensions. */
+  resize(width: number, height: number): void;
 };
 
 export type LpcSlotDef = {
@@ -142,10 +161,10 @@ class LpcPreviewViewModel
   // ── Public reactive state ──────────────────────────────────────────
 
   readonly maxLayers = MaxLayers;
-  readonly canvasWidth = CanvasWidth;
-  readonly canvasHeight = CanvasHeight;
-  readonly entityX = EntityX;
-  readonly entityY = EntityY;
+  get canvasWidth(): number { return this._canvasWidth; }
+  get canvasHeight(): number { return this._canvasHeight; }
+  get entityX(): number { return this._canvasWidth / 2; }
+  get entityY(): number { return this._canvasHeight / 2 - 32; }
 
   readonly animationStateOptions = ANIMATION_STATE_OPTIONS;
   readonly directionOptions = DIRECTION_OPTIONS;
@@ -195,6 +214,10 @@ class LpcPreviewViewModel
   frameDurationMs = $state(0);
   compositionFailed = $state(false);
   zoom = $state(1);
+
+  // Current canvas dimensions (may be updated via resize())
+  private _canvasWidth = CanvasWidth;
+  private _canvasHeight = CanvasHeight;
 
   constructor(options: LpcPreviewViewModelOptions) {
     super(options);
@@ -451,6 +474,15 @@ class LpcPreviewViewModel
     this.zoom = zoom;
   }
 
+  resize(width: number, height: number): void {
+    if (width === this._canvasWidth && height === this._canvasHeight) return;
+    this._canvasWidth = width;
+    this._canvasHeight = height;
+    if (this.pixiApp) {
+      this.pixiApp.renderer.resize(width, height);
+    }
+  }
+
   private _updateMaxFrame(state: LpcAnimationState): void {
     const frameCounts: Record<number, number> = {
       [LpcAnimationState.Spellcast]: 6,
@@ -625,8 +657,8 @@ class LpcPreviewViewModel
       }
 
       container.scale.set(currentZoom, currentZoom);
-      container.x = CanvasWidth / 2;
-      container.y = CanvasHeight / 2;
+      container.x = this._canvasWidth / 2;
+      container.y = this._canvasHeight / 2;
 
       this.pixiApp.stage.addChild(container);
       this._characterContainer = container;
@@ -702,8 +734,8 @@ class LpcPreviewViewModel
     const gridContainer = new Container();
     gridContainer.eventMode = 'none';
     gridContainer.scale.set(this.zoom, this.zoom);
-    gridContainer.x = CanvasWidth / 2;
-    gridContainer.y = CanvasHeight / 2;
+    gridContainer.x = this._canvasWidth / 2;
+    gridContainer.y = this._canvasHeight / 2;
     gfx.x = -32;
     gfx.y = -32;
     gridContainer.addChild(gfx);
@@ -818,8 +850,8 @@ class LpcPreviewViewModel
     try {
       const result = await createPixiApp({
         canvas: this.canvasElement,
-        width: CanvasWidth,
-        height: CanvasHeight,
+        width: this._canvasWidth,
+        height: this._canvasHeight,
         backgroundColor: 0x0d0d1a,
       });
 
