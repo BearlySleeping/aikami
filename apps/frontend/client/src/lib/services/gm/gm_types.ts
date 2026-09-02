@@ -86,6 +86,45 @@ export type GmCombatContext = {
 };
 
 // ---------------------------------------------------------------------------
+// Prompt section priority tiers for budget enforcement (C-457)
+// ---------------------------------------------------------------------------
+
+/**
+ * Priority tier for a prompt section.
+ * "required" sections are always included and never dropped.
+ * "high", "medium", "low" sections may be dropped in that order
+ * when the assembled prompt exceeds the byte budget.
+ */
+export type PromptSectionPriority = 'required' | 'high' | 'medium' | 'low';
+
+/**
+ * A single section of the assembled GM prompt with priority metadata.
+ */
+export type PromptSection = {
+  /** Human-readable section name for logging, e.g. "WORLD INFO" */
+  readonly name: string;
+  /** Formatted section content (may be multi-line) */
+  readonly content: string;
+  /** Priority tier for budget enforcement */
+  readonly priority: PromptSectionPriority;
+  /**
+   * Optional partial rendering for a section built from a list of entries.
+   *
+   * 🔴 Without this, budget enforcement is all-or-nothing: a section that does
+   * not fit is dropped whole. C-456 requires finer granularity for
+   * `[NEARBY NPCS]` — a location with hundreds of NPC IDs must still
+   * contribute the NPCs it can, keeping source order and omitting only the
+   * trailing entries that do not fit, rather than vanishing entirely.
+   *
+   * `render(n)` returns the section rendered with only its first `n` entries.
+   */
+  readonly partial?: {
+    readonly render: (entryCount: number) => string;
+    readonly total: number;
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Narrative Director types
 // ---------------------------------------------------------------------------
 
