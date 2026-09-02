@@ -18,22 +18,20 @@
 const cliSubcommand = Bun.argv[2];
 
 switch (cliSubcommand) {
-	case 'db':
-		await import('./lib/db/index.ts');
-		break;
-	case 'storage':
-		await import('./lib/storage/index.ts');
-		break;
-	case 'dns':
-		await import('./lib/dns/index.ts');
-		break;
-	case 'worker':
-		await import('./lib/worker/index.ts');
-		break;
-	default:
-		console.error(`Usage: bun run src/cli.ts <subcommand>`);
-		console.error(`  Subcommands: db, storage, dns, worker`);
-		process.exit(1);
+  case 'db':
+    await import('./lib/db/index.ts');
+    break;
+  case 'storage':
+    await import('./lib/storage/index.ts');
+    break;
+  case 'dns':
+    await import('./lib/dns/index.ts');
+    break;
+  case 'worker':
+    await import('./lib/worker/index.ts');
+    break;
+  default:
+    process.exit(1);
 }
 
 export {};

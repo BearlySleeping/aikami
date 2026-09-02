@@ -3,54 +3,45 @@
 // C-455: Thin wrapper over `wrangler d1 execute <command>`.
 // Runs a SQL command against the D1 database.
 
-import {
-	getHubDir,
-	resolveD1Binding,
-	resolveModeGuard,
-	runWrangler,
-} from '../wrangler.ts';
+import { getHubDir, resolveD1Binding, resolveModeGuard, runWrangler } from '../wrangler.ts';
 
 const main = async (): Promise<void> => {
-	const args = Bun.argv.slice(3);
-	const { mode, isLocal } = resolveModeGuard(args);
+  const args = Bun.argv.slice(3);
+  const { mode, isLocal } = resolveModeGuard(args);
 
-	// Extract the SQL command from remaining args after --command
-	const cmdIdx = args.indexOf('--command');
-	const command = cmdIdx !== -1 ? args[cmdIdx + 1] : undefined;
+  // Extract the SQL command from remaining args after --command
+  const cmdIdx = args.indexOf('--command');
+  const command = cmdIdx !== -1 ? args[cmdIdx + 1] : undefined;
 
-	if (!command) {
-		console.error('Usage: bun run src/cli.ts db exec --command <sql> [--local|--remote] [--mode staging|production]');
-		process.exit(1);
-	}
+  if (!command) {
+    process.exit(1);
+  }
 
-	const dbBinding = resolveD1Binding(mode);
-	if (!dbBinding) {
-		throw new Error(`No D1 database configured for hub in mode "${mode}"`);
-	}
+  const dbBinding = resolveD1Binding(mode);
+  if (!dbBinding) {
+    throw new Error(`No D1 database configured for hub in mode "${mode}"`);
+  }
 
-	const dbDir = getHubDir();
+  const dbDir = getHubDir();
 
-	const wranglerArgs = [
-		'd1',
-		'execute',
-		dbBinding.binding,
-		'--command',
-		command,
-		'--yes',
-		isLocal ? '--local' : '--remote',
-	];
+  const wranglerArgs = [
+    'd1',
+    'execute',
+    dbBinding.binding,
+    '--command',
+    command,
+    '--yes',
+    isLocal ? '--local' : '--remote',
+  ];
 
-	try {
-		const output = runWrangler({ args: wranglerArgs, cwd: dbDir });
-		console.log(output.toString());
-	} catch (error) {
-		console.error(`db:exec failed: ${(error as Error).message}`);
-		process.exit(1);
-	}
+  try {
+    runWrangler({ args: wranglerArgs, cwd: dbDir });
+  } catch {
+    process.exit(1);
+  }
 };
-
 
 const isMainModule = import.meta.path === Bun.main;
 if (isMainModule) {
-	main();
+  main();
 }

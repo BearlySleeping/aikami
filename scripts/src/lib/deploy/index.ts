@@ -47,11 +47,11 @@ import { dirname, resolve } from 'node:path';
 import { stdin as processStdin, stdout as processStdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { applyMigrations } from '../../../../apps/backend/cloudflare/src/lib/db/migrate.ts';
 import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString } from './cache';
 import { deployCloudflareWorker } from './cloudflare';
-import { applyMigrations } from '../../../../apps/backend/cloudflare/src/lib/db/migrate.ts';
 import {
   APP_CONFIG,
   type AppConfig,
@@ -173,7 +173,9 @@ async function deployApp(
       if (config.target === 'd1-migrate') {
         await applyMigrations({ mode, isLocal: mode === 'emulator' });
       } else if (config.target === 'r2-reconcile') {
-        const { reconcileBucket } = await import('../../../../apps/backend/cloudflare/src/lib/storage/sync.ts');
+        const { reconcileBucket } = await import(
+          '../../../../apps/backend/cloudflare/src/lib/storage/sync.ts'
+        );
         await reconcileBucket({ mode, isLocal: mode === 'emulator', bucketKey: 'saves' });
       } else {
         console.warn(`Unknown infra target "${config.target}" for ${appName}. Skipping.`);

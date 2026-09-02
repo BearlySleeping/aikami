@@ -7,13 +7,11 @@
 const workerSubcommand = Bun.argv[3];
 
 switch (workerSubcommand) {
-	case 'deploy':
-		await import('./deploy.ts');
-		break;
-	default:
-		console.error('Usage: bun run src/cli.ts worker <subcommand>');
-		console.error('  Subcommands: deploy');
-		process.exit(1);
+  case 'deploy':
+    await import('./deploy.ts');
+    break;
+  default:
+    process.exit(1);
 }
 
 export {};

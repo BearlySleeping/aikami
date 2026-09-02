@@ -38,7 +38,7 @@ const TYPE_LABEL: Record<string, string> = {
   'cloudflare-worker': 'Cloudflare Worker',
   'tauri-release': 'Tauri Release',
   'docker-release': 'Docker Release',
-  'infra': 'Infra (D1/R2)',
+  infra: 'Infra (D1/R2)',
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────

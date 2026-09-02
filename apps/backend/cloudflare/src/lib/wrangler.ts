@@ -4,16 +4,16 @@
 // enforce the production guard" helper. Every D1 subcommand and the worker
 // deploy path calls into this module instead of copy-pasting the same steps.
 
-import { execFileSync, type ExecSyncOptions } from 'node:child_process';
+import { type ExecSyncOptions, execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { D1_DATABASES } from '@aikami/constants';
 import type { D1DatabaseEntry } from '@aikami/constants';
+import { D1_DATABASES } from '@aikami/constants';
 
 export type WranglerModeGuard = {
-	mode: string;
-	isLocal: boolean;
+  mode: string;
+  isLocal: boolean;
 };
 
 /**
@@ -28,22 +28,22 @@ export type WranglerModeGuard = {
  * - `--mode` without `--remote` → still defaults to local (must explicitly say --remote)
  */
 export const resolveModeGuard = (args: string[]): WranglerModeGuard => {
-	const hasLocal = args.includes('--local');
-	const hasRemote = args.includes('--remote');
-	const isLocal = hasLocal || !hasRemote;
+  const hasLocal = args.includes('--local');
+  const hasRemote = args.includes('--remote');
+  const isLocal = hasLocal || !hasRemote;
 
-	if (isLocal) {
-		checkLocalMode();
-		return { mode: 'emulator', isLocal: true };
-	}
+  if (isLocal) {
+    checkLocalMode();
+    return { mode: 'emulator', isLocal: true };
+  }
 
-	// hasRemote is true here
-	const modeIdx = args.indexOf('--mode');
-	const mode = modeIdx !== -1 ? args[modeIdx + 1] : undefined;
-	if (mode !== 'staging' && mode !== 'production') {
-		throw new Error('refusing: --mode staging|production is required for a non-local run.');
-	}
-	return { mode, isLocal: false };
+  // hasRemote is true here
+  const modeIdx = args.indexOf('--mode');
+  const mode = modeIdx !== -1 ? args[modeIdx + 1] : undefined;
+  if (mode !== 'staging' && mode !== 'production') {
+    throw new Error('refusing: --mode staging|production is required for a non-local run.');
+  }
+  return { mode, isLocal: false };
 };
 
 /**
@@ -51,30 +51,27 @@ export const resolveModeGuard = (args: string[]): WranglerModeGuard => {
  * If CLOUDFLARE_API_TOKEN is set, wrangler might reach remote D1.
  */
 export const checkLocalMode = (): void => {
-	if (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_API_TOKEN.length > 0) {
-		console.error('CLOUDFLARE_API_TOKEN is set — refusing to run (may target remote D1/R2).');
-		console.error('Unset CLOUDFLARE_API_TOKEN or run in a clean shell:');
-		console.error('  unset CLOUDFLARE_API_TOKEN && bun db <command> --local');
-		process.exit(1);
-	}
+  if (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_API_TOKEN.length > 0) {
+    process.exit(1);
+  }
 };
 
 /** Confirm production operation with the user (interactive TTY). */
 export const confirmProduction = async (): Promise<boolean> => {
-	const { createInterface } = await import('node:readline/promises');
-	const rl = createInterface({ input: process.stdin, output: process.stdout });
-	const answer = await rl.question('\n⚠️  This targets PRODUCTION. Continue? (y/N) ');
-	rl.close();
-	const normalized = answer.trim().toLowerCase();
-	return normalized === 'y' || normalized === 'yes';
+  const { createInterface } = await import('node:readline/promises');
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await rl.question('\n⚠️  This targets PRODUCTION. Continue? (y/N) ');
+  rl.close();
+  const normalized = answer.trim().toLowerCase();
+  return normalized === 'y' || normalized === 'yes';
 };
 
 export type WriteConfigOptions = {
-	mode: string;
-	isLocal: boolean;
-	dbDir: string;
-	dbBinding: D1DatabaseEntry;
-	migrationsDir: string;
+  mode: string;
+  isLocal: boolean;
+  dbDir: string;
+  dbBinding: D1DatabaseEntry;
+  migrationsDir: string;
 };
 
 /**
@@ -82,62 +79,70 @@ export type WriteConfigOptions = {
  * Returns the path to the temporary config file.
  */
 export const writeThrowawayD1Config = (options: WriteConfigOptions): string => {
-	const { mode, dbBinding, migrationsDir } = options;
-	const tmpDir = mkdtempSync(join(tmpdir(), 'aikami-d1-'));
-	const tmpConfigPath = join(tmpDir, 'wrangler.jsonc');
-	writeFileSync(
-		tmpConfigPath,
-		JSON.stringify({
-			name: `aikami-${mode}-ops`, // never deployed — wrangler just wants a name
-			compatibility_date: '2026-08-21',
-			d1_databases: [
-				{
-					binding: dbBinding.binding,
-					database_name: dbBinding.databaseName,
-					database_id: dbBinding.databaseId,
-					migrations_dir: migrationsDir,
-				},
-			],
-		}),
-	);
-	return tmpConfigPath;
+  const { mode, dbBinding, migrationsDir } = options;
+  const tmpDir = mkdtempSync(join(tmpdir(), 'aikami-d1-'));
+  const tmpConfigPath = join(tmpDir, 'wrangler.jsonc');
+  writeFileSync(
+    tmpConfigPath,
+    JSON.stringify({
+      name: `aikami-${mode}-ops`, // never deployed — wrangler just wants a name
+      // biome-ignore lint/style/useNamingConvention: wrangler.jsonc uses snake_case
+      compatibility_date: '2026-08-21',
+      // biome-ignore lint/style/useNamingConvention: wrangler.jsonc uses snake_case
+      d1_databases: [
+        {
+          binding: dbBinding.binding,
+          // biome-ignore lint/style/useNamingConvention: wrangler.jsonc uses snake_case
+          database_name: dbBinding.databaseName,
+          // biome-ignore lint/style/useNamingConvention: wrangler.jsonc uses snake_case
+          database_id: dbBinding.databaseId,
+          // biome-ignore lint/style/useNamingConvention: wrangler.jsonc uses snake_case
+          migrations_dir: migrationsDir,
+        },
+      ],
+    }),
+  );
+  return tmpConfigPath;
 };
 
 export type RunWranglerOptions = {
-	args: string[];
-	cwd: string;
-	timeout?: number;
-	stdio?: ExecSyncOptions['stdio'];
+  args: string[];
+  cwd: string;
+  timeout?: number;
+  stdio?: ExecSyncOptions['stdio'];
 };
 
 /**
  * Run `bunx wrangler` with the given arguments.
  */
 export const runWrangler = (options: RunWranglerOptions): Buffer => {
-	const { args, cwd, timeout = 120_000, stdio = ['ignore', 'pipe', 'pipe'] } = options;
-	try {
-		return execFileSync('bunx', ['wrangler', ...args], {
-			cwd,
-			stdio,
-			timeout,
-		});
-	} catch (error) {
-		const stderr = (error as { stderr?: Buffer }).stderr?.toString().trim();
-		const stdout = (error as { stdout?: Buffer }).stdout?.toString().trim();
-		throw new Error(stderr || stdout || (error as Error).message);
-	}
+  const { args, cwd, timeout = 120_000, stdio = ['ignore', 'pipe', 'pipe'] } = options;
+  try {
+    return execFileSync('bunx', ['wrangler', ...args], {
+      cwd,
+      stdio,
+      timeout,
+    });
+  } catch (error) {
+    const stderr = (error as { stderr?: Buffer }).stderr?.toString().trim();
+    const stdout = (error as { stdout?: Buffer }).stdout?.toString().trim();
+    throw new Error(stderr || stdout || (error as Error).message);
+  }
 };
 
 /**
  * Resolve D1 binding for the given mode from @aikami/constants.
  */
-export const resolveD1Binding = (mode: string, dbKey: keyof typeof D1_DATABASES = 'hub'): D1DatabaseEntry | undefined => {
-	const db = D1_DATABASES[dbKey];
-	const entry = db[mode as keyof typeof db];
-	if (!entry) {
-		return undefined;
-	}
-	return entry as D1DatabaseEntry;
+export const resolveD1Binding = (
+  mode: string,
+  dbKey: keyof typeof D1_DATABASES = 'hub',
+): D1DatabaseEntry | undefined => {
+  const db = D1_DATABASES[dbKey];
+  const entry = db[mode as keyof typeof db];
+  if (!entry) {
+    return undefined;
+  }
+  return entry as D1DatabaseEntry;
 };
 
 /**
@@ -151,13 +156,9 @@ const ROOT = resolve(import.meta.dir, '../../../../..');
 /**
  * Get the hub directory path (needed as cwd for wrangler operations).
  */
-export const getHubDir = (): string => {
-	return resolve(ROOT, 'apps/frontend/hub');
-};
+export const getHubDir = (): string => resolve(ROOT, 'apps/frontend/hub');
 
 /**
  * Get the migrations directory path.
  */
-export const getMigrationsDir = (): string => {
-	return resolve(ROOT, 'packages/backend/database/drizzle-d1');
-};
+export const getMigrationsDir = (): string => resolve(ROOT, 'packages/backend/database/drizzle-d1');

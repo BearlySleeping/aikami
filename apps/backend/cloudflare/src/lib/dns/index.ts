@@ -5,13 +5,11 @@
 const dnsSubcommand = Bun.argv[3];
 
 switch (dnsSubcommand) {
-	case 'reconcile':
-		await import('./reconcile.ts');
-		break;
-	default:
-		console.error('Usage: bun run src/cli.ts dns <subcommand>');
-		console.error('  Subcommands: reconcile');
-		process.exit(1);
+  case 'reconcile':
+    await import('./reconcile.ts');
+    break;
+  default:
+    process.exit(1);
 }
 
 export {};
