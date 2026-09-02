@@ -3,7 +3,7 @@ id: C-455
 title: "apps/backend/cloudflare: one home for Cloudflare operations"
 source: "Audit of D1/R2 operational tooling ahead of C-455/C-456"
 contract_type: full
-status: approved
+status: implemented
 github:
     issue_number: null
     issue_url: null
