@@ -3,7 +3,7 @@ id: C-461
 title: "Generate TypeBox row schemas from the D1 Drizzle schema"
 source: "Author request, 2026-09-02. Renumbered on authoring: C-456 is already claimed by the approved 'Group Chat & Systemic NPC Interactions' contract; C-457..C-460 are also claimed. C-461 is the real next free ID."
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-02"
 | **Type** | thin |
 | **Priority** | P2 — closes a dangling doc citation and a real drift hazard (hand-written wire schemas can silently diverge from Drizzle row shapes), but nothing is on fire |
 | **Dependencies** | C-454 (D1/R2 infra + storage package — removed the `database` → `schemas` edge that would otherwise make this a cycle), C-455 (`apps/backend/cloudflare` as the one home for Cloudflare/D1 operations — this generator lives in its `db` subcommand tree) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `sandbox` |
 | **Docs Impact** | internal → none (no `apps/frontend/docs` page; this is a build/codegen concern) |
 | **Contract version** | 2.0.0 |
@@ -44,7 +44,7 @@ After this contract, a developer who edits `packages/backend/database/src/lib/sc
 
 - **In Scope:**
   - A hand-rolled generator at `apps/backend/cloudflare/src/lib/db/generate_schemas.ts` (~150 lines) that reads Drizzle table metadata from `@aikami/backend-database` and emits one TypeBox 1.x row schema per table into `packages/shared/schemas/src/lib/db/`.
-  - Wiring the generator into the existing `db` CLI subcommand tree (`apps/backend/cloudflare/src/lib/db/index.ts`) as `db generate`, exposed at the repo root as `bun db generate` (and a `--check` mode that diffs generated output against what's committed, without writing).
+  - Wiring the generator into the existing `db` CLI subcommand tree (`apps/backend/cloudflare/src/lib/db/index.ts`) as `db generate`, exposed at the repo root as a root-level `package.json` script alias (e.g. `"db:generate-schemas"` to avoid collision with the existing `"db:generate"` drizzle-kit script), and invocable as `bun db generate` through a `"db"` script or as `bun run db:generate-schemas` (and a `--check` mode that diffs generated output against what's committed, without writing).
   - A moon task on the `cloudflare` project (`apps/backend/cloudflare/moon.yml`) that runs `db generate --check` and fails on a stale diff, wired into CI the same way `drizzle-kit generate --check` already is for SQL.
   - Committing the generated output under `packages/shared/schemas/src/lib/db/`.
   - A conformance test (location TBD by the implementer, but must supersede the dangling citation) asserting every generated row `Static<>` type is structurally assignable to/from its Drizzle `$inferSelect` counterpart, and that it passes for every table currently in `schema.ts`.
