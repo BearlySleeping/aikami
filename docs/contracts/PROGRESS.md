@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-02)
 
-**214 active (0 without contract file), 119 archived, 0 duplicates**
+**215 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -222,6 +222,7 @@
 | C-458 | In House Memory And Lore Retrieval System | 👍 approved | — | v1 | full |
 | C-459 | Ai Gm Narrative Director Enhancements | 📝 draft | — | v1 | full |
 | C-460 | Npc Behavioral Autonomy Layer | 📝 draft | — | v1 | full |
+| C-461 | Generate Typebox Row Schemas From Drizzle | 📝 draft | ❓ `sandbox` | v2 | thin |
 
 ---
 
