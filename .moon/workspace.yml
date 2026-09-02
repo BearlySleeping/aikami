@@ -18,6 +18,7 @@ projects:
   image: "apps/backend/image"
   text: "apps/backend/text"
   local-stack: "apps/backend/local-stack"
+  cloudflare: "apps/backend/cloudflare"
 
   # Shared Packages
   constants: "packages/shared/constants"

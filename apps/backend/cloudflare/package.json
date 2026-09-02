@@ -1,0 +1,28 @@
+{
+  "name": "@aikami/cloudflare",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "src/cli.ts",
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "build": "true",
+    "typecheck": "tsgo --noEmit",
+    "lint": "biome check .",
+    "format": "biome format .",
+    "fix": "biome check --write . --error-on-warnings",
+    "test": "bun test --pass-with-no-tests",
+    "deploy": "bun run src/cli.ts"
+  },
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/logger": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*",
+    "@aikami/utils": "workspace:*",
+    "@aikami/backend-database": "workspace:*"
+  },
+  "devDependencies": {
+    "wrangler": "4.127.1"
+  }
+}

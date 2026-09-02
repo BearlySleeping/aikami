@@ -51,7 +51,7 @@ import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString } from './cache';
 import { deployCloudflareWorker } from './cloudflare';
-import { deployDatabaseMigration } from './database_migration';
+import { applyMigrations } from '../../../../apps/backend/cloudflare/src/lib/db/migrate.ts';
 import {
   APP_CONFIG,
   type AppConfig,
@@ -167,10 +167,17 @@ async function deployApp(
         preflightChecksum,
       );
       return 'success';
-    case 'database-migration':
-      // Migrations never need a moon build, docker push or Cloud Run
-      // deploy — just an explicit, idempotent apply (AC-5).
-      await deployDatabaseMigration({ mode, rootDir });
+    case 'infra':
+      // Infra apps (database, storage) never need a moon build, docker
+      // push or Cloud Run deploy — just an explicit, idempotent operation.
+      if (config.target === 'd1-migrate') {
+        await applyMigrations({ mode, isLocal: mode === 'emulator' });
+      } else if (config.target === 'r2-reconcile') {
+        const { reconcileBucket } = await import('../../../../apps/backend/cloudflare/src/lib/storage/sync.ts');
+        await reconcileBucket({ mode, isLocal: mode === 'emulator', bucketKey: 'saves' });
+      } else {
+        console.warn(`Unknown infra target "${config.target}" for ${appName}. Skipping.`);
+      }
       return 'success';
     default:
       warn(`Unknown service type "${(config as AppConfig).serviceType}" for ${appName}. Skipping.`);
@@ -349,7 +356,7 @@ async function main(): Promise<void> {
 
     // database-migration doesn't use checksum caching — migrations are
     // idempotent, and a cache hit must never silently skip a pending migration.
-    if (config.serviceType === 'database-migration') {
+    if (config.serviceType === 'infra') {
       continue;
     }
 

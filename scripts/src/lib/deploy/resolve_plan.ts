@@ -35,7 +35,7 @@ const SERVICE_TYPE_OUTPUT_KEY: Record<ServiceType, string> = {
   'tauri-release': 'desktop_apps',
   'cloudflare-worker': 'cloudflare_apps',
   'docker-release': 'docker_release_apps',
-  'database-migration': 'database_migration_apps',
+  'infra': 'database_migration_apps',
 };
 
 /** Write a single-line value to $GITHUB_OUTPUT (or console when not in CI). */

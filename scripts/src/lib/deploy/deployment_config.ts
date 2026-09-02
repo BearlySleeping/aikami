@@ -13,7 +13,7 @@
  *   cloudflare-worker    → Build → `wrangler deploy` → Cloudflare Worker (client, site, docs)
  *   tauri-release        → Build Tauri desktop app → release artifacts
  *   docker-release       → Docker build + push only (image, text, voice)
- *   database-migration   → Apply server-plane migrations against Cloudflare D1
+ *   infra               → Apply server-plane migrations against Cloudflare D1 (was database-migration)
  */
 
 import { D1_DATABASES, R2_BUCKETS } from '@aikami/constants';
@@ -24,7 +24,7 @@ export const ALL_SERVICE_TYPES = [
   'cloudflare-worker',
   'tauri-release',
   'docker-release',
-  'database-migration',
+  'infra',
 ] as const;
 
 export type ServiceType = (typeof ALL_SERVICE_TYPES)[number];
@@ -110,6 +110,8 @@ export type AppConfig = {
   serviceType: ServiceType;
   /** Relative path from repo root */
   path: string;
+  /** Target subcommand for infra apps (d1-migrate, r2-reconcile). Optional. */
+  target?: string;
   /** Short identifier used in docker tags, URLs, etc. Empty string = default hosting. */
   shortName: string;
   /** Set to false to exclude from deployment. Default: true. */
@@ -352,8 +354,17 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
    * removed when Data Connect stopped riding along with Firebase deploys.
    */
   database: {
-    serviceType: 'database-migration',
-    path: 'packages/backend/database',
+    serviceType: 'infra',
+    path: 'apps/backend/cloudflare',
+    target: 'd1-migrate',
+    shortName: '',
+    prefix: 'HUB',
+    needsDist: false,
+  },
+  storage: {
+    serviceType: 'infra',
+    path: 'apps/backend/cloudflare',
+    target: 'r2-reconcile',
     shortName: '',
     prefix: 'HUB',
     needsDist: false,

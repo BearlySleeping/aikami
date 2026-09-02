@@ -78,10 +78,10 @@ export function resolveLogTarget(appId: AppId, mode: string): LogTarget | { unsu
     case 'tauri-release':
       return { unsupported: `${appId} is a desktop release artifact — no server logs.` };
 
-    case 'database-migration':
+    case 'infra':
       return {
         unsupported:
-          `${appId} is a one-shot migration job (C-394 AC-5) with no runtime — ` +
+          `${appId} is a one-shot infra job (C-394/C-455) with no runtime — ` +
           'there are no server logs to stream. Run it via `bun run deploy database --mode=production`.',
       };
 
