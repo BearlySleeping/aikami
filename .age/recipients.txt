@@ -10,5 +10,5 @@
 #   3. The maintainer adds it here and re-encrypts all files
 #
 # Current recipients:
-age1w80n8hhnkcgt7e3gcx35w87a580ktrcu3yryeumt94d7sq4mhd4sq5vcw0  # Maintainer (snorre) — .age/maintainer_key.txt, aikami-only
+age1w80n8hhnkcgt7e3gcx35w87a580ktrcu3yryeumt94d7sq4mhd4sq5vcw0  # Maintainer (snorreks) — .age/maintainer_key.txt, aikami-only
 age125al780jtkpg0y3xn6x7dphsy4fqgrp6ce2ryj5dsgscgdup64uqlv6j6s  # CI/CD pipeline (GitHub Actions secret: SOPS_AGE_KEY)

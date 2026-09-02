@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-02
-> Files: 387 across 17 categories
+> Files: 388 across 17 categories
 
 ## Quick Start (Read These First)
 
@@ -361,6 +361,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-451: Thin Contract Mode for Quick Fixes](contracts/C-451-thin-contract-mode.md)
 - [Contract C-452: Backfill missing Execution Reports on 17 already-implemented contracts](contracts/C-452-backfill-execution-reports.md)
 - [Contract C-453: Moon remote build cache on Cloudflare Workers + R2](contracts/C-453-moon-remote-build-cache-cloudflare-workers-r2.md)
+- [Contract C-454: Declare D1 and R2 once: infrastructure constants, key schemas, storage package](contracts/C-454-d1-r2-infrastructure-constants-storage-package.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
