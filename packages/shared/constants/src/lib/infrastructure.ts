@@ -12,20 +12,22 @@
 // wrangler.jsonc (static JSONC), .pi extensions (no moon project graph), and
 // bash scripts (scripts/direnv/bootstrap.sh).
 
-import { modes } from './project.ts';
+import type { modes } from './project.ts';
 
 // ---------------------------------------------------------------------------
 // D1 databases
 // ---------------------------------------------------------------------------
 
+/** Cloudflare D1 identity required to bind one database to a Worker. */
 export type D1DatabaseEntry = {
   binding: string;
   databaseName: string;
   databaseId: string;
 };
 
+/** Optional per-mode D1 identities for each server database. */
 export type D1Databases = {
-  hub: Record<(typeof modes)[number], D1DatabaseEntry>;
+  hub: Partial<Record<(typeof modes)[number], D1DatabaseEntry>>;
 };
 
 /**
@@ -52,20 +54,22 @@ export const D1_DATABASES = {
     // emulator / testing: local-only, no fixed databaseId — resolved at
     // runtime by the existing local-dev tooling, not declared here.
   } as const,
-} as const satisfies Record<string, Partial<Record<(typeof modes)[number], D1DatabaseEntry>>>;
+} as const satisfies D1Databases;
 
 // ---------------------------------------------------------------------------
 // R2 buckets
 // ---------------------------------------------------------------------------
 
+/** Cloudflare R2 identity required to bind one bucket to a Worker. */
 export type R2BucketEntry = {
   binding: string;
   bucketName: string;
 };
 
+/** Optional per-mode R2 identities for each storage target. */
 export type R2Buckets = {
-  saves: Record<(typeof modes)[number], R2BucketEntry>;
-  catalog: Record<(typeof modes)[number], R2BucketEntry>;
+  saves: Partial<Record<(typeof modes)[number], R2BucketEntry>>;
+  catalog: Partial<Record<(typeof modes)[number], R2BucketEntry>>;
 };
 
 /**
@@ -89,18 +93,18 @@ export const R2_BUCKETS = {
     production: { binding: 'CATALOG_BUCKET', bucketName: 'aikami-catalog' },
     staging: { binding: 'CATALOG_BUCKET', bucketName: 'aikami-staging-catalog' },
   } as const,
-} as const satisfies Record<string, Partial<Record<(typeof modes)[number], R2BucketEntry>>>;
+} as const satisfies R2Buckets;
 
 /**
  * Resolve the R2 bucket name for a given mode and bucket key.
  * Returns undefined for emulator/testing modes (local-only).
  */
-export const resolveBucketName = (
-  bucketKey: keyof typeof R2_BUCKETS,
-  mode: string,
-): string | undefined => {
-  const bucket = R2_BUCKETS[bucketKey];
-  const entry = bucket[mode as keyof typeof bucket];
+export const resolveBucketName = (options: {
+  bucketKey: keyof typeof R2_BUCKETS;
+  mode: string;
+}): string | undefined => {
+  const bucket = R2_BUCKETS[options.bucketKey];
+  const entry = bucket[options.mode as keyof typeof bucket];
   return entry?.bucketName;
 };
 
@@ -108,14 +112,14 @@ export const resolveBucketName = (
  * Resolve the D1 database entry for a given mode and database key.
  * Returns undefined for emulator/testing modes (local-only).
  */
-export const resolveD1Database = (
-  dbKey: keyof typeof D1_DATABASES,
-  mode: string,
-): D1DatabaseEntry | undefined => {
-  const db = D1_DATABASES[dbKey];
-  const entry = db[mode as keyof typeof db];
+export const resolveD1Database = (options: {
+  dbKey: keyof typeof D1_DATABASES;
+  mode: string;
+}): D1DatabaseEntry | undefined => {
+  const db = D1_DATABASES[options.dbKey];
+  const entry = db[options.mode as keyof typeof db];
   if (!entry) {
     return undefined;
   }
-  return entry as D1DatabaseEntry;
+  return entry;
 };

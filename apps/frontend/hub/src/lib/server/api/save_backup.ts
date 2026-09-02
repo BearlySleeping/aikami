@@ -18,8 +18,8 @@
 // C-454: key construction uses the shared saveBackupKey spec from
 // @aikami/schemas instead of inline template literals.
 
-import { saveBackupKey } from '@aikami/schemas';
 import { accountBackups } from '@aikami/backend-database';
+import { saveBackupKey } from '@aikami/schemas';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { getBetterAuth } from './better_auth.ts';
@@ -52,17 +52,17 @@ export const MAX_BACKUPS_PER_ACCOUNT = 20;
  * upload gets a collision-resistant key even within the same millisecond.
  * C-454: delegates to the shared saveBackupKey spec.
  */
-export const saveKeyFor = (
-  accountId: string,
-  timestamp: number,
-  filename: string,
-  backupId: string,
-): string =>
+export const saveKeyFor = (options: {
+  accountId: string;
+  timestamp: number;
+  filename: string;
+  backupId: string;
+}): string =>
   saveBackupKey.build({
-    accountId,
-    timestamp: String(timestamp),
-    backupId,
-    filename,
+    accountId: options.accountId,
+    timestamp: String(options.timestamp),
+    backupId: options.backupId,
+    filename: options.filename,
   });
 
 /** SHA-256 hex digest of the uploaded bytes (for the checksum column). */
@@ -151,7 +151,7 @@ export const handleCreateBackup = async (
 
   const backupId = crypto.randomUUID();
   const timestamp = Date.now();
-  const r2Key = saveKeyFor(accountId, timestamp, filename, backupId);
+  const r2Key = saveKeyFor({ accountId, timestamp, filename, backupId });
 
   // Upload to R2 first — only on success do we write the metadata row.
   await env.SAVES_BUCKET.put(r2Key, bytes, {

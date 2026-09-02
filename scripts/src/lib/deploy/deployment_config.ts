@@ -16,9 +16,9 @@
  *   database-migration   → Apply server-plane migrations against Neon
  */
 
+import { D1_DATABASES, R2_BUCKETS } from '@aikami/constants';
 import { MODE_PROJECT_MAP, modes } from '../../../../packages/shared/constants/src/lib/project.ts';
 import type { AppId } from '../../../../packages/shared/types/src/index.ts';
-import { D1_DATABASES, R2_BUCKETS } from '../../../../packages/shared/constants/src/lib/infrastructure.ts';
 
 export const ALL_SERVICE_TYPES = [
   'cloudflare-worker',

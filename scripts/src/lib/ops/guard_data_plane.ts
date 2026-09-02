@@ -123,6 +123,20 @@ const WORKSPACE_TREES = [
 ];
 const SOURCE_EXTS = ['.ts', '.tsx', '.svelte', '.js', '.mjs'];
 
+type ForbiddenPattern = {
+  label: string;
+  re: RegExp;
+};
+
+type ParsedPackageManifest = {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  bundledDependencies?: string[] | boolean;
+  bundleDependencies?: string[] | boolean;
+};
+
 const guardNeonDependencies = (): void => {
   // 1. pg, postgres, @neondatabase/serverless anywhere in workspace sources
   //    (excluding this guard's own source, which names the packages in its docs).
@@ -191,11 +205,11 @@ const guardSchemasNoCli = (): void => {
 
   // 1. Scan source files for forbidden references
   const sourceFiles = walk(SCHEMAS_SRC, SOURCE_EXTS);
-  const FORBIDDEN_PATTERNS: Array<{ label: string; re: RegExp }> = [
+  const FORBIDDEN_PATTERNS = [
     { label: 'wrangler', re: /\bwrangler\b/ },
     { label: 'drizzle-kit', re: /\bdrizzle-kit\b/ },
     { label: 'node:child_process', re: /['"`]node:child_process['"`]/ },
-  ];
+  ] as const satisfies readonly ForbiddenPattern[];
   const sourceHits: string[] = [];
   for (const file of sourceFiles) {
     const content = readFileSync(file, 'utf8');
@@ -217,15 +231,16 @@ const guardSchemasNoCli = (): void => {
 
   // 2. Scan package.json dependencies
   if (existsSync(SCHEMAS_PKG)) {
-    const pkg = JSON.parse(readFileSync(SCHEMAS_PKG, 'utf8')) as {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
-    const allDeps = {
-      ...pkg.dependencies,
-      ...pkg.devDependencies,
-    };
-    const forbiddenDeps = Object.keys(allDeps).filter(
+    const pkg = JSON.parse(readFileSync(SCHEMAS_PKG, 'utf8')) as ParsedPackageManifest;
+    const dependencyNames = [
+      ...Object.keys(pkg.dependencies ?? {}),
+      ...Object.keys(pkg.devDependencies ?? {}),
+      ...Object.keys(pkg.peerDependencies ?? {}),
+      ...Object.keys(pkg.optionalDependencies ?? {}),
+      ...(Array.isArray(pkg.bundledDependencies) ? pkg.bundledDependencies : []),
+      ...(Array.isArray(pkg.bundleDependencies) ? pkg.bundleDependencies : []),
+    ];
+    const forbiddenDeps = dependencyNames.filter(
       (dep) => dep === 'wrangler' || dep === 'drizzle-kit',
     );
     if (forbiddenDeps.length > 0) {

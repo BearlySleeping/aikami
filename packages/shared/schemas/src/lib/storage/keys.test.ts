@@ -4,14 +4,14 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
-  userObjectKey,
-  saveBackupKey,
+  ASSET_CACHE_CONTROL,
   assetKey,
   catalogIndexKey,
-  seedKey,
-  ASSET_CACHE_CONTROL,
   INDEX_CACHE_CONTROL,
   SEED_CACHE_CONTROL,
+  saveBackupKey,
+  seedKey,
+  userObjectKey,
 } from './keys.ts';
 
 describe('userObjectKey', () => {
@@ -30,6 +30,21 @@ describe('userObjectKey', () => {
     const key = userObjectKey.build(input);
     const parsed = userObjectKey.parse(key);
     expect(parsed).toEqual(input);
+  });
+
+  test('round-trips accepted path and newline boundaries', () => {
+    const input = { uid: 'u\n1', filename: 'nested/path\nphoto.jpg' };
+    expect(userObjectKey.parse(userObjectKey.build(input))).toEqual(input);
+  });
+
+  test('rejects empty or ambiguous segments before build', () => {
+    expect(() => userObjectKey.build({ uid: '', filename: 'photo.jpg' })).toThrow();
+    expect(() => userObjectKey.build({ uid: 'user/other', filename: 'photo.jpg' })).toThrow();
+    expect(() => userObjectKey.build({ uid: 'user-1', filename: '' })).toThrow();
+  });
+
+  test('builds a user-scoped prefix without a filename', () => {
+    expect(userObjectKey.buildPrefix({ uid: 'user-123' })).toBe('users/user-123/');
   });
 
   test('returns undefined for invalid key', () => {
@@ -82,6 +97,34 @@ describe('saveBackupKey', () => {
     expect(parsed).toEqual(input);
   });
 
+  test('round-trips delimiter-like filenames and accepted path boundaries', () => {
+    const input = {
+      accountId: 'account\n42',
+      timestamp: '0',
+      backupId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+      filename: 'abcdef--nested/save\nfile.sqlite',
+    };
+    expect(saveBackupKey.parse(saveBackupKey.build(input))).toEqual(input);
+  });
+
+  test('rejects invalid or empty save segments before build', () => {
+    const valid = {
+      accountId: 'acc-1',
+      timestamp: '1',
+      backupId: '550e8400-e29b-41d4-a716-446655440000',
+      filename: 'backup.db',
+    };
+    expect(() => saveBackupKey.build({ ...valid, accountId: '' })).toThrow();
+    expect(() => saveBackupKey.build({ ...valid, timestamp: '' })).toThrow();
+    expect(() => saveBackupKey.build({ ...valid, timestamp: '1x' })).toThrow();
+    expect(() => saveBackupKey.build({ ...valid, backupId: 'not-a-uuid' })).toThrow();
+    expect(() => saveBackupKey.build({ ...valid, filename: '' })).toThrow();
+  });
+
+  test('builds an account-scoped prefix without trailing save parameters', () => {
+    expect(saveBackupKey.buildPrefix({ accountId: 'acc-1' })).toBe('saves/acc-1/');
+  });
+
   test('returns undefined for invalid key', () => {
     expect(saveBackupKey.parse('')).toBeUndefined();
     expect(saveBackupKey.parse('saves/acc-1/file.txt')).toBeUndefined();
@@ -111,6 +154,23 @@ describe('assetKey', () => {
     const key = assetKey.build(input);
     const parsed = assetKey.parse(key);
     expect(parsed).toEqual(input);
+  });
+
+  test('round-trips accepted one-character and uppercase boundaries', () => {
+    const inputs = [
+      { sha256: 'a', ext: '.x' },
+      { sha256: 'ABCDEF', ext: '.PNG' },
+    ];
+    for (const input of inputs) {
+      expect(assetKey.parse(assetKey.build(input))).toEqual(input);
+    }
+  });
+
+  test('rejects empty or ambiguous asset segments before build', () => {
+    expect(() => assetKey.build({ sha256: '', ext: '.png' })).toThrow();
+    expect(() => assetKey.build({ sha256: 'not-hex', ext: '.png' })).toThrow();
+    expect(() => assetKey.build({ sha256: 'abcdef', ext: '' })).toThrow();
+    expect(() => assetKey.build({ sha256: 'abcdef', ext: 'png' })).toThrow();
   });
 
   test('uses ASSET_CACHE_CONTROL', () => {
@@ -159,6 +219,15 @@ describe('seedKey', () => {
     const key = seedKey.build(input);
     const parsed = seedKey.parse(key);
     expect(parsed).toEqual(input);
+  });
+
+  test('round-trips accepted nested path and newline boundaries', () => {
+    const input = { name: 'nested/offline\ncore.json' };
+    expect(seedKey.parse(seedKey.build(input))).toEqual(input);
+  });
+
+  test('rejects an empty seed name before build', () => {
+    expect(() => seedKey.build({ name: '' })).toThrow();
   });
 
   test('uses SEED_CACHE_CONTROL', () => {

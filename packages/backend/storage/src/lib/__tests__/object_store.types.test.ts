@@ -9,7 +9,7 @@
 // typecheck. This is a real assertion, not a comment.
 
 import { describe, expect, test } from 'bun:test';
-import { userObjectKey, assetKey } from '@aikami/schemas';
+import { assetKey, userObjectKey } from '@aikami/schemas';
 import type { ObjectStore } from '../object_store.ts';
 
 describe('AC-5: Type-level compile errors', () => {
@@ -42,13 +42,21 @@ describe('AC-5: Type-level compile errors', () => {
       const body = new ArrayBuffer(0);
 
       // @ts-expect-error - assetKey expects { sha256, ext }, not { uid, filename }
-      store.put(assetKey, { uid: 'x', filename: 'y' }, body);
+      store.put({ spec: assetKey, params: { uid: 'x', filename: 'y' }, body });
     };
     void _typeCheck;
     expect(true).toBe(true);
   });
 
   test('ObjectStore methods reject bare string keys', () => {
+    const _typeCheck = (): void => {
+      const store = null as unknown as ObjectStore;
+
+      // @ts-expect-error - ObjectStore.get requires a typed KeySpec options object
+      store.get('users/user-1/file.txt');
+    };
+    void _typeCheck;
+
     // Verify the KeySpec type is required, not any/string
     expect(userObjectKey.build).toBeInstanceOf(Function);
   });

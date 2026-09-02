@@ -29,11 +29,16 @@ import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env.ts';
 /**
  * Default R2 bucket for the catalog origin. Override via CATALOG_BUCKET env var.
  * C-454: mode-aware resolution from R2_BUCKETS.catalog.
- * Returns 'aikami-catalog' for production, 'aikami-staging-catalog' for staging,
- * and falls back to 'aikami-catalog' for emulator/testing (local-only).
+ * Rejects modes without a configured catalog bucket so typos cannot publish
+ * to the production bucket.
  */
-export const resolveDefaultCatalogBucket = (mode: string): string =>
-  R2_BUCKETS.catalog[mode as keyof typeof R2_BUCKETS.catalog]?.bucketName ?? 'aikami-catalog';
+export const resolveDefaultCatalogBucket = (mode: string): string => {
+  const entry = R2_BUCKETS.catalog[mode as keyof typeof R2_BUCKETS.catalog];
+  if (!entry) {
+    throw new Error(`No catalog bucket is configured for mode ${JSON.stringify(mode)}`);
+  }
+  return entry.bucketName;
+};
 
 /** Asset object key prefix (content-addressed, immutable). */
 export const ASSET_KEY_PREFIX = 'assets/';
@@ -109,7 +114,7 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
   const originUrlRaw = getScriptsEnv('CATALOG_ORIGIN_URL') ?? '';
   // C-454: CATALOG_BUCKET env var override takes precedence (local testing),
   // otherwise resolve from R2_BUCKETS.catalog by mode.
-  const bucket = getScriptsEnv('CATALOG_BUCKET') ?? resolveDefaultCatalogBucket(mode);
+  const bucket = getScriptsEnv('CATALOG_BUCKET') || resolveDefaultCatalogBucket(mode);
 
   const missing: string[] = [];
   if (!accessKeyId) {

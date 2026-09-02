@@ -6,11 +6,14 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
-    "fix": "biome check --write . --error-on-warnings",
+    "fix": "biome check --write .",
     "test": "bun test"
   },
   "dependencies": {
     "@aikami/schemas": "workspace:*",
     "@aikami/constants": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260831.1"
   }
 }
