@@ -238,6 +238,11 @@ class ConfigService
   async load(pin?: string): Promise<void> {
     this.debug('ConfigService.load');
 
+    // Vault-held provider keys are applied after step 2, because the plain
+    // config replaces the whole voice/image object and would clobber them.
+    let vaultVoiceApiKey: string | undefined;
+    let vaultImageApiKey: string | undefined;
+
     // 1. Load connections from encrypted vault
     const raw = await decrypt({ pin });
     if (raw) {
@@ -272,6 +277,21 @@ class ConfigService
         }
         if (typeof vault.defaultConnectionId === 'string' || vault.defaultConnectionId === null) {
           this.state.defaultConnectionId = vault.defaultConnectionId as ConnectionId | null;
+        }
+        // Per-capability defaults were previously never persisted, so they
+        // reset to {} on every reload and the capability screen re-derived
+        // them from insertion order.
+        if (vault.defaultByCapability && typeof vault.defaultByCapability === 'object') {
+          this.state.defaultByCapability = vault.defaultByCapability as Record<
+            string,
+            string | null
+          >;
+        }
+        if (typeof vault.voiceApiKey === 'string') {
+          vaultVoiceApiKey = vault.voiceApiKey;
+        }
+        if (typeof vault.imageApiKey === 'string') {
+          vaultImageApiKey = vault.imageApiKey;
         }
         // Load user presets from vault (built-in presets are merged on load)
         if (Array.isArray(vault.userPresets)) {
@@ -319,29 +339,52 @@ class ConfigService
       }
     }
 
+    // 3. Apply vault-held provider keys over the plain config. A key still
+    //    sitting in the plain blob is pre-migration cleartext — keep it so
+    //    nothing is lost, and the next save() moves it into the vault.
+    if (vaultVoiceApiKey) {
+      this.state.voice = { ...this.state.voice, apiKey: vaultVoiceApiKey };
+    }
+    if (vaultImageApiKey) {
+      this.state.image = { ...this.state.image, apiKey: vaultImageApiKey };
+    }
+
+    // 4. Reconcile defaults: drop any pointing at a pruned connection, then
+    //    re-derive isDefault so the persisted flags cannot contradict the map.
+    this._pruneDefaults();
+    this._backfillDefaultsFromFlags();
+    this._syncDefaultFlags();
+
     this.isLoaded = true;
   }
 
   async save(): Promise<void> {
     this.debug('ConfigService.save');
 
-    // Encrypt sensitive data: connections (API keys)
+    // Encrypt sensitive data: connection API keys, the voice/image provider
+    // keys, and the per-capability default map.
     const userPresets = this.state.presets.filter((p) => !p.isBuiltIn);
     const vaultPayload = JSON.stringify({
       connections: this.state.connections,
       defaultConnectionId: this.state.defaultConnectionId,
+      defaultByCapability: this.state.defaultByCapability,
+      voiceApiKey: this.state.voice.apiKey ?? '',
+      imageApiKey: this.state.image.apiKey ?? '',
       userPresets,
     });
     await encrypt({ text: vaultPayload });
 
-    // Plain config (non-sensitive)
+    // Plain config (non-sensitive). `apiKey` is stripped from voice/image —
+    // it used to be written here in cleartext alongside the encrypted vault.
+    const { apiKey: _voiceKey, ...voiceWithoutKey } = this.state.voice;
+    const { apiKey: _imageKey, ...imageWithoutKey } = this.state.image;
     const plain: Record<string, unknown> = {
       activeLorebookIds: this.state.activeLorebookIds,
       generationParams: this.state.generationParams,
-      image: this.state.image,
+      image: imageWithoutKey,
       lorebooks: this.state.lorebooks,
       models: this.state.models,
-      voice: this.state.voice,
+      voice: voiceWithoutKey,
     };
     localStorage.setItem(PLAIN_CONFIG_KEY, JSON.stringify(plain));
   }
@@ -422,9 +465,26 @@ class ConfigService
     // Only consider text connections — voice/image connections are irrelevant
     // for text provider resolution and can cause the wrong provider (e.g.,
     // 'kokoro') to be returned for text requests.
-    const connections = allConnections.filter((c) => (c.capability ?? 'text') === 'text');
+    const connections = allConnections.filter((c) => this._capabilityOf(c) === 'text');
 
-    // ── Priority 1: Default connection (C-230) ──────────────────────
+    // ── Priority 1: the text capability default ─────────────────────
+    // Authoritative. `defaultConnectionId` is a legacy single-slot alias
+    // that any capability used to be able to claim, so a voice/image
+    // default could silently push text resolution onto Priority 3.
+    const textDefaultId = this.state.defaultByCapability?.text;
+    if (textDefaultId) {
+      const conn = connections.find((c) => c.id === textDefaultId);
+      if (conn) {
+        return {
+          model: conn.model,
+          provider: conn.provider,
+          endpoint: conn.baseUrl || '',
+          apiKey: conn.apiKey || '',
+        };
+      }
+    }
+
+    // ── Priority 2: legacy defaultConnectionId, if it is a text one ──
     if (defaultConnectionId) {
       const conn = connections.find((c) => c.id === defaultConnectionId);
       if (conn) {
@@ -437,7 +497,7 @@ class ConfigService
       }
     }
 
-    // ── Priority 2: First available connection ──────────────────────
+    // ── Priority 3: First available connection ──────────────────────
     if (connections.length > 0) {
       const conn = connections[0];
       return {
@@ -466,62 +526,74 @@ class ConfigService
       updatedAt: now,
     };
 
-    // If this is marked as default, clear previous default
-    if (newConnection.isDefault) {
-      this.state.connections = this.state.connections.map((c) =>
-        c.isDefault ? { ...c, isDefault: false } : c,
-      );
-      this.state.defaultConnectionId = id;
-    }
-
-    // If this is the first connection, make it default automatically
-    if (
-      this.state.connections.length === 0 &&
-      !newConnection.isDefault &&
-      this.state.defaultConnectionId === null
-    ) {
-      newConnection.isDefault = true;
-      this.state.defaultConnectionId = id;
-    }
+    const capability = this._capabilityOf(newConnection);
+    const claimsDefault =
+      newConnection.isDefault || this.state.defaultByCapability?.[capability] == null;
 
     this.state.connections = [...this.state.connections, newConnection];
+
+    // First connection of a capability claims that capability's default —
+    // capabilities never compete with each other for one global slot.
+    if (claimsDefault) {
+      this._setCapabilityDefault({ id, capability });
+    } else {
+      this._syncDefaultFlags();
+    }
+
     return id;
   }
 
   updateConnection(id: ConnectionId, patch: Partial<Omit<Connection, 'id' | 'createdAt'>>): void {
-    this.state.connections = this.state.connections.map((c) => {
-      if (c.id !== id) {
-        return c;
-      }
-      const updated = { ...c, ...patch, id: c.id, updatedAt: new Date().toISOString() };
+    // Build the next array in one pass. The previous implementation reassigned
+    // `this.state.connections` from inside this callback to clear the old
+    // default, and the outer map — built from the pre-mutation array — then
+    // overwrote it, leaving two connections flagged default.
+    const next = this.state.connections.map((c) =>
+      c.id === id ? { ...c, ...patch, id: c.id, updatedAt: new Date().toISOString() } : c,
+    );
+    this.state.connections = next;
 
-      // Handle default switching
-      if (patch.isDefault && c.isDefault === false) {
-        // Clear previous default on other connections
-        this.state.connections = this.state.connections.map((oc) =>
-          oc.id !== id && oc.isDefault ? { ...oc, isDefault: false } : oc,
-        );
-        this.state.defaultConnectionId = id;
-      }
+    const updated = next.find((c) => c.id === id);
+    if (!updated) {
+      return;
+    }
 
-      return updated;
-    });
+    if (patch.isDefault) {
+      this._setCapabilityDefault({ id, capability: this._capabilityOf(updated) });
+      return;
+    }
+
+    // A capability change can orphan the old capability's default.
+    this._pruneDefaults();
+    this._syncDefaultFlags();
   }
 
   deleteConnection(id: ConnectionId): void {
-    const filtered = this.state.connections.filter((c) => c.id !== id);
-    this.state.connections = filtered;
+    const removed = this.state.connections.find((c) => c.id === id);
+    this.state.connections = this.state.connections.filter((c) => c.id !== id);
 
-    // If the deleted connection was the default, pick the first remaining
-    if (this.state.defaultConnectionId === id) {
-      if (filtered.length > 0) {
-        const newDefault = { ...filtered[0], isDefault: true };
-        this.state.connections = [newDefault, ...filtered.slice(1)];
-        this.state.defaultConnectionId = newDefault.id;
-      } else {
-        this.state.defaultConnectionId = null;
-      }
+    if (!removed) {
+      return;
     }
+
+    // Promote a replacement from the SAME capability. Promoting the first
+    // remaining connection of any capability is what let a voice connection
+    // become the text default.
+    const capability = this._capabilityOf(removed);
+    if (this.state.defaultByCapability?.[capability] === id) {
+      const replacement = this.state.connections.find(
+        (c) => this._capabilityOf(c) === capability,
+      );
+      if (replacement) {
+        this._setCapabilityDefault({ id: replacement.id, capability });
+      } else {
+        this._clearCapabilityDefault(capability);
+      }
+      return;
+    }
+
+    this._pruneDefaults();
+    this._syncDefaultFlags();
   }
 
   duplicateConnection(id: ConnectionId): ConnectionId | undefined {
@@ -546,20 +618,113 @@ class ConfigService
   }
 
   setDefaultConnection(id: ConnectionId): void {
-    this.state.connections = this.state.connections.map((c) => ({
-      ...c,
-      isDefault: c.id === id,
-    }));
-    this.state.defaultConnectionId = id;
-
-    // Track per-capability default
     const connection = this.state.connections.find((c) => c.id === id);
-    if (connection) {
-      const capability = connection.capability ?? 'text';
-      this.state.defaultByCapability = {
-        ...this.state.defaultByCapability,
-        [capability]: id,
-      };
+    if (!connection) {
+      return;
+    }
+    this._setCapabilityDefault({ id, capability: this._capabilityOf(connection) });
+  }
+
+  // ── Private: default bookkeeping ─────────────────────────────────────
+  //
+  // `defaultByCapability` is the single source of truth. `isDefault` on each
+  // connection is derived from it, and `defaultConnectionId` is a legacy
+  // alias that mirrors the *text* default only — it is still read by older
+  // persisted vaults and by getActiveTextProvider's fallback rung.
+
+  /** Capability of a connection, defaulting to 'text' for pre-C-230 rows. */
+  private _capabilityOf(connection: { capability?: string }): ConnectionCapability {
+    return (connection.capability ?? 'text') as ConnectionCapability; // guard-ignore lint/type-safety/casting: capability is a closed union persisted as string
+  }
+
+  /** Points a capability at a connection and re-derives every isDefault flag. */
+  private _setCapabilityDefault(options: {
+    id: ConnectionId;
+    capability: ConnectionCapability;
+  }): void {
+    this.state.defaultByCapability = {
+      ...this.state.defaultByCapability,
+      [options.capability]: options.id,
+    };
+    if (options.capability === 'text') {
+      this.state.defaultConnectionId = options.id;
+    }
+    this._syncDefaultFlags();
+  }
+
+  /** Drops a capability's default and re-derives every isDefault flag. */
+  private _clearCapabilityDefault(capability: ConnectionCapability): void {
+    const next = { ...this.state.defaultByCapability };
+    delete next[capability];
+    this.state.defaultByCapability = next;
+    if (capability === 'text') {
+      this.state.defaultConnectionId = null;
+    }
+    this._syncDefaultFlags();
+  }
+
+  /** Removes capability defaults whose connection no longer exists. */
+  private _pruneDefaults(): void {
+    const ids = new Set(this.state.connections.map((c) => c.id));
+    const next: Record<string, string | null> = {};
+    for (const [capability, id] of Object.entries(this.state.defaultByCapability ?? {})) {
+      if (id && ids.has(id)) {
+        next[capability] = id;
+      }
+    }
+    this.state.defaultByCapability = next;
+    if (this.state.defaultConnectionId && !ids.has(this.state.defaultConnectionId)) {
+      this.state.defaultConnectionId = null;
+    }
+  }
+
+  /**
+   * Seeds missing capability defaults from vaults written before the map was
+   * persisted: prefer a connection already flagged `isDefault`, else the
+   * legacy `defaultConnectionId`, else the first of that capability.
+   */
+  private _backfillDefaultsFromFlags(): void {
+    const defaults = { ...(this.state.defaultByCapability ?? {}) };
+    for (const connection of this.state.connections) {
+      const capability = this._capabilityOf(connection);
+      if (defaults[capability]) {
+        continue;
+      }
+      const candidates = this.state.connections.filter(
+        (c) => this._capabilityOf(c) === capability,
+      );
+      const chosen =
+        candidates.find((c) => c.isDefault) ??
+        candidates.find((c) => c.id === this.state.defaultConnectionId) ??
+        candidates[0];
+      if (chosen) {
+        defaults[capability] = chosen.id;
+      }
+    }
+    this.state.defaultByCapability = defaults;
+    const textDefault = defaults.text;
+    if (textDefault) {
+      this.state.defaultConnectionId = textDefault;
+    }
+  }
+
+  /** Re-derives `isDefault` on every connection from `defaultByCapability`. */
+  private _syncDefaultFlags(): void {
+    const defaults = this.state.defaultByCapability ?? {};
+    let changed = false;
+    const next = this.state.connections.map((c) => {
+      const isDefault = defaults[this._capabilityOf(c)] === c.id;
+      if (c.isDefault === isDefault) {
+        return c;
+      }
+      changed = true;
+      return { ...c, isDefault };
+    });
+    // Only reassign when a flag actually moved — capability_view_model runs
+    // an $effect over `connections`, and an unconditional new array would
+    // wake it on every no-op reconcile.
+    if (changed) {
+      this.state.connections = next;
     }
   }
 
