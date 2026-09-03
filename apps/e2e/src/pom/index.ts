@@ -16,3 +16,4 @@ export { MapSandboxPage } from './map_sandbox_page';
 export { PartyRosterPage } from './party_roster_page';
 export { SandboxPage } from './sandbox_page';
 export { SessionMgmtPage } from './session_mgmt_page';
+export { SettingsPage } from './settings_page';

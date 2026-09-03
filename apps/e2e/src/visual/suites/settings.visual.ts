@@ -1,31 +1,31 @@
 // apps/e2e/src/visual/suites/settings.visual.ts
 //
-// Visual test suite for progressive disclosure settings (C-333).
-// Contracts: AC-1 (Basic mode), AC-4 (In-game overlay)
+// Visual test suite for the grouped settings shell (C-333).
+// Contracts: AC-1 (Play group default), AC-4 (In-game overlay)
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
 
 const SettingsBasicSchema = Type.Object({
   score: Type.Number({ description: '0-100 score of visual correctness' }),
-  basicSectionsVisible: Type.Boolean({
+  groupTabsVisible: Type.Boolean({
+    description: 'Whether the four group tabs are visible (Play, AI, Content, Data)',
+  }),
+  playGroupActive: Type.Boolean({
+    description: 'Whether the Play group tab is shown as the active/selected tab',
+  }),
+  playSectionsVisible: Type.Boolean({
     description:
-      'Whether the 5 basic section tabs are visible (Controls, Audio, Display, Gameplay, AI & Privacy)',
+      'Whether the Play group sub-nav shows its four sections (Controls, Audio, Display, Gameplay)',
   }),
-  noAdvancedSectionsVisible: Type.Boolean({
-    description: 'Whether no advanced sections (Agents, etc.) are visible',
-  }),
-  searchBarVisible: Type.Boolean({
-    description: 'Whether the search bar with placeholder "Search settings…" is visible',
+  noSearchBoxVisible: Type.Boolean({
+    description: 'Whether there is no search input anywhere on the page',
   }),
   closeButtonVisible: Type.Boolean({
     description: 'Whether the Close button with back arrow is visible in the header',
   }),
   capabilityBadgeVisible: Type.Boolean({
     description: 'Whether the AI capability badge is visible next to the Settings title',
-  }),
-  advancedToggleVisible: Type.Boolean({
-    description: 'Whether the Advanced toggle button is visible below the tabs',
   }),
   issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
 });
@@ -37,8 +37,8 @@ export default defineConfig({
   requiresAuth: false,
   cases: [
     {
-      name: 'Settings Basic Mode — AC-1',
-      prompt: `Score 90+: Settings page shows exactly 5 section tabs (Controls, Audio, Display, Gameplay, AI & Privacy). No generation parameters, agent editors, or export sections visible. Clean tab bar with clear labels. A search bar with "Search settings…" placeholder is present below the header. A Close button with back arrow is at the top left. An AI capability badge (e.g. "AI: Connected" or "AI: Not Set Up") is visible next to the "Settings" title. An Advanced toggle button is below the tabs. The Controls tab is selected by default showing keybinding options with "Reset to Defaults" button.`,
+      name: 'Settings Grouped Shell — AC-1',
+      prompt: `Score 90+: Settings page shows a top-level group tab bar with exactly four tabs: Play, AI, Content, Data. The Play group tab is active/selected by default. Below the group tabs, a second-level sub-nav shows the Play group's four sections: Controls, Audio, Display, Gameplay. There is no search input anywhere on the page and no "Basic"/"Advanced" toggle button. A Close button with back arrow is at the top left. An AI capability badge (e.g. "AI: Connected" or "AI: Not Set Up") is visible next to the "Settings" title. The Controls section is selected by default in the sub-nav, showing keybinding options with a "Reset to Defaults" button.`,
       schema: SettingsBasicSchema,
       setupHook: async (page) => {
         await page.waitForSelector('h1:has-text("Settings")', { timeout: 10_000 });
