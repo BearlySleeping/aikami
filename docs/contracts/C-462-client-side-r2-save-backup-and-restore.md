@@ -24,7 +24,7 @@ created_at: "2026-09-03"
 | **Type** | full |
 | **Priority** | P2 — cloud backup is an opt-in safety net, not required for the game to boot/play/save (CLAUDE.md's offline-first invariant), but the hub half (C-426 AC-6/AC-7) has sat unreachable from the client since it shipped |
 | **Dependencies** | None — the hub API, D1 schema, and R2 key spec are already implemented (C-426, C-454) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `sandbox` |
 | **Docs Impact** | user-facing → a short "Cloud Backup" section belongs in `apps/frontend/docs/src/content/docs/` once this leaves the dev sandbox and gets a real settings-page entry point (out of scope here — see Scope Boundaries) |
 | **Contract version** | 2.0.0 |
