@@ -4,6 +4,11 @@
 // dev/config dashboard. API keys are encrypted at rest via crypto_vault;
 // non-sensitive settings are stored as plain JSON in localStorage.
 // Firestore sync is optional — works entirely offline for Tauri / local use.
+//
+// C-463: Now manages AiProvider/AiConnection/RoleAssignments alongside the
+// legacy ConnectionEntry shape. On load, v1 vaults are migrated to v2.
+//
+// Contract: C-463
 
 import { BUILT_IN_PRESETS, DEFAULT_VOICE_ARCHETYPES, type GenParamPreset } from '@aikami/constants';
 import {
@@ -12,14 +17,29 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type {
+  AiConnection,
+  AiProvider,
+  AiRole,
   ConfigState,
   ImageConfig,
+  ImageParams,
   ModelConfigEntry,
+  ProviderId,
+  RoleAssignments,
+  TextParams,
   VoiceConfig,
+  VoiceParams,
 } from '@aikami/types';
 import { clearVault, decrypt, encrypt } from '$lib/views/utils/crypto_vault';
-import type { ConnectionCapability, Lorebook, LorebookEntry } from '$types';
-import type { GenerationParams } from '$types';
+import type {
+  Connection,
+  ConnectionCapability,
+  ConnectionId,
+  GenerationParams,
+  Lorebook,
+  LorebookEntry,
+} from '$types';
+import { migrateVaultV1ToV2 } from './config_migration.ts';
 
 // ---------------------------------------------------------------------------
 // Re-exports from @aikami/constants and @aikami/types for backward compatibility
@@ -38,8 +58,6 @@ export {
   VOICE_ENGINES,
   VOICE_PROVIDERS,
 } from '@aikami/constants';
-
-import type { Connection, ConnectionId } from '$types';
 
 /** Resolved text generation provider ready for API calls. */
 type ResolvedTextProvider = {
@@ -86,14 +104,13 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
 
   /**
    * Resolves the active text generation provider from the current
-   * configuration state.
+   * configuration state. Resolves through the `narration` role (C-463).
    *
-   * Throws if no model is configured (neither preferredModel nor models
-   * array has an entry).
+   * Throws if no model is configured.
    */
   getActiveTextProvider(): ResolvedTextProvider;
 
-  // ── Connection management (C-230) ──────────────────────────────────
+  // ── Connection management (C-230 / C-463) ──────────────────────────
 
   /** Adds a new connection and returns its ID. */
   addConnection(connection: Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>): ConnectionId;
@@ -115,6 +132,46 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
    * `undefined` when no matching connection exists or no key is set.
    */
   getApiKey(provider: string, capability?: ConnectionCapability): string | undefined;
+
+  // ── Provider management (C-463) ────────────────────────────────────
+
+  /** Adds a new provider and returns its ID. */
+  addProvider(options: Omit<AiProvider, 'id'>): ProviderId;
+  /** Updates an existing provider by ID. */
+  updateProvider(id: ProviderId, patch: Partial<Omit<AiProvider, 'id'>>): void;
+  /** Deletes a provider and its connections by ID. */
+  deleteProvider(id: ProviderId): void;
+  /** Returns a provider by ID, or undefined. */
+  getProvider(id: ProviderId): AiProvider | undefined;
+  /** Returns all providers. */
+  getProviders(): readonly AiProvider[];
+
+  // ── AiConnection management (C-463) ────────────────────────────────
+
+  /** Adds a new AI connection and returns its ID. */
+  addAiConnection(options: Omit<AiConnection, 'id' | 'createdAt' | 'updatedAt'>): ConnectionId;
+  /** Updates an existing AI connection by ID. */
+  updateAiConnection(id: ConnectionId, patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>): void;
+  /** Deletes an AI connection by ID. */
+  deleteAiConnection(id: ConnectionId): void;
+  /** Returns an AI connection by ID, or undefined. */
+  getAiConnection(id: ConnectionId): AiConnection | undefined;
+  /** Returns all AI connections. */
+  getAiConnections(): readonly AiConnection[];
+
+  // ── Role management (C-463) ────────────────────────────────────────
+
+  /** Assigns a connection to a role. */
+  setRoleAssignment(role: AiRole, connectionId: ConnectionId): void;
+  /** Clears a role assignment. */
+  clearRoleAssignment(role: AiRole): void;
+  /** Returns all role assignments. */
+  getRoleAssignments(): RoleAssignments;
+  /**
+   * Resolves the active provider+connection for a role.
+   * Returns undefined if the role has no assignment or the connection is gone.
+   */
+  resolveRole(role: AiRole): ResolvedTextProvider | undefined;
 
   // ── Preset management (C-230) ─────────────────────────────────────
 
@@ -208,6 +265,10 @@ const DEFAULT_STATE: ConfigState = {
   connections: [],
   defaultConnectionId: null,
   defaultByCapability: {},
+  providers: [],
+  aiConnections: [],
+  roles: {},
+  schemaVersion: 0,
   generationParams: { ...DEFAULT_GENERATION_PARAMS },
   image: { ...DEFAULT_IMAGE_CONFIG },
   lorebooks: [],
@@ -243,60 +304,134 @@ class ConfigService
     let vaultVoiceApiKey: string | undefined;
     let vaultImageApiKey: string | undefined;
 
-    // 1. Load connections from encrypted vault
+    // 1. Load from encrypted vault
     const raw = await decrypt({ pin });
     if (raw) {
       try {
         const vault = JSON.parse(raw) as Record<string, unknown>;
 
-        // Load connections from vault (C-230)
-        if (Array.isArray(vault.connections)) {
-          // Prune stale auto-seeded connections:
-          // - env-seeded with no API key (phantom from old _seedConnectionsFromEnv bug)
-          // - detected connections from previous sessions (re-detected on every capability scan)
-          const cleaned = (vault.connections as Connection[]).filter(
-            (c) =>
-              // Keep manually created/stored connections
-              c.source === 'stored' ||
-              (c.source === 'env' &&
-                // Keep env connections that have a real API key
-                ((c.apiKey && c.apiKey.length > 0) ||
-                  // Or local providers (Ollama, llama.cpp, etc.) which don't need API keys
-                  c.provider === 'ollama' ||
-                  c.provider === 'llamacpp' ||
-                  c.provider === 'ooba')) ||
-              // Keep detected connections ONLY if they're local providers
-              (c.source === 'detected' &&
-                (c.provider === 'ollama' ||
-                  c.provider === 'llamacpp' ||
-                  c.provider === 'ooba' ||
-                  c.provider === 'comfyui' ||
-                  c.provider === 'kokoro')),
-          );
-          this.state.connections = cleaned;
+        // C-463: Detect v1 vs v2 vault by schemaVersion
+        const schemaVersion = (vault.schemaVersion as number) ?? 0;
+
+        if (schemaVersion === 2) {
+          // ── v2 vault: load the new shape directly ────────────────
+          if (Array.isArray(vault.providers)) {
+            this.state.providers = vault.providers as AiProvider[];
+          }
+          if (Array.isArray(vault.connections)) {
+            this.state.aiConnections = vault.connections as AiConnection[];
+          }
+          if (vault.roles && typeof vault.roles === 'object') {
+            this.state.roles = vault.roles as RoleAssignments;
+          }
+          this.state.schemaVersion = 2;
+
+          // Backfill legacy connections array from v2 connections for ViewModel compat
+          this._backfillLegacyConnections();
+
+          // Preserve legacy-only rows that do not have a corresponding v2 connection.
+          if (vault.legacy) {
+            const legacyPayload = vault.legacy as Record<string, unknown>;
+            if (Array.isArray(legacyPayload.connections)) {
+              const aiConnectionIds = new Set(
+                this.state.aiConnections.map((connection) => connection.id),
+              );
+              const legacyConnections = (legacyPayload.connections as Connection[]).filter(
+                (connection) => !aiConnectionIds.has(connection.id),
+              );
+              this.state.connections = [...this.state.connections, ...legacyConnections];
+            }
+          }
+        } else {
+          // ── v1 vault: migrate to v2 ──────────────────────────────
+          try {
+            // Prune stale connections first (existing behavior)
+            if (Array.isArray(vault.connections)) {
+              const cleaned = (vault.connections as Connection[]).filter(
+                (c) =>
+                  c.source === 'stored' ||
+                  (c.source === 'env' &&
+                    ((c.apiKey && c.apiKey.length > 0) ||
+                      c.provider === 'ollama' ||
+                      c.provider === 'llamacpp' ||
+                      c.provider === 'ooba')) ||
+                  (c.source === 'detected' &&
+                    (c.provider === 'ollama' ||
+                      c.provider === 'llamacpp' ||
+                      c.provider === 'ooba' ||
+                      c.provider === 'comfyui' ||
+                      c.provider === 'kokoro')),
+              );
+              vault.connections = cleaned;
+            }
+
+            // Run migration
+            const v2 = migrateVaultV1ToV2(vault as Record<string, unknown>);
+
+            this.state.providers = v2.providers;
+            this.state.aiConnections = v2.connections;
+            this.state.roles = v2.roles;
+            this.state.schemaVersion = 2;
+
+            // Keep user presets from migrated vault
+            if (Array.isArray(v2.userPresets)) {
+              const userPresets = v2.userPresets as GenParamPreset[];
+              const builtInIds = new Set<string>(BUILT_IN_PRESETS.map((p) => p.id));
+              this.state.presets = [
+                ...BUILT_IN_PRESETS,
+                ...userPresets.filter((p) => !builtInIds.has(p.id)),
+              ];
+            }
+
+            // Backfill legacy connections array
+            this._backfillLegacyConnections();
+
+            this.info('migration:completed', {
+              providersCreated: v2.providers.length,
+              connectionsMigrated: v2.connections.length,
+              rolesSeeded: Object.keys(v2.roles).length,
+            });
+          } catch (migrationError) {
+            // AC-6: Failed migration never writes partial vault.
+            // Log a warning, fall back to empty state.
+            this.warn('load:migration-failed', { error: String(migrationError) });
+            this.state = this._makeDefaultState();
+            this.state.schemaVersion = 2;
+          }
         }
-        if (typeof vault.defaultConnectionId === 'string' || vault.defaultConnectionId === null) {
-          this.state.defaultConnectionId = vault.defaultConnectionId as ConnectionId | null;
+
+        // Legacy: load defaultConnectionId and defaultByCapability for ViewModel compat.
+        // In v2 vaults these are stored inside `legacy`.
+        const legacySource =
+          schemaVersion === 2
+            ? ((vault.legacy as Record<string, unknown> | undefined) ?? vault)
+            : vault;
+
+        if (
+          typeof legacySource.defaultConnectionId === 'string' ||
+          legacySource.defaultConnectionId === null
+        ) {
+          this.state.defaultConnectionId = legacySource.defaultConnectionId as ConnectionId | null;
         }
-        // Per-capability defaults were previously never persisted, so they
-        // reset to {} on every reload and the capability screen re-derived
-        // them from insertion order.
-        if (vault.defaultByCapability && typeof vault.defaultByCapability === 'object') {
-          this.state.defaultByCapability = vault.defaultByCapability as Record<
+        if (legacySource.defaultByCapability && typeof legacySource.defaultByCapability === 'object') {
+          this.state.defaultByCapability = legacySource.defaultByCapability as Record<
             string,
             string | null
           >;
         }
-        if (typeof vault.voiceApiKey === 'string') {
-          vaultVoiceApiKey = vault.voiceApiKey;
+        if (typeof legacySource.voiceApiKey === 'string') {
+          vaultVoiceApiKey = legacySource.voiceApiKey as string;
         }
-        if (typeof vault.imageApiKey === 'string') {
-          vaultImageApiKey = vault.imageApiKey;
+        if (typeof legacySource.imageApiKey === 'string') {
+          vaultImageApiKey = legacySource.imageApiKey as string;
         }
-        // Load user presets from vault (built-in presets are merged on load)
-        if (Array.isArray(vault.userPresets)) {
+
+        // Load user presets from vault (only if not already set by migration)
+        if (
+          Array.isArray(vault.userPresets) &&
+          this.state.presets.every((preset) => preset.isBuiltIn)
+        ) {
           const userPresets = vault.userPresets as GenParamPreset[];
-          // Merge user presets on top of built-in presets (user wins on duplicate IDs)
           const builtInIds = new Set<string>(BUILT_IN_PRESETS.map((p) => p.id));
           this.state.presets = [
             ...BUILT_IN_PRESETS,
@@ -361,16 +496,29 @@ class ConfigService
   async save(): Promise<void> {
     this.debug('ConfigService.save');
 
-    // Encrypt sensitive data: connection API keys, the voice/image provider
-    // keys, and the per-capability default map.
+    // C-463: Build v2 vault payload. Credentials live on providers.
     const userPresets = this.state.presets.filter((p) => !p.isBuiltIn);
-    const vaultPayload = JSON.stringify({
+
+    // Build legacy payload for rollback (exactly one release).
+    // Always populated — the loader reads `defaultByCapability`,
+    // `voiceApiKey` etc. from `legacy` in v2 vaults.
+    const legacyPayload = {
       connections: this.state.connections,
       defaultConnectionId: this.state.defaultConnectionId,
       defaultByCapability: this.state.defaultByCapability,
       voiceApiKey: this.state.voice.apiKey ?? '',
       imageApiKey: this.state.image.apiKey ?? '',
       userPresets,
+    };
+
+    const vaultPayload = JSON.stringify({
+      schemaVersion: 2,
+      providers: this.state.providers,
+      connections: this.state.aiConnections,
+      roles: this.state.roles,
+      userPresets,
+      // legacy payload for rollback (one release window)
+      legacy: legacyPayload,
     });
     await encrypt({ text: vaultPayload });
 
@@ -403,6 +551,10 @@ class ConfigService
       connections: [],
       defaultConnectionId: null,
       defaultByCapability: {},
+      providers: [],
+      aiConnections: [],
+      roles: {},
+      schemaVersion: 0,
       generationParams: { ...DEFAULT_GENERATION_PARAMS },
       image: { ...DEFAULT_IMAGE_CONFIG },
       lorebooks: [],
@@ -410,6 +562,63 @@ class ConfigService
       presets: [...BUILT_IN_PRESETS],
       voice: { ...DEFAULT_VOICE_CONFIG },
     };
+  }
+
+  /**
+   * Backfills the legacy `connections` array from the new `aiConnections`
+   * and `providers` arrays for ViewModel backward compatibility.
+   */
+  private _backfillLegacyConnections(): void {
+    this.state.connections = this.state.aiConnections.map((aiConn): Connection => {
+      const provider = this.state.providers.find((p) => p.id === aiConn.providerId);
+      const textParams = aiConn.capability === 'text' ? (aiConn.params as TextParams) : undefined;
+      const genParams = {
+        temperature: textParams?.temperature ?? 0.7,
+        topP: textParams?.topP ?? 0.9,
+        topK: textParams?.topK ?? 40,
+        repetitionPenalty: textParams?.repetitionPenalty ?? 1.1,
+        presencePenalty: textParams?.presencePenalty ?? 0,
+        maxTokens: textParams?.maxTokens ?? 1024,
+        contextSize: textParams?.contextSize ?? 4096,
+      };
+      let imageOptions: Connection['imageOptions'];
+      if (aiConn.capability === 'image') {
+        const imageParams = aiConn.params as ImageParams;
+        imageOptions = {
+          checkpoint: imageParams.checkpoint,
+          width: imageParams.width,
+          height: imageParams.height,
+          steps: imageParams.steps,
+          cfg: imageParams.cfg,
+        };
+      }
+      let voiceOptions: Connection['voiceOptions'];
+      if (aiConn.capability === 'voice') {
+        const voiceParams = aiConn.params as VoiceParams;
+        voiceOptions = {
+          voiceId: voiceParams.voiceId,
+          speed: voiceParams.speed,
+          pitch: voiceParams.pitch,
+        };
+      }
+
+      return {
+        id: aiConn.id,
+        name: aiConn.label,
+        capability: aiConn.capability,
+        provider: provider?.registryId ?? '',
+        apiKey: provider?.credential ?? '',
+        baseUrl: provider?.baseUrl ?? '',
+        model: aiConn.model,
+        generationParams: genParams,
+        isDefault: false,
+        source: provider?.source ?? 'stored',
+        createdAt: aiConn.createdAt,
+        updatedAt: aiConn.updatedAt,
+        imageOptions,
+        voiceOptions,
+      };
+    });
   }
 
   /** Normalizes a persisted lorebook from the shared storage shape to the client-local Lorebook type. */
@@ -460,17 +669,28 @@ class ConfigService
   // ── Text provider resolution ─────────────────────────────────────────
 
   getActiveTextProvider(): ResolvedTextProvider {
-    const { connections: allConnections = [], defaultConnectionId } = this.state;
+    // C-463: Resolve through the `narration` role first.
+    const narrationId = this.state.roles.narration;
+    if (narrationId) {
+      const aiConn = this.state.aiConnections.find((c) => c.id === narrationId);
+      if (aiConn && aiConn.capability === 'text') {
+        const provider = this.state.providers.find((p) => p.id === aiConn.providerId);
+        if (provider) {
+          return {
+            model: aiConn.model,
+            provider: provider.registryId,
+            endpoint: provider.baseUrl || '',
+            apiKey: provider.credential || '',
+          };
+        }
+      }
+    }
 
-    // Only consider text connections — voice/image connections are irrelevant
-    // for text provider resolution and can cause the wrong provider (e.g.,
-    // 'kokoro') to be returned for text requests.
+    // Fallback: legacy resolution from connections array
+    const { connections: allConnections = [], defaultConnectionId } = this.state;
     const connections = allConnections.filter((c) => this._capabilityOf(c) === 'text');
 
-    // ── Priority 1: the text capability default ─────────────────────
-    // Authoritative. `defaultConnectionId` is a legacy single-slot alias
-    // that any capability used to be able to claim, so a voice/image
-    // default could silently push text resolution onto Priority 3.
+    // Legacy Priority 1: text capability default
     const textDefaultId = this.state.defaultByCapability?.text;
     if (textDefaultId) {
       const conn = connections.find((c) => c.id === textDefaultId);
@@ -484,7 +704,7 @@ class ConfigService
       }
     }
 
-    // ── Priority 2: legacy defaultConnectionId, if it is a text one ──
+    // Legacy Priority 2: defaultConnectionId
     if (defaultConnectionId) {
       const conn = connections.find((c) => c.id === defaultConnectionId);
       if (conn) {
@@ -497,7 +717,7 @@ class ConfigService
       }
     }
 
-    // ── Priority 3: First available connection ──────────────────────
+    // Legacy Priority 3: first available
     if (connections.length > 0) {
       const conn = connections[0];
       return {
@@ -514,7 +734,7 @@ class ConfigService
     );
   }
 
-  // ── Connection management (C-230) ──────────────────────────────────
+  // ── Connection management (C-230 / C-463) ─────────────────────────
 
   addConnection(connection: Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>): ConnectionId {
     const now = new Date().toISOString();
@@ -623,6 +843,126 @@ class ConfigService
       return;
     }
     this._setCapabilityDefault({ id, capability: this._capabilityOf(connection) });
+  }
+
+  // ── C-463: Provider management ─────────────────────────────────────
+
+  addProvider(options: Omit<AiProvider, 'id'>): ProviderId {
+    const id = crypto.randomUUID();
+    const provider: AiProvider = { id, ...options };
+    this.state.providers = [...this.state.providers, provider];
+    return id;
+  }
+
+  updateProvider(id: ProviderId, patch: Partial<Omit<AiProvider, 'id'>>): void {
+    this.state.providers = this.state.providers.map((p) =>
+      p.id === id ? { ...p, ...patch } : p,
+    );
+  }
+
+  deleteProvider(id: ProviderId): void {
+    // Also delete connections referencing this provider
+    const deletedConnectionIds = new Set(
+      this.state.aiConnections
+        .filter((connection) => connection.providerId === id)
+        .map((connection) => connection.id),
+    );
+    this.state.aiConnections = this.state.aiConnections.filter(
+      (c) => c.providerId !== id,
+    );
+    this._clearRolesForConnectionIds(deletedConnectionIds);
+    this.state.providers = this.state.providers.filter((p) => p.id !== id);
+  }
+
+  getProvider(id: ProviderId): AiProvider | undefined {
+    return this.state.providers.find((p) => p.id === id);
+  }
+
+  getProviders(): readonly AiProvider[] {
+    return this.state.providers;
+  }
+
+  // ── C-463: AiConnection management ─────────────────────────────────
+
+  addAiConnection(options: Omit<AiConnection, 'id' | 'createdAt' | 'updatedAt'>): ConnectionId {
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const conn: AiConnection = {
+      ...options,
+      createdAt: now,
+      id,
+      updatedAt: now,
+    };
+    this.state.aiConnections = [...this.state.aiConnections, conn];
+    return id;
+  }
+
+  updateAiConnection(id: ConnectionId, patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>): void {
+    this.state.aiConnections = this.state.aiConnections.map((c) =>
+      c.id === id ? { ...c, ...patch, id: c.id, updatedAt: new Date().toISOString() } : c,
+    );
+  }
+
+  deleteAiConnection(id: ConnectionId): void {
+    this.state.aiConnections = this.state.aiConnections.filter((c) => c.id !== id);
+    this._clearRolesForConnectionIds(new Set([id]));
+  }
+
+  getAiConnection(id: ConnectionId): AiConnection | undefined {
+    return this.state.aiConnections.find((c) => c.id === id);
+  }
+
+  getAiConnections(): readonly AiConnection[] {
+    return this.state.aiConnections;
+  }
+
+  // ── C-463: Role management ─────────────────────────────────────────
+
+  setRoleAssignment(role: AiRole, connectionId: ConnectionId): void {
+    this.state.roles = { ...this.state.roles, [role]: connectionId };
+  }
+
+  clearRoleAssignment(role: AiRole): void {
+    const next = { ...this.state.roles };
+    delete next[role];
+    this.state.roles = next;
+  }
+
+  getRoleAssignments(): RoleAssignments {
+    return { ...this.state.roles };
+  }
+
+  resolveRole(role: AiRole): ResolvedTextProvider | undefined {
+    const connectionId = this.state.roles[role];
+    if (!connectionId) {
+      return undefined;
+    }
+
+    const aiConn = this.state.aiConnections.find((c) => c.id === connectionId);
+    if (!aiConn) {
+      return undefined;
+    }
+
+    const provider = this.state.providers.find((p) => p.id === aiConn.providerId);
+    if (!provider) {
+      return undefined;
+    }
+
+    return {
+      model: aiConn.model,
+      provider: provider.registryId,
+      endpoint: provider.baseUrl || '',
+      apiKey: provider.credential || '',
+    };
+  }
+
+  /** Clears role assignments that reference connections removed from the configuration. */
+  private _clearRolesForConnectionIds(connectionIds: ReadonlySet<ConnectionId>): void {
+    this.state.roles = Object.fromEntries(
+      Object.entries(this.state.roles).filter(
+        ([, connectionId]) => !connectionIds.has(connectionId),
+      ),
+    );
   }
 
   // ── Private: default bookkeeping ─────────────────────────────────────

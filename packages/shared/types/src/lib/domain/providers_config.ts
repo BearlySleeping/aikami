@@ -3,6 +3,72 @@
 // Configuration types for provider settings (text, voice, image, memory,
 // emotion). These are shared between the client config service and view
 // models — pure type definitions, no runtime values.
+//
+// Contract: C-463 — new AiProvider/AiConnection/RoleAssignments model.
+// Existing types (ConnectionEntry, ConfigState, etc.) are kept for
+// backward compatibility during migration.
+
+import type {
+  AiConnectionSchema,
+  AiProviderSchema,
+  AiRoleSchema,
+  ConnectionCapabilitySchema,
+  ImageParamsSchema,
+  ProviderSourceSchema,
+  RoleAssignmentsSchema,
+  TextParamsSchema,
+  V1ConnectionSchema,
+  V1VaultPayloadSchema,
+  VaultPayloadV2Schema,
+  VoiceParamsSchema,
+} from '@aikami/schemas';
+import type { Static } from 'typebox';
+
+// ---------------------------------------------------------------------------
+// C-463: New types — derived from TypeBox schemas
+// ---------------------------------------------------------------------------
+
+/** Provider identifier type. */
+export type ProviderId = string;
+
+/** Connection identifier type. */
+export type ConnectionId = string;
+
+/** AI capability category. */
+export type ConnectionCapability = Static<typeof ConnectionCapabilitySchema>;
+
+/** How a provider was sourced. */
+export type ProviderSource = Static<typeof ProviderSourceSchema>;
+
+/** AI role — what the game uses a connection FOR. */
+export type AiRole = Static<typeof AiRoleSchema>;
+
+/** Generation parameters for text connections. */
+export type TextParams = Static<typeof TextParamsSchema>;
+
+/** Image-generation-specific connection options. */
+export type ImageParams = Static<typeof ImageParamsSchema>;
+
+/** Voice/TTS-specific connection options. */
+export type VoiceParams = Static<typeof VoiceParamsSchema>;
+
+/** A credential + host. Created once per account. */
+export type AiProvider = Static<typeof AiProviderSchema>;
+
+/** A usable configuration. MANY per provider. */
+export type AiConnection = Static<typeof AiConnectionSchema>;
+
+/** What the game uses a connection FOR. Replaces defaultByCapability. */
+export type RoleAssignments = Static<typeof RoleAssignmentsSchema>;
+
+/** V2 vault payload shape. */
+export type VaultPayloadV2 = Static<typeof VaultPayloadV2Schema>;
+
+/** V1 connection entry shape. */
+export type V1Connection = Static<typeof V1ConnectionSchema>;
+
+/** V1 vault payload shape. */
+export type V1VaultPayload = Static<typeof V1VaultPayloadSchema>;
 
 // ---------------------------------------------------------------------------
 // Provider endpoint types
@@ -136,6 +202,10 @@ export type OpenRouterModel = {
 
 // ---------------------------------------------------------------------------
 // Top-level config state (self-contained, no client-only type dependencies)
+//
+// ConfigState is still v1 shape for backward compat. C-463 adds the new
+// fields alongside the old ones; the service layer drives from the new
+// shape after migration.
 // ---------------------------------------------------------------------------
 
 /** A single model configuration entry. */
@@ -228,12 +298,20 @@ export type ConfigState = {
     maxTokens: number;
     contextSize: number;
   };
-  /** Saved provider connections (C-230). */
+  /** Saved provider connections (C-230) — legacy v1 shape. */
   connections: ConnectionEntry[];
   /** ID of the default connection, or null if none set. */
   defaultConnectionId: string | null;
   /** Per-capability default connection IDs (text, image, voice). */
   defaultByCapability: Record<string, string | null>;
+  /** C-463: AiProvider entries (credential + host). */
+  providers: AiProvider[];
+  /** C-463: AiConnection entries (model + params, references a provider). */
+  aiConnections: AiConnection[];
+  /** C-463: Role assignments (which connection for which job). */
+  roles: RoleAssignments;
+  /** C-463: Schema version of the persisted vault (0 = not set, 1 = v1, 2 = v2). */
+  schemaVersion: number;
   /** Generation parameter presets (built-in + user-defined). */
   presets: PresetEntry[];
   /** Lorebooks (world info collections) persisted in localStorage. */

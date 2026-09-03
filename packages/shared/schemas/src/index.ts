@@ -41,6 +41,7 @@ export * from './lib/domain/message.ts';
 export * from './lib/domain/notification.ts';
 export * from './lib/domain/npc.ts';
 export * from './lib/domain/persona.ts';
+export * from './lib/domain/providers_config.ts';
 export * from './lib/domain/relationship.ts';
 export * from './lib/domain/skills.ts';
 export * from './lib/domain/user.ts';

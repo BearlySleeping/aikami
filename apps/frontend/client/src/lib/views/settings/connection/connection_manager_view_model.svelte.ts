@@ -672,7 +672,7 @@ class ConnectionManagerViewModel
     }
 
     const capability = this.draft.capability ?? 'text';
-    const apiKey = this.draft.apiKey || this._getFallbackApiKey(provider, capability);
+    const apiKey = this.draft.apiKey || configService.getApiKey(provider, capability);
     if (config.auth.location === 'header' && config.auth.name && !apiKey) {
       this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No API key configured' };
       return;

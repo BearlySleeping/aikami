@@ -160,8 +160,13 @@ class AgentEditorViewModel
 
   get connectionOptions(): { value: string; label: string }[] {
     const options = [{ value: '', label: 'Use chat default' }];
+    // C-463: Only show text connections for agent routing (AC-8).
+    // Agents use text generation, so voice/image connections are irrelevant.
     for (const conn of configService.state.connections as readonly Connection[]) {
-      options.push({ value: conn.id, label: conn.name });
+      const capability = (conn as { capability?: string }).capability ?? 'text';
+      if (capability === 'text') {
+        options.push({ value: conn.id, label: conn.name });
+      }
     }
     return options;
   }

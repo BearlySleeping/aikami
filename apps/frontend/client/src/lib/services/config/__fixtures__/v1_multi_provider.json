@@ -1,0 +1,142 @@
+{
+  "connections": [
+    {
+      "id": "conn-1",
+      "name": "OpenRouter Sonnet",
+      "capability": "text",
+      "provider": "openrouter",
+      "apiKey": "sk-or-shared-key-123",
+      "baseUrl": "",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "generationParams": {
+        "temperature": 0.7,
+        "topP": 0.9,
+        "topK": 40,
+        "repetitionPenalty": 1.1,
+        "presencePenalty": 0,
+        "maxTokens": 1024,
+        "contextSize": 4096
+      },
+      "isDefault": true,
+      "source": "stored",
+      "createdAt": "2026-01-15T10:00:00.000Z",
+      "updatedAt": "2026-01-15T10:00:00.000Z"
+    },
+    {
+      "id": "conn-2",
+      "name": "OpenRouter Haiku",
+      "capability": "text",
+      "provider": "openrouter",
+      "apiKey": "sk-or-shared-key-123",
+      "baseUrl": "",
+      "model": "anthropic/claude-haiku-4-20250514",
+      "generationParams": {
+        "temperature": 0.3,
+        "topP": 0.5,
+        "topK": 20,
+        "repetitionPenalty": 1.15,
+        "presencePenalty": -0.1,
+        "maxTokens": 512,
+        "contextSize": 4096
+      },
+      "isDefault": false,
+      "source": "stored",
+      "createdAt": "2026-01-15T10:01:00.000Z",
+      "updatedAt": "2026-01-15T10:01:00.000Z"
+    },
+    {
+      "id": "conn-3",
+      "name": "OpenRouter Different Key",
+      "capability": "text",
+      "provider": "openrouter",
+      "apiKey": "sk-or-different-key-456",
+      "baseUrl": "",
+      "model": "openai/gpt-4o",
+      "generationParams": {
+        "temperature": 0.7,
+        "topP": 0.9,
+        "topK": 40,
+        "repetitionPenalty": 1.1,
+        "presencePenalty": 0,
+        "maxTokens": 1024,
+        "contextSize": 4096
+      },
+      "isDefault": false,
+      "source": "stored",
+      "createdAt": "2026-01-15T10:02:00.000Z",
+      "updatedAt": "2026-01-15T10:02:00.000Z"
+    },
+    {
+      "id": "conn-4",
+      "name": "Local Ollama",
+      "capability": "text",
+      "provider": "ollama",
+      "apiKey": "",
+      "baseUrl": "http://localhost:11434",
+      "model": "llama3.2",
+      "generationParams": {
+        "temperature": 0.7,
+        "topP": 0.9,
+        "topK": 40,
+        "repetitionPenalty": 1.1,
+        "presencePenalty": 0,
+        "maxTokens": 1024,
+        "contextSize": 4096
+      },
+      "isDefault": false,
+      "source": "detected",
+      "createdAt": "2026-01-15T10:03:00.000Z",
+      "updatedAt": "2026-01-15T10:03:00.000Z"
+    },
+    {
+      "id": "conn-5",
+      "name": "ElevenLabs TTS",
+      "capability": "voice",
+      "provider": "elevenlabs",
+      "apiKey": "sk-elevenlabs-key",
+      "baseUrl": "",
+      "model": "eleven_multilingual_v2",
+      "generationParams": {
+        "temperature": 0.7,
+        "topP": 0.9,
+        "topK": 40,
+        "repetitionPenalty": 1.1,
+        "presencePenalty": 0,
+        "maxTokens": 1024,
+        "contextSize": 4096
+      },
+      "isDefault": true,
+      "source": "stored",
+      "voiceOptions": {
+        "voiceId": "21m00Tcm4TlvDq8ikWAM",
+        "speed": 1.0,
+        "pitch": 0
+      },
+      "createdAt": "2026-01-15T10:04:00.000Z",
+      "updatedAt": "2026-01-15T10:04:00.000Z"
+    }
+  ],
+  "defaultConnectionId": "conn-1",
+  "defaultByCapability": {
+    "text": "conn-1",
+    "voice": "conn-5"
+  },
+  "voiceApiKey": "",
+  "imageApiKey": "",
+  "userPresets": [
+    {
+      "id": "user-custom",
+      "name": "My Custom",
+      "isBuiltIn": false,
+      "params": {
+        "temperature": 0.5,
+        "topP": 0.8,
+        "topK": 30,
+        "repetitionPenalty": 1.2,
+        "presencePenalty": 0.1,
+        "maxTokens": 2048,
+        "contextSize": 8192
+      }
+    }
+  ]
+}
