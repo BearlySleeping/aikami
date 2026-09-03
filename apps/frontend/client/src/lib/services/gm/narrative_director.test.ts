@@ -1,17 +1,21 @@
 // apps/frontend/client/src/lib/services/gm/narrative_director.test.ts
 //
-// Unit tests for NarrativeDirectorService — AC-3: interval check,
-// structured output via Zod, guidance injection, manual override.
+// Unit tests for NarrativeDirectorService:
+//   - C-235 baseline: interval check, structured output, guidance injection, manual override.
+//   - C-459 AC-1: scene direction references relevant past events via memory retrieval.
+//   - C-459 AC-2: graceful degradation when no retrieval results exist.
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/narrative_director.test.ts
 
-import { describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 mock.module('../game/serializable_service', () => ({
   registerSerializable: mock(() => {}),
 }));
+
+const mockMemoryQuery = mock(async () => []);
 
 mock.module('$services', () => ({
   textGenerationService: {
@@ -22,11 +26,14 @@ mock.module('$services', () => ({
     })),
     cancelAll: mock(() => {}),
   },
+  memoryRetrievalService: {
+    query: mockMemoryQuery,
+  },
 }));
 
 import { NarrativeDirectorService } from './narrative_director_service.svelte.ts';
 
-describe('NarrativeDirectorService — AC-3', () => {
+describe('NarrativeDirectorService — C-235 baseline + C-459', () => {
   test('isRunning starts as false', () => {
     const service = NarrativeDirectorService.create({ className: 'TestNarrativeDirector' });
     expect(service.isRunning).toBe(false);
@@ -82,5 +89,127 @@ describe('NarrativeDirectorService — AC-3', () => {
     };
     service.hydrate({ arcMemory: arc });
     expect(service.currentArc?.arcId).toBe('test-arc');
+  });
+});
+
+// ── C-459 AC-1: Scene direction references relevant past events ───────────
+
+describe('C-459 AC-1: Scene direction references relevant past events', () => {
+  beforeEach(() => {
+    mockMemoryQuery.mockReset();
+  });
+
+  test('referencedMemory is populated when retrieval has relevant results', async () => {
+    const mockResults = [
+      {
+        sourceType: 'session_summary' as const,
+        sourceId: 's1',
+        content: 'The party discovered ancient writings about the lost city.',
+        relevanceScore: 0.85,
+      },
+      {
+        sourceType: 'lore' as const,
+        sourceId: 'e1',
+        content: 'The lost city was built by the first dwarven king.',
+        relevanceScore: 0.72,
+      },
+    ];
+    mockMemoryQuery.mockResolvedValue(mockResults);
+
+    const service = NarrativeDirectorService.create({ className: 'TestNarrativeDirector' });
+    service.start(300_000);
+
+    // Trigger manual generation
+    await service.pushStory();
+
+    const directions = service.sceneDirections;
+    expect(directions.length).toBe(1);
+
+    const direction = directions[0];
+    expect(direction.referencedMemory).toBeDefined();
+    expect(direction.referencedMemory?.length).toBe(2);
+    expect(direction.referencedMemory?.[0].sourceId).toBe('s1');
+    expect(direction.referencedMemory?.[1].sourceId).toBe('e1');
+
+    service.stop();
+  });
+
+  test('memoryRetrievalService is queried with arc description', async () => {
+    mockMemoryQuery.mockResolvedValue([]);
+
+    const service = NarrativeDirectorService.create({ className: 'TestNarrativeDirector' });
+    service.start(300_000);
+
+    await service.pushStory();
+
+    expect(mockMemoryQuery).toHaveBeenCalledTimes(1);
+    const queryArg = mockMemoryQuery.mock.calls[0][0];
+    expect(queryArg).toHaveProperty('text');
+    expect(queryArg).toHaveProperty('scope', 'all');
+    expect(queryArg).toHaveProperty('limit', 5);
+
+    service.stop();
+  });
+});
+
+// ── C-459 AC-2: Graceful degradation with no retrieval results ────────────
+
+describe('C-459 AC-2: Graceful degradation with no retrieval results', () => {
+  beforeEach(() => {
+    mockMemoryQuery.mockReset();
+  });
+
+  test('generation succeeds with empty retrieval results (no referencedMemory)', async () => {
+    mockMemoryQuery.mockResolvedValue([]);
+
+    const service = NarrativeDirectorService.create({ className: 'TestNarrativeDirector' });
+    service.start(300_000);
+
+    await service.pushStory();
+
+    const directions = service.sceneDirections;
+    expect(directions.length).toBe(1);
+
+    const direction = directions[0];
+    expect(direction.referencedMemory).toBeUndefined();
+    expect(direction.description).toBeTruthy();
+    expect(direction.description.length).toBeGreaterThan(0);
+
+    service.stop();
+  });
+
+  test('generation succeeds when retrieval throws (falls back gracefully)', async () => {
+    mockMemoryQuery.mockRejectedValue(new Error('retrieval unavailable'));
+
+    const service = NarrativeDirectorService.create({ className: 'TestNarrativeDirector' });
+    service.start(300_000);
+
+    await service.pushStory();
+
+    const directions = service.sceneDirections;
+    expect(directions.length).toBe(1);
+
+    const direction = directions[0];
+    expect(direction.referencedMemory).toBeUndefined();
+    expect(direction.description).toBeTruthy();
+
+    service.stop();
+  });
+
+  test('existing C-235 baseline behavior is preserved (world/party/quest only)', async () => {
+    mockMemoryQuery.mockResolvedValue([]);
+
+    const service = NarrativeDirectorService.create({ className: 'TestNarrativeDirector' });
+    service.start(300_000);
+
+    await service.pushStory();
+
+    // Direction content should still be valid JSON-like structure
+    const direction = service.sceneDirections[0];
+    expect(direction.id).toBeTruthy();
+    expect(direction.createdAt).toBeGreaterThan(0);
+    expect(direction.acknowledged).toBe(false);
+
+    service.stop();
   });
 });

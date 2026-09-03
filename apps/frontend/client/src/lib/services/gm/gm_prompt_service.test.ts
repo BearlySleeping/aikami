@@ -73,7 +73,12 @@ mock.module('../game/world_state_service.svelte.ts', () => ({
 }));
 
 // Import after mocks are registered
-import { characterService, choiceHistoryStore, playerStateService } from '$services';
+import {
+  characterService,
+  choiceHistoryStore,
+  narrativeDirectorService,
+  playerStateService,
+} from '$services';
 
 // We need to access the CLASS_REGISTRY mock - it's a package import,
 // so we mock it at the barrel level via test_preload globals.
@@ -394,6 +399,116 @@ describe('GmPromptService — C-457', () => {
     test('gatherCombatContext returns null when not in combat', () => {
       const combatCtx = gmPromptService.gatherCombatContext();
       expect(combatCtx).toBeNull();
+    });
+  });
+
+  // ── C-459 AC-3: Narrative Guidance section ─────────────────────────
+
+  describe('C-459 AC-3: Narrative Guidance section', () => {
+    beforeEach(() => {
+      // Clear any previously pushed scene directions
+      narrativeDirectorService.sceneDirections.length = 0;
+    });
+
+    test('NARRATIVE GUIDANCE section is absent when no referenced memory exists', () => {
+      const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
+      expect(prompt).not.toContain('[NARRATIVE GUIDANCE]');
+    });
+
+    test('NARRATIVE GUIDANCE section is present when scene direction has referenced memory', () => {
+      // Push a scene direction with referenced memory onto the mock
+      const mockDirection = {
+        id: 'dir-1',
+        description: 'The ancient ruins loom ahead.',
+        createdAt: Date.now(),
+        acknowledged: false,
+        referencedMemory: [
+          {
+            sourceType: 'session_summary' as const,
+            sourceId: 's1',
+            content: 'The party learned of the lost city from the old sage.',
+            relevanceScore: 0.85,
+          },
+          {
+            sourceType: 'lore' as const,
+            sourceId: 'e1',
+            content: 'The lost city was built by the first dwarven king.',
+            relevanceScore: 0.72,
+          },
+        ],
+      };
+      (narrativeDirectorService.sceneDirections as Array<typeof mockDirection>).push(mockDirection);
+
+      const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
+
+      expect(prompt).toContain('[NARRATIVE GUIDANCE]');
+      expect(prompt).toContain('[/NARRATIVE GUIDANCE]');
+      expect(prompt).toContain('the old sage');
+      expect(prompt).toContain('first dwarven king');
+    });
+
+    test('NARRATIVE GUIDANCE section uses the latest scene direction only', () => {
+      const oldDirection = {
+        id: 'dir-old',
+        description: 'The forest path winds east.',
+        createdAt: Date.now() - 1000,
+        acknowledged: true,
+      };
+      const newDirection = {
+        id: 'dir-new',
+        description: 'The ancient ruins loom ahead.',
+        createdAt: Date.now(),
+        acknowledged: false,
+        referencedMemory: [
+          {
+            sourceType: 'session_summary' as const,
+            sourceId: 's1',
+            content: 'The party learned of the lost city.',
+            relevanceScore: 0.85,
+          },
+        ],
+      };
+      (narrativeDirectorService.sceneDirections as Array<typeof oldDirection>).push(oldDirection);
+      (narrativeDirectorService.sceneDirections as Array<typeof newDirection>).push(newDirection);
+
+      const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
+
+      expect(prompt).toContain('[NARRATIVE GUIDANCE]');
+      expect(prompt).toContain('lost city');
+    });
+
+    test('NARRATIVE GUIDANCE is medium priority — dropped before low priority sections', () => {
+      // Push referenced memory
+      const mockDirection = {
+        id: 'dir-1',
+        description: 'Scene with memory.',
+        createdAt: Date.now(),
+        acknowledged: false,
+        referencedMemory: [
+          {
+            sourceType: 'session_summary' as const,
+            sourceId: 's1',
+            content: 'Relevant past event.',
+            relevanceScore: 0.9,
+          },
+        ],
+      };
+      (narrativeDirectorService.sceneDirections as Array<typeof mockDirection>).push(mockDirection);
+
+      // Add large quest content to trigger budget enforcement
+      worldStateMock.quests = Array.from({ length: 30 }, (_, i) => ({
+        id: `q-${i}`,
+        title: `Quest ${i}`,
+        description: 'X'.repeat(1200),
+        status: 'active' as const,
+      }));
+
+      const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
+      const encoder = new TextEncoder();
+      const byteLength = encoder.encode(prompt).length;
+
+      expect(byteLength).toBeLessThanOrEqual(6144);
+      expect(prompt).toContain('[SYSTEM INSTRUCTIONS]');
     });
   });
 });

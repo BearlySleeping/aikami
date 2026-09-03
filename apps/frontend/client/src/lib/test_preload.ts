@@ -500,7 +500,9 @@ const _localServicesMock = () => ({
   vendorService: _createServiceStub(),
   worldGenSeedingService: _createServiceStub(),
   compileImagePrompt: _createCallableStub(),
-  narrativeDirectorService: _createServiceStub(),
+  narrativeDirectorService: Object.assign(_createServiceStub(), {
+    sceneDirections: [],
+  }),
   buildVerifyHeaders: _createCallableStub(),
   buildVerifyUrl: _createCallableStub(),
 
@@ -644,6 +646,9 @@ const _localServicesMock = () => ({
     detectImage: mock(async () => 'detected'),
   }),
   gmPromptService: _createServiceStub(),
+  memoryRetrievalService: Object.assign(_createServiceStub(), {
+    query: mock(async () => []),
+  }),
   messageBranchStore: _createServiceStub(),
   trackRegistryService: _createServiceStub(),
   timeService: { gameHour: 12, gameMinute: 0, windVelocity: 0, rainIntensity: 0 },

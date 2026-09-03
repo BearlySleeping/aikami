@@ -24,6 +24,7 @@ import type { AddressMode } from '$types';
 // Imported directly to break the barrel cycle: the barrel re-exports
 // gm_prompt_service before it re-exports lorebookStore.
 import { lorebookStore } from '../lorebook/lorebook_store.svelte.ts';
+import { narrativeDirectorService } from '$services';
 import type { GmCombatContext, GmPromptContext, PromptSection } from './gm_types';
 
 // ---------------------------------------------------------------------------
@@ -265,6 +266,33 @@ class GmPromptService
       sections.push({
         name: 'ACTIVE QUESTS',
         content: questLines.join('\n'),
+        priority: 'medium',
+      });
+    }
+
+    // ── Medium: Narrative guidance (C-459) ───────────────────────────
+    // Injects referenced memory from the narrative director's scene
+    // direction as advisory-only narrative context. Present only when
+    // the director has generated a direction with retrieved memory.
+    // This is purely prompt context — no direct state mutation.
+    const latestDirection =
+      narrativeDirectorService.sceneDirections.length > 0
+        ? (narrativeDirectorService.sceneDirections[
+            narrativeDirectorService.sceneDirections.length - 1
+          ] as import('./gm_types').SceneDirection)
+        : undefined;
+    const referencedMemory = latestDirection?.referencedMemory;
+
+    if (referencedMemory && referencedMemory.length > 0) {
+      const memLines: string[] = ['', '[NARRATIVE GUIDANCE]'];
+      memLines.push('The following events from campaign history are relevant to the current scene:');
+      for (const mem of referencedMemory) {
+        memLines.push(`- [${mem.sourceType}] ${mem.content}`);
+      }
+      memLines.push('[/NARRATIVE GUIDANCE]');
+      sections.push({
+        name: 'NARRATIVE GUIDANCE',
+        content: memLines.join('\n'),
         priority: 'medium',
       });
     }
