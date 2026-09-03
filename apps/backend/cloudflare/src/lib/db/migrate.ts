@@ -101,7 +101,7 @@ export const applyMigrations = async (
 
 // ── CLI entry ──────────────────────────────────────────────────────────
 
-const main = async (): Promise<void> => {
+export const main = async (): Promise<void> => {
   const args = Bun.argv.slice(3);
   const { mode, isLocal } = resolveModeGuard(args);
 

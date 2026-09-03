@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 const ROOT = resolve(import.meta.dir, '../../../../../..');
 const DB_DIR = resolve(ROOT, 'packages/backend/database');
 
-const main = (): void => {
+export const main = (): void => {
   try {
     execFileSync('bunx', ['drizzle-kit', 'studio'], {
       cwd: DB_DIR,

@@ -25,6 +25,8 @@ import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state
 
 export type { LpcPreviewState };
 
+type PreviewSprite = Sprite & {_originalIndex?: number};
+
 // ── Constants ────────────────────────────────────────────────────────────
 
 const MaxLayers = 8;
@@ -554,51 +556,51 @@ class LpcPreviewViewModel
     }
 
     try {
-      const newSprites: Sprite[] = [];
+      const newSprites: PreviewSprite[] = [];
 
-      const layerPromises = currentRecipes.map(async (recipe, i) => {
-        if (!recipe) {
-          return;
-        }
+		const layerPromises = currentRecipes.map(async (recipe, i) => {
+			if (!recipe) {
+				return;
+			}
 
-        const recipeSlot = recipe.slot;
-        const recipeAssetId = recipe.assetId;
+			const recipeSlot = recipe.slot;
+			const recipeAssetId = recipe.assetId;
 
-        let texture = await this._loadSheetTexture(recipeSlot, recipeAssetId, currentState);
+			let texture = await this._loadSheetTexture(recipeSlot, recipeAssetId, currentState);
 
-        if (
-          (!texture || texture === Texture.EMPTY) &&
-          recipeSlot === 'head' &&
-          LPC_DEFAULT_HEAD_ASSET_ID !== recipeAssetId
-        ) {
-          this.warn('lpc.headFallback', {
-            original: recipeAssetId,
-            fallback: LPC_DEFAULT_HEAD_ASSET_ID,
-          });
-          texture = await this._loadSheetTexture('head', LPC_DEFAULT_HEAD_ASSET_ID, currentState);
-        }
+			if (
+				(!texture || texture === Texture.EMPTY) &&
+				recipeSlot === 'head' &&
+				LPC_DEFAULT_HEAD_ASSET_ID !== recipeAssetId
+			) {
+				this.warn('lpc.headFallback', {
+					original: recipeAssetId,
+					fallback: LPC_DEFAULT_HEAD_ASSET_ID,
+				});
+				texture = await this._loadSheetTexture('head', LPC_DEFAULT_HEAD_ASSET_ID, currentState);
+			}
 
-        if (!texture || texture === Texture.EMPTY) {
-          return;
-        }
+			if (!texture || texture === Texture.EMPTY) {
+				return;
+			}
 
-        const layout = detectLpcSheetLayout(texture);
-        const col = currentFrame % layout.columns;
-        const row = layout.rows > 1 ? currentDirection % layout.rows : 0;
-        const x = col * layout.pitch;
-        const y = row * layout.pitch;
+			const layout = detectLpcSheetLayout(texture);
+			const col = currentFrame % layout.columns;
+			const row = layout.rows > 1 ? currentDirection % layout.rows : 0;
+			const x = col * layout.pitch;
+			const y = row * layout.pitch;
 
-        if (x + layout.pitch > texture.width || y + layout.pitch > texture.height) {
-          return;
-        }
+			if (x + layout.pitch > texture.width || y + layout.pitch > texture.height) {
+				return;
+			}
 
-        const frameTexture = new Texture({
-          source: texture.source,
-          frame: new Rectangle(x, y, layout.pitch, layout.pitch),
-        });
+			const frameTexture = new Texture({
+				source: texture.source,
+				frame: new Rectangle(x, y, layout.pitch, layout.pitch),
+			});
 
-        const anchor = getLpcSpriteAnchor(layout);
-        const sprite = new Sprite(frameTexture);
+			const anchor = getLpcSpriteAnchor(layout);
+			const sprite: PreviewSprite = new Sprite(frameTexture)
         sprite.eventMode = 'none';
         sprite.x = anchor.x;
         sprite.y = anchor.y;
@@ -609,7 +611,7 @@ class LpcPreviewViewModel
           layerRole: recipe.layerRole ?? 'front',
           direction: 2,
         });
-        (sprite as unknown as Record<string, unknown>)._originalIndex = i; // guard-ignore lint/type-safety/casting: Record cast for dynamic LPC layer data from asset store
+			sprite._originalIndex = i;
 
         const effectiveColor =
           this.layerOverrides[i] && this.paletteColors[i] ? this.paletteColors[i] : this.globalTint;
@@ -642,8 +644,8 @@ class LpcPreviewViewModel
         if (a.zIndex !== b.zIndex) {
           return a.zIndex - b.zIndex;
         }
-        const aIdx = (a as unknown as Record<string, unknown>)._originalIndex as number; // guard-ignore lint/type-safety/casting: Record cast for dynamic LPC layer data from asset store
-        const bIdx = (b as unknown as Record<string, unknown>)._originalIndex as number; // guard-ignore lint/type-safety/casting: Record cast for dynamic LPC layer data from asset store
+        const aIdx = a._originalIndex?? 0
+        const bIdx = b._originalIndex ?? 0
         return aIdx - bIdx;
       });
 
@@ -894,7 +896,8 @@ class LpcPreviewViewModel
       this._setStatus('LPC preview initialized.', 'info');
 
       if (typeof window !== 'undefined') {
-        (window as any).__PIXI_LOADED__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+ // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+		  (window as any).__PIXI_LOADED__ = true;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

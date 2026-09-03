@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-02)
+## Status Summary (Auto-generated: 2026-09-03)
 
-**215 active (0 without contract file), 119 archived, 0 duplicates**
+**216 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -217,12 +217,13 @@
 | C-453 | Moon Remote Build Cache Cloudflare Workers R2 | 📝 draft | — | v2 | full |
 | C-454 | D1 R2 Infrastructure Constants Storage Package | 🛠️ implemented | — | v2 | full |
 | C-455 | Apps Backend Cloudflare One Home For Cloudflare Operations | 🛠️ implemented | — | v2 | full |
-| C-456 | Group Chat And Systemic Npc Interactions | 👍 approved | — | v1 | full |
+| C-456 | Group Chat And Systemic Npc Interactions | 🛠️ implemented | — | v1 | full |
 | C-457 | Gm Prompt Assembly Upgrade | 🛠️ implemented | — | v1 | full |
 | C-458 | In House Memory And Lore Retrieval System | 🛠️ implemented | — | v1 | full |
-| C-459 | Ai Gm Narrative Director Enhancements | 📝 draft | — | v1 | full |
+| C-459 | Ai Gm Narrative Director Enhancements | 👍 approved | — | v1 | full |
 | C-460 | Npc Behavioral Autonomy Layer | 📝 draft | — | v1 | full |
-| C-461 | Generate Typebox Row Schemas From Drizzle | 👍 approved | ❓ `sandbox` | v2 | thin |
+| C-461 | Generate Typebox Row Schemas From Drizzle | 🛠️ implemented | ❓ `sandbox` | v2 | thin |
+| C-462 | Client Side R2 Save Backup And Restore | 📝 draft | ❓ `sandbox` | v2 | full |
 
 ---
 

@@ -59,11 +59,6 @@
     "t2": 0,
     "t3": 0
   },
-  "packages/frontend/preview/src/lib/lpc/lpc_preview.svelte": {
-    "t1": 2,
-    "t2": 0,
-    "t3": 0
-  },
   "packages/frontend/utils/src/lib/browser/mobile_logger.ts": {
     "t1": 0,
     "t2": 2,

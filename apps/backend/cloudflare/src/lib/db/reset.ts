@@ -10,7 +10,7 @@ import { checkLocalMode, resolveModeGuard } from '../wrangler.ts';
 const ROOT = resolve(import.meta.dir, '../../../../../..');
 const HUB_DIR = resolve(ROOT, 'apps/frontend/hub');
 
-const main = async (): Promise<void> => {
+export const main = async (): Promise<void> => {
   const args = Bun.argv.slice(3);
   const { isLocal } = resolveModeGuard(args);
 

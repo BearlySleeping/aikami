@@ -5,7 +5,7 @@
 
 import { getHubDir, resolveD1Binding, resolveModeGuard, runWrangler } from '../wrangler.ts';
 
-const main = async (): Promise<void> => {
+export const main = async (): Promise<void> => {
   const args = Bun.argv.slice(3);
   const { mode, isLocal } = resolveModeGuard(args);
 

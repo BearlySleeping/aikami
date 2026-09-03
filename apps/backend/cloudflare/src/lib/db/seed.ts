@@ -143,7 +143,7 @@ const createDevPack = async (): Promise<void> => {
 };
 
 // ── Main ────────────────────────────────────────────────────
-const main = async (): Promise<void> => {
+export const main = async (): Promise<void> => {
   checkLocalMode();
 
   await checkHubWorkerRunning();

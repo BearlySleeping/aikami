@@ -1,10 +1,15 @@
 // apps/backend/cloudflare/src/lib/worker/deploy.ts
 //
-// C-455: Cloudflare Worker deployment. Moved from scripts/src/lib/deploy/cloudflare.ts.
-//
-// This module re-exports and wraps the deploy logic that was previously in
-// scripts/src/lib/deploy/cloudflare.ts. The original file is deleted after
-// this migration.
+// 🔴 PARTIAL PORT, NOT WIRED IN. This is a simplified sketch, not a real
+// port of scripts/src/lib/deploy/cloudflare.ts's `deployCloudflareWorker` —
+// see ../worker/index.ts's header for the concrete gaps (no checksum
+// cache, no build step, no headers file, expects a pre-existing
+// wrangler.jsonc instead of generating one). The original 498-line file
+// was NOT deleted; it is still the sole deploy path every app's
+// scripts/deploy.ts and scripts/src/index.ts actually call. Finishing
+// this port and cutting those four apps + the orchestrator over to it is
+// unstarted, separate work — do it as its own contract, verified against
+// a real staging deploy before any production app is repointed here.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
