@@ -46,6 +46,10 @@ import {
   getExportViewModel,
 } from './export/export_view_model.svelte';
 import {
+  type AccountViewModelInterface,
+  getAccountViewModel,
+} from './account/account_view_model.svelte';
+import {
   type GameplayViewModelInterface,
   getGameplayViewModel,
 } from './gameplay/gameplay_view_model.svelte';
@@ -81,6 +85,7 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly aiCapabilityBadgeColor: string;
 
   // ── Sub-ViewModels ──
+  readonly accountViewModel: AccountViewModelInterface;
   readonly gameplayViewModel: GameplayViewModelInterface;
   readonly aiPrivacyViewModel: AIPrivacyViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
@@ -120,6 +125,7 @@ export class SettingsViewModel
   activeGroupId = $state<SettingsGroupId>(SETTINGS_SECTIONS[0].group);
 
   // ── Basic sub-ViewModels (always created) ──
+  readonly accountViewModel: AccountViewModelInterface;
   readonly gameplayViewModel: GameplayViewModelInterface;
   readonly aiPrivacyViewModel: AIPrivacyViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
@@ -227,6 +233,7 @@ export class SettingsViewModel
     super(options);
 
     // Always create basic sub-ViewModels
+    this.accountViewModel = getAccountViewModel({ className: 'AccountViewModel' });
     this.gameplayViewModel = getGameplayViewModel({ className: 'GameplayViewModel' });
     this.aiPrivacyViewModel = getAIPrivacyViewModel({ className: 'AIPrivacyViewModel' });
     this.audioViewModel = getSettingsAudioViewModel({ className: 'SettingsAudioViewModel' });

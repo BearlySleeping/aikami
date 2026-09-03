@@ -7,6 +7,7 @@ import { GroupedTablist } from '@aikami/frontend/components';
 import { BaseViewModelContainer } from '$components';
 import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
 import AgentListView from '../agent/list/agent_list_view.svelte';
+import AccountView from './account/account_view.svelte';
 import AIPrivacyView from './ai_privacy/ai_privacy_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
 import AutonomousSettingsView from './autonomous/autonomous_settings_view.svelte';
@@ -74,7 +75,9 @@ const { viewModel }: Props = $props();
     onGroupActivate={(id) => viewModel.setActiveGroup(id)}
     onSectionActivate={(id) => viewModel.setActiveSection(id)}
   >
-    {#if viewModel.activeSectionId === 'controls'}
+    {#if viewModel.activeSectionId === 'account'}
+      <AccountView viewModel={viewModel.accountViewModel} />
+    {:else if viewModel.activeSectionId === 'controls'}
       <SettingsControlsView viewModel={viewModel.controlsViewModel} />
     {:else if viewModel.activeSectionId === 'audio'}
       <SettingsAudioView viewModel={viewModel.audioViewModel} />

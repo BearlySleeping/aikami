@@ -33,6 +33,11 @@ import {
   handleListBackups,
 } from './save_backup.ts';
 import { getStorageEnv, handleStorageUpload, handleStorageUrl } from './storage.ts';
+import {
+  getAccountDeleteEnv,
+  handleAccountDeleteRequest,
+} from './account_delete.ts';
+import { handleRevokeAllSessions } from './account_sessions.ts';
 
 // ─── Schemas (TypeBox) ───────────────────────────────────────────────
 
@@ -197,6 +202,22 @@ export const app = new Elysia({
     {
       response: catalogStatsResponseSchema,
     },
+  )
+  // C-464 AC-3/4/5/6: Session-verified account deletion.
+  // 503 when the hub is not yet on a Worker with the SAVES_BUCKET binding.
+  .delete('/account', ({ request }) => {
+    const env = getAccountDeleteEnv();
+    if (!env) {
+      return new Response(JSON.stringify({ error: 'account_unconfigured' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return handleAccountDeleteRequest(request, env);
+  })
+  // C-464 AC-10: Revoke all sessions through Better Auth's session API.
+  .post('/account/sessions/revoke-all', ({ request }) =>
+    handleRevokeAllSessions(request),
   )
   .post('/ask', handleAsk, {
     body: askRequestSchema,

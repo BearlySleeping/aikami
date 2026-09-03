@@ -1,8 +1,7 @@
 // apps/frontend/client/src/lib/views/settings/export/export_view_model.svelte.ts
 //
-// ViewModel for the Export & Data settings tab (C-246, AC-6).
-// Bridges the exportService to the settings UI — lists chats, characters,
-// sessions, and provides download triggers for all export operations.
+// C-464 AC-8: Export & Data settings tab — export operations, offline mode,
+// telemetry opt-out, and delete local data.
 
 import {
   BaseViewModel,
@@ -41,6 +40,12 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
   /** Backup progress message. */
   readonly backupProgress: string;
 
+  // ── Privacy toggles (C-464 AC-8) ──
+  /** Offline mode — when true, no AI calls are attempted. */
+  readonly offlineMode: boolean;
+  /** Telemetry opt-out. */
+  readonly telemetryOptOut: boolean;
+
   // ── Chat exports ──
   exportChatAsJsonl(chat: ChatData): Promise<void>;
   exportChatAsPlainText(chat: ChatData): Promise<void>;
@@ -57,6 +62,10 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
 
   /** Formats a Firestore Timestamp or ISO string to a locale date. */
   formatDate(timestamp: unknown): string;
+
+  // ── Privacy actions (C-464 AC-8) ──
+  toggleOfflineMode(): void;
+  toggleTelemetry(): void;
 };
 
 // ── Options ─────────────────────────────────────────────────────────────
@@ -74,6 +83,10 @@ export class ExportViewModel
   sessions: ExportableSession[] = $state([]);
   isLoading = $state(false);
   backupProgress = $state('');
+
+  // ── Privacy toggles (C-464 AC-8) ──
+  offlineMode = $state<boolean>(false);
+  telemetryOptOut = $state<boolean>(false);
 
   override async initialize(): Promise<void> {
     this.isLoading = true;
@@ -125,7 +138,7 @@ export class ExportViewModel
 
   formatDate(timestamp: unknown): string {
     if (!timestamp) {
-      return '—';
+      return '\u2014';
     }
     if (timestamp instanceof Date) {
       return timestamp.toLocaleDateString();
@@ -138,7 +151,35 @@ export class ExportViewModel
     ) {
       return (timestamp as { toDate: () => Date }).toDate().toLocaleDateString();
     }
-    return '—';
+    return '\u2014';
+  }
+
+  // ── Privacy actions (C-464 AC-8) ──
+
+  toggleOfflineMode(): void {
+    this.offlineMode = !this.offlineMode;
+    this._persistPrivacySettings();
+    this.debug('toggleOfflineMode', { offlineMode: this.offlineMode });
+  }
+
+  toggleTelemetry(): void {
+    this.telemetryOptOut = !this.telemetryOptOut;
+    this._persistPrivacySettings();
+    this.debug('toggleTelemetry', { telemetryOptOut: this.telemetryOptOut });
+  }
+
+  private _persistPrivacySettings(): void {
+    try {
+      localStorage.setItem(
+        'aikami_ai_privacy_settings',
+        JSON.stringify({
+          offlineMode: this.offlineMode,
+          telemetryOptOut: this.telemetryOptOut,
+        }),
+      );
+    } catch {
+      // localStorage may be unavailable
+    }
   }
 
   // ── Internal ────────────────────────────────────────────────────────
@@ -152,6 +193,26 @@ export class ExportViewModel
     this.chats = chats;
     this.characters = exportableCharacters;
     this.sessions = sessions;
+
+    // Load persisted privacy settings (C-464 AC-8: keep the same key)
+    this._loadPrivacySettings();
+  }
+
+  private _loadPrivacySettings(): void {
+    try {
+      const stored = localStorage.getItem('aikami_ai_privacy_settings');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.offlineMode === 'boolean') {
+          this.offlineMode = parsed.offlineMode;
+        }
+        if (typeof parsed.telemetryOptOut === 'boolean') {
+          this.telemetryOptOut = parsed.telemetryOptOut;
+        }
+      }
+    } catch {
+      // Invalid stored data — keep defaults
+    }
   }
 
   async _loadChats(): Promise<ChatData[]> {

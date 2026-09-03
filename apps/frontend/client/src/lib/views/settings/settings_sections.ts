@@ -8,7 +8,7 @@
 // ---------------------------------------------------------------------------
 
 /** Stable identifier used to select and deep-link a top-level settings group. */
-export type SettingsGroupId = 'play' | 'ai' | 'content' | 'data';
+export type SettingsGroupId = 'play' | 'ai' | 'content' | 'data' | 'account';
 
 /** Application context that determines whether a settings section is available. */
 export type SettingsContext = 'page' | 'pause' | 'onboarding';
@@ -42,6 +42,7 @@ export type SettingsSection = {
 // ---------------------------------------------------------------------------
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
+  { id: 'account', label: 'Account' },
   { id: 'play', label: 'Play' },
   { id: 'ai', label: 'AI' },
   { id: 'content', label: 'Content' },
@@ -118,6 +119,15 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     group: 'content',
     contexts: ['page'],
     icon: 'music',
+  },
+
+  // ── Account ──────────────────────────────────────────────────────────
+  {
+    id: 'account',
+    label: 'Account',
+    group: 'account',
+    contexts: ['page'],
+    icon: 'user',
   },
 
   // ── Data ─────────────────────────────────────────────────────────────
