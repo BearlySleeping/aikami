@@ -14,6 +14,7 @@
       "@aikami/types/*": ["../types/src/lib/*"]
     }
   },
+  "files": ["src/lib/db/db_schemas_conformance.test.ts"],
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "**/*.test.js"]
 }
