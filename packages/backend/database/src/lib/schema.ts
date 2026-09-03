@@ -155,7 +155,7 @@ export const packs = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     /** Visibility state — SQLite CHECK constraint (see below). */
-    visibility: text('visibility').notNull().default('draft'),
+    visibility: text('visibility').$type<PackVisibility>().notNull().default('draft'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },

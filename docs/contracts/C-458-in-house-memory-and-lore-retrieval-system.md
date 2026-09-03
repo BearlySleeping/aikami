@@ -3,7 +3,7 @@ id: C-458
 title: "In-House Memory & Lore Retrieval System"
 source: "docs/contracts/BACKLOG_C452_PLUS.md 'C-463' seed (RPG-depth batch, 2026-08-30 roadmap review — 'the single highest-leverage gap identified'). Renumbered on authoring — see C-456's source note for the ID-allocation caveat."
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null

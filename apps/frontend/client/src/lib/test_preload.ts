@@ -700,6 +700,21 @@ mock.module('$app/state', () => ({
   },
 }));
 
+// ── Mock $lib paths (SvelteKit alias not resolvable in Bun without .svelte-kit) ──
+// ConfigService imports $lib/views/utils/crypto_vault and $types which can't be
+// resolved. We mock the lorebook_store module so it never loads config_service.
+mock.module('$lib/views/utils/crypto_vault', () => ({}));
+// 🔴 Resolved from this file's own location, never a literal absolute path:
+// an absolute path bakes in one machine's checkout (or one throwaway contract
+// worktree) and silently stops matching everywhere else, leaving the real
+// module to load and pull in config_service again.
+mock.module(`${import.meta.dir}/services/lorebook/lorebook_store.svelte.ts`, () => ({
+  lorebookStore: {
+    scanActiveEntries: () => [],
+  },
+  LorebookStore: class {},
+}));
+
 // ── Vite env vars required by @aikami/frontend-configs/environment.ts ─────
 
 process.env.PUBLIC_APP_ID = 'client';

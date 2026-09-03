@@ -23,7 +23,7 @@ created_at: "2026-09-02"
 | **Type** | thin |
 | **Priority** | P2 — closes a dangling doc citation and a real drift hazard (hand-written wire schemas can silently diverge from Drizzle row shapes), but nothing is on fire |
 | **Dependencies** | C-454 (D1/R2 infra + storage package — removed the `database` → `schemas` edge that would otherwise make this a cycle), C-455 (`apps/backend/cloudflare` as the one home for Cloudflare/D1 operations — this generator lives in its `db` subcommand tree) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `sandbox` |
 | **Docs Impact** | internal → none (no `apps/frontend/docs` page; this is a build/codegen concern) |
 | **Contract version** | 2.0.0 |

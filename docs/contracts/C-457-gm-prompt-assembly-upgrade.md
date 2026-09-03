@@ -3,7 +3,7 @@ id: C-457
 title: "GM Prompt Assembly Upgrade"
 source: "docs/contracts/BACKLOG_C452_PLUS.md 'C-462' seed (RPG-depth batch, 2026-08-30 roadmap review). Renumbered on authoring — see C-456's source note for the ID-allocation caveat."
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null

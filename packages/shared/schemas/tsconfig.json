@@ -8,10 +8,13 @@
     "paths": {
       "@aikami/constants": ["../constants/src/index.ts"],
       "@aikami/constants/*": ["../constants/src/lib/*"],
+      "@aikami/schemas": ["./src/index.ts"],
+      "@aikami/schemas/*": ["./src/lib/*"],
       "@aikami/types": ["../types/src/index.ts"],
       "@aikami/types/*": ["../types/src/lib/*"]
     }
   },
+  "files": ["src/lib/db/db_schemas_conformance.test.ts"],
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "**/*.test.js"]
 }

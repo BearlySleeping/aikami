@@ -24,3 +24,12 @@ tasks:
       - '@group(root-configs)'
     options:
       cache: true
+
+  generate-schemas-check:
+    command: 'bun run src/cli.ts db generate --check'
+    inputs:
+      - '@group(sources)'
+      - 'packages/shared/schemas/src/lib/db/**/*'
+    options:
+      cache: false
+      runInCI: true
