@@ -797,18 +797,22 @@ class ConfigService
       }
     }
 
-    const merged: Connection = {
-      ...(projected as Connection),
-      ...patch,
-      capability,
-    };
-    this.updateAiConnection(id, {
+    const merged = {
+      ...existing,
       providerId,
       capability,
       label: patch.name ?? existing.label,
       model: patch.model ?? existing.model,
-      params: this._paramsFromLegacy(merged, capability),
-    });
+    };
+    const changesParams =
+      capability !== existing.capability ||
+      (capability === 'text' && patch.generationParams !== undefined) ||
+      (capability === 'image' && patch.imageOptions !== undefined) ||
+      (capability === 'voice' && patch.voiceOptions !== undefined);
+    if (changesParams) {
+      merged.params = this._paramsFromLegacy(patch, capability);
+    }
+    this.updateAiConnection(id, merged);
 
     if (patch.isDefault) {
       this._assignCapabilityRoles({ id, capability });
@@ -1187,7 +1191,11 @@ class ConfigService
           prev.baseUrl === c.baseUrl &&
           prev.provider === c.provider &&
           prev.name === c.name &&
-          prev.capability === c.capability
+          prev.capability === c.capability &&
+          prev.source === c.source &&
+          JSON.stringify(prev.generationParams) === JSON.stringify(c.generationParams) &&
+          JSON.stringify(prev.imageOptions) === JSON.stringify(c.imageOptions) &&
+          JSON.stringify(prev.voiceOptions) === JSON.stringify(c.voiceOptions)
         );
       });
     if (!unchanged) {

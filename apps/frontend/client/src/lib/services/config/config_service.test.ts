@@ -646,6 +646,41 @@ describe('ConfigService — C-079', () => {
       expect(service.getApiKey('openrouter', 'text')).toBe('sk-or-rotated');
     });
 
+    test('updating a direct AI connection preserves params before projection', async () => {
+      const service = await createService();
+      const params = { ..._params, temperature: 0.25 };
+      const id = service.addAiConnection({
+        providerId: crypto.randomUUID(),
+        capability: 'text',
+        label: 'Direct connection',
+        model: 'old-model',
+        params,
+      });
+
+      service.updateConnection(id, { name: 'Renamed connection', model: 'new-model' });
+
+      expect(service.getAiConnection(id)).toMatchObject({
+        label: 'Renamed connection',
+        model: 'new-model',
+        params,
+      });
+    });
+
+    test('params-only edits replace the legacy projection and persist it', async () => {
+      const service = await createService();
+      const id = service.addConnection(_conn());
+      const previous = service.state.connections[0];
+      const generationParams = { ..._params, temperature: 0.25 };
+
+      service.updateConnection(id, { generationParams });
+      await service.save();
+
+      expect(service.state.connections[0]).not.toBe(previous);
+      expect(service.getConnection(id)?.generationParams).toEqual(generationParams);
+      const persisted = JSON.parse(vaultStore.get('__vault') ?? '{}');
+      expect(persisted.legacy.connections[0].generationParams).toEqual(generationParams);
+    });
+
     test('deleting the last connection on a provider removes the provider', async () => {
       const service = await createService();
       const id = service.addConnection(_conn());
