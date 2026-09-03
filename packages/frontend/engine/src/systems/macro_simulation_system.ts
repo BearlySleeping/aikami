@@ -6,6 +6,7 @@ import { logger } from '$logger';
 import { GoapAgent } from '../components/goap_agent.ts';
 import { MapLocation } from '../components/map_location.ts';
 import { ZoneStatus } from '../components/zone_status.ts';
+
 import {
   applyEffects,
   evaluatePreconditions,
@@ -150,9 +151,9 @@ export const stepMacroAgent = (_world: World, eid: number): boolean => {
     return true;
   }
 
-  // ── Select new action ──
+  // ── Select new action (with optional relationship-aware scoring) ──
   if (currentActionId < 0 && currentGoal !== 0) {
-    currentActionId = selectBestAction(currentState, currentGoal);
+    currentActionId = selectBestAction(currentState, currentGoal, eid);
     if (currentActionId >= 0) {
       const selectedAction = getActionByIndex(currentActionId);
       if (selectedAction) {

@@ -47,6 +47,13 @@ mock.module('../ai/text_generation_service.svelte.ts', () => ({
   },
 }));
 
+mock.module('../game/relationship_service.svelte.ts', () => ({
+  relationshipService: {
+    getRelationship: mock((_characterId: string) => undefined),
+    getStanding: mock((_factionId: string) => undefined),
+  },
+}));
+
 describe('AutonomousMessageService', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -60,6 +67,12 @@ describe('AutonomousMessageService', () => {
     // Reset idleDetectionService.isIdle mock to default true value
     const { idleDetectionService } = await import('../game/idle_detection_service.svelte.ts');
     idleDetectionService.isIdle.mockReturnValue(true);
+
+    // Reset relationship service mock to return undefined (no relationship data)
+    const { relationshipService: relService } = await import(
+      '../game/relationship_service.svelte.ts'
+    );
+    relService.getRelationship.mockReturnValue(undefined);
   });
 
   it('should start and stop the poller', async () => {
@@ -156,6 +169,90 @@ describe('AutonomousMessageService', () => {
     autonomousMessageService.stop();
     // @ts-expect-error: mock mutation
     chatService.isTyping = false;
+    vi.clearAllTimers();
+  });
+
+  it('should compute relationship boost for friendly NPC', async () => {
+    const { autonomousMessageService } = await import(
+      '../npc/autonomous_message_service.svelte.ts'
+    );
+    const { relationshipService: relService } = await import(
+      '../game/relationship_service.svelte.ts'
+    );
+
+    // Mock a friendly relationship
+    relService.getRelationship.mockReturnValue({
+      id: 'rel_test_1',
+      uid: 'test',
+      characterId: 'npc-friendly',
+      relationshipType: 'friend',
+      trust: 60,
+      affinity: 40,
+      history: [],
+      notes: '',
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Access private method via bracket notation for testing
+    const boost = (autonomousMessageService as Record<string, unknown>)['_computeRelationshipBoost']
+      ? (autonomousMessageService as Record<string, (id: string) => number>)[
+          '_computeRelationshipBoost'
+        ]('npc-friendly')
+      : 0;
+
+    // boost = (60 + 40) / 400 = 0.25
+    expect(boost).toBeCloseTo(0.25, 2);
+
+    vi.clearAllTimers();
+  });
+
+  it('should compute zero relationship boost when no relationship data exists', async () => {
+    const { autonomousMessageService } = await import(
+      '../npc/autonomous_message_service.svelte.ts'
+    );
+
+    // No relationship data mocked — getRelationship returns undefined
+    const boost = (autonomousMessageService as Record<string, unknown>)['_computeRelationshipBoost']
+      ? (autonomousMessageService as Record<string, (id: string) => number>)[
+          '_computeRelationshipBoost'
+        ]('npc-unknown')
+      : 0;
+
+    expect(boost).toBe(0);
+
+    vi.clearAllTimers();
+  });
+
+  it('should compute negative relationship boost for hostile NPC', async () => {
+    const { autonomousMessageService } = await import(
+      '../npc/autonomous_message_service.svelte.ts'
+    );
+    const { relationshipService: relService } = await import(
+      '../game/relationship_service.svelte.ts'
+    );
+
+    // Mock a hostile relationship
+    relService.getRelationship.mockReturnValue({
+      id: 'rel_test_2',
+      uid: 'test',
+      characterId: 'npc-hostile',
+      relationshipType: 'enemy',
+      trust: -80,
+      affinity: -60,
+      history: [],
+      notes: '',
+      updatedAt: new Date().toISOString(),
+    });
+
+    const boost = (autonomousMessageService as Record<string, unknown>)['_computeRelationshipBoost']
+      ? (autonomousMessageService as Record<string, (id: string) => number>)[
+          '_computeRelationshipBoost'
+        ]('npc-hostile')
+      : 0;
+
+    // boost = (-80 + -60) / 400 = -0.35
+    expect(boost).toBeCloseTo(-0.35, 2);
+
     vi.clearAllTimers();
   });
 
