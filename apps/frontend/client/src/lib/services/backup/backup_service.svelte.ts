@@ -28,10 +28,12 @@ import { hubApiBase } from '../api/hub_api_client';
 
 export type BackupServiceOptions = BaseFrontendClassOptions & {
   backupClient: BackupClientInterface;
-  database: LocalDatabaseInterface;
 };
 
 export type BackupServiceInterface = BaseFrontendClassInterface & {
+  /** Supplies the local database used by backup and restore operations. */
+  setup(database: LocalDatabaseInterface): void;
+
   /**
    * Exports the local database bytes and uploads them as a new backup.
    * @returns The backup id and R2 key, or undefined on failure.
@@ -65,17 +67,17 @@ class BackupService
   extends BaseFrontendClass<BackupServiceOptions>
   implements BackupServiceInterface
 {
-  private get _backupClient(): BackupClientInterface {
-    return this._options.backupClient;
-  }
+  private _database: LocalDatabaseInterface | undefined;
 
-  private get _database(): LocalDatabaseInterface {
-    return this._options.database;
+  setup(database: LocalDatabaseInterface): void {
+    this._database = database;
   }
 
   async backupNow(): Promise<CreateBackupResult | undefined> {
+    const database = this._getDatabase();
+
     try {
-      const bytes = await this._database.exportBytes();
+      const bytes = await database.exportBytes();
       this.log('backupNow', { byteLength: bytes.byteLength });
 
       if (bytes.byteLength === 0) {
@@ -98,11 +100,13 @@ class BackupService
       return entries;
     } catch (error) {
       this.error('listBackups:failed', error);
-      return [];
+      throw error;
     }
   }
 
   async restore(backupId: string): Promise<void> {
+    const database = this._getDatabase();
+
     try {
       this.log('restore', { backupId });
 
@@ -111,7 +115,7 @@ class BackupService
         throw new Error('Downloaded backup is empty');
       }
 
-      await this._database.importBytes(bytes);
+      await database.importBytes(bytes);
       this.log('restore:complete', { backupId, byteLength: bytes.byteLength });
     } catch (error) {
       this.error('restore:failed', { backupId, error });
@@ -129,6 +133,18 @@ class BackupService
       throw error;
     }
   }
+
+  private get _backupClient(): BackupClientInterface {
+    return this._options.backupClient;
+  }
+
+  private _getDatabase(): LocalDatabaseInterface {
+    if (!this._database) {
+      throw new Error('BackupService: not initialized — call setup() first');
+    }
+
+    return this._database;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -137,14 +153,5 @@ class BackupService
 
 export const backupService: BackupServiceInterface = BackupService.create({
   backupClient: createBackupClient(hubApiBase()),
-  database: undefined as unknown as LocalDatabaseInterface, // set lazily via setDatabase
   className: 'BackupService',
 });
-
-/**
- * Sets the local database adapter on the backup service singleton.
- * Must be called before any backup/restore operation.
- */
-export const setBackupDatabase = (database: LocalDatabaseInterface): void => {
-  (backupService as unknown as { _options: BackupServiceOptions })._options.database = database;
-};

@@ -44,6 +44,15 @@ type WasmDatabase = {
   isOpen(): boolean;
 };
 
+/** OPFS SAH-pool methods needed to replace a persisted database file. */
+type OpfsSahPool = {
+  // biome-ignore lint/style/useNamingConvention: sqlite-wasm API name
+  OpfsSAHPoolDb?: new (
+    filename: string,
+  ) => WasmDatabase;
+  importDb(filename: string, bytes: Uint8Array): number | Promise<number>;
+};
+
 /** Async key/value persistence backend (IndexedDB in production). */
 type PersistenceBackend = {
   get(key: string): Promise<unknown | null>;
@@ -141,6 +150,9 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
   /** Which persistence mode is active (set during open()). */
   private _persistMode: 'opfs' | 'idb-snapshot' | 'memory' = 'memory';
 
+  /** Installed OPFS SAH pool used to atomically replace persisted bytes. */
+  private _opfsSahPool: OpfsSahPool | undefined;
+
   /** Debounced persistence timer (snapshot mode). */
   private _persistTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -218,12 +230,7 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       // sqlite3.oo1.
       try {
         const installOpfsSahPoolVfs = sqlite3['installOpfsSAHPoolVfs'] as
-          | ((opts?: Record<string, unknown>) => Promise<{
-              // biome-ignore lint/style/useNamingConvention: sqlite-wasm API name
-              OpfsSAHPoolDb?: new (
-                filename: string,
-              ) => WasmDatabase;
-            }>)
+          | ((options?: Record<string, unknown>) => Promise<OpfsSahPool>)
           | undefined;
 
         if (installOpfsSahPoolVfs) {
@@ -231,6 +238,7 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
           const SahCtor = poolUtil?.OpfsSAHPoolDb;
           if (SahCtor) {
             this._db = new SahCtor(this._databasePath);
+            this._opfsSahPool = poolUtil;
             this._persistMode = 'opfs';
             logger.debug('WasmStorageAdapter:opened-opfs-sahpool', {
               databasePath: this._databasePath,
@@ -411,11 +419,19 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       throw new Error('WasmStorageAdapter: not connected — call open() first');
     }
 
-    this._restoreSnapshotBytes(bytes);
+    if (this._persistMode === 'opfs') {
+      await this._restoreOpfsSnapshot(bytes);
+    } else {
+      this._restoreSnapshotBytes(bytes);
+    }
 
     // Re-apply PRAGMA after deserialize (the restored bytes replace the
     // entire database, so PRAGMA settings are lost).
-    this._db.exec({ sql: 'PRAGMA foreign_keys = ON' });
+    this._getDb().exec({ sql: 'PRAGMA foreign_keys = ON' });
+
+    if (this._persistMode === 'idb-snapshot') {
+      await this._persistNow();
+    }
   }
 
   /** @inheritdoc */
@@ -498,6 +514,24 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
       logger.warn('WasmStorageAdapter:persist-snapshot-failed', {
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  /** Replaces the OPFS database file and reopens its connection. */
+  private async _restoreOpfsSnapshot(bytes: Uint8Array): Promise<void> {
+    const pool = this._opfsSahPool;
+    const DatabaseConstructor = pool?.OpfsSAHPoolDb;
+    if (!pool || !DatabaseConstructor) {
+      throw new Error('WasmStorageAdapter: OPFS persistence is not initialized');
+    }
+
+    this._db?.close();
+    this._db = null;
+
+    try {
+      await pool.importDb(this._databasePath, bytes);
+    } finally {
+      this._db = new DatabaseConstructor(this._databasePath);
     }
   }
 

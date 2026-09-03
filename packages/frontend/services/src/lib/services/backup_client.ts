@@ -89,7 +89,7 @@ export const createBackupClient = (hubBase: string): BackupClientInterface => {
       {
         method: 'POST',
         credentials: 'include',
-        body: bytes as unknown as BodyInit,
+        body: new Uint8Array(bytes),
       },
     );
     if (!response.ok) {
@@ -113,6 +113,7 @@ export const createBackupClient = (hubBase: string): BackupClientInterface => {
     const response = await fetch(`${hubBase}/saves/${encodeURIComponent(backupId)}`, {
       method: 'GET',
       credentials: 'include',
+      cache: 'no-store',
     });
     if (!response.ok) {
       throw await toAppErrorFromResponse(response);

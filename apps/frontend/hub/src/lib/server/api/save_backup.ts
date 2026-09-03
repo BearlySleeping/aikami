@@ -258,7 +258,10 @@ export const handleGetBackup = async (
   return new Response(object.body as unknown as ReadableStream, {
     // guard-ignore lint/type-safety/casting: R2 upload stream type cast - CF Workers API type limitation
     status: 200,
-    headers: { 'content-type': 'application/octet-stream' },
+    headers: {
+      'cache-control': 'no-store',
+      'content-type': 'application/octet-stream',
+    },
   });
 };
 
@@ -292,20 +295,19 @@ export const handleDeleteBackup = async (
     });
   }
 
-  // Delete the R2 object first. If this fails, do NOT delete the D1 row
-  // (an orphaned row pointing at a real object is recoverable; a D1 row
-  // deleted while the R2 object survives forever is an unrecoverable leak).
+  // Delete the R2 object first. R2 deletion is idempotent, so a retry after
+  // either operation fails can safely repeat it before retrying D1 cleanup.
   try {
     await env.SAVES_BUCKET.delete(row.r2Key);
+
+    // R2 delete succeeded — safe to remove the metadata row.
+    await db.delete(accountBackups).where(eq(accountBackups.id, backupId));
   } catch {
     return new Response(JSON.stringify({ error: 'internal' }), {
       status: 500,
       headers: { 'content-type': 'application/json' },
     });
   }
-
-  // R2 delete succeeded — safe to remove the metadata row.
-  await db.delete(accountBackups).where(eq(accountBackups.id, backupId));
 
   return new Response(JSON.stringify({ deleted: backupId }), {
     status: 200,

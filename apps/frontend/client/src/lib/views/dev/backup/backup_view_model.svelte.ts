@@ -11,7 +11,7 @@ import {
 } from '@aikami/frontend/services';
 import type { BackupEntry } from '@aikami/frontend/services';
 import { getLocalDatabase } from '@aikami/frontend/storage';
-import { authService, backupService, setBackupDatabase } from '$services';
+import { authService, backupService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,7 +82,7 @@ class BackupViewModel
 
     // Ensure the backup service has the local database adapter.
     const db = await getLocalDatabase();
-    setBackupDatabase(db);
+    backupService.setup(db);
 
     if (this.isLoggedIn) {
       await this.refresh();
@@ -129,8 +129,9 @@ class BackupViewModel
     try {
       this.backups = await backupService.listBackups();
     } catch (error) {
-      this.debug('refresh:error', { error: String(error) });
-      this.backups = [];
+      const message = error instanceof Error ? error.message : String(error);
+      this._setMessage(`Failed to load backups: ${message}`, true);
+      this.debug('refresh:error', { error: message });
     } finally {
       this.isLoading = false;
     }
