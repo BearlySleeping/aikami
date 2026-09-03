@@ -224,7 +224,7 @@
 | C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | — | v1 | full |
 | C-461 | Generate Typebox Row Schemas From Drizzle | 🛠️ implemented | ❓ `sandbox` | v2 | thin |
 | C-462 | Client Side R2 Save Backup And Restore | 🛠️ implemented | ❓ `sandbox` | v2 | full |
-| C-463 | Provider Connection Role Model | 📝 draft | ❓ `integrated` | v2 | full |
+| C-463 | Provider Connection Role Model | 👍 approved | ❓ `integrated` | v2 | full |
 
 ---
 

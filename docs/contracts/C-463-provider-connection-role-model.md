@@ -3,7 +3,7 @@ id: C-463
 title: "Provider, Connection, and Role — one model for AI configuration"
 source: "Settings teardown review, 2026-09-03. Follow-up to PRs #233/#234/#235, which removed the dead provider-configuration surface and fixed the per-capability default bugs. C-462 is claimed by 'Client-Side R2 Save Backup & Restore'; C-463 is the next free ID."
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-03"
 | **Type** | full |
 | **Priority** | P1 — blocks the settings-shell, AI-section, and three-mounts contracts; every one of them needs this shape fixed first |
 | **Dependencies** | C-230 (connection model, superseded here), C-318 (capability screen), PRs #233/#234/#235 (already merged) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal → none. The user-facing AI settings page is a later contract. |
 | **Contract version** | 2.0.0 |
@@ -185,6 +185,10 @@ type AiRole =
 type RoleAssignments = Partial<Record<AiRole, ConnectionId>>;
 ```
 
+Assignments are **global**, not per-campaign (OQ-2, decided). `RoleAssignments` is a
+plain map, so scoping it to a campaign later is an additive change rather than a
+reshape.
+
 `TextParams` carries the existing `generationParams` fields; `ImageParams` and
 `VoiceParams` carry today's `imageOptions` / `voiceOptions` fields. They are moved,
 not redesigned — wiring them to the runtime is a later contract.
@@ -218,7 +222,11 @@ Persisted vault payload:
 - **Cancellation/retry/idempotency**: migration must be idempotent — running `load()`
   twice, or loading an already-v2 vault, is a no-op.
 - **Observability**: log one line on migration with counts only
-  (`{ providersCreated, connectionsMigrated, rolesSeeded }`) — never contents.
+  (`{ providersCreated, connectionsMigrated, modelRowsConverted, rolesSeeded }`) —
+  never contents.
+- **Honest staleness**: `lastVerifiedAt` persists across reloads (OQ-3, decided), so
+  any surface rendering it must phrase it as "last checked {time}" and never as
+  current truth — a key revoked an hour ago still has a recent timestamp.
 
 ## Migration & Rollback
 
@@ -241,9 +249,14 @@ Persisted vault payload:
      disagree, prefer `stored` over `env` over `detected`.
   5. Move the standalone `voiceApiKey` / `imageApiKey` (added in PR #235) onto the
      matching voice/image provider, or into a new provider if none matches.
+  6. Convert each `models[]` row into a text `AiConnection`. Attach it to the provider
+     matching `(row.provider, row.endpoint, '')`, creating a keyless one if none
+     exists. Skip rows whose `(provider, model)` pair a migrated connection already
+     covers — those are duplicates of the same choice, not a second configuration.
 
 - **Rollback**: write the untouched v1 payload under `legacy` in the v2 vault, and keep
-  writing it for one release. Rolling back the app then finds a vault whose top level
+  writing it for **exactly one tagged release** (OQ-4, decided) — record that tag in
+  the Amendments table when it ships, so the follow-up removal is unambiguous. Rolling back the app then finds a vault whose top level
   it cannot parse but whose `legacy` key it can — so the pre-C-463 build must be able
   to fall back to `legacy` when the top-level shape is unrecognised. **That fallback
   read is part of this contract** and must be added even though it only benefits a
@@ -267,6 +280,9 @@ Persisted vault payload:
   - Compile-level updates to the 11 existing consumers, and deleting
     `_providerCache` / `_getFallbackApiKey` from `connection_manager_view_model`.
   - Capability-filtering `agent_editor_view_model.connectionOptions`.
+  - **Retiring `models` / `ModelConfigEntry`** (OQ-1, decided): migrate its rows into
+    `AiConnection`s and delete the field, replacing the `_resolveTextRouting()` lookup
+    with a lookup over text connections.
 
 - **Out of Scope:**
   - **Any settings UI redesign.** The provider tree, status board and role drawer are
@@ -276,10 +292,6 @@ Persisted vault payload:
     sizes are still not read by the gateway; making them live is a later contract and
     doing it here would hide a behaviour change inside a migration.
   - `VOICE_PROVIDERS` / `IMAGE_PROVIDERS` registry corrections.
-  - The `models` / `ModelConfigEntry` field. It is still read by
-    `ai_gateway_service._resolveTextRouting` as an explicit-model override and has had
-    no writer since PR #233. Decide its fate here in an Open Question, do not silently
-    drop it.
   - Anything under `src-tauri/`, `apps/backend/**`, or `scripts/**`.
 
 ## Contract Size & Split Rule
@@ -436,6 +448,32 @@ named in Baseline Evidence — no additions.
     - **Functional**: `tests/client/settings.spec.ts` unchanged and still green.
     - **Visual**: N/A — no visual change in this contract.
 
+### AC-10: The `models` override path resolves through connections
+**Given** a v1 vault holding a `models[]` row for `anthropic/claude-opus-4` on an
+endpoint, and a text connection for a different model on the same provider
+**When** the vault is migrated and `streamChat({ model: 'anthropic/claude-opus-4' })`
+is issued
+**Then** `models` no longer exists on `ConfigState`, the row has become a text
+`AiConnection` attached to that provider, and routing returns that connection's
+provider, endpoint and credential — the same resolution the `models[]` lookup gave
+before.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-10 | Unit | `config_service_migration.test.ts`; `ai_gateway_service.test.ts` | `/game` | Filled during verification |
+
+**Test Hooks**:
+- Moon Task: `moon run client:test`
+- Integration: assert the explicit-model branch of `_resolveTextRouting()` against a
+  migrated fixture, not a hand-built state object.
+
+**Watch Points**:
+- An unknown explicit model must still fall through to the active provider with the
+  model passed verbatim — that branch exists today and callers depend on it.
+- A `models[]` row duplicating a connection's `(provider, model)` pair must not create
+  a second connection.
+
 ## Implementation Sequence
 
 1. **Phase 1 (Types)**: `AiProvider`, `AiConnection`, `AiRole`, `RoleAssignments` and
@@ -448,7 +486,9 @@ named in Baseline Evidence — no additions.
    new model; port the PR #235 default-invariant tests to roles; add the `legacy`
    write and the unrecognised-shape fallback read.
 4. **Phase 4 (Consumers)**: update the 11 consumers; delete `_providerCache` and
-   `_getFallbackApiKey`; filter the agent picker.
+   `_getFallbackApiKey`; filter the agent picker; replace the `state.models` lookup
+   in `ai_gateway_service._resolveTextRouting()` with a text-connection lookup and
+   drop the field from `ConfigState`.
 5. **Phase 5 (Validation)**: `bun run fix && bun moon run :validate && bun run test`;
    confirm the 31-failure baseline is unchanged and the type-safety guard baseline
    still holds at T1=14 T2=4 T3=1.
@@ -473,26 +513,23 @@ named in Baseline Evidence — no additions.
 - **`crypto.randomUUID()` in migration** makes the output non-deterministic, which
   fights AC-5's deep-equal assertion. Inject the id factory so tests can pin it.
 
-## Open Questions
+## Resolved Decisions
 
-Must be resolved before status becomes `approved`:
+All open questions were resolved by the author on 2026-09-03; the contract is
+`approved`. Recorded here rather than deleted, because each one shaped a scope
+boundary above.
 
-1. **What happens to `models` / `ModelConfigEntry`?** It is read by
-   `ai_gateway_service._resolveTextRouting()` as an explicit-model override and has had
-   no writer since PR #233, but existing installs may hold rows written by the old AI
-   Engine tab. *Recommendation:* migrate its rows into `AiConnection`s on the matching
-   provider and delete the field, so the override path and the connection list stop
-   being two answers to the same question.
-2. **Do roles need a per-campaign override?** Assignments are global today. A player
-   running an expensive campaign and a cheap one might want different narration models.
-   *Recommendation:* global-only in this contract; the type is a plain map, so scoping
-   it later is additive.
-3. **Should `lastVerifiedAt` persist, or be session-only?** Persisting it means the
-   health dot can show green for a key revoked yesterday. *Recommendation:* persist it
-   but always render it as "last checked <time>", never as current truth.
-4. **How long does `legacy` stay?** *Recommendation:* exactly one tagged release, then
-   a one-line removal in the following contract. Record the release tag here when it
-   ships so the removal is unambiguous.
+1. **`models` / `ModelConfigEntry` is retired.** Its rows migrate into text
+   `AiConnection`s and the field is deleted. `_resolveTextRouting()`'s explicit-model
+   override now looks up a text connection by model, so the override path and the
+   connection list stop being two answers to the same question. See Migration step 6
+   and AC-10.
+2. **Role assignments are global.** No per-campaign override in this contract. The
+   type is a plain map, so campaign scoping later is additive.
+3. **`lastVerifiedAt` persists.** Rendered as "last checked {time}", never as current
+   truth — see Quality Requirements.
+4. **`legacy` survives exactly one tagged release.** The tag goes in the Amendments
+   table when it ships; a follow-up contract removes the key.
 
 ## Amendments
 
