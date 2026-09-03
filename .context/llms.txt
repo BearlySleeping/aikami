@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-03
-> Files: 396 across 17 categories
+> Files: 397 across 17 categories
 
 ## Quick Start (Read These First)
 
@@ -370,6 +370,7 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-460: NPC Behavioral Autonomy Layer](contracts/C-460-npc-behavioral-autonomy-layer.md)
 - [Contract C-461: Generate TypeBox row schemas from the D1 Drizzle schema](contracts/C-461-generate-typebox-row-schemas-from-drizzle.md)
 - [Contract C-462: Client-Side R2 Save Backup & Restore](contracts/C-462-client-side-r2-save-backup-and-restore.md)
+- [Contract C-463: Provider, Connection, and Role — one model for AI configuration](contracts/C-463-provider-connection-role-model.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)

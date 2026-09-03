@@ -200,6 +200,6 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-456 | Group Chat And Systemic Npc Interactions | 🛠️ implemented | v1 | full |
 | C-457 | Gm Prompt Assembly Upgrade | 🛠️ implemented | v1 | full |
 | C-458 | In House Memory And Lore Retrieval System | 🛠️ implemented | v1 | full |
-| C-459 | Ai Gm Narrative Director Enhancements | 👍 approved | v1 | full |
-| C-460 | Npc Behavioral Autonomy Layer | 📝 draft | v1 | full |
+| C-459 | Ai Gm Narrative Director Enhancements | 🛠️ implemented | v1 | full |
+| C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | v1 | full |
 
