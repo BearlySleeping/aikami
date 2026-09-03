@@ -23,7 +23,9 @@ import type { NpcSchedule } from '@aikami/types';
 import { gameOverlayService, idleDetectionService, worldStateService } from '$services';
 import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { chatService } from '../chat/chat.svelte.ts';
+import { relationshipService } from '../game/relationship_service.svelte.ts';
 import { npcScheduleService } from './npc_schedule_service.svelte.ts';
+import type { CharacterRelationship } from '@aikami/types';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,13 @@ export type AutonomousMessageServiceOptions = BaseFrontendClassOptions & {
   pollerIntervalMs?: number;
   /** Idle threshold in milliseconds (default: 5 min). */
   idleThresholdMs?: number;
+  /**
+   * Memory retrieval service for recent-history signal (C-458).
+   * Optional — when absent, relationship boost uses relationship data only.
+   */
+  memoryRetrievalService?: {
+    query: (q: { text: string; limit?: number }) => Promise<Array<{ relevanceScore: number }>>;
+  };
 };
 
 export type AutonomousMessageServiceInterface = BaseFrontendClassInterface & {
@@ -105,10 +114,17 @@ class AutonomousMessageService
   /** Per-NPC cooldown tracker: npcId → timestamp of last message. */
   private _cooldowns = new Map<string, number>();
 
+  /**
+   * Optional memory retrieval service for recent-history signal (C-458).
+   * When unavailable, the relationship boost uses relationship data only.
+   */
+  private _memoryRetrievalService: { query: (q: { text: string; limit?: number }) => Promise<Array<{ relevanceScore: number }>> } | undefined;
+
   constructor(options: AutonomousMessageServiceOptions) {
     super(options);
     this._pollerIntervalMs = options.pollerIntervalMs ?? DEFAULT_POLLER_INTERVAL_MS;
     this._idleThresholdMs = options.idleThresholdMs ?? DEFAULT_IDLE_THRESHOLD_MS;
+    this._memoryRetrievalService = options.memoryRetrievalService;
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────
@@ -321,12 +337,13 @@ class AutonomousMessageService
       return undefined;
     }
 
-    // Build weighted array using talkativeness from schedule cache
+    // Build weighted array using talkativeness + relationship boost
     const weighted: Array<{ npcId: string; weight: number }> = [];
 
     for (const npcId of npcIds) {
       const schedule = this._getCachedSchedule(npcId);
-      const weight = schedule.talkativeness;
+      const relationshipBoost = this._computeRelationshipBoost(npcId);
+      const weight = Math.max(0, schedule.talkativeness + relationshipBoost);
       weighted.push({ npcId, weight });
     }
 
@@ -372,7 +389,8 @@ class AutonomousMessageService
       const weighted: Array<{ npcId: string; weight: number }> = [];
       for (const npcId of pool) {
         const schedule = this._getCachedSchedule(npcId);
-        weighted.push({ npcId, weight: schedule.talkativeness });
+        const relationshipBoost = this._computeRelationshipBoost(npcId);
+        weighted.push({ npcId, weight: Math.max(0, schedule.talkativeness + relationshipBoost) });
       }
 
       const totalWeight = weighted.reduce((sum, item) => sum + item.weight, 0);
@@ -528,6 +546,37 @@ class AutonomousMessageService
       ],
       onChunk,
     });
+  }
+
+  /**
+   * Computes a relationship boost weight for an NPC based on their
+   * relationship standing with the player.
+   *
+   * Returns a value in [-0.5, 0.5] range:
+   *   - Positive for friendly relationships (higher selection likelihood)
+   *   - Negative for hostile relationships (lower selection likelihood)
+   *   - 0 when no relationship data exists (graceful degradation)
+   *
+   * Contract C-460: NPC Behavioral Autonomy Layer (AC-2)
+   */
+  private _computeRelationshipBoost(npcId: string): number {
+    try {
+      const relationship = relationshipService.getRelationship(npcId);
+      if (!relationship) {
+        return 0;
+      }
+
+      // Derive boost from trust + affinity (-100..100 each → -200..200 sum)
+      // Normalize to [-0.5, 0.5] range
+      const sum = relationship.trust + relationship.affinity;
+      const boost = (sum / 400); // -200/400 = -0.5, 200/400 = 0.5
+
+      this.debug('_computeRelationshipBoost', { npcId, trust: relationship.trust, affinity: relationship.affinity, boost });
+      return boost;
+    } catch {
+      // Graceful degradation: relationship service unavailable
+      return 0;
+    }
   }
 
   /**

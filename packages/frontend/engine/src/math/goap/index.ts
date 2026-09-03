@@ -7,16 +7,20 @@
 // evaluation, and faction relation graph primitives.
 // ---------------------------------------------------------------------------
 
-export type { StaticActionDefinition } from './action_registry.ts';
+export type { GoapActionScoringContext, StaticActionDefinition } from './action_registry.ts';
 export {
   applyEffects,
   clearActionRegistry,
+  clearAllScoringContexts,
+  clearEntityScoringContext,
   evaluatePreconditions,
   findSatisfiedActions,
   getActionByIndex,
   getActionRegistry,
+  getEntityScoringContext,
   initializeActionRegistry,
   selectBestAction,
+  setEntityScoringContext,
 } from './action_registry.ts';
 
 export { Faction, IsHostileTo, IsMemberOf, IsProtectorOf } from './faction_relations.ts';

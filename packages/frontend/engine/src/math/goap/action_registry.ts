@@ -109,6 +109,59 @@ export const clearActionRegistry = (): void => {
 };
 
 // ---------------------------------------------------------------------------
+// Scoring context — optional relationship/faction data for entity-aware scoring
+// ---------------------------------------------------------------------------
+
+/**
+ * Relationship and faction data that influences GOAP action scoring.
+ * Injected per-entity before stepping macro agents.
+ * When absent, scoring falls back to the current relationship-agnostic behavior.
+ *
+ * Contract C-460: NPC Behavioral Autonomy Layer
+ */
+export type GoapActionScoringContext = {
+  /** Relationship standing with the player (-100 to 100). */
+  playerRelationship?: { standing: number; factionTier?: string };
+  /** NPC's faction identifier (maps to Faction constants in faction_relations.ts). */
+  npcFactionId?: string;
+};
+
+/**
+ * Module-level map of entity ID to scoring context.
+ * Set by the caller before stepping macro agents;
+ * cleared after the tick completes.
+ */
+const _scoringContextMap = new Map<number, GoapActionScoringContext>();
+
+/**
+ * Sets the scoring context for a single entity.
+ * Called by the macro simulation system before stepping.
+ */
+export const setEntityScoringContext = (eid: number, context: GoapActionScoringContext): void => {
+  _scoringContextMap.set(eid, context);
+};
+
+/**
+ * Removes the scoring context for a single entity.
+ */
+export const clearEntityScoringContext = (eid: number): void => {
+  _scoringContextMap.delete(eid);
+};
+
+/**
+ * Clears all scoring contexts (called between ticks or on teardown).
+ */
+export const clearAllScoringContexts = (): void => {
+  _scoringContextMap.clear();
+};
+
+/**
+ * Returns the scoring context for an entity, or undefined if none set.
+ */
+export const getEntityScoringContext = (eid: number): GoapActionScoringContext | undefined =>
+  _scoringContextMap.get(eid);
+
+// ---------------------------------------------------------------------------
 // Plan evaluation functions (zero-allocation, pure)
 // ---------------------------------------------------------------------------
 
@@ -175,7 +228,12 @@ export const findSatisfiedActions = (currentState: number): number[] => {
  * @param goalMask - The target goal state uint32.
  * @returns The best matching action index, or -1 if no action matches.
  */
-export const selectBestAction = (currentState: number, goalMask: number): number => {
+export const selectBestAction = (
+  currentState: number,
+  goalMask: number,
+  entityId?: number,
+): number => {
+  const scoringContext = entityId !== undefined ? _scoringContextMap.get(entityId) : undefined;
   let bestIndex = -1;
   let bestScore = -1;
   let bestCost = Number.POSITIVE_INFINITY;
@@ -194,15 +252,89 @@ export const selectBestAction = (currentState: number, goalMask: number): number
     // Score: how many new goal bits this action sets
     const score = _popcount(newBits);
 
-    // Prefer higher score, then lower cost
-    if (score > bestScore || (score === bestScore && action.cost < bestCost)) {
+    // Apply relationship-based cost modifier if scoring context exists
+    const effectiveCost = scoringContext
+      ? _applyRelationshipCostModifier({
+          actionId: action.actionId,
+          cost: action.cost,
+          scoringContext,
+        })
+      : action.cost;
+
+    // Prefer higher score, then lower effective cost
+    if (score > bestScore || (score === bestScore && effectiveCost < bestCost)) {
       bestScore = score;
-      bestCost = action.cost;
+      bestCost = effectiveCost;
       bestIndex = i;
     }
   }
 
   return bestIndex;
+};
+
+// ---------------------------------------------------------------------------
+// Internal: relationship-based cost modifier
+// ---------------------------------------------------------------------------
+
+/**
+ * Action IDs that are considered aggressive/avoidant — lower effective cost
+ * for hostile NPCs (faction standing < 0).
+ * Currently: action 6 (Flee), action 7 (Pursue target), action 10 (Combat move).
+ */
+const HOSTILE_BIAS_ACTION_IDS = new Set([6, 7, 10]);
+
+/**
+ * Action IDs that are considered social/approachable — lower effective cost
+ * for friendly NPCs (faction standing > 0).
+ * Currently: action 2 (Go to pub), action 3 (social interaction).
+ */
+const FRIENDLY_BIAS_ACTION_IDS = new Set([2, 3]);
+
+/**
+ * Maximum cost modifier applied for relationship-based scoring.
+ * Kept small so it influences tie-breaking without overriding goal progress.
+ */
+const MAX_RELATIONSHIP_COST_MODIFIER = 3;
+
+/**
+ * Computes an effective cost for an action given the NPC's relationship
+ * context. Hostile NPCs prefer aggressive/avoidant actions (lower cost);
+ * friendly NPCs prefer social/approach actions (lower cost).
+ *
+ * The modifier is additive and proportional to relationship standing
+ * magnitude, capped at MAX_RELATIONSHIP_COST_MODIFIER.
+ *
+ * @returns The effective cost after applying the relationship modifier.
+ */
+const _applyRelationshipCostModifier = (options: {
+  actionId: number;
+  cost: number;
+  scoringContext: GoapActionScoringContext;
+}): number => {
+  const { actionId, cost, scoringContext } = options;
+  const standing = scoringContext.playerRelationship?.standing ?? 0;
+
+  if (standing === 0) {
+    return cost;
+  }
+
+  // Normalize standing to -1..1 range (clamped to -100..100)
+  const normalizedStanding = Math.max(-1, Math.min(1, standing / 100));
+
+  // Hostile NPCs (standing < 0): prefer aggressive/avoidant actions
+  if (standing < 0 && HOSTILE_BIAS_ACTION_IDS.has(actionId)) {
+    const modifier = Math.round(Math.abs(normalizedStanding) * MAX_RELATIONSHIP_COST_MODIFIER);
+    return Math.max(0, cost - modifier);
+  }
+
+  // Friendly NPCs (standing > 0): prefer social/approach actions
+  if (standing > 0 && FRIENDLY_BIAS_ACTION_IDS.has(actionId)) {
+    const modifier = Math.round(normalizedStanding * MAX_RELATIONSHIP_COST_MODIFIER);
+    return Math.max(0, cost - modifier);
+  }
+
+  // No bias for this action — leave cost unchanged
+  return cost;
 };
 
 // ---------------------------------------------------------------------------

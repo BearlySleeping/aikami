@@ -9,13 +9,20 @@
 //   AC-2: Coarse schedule state shifts — GOAP agents update on macro ticks
 //   AC-3: Portal zone hydration — virtual grid → pixel coordinate resolution
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld } from 'bitecs';
 import { GoapAgent } from '../components/goap_agent.ts';
 import { MapLocation } from '../components/map_location.ts';
 import { ZoneStatus } from '../components/zone_status.ts';
-import { initializeActionRegistry } from '../math/goap/action_registry.ts';
+
+import {
+  clearAllScoringContexts,
+  getEntityScoringContext,
+  initializeActionRegistry,
+  selectBestAction,
+  setEntityScoringContext,
+} from '../math/goap/action_registry.ts';
 import {
   dehydrateZone,
   getMacroClock,
@@ -75,6 +82,24 @@ const _buildDefaultActions = () => [
     effectClearMask: 8,
     effectSetMask: 2,
   },
+  {
+    // Flee/avoid action — sets no goal bits but moves NPC away
+    actionId: 6,
+    cost: 10,
+    preconditionUsageMask: 0,
+    preconditionValueMask: 0,
+    effectClearMask: 0,
+    effectSetMask: 0, // No goal progress; hostile NPCs prefer it via cost modifier
+  },
+  {
+    // Combat action — minimal goal progress
+    actionId: 7,
+    cost: 10,
+    preconditionUsageMask: 0,
+    preconditionValueMask: 0,
+    effectClearMask: 0,
+    effectSetMask: 0, // No goal progress; hostile NPCs prefer it via cost modifier
+  },
 ];
 
 /** Creates a fresh bitECS world. */
@@ -101,6 +126,7 @@ afterEach(() => {
   GoapAgent.currentGoal.length = 0;
   GoapAgent.currentActionId.length = 0;
   GoapAgent.targetEntityId.length = 0;
+  GoapAgent.relationshipStanding.length = 0;
 });
 
 // ---------------------------------------------------------------------------
@@ -412,6 +438,144 @@ describe('AC-3: Portal Zone Hydration', () => {
 
     // No state should have changed
     expect(ZoneStatus.isActive[inactiveZoneEid]).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-4: Relationship-Aware Scoring (C-460 NPC Behavioral Autonomy Layer)
+// ---------------------------------------------------------------------------
+
+describe('AC-4: Relationship-Aware Scoring', () => {
+  let world: World;
+
+  beforeEach(() => {
+    stopMacroSimulation();
+    world = createTestWorld();
+    initializeActionRegistry(_buildDefaultActions());
+  });
+
+  afterEach(() => {
+    stopMacroSimulation();
+    clearAllScoringContexts();
+  });
+
+  test('selectBestAction uses relationship bias to break an otherwise equal tie', () => {
+    initializeActionRegistry([
+      {
+        actionId: 4,
+        cost: 10,
+        preconditionUsageMask: 0,
+        preconditionValueMask: 0,
+        effectClearMask: 0,
+        effectSetMask: 1,
+      },
+      {
+        actionId: 2,
+        cost: 10,
+        preconditionUsageMask: 0,
+        preconditionValueMask: 0,
+        effectClearMask: 0,
+        effectSetMask: 2,
+      },
+    ]);
+    const friendlyEid = addEntity(world);
+    setEntityScoringContext(friendlyEid, {
+      playerRelationship: { standing: 80, factionTier: 'friend' },
+    });
+
+    expect(selectBestAction(0, 1 | 2)).toBe(0);
+    expect(selectBestAction(0, 1 | 2, friendlyEid)).toBe(1);
+  });
+
+  test('macro tick supplies relationship context and clears it afterward', () => {
+    jest.useFakeTimers();
+    initializeActionRegistry([
+      {
+        actionId: 4,
+        cost: 10,
+        preconditionUsageMask: 0,
+        preconditionValueMask: 0,
+        effectClearMask: 0,
+        effectSetMask: 1,
+      },
+      {
+        actionId: 2,
+        cost: 10,
+        preconditionUsageMask: 0,
+        preconditionValueMask: 0,
+        effectClearMask: 0,
+        effectSetMask: 2,
+      },
+    ]);
+    const friendlyEid = addEntity(world);
+    GoapAgent.currentState[friendlyEid] = 0;
+    GoapAgent.currentGoal[friendlyEid] = 1 | 2;
+    GoapAgent.currentActionId[friendlyEid] = -1;
+    GoapAgent.relationshipStanding[friendlyEid] = 80;
+    MapLocation.currentZoneId[friendlyEid] = 1;
+    ZoneStatus.isActive[1] = 0;
+
+    try {
+      startMacroSimulation();
+      jest.advanceTimersByTime(500);
+
+      expect(GoapAgent.currentActionId[friendlyEid]).toBe(1);
+      expect(getEntityScoringContext(friendlyEid)).toBeUndefined();
+    } finally {
+      stopMacroSimulation();
+      jest.useRealTimers();
+    }
+  });
+
+  test('neutral-standing NPC behaves identically to no-context NPC', () => {
+    const noContextEid = addEntity(world);
+    GoapAgent.currentState[noContextEid] = 16 | 4;
+    GoapAgent.currentGoal[noContextEid] = 2;
+    GoapAgent.currentActionId[noContextEid] = -1;
+
+    const neutralContextEid = addEntity(world);
+    GoapAgent.currentState[neutralContextEid] = 16 | 4;
+    GoapAgent.currentGoal[neutralContextEid] = 2;
+    GoapAgent.currentActionId[neutralContextEid] = -1;
+
+    setEntityScoringContext(neutralContextEid, {
+      playerRelationship: { standing: 0 },
+    });
+
+    stepMacroAgent(world, noContextEid);
+    stepMacroAgent(world, neutralContextEid);
+
+    expect(GoapAgent.currentActionId[noContextEid]).toBe(
+      GoapAgent.currentActionId[neutralContextEid],
+    );
+  });
+
+  test('scoring context cleans up after clearAllScoringContexts', () => {
+    const eid = addEntity(world);
+    GoapAgent.currentState[eid] = 16 | 4;
+    GoapAgent.currentGoal[eid] = 2;
+    GoapAgent.currentActionId[eid] = -1;
+
+    setEntityScoringContext(eid, {
+      playerRelationship: { standing: -80 },
+    });
+
+    clearAllScoringContexts();
+
+    const noContextEid = addEntity(world);
+    GoapAgent.currentState[noContextEid] = 16 | 4;
+    GoapAgent.currentGoal[noContextEid] = 2;
+    GoapAgent.currentActionId[noContextEid] = -1;
+
+    stepMacroAgent(world, eid);
+    stepMacroAgent(world, noContextEid);
+
+    expect(GoapAgent.currentActionId[eid]).toBe(GoapAgent.currentActionId[noContextEid]);
+  });
+
+  test('selectBestAction works without entity ID (backward compatibility)', () => {
+    const result = selectBestAction(16 | 4, 2);
+    expect(result).toBeGreaterThanOrEqual(0);
   });
 });
 
