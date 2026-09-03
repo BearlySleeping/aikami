@@ -24,7 +24,7 @@ created_at: "2026-09-03"
 | **Type** | full |
 | **Priority** | P1 — blocks the settings-shell, AI-section, and three-mounts contracts; every one of them needs this shape fixed first |
 | **Dependencies** | C-230 (connection model, superseded here), C-318 (capability screen), PRs #233/#234/#235 (already merged) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | internal → none. The user-facing AI settings page is a later contract. |
 | **Contract version** | 2.0.0 |
