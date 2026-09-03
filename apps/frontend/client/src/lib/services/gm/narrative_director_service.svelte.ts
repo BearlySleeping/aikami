@@ -268,6 +268,7 @@ class NarrativeDirectorService
       return;
     }
 
+    const generationArcId = this._currentArc.arcId;
     this.debug('_generateSceneDirection');
 
     try {
@@ -276,6 +277,10 @@ class NarrativeDirectorService
       // returns nothing, referencedMemory is absent and generation proceeds
       // with world/party/quest state only (existing C-235 behavior).
       const referencedMemory = await this._queryRelevantMemory();
+      if (this._currentArc?.arcId !== generationArcId) {
+        this.debug('_generateSceneDirection:arc-changed-after-memory', { generationArcId });
+        return;
+      }
       const hasMemory = referencedMemory.length > 0;
 
       if (hasMemory) {
@@ -331,6 +336,11 @@ class NarrativeDirectorService
         systemPrompt:
           'Generate concise fantasy RPG scene directions. JSON only. No markdown, no explanations.',
       })) as { description: string; playerGuidance?: string };
+
+      if (this._currentArc?.arcId !== generationArcId) {
+        this.debug('_generateSceneDirection:arc-changed-after-generation', { generationArcId });
+        return;
+      }
 
       const direction: SceneDirection = {
         id: crypto.randomUUID(),

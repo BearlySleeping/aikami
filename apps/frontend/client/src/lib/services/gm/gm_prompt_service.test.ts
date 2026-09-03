@@ -453,6 +453,14 @@ describe('GmPromptService — C-457', () => {
         description: 'The forest path winds east.',
         createdAt: Date.now() - 1000,
         acknowledged: true,
+        referencedMemory: [
+          {
+            sourceType: 'session_summary' as const,
+            sourceId: 'old-session',
+            content: 'OLD MEMORY: The party promised to return to the forest shrine.',
+            relevanceScore: 0.8,
+          },
+        ],
       };
       const newDirection = {
         id: 'dir-new',
@@ -463,7 +471,7 @@ describe('GmPromptService — C-457', () => {
           {
             sourceType: 'session_summary' as const,
             sourceId: 's1',
-            content: 'The party learned of the lost city.',
+            content: 'NEW MEMORY: The party learned of the lost city.',
             relevanceScore: 0.85,
           },
         ],
@@ -474,10 +482,13 @@ describe('GmPromptService — C-457', () => {
       const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
 
       expect(prompt).toContain('[NARRATIVE GUIDANCE]');
-      expect(prompt).toContain('lost city');
+      expect(prompt).toContain('NEW MEMORY: The party learned of the lost city.');
+      expect(prompt).not.toContain(
+        'OLD MEMORY: The party promised to return to the forest shrine.',
+      );
     });
 
-    test('NARRATIVE GUIDANCE is medium priority — dropped before low priority sections', () => {
+    test('NARRATIVE GUIDANCE is retained before low-priority guidance', () => {
       // Push referenced memory
       const mockDirection = {
         id: 'dir-1',
@@ -495,6 +506,8 @@ describe('GmPromptService — C-457', () => {
       };
       (narrativeDirectorService.sceneDirections as Array<typeof mockDirection>).push(mockDirection);
 
+      const lowPriorityGuidance = 'LOW PRIORITY INFLUENCE';
+
       // Add large quest content to trigger budget enforcement
       worldStateMock.quests = Array.from({ length: 30 }, (_, i) => ({
         id: `q-${i}`,
@@ -503,12 +516,35 @@ describe('GmPromptService — C-457', () => {
         status: 'active' as const,
       }));
 
-      const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
+      const prompt = gmPromptService.assemblePrompt({
+        mode: 'scene',
+        bridgeContext: {
+          durableNotes: [],
+          turnInfluences: [`${lowPriorityGuidance}: ${'L'.repeat(5600)}`],
+          recentGameContext: 'The party entered the ruins.',
+        },
+      });
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(prompt).length;
 
       expect(byteLength).toBeLessThanOrEqual(6144);
+      expect(prompt).toContain('[ADDRESS MODE: Scene');
+      expect(prompt).toContain('[WORLD STATE]');
+      expect(prompt).toContain('[PLAYER CHARACTER]');
       expect(prompt).toContain('[SYSTEM INSTRUCTIONS]');
+      expect(prompt).toContain('[NARRATIVE GUIDANCE]');
+      expect(prompt).toContain('Relevant past event.');
+      expect(prompt).not.toContain('[ACTIVE QUESTS]');
+      expect(prompt).not.toContain(lowPriorityGuidance);
+      expect(warnMock).toHaveBeenCalledWith(
+        'assemblePrompt:sections-dropped',
+        expect.objectContaining({
+          droppedSections: expect.arrayContaining([
+            expect.objectContaining({ name: 'ACTIVE QUESTS' }),
+            expect.objectContaining({ name: 'INFLUENCE' }),
+          ]),
+        }),
+      );
     });
   });
 });

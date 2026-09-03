@@ -10,20 +10,22 @@
 //     src/lib/services/gm/narrative_director.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { NarrativeDirectorService as NarrativeDirectorServiceClass } from './narrative_director_service.svelte.ts';
 
 mock.module('../game/serializable_service', () => ({
   registerSerializable: mock(() => {}),
 }));
 
 const mockMemoryQuery = mock(async () => []);
+const mockExtractStructure = mock(async () => ({
+  description: 'A misty morning in the forest. Birds chirp softly.',
+  playerGuidance: 'Follow the path north to find the ancient ruins.',
+}));
 
 mock.module('$services', () => ({
   textGenerationService: {
     streamChat: mock(async () => {}),
-    extractStructure: mock(async () => ({
-      description: 'A misty morning in the forest. Birds chirp softly.',
-      playerGuidance: 'Follow the path north to find the ancient ruins.',
-    })),
+    extractStructure: mockExtractStructure,
     cancelAll: mock(() => {}),
   },
   memoryRetrievalService: {
@@ -31,7 +33,13 @@ mock.module('$services', () => ({
   },
 }));
 
-import { NarrativeDirectorService } from './narrative_director_service.svelte.ts';
+let NarrativeDirectorService: typeof NarrativeDirectorServiceClass;
+
+beforeEach(async () => {
+  const serviceModule = await import('./narrative_director_service.svelte.ts');
+  NarrativeDirectorService = serviceModule.NarrativeDirectorService;
+  mockExtractStructure.mockClear();
+});
 
 describe('NarrativeDirectorService — C-235 baseline + C-459', () => {
   test('isRunning starts as false', () => {
@@ -149,6 +157,44 @@ describe('C-459 AC-1: Scene direction references relevant past events', () => {
     expect(queryArg).toHaveProperty('limit', 5);
 
     service.stop();
+  });
+
+  test('discards pending generation when a different arc loads during retrieval', async () => {
+    let resolveRetrieval: (() => void) | undefined;
+    mockMemoryQuery.mockImplementation(
+      () =>
+        new Promise<never[]>((resolve) => {
+          resolveRetrieval = () => resolve([]);
+        }),
+    );
+
+    const service = NarrativeDirectorService.create({ className: 'TestNarrativeDirector' });
+    service.loadArc({
+      arcId: 'original-arc',
+      arcName: 'Original Arc',
+      description: 'The party searches the old forest.',
+      sceneDirections: [],
+      isCompleted: false,
+      updatedAt: Date.now(),
+    });
+
+    const generation = service.pushStory();
+    expect(mockMemoryQuery).toHaveBeenCalledTimes(1);
+
+    service.loadArc({
+      arcId: 'replacement-arc',
+      arcName: 'Replacement Arc',
+      description: 'The party arrives in a new kingdom.',
+      sceneDirections: [],
+      isCompleted: false,
+      updatedAt: Date.now(),
+    });
+    resolveRetrieval?.();
+    await generation;
+
+    expect(service.currentArc?.arcId).toBe('replacement-arc');
+    expect(service.sceneDirections).toHaveLength(0);
+    expect(mockExtractStructure).not.toHaveBeenCalled();
   });
 });
 
