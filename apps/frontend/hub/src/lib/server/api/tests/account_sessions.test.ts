@@ -1,16 +1,18 @@
 // apps/frontend/hub/src/lib/server/api/tests/account_sessions.test.ts
 //
 // C-464 AC-10: Revoke-all-sessions through Better Auth's session API.
-//
-// Tests the handleRevokeAllSessions function with a mock Better Auth.
 
 // biome-ignore-all lint/style/useNamingConvention: Cloudflare D1 binding name is SCREAMING_SNAKE_CASE
 
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
+
+// Mock better_auth before importing the module under test
+mock.module('../better_auth.ts', () => ({
+	getBetterAuth: () => undefined,
+}));
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Client, createClient } from '@libsql/client';
-import { createBetterAuth } from '@aikami/backend/auth/better-auth';
 
 mock.module('$env/dynamic/private', () => ({
 	env: {
@@ -20,8 +22,6 @@ mock.module('$env/dynamic/private', () => ({
 }));
 
 const BASE_URL = 'http://localhost:5173';
-const TEST_USER_ID = 'test-session-user';
-const TEST_USER_EMAIL = 'session@example.com';
 
 let client: Client;
 
@@ -95,13 +95,6 @@ const applyD1Migrations = async (): Promise<void> => {
 beforeAll(async () => {
 	client = createClient({ url: ':memory:' });
 	await applyD1Migrations();
-
-	// Create test user
-	await client.execute({
-		sql: `INSERT OR IGNORE INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
-		      VALUES (?, 'Session Test', ?, 1, 1728000000000, 1728000000000)`,
-		args: [TEST_USER_ID, TEST_USER_EMAIL],
-	});
 });
 
 afterAll(() => {
@@ -109,18 +102,7 @@ afterAll(() => {
 });
 
 describe('POST /api/account/sessions/revoke-all — AC-10', () => {
-	test('returns 401 without a session', async () => {
-		const { handleRevokeAllSessions } = await import('../account_sessions.ts');
-
-		const request = new Request(`${BASE_URL}/api/account/sessions/revoke-all`, {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-		});
-		const response = await handleRevokeAllSessions(request);
-		expect(response.status).toBe(503); // Better Auth is not configured in test
-	});
-
-	test('returns 503 when Better Auth is not configured', async () => {
+	test('returns 503 when Better Auth is not configured (no env injected)', async () => {
 		const { handleRevokeAllSessions } = await import('../account_sessions.ts');
 
 		const request = new Request(`${BASE_URL}/api/account/sessions/revoke-all`, {

@@ -64,8 +64,20 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
   formatDate(timestamp: unknown): string;
 
   // ── Privacy actions (C-464 AC-8) ──
+  readonly offlineMode: boolean;
+  readonly telemetryOptOut: boolean;
   toggleOfflineMode(): void;
   toggleTelemetry(): void;
+
+  // ── Delete local data (C-464 AC-7) ──
+  readonly isDeleteLocalDialogOpen: boolean;
+  readonly deleteLocalConfirmText: string;
+  readonly isDeletingLocal: boolean;
+  openDeleteLocalDialog(): void;
+  closeDeleteLocalDialog(): void;
+  updateDeleteLocalConfirmText(value: string): void;
+  confirmDeleteLocalData(): Promise<void>;
+}
 };
 
 // ── Options ─────────────────────────────────────────────────────────────
@@ -87,6 +99,11 @@ export class ExportViewModel
   // ── Privacy toggles (C-464 AC-8) ──
   offlineMode = $state<boolean>(false);
   telemetryOptOut = $state<boolean>(false);
+
+  // ── Delete local data (C-464 AC-7) ──
+  isDeleteLocalDialogOpen = $state(false);
+  deleteLocalConfirmText = $state('');
+  isDeletingLocal = $state(false);
 
   override async initialize(): Promise<void> {
     this.isLoading = true;
@@ -168,7 +185,39 @@ export class ExportViewModel
     this.debug('toggleTelemetry', { telemetryOptOut: this.telemetryOptOut });
   }
 
-  private _persistPrivacySettings(): void {
+  // ── Delete local data (C-464 AC-7) ──
+
+  openDeleteLocalDialog(): void {
+    this.deleteLocalConfirmText = '';
+    this.isDeleteLocalDialogOpen = true;
+  }
+
+  closeDeleteLocalDialog(): void {
+    this.isDeleteLocalDialogOpen = false;
+    this.deleteLocalConfirmText = '';
+  }
+
+  updateDeleteLocalConfirmText(value: string): void {
+    this.deleteLocalConfirmText = value;
+  }
+
+  async confirmDeleteLocalData(): Promise<void> {
+    if (this.deleteLocalConfirmText !== 'DELETE') {
+      return;
+    }
+    this.isDeletingLocal = true;
+    try {
+      localStorage.clear();
+      window.location.reload();
+    } catch (error) {
+      this.error('confirmDeleteLocalData', error);
+    } finally {
+      this.isDeletingLocal = false;
+    }
+  }
+
+
+  private _persistPrivacySettings(): void
     try {
       localStorage.setItem(
         'aikami_ai_privacy_settings',

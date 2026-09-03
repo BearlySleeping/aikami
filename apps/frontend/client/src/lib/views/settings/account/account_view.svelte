@@ -145,6 +145,19 @@ const { viewModel }: Props = $props();
               Sign Out
             {/if}
           </button>
+          <button
+            type="button"
+            class="btn btn-outline w-full"
+            disabled={viewModel.isRevokingAllSessions || !viewModel.isOnline}
+            onclick={() => viewModel.revokeAllSessions()}
+          >
+            {#if viewModel.isRevokingAllSessions}
+              <span class="loading loading-spinner loading-sm"></span>
+              Revoking all sessions…
+            {:else}
+              Sign Out Everywhere
+            {/if}
+          </button>
         </div>
       </div>
     </section>

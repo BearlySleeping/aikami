@@ -105,6 +105,29 @@ class AccountViewModel
     }
   }
 
+  async revokeAllSessions(): Promise<void> {
+    this.isRevokingAllSessions = true;
+    try {
+      const { hubApiBase } = await import('$lib/services/api/hub_api_client');
+      const base = hubApiBase();
+      const response = await fetch(
+        new URL('/api/account/sessions/revoke-all', base).href,
+        { method: 'POST', credentials: 'include' },
+      );
+      if (!response.ok) {
+        this.error('revokeAllSessions:failed', { status: response.status });
+        return;
+      }
+      authService.setCurrentUser(undefined);
+      this.debug('revokeAllSessions:success');
+    } catch (error) {
+      this.error('revokeAllSessions', error);
+    } finally {
+      this.isRevokingAllSessions = false;
+    }
+  }
+
+
   async refreshSyncSlots(): Promise<void> {
     if (!authService.uid) {
       return;
