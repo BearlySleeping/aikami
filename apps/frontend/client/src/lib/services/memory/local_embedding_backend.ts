@@ -7,6 +7,12 @@
 //
 // Contract: C-458 In-House Memory & Lore Retrieval System
 
+import {
+  DEFAULT_MAX_RESULTS,
+  DEFAULT_MIN_SCORE,
+  EMBEDDING_DIMENSION,
+  MEMORY_QUERY_SCOPE_SOURCE_TYPES,
+} from '@aikami/constants';
 import type {
   InMemoryIndexEntry,
   MemoryIndexable,
@@ -17,11 +23,6 @@ import type {
 } from '@aikami/types';
 import { logger } from '$logger';
 
-// Inline constants to avoid workspace dependency resolution issues in tests.
-// These mirror the values in @aikami/constants/src/lib/memory.ts.
-const DEFAULT_MAX_RESULTS = 10;
-const DEFAULT_MIN_SCORE = 0.25;
-const EMBEDDING_DIMENSION = 384;
 const LOCAL_EMBEDDING_MODEL = 'Xenova/all-MiniLM-L6-v2';
 
 // ---------------------------------------------------------------------------
@@ -102,13 +103,14 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
    */
   async init(): Promise<void> {
     if (this._modelLoadPromise) {
-      await this._modelLoadPromise;
+      this._model = await this._modelLoadPromise;
+      this._initialised = true;
       return;
     }
 
     this._modelLoadPromise = this._loadModel();
     try {
-      await this._modelLoadPromise;
+      this._model = await this._modelLoadPromise;
       this._initialised = true;
       logger.debug('LocalEmbeddingBackend:initialised', { dimension: EMBEDDING_DIMENSION });
     } catch (err) {
@@ -124,11 +126,11 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
       return;
     }
 
-    await this._ensureModel();
+    const model = await this._ensureModel();
 
     // Extract texts to embed
     const texts = entries.map((e) => e.content);
-    const embeddings = await this._model.embed(texts);
+    const embeddings = await model.embed(texts);
 
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
@@ -181,8 +183,10 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
       const queryWords = q.text.toLowerCase().split(/\W+/).filter(Boolean);
       const results: MemoryResult[] = [];
       const scope = q.scope ?? 'all';
-      const candidates =
-        scope === 'all' ? this._entries : this._entries.filter((e) => e.sourceType === scope);
+      const sourceTypes = MEMORY_QUERY_SCOPE_SOURCE_TYPES[scope];
+      const candidates = this._entries.filter((entry) =>
+        sourceTypes.some((sourceType) => sourceType === entry.sourceType),
+      );
 
       for (const entry of candidates) {
         const entryWords = entry.content.toLowerCase().split(/\W+/).filter(Boolean);
@@ -204,13 +208,16 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
       return results.slice(0, limit);
     }
 
-    const rawQueryVec = (await this._model.embed([q.text]))[0];
+    const model = await this._ensureModel();
+    const rawQueryVec = (await model.embed([q.text]))[0];
     const normalisedQuery = _normalise(rawQueryVec);
 
     // Filter by scope
     const scope = q.scope ?? 'all';
-    const candidates =
-      scope === 'all' ? this._entries : this._entries.filter((e) => e.sourceType === scope);
+    const sourceTypes = MEMORY_QUERY_SCOPE_SOURCE_TYPES[scope];
+    const candidates = this._entries.filter((entry) =>
+      sourceTypes.some((sourceType) => sourceType === entry.sourceType),
+    );
 
     // Score and rank
     const scored: Array<{ entry: InMemoryIndexEntry; score: number }> = [];
@@ -289,10 +296,17 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
   private async _loadModel(): Promise<EmbeddingModel> {
     // Dynamic import: @huggingface/transformers is ~2MB+ and should not
     // block boot — it is loaded lazily on first indexing/query.
-    const { pipeline } = await import('@huggingface/transformers');
+    const { env, pipeline } = await import('@huggingface/transformers');
+
+    env.allowLocalModels = true;
+    env.allowRemoteModels = false;
+    env.localModelPath = '/models/';
+    if (env.backends.onnx.wasm) {
+      env.backends.onnx.wasm.wasmPaths = '/ort/';
+    }
 
     const pipe = await pipeline('feature-extraction', LOCAL_EMBEDDING_MODEL, {
-      quantized: true,
+      dtype: 'q8',
     });
 
     logger.debug('LocalEmbeddingBackend:model-loaded', { model: LOCAL_EMBEDDING_MODEL });
@@ -316,10 +330,15 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
     };
   }
 
-  private async _ensureModel(): Promise<void> {
-    if (!this._model) {
-      this._model = await this._loadModel();
-      this._initialised = true;
+  private async _ensureModel(): Promise<EmbeddingModel> {
+    if (this._model) {
+      return this._model;
     }
+
+    await this.init();
+    if (!this._model) {
+      throw new Error('LocalEmbeddingBackend: model unavailable after initialization');
+    }
+    return this._model;
   }
 }

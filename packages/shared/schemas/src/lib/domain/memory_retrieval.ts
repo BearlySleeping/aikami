@@ -17,12 +17,7 @@ export const MemoryQuerySchema = Type.Object({
   text: Type.String({ minLength: 1, description: 'Query text' }),
   /** Scope filter — which source types to search. Defaults to "all". */
   scope: Type.Optional(
-    Type.Union([
-      Type.Literal('lore'),
-      Type.Literal('history'),
-      Type.Literal('relationships'),
-      Type.Literal('all'),
-    ]),
+    Type.Union([Type.Literal('lore'), Type.Literal('history'), Type.Literal('all')]),
   ),
   /** Maximum number of results to return. Defaults to 10. */
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),

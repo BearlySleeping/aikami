@@ -16,7 +16,20 @@
 // embedding-based similarity, and test the backend interface contract.
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { MemoryIndexable, MemoryResult, MemoryRetrievalBackend } from '@aikami/types';
+import { EMBEDDING_DIMENSION, MEMORY_QUERY_SCOPE_SOURCE_TYPES } from '@aikami/constants';
+import type {
+  MemoryIndexable,
+  MemoryQuery,
+  MemoryResult,
+  MemoryRetrievalBackend,
+} from '@aikami/types';
+import type { SessionSummary } from '$types';
+import type { LocalEmbeddingBackend as LocalEmbeddingBackendInstance } from './local_embedding_backend';
+import type {
+  MemoryRetrievalService as MemoryRetrievalServiceInstance,
+  MemoryRetrievalServiceInterface,
+  MemoryRetrievalServiceOptions,
+} from './memory_retrieval_service.svelte';
 
 // ---------------------------------------------------------------------------
 // Mock dependencies BEFORE importing the service module
@@ -26,6 +39,18 @@ const mockLorebooks: Array<{
   id: string;
   entries: Array<{ id: string; content: string; keywords?: string[]; name?: string }>;
 }> = [];
+let mockSessionSummary: SessionSummary | null = null;
+
+const mockFeatureExtraction = mock(async () => ({
+  data: new Float32Array(EMBEDDING_DIMENSION).fill(0.5),
+}));
+const mockTransformerPipeline = mock(async () => mockFeatureExtraction);
+const mockTransformersEnvironment = {
+  allowLocalModels: false,
+  allowRemoteModels: true,
+  backends: { onnx: { wasm: { wasmPaths: '' } } },
+  localModelPath: '',
+};
 
 mock.module('../lorebook/lorebook_store.svelte', () => ({
   lorebookStore: {
@@ -38,9 +63,14 @@ mock.module('../lorebook/lorebook_store.svelte', () => ({
 mock.module('../gm/session_summary_service.svelte', () => ({
   sessionSummaryService: {
     get currentSummary() {
-      return null;
+      return mockSessionSummary;
     },
   },
+}));
+
+mock.module('@huggingface/transformers', () => ({
+  env: mockTransformersEnvironment,
+  pipeline: mockTransformerPipeline,
 }));
 
 // Mock $logger to avoid Bun resolution issues
@@ -54,12 +84,24 @@ mock.module('$logger', () => ({
   },
 }));
 
-// Now safe to import the service under test
-import { LocalEmbeddingBackend } from './local_embedding_backend';
+let LocalEmbeddingBackend: { create(): LocalEmbeddingBackendInstance };
+let MemoryRetrievalService: {
+  create(options: MemoryRetrievalServiceOptions): MemoryRetrievalServiceInstance;
+};
 
-const { MemoryRetrievalService } = await import('./memory_retrieval_service.svelte');
+beforeEach(async () => {
+  mockLorebooks.length = 0;
+  mockSessionSummary = null;
+  mockFeatureExtraction.mockClear();
+  mockTransformerPipeline.mockClear();
+  mockTransformersEnvironment.allowLocalModels = false;
+  mockTransformersEnvironment.allowRemoteModels = true;
+  mockTransformersEnvironment.localModelPath = '';
+  mockTransformersEnvironment.backends.onnx.wasm.wasmPaths = '';
 
-import type { MemoryRetrievalServiceInterface } from './memory_retrieval_service.svelte';
+  ({ LocalEmbeddingBackend } = await import('./local_embedding_backend'));
+  ({ MemoryRetrievalService } = await import('./memory_retrieval_service.svelte'));
+});
 
 // ---------------------------------------------------------------------------
 // Mock backend for testing retrieval logic without the real embedding model
@@ -86,7 +128,7 @@ const createMockBackend = (): MemoryRetrievalBackend & {
     seed: (e: MockEntry[]) => {
       entries = e;
     },
-    index: async (indexables: MemoryIndexable[]) => {
+    index: mock(async (indexables: MemoryIndexable[]) => {
       for (const ix of indexables) {
         const existing = entries.findIndex(
           (e) => e.sourceType === ix.sourceType && e.sourceId === ix.sourceId,
@@ -103,12 +145,15 @@ const createMockBackend = (): MemoryRetrievalBackend & {
           entries.push(newEntry);
         }
       }
-    },
-    query: async (q: { text: string; scope?: string; limit?: number }): Promise<MemoryResult[]> => {
+    }),
+    query: async (q: MemoryQuery): Promise<MemoryResult[]> => {
       const scope = q.scope ?? 'all';
       const queryWords = q.text.toLowerCase().split(/\W+/).filter(Boolean);
+      const sourceTypes = MEMORY_QUERY_SCOPE_SOURCE_TYPES[scope];
 
-      const candidates = scope === 'all' ? entries : entries.filter((e) => e.sourceType === scope);
+      const candidates = entries.filter((entry) =>
+        sourceTypes.some((sourceType) => sourceType === entry.sourceType),
+      );
 
       const scored = candidates
         .map((e) => {
@@ -212,7 +257,7 @@ describe('LocalEmbeddingBackend', () => {
     expect(await backend.size()).toBe(1);
   });
 
-  it('toSnapshot() and loadSnapshot() round-trip', () => {
+  it('toSnapshot() and loadSnapshot() round-trip', async () => {
     const backend = LocalEmbeddingBackend.create();
     // @ts-expect-error: accessing private _entries for test setup
     backend._entries = [
@@ -229,31 +274,29 @@ describe('LocalEmbeddingBackend', () => {
 
     const backend2 = LocalEmbeddingBackend.create();
     backend2.loadSnapshot(snapshot);
-    expect(backend2.size()).resolves.toBe(1);
+    await expect(backend2.size()).resolves.toBe(1);
   });
 
   it('is idempotent — re-indexing same sourceId replaces entry', async () => {
     const backend = LocalEmbeddingBackend.create();
-    // @ts-expect-error: accessing private _entries for test setup
-    backend._entries = [
-      {
-        sourceType: 'lore' as const,
-        sourceId: 'e1',
-        content: 'old content',
-        embedding: [0.5, 0.5],
-      },
-    ];
-
-    await backend.remove({ sourceType: 'lore', sourceId: 'e1' });
-    // @ts-expect-error: accessing private _entries for test setup
-    backend._entries.push({
-      sourceType: 'lore' as const,
-      sourceId: 'e1',
-      content: 'new content',
-      embedding: [0.8, 0.2],
-    });
+    await backend.index([createLoreEntry('e1', 'old content')]);
+    await backend.index([createLoreEntry('e1', 'new content')]);
 
     expect(await backend.size()).toBe(1);
+    expect(backend.toSnapshot().entries[0].content).toBe('new content');
+  });
+
+  it('reuses the model loaded by init() when indexing', async () => {
+    const backend = LocalEmbeddingBackend.create();
+
+    await backend.init();
+    await backend.index([createLoreEntry('e1', 'indexed content')]);
+
+    expect(mockTransformerPipeline).toHaveBeenCalledTimes(1);
+    expect(mockTransformersEnvironment.allowLocalModels).toBe(true);
+    expect(mockTransformersEnvironment.allowRemoteModels).toBe(false);
+    expect(mockTransformersEnvironment.localModelPath).toBe('/models/');
+    expect(mockTransformersEnvironment.backends.onnx.wasm.wasmPaths).toBe('/ort/');
   });
 });
 
@@ -280,6 +323,27 @@ describe('MemoryRetrievalService', () => {
     (service as Record<string, unknown>)._isReady = true;
     // @ts-expect-error: accessing private _initialised for test setup
     (service as Record<string, unknown>)._initialised = true;
+  });
+
+  it('allows initialization to retry after a backend failure', async () => {
+    let attempts = 0;
+    const init = mock(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error('model unavailable');
+      }
+    });
+    const retryBackend = Object.assign(createMockBackend(), { init });
+    (service as Record<string, unknown>)._backend = retryBackend;
+    (service as Record<string, unknown>)._isReady = false;
+    (service as Record<string, unknown>)._initialised = false;
+
+    await service.init();
+    expect(service.isReady).toBe(false);
+
+    await service.init();
+    expect(service.isReady).toBe(true);
+    expect(init).toHaveBeenCalledTimes(2);
   });
 
   // AC-1: Semantic retrieval (simulated via keyword overlap)
@@ -372,19 +436,37 @@ describe('MemoryRetrievalService', () => {
   // AC-4: Background indexing
   describe('AC-4: Background indexing', () => {
     it('indexAll() collects lore entries and session summaries', async () => {
-      await mockBackend.index([
-        createLoreEntry('e1', 'The crystal cave glows with an inner light.'),
-        createSessionSummary(
-          's1',
-          'The party explored the crystal cave and discovered ancient writings.',
-        ),
-      ]);
-
-      const results = await service.query({
-        text: 'crystal cave ancient writings',
-        scope: 'all',
+      mockLorebooks.push({
+        id: 'lorebook-1',
+        entries: [{ id: 'e1', content: 'The crystal cave glows with an inner light.' }],
       });
-      expect(results.length).toBeGreaterThan(0);
+      mockSessionSummary = {
+        id: 's1',
+        createdAt: 1,
+        keyEvents: ['The party discovered ancient writings.'],
+        npcInteractions: [],
+        playtimeMinutes: 30,
+        resumePoint: 'Inside the crystal cave',
+        synopsis: 'The party explored the crystal cave.',
+      };
+
+      await service.indexAll();
+
+      expect(mockBackend.index).toHaveBeenCalledTimes(1);
+      expect(mockBackend.index).toHaveBeenCalledWith([
+        {
+          content: 'The crystal cave glows with an inner light.',
+          metadata: { lorebookId: 'lorebook-1' },
+          sourceId: 'e1',
+          sourceType: 'lore',
+        },
+        {
+          content: 'The party explored the crystal cave. The party discovered ancient writings.',
+          metadata: { createdAt: '1' },
+          sourceId: 's1',
+          sourceType: 'session_summary',
+        },
+      ]);
     });
 
     it('clearIndex() removes all entries', async () => {
@@ -402,6 +484,25 @@ describe('MemoryRetrievalService', () => {
 // ---------------------------------------------------------------------------
 
 describe('Backend scope filtering', () => {
+  it('maps history scope to session summaries', async () => {
+    const backend = LocalEmbeddingBackend.create();
+    backend.loadSnapshot({
+      entries: [
+        {
+          sourceType: 'session_summary',
+          sourceId: 's1',
+          content: 'The party discovered ancient writings.',
+          embedding: [1, 0],
+        },
+      ],
+    });
+
+    const results = await backend.query({ text: 'ancient writings', scope: 'history' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].sourceType).toBe('session_summary');
+  });
+
   it('returns empty gracefully when no entries match the scope', async () => {
     const backend = LocalEmbeddingBackend.create();
     // @ts-expect-error: accessing private _entries for test

@@ -19,5 +19,12 @@ export const INDEX_SIZE_WARN = 250;
 /** Embedding dimension for all-MiniLM-L6-v2. */
 export const EMBEDDING_DIMENSION = 384;
 
+/** Indexed source types searched for each public retrieval scope. */
+export const MEMORY_QUERY_SCOPE_SOURCE_TYPES = {
+  all: ['lore', 'session_summary'],
+  history: ['session_summary'],
+  lore: ['lore'],
+} as const;
+
 /** HuggingFace model ID for local embedding generation. */
 export const LOCAL_EMBEDDING_MODEL = 'Xenova/all-MiniLM-L6-v2';

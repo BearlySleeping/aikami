@@ -1,26 +1,24 @@
 // apps/frontend/client/src/lib/services/memory/memory_retrieval_service.svelte.ts
 //
 // Memory & lore retrieval service. Provides a unified query interface
-// across lorebook entries, session summaries, and relationship/faction data
-// using local embeddings for semantic matching.
+// across lorebook entries and session summaries using local embeddings for
+// semantic matching.
 //
 // This service:
 //   1. Indexes lorebook entries (supplementing keyword_scanner.ts exact-match)
 //   2. Indexes session summaries (making them queryable by topic)
-//   3. Reads relationship/faction state live at query time (avoids staleness)
-//   4. Runs background indexing on campaign load without blocking boot
+//   3. Runs background indexing on campaign load without blocking boot
 //
 // Contract: C-458 In-House Memory & Lore Retrieval System
 
+import { DEFAULT_MAX_RESULTS, MEMORY_QUERY_SCOPE_SOURCE_TYPES } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { MemoryIndexable, MemoryQuery, MemoryResult, MemoryRetrievalBackend } from '@aikami/types';
-import { logger } from '$logger';
 
-const DEFAULT_MAX_RESULTS = 10;
 import { lorebookStore } from '../lorebook/lorebook_store.svelte.ts';
 import { sessionSummaryService } from '../gm/session_summary_service.svelte.ts';
 import { LocalEmbeddingBackend } from './local_embedding_backend';
@@ -29,8 +27,10 @@ import { LocalEmbeddingBackend } from './local_embedding_backend';
 // Types
 // ---------------------------------------------------------------------------
 
+/** Construction options for the memory retrieval service. */
 export type MemoryRetrievalServiceOptions = BaseFrontendClassOptions;
 
+/** Public reactive state and operations exposed by the memory retrieval service. */
 export type MemoryRetrievalServiceInterface = BaseFrontendClassInterface & {
   /** Whether the retrieval backend is ready. */
   readonly isReady: boolean;
@@ -54,9 +54,6 @@ export type MemoryRetrievalServiceInterface = BaseFrontendClassInterface & {
    * Query the memory index with a natural-language query.
    * Returns ranked results from all indexed sources.
    *
-   * Relationship/faction data is queried live (not from index)
-   * to avoid staleness — results are appended to the index results.
-   *
    * Returns empty array (not error) when nothing is indexed yet.
    */
   query(q: MemoryQuery): Promise<MemoryResult[]>;
@@ -76,7 +73,6 @@ export type MemoryRetrievalServiceInterface = BaseFrontendClassInterface & {
   /**
    * Run a full indexing pass over all available data:
    * lorebook entries + session summaries.
-   * Does NOT index relationship/faction data (queried live).
    * Safe to call multiple times — idempotent.
    */
   indexAll(): Promise<void>;
@@ -97,6 +93,7 @@ export type MemoryRetrievalServiceInterface = BaseFrontendClassInterface & {
 // Implementation
 // ---------------------------------------------------------------------------
 
+/** Coordinates indexing and scoped lookup across campaign memory sources. */
 class MemoryRetrievalService
   extends BaseFrontendClass<MemoryRetrievalServiceOptions>
   implements MemoryRetrievalServiceInterface
@@ -139,6 +136,7 @@ class MemoryRetrievalService
       this._isReady = true;
       this.debug('init:complete');
     } catch (err) {
+      this._initialised = false;
       this.warn('init:model-load-failed', { error: String(err) });
       // Degrade gracefully — isReady stays false, query returns empty
     }
@@ -151,28 +149,16 @@ class MemoryRetrievalService
     }
 
     const scope = q.scope ?? 'all';
-    const results: MemoryResult[] = [];
+    const sourceTypes = MEMORY_QUERY_SCOPE_SOURCE_TYPES[scope];
+    const indexResults = await this._backend.query({ ...q, scope });
+    const results = indexResults.filter((result) =>
+      sourceTypes.some((sourceType) => sourceType === result.sourceType),
+    );
 
-    // 1. Query the embedding index for lore + session summaries
-    if (scope === 'all' || scope === 'lore' || scope === 'history') {
-      const indexScope = scope === 'all' ? 'all' : scope;
-      const indexResults = await this._backend.query({
-        ...q,
-        scope: indexScope as MemoryQuery['scope'],
-      });
-      results.push(...indexResults);
-    }
-
-    // 2. Live query of relationship/faction data (avoid staleness)
-    if (scope === 'all' || scope === 'relationships') {
-      const relationshipResults = await this._queryRelationships(q);
-      results.push(...relationshipResults);
-    }
-
-    // 3. Sort by relevance score descending
+    // Sort by relevance score descending
     results.sort((a, b) => b.relevanceScore - a.relevanceScore);
 
-    // 4. Apply limit
+    // Apply limit
     const limit = q.limit ?? DEFAULT_MAX_RESULTS;
     return results.slice(0, limit);
   }
@@ -269,25 +255,6 @@ class MemoryRetrievalService
   async clearIndex(): Promise<void> {
     await this._backend.clear();
     this.debug('clearIndex');
-  }
-
-  // ── Private helpers ─────────────────────────────────────────────────
-
-  /**
-   * Query relationship/faction data live from the game state.
-   * Returns MemoryResult entries for characters/factions whose name or
-   * description matches the query text (simple keyword overlap as a
-   * lightweight live query — avoids embedding staleness).
-   */
-  private async _queryRelationships(q: MemoryQuery): Promise<MemoryResult[]> {
-    // Relationship/faction data is queried live to avoid staleness.
-    // For now, we return empty since the integration with
-    // relationship_state data requires the full relationship service
-    // which is wired in C-457's prompt assembler integration.
-    //
-    // The interface supports it; the actual live query will be
-    // implemented when C-457 wires this service into prompt assembly.
-    return [];
   }
 }
 
