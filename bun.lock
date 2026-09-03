@@ -135,7 +135,7 @@
         "@types/node": "26.4.1",
         "@types/png-chunks-extract": "1.0.2",
         "@types/text-encoding": "0.0.40",
-        "daisyui": "5.7.26",
+        "daisyui": "5.7.27",
         "rollup-plugin-visualizer": "7.1.1",
         "svelte": "5.57.0",
         "svelte-check": "4.7.6",
@@ -188,7 +188,7 @@
         "@sveltejs/vite-plugin-svelte": "7.3.0",
         "@tailwindcss/vite": "4.3.3",
         "@types/node": "26.4.1",
-        "daisyui": "5.7.26",
+        "daisyui": "5.7.27",
         "playwright": "1.62.1",
         "rollup-plugin-visualizer": "7.1.1",
         "svelte": "5.57.0",
@@ -1922,7 +1922,7 @@
 
     "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
 
-    "daisyui": ["daisyui@5.7.26", "", {}, "sha512-f2Wsz5tyxewjexhXAnnJbDtRdShNpFbFfrov0iOp2LCfW6TEo4ozjJ8aROP5TKajSSDCGn/eIy9ey1F8wPRpPw=="],
+    "daisyui": ["daisyui@5.7.27", "", {}, "sha512-Je10yYK7UFJYyLSQrIxhFmpwX+86gXdNTnfNkA1jlev7j9oz3QrqioEQ6/0JYOvYPs5NYH4aaJ+X35/N80G/xg=="],
 
     "data-uri-to-buffer": ["data-uri-to-buffer@4.0.1", "", {}, "sha512-0R9ikRb668HB7QDxT1vkpuUBtqc53YyAwMwGeUFKRojY/NWKvdZ+9UYtRfGmhqNbRkTSVpMbmyhXipFFv2cb/A=="],
 
