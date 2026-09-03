@@ -64,8 +64,6 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
   formatDate(timestamp: unknown): string;
 
   // ── Privacy actions (C-464 AC-8) ──
-  readonly offlineMode: boolean;
-  readonly telemetryOptOut: boolean;
   toggleOfflineMode(): void;
   toggleTelemetry(): void;
 
@@ -217,8 +215,7 @@ export class ExportViewModel
   }
 
 
-  private _persistPrivacySettings(): void
-    try {
+  private _persistPrivacySettings(): void {
       localStorage.setItem(
         'aikami_ai_privacy_settings',
         JSON.stringify({
