@@ -24,7 +24,7 @@ created_at: "2026-09-02"
 | **Type** | full |
 | **Priority** | P3 |
 | **Dependencies** | [C-456](C-456-group-chat-and-systemic-npc-interactions.md) (nearby-NPC awareness source), [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) (relationship/faction data this layer wires in) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing (indirect — NPCs feel more alive) |
 | **Contract version** | 1.0.0 |
