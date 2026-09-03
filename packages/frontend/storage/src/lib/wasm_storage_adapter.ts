@@ -383,6 +383,42 @@ export class WasmStorageAdapter implements LocalDatabaseInterface {
   }
 
   /** @inheritdoc */
+  async exportBytes(): Promise<Uint8Array> {
+    const db = this._getDb();
+    logger.debug('WasmStorageAdapter.exportBytes');
+
+    if (!this._sqlite3) {
+      throw new Error('WasmStorageAdapter: sqlite3 module not initialized');
+    }
+
+    const capi = (this._sqlite3 as unknown as { capi?: Record<string, unknown> }).capi; // guard-ignore lint/type-safety/casting: sqlite3 WASM C API bindings have untyped function surface
+    const exportFn = capi?.['sqlite3_js_db_export'] as
+      | ((pDb: number, schema?: number) => Uint8Array)
+      | undefined;
+    if (!exportFn) {
+      throw new Error('WasmStorageAdapter: sqlite3_js_db_export not available');
+    }
+
+    const pointer = (db as unknown as { pointer: number }).pointer; // guard-ignore lint/type-safety/casting: sqlite3 WASM C API bindings have untyped function surface
+    return exportFn(pointer);
+  }
+
+  /** @inheritdoc */
+  async importBytes(bytes: Uint8Array): Promise<void> {
+    logger.debug('WasmStorageAdapter.importBytes', { byteLength: bytes.byteLength });
+
+    if (!this._db || !this._sqlite3) {
+      throw new Error('WasmStorageAdapter: not connected — call open() first');
+    }
+
+    this._restoreSnapshotBytes(bytes);
+
+    // Re-apply PRAGMA after deserialize (the restored bytes replace the
+    // entire database, so PRAGMA settings are lost).
+    this._db.exec({ sql: 'PRAGMA foreign_keys = ON' });
+  }
+
+  /** @inheritdoc */
   async sync(): Promise<void> {
     // No-op: sync is not configured until C-357
   }

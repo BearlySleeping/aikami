@@ -151,6 +151,9 @@ const postBytes = (path: string, bytes: Uint8Array, cookie?: string) =>
 const get = (path: string, cookie?: string) =>
   new Request(`${BASE_URL}${path}`, { headers: cookie ? { cookie } : {} });
 
+const del = (path: string, cookie?: string) =>
+  new Request(`${BASE_URL}${path}`, { method: 'DELETE', headers: cookie ? { cookie } : {} });
+
 /** Sign up + sign in, returning the session cookie. */
 const signInCookie = async (email: string): Promise<string> => {
   const handleAuth = (request: Request) => app.handle(request);
@@ -280,5 +283,86 @@ describe('save backup/restore (AC-6/AC-7)', () => {
     const carolCookie = await signInCookie('carol@example.com');
     const res = await app.handle(get(`/api/saves/${backupId}`, carolCookie));
     expect(res.status).toBe(404);
+  });
+
+  // ── C-462: DELETE endpoint ───────────────────────────────────────────
+
+  test('delete without a session is rejected 401', async () => {
+    const res = await app.handle(del('/api/saves/some-id'));
+    expect(res.status).toBe(401);
+  });
+
+  test('delete of owned backup removes R2 object and D1 row', async () => {
+    const cookie = await signInCookie('diana@example.com');
+    const bytes = new Uint8Array([10, 20, 30]);
+    const createRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', bytes, cookie),
+    );
+    expect(createRes.status).toBe(201);
+    const body = (await createRes.json()) as { backupId: string; r2Key: string };
+    const { backupId, r2Key } = body;
+
+    // Verify it exists before delete.
+    expect(r2.store.has(r2Key)).toBe(true);
+    const rowsBefore = await client.execute('SELECT id FROM account_backups');
+    const beforeCount = rowsBefore.rows.length;
+
+    const delRes = await app.handle(del(`/api/saves/${backupId}`, cookie));
+    expect(delRes.status).toBe(200);
+
+    // R2 object is gone.
+    expect(r2.store.has(r2Key)).toBe(false);
+
+    // D1 row count decreased by 1.
+    const rowsAfter = await client.execute('SELECT id FROM account_backups');
+    expect(rowsAfter.rows.length).toBe(beforeCount - 1);
+  });
+
+  test('delete of another user backup is rejected 404', async () => {
+    const aliceCookie = await signInCookie('alice@example.com');
+    const createRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', new Uint8Array([1, 2, 3]), aliceCookie),
+    );
+    expect(createRes.status).toBe(201);
+    const body = (await createRes.json()) as { backupId: string; r2Key: string };
+    const { backupId, r2Key } = body;
+
+    const eveCookie = await signInCookie('eve@example.com');
+    const res = await app.handle(del(`/api/saves/${backupId}`, eveCookie));
+    expect(res.status).toBe(404);
+
+    // The backup should still exist (owned by Alice).
+    expect(r2.store.has(r2Key)).toBe(true);
+  });
+
+  test('quota recovers after delete', async () => {
+    const cookie = await signInCookie('fiona@example.com');
+
+    // Create MAX_BACKUPS_PER_ACCOUNT backups.
+    const backupIds: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const res = await app.handle(
+        postBytes('/api/saves/backup?filename=save.db', new Uint8Array([i]), cookie),
+      );
+      expect(res.status).toBe(201);
+      const { backupId } = (await res.json()) as { backupId: string };
+      backupIds.push(backupId);
+    }
+
+    // 21st backup should be rejected (quota_exceeded).
+    const quotaRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', new Uint8Array([99]), cookie),
+    );
+    expect(quotaRes.status).toBe(429);
+
+    // Delete one backup.
+    const delRes = await app.handle(del(`/api/saves/${backupIds[0]}`, cookie));
+    expect(delRes.status).toBe(200);
+
+    // Now the 21st backup should succeed.
+    const successRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', new Uint8Array([99]), cookie),
+    );
+    expect(successRes.status).toBe(201);
   });
 });

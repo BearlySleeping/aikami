@@ -261,3 +261,54 @@ export const handleGetBackup = async (
     headers: { 'content-type': 'application/octet-stream' },
   });
 };
+
+/**
+ * DELETE /api/saves/:id
+ *
+ * Session-verified. Deletes the R2 object first; only on success does it
+ * remove the `account_backups` metadata row (reverse order of create, so
+ * a failed R2 delete never leaves an orphaned D1 row pointing at nothing).
+ * Ownership-checked exactly like handleGetBackup: returns 404 for both
+ * missing and non-owned backups (no 403 that confirms existence).
+ */
+export const handleDeleteBackup = async (
+  request: Request,
+  env: SaveBackupEnv,
+  backupId: string,
+): Promise<Response> => {
+  const accountId = await getSessionUserId(request);
+  if (!accountId) {
+    return unauthorized();
+  }
+
+  const db = drizzle(env.DB, { schema: { accountBackups } });
+  const rows = await db.select().from(accountBackups).where(eq(accountBackups.id, backupId));
+
+  const row = rows[0];
+  if (!row || row.accountId !== accountId) {
+    return new Response(JSON.stringify({ error: 'not-found' }), {
+      status: 404,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  // Delete the R2 object first. If this fails, do NOT delete the D1 row
+  // (an orphaned row pointing at a real object is recoverable; a D1 row
+  // deleted while the R2 object survives forever is an unrecoverable leak).
+  try {
+    await env.SAVES_BUCKET.delete(row.r2Key);
+  } catch {
+    return new Response(JSON.stringify({ error: 'internal' }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  // R2 delete succeeded — safe to remove the metadata row.
+  await db.delete(accountBackups).where(eq(accountBackups.id, backupId));
+
+  return new Response(JSON.stringify({ deleted: backupId }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+};

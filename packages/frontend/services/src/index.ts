@@ -8,6 +8,7 @@ export * from './lib/base/preference/index.ts';
 // router
 export * from './lib/router/router_utils.ts';
 export * from './lib/router/routes.ts';
+export * from './lib/services/backup_client.ts';
 // services
 export * from './lib/services/dialog.svelte.ts';
 export * from './lib/services/r2_storage.ts';

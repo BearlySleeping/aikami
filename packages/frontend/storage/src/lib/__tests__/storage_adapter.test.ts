@@ -321,6 +321,79 @@ describe('WasmStorageAdapter (in-memory)', () => {
     await db.sync();
   });
 
+  // ── C-462: exportBytes / importBytes round-trip ────────────────────
+
+  test('exportBytes returns a non-empty Uint8Array', async () => {
+    await db.execute({
+      sql: `INSERT INTO meta (key, value) VALUES (?, ?)`,
+      args: ['export-test', 'export-value'],
+    });
+
+    const bytes = await db.exportBytes();
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(bytes.byteLength).toBeGreaterThan(0);
+  });
+
+  test('exportBytes then importBytes restores identical queryable state', async () => {
+    // Insert some data into the current adapter.
+    const campaignData = makeCampaignJson({ id: 'export-roundtrip' });
+    await db.execute({
+      sql: `INSERT INTO campaigns (id, data, updated_at) VALUES (?, ?, ?)`,
+      args: ['export-roundtrip', campaignData, '2026-01-01T00:00:00.000Z'],
+    });
+
+    // Verify the row exists before export.
+    const before = await db.query({
+      sql: 'SELECT id FROM campaigns WHERE id = ?',
+      args: ['export-roundtrip'],
+    });
+    expect(before.rows.length).toBe(1);
+
+    // Export the bytes.
+    const bytes = await db.exportBytes();
+    expect(bytes.byteLength).toBeGreaterThan(0);
+
+    // Close and create a fresh adapter.
+    await db.close();
+    db = new WasmStorageAdapter({ databasePath: ':memory:' });
+    await db.open();
+
+    // Import the bytes onto the fresh adapter (the bytes carry the full
+    // schema + data — no separate schema DDL needed).
+    await db.importBytes(bytes);
+
+    // The imported database should contain the same data.
+    const after = await db.query({
+      sql: 'SELECT id, data FROM campaigns WHERE id = ?',
+      args: ['export-roundtrip'],
+    });
+    expect(after.rows.length).toBe(1);
+    expect(after.rows[0].data).toBe(campaignData);
+
+    // Verify the adapter is still usable after import.
+    await db.execute({
+      sql: `INSERT INTO meta (key, value) VALUES (?, ?)`,
+      args: ['post-import', 'works'],
+    });
+    const metaResult = await db.query({
+      sql: 'SELECT value FROM meta WHERE key = ?',
+      args: ['post-import'],
+    });
+    expect(metaResult.rows[0].value).toBe('works');
+  });
+
+  test('importBytes with empty bytes does not corrupt the database', async () => {
+    const emptyBytes = new Uint8Array(0);
+
+    // Should not throw but may produce an empty database.
+    await db.importBytes(emptyBytes);
+
+    // The adapter should still be queryable.
+    // An empty database has no tables, but the adapter itself is not broken.
+    // Re-apply schema so subsequent tests can use it.
+    await applySchema(db);
+  });
+
   // ── C-373: Asset registry tables (old-DB additive upgrade) ─────────
 
   test('C-373: assets/asset_sources/install_state tables exist after DDL', async () => {
