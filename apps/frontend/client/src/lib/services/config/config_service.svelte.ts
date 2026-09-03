@@ -68,6 +68,8 @@ type ResolvedTextProvider = {
   endpoint: string;
   /** API key for the resolved provider, or undefined if not configured. */
   apiKey: string | undefined;
+  /** Capability-appropriate params carried by the resolved AiConnection, when present (C-463 wiring). */
+  params: TextParams | ImageParams | VoiceParams | undefined;
 };
 
 // ---------------------------------------------------------------------------
@@ -675,6 +677,7 @@ class ConfigService
             provider: provider.registryId,
             endpoint: provider.baseUrl || '',
             apiKey: provider.credential || '',
+            params: aiConn.params as TextParams,
           };
         }
       }
@@ -694,6 +697,7 @@ class ConfigService
           provider: conn.provider,
           endpoint: conn.baseUrl || '',
           apiKey: conn.apiKey || '',
+          params: conn.generationParams as TextParams,
         };
       }
     }
@@ -707,6 +711,7 @@ class ConfigService
           provider: conn.provider,
           endpoint: conn.baseUrl || '',
           apiKey: conn.apiKey || '',
+          params: conn.generationParams as TextParams,
         };
       }
     }
@@ -719,6 +724,7 @@ class ConfigService
         provider: conn.provider,
         endpoint: conn.baseUrl || '',
         apiKey: conn.apiKey || '',
+        params: conn.generationParams as TextParams,
       };
     }
 
@@ -976,6 +982,7 @@ class ConfigService
       provider: provider.registryId,
       endpoint: provider.baseUrl || '',
       apiKey: provider.credential || '',
+      params: aiConn.params,
     };
   }
 

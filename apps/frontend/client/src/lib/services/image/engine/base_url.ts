@@ -13,8 +13,14 @@
 // through runtimeConfigService's dev-default rung, so the same-origin
 // relative path is still accepted by assertSafeBaseUrl.
 //
+// C-463 wiring: prefers the `portrait` role's connection provider, falling
+// back to runtimeConfigService.getImageUrl() exactly as before when no
+// portrait role resolves — that is the local-stack path and the common
+// case today.
+//
 // Contract: C-388 Image Engine Provider Abstraction / C-389 AC-1, AC-2
 
+import { configService } from '../../config/config_service.svelte.ts';
 import { runtimeConfigService } from '../../config/runtime_config_service.svelte.ts';
 import type { ResolvedImageEngineId } from './types.ts';
 
@@ -25,7 +31,8 @@ import type { ResolvedImageEngineId } from './types.ts';
  *          engine is configured (precedence rung 5 — unset).
  */
 export const resolveImageBaseUrl = (engineId: ResolvedImageEngineId): string | undefined => {
-  const configured = runtimeConfigService.getImageUrl()?.trim();
+  const roleEndpoint = configService.resolveRole('portrait')?.endpoint;
+  const configured = (roleEndpoint || runtimeConfigService.getImageUrl())?.trim();
   if (!configured) {
     return undefined;
   }

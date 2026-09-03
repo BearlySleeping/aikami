@@ -6,6 +6,7 @@
 // Contract: C-320 AC-1
 
 import Type from 'typebox';
+import { TextParamsSchema } from './domain/providers_config.ts';
 
 /** Which adapter family serves a capability. */
 export const AiModeSchema = Type.Union([
@@ -59,6 +60,8 @@ export const AiModeResolutionSchema = Type.Object({
   endpoint: Type.Optional(Type.String()),
   /** Model id, when the capability is model-addressable. */
   model: Type.Optional(Type.String()),
+  /** Text generation params from the resolved connection, when configured (C-463 wiring). */
+  params: Type.Optional(TextParamsSchema),
 });
 
 /** Detection result per capability (convertible to existing DetectionStatus). */

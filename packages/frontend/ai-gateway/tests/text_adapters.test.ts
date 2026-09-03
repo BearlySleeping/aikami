@@ -196,6 +196,83 @@ describe('OpenAI-compatible text adapter — streaming', () => {
     expect(calls[1].body.options).toBeUndefined();
   });
 
+  // C-464 PR: connection params must reach the request body.
+  test('forwards resolution.params onto the OpenAI-compatible request body', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: resolution({
+        params: {
+          temperature: 0.2,
+          topP: 0.8,
+          topK: 30,
+          repetitionPenalty: 1.05,
+          presencePenalty: 0.1,
+          maxTokens: 512,
+          contextSize: 8192,
+        },
+      }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].body.temperature).toBe(0.2);
+    expect(calls[0].body.top_p).toBe(0.8);
+    expect(calls[0].body.max_tokens).toBe(512);
+    expect(calls[0].body.presence_penalty).toBe(0.1);
+    // contextSize and repetitionPenalty have no OpenAI-compatible field.
+    expect(calls[0].body.contextSize).toBeUndefined();
+    expect(calls[0].body.repetitionPenalty).toBeUndefined();
+    expect(calls[0].body.context_size).toBeUndefined();
+    expect(calls[0].body.repetition_penalty).toBeUndefined();
+  });
+
+  test('omits generation param keys entirely when resolution has no params', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect('temperature' in calls[0].body).toBe(false);
+    expect('top_p' in calls[0].body).toBe(false);
+    expect('max_tokens' in calls[0].body).toBe(false);
+    expect('presence_penalty' in calls[0].body).toBe(false);
+  });
+
+  test('does not forward OpenAI-shaped params to Ollama native /api/chat', async () => {
+    const { fetchFn, calls } = createJsonFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: resolution({
+        mode: 'offline',
+        provider: 'ollama',
+        endpoint: 'http://10.0.0.5:8080/v1',
+        params: {
+          temperature: 0.2,
+          topP: 0.8,
+          topK: 30,
+          repetitionPenalty: 1.05,
+          presencePenalty: 0.1,
+          maxTokens: 512,
+          contextSize: 8192,
+        },
+      }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect('temperature' in calls[0].body).toBe(false);
+    expect('top_p' in calls[0].body).toBe(false);
+    expect('max_tokens' in calls[0].body).toBe(false);
+    expect('presence_penalty' in calls[0].body).toBe(false);
+  });
+
   test('propagates AbortSignal to the upstream fetch mid-stream', async () => {
     // SSE stream that emits one chunk and stays open — only an abort ends it.
     const calls: Array<{ signal: AbortSignal | undefined }> = [];

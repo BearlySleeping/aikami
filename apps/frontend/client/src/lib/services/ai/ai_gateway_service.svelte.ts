@@ -35,7 +35,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
+import type { AiCapability, AiDetectionResult, AiModeResolution, TextParams } from '@aikami/types';
 import { ttsService } from '../audio/tts_service.svelte.ts';
 import { configService } from '../config/config_service.svelte.ts';
 import {
@@ -242,6 +242,7 @@ class AiGatewayService
           provider: matchProvider.registryId,
           model: match.model,
           endpoint: explicitEndpoint ?? matchProvider.baseUrl ?? '',
+          params: match.params as TextParams,
         });
       }
       // Model not found in connections — use it verbatim with the active provider/endpoint
@@ -250,6 +251,7 @@ class AiGatewayService
         provider: resolved.provider,
         model: explicitModel,
         endpoint: explicitEndpoint ?? resolved.endpoint,
+        params: resolved.params as TextParams | undefined,
       });
     }
 
@@ -258,6 +260,7 @@ class AiGatewayService
       provider: resolved.provider,
       model: resolved.model,
       endpoint: explicitEndpoint ?? resolved.endpoint,
+      params: resolved.params as TextParams | undefined,
     });
   }
 
@@ -266,14 +269,16 @@ class AiGatewayService
     provider: string;
     model: string;
     endpoint: string;
+    params?: TextParams;
   }): AiModeResolution {
-    const { provider, model, endpoint } = options;
+    const { provider, model, endpoint, params } = options;
     return {
       capability: 'text',
       mode: LOCAL_TEXT_PROVIDERS.has(provider) ? 'offline' : 'byok',
       provider,
       model,
       endpoint,
+      params,
     };
   }
 
