@@ -24,7 +24,7 @@ created_at: "2026-09-02"
 | **Type** | full |
 | **Priority** | P2 |
 | **Dependencies** | [C-457](C-457-gm-prompt-assembly-upgrade.md), [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) — the director needs a bounded prompt budget and real retrieval to draw on before its scene direction can meaningfully use campaign history |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
 | **Contract version** | 1.0.0 |
