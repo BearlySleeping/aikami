@@ -3,7 +3,7 @@ id: C-460
 title: "NPC Behavioral Autonomy Layer"
 source: "docs/contracts/BACKLOG_C452_PLUS.md 'C-465' seed (RPG-depth batch, 2026-08-30 roadmap review). Renumbered on authoring — see C-456's source note for the ID-allocation caveat."
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-02"
 | **Type** | full |
 | **Priority** | P3 |
 | **Dependencies** | [C-456](C-456-group-chat-and-systemic-npc-interactions.md) (nearby-NPC awareness source), [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) (relationship/faction data this layer wires in) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing (indirect — NPCs feel more alive) |
 | **Contract version** | 1.0.0 |
@@ -34,7 +34,7 @@ created_at: "2026-09-02"
 - **Reproduction**: N/A — not a bug, a scoping gap; observable by inspecting `selectBestAction`'s scoring inputs (spatial/GOAP only) and `autonomous_message_service.svelte.ts`'s NPC-selection weighting (talkativeness/cooldown/schedule only, no relationship or faction terms).
 - **Existing implementation to reuse**: both `MacroSimulationSystem` and the C-248 idle-chat selection are reused as-is structurally — this contract is explicitly "wire memory/relationships into decisions these systems already make," not a new simulation layer, per the backlog seed and Directive #7 (progressive disclosure) and Directive #12 (no technology migration inside the vertical slice unless it removes a blocker).
 - **Known gaps**: neither system reads `relationship_state.ts`/`faction_standing.ts` (C-341) or C-458's retrieval layer at all. An NPC hostile to the player's faction behaves identically, mechanically, to a friendly one; idle-chat NPC selection doesn't favor NPCs with an active relationship thread or recent shared history with the player.
-- **Baseline tests**: `macro_simulation_system.test.ts`, existing autonomous message service tests — establish current mechanical-only behavior as the regression baseline.
+- **Baseline tests**: `packages/frontend/engine/src/__tests__/macro_simulation.test.ts` (C-194 baseline), existing autonomous message service tests — establish current mechanical-only behavior as the regression baseline. This contract extends the existing macro simulation test file with new tests for relationship-weighted scoring; it does not create a separate test file from scratch.
 
 ## User Outcome
 
@@ -52,12 +52,12 @@ After this contract, NPCs' autonomous behavior (offscreen actions, idle-chat par
 |---|---|---|
 | Offscreen GOAP stepping | `MacroSimulationSystem`, `action_registry.ts` (C-194) | reuse — modify scoring inputs only |
 | Idle-chat NPC selection | `autonomous_message_service.svelte.ts`, `autonomous_npc.ts` constants (C-248) | reuse — modify selection weighting only |
-| Relationship/faction data | `relationship_state.ts`/`faction_standing.ts` (C-341) | new input — read, not modified |
+| Relationship/faction data | `relationship_state.ts`/`faction_standing.ts` (C-341), accessed via `relationship_service.svelte.ts` (`.getRelationship()`, `.getStanding()`) in the client; injected context in the engine | new input — read, not modified |
 | Memory/retrieval | [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) | new input — read for "recent shared history" signal |
 
 ## Overview
 
-Wire relationship and faction standing (C-341) and, where relevant, recent shared history (C-458) into the scoring/selection logic of two existing mechanical systems: `MacroSimulationSystem`'s GOAP action selection and C-248's idle-chat NPC selection. No new simulation layer, no new scheduling system — additive scoring terms on existing decision points, consistent with the codebase's stated bias against feature-bloat copied from reference tools (Marinara-Engine/SillyTavern/RisuAI) that don't share Aikami's "game first" directives.
+Wire relationship and faction standing (C-341 — accessed via `relationship_service.svelte.ts`) and, where relevant, recent shared history (C-458 — via `memoryRetrievalService.query()`) into the scoring/selection logic of two existing mechanical systems: `MacroSimulationSystem`'s GOAP action selection and C-248's idle-chat NPC selection. No new simulation layer, no new scheduling system — additive scoring terms on existing decision points, consistent with the codebase's stated bias against feature-bloat copied from reference tools (Marinara-Engine/SillyTavern/RisuAI) that don't share Aikami's "game first" directives.
 
 ## Design Reference
 
@@ -67,8 +67,8 @@ Follow Directive #7 (progressive disclosure) — this remains ambient/systemic b
 
 ## Architecture Directives
 
-- `MacroSimulationSystem`/`action_registry.ts`: add relationship/faction standing as an optional scoring term in `selectBestAction`'s GOAP evaluation — e.g. a hostile-faction NPC's action scoring can favor aggressive/avoidant actions toward the player's known position; a friendly NPC's scoring can favor helpful/approach actions. Keep this additive to existing precondition/effect evaluation, not a replacement.
-- `autonomous_message_service.svelte.ts`: add relationship/faction standing and recent-shared-history (via C-458 query) as additional weighting terms alongside existing talkativeness/cooldown/schedule — an NPC with an active relationship thread or recent shared event should have elevated selection weight within the existing selection algorithm, not a parallel selection path.
+- `MacroSimulationSystem`/`stepMacroAgent`: add relationship/faction standing as an optional scoring term before the GOAP `selectBestAction` call — e.g. a hostile-faction NPC's action scoring can favor aggressive/avoidant actions toward the player's known position; a friendly NPC's scoring can favor helpful/approach actions. Keep this additive to existing precondition/effect evaluation, not a replacement. **Data flow**: `stepMacroAgent(eid)` reads per-entity relationship context from a new optional parameter or a module-level lookup (e.g. a `Map<number, GoapActionScoringContext>` keyed by entity ID) rather than importing client services directly into the engine package — the engine (`packages/frontend/engine/`) must not depend on `apps/frontend/client/`; relationship data must be injected or stored in bitECS components at the boundary.
+- `autonomous_message_service.svelte.ts`: add relationship/faction standing (via `relationshipService.getRelationship()`, `relationshipService.getStanding()`) and recent-shared-history (via `memoryRetrievalService.query()`, C-458) as additional weighting terms alongside existing talkativeness/cooldown/schedule — an NPC with an active relationship thread or recent shared event should have elevated selection weight within the existing selection algorithm, not a parallel selection path.
 - Both integrations must be read-only against relationship/faction/memory data — this contract does not change how relationships or faction standing themselves are computed or updated (that's C-341's domain).
 - Preserve `MAX_AUTONOMOUS_MESSAGES_PER_TICK` and the 500ms macro tick rate exactly — this contract changes *what* is scored, not *how often* or *how many* decisions happen.
 
@@ -79,6 +79,7 @@ Follow Directive #7 (progressive disclosure) — this remains ambient/systemic b
 type GoapActionScoringContext = {
   // existing spatial/precondition inputs unchanged
   playerRelationship?: { standing: number; factionTier?: string }; // optional, from C-341
+  npcFactionId?: string;
 };
 
 // apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts — additive weighting input
@@ -120,12 +121,12 @@ N/A — no persistent state changes. Rollback is reverting the additive scoring 
 ### AC-1: Faction-hostile NPC's offscreen GOAP action reflects hostility
 **Given** an NPC with negative faction standing toward the player, stepped by `MacroSimulationSystem` while offscreen
 **When** `selectBestAction` evaluates candidate actions
-**Then** the selected action differs (favoring aggressive/avoidant behavior) compared to an otherwise-identical neutral-standing NPC
+**Then** the selected action differs (favoring aggressive/avoidant behavior) compared to an otherwise-identical neutral-standing NPC — verified by seeding identical NPCs with different faction standings and asserting divergent `selectBestAction` results
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit | `macro_simulation_system.test.ts` | N/A | Filled during verification |
+| AC-1 | Unit | `packages/frontend/engine/src/__tests__/macro_simulation.test.ts` (extended) | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run engine:test`
@@ -138,7 +139,7 @@ N/A — no persistent state changes. Rollback is reverting the additive scoring 
 ### AC-2: Relationship standing elevates idle-chat selection likelihood
 **Given** two idle NPCs with equal talkativeness/cooldown/schedule state but different relationship standing with the player
 **When** the idle-chat poller selects a speaker
-**Then** the NPC with higher relationship standing (or more recent shared history via C-458) is selected more often across repeated trials
+**Then** the NPC with higher relationship standing (or more recent shared history via C-458) receives a higher selection weight — verified by testing that the weight computation function produces a correctly elevated `relationshipBoost` term for higher-standing NPCs (not by stochastic distribution across trials)
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -161,11 +162,12 @@ N/A — no persistent state changes. Rollback is reverting the additive scoring 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Unit | `macro_simulation_system.test.ts`, autonomous message service tests | N/A | Filled during verification |
+| AC-3 | Unit | `packages/frontend/engine/src/__tests__/macro_simulation.test.ts` (extended), autonomous message service tests | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run engine:test`, `moon run client:test`
 - Integration: fresh dev-sandbox campaign, run both systems, diff against pre-contract baseline behavior
+- Regression: run the existing C-194 macro simulation tests unchanged to confirm no baseline regression
 - E2E / Visual: N/A
 
 **Watch Points**:
@@ -180,6 +182,7 @@ N/A — no persistent state changes. Rollback is reverting the additive scoring 
 ## Edge Cases & Gotchas
 
 - **Macro tick performance**: relationship reads inside the 500ms macro-tick hot loop must stay cheap (direct state read, not a retrieval query) — reserve any C-458 retrieval usage for the much-lower-frequency idle-chat path per the Performance Budget note above.
+- **Engine-client boundary**: the engine package (`packages/frontend/engine/`) cannot import from `apps/frontend/client/`. Relationship data must reach the GOAP system via injection (e.g. a `Map<eid, GoapActionScoringContext>` set by the caller before stepping) or via bitECS components — not by importing `relationshipService` directly.
 - **Relationship data mid-change**: an NPC's standing could change between tick evaluations — acceptable, since both systems already re-evaluate every tick/poll; no special staleness handling needed beyond reading current state each time.
 
 ## Open Questions
