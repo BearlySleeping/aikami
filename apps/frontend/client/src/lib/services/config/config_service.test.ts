@@ -128,7 +128,6 @@ describe('ConfigService — C-079', () => {
 
       // C-230: API keys now live in connections[] (no text.apiKeys).
       expect(service.state.connections).toEqual([]);
-      expect(service.state.models).toEqual([]);
       expect(service.state.voice.engine).toBe('kokoro');
       expect(service.state.image.checkpoint).toBe('sd_xl_base_1.0');
     });
@@ -238,7 +237,7 @@ describe('ConfigService — C-079', () => {
         throw new Error('Expected plain config to be defined');
       }
       const parsed = JSON.parse(plain);
-      expect(typeof parsed.models).toBe('object');
+      expect(typeof parsed.voice).toBe('object');
     });
 
     test('save should NOT include API keys in plain localStorage', async () => {
@@ -574,6 +573,153 @@ describe('ConfigService — C-079', () => {
     });
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // The legacy Connection API writes through to the C-463 model.
+  //
+  // The first C-463 build left `addConnection` appending to the legacy array
+  // only, so `providers` / `aiConnections` / `roles` stayed empty for
+  // anything created through the UI and `legacy` became load-bearing.
+  // ═══════════════════════════════════════════════════════════════════════
+
+  describe('Legacy Connection API writes through', () => {
+    const _params = {
+      temperature: 0.7,
+      topP: 0.95,
+      topK: 40,
+      repetitionPenalty: 1,
+      presencePenalty: 0,
+      maxTokens: 1024,
+      contextSize: 4096,
+    };
+    const _conn = (over: Record<string, unknown> = {}) => ({
+      name: 'OpenRouter',
+      provider: 'openrouter',
+      capability: 'text' as const,
+      apiKey: 'sk-or-a',
+      baseUrl: '',
+      model: 'anthropic/claude-sonnet-4.5',
+      generationParams: _params,
+      isDefault: false,
+      source: 'stored' as const,
+      ...over,
+    });
+
+    test('addConnection creates a provider, an aiConnection and a role', async () => {
+      const service = await createService();
+      const id = service.addConnection(_conn());
+
+      expect(service.state.providers).toHaveLength(1);
+      expect(service.state.aiConnections).toHaveLength(1);
+      expect(service.state.roles.narration).toBe(id);
+      expect(service.state.providers[0].credential).toBe('sk-or-a');
+      // The legacy array remains readable as a projection.
+      expect(service.getConnection(id)?.apiKey).toBe('sk-or-a');
+    });
+
+    test('two models on one key share a single provider', async () => {
+      const service = await createService();
+      service.addConnection(_conn({ model: 'anthropic/claude-sonnet-4.5' }));
+      service.addConnection(_conn({ model: 'anthropic/claude-haiku-4.5' }));
+
+      expect(service.state.providers).toHaveLength(1);
+      expect(service.state.aiConnections).toHaveLength(2);
+    });
+
+    test('two accounts on the same registry stay separate providers', async () => {
+      const service = await createService();
+      service.addConnection(_conn({ apiKey: 'sk-or-a' }));
+      service.addConnection(_conn({ apiKey: 'sk-or-b', model: 'openai/gpt-4o' }));
+
+      expect(service.state.providers).toHaveLength(2);
+    });
+
+    test('editing the key updates every connection on that provider', async () => {
+      const service = await createService();
+      const a = service.addConnection(_conn({ model: 'm1' }));
+      const b = service.addConnection(_conn({ model: 'm2' }));
+
+      service.updateConnection(a, { apiKey: 'sk-or-rotated' });
+
+      expect(service.state.providers).toHaveLength(1);
+      expect(service.getConnection(a)?.apiKey).toBe('sk-or-rotated');
+      expect(service.getConnection(b)?.apiKey).toBe('sk-or-rotated');
+      expect(service.getApiKey('openrouter', 'text')).toBe('sk-or-rotated');
+    });
+
+    test('deleting the last connection on a provider removes the provider', async () => {
+      const service = await createService();
+      const id = service.addConnection(_conn());
+      service.deleteConnection(id);
+
+      expect(service.state.aiConnections).toHaveLength(0);
+      expect(service.state.providers).toHaveLength(0);
+      expect(service.state.roles.narration).toBeUndefined();
+    });
+
+    test('a UI-created connection survives save + load without the legacy key', async () => {
+      const service = await createService();
+      await service.load();
+      const id = service.addConnection(_conn());
+      await service.save();
+
+      // Strip `legacy` from the persisted vault — nothing should depend on it.
+      const stored = JSON.parse(vaultStore.get('__vault') ?? '{}');
+      delete stored.legacy;
+      vaultStore.set('__vault', JSON.stringify(stored));
+
+      const reloaded = await createService();
+      await reloaded.load();
+
+      expect(reloaded.getConnection(id)?.model).toBe('anthropic/claude-sonnet-4.5');
+      expect(reloaded.getApiKey('openrouter', 'text')).toBe('sk-or-a');
+      expect(reloaded.getActiveTextProvider().model).toBe('anthropic/claude-sonnet-4.5');
+    });
+
+    test('a vault from the first C-463 build absorbs its legacy-only rows', async () => {
+      // providers/connections empty, everything under `legacy` — the exact
+      // shape the merged-but-unfixed build produced.
+      vaultStore.set(
+        '__vault',
+        JSON.stringify({
+          schemaVersion: 2,
+          providers: [],
+          connections: [],
+          roles: {},
+          legacy: {
+            connections: [
+              {
+                id: 'legacy-conn-1',
+                name: 'OpenRouter',
+                capability: 'text',
+                provider: 'openrouter',
+                apiKey: 'sk-or-legacy',
+                baseUrl: '',
+                model: 'anthropic/claude-sonnet-4.5',
+                generationParams: _params,
+                isDefault: true,
+                source: 'stored',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+            ],
+            defaultByCapability: { text: 'legacy-conn-1' },
+            defaultConnectionId: 'legacy-conn-1',
+          },
+        }),
+      );
+
+      const service = await createService();
+      await service.load();
+
+      expect(service.state.providers).toHaveLength(1);
+      expect(service.state.aiConnections).toHaveLength(1);
+      // The id is preserved so per-agent overrides keep resolving.
+      expect(service.state.aiConnections[0].id).toBe('legacy-conn-1');
+      expect(service.state.roles.narration).toBe('legacy-conn-1');
+      expect(service.getActiveTextProvider().apiKey).toBe('sk-or-legacy');
+    });
+  });
+
   describe('AC-2: reset', () => {
     test('reset should clear all state', async () => {
       const service = await createService();
@@ -665,48 +811,6 @@ describe('ConfigService — C-079', () => {
       expect(service.state.image.width).toBe(512);
     });
   });
-
-  describe('Models', () => {
-    test('setModels should replace models array', async () => {
-      const service = await createService();
-      service.setModels([{ model: 'claude-3', provider: 'anthropic', endpoint: '' }]);
-
-      expect(service.state.models.length).toBe(1);
-      expect(service.state.models[0].model).toBe('claude-3');
-    });
-
-    test('updateModel should update single model by index', async () => {
-      const service = await createService();
-      service.setModels([
-        { model: 'claude-3', provider: 'anthropic', endpoint: '' },
-        { model: 'gpt-4', provider: 'openai', endpoint: '' },
-      ]);
-
-      service.updateModel(0, { endpoint: 'https://api.anthropic.com' });
-
-      expect(service.state.models[0].endpoint).toBe('https://api.anthropic.com');
-      expect(service.state.models[0].model).toBe('claude-3'); // Unchanged
-      expect(service.state.models[1].endpoint).toBe(''); // Unchanged
-    });
-
-    test('updateModel with out-of-bounds index should no-op', async () => {
-      const service = await createService();
-      service.setModels([{ model: 'test', provider: 'test', endpoint: '' }]);
-
-      service.updateModel(99, { model: 'should-not-change' });
-
-      expect(service.state.models[0].model).toBe('test');
-    });
-
-    test('updateModel with negative index should no-op', async () => {
-      const service = await createService();
-      service.setModels([{ model: 'test', provider: 'test', endpoint: '' }]);
-
-      service.updateModel(-1, { model: 'should-not-change' });
-
-      expect(service.state.models[0].model).toBe('test');
-    });
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -739,7 +843,14 @@ describe('ConfigService × AiGateway — C-322 connection visibility', () => {
 
   const _clearConnections = async () => {
     const { configService } = await _getSingletons();
+    // `connections` / `defaultConnectionId` are projections of the C-463
+    // model — clearing only those leaves the real rows behind and the next
+    // mutation reprojects them back.
+    configService.state.providers = [];
+    configService.state.aiConnections = [];
+    configService.state.roles = {};
     configService.state.connections = [];
+    configService.state.defaultByCapability = {};
     configService.state.defaultConnectionId = null;
   };
 

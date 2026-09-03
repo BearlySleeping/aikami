@@ -229,15 +229,19 @@ class AiGatewayService
   private _resolveTextRouting(options: { model?: string; endpoint?: string }): AiModeResolution {
     const { model: explicitModel, endpoint: explicitEndpoint } = options;
     if (explicitModel) {
-      // C-463: Look up explicit model in text connections instead of models[]
-      const match = configService.state.connections.find(
-        (c) => (c.capability ?? 'text') === 'text' && c.model === explicitModel,
+      // C-463: resolve an explicit model against the real model — a text
+      // AiConnection and the provider it points at.
+      const match = configService.state.aiConnections.find(
+        (c) => c.capability === 'text' && c.model === explicitModel,
       );
-      if (match) {
+      const matchProvider = match
+        ? configService.state.providers.find((p) => p.id === match.providerId)
+        : undefined;
+      if (match && matchProvider) {
         return this._toTextResolution({
-          provider: match.provider,
+          provider: matchProvider.registryId,
           model: match.model,
-          endpoint: explicitEndpoint ?? match.baseUrl ?? '',
+          endpoint: explicitEndpoint ?? matchProvider.baseUrl ?? '',
         });
       }
       // Model not found in connections — use it verbatim with the active provider/endpoint
