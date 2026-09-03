@@ -72,11 +72,13 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
     mode: AiMode;
     provider?: string;
     model?: string;
+    endpoint?: string;
   }): AiModeResolution => ({
     capability: options2.capability,
     mode: options2.mode,
     provider: options2.provider ?? options2.mode,
     model: options2.model,
+    endpoint: options2.endpoint,
   });
 
   const missingAdapterError = (options2: { capability: AiCapability; mode: AiMode }): Error =>
@@ -94,6 +96,7 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
   const resolveNormalized = (options2: {
     capability: AiCapability;
     model?: string;
+    endpoint?: string;
   }): AiModeResolution => {
     try {
       return resolveMode(options2);
@@ -151,7 +154,8 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
     },
 
     async generateText(options2: AiTextGenerationOptions): Promise<AiTextGenerationResult> {
-      const { messages, onChunk, schema, schemaName, model, signal, mode, onResolve } = options2;
+      const { messages, onChunk, schema, schemaName, model, endpoint, signal, mode, onResolve } =
+        options2;
 
       // Resolution happens exactly once, here at the gateway boundary.
       let resolution: AiModeResolution;
@@ -166,9 +170,10 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
           mode,
           provider: adapter.provider,
           model,
+          endpoint,
         });
       } else {
-        resolution = resolveNormalized({ capability: 'text', model });
+        resolution = resolveNormalized({ capability: 'text', model, endpoint });
         adapter = registry.getText(resolution.mode);
         if (!adapter) {
           throw missingAdapterError({ capability: 'text', mode: resolution.mode });

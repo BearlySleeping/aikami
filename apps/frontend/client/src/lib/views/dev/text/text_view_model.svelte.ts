@@ -183,6 +183,7 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
       await textGenerationService.streamChat({
         messages,
         model: this.model.trim() || undefined,
+        endpoint: this.endpoint.trim() || undefined,
         signal: abortController.signal,
         onChunk: (text: string) => {
           if (streamMode) {
