@@ -28,6 +28,7 @@ import { getHealthDbEnv, handleDbHealth } from './health_db.ts';
 import {
   getSaveBackupEnv,
   handleCreateBackup,
+  handleDeleteBackup,
   handleGetBackup,
   handleListBackups,
 } from './save_backup.ts';
@@ -142,6 +143,16 @@ export const app = new Elysia({
       });
     }
     return handleGetBackup(request, env, params.id);
+  })
+  .delete('/saves/:id', ({ request, params }) => {
+    const env = getSaveBackupEnv();
+    if (!env) {
+      return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return handleDeleteBackup(request, env, params.id);
   })
   // C-426: R2 object storage (avatars, etc.), session-gated. 503 when the
   // hub is not yet on a Worker with the SAVES_BUCKET binding.

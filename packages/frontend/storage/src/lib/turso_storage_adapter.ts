@@ -125,6 +125,50 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
     this._closed = true;
   }
 
+  /** @inheritdoc */
+  async exportBytes(): Promise<Uint8Array> {
+    this._assertOpen();
+    logger.debug('TursoStorageAdapter.exportBytes');
+
+    // Strip the 'file:' prefix to get the actual filesystem path.
+    const fsPath = this._databasePath.replace(/^file:/, '');
+
+    // Dynamically import the Tauri fs plugin (only available in Tauri runtime).
+    const fs = await import('@tauri-apps/plugin-fs');
+    return await fs.readFile(fsPath);
+  }
+
+  /** @inheritdoc */
+  async importBytes(bytes: Uint8Array): Promise<void> {
+    if (this._closed) {
+      throw new Error('TursoStorageAdapter: adapter is closed');
+    }
+
+    logger.debug('TursoStorageAdapter.importBytes', { byteLength: bytes.byteLength });
+
+    // Close the current connection so the file can be overwritten.
+    if (this._db) {
+      this._db.close();
+      this._db = null;
+    }
+
+    try {
+      const fsPath = this._databasePath.replace(/^file:/, '');
+      const fs = await import('@tauri-apps/plugin-fs');
+      await fs.writeFile(fsPath, bytes);
+
+      // Reopen the database with the restored contents.
+      const turso = await import(/* @vite-ignore */ '@tursodatabase/database');
+      this._db = await turso.connect(this._databasePath);
+      await this.execute({ sql: 'PRAGMA foreign_keys = ON', args: [] });
+    } catch (error) {
+      // If reopening failed, the adapter is in a closed-but-not-dead state.
+      // The caller can retry importBytes() or close the adapter.
+      this._db = null;
+      throw error;
+    }
+  }
+
   // -------------------------------------------------------------------
   // Public: LocalDatabaseInterface
   // -------------------------------------------------------------------
@@ -221,6 +265,7 @@ export class TursoStorageAdapter implements LocalDatabaseInterface {
     return result;
   }
 
+  /** @inheritdoc */
   /** @inheritdoc */
   async sync(): Promise<void> {
     this._assertOpen();

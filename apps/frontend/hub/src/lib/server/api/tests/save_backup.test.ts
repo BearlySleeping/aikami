@@ -24,7 +24,8 @@ mock.module('$env/dynamic/private', () => ({
 
 const BASE_URL = 'http://localhost:5173';
 
-const createMockD1 = (dbClient: Client): unknown => {
+const createMockD1 = (dbClient: Client) => {
+  let failNextAccountBackupDelete = false;
   const prepareStatement = (sql: string) => ({
     bind: (...params: never[]) => ({
       all: async () => {
@@ -36,6 +37,10 @@ const createMockD1 = (dbClient: Client): unknown => {
         return res.rows[0] ?? null;
       },
       run: async () => {
+        if (failNextAccountBackupDelete && /delete from [`"]?account_backups/i.test(sql)) {
+          failNextAccountBackupDelete = false;
+          throw new Error('D1 account_backups delete failed');
+        }
         const _res = await dbClient.execute({ sql, args: params as never[] });
         return { meta: { last_row_id: 0, changes: 0 } };
       },
@@ -46,23 +51,32 @@ const createMockD1 = (dbClient: Client): unknown => {
     }),
   });
   return {
-    prepare: prepareStatement,
-    exec: async (sql: string) => {
-      await dbClient.execute(sql);
+    binding: {
+      prepare: prepareStatement,
+      exec: async (sql: string) => {
+        await dbClient.execute(sql);
+      },
+      batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
+        Promise.all(
+          statements.map((statement) =>
+            dbClient.execute({ sql: statement.sql, args: (statement.params ?? []) as never[] }),
+          ),
+        ),
     },
-    batch: async (statements: Array<{ sql: string; params?: unknown[] }>) =>
-      Promise.all(
-        statements.map((s) => client.execute({ sql: s.sql, args: (s.params ?? []) as never[] })),
-      ),
+    failNextAccountBackupDelete: () => {
+      failNextAccountBackupDelete = true;
+    },
   };
 };
 
 // ── Mock R2 bucket (in-memory) ──────────────────────────────────────────
 const createMockR2 = () => {
   const store = new Map<string, Uint8Array>();
+  const deleteCalls: string[] = [];
   let failPut = false;
   return {
     store,
+    deleteCalls,
     failPut: (v: boolean) => {
       failPut = v;
     },
@@ -81,6 +95,7 @@ const createMockR2 = () => {
       return { body: new Blob([bytes as BlobPart]).stream() };
     },
     delete: async (key: string) => {
+      deleteCalls.push(key);
       store.delete(key);
     },
   };
@@ -99,6 +114,7 @@ let setBetterAuthEnv: (env: BetterAuthEnv | undefined) => void;
 let setSaveBackupEnv: (env: SaveBackupEnv | undefined) => void;
 let app: import('../index.ts').App;
 let r2: ReturnType<typeof createMockR2>;
+let saveD1: ReturnType<typeof createMockD1>;
 
 const applyD1Migrations = async (): Promise<void> => {
   const dir = join(
@@ -151,6 +167,9 @@ const postBytes = (path: string, bytes: Uint8Array, cookie?: string) =>
 const get = (path: string, cookie?: string) =>
   new Request(`${BASE_URL}${path}`, { headers: cookie ? { cookie } : {} });
 
+const del = (path: string, cookie?: string) =>
+  new Request(`${BASE_URL}${path}`, { method: 'DELETE', headers: cookie ? { cookie } : {} });
+
 /** Sign up + sign in, returning the session cookie. */
 const signInCookie = async (email: string): Promise<string> => {
   const handleAuth = (request: Request) => app.handle(request);
@@ -175,14 +194,16 @@ beforeAll(async () => {
   await applyD1Migrations();
   const betterAuthModule = await import('../better_auth.ts');
   setBetterAuthEnv = betterAuthModule.setBetterAuthEnv;
+  const betterAuthD1 = createMockD1(client);
   setBetterAuthEnv({
-    DB: createMockD1(client) as unknown as import('@cloudflare/workers-types').D1Database,
+    DB: betterAuthD1.binding as unknown as import('@cloudflare/workers-types').D1Database,
   });
   const saveBackupModule = await import('../save_backup.ts');
   setSaveBackupEnv = saveBackupModule.setSaveBackupEnv;
   r2 = createMockR2();
+  saveD1 = createMockD1(client);
   setSaveBackupEnv({
-    DB: createMockD1(client) as unknown as import('@cloudflare/workers-types').D1Database,
+    DB: saveD1.binding as unknown as import('@cloudflare/workers-types').D1Database,
     SAVES_BUCKET: r2 as unknown as import('@cloudflare/workers-types').R2Bucket,
   });
   ({ app } = await import('../index.ts'));
@@ -264,6 +285,7 @@ describe('save backup/restore (AC-6/AC-7)', () => {
 
     const res = await app.handle(get(`/api/saves/${backupId}`, cookie));
     expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
     const text = await res.text();
     expect(text).toBe(String.fromCharCode(1, 2, 3, 4, 5));
   });
@@ -280,5 +302,118 @@ describe('save backup/restore (AC-6/AC-7)', () => {
     const carolCookie = await signInCookie('carol@example.com');
     const res = await app.handle(get(`/api/saves/${backupId}`, carolCookie));
     expect(res.status).toBe(404);
+  });
+
+  // ── C-462: DELETE endpoint ───────────────────────────────────────────
+
+  test('delete without a session is rejected 401', async () => {
+    const res = await app.handle(del('/api/saves/some-id'));
+    expect(res.status).toBe(401);
+  });
+
+  test('delete of owned backup removes R2 object and D1 row', async () => {
+    const cookie = await signInCookie('diana@example.com');
+    const bytes = new Uint8Array([10, 20, 30]);
+    const createRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', bytes, cookie),
+    );
+    expect(createRes.status).toBe(201);
+    const body = (await createRes.json()) as { backupId: string; r2Key: string };
+    const { backupId, r2Key } = body;
+
+    // Verify it exists before delete.
+    expect(r2.store.has(r2Key)).toBe(true);
+    const rowsBefore = await client.execute('SELECT id FROM account_backups');
+    const beforeCount = rowsBefore.rows.length;
+
+    const delRes = await app.handle(del(`/api/saves/${backupId}`, cookie));
+    expect(delRes.status).toBe(200);
+
+    // R2 object is gone.
+    expect(r2.store.has(r2Key)).toBe(false);
+
+    // D1 row count decreased by 1.
+    const rowsAfter = await client.execute('SELECT id FROM account_backups');
+    expect(rowsAfter.rows.length).toBe(beforeCount - 1);
+  });
+
+  test('delete of another user backup is rejected 404', async () => {
+    const aliceCookie = await signInCookie('alice@example.com');
+    const createRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', new Uint8Array([1, 2, 3]), aliceCookie),
+    );
+    expect(createRes.status).toBe(201);
+    const body = (await createRes.json()) as { backupId: string; r2Key: string };
+    const { backupId, r2Key } = body;
+
+    const eveCookie = await signInCookie('eve@example.com');
+    const res = await app.handle(del(`/api/saves/${backupId}`, eveCookie));
+    expect(res.status).toBe(404);
+
+    // The backup should still exist (owned by Alice).
+    expect(r2.store.has(r2Key)).toBe(true);
+  });
+
+  test('a metadata delete failure is retryable after the R2 object is gone', async () => {
+    const cookie = await signInCookie('retry-delete@example.com');
+    const createRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', new Uint8Array([7, 8, 9]), cookie),
+    );
+    const { backupId, r2Key } = (await createRes.json()) as {
+      backupId: string;
+      r2Key: string;
+    };
+
+    saveD1.failNextAccountBackupDelete();
+    const firstDelete = await app.handle(del(`/api/saves/${backupId}`, cookie));
+    expect(firstDelete.status).toBe(500);
+    expect(r2.store.has(r2Key)).toBe(false);
+
+    const rowAfterFailure = await client.execute({
+      sql: 'SELECT id FROM account_backups WHERE id = ?',
+      args: [backupId],
+    });
+    expect(rowAfterFailure.rows).toHaveLength(1);
+
+    const retryDelete = await app.handle(del(`/api/saves/${backupId}`, cookie));
+    expect(retryDelete.status).toBe(200);
+    expect(r2.deleteCalls.filter((key) => key === r2Key)).toHaveLength(2);
+
+    const rowAfterRetry = await client.execute({
+      sql: 'SELECT id FROM account_backups WHERE id = ?',
+      args: [backupId],
+    });
+    expect(rowAfterRetry.rows).toHaveLength(0);
+  });
+
+  test('quota recovers after delete', async () => {
+    const cookie = await signInCookie('fiona@example.com');
+
+    // Create MAX_BACKUPS_PER_ACCOUNT backups.
+    const backupIds: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const res = await app.handle(
+        postBytes('/api/saves/backup?filename=save.db', new Uint8Array([i]), cookie),
+      );
+      expect(res.status).toBe(201);
+      const { backupId } = (await res.json()) as { backupId: string };
+      backupIds.push(backupId);
+    }
+
+    // 21st backup should be rejected (quota_exceeded).
+    const quotaRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', new Uint8Array([99]), cookie),
+    );
+    expect(quotaRes.status).toBe(429);
+
+    // Delete one backup.
+    const delRes = await app.handle(del(`/api/saves/${backupIds[0]}`, cookie));
+    expect(delRes.status).toBe(200);
+
+    // Now the 21st backup should succeed.
+    const successRes = await app.handle(
+      postBytes('/api/saves/backup?filename=save.db', new Uint8Array([99]), cookie),
+    );
+    expect(successRes.status).toBe(201);
   });
 });

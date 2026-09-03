@@ -41,6 +41,7 @@ export * from './audio/track_registry_service.svelte';
 export * from './audio/tts_service.svelte.ts';
 export * from './audio/voice_model_service.svelte.ts';
 export * from './auth/auth_service.svelte.ts';
+export * from './backup/backup_service.svelte.ts';
 export * from './campaign/campaign_service.svelte.ts';
 export * from './campaign/pack_registry_service.svelte.ts';
 export * from './capability/capability_service.svelte.ts';

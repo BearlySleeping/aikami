@@ -78,6 +78,22 @@ export type LocalDatabaseInterface = {
   sync(): Promise<void>;
 
   /**
+   * Exports the full database as raw bytes for backup or transfer.
+   *
+   * @returns The complete database file as a Uint8Array.
+   */
+  exportBytes(): Promise<Uint8Array>;
+
+  /**
+   * Replaces the database contents with the given bytes, then leaves
+   * the adapter in a fully queryable state.
+   *
+   * @param bytes - Raw database file bytes (previously obtained from
+   *   exportBytes()).
+   */
+  importBytes(bytes: Uint8Array): Promise<void>;
+
+  /**
    * Closes the database connection and releases resources.
    */
   close(): Promise<void>;
