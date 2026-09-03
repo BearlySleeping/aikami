@@ -13,8 +13,9 @@ export const usersRowSchema = Type.Object({
   email: Type.String(),
   emailVerified: Type.Boolean(), // column: `email_verified`
   image: Type.Union([Type.String(), Type.Null()]),
-  createdAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `created_at`
-  updatedAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `updated_at`
+  createdAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `created_at`
+  updatedAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `updated_at`
 });
 
+/** Static row type inferred from {@link usersRowSchema}. */
 export type UserRow = Static<typeof usersRowSchema>;

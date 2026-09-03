@@ -16,12 +16,19 @@ export const accountsRowSchema = Type.Object({
   accessToken: Type.Union([Type.String(), Type.Null()]), // column: `access_token`
   refreshToken: Type.Union([Type.String(), Type.Null()]), // column: `refresh_token`
   idToken: Type.Union([Type.String(), Type.Null()]), // column: `id_token`
-  accessTokenExpiresAt: Type.Union([Type.Unsafe<Date>({ type: 'Date' }), Type.Null()]), // column: `access_token_expires_at`
-  refreshTokenExpiresAt: Type.Union([Type.Unsafe<Date>({ type: 'Date' }), Type.Null()]), // column: `refresh_token_expires_at`
+  accessTokenExpiresAt: Type.Union([
+    Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date),
+    Type.Null(),
+  ]), // column: `access_token_expires_at`
+  refreshTokenExpiresAt: Type.Union([
+    Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date),
+    Type.Null(),
+  ]), // column: `refresh_token_expires_at`
   scope: Type.Union([Type.String(), Type.Null()]),
   password: Type.Union([Type.String(), Type.Null()]),
-  createdAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `created_at`
-  updatedAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `updated_at`
+  createdAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `created_at`
+  updatedAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `updated_at`
 });
 
+/** Static row type inferred from {@link accountsRowSchema}. */
 export type AccountRow = Static<typeof accountsRowSchema>;

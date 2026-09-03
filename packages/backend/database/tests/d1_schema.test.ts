@@ -213,6 +213,7 @@ describe('D1 schema (AC-1)', () => {
       db
         .insert(packs)
         .values({
+          // @ts-expect-error: Exercise the database CHECK constraint with an invalid value.
           id: 'pack-bad',
           slug: 'bad-visibility',
           ownerAccountId: 'user-3',

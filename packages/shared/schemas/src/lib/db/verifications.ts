@@ -11,9 +11,16 @@ export const verificationsRowSchema = Type.Object({
   id: Type.String(),
   identifier: Type.String(),
   value: Type.String(),
-  expiresAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `expires_at`
-  createdAt: Type.Union([Type.Unsafe<Date>({ type: 'Date' }), Type.Null()]), // column: `created_at`
-  updatedAt: Type.Union([Type.Unsafe<Date>({ type: 'Date' }), Type.Null()]), // column: `updated_at`
+  expiresAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `expires_at`
+  createdAt: Type.Union([
+    Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date),
+    Type.Null(),
+  ]), // column: `created_at`
+  updatedAt: Type.Union([
+    Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date),
+    Type.Null(),
+  ]), // column: `updated_at`
 });
 
+/** Static row type inferred from {@link verificationsRowSchema}. */
 export type VerificationRow = Static<typeof verificationsRowSchema>;

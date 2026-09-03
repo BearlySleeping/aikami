@@ -11,9 +11,15 @@ export const packsRowSchema = Type.Object({
   id: Type.String(),
   slug: Type.String(),
   ownerAccountId: Type.String(), // column: `owner_account_id`
-  visibility: Type.Union([Type.Literal("draft"), Type.Literal("public"), Type.Literal("unlisted"), Type.Literal("removed")]),
-  createdAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `created_at`
-  updatedAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `updated_at`
+  visibility: Type.Union([
+    Type.Literal('draft'),
+    Type.Literal('public'),
+    Type.Literal('unlisted'),
+    Type.Literal('removed'),
+  ]),
+  createdAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `created_at`
+  updatedAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `updated_at`
 });
 
+/** Static row type inferred from {@link packsRowSchema}. */
 export type PackRow = Static<typeof packsRowSchema>;

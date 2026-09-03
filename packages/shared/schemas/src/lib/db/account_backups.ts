@@ -13,7 +13,8 @@ export const accountBackupsRowSchema = Type.Object({
   r2Key: Type.String(), // column: `r2_key`
   sizeBytes: Type.Number(), // column: `size_bytes`
   checksumSha256: Type.String(), // column: `checksum_sha256`
-  createdAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `created_at`
+  createdAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `created_at`
 });
 
+/** Static row type inferred from {@link accountBackupsRowSchema}. */
 export type AccountBackupRow = Static<typeof accountBackupsRowSchema>;

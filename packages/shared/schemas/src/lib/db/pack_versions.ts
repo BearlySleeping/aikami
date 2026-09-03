@@ -12,8 +12,12 @@ export const packVersionsRowSchema = Type.Object({
   packId: Type.String(), // column: `pack_id`
   version: Type.String(),
   manifestHash: Type.String(), // column: `manifest_hash`
-  createdAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `created_at`
-  publishedAt: Type.Union([Type.Unsafe<Date>({ type: 'Date' }), Type.Null()]), // column: `published_at`
+  createdAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `created_at`
+  publishedAt: Type.Union([
+    Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date),
+    Type.Null(),
+  ]), // column: `published_at`
 });
 
+/** Static row type inferred from {@link packVersionsRowSchema}. */
 export type PackVersionRow = Static<typeof packVersionsRowSchema>;

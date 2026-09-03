@@ -47,6 +47,14 @@ const ENUM_COLUMNS: Record<string, readonly string[]> = {
   'packs.visibility': ['draft', 'public', 'unlisted', 'removed'],
 } as const;
 
+/** Escape a value for a generated single-quoted TypeScript string literal. */
+const toTypeScriptStringLiteral = (value: string): string =>
+  `'${value
+    .replaceAll('\\', '\\\\')
+    .replaceAll("'", "\\'")
+    .replaceAll('\n', '\\n')
+    .replaceAll('\r', '\\r')}'`;
+
 // ── Column → TypeBox type string ─────────────────────────────────────────
 
 /** Shape of a Drizzle column object as seen at runtime. */
@@ -74,8 +82,10 @@ const columnToTypeExpr = (colKey: string, tableName: string, col: ColumnMeta): s
 
   if (enumValues && col.dataType === 'string') {
     // Narrowed text column — Type.Union of literal values
-    const literals = enumValues.map((v) => `Type.Literal(${JSON.stringify(v)})`).join(', ');
-    baseType = `Type.Union([${literals}])`;
+    const literals = enumValues
+      .map((value) => `    Type.Literal(${toTypeScriptStringLiteral(value)}),`)
+      .join('\n');
+    baseType = `Type.Union([\n${literals}\n  ])`;
   } else {
     switch (col.dataType) {
       case 'string':
@@ -88,15 +98,22 @@ const columnToTypeExpr = (colKey: string, tableName: string, col: ColumnMeta): s
         baseType = 'Type.Boolean()';
         break;
       case 'date':
-        // TypeBox 1.x has no Type.Date(); use Unsafe<Date> for timestamp columns.
-        baseType = "Type.Unsafe<Date>({ type: 'Date' })";
+        // TypeBox 1.x has no Type.Date(); refine an Unsafe<Date> static type at runtime.
+        baseType =
+          "Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date)";
         break;
       default:
         baseType = 'Type.Unknown()';
     }
   }
 
-  return col.notNull ? baseType : `Type.Union([${baseType}, Type.Null()])`;
+  if (col.notNull) {
+    return baseType;
+  }
+  if (col.dataType === 'date') {
+    return `Type.Union([\n    ${baseType},\n    Type.Null(),\n  ])`;
+  }
+  return `Type.Union([${baseType}, Type.Null()])`;
 };
 
 // ── Code generation ──────────────────────────────────────────────────────
@@ -154,6 +171,7 @@ const generateSchemaFile = (tableName: string, table: object): string => {
 
   lines.push('});');
   lines.push('');
+  lines.push(`/** Static row type inferred from {@link ${tableName}RowSchema}. */`);
   lines.push(`export type ${rowTypeName(tableName)} = Static<typeof ${tableName}RowSchema>;`);
   lines.push('');
 
@@ -167,7 +185,7 @@ const main = async (): Promise<void> => {
   const isCheck = args.includes('--check');
 
   if (isCheck) {
-    console.log('Checking generated row schemas are up to date…');
+    process.stdout.write('Checking generated row schemas are up to date…\n');
   }
 
   // Build output for each table
@@ -190,29 +208,33 @@ const main = async (): Promise<void> => {
     for (const [name, content] of generated) {
       const filePath = join(OUT_ABS, `${toSnakeCase(name)}.ts`);
       if (!existsSync(filePath)) {
-        console.error(`MISSING: ${filePath} \u2014 run \`bun db generate\` to create it`);
+        process.stderr.write(`MISSING: ${filePath} \u2014 run \`bun db generate\` to create it\n`);
         hasDiff = true;
         continue;
       }
       const existing = readFileSync(filePath, 'utf8');
       if (existing !== content) {
-        console.error(`STALE: ${filePath} \u2014 run \`bun db generate\` to regenerate it`);
+        process.stderr.write(
+          `STALE: ${filePath} \u2014 run \`bun db generate\` to regenerate it\n`,
+        );
         hasDiff = true;
       }
     }
 
     if (hasDiff) {
-      console.error('\n\u274c Some generated schemas are stale. Run `bun db generate` to fix.');
+      process.stderr.write(
+        '\n\u274c Some generated schemas are stale. Run `bun db generate` to fix.\n',
+      );
       process.exit(1);
     }
-    console.log('\u2705 All generated row schemas are up to date.');
+    process.stdout.write('\u2705 All generated row schemas are up to date.\n');
   } else {
     // Write output files
     mkdirSync(OUT_ABS, { recursive: true });
     for (const [name, content] of generated) {
       const filePath = join(OUT_ABS, `${toSnakeCase(name)}.ts`);
       writeFileSync(filePath, content, 'utf8');
-      console.log(`  Wrote ${relative(ROOT, filePath)}`);
+      process.stdout.write(`  Wrote ${relative(ROOT, filePath)}\n`);
     }
   }
 };

@@ -9,13 +9,14 @@ import { type Static, Type } from 'typebox';
 /** Row shape for the \`session\` table (\`sessions\` export). */
 export const sessionsRowSchema = Type.Object({
   id: Type.String(),
-  expiresAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `expires_at`
+  expiresAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `expires_at`
   token: Type.String(),
-  createdAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `created_at`
-  updatedAt: Type.Unsafe<Date>({ type: 'Date' }), // column: `updated_at`
+  createdAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `created_at`
+  updatedAt: Type.Refine(Type.Unsafe<Date>({ type: 'Date' }), (value) => value instanceof Date), // column: `updated_at`
   ipAddress: Type.Union([Type.String(), Type.Null()]), // column: `ip_address`
   userAgent: Type.Union([Type.String(), Type.Null()]), // column: `user_agent`
   userId: Type.String(), // column: `user_id`
 });
 
+/** Static row type inferred from {@link sessionsRowSchema}. */
 export type SessionRow = Static<typeof sessionsRowSchema>;
