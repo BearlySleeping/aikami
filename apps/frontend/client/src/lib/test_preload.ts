@@ -336,6 +336,7 @@ const _localServicesMock = () => ({
   getOpenAiCompatRuntimeModelsUrl: _createCallableStub(),
   authService: _createServiceStub(),
   AuthService: class {},
+  gameStateSyncService: _createServiceStub(),
   personaCreationService: _createServiceStub(),
   PersonaCreationService: class {},
   characterService: _createServiceStub(),
