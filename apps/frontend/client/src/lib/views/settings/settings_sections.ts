@@ -7,10 +7,13 @@
 // Types
 // ---------------------------------------------------------------------------
 
+/** Stable identifier used to select and deep-link a top-level settings group. */
 export type SettingsGroupId = 'play' | 'ai' | 'content' | 'data';
 
+/** Application context that determines whether a settings section is available. */
 export type SettingsContext = 'page' | 'pause' | 'onboarding';
 
+/** Metadata rendered for a top-level group in the settings navigation shell. */
 export type SettingsGroup = {
   /** Unique group identifier. */
   id: SettingsGroupId;
@@ -18,6 +21,7 @@ export type SettingsGroup = {
   label: string;
 };
 
+/** Registry entry describing a navigable settings section and its availability. */
 export type SettingsSection = {
   /** Unique section identifier — matches existing sub-tab IDs where applicable. */
   id: string;
@@ -27,7 +31,7 @@ export type SettingsSection = {
   group: SettingsGroupId;
   /** Which UI contexts this section is available in. */
   contexts: readonly SettingsContext[];
-  /** Heroicon name for the tab icon (used as a lookup key by the view). */
+  /** Heroicon name used as a lookup key by the grouped tab component. */
   icon: string;
   /** Optional capability key for badge display (e.g. 'ai', 'connection'). */
   capabilityKey?: string;

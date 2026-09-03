@@ -6,6 +6,7 @@
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names for module mocking
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { SettingsViewModel as SettingsViewModelClass } from './settings_view_model.svelte.ts';
 
 const _stubViewModel = (extra: Record<string, unknown> = {}) => ({
   masterVolume: 1,
@@ -48,13 +49,13 @@ mock.module('./music/settings_music_view_model.svelte', () => ({
   getSettingsMusicViewModel: () => _stubViewModel(),
 }));
 
-const { SettingsViewModel } = await import('./settings_view_model.svelte.ts');
-type SettingsViewModelType = InstanceType<typeof SettingsViewModel>;
+type SettingsViewModelType = InstanceType<typeof SettingsViewModelClass>;
 
 describe('SettingsViewModel — group/section selection', () => {
   let vm: SettingsViewModelType;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const { SettingsViewModel } = await import('./settings_view_model.svelte.ts');
     vm = SettingsViewModel.create({ className: 'SettingsViewModel' });
   });
 
@@ -93,6 +94,12 @@ describe('SettingsViewModel — group/section selection', () => {
 
 describe('SettingsViewModel — deep links', () => {
   const originalLocation = window.location;
+  let settingsViewModelClass: typeof SettingsViewModelClass;
+
+  beforeEach(async () => {
+    const { SettingsViewModel } = await import('./settings_view_model.svelte.ts');
+    settingsViewModelClass = SettingsViewModel;
+  });
 
   afterEach(() => {
     Object.defineProperty(window, 'location', {
@@ -112,7 +119,7 @@ describe('SettingsViewModel — deep links', () => {
 
   test('?section=<id> selects that section and its owning group', async () => {
     setSearch('?section=music');
-    const vm = SettingsViewModel.create({ className: 'SettingsViewModel' });
+    const vm = settingsViewModelClass.create({ className: 'SettingsViewModel' });
     await vm.initialize();
     expect(vm.activeSectionId).toBe('music');
     expect(vm.activeGroupId).toBe('content');
@@ -120,7 +127,7 @@ describe('SettingsViewModel — deep links', () => {
 
   test('?group=<id> selects that group and its first section', async () => {
     setSearch('?group=data');
-    const vm = SettingsViewModel.create({ className: 'SettingsViewModel' });
+    const vm = settingsViewModelClass.create({ className: 'SettingsViewModel' });
     await vm.initialize();
     expect(vm.activeGroupId).toBe('data');
     expect(vm.activeSectionId).toBe('export');
@@ -128,7 +135,7 @@ describe('SettingsViewModel — deep links', () => {
 
   test('an unknown ?section= falls back to the default', async () => {
     setSearch('?section=does-not-exist');
-    const vm = SettingsViewModel.create({ className: 'SettingsViewModel' });
+    const vm = settingsViewModelClass.create({ className: 'SettingsViewModel' });
     await vm.initialize();
     expect(vm.activeSectionId).toBe('controls');
     expect(vm.activeGroupId).toBe('play');

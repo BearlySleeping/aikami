@@ -103,6 +103,7 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
+/** Construction options required to instrument the settings page ViewModel. */
 export type SettingsViewModelOptions = BaseViewModelOptions;
 
 // ---------------------------------------------------------------------------
