@@ -33,6 +33,7 @@ export * from './lib/domain/npc.ts';
 export * from './lib/domain/oauth2.ts';
 export * from './lib/domain/persona.ts';
 export * from './lib/domain/providers_config.ts';
+export * from './lib/domain/memory_retrieval.ts';
 export * from './lib/domain/relationship.ts';
 export * from './lib/domain/user.ts';
 export * from './lib/domain/utils.ts';
