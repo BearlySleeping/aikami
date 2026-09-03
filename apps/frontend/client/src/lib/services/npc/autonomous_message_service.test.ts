@@ -5,8 +5,9 @@
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
-import { mock, setSystemTime } from 'bun:test';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, jest, mock, setSystemTime } from 'bun:test';
+import type { CharacterRelationship } from '@aikami/types';
+import type { AutonomousMessageServiceInterface } from './autonomous_message_service.svelte.ts';
 
 // Mock dependencies — bun:test mock.module (vitest's vi.mock is not
 // available under the bun test runner).
@@ -32,12 +33,23 @@ mock.module('../chat/chat.svelte.ts', () => ({
   },
 }));
 
+const npcScheduleServiceMock = {
+  getSchedule: mock(() => {}),
+  getCachedSchedule: mock((npcId: string) => ({
+    npcId,
+    days: [],
+    autonomousEnabled: true,
+    talkativeness: 0.5,
+    cooldownMinutes: 15,
+    generated: false,
+    updatedAt: new Date().toISOString(),
+  })),
+  isAvailable: mock(() => {}),
+  getCurrentStatus: mock(() => {}),
+};
+
 mock.module('./npc_schedule_service.svelte.ts', () => ({
-  npcScheduleService: {
-    getSchedule: mock(() => {}),
-    isAvailable: mock(() => {}),
-    getCurrentStatus: mock(() => {}),
-  },
+  npcScheduleService: npcScheduleServiceMock,
 }));
 
 mock.module('../ai/text_generation_service.svelte.ts', () => ({
@@ -47,39 +59,40 @@ mock.module('../ai/text_generation_service.svelte.ts', () => ({
   },
 }));
 
+const relationshipServiceMock = {
+  getRelationship: mock((_characterId: string): CharacterRelationship | undefined => undefined),
+  getStanding: mock((_factionId: string) => undefined),
+};
+
 mock.module('../game/relationship_service.svelte.ts', () => ({
-  relationshipService: {
-    getRelationship: mock((_characterId: string) => undefined),
-    getStanding: mock((_factionId: string) => undefined),
-  },
+  relationshipService: relationshipServiceMock,
 }));
+
+let autonomousMessageService: AutonomousMessageServiceInterface;
 
 describe('AutonomousMessageService', () => {
   afterEach(() => {
-    vi.useRealTimers();
+    autonomousMessageService.stop();
+    jest.clearAllTimers();
+    jest.restoreAllMocks();
+    jest.useRealTimers();
   });
 
   beforeEach(async () => {
-    vi.clearAllMocks();
-    vi.useFakeTimers();
+    jest.clearAllMocks();
+    jest.useFakeTimers();
     setSystemTime(new Date('2026-07-10T12:00:00Z'));
 
     // Reset idleDetectionService.isIdle mock to default true value
     const { idleDetectionService } = await import('../game/idle_detection_service.svelte.ts');
     idleDetectionService.isIdle.mockReturnValue(true);
 
-    // Reset relationship service mock to return undefined (no relationship data)
-    const { relationshipService: relService } = await import(
-      '../game/relationship_service.svelte.ts'
-    );
-    relService.getRelationship.mockReturnValue(undefined);
+    relationshipServiceMock.getRelationship.mockReturnValue(undefined);
+
+    ({ autonomousMessageService } = await import('./autonomous_message_service.svelte.ts'));
   });
 
   it('should start and stop the poller', async () => {
-    const { autonomousMessageService } = await import(
-      '../npc/autonomous_message_service.svelte.ts'
-    );
-
     expect(autonomousMessageService.isRunning).toBe(false);
 
     autonomousMessageService.start();
@@ -88,20 +101,17 @@ describe('AutonomousMessageService', () => {
     autonomousMessageService.stop();
     expect(autonomousMessageService.isRunning).toBe(false);
 
-    vi.clearAllTimers();
+    jest.clearAllTimers();
   });
 
   it('should not tick when DND is active', async () => {
-    const { autonomousMessageService } = await import(
-      '../npc/autonomous_message_service.svelte.ts'
-    );
     const { idleDetectionService } = await import('../game/idle_detection_service.svelte.ts');
 
     // @ts-expect-error: mock mutation
     idleDetectionService.isDnd = true;
 
     autonomousMessageService.start();
-    vi.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(60_000);
 
     // No messages should be generated
     const { chatService } = await import('../chat/chat.svelte.ts');
@@ -110,38 +120,32 @@ describe('AutonomousMessageService', () => {
     autonomousMessageService.stop();
     // @ts-expect-error: mock mutation
     idleDetectionService.isDnd = false;
-    vi.clearAllTimers();
+    jest.clearAllTimers();
   });
 
   it('should not tick when player is not idle', async () => {
-    const { autonomousMessageService } = await import(
-      '../npc/autonomous_message_service.svelte.ts'
-    );
     const { idleDetectionService } = await import('../game/idle_detection_service.svelte.ts');
 
     idleDetectionService.isIdle.mockReturnValue(false);
 
     autonomousMessageService.start();
-    vi.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(60_000);
 
     const { chatService } = await import('../chat/chat.svelte.ts');
     expect(chatService.addMessage).not.toHaveBeenCalled();
 
     autonomousMessageService.stop();
-    vi.clearAllTimers();
+    jest.clearAllTimers();
   });
 
   it('should not tick during combat', async () => {
-    const { autonomousMessageService } = await import(
-      '../npc/autonomous_message_service.svelte.ts'
-    );
     const { gameOverlayService } = await import('../game/game_overlay_service.svelte.ts');
 
     // @ts-expect-error: mock mutation
     gameOverlayService.activeOverlay = 'COMBAT';
 
     autonomousMessageService.start();
-    vi.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(60_000);
 
     const { chatService } = await import('../chat/chat.svelte.ts');
     expect(chatService.addMessage).not.toHaveBeenCalled();
@@ -149,124 +153,96 @@ describe('AutonomousMessageService', () => {
     autonomousMessageService.stop();
     // @ts-expect-error: mock mutation
     gameOverlayService.activeOverlay = 'NONE';
-    vi.clearAllTimers();
+    jest.clearAllTimers();
   });
 
   it('should not tick when chat is actively streaming', async () => {
-    const { autonomousMessageService } = await import(
-      '../npc/autonomous_message_service.svelte.ts'
-    );
     const { chatService } = await import('../chat/chat.svelte.ts');
 
     // @ts-expect-error: mock mutation
     chatService.isTyping = true;
 
     autonomousMessageService.start();
-    vi.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(60_000);
 
     expect(chatService.addMessage).not.toHaveBeenCalled();
 
     autonomousMessageService.stop();
     // @ts-expect-error: mock mutation
     chatService.isTyping = false;
-    vi.clearAllTimers();
+    jest.clearAllTimers();
   });
 
-  it('should compute relationship boost for friendly NPC', async () => {
-    const { autonomousMessageService } = await import(
-      '../npc/autonomous_message_service.svelte.ts'
+  it('should favor a friendly NPC during weighted selection', () => {
+    relationshipServiceMock.getRelationship.mockImplementation((characterId) =>
+      characterId === 'npc-friendly'
+        ? {
+            id: 'rel_test_1',
+            uid: 'test',
+            characterId: 'npc-friendly',
+            relationshipType: 'friend',
+            trust: 60,
+            affinity: 40,
+            history: [],
+            notes: '',
+            updatedAt: new Date().toISOString(),
+          }
+        : undefined,
     );
-    const { relationshipService: relService } = await import(
-      '../game/relationship_service.svelte.ts'
-    );
+    jest.spyOn(Math, 'random').mockReturnValue(0.45);
 
-    // Mock a friendly relationship
-    relService.getRelationship.mockReturnValue({
-      id: 'rel_test_1',
-      uid: 'test',
-      characterId: 'npc-friendly',
-      relationshipType: 'friend',
-      trust: 60,
-      affinity: 40,
-      history: [],
-      notes: '',
-      updatedAt: new Date().toISOString(),
+    const selected = autonomousMessageService.selectGroupParticipants({
+      npcIds: ['npc-unknown', 'npc-friendly'],
+      count: 1,
     });
 
-    // Access private method via bracket notation for testing
-    const boost = (autonomousMessageService as Record<string, unknown>)['_computeRelationshipBoost']
-      ? (autonomousMessageService as Record<string, (id: string) => number>)[
-          '_computeRelationshipBoost'
-        ]('npc-friendly')
-      : 0;
-
-    // boost = (60 + 40) / 400 = 0.25
-    expect(boost).toBeCloseTo(0.25, 2);
-
-    vi.clearAllTimers();
+    expect(selected).toEqual(['npc-friendly']);
   });
 
-  it('should compute zero relationship boost when no relationship data exists', async () => {
-    const { autonomousMessageService } = await import(
-      '../npc/autonomous_message_service.svelte.ts'
-    );
+  it('should preserve talkativeness-only selection for unknown relationships', () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.25);
 
-    // No relationship data mocked — getRelationship returns undefined
-    const boost = (autonomousMessageService as Record<string, unknown>)['_computeRelationshipBoost']
-      ? (autonomousMessageService as Record<string, (id: string) => number>)[
-          '_computeRelationshipBoost'
-        ]('npc-unknown')
-      : 0;
-
-    expect(boost).toBe(0);
-
-    vi.clearAllTimers();
-  });
-
-  it('should compute negative relationship boost for hostile NPC', async () => {
-    const { autonomousMessageService } = await import(
-      '../npc/autonomous_message_service.svelte.ts'
-    );
-    const { relationshipService: relService } = await import(
-      '../game/relationship_service.svelte.ts'
-    );
-
-    // Mock a hostile relationship
-    relService.getRelationship.mockReturnValue({
-      id: 'rel_test_2',
-      uid: 'test',
-      characterId: 'npc-hostile',
-      relationshipType: 'enemy',
-      trust: -80,
-      affinity: -60,
-      history: [],
-      notes: '',
-      updatedAt: new Date().toISOString(),
+    const selected = autonomousMessageService.selectGroupParticipants({
+      npcIds: ['npc-unknown', 'npc-other'],
+      count: 1,
     });
 
-    const boost = (autonomousMessageService as Record<string, unknown>)['_computeRelationshipBoost']
-      ? (autonomousMessageService as Record<string, (id: string) => number>)[
-          '_computeRelationshipBoost'
-        ]('npc-hostile')
-      : 0;
+    expect(selected).toEqual(['npc-unknown']);
+  });
 
-    // boost = (-80 + -60) / 400 = -0.35
-    expect(boost).toBeCloseTo(-0.35, 2);
+  it('should reduce a hostile NPC weighting during selection', () => {
+    relationshipServiceMock.getRelationship.mockImplementation((characterId) =>
+      characterId === 'npc-hostile'
+        ? {
+            id: 'rel_test_2',
+            uid: 'test',
+            characterId: 'npc-hostile',
+            relationshipType: 'enemy',
+            trust: -80,
+            affinity: -60,
+            history: [],
+            notes: '',
+            updatedAt: new Date().toISOString(),
+          }
+        : undefined,
+    );
+    jest.spyOn(Math, 'random').mockReturnValue(0.25);
 
-    vi.clearAllTimers();
+    const selected = autonomousMessageService.selectGroupParticipants({
+      npcIds: ['npc-hostile', 'npc-unknown'],
+      count: 1,
+    });
+
+    expect(selected).toEqual(['npc-unknown']);
   });
 
   it('should pause and resume the poller', async () => {
-    const { autonomousMessageService } = await import(
-      '../npc/autonomous_message_service.svelte.ts'
-    );
-
     expect(autonomousMessageService.isPaused).toBe(false);
     autonomousMessageService.pause();
     expect(autonomousMessageService.isPaused).toBe(true);
     autonomousMessageService.resume();
     expect(autonomousMessageService.isPaused).toBe(false);
 
-    vi.clearAllTimers();
+    jest.clearAllTimers();
   });
 });

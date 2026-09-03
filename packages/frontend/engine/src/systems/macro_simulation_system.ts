@@ -9,9 +9,11 @@ import { ZoneStatus } from '../components/zone_status.ts';
 
 import {
   applyEffects,
+  clearAllScoringContexts,
   evaluatePreconditions,
   getActionByIndex,
   selectBestAction,
+  setEntityScoringContext,
 } from '../math/goap/action_registry.ts';
 
 // ---------------------------------------------------------------------------
@@ -286,27 +288,35 @@ export const hydrateZone = (
 const _macroTick = (): void => {
   _macroClock++;
 
-  // Scan global SoA arrays directly — ecs_worker.ts owns the
-  // single world instance. The GoapAgent component arrays serve
-  // as the sparse marker for agent entities.
-  const count = GoapAgent.currentState.length;
-  for (let eid = 0; eid < count; eid++) {
-    // Sparse check: only process entities that actually have GoapAgent
-    if (GoapAgent.currentState[eid] === undefined) {
-      continue;
-    }
+  try {
+    // Scan global SoA arrays directly — ecs_worker.ts owns the
+    // single world instance. The GoapAgent component arrays serve
+    // as the sparse marker for agent entities.
+    const count = GoapAgent.currentState.length;
+    for (let eid = 0; eid < count; eid++) {
+      // Sparse check: only process entities that actually have GoapAgent
+      if (GoapAgent.currentState[eid] === undefined) {
+        continue;
+      }
 
-    // Only process entities in inactive zones
-    const zoneEid = MapLocation.currentZoneId[eid];
-    if (zoneEid === undefined || zoneEid === 0) {
-      continue;
-    }
-    if (ZoneStatus.isActive[zoneEid] === 1) {
-      continue; // Active zone — skip macro processing
-    }
+      // Only process entities in inactive zones
+      const zoneEid = MapLocation.currentZoneId[eid];
+      if (zoneEid === undefined || zoneEid === 0) {
+        continue;
+      }
+      if (ZoneStatus.isActive[zoneEid] === 1) {
+        continue; // Active zone — skip macro processing
+      }
 
-    // Step the agent (world param unused — we operate on global SoA arrays)
-    stepMacroAgent(null as unknown as World, eid); // guard-ignore lint/type-safety/casting: stepMacroAgent ignores world param, operates on global SoA arrays
+      setEntityScoringContext(eid, {
+        playerRelationship: { standing: GoapAgent.relationshipStanding[eid] ?? 0 },
+      });
+
+      // Step the agent (world param unused — we operate on global SoA arrays)
+      stepMacroAgent(null as unknown as World, eid); // guard-ignore lint/type-safety/casting: stepMacroAgent ignores world param, operates on global SoA arrays
+    }
+  } finally {
+    clearAllScoringContexts();
   }
 };
 

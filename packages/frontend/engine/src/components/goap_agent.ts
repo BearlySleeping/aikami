@@ -23,6 +23,8 @@ export const GoapAgent = {
   currentActionId: [] as number[],
   /** The entity ID of the agent's current target, or 0 if none. */
   targetEntityId: [] as number[],
+  /** Current relationship standing with the player (-100 to 100). */
+  relationshipStanding: [] as number[],
 };
 
 /** Payload shape stored/retrieved via observers. */
@@ -31,6 +33,7 @@ export type GoapAgentData = {
   currentGoal: number;
   currentActionId: number;
   targetEntityId: number;
+  relationshipStanding?: number;
 };
 
 /**
@@ -44,6 +47,7 @@ export const registerGoapAgentObservers = (world: World): void => {
     GoapAgent.currentGoal[eid] = params.currentGoal;
     GoapAgent.currentActionId[eid] = params.currentActionId;
     GoapAgent.targetEntityId[eid] = params.targetEntityId;
+    GoapAgent.relationshipStanding[eid] = params.relationshipStanding ?? 0;
   });
 
   observe(
@@ -54,6 +58,7 @@ export const registerGoapAgentObservers = (world: World): void => {
       currentGoal: GoapAgent.currentGoal[eid],
       currentActionId: GoapAgent.currentActionId[eid],
       targetEntityId: GoapAgent.targetEntityId[eid],
+      relationshipStanding: GoapAgent.relationshipStanding[eid] ?? 0,
     }),
   );
 };

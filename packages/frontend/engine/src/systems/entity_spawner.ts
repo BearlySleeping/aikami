@@ -480,6 +480,7 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint, packConfig?: PackConfig
       currentGoal: 0,
       currentActionId: wanders ? DEFAULT_ACTION_GO_TO_PUB : -1,
       targetEntityId: 0,
+      relationshipStanding: _getNumberProperty(spawnPoint.properties, 'relationshipValue', 0),
     }),
   );
 

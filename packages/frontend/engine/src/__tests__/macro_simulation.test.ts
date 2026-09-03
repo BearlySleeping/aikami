@@ -9,7 +9,7 @@
 //   AC-2: Coarse schedule state shifts — GOAP agents update on macro ticks
 //   AC-3: Portal zone hydration — virtual grid → pixel coordinate resolution
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld } from 'bitecs';
 import { GoapAgent } from '../components/goap_agent.ts';
@@ -18,7 +18,9 @@ import { ZoneStatus } from '../components/zone_status.ts';
 
 import {
   clearAllScoringContexts,
+  getEntityScoringContext,
   initializeActionRegistry,
+  selectBestAction,
   setEntityScoringContext,
 } from '../math/goap/action_registry.ts';
 import {
@@ -124,6 +126,7 @@ afterEach(() => {
   GoapAgent.currentGoal.length = 0;
   GoapAgent.currentActionId.length = 0;
   GoapAgent.targetEntityId.length = 0;
+  GoapAgent.relationshipStanding.length = 0;
 });
 
 // ---------------------------------------------------------------------------
@@ -456,132 +459,72 @@ describe('AC-4: Relationship-Aware Scoring', () => {
     clearAllScoringContexts();
   });
 
-  test('hostile NPC selects avoidant action when score is tied with neutral NPC', () => {
-    // Scenario: both actions have same score (0 new goal bits) but different costs.
-    // Goal is AtWorkplace (bit 2), already set in state.
-    // Action 4 (Go to workplace, cost 10) and action 6 (Flee, cost 10) both score 0
-    // since the goal is already satisfied. For hostile NPC, Flee cost is reduced.
-    const neutralEid = addEntity(world);
-    GoapAgent.currentState[neutralEid] = 2; // Already AtWorkplace
-    GoapAgent.currentGoal[neutralEid] = 2; // Goal already satisfied
-    GoapAgent.currentActionId[neutralEid] = -1;
-
-    const hostileEid = addEntity(world);
-    GoapAgent.currentState[hostileEid] = 2;
-    GoapAgent.currentGoal[hostileEid] = 2;
-    GoapAgent.currentActionId[hostileEid] = -1;
-
-    setEntityScoringContext(hostileEid, {
-      playerRelationship: { standing: -80, factionTier: 'hostile' },
+  test('selectBestAction uses relationship bias to break an otherwise equal tie', () => {
+    initializeActionRegistry([
+      {
+        actionId: 4,
+        cost: 10,
+        preconditionUsageMask: 0,
+        preconditionValueMask: 0,
+        effectClearMask: 0,
+        effectSetMask: 1,
+      },
+      {
+        actionId: 2,
+        cost: 10,
+        preconditionUsageMask: 0,
+        preconditionValueMask: 0,
+        effectClearMask: 0,
+        effectSetMask: 2,
+      },
+    ]);
+    const friendlyEid = addEntity(world);
+    setEntityScoringContext(friendlyEid, {
+      playerRelationship: { standing: 80, factionTier: 'friend' },
     });
 
-    // Both should have their goal cleared (already satisfied), so no action selected
-    stepMacroAgent(world, neutralEid);
-    stepMacroAgent(world, hostileEid);
-
-    // Goal cleared for both
-    expect(GoapAgent.currentGoal[neutralEid]).toBe(0);
-    expect(GoapAgent.currentGoal[hostileEid]).toBe(0);
+    expect(selectBestAction(0, 1 | 2)).toBe(0);
+    expect(selectBestAction(0, 1 | 2, friendlyEid)).toBe(1);
   });
 
-  test('hostile NPC selects different action when multiple actions make equal progress', () => {
-    // Both action 2 (Go to pub, cost 10, sets bit 8) and action 6 (Flee, cost 10)
-    // and action 7 (Combat, cost 10) all score 0 for a goal that's already satisfied.
-    // Hostile NPC should prefer Flee or Combat over Go to pub.
-    const neutralEid = addEntity(world);
-    GoapAgent.currentState[neutralEid] = 8 | 2; // Already AtPub + AtWorkplace
-    GoapAgent.currentGoal[neutralEid] = 8 | 2; // Both satisfied
-    GoapAgent.currentActionId[neutralEid] = -1;
+  test('macro tick supplies relationship context and clears it afterward', () => {
+    jest.useFakeTimers();
+    initializeActionRegistry([
+      {
+        actionId: 4,
+        cost: 10,
+        preconditionUsageMask: 0,
+        preconditionValueMask: 0,
+        effectClearMask: 0,
+        effectSetMask: 1,
+      },
+      {
+        actionId: 2,
+        cost: 10,
+        preconditionUsageMask: 0,
+        preconditionValueMask: 0,
+        effectClearMask: 0,
+        effectSetMask: 2,
+      },
+    ]);
+    const friendlyEid = addEntity(world);
+    GoapAgent.currentState[friendlyEid] = 0;
+    GoapAgent.currentGoal[friendlyEid] = 1 | 2;
+    GoapAgent.currentActionId[friendlyEid] = -1;
+    GoapAgent.relationshipStanding[friendlyEid] = 80;
+    MapLocation.currentZoneId[friendlyEid] = 1;
+    ZoneStatus.isActive[1] = 0;
 
-    const hostileEid = addEntity(world);
-    GoapAgent.currentState[hostileEid] = 8 | 2;
-    GoapAgent.currentGoal[hostileEid] = 8 | 2;
-    GoapAgent.currentActionId[hostileEid] = -1;
+    try {
+      startMacroSimulation();
+      jest.advanceTimersByTime(500);
 
-    setEntityScoringContext(hostileEid, {
-      playerRelationship: { standing: -80, factionTier: 'hostile' },
-    });
-
-    stepMacroAgent(world, neutralEid);
-    stepMacroAgent(world, hostileEid);
-
-    // Both goals should be cleared (already satisfied)
-    expect(GoapAgent.currentGoal[neutralEid]).toBe(0);
-    expect(GoapAgent.currentGoal[hostileEid]).toBe(0);
-  });
-
-  test('selectBestAction returns divergent results with hostile vs neutral context', async () => {
-    // Direct test of selectBestAction with entity-aware scoring.
-    // Two actions with equal score (both set 1 goal bit), same cost:
-    // Action 2 (Go to pub, cost 10, sets bit 8) and action 4 (Go to workplace, cost 10, sets bit 2)
-    // For goal = bit 8 | bit 2, both score 1.
-    // With neutral context, action 2 wins (lower index at same cost).
-    // With hostile context, cost modifier reduces Flee/combat costs but doesn't affect
-    // actions that make goal progress — so we need a different scenario.
-    //
-    // Better: test that action 6 (Flee) is selected by hostile NPC when its
-    // effective cost becomes lower than other equal-score actions.
-
-    // State: IsHungry (16) + HasMoney (4)
-    // Goal: AtWorkplace (2) — action 4 directly sets bit 2
-    // For hostile NPC: action 6 (Flee, cost 10 - modifier) vs action 4 (cost 10)
-    // Both score equally (action 4 sets 1 goal bit, action 6 sets 0)
-    // Hostile modifier makes Flee cheaper, but action 4 still has higher score.
-    // So hostile won't choose Flee over making progress toward the goal.
-    //
-    // Correct test: When both actions make EQUAL progress (same score), hostile cost
-    // modifier breaks the tie.
-
-    // State: has money (4), no special bits
-    // Goal: AtWorkplace (2) — action 4 (cost 10, sets bit 2, no preconditions)
-    // and for hostile, flee action (6) has same score 0 for this goal.
-    // But Flee doesn't set bit 2, so score = 0 while action 4 has score = 1.
-    // Hostile NPC still picks action 4 because it makes progress.
-    //
-    // The relationship modifier only matters for TIES (same score, lower cost wins).
-    // So I need two actions with SAME score for the same goal.
-
-    // Let's test with a goal where both action 6 (Flee, sets 0 bits) and
-    // action 7 (Combat, sets 0 bits) have same score = 0.
-    // Goal: AtWorkplace (2) — neither action 6 nor 7 sets bit 2.
-    // Action 4 (Go to workplace) still wins because score = 1 > 0.
-    //
-    // For a true tie: use a goal that NO action satisfies directly.
-    // Goal bit 64: no action has effectSetMask including bit 64.
-    // All actions score 0 for this goal.
-    // Among actions with cost 0 (Idle) and cost 10 (Flee/Combat/Workplace/Pub),
-    // hostile NPC prefers Flee (cost 7 after modifier) over Idle (cost 0)? No, idle is 0.
-    //
-    // Hmm, let me reconsider. The modifier reduces Flee's cost from 10 to 7.
-    // Idle still costs 0. So idle always wins.
-    //
-    // Realistic scenario: goal that Flee DOES make progress toward.
-    // Let me add a test that just checks the cost modifier function directly
-    // to confirm the logic works, plus a test that shows setEntityScoringContext
-    // doesn't break anything.
-
-    // Direct cost modifier verification
-    const { selectBestAction: selectAction } = await import('../math/goap/action_registry.ts');
-
-    // Without entity ID (baseline)
-    const neutralResult = selectAction(16 | 4, 2);
-
-    // With hostile entity context
-    const hostileEid = addEntity(world);
-    GoapAgent.currentState[hostileEid] = 16 | 4;
-    GoapAgent.currentGoal[hostileEid] = 2;
-    GoapAgent.currentActionId[hostileEid] = -1;
-
-    setEntityScoringContext(hostileEid, {
-      playerRelationship: { standing: -80, factionTier: 'hostile' },
-    });
-
-    // Both should still select the same action since relationship modifier
-    // doesn't override goal progress (Flee doesn't set bit 2)
-    const hostileResult = selectAction(16 | 4, 2, hostileEid);
-    expect(neutralResult).toBe(hostileResult);
-
-    clearAllScoringContexts();
+      expect(GoapAgent.currentActionId[friendlyEid]).toBe(1);
+      expect(getEntityScoringContext(friendlyEid)).toBeUndefined();
+    } finally {
+      stopMacroSimulation();
+      jest.useRealTimers();
+    }
   });
 
   test('neutral-standing NPC behaves identically to no-context NPC', () => {
@@ -630,56 +573,9 @@ describe('AC-4: Relationship-Aware Scoring', () => {
     expect(GoapAgent.currentActionId[eid]).toBe(GoapAgent.currentActionId[noContextEid]);
   });
 
-  test('setEntityScoringContext is a no-op for non-hostile standing', () => {
-    const eid = addEntity(world);
-    GoapAgent.currentState[eid] = 16 | 4;
-    GoapAgent.currentGoal[eid] = 8 | 2;
-    GoapAgent.currentActionId[eid] = -1;
-
-    // Friendly standing should NOT change behavior because action 2
-    // (Go to pub, cost 10) and action 4 (Go to workplace, cost 10)
-    // both score 1 for the combined goal. Action 2 gets cost reduction
-    // for friendly standing, making it 7 vs action 4's 10.
-    // But with same score, action 2's index is lower anyway (2 vs 4).
-    // So this just verifies no errors.
-    setEntityScoringContext(eid, {
-      playerRelationship: { standing: 80, factionTier: 'friend' },
-    });
-
-    stepMacroAgent(world, eid);
-    expect(GoapAgent.currentActionId[eid]).not.toBe(-1);
-  });
-
-  test('selectBestAction works without entity ID (backward compatibility)', async () => {
-    // This verifies callers that don't pass entity ID still get correct results
-    const { selectBestAction: selectAction } = await import('../math/goap/action_registry.ts');
-    const result = selectAction(16 | 4, 2);
+  test('selectBestAction works without entity ID (backward compatibility)', () => {
+    const result = selectBestAction(16 | 4, 2);
     expect(result).toBeGreaterThanOrEqual(0);
-  });
-
-  test('relationship cost modifier function works correctly', async () => {
-    // Import the internal modifier via the exported selectBestAction
-    // Standing = -80 should reduce Flee (action 6) cost from 10 to 7
-    // Standing = 0 should leave cost unchanged
-    // Standing = 80 should reduce Go to pub (action 2) cost from 10 to 7
-
-    const { selectBestAction: selectAction } = await import('../math/goap/action_registry.ts');
-
-    // Test 1: No context — unchanged
-    const noContextResult = selectAction(16 | 4, 8);
-    expect(noContextResult).toBe(2); // Go to pub (friendly action)
-
-    // Test 2: Hostile context — action 2 (Go to pub, friendly-biased)
-    // doesn't get cost reduction, so behavior unchanged for this goal
-    // since Flee doesn't make progress toward bit 8
-    const hostileEid = addEntity(world);
-    setEntityScoringContext(hostileEid, {
-      playerRelationship: { standing: -80 },
-    });
-    const hostileResult = selectAction(16 | 4, 8, hostileEid);
-    expect(hostileResult).toBe(2); // Still picks Go to pub (only action that sets bit 8)
-
-    clearAllScoringContexts();
   });
 });
 
