@@ -132,32 +132,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
 
   // ── Advanced sections ───────────────────────────────────────────────
   {
-    id: 'providers',
-    label: 'AI Engine',
-    category: 'advanced',
-    icon: 'cpu',
-    keywords: [
-      'ai',
-      'engine',
-      'provider',
-      'text',
-      'voice',
-      'image',
-      'llm',
-      'model',
-      'generation',
-      'parameters',
-      'temperature',
-      'token',
-      'instruct',
-      'template',
-      'emotion',
-      'api key',
-      'endpoint',
-    ],
-    capabilityKey: 'ai',
-  },
-  {
     id: 'connections',
     label: 'Connections',
     category: 'advanced',

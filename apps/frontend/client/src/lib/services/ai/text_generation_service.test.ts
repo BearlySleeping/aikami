@@ -146,6 +146,18 @@ describe('TextGenerationService — AC-1: Gateway delegation', () => {
     expect(gatewayGenerateCalls[0].model).toBe('deepseek-chat');
   });
 
+  test('streamChat passes explicit endpoint override to the gateway', async () => {
+    const service = await loadService();
+
+    await service.streamChat({
+      messages: [{ role: 'user', content: 'Hi' }],
+      onChunk: () => {},
+      endpoint: 'http://localhost:8080/v1',
+    });
+
+    expect(gatewayGenerateCalls[0].endpoint).toBe('http://localhost:8080/v1');
+  });
+
   test('streamChat exposes resolved routing via __text_service_resolved_routing', async () => {
     const service = await loadService();
 

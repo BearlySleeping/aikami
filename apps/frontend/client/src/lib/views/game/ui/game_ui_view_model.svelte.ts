@@ -6,9 +6,9 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import {
-  aiSettingsService,
   chatService,
   combatService,
+  configService,
   type GameEngineServiceInterface,
   gameEngineService,
   gameOverlayService,
@@ -17,6 +17,7 @@ import {
   onboardingHintService,
   playerStateService,
   questOverlayService,
+  runtimeConfigService,
   sessionService,
   timeService,
 } from '$services';
@@ -64,6 +65,8 @@ import {
   getQuestTrackerViewModel,
   type QuestTrackerViewModelInterface,
 } from './quest_tracker_view_model.svelte';
+
+const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
 
 // Re-export for sub-ViewModels
 export type { AutoSaveStatus, DialogueNpcData, GameOverlayType };
@@ -250,7 +253,15 @@ class GameUIViewModel
    * Used to show a graceful message when a step requires a model.
    */
   private _hasTextProvider(): boolean {
-    return !!(aiSettingsService.textProvider?.apiKey || aiSettingsService.textProvider?.endpoint);
+    try {
+      const resolved = configService.getActiveTextProvider();
+      if (LOCAL_TEXT_PROVIDERS.has(resolved.provider)) {
+        return Boolean(runtimeConfigService.getTextUrl());
+      }
+      return Boolean(resolved.endpoint || resolved.apiKey);
+    } catch {
+      return false;
+    }
   }
 
   private _reducedMotionQuery: MediaQueryList | undefined;

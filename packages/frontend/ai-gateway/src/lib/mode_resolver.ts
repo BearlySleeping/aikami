@@ -21,7 +21,7 @@ export const createModeResolver = (options: {
 }): AiModeResolver => {
   const { getConfig } = options;
 
-  return ({ capability, model }): AiModeResolution => {
+  return ({ capability, model, endpoint }): AiModeResolution => {
     const config = getConfig();
     const entry = config[capability];
 
@@ -48,7 +48,7 @@ export const createModeResolver = (options: {
       capability,
       mode: entry.mode,
       provider: entry.provider,
-      endpoint: entry.endpoint,
+      endpoint: endpoint ?? entry.endpoint,
       model: model ?? entry.model,
     };
   };

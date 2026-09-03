@@ -54,10 +54,7 @@ import {
   getSettingsMusicViewModel,
   type SettingsMusicViewModelInterface,
 } from './music/settings_music_view_model.svelte';
-import {
-  getProvidersViewModel,
-  type ProvidersViewModelInterface,
-} from './providers/providers_view_model.svelte';
+
 import { SETTINGS_SECTIONS, type SettingsSection } from './settings_sections';
 
 // ---------------------------------------------------------------------------
@@ -92,7 +89,6 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   // ── Sub-ViewModels ──
   readonly gameplayViewModel: GameplayViewModelInterface;
   readonly aiPrivacyViewModel: AIPrivacyViewModelInterface;
-  readonly providersViewModel: ProvidersViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
   readonly musicViewModel: SettingsMusicViewModelInterface;
   readonly autonomousViewModel: AutonomousSettingsViewModelInterface;
@@ -141,7 +137,6 @@ export class SettingsViewModel
   readonly controlsViewModel: SettingsControlsViewModelInterface;
 
   // ── Advanced sub-ViewModels (lazily created) ──
-  private _providersViewModel: ProvidersViewModelInterface | undefined;
   private _musicViewModel: SettingsMusicViewModelInterface | undefined;
   private _autonomousViewModel: AutonomousSettingsViewModelInterface | undefined;
   private _exportViewModel: ExportViewModelInterface | undefined;
@@ -181,13 +176,6 @@ export class SettingsViewModel
         s.label.toLowerCase().includes(query) ||
         s.keywords.some((kw) => kw.toLowerCase().includes(query)),
     );
-  }
-
-  get providersViewModel(): ProvidersViewModelInterface {
-    if (!this._providersViewModel) {
-      this._providersViewModel = getProvidersViewModel({ className: 'ProvidersViewModel' });
-    }
-    return this._providersViewModel;
   }
 
   get musicViewModel(): SettingsMusicViewModelInterface {

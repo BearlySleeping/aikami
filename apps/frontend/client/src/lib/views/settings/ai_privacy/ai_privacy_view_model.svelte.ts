@@ -107,15 +107,12 @@ class AIPrivacyViewModel
     if (!configService.isLoaded) {
       return undefined;
     }
-    // Use the first connection's provider label, or the text provider label
     if (configService.state.connections.length > 0) {
       const providerId = configService.state.connections[0].provider;
       const provider = TEXT_PROVIDERS.find((p) => p.id === providerId);
       return provider?.label;
     }
-    const providerId = configService.state.text.provider;
-    const provider = TEXT_PROVIDERS.find((p) => p.id === providerId);
-    return provider?.label;
+    return undefined;
   }
 
   async connectAi(): Promise<void> {

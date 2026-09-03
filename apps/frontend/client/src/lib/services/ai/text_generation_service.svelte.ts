@@ -37,6 +37,7 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
     onChunk: (text: string) => void;
     signal?: AbortSignal;
     model?: string;
+    endpoint?: string;
   }): Promise<void>;
 
   /**
@@ -134,8 +135,9 @@ class TextGenerationService
     onChunk: (text: string) => void;
     signal?: AbortSignal;
     model?: string;
+    endpoint?: string;
   }): Promise<void> {
-    const { messages, onChunk, signal, model } = options;
+    const { messages, onChunk, signal, model, endpoint } = options;
 
     if (signal?.aborted) {
       return;
@@ -149,6 +151,7 @@ class TextGenerationService
         messages,
         onChunk,
         model,
+        endpoint,
         signal: abortController.signal,
         onResolve: (resolution) => this._exposeRouting(resolution),
       });

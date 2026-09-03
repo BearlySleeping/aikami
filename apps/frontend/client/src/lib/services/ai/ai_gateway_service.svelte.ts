@@ -45,7 +45,6 @@ import {
 } from '../config/provider_endpoints.ts';
 import { resolveImageEngine } from '../image/engine/image_engine_factory.svelte.ts';
 import { imageGenerationService } from '../image/image_generation_service.svelte.ts';
-import { aiSettingsService } from '../settings/ai_settings.svelte.ts';
 import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
@@ -156,7 +155,8 @@ class AiGatewayService
 
     return createAiProviderGateway({
       registry,
-      resolveMode: ({ capability, model }) => this._resolveCapability({ capability, model }),
+      resolveMode: ({ capability, model, endpoint }) =>
+        this._resolveCapability({ capability, model, endpoint }),
       detectors: {
         text: ({ signal }) =>
           detectTextAvailability({
@@ -208,11 +208,12 @@ class AiGatewayService
   private _resolveCapability(options: {
     capability: AiCapability;
     model?: string;
+    endpoint?: string;
   }): AiModeResolution {
-    const { capability, model } = options;
+    const { capability, model, endpoint } = options;
 
     if (capability === 'text') {
-      return this._resolveTextRouting(model);
+      return this._resolveTextRouting({ model, endpoint });
     }
     if (capability === 'image') {
       return { capability: 'image', mode: 'offline', provider: 'comfyui' };
@@ -225,14 +226,15 @@ class AiGatewayService
    * Priority: explicit model param → configService.getActiveTextProvider().
    * Throws (typed via gateway normalization) if no provider is configured.
    */
-  private _resolveTextRouting(explicitModel?: string): AiModeResolution {
+  private _resolveTextRouting(options: { model?: string; endpoint?: string }): AiModeResolution {
+    const { model: explicitModel, endpoint: explicitEndpoint } = options;
     if (explicitModel) {
       const match = configService.state.models.find((m) => m.model === explicitModel);
       if (match) {
         return this._toTextResolution({
           provider: match.provider,
           model: match.model,
-          endpoint: match.endpoint || '',
+          endpoint: explicitEndpoint ?? match.endpoint ?? '',
         });
       }
       // Model not found in config — use it verbatim with the active provider/endpoint
@@ -240,7 +242,7 @@ class AiGatewayService
       return this._toTextResolution({
         provider: resolved.provider,
         model: explicitModel,
-        endpoint: resolved.endpoint,
+        endpoint: explicitEndpoint ?? resolved.endpoint,
       });
     }
 
@@ -248,7 +250,7 @@ class AiGatewayService
     return this._toTextResolution({
       provider: resolved.provider,
       model: resolved.model,
-      endpoint: resolved.endpoint,
+      endpoint: explicitEndpoint ?? resolved.endpoint,
     });
   }
 
@@ -341,11 +343,18 @@ class AiGatewayService
     }
   }
 
-  /** Whether an image provider is configured via settings. */
+  /** Whether an image connection is configured (presence-only, never validated). */
   private _hasConfiguredImageProvider(): boolean {
     try {
-      const { imageProvider } = aiSettingsService;
-      return Boolean(imageProvider.endpoint || imageProvider.model);
+      const { connections } = configService.state;
+      if (!Array.isArray(connections)) {
+        return false;
+      }
+      return connections.some(
+        (connection) =>
+          connection.capability === 'image' &&
+          Boolean(connection.apiKey || (connection.baseUrl && connection.model)),
+      );
     } catch {
       return false;
     }

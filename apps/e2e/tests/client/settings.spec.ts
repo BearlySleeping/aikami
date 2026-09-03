@@ -32,7 +32,6 @@ test.describe('Settings — Progressive Disclosure (C-333)', () => {
     await expect(page.locator('.tabs-boxed button.tab:has-text("AI & Privacy")')).toBeVisible();
 
     // Verify no advanced section tabs are visible
-    await expect(page.locator('.tabs-boxed button.tab:has-text("AI Engine")')).not.toBeVisible();
     await expect(page.locator('.tabs-boxed button.tab:has-text("Agents")')).not.toBeVisible();
     await expect(page.locator('.tabs-boxed button.tab:has-text("Music")')).not.toBeVisible();
     await expect(page.locator('.tabs-boxed button.tab:has-text("Export")')).not.toBeVisible();
@@ -65,10 +64,9 @@ test.describe('Settings — Progressive Disclosure (C-333)', () => {
     // Verify advanced sections now visible
     const allTabs = page.locator('.tabs-boxed button.tab');
     const tabCount = await allTabs.count();
-    expect(tabCount).toBeGreaterThanOrEqual(10); // 5 basic + 6 advanced
+    expect(tabCount).toBeGreaterThanOrEqual(9); // 5 basic + 5 advanced
 
     // Verify specific advanced sections
-    await expect(page.locator('.tabs-boxed button.tab:has-text("AI Engine")')).toBeVisible();
     await expect(page.locator('.tabs-boxed button.tab:has-text("Agents")')).toBeVisible();
     await expect(page.locator('.tabs-boxed button.tab:has-text("Music DJ")')).toBeVisible();
     await expect(page.locator('.tabs-boxed button.tab:has-text("Export & Data")')).toBeVisible();

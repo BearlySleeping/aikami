@@ -13,7 +13,7 @@ const SettingsBasicSchema = Type.Object({
       'Whether the 5 basic section tabs are visible (Controls, Audio, Display, Gameplay, AI & Privacy)',
   }),
   noAdvancedSectionsVisible: Type.Boolean({
-    description: 'Whether no advanced sections (AI Engine, Agents, etc.) are visible',
+    description: 'Whether no advanced sections (Agents, etc.) are visible',
   }),
   searchBarVisible: Type.Boolean({
     description: 'Whether the search bar with placeholder "Search settings…" is visible',

@@ -10,7 +10,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { page } from '$app/state';
-import { aiSettingsService, textGenerationService } from '$services';
+import { configService, textGenerationService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -84,6 +84,8 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   streamEnabled = $state(true);
 
   // Shared
+  endpoint = $state('');
+  model = $state('');
   output = $state('');
   isGenerating = $state(false);
 
@@ -104,22 +106,6 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
     return TAB_META;
   }
 
-  get endpoint(): string {
-    return aiSettingsService.textProvider.endpoint;
-  }
-
-  set endpoint(value: string) {
-    aiSettingsService.setTextProvider({ endpoint: value });
-  }
-
-  get model(): string {
-    return aiSettingsService.textProvider.model;
-  }
-
-  set model(value: string) {
-    aiSettingsService.setTextProvider({ model: value });
-  }
-
   // ── Public: navigation ────────────────────────────────────────────────
 
   setActiveTab(tab: TextTab): void {
@@ -129,17 +115,26 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   // ── Public: lifecycle ─────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
+    // Seed from configService, with try/catch for unconfigured state
+    try {
+      const resolved = configService.getActiveTextProvider();
+      this.endpoint = resolved.endpoint;
+      this.model = resolved.model;
+    } catch {
+      // No text provider configured — keep defaults
+    }
+
     const url = new URL(page.url as unknown as string); // guard-ignore lint/type-safety/casting: URL constructor cast - value guaranteed to be string by runtime
     const instantParam = url.searchParams.get('instant') ?? url.searchParams.get('instant-start');
 
     const endpointParam = url.searchParams.get('endpoint');
     if (endpointParam) {
-      aiSettingsService.setTextProvider({ endpoint: decodeURIComponent(endpointParam) });
+      this.endpoint = decodeURIComponent(endpointParam);
     }
 
     const modelParam = url.searchParams.get('model');
     if (modelParam) {
-      aiSettingsService.setTextProvider({ model: decodeURIComponent(modelParam) });
+      this.model = decodeURIComponent(modelParam);
     }
 
     if (instantParam === 'true') {
@@ -187,6 +182,8 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
 
       await textGenerationService.streamChat({
         messages,
+        model: this.model.trim() || undefined,
+        endpoint: this.endpoint.trim() || undefined,
         signal: abortController.signal,
         onChunk: (text: string) => {
           if (streamMode) {

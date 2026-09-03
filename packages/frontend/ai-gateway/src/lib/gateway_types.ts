@@ -30,6 +30,8 @@ export type AiTextGenerationOptions = {
   schemaName?: string;
   /** Explicit model override. */
   model?: string;
+  /** Explicit provider endpoint override. */
+  endpoint?: string;
   /** Cancellation signal — propagated to the upstream provider fetch. */
   signal?: AbortSignal;
   /**
@@ -161,4 +163,5 @@ export type AiProviderGateway = {
 export type AiModeResolver = (options: {
   capability: AiCapability;
   model?: string;
+  endpoint?: string;
 }) => AiModeResolution;

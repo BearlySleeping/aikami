@@ -55,31 +55,6 @@ export type VoiceArchetype = {
 // Config section types
 // ---------------------------------------------------------------------------
 
-/** Memory subsystem type. */
-export type MemoryType = 'none' | 'basic' | 'hypa-style' | 'hanurai';
-
-/** Memory subsystem configuration. */
-export type MemoryConfig = {
-  /** Memory type (algorithm). */
-  type: MemoryType;
-  /** Maximum context window size in tokens. */
-  contextWindow: number;
-  /** Maximum number of conversation turns to retain. */
-  maxTurns: number;
-  /** Summarization threshold (turns before summarisation kicks in). */
-  summarizationThreshold: number;
-  /** Whether long-term memory (vector store) is enabled. */
-  longTermMemory: boolean;
-  /** Embedding model provider for vector search. */
-  embeddingModel: string;
-  /** Custom embedding API endpoint (when embeddingModel is 'custom'). */
-  embeddingUrl?: string;
-  /** API key for custom embedding provider. */
-  embeddingKey?: string;
-  /** Text chunk size for embedding ingestion. */
-  chunkSize: number;
-};
-
 /** Voice / TTS subsystem configuration. */
 export type VoiceConfig = {
   /** Selected TTS provider (e.g. 'kokoro', 'elevenlabs'). */
@@ -136,23 +111,6 @@ export type ImageConfig = {
   reviewBeforeGenerate: boolean;
 };
 
-/** Emotion resolution methods. */
-export type EmotionMethod = 'submodel' | 'embedding';
-
-/** Emotion resolution configuration. */
-export type EmotionConfig = {
-  /** How character emotions are resolved. */
-  method: EmotionMethod;
-  /** Target model for emotion extraction (when method is 'submodel'). */
-  targetModel?: string;
-};
-
-/** Advanced overrides for specific providers. */
-export type AdvancedOverrides = {
-  /** Thinking/reasoning level for DeepSeek/Claude models. */
-  thinkingLevel: number;
-};
-
 // ---------------------------------------------------------------------------
 // OpenRouter model type
 // ---------------------------------------------------------------------------
@@ -179,11 +137,6 @@ export type OpenRouterModel = {
 // ---------------------------------------------------------------------------
 // Top-level config state (self-contained, no client-only type dependencies)
 // ---------------------------------------------------------------------------
-
-/** @deprecated Use `connections[]` instead. */
-export type TextConfig = {
-  provider: string;
-};
 
 /** A single model configuration entry. */
 export type ModelConfigEntry = {
@@ -259,20 +212,12 @@ export type LorebookEntry = {
 
 /** Top-level configuration state. */
 export type ConfigState = {
-  /** Text generation settings (provider, API keys, URL). */
-  text: TextConfig;
-  /** Preferred text generation model. */
-  preferredModel: string;
   /** Model configurations (provider-agnostic). */
   models: ModelConfigEntry[];
-  /** Memory subsystem settings. */
-  memory: MemoryConfig;
   /** Voice / TTS settings. */
   voice: VoiceConfig;
   /** Image generation settings. */
   image: ImageConfig;
-  /** Emotion resolution settings. */
-  emotion: EmotionConfig;
   /** AI generation parameter overrides. */
   generationParams: {
     temperature: number;
@@ -282,16 +227,6 @@ export type ConfigState = {
     presencePenalty: number;
     maxTokens: number;
     contextSize: number;
-  };
-  /** Selected instruct template format. */
-  instructTemplate: 'chatml' | 'alpaca' | 'vicuna' | 'llama3' | 'mistral' | 'deepseek' | 'custom';
-  /** Advanced provider-specific overrides. */
-  advancedOverrides: AdvancedOverrides;
-  /** Auxiliary model assignments for specialised tasks. */
-  auxiliaryModels: {
-    summarization: string | undefined;
-    vision: string | undefined;
-    embedding: string | undefined;
   };
   /** Saved provider connections (C-230). */
   connections: ConnectionEntry[];

@@ -206,6 +206,17 @@ describe('Service mode guard — mode_unavailable', () => {
     expect(resolution.provider).toBe('aikami_service');
   });
 
+  test('explicit endpoint overrides configured endpoint', () => {
+    const resolver = createModeResolver({ getConfig: mixedModeConfig });
+
+    const resolution = resolver({
+      capability: 'text',
+      endpoint: 'http://localhost:8080/v1',
+    });
+
+    expect(resolution.endpoint).toBe('http://localhost:8080/v1');
+  });
+
   test('explicit service-mode dispatch with no registered adapter throws mode_unavailable', async () => {
     const registry = createAdapterRegistry();
     const gateway = createAiProviderGateway({
@@ -284,7 +295,7 @@ describe('Gateway dispatch — mixed-mode resolution and cancellation', () => {
   test('resolution is exposed exactly once per call via onResolve', async () => {
     const registry = createAdapterRegistry();
     // Ollama offline text uses native /api/chat → plain JSON response
-    const { fetchFn } = createJsonFetchMock();
+    const { fetchFn, calls } = createJsonFetchMock();
     registry.registerText({
       mode: 'offline',
       adapter: createOpenAiCompatibleTextAdapter({ fetchFn }),
@@ -298,11 +309,14 @@ describe('Gateway dispatch — mixed-mode resolution and cancellation', () => {
     const resolutions: AiModeResolution[] = [];
     await gateway.generateText({
       messages: [{ role: 'user', content: 'Hi' }],
+      endpoint: 'http://localhost:8080/v1',
       onResolve: (resolution) => resolutions.push(resolution),
     });
 
     expect(resolutions).toHaveLength(1);
     expect(resolutions[0].provider).toBe('ollama');
+    expect(resolutions[0].endpoint).toBe('http://localhost:8080/v1');
+    expect(calls[0].url).toBe('http://localhost:8080/api/chat');
   });
 
   test('cancelAll aborts in-flight calls with cancelled errors', async () => {

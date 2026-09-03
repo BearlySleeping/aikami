@@ -535,8 +535,7 @@ const _localServicesMock = () => ({
       return {};
     }
   },
-  aiSettingsService: _createServiceStub(),
-  AISettingsService: class {},
+
   storageService: _createServiceStub(),
   StorageService: class {},
   routerService: _createServiceStub(),

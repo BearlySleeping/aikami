@@ -126,11 +126,9 @@ describe('ConfigService — C-079', () => {
     test('should return default state before load', async () => {
       const service = await createService();
 
-      expect(service.state.preferredModel).toBe('');
       // C-230: API keys now live in connections[] (no text.apiKeys).
       expect(service.state.connections).toEqual([]);
       expect(service.state.models).toEqual([]);
-      expect(service.state.memory.contextWindow).toBe(8192);
       expect(service.state.voice.engine).toBe('kokoro');
       expect(service.state.image.checkpoint).toBe('sd_xl_base_1.0');
     });
@@ -179,11 +177,11 @@ describe('ConfigService — C-079', () => {
       const service = await createService();
       service.addConnection(_textConn('sk-or-abc', 'openrouter'));
       service.addConnection(_textConn('sk-oa-xyz', 'openai'));
-      service.addConnection(_textConn('gm-123', 'gemini'));
+      service.addConnection(_textConn('gm-123', 'google'));
 
       expect(service.getApiKey('openrouter')).toBe('sk-or-abc');
       expect(service.getApiKey('openai')).toBe('sk-oa-xyz');
-      expect(service.getApiKey('gemini')).toBe('gm-123');
+      expect(service.getApiKey('google')).toBe('gm-123');
     });
 
     test('updateConnection replaces the API key', async () => {
@@ -230,8 +228,6 @@ describe('ConfigService — C-079', () => {
 
     test('save should store plain config in localStorage', async () => {
       const service = await createService();
-      service.setPreferredModel('claude-3-opus');
-      service.setMemoryConfig({ contextWindow: 16384 });
 
       await service.save();
 
@@ -242,8 +238,7 @@ describe('ConfigService — C-079', () => {
         throw new Error('Expected plain config to be defined');
       }
       const parsed = JSON.parse(plain);
-      expect(parsed.preferredModel).toBe('claude-3-opus');
-      expect(parsed.memory.contextWindow).toBe(16384);
+      expect(typeof parsed.models).toBe('object');
     });
 
     test('save should NOT include API keys in plain localStorage', async () => {
@@ -364,17 +359,16 @@ describe('ConfigService — C-079', () => {
       const service = await createService();
       await service.load();
 
-      expect(service.state.preferredModel).toBe('gpt-4');
-      expect(service.state.memory.contextWindow).toBe(32768);
+      // preferredModel and memory are no longer stored
+      expect(service.state.voice.engine).toBe('kokoro');
     });
 
     test('load should merge partial plain config with defaults', async () => {
-      store.set('aikami_config', JSON.stringify({ preferredModel: 'gemini-pro' }));
+      store.set('aikami_config', JSON.stringify({}));
 
       const service = await createService();
       await service.load();
 
-      expect(service.state.preferredModel).toBe('gemini-pro');
       // Defaults should still be present
       expect(service.state.voice.engine).toBe('kokoro');
       expect(service.state.image.width).toBe(1024);
@@ -385,7 +379,6 @@ describe('ConfigService — C-079', () => {
       await service.load();
 
       // Should have defaults
-      expect(service.state.preferredModel).toBe('');
       expect(service.isLoaded).toBe(true);
     });
 
@@ -407,7 +400,177 @@ describe('ConfigService — C-079', () => {
       await service.load();
 
       expect(service.isLoaded).toBe(true);
-      expect(service.state.preferredModel).toBe('');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Per-capability connection defaults
+  //
+  // Invariants under test:
+  //   1. `defaultByCapability[cap]` is authoritative.
+  //   2. `connection.isDefault` is true iff it is its capability's default.
+  //   3. `defaultConnectionId` mirrors the text default (legacy alias).
+  // ═══════════════════════════════════════════════════════════════════════
+
+  describe('Connection defaults are per-capability', () => {
+    const _params = {
+      temperature: 0.7,
+      topP: 0.95,
+      topK: 40,
+      repetitionPenalty: 1,
+      presencePenalty: 0,
+      maxTokens: 1024,
+      contextSize: 4096,
+    };
+
+    const _conn = (options: {
+      capability: 'text' | 'image' | 'voice';
+      provider: string;
+      model?: string;
+    }) => ({
+      name: `${options.provider} (${options.capability})`,
+      provider: options.provider,
+      capability: options.capability,
+      apiKey: 'sk-test',
+      baseUrl: '',
+      model: options.model ?? `${options.provider}/model`,
+      generationParams: _params,
+      isDefault: false,
+      // load() prunes rows without a recognised source, so user-created
+      // connections must carry 'stored' to survive a round trip.
+      source: 'stored' as const,
+    });
+
+    test('the first connection of each capability becomes that capability default', async () => {
+      const service = await createService();
+      const textId = service.addConnection(_conn({ capability: 'text', provider: 'openrouter' }));
+      const voiceId = service.addConnection(_conn({ capability: 'voice', provider: 'kokoro' }));
+
+      expect(service.state.defaultByCapability.text).toBe(textId);
+      expect(service.state.defaultByCapability.voice).toBe(voiceId);
+    });
+
+    test('setting a voice default does not steal the text default', async () => {
+      const service = await createService();
+      service.addConnection(_conn({ capability: 'text', provider: 'openai' }));
+      const chosenText = service.addConnection(
+        _conn({ capability: 'text', provider: 'anthropic' }),
+      );
+      const voiceId = service.addConnection(_conn({ capability: 'voice', provider: 'kokoro' }));
+
+      service.setDefaultConnection(chosenText);
+      service.setDefaultConnection(voiceId);
+
+      expect(service.state.defaultByCapability.text).toBe(chosenText);
+      expect(service.state.defaultByCapability.voice).toBe(voiceId);
+      // The text resolution must still honour the chosen text connection,
+      // not fall through to insertion order.
+      expect(service.getActiveTextProvider().provider).toBe('anthropic');
+    });
+
+    test('exactly one connection per capability carries isDefault', async () => {
+      const service = await createService();
+      const first = service.addConnection(_conn({ capability: 'text', provider: 'openrouter' }));
+      const second = service.addConnection(_conn({ capability: 'text', provider: 'openai' }));
+
+      service.setDefaultConnection(second);
+
+      const flagged = service.state.connections.filter((c) => c.isDefault).map((c) => c.id);
+      expect(flagged).toEqual([second]);
+      expect(service.getConnection(first)?.isDefault).toBe(false);
+    });
+
+    test('updateConnection({ isDefault: true }) clears the previous default', async () => {
+      const service = await createService();
+      const first = service.addConnection(_conn({ capability: 'text', provider: 'openrouter' }));
+      const second = service.addConnection(_conn({ capability: 'text', provider: 'openai' }));
+
+      service.updateConnection(second, { isDefault: true });
+
+      const flagged = service.state.connections.filter((c) => c.isDefault).map((c) => c.id);
+      expect(flagged).toEqual([second]);
+      expect(service.state.defaultByCapability.text).toBe(second);
+      expect(service.getConnection(first)?.isDefault).toBe(false);
+    });
+
+    test('updateConnection applies the patch to the target connection', async () => {
+      const service = await createService();
+      const id = service.addConnection(_conn({ capability: 'text', provider: 'openrouter' }));
+
+      service.updateConnection(id, { model: 'anthropic/claude-sonnet-4.5' });
+
+      expect(service.getConnection(id)?.model).toBe('anthropic/claude-sonnet-4.5');
+    });
+
+    test('deleting a capability default promotes another of the same capability', async () => {
+      const service = await createService();
+      const voiceId = service.addConnection(_conn({ capability: 'voice', provider: 'kokoro' }));
+      const textA = service.addConnection(_conn({ capability: 'text', provider: 'openrouter' }));
+      const textB = service.addConnection(_conn({ capability: 'text', provider: 'openai' }));
+
+      service.setDefaultConnection(textA);
+      service.deleteConnection(textA);
+
+      expect(service.state.defaultByCapability.text).toBe(textB);
+      expect(service.state.defaultByCapability.voice).toBe(voiceId);
+      expect(service.getActiveTextProvider().provider).toBe('openai');
+    });
+
+    test('deleting the last connection of a capability clears its default', async () => {
+      const service = await createService();
+      service.addConnection(_conn({ capability: 'text', provider: 'openrouter' }));
+      const voiceId = service.addConnection(_conn({ capability: 'voice', provider: 'kokoro' }));
+
+      service.deleteConnection(voiceId);
+
+      expect(service.state.defaultByCapability.voice ?? null).toBeNull();
+      // The unrelated text default survives.
+      expect(service.state.defaultByCapability.text).toBeDefined();
+    });
+
+    test('per-capability defaults survive a save/load round trip', async () => {
+      const service = await createService();
+      service.addConnection(_conn({ capability: 'text', provider: 'openrouter' }));
+      const textB = service.addConnection(_conn({ capability: 'text', provider: 'openai' }));
+      const voiceId = service.addConnection(_conn({ capability: 'voice', provider: 'kokoro' }));
+      service.setDefaultConnection(textB);
+      await service.save();
+
+      const reloaded = await createService();
+      await reloaded.load();
+
+      expect(reloaded.state.defaultByCapability.text).toBe(textB);
+      expect(reloaded.state.defaultByCapability.voice).toBe(voiceId);
+      expect(reloaded.getActiveTextProvider().provider).toBe('openai');
+    });
+  });
+
+  describe('Voice and image API keys are encrypted at rest', () => {
+    test('save keeps voice and image keys out of plain localStorage', async () => {
+      const service = await createService();
+      await service.load();
+      service.setVoiceConfig({ apiKey: 'el-voice-secret' });
+      service.setImageConfig({ apiKey: 'sd-image-secret' });
+
+      await service.save();
+
+      const plain = store.get('aikami_config') ?? '';
+      expect(plain).not.toContain('el-voice-secret');
+      expect(plain).not.toContain('sd-image-secret');
+    });
+
+    test('voice and image keys round-trip through the vault', async () => {
+      const service = await createService();
+      await service.load();
+      service.setVoiceConfig({ apiKey: 'el-voice-secret' });
+      service.setImageConfig({ apiKey: 'sd-image-secret' });
+      await service.save();
+
+      const reloaded = await createService();
+      await reloaded.load();
+
+      expect(reloaded.state.voice.apiKey).toBe('el-voice-secret');
+      expect(reloaded.state.image.apiKey).toBe('sd-image-secret');
     });
   });
 
@@ -423,11 +586,9 @@ describe('ConfigService — C-079', () => {
         generationParams: {},
         isDefault: true,
       });
-      service.setPreferredModel('claude-3');
 
       await service.reset();
 
-      expect(service.state.preferredModel).toBe('');
       expect(service.state.connections).toHaveLength(0);
     });
 
@@ -448,33 +609,8 @@ describe('ConfigService — C-079', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // AC-4: Domain settings (Memory, Voice, Image)
+  // AC-4: Domain settings (Voice, Image)
   // ═══════════════════════════════════════════════════════════════════════
-
-  describe('Domain: Memory config', () => {
-    test('setMemoryConfig should merge partial config', async () => {
-      const service = await createService();
-      service.setMemoryConfig({ contextWindow: 32768 });
-
-      expect(service.state.memory.contextWindow).toBe(32768);
-      expect(service.state.memory.maxTurns).toBe(50); // Default preserved
-    });
-
-    test('setMemoryConfig should update all fields', async () => {
-      const service = await createService();
-      service.setMemoryConfig({
-        contextWindow: 4096,
-        longTermMemory: true,
-        maxTurns: 25,
-        summarizationThreshold: 10,
-      });
-
-      expect(service.state.memory.contextWindow).toBe(4096);
-      expect(service.state.memory.longTermMemory).toBe(true);
-      expect(service.state.memory.maxTurns).toBe(25);
-      expect(service.state.memory.summarizationThreshold).toBe(10);
-    });
-  });
 
   describe('Domain: Voice config', () => {
     test('setVoiceConfig should merge partial config', async () => {
