@@ -1,7 +1,7 @@
 // packages/frontend/engine/src/ai_clients/ai/factory.ts
 
 import type { FrontendAiInterface } from './frontend_ai_interface.ts';
-import type { AiClientOptions, AiProvider, ComfyUiClientOptions } from './types.ts';
+import type { AiClientOptions, AiProviderId, ComfyUiClientOptions } from './types.ts';
 
 /**
  * Creates the appropriate AI client for the given provider type.
@@ -15,7 +15,7 @@ import type { AiClientOptions, AiProvider, ComfyUiClientOptions } from './types.
  * @throws If the provider is unsupported or missing required options.
  */
 async function createAiClient(
-  provider: AiProvider,
+  provider: AiProviderId,
   options: AiClientOptions = {},
 ): Promise<FrontendAiInterface> {
   switch (provider) {

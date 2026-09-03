@@ -2,7 +2,7 @@
 
 import type {
   AiClientOptions,
-  AiProvider,
+  AiProviderId,
   FrontendAiInterface,
   GameApiClientInterface,
 } from '@aikami/types';
@@ -17,14 +17,14 @@ import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts
  *
  * @returns The configured AI provider identifier.
  */
-function getConfiguredProvider(): AiProvider {
+function getConfiguredProvider(): AiProviderId {
   if (typeof window !== 'undefined') {
     // URL param
     const urlParams = new URLSearchParams(window.location.search);
     const fromUrl = urlParams.get('ai_provider');
 
     if (fromUrl && isValidProvider(fromUrl)) {
-      return fromUrl as AiProvider;
+      return fromUrl as AiProviderId;
     }
 
     // localStorage
@@ -32,7 +32,7 @@ function getConfiguredProvider(): AiProvider {
       const fromStorage = localStorage.getItem('aikami_ai_provider');
 
       if (fromStorage && isValidProvider(fromStorage)) {
-        return fromStorage as AiProvider;
+        return fromStorage as AiProviderId;
       }
     } catch {
       // localStorage may be unavailable (SSR, some privacy modes)
@@ -44,7 +44,7 @@ function getConfiguredProvider(): AiProvider {
     const fromEnv = import.meta.env.VITE_AI_PROVIDER as string | undefined;
 
     if (fromEnv && isValidProvider(fromEnv)) {
-      return fromEnv as AiProvider;
+      return fromEnv as AiProviderId;
     }
   } catch {
     // import.meta.env may be unavailable in some contexts
@@ -92,7 +92,7 @@ function getAiClientOptions(apiClient?: GameApiClientInterface): AiClientOptions
 
 const VALID_PROVIDERS = ['openai', 'gemini', 'ollama', 'comfyui', 'local-tts', 'mock'];
 
-function isValidProvider(value: string): value is AiProvider {
+function isValidProvider(value: string): value is AiProviderId {
   return VALID_PROVIDERS.includes(value);
 }
 

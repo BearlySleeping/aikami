@@ -23,7 +23,6 @@ import type {
   ConfigState,
   ImageConfig,
   ImageParams,
-  ModelConfigEntry,
   ProviderId,
   RoleAssignments,
   TextParams,
@@ -91,10 +90,6 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   reset(): Promise<void>;
 
   /** Updates the text provider selection (legacy — prefer connections). */
-  /** Replaces the full models array. */
-  setModels(models: ModelConfigEntry[]): void;
-  /** Updates a single model config by index. */
-  updateModel(index: number, config: Partial<ModelConfigEntry>): void;
   /** Updates voice config (partial merge). */
   setVoiceConfig(config: Partial<VoiceConfig>): void;
   /** Updates image config (partial merge). */
@@ -226,7 +221,25 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
 // Defaults
 // ---------------------------------------------------------------------------
 
-const DEFAULT_MODEL_CONFIGS: ModelConfigEntry[] = [];
+/** Every capability, in a stable order for projection. */
+const CAPABILITIES: readonly ConnectionCapability[] = ['text', 'image', 'voice'];
+
+/** Roles each capability owns. */
+const ROLES_BY_CAPABILITY: Record<ConnectionCapability, readonly AiRole[]> = {
+  text: ['narration', 'dialogue', 'summarization', 'structured'],
+  image: ['portrait', 'scene'],
+  voice: ['narrator-voice', 'npc-voice'],
+};
+
+/**
+ * The role a capability's "default" maps onto. `defaultByCapability` and the
+ * legacy `defaultConnectionId` are projections of these three.
+ */
+const PRIMARY_ROLE: Record<ConnectionCapability, AiRole> = {
+  text: 'narration',
+  image: 'portrait',
+  voice: 'narrator-voice',
+};
 
 const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   autoSpeech: false,
@@ -272,7 +285,6 @@ const DEFAULT_STATE: ConfigState = {
   generationParams: { ...DEFAULT_GENERATION_PARAMS },
   image: { ...DEFAULT_IMAGE_CONFIG },
   lorebooks: [],
-  models: [...DEFAULT_MODEL_CONFIGS],
   presets: [...BUILT_IN_PRESETS],
   voice: { ...DEFAULT_VOICE_CONFIG },
 };
@@ -325,23 +337,18 @@ class ConfigService
             this.state.roles = vault.roles as RoleAssignments;
           }
           this.state.schemaVersion = 2;
-
-          // Backfill legacy connections array from v2 connections for ViewModel compat
-          this._backfillLegacyConnections();
-
-          // Preserve legacy-only rows that do not have a corresponding v2 connection.
-          if (vault.legacy) {
-            const legacyPayload = vault.legacy as Record<string, unknown>;
-            if (Array.isArray(legacyPayload.connections)) {
-              const aiConnectionIds = new Set(
-                this.state.aiConnections.map((connection) => connection.id),
-              );
-              const legacyConnections = (legacyPayload.connections as Connection[]).filter(
-                (connection) => !aiConnectionIds.has(connection.id),
-              );
-              this.state.connections = [...this.state.connections, ...legacyConnections];
-            }
+          if (typeof vault.voiceApiKey === 'string') {
+            vaultVoiceApiKey = vault.voiceApiKey;
           }
+          if (typeof vault.imageApiKey === 'string') {
+            vaultImageApiKey = vault.imageApiKey;
+          }
+
+          // Vaults written by the first C-463 build kept UI-created rows only
+          // under `legacy`, because the legacy CRUD did not write through.
+          // Absorb them into the real model so `legacy` stops being load-bearing.
+          this._absorbLegacyPayload(vault.legacy);
+          this._reproject();
         } else {
           // ── v1 vault: migrate to v2 ──────────────────────────────
           try {
@@ -383,8 +390,7 @@ class ConfigService
               ];
             }
 
-            // Backfill legacy connections array
-            this._backfillLegacyConnections();
+            this._reproject();
 
             this.info('migration:completed', {
               providersCreated: v2.providers.length,
@@ -448,9 +454,6 @@ class ConfigService
     if (plain) {
       try {
         const parsed = JSON.parse(plain) as Partial<ConfigState>;
-        if (parsed.models) {
-          this.state.models = parsed.models;
-        }
         if (parsed.voice) {
           this.state.voice = { ...DEFAULT_VOICE_CONFIG, ...parsed.voice };
         }
@@ -486,9 +489,7 @@ class ConfigService
 
     // 4. Reconcile defaults: drop any pointing at a pruned connection, then
     //    re-derive isDefault so the persisted flags cannot contradict the map.
-    this._pruneDefaults();
-    this._backfillDefaultsFromFlags();
-    this._syncDefaultFlags();
+    this._reproject();
 
     this.isLoaded = true;
   }
@@ -517,7 +518,10 @@ class ConfigService
       connections: this.state.aiConnections,
       roles: this.state.roles,
       userPresets,
-      // legacy payload for rollback (one release window)
+      voiceApiKey: this.state.voice.apiKey ?? '',
+      imageApiKey: this.state.image.apiKey ?? '',
+      // Rollback only — the loader must not depend on this. See
+      // `_absorbLegacyPayload`, which exists because it once did.
       legacy: legacyPayload,
     });
     await encrypt({ text: vaultPayload });
@@ -531,7 +535,6 @@ class ConfigService
       generationParams: this.state.generationParams,
       image: imageWithoutKey,
       lorebooks: this.state.lorebooks,
-      models: this.state.models,
       voice: voiceWithoutKey,
     };
     localStorage.setItem(PLAIN_CONFIG_KEY, JSON.stringify(plain));
@@ -558,7 +561,6 @@ class ConfigService
       generationParams: { ...DEFAULT_GENERATION_PARAMS },
       image: { ...DEFAULT_IMAGE_CONFIG },
       lorebooks: [],
-      models: [],
       presets: [...BUILT_IN_PRESETS],
       voice: { ...DEFAULT_VOICE_CONFIG },
     };
@@ -568,9 +570,13 @@ class ConfigService
    * Backfills the legacy `connections` array from the new `aiConnections`
    * and `providers` arrays for ViewModel backward compatibility.
    */
-  private _backfillLegacyConnections(): void {
-    this.state.connections = this.state.aiConnections.map((aiConn): Connection => {
-      const provider = this.state.providers.find((p) => p.id === aiConn.providerId);
+  /** Projects one AiConnection + its provider into the legacy Connection shape. */
+  private _projectConnection(options: {
+    aiConn: AiConnection;
+    provider: AiProvider | undefined;
+    isDefault: boolean;
+  }): Connection {
+    const { aiConn, provider, isDefault } = options;
       const textParams = aiConn.capability === 'text' ? (aiConn.params as TextParams) : undefined;
       const genParams = {
         temperature: textParams?.temperature ?? 0.7,
@@ -602,7 +608,7 @@ class ConfigService
         };
       }
 
-      return {
+    return {
         id: aiConn.id,
         name: aiConn.label,
         capability: aiConn.capability,
@@ -611,14 +617,13 @@ class ConfigService
         baseUrl: provider?.baseUrl ?? '',
         model: aiConn.model,
         generationParams: genParams,
-        isDefault: false,
+        isDefault,
         source: provider?.source ?? 'stored',
         createdAt: aiConn.createdAt,
         updatedAt: aiConn.updatedAt,
         imageOptions,
         voiceOptions,
-      };
-    });
+    };
   }
 
   /** Normalizes a persisted lorebook from the shared storage shape to the client-local Lorebook type. */
@@ -642,17 +647,6 @@ class ConfigService
   }
 
   // ── Mutators ──────────────────────────────────────────────────────────
-
-  setModels(models: ModelConfigEntry[]): void {
-    this.state.models = models;
-  }
-
-  updateModel(index: number, config: Partial<ModelConfigEntry>): void {
-    if (index < 0 || index >= this.state.models.length) {
-      return;
-    }
-    this.state.models = this.state.models.map((m, i) => (i === index ? { ...m, ...config } : m));
-  }
 
   setVoiceConfig(config: Partial<VoiceConfig>): void {
     this.state.voice = { ...this.state.voice, ...config };
@@ -736,113 +730,142 @@ class ConfigService
 
   // ── Connection management (C-230 / C-463) ─────────────────────────
 
+  // ── Legacy Connection API — adapters over the C-463 model ──────────
+  //
+  // These keep the pre-C-463 `Connection` shape for the ~11 existing call
+  // sites, but every mutation now lands in `providers` / `aiConnections` /
+  // `roles`. `state.connections`, `defaultConnectionId` and
+  // `defaultByCapability` are pure projections rebuilt by `_reproject()` —
+  // nothing writes them directly.
+
   addConnection(connection: Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>): ConnectionId {
-    const now = new Date().toISOString();
-    const id = crypto.randomUUID();
-    const newConnection: Connection = {
-      ...connection,
-      createdAt: now,
-      id,
-      updatedAt: now,
-    };
+    const capability = this._capabilityOf(connection);
+    const providerId = this._resolveOrCreateProvider({
+      registryId: connection.provider,
+      baseUrl: connection.baseUrl ?? '',
+      credential: connection.apiKey ?? '',
+      source: (connection.source ?? 'stored') as AiProvider['source'],
+      label: connection.name,
+    });
 
-    const capability = this._capabilityOf(newConnection);
-    const claimsDefault =
-      newConnection.isDefault || this.state.defaultByCapability?.[capability] == null;
+    const id = this.addAiConnection({
+      providerId,
+      capability,
+      label: connection.name,
+      model: connection.model,
+      params: this._paramsFromLegacy(connection, capability),
+    });
 
-    this.state.connections = [...this.state.connections, newConnection];
-
-    // First connection of a capability claims that capability's default —
-    // capabilities never compete with each other for one global slot.
+    const claimsDefault = connection.isDefault || this.state.roles[PRIMARY_ROLE[capability]] == null;
     if (claimsDefault) {
-      this._setCapabilityDefault({ id, capability });
-    } else {
-      this._syncDefaultFlags();
+      this._assignCapabilityRoles({ id, capability });
     }
-
+    this._reproject();
     return id;
   }
 
   updateConnection(id: ConnectionId, patch: Partial<Omit<Connection, 'id' | 'createdAt'>>): void {
-    // Build the next array in one pass. The previous implementation reassigned
-    // `this.state.connections` from inside this callback to clear the old
-    // default, and the outer map — built from the pre-mutation array — then
-    // overwrote it, leaving two connections flagged default.
-    const next = this.state.connections.map((c) =>
-      c.id === id ? { ...c, ...patch, id: c.id, updatedAt: new Date().toISOString() } : c,
-    );
-    this.state.connections = next;
-
-    const updated = next.find((c) => c.id === id);
-    if (!updated) {
+    const existing = this.state.aiConnections.find((c) => c.id === id);
+    if (!existing) {
       return;
     }
+    const projected = this.state.connections.find((c) => c.id === id);
+    const capability = patch.capability ?? existing.capability;
+
+    // Provider-level fields re-resolve the provider: changing a key must
+    // update the shared credential, not fork a copy onto this connection.
+    const touchesProvider =
+      patch.provider !== undefined || patch.apiKey !== undefined || patch.baseUrl !== undefined;
+    let providerId = existing.providerId;
+    if (touchesProvider) {
+      const current = this.state.providers.find((p) => p.id === existing.providerId);
+      const registryId = patch.provider ?? current?.registryId ?? '';
+      const nextKey = patch.apiKey ?? current?.credential ?? '';
+      const nextUrl = patch.baseUrl ?? current?.baseUrl ?? '';
+      const sameRegistry = registryId === current?.registryId;
+      if (current && sameRegistry) {
+        // Same account, edited in place — every sibling connection follows.
+        this.updateProvider(current.id, { credential: nextKey, baseUrl: nextUrl });
+      } else {
+        providerId = this._resolveOrCreateProvider({
+          registryId,
+          baseUrl: nextUrl,
+          credential: nextKey,
+          source: (patch.source ?? projected?.source ?? 'stored') as AiProvider['source'],
+          label: patch.name ?? existing.label,
+        });
+      }
+    }
+
+    const merged = {
+      ...existing,
+      providerId,
+      capability,
+      label: patch.name ?? existing.label,
+      model: patch.model ?? existing.model,
+    };
+    const changesParams =
+      capability !== existing.capability ||
+      (capability === 'text' && patch.generationParams !== undefined) ||
+      (capability === 'image' && patch.imageOptions !== undefined) ||
+      (capability === 'voice' && patch.voiceOptions !== undefined);
+    if (changesParams) {
+      merged.params = this._paramsFromLegacy(patch, capability);
+    }
+    this.updateAiConnection(id, merged);
 
     if (patch.isDefault) {
-      this._setCapabilityDefault({ id, capability: this._capabilityOf(updated) });
-      return;
+      this._assignCapabilityRoles({ id, capability });
     }
-
-    // A capability change can orphan the old capability's default.
-    this._pruneDefaults();
-    this._syncDefaultFlags();
+    this._pruneOrphanProviders();
+    this._reproject();
   }
 
   deleteConnection(id: ConnectionId): void {
-    const removed = this.state.connections.find((c) => c.id === id);
-    this.state.connections = this.state.connections.filter((c) => c.id !== id);
-
+    const removed = this.state.aiConnections.find((c) => c.id === id);
     if (!removed) {
       return;
     }
+    const { capability } = removed;
+    this.deleteAiConnection(id);
 
-    // Promote a replacement from the SAME capability. Promoting the first
-    // remaining connection of any capability is what let a voice connection
-    // become the text default.
-    const capability = this._capabilityOf(removed);
-    if (this.state.defaultByCapability?.[capability] === id) {
-      const replacement = this.state.connections.find(
-        (c) => this._capabilityOf(c) === capability,
-      );
-      if (replacement) {
-        this._setCapabilityDefault({ id: replacement.id, capability });
-      } else {
-        this._clearCapabilityDefault(capability);
-      }
-      return;
+    // Promote a replacement from the SAME capability into the roles the
+    // deletion just freed. Promoting across capabilities is what once let a
+    // voice connection become the text default.
+    const replacement = this.state.aiConnections.find((c) => c.capability === capability);
+    if (replacement) {
+      this._assignCapabilityRoles({ id: replacement.id, capability, onlyUnassigned: true });
     }
 
-    this._pruneDefaults();
-    this._syncDefaultFlags();
+    this._pruneOrphanProviders();
+    this._reproject();
   }
 
   duplicateConnection(id: ConnectionId): ConnectionId | undefined {
-    const original = this.state.connections.find((c) => c.id === id);
+    const original = this.state.aiConnections.find((c) => c.id === id);
     if (!original) {
       return undefined;
     }
-
-    const now = new Date().toISOString();
-    const newId = crypto.randomUUID();
-    const copy = {
-      ...original,
-      createdAt: now,
-      id: newId,
-      isDefault: false,
-      name: `${original.name} (copy)`,
-      updatedAt: now,
-    } as unknown as import('@aikami/types').ConnectionEntry; // guard-ignore lint/type-safety/casting: config service internal state - parsed JSON guaranteed by upstream schema validation
-
-    this.state.connections = [...this.state.connections, copy];
+    // A copy shares the account — it points at the same provider rather than
+    // cloning the credential.
+    const newId = this.addAiConnection({
+      providerId: original.providerId,
+      capability: original.capability,
+      label: `${original.label} (copy)`,
+      model: original.model,
+      params: original.params,
+    });
+    this._reproject();
     return newId;
   }
 
   setDefaultConnection(id: ConnectionId): void {
-    const connection = this.state.connections.find((c) => c.id === id);
+    const connection = this.state.aiConnections.find((c) => c.id === id);
     if (!connection) {
       return;
     }
-    this._setCapabilityDefault({ id, capability: this._capabilityOf(connection) });
+    this._assignCapabilityRoles({ id, capability: connection.capability });
+    this._reproject();
   }
 
   // ── C-463: Provider management ─────────────────────────────────────
@@ -965,107 +988,229 @@ class ConfigService
     );
   }
 
-  // ── Private: default bookkeeping ─────────────────────────────────────
+  // ── Private: the C-463 model is the single source of truth ──────────
   //
-  // `defaultByCapability` is the single source of truth. `isDefault` on each
-  // connection is derived from it, and `defaultConnectionId` is a legacy
-  // alias that mirrors the *text* default only — it is still read by older
-  // persisted vaults and by getActiveTextProvider's fallback rung.
+  // `roles` decides everything. `state.connections`, `defaultConnectionId`,
+  // `defaultByCapability` and each row's `isDefault` are projections rebuilt
+  // by `_reproject()`. Nothing else may write them.
 
   /** Capability of a connection, defaulting to 'text' for pre-C-230 rows. */
   private _capabilityOf(connection: { capability?: string }): ConnectionCapability {
     return (connection.capability ?? 'text') as ConnectionCapability; // guard-ignore lint/type-safety/casting: capability is a closed union persisted as string
   }
 
-  /** Points a capability at a connection and re-derives every isDefault flag. */
-  private _setCapabilityDefault(options: {
-    id: ConnectionId;
-    capability: ConnectionCapability;
-  }): void {
-    this.state.defaultByCapability = {
-      ...this.state.defaultByCapability,
-      [options.capability]: options.id,
-    };
-    if (options.capability === 'text') {
-      this.state.defaultConnectionId = options.id;
+  /**
+   * Finds a provider matching the account triple, or creates one. This is
+   * what makes "same key, many models" a single credential: two connections
+   * with the same registry id, URL and key resolve to one provider.
+   */
+  private _resolveOrCreateProvider(options: {
+    registryId: string;
+    baseUrl: string;
+    credential: string;
+    source: AiProvider['source'];
+    label: string;
+  }): ProviderId {
+    const existing = this.state.providers.find(
+      (p) =>
+        p.registryId === options.registryId &&
+        (p.baseUrl ?? '') === options.baseUrl &&
+        (p.credential ?? '') === options.credential,
+    );
+    if (existing) {
+      return existing.id;
     }
-    this._syncDefaultFlags();
-  }
-
-  /** Drops a capability's default and re-derives every isDefault flag. */
-  private _clearCapabilityDefault(capability: ConnectionCapability): void {
-    const next = { ...this.state.defaultByCapability };
-    delete next[capability];
-    this.state.defaultByCapability = next;
-    if (capability === 'text') {
-      this.state.defaultConnectionId = null;
-    }
-    this._syncDefaultFlags();
-  }
-
-  /** Removes capability defaults whose connection no longer exists. */
-  private _pruneDefaults(): void {
-    const ids = new Set(this.state.connections.map((c) => c.id));
-    const next: Record<string, string | null> = {};
-    for (const [capability, id] of Object.entries(this.state.defaultByCapability ?? {})) {
-      if (id && ids.has(id)) {
-        next[capability] = id;
-      }
-    }
-    this.state.defaultByCapability = next;
-    if (this.state.defaultConnectionId && !ids.has(this.state.defaultConnectionId)) {
-      this.state.defaultConnectionId = null;
-    }
+    return this.addProvider({
+      registryId: options.registryId,
+      label: options.label || options.registryId,
+      credential: options.credential || undefined,
+      baseUrl: options.baseUrl || undefined,
+      source: options.source,
+    });
   }
 
   /**
-   * Seeds missing capability defaults from vaults written before the map was
-   * persisted: prefer a connection already flagged `isDefault`, else the
-   * legacy `defaultConnectionId`, else the first of that capability.
+   * Pulls rows out of a v2 vault's `legacy` payload into the real model.
+   *
+   * The first C-463 build wrote through only on migration: connections
+   * created afterwards through the UI landed in `legacy.connections` alone,
+   * which made a rollback-only key load-bearing. This absorbs them once, and
+   * is a no-op on vaults that never had the problem.
    */
-  private _backfillDefaultsFromFlags(): void {
-    const defaults = { ...(this.state.defaultByCapability ?? {}) };
-    for (const connection of this.state.connections) {
-      const capability = this._capabilityOf(connection);
-      if (defaults[capability]) {
-        continue;
-      }
-      const candidates = this.state.connections.filter(
-        (c) => this._capabilityOf(c) === capability,
-      );
-      const chosen =
-        candidates.find((c) => c.isDefault) ??
-        candidates.find((c) => c.id === this.state.defaultConnectionId) ??
-        candidates[0];
-      if (chosen) {
-        defaults[capability] = chosen.id;
+  private _absorbLegacyPayload(legacy: unknown): void {
+    if (!legacy || typeof legacy !== 'object') {
+      return;
+    }
+    const payload = legacy as Record<string, unknown>;
+    const rows = Array.isArray(payload.connections) ? (payload.connections as Connection[]) : [];
+    const known = new Set(this.state.aiConnections.map((c) => c.id));
+    const orphans = rows.filter((row) => !known.has(row.id));
+
+    for (const row of orphans) {
+      const capability = this._capabilityOf(row);
+      const providerId = this._resolveOrCreateProvider({
+        registryId: row.provider,
+        baseUrl: row.baseUrl ?? '',
+        credential: row.apiKey ?? '',
+        source: (row.source ?? 'stored') as AiProvider['source'],
+        label: row.name,
+      });
+      // Keep the original id so role assignments and per-agent overrides
+      // pointing at it keep resolving.
+      this.state.aiConnections = [
+        ...this.state.aiConnections,
+        {
+          id: row.id,
+          providerId,
+          capability,
+          label: row.name,
+          model: row.model,
+          params: this._paramsFromLegacy(row, capability),
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        },
+      ];
+    }
+
+    // Seed roles from the legacy defaults for anything still unassigned.
+    const byCapability = (payload.defaultByCapability ?? {}) as Record<string, string | null>;
+    for (const capability of CAPABILITIES) {
+      const id = byCapability[capability];
+      if (id && this.state.aiConnections.some((c) => c.id === id)) {
+        this._assignCapabilityRoles({ id, capability, onlyUnassigned: true });
       }
     }
-    this.state.defaultByCapability = defaults;
-    const textDefault = defaults.text;
-    if (textDefault) {
-      this.state.defaultConnectionId = textDefault;
+    for (const capability of CAPABILITIES) {
+      if (this.state.roles[PRIMARY_ROLE[capability]]) {
+        continue;
+      }
+      const first = this.state.aiConnections.find((c) => c.capability === capability);
+      if (first) {
+        this._assignCapabilityRoles({ id: first.id, capability, onlyUnassigned: true });
+      }
+    }
+
+    if (orphans.length > 0) {
+      this.info('load:absorbed-legacy-connections', { count: orphans.length });
     }
   }
 
-  /** Re-derives `isDefault` on every connection from `defaultByCapability`. */
-  private _syncDefaultFlags(): void {
-    const defaults = this.state.defaultByCapability ?? {};
-    let changed = false;
-    const next = this.state.connections.map((c) => {
-      const isDefault = defaults[this._capabilityOf(c)] === c.id;
-      if (c.isDefault === isDefault) {
-        return c;
-      }
-      changed = true;
-      return { ...c, isDefault };
-    });
-    // Only reassign when a flag actually moved — capability_view_model runs
-    // an $effect over `connections`, and an unconditional new array would
-    // wake it on every no-op reconcile.
-    if (changed) {
-      this.state.connections = next;
+  /** Drops providers no connection references any more. */
+  private _pruneOrphanProviders(): void {
+    const referenced = new Set(this.state.aiConnections.map((c) => c.providerId));
+    this.state.providers = this.state.providers.filter((p) => referenced.has(p.id));
+  }
+
+  /** Builds capability-shaped params from the legacy Connection fields. */
+  private _paramsFromLegacy(
+    connection: Partial<Connection>,
+    capability: ConnectionCapability,
+  ): AiConnection['params'] {
+    if (capability === 'image') {
+      const o = connection.imageOptions;
+      return {
+        checkpoint: o?.checkpoint ?? '',
+        width: o?.width ?? 1024,
+        height: o?.height ?? 1024,
+        steps: o?.steps ?? 20,
+        cfg: o?.cfg ?? 7,
+      };
     }
+    if (capability === 'voice') {
+      const o = connection.voiceOptions;
+      return { voiceId: o?.voiceId ?? '', speed: o?.speed ?? 1, pitch: o?.pitch ?? 0 };
+    }
+    const g = connection.generationParams ?? this.state.generationParams;
+    return {
+      temperature: g.temperature,
+      topP: g.topP,
+      topK: g.topK,
+      repetitionPenalty: g.repetitionPenalty,
+      presencePenalty: g.presencePenalty,
+      maxTokens: g.maxTokens,
+      contextSize: g.contextSize,
+    };
+  }
+
+  /**
+   * Points a capability's roles at a connection. The primary role always
+   * moves; the secondary roles only fill when unassigned, so a deliberate
+   * fine-grained choice (Haiku for summarization) survives someone starring
+   * a different connection.
+   */
+  private _assignCapabilityRoles(options: {
+    id: ConnectionId;
+    capability: ConnectionCapability;
+    onlyUnassigned?: boolean;
+  }): void {
+    const next = { ...this.state.roles };
+    const valid = new Set(this.state.aiConnections.map((c) => c.id));
+    for (const role of ROLES_BY_CAPABILITY[options.capability]) {
+      const isPrimary = role === PRIMARY_ROLE[options.capability];
+      const current = next[role];
+      const currentIsStale = current !== undefined && !valid.has(current);
+      if ((isPrimary && !options.onlyUnassigned) || current === undefined || currentIsStale) {
+        next[role] = options.id;
+      }
+    }
+    this.state.roles = next;
+  }
+
+  /**
+   * Rebuilds every legacy projection from providers/aiConnections/roles.
+   * Skips the `connections` write when the projection is unchanged —
+   * capability_view_model runs an $effect over it and an unconditional new
+   * array would wake it on every no-op.
+   */
+  private _reproject(): void {
+    // Drop role assignments whose connection is gone.
+    const valid = new Set(this.state.aiConnections.map((c) => c.id));
+    const prunedRoles = Object.fromEntries(
+      Object.entries(this.state.roles).filter(([, id]) => id !== undefined && valid.has(id)),
+    );
+    if (Object.keys(prunedRoles).length !== Object.keys(this.state.roles).length) {
+      this.state.roles = prunedRoles;
+    }
+
+    const next = this.state.aiConnections.map((aiConn) => {
+      const provider = this.state.providers.find((p) => p.id === aiConn.providerId);
+      const isDefault = this.state.roles[PRIMARY_ROLE[aiConn.capability]] === aiConn.id;
+      return this._projectConnection({ aiConn, provider, isDefault });
+    });
+
+    const unchanged =
+      next.length === this.state.connections.length &&
+      next.every((c, i) => {
+        const prev = this.state.connections[i];
+        return (
+          prev !== undefined &&
+          prev.id === c.id &&
+          prev.isDefault === c.isDefault &&
+          prev.model === c.model &&
+          prev.apiKey === c.apiKey &&
+          prev.baseUrl === c.baseUrl &&
+          prev.provider === c.provider &&
+          prev.name === c.name &&
+          prev.capability === c.capability &&
+          prev.source === c.source &&
+          JSON.stringify(prev.generationParams) === JSON.stringify(c.generationParams) &&
+          JSON.stringify(prev.imageOptions) === JSON.stringify(c.imageOptions) &&
+          JSON.stringify(prev.voiceOptions) === JSON.stringify(c.voiceOptions)
+        );
+      });
+    if (!unchanged) {
+      this.state.connections = next as unknown as import('@aikami/types').ConnectionEntry[]; // guard-ignore lint/type-safety/casting: projection of the C-463 model into the legacy persisted shape
+    }
+
+    const defaults: Record<string, string | null> = {};
+    for (const capability of CAPABILITIES) {
+      const id = this.state.roles[PRIMARY_ROLE[capability]];
+      if (id) {
+        defaults[capability] = id;
+      }
+    }
+    this.state.defaultByCapability = defaults;
+    this.state.defaultConnectionId = this.state.roles.narration ?? null;
   }
 
   getConnection(id: ConnectionId): Connection | undefined {
@@ -1073,17 +1218,24 @@ class ConfigService
   }
 
   getApiKey(provider: string, capability: ConnectionCapability = 'text'): string | undefined {
-    const matches = (c: import('@aikami/types').ConnectionEntry): boolean =>
-      (c.capability ?? 'text') === capability && c.provider === provider;
+    // Resolved through the provider, which is where the credential lives.
+    // Prefer the capability's primary-role connection when it is on this
+    // provider, so a user with two accounts gets the one they chose.
+    const onProvider = (connection: AiConnection): boolean =>
+      connection.capability === capability &&
+      this.state.providers.find((p) => p.id === connection.providerId)?.registryId === provider;
 
-    // Prefer the default connection, but only when it also matches the
-    // requested provider and capability; otherwise fall back to the first
-    // matching connection.
-    const defaultConnection = this.state.defaultConnectionId
-      ? this.state.connections.find((c) => c.id === this.state.defaultConnectionId && matches(c))
+    const primaryId = this.state.roles[PRIMARY_ROLE[capability]];
+    const preferred = primaryId
+      ? this.state.aiConnections.find((c) => c.id === primaryId && onProvider(c))
       : undefined;
-    const connection = defaultConnection ?? this.state.connections.find(matches);
-    return connection?.apiKey || undefined;
+    const connection = preferred ?? this.state.aiConnections.find(onProvider);
+    if (!connection) {
+      return undefined;
+    }
+    return (
+      this.state.providers.find((p) => p.id === connection.providerId)?.credential || undefined
+    );
   }
 
   // ── Preset management (C-230) ─────────────────────────────────────

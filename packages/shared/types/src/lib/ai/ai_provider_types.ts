@@ -178,7 +178,7 @@ export type HealthCheckResult = {
 /**
  * Provider identifier for runtime selection.
  */
-export type AiProvider = 'openai' | 'gemini' | 'ollama' | 'comfyui' | 'local-tts' | 'mock';
+export type AiProviderId = 'openai' | 'gemini' | 'ollama' | 'comfyui' | 'local-tts' | 'mock';
 
 /**
  * Options for the OpenAiClient constructor.

@@ -208,16 +208,6 @@ export type OpenRouterModel = {
 // shape after migration.
 // ---------------------------------------------------------------------------
 
-/** A single model configuration entry. */
-export type ModelConfigEntry = {
-  /** Model identifier (e.g. 'claude-3-opus-20240229'). */
-  model: string;
-  /** Provider this model belongs to. */
-  provider: string;
-  /** Base URL for the API endpoint. */
-  endpoint: string;
-};
-
 /** A generation parameter preset. */
 export type PresetEntry = {
   id: string;
@@ -282,8 +272,6 @@ export type LorebookEntry = {
 
 /** Top-level configuration state. */
 export type ConfigState = {
-  /** Model configurations (provider-agnostic). */
-  models: ModelConfigEntry[];
   /** Voice / TTS settings. */
   voice: VoiceConfig;
   /** Image generation settings. */

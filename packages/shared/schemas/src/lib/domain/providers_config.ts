@@ -144,7 +144,14 @@ export const VaultPayloadV2Schema = Type.Object({
   roles: RoleAssignmentsSchema,
   /** User-defined generation parameter presets (built-in presets merged on load). */
   userPresets: Type.Optional(Type.Array(Type.Any())),
-  /** Verbatim v1 payload for rollback, present for exactly one release. */
+  /** Vault-held voice provider key. */
+  voiceApiKey: Type.Optional(Type.String()),
+  /** Vault-held image provider key. */
+  imageApiKey: Type.Optional(Type.String()),
+  /**
+   * Verbatim v1 payload, written for rollback only. The loader must never
+   * depend on it for normal operation — see `_absorbLegacyConnections`.
+   */
   legacy: Type.Optional(Type.Any()),
 });
 
