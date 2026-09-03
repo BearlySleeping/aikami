@@ -177,11 +177,11 @@ describe('ConfigService — C-079', () => {
       const service = await createService();
       service.addConnection(_textConn('sk-or-abc', 'openrouter'));
       service.addConnection(_textConn('sk-oa-xyz', 'openai'));
-      service.addConnection(_textConn('gm-123', 'gemini'));
+      service.addConnection(_textConn('gm-123', 'google'));
 
       expect(service.getApiKey('openrouter')).toBe('sk-or-abc');
       expect(service.getApiKey('openai')).toBe('sk-oa-xyz');
-      expect(service.getApiKey('gemini')).toBe('gm-123');
+      expect(service.getApiKey('google')).toBe('gm-123');
     });
 
     test('updateConnection replaces the API key', async () => {

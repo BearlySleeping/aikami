@@ -24,8 +24,8 @@ export const PROVIDER_ENDPOINTS: Record<string, ProviderEndpoint> = {
     verifyUrl: 'https://openrouter.ai/api/v1/auth/key',
     auth: { location: 'header', name: 'Authorization', prefix: 'Bearer ' },
   },
-  gemini: {
-    label: 'Gemini',
+  google: {
+    label: 'Google (Gemini)',
     method: 'GET',
     verifyUrl: 'https://generativelanguage.googleapis.com/v1beta/models?key={{key}}',
     auth: { location: 'query', name: 'key' },
@@ -47,6 +47,12 @@ export const PROVIDER_ENDPOINTS: Record<string, ProviderEndpoint> = {
     label: 'DeepSeek',
     method: 'GET',
     verifyUrl: 'https://api.deepseek.com/v1/models',
+    auth: { location: 'header', name: 'Authorization', prefix: 'Bearer ' },
+  },
+  mistral: {
+    label: 'Mistral AI',
+    method: 'GET',
+    verifyUrl: 'https://api.mistral.ai/v1/models',
     auth: { location: 'header', name: 'Authorization', prefix: 'Bearer ' },
   },
 } as const;
