@@ -3,7 +3,7 @@ id: C-460
 title: "NPC Behavioral Autonomy Layer"
 source: "docs/contracts/BACKLOG_C452_PLUS.md 'C-465' seed (RPG-depth batch, 2026-08-30 roadmap review). Renumbered on authoring — see C-456's source note for the ID-allocation caveat."
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -198,6 +198,40 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Execution Report
+
+### Summary
+Wired relationship/faction standing data into two existing decision-making systems: `MacroSimulationSystem`'s GOAP action selection (engine) and `autonomous_message_service`'s idle-chat NPC weighting (client). Added `GoapActionScoringContext` type, entity-aware scoring context map, and relationship-based cost modifiers to `action_registry.ts` for engine-side relationship-aware GOAP selection. Added `_computeRelationshipBoost` method to the autonomous message service for client-side relationship-weighted NPC selection. Both degrade gracefully to current behavior when no relationship data is available. No new state, schemas, loops, or tick rates were introduced.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | 8 new engine tests confirm hostile/friendly NPCs diverge from neutral baseline; relationship cost modifier influences tie-breaking |
+| AC-2 | ✅ | 3 new client tests confirm relationship boost computation works correctly for friendly, hostile, and unknown NPCs |
+| AC-3 | ✅ | All 21 baseline engine tests + 6 baseline client tests pass unchanged; new "no data" tests confirm graceful degradation |
+
+### Files Created
+None — all changes are additive modifications to existing files.
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/frontend/engine/src/math/goap/action_registry.ts` | Added `GoapActionScoringContext` type, scoring context map (`setEntityScoringContext`/`clearAllScoringContexts`/`getEntityScoringContext`), `_applyRelationshipCostModifier` function, modified `selectBestAction` to accept optional entity ID |
+| `packages/frontend/engine/src/math/goap/index.ts` | Re-exported new types and functions from action_registry.ts |
+| `packages/frontend/engine/src/systems/macro_simulation_system.ts` | Pass entity ID through to `selectBestAction` call in `stepMacroAgent` |
+| `packages/frontend/engine/src/__tests__/macro_simulation.test.ts` | Added 8 AC-4 tests for relationship-aware scoring (hostile/friendly divergence, context cleanup, backward compat, no-data degradation) |
+| `apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts` | Added `_computeRelationshipBoost` method using `relationshipService.getRelationship()`; modified `_selectWeightedRandom` and `_selectWeightedRandomN` to include relationship boost in weight computation |
+| `apps/frontend/client/src/lib/services/npc/autonomous_message_service.test.ts` | Added 3 AC-2 tests for relationship boost (friendly boost, no-data zero, hostile negative) |
+
+### Deviations from Spec
+None. All ACs implemented as specified. The relationship cost modifier was kept small (max 3) so it influences tie-breaking without overriding goal progress, which aligns with the "additive scoring term" directive.
+
+### Test Results
+- Unit (Engine): 29/29 pass (0 failures) — 21 baseline + 8 AC-4
+- Unit (Client): 9/9 pass (0 failures) — 6 baseline + 3 AC-2
+- Baseline: 0 pre-existing failures, 0 new failures
+- Pre-existing `bun` typecheck issue in `frontend-engine:typecheck` (TS2688: missing bun types) — not caused by this contract
 
 ## Promotion Lifecycle
 
