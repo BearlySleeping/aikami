@@ -283,7 +283,10 @@ export const migrateVaultV1ToV2 = (
   const models = (v1 as Record<string, unknown>).models;
   if (Array.isArray(models)) {
     const existingPairs = new Set(
-      connections.filter((c) => c.capability === 'text').map((c) => `${c.model}::${c.label}`),
+      connections.filter((c) => c.capability === 'text').map((c) => {
+        const connProvider = providers.find((p) => p.id === c.providerId);
+        return `${c.model}::${connProvider?.registryId ?? ''}`;
+      }),
     );
 
     for (const modelRow of models) {

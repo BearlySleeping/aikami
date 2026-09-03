@@ -11,12 +11,11 @@ import { describe, expect, test } from 'bun:test';
 import { type MigrationOptions, migrateVaultV1ToV2 } from './config_migration.ts';
 
 // Deterministic ID factory for testing
-let idCounter = 0;
 const testIdFactory = (prefix = 'prov-'): (() => string) => {
-  idCounter = 0;
+  let counter = 0;
   return () => {
-    idCounter++;
-    return `${prefix}${idCounter}`;
+    counter++;
+    return `${prefix}${counter}`;
   };
 };
 
@@ -240,9 +239,7 @@ describe('C-463 Migration: v1 → v2', () => {
     });
 
     test('deterministic output with same id factory', () => {
-      idCounter = 0;
       const factory1 = testIdFactory();
-      idCounter = 0;
       const factory2 = testIdFactory();
 
       const v1 = {

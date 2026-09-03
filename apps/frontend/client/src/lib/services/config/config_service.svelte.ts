@@ -321,6 +321,15 @@ class ConfigService
 
           // Backfill legacy connections array from v2 connections for ViewModel compat
           this._backfillLegacyConnections();
+
+          // If aiConnections was empty (e.g. legacy-only save), restore
+          // connections from the legacy payload directly.
+          if (this.state.connections.length === 0 && vault.legacy) {
+            const legacyPayload = vault.legacy as Record<string, unknown>;
+            if (Array.isArray(legacyPayload.connections)) {
+              this.state.connections = legacyPayload.connections as Connection[];
+            }
+          }
         } else {
           // ── v1 vault: migrate to v2 ──────────────────────────────
           try {
@@ -381,21 +390,30 @@ class ConfigService
           }
         }
 
-        // Legacy: load defaultConnectionId and defaultByCapability for ViewModel compat
-        if (typeof vault.defaultConnectionId === 'string' || vault.defaultConnectionId === null) {
-          this.state.defaultConnectionId = vault.defaultConnectionId as ConnectionId | null;
+        // Legacy: load defaultConnectionId and defaultByCapability for ViewModel compat.
+        // In v2 vaults these are stored inside `legacy`.
+        const legacySource =
+          schemaVersion === 2
+            ? ((vault.legacy as Record<string, unknown> | undefined) ?? vault)
+            : vault;
+
+        if (
+          typeof legacySource.defaultConnectionId === 'string' ||
+          legacySource.defaultConnectionId === null
+        ) {
+          this.state.defaultConnectionId = legacySource.defaultConnectionId as ConnectionId | null;
         }
-        if (vault.defaultByCapability && typeof vault.defaultByCapability === 'object') {
-          this.state.defaultByCapability = vault.defaultByCapability as Record<
+        if (legacySource.defaultByCapability && typeof legacySource.defaultByCapability === 'object') {
+          this.state.defaultByCapability = legacySource.defaultByCapability as Record<
             string,
             string | null
           >;
         }
-        if (typeof vault.voiceApiKey === 'string') {
-          vaultVoiceApiKey = vault.voiceApiKey;
+        if (typeof legacySource.voiceApiKey === 'string') {
+          vaultVoiceApiKey = legacySource.voiceApiKey as string;
         }
-        if (typeof vault.imageApiKey === 'string') {
-          vaultImageApiKey = vault.imageApiKey;
+        if (typeof legacySource.imageApiKey === 'string') {
+          vaultImageApiKey = legacySource.imageApiKey as string;
         }
 
         // Load user presets from vault (only if not already set by migration)
@@ -468,17 +486,17 @@ class ConfigService
     // C-463: Build v2 vault payload. Credentials live on providers.
     const userPresets = this.state.presets.filter((p) => !p.isBuiltIn);
 
-    // Build legacy payload for rollback (exactly one release)
-    const legacyPayload = this.state.schemaVersion < 2
-      ? undefined
-      : {
-          connections: this.state.connections,
-          defaultConnectionId: this.state.defaultConnectionId,
-          defaultByCapability: this.state.defaultByCapability,
-          voiceApiKey: this.state.voice.apiKey ?? '',
-          imageApiKey: this.state.image.apiKey ?? '',
-          userPresets,
-        };
+    // Build legacy payload for rollback (exactly one release).
+    // Always populated — the loader reads `defaultByCapability`,
+    // `voiceApiKey` etc. from `legacy` in v2 vaults.
+    const legacyPayload = {
+      connections: this.state.connections,
+      defaultConnectionId: this.state.defaultConnectionId,
+      defaultByCapability: this.state.defaultByCapability,
+      voiceApiKey: this.state.voice.apiKey ?? '',
+      imageApiKey: this.state.image.apiKey ?? '',
+      userPresets,
+    };
 
     const vaultPayload = JSON.stringify({
       schemaVersion: 2,
