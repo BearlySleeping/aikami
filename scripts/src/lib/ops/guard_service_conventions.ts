@@ -49,6 +49,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
+import { annotate } from './gha_annotate.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const APP_ROOTS = [
@@ -57,7 +58,7 @@ const APP_ROOTS = [
 ];
 const BASELINE_PATH = resolve(import.meta.dir, 'guard_service_conventions_baseline.json');
 
-type Violation = { file: string; rule: string; message: string };
+type Violation = { file: string; rule: string; message: string; line: number };
 type RatchetRule = 's11' | 's12';
 type RatchetCounts = Record<RatchetRule, number>;
 type Baseline = Record<string, RatchetCounts>;
@@ -123,6 +124,17 @@ const stripStringsAndComments = (source: string): string => {
   }
   return result;
 };
+
+const lineOf = (source: string, index: number): number => {
+  let line = 1;
+  for (let i = 0; i < index; i++) {
+    if (source[i] === '\n') {
+      line++;
+    }
+  }
+  return line;
+};
+
 const walk = (dir: string, matches: (name: string) => boolean): string[] => {
   const out: string[] = [];
   if (!existsSync(dir)) {
@@ -158,6 +170,7 @@ const checkService = (file: string): void => {
       file: relPath(file),
       rule: 'S1',
       message: 'missing a declared or imported `*ServiceOptions` type',
+      line: 1,
     });
   }
   if (!/export type \w*ServiceInterface\s*=/.test(content)) {
@@ -165,6 +178,7 @@ const checkService = (file: string): void => {
       file: relPath(file),
       rule: 'S2',
       message: 'missing exported `*ServiceInterface` type',
+      line: 1,
     });
   }
   if (
@@ -175,6 +189,7 @@ const checkService = (file: string): void => {
       file: relPath(file),
       rule: 'S3',
       message: 'class does not extend BaseFrontendClass',
+      line: 1,
     });
   }
   const className = content.match(/\bclass\s+(\w+)\s+extends\s+BaseFrontendClass\b/)?.[1];
@@ -194,37 +209,48 @@ const checkService = (file: string): void => {
       rule: 'S4',
       message:
         'missing an exported singleton or factory that invokes the declared service class `.create()`',
+      line: 1,
     });
   }
-  if (className && new RegExp(`new\\s+${className}\\s*\\(`).test(content)) {
+  const newInstantiationMatch = className
+    ? content.match(new RegExp(`new\\s+${className}\\s*\\(`))
+    : null;
+  if (newInstantiationMatch) {
     violations.push({
       file: relPath(file),
       rule: 'S4',
       message: 'instantiates the service with `new` instead of `.create()`',
+      line: lineOf(content, newInstantiationMatch.index ?? 0),
     });
   }
-  if (
-    className !== undefined &&
-    new RegExp(`export\\s+const\\s+\\w+\\s*=\\s*${className}\\.create\\s*\\(`).test(content)
-  ) {
+  const untypedSingletonMatch =
+    className !== undefined
+      ? content.match(new RegExp(`export\\s+const\\s+\\w+\\s*=\\s*${className}\\.create\\s*\\(`))
+      : null;
+  if (untypedSingletonMatch) {
     violations.push({
       file: relPath(file),
       rule: 'S5',
       message: 'singleton export is not typed against its `*ServiceInterface`',
+      line: lineOf(content, untypedSingletonMatch.index ?? 0),
     });
   }
-  if (/from ['"]\$lib\/services\//.test(content)) {
+  const serviceDirectImportMatch = content.match(/from ['"]\$lib\/services\//);
+  if (serviceDirectImportMatch) {
     violations.push({
       file: relPath(file),
       rule: 'S6',
       message: 'imports a service from `$lib/services/*` instead of the `$services` barrel',
+      line: lineOf(content, serviceDirectImportMatch.index ?? 0),
     });
   }
-  if (/from ['"]\$logger['"]/.test(content)) {
+  const loggerImportMatch = content.match(/from ['"]\$logger['"]/);
+  if (loggerImportMatch) {
     violations.push({
       file: relPath(file),
       rule: 'S7',
       message: 'imports `$logger` — use inherited this.debug()/this.error() instead',
+      line: lineOf(content, loggerImportMatch.index ?? 0),
     });
   }
 
@@ -234,14 +260,15 @@ const checkService = (file: string): void => {
   const arrowMethodRe =
     /^\s{2,}(?:private |protected |public |override )?_?\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::\s*[^=]+?)?=>\s*\{/gm;
   for (const match of content.matchAll(arrowMethodRe)) {
-    const line = match[0];
-    if (/\$state|\$derived/.test(line)) {
+    const snippet = match[0];
+    if (/\$state|\$derived/.test(snippet)) {
       continue;
     }
     violations.push({
       file: relPath(file),
       rule: 'S8',
-      message: `arrow-function class-field method (breaks this/super): \`${line.trim()}\``,
+      message: `arrow-function class-field method (breaks this/super): \`${snippet.trim()}\``,
+      line: lineOf(content, match.index),
     });
   }
 
@@ -270,6 +297,7 @@ const checkService = (file: string): void => {
       file: relPath(file),
       rule: 'S9',
       message: `exports \`${name}\` — only the singleton service instance should be exported; move constants to @aikami/constants and helper functions to a local data/utils module`,
+      line: lineOf(content, match.index),
     });
   }
 
@@ -284,15 +312,16 @@ const checkService = (file: string): void => {
       file: relPath(file),
       rule: 'S10',
       message: `exports type \`${name}\` — move it to @aikami/types|schemas or a local types/ folder`,
+      line: lineOf(content, match.index),
     });
   }
 
-  const viewImportCount = content.match(/from ['"]\$lib\/views\/|from ['"]\$views\//g)?.length ?? 0;
-  for (let i = 0; i < viewImportCount; i++) {
+  for (const match of content.matchAll(/from ['"]\$lib\/views\/|from ['"]\$views\//g)) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'S11',
       message: 'imports from Views/ViewModels — services must not depend upward',
+      line: lineOf(content, match.index),
     });
   }
 
@@ -308,19 +337,22 @@ const checkService = (file: string): void => {
     /\?worker&type=module/,
     /eruda/,
   ];
-  const dynamicImportMatches = strippedContent.match(/\bawait\s+import\s*\(/g) ?? [];
+  const dynamicImportMatches = [...strippedContent.matchAll(/\bawait\s+import\s*\(/g)];
   const dynamicImportCount = dynamicImportMatches.length;
   const allowlistedCount = allowlistPatterns.reduce((count, pattern) => {
     const matches = strippedContent.match(pattern);
     return count + (matches ? matches.length : 0);
   }, 0);
   const effectiveCount = Math.max(0, dynamicImportCount - allowlistedCount);
-  for (let i = 0; i < effectiveCount; i++) {
+  // Heuristic: report the last `effectiveCount` occurrences — a best-effort
+  // pointer, since which specific call is "non-allowlisted" isn't tracked.
+  for (const match of dynamicImportMatches.slice(dynamicImportCount - effectiveCount)) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'S12',
       message:
         'uses `await import()` — only valid per the allowlist in svelte-conventions/SKILL.md',
+      line: lineOf(content, match.index),
     });
   }
 };
@@ -360,7 +392,13 @@ if (violations.length > 0) {
   for (const [file, vs] of byFile) {
     console.error(`❌ ${file}`);
     for (const v of vs) {
-      console.error(`      [${v.rule}] ${v.message}`);
+      console.error(`      ${file}:${v.line} [${v.rule}] ${v.message}`);
+      annotate({
+        file,
+        line: v.line,
+        message: `[${v.rule}] ${v.message}`,
+        title: 'service-conventions guard',
+      });
     }
   }
   console.error(
@@ -410,6 +448,15 @@ for (const file of [...allRatchetPaths].sort()) {
     console.error(`❌ ${file}`);
     for (const line of lines) {
       console.error(`      ${line}`);
+    }
+    for (const v of ratchetViolations.filter((r) => r.file === file)) {
+      console.error(`        ${file}:${v.line} [${v.rule}] ${v.message}`);
+      annotate({
+        file,
+        line: v.line,
+        message: `[${v.rule}] ${v.message}`,
+        title: 'service-conventions guard',
+      });
     }
   }
 }

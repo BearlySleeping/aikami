@@ -55,6 +55,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
+import { annotate } from './gha_annotate.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const SCAN_ROOTS = ['apps', 'packages', 'scripts'].map((dir) => resolve(ROOT, dir));
@@ -335,6 +336,12 @@ for (const relPath of [...allPaths].sort()) {
     }
     for (const v of fileViolations.get(relPath) ?? []) {
       console.error(`        line ${v.line}: ${v.snippet}`);
+      annotate({
+        file: relPath,
+        line: v.line,
+        message: `${RULE_LABEL[v.rule]}: ${v.snippet}`,
+        title: 'type-safety guard',
+      });
     }
   }
 }

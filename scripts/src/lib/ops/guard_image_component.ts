@@ -14,6 +14,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { annotate } from './gha_annotate.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const SCAN_ROOTS = [
@@ -62,7 +63,9 @@ for (const root of SCAN_ROOTS) {
 
 if (violations.length > 0) {
   for (const v of violations) {
-    console.error(`❌ ${v.file}:${v.line} — raw <img> tag, use <Image> from $components instead`);
+    const message = 'raw <img> tag, use <Image> from $components instead';
+    console.error(`❌ ${v.file}:${v.line} — ${message}`);
+    annotate({ file: v.file, line: v.line, message, title: 'image-component guard' });
   }
   console.error(
     `\n🔴 image-component guard failed — ${violations.length} raw <img> tag(s). See .pi/skills/aikami-ui/SKILL.md.`,

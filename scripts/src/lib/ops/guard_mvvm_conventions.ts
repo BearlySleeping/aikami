@@ -61,6 +61,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
+import { annotate } from './gha_annotate.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const APP_ROOTS = [
@@ -69,7 +70,7 @@ const APP_ROOTS = [
 ];
 const BASELINE_PATH = resolve(import.meta.dir, 'guard_mvvm_conventions_baseline.json');
 
-type Violation = { file: string; rule: string; message: string };
+type Violation = { file: string; rule: string; message: string; line: number };
 type RatchetRule = 'v6' | 'v7' | 'm8' | 'm9';
 type RatchetCounts = Record<RatchetRule, number>;
 type Baseline = Record<string, RatchetCounts>;
@@ -137,6 +138,16 @@ const stripStringsAndComments = (source: string): string => {
   return result;
 };
 
+const lineOf = (source: string, index: number): number => {
+  let line = 1;
+  for (let i = 0; i < index; i++) {
+    if (source[i] === '\n') {
+      line++;
+    }
+  }
+  return line;
+};
+
 const walk = (dir: string, matches: (name: string) => boolean): string[] => {
   const out: string[] = [];
   if (!existsSync(dir)) {
@@ -167,6 +178,10 @@ const checkView = (file: string): void => {
     ) ?? scriptMatches[0];
   const scriptAttributes = scriptMatch?.[1] ?? '';
   const script = scriptMatch?.[2] ?? '';
+  // Offset of `script` within `content`, so indices found inside `script`
+  // (or its stripped copy, which preserves length/newlines) map back to a
+  // real line number in the file.
+  const scriptOffset = scriptMatch !== undefined ? content.indexOf(script, scriptMatch.index) : 0;
   const markup = content
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
@@ -177,6 +192,7 @@ const checkView = (file: string): void => {
       file: relPath(file),
       rule: 'V0',
       message: 'uses a <script> block without lang="ts"',
+      line: lineOf(content, scriptMatch.index),
     });
   }
 
@@ -204,52 +220,69 @@ const checkView = (file: string): void => {
       file: relPath(file),
       rule: 'V1',
       message: 'has a viewModel prop but does not wrap markup in <BaseViewModelContainer>',
+      line: lineOf(content, content.indexOf(markupForContainer.slice(0, 40))),
     });
   }
 
-  if (/@aikami\/constants|from ['"]\$constants/.test(script)) {
-    violations.push({ file: relPath(file), rule: 'V2', message: 'imports constants directly' });
+  const constantsImportMatch = script.match(/@aikami\/constants|from ['"]\$constants/);
+  if (constantsImportMatch) {
+    violations.push({
+      file: relPath(file),
+      rule: 'V2',
+      message: 'imports constants directly',
+      line: lineOf(content, scriptOffset + (constantsImportMatch.index ?? 0)),
+    });
   }
 
-  if (
-    /from ['"]\$services['"]|from ['"]\$lib\/services\/|from ['"]@aikami\/frontend\/services['"]/.test(
-      script,
-    )
-  ) {
-    violations.push({ file: relPath(file), rule: 'V3', message: 'imports a service directly' });
+  const serviceImportMatch = script.match(
+    /from ['"]\$services['"]|from ['"]\$lib\/services\/|from ['"]@aikami\/frontend\/services['"]/,
+  );
+  if (serviceImportMatch) {
+    violations.push({
+      file: relPath(file),
+      rule: 'V3',
+      message: 'imports a service directly',
+      line: lineOf(content, scriptOffset + (serviceImportMatch.index ?? 0)),
+    });
   }
 
-  if (/(^|\n)\s*(export\s+)?(async\s+)?function\s+\w+\s*\(/.test(stripStringsAndComments(script))) {
+  const functionDeclMatch = stripStringsAndComments(script).match(
+    /(^|\n)\s*(export\s+)?(async\s+)?function\s+\w+\s*\(/,
+  );
+  if (functionDeclMatch) {
     violations.push({
       file: relPath(file),
       rule: 'V4',
       message: 'declares a function in <script>',
+      line: lineOf(content, scriptOffset + (functionDeclMatch.index ?? 0)),
     });
   }
 
-  if (/<style[\s>]/.test(content)) {
+  const styleMatch = content.match(/<style[\s>]/);
+  if (styleMatch) {
     violations.push({
       file: relPath(file),
       rule: 'V5',
       message: 'has a <style> block — prefer Tailwind classes',
+      line: lineOf(content, styleMatch.index ?? 0),
     });
   }
 
   const strippedScript = stripStringsAndComments(script);
-  const effectCount = strippedScript.match(/\$effect\s*\(/g)?.length ?? 0;
-  for (let i = 0; i < effectCount; i++) {
+  for (const match of strippedScript.matchAll(/\$effect\s*\(/g)) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'V6',
       message: 'uses `$effect` — Views are completely logicless (Pillar 3)',
+      line: lineOf(content, scriptOffset + match.index),
     });
   }
-  const lifecycleCount = strippedScript.match(/\bonMount\s*\(|\bonDestroy\s*\(/g)?.length ?? 0;
-  for (let i = 0; i < lifecycleCount; i++) {
+  for (const match of strippedScript.matchAll(/\bonMount\s*\(|\bonDestroy\s*\(/g)) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'V7',
       message: 'uses onMount/onDestroy — lifecycle belongs to BaseViewModelContainer',
+      line: lineOf(content, scriptOffset + match.index),
     });
   }
 };
@@ -269,6 +302,7 @@ const checkViewModel = (file: string): void => {
       file: relPath(file),
       rule: 'M1',
       message: 'missing exported `*ViewModelOptions` type',
+      line: 1,
     });
   }
   if (!/export type \w*ViewModelInterface\s*=/.test(content)) {
@@ -276,6 +310,7 @@ const checkViewModel = (file: string): void => {
       file: relPath(file),
       rule: 'M2',
       message: 'missing exported `*ViewModelInterface` type',
+      line: 1,
     });
   }
   if (!/extends \w+ViewModel[<(]/.test(content) && !/extends \w+ViewModel\b/.test(content)) {
@@ -283,6 +318,7 @@ const checkViewModel = (file: string): void => {
       file: relPath(file),
       rule: 'M3',
       message: 'class does not extend BaseViewModel',
+      line: 1,
     });
   }
   const className = content.match(/\bclass\s+(\w+ViewModel)\s+extends\s+\w+ViewModel\b/)?.[1];
@@ -296,27 +332,36 @@ const checkViewModel = (file: string): void => {
       file: relPath(file),
       rule: 'M4',
       message: 'missing an exported factory that invokes the declared ViewModel class `.create()`',
+      line: 1,
     });
   }
-  if (className && new RegExp(`new\\s+${className}\\s*\\(`).test(content)) {
+  const newInstantiationMatch = className
+    ? content.match(new RegExp(`new\\s+${className}\\s*\\(`))
+    : null;
+  if (newInstantiationMatch) {
     violations.push({
       file: relPath(file),
       rule: 'M4',
       message: 'instantiates the ViewModel with `new` instead of `.create()`',
+      line: lineOf(content, newInstantiationMatch.index ?? 0),
     });
   }
-  if (/from ['"]\$lib\/services\//.test(content)) {
+  const serviceDirectImportMatch = content.match(/from ['"]\$lib\/services\//);
+  if (serviceDirectImportMatch) {
     violations.push({
       file: relPath(file),
       rule: 'M5',
       message: 'imports a service from `$lib/services/*` instead of the `$services` barrel',
+      line: lineOf(content, serviceDirectImportMatch.index ?? 0),
     });
   }
-  if (/from ['"]\$logger['"]/.test(content)) {
+  const loggerImportMatch = content.match(/from ['"]\$logger['"]/);
+  if (loggerImportMatch) {
     violations.push({
       file: relPath(file),
       rule: 'M6',
       message: 'imports `$logger` — use inherited this.debug()/this.error() instead',
+      line: lineOf(content, loggerImportMatch.index ?? 0),
     });
   }
 
@@ -326,25 +371,25 @@ const checkViewModel = (file: string): void => {
   const arrowMethodRe =
     /^\s{2,}(?:private |protected |public |override )?_?\w+\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::\s*[^=]+?)?=>\s*\{/gm;
   for (const match of content.matchAll(arrowMethodRe)) {
-    const line = match[0];
-    if (/\$state|\$derived/.test(line)) {
+    const snippet = match[0];
+    if (/\$state|\$derived/.test(snippet)) {
       continue;
     }
     violations.push({
       file: relPath(file),
       rule: 'M7',
-      message: `arrow-function class-field method (breaks this/super): \`${line.trim()}\``,
+      message: `arrow-function class-field method (breaks this/super): \`${snippet.trim()}\``,
+      line: lineOf(content, match.index),
     });
   }
 
   const strippedContent = stripStringsAndComments(content);
-  const vmImportCount =
-    strippedContent.match(/from ['"][^'"]*_view_model(\.svelte)?['"]/g)?.length ?? 0;
-  for (let i = 0; i < vmImportCount; i++) {
+  for (const match of strippedContent.matchAll(/from ['"][^'"]*_view_model(\.svelte)?['"]/g)) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'M8',
       message: 'imports another ViewModel — a ViewModel may not depend on another ViewModel',
+      line: lineOf(content, match.index),
     });
   }
 
@@ -359,7 +404,7 @@ const checkViewModel = (file: string): void => {
     /\?worker&type=module/,
     /eruda/,
   ];
-  const dynamicImportMatches = strippedContent.match(/\bawait\s+import\s*\(/g) ?? [];
+  const dynamicImportMatches = [...strippedContent.matchAll(/\bawait\s+import\s*\(/g)];
   const dynamicImportCount = dynamicImportMatches.length;
   // Count non-allowlisted dynamic imports by checking if any remain after
   // removing allowlisted ones. This is a heuristic — we count all dynamic
@@ -369,12 +414,15 @@ const checkViewModel = (file: string): void => {
     return count + (matches ? matches.length : 0);
   }, 0);
   const effectiveCount = Math.max(0, dynamicImportCount - allowlistedCount);
-  for (let i = 0; i < effectiveCount; i++) {
+  // Heuristic: report the last `effectiveCount` occurrences — a best-effort
+  // pointer, since which specific call is "non-allowlisted" isn't tracked.
+  for (const match of dynamicImportMatches.slice(dynamicImportCount - effectiveCount)) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'M9',
       message:
         'uses `await import()` — only valid per the allowlist in svelte-conventions/SKILL.md',
+      line: lineOf(content, match.index),
     });
   }
 };
@@ -417,7 +465,13 @@ if (violations.length > 0) {
   for (const [file, vs] of byFile) {
     console.error(`❌ ${file}`);
     for (const v of vs) {
-      console.error(`      [${v.rule}] ${v.message}`);
+      console.error(`      ${file}:${v.line} [${v.rule}] ${v.message}`);
+      annotate({
+        file,
+        line: v.line,
+        message: `[${v.rule}] ${v.message}`,
+        title: 'mvvm-conventions guard',
+      });
     }
   }
   console.error(
@@ -467,6 +521,15 @@ for (const file of [...allRatchetPaths].sort()) {
     console.error(`❌ ${file}`);
     for (const line of lines) {
       console.error(`      ${line}`);
+    }
+    for (const v of ratchetViolations.filter((r) => r.file === file)) {
+      console.error(`        ${file}:${v.line} [${v.rule}] ${v.message}`);
+      annotate({
+        file,
+        line: v.line,
+        message: `[${v.rule}] ${v.message}`,
+        title: 'mvvm-conventions guard',
+      });
     }
   }
 }
