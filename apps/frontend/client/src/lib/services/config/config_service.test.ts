@@ -126,11 +126,9 @@ describe('ConfigService — C-079', () => {
     test('should return default state before load', async () => {
       const service = await createService();
 
-      expect(service.state.preferredModel).toBe('');
       // C-230: API keys now live in connections[] (no text.apiKeys).
       expect(service.state.connections).toEqual([]);
       expect(service.state.models).toEqual([]);
-      expect(service.state.memory.contextWindow).toBe(8192);
       expect(service.state.voice.engine).toBe('kokoro');
       expect(service.state.image.checkpoint).toBe('sd_xl_base_1.0');
     });
@@ -230,8 +228,6 @@ describe('ConfigService — C-079', () => {
 
     test('save should store plain config in localStorage', async () => {
       const service = await createService();
-      service.setPreferredModel('claude-3-opus');
-      service.setMemoryConfig({ contextWindow: 16384 });
 
       await service.save();
 
@@ -242,8 +238,7 @@ describe('ConfigService — C-079', () => {
         throw new Error('Expected plain config to be defined');
       }
       const parsed = JSON.parse(plain);
-      expect(parsed.preferredModel).toBe('claude-3-opus');
-      expect(parsed.memory.contextWindow).toBe(16384);
+      expect(typeof parsed.models).toBe('object');
     });
 
     test('save should NOT include API keys in plain localStorage', async () => {
@@ -364,17 +359,16 @@ describe('ConfigService — C-079', () => {
       const service = await createService();
       await service.load();
 
-      expect(service.state.preferredModel).toBe('gpt-4');
-      expect(service.state.memory.contextWindow).toBe(32768);
+      // preferredModel and memory are no longer stored
+      expect(service.state.voice.engine).toBe('kokoro');
     });
 
     test('load should merge partial plain config with defaults', async () => {
-      store.set('aikami_config', JSON.stringify({ preferredModel: 'gemini-pro' }));
+      store.set('aikami_config', JSON.stringify({}));
 
       const service = await createService();
       await service.load();
 
-      expect(service.state.preferredModel).toBe('gemini-pro');
       // Defaults should still be present
       expect(service.state.voice.engine).toBe('kokoro');
       expect(service.state.image.width).toBe(1024);
@@ -385,7 +379,6 @@ describe('ConfigService — C-079', () => {
       await service.load();
 
       // Should have defaults
-      expect(service.state.preferredModel).toBe('');
       expect(service.isLoaded).toBe(true);
     });
 
@@ -407,7 +400,6 @@ describe('ConfigService — C-079', () => {
       await service.load();
 
       expect(service.isLoaded).toBe(true);
-      expect(service.state.preferredModel).toBe('');
     });
   });
 
@@ -423,11 +415,9 @@ describe('ConfigService — C-079', () => {
         generationParams: {},
         isDefault: true,
       });
-      service.setPreferredModel('claude-3');
 
       await service.reset();
 
-      expect(service.state.preferredModel).toBe('');
       expect(service.state.connections).toHaveLength(0);
     });
 
@@ -448,33 +438,8 @@ describe('ConfigService — C-079', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // AC-4: Domain settings (Memory, Voice, Image)
+  // AC-4: Domain settings (Voice, Image)
   // ═══════════════════════════════════════════════════════════════════════
-
-  describe('Domain: Memory config', () => {
-    test('setMemoryConfig should merge partial config', async () => {
-      const service = await createService();
-      service.setMemoryConfig({ contextWindow: 32768 });
-
-      expect(service.state.memory.contextWindow).toBe(32768);
-      expect(service.state.memory.maxTurns).toBe(50); // Default preserved
-    });
-
-    test('setMemoryConfig should update all fields', async () => {
-      const service = await createService();
-      service.setMemoryConfig({
-        contextWindow: 4096,
-        longTermMemory: true,
-        maxTurns: 25,
-        summarizationThreshold: 10,
-      });
-
-      expect(service.state.memory.contextWindow).toBe(4096);
-      expect(service.state.memory.longTermMemory).toBe(true);
-      expect(service.state.memory.maxTurns).toBe(25);
-      expect(service.state.memory.summarizationThreshold).toBe(10);
-    });
-  });
 
   describe('Domain: Voice config', () => {
     test('setVoiceConfig should merge partial config', async () => {

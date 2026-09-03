@@ -6,9 +6,9 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import {
-  aiSettingsService,
   chatService,
   combatService,
+  configService,
   type GameEngineServiceInterface,
   gameEngineService,
   gameOverlayService,
@@ -250,7 +250,12 @@ class GameUIViewModel
    * Used to show a graceful message when a step requires a model.
    */
   private _hasTextProvider(): boolean {
-    return !!(aiSettingsService.textProvider?.apiKey || aiSettingsService.textProvider?.endpoint);
+    try {
+      const resolved = configService.getActiveTextProvider();
+      return Boolean(resolved.endpoint || resolved.apiKey);
+    } catch {
+      return false;
+    }
   }
 
   private _reducedMotionQuery: MediaQueryList | undefined;

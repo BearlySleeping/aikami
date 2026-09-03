@@ -12,23 +12,14 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type {
-  AdvancedOverrides,
   ConfigState,
-  EmotionConfig,
   ImageConfig,
-  MemoryConfig,
   ModelConfigEntry,
-  TextConfig,
   VoiceConfig,
 } from '@aikami/types';
 import { clearVault, decrypt, encrypt } from '$lib/views/utils/crypto_vault';
 import type { ConnectionCapability, Lorebook, LorebookEntry } from '$types';
-import {
-  type AuxiliaryModels,
-  type GenerationParams,
-  INSTRUCT_TEMPLATES,
-  type InstructTemplate,
-} from '$types';
+import type { GenerationParams } from '$types';
 
 // ---------------------------------------------------------------------------
 // Re-exports from @aikami/constants and @aikami/types for backward compatibility
@@ -82,29 +73,16 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   reset(): Promise<void>;
 
   /** Updates the text provider selection (legacy — prefer connections). */
-  setTextProvider(provider: string): void;
-  /** Sets the preferred model identifier. */
-  setPreferredModel(model: string): void;
   /** Replaces the full models array. */
   setModels(models: ModelConfigEntry[]): void;
   /** Updates a single model config by index. */
   updateModel(index: number, config: Partial<ModelConfigEntry>): void;
-  /** Updates memory config (partial merge). */
-  setMemoryConfig(config: Partial<MemoryConfig>): void;
   /** Updates voice config (partial merge). */
   setVoiceConfig(config: Partial<VoiceConfig>): void;
   /** Updates image config (partial merge). */
   setImageConfig(config: Partial<ImageConfig>): void;
-  /** Updates emotion config (partial merge). */
-  setEmotionConfig(config: Partial<EmotionConfig>): void;
   /** Updates generation parameters (partial merge). */
   setGenerationParams(params: Partial<GenerationParams>): void;
-  /** Sets the instruct template. */
-  setInstructTemplate(template: InstructTemplate): void;
-  /** Updates advanced overrides (partial merge). */
-  setAdvancedOverrides(overrides: Partial<AdvancedOverrides>): void;
-  /** Updates auxiliary model assignments (partial merge). */
-  setAuxiliaryModels(models: Partial<AuxiliaryModels>): void;
 
   /**
    * Resolves the active text generation provider from the current
@@ -191,21 +169,7 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
 // Defaults
 // ---------------------------------------------------------------------------
 
-const DEFAULT_TEXT_CONFIG: TextConfig = {
-  provider: 'openrouter',
-};
-
 const DEFAULT_MODEL_CONFIGS: ModelConfigEntry[] = [];
-
-const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
-  chunkSize: 512,
-  contextWindow: 8192,
-  embeddingModel: 'minilm',
-  longTermMemory: false,
-  maxTurns: 50,
-  summarizationThreshold: 20,
-  type: 'basic',
-};
 
 const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   autoSpeech: false,
@@ -239,39 +203,16 @@ const DEFAULT_GENERATION_PARAMS: GenerationParams = {
   topP: 0.9,
 };
 
-const DEFAULT_ADVANCED_OVERRIDES: AdvancedOverrides = {
-  thinkingLevel: 0,
-};
-
-const DEFAULT_AUXILIARY_MODELS: AuxiliaryModels = {
-  embedding: undefined,
-  summarization: undefined,
-  vision: undefined,
-};
-
-const DEFAULT_EMOTION_CONFIG: EmotionConfig = {
-  method: 'submodel',
-};
-
-const DEFAULT_TEMPLATE: InstructTemplate = 'chatml';
-
 const DEFAULT_STATE: ConfigState = {
   activeLorebookIds: [],
-  advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
-  auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
   connections: [],
   defaultConnectionId: null,
   defaultByCapability: {},
-  emotion: { ...DEFAULT_EMOTION_CONFIG },
   generationParams: { ...DEFAULT_GENERATION_PARAMS },
   image: { ...DEFAULT_IMAGE_CONFIG },
-  instructTemplate: DEFAULT_TEMPLATE,
   lorebooks: [],
-  memory: { ...DEFAULT_MEMORY_CONFIG },
   models: [...DEFAULT_MODEL_CONFIGS],
-  preferredModel: '',
   presets: [...BUILT_IN_PRESETS],
-  text: { ...DEFAULT_TEXT_CONFIG },
   voice: { ...DEFAULT_VOICE_CONFIG },
 };
 
@@ -352,14 +293,8 @@ class ConfigService
     if (plain) {
       try {
         const parsed = JSON.parse(plain) as Partial<ConfigState>;
-        if (parsed.preferredModel !== undefined) {
-          this.state.preferredModel = parsed.preferredModel;
-        }
         if (parsed.models) {
           this.state.models = parsed.models;
-        }
-        if (parsed.memory) {
-          this.state.memory = { ...DEFAULT_MEMORY_CONFIG, ...parsed.memory };
         }
         if (parsed.voice) {
           this.state.voice = { ...DEFAULT_VOICE_CONFIG, ...parsed.voice };
@@ -367,31 +302,10 @@ class ConfigService
         if (parsed.image) {
           this.state.image = { ...DEFAULT_IMAGE_CONFIG, ...parsed.image };
         }
-        if (parsed.emotion) {
-          this.state.emotion = { ...DEFAULT_EMOTION_CONFIG, ...parsed.emotion };
-        }
         if (parsed.generationParams) {
           this.state.generationParams = {
             ...DEFAULT_GENERATION_PARAMS,
             ...(parsed.generationParams as Partial<GenerationParams>),
-          };
-        }
-        if (
-          typeof parsed.instructTemplate === 'string' &&
-          INSTRUCT_TEMPLATES.includes(parsed.instructTemplate as InstructTemplate)
-        ) {
-          this.state.instructTemplate = parsed.instructTemplate as InstructTemplate;
-        }
-        if (parsed.advancedOverrides) {
-          this.state.advancedOverrides = {
-            ...DEFAULT_ADVANCED_OVERRIDES,
-            ...(parsed.advancedOverrides as Partial<AdvancedOverrides>),
-          };
-        }
-        if (parsed.auxiliaryModels) {
-          this.state.auxiliaryModels = {
-            ...DEFAULT_AUXILIARY_MODELS,
-            ...(parsed.auxiliaryModels as Partial<AuxiliaryModels>),
           };
         }
         if (Array.isArray(parsed.lorebooks)) {
@@ -423,16 +337,10 @@ class ConfigService
     // Plain config (non-sensitive)
     const plain: Record<string, unknown> = {
       activeLorebookIds: this.state.activeLorebookIds,
-      advancedOverrides: this.state.advancedOverrides,
-      auxiliaryModels: this.state.auxiliaryModels,
-      emotion: this.state.emotion,
       generationParams: this.state.generationParams,
       image: this.state.image,
-      instructTemplate: this.state.instructTemplate,
       lorebooks: this.state.lorebooks,
-      memory: this.state.memory,
       models: this.state.models,
-      preferredModel: this.state.preferredModel,
       voice: this.state.voice,
     };
     localStorage.setItem(PLAIN_CONFIG_KEY, JSON.stringify(plain));
@@ -449,21 +357,14 @@ class ConfigService
   private _makeDefaultState(): ConfigState {
     return {
       activeLorebookIds: [],
-      advancedOverrides: { ...DEFAULT_ADVANCED_OVERRIDES },
-      auxiliaryModels: { ...DEFAULT_AUXILIARY_MODELS },
       connections: [],
       defaultConnectionId: null,
       defaultByCapability: {},
-      emotion: { ...DEFAULT_EMOTION_CONFIG },
       generationParams: { ...DEFAULT_GENERATION_PARAMS },
       image: { ...DEFAULT_IMAGE_CONFIG },
-      instructTemplate: DEFAULT_TEMPLATE,
       lorebooks: [],
-      memory: { ...DEFAULT_MEMORY_CONFIG },
       models: [],
-      preferredModel: '',
       presets: [...BUILT_IN_PRESETS],
-      text: { provider: 'openrouter' },
       voice: { ...DEFAULT_VOICE_CONFIG },
     };
   }
@@ -490,14 +391,6 @@ class ConfigService
 
   // ── Mutators ──────────────────────────────────────────────────────────
 
-  setTextProvider(provider: string): void {
-    this.state.text.provider = provider;
-  }
-
-  setPreferredModel(model: string): void {
-    this.state.preferredModel = model;
-  }
-
   setModels(models: ModelConfigEntry[]): void {
     this.state.models = models;
   }
@@ -509,10 +402,6 @@ class ConfigService
     this.state.models = this.state.models.map((m, i) => (i === index ? { ...m, ...config } : m));
   }
 
-  setMemoryConfig(config: Partial<MemoryConfig>): void {
-    this.state.memory = { ...this.state.memory, ...config };
-  }
-
   setVoiceConfig(config: Partial<VoiceConfig>): void {
     this.state.voice = { ...this.state.voice, ...config };
   }
@@ -521,24 +410,8 @@ class ConfigService
     this.state.image = { ...this.state.image, ...config };
   }
 
-  setEmotionConfig(config: Partial<EmotionConfig>): void {
-    this.state.emotion = { ...this.state.emotion, ...config };
-  }
-
   setGenerationParams(params: Partial<GenerationParams>): void {
     this.state.generationParams = { ...this.state.generationParams, ...params };
-  }
-
-  setInstructTemplate(template: InstructTemplate): void {
-    this.state.instructTemplate = template;
-  }
-
-  setAdvancedOverrides(overrides: Partial<AdvancedOverrides>): void {
-    this.state.advancedOverrides = { ...this.state.advancedOverrides, ...overrides };
-  }
-
-  setAuxiliaryModels(models: Partial<AuxiliaryModels>): void {
-    this.state.auxiliaryModels = { ...this.state.auxiliaryModels, ...models };
   }
 
   // ── Text provider resolution ─────────────────────────────────────────

@@ -12,7 +12,7 @@ import {
 } from '@aikami/frontend/services';
 import type { Campaign, CapabilityProfile } from '@aikami/types';
 import { AiTextProviderRequiredError } from '@aikami/utils';
-import { aiSettingsService, configService } from '$services';
+import { configService } from '$services';
 import { registerSerializable } from '../game/serializable_service.ts';
 import { transition } from './boot_state_machine.ts';
 import { campaignStorage } from './campaign_storage.svelte.ts';
@@ -108,13 +108,10 @@ const hasConnectionForCapability = (capability: string): boolean => {
 
 /** Builds a capability profile from current AI settings. */
 const buildCapabilityProfile = (): CapabilityProfile => {
-  const { ttsProvider, imageProvider } = aiSettingsService;
   return {
     textProvider: hasConnectionForCapability('text'),
-    imageProvider:
-      hasConnectionForCapability('image') || !!(imageProvider.apiKey || imageProvider.endpoint),
-    voiceProvider:
-      hasConnectionForCapability('voice') || !!(ttsProvider.apiKey || ttsProvider.endpoint),
+    imageProvider: hasConnectionForCapability('image'),
+    voiceProvider: hasConnectionForCapability('voice'),
   };
 };
 

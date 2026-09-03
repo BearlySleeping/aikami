@@ -12,7 +12,6 @@ import { goto } from '$app/navigation';
 import { navigating, page } from '$app/state';
 import type { RouteName } from '$router';
 import {
-  aiSettingsService,
   appService,
   authService,
   emulatorSeedService,
@@ -96,11 +95,6 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   override async initialize(): Promise<void> {
     // Anti-FOUC: unhide the body once the SPA mounts (see app.html inline style).
     document.body.classList.add('app-mounted');
-
-    // 0. Bootstrap AI settings from environment defaults (e.g. OpenRouter
-    //    API key / model from .env) so text providers are available before
-    //    the start screen checks for them.
-    await aiSettingsService.loadFromVault();
 
     // 0b. Resolve the runtime engine config (C-389) — config.json beside
     //    index.html, Tauri app config dir, or dev-only defaults. Loaded

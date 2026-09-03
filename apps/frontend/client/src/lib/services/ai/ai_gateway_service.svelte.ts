@@ -45,7 +45,6 @@ import {
 } from '../config/provider_endpoints.ts';
 import { resolveImageEngine } from '../image/engine/image_engine_factory.svelte.ts';
 import { imageGenerationService } from '../image/image_generation_service.svelte.ts';
-import { aiSettingsService } from '../settings/ai_settings.svelte.ts';
 import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
@@ -341,11 +340,18 @@ class AiGatewayService
     }
   }
 
-  /** Whether an image provider is configured via settings. */
+  /** Whether an image connection is configured (presence-only, never validated). */
   private _hasConfiguredImageProvider(): boolean {
     try {
-      const { imageProvider } = aiSettingsService;
-      return Boolean(imageProvider.endpoint || imageProvider.model);
+      const { connections } = configService.state;
+      if (!Array.isArray(connections)) {
+        return false;
+      }
+      return connections.some(
+        (connection) =>
+          connection.capability === 'image' &&
+          Boolean(connection.apiKey || (connection.baseUrl && connection.model)),
+      );
     } catch {
       return false;
     }

@@ -15,7 +15,7 @@ import SettingsDisplayView from './display/settings_display_view.svelte';
 import ExportView from './export/export_view.svelte';
 import GameplayView from './gameplay/gameplay_view.svelte';
 import SettingsMusicView from './music/settings_music_view.svelte';
-import ProvidersView from './providers/providers_view.svelte';
+
 import type { SettingsViewModelInterface } from './settings_view_model.svelte';
 
 type Props = {
@@ -206,8 +206,6 @@ const focusOnMount = (node: HTMLInputElement): { destroy: () => void } => {
       <GameplayView viewModel={viewModel.gameplayViewModel} />
     {:else if viewModel.activeSectionId === 'ai_privacy'}
       <AIPrivacyView viewModel={viewModel.aiPrivacyViewModel} />
-    {:else if viewModel.activeSectionId === 'providers'}
-      <ProvidersView viewModel={viewModel.providersViewModel} />
     {:else if viewModel.activeSectionId === 'connections'}
       <ConnectionsListView viewModel={viewModel.connectionViewModel} />
     {:else if viewModel.activeSectionId === 'agents'}

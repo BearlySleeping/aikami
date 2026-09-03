@@ -15,7 +15,6 @@ import {
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
 import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 import {
-  aiSettingsService,
   authService,
   equipmentService,
   imageGenerationService,
@@ -279,10 +278,6 @@ export class PersonaCreateViewModel
 
   override async initialize(): Promise<void> {
     const model = (import.meta.env.PUBLIC_OPENROUTER_MODEL as string) || undefined;
-
-    if (model) {
-      aiSettingsService.setTextProvider({ model });
-    }
 
     this.messages = [
       {

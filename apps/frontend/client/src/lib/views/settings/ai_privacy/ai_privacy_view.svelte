@@ -45,8 +45,8 @@ const { viewModel }: Props = $props();
           {/if}
         </div>
         <p class="text-sm text-base-content/60 mb-2">
-          Your AI provider is configured and ready. Advanced settings are available in the AI Engine
-          section when Advanced mode is enabled.
+          Your AI provider is configured and ready. Advanced settings are available in the
+          Connections section when Advanced mode is enabled.
         </p>
       {:else if viewModel.aiConnectionStatus === 'offline'}
         <div class="flex items-center gap-3 mb-3">

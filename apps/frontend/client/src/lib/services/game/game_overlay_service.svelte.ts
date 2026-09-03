@@ -9,9 +9,9 @@ import {
   routerService,
 } from '@aikami/frontend/services';
 import {
-  aiSettingsService,
   audioService,
   campaignService,
+  configService,
   gameModeService,
   gameSaveService,
   sessionService,
@@ -1384,10 +1384,11 @@ export class GameOverlayService
       return;
     }
     try {
-      this._textProviderEndpoint = aiSettingsService.textProvider?.endpoint ?? '';
-      this._useOllama = this._textProviderEndpoint.includes('localhost');
+      const resolved = configService.getActiveTextProvider();
+      this._textProviderEndpoint = resolved.endpoint;
+      this._useOllama = resolved.provider === 'ollama';
     } catch {
-      // Settings not available — keep defaults
+      // No text provider configured — keep defaults.
     }
     this._settingsLoaded = true;
   }
