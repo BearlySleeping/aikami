@@ -56,13 +56,46 @@ vcs:
   provider: "github"
   defaultBranch: "main"
   remoteCandidates: ["origin"]
+  # 🔴 TWO RULES FOR EVERY COMMAND IN THIS BLOCK.
+  #
+  # 1. No shell syntax. Commands are copied VERBATIM into the generated hook,
+  #    and moon generates PowerShell on Windows / bash on POSIX. `[ -x ... ]`,
+  #    `&&` and `if` are parse errors on Windows contributors' machines.
+  #    Conditionals belong inside the script — see ops/sync_workspace.ts,
+  #    which also documents why `moon sync` must NOT run in worktrees.
+  #
+  # 2. 🔴 Only reference an entrypoint that exists in EVERY tree, including
+  #    old branches and worktrees created before the command was added.
+  #    `core.hooksPath` is ONE absolute path in the main checkout shared by
+  #    every worktree, but `bun run <name>` resolves against whatever
+  #    package.json that worktree has checked out. So a hook naming a NEWLY
+  #    added script fails in every pre-existing tree.
+  #
+  #    2026-09-03: adding `pre-push: bun run guard-workspace-boundary` broke
+  #    the push for all four in-flight contract worktrees at once — they were
+  #    branched before the script existed, so `bun run` exited non-zero and
+  #    aborted the push on work that had already passed verification.
+  #
+  #    `pre-commit` is safe because `bun run pre-commit` predates every live
+  #    branch: an old tree runs its own older pre_commit.ts (no boundary
+  #    guard, no error) while a current tree gets the guard. Degrading to
+  #    "older behaviour" is fine; failing the hook outright is not. Adding a
+  #    NEW hook name is only safe once every active branch carries the script.
+  #
+  #    This is why `post-merge` / `post-checkout` are gone. They ran
+  #    `moon sync`, and a failure there is NOT merely cosmetic: a non-zero
+  #    post-checkout makes `git checkout` ITSELF exit non-zero, so every
+  #    `git checkout && …` and every execFileSync git call breaks in any tree
+  #    lacking the script — including a developer checking out an older
+  #    branch in the main repo. The previous inline-shell form had the same
+  #    defect on Windows, where moon emits PowerShell and the POSIX `if`
+  #    was a parse error. Nothing is lost by dropping them: `postinstall`
+  #    runs `moon sync`, and `pipeline.syncProjects` / `syncWorkspace` below
+  #    re-sync on every `moon run`. `bun run sync-workspace` remains for a
+  #    manual sync.
   hooks:
     pre-commit:
       - "bun run pre-commit"
-    post-merge:
-      - "if [ -x node_modules/.bin/moon ]; then bunx moon sync; fi"
-    post-checkout:
-      - "if [ -x node_modules/.bin/moon ]; then bunx moon sync; fi"
 
 constraints:
   enforceLayerRelationships: false

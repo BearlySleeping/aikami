@@ -42,8 +42,15 @@ export const MOBILE_LOW_BATTERY_INTERVAL_MULTIPLIER = 2;
 /** Mobile battery threshold for optimization (< 0.2 = low battery). */
 export const MOBILE_LOW_BATTERY_THRESHOLD = 0.2;
 
-/** Maximum autonomous messages per poller tick. */
+/** Maximum autonomous messages per poller tick (idle ambiance only). */
 export const MAX_AUTONOMOUS_MESSAGES_PER_TICK = 1;
+
+/**
+ * Maximum NPC participants in a single group-addressed turn.
+ * Stays at 1 for idle ticks (MAX_AUTONOMOUS_MESSAGES_PER_TICK);
+ * only applies to player-addressed party/group turns.
+ */
+export const MAX_GROUP_PARTICIPANTS = 3;
 
 /** Number of recent chat messages to include in autonomous prompt context. */
 export const AUTONOMOUS_CONTEXT_MESSAGE_COUNT = 5;

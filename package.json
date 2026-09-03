@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "moon": "moon",
-    "postinstall": "moon sync",
+    "postinstall": "bun run scripts/src/lib/ops/sync_workspace.ts",
     "dev": "moon run client:dev",
     "build": "moon run :build",
     "build:affected": "moon run :build --affected",
@@ -36,6 +36,8 @@
     "dev:all": "bun run scripts/src/lib/ops/dev_all.ts",
     "knowledge:sync": "bun run scripts/src/lib/ops/sync_contracts.ts && bun run scripts/src/lib/ops/generate_llms_txt.ts",
     "pre-commit": "bun run scripts/src/lib/ops/pre_commit.ts",
+    "sync-workspace": "bun run scripts/src/lib/ops/sync_workspace.ts",
+    "guard-workspace-boundary": "bun run scripts/src/lib/ops/guard_workspace_boundary.ts",
     "test:blackbox": "bun run scripts/src/lib/test_blackbox/run.ts",
     "herdr:start": "bun run scripts/src/lib/herdr/start.ts",
     "workspace:cleanup": "bun run scripts/src/lib/ops/workspace_cleanup.ts",
@@ -99,13 +101,13 @@
     "@google-cloud/secret-manager": "^7.0.0",
     "@moonrepo/cli": "2.5.3",
     "@types/bun": "^1.4.0",
-    "@types/node": "26.4.0",
+    "@types/node": "26.4.1",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "syncpack": "15.3.3",
     "typescript": "6.0.3"
   },
   "dependencies": {
-    "typebox": "1.3.24"
+    "typebox": "1.3.25"
   },
   "overrides": {},
   "trustedDependencies": [

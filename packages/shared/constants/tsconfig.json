@@ -6,6 +6,8 @@
     "rootDir": "..",
     "outDir": "dist",
     "paths": {
+      "@aikami/schemas": ["../schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../schemas/src/lib/*"],
       "@aikami/types": ["../types/src/index.ts"],
       "@aikami/types/*": ["../types/src/lib/*"]
     }

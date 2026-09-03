@@ -13,12 +13,26 @@ import {
 } from '@aikami/frontend/services';
 import { resolveMacros } from '@aikami/parser';
 import type { BridgeContext } from '@aikami/types';
-import { choiceHistoryStore, combatService, timeService, worldStateService } from '$services';
+import { CLASS_REGISTRY } from '@aikami/constants';
+import { characterService, choiceHistoryStore, combatService, playerStateService, timeService } from '$services';
+// Direct imports to break the barrel cycle: the barrel re-exports
+// gm_prompt_service before it re-exports these services (C-456).
+import { partyRosterService } from '../game/party_roster_service.svelte.ts';
+import { worldStateService } from '../game/world_state_service.svelte.ts';
+import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
 import type { AddressMode } from '$types';
 // Imported directly to break the barrel cycle: the barrel re-exports
 // gm_prompt_service before it re-exports lorebookStore.
 import { lorebookStore } from '../lorebook/lorebook_store.svelte.ts';
-import type { GmCombatContext, GmPromptContext } from './gm_types';
+import type { GmCombatContext, GmPromptContext, PromptSection } from './gm_types';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Hard cap for assembled prompt byte budget (C-457). */
+const PROMPT_BUDGET_CAP = 6144;
+
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,187 +95,354 @@ class GmPromptService
     const { mode, userMessage, bridgeContext, chatId } = options;
     const context = this.gatherContext();
     const combatContext = this.gatherCombatContext();
-    const lines: string[] = [];
 
-    // ── Address-mode header ─────────────────────────────────────────
-    lines.push(this._buildAddressModeHeader(mode));
+    // Build sections with priority metadata
+    const sections: PromptSection[] = this._buildSections({
+      mode,
+      context,
+      combatContext,
+      userMessage,
+      bridgeContext,
+      chatId,
+    });
 
-    // ── World state ─────────────────────────────────────────────────
-    lines.push('');
-    lines.push('[WORLD STATE]');
-    lines.push(`World: ${context.worldName}`);
-    lines.push(`Region: ${context.regionName}`);
-    lines.push(`Location: ${context.locationName}`);
-    lines.push(`Description: ${context.locationDescription}`);
-    lines.push(`Time: ${context.timeOfDay}`);
-    lines.push(`Weather: ${context.weather}`);
-    lines.push('[/WORLD STATE]');
-
-    // ── Player character ────────────────────────────────────────────
-    lines.push('');
-    lines.push('[PLAYER CHARACTER]');
-    lines.push(
-      `Name: ${context.playerCharacter.name} — ${context.playerCharacter.class} (Level ${context.playerCharacter.level})`,
-    );
-    lines.push(`HP: ${context.playerCharacter.currentHp}/${context.playerCharacter.maxHp}`);
-    lines.push('[/PLAYER CHARACTER]');
-
-    // ── Active quests ───────────────────────────────────────────────
-    if (context.activeQuests.length > 0) {
-      lines.push('');
-      lines.push('[ACTIVE QUESTS]');
-      for (const quest of context.activeQuests) {
-        lines.push(`- ${quest.name} [${quest.status}]: ${quest.description}`);
-      }
-      lines.push('[/ACTIVE QUESTS]');
-    }
-
-    // ── Nearby NPCs ─────────────────────────────────────────────────
-    if (context.nearbyNpcs.length > 0) {
-      lines.push('');
-      lines.push('[NEARBY NPCS]');
-      for (const npc of context.nearbyNpcs) {
-        lines.push(`- ${npc.name} (${npc.persona}): ${npc.currentActivity}`);
-        if (npc.relationship) {
-          lines.push(`  Relationship: ${npc.relationship}`);
-        }
-      }
-      lines.push('[/NEARBY NPCS]');
-    }
-
-    // ── Party members (Party mode multi-character voice) ───────────
-    if (mode === 'party' && context.partyMembers.length > 0) {
-      lines.push('');
-      lines.push('[PARTY MEMBERS]');
-      for (const member of context.partyMembers) {
-        lines.push(`- ${member.name}: ${member.personality}`);
-      }
-      lines.push('[/PARTY MEMBERS]');
-    }
-
-    // ── Combat context ──────────────────────────────────────────────
-    if (combatContext?.isInCombat) {
-      lines.push('');
-      lines.push('[COMBAT STATE]');
-      lines.push(`Round: ${combatContext.round}`);
-      lines.push('');
-      lines.push('Enemies:');
-      for (const enemy of combatContext.enemies) {
-        lines.push(`- ${enemy.name} (HP: ${enemy.currentHp}/${enemy.maxHp})`);
-      }
-      lines.push('');
-      lines.push('Allies:');
-      for (const ally of combatContext.allies) {
-        lines.push(`- ${ally.name} (HP: ${ally.currentHp}/${ally.maxHp})`);
-      }
-      lines.push('[/COMBAT STATE]');
-    }
-
-    // ── Arc memory injection ────────────────────────────────────────
-    // Arc memory is injected by the NarrativeDirectorService —
-    // this base prompt stays generic.
-
-    // ── System instructions ─────────────────────────────────────────
-    lines.push('');
-    lines.push('[SYSTEM INSTRUCTIONS]');
-    lines.push('You are an AI Game Master for a fantasy RPG.');
-    lines.push(this._buildAddressModeInstruction(mode));
-    lines.push('Describe the world vividly but concisely — 2 to 4 sentences per response.');
-    lines.push('React to player actions with logical consequences.');
-    lines.push('Stay in character as the narrator. Do not break the fourth wall.');
-
-    if (mode === 'gm') {
-      lines.push('');
-      lines.push('[GM ONLY]');
-      lines.push('You are in Direct GM mode. Speak to the player as a human GM would.');
-      lines.push('You may reference game mechanics, dice rolls, and rules when appropriate.');
-      lines.push('Offer suggestions and guidance when the player seems stuck.');
-      lines.push('[/GM ONLY]');
-    }
-
-    lines.push('[/SYSTEM INSTRUCTIONS]');
-
-    // ── Lorebook World Info (C-238) ─────────────────────────────────
-    if (userMessage) {
-      const matches = lorebookStore.scanActiveEntries({ message: userMessage });
-      if (matches.length > 0) {
-        lines.push('');
-        lines.push('[WORLD INFO]');
-        for (const match of matches) {
-          // Resolve macros in the entry content before injection
-          const resolved = resolveMacros({ template: match.entry.content, context: {} });
-          lines.push(`[${match.matchReason}]`);
-          lines.push(resolved);
-        }
-        lines.push('[/WORLD INFO]');
-      }
-    }
-
-    // ── CYOA Choice History (C-245) ──────────────────────────────
-    if (chatId) {
-      const historySection = choiceHistoryStore.formatHistorySection(chatId);
-      if (historySection.length > 0) {
-        lines.push('');
-        lines.push(historySection);
-      }
-    }
-
-    // ── Bridge Context (C-244) — connected chats bridge ─────────────
-    if (bridgeContext) {
-      if (bridgeContext.durableNotes.length > 0) {
-        lines.push('');
-        lines.push('[DM NOTES (from linked OOC chat)]');
-        for (const note of bridgeContext.durableNotes) {
-          lines.push(`- ${note}`);
-        }
-        lines.push('[/DM NOTES]');
-      }
-
-      if (bridgeContext.turnInfluences.length > 0) {
-        lines.push('');
-        lines.push('[INFLUENCE (this turn only)]');
-        for (const influence of bridgeContext.turnInfluences) {
-          lines.push(`- ${influence}`);
-        }
-        lines.push('[/INFLUENCE]');
-      }
-    }
-
-    const prompt = lines.join('\n');
-
-    // Enforce < 6 KB constraint
+    // Assemble with budget enforcement
     const encoder = new TextEncoder();
-    const byteLength = encoder.encode(prompt).length;
-    if (byteLength > 6144) {
-      this.warn('assemblePrompt:prompt-exceeds-6kb', {
-        byteLength,
+    const separatorBytes = encoder.encode('\n').length;
+    let totalBytes = 0;
+    let remainingRequiredBytes = sections.reduce(
+      (total, section) =>
+        section.priority === 'required' ? total + encoder.encode(section.content).length : total,
+      0,
+    );
+    let remainingRequiredSections = sections.filter(
+      (section) => section.priority === 'required',
+    ).length;
+    const assembledLines: string[] = [];
+    const droppedSections: Array<{ name: string; bytes: number }> = [];
+
+    const trimmedSections: Array<{ name: string; kept: number; total: number }> = [];
+
+    for (const section of sections) {
+      const sectionBytes = encoder.encode(section.content).length;
+      const leadingSeparatorBytes = assembledLines.length > 0 ? separatorBytes : 0;
+
+      if (section.priority === 'required') {
+        remainingRequiredBytes -= sectionBytes;
+        remainingRequiredSections -= 1;
+        assembledLines.push(section.content);
+        totalBytes += leadingSeparatorBytes + sectionBytes;
+        continue;
+      }
+
+      const reservedRequiredBytes =
+        remainingRequiredBytes + remainingRequiredSections * separatorBytes;
+      const availableContentBytes =
+        PROMPT_BUDGET_CAP - totalBytes - leadingSeparatorBytes - reservedRequiredBytes;
+
+      if (sectionBytes > availableContentBytes) {
+        // A list-backed section contributes what fits rather than vanishing.
+        const fitted = section.partial
+          ? this._fitPartialSection({
+              partial: section.partial,
+              remainingBytes: Math.max(0, availableContentBytes),
+              encoder,
+            })
+          : undefined;
+        if (fitted) {
+          assembledLines.push(fitted.content);
+          totalBytes += leadingSeparatorBytes + fitted.bytes;
+          trimmedSections.push({
+            name: section.name,
+            kept: fitted.entryCount,
+            total: section.partial?.total ?? 0,
+          });
+          continue;
+        }
+        droppedSections.push({ name: section.name, bytes: sectionBytes });
+        continue;
+      }
+
+      assembledLines.push(section.content);
+      totalBytes += leadingSeparatorBytes + sectionBytes;
+    }
+
+    if (trimmedSections.length > 0) {
+      this.warn('assemblePrompt:sections-trimmed', {
         mode,
+        trimmedSections,
+        cap: PROMPT_BUDGET_CAP,
+      });
+    }
+
+    // Log dropped sections for observability
+    if (droppedSections.length > 0) {
+      this.warn('assemblePrompt:sections-dropped', {
+        mode,
+        droppedSections,
+        totalBytes,
+        cap: PROMPT_BUDGET_CAP,
+      });
+    }
+
+    const prompt = assembledLines.join('\n');
+
+    // Warn if even required sections exceed budget (edge case)
+    const finalBytes = encoder.encode(prompt).length;
+    if (finalBytes > PROMPT_BUDGET_CAP) {
+      this.warn('assemblePrompt:prompt-exceeds-cap', {
+        byteLength: finalBytes,
+        cap: PROMPT_BUDGET_CAP,
+        mode,
+        droppedSections: droppedSections.map((d) => d.name),
       });
     }
 
     return prompt;
   }
 
+  /**
+   * Builds all prompt sections with priority metadata for budget enforcement.
+   * Sections are ordered by descending priority (required first, low last).
+   */
+  private _buildSections(options: {
+    mode: AddressMode;
+    context: GmPromptContext;
+    combatContext: GmCombatContext | null;
+    userMessage?: string;
+    bridgeContext?: BridgeContext | null;
+    chatId?: string;
+  }): PromptSection[] {
+    const { mode, context, combatContext, userMessage, bridgeContext, chatId } = options;
+    const sections: PromptSection[] = [];
+
+    // ── Required: Address-mode header ────────────────────────────────
+    sections.push({
+      name: 'ADDRESS MODE HEADER',
+      content: this._buildAddressModeHeader(mode),
+      priority: 'required',
+    });
+
+    // ── High: World state ────────────────────────────────────────────
+    const worldStateLines: string[] = [
+      '',
+      '[WORLD STATE]',
+      `World: ${context.worldName}`,
+      `Region: ${context.regionName}`,
+      `Location: ${context.locationName}`,
+      `Description: ${context.locationDescription}`,
+      `Time: ${context.timeOfDay}`,
+      `Weather: ${context.weather}`,
+      '[/WORLD STATE]',
+    ];
+    sections.push({
+      name: 'WORLD STATE',
+      content: worldStateLines.join('\n'),
+      priority: 'high',
+    });
+
+    // ── High: Player character ───────────────────────────────────────
+    const playerLines: string[] = [
+      '',
+      '[PLAYER CHARACTER]',
+      `Name: ${context.playerCharacter.name} — ${context.playerCharacter.class} (Level ${context.playerCharacter.level})`,
+      `HP: ${context.playerCharacter.currentHp}/${context.playerCharacter.maxHp}`,
+      '[/PLAYER CHARACTER]',
+    ];
+    sections.push({
+      name: 'PLAYER CHARACTER',
+      content: playerLines.join('\n'),
+      priority: 'high',
+    });
+
+    // ── Medium: Active quests ────────────────────────────────────────
+    if (context.activeQuests.length > 0) {
+      const questLines: string[] = ['', '[ACTIVE QUESTS]'];
+      for (const quest of context.activeQuests) {
+        questLines.push(`- ${quest.name} [${quest.status}]: ${quest.description}`);
+      }
+      questLines.push('[/ACTIVE QUESTS]');
+      sections.push({
+        name: 'ACTIVE QUESTS',
+        content: questLines.join('\n'),
+        priority: 'medium',
+      });
+    }
+
+    // ── Medium: Combat context ───────────────────────────────────────
+    if (combatContext?.isInCombat) {
+      const combatLines: string[] = ['', '[COMBAT STATE]', `Round: ${combatContext.round}`, ''];
+      combatLines.push('Enemies:');
+      for (const enemy of combatContext.enemies) {
+        combatLines.push(`- ${enemy.name} (HP: ${enemy.currentHp}/${enemy.maxHp})`);
+      }
+      combatLines.push('');
+      combatLines.push('Allies:');
+      for (const ally of combatContext.allies) {
+        combatLines.push(`- ${ally.name} (HP: ${ally.currentHp}/${ally.maxHp})`);
+      }
+      combatLines.push('[/COMBAT STATE]');
+      sections.push({
+        name: 'COMBAT STATE',
+        content: combatLines.join('\n'),
+        priority: 'medium',
+      });
+    }
+
+    // ── Required: System instructions (always included) ──────────────
+    const sysLines: string[] = [
+      '',
+      '[SYSTEM INSTRUCTIONS]',
+      'You are an AI Game Master for a fantasy RPG.',
+      this._buildAddressModeInstruction(mode),
+      'Describe the world vividly but concisely — 2 to 4 sentences per response.',
+      'React to player actions with logical consequences.',
+      'Stay in character as the narrator. Do not break the fourth wall.',
+    ];
+
+    if (mode === 'gm') {
+      sysLines.push('');
+      sysLines.push('[GM ONLY]');
+      sysLines.push('You are in Direct GM mode. Speak to the player as a human GM would.');
+      sysLines.push('You may reference game mechanics, dice rolls, and rules when appropriate.');
+      sysLines.push('Offer suggestions and guidance when the player seems stuck.');
+      sysLines.push('[/GM ONLY]');
+    }
+
+    sysLines.push('[/SYSTEM INSTRUCTIONS]');
+    sections.push({
+      name: 'SYSTEM INSTRUCTIONS',
+      content: sysLines.join('\n'),
+      priority: 'required',
+    });
+
+    // ── Low: Lorebook World Info (C-238) ────────────────────────────
+    if (userMessage) {
+      const matches = lorebookStore.scanActiveEntries({ message: userMessage });
+      if (matches.length > 0) {
+        const wiLines: string[] = ['', '[WORLD INFO]'];
+        for (const match of matches) {
+          const resolved = resolveMacros({ template: match.entry.content, context: {} });
+          wiLines.push(`[${match.matchReason}]`);
+          wiLines.push(resolved);
+        }
+        wiLines.push('[/WORLD INFO]');
+        sections.push({
+          name: 'WORLD INFO',
+          content: wiLines.join('\n'),
+          priority: 'low',
+        });
+      }
+    }
+
+    // ── Low: Nearby NPCs ─────────────────────────────────────────────
+    // Rendered through `partial` (C-456): a location can carry hundreds of NPC
+    // IDs, and dropping the whole block loses the near ones along with the far
+    // ones. Budget enforcement keeps the leading entries that fit.
+    if (context.nearbyNpcs.length > 0) {
+      const renderNearbyNpcs = (entryCount: number): string => {
+        const npcLines: string[] = ['', '[NEARBY NPCS]'];
+        for (const npc of context.nearbyNpcs.slice(0, entryCount)) {
+          npcLines.push(`- ${npc.name} (${npc.persona}): ${npc.currentActivity}`);
+          if (npc.relationship) {
+            npcLines.push(`  Relationship: ${npc.relationship}`);
+          }
+        }
+        npcLines.push('[/NEARBY NPCS]');
+        return npcLines.join('\n');
+      };
+      sections.push({
+        name: 'NEARBY NPCS',
+        content: renderNearbyNpcs(context.nearbyNpcs.length),
+        priority: 'low',
+        partial: { render: renderNearbyNpcs, total: context.nearbyNpcs.length },
+      });
+    }
+
+    // ── Low: Party members (Party mode) ──────────────────────────────
+    if (mode === 'party' && context.partyMembers.length > 0) {
+      const partyLines: string[] = ['', '[PARTY MEMBERS]'];
+      for (const member of context.partyMembers) {
+        partyLines.push(`- ${member.name}: ${member.personality}`);
+      }
+      partyLines.push('[/PARTY MEMBERS]');
+      sections.push({
+        name: 'PARTY MEMBERS',
+        content: partyLines.join('\n'),
+        priority: 'low',
+      });
+    }
+
+    // ── Low: CYOA Choice History (C-245) ─────────────────────────────
+    if (chatId) {
+      const historySection = choiceHistoryStore.formatHistorySection(chatId);
+      if (historySection && historySection.length > 0) {
+        sections.push({
+          name: 'CYOA HISTORY',
+          content: `\n${historySection}`,
+          priority: 'low',
+        });
+      }
+    }
+
+    // ── Low: Bridge Context (C-244) ──────────────────────────────────
+    if (bridgeContext) {
+      if (bridgeContext.durableNotes.length > 0) {
+        const notesLines: string[] = ['', '[DM NOTES (from linked OOC chat)]'];
+        for (const note of bridgeContext.durableNotes) {
+          notesLines.push(`- ${note}`);
+        }
+        notesLines.push('[/DM NOTES]');
+        sections.push({
+          name: 'DM NOTES',
+          content: notesLines.join('\n'),
+          priority: 'low',
+        });
+      }
+
+      if (bridgeContext.turnInfluences.length > 0) {
+        const inflLines: string[] = ['', '[INFLUENCE (this turn only)]'];
+        for (const influence of bridgeContext.turnInfluences) {
+          inflLines.push(`- ${influence}`);
+        }
+        inflLines.push('[/INFLUENCE]');
+        sections.push({
+          name: 'INFLUENCE',
+          content: inflLines.join('\n'),
+          priority: 'low',
+        });
+      }
+    }
+
+    return sections;
+  }
+
   /** @inheritdoc */
   gatherContext(): GmPromptContext {
     const worldOutput = worldStateService.worldGenOutput;
+    const currentLocation = worldStateService.currentLocation;
+
+    // Resolve player class name from CLASS_REGISTRY (C-457)
+    const classId = playerStateService.classId;
+    const classDef = (CLASS_REGISTRY as Record<string, { name: string }>)[classId];
+    const playerClassName = classDef?.name ?? 'Adventurer';
 
     return {
       worldName: worldOutput?.worldName ?? 'Unknown World',
       regionName: worldOutput?.locations?.[0] ?? 'Unknown Region',
-      locationName: 'Town Square', // TODO: wire to actual location system
-      locationDescription: 'A bustling town square with merchants and townsfolk.',
+      locationName: currentLocation?.name ?? 'Town Square',
+      locationDescription: currentLocation?.description ?? 'A bustling town square with merchants and townsfolk.',
       timeOfDay: `${timeService.gameHour}:${String(timeService.gameMinute).padStart(2, '0')}`,
       weather: this._describeWeather(),
       activeQuests: this._gatherActiveQuests(),
       nearbyNpcs: this._gatherNearbyNpcs(),
       partyMembers: this._gatherPartyMembers(),
       playerCharacter: {
-        name: 'Hero', // TODO: wire to actual character name
-        class: 'Adventurer',
-        level: 1,
-        currentHp: 20,
-        maxHp: 20,
+        name: characterService.selectedCharacter?.name ?? 'Hero',
+        class: playerClassName,
+        level: playerStateService.playerLevel,
+        currentHp: playerStateService.playerHp,
+        maxHp: playerStateService.playerMaxHp,
       },
     };
   }
@@ -289,6 +470,37 @@ class GmPromptService
   }
 
   // ── Private helpers ────────────────────────────────────────────────
+
+  /**
+   * Largest leading slice of a list-backed section that fits `remainingBytes`.
+   *
+   * Binary search over the entry count (C-456's approach): rendering is not
+   * linear in entry count — entries vary in length and a section has fixed
+   * open/close tags — so counting bytes per entry would mis-fit. Returns
+   * undefined when not even one entry fits, so the caller drops the section.
+   */
+  private _fitPartialSection(options: {
+    partial: NonNullable<PromptSection['partial']>;
+    remainingBytes: number;
+    encoder: TextEncoder;
+  }): { content: string; bytes: number; entryCount: number } | undefined {
+    const { partial, remainingBytes, encoder } = options;
+    let low = 0;
+    let high = partial.total;
+    while (low < high) {
+      const candidate = Math.ceil((low + high) / 2);
+      if (encoder.encode(partial.render(candidate)).length <= remainingBytes) {
+        low = candidate;
+      } else {
+        high = candidate - 1;
+      }
+    }
+    if (low === 0) {
+      return undefined;
+    }
+    const content = partial.render(low);
+    return { content, bytes: encoder.encode(content).length, entryCount: low };
+  }
 
   /**
    * Builds the address-mode header line for the prompt.
@@ -355,7 +567,27 @@ class GmPromptService
    * Gathers nearby NPC context from the game state.
    */
   private _gatherNearbyNpcs(): GmPromptContext['nearbyNpcs'] {
-    return []; // TODO: wire to actual NPC awareness system
+    // Returns empty synchronously — the awareness service is async.
+    // For synchronous prompt assembly, expose the IDs from current location.
+    const location = worldStateService.currentLocation;
+    if (!location?.npcIds || location.npcIds.length === 0) {
+      return [];
+    }
+
+    const partyNpcIds = new Set(partyRosterService.members.map((m) => m.npcId));
+
+    // Build minimal context from location data — full resolution with
+    // NPC personalities is available via npcAwarenessService.getNearbyNpcContext()
+    // for the async path (multi-NPC turn generation).
+    return location.npcIds
+      .filter((id) => !partyNpcIds.has(id))
+      .map((id) => ({
+        id,
+        name: id,
+        persona: 'Unknown',
+        relationship: 'Unknown',
+        currentActivity: 'Present',
+      }));
   }
 
   /**
@@ -363,7 +595,18 @@ class GmPromptService
    * Returns an empty array when no party data is available.
    */
   private _gatherPartyMembers(): GmPromptContext['partyMembers'] {
-    return []; // TODO: wire to actual party member system
+    const members = partyRosterService.members;
+    if (members.length === 0) {
+      return [];
+    }
+
+    return members.map((member) => ({
+      id: member.npcId,
+      name: member.name,
+      // Personality from class description — the NPC's full personality
+      // is resolved asynchronously via npcAwarenessService for multi-NPC turns.
+      personality: `${member.name} (${member.classId}, Level ${member.level})`,
+    }));
   }
 }
 

@@ -34,6 +34,7 @@ import {
   type ContractHerdrAdapterInterface,
   ghTokenFilePath,
 } from './herdr_adapter.ts';
+import { settleEmptyImplementation } from './implement_guard.ts';
 import {
   acquireLock,
   createManifest,
@@ -1016,6 +1017,7 @@ export const runContractPipeline = async (options: {
         const cwdForGit =
           wPath && (stage === 'implement' || stage === 'verify') ? wPath : options.repoRoot;
         const before = captureGitState(cwdForGit);
+        const headBefore = currentCommit(cwdForGit);
         const feedback =
           stage === 'implement' ? verifierFeedback({ manifest, attempt }) : undefined;
         // 🔴 Consume the review captain's `change` decision exactly once, as
@@ -1148,6 +1150,34 @@ export const runContractPipeline = async (options: {
               original: outcome.result,
               unauthorizedPaths: pc.unauthorizedPaths,
             });
+
+        // 🔴 Ground-truth zero-diff guard (C-457). Runs BEFORE the commitAll
+        // below, because `commitAll` on an unchanged tree is a successful
+        // no-op and therefore proves nothing. See implement_guard.ts.
+        if (stage === 'implement') {
+          const guarded = await settleEmptyImplementation({
+            result,
+            before,
+            headBefore,
+            // Re-read rather than reusing `after`: the worker may still be
+            // writing, which is the whole point of the settle window.
+            captureAfter: () => ({
+              after: captureGitState(cwdForGit),
+              headAfter: currentCommit(cwdForGit),
+            }),
+            isWorkerActive: () => adapter.isWorkerActive(outcome.paneId),
+            onWait: (message) => console.log(message),
+          });
+          if (guarded !== result) {
+            console.warn(`⚠️  ${guarded.summary}`);
+            pipelineLog({
+              runId: manifest.runId,
+              cwd: options.repoRoot,
+              message: `${stage}-${attempt}: zero-diff \`passed\` overridden to blocked.`,
+            });
+            result = guarded;
+          }
+        }
 
         if (stage === 'implement' && result.status === 'passed') {
           // Status is tracked in run manifest only — don't touch main contract.

@@ -736,6 +736,31 @@ export CONTRACT_PIPELINE_WORKTREE=1
           }
         }
       }
+      // ── node_modules/.bin — required for the pre-commit hook ──
+      // 🔴 Without this the worktree has no `moon`, `biome` or `tsc` on its
+      // resolution path, so `bun run pre-commit` (from .moon/hooks/pre-commit,
+      // which every worktree inherits via the shared core.hooksPath) dies at
+      // step 2 and the implementer agent's own commits go through unchecked.
+      //
+      // A link to root's `.bin` is correct rather than a copy: the shims
+      // inside are RELATIVE symlinks (`moon -> ../@moonrepo/cli/moon.js`), so
+      // they resolve against root's real node_modules where those packages
+      // actually live. Moon still treats the worktree as its own workspace
+      // root — it walks up from cwd for `.moon/`, which the worktree has —
+      // so the checks run against worktree code, not root's.
+      const rootBin = join(repoRoot, 'node_modules', '.bin');
+      const worktreeBin = join(worktreeNodeModules, '.bin');
+      if (existsSync(rootBin) && !existsSync(worktreeBin)) {
+        try {
+          symlinkSync(rootBin, worktreeBin, dirSymlinkType);
+        } catch (err: unknown) {
+          console.warn(
+            `⚠️  Could not link node_modules/.bin (${err instanceof Error ? err.message : String(err)}) — ` +
+              'pre-commit checks will be skipped in this worktree.',
+          );
+        }
+      }
+
       // Junction per-app node_modules from root (vite, pixi.js, etc.)
       for (const wsGlob of workspaces) {
         const base = wsGlob.replace(/\*$/, '');

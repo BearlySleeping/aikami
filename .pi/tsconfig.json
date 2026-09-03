@@ -22,6 +22,8 @@
     "noUnusedParameters": true,
 
     "paths": {
+      "@aikami/schemas": ["../packages/shared/schemas/src/index.ts"],
+      "@aikami/schemas/*": ["../packages/shared/schemas/src/lib/*"],
       "@aikami/types": ["../packages/shared/types/src/index.ts"],
       "@aikami/types/*": ["../packages/shared/types/src/lib/*"]
     }
