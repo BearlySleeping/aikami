@@ -21,6 +21,9 @@ mock.module('$services', () => ({
     })),
     cancelAll: mock(() => {}),
   },
+  memoryRetrievalService: {
+    query: mock(async () => []),
+  },
 }));
 
 import type { ArcMemory } from './gm_types';

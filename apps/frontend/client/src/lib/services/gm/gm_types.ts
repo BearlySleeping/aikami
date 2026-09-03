@@ -1,5 +1,7 @@
 // apps/frontend/client/src/lib/services/gm/gm_types.ts
 //
+// apps/frontend/client/src/lib/services/gm/gm_types.ts
+//
 // Client-local types for the GM Narrative Director system. These are
 // UI-layer constructs specific to the Aikami Client — not cross-boundary
 // data — so they live in the app's local types, not shared packages.
@@ -133,6 +135,11 @@ export type PromptSection = {
  *
  * Contains a formatted scene description and optional guidance for what
  * the player might encounter next.
+ *
+ * C-459: `referencedMemory` is advisory-only narrative flavor, populated
+ * from C-458's memory/lore retrieval when relevant history exists.
+ * The director never directly mutates game state — this field is consumed
+ * solely as prompt context by GmPromptService._buildSections().
  */
 export type SceneDirection = {
   /** Unique identifier for this scene direction. */
@@ -145,6 +152,20 @@ export type SceneDirection = {
   readonly createdAt: number;
   /** Whether the player has acknowledged this direction. */
   readonly acknowledged: boolean;
+  /**
+   * Memory/lore entries retrieved from C-458's MemoryRetrievalService
+   * that are contextually relevant to the current arc/situation.
+   *
+   * This is advisory-only narrative flavor. Present only when retrieval
+   * found relevant history; absent or empty for fresh campaigns with
+   * no indexed data. Never used for direct state mutation.
+   */
+  readonly referencedMemory?: ReadonlyArray<{
+    readonly sourceType: string;
+    readonly sourceId: string;
+    readonly content: string;
+    readonly relevanceScore: number;
+  }>;
 };
 
 /**

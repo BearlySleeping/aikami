@@ -11,7 +11,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import { textGenerationService } from '$services';
+import { memoryRetrievalService, textGenerationService } from '$services';
 import { registerSerializable, type SerializableService } from '../game/serializable_service';
 import type { ArcMemory, SceneDirection } from './gm_types';
 
@@ -212,15 +212,95 @@ class NarrativeDirectorService
    * Generates a new scene direction via a low-temperature LLM call.
    * Appends the result to the current arc memory.
    */
+  /**
+   * Queries C-458's memory retrieval for contextually relevant history.
+   * Formulates the query from the current arc description and last scene
+   * direction (if any) to retrieve relevant past events.
+   *
+   * Graceful degradation: returns empty array when retrieval is unavailable,
+   * disabled, or has no relevant results — never throws.
+   */
+  private async _queryRelevantMemory(): Promise<ReadonlyArray<import('@aikami/types').MemoryResult>> {
+    try {
+      const lastDirection =
+        this._sceneDirections.length > 0
+          ? this._sceneDirections[this._sceneDirections.length - 1]
+          : undefined;
+
+      // Formulate query text from arc description + last scene direction
+      const queryParts = [this._currentArc?.description ?? ''];
+      if (lastDirection?.description) {
+        queryParts.push(lastDirection.description);
+      }
+      const queryText = queryParts.join(' ');
+
+      if (!queryText.trim()) {
+        return [];
+      }
+
+      const results = await memoryRetrievalService.query({
+        text: queryText,
+        scope: 'all',
+        limit: 5,
+      });
+
+      if (results.length > 0) {
+        this.debug('_queryRelevantMemory:found', { count: results.length });
+      }
+
+      return results;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.warn('_queryRelevantMemory:failed', { message });
+      return [];
+    }
+  }
+
+  /**
+   * Generates a new scene direction via a low-temperature LLM call.
+   * Before generating, queries C-458's memory retrieval for contextually
+   * relevant history to inform the narrative direction.
+   * Appends the result to the current arc memory.
+   */
   private async _generateSceneDirection(): Promise<void> {
     if (!this._currentArc) {
       this.debug('_generateSceneDirection:no-arc');
       return;
     }
 
+    const generationArcId = this._currentArc.arcId;
     this.debug('_generateSceneDirection');
 
     try {
+      // ── Retrieve relevant memory (C-459) ──────────────────────────
+      // Graceful degradation: if retrieval is unavailable, disabled, or
+      // returns nothing, referencedMemory is absent and generation proceeds
+      // with world/party/quest state only (existing C-235 behavior).
+      const referencedMemory = await this._queryRelevantMemory();
+      if (this._currentArc?.arcId !== generationArcId) {
+        this.debug('_generateSceneDirection:arc-changed-after-memory', { generationArcId });
+        return;
+      }
+      const hasMemory = referencedMemory.length > 0;
+
+      if (hasMemory) {
+        this.debug('_generateSceneDirection:with-referenced-memory', {
+          memoryCount: referencedMemory.length,
+        });
+      }
+
+      // Build prompt with optional memory context
+      const memorySection = hasMemory
+        ? [
+            '',
+            'Relevant past events from campaign history:',
+            ...referencedMemory.map(
+              (m, i) => `${i + 1}. [${m.sourceType}] ${m.content}`,
+            ),
+            '',
+          ].join('\n')
+        : '';
+
       const prompt = [
         'You are a Game Master generating a brief narrative scene direction for a fantasy RPG.',
         '',
@@ -231,7 +311,7 @@ class NarrativeDirectorService
         this._sceneDirections.length > 0
           ? `There are ${this._sceneDirections.length} prior scene directions in this arc.`
           : 'This is the first scene direction in this arc.',
-        '',
+        memorySection,
         'Respond with a JSON object:',
         '{',
         '  "description": "A 2-4 sentence scene description setting the mood and environment.",',
@@ -257,12 +337,18 @@ class NarrativeDirectorService
           'Generate concise fantasy RPG scene directions. JSON only. No markdown, no explanations.',
       })) as { description: string; playerGuidance?: string };
 
+      if (this._currentArc?.arcId !== generationArcId) {
+        this.debug('_generateSceneDirection:arc-changed-after-generation', { generationArcId });
+        return;
+      }
+
       const direction: SceneDirection = {
         id: crypto.randomUUID(),
         description: result.description,
         playerGuidance: result.playerGuidance,
         createdAt: Date.now(),
         acknowledged: false,
+        ...(hasMemory ? { referencedMemory } : {}),
       };
 
       this._sceneDirections = [...this._sceneDirections, direction];
@@ -276,6 +362,7 @@ class NarrativeDirectorService
         directionId: direction.id,
         descriptionLength: direction.description.length,
         totalDirections: this._sceneDirections.length,
+        hasReferencedMemory: hasMemory,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
