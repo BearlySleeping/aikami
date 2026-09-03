@@ -3,7 +3,12 @@
 // Tests for AC-8: An agent can only be pointed at a compatible connection.
 // Contract: C-463
 
-import { describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { ConfigServiceInterface } from '../../../services/config/config_service.svelte.ts';
+import type {
+  AgentEditorViewModelInterface,
+  AgentEditorViewModelOptions,
+} from './agent_editor_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Mock dependencies (same pattern as config_service.test.ts)
@@ -20,10 +25,30 @@ mock.module('$lib/views/utils/crypto_vault', () => ({
   __esModule: true,
 }));
 
-import { configService } from '../../../services/config/config_service.svelte.ts';
-import { getAgentEditorViewModel } from './agent_editor_view_model.svelte.ts';
+let configService: ConfigServiceInterface;
+let getAgentEditorViewModel: (
+  options: AgentEditorViewModelOptions,
+) => AgentEditorViewModelInterface;
+
+mock.module('$services', () => ({
+  agentRegistryService: {},
+  configService: {
+    get state() {
+      return configService.state;
+    },
+  },
+  runCustomAgent: mock(async () => undefined),
+}));
 
 describe('C-463 AC-8: Agent connection picker filters by capability', () => {
+  beforeEach(async () => {
+    const configModule = await import('../../../services/config/config_service.svelte.ts');
+    const viewModelModule = await import('./agent_editor_view_model.svelte.ts');
+    configService = configModule.configService;
+    getAgentEditorViewModel = viewModelModule.getAgentEditorViewModel;
+    await configService.reset();
+  });
+
   test('connectionOptions contains only text connections', () => {
     // Setup: add text, image, and voice connections
     const textId = configService.addConnection({

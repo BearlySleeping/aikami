@@ -19,17 +19,26 @@ import {
 import type {
   AiConnection,
   AiProvider,
+  AiRole,
   ConfigState,
-  ConnectionId,
   ImageConfig,
+  ImageParams,
   ModelConfigEntry,
   ProviderId,
   RoleAssignments,
+  TextParams,
   VoiceConfig,
+  VoiceParams,
 } from '@aikami/types';
 import { clearVault, decrypt, encrypt } from '$lib/views/utils/crypto_vault';
-import type { Connection, ConnectionCapability, Lorebook, LorebookEntry } from '$types';
-import type { GenerationParams } from '$types';
+import type {
+  Connection,
+  ConnectionCapability,
+  ConnectionId,
+  GenerationParams,
+  Lorebook,
+  LorebookEntry,
+} from '$types';
 import { migrateVaultV1ToV2 } from './config_migration.ts';
 
 // ---------------------------------------------------------------------------
@@ -49,8 +58,6 @@ export {
   VOICE_ENGINES,
   VOICE_PROVIDERS,
 } from '@aikami/constants';
-
-import type { Connection, ConnectionId } from '$types';
 
 /** Resolved text generation provider ready for API calls. */
 type ResolvedTextProvider = {
@@ -155,16 +162,16 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   // ── Role management (C-463) ────────────────────────────────────────
 
   /** Assigns a connection to a role. */
-  setRoleAssignment(role: string, connectionId: ConnectionId): void;
+  setRoleAssignment(role: AiRole, connectionId: ConnectionId): void;
   /** Clears a role assignment. */
-  clearRoleAssignment(role: string): void;
+  clearRoleAssignment(role: AiRole): void;
   /** Returns all role assignments. */
   getRoleAssignments(): RoleAssignments;
   /**
    * Resolves the active provider+connection for a role.
    * Returns undefined if the role has no assignment or the connection is gone.
    */
-  resolveRole(role: string): ResolvedTextProvider | undefined;
+  resolveRole(role: AiRole): ResolvedTextProvider | undefined;
 
   // ── Preset management (C-230) ─────────────────────────────────────
 
@@ -322,12 +329,17 @@ class ConfigService
           // Backfill legacy connections array from v2 connections for ViewModel compat
           this._backfillLegacyConnections();
 
-          // If aiConnections was empty (e.g. legacy-only save), restore
-          // connections from the legacy payload directly.
-          if (this.state.connections.length === 0 && vault.legacy) {
+          // Preserve legacy-only rows that do not have a corresponding v2 connection.
+          if (vault.legacy) {
             const legacyPayload = vault.legacy as Record<string, unknown>;
             if (Array.isArray(legacyPayload.connections)) {
-              this.state.connections = legacyPayload.connections as Connection[];
+              const aiConnectionIds = new Set(
+                this.state.aiConnections.map((connection) => connection.id),
+              );
+              const legacyConnections = (legacyPayload.connections as Connection[]).filter(
+                (connection) => !aiConnectionIds.has(connection.id),
+              );
+              this.state.connections = [...this.state.connections, ...legacyConnections];
             }
           }
         } else {
@@ -385,8 +397,6 @@ class ConfigService
             this.warn('load:migration-failed', { error: String(migrationError) });
             this.state = this._makeDefaultState();
             this.state.schemaVersion = 2;
-            this.state.isLoaded = true;
-            return;
           }
         }
 
@@ -417,7 +427,10 @@ class ConfigService
         }
 
         // Load user presets from vault (only if not already set by migration)
-        if (Array.isArray(vault.userPresets) && this.state.presets.length === 0) {
+        if (
+          Array.isArray(vault.userPresets) &&
+          this.state.presets.every((preset) => preset.isBuiltIn)
+        ) {
           const userPresets = vault.userPresets as GenParamPreset[];
           const builtInIds = new Set<string>(BUILT_IN_PRESETS.map((p) => p.id));
           this.state.presets = [
@@ -556,36 +569,38 @@ class ConfigService
    * and `providers` arrays for ViewModel backward compatibility.
    */
   private _backfillLegacyConnections(): void {
-    this.state.connections = this.state.aiConnections.map((aiConn) => {
+    this.state.connections = this.state.aiConnections.map((aiConn): Connection => {
       const provider = this.state.providers.find((p) => p.id === aiConn.providerId);
-      const params = aiConn.params as Record<string, unknown>;
+      const textParams = aiConn.capability === 'text' ? (aiConn.params as TextParams) : undefined;
       const genParams = {
-        temperature: (params.temperature as number) ?? 0.7,
-        topP: (params.topP as number) ?? 0.9,
-        topK: (params.topK as number) ?? 40,
-        repetitionPenalty: (params.repetitionPenalty as number) ?? 1.1,
-        presencePenalty: (params.presencePenalty as number) ?? 0,
-        maxTokens: (params.maxTokens as number) ?? 1024,
-        contextSize: (params.contextSize as number) ?? 4096,
+        temperature: textParams?.temperature ?? 0.7,
+        topP: textParams?.topP ?? 0.9,
+        topK: textParams?.topK ?? 40,
+        repetitionPenalty: textParams?.repetitionPenalty ?? 1.1,
+        presencePenalty: textParams?.presencePenalty ?? 0,
+        maxTokens: textParams?.maxTokens ?? 1024,
+        contextSize: textParams?.contextSize ?? 4096,
       };
-      const imageOptions =
-        aiConn.capability === 'image'
-          ? {
-              checkpoint: (params.checkpoint as string) ?? '',
-              width: (params.width as number) ?? 1024,
-              height: (params.height as number) ?? 1024,
-              steps: (params.steps as number) ?? 30,
-              cfg: (params.cfg as number) ?? 7.5,
-            }
-          : undefined;
-      const voiceOptions =
-        aiConn.capability === 'voice'
-          ? {
-              voiceId: (params.voiceId as string) ?? '',
-              speed: (params.speed as number) ?? 1.0,
-              pitch: (params.pitch as number) ?? 0,
-            }
-          : undefined;
+      let imageOptions: Connection['imageOptions'];
+      if (aiConn.capability === 'image') {
+        const imageParams = aiConn.params as ImageParams;
+        imageOptions = {
+          checkpoint: imageParams.checkpoint,
+          width: imageParams.width,
+          height: imageParams.height,
+          steps: imageParams.steps,
+          cfg: imageParams.cfg,
+        };
+      }
+      let voiceOptions: Connection['voiceOptions'];
+      if (aiConn.capability === 'voice') {
+        const voiceParams = aiConn.params as VoiceParams;
+        voiceOptions = {
+          voiceId: voiceParams.voiceId,
+          speed: voiceParams.speed,
+          pitch: voiceParams.pitch,
+        };
+      }
 
       return {
         id: aiConn.id,
@@ -603,7 +618,7 @@ class ConfigService
         imageOptions,
         voiceOptions,
       };
-    }) as unknown as Connection[];
+    });
   }
 
   /** Normalizes a persisted lorebook from the shared storage shape to the client-local Lorebook type. */
@@ -847,9 +862,15 @@ class ConfigService
 
   deleteProvider(id: ProviderId): void {
     // Also delete connections referencing this provider
+    const deletedConnectionIds = new Set(
+      this.state.aiConnections
+        .filter((connection) => connection.providerId === id)
+        .map((connection) => connection.id),
+    );
     this.state.aiConnections = this.state.aiConnections.filter(
       (c) => c.providerId !== id,
     );
+    this._clearRolesForConnectionIds(deletedConnectionIds);
     this.state.providers = this.state.providers.filter((p) => p.id !== id);
   }
 
@@ -884,6 +905,7 @@ class ConfigService
 
   deleteAiConnection(id: ConnectionId): void {
     this.state.aiConnections = this.state.aiConnections.filter((c) => c.id !== id);
+    this._clearRolesForConnectionIds(new Set([id]));
   }
 
   getAiConnection(id: ConnectionId): AiConnection | undefined {
@@ -896,13 +918,13 @@ class ConfigService
 
   // ── C-463: Role management ─────────────────────────────────────────
 
-  setRoleAssignment(role: string, connectionId: ConnectionId): void {
+  setRoleAssignment(role: AiRole, connectionId: ConnectionId): void {
     this.state.roles = { ...this.state.roles, [role]: connectionId };
   }
 
-  clearRoleAssignment(role: string): void {
+  clearRoleAssignment(role: AiRole): void {
     const next = { ...this.state.roles };
-    delete next[role as keyof RoleAssignments];
+    delete next[role];
     this.state.roles = next;
   }
 
@@ -910,8 +932,8 @@ class ConfigService
     return { ...this.state.roles };
   }
 
-  resolveRole(role: string): ResolvedTextProvider | undefined {
-    const connectionId = this.state.roles[role as keyof RoleAssignments];
+  resolveRole(role: AiRole): ResolvedTextProvider | undefined {
+    const connectionId = this.state.roles[role];
     if (!connectionId) {
       return undefined;
     }
@@ -932,6 +954,15 @@ class ConfigService
       endpoint: provider.baseUrl || '',
       apiKey: provider.credential || '',
     };
+  }
+
+  /** Clears role assignments that reference connections removed from the configuration. */
+  private _clearRolesForConnectionIds(connectionIds: ReadonlySet<ConnectionId>): void {
+    this.state.roles = Object.fromEntries(
+      Object.entries(this.state.roles).filter(
+        ([, connectionId]) => !connectionIds.has(connectionId),
+      ),
+    );
   }
 
   // ── Private: default bookkeeping ─────────────────────────────────────

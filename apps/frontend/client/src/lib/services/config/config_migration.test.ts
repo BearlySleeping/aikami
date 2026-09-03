@@ -24,12 +24,9 @@ const testOpts = (): MigrationOptions => ({
 });
 
 // Fixture helpers
-const loadFixture = (name: string): Record<string, unknown> => {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const fixturePath = path.join(__dirname, '__fixtures__', name);
-  return JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
+const loadFixture = async (name: string): Promise<Record<string, unknown>> => {
+  const fixture = Bun.file(`${import.meta.dir}/__fixtures__/${name}`);
+  return JSON.parse(await fixture.text());
 };
 
 describe('C-463 Migration: v1 → v2', () => {
@@ -56,6 +53,7 @@ describe('C-463 Migration: v1 → v2', () => {
       expect(v2.schemaVersion).toBe(2);
       expect(v2.providers).toEqual([]);
       expect(v2.connections).toEqual([]);
+      expect(v2.roles).toEqual({});
     });
 
     test('missing optional fields do not throw', () => {
@@ -93,8 +91,8 @@ describe('C-463 Migration: v1 → v2', () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('AC-4: Migration is lossless', () => {
-    test('migrates multi-provider fixture correctly', () => {
-      const v1 = loadFixture('v1_multi_provider.json');
+    test('migrates multi-provider fixture correctly', async () => {
+      const v1 = await loadFixture('v1_multi_provider.json');
       const v2 = migrateVaultV1ToV2(v1, testOpts());
 
       // Should create 4 providers: 2 OpenRouter (different keys), 1 Ollama, 1 ElevenLabs
@@ -201,8 +199,8 @@ describe('C-463 Migration: v1 → v2', () => {
       expect(key1Prov?.id).not.toBe(key2Prov?.id);
     });
 
-    test('preserves user presets', () => {
-      const v1 = loadFixture('v1_multi_provider.json');
+    test('preserves user presets', async () => {
+      const v1 = await loadFixture('v1_multi_provider.json');
       const v2 = migrateVaultV1ToV2(v1, testOpts());
 
       expect(v2.userPresets).toBeDefined();
@@ -210,8 +208,8 @@ describe('C-463 Migration: v1 → v2', () => {
       expect(v2.userPresets).toHaveLength(1);
     });
 
-    test('preserves legacy payload for rollback', () => {
-      const v1 = loadFixture('v1_multi_provider.json');
+    test('preserves legacy payload for rollback', async () => {
+      const v1 = await loadFixture('v1_multi_provider.json');
       const v2 = migrateVaultV1ToV2(v1, testOpts());
 
       expect(v2.legacy).toBeDefined();
@@ -224,8 +222,8 @@ describe('C-463 Migration: v1 → v2', () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('AC-5: Migration is idempotent', () => {
-    test('migrating an already-migrated v2 vault is a no-op', () => {
-      const v1 = loadFixture('v1_multi_provider.json');
+    test('migrating an already-migrated v2 vault is a no-op', async () => {
+      const v1 = await loadFixture('v1_multi_provider.json');
       const first = migrateVaultV1ToV2(v1, testOpts());
 
       // Simulate loading a v2 vault by treating first as input
@@ -283,17 +281,17 @@ describe('C-463 Migration: v1 → v2', () => {
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('AC-10: models[] migration', () => {
-    test('models rows become text connections', () => {
-      const v1 = loadFixture('v1_with_models.json');
+    test('models rows become text connections', async () => {
+      const v1 = await loadFixture('v1_with_models.json');
       const v2 = migrateVaultV1ToV2(v1, testOpts());
 
-      // Should have 1 provider (openrouter with key) + potentially more from models
-      // The models rows create connections on the same provider
+      expect(v2.providers).toHaveLength(1);
+      const provider = v2.providers[0];
+      expect(provider.credential).toBe('sk-or-key');
+
       const textConns = v2.connections.filter((c) => c.capability === 'text');
-      // 1 from v1 connection + 2 from models (but one might be duplicate if model matches)
-      // conn-main model is 'anthropic/claude-sonnet-4-20250514', models are 'anthropic/claude-opus-4' and 'openai/gpt-4o'
-      // No duplicates since models are different
-      expect(textConns.length).toBeGreaterThanOrEqual(3);
+      expect(textConns).toHaveLength(3);
+      expect(textConns.every((connection) => connection.providerId === provider.id)).toBe(true);
     });
 
     test('duplicate (provider, model) pairs are skipped', () => {

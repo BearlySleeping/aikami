@@ -776,7 +776,7 @@ class ConnectionManagerViewModel
     }
 
     const capability = this.draft.capability ?? 'text';
-    const apiKey = this.draft.apiKey || configService.getApiKey(provider, capability);
+    const apiKey = this.draft.apiKey || this._getFallbackApiKey(provider, capability);
 
     this.isFetchingModels = true;
 

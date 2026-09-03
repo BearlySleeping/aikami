@@ -230,20 +230,15 @@ class AiGatewayService
     const { model: explicitModel, endpoint: explicitEndpoint } = options;
     if (explicitModel) {
       // C-463: Look up explicit model in text connections instead of models[]
-      const match = configService.state.aiConnections.find(
-        (c) => c.capability === 'text' && c.model === explicitModel,
+      const match = configService.state.connections.find(
+        (c) => (c.capability ?? 'text') === 'text' && c.model === explicitModel,
       );
       if (match) {
-        const provider = configService.state.providers.find(
-          (p) => p.id === match.providerId,
-        );
-        if (provider) {
-          return this._toTextResolution({
-            provider: provider.registryId,
-            model: match.model,
-            endpoint: explicitEndpoint ?? provider.baseUrl ?? '',
-          });
-        }
+        return this._toTextResolution({
+          provider: match.provider,
+          model: match.model,
+          endpoint: explicitEndpoint ?? match.baseUrl ?? '',
+        });
       }
       // Model not found in connections — use it verbatim with the active provider/endpoint
       const resolved = configService.getActiveTextProvider();

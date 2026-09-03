@@ -32,6 +32,7 @@ import type {
   V1VaultPayload,
   VaultPayloadV2,
 } from '@aikami/types';
+import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$lib/data/connection_defaults.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -130,19 +131,21 @@ export const migrateVaultV1ToV2 = (
     const capability = (conn.capability ?? 'text') as ConnectionCapability;
 
     let params: AiConnection['params'];
-    if (capability === 'image' && conn.imageOptions) {
+    if (capability === 'image') {
+      const imageOptions = conn.imageOptions ?? DEFAULT_IMAGE_OPTIONS;
       params = {
-        checkpoint: conn.imageOptions.checkpoint,
-        width: conn.imageOptions.width,
-        height: conn.imageOptions.height,
-        steps: conn.imageOptions.steps,
-        cfg: conn.imageOptions.cfg,
+        checkpoint: imageOptions.checkpoint,
+        width: imageOptions.width,
+        height: imageOptions.height,
+        steps: imageOptions.steps,
+        cfg: imageOptions.cfg,
       };
-    } else if (capability === 'voice' && conn.voiceOptions) {
+    } else if (capability === 'voice') {
+      const voiceOptions = conn.voiceOptions ?? DEFAULT_VOICE_OPTIONS;
       params = {
-        voiceId: conn.voiceOptions.voiceId,
-        speed: conn.voiceOptions.speed,
-        pitch: conn.voiceOptions.pitch,
+        voiceId: voiceOptions.voiceId,
+        speed: voiceOptions.speed,
+        pitch: voiceOptions.pitch,
       };
     } else {
       params = { ...conn.generationParams };
@@ -166,7 +169,12 @@ export const migrateVaultV1ToV2 = (
 
   // Text roles
   const textDefaultId = defaultByCapability.text ?? v1.defaultConnectionId ?? undefined;
-  if (textDefaultId) {
+  if (
+    textDefaultId &&
+    connections.some(
+      (connection) => connection.id === textDefaultId && connection.capability === 'text',
+    )
+  ) {
     const textRoles: AiRole[] = ['narration', 'dialogue', 'summarization', 'structured'];
     for (const role of textRoles) {
       roles[role] = textDefaultId;
@@ -175,7 +183,12 @@ export const migrateVaultV1ToV2 = (
 
   // Image roles
   const imageDefaultId = defaultByCapability.image ?? undefined;
-  if (imageDefaultId) {
+  if (
+    imageDefaultId &&
+    connections.some(
+      (connection) => connection.id === imageDefaultId && connection.capability === 'image',
+    )
+  ) {
     const imageRoles: AiRole[] = ['portrait', 'scene'];
     for (const role of imageRoles) {
       roles[role] = imageDefaultId;
@@ -184,7 +197,12 @@ export const migrateVaultV1ToV2 = (
 
   // Voice roles
   const voiceDefaultId = defaultByCapability.voice ?? undefined;
-  if (voiceDefaultId) {
+  if (
+    voiceDefaultId &&
+    connections.some(
+      (connection) => connection.id === voiceDefaultId && connection.capability === 'voice',
+    )
+  ) {
     const voiceRoles: AiRole[] = ['narrator-voice', 'npc-voice'];
     for (const role of voiceRoles) {
       roles[role] = voiceDefaultId;
@@ -283,10 +301,12 @@ export const migrateVaultV1ToV2 = (
   const models = (v1 as Record<string, unknown>).models;
   if (Array.isArray(models)) {
     const existingPairs = new Set(
-      connections.filter((c) => c.capability === 'text').map((c) => {
-        const connProvider = providers.find((p) => p.id === c.providerId);
-        return `${c.model}::${connProvider?.registryId ?? ''}`;
-      }),
+      connections
+        .filter((c) => c.capability === 'text')
+        .map((c) => {
+          const connProvider = providers.find((p) => p.id === c.providerId);
+          return `${c.model}::${connProvider?.registryId ?? ''}`;
+        }),
     );
 
     for (const modelRow of models) {
@@ -306,8 +326,21 @@ export const migrateVaultV1ToV2 = (
       }
 
       // Find or create provider for this model row
-      const modelKey = `${row.provider}::${row.endpoint ?? ''}::`;
+      const modelBaseUrl = row.endpoint ?? '';
+      const modelKey = `${row.provider}::${modelBaseUrl}::`;
       let modelProviderId = providerIdByGroupKey.get(modelKey);
+
+      if (!modelProviderId) {
+        const keyedMatches = providers.filter(
+          (provider) =>
+            provider.registryId === row.provider &&
+            (provider.baseUrl ?? '') === modelBaseUrl &&
+            Boolean(provider.credential),
+        );
+        if (keyedMatches.length === 1) {
+          modelProviderId = keyedMatches[0].id;
+        }
+      }
 
       if (!modelProviderId) {
         modelProviderId = idFactory();
@@ -317,7 +350,7 @@ export const migrateVaultV1ToV2 = (
           registryId: row.provider,
           label: row.provider,
           source: 'stored',
-          baseUrl: row.endpoint || undefined,
+          baseUrl: modelBaseUrl || undefined,
         });
       }
 
@@ -350,7 +383,7 @@ export const migrateVaultV1ToV2 = (
     connections,
     roles,
     userPresets: v1.userPresets ?? [],
-    legacy: v1 as unknown as Record<string, unknown>,
+    legacy: v1,
   };
 
   return v2;
