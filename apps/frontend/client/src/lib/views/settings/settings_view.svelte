@@ -1,8 +1,8 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/settings/settings_view.svelte
 //
-// Settings page with progressive disclosure — Basic/Advanced toggle,
-// search filtering, per-section reset, and capability badges.
+// Settings page — a group tab bar with a section sub-nav per group,
+// per-section reset, and capability badges.
 import { BaseViewModelContainer } from '$components';
 import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
 import AgentListView from '../agent/list/agent_list_view.svelte';
@@ -46,9 +46,44 @@ const iconMap: Record<string, string> = {
 
 const getIconPath = (icon: string): string => iconMap[icon] ?? iconMap.cog;
 
-const focusOnMount = (node: HTMLInputElement): { destroy: () => void } => {
-  node.focus();
-  return { destroy: () => {} };
+/**
+ * Moves focus within an ARIA tablist per the WAI-ARIA authoring practices:
+ * Left/Right (or Up/Down) move to the adjacent tab and activate it,
+ * Home/End jump to the first/last tab.
+ */
+const handleTablistKeydown = (
+  event: KeyboardEvent,
+  idPrefix: string,
+  ids: readonly string[],
+  activeId: string,
+  activate: (id: string) => void,
+): void => {
+  const currentIndex = ids.indexOf(activeId);
+  let nextIndex: number | undefined;
+
+  switch (event.key) {
+    case 'ArrowRight':
+    case 'ArrowDown':
+      nextIndex = (currentIndex + 1) % ids.length;
+      break;
+    case 'ArrowLeft':
+    case 'ArrowUp':
+      nextIndex = (currentIndex - 1 + ids.length) % ids.length;
+      break;
+    case 'Home':
+      nextIndex = 0;
+      break;
+    case 'End':
+      nextIndex = ids.length - 1;
+      break;
+    default:
+      return;
+  }
+
+  event.preventDefault();
+  const nextId = ids[nextIndex];
+  activate(nextId);
+  document.getElementById(`${idPrefix}${nextId}`)?.focus();
 };
 </script>
 
@@ -91,51 +126,65 @@ const focusOnMount = (node: HTMLInputElement): { destroy: () => void } => {
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════
-       Search Bar
+       Group Tabs
        ═══════════════════════════════════════════════════════════════════ -->
-  <div class="px-6 pt-4">
-    <div class="input input-bordered flex items-center gap-2 w-full max-w-md">
-      <label class="sr-only" for="settings-search">Search settings</label>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="h-4 w-4 text-base-content/40"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        aria-hidden="true"
+  <div
+    class="tabs tabs-boxed bg-base-100 mx-6 mt-6 justify-center flex-wrap"
+    role="tablist"
+    aria-label="Settings groups"
+  >
+    {#each viewModel.visibleGroups as group (group.id)}
+      <button
+        type="button"
+        id="settings-group-tab-{group.id}"
+        class="tab tab-lg"
+        role="tab"
+        aria-selected={viewModel.activeGroupId === group.id}
+        aria-controls="settings-section-panel"
+        tabindex={viewModel.activeGroupId === group.id ? 0 : -1}
+        class:tab-active={viewModel.activeGroupId === group.id}
+        onclick={() => viewModel.setActiveGroup(group.id)}
+        onkeydown={(e) =>
+          handleTablistKeydown(
+            e,
+            'settings-group-tab-',
+            viewModel.visibleGroups.map((g) => g.id),
+            viewModel.activeGroupId,
+            (id) => viewModel.setActiveGroup(id as typeof group.id),
+          )}
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-        />
-      </svg>
-      <input
-        id="settings-search"
-        type="text"
-        class="grow"
-        placeholder="Search settings…"
-        value={viewModel.searchQuery}
-        oninput={(e: Event) => {
-          const input = e.target as HTMLInputElement;
-          viewModel.setSearchQuery(input.value);
-        }}
-        use:focusOnMount
-      >
-    </div>
+        {group.label}
+      </button>
+    {/each}
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════
-       Section Tabs (from registry, filtered by tier + search)
+       Section Sub-nav (for the active group)
        ═══════════════════════════════════════════════════════════════════ -->
-  <div class="tabs tabs-boxed bg-base-100 m-6 justify-center flex-wrap">
-    {#each viewModel.visibleSections as section}
+  <div
+    class="tabs tabs-bordered mx-6 mb-6 justify-center flex-wrap"
+    role="tablist"
+    aria-label="Settings sections"
+  >
+    {#each viewModel.sectionsInActiveGroup as section (section.id)}
       <button
         type="button"
-        class="tab tab-lg gap-2"
+        id="settings-section-tab-{section.id}"
+        class="tab gap-2"
+        role="tab"
+        aria-selected={viewModel.activeSectionId === section.id}
+        aria-controls="settings-section-panel"
+        tabindex={viewModel.activeSectionId === section.id ? 0 : -1}
         class:tab-active={viewModel.activeSectionId === section.id}
         onclick={() => viewModel.setActiveSection(section.id)}
+        onkeydown={(e) =>
+          handleTablistKeydown(
+            e,
+            'settings-section-tab-',
+            viewModel.sectionsInActiveGroup.map((s) => s.id),
+            viewModel.activeSectionId,
+            (id) => viewModel.setActiveSection(id),
+          )}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -144,58 +193,22 @@ const focusOnMount = (node: HTMLInputElement): { destroy: () => void } => {
           viewBox="0 0 24 24"
           aria-hidden="true"
         >
-          <title>{section.icon} icon</title>
           <path d={getIconPath(section.icon)} />
         </svg>
         {section.label}
       </button>
     {/each}
-
-    {#if viewModel.visibleSections.length === 0}
-      <span class="text-base-content/50 py-3">No settings found</span>
-    {/if}
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════════════════
-       Basic / Advanced Toggle
-       ═══════════════════════════════════════════════════════════════════ -->
-  <div class="flex justify-center mb-4">
-    <button
-      type="button"
-      class="btn btn-sm btn-outline gap-2"
-      onclick={() => viewModel.toggleAdvanced()}
-      aria-label={viewModel.isAdvanced ? 'Show basic settings only' : 'Show advanced settings'}
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="h-4 w-4"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        aria-hidden="true"
-      >
-        <title>Toggle icon</title>
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-        />
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-        />
-      </svg>
-      {viewModel.isAdvanced ? 'Basic Mode' : 'Advanced'}
-    </button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════════
        Section Content
        ═══════════════════════════════════════════════════════════════════ -->
-  <div class="px-6 pb-6 max-w-2xl">
+  <div
+    id="settings-section-panel"
+    class="px-6 pb-6 max-w-2xl"
+    role="tabpanel"
+    aria-labelledby="settings-section-tab-{viewModel.activeSectionId}"
+  >
     {#if viewModel.activeSectionId === 'controls'}
       <SettingsControlsView viewModel={viewModel.controlsViewModel} />
     {:else if viewModel.activeSectionId === 'audio'}
@@ -210,6 +223,7 @@ const focusOnMount = (node: HTMLInputElement): { destroy: () => void } => {
       <ConnectionsListView viewModel={viewModel.connectionViewModel} />
     {:else if viewModel.activeSectionId === 'agents'}
       <AgentListView viewModel={viewModel.agentListViewModel} />
+      <AgentEditorView viewModel={viewModel.agentEditorViewModel} />
     {:else if viewModel.activeSectionId === 'autonomous'}
       <AutonomousSettingsView viewModel={viewModel.autonomousViewModel} />
     {:else if viewModel.activeSectionId === 'music'}
@@ -220,7 +234,4 @@ const focusOnMount = (node: HTMLInputElement): { destroy: () => void } => {
       <p class="text-base-content/50 text-center py-8">Select a section to configure</p>
     {/if}
   </div>
-
-  <!-- Agent Editor (always available when agents section is used) -->
-  <AgentEditorView viewModel={viewModel.agentEditorViewModel} />
 </BaseViewModelContainer>

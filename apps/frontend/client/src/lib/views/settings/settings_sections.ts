@@ -1,26 +1,34 @@
 // apps/frontend/client/src/lib/views/settings/settings_sections.ts
 //
-// Typed registry of all settings sections with metadata for progressive
-// disclosure, search, and capability badges. Drives both the tab UI and
-// search filtering in SettingsViewModel.
+// Typed registry of all settings sections and the groups they belong to.
+// Drives the group tab bar + section sub-nav in SettingsViewModel.
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingsSectionCategory = 'basic' | 'advanced';
+export type SettingsGroupId = 'play' | 'ai' | 'content' | 'data';
+
+export type SettingsContext = 'page' | 'pause' | 'onboarding';
+
+export type SettingsGroup = {
+  /** Unique group identifier. */
+  id: SettingsGroupId;
+  /** Display label shown in the group tab bar. */
+  label: string;
+};
 
 export type SettingsSection = {
   /** Unique section identifier — matches existing sub-tab IDs where applicable. */
   id: string;
-  /** Display label shown in the tab bar. */
+  /** Display label shown in the sub-nav. */
   label: string;
-  /** Which disclosure tier this section belongs to. */
-  category: SettingsSectionCategory;
+  /** Which group tab this section is nested under. */
+  group: SettingsGroupId;
+  /** Which UI contexts this section is available in. */
+  contexts: readonly SettingsContext[];
   /** Heroicon name for the tab icon (used as a lookup key by the view). */
   icon: string;
-  /** Search keywords for fuzzy matching. */
-  keywords: readonly string[];
   /** Optional capability key for badge display (e.g. 'ai', 'connection'). */
   capabilityKey?: string;
 };
@@ -29,162 +37,91 @@ export type SettingsSection = {
 // Registry
 // ---------------------------------------------------------------------------
 
+export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
+  { id: 'play', label: 'Play' },
+  { id: 'ai', label: 'AI' },
+  { id: 'content', label: 'Content' },
+  { id: 'data', label: 'Data' },
+] as const satisfies readonly SettingsGroup[];
+
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
-  // ── Basic sections ──────────────────────────────────────────────────
+  // ── Play ─────────────────────────────────────────────────────────────
   {
     id: 'controls',
     label: 'Controls',
-    category: 'basic',
+    group: 'play',
+    contexts: ['page', 'pause'],
     icon: 'keyboard',
-    keywords: [
-      'controls',
-      'keybindings',
-      'key',
-      'bind',
-      'input',
-      'move',
-      'interact',
-      'menu',
-      'shortcut',
-      'hotkey',
-      'keyboard',
-      'gamepad',
-    ],
   },
   {
     id: 'audio',
     label: 'Audio',
-    category: 'basic',
+    group: 'play',
+    contexts: ['page', 'pause'],
     icon: 'speaker',
-    keywords: [
-      'audio',
-      'volume',
-      'sound',
-      'music',
-      'bgm',
-      'sfx',
-      'loud',
-      'quiet',
-      'mute',
-      'speaker',
-      'master',
-      'crossfade',
-    ],
   },
   {
     id: 'display',
     label: 'Display',
-    category: 'basic',
+    group: 'play',
+    contexts: ['page', 'pause'],
     icon: 'monitor',
-    keywords: [
-      'display',
-      'resolution',
-      'fullscreen',
-      'window',
-      'monitor',
-      'screen',
-      'size',
-      'brightness',
-      'hd',
-      'qhd',
-      'pixels',
-    ],
   },
   {
     id: 'gameplay',
     label: 'Gameplay',
-    category: 'basic',
+    group: 'play',
+    contexts: ['page', 'pause'],
     icon: 'cog',
-    keywords: [
-      'gameplay',
-      'game',
-      'options',
-      'language',
-      'region',
-      'accessibility',
-      'difficulty',
-      'autosave',
-      'tutorial',
-      'hints',
-    ],
   },
+
+  // ── AI ───────────────────────────────────────────────────────────────
   {
     id: 'ai_privacy',
     label: 'AI & Privacy',
-    category: 'basic',
+    group: 'ai',
+    contexts: ['page'],
     icon: 'shield',
-    keywords: [
-      'ai',
-      'privacy',
-      'provider',
-      'connect',
-      'offline',
-      'telemetry',
-      'data',
-      'model',
-      'connection',
-      'status',
-      'local',
-      'api',
-    ],
     capabilityKey: 'ai',
   },
-
-  // ── Advanced sections ───────────────────────────────────────────────
   {
     id: 'connections',
     label: 'Connections',
-    category: 'advanced',
+    group: 'ai',
+    contexts: ['page'],
     icon: 'link',
-    keywords: ['connections', 'connection', 'link', 'endpoint', 'url', 'server', 'network', 'api'],
     capabilityKey: 'connection',
   },
+
+  // ── Content ──────────────────────────────────────────────────────────
   {
     id: 'agents',
     label: 'Agents',
-    category: 'advanced',
+    group: 'content',
+    contexts: ['page'],
     icon: 'users',
-    keywords: [
-      'agents',
-      'agent',
-      'persona',
-      'character',
-      'npc',
-      'editor',
-      'list',
-      'create',
-      'custom',
-    ],
   },
   {
     id: 'autonomous',
     label: 'Automation',
-    category: 'advanced',
+    group: 'content',
+    contexts: ['page'],
     icon: 'refresh',
-    keywords: [
-      'automation',
-      'autonomous',
-      'npc',
-      'behavior',
-      'ai',
-      'background',
-      'schedule',
-      'automatic',
-      'bot',
-    ],
   },
   {
     id: 'music',
     label: 'Music DJ',
-    category: 'advanced',
+    group: 'content',
+    contexts: ['page'],
     icon: 'music',
-    keywords: ['music', 'dj', 'track', 'library', 'scene', 'playlist', 'song', 'bgm', 'override'],
   },
+
+  // ── Data ─────────────────────────────────────────────────────────────
   {
     id: 'export',
     label: 'Export & Data',
-    category: 'advanced',
+    group: 'data',
+    contexts: ['page'],
     icon: 'download',
-    keywords: ['export', 'data', 'download', 'save', 'import', 'backup', 'file', 'json', 'dump'],
   },
 ] as const satisfies readonly SettingsSection[];

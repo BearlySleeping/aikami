@@ -1,8 +1,7 @@
 // apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts
 //
-// ViewModel for the Settings page. Manages the section registry, progressive
-// disclosure (Basic/Advanced toggle), search filtering, per-section reset,
-// and immediate preview/revert for Display and Audio.
+// ViewModel for the Settings page. Manages the group + section registry,
+// per-section reset, and immediate preview/revert for Display and Audio.
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -55,15 +54,13 @@ import {
   type SettingsMusicViewModelInterface,
 } from './music/settings_music_view_model.svelte';
 
-import { SETTINGS_SECTIONS, type SettingsSection } from './settings_sections';
-
-// ---------------------------------------------------------------------------
-// Types (backward-compatible aliases)
-// ---------------------------------------------------------------------------
-
-export type SettingsCategory = 'game' | 'ai_engine' | 'agents';
-
-export type GameSubTab = 'display' | 'audio' | 'controls' | 'export' | 'music' | 'autonomous';
+import {
+  SETTINGS_GROUPS,
+  SETTINGS_SECTIONS,
+  type SettingsGroup,
+  type SettingsGroupId,
+  type SettingsSection,
+} from './settings_sections';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -72,15 +69,12 @@ export type GameSubTab = 'display' | 'audio' | 'controls' | 'export' | 'music' |
 export type SettingsViewModelInterface = BaseViewModelInterface & {
   // ── Section registry ──
   readonly allSections: readonly SettingsSection[];
-  readonly visibleSections: readonly SettingsSection[];
   readonly activeSectionId: string;
 
-  // ── Progressive disclosure ──
-  readonly isAdvanced: boolean;
-  readonly canToggleAdvanced: boolean;
-
-  // ── Search ──
-  readonly searchQuery: string;
+  // ── Groups ──
+  readonly visibleGroups: readonly SettingsGroup[];
+  readonly activeGroupId: SettingsGroupId;
+  readonly sectionsInActiveGroup: readonly SettingsSection[];
 
   // ── Capability badges ──
   readonly aiCapabilityBadge: string;
@@ -101,8 +95,7 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
 
   // ── Actions ──
   setActiveSection(id: string): void;
-  setSearchQuery(query: string): void;
-  toggleAdvanced(): void;
+  setActiveGroup(id: SettingsGroupId): void;
   closeSettings(): Promise<void>;
 };
 
@@ -110,10 +103,7 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
-export type SettingsViewModelOptions = BaseViewModelOptions & {
-  /** Whether this instance is running in the in-game overlay (vs full-page). */
-  overlayMode?: boolean;
-};
+export type SettingsViewModelOptions = BaseViewModelOptions;
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -126,8 +116,7 @@ export class SettingsViewModel
   // ── Section registry ──
   readonly allSections = SETTINGS_SECTIONS;
   activeSectionId = $state<string>(SETTINGS_SECTIONS[0].id);
-  isAdvanced = $state<boolean>(false);
-  searchQuery = $state<string>('');
+  activeGroupId = $state<SettingsGroupId>(SETTINGS_SECTIONS[0].group);
 
   // ── Basic sub-ViewModels (always created) ──
   readonly gameplayViewModel: GameplayViewModelInterface;
@@ -147,35 +136,14 @@ export class SettingsViewModel
   // ── Preview/revert state ──
   private _preEditAudioVolume: number | undefined;
 
-  // ── Search debounce ──
-  private _searchTimeout: ReturnType<typeof setTimeout> | undefined;
-  private _pendingSearchQuery = $state<string>('');
-
-  // ── Overlay mode ──
-  private readonly _overlayMode: boolean;
-
   // ── Getters ──
 
-  get visibleSections(): readonly SettingsSection[] {
-    const filtered = this.allSections.filter((s) => {
-      // In basic mode, only show basic sections
-      if (!this.isAdvanced && s.category === 'advanced') {
-        return false;
-      }
-      return true;
-    });
+  get visibleGroups(): readonly SettingsGroup[] {
+    return SETTINGS_GROUPS;
+  }
 
-    // Apply search filter
-    if (this.searchQuery.trim().length === 0) {
-      return filtered;
-    }
-
-    const query = this.searchQuery.toLowerCase().trim();
-    return filtered.filter(
-      (s) =>
-        s.label.toLowerCase().includes(query) ||
-        s.keywords.some((kw) => kw.toLowerCase().includes(query)),
-    );
+  get sectionsInActiveGroup(): readonly SettingsSection[] {
+    return this.allSections.filter((s) => s.group === this.activeGroupId);
   }
 
   get musicViewModel(): SettingsMusicViewModelInterface {
@@ -230,12 +198,6 @@ export class SettingsViewModel
     return this._agentEditorViewModel;
   }
 
-  get canToggleAdvanced(): boolean {
-    // Always allow toggling — no confirmation needed in this implementation
-    // (advanced fields are lazily created and have no dirty state to lose)
-    return true;
-  }
-
   get aiCapabilityBadge(): string {
     const status = this.aiPrivacyViewModel.aiConnectionStatus;
     if (status === 'loading') {
@@ -262,7 +224,6 @@ export class SettingsViewModel
 
   constructor(options: SettingsViewModelOptions) {
     super(options);
-    this._overlayMode = options.overlayMode ?? false;
 
     // Always create basic sub-ViewModels
     this.gameplayViewModel = getGameplayViewModel({ className: 'GameplayViewModel' });
@@ -275,15 +236,24 @@ export class SettingsViewModel
   }
 
   override async initialize(): Promise<void> {
-    this.debug('initialize', { overlayMode: this._overlayMode });
-    // Deep-link a settings section via `?section=<id>` (e.g. /settings?section=audio)
+    this.debug('initialize');
+    // Deep-link a settings section via `?section=<id>` (e.g. /settings?section=audio),
+    // or a group via `?group=<id>` (e.g. /settings?group=ai).
     try {
-      const sectionParam = new URLSearchParams(window.location.search).get('section');
-      if (sectionParam && SETTINGS_SECTIONS.some((s) => s.id === sectionParam)) {
-        this.activeSectionId = sectionParam;
+      const params = new URLSearchParams(window.location.search);
+      const sectionParam = params.get('section');
+      const section = SETTINGS_SECTIONS.find((s) => s.id === sectionParam);
+      if (section) {
+        this.activeSectionId = section.id;
+        this.activeGroupId = section.group;
+      } else {
+        const groupParam = params.get('group');
+        if (groupParam && SETTINGS_GROUPS.some((g) => g.id === groupParam)) {
+          this.setActiveGroup(groupParam as SettingsGroupId);
+        }
       }
     } catch {
-      // location unavailable (tests) — keep the default section.
+      // location unavailable (tests) — keep the default section/group.
     }
     // Capture pre-edit state for preview/revert
     this._capturePreEditState();
@@ -296,35 +266,11 @@ export class SettingsViewModel
     this.activeSectionId = id;
   }
 
-  setSearchQuery(query: string): void {
-    // Store incoming query as pending input
-    this._pendingSearchQuery = query;
-
-    // Clear and replace existing timeout
-    if (this._searchTimeout) {
-      clearTimeout(this._searchTimeout);
-    }
-
-    // Assign searchQuery only after debounce
-    this._searchTimeout = setTimeout(() => {
-      this.searchQuery = this._pendingSearchQuery;
-    }, 150);
-  }
-
-  toggleAdvanced(): void {
-    this.isAdvanced = !this.isAdvanced;
-    this.debug('toggleAdvanced', { isAdvanced: this.isAdvanced });
-
-    // When disabling Advanced mode, check if current section is advanced
-    if (!this.isAdvanced) {
-      const currentSection = this.allSections.find((s) => s.id === this.activeSectionId);
-      if (currentSection?.category === 'advanced') {
-        // Switch to the first basic section
-        const firstBasicSection = this.allSections.find((s) => s.category === 'basic');
-        if (firstBasicSection) {
-          this.activeSectionId = firstBasicSection.id;
-        }
-      }
+  setActiveGroup(id: SettingsGroupId): void {
+    this.activeGroupId = id;
+    const firstSection = this.allSections.find((s) => s.group === id);
+    if (firstSection) {
+      this.activeSectionId = firstSection.id;
     }
   }
 
