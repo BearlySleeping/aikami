@@ -3,7 +3,7 @@ id: C-459
 title: "AI GM / Narrative Director Enhancements"
 source: "docs/contracts/BACKLOG_C452_PLUS.md 'C-464' seed (RPG-depth batch, 2026-08-30 roadmap review). Renumbered on authoring — see C-456's source note for the ID-allocation caveat."
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -202,3 +202,46 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+
+Added memory-retrieval query step to the narrative director's generation cycle (C-459), wiring it to C-458's `MemoryRetrievalService.query()` so scene directions can reference relevant campaign history. Added optional `referencedMemory` field to `SceneDirection` type and a `[NARRATIVE GUIDANCE]` section in `gm_prompt_service.svelte.ts`'s `_buildSections()` at medium priority. Graceful degradation: empty retrieval or errors fall back to existing C-235 world-state-only behavior. No changes to the 120s interval, manual trigger, or persistence mechanism.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `referencedMemory` populated when retrieval has relevant results; `memoryRetrievalService.query()` called with arc context |
+| AC-2 | ✅ | Empty retrieval results, errors, and fresh campaigns all produce direction without `referencedMemory` — no error, no blocked generation |
+| AC-3 | ✅ | `SceneDirection` with `referencedMemory` injected only as `[NARRATIVE GUIDANCE]` prompt context; no direct state mutation path exists |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `apps/frontend/docs/src/content/docs/features/narrative-director.md` | User-facing docs page for the narrative director feature |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/gm/gm_types.ts` | Added `referencedMemory` field to `SceneDirection` type |
+| `apps/frontend/client/src/lib/services/gm/narrative_director_service.svelte.ts` | Added `_queryRelevantMemory()` retrieval step before LLM generation; included `referencedMemory` in generated `SceneDirection` |
+| `apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts` | Added `[NARRATIVE GUIDANCE]` section in `_buildSections()` at medium priority, consuming `narrativeDirectorService`'s latest `SceneDirection.referencedMemory` |
+| `apps/frontend/client/src/lib/services/gm/narrative_director.test.ts` | Added 5 tests for AC-1 (referencedMemory populated, query args) and AC-2 (empty results, error fallback, baseline preserved) |
+| `apps/frontend/client/src/lib/services/gm/gm_prompt_service.test.ts` | Added 4 tests for AC-3 (section absent/present, latest direction only, medium priority budget enforcement) |
+| `apps/frontend/client/src/lib/services/gm/arc_memory.test.ts` | Added `memoryRetrievalService` mock for import compatibility |
+| `apps/frontend/client/src/lib/test_preload.ts` | Added `memoryRetrievalService` and enhanced `narrativeDirectorService` stubs in global `$services` mock |
+
+### Deviations from Spec
+
+None. All changes are within the approved scope. The type assertion `as import('./gm_types').SceneDirection` in `gm_prompt_service.svelte.ts` was necessary because the barrel-exported `SceneDirection` type from `$services` doesn't carry the `referencedMemory` field through the `NarrativeDirectorServiceInterface` type — this is a minor type-narrowing detail, not a logic change.
+
+### Test Results
+
+- Unit: 44/44 PASS (0 failures) — 13 narrative director tests, 5 arc memory tests, 26 gm prompt service tests
+- E2E: N/A (no E2E required per contract AC evidence matrix)
+- Visual: N/A (no visual test required)
+- Baseline: 24 pre-existing typecheck errors (typebox module resolution), 0 new failures
