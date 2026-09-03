@@ -52,8 +52,14 @@ tasks:
     options:
       runInCI: false
 
+  # args/env mirror the inherited `lint` task in .moon/tasks/all.yml. The flag
+  # lands on the biome invocation that terminates this project's chained lint
+  # script (`bash -n … && bash scripts/check.sh --static && bunx biome check`).
   lint:
     command: 'bun run lint'
+    args: ['--reporter=$AIKAMI_BIOME_REPORTER']
+    env:
+      AIKAMI_BIOME_REPORTER: 'default'
     options:
       runInCI: true
 

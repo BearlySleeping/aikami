@@ -162,6 +162,42 @@ bun moon run e2e:run-visual-tests # AI visual runner
 
 ## Prerequisites
 
-- Client dev server on port 5274 (`bun moon run client:dev` or `herdr_session start client`)
-- Firebase emulators for functional tests (`herdr_session start firebase`)
+Playwright's `webServer` block starts whatever is missing, so nothing here is
+strictly required — but a warm herdr workspace makes runs much faster because
+Playwright reuses the servers instead of starting its own
+(`reuseExistingServer: !process.env.CI`).
+
+- Client dev server on port 5274 (`bun herdr:start client`, or `bun moon run client:dev`)
+- Hub dev server on port 5276 for `tests/hub` (`bun herdr:start hub`)
+- Site dev server on port 5280 for `tests/site` (`bun herdr:start site`)
 - `OPENROUTER_API_KEY` env var for AI visual evaluation
+
+There is no Firebase emulator any more — C-426 replaced it with Cloudflare D1
+plus local SQLite, and `global_setup.ts`'s purge step is now a no-op.
+
+## How this runs in CI
+
+herdr is **not** used in CI, on purpose. It is a nix flake input (a Rust
+binary), so a GitHub runner would have to install nix or build it from source
+just to get it on PATH — and everything herdr is good at (detachable panes
+that outlive the client, named tabs an agent can read back, one workspace per
+contract) is worth nothing to a one-shot job that dies with the runner.
+Playwright's own `webServer` does the CI job: start, poll for readiness, tear
+down.
+
+Two deliberate differences from a local run:
+
+| | Local | CI |
+|---|---|---|
+| Servers | your herdr tabs, reused | started by Playwright, from **built** output |
+| Hub | `vite dev` on :5276 (SvelteKit platform proxy supplies D1/R2) | `wrangler dev --local` on :5278 against `build/_worker.js`, with real local D1 |
+| Reporter | `list` | `list` + `html` (uploaded as a workflow artifact) |
+
+CI serves built output so there is no HMR warm-up stalling behind a 15s
+`expect` timeout, and so the bytes under test are the bytes that ship. The
+hub is the exception to "just preview it": `vite preview` serves an SSR
+adapter-cloudflare app *without* its bindings, so every `/api` route would
+500 — its real built equivalent is the wrangler worker.
+
+The e2e suite is label-gated: add `run-heavy` to a PR, or dispatch
+`pr-checks.yml` with `include-heavy=true`.

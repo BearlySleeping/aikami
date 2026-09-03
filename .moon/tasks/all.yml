@@ -77,9 +77,23 @@ tasks:
   # Lint
   # Runs the project's linter. All projects expose `bun run lint`.
   # ------------------------------------------------------------------
+  # 🔴 `--reporter` is threaded through an env var rather than hardcoded so CI
+  # can switch biome to a machine-readable format while local runs keep the
+  # full code-frame output that makes a violation easy to read. Moon
+  # interpolates `$VAR` in args and lets the ambient environment override the
+  # task-level default, so the PR gate sets AIKAMI_BIOME_REPORTER=concise once
+  # (see .github/workflows/pr-checks.yml) and every project picks it up — no
+  # per-package.json edit anywhere.
+  #
+  # NOT `--reporter=github`: that emits `::error` workflow commands, which moon
+  # re-prints un-prefixed in its REVIEW block, so GitHub would create an
+  # annotation there AND scripts/src/lib/ci/report.ts would create a second one
+  # for the same diagnostic. `concise` keeps report.ts the single annotator.
   lint:
     command: "bun"
-    args: ["run", "lint"]
+    args: ["run", "lint", "--reporter=$AIKAMI_BIOME_REPORTER"]
+    env:
+      AIKAMI_BIOME_REPORTER: "default"
     inputs:
       - "@group(sources)"
       - "@group(configs)"
@@ -95,7 +109,9 @@ tasks:
   # ------------------------------------------------------------------
   format:
     command: "bun"
-    args: ["run", "format"]
+    args: ["run", "format", "--reporter=$AIKAMI_BIOME_REPORTER"]
+    env:
+      AIKAMI_BIOME_REPORTER: "default"
     inputs:
       - "@group(sources)"
       - "@group(configs)"

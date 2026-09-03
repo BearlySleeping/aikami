@@ -29,6 +29,7 @@
     "guard:all": "moon run scripts:guard-mvvm-conventions scripts:guard-service-conventions scripts:guard-image-component scripts:guard-data-plane scripts:guard-type-safety",
     "guard:show-all": "bun run --cwd scripts src/lib/ops/guard_mvvm_conventions.ts --show-all; bun run --cwd scripts src/lib/ops/guard_service_conventions.ts --show-all; bun run --cwd scripts src/lib/ops/guard_image_component.ts; bun run --cwd scripts src/lib/ops/guard_data_plane.ts; bun run --cwd scripts src/lib/ops/guard_type_safety.ts --show-all",
     "ci": "bun run validate && bun run test",
+    "ci:report": "bun run scripts/src/lib/ci/report.ts",
     "scripts": "bun run scripts/src/index.ts",
     "setup": "bun run scripts/src/lib/local_setup/index.ts",
     "project:setup": "bun run scripts/src/lib/project_setup/index.ts --mode=production",

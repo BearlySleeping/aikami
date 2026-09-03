@@ -159,6 +159,10 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly reducedMotion: boolean;
 
   handleKeyDown(event: KeyboardEvent): void;
+  /** Tab-focus-trap for the Quest Log dialog only — must NOT also dispatch to
+   * gameOverlayService.handleKeyDown(), which the window-level listener
+   * already calls for the same keydown as it bubbles up. */
+  handleQuestLogDialogKeyDown(event: KeyboardEvent): void;
   handleBackdropClick(event: MouseEvent): void;
   resumeGame(): void;
   endDialogue(): void;
@@ -232,7 +236,11 @@ class GameUIViewModel
   }
 
   get onboardingHintVisible(): boolean {
-    return onboardingHintService.hintVisible;
+    // C-327 AC-3: suppress the toast while any overlay (dialogue, inventory,
+    // pause menu, ...) is open — the taught key is often unusable there
+    // (e.g. "Press Q" while mid-conversation), and the hint reappears once
+    // the overlay closes since the underlying step is still pending.
+    return onboardingHintService.hintVisible && gameOverlayService.activeOverlay === 'NONE';
   }
 
   /** @inheritdoc */
@@ -602,22 +610,30 @@ class GameUIViewModel
   // ── Delegated ──
 
   handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Tab' && this.activeOverlay === 'QUEST_LOG') {
-      event.preventDefault();
-      const dialog = event.currentTarget as HTMLElement;
-      const focusable = dialog.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href]',
-      );
-      if (focusable.length === 0) {
-        return;
-      }
-      const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
-      const direction = event.shiftKey ? -1 : 1;
-      const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
-      focusable[nextIndex]?.focus();
+    gameOverlayService.handleKeyDown(event);
+  }
+
+  /** @inheritdoc */
+  handleQuestLogDialogKeyDown(event: KeyboardEvent): void {
+    if (event.key !== 'Tab') {
+      // Every other key (Q, Escape, ...) is handled once by the window-level
+      // handleKeyDown as this event bubbles up — dispatching it again here
+      // would double-fire (e.g. Q closing the log, then immediately
+      // reopening it on the bubbled call).
       return;
     }
-    gameOverlayService.handleKeyDown(event);
+    event.preventDefault();
+    const dialog = event.currentTarget as HTMLElement;
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href]',
+    );
+    if (focusable.length === 0) {
+      return;
+    }
+    const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+    const direction = event.shiftKey ? -1 : 1;
+    const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+    focusable[nextIndex]?.focus();
   }
 
   handleBackdropClick(event: MouseEvent): void {

@@ -33,13 +33,29 @@ const EMULATOR_PORT_OFFSET = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0
 const CLIENT_PORT = 5274 + EMULATOR_PORT_OFFSET;
 const SITE_PORT = 5280 + EMULATOR_PORT_OFFSET;
 const HUB_PORT = 5276 + EMULATOR_PORT_OFFSET;
+const HUB_WORKER_PORT = 5278 + EMULATOR_PORT_OFFSET;
+
+// 🔴 The hub is served from a different port in CI than it is locally, and
+// that is deliberate rather than an inconsistency.
+//
+// The hub is an SSR app on adapter-cloudflare whose /api routes need D1 and
+// R2 bindings. Locally the herdr `hub` tab is `vite dev` on HUB_PORT, and
+// SvelteKit's platform proxy supplies those bindings. In CI we serve BUILT
+// output, and `vite preview` deliberately does NOT set up the platform proxy
+// — the built hub's real equivalent is `wrangler dev --local` against
+// build/_worker.js, which run_hub_worker.ts starts on HUB_WORKER_PORT with
+// genuine local D1/R2.
+//
+// Client and site have no such split: both are static builds (adapter-static
+// / Astro `output: 'static'`), so previewing them is just serving files.
+const HUB_SERVER_PORT = process.env.CI ? HUB_WORKER_PORT : HUB_PORT;
 
 // ── Dev server base URLs ──────────────────────────────────────
 
 const CLIENT_BASE_URL = `http://localhost:${CLIENT_PORT}`;
 const SITE_BASE_URL = `http://localhost:${SITE_PORT}`;
 // Hub SSR dev server (C-396): public catalog browse surface.
-const HUB_BASE_URL = `http://localhost:${HUB_PORT}`;
+const HUB_BASE_URL = `http://localhost:${HUB_SERVER_PORT}`;
 
 // Auth state cache file — per-worker for data isolation.
 // Falls back to worker-0 if the specific worker file doesn't exist
@@ -89,8 +105,16 @@ export default defineConfig({
   // Single worker in CI (deterministic), auto locally
   workers: process.env.CI ? 1 : undefined,
 
-  // Reporter: list locally, github in CI
-  reporter: process.env.CI ? [['github']] : [['list']],
+  // Reporter: `list` everywhere, plus an HTML report in CI.
+  //
+  // 🔴 NOT the `github` reporter. It emits `::error` workflow commands, and
+  // moon re-prints a failed task's output un-prefixed in its REVIEW block —
+  // so GitHub would raise an annotation from that, AND
+  // scripts/src/lib/ci/report.ts would raise a second one for the same
+  // failure. The report script is the single annotator by design; it parses
+  // this exact `list` failure format. The HTML report is uploaded as a
+  // workflow artifact, which is where traces, screenshots and video live.
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
 
   // Shared settings for all projects
   use: {
@@ -106,6 +130,58 @@ export default defineConfig({
     // Video retained on failure for CI debugging
     video: 'retain-on-failure',
   },
+
+  // ── Server lifecycle ──────────────────────────────────────
+  //
+  // 🔴 `reuseExistingServer: !process.env.CI` is what lets one config serve
+  // both worlds. Locally your herdr tabs are already listening on these
+  // ports, so Playwright attaches to them and starts nothing — the workflow
+  // README.md documents stays exactly as it is. In CI there is no herdr (it
+  // is a nix flake input, not something a GitHub runner has), so Playwright
+  // starts each server itself and tears it down when the run ends.
+  //
+  // CI serves BUILT output rather than `vite dev`: no HMR warm-up, no
+  // first-request compile stalls behind a 15s expect timeout, and the bytes
+  // under test are the bytes that ship. The heavy job runs the moon builds
+  // first — cache-warm — so these commands only have to serve. See
+  // .github/workflows/pr-checks.yml.
+  //
+  // Each app reads PORT (client/site vite+astro config, run_hub_worker.ts),
+  // so the contract port offset above propagates without a second source of
+  // truth for port numbers.
+  webServer: [
+    {
+      command: 'bun run preview',
+      cwd: '../frontend/client',
+      url: CLIENT_BASE_URL,
+      env: { PORT: String(CLIENT_PORT) },
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      command: 'bun run preview',
+      cwd: '../frontend/site',
+      url: SITE_BASE_URL,
+      env: { PORT: String(SITE_PORT) },
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
+      // See HUB_SERVER_PORT above for why CI and local differ here.
+      command: process.env.CI ? 'bun run dev:worker' : 'bun run dev',
+      cwd: '../frontend/hub',
+      url: HUB_BASE_URL,
+      env: { PORT: String(HUB_SERVER_PORT) },
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  ],
 
   // Timeout per test
   timeout: 60_000,

@@ -842,6 +842,16 @@ class GameBootService
     }
     this._propFrameResolverHandle = propFrameHandle;
 
+    // ── C-327 AC-3 / C-422 AC-4: Load onboarding hints from the content pack ──
+    await gameEngineService.applyOnboardingForPack({
+      packId: input.contentPackId,
+      manifest: pack.manifest,
+    });
+    // Check generation after async onboarding load
+    if (generation !== this._bootGeneration) {
+      return;
+    }
+
     const elapsed = performance.now() - t0;
     this.debug('stage:preloading_content:complete', {
       elapsedMs: elapsed,

@@ -46,8 +46,10 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
     >
       <StartBackdrop />
 
-      <!-- Account control — optional, so it stays out of the play path. -->
-      <div class="relative z-10 flex w-full max-w-sm justify-end">
+      <!-- Account control — optional, so it stays out of the play path. Pinned
+           to the actual screen corner, not the centered menu column, so it
+           doesn't drift toward the middle on wide viewports. -->
+      <div class="absolute top-6 right-4 z-10">
         <LoginView buttonClass="btn btn-ghost btn-sm font-normal text-base-content/60" />
       </div>
 
@@ -103,14 +105,6 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
         <nav
           class="animate-rise motion-reduce:animate-none [animation-delay:0.16s] mt-6 flex items-center justify-center gap-1 text-sm"
         >
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm font-normal text-base-content/60 hover:text-base-content"
-            onclick={() => viewModel.replayTutorial()}
-          >
-            How to Play
-          </button>
-          <span class="text-base-content/20" aria-hidden="true">·</span>
           <button
             type="button"
             class="btn btn-ghost btn-sm font-normal text-base-content/60 hover:text-base-content"

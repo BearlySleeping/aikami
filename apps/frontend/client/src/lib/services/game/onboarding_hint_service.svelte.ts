@@ -74,7 +74,12 @@ export class OnboardingHintService
     if (!this.currentHint || this._steps.length === 0) {
       return -1;
     }
-    return this._steps.indexOf(this.currentHint);
+    // Compare by id, not object identity — `currentHint` is a Svelte $state
+    // field, so reading it back returns a reactive proxy wrapping the step
+    // object, not the raw reference stored in `_steps`. indexOf() against
+    // the raw array would never match that proxy.
+    const hintId = this.currentHint.id;
+    return this._steps.findIndex((s) => s.id === hintId);
   }
 
   /** @inheritdoc */

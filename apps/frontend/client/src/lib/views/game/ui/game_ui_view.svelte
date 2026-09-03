@@ -141,7 +141,7 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
         aria-label="Quest Log"
         tabindex="-1"
         onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
-        onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
+        onkeydown={(event: KeyboardEvent) => viewModel.handleQuestLogDialogKeyDown(event)}
         use:focusOnMount
       >
         <div

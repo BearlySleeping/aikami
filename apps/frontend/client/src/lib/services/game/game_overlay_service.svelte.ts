@@ -901,6 +901,7 @@ export class GameOverlayService
       if (this.activeOverlay === 'QUEST_LOG') {
         event.preventDefault();
         this.closeQuestLog();
+        onboardingHintService.onActionPerformed('open_quest_log');
         return;
       }
       if (!this.canOpenOverlay('QUEST_LOG')) {
@@ -909,6 +910,7 @@ export class GameOverlayService
       if (this.activeOverlay === 'NONE' || this.activeOverlay === 'PAUSE_MENU') {
         event.preventDefault();
         this.openQuestLog();
+        onboardingHintService.onActionPerformed('open_quest_log');
         return;
       }
       return;

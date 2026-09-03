@@ -23,8 +23,14 @@ import type {
 } from '@aikami/types';
 import { audioContextManager, equipmentService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
+import { getLpcAssetPath, getLpcCatalog, wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
+import { assetManager } from '../assets/asset_manager.svelte';
+import { assetTagResolver } from '../assets/registry_resolver';
 import { playSfxByName } from '../audio/audio_asset_resolver';
+import { inputActionService } from './input_action_service.svelte';
+import { onboardingHintService } from './onboarding_hint_service.svelte';
+import { buildPropFrameResolver } from './prop_frame_resolver';
 
 // ---------------------------------------------------------------------------
 // GameEngineService — owns the PixiJS engine bridge, world, and game state
@@ -163,6 +169,16 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
 
   /** Boots the engine with the given canvas (called by ViewModel after canvas bind). */
   bootWithCanvas(canvas: HTMLCanvasElement): Promise<void>;
+
+  /**
+   * Loads (or clears) onboarding hints for a freshly-loaded content pack.
+   *
+   * Called by GameBootService once the pack manifest is available — the
+   * real boot pipeline builds its own GameWorld directly rather than going
+   * through bootWithCanvas, so onboarding loading must be reachable
+   * independently of that method.
+   */
+  applyOnboardingForPack(options: { packId: string; manifest: ContentPackManifest }): Promise<void>;
 
   /** Registers a GameWorld created by the boot pipeline for pause/resume control. */
   registerWorld(world: GameWorld): void;
@@ -411,7 +427,6 @@ class GameEngineService
       let packConfig: PackConfig | undefined;
       try {
         const { loadContentPack } = await import('@aikami/frontend/engine');
-        const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
         const pack = await loadContentPack({ packId, resolveTag: assetTagResolver });
         packConfig = this._buildPackConfig(pack.manifest, mapId);
       } catch (error) {
@@ -760,12 +775,10 @@ class GameEngineService
       const { GameWorld: EngineGameWorld, TextureManager } = await import(
         '@aikami/frontend/engine'
       );
-      const { getLpcAssetPath, wireLpcUrlResolver } = await import('$lib/data/lpc_asset_catalog');
       // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
       // is loaded before the engine boots (idempotent — catalog module scope
       // also wires it).
       await wireLpcUrlResolver();
-      const { getLpcCatalog } = await import('$lib/data/lpc_asset_catalog');
       const lpcCatalog = getLpcCatalog();
 
       const textureManager = new TextureManager();
@@ -781,15 +794,12 @@ class GameEngineService
         '@aikami/frontend/engine'
       );
       this._clearContentPackCache = clearCacheFn;
-      const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
-      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
       const releaseUrl = (url: string) => assetManager.releaseUrl(url);
       const pack = await loadPack({
         packId: this.contentPackId,
         resolveTag: assetTagResolver,
         releaseUrl,
       });
-      const { buildPropFrameResolver } = await import('./prop_frame_resolver');
       this._propFrameResolverHandle = await buildPropFrameResolver({
         manifest: pack.manifest,
         resolveTag: assetTagResolver,
@@ -830,34 +840,9 @@ class GameEngineService
       const startingMap = pack.getStartingMap();
 
       // ── C-327 AC-3 / C-422 AC-4: Load onboarding hints from the content pack ──
-      if (pack.manifest.onboarding) {
-        const { onboardingHintService: svc } = await import('./onboarding_hint_service.svelte.ts');
-
-        // C-422 AC-4: Conditionally extend the onboarding arc behind a feature flag
-        const extendedArcEnabled =
-          typeof import.meta !== 'undefined' &&
-          import.meta.env?.PUBLIC_EXTENDED_ONBOARDING_ARC === '1';
-
-        const onboarding = (
-          extendedArcEnabled
-            ? this._extendOnboardingArc(pack.manifest.onboarding)
-            : pack.manifest.onboarding
-        ) as OnboardingSection;
-
-        svc.loadOnboarding({
-          packId: this.contentPackId,
-          onboarding,
-        });
-      } else {
-        // Clear stale hints from a previous pack that had onboarding
-        const { onboardingHintService: svc } = await import('./onboarding_hint_service.svelte.ts');
-        svc.resetOnboarding();
-      }
+      await this.applyOnboardingForPack({ packId: this.contentPackId, manifest: pack.manifest });
       // Also refresh keybindings when loading the pack (for current bindings)
-      {
-        const { inputActionService: inputSvc } = await import('./input_action_service.svelte.ts');
-        inputSvc.refreshBindings();
-      }
+      inputActionService.refreshBindings();
 
       await this._gameWorld.loadMap({
         mapUrl: pack.resolveMapUrl(pack.manifest.startingMapId),
@@ -1084,6 +1069,31 @@ class GameEngineService
     this._resizeCleanup = (): void => {
       window.removeEventListener('resize', handleResize);
     };
+  }
+
+  /** @inheritdoc */
+  async applyOnboardingForPack(options: {
+    packId: string;
+    manifest: ContentPackManifest;
+  }): Promise<void> {
+    const { packId, manifest } = options;
+
+    if (!manifest.onboarding) {
+      // Clear stale hints from a previous pack that had onboarding
+      onboardingHintService.resetOnboarding();
+      return;
+    }
+
+    // C-422 AC-4: Conditionally extend the onboarding arc behind a feature flag
+    const extendedArcEnabled =
+      typeof import.meta !== 'undefined' &&
+      import.meta.env?.PUBLIC_EXTENDED_ONBOARDING_ARC === '1';
+
+    const onboarding = (
+      extendedArcEnabled ? this._extendOnboardingArc(manifest.onboarding) : manifest.onboarding
+    ) as OnboardingSection;
+
+    onboardingHintService.loadOnboarding({ packId, onboarding });
   }
 
   /**

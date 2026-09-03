@@ -12,6 +12,16 @@ name: PR Checks
 # from the default graph via `runInCI: false` in their respective moon.yml
 # files. To run them on demand, use workflow_dispatch with include-heavy=true
 # or add the "run-heavy" label to a PR.
+#
+# Failure reporting: `moon ci` streams ~300 targets' native output into one
+# multi-thousand-line log, so the step that runs it deliberately does NOT
+# decide the job's fate. It is captured with `tee` and handed to
+# scripts/src/lib/ci/report.ts, which parses every tool's diagnostics
+# (biome, tsc/tsgo, svelte-check, the guard scripts, bun test) into one
+# structured set and emits three things: inline PR annotations, a grouped
+# job summary, and a sticky PR comment carrying a copy-pasteable
+# "🤖 Prompt for AI agents" block. A final step then fails the job off the
+# moon step's own outcome — so a parser bug can never flip a red build green.
 on:
   push:
     branches: [main]
@@ -42,6 +52,13 @@ jobs:
     name: Moon CI
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      # Only for the sticky PR comment. Scoped to this job so the heavy
+      # matrix — which reports to the job summary alone — cannot write to a PR.
+      # A fork PR gets a read-only token regardless; that comment step is
+      # skipped there and the job summary still carries the whole report.
+      pull-requests: write
     # Gate the whole JOB, not just the moon step. The `labeled` event
     # re-triggers this workflow on every label change; skipping only the step
     # still paid for a runner, a full-history checkout and a `bun install`
@@ -76,6 +93,12 @@ jobs:
           moon-cache-save: ${{ github.event_name == 'push' && 'true' || 'false' }}
 
       - name: Run Moon CI (default check)
+        id: moon
+        # 🔴 The gate's verdict comes from this step's `outcome`, applied by
+        # the "Enforce Moon CI result" step at the end. Letting it fail the
+        # job here would skip the reporting steps and leave the PR with
+        # nothing but "Process completed with exit code 1".
+        continue-on-error: true
         env:
           # For pull_request events, diff against the target branch.
           # For push/workflow_dispatch, diff against main (no PR context).
@@ -83,7 +106,61 @@ jobs:
           # Astro sites need these for static builds
           PUBLIC_APP_ID: site
           PUBLIC_MODE: development
-        run: bun moon ci --base="origin/$BASE_REF"
+          # 🔴 report.ts is the SINGLE annotator. Two things make that true:
+          #   - AIKAMI_CI_ANNOTATIONS=off mutes gha_annotate.ts (the guards and
+          #     typecheck_svelte.ts), which would otherwise emit `::error`
+          #     workflow commands that moon re-prints un-prefixed in its REVIEW
+          #     block, giving GitHub a second annotation for the same problem.
+          #   - biome runs with `concise`, NOT `github`, for the same reason —
+          #     the github reporter emits those same workflow commands.
+          # Everything therefore reaches GitHub exactly once, through the
+          # parsed, deduped set. `concise` also collapses biome's code frames
+          # to one line per diagnostic, which shortens the log considerably.
+          AIKAMI_CI_ANNOTATIONS: "off"
+          AIKAMI_BIOME_REPORTER: concise
+        run: |
+          set -o pipefail
+          bun moon ci --base="origin/$BASE_REF" 2>&1 | tee "$RUNNER_TEMP/moon-ci.log"
+
+      # `always()` rather than `failure()` so a green run refreshes a stale
+      # red comment. Skipped on cancellation: a half-written log would be
+      # reported as a genuine failure.
+      - name: Build failure report
+        if: always() && steps.moon.outcome != 'cancelled'
+        env:
+          # For a pull_request event GITHUB_SHA is the ephemeral merge commit,
+          # which has no browsable blob URL — permalinks must use the head SHA.
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECK_STATUS: ${{ steps.moon.outcome }}
+        run: |
+          bun run scripts/src/lib/ci/report.ts \
+            --log "$RUNNER_TEMP/moon-ci.log" \
+            --status "$CHECK_STATUS" \
+            --annotate \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            --comment "$RUNNER_TEMP/pr-comment.md"
+
+      # Fork PRs carry a read-only token, so skip rather than fail loudly on a
+      # 403 nobody can act on. Never fatal either way — a missing comment must
+      # not turn a passing gate red.
+      - name: Update sticky PR comment
+        if: >-
+          always() &&
+          steps.moon.outcome != 'cancelled' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CHECK_STATUS: ${{ steps.moon.outcome }}
+        run: bun run scripts/src/lib/ci/post_pr_comment.ts --body "$RUNNER_TEMP/pr-comment.md"
+
+      - name: Enforce Moon CI result
+        if: steps.moon.outcome != 'success'
+        run: |
+          echo "moon ci failed — see the job summary above for the parsed diagnostics."
+          exit 1
 
   # Heavy suites run as their own job so they execute IN PARALLEL with the
   # default gate (previously they were extra steps that only started after
@@ -116,7 +193,69 @@ jobs:
           install-deps: "true"
           moon-cache-save: "false" # heavy runs are label/dispatch-triggered, never the warm-cache source
 
+      # Only the e2e leg needs these; the Tauri leg shares the job definition.
+      #
+      # herdr is deliberately NOT used here. It is a nix flake input (a Rust
+      # binary), so a runner would have to install nix or build it just to get
+      # it on PATH — and everything herdr is good at (detachable panes that
+      # outlive a client, named tabs an agent can read back, one workspace per
+      # contract) is worth nothing to a one-shot job that dies with the
+      # runner. Playwright's own `webServer` block starts the same servers,
+      # polls them for readiness and tears them down; see
+      # apps/e2e/playwright.config.ts.
+      - name: Install Playwright browsers
+        if: matrix.suite == 'e2e:test'
+        run: bunx playwright install --with-deps chromium firefox
+
+      # The e2e servers serve BUILT output, so build before Playwright starts
+      # them. Through moon, so these hit the same cache the gate warmed.
+      # hub:db-migrate-local creates the local D1 the hub worker binds to —
+      # without it every hub /api route 500s.
+      - name: Build apps under test
+        if: matrix.suite == 'e2e:test'
+        env:
+          PUBLIC_APP_ID: site
+          PUBLIC_MODE: development
+        run: bun moon run client:build site:build hub:build hub:db-migrate-local
+
       - name: Run ${{ matrix.suite }}
+        id: suite
+        continue-on-error: true
         env:
           SUITE: ${{ matrix.suite }}
-        run: bun moon run "$SUITE"
+          AIKAMI_CI_ANNOTATIONS: "off"
+          AIKAMI_BIOME_REPORTER: concise
+        run: |
+          set -o pipefail
+          bun moon run "$SUITE" 2>&1 | tee "$RUNNER_TEMP/moon-heavy.log"
+
+      # Job summary only, no PR comment: both matrix legs would race for the
+      # same sticky comment and clobber each other's body.
+      - name: Build failure report
+        if: always() && steps.suite.outcome != 'cancelled'
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECK_STATUS: ${{ steps.suite.outcome }}
+        run: |
+          bun run scripts/src/lib/ci/report.ts \
+            --log "$RUNNER_TEMP/moon-heavy.log" \
+            --status "$CHECK_STATUS" \
+            --annotate \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      # Traces, screenshots and video are the whole reason a failed e2e run is
+      # debuggable after the fact — the report parser can only see stdout.
+      - name: Upload Playwright artifacts
+        if: always() && matrix.suite == 'e2e:test' && steps.suite.outcome != 'success'
+        uses: actions/upload-artifact@v5 # zizmor: ignore[unpinned-uses] actions/* are exempt per C-440
+        with:
+          name: playwright-report
+          path: |
+            apps/e2e/playwright-report/
+            apps/e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Enforce ${{ matrix.suite }} result
+        if: steps.suite.outcome != 'success'
+        run: exit 1

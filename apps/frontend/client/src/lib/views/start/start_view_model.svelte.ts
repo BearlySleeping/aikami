@@ -23,7 +23,6 @@ import {
   gameOverlayService,
   gameSaveService,
   inventoryService,
-  onboardingHintService,
   packRegistryService,
   playerStateService,
   routerService,
@@ -182,10 +181,6 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** Navigates to the /dev tools hub. */
   goToDev(): Promise<void>;
-
-  /** C-422 AC-3: Navigates to the game with a fresh onboarding arc (replay tutorial). */
-  replayTutorial(): Promise<void>;
-
 
   // ── Pack Browser (C-345) ──
 
@@ -603,14 +598,6 @@ class StartViewModel
         },
       },
     ];
-  }
-
-  /** @inheritdoc */
-  async replayTutorial(): Promise<void> {
-    // Reset onboarding progress and navigate to game with a fresh arc
-    onboardingHintService.resetOnboarding();
-
-    await routerService.goToHref('/game?tutorial=1');
   }
 
   /** @inheritdoc */

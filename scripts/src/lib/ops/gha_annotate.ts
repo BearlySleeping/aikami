@@ -13,6 +13,13 @@
 // `file` must be repo-root-relative (posix separators) — GitHub resolves it
 // against GITHUB_WORKSPACE, so a cwd-relative or absolute path would attach
 // the annotation to the wrong file or silently drop it.
+//
+// 🔴 AIKAMI_CI_ANNOTATIONS=off suppresses emission. The PR gate sets it for
+// the `moon ci` step so that scripts/src/lib/ci/report.ts is the SINGLE
+// annotator: it parses every tool's output (biome and tsc never emitted
+// workflow commands at all) and annotates the whole set uniformly. Without
+// the switch, anything routed through here would be annotated twice — once
+// streamed by the task, once again by the reporter.
 
 const escapeProperty = (value: string): string =>
   value
@@ -32,7 +39,7 @@ export const annotate = (options: {
   message: string;
   title?: string;
 }): void => {
-  if (process.env.GITHUB_ACTIONS !== 'true') {
+  if (process.env.GITHUB_ACTIONS !== 'true' || process.env.AIKAMI_CI_ANNOTATIONS === 'off') {
     return;
   }
   const { file, line, col, message, title } = options;

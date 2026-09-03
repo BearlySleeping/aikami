@@ -49,8 +49,13 @@ tasks:
     options:
       mergeArgs: 'replace'
 
+  # args/env mirror the inherited `lint` task in .moon/tasks/all.yml — this
+  # task replaces it wholesale, so the reporter switch has to be repeated here.
   lint:
     command: 'bun run lint'
+    args: ['--reporter=$AIKAMI_BIOME_REPORTER']
+    env:
+      AIKAMI_BIOME_REPORTER: 'default'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
