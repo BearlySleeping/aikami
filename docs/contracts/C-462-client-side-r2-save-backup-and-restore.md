@@ -3,7 +3,7 @@ id: C-462
 title: "Client-Side R2 Save Backup & Restore"
 source: "user request"
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-03"
 | **Type** | full |
 | **Priority** | P2 — cloud backup is an opt-in safety net, not required for the game to boot/play/save (CLAUDE.md's offline-first invariant), but the hub half (C-426 AC-6/AC-7) has sat unreachable from the client since it shipped |
 | **Dependencies** | None — the hub API, D1 schema, and R2 key spec are already implemented (C-426, C-454) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `sandbox` |
 | **Docs Impact** | user-facing → a short "Cloud Backup" section belongs in `apps/frontend/docs/src/content/docs/` once this leaves the dev sandbox and gets a real settings-page entry point (out of scope here — see Scope Boundaries) |
 | **Contract version** | 2.0.0 |
@@ -173,7 +173,7 @@ N/A — no persistent state changes. This is new, additive client capability plu
 ### AC-2: A signed-in player can back up their local database to R2
 **Given** a signed-in session and a local database with data
 **When** "Back Up Now" is triggered in the dev sandbox
-**Then** a new backup appears in the list with a plausible size and timestamp, and a corresponding R2 object + `account_backups` row exist (verifiable via `bun cf storage ls saves` / `bun cf db exec`)
+**Then** a new backup appears in the list with a plausible size and timestamp, and a corresponding R2 object + `account_backups` row exist (verifiable via `wrangler r2 object list saves` / `wrangler d1 execute DB --local --command "select * from account_backups"`)
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -182,7 +182,7 @@ N/A — no persistent state changes. This is new, additive client capability plu
 
 **Test Hooks**:
 - Moon Task: N/A (manual — this is a dev sandbox, not a production surface)
-- Integration: `bun herdr:start hub-worker`, sign in on the client, trigger backup, confirm via `bun cf db exec --local --command "select * from account_backups"`
+- Integration: `bun herdr:start hub-worker`, sign in on the client, trigger backup, confirm via `wrangler d1 execute DB --local --command "select * from account_backups"`
 - E2E / Visual: N/A — explicitly out of scope per the dev-sandbox boundary.
 
 **Watch Points**:
