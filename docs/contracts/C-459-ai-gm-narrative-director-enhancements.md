@@ -3,7 +3,7 @@ id: C-459
 title: "AI GM / Narrative Director Enhancements"
 source: "docs/contracts/BACKLOG_C452_PLUS.md 'C-464' seed (RPG-depth batch, 2026-08-30 roadmap review). Renumbered on authoring — see C-456's source note for the ID-allocation caveat."
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,16 +23,16 @@ created_at: "2026-09-02"
 | **Type** | full |
 | **Priority** | P2 |
 | **Dependencies** | [C-457](C-457-gm-prompt-assembly-upgrade.md), [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) — the director needs a bounded prompt budget and real retrieval to draw on before its scene direction can meaningfully use campaign history |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
 | **Contract version** | 1.0.0 |
 
 ## Problem & Baseline Evidence
 
-- **Current behavior**: `narrative_director_service.svelte.ts` (C-235) already runs as a background LLM agent generating `SceneDirection` objects on a configurable interval (default 120s), persists `ArcMemory` via `gameSaveService`, and injects narrative guidance into GM prompts. It has a manual `pushStory()` trigger and start/stop controls. This is a working director, not a blank slate — but its scene direction currently draws only on whatever `gm_prompt_service.svelte.ts` already assembles (world/party/quest state), with no access to the richer retrieval layer being built in [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) and no formal connection to the rules-engine-decides directive.
+- **Current behavior**: `narrative_director_service.svelte.ts` (C-235) already runs as a background LLM agent generating `SceneDirection` objects on a configurable interval (default 120s), persists `ArcMemory` via `gameSaveService`, and its output is consumed by the agent pipeline (`narrative_director_agent.ts`) which feeds scene direction into the GM response flow. It has a manual `pushStory()` trigger and start/stop controls. However, `gm_prompt_service.svelte.ts` has no dedicated narrative-guidance section in its prompt assembly — scene direction currently has no formal injection path into the assembled GM system prompt. This contract adds one. This is a working director, not a blank slate — but its scene direction currently draws only on whatever `gm_prompt_service.svelte.ts` already assembles (world/party/quest state), with no access to the richer retrieval layer being built in [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) and no formal connection to the rules-engine-decides directive.
 - **Reproduction**: N/A — this is an enhancement to a working system, not a bug repro; baseline behavior is observable by running an existing dev-sandbox campaign for 2+ minutes and inspecting generated `SceneDirection` output.
-- **Existing implementation to reuse**: `narrative_director_service.svelte.ts`'s interval-based generation loop, `ArcMemory` persistence, and `pushStory()` manual trigger — all reused as-is. `gm_prompt_service.svelte.ts`'s injection point for director guidance — reused, not rebuilt.
+- **Existing implementation to reuse**: `narrative_director_service.svelte.ts`'s interval-based generation loop, `ArcMemory` persistence, and `pushStory()` manual trigger — all reused as-is. `gm_prompt_service.svelte.ts`'s `_buildSections()` priority/budget infrastructure — extended to add a new narrative-guidance section (no existing injection point exists, this contract creates one).
 - **Known gaps**: director-generated `SceneDirection` has no explicit mechanism ensuring it only *proposes* narrative beats rather than directly mutating game state — Directive #2 ("AI proposes; the rules engine decides") needs a concrete, checkable boundary here, not just a convention. No connection yet to C-458's retrieval layer, so scene direction can't reference "what happened 3 sessions ago" even once that capability exists.
 - **Baseline tests**: `narrative_director.test.ts`, `arc_memory.test.ts` — establish current interval/persistence behavior as the regression baseline.
 
@@ -53,7 +53,8 @@ After this contract, the AI GM's background narrative direction draws on real ca
 | Background scene-direction loop | `narrative_director_service.svelte.ts` (C-235) | reuse — extend inputs, not the loop mechanism |
 | Arc memory persistence | `ArcMemory` via `gameSaveService` (C-235) | reuse as-is |
 | Manual trigger | `pushStory()` (C-235) | reuse as-is |
-| Retrieval layer | [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) `MemoryRetrievalBackend` | new dependency — director queries it for relevant history when generating `SceneDirection` |
+| Retrieval layer | [C-458](C-458-in-house-memory-and-lore-retrieval-system.md) `MemoryRetrievalService` / `memoryRetrievalService` | new dependency — director queries it for relevant history when generating `SceneDirection` |
+| Prompt section infrastructure | `gm_prompt_service.svelte.ts` `_buildSections()` priority/budget pattern | modify — add a new narrative-guidance section with referenced memory |
 | AI-proposes/rules-decide boundary | Directive #2, `vision-and-directives.md` | new — formalize for this specific proposal path |
 
 ## Overview
@@ -62,13 +63,13 @@ Extend the existing narrative director to query C-458's memory/lore retrieval sy
 
 ## Design Reference
 
-Follow Directive #2 exactly: `SceneDirection` remains an LLM proposal; whatever downstream consumes it (currently `gm_prompt_service.svelte.ts`'s injection point) must be the thing that decides whether/how it affects the actual prompt or game state, not the director itself. Follow Directive #4 (hand-authored baseline before generation) — scene direction is optional narrative flavor, not a required-to-function system; the game must play correctly with the director disabled.
+Follow Directive #2 exactly: `SceneDirection` remains an LLM proposal; whatever downstream consumes it (the new narrative-guidance section in `gm_prompt_service.svelte.ts`'s `_buildSections()`) must be the thing that decides whether/how it affects the actual prompt or game state, not the director itself. Follow Directive #4 (hand-authored baseline before generation) — scene direction is optional narrative flavor, not a required-to-function system; the game must play correctly with the director disabled.
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
 
 ## Architecture Directives
 
-- Add a retrieval query step to `narrative_director_service.svelte.ts`'s generation cycle: before generating `SceneDirection`, query C-458's `MemoryRetrievalBackend` for content relevant to the current scene/arc state.
+- Add a retrieval query step to `narrative_director_service.svelte.ts`'s generation cycle: before generating `SceneDirection`, query C-458's `memoryRetrievalService.query()` for content relevant to the current scene/arc state. Formulate the query text from the current arc description + last scene direction (if any) to retrieve contextually relevant history — e.g. `{ text: arc.description, scope: 'all', limit: 5 }`.
 - Keep `SceneDirection`'s existing typed shape as the sole interface between the director and the rest of the system — no new direct-mutation path. Document (in code comments where non-obvious, and in this contract's State & Data Models) exactly which fields are advisory-only.
 - Degrade gracefully: if C-458's retrieval returns nothing (fresh campaign, or retrieval disabled), the director must produce `SceneDirection` from existing world/party/quest state exactly as it does today — this is not a hard dependency that breaks direction if retrieval is unavailable.
 - Do not change the 120s default interval or the `pushStory()` manual trigger's behavior — this contract adds an input source, not new triggering logic.
@@ -157,11 +158,11 @@ No `packages/shared` schema changes — `SceneDirection` stays client-local per 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Unit | `narrative_director.test.ts` | N/A | Filled during verification |
+| AC-3 | Unit | `gm_prompt_service.test.ts` | N/A | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run client:test`
-- Integration: code-level check — grep/audit the director for any write call into game/campaign state outside `ArcMemory` persistence
+- Integration: code-level check — grep/audit both the director and gm_prompt_service for any write call into game/campaign state outside `ArcMemory` persistence
 - E2E / Visual: N/A
 
 **Watch Points**:
@@ -170,7 +171,7 @@ No `packages/shared` schema changes — `SceneDirection` stays client-local per 
 ## Implementation Sequence
 
 1. **Phase 1 (Data/Logic)**: add the `referencedMemory` field to `SceneDirection`; implement the retrieval query call.
-2. **Phase 2 (Integration)**: wire the query into the director's generation cycle with graceful fallback; confirm `gm_prompt_service.svelte.ts`'s injection point handles the optional field.
+2. **Phase 2 (Integration)**: wire the query into the director's generation cycle with graceful fallback; add a new narrative-guidance section to `gm_prompt_service.svelte.ts`'s `_buildSections()` that includes `referencedMemory` when present.
 3. **Phase 3 (Validation)**: run `bun run validate`, `moon run client:test`, and a manual audit for AC-3's propose-not-mutate guarantee.
 
 ## Edge Cases & Gotchas
