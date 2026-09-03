@@ -463,9 +463,7 @@ class CapabilityViewModel
       anthropic: 'ANTHROPIC_API_KEY',
       deepseek: 'DEEPSEEK_API_KEY',
       google: 'GEMINI_API_KEY',
-      gemini: 'GEMINI_API_KEY',
       mistral: 'MISTRAL_API_KEY',
-      cohere: 'COHERE_API_KEY',
     };
     return mapping[provider];
   }
