@@ -24,7 +24,7 @@ created_at: "2026-09-04"
 | **Type** | full |
 | **Priority** | P1 — the settings shell (#238) has a `data` group with one section in it and no account surface at all, while every piece of plumbing it needs already exists unused |
 | **Dependencies** | C-426 (Cloudflare identity), C-463 (config model), PR #238 (settings groups) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | user-facing → a "Your account and your data" page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
