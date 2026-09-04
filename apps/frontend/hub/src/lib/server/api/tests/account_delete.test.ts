@@ -63,6 +63,42 @@ const createMockD1 = (dbClient: Client) => {
   };
 };
 
+/**
+ * Wraps createMockD1 so the FIRST statement matching `sqlPattern` throws,
+ * then behaves normally on every call after — simulating a crash mid-way
+ * through handleDeleteAccount for AC-5.
+ */
+const createMockD1WithOneFailure = (dbClient: Client, sqlPattern: RegExp) => {
+  const real = createMockD1(dbClient);
+  let hasFailed = false;
+  return {
+    binding: {
+      ...real.binding,
+      prepare: (sql: string) => {
+        const statement = real.binding.prepare(sql);
+        if (!sqlPattern.test(sql)) {
+          return statement;
+        }
+        return {
+          bind: (...params: never[]) => {
+            const bound = statement.bind(...params);
+            return {
+              ...bound,
+              run: async () => {
+                if (!hasFailed) {
+                  hasFailed = true;
+                  throw new Error(`simulated crash: ${sql}`);
+                }
+                return bound.run();
+              },
+            };
+          },
+        };
+      },
+    },
+  };
+};
+
 // ── Mock R2 bucket (in-memory) ──────────────────────────────────────────
 
 const createMockR2 = () => {
@@ -328,39 +364,146 @@ describe('DELETE /api/account — AC-4: Pack author can be deleted', () => {
     });
     expect(userResult.rows.length).toBe(0);
   });
-});
 
-describe('DELETE /api/account — AC-5: Never half-completes', () => {
-  test('failing after partial R2 delete does not leave user deleted with blobs remaining', async () => {
-    const userId = 'test-user-fail';
+  test('transfers unlisted and removed packs, not just public ones', async () => {
+    // Unlisted packs are installable via direct link even though they are
+    // hidden from the catalog — exactly the "someone may have installed
+    // this" case AC-4 exists to protect. 'removed' packs were public before
+    // moderation took them down, so existing installs predate the removal.
+    // Neither should be destroyed on deletion.
+    const userId = 'test-user-unlisted-author';
     const { handleDeleteAccount } = await import('../account_delete.ts');
 
-    // Create the user
     await client.execute({
       sql: `INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
-			      VALUES (?, 'Fail Test', 'fail-test@example.com', 1, 1728000000000, 1728000000000)`,
+			      VALUES (?, 'Unlisted Author', 'unlisted-author@example.com', 1, 1728000000000, 1728000000000)`,
       args: [userId],
     });
 
-    // Add a backup row
+    await client.execute({
+      sql: `INSERT INTO "packs" ("id", "slug", "owner_account_id", "visibility", "created_at", "updated_at")
+			      VALUES (?, 'unlisted-pack', ?, 'unlisted', 1728000000000, 1728000000000)`,
+      args: ['pack-unlisted', userId],
+    });
+    await client.execute({
+      sql: `INSERT INTO "packs" ("id", "slug", "owner_account_id", "visibility", "created_at", "updated_at")
+			      VALUES (?, 'removed-pack', ?, 'removed', 1728000000000, 1728000000000)`,
+      args: ['pack-removed', userId],
+    });
+
+    const response = await handleDeleteAccount(userId, {
+      DB: createMockD1(client).binding as never,
+      SAVES_BUCKET: mockR2.binding as never,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.packsTransferred).toBe(2);
+
+    const unlistedResult = await client.execute({
+      sql: 'SELECT owner_account_id FROM packs WHERE id = ?',
+      args: ['pack-unlisted'],
+    });
+    expect(unlistedResult.rows.length).toBe(1);
+    expect(unlistedResult.rows[0]?.owner_account_id).toBe(DELETED_OWNER_ACCOUNT_ID);
+
+    const removedResult = await client.execute({
+      sql: 'SELECT owner_account_id FROM packs WHERE id = ?',
+      args: ['pack-removed'],
+    });
+    expect(removedResult.rows.length).toBe(1);
+    expect(removedResult.rows[0]?.owner_account_id).toBe(DELETED_OWNER_ACCOUNT_ID);
+  });
+});
+
+describe('DELETE /api/account — AC-5: Never half-completes', () => {
+  test('completes cleanly with no injected fault (control case)', async () => {
+    const userId = 'test-user-fail-control';
+    const { handleDeleteAccount } = await import('../account_delete.ts');
+
+    await client.execute({
+      sql: `INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
+			      VALUES (?, 'Fail Test', 'fail-test-control@example.com', 1, 1728000000000, 1728000000000)`,
+      args: [userId],
+    });
     await client.execute({
       sql: `INSERT INTO "account_backups" ("id", "account_id", "r2_key", "size_bytes", "checksum_sha256", "created_at")
 			      VALUES (?, ?, ?, 100, 'abc', 1728000000000)`,
-      args: ['backup-fail-1', userId, `saves/${userId}/fail.bak`],
+      args: ['backup-fail-control-1', userId, `saves/${userId}/fail.bak`],
     });
+    mockR2.store.set(`saves/${userId}/fail.bak`, new Uint8Array([1, 2, 3]));
 
-    // Add R2 objects
-    await mockR2.store.set(`saves/${userId}/fail.bak`, new Uint8Array([1, 2, 3]));
-
-    // Delete should succeed
     const response = await handleDeleteAccount(userId, {
       DB: createMockD1(client).binding as never,
       SAVES_BUCKET: mockR2.binding as never,
     });
     expect(response.status).toBe(200);
 
-    // Verify nothing remains
     const remainingBlobs = [...mockR2.store.keys()].filter((k) => k.startsWith(`saves/${userId}/`));
     expect(remainingBlobs.length).toBe(0);
+  });
+
+  test('a crash deleting the user row leaves R2 gone but the user intact — and a retry finishes the job', async () => {
+    // This is the invariant AC-5 exists to protect: the user row is deleted
+    // dead last (Phase 4), after R2 blobs, pack transfers, and backup rows
+    // are already gone. A crash AT that step must never be able to combine
+    // "user row deleted" with "blobs still exist" — that combination is
+    // unrecoverable, because account_backups (the only index of which R2
+    // keys belonged to this user) is cascaded away with the user row.
+    const userId = 'test-user-fail-real';
+    const { handleDeleteAccount } = await import('../account_delete.ts');
+
+    await client.execute({
+      sql: `INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
+			      VALUES (?, 'Fail Test', 'fail-test-real@example.com', 1, 1728000000000, 1728000000000)`,
+      args: [userId],
+    });
+    await client.execute({
+      sql: `INSERT INTO "account_backups" ("id", "account_id", "r2_key", "size_bytes", "checksum_sha256", "created_at")
+			      VALUES (?, ?, ?, 100, 'abc', 1728000000000)`,
+      args: ['backup-fail-real-1', userId, `saves/${userId}/fail.bak`],
+    });
+    mockR2.store.set(`saves/${userId}/fail.bak`, new Uint8Array([1, 2, 3]));
+
+    // First call: the DELETE FROM "user" statement throws, simulating a
+    // crash after every earlier phase has already committed.
+    const failingD1 = createMockD1WithOneFailure(client, /delete from "?user"?\s/i);
+    await expect(
+      handleDeleteAccount(userId, {
+        DB: failingD1.binding as never,
+        SAVES_BUCKET: mockR2.binding as never,
+      }),
+    ).rejects.toThrow(/delete from "user"/i);
+
+    // R2 blobs are already gone (Phase 1 ran to completion before the crash)...
+    const blobsAfterCrash = [...mockR2.store.keys()].filter((k) =>
+      k.startsWith(`saves/${userId}/`),
+    );
+    expect(blobsAfterCrash.length).toBe(0);
+
+    // ...but the user row must still exist — the dangerous combination
+    // (user gone, blobs remaining) never occurred, and the SAFE combination
+    // (blobs gone, user remaining) is what a crash at this exact step
+    // produces instead.
+    const userAfterCrash = await client.execute({
+      sql: 'SELECT id FROM "user" WHERE id = ?',
+      args: [userId],
+    });
+    expect(userAfterCrash.rows.length).toBe(1);
+
+    // Retry with a healthy DB — idempotent (AC-5): completes even though
+    // Phase 1-3 have nothing left to do.
+    const retryResponse = await handleDeleteAccount(userId, {
+      DB: createMockD1(client).binding as never,
+      SAVES_BUCKET: mockR2.binding as never,
+    });
+    expect(retryResponse.status).toBe(200);
+    const retryBody = await retryResponse.json();
+    expect(retryBody.blobsDeleted).toBe(0);
+
+    const userAfterRetry = await client.execute({
+      sql: 'SELECT id FROM "user" WHERE id = ?',
+      args: [userId],
+    });
+    expect(userAfterRetry.rows.length).toBe(0);
   });
 });
