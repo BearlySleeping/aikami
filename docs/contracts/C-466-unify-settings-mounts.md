@@ -3,7 +3,7 @@ id: C-466
 title: "Unify settings mounts — pause menu and onboarding on the shared registry"
 source: "Settings teardown review, 2026-09-03, and C-465's own Out of Scope: 'The three-mounts unification... That field exists on the registry since #238 but nothing reads it yet — wiring it up is a separate contract.' C-465 is the highest claimed ID; C-466 is the next free one."
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -24,7 +24,7 @@ created_at: "2026-09-04"
 | **Type** | full |
 | **Priority** | P2 — no user-facing bug is currently reported, but two mounts are silently drifting from the registry that was built to unify them, and onboarding is running a pre-C-463 code path with a bug already fixed everywhere else |
 | **Dependencies** | PR #238 (settings groups + registry, defines `SettingsContext`), C-463 (Provider/Connection/Role model, PRs #236/#237), C-465 (AI settings section, `page` context only, PR #242/#243) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | none — internal wiring; no new user-facing surface, existing pause/onboarding screens keep their current visual identity |
 | **Contract version** | 1.0.0 |
