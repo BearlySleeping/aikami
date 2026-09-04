@@ -98,9 +98,9 @@
     "infra:report": "bun run scripts/src/lib/ops/infra_report_cli.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.11",
+    "@biomejs/biome": "2.5.12",
     "@google-cloud/secret-manager": "^7.0.0",
-    "@moonrepo/cli": "2.5.3",
+    "@moonrepo/cli": "2.5.4",
     "@types/bun": "^1.4.0",
     "@types/node": "26.4.1",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
