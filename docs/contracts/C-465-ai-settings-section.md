@@ -24,7 +24,7 @@ created_at: "2026-09-04"
 | **Type** | full |
 | **Priority** | P1 — the model, the runtime wiring, and the settings shell it slots into are all already merged; this is the piece that makes them visible and operable |
 | **Dependencies** | C-463 (Provider/Connection/Role model, PRs #236/#237), PR #238 (settings groups + registry), PR #239 (generation/voice/image params reach the runtime), C-464 (Account section pattern to follow, PRs #240/#241) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` |
 | **Docs Impact** | user-facing → a short "Connecting an AI provider" page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
