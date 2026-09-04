@@ -7,10 +7,18 @@ import { localServicesMockBase } from '../../../test_preload.ts';
 
 // Mock configService with a controlled test state
 const mockProviders: Array<{
-  id: string; registryId: string; label: string; credential?: string; source: string;
+  id: string;
+  registryId: string;
+  label: string;
+  credential?: string;
+  source: string;
 }> = [];
 const mockAiConnections: Array<{
-  id: string; providerId: string; capability: string; label: string; model: string;
+  id: string;
+  providerId: string;
+  capability: string;
+  label: string;
+  model: string;
   params: Record<string, unknown>;
 }> = [];
 const mockRoleAssignments: Record<string, string> = {};
@@ -38,7 +46,7 @@ const mockConfigService = {
   }),
   addAiConnection: mock((opts: Record<string, unknown>) => {
     const id = `conn-${nextId++}`;
-    mockAiConnections.push({ id, ...opts } as typeof mockAiConnections[0]);
+    mockAiConnections.push({ id, ...opts } as (typeof mockAiConnections)[0]);
     return id;
   }),
   updateAiConnection: mock((_id: string, _patch: Record<string, unknown>) => {}),
@@ -93,7 +101,15 @@ describe('AiSettingsViewModel — AC-1: Second model reuses key', () => {
       capability: 'text',
       label: 'Sonnet',
       model: 'anthropic/claude-sonnet',
-      params: { temperature: 0.7, topP: 1, topK: 40, repetitionPenalty: 1, presencePenalty: 0, maxTokens: 2048, contextSize: 4096 },
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
     });
 
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
@@ -120,7 +136,15 @@ describe('AiSettingsViewModel — AC-3: Key conflict prompt', () => {
       capability: 'text',
       label: 'Sonnet',
       model: 'anthropic/claude-sonnet',
-      params: { temperature: 0.7, topP: 1, topK: 40, repetitionPenalty: 1, presencePenalty: 0, maxTokens: 2048, contextSize: 4096 },
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
     });
 
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
@@ -149,7 +173,15 @@ describe('AiSettingsViewModel — AC-3: Key conflict prompt', () => {
       capability: 'text',
       label: 'Sonnet',
       model: 'anthropic/claude-sonnet',
-      params: { temperature: 0.7, topP: 1, topK: 40, repetitionPenalty: 1, presencePenalty: 0, maxTokens: 2048, contextSize: 4096 },
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
     });
 
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
@@ -192,7 +224,15 @@ describe('AiSettingsViewModel — AC-4: Status board', () => {
       capability: 'text',
       label: 'Sonnet',
       model: 'anthropic/claude-sonnet',
-      params: { temperature: 0.7, topP: 1, topK: 40, repetitionPenalty: 1, presencePenalty: 0, maxTokens: 2048, contextSize: 4096 },
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
     });
 
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
@@ -223,14 +263,30 @@ describe('AiSettingsViewModel — AC-5: Role assignment', () => {
       capability: 'text',
       label: 'Sonnet',
       model: 'anthropic/claude-sonnet',
-      params: { temperature: 0.7, topP: 1, topK: 40, repetitionPenalty: 1, presencePenalty: 0, maxTokens: 2048, contextSize: 4096 },
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
     });
     mockConfigService.addAiConnection({
       providerId: pid,
       capability: 'text',
       label: 'Haiku',
       model: 'anthropic/claude-haiku',
-      params: { temperature: 0.5, topP: 1, topK: 40, repetitionPenalty: 1, presencePenalty: 0, maxTokens: 1024, contextSize: 4096 },
+      params: {
+        temperature: 0.5,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 1024,
+        contextSize: 4096,
+      },
     });
 
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
