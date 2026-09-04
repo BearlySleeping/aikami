@@ -48,7 +48,7 @@ This action cannot be undone. If you have cloud backups, you can restore them af
 
 Deletion is immediate and permanent. There is no grace period or undo.
 
-> ⚠️ **If you want to keep your data**, back up your saves to the cloud first (Settings → Account → Cloud Sync), then delete your account. Your on-device data remains untouched.
+> ⚠️ **Keep your cloud account for as long as you need its cloud backups.** Deleting the account permanently removes those backups. Your on-device data remains untouched, but the downloadable export ZIP does not include campaigns or saves and is not a replacement for cloud backup.
 
 ## Compare: Account Delete vs Local Delete
 

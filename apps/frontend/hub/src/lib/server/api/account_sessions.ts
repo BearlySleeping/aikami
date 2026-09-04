@@ -3,6 +3,7 @@
 // C-464 AC-10: Session management endpoints — revoke all sessions through
 // Better Auth's own session API rather than deleting `sessions` rows directly.
 
+import { logger } from '$logger';
 import { getBetterAuth } from './better_auth.ts';
 
 /**
@@ -42,6 +43,7 @@ export const handleRevokeAllSessions = async (
 		});
 
 		let revokedCount = 0;
+		let failedCount = 0;
 		for (const s of sessions) {
 			try {
 				await auth.api.revokeSession({
@@ -49,10 +51,19 @@ export const handleRevokeAllSessions = async (
 					body: { token: s.token },
 				} as never);
 				revokedCount++;
-			} catch {
-				// If a session is already revoked or the token is invalid,
-				// continue with the next one.
+			} catch (error) {
+				failedCount++;
+				logger.error(
+					JSON.stringify({ event: 'sessions:revoke-failed', error: String(error) }),
+				);
 			}
+		}
+
+		if (failedCount > 0) {
+			return new Response(
+				JSON.stringify({ error: 'incomplete', revoked: revokedCount, failed: failedCount }),
+				{ status: 500, headers: { 'content-type': 'application/json' } },
+			);
 		}
 
 		return new Response(
@@ -60,7 +71,7 @@ export const handleRevokeAllSessions = async (
 			{ status: 200, headers: { 'content-type': 'application/json' } },
 		);
 	} catch (error) {
-		console.error(
+		logger.error(
 			JSON.stringify({ event: 'sessions:revoke-all-failed', error: String(error) }),
 		);
 		return new Response(JSON.stringify({ error: 'internal' }), {

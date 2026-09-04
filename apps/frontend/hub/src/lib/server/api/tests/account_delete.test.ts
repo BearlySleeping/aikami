@@ -21,7 +21,6 @@ mock.module('$env/dynamic/private', () => ({
 	} as Record<string, string | undefined>,
 }));
 
-const BASE_URL = 'http://localhost:5173';
 const TEST_USER_ID = 'test-user-123';
 const TEST_USER_EMAIL = 'test@example.com';
 
@@ -133,14 +132,6 @@ const applyD1Migrations = async (): Promise<void> => {
 	}
 };
 
-const createEnv = (): {
-	DB: import('@cloudflare/workers-types').D1Database;
-	SAVES_BUCKET: import('@cloudflare/workers-types').R2Bucket;
-} => ({
-	DB: createMockD1(client).binding as never,
-	SAVES_BUCKET: mockR2.binding as never,
-});
-
 const createUser = async (id: string, email: string): Promise<void> => {
 	await client.execute({
 		sql: `INSERT OR IGNORE INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
@@ -169,24 +160,6 @@ beforeAll(async () => {
 afterAll(() => {
 	client.close();
 });
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-const createAuthenticatedRequest = (method: string, body?: unknown): Request => {
-	const headers: Record<string, string> = {
-		'content-type': 'application/json',
-	};
-	// Simulate a session cookie — the endpoint uses getSessionUserId which
-	// calls getBetterAuth().api.getSession(). In test mode the Better Auth
-	// env is not set, so the handler returns 401 unless we inject a session.
-	// We'll test via the handler directly instead of through the Elysia app
-	// because Better Auth is not available in test.
-	return new Request(`${BASE_URL}/api/account`, {
-		method,
-		headers,
-		body: body ? JSON.stringify(body) : undefined,
-	});
-};
 
 // ── Direct handler tests ────────────────────────────────────────────────
 // The endpoint is tested via its exported handleDeleteAccount function
@@ -310,6 +283,11 @@ describe('DELETE /api/account — AC-4: Pack author can be deleted', () => {
 			      VALUES (?, 'test-pack-2', ?, 'draft', 1728000000000, 1728000000000)`,
 			args: ['pack-2', userId],
 		});
+		await client.execute({
+			sql: `INSERT INTO "pack_versions" ("id", "pack_id", "version", "manifest_hash", "created_at")
+			      VALUES (?, ?, '0.1.0', 'draft-hash', 1728000000000)`,
+			args: ['pack-version-2', 'pack-2'],
+		});
 
 		// Delete the account
 		const response = await handleDeleteAccount(userId, {
@@ -318,7 +296,7 @@ describe('DELETE /api/account — AC-4: Pack author can be deleted', () => {
 		});
 		expect(response.status).toBe(200);
 		const body = await response.json();
-		expect(body.packsTransferred).toBe(2);
+		expect(body.packsTransferred).toBe(1);
 
 		// Verify packs now belong to tombstone owner
 		const result = await client.execute({
@@ -326,6 +304,17 @@ describe('DELETE /api/account — AC-4: Pack author can be deleted', () => {
 			args: ['pack-1'],
 		});
 		expect(result.rows[0]?.owner_account_id).toBe(DELETED_OWNER_ACCOUNT_ID);
+
+		const draftResult = await client.execute({
+			sql: 'SELECT id FROM packs WHERE id = ?',
+			args: ['pack-2'],
+		});
+		expect(draftResult.rows.length).toBe(0);
+		const draftVersionResult = await client.execute({
+			sql: 'SELECT id FROM pack_versions WHERE pack_id = ?',
+			args: ['pack-2'],
+		});
+		expect(draftVersionResult.rows.length).toBe(0);
 
 		// Verify user is deleted
 		const userResult = await client.execute({

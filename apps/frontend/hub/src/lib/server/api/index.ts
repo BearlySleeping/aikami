@@ -22,6 +22,10 @@
 import { AssetStatsSchema, CategoryStatsSchema } from '@aikami/schemas';
 import { Elysia, t } from 'elysia';
 import { handleAsk } from './ask.ts';
+import {
+  type AccountDeleteEnv,
+  handleAccountDeleteRequest,
+} from './account_delete.ts';
 import { getBetterAuth } from './better_auth.ts';
 import { getCatalogStatsEnv, handleCatalogStats } from './catalog_stats.ts';
 import { getHealthDbEnv, handleDbHealth } from './health_db.ts';
@@ -33,10 +37,6 @@ import {
   handleListBackups,
 } from './save_backup.ts';
 import { getStorageEnv, handleStorageUpload, handleStorageUrl } from './storage.ts';
-import {
-  getAccountDeleteEnv,
-  handleAccountDeleteRequest,
-} from './account_delete.ts';
 import { handleRevokeAllSessions } from './account_sessions.ts';
 
 // ─── Schemas (TypeBox) ───────────────────────────────────────────────
@@ -96,7 +96,8 @@ const betterAuthHandler = (request: Request): Response | Promise<Response> => {
   return auth.handler(request);
 };
 
-export const app = new Elysia({
+/** Creates the API app with request-scoped account-deletion bindings. */
+export const createApp = (accountDeleteEnv?: AccountDeleteEnv) => new Elysia({
   prefix: '/api',
   // Cloudflare Workers disallow `new Function` (code generation from strings).
   // Elysia's AOT handler composition uses it, so disable AOT to use the
@@ -206,14 +207,13 @@ export const app = new Elysia({
   // C-464 AC-3/4/5/6: Session-verified account deletion.
   // 503 when the hub is not yet on a Worker with the SAVES_BUCKET binding.
   .delete('/account', ({ request }) => {
-    const env = getAccountDeleteEnv();
-    if (!env) {
+    if (!accountDeleteEnv) {
       return new Response(JSON.stringify({ error: 'account_unconfigured' }), {
         status: 503,
         headers: { 'content-type': 'application/json' },
       });
     }
-    return handleAccountDeleteRequest(request, env);
+    return handleAccountDeleteRequest(request, accountDeleteEnv);
   })
   // C-464 AC-10: Revoke all sessions through Better Auth's session API.
   .post('/account/sessions/revoke-all', ({ request }) =>
@@ -224,4 +224,6 @@ export const app = new Elysia({
     response: askResponseSchema,
   });
 
-export type App = typeof app;
+export const app = createApp();
+
+export type App = ReturnType<typeof createApp>;

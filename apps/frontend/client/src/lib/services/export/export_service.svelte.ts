@@ -10,6 +10,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { getLocalDatabase } from '@aikami/frontend/storage';
 import type {
   AikamiCharacterCard,
   BackupManifest,
@@ -72,6 +73,8 @@ export type ExportServiceInterface = BaseFrontendClassInterface & {
   // ── Bulk backup ──
   /** Exports all user data as a timestamped zip and triggers browser download. */
   exportBulkBackup(): Promise<void>;
+  /** Atomically erases all repository-backed data from the local database. */
+  deleteAllLocalData(): Promise<void>;
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -413,6 +416,32 @@ class ExportService
       this.isBackingUp = false;
       this.backupProgress = '';
     }
+  }
+
+  async deleteAllLocalData(): Promise<void> {
+    const db = await getLocalDatabase();
+    await db.transaction([
+      { sql: 'DELETE FROM install_state', args: [] },
+      { sql: 'DELETE FROM asset_sources', args: [] },
+      { sql: 'DELETE FROM assets', args: [] },
+      { sql: 'DELETE FROM capability_profile', args: [] },
+      { sql: 'DELETE FROM chat_history', args: [] },
+      { sql: 'DELETE FROM chat_links', args: [] },
+      { sql: 'DELETE FROM chats', args: [] },
+      { sql: 'DELETE FROM session_checkpoints', args: [] },
+      { sql: 'DELETE FROM journal_entries', args: [] },
+      { sql: 'DELETE FROM compacted_summaries', args: [] },
+      { sql: 'DELETE FROM sessions', args: [] },
+      { sql: 'DELETE FROM saves', args: [] },
+      { sql: 'DELETE FROM npc_schedules', args: [] },
+      { sql: 'DELETE FROM characters', args: [] },
+      { sql: 'DELETE FROM personas', args: [] },
+      { sql: 'DELETE FROM npcs', args: [] },
+      { sql: 'DELETE FROM custom_agents', args: [] },
+      { sql: 'DELETE FROM string_registry', args: [] },
+      { sql: 'DELETE FROM meta', args: [] },
+      { sql: 'DELETE FROM campaigns', args: [] },
+    ]);
   }
 }
 

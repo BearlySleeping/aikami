@@ -13,28 +13,19 @@
 // Published packs are transferred to the tombstone owner rather than removed
 // (AC-4), so other players who installed a pack are not punished.
 
-import { accountBackups, packs, users } from '@aikami/backend-database';
+import { accountBackups, packs, packVersions, users } from '@aikami/backend-database';
 import { DELETED_OWNER_ACCOUNT_ID } from '@aikami/constants';
 import type { AccountDeletionResult } from '@aikami/types';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, ne } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
+import { logger } from '$logger';
 
-type AccountDeleteEnv = {
+export type AccountDeleteEnv = {
 	// biome-ignore lint/style/useNamingConvention: Cloudflare D1 binding name
 	DB: import('@cloudflare/workers-types').D1Database;
 	// biome-ignore lint/style/useNamingConvention: Cloudflare R2 binding name
 	SAVES_BUCKET: import('@cloudflare/workers-types').R2Bucket;
 };
-
-let _env: AccountDeleteEnv | undefined;
-
-/** Inject the per-request Worker env (called by the catch-all route). */
-export const setAccountDeleteEnv = (envValue: AccountDeleteEnv | undefined): void => {
-	_env = envValue;
-};
-
-/** The injected env, or undefined when the hub is not on a Worker yet. */
-export const getAccountDeleteEnv = (): AccountDeleteEnv | undefined => _env;
 
 const unauthorized = (): Response =>
 	new Response(JSON.stringify({ error: 'unauthorized' }), {
@@ -67,7 +58,7 @@ export const handleDeleteAccount = async (
 		return unauthorized();
 	}
 
-	const db = drizzle(env.DB, { schema: { accountBackups, packs, users } });
+	const db = drizzle(env.DB, { schema: { accountBackups, packs, packVersions, users } });
 
 	// ── Phase 1: Delete R2 blobs ──────────────────────────────────────────
 	// List all objects under saves/{uid}/ and delete them. R2 list is
@@ -82,7 +73,7 @@ export const handleDeleteAccount = async (
 		});
 		if (listResult.objects.length > 0) {
 			const keys = listResult.objects.map((o) => o.key);
-			await env.SAVES_BUCKET.delete(keys as unknown as string);
+			await env.SAVES_BUCKET.delete(keys);
 			blobsDeleted += keys.length;
 		}
 		cursor = listResult.truncated ? listResult.cursor : undefined;
@@ -94,7 +85,18 @@ export const handleDeleteAccount = async (
 	const packsToTransfer = await db
 		.select({ id: packs.id })
 		.from(packs)
-		.where(eq(packs.ownerAccountId, accountId));
+		.where(and(eq(packs.ownerAccountId, accountId), eq(packs.visibility, 'public')));
+
+	const packsToDelete = await db
+		.select({ id: packs.id })
+		.from(packs)
+		.where(and(eq(packs.ownerAccountId, accountId), ne(packs.visibility, 'public')));
+
+	if (packsToDelete.length > 0) {
+		const packIds = packsToDelete.map((pack) => pack.id);
+		await db.delete(packVersions).where(inArray(packVersions.packId, packIds));
+		await db.delete(packs).where(inArray(packs.id, packIds));
+	}
 
 	const packsTransferred = packsToTransfer.length;
 	if (packsTransferred > 0) {
@@ -128,7 +130,7 @@ export const handleDeleteAccount = async (
 	};
 
 	// Structured log with counts only — no PII.
-	console.log(
+	logger.info(
 		JSON.stringify({
 			event: 'account:deleted',
 			blobsDeleted,

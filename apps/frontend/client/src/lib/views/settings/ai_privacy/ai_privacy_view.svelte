@@ -105,40 +105,5 @@ const { viewModel }: Props = $props();
       {/if}
     </div>
 
-    <div class="divider"></div>
-
-    <!-- ── Offline Mode ── -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h4 class="font-medium">Play Offline</h4>
-        <p class="text-sm text-base-content/60">
-          Disable all AI calls — even if a provider is configured.
-        </p>
-      </div>
-      <input
-        type="checkbox"
-        class="toggle toggle-primary"
-        checked={viewModel.offlineMode}
-        onchange={() => viewModel.toggleOfflineMode()}
-        aria-label="Play Offline — disable all AI calls"
-      >
-    </div>
-
-    <!-- ── Telemetry Opt-Out ── -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h4 class="font-medium">Telemetry</h4>
-        <p class="text-sm text-base-content/60">
-          Share anonymous usage data to help improve Aikami.
-        </p>
-      </div>
-      <input
-        type="checkbox"
-        class="toggle toggle-primary"
-        checked={!viewModel.telemetryOptOut}
-        onchange={() => viewModel.toggleTelemetry()}
-        aria-label="Telemetry — share anonymous usage data"
-      >
-    </div>
   </div>
 </BaseViewModelContainer>

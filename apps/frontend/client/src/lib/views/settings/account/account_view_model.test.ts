@@ -3,30 +3,45 @@
 // C-464 AC-1/2/7: Account settings section tests.
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { DELETED_OWNER_ACCOUNT_ID } from '@aikami/constants';
 
 // Mock authService
 const mockSignOut = mock(async () => true);
 const mockDeleteAccount = mock(async () => true);
 const mockListSlots = mock(async () => []);
+const mockAuthService = {
+	isLoggedIn: false,
+	currentUser: undefined as
+		| { id: string; displayName: string; email: string }
+		| undefined,
+	uid: undefined as string | undefined,
+	signOut: mockSignOut,
+	deleteAccount: mockDeleteAccount,
+	setCurrentUser: mock(() => {}),
+};
 
 mock.module('$services', () => ({
-	authService: {
-		isLoggedIn: false,
-		currentUser: undefined,
-		uid: undefined,
-		signOut: mockSignOut,
-		deleteAccount: mockDeleteAccount,
-		setCurrentUser: mock(() => {}),
-	},
+	authService: mockAuthService,
 	gameStateSyncService: {
 		listSlots: mockListSlots,
 	},
+	hubApiBase: () => '/api/hub',
+	hubAuthHeaders: () => ({}),
 }));
+
+let getAccountViewModel: typeof import('./account_view_model.svelte').getAccountViewModel;
+
+beforeEach(async () => {
+	mockAuthService.isLoggedIn = false;
+	mockAuthService.currentUser = undefined;
+	mockAuthService.uid = undefined;
+	mockSignOut.mockClear();
+	mockDeleteAccount.mockClear();
+	mockListSlots.mockClear();
+	({ getAccountViewModel } = await import('./account_view_model.svelte'));
+});
 
 describe('AccountViewModel — AC-1: Signed-out state', () => {
 	test('shows signed-out state when not logged in', async () => {
-		const { getAccountViewModel } = await import('./account_view_model.svelte');
 		const vm = getAccountViewModel({ className: 'AccountViewModel' });
 
 		expect(vm.isLoggedIn).toBe(false);
@@ -36,7 +51,6 @@ describe('AccountViewModel — AC-1: Signed-out state', () => {
 	});
 
 	test('does not offer sync controls when signed out', async () => {
-		const { getAccountViewModel } = await import('./account_view_model.svelte');
 		const vm = getAccountViewModel({ className: 'AccountViewModel' });
 
 		expect(vm.syncSlots).toEqual([]);
@@ -57,34 +71,33 @@ describe('AccountViewModel — AC-2: Sync status', () => {
 	});
 
 	test('lists sync slots when signed in', async () => {
-		// Re-mock authService as signed in
-		mock.module('$services', () => ({
-			authService: {
-				isLoggedIn: true,
-				currentUser: { id: 'test-uid', name: 'Test User', email: 'test@example.com' },
-				uid: 'test-uid',
-				signOut: mockSignOut,
-				deleteAccount: mockDeleteAccount,
-				setCurrentUser: mock(() => {}),
-			},
-			gameStateSyncService: {
-				listSlots: mockListSlots,
-			},
-		}));
-
-		const { getAccountViewModel } = await import('./account_view_model.svelte');
+		mockAuthService.isLoggedIn = true;
+		mockAuthService.currentUser = {
+			id: 'test-uid',
+			displayName: 'Test User',
+			email: 'test@example.com',
+		};
+		mockAuthService.uid = 'test-uid';
 		const vm = getAccountViewModel({ className: 'AccountViewModel' });
+		await vm.initialize();
 
 		expect(vm.isLoggedIn).toBe(true);
 		expect(vm.displayName).toBe('Test User');
 		expect(vm.email).toBe('test@example.com');
 		expect(vm.showDeleteAccount).toBe(true);
+		expect(mockListSlots).toHaveBeenCalled();
+		expect(vm.syncSlots).toContainEqual({
+			slotNumber: 1,
+			lastLocationName: 'Test Location',
+			playedTimeSeconds: null,
+			storageRef: 'saves/test-uid/slot_1.json',
+			updatedAt: '2026-09-04T00:00:00.000Z',
+		});
 	});
 });
 
 describe('AccountViewModel — AC-7: Delete account type-to-confirm', () => {
 	test('confirm requires DELETE text', async () => {
-		const { getAccountViewModel } = await import('./account_view_model.svelte');
 		const vm = getAccountViewModel({ className: 'AccountViewModel' });
 
 		vm.openDeleteDialog();

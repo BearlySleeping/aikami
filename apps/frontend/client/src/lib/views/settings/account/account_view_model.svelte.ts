@@ -8,8 +8,8 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { authService, gameStateSyncService } from '$services';
 import type { SaveSlotEntry } from '@aikami/types';
+import { authService, gameStateSyncService, hubApiBase, hubAuthHeaders } from '$services';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -30,6 +30,8 @@ export type AccountViewModelInterface = BaseViewModelInterface & {
   readonly isSyncLoading: boolean;
   /** Whether a sign-out is in progress. */
   readonly isSigningOut: boolean;
+  /** Whether all account sessions are being revoked. */
+  readonly isRevokingAllSessions: boolean;
   /** Whether the delete account confirmation dialog is open. */
   readonly isDeleteDialogOpen: boolean;
   /** The text typed into the delete confirmation field. */
@@ -41,6 +43,8 @@ export type AccountViewModelInterface = BaseViewModelInterface & {
 
   /** Signs out the current user. */
   signOut(): Promise<void>;
+  /** Revokes all sessions for the current account. */
+  revokeAllSessions(): Promise<void>;
   /** Opens the delete account confirmation dialog. */
   openDeleteDialog(): void;
   /** Closes the delete account confirmation dialog. */
@@ -61,6 +65,7 @@ class AccountViewModel
 {
   isSyncLoading = $state(false);
   isSigningOut = $state(false);
+  isRevokingAllSessions = $state(false);
   isDeleteDialogOpen = $state(false);
   deleteConfirmText = $state('');
   isDeleting = $state(false);
@@ -71,7 +76,7 @@ class AccountViewModel
   }
 
   get displayName(): string | undefined {
-    return authService.currentUser?.displayName ?? authService.currentUser?.name;
+    return authService.currentUser?.displayName;
   }
 
   get email(): string | undefined {
@@ -108,12 +113,12 @@ class AccountViewModel
   async revokeAllSessions(): Promise<void> {
     this.isRevokingAllSessions = true;
     try {
-      const { hubApiBase } = await import('$lib/services/api/hub_api_client');
       const base = hubApiBase();
-      const response = await fetch(
-        new URL('/api/account/sessions/revoke-all', base).href,
-        { method: 'POST', credentials: 'include' },
-      );
+      const response = await fetch(`${base}/account/sessions/revoke-all`, {
+        method: 'POST',
+        headers: hubAuthHeaders(),
+        credentials: 'include',
+      });
       if (!response.ok) {
         this.error('revokeAllSessions:failed', { status: response.status });
         return;
@@ -126,7 +131,6 @@ class AccountViewModel
       this.isRevokingAllSessions = false;
     }
   }
-
 
   async refreshSyncSlots(): Promise<void> {
     if (!authService.uid) {

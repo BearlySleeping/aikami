@@ -216,8 +216,10 @@ const { viewModel }: Props = $props();
               <p class="text-sm text-base-content/60">When enabled, no AI calls are attempted.</p>
             </div>
             <input
+              id="offline-mode-toggle"
               type="checkbox"
               class="toggle toggle-primary"
+              aria-label="Enable Offline Mode"
               checked={viewModel.offlineMode}
               onchange={() => viewModel.toggleOfflineMode()}
             />
@@ -234,8 +236,10 @@ const { viewModel }: Props = $props();
               <p class="text-sm text-base-content/60">Opt out of anonymous usage data.</p>
             </div>
             <input
+              id="telemetry-opt-out-toggle"
               type="checkbox"
               class="toggle toggle-primary"
+              aria-label="Opt out of telemetry"
               checked={viewModel.telemetryOptOut}
               onchange={() => viewModel.toggleTelemetry()}
             />
@@ -272,8 +276,16 @@ const { viewModel }: Props = $props();
       aria-modal="true"
       aria-label="Delete local data confirmation"
       tabindex="-1"
-      onclick={(e) => { if (e.target === e.currentTarget) viewModel.closeDeleteLocalDialog(); }}
-      onkeydown={(e) => { if (e.key === 'Escape') viewModel.closeDeleteLocalDialog(); }}
+      onclick={(e) => {
+        if (e.target === e.currentTarget) {
+          viewModel.closeDeleteLocalDialog();
+        }
+      }}
+      onkeydown={(e) => {
+        if (e.key === 'Escape') {
+          viewModel.closeDeleteLocalDialog();
+        }
+      }}
     >
       <div class="modal-box max-w-md">
         <h3 class="text-lg font-bold text-error mb-2">Delete all local data?</h3>

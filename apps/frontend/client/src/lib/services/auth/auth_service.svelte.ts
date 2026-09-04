@@ -22,7 +22,7 @@ import {
 import type { AppResult, CurrentUser, RegisterForm, SignInProviderName } from '@aikami/types';
 import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { isTauri } from '$lib/views/utils/is_tauri';
-import { hubApiBase } from '../api/hub_api_client';
+import { hubApiBase, hubAuthHeaders } from '../api/hub_api_client';
 import {
   sendPasswordResetEmail as baSendPasswordResetEmail,
   signInWithEmailAndPassword as baSignInWithEmailAndPassword,
@@ -425,10 +425,11 @@ export class AuthService
     this.log('deleteAccount');
     try {
       const base = hubApiBase();
-      const response = await fetch(
-        new URL('/api/account', base).href,
-        { method: 'DELETE', credentials: 'include' },
-      );
+      const response = await fetch(`${base}/account`, {
+        method: 'DELETE',
+        headers: hubAuthHeaders(),
+        credentials: 'include',
+      });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         this.error('deleteAccount:failed', { status: response.status, body });

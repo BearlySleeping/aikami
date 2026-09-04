@@ -9,7 +9,11 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ChatData, NpcData, PersonaData } from '@aikami/types';
-import { exportService } from '$services';
+import {
+  exportService,
+  readAiPrivacySettings,
+  writeAiPrivacySettings,
+} from '$services';
 import type { GameSession } from '$types';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -75,7 +79,6 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
   closeDeleteLocalDialog(): void;
   updateDeleteLocalConfirmText(value: string): void;
   confirmDeleteLocalData(): Promise<void>;
-}
 };
 
 // ── Options ─────────────────────────────────────────────────────────────
@@ -205,6 +208,7 @@ export class ExportViewModel
     }
     this.isDeletingLocal = true;
     try {
+      await exportService.deleteAllLocalData();
       localStorage.clear();
       window.location.reload();
     } catch (error) {
@@ -214,18 +218,11 @@ export class ExportViewModel
     }
   }
 
-
   private _persistPrivacySettings(): void {
-      localStorage.setItem(
-        'aikami_ai_privacy_settings',
-        JSON.stringify({
-          offlineMode: this.offlineMode,
-          telemetryOptOut: this.telemetryOptOut,
-        }),
-      );
-    } catch {
-      // localStorage may be unavailable
-    }
+    writeAiPrivacySettings({
+      offlineMode: this.offlineMode,
+      telemetryOptOut: this.telemetryOptOut,
+    });
   }
 
   // ── Internal ────────────────────────────────────────────────────────
@@ -245,20 +242,9 @@ export class ExportViewModel
   }
 
   private _loadPrivacySettings(): void {
-    try {
-      const stored = localStorage.getItem('aikami_ai_privacy_settings');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (typeof parsed.offlineMode === 'boolean') {
-          this.offlineMode = parsed.offlineMode;
-        }
-        if (typeof parsed.telemetryOptOut === 'boolean') {
-          this.telemetryOptOut = parsed.telemetryOptOut;
-        }
-      }
-    } catch {
-      // Invalid stored data — keep defaults
-    }
+    const settings = readAiPrivacySettings();
+    this.offlineMode = settings.offlineMode;
+    this.telemetryOptOut = settings.telemetryOptOut;
   }
 
   async _loadChats(): Promise<ChatData[]> {
