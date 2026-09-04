@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/capability/capability_view_model.test.ts
 //
 // Unit tests for CapabilityViewModel — tabs, connection entries, selection, campaign start.
-// Contract: C-323 AC-2 (offline demo removed, only local + cloud paths)
+// C-466: rebuilt on AiSettingsViewModel; connection manager mock replaced with AI settings mock.
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
@@ -10,6 +10,8 @@
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names for module mocking
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$lib/data/connection_defaults.ts';
+import type { AiSettingsViewModelInterface } from '$views/settings/ai/ai_settings_view_model.svelte';
 
 mock.module('@aikami/utils', () => ({
   AiTextProviderRequiredError: class AiTextProviderRequiredError extends Error {
@@ -23,16 +25,121 @@ mock.module('@aikami/utils', () => ({
     error instanceof Error && error.message.includes('text AI provider'),
 }));
 
-mock.module('$views/settings/connection/connection_manager_view_model.svelte', () => ({
-  getConnectionManagerViewModel: mock(() => ({
-    connections: [],
-    defaultConnectionId: undefined,
-    isEditorOpen: false,
-    providerLabels: {},
-    openCreate: mock(() => {}),
-    openCreateFor: mock(() => {}),
-    cancelEdit: mock(() => {}),
-  })),
+// Mock AiSettingsViewModel (C-466 replacement for ConnectionManagerViewModel)
+const aiSettingsViewModelMock = {
+  _className: 'CapabilityAiSettingsViewModel',
+  __mounted: false,
+  errorMessage: undefined,
+  showLoadingView: false,
+  initialize: mock(async () => {}),
+  dispose: mock(async () => {}),
+  showAdvancedSections: false,
+  statusEntries: [],
+  providerTree: [],
+  isEditorOpen: false,
+  isAddProviderOpen: false,
+  draft: {
+    providerId: undefined,
+    registryId: 'openrouter',
+    capability: 'text',
+    label: '',
+    model: '',
+    apiKey: '',
+    baseUrl: '',
+    showApiKey: false,
+    isEditing: false,
+    editingConnectionId: undefined,
+  },
+  openAddProvider: mock(() => {}),
+  closeAddProvider: mock(() => {}),
+  openEditConnection: mock(() => {}),
+  cancelEdit: mock(() => {}),
+  setDraftField: mock(() => {}),
+  setDraftProvider: mock(() => {}),
+  saveDraft: mock(() => {}),
+  deleteConnection: mock(() => {}),
+  testConnection: mock(async () => {}),
+  testDraftConnection: mock(async () => {}),
+  fetchModels: mock(async () => {}),
+  toggleApiKeyVisibility: mock(() => {}),
+  resolveKeyConflict: mock(() => {}),
+  dismissKeyConflict: mock(() => {}),
+  toggleRolesDrawer: mock(() => {}),
+  assignRole: mock(() => {}),
+  clearRole: mock(() => {}),
+  isRolesDrawerOpen: false,
+  connectionsWithRoles: [],
+  availableRoles: [],
+  unassignedConnections: [],
+  voiceConnections: [],
+  activeVoiceConnectionId: undefined,
+  setActiveVoiceConnection: mock(() => {}),
+  voiceArchetypes: [],
+  setVoiceArchetype: mock(() => {}),
+  voiceIdInputLabelFor: mock(() => ''),
+  voiceSpeed: 1,
+  voicePitch: 0,
+  setVoiceSpeed: mock(() => {}),
+  setVoicePitch: mock(() => {}),
+  commitConfigChanges: mock(() => {}),
+  voicePreviewState: { status: 'idle' },
+  previewVoiceArchetype: mock(async () => {}),
+  showVoiceLocalDownload: false,
+  voiceModelState: { status: 'not-downloaded', receivedBytes: 0, totalBytes: 92887435 },
+  voiceModelProgress: 0,
+  voiceModelSizeLabel: '',
+  downloadVoiceModel: mock(async () => {}),
+  cancelVoiceModelDownload: mock(() => {}),
+  imageConnections: [],
+  activeImageConnectionId: undefined,
+  setActiveImageConnection: mock(() => {}),
+  imageSizePresets: [],
+  setImageSizePreset: mock(() => {}),
+  imageQualityLevels: [],
+  setImageQuality: mock(() => {}),
+  isImageAdvancedOpenFor: mock(() => false),
+  toggleImageAdvanced: mock(() => {}),
+  imageParamsFor: mock(() => ({})),
+  setImageParamField: mock(() => {}),
+  imageCheckpoints: [],
+  setImageCheckpoint: mock(() => {}),
+  imageStyleProfiles: [],
+  activeStyleProfileId: '',
+  setImageStyleProfile: mock(() => {}),
+  imagePreviewStateFor: mock(() => ({ status: 'idle' })),
+  imagePreviewUrlFor: mock(() => ''),
+  imagePreviewErrorFor: mock(() => ''),
+  previewImage: mock(async () => {}),
+  isGenParamsOpen: false,
+  toggleGenParamsDisclosure: mock(() => {}),
+  genParamsDisplay: undefined,
+  setGenParamField: mock(() => {}),
+  genParamPresets: [],
+  applyGenPreset: mock(() => {}),
+  modelOptions: [],
+  isFetchingModels: false,
+  fetchModelsError: undefined,
+  canFetchModels: false,
+  needsApiKey: false,
+  needsUrl: false,
+  isLocalProvider: false,
+  providerOptions: [],
+  testResults: {},
+  testingIds: new Set<string>(),
+  keyConflictPrompt: undefined,
+} satisfies AiSettingsViewModelInterface;
+
+const getAiSettingsViewModelMock = mock(
+  (): AiSettingsViewModelInterface => aiSettingsViewModelMock,
+);
+
+mock.module('$views/settings/ai/ai_settings_view_model.svelte', () => ({
+  getAiSettingsViewModel: getAiSettingsViewModelMock,
+}));
+
+mock.module('$types', () => ({
+  DEFAULT_IMAGE_OPTIONS,
+  DEFAULT_VOICE_OPTIONS,
 }));
 
 mock.module('$lib/views/utils/crypto_vault', () => ({
@@ -73,7 +180,6 @@ mock.module('$services', () => ({
     cancel: mock(() => {}),
     checkStatus: mock(async () => ({ status: 'not-downloaded' })),
   },
-  // C-389: engine URLs resolve from the runtime config at call time.
   runtimeConfigService: {
     getTextUrl: () => undefined,
     getImageUrl: () => undefined,
@@ -93,7 +199,13 @@ mock.module('$services', () => ({
   configService: (() => {
     let _nextId = 1;
     const state: {
-      connections: Array<{ id: string; provider: string; capability?: string }>;
+      connections: Array<{
+        id: string;
+        provider: string;
+        capability?: string;
+        apiKey?: string;
+        source?: string;
+      }>;
       defaultConnectionId: null;
       defaultByCapability?: Record<string, string>;
     } = {
@@ -176,7 +288,7 @@ const setDetectionResult = (
 describe('CapabilityViewModel', () => {
   beforeEach(async () => {
     setDetectionResult('not_found');
-    // Reset config mock state between tests so seed assertions don't leak.
+    getAiSettingsViewModelMock.mockClear();
     const { configService } = await import('$services');
     (configService as unknown as { _resetForTest: () => void })._resetForTest();
   });
@@ -193,10 +305,6 @@ describe('CapabilityViewModel', () => {
   });
 
   test('C-417 AC-3: pre-detection snapshot never reports a literal detected status', () => {
-    // Regression: voiceStatus used to default to the literal 'detected' before
-    // any probe ran, which a future code path could surface as a false
-    // positive. Every capability status must start at the shared
-    // 'pending' status and only transition on a real probe result.
     const vm = createVm();
     expect(vm.snapshot.voiceStatus).toBe('pending');
     expect(vm.snapshot.textStatus).toBe('pending');
@@ -206,7 +314,6 @@ describe('CapabilityViewModel', () => {
 
   test('C-417 AC-3: no connection is auto-seeded before detection runs', () => {
     const vm = createVm();
-    // No probe has run — the connection list must stay empty.
     expect(vm.connectionEntries).toEqual([]);
     expect(vm.hasTextProvider).toBe(false);
     expect(vm.hasImageProvider).toBe(false);
@@ -254,9 +361,6 @@ describe('CapabilityViewModel', () => {
     const vm = createVm();
     await vm.initialize();
 
-    // Detection must not run on page load — probing localhost from an HTTPS
-    // origin triggers the browser's private-network permission prompt. It
-    // only runs when the user explicitly picks Ollama or hits Retry.
     expect(detectMock).not.toHaveBeenCalled();
     expect(vm.isDetecting).toBe(false);
   });
@@ -270,7 +374,6 @@ describe('CapabilityViewModel', () => {
     const startMock = campaignService.startNewCampaign as ReturnType<typeof mock>;
     startMock.mockClear();
 
-    // With seeding working, hasTextProvider should be true when ollama detected
     await vm.startCampaign();
 
     expect(startMock).toHaveBeenCalledWith({
@@ -282,37 +385,17 @@ describe('CapabilityViewModel', () => {
     });
   });
 
-  test('openCloudSetup shows modal', () => {
-    const vm = createVm();
-    expect(vm.showCloudSetup).toBe(false);
-    vm.openCloudSetup();
-    expect(vm.showCloudSetup).toBe(true);
-  });
-
-  test('closeCloudSetup hides modal', () => {
-    const vm = createVm();
-    vm.openCloudSetup();
-    expect(vm.showCloudSetup).toBe(true);
-    vm.closeCloudSetup();
-    expect(vm.showCloudSetup).toBe(false);
-  });
-
   test('startDetection seeds connections and sets hasTextProvider to true', async () => {
     setDetectionResult('detected');
     const vm = createVm();
     await vm.startDetection();
 
-    // After detection with ollama, the seed should have pushed a text connection
     expect(vm.hasTextProvider).toBe(true);
     expect(vm.connectionEntries.length).toBeGreaterThan(0);
     expect(vm.connectionEntries[0].providerLabel).toBe('Ollama (local)');
   });
 
   test('startDetection with llamacpp detected seeds a distinct llama.cpp connection, not ollama', async () => {
-    // C-406: the local-stack's bundled default (llama.cpp) is detected via
-    // its OpenAI-compatible /v1/models, not Ollama's native API — the
-    // seeded connection must carry provider 'llamacpp', never 'ollama',
-    // so the chat adapter doesn't disable streaming for it.
     setDetectionResult('detected', 'not_found', 'not_found', 'llamacpp');
     const vm = createVm();
     await vm.startDetection();
@@ -368,5 +451,21 @@ describe('CapabilityViewModel', () => {
     const vm = createVm();
     expect(vm.voiceModelSizeLabel).toMatch(/MB/);
     expect(vm.voiceModelState).toBeDefined();
+  });
+
+  // ── C-466: AI settings ViewModel integration ─────────────────────────
+
+  test('AC-5: creates and reuses the shared AI settings ViewModel', () => {
+    const vm = createVm();
+    const firstAccess = vm.aiSettingsViewModel;
+    const secondAccess = vm.aiSettingsViewModel;
+
+    expect(firstAccess).toBeDefined();
+    expect(secondAccess).toBe(firstAccess);
+    expect(getAiSettingsViewModelMock).toHaveBeenCalledTimes(1);
+    expect(getAiSettingsViewModelMock).toHaveBeenCalledWith({
+      className: 'CapabilityAiSettingsViewModel',
+      showAdvancedSections: false,
+    });
   });
 });

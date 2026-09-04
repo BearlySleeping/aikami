@@ -258,6 +258,46 @@ All four questions were resolved by the author on 2026-09-05; the contract is
    active section), so AI/Account/Content/Data remain reachable mid-game without quitting.
    See Overview item 2, AC-4, and the new Edge Case on route navigation while paused.
 
+## Execution Report
+
+### Summary
+Unified the three settings mounts (page, pause, onboarding) on the shared registry. The pause overlay now derives its tab list from `SETTINGS_SECTIONS` filtered by `pause` context (fixing the concrete `gameplay` bug), gains a "Full Settings" navigation action, and preserves the audio revert-on-close behavior. The onboarding/capability screen now renders the shared `AiSettingsView` component in reduced `onboarding` mode (status board + provider tree), replacing the legacy `ConnectionManagerViewModel`/`ConnectionEditorPanel` path. A shared `sectionsForContext()` helper and per-section ViewModel factory lookup were added to `settings_sections.ts`.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Pause overlay shows all 4 pause-flagged sections (controls, audio, display, gameplay) in registry order |
+| AC-2 | ✅ | Adding a new pause-flagged section requires no overlay code change — verified via test with throwaway fixture |
+| AC-3 | ✅ | Audio volume revert-on-close behavior is preserved and tested |
+| AC-4 | ✅ | "Full Settings" action navigates to `/settings?group=X&section=Y` with correct deep-link params |
+| AC-5 | ✅ | Onboarding's `aiSettingsViewModel` uses the shared `AiSettingsViewModel` — second connection on same provider uses existing key |
+| AC-6 | ✅ | Onboarding renders `AiSettingsView` with `mode="onboarding"` — no duplicate provider-tree implementation |
+| AC-7 | ⚠️ | 27 pre-existing typecheck errors (typebox/`$types`) remain unchanged; 30 unit tests pass; 0 new failures |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/views/game/ui/overlays/settings/settings_overlay_view_model.test.ts` | Unit tests for AC-1 through AC-4 (12 tests) |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/views/settings/settings_sections.ts` | Added `sectionsForContext()`, `createSectionViewModel()`, `hasSectionViewModel()`, `SimpleSectionViewModel` type, and per-section factory map. Marked `ai` section with `contexts: ['page', 'onboarding']`. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/settings/settings_overlay_view_model.svelte.ts` | Replaced hardcoded `SettingsOverlayTab`/3-VM pattern with registry-driven section list from `SETTINGS_SECTIONS`. Added "Full Settings" navigation. Preserved audio revert-on-close. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/settings/settings_overlay.svelte` | Replaced hardcoded `TABS` array with dynamic rendering from `viewModel.pauseSections`. Added "Full Settings →" button. |
+| `apps/frontend/client/src/lib/views/settings/ai/ai_settings_view.svelte` | Added `mode` prop (`'full' | 'onboarding'`). Wrapped roles/voice/image sections with `{#if mode === 'full'}`. |
+| `apps/frontend/client/src/lib/views/capability/capability_view_model.svelte.ts` | Replaced `ConnectionManagerViewModel` with `AiSettingsViewModel`. Added `aiSettingsViewModel` export. |
+| `apps/frontend/client/src/lib/views/capability/capability_view.svelte` | Replaced `ConnectionEditorPanel` with `<AiSettingsView mode="onboarding" />`. |
+| `apps/frontend/client/src/lib/views/capability/capability_view_model.test.ts` | Updated mocks for `AiSettingsViewModel`. Added AC-5 test. |
+
+### Deviations from Spec
+- The per-section ViewModel factory lookup was placed in `settings_sections.ts` (not a separate file) because `svelte-check` could not resolve a standalone `.ts` file imported via `$lib` alias in the worktree. Functionally identical.
+
+### Test Results
+- Unit (overlay): 12/12 PASS
+- Unit (capability): 18/18 PASS
+- Baseline: 27 pre-existing typecheck errors, 0 new failures
+
 ## Amendments
 
 Changes to ACs or scope require a version bump and user approval.

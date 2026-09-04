@@ -12,7 +12,7 @@ type Props = {
   viewModel: AiSettingsViewModelInterface;
 };
 
-const { viewModel }: Props = $props();
+let { viewModel }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="max-w-4xl mx-auto space-y-8">
@@ -184,292 +184,298 @@ const { viewModel }: Props = $props();
   <!-- ═══════════════════════════════════════════════════════════════════
        ROLES DRAWER
        ═══════════════════════════════════════════════════════════════════ -->
-  <section>
-    <button
-      type="button"
-      class="btn btn-ghost w-full font-mono text-sm text-[#938ea1] justify-start"
-      onclick={() => viewModel.toggleRolesDrawer()}
-    >
-      {viewModel.isRolesDrawerOpen ? '▾' : '▸'}
-      Roles & advanced
-    </button>
+  {#if viewModel.showAdvancedSections}
+    <section>
+      <button
+        type="button"
+        class="btn btn-ghost w-full font-mono text-sm text-[#938ea1] justify-start"
+        onclick={() => viewModel.toggleRolesDrawer()}
+      >
+        {viewModel.isRolesDrawerOpen ? '▾' : '▸'}
+        Roles & advanced
+      </button>
 
-    {#if viewModel.isRolesDrawerOpen}
-      <div class="mt-3 space-y-3">
-        {#if viewModel.connectionsWithRoles.length === 0}
-          <p class="text-sm text-[#938ea1]/60 font-sans italic">No role assignments yet.</p>
-        {:else}
-          {#each viewModel.connectionsWithRoles as cwr (cwr.connection.id)}
-            <div class="card card-bordered border-white/[0.08] bg-base-100/30">
-              <div class="card-body p-3">
-                <div class="flex items-center justify-between">
-                  <span class="font-mono text-xs">{cwr.connection.label}</span>
-                  <span class="text-xs text-[#938ea1]/60">
-                    {#if cwr.roles.length > 0}
-                      {cwr.roles.join(', ')}
-                    {:else}
-                      No roles assigned
-                    {/if}
-                  </span>
+      {#if viewModel.isRolesDrawerOpen}
+        <div class="mt-3 space-y-3">
+          {#if viewModel.connectionsWithRoles.length === 0}
+            <p class="text-sm text-[#938ea1]/60 font-sans italic">No role assignments yet.</p>
+          {:else}
+            {#each viewModel.connectionsWithRoles as cwr (cwr.connection.id)}
+              <div class="card card-bordered border-white/[0.08] bg-base-100/30">
+                <div class="card-body p-3">
+                  <div class="flex items-center justify-between">
+                    <span class="font-mono text-xs">{cwr.connection.label}</span>
+                    <span class="text-xs text-[#938ea1]/60">
+                      {#if cwr.roles.length > 0}
+                        {cwr.roles.join(', ')}
+                      {:else}
+                        No roles assigned
+                      {/if}
+                    </span>
+                  </div>
+                  {#if cwr.roles.length > 0}
+                    <div class="flex flex-wrap gap-1 mt-1">
+                      {#each cwr.roles as role}
+                        <button
+                          type="button"
+                          class="badge badge-xs badge-outline gap-1 cursor-pointer"
+                          onclick={() => viewModel.clearRole(role)}
+                        >
+                          {role}
+                          ✕
+                        </button>
+                      {/each}
+                    </div>
+                  {/if}
                 </div>
-                {#if cwr.roles.length > 0}
-                  <div class="flex flex-wrap gap-1 mt-1">
-                    {#each cwr.roles as role}
+              </div>
+            {/each}
+            {#each viewModel.unassignedConnections as connection (connection.id)}
+              <div class="card card-bordered border-white/[0.08] bg-base-100/30">
+                <div class="card-body p-3">
+                  <span class="font-mono text-xs">Assign {connection.label}</span>
+                  <div class="flex flex-wrap gap-1 mt-2">
+                    {#each viewModel.availableRoles as role}
                       <button
                         type="button"
-                        class="badge badge-xs badge-outline gap-1 cursor-pointer"
-                        onclick={() => viewModel.clearRole(role)}
+                        class="badge badge-xs badge-outline cursor-pointer"
+                        onclick={() => viewModel.assignRole(role, connection.id)}
                       >
                         {role}
-                        ✕
                       </button>
                     {/each}
                   </div>
-                {/if}
-              </div>
-            </div>
-          {/each}
-          {#each viewModel.unassignedConnections as connection (connection.id)}
-            <div class="card card-bordered border-white/[0.08] bg-base-100/30">
-              <div class="card-body p-3">
-                <span class="font-mono text-xs">Assign {connection.label}</span>
-                <div class="flex flex-wrap gap-1 mt-2">
-                  {#each viewModel.availableRoles as role}
-                    <button
-                      type="button"
-                      class="badge badge-xs badge-outline cursor-pointer"
-                      onclick={() => viewModel.assignRole(role, connection.id)}
-                    >
-                      {role}
-                    </button>
-                  {/each}
                 </div>
               </div>
-            </div>
-          {/each}
-        {/if}
-      </div>
-    {/if}
-  </section>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   <!-- ═══════════════════════════════════════════════════════════════════
        VOICE SECTION (AC-6)
        ═══════════════════════════════════════════════════════════════════ -->
-  <section>
-    <h2 class="font-mono text-lg font-bold text-primary mb-4">Voice</h2>
+  {#if viewModel.showAdvancedSections}
+    <section>
+      <h2 class="font-mono text-lg font-bold text-primary mb-4">Voice</h2>
 
-    {#if viewModel.voiceConnections.length === 0}
-      <p class="text-sm text-base-content/60 font-sans italic mb-3">
-        No voice connection yet — add one above to assign archetypes.
-      </p>
-    {:else}
-      <div class="card card-bordered border-base-300 bg-base-100/50 mb-3">
-        <div class="card-body p-4 space-y-3">
-          <div class="flex items-center gap-4">
-            <label class="text-xs font-mono text-base-content/60 flex-1" for="voice-speed">
-              Speed ({viewModel.voiceSpeed.toFixed(2)}x)
-              <input
-                id="voice-speed"
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.05"
-                class="range range-xs w-full"
-                value={viewModel.voiceSpeed}
-                oninput={(e) => viewModel.setVoiceSpeed(Number((e.target as HTMLInputElement).value))}
-                onchange={() => viewModel.commitConfigChanges()}
-              >
-            </label>
-            <label class="text-xs font-mono text-base-content/60 flex-1" for="voice-pitch">
-              Pitch ({viewModel.voicePitch})
-              <input
-                id="voice-pitch"
-                type="range"
-                min="-12"
-                max="12"
-                step="1"
-                class="range range-xs w-full"
-                value={viewModel.voicePitch}
-                oninput={(e) => viewModel.setVoicePitch(Number((e.target as HTMLInputElement).value))}
-                onchange={() => viewModel.commitConfigChanges()}
-              >
-            </label>
-          </div>
-
-          <div class="space-y-2">
-            {#each viewModel.voiceArchetypes as archetype (archetype.id)}
-              <div class="flex items-center gap-2 text-xs font-mono">
-                <span class="w-32 text-base-content/60">{archetype.label}</span>
+      {#if viewModel.voiceConnections.length === 0}
+        <p class="text-sm text-base-content/60 font-sans italic mb-3">
+          No voice connection yet — add one above to assign archetypes.
+        </p>
+      {:else}
+        <div class="card card-bordered border-base-300 bg-base-100/50 mb-3">
+          <div class="card-body p-4 space-y-3">
+            <div class="flex items-center gap-4">
+              <label class="text-xs font-mono text-base-content/60 flex-1" for="voice-speed">
+                Speed ({viewModel.voiceSpeed.toFixed(2)}x)
                 <input
-                  type="text"
-                  class="input input-bordered input-xs flex-1"
-                  aria-label={viewModel.voiceIdInputLabelFor(archetype.label)}
-                  value={archetype.voiceId}
-                  oninput={(e) =>
-                    viewModel.setVoiceArchetype(archetype.id, (e.target as HTMLInputElement).value)}
+                  id="voice-speed"
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.05"
+                  class="range range-xs w-full"
+                  value={viewModel.voiceSpeed}
+                  oninput={(e) => viewModel.setVoiceSpeed(Number((e.target as HTMLInputElement).value))}
                   onchange={() => viewModel.commitConfigChanges()}
                 >
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs text-primary"
-                  disabled={viewModel.voicePreviewState.status === 'playing'}
-                  onclick={() => viewModel.previewVoiceArchetype(archetype.id)}
+              </label>
+              <label class="text-xs font-mono text-base-content/60 flex-1" for="voice-pitch">
+                Pitch ({viewModel.voicePitch})
+                <input
+                  id="voice-pitch"
+                  type="range"
+                  min="-12"
+                  max="12"
+                  step="1"
+                  class="range range-xs w-full"
+                  value={viewModel.voicePitch}
+                  oninput={(e) => viewModel.setVoicePitch(Number((e.target as HTMLInputElement).value))}
+                  onchange={() => viewModel.commitConfigChanges()}
                 >
-                  {viewModel.voicePreviewState.status === 'playing' ? '▶ Playing…' : '▶ Preview'}
-                </button>
-              </div>
-            {/each}
+              </label>
+            </div>
+
+            <div class="space-y-2">
+              {#each viewModel.voiceArchetypes as archetype (archetype.id)}
+                <div class="flex items-center gap-2 text-xs font-mono">
+                  <span class="w-32 text-base-content/60">{archetype.label}</span>
+                  <input
+                    type="text"
+                    class="input input-bordered input-xs flex-1"
+                    aria-label={viewModel.voiceIdInputLabelFor(archetype.label)}
+                    value={archetype.voiceId}
+                    oninput={(e) =>
+                    viewModel.setVoiceArchetype(archetype.id, (e.target as HTMLInputElement).value)}
+                    onchange={() => viewModel.commitConfigChanges()}
+                  >
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs text-primary"
+                    disabled={viewModel.voicePreviewState.status === 'playing'}
+                    onclick={() => viewModel.previewVoiceArchetype(archetype.id)}
+                  >
+                    {viewModel.voicePreviewState.status === 'playing' ? '▶ Playing…' : '▶ Preview'}
+                  </button>
+                </div>
+              {/each}
+            </div>
+
+            {#if viewModel.voicePreviewState.status === 'error'}
+              <p class="text-xs text-error">{viewModel.voicePreviewState.error}</p>
+            {/if}
           </div>
-
-          {#if viewModel.voicePreviewState.status === 'error'}
-            <p class="text-xs text-error">{viewModel.voicePreviewState.error}</p>
-          {/if}
         </div>
-      </div>
-    {/if}
+      {/if}
 
-    <VoiceModelDownload
-      show={viewModel.showVoiceLocalDownload}
-      state={viewModel.voiceModelState}
-      progress={viewModel.voiceModelProgress}
-      sizeLabel={viewModel.voiceModelSizeLabel}
-      ondownload={() => viewModel.downloadVoiceModel()}
-      oncancel={() => viewModel.cancelVoiceModelDownload()}
-    />
-  </section>
+      <VoiceModelDownload
+        show={viewModel.showVoiceLocalDownload}
+        state={viewModel.voiceModelState}
+        progress={viewModel.voiceModelProgress}
+        sizeLabel={viewModel.voiceModelSizeLabel}
+        ondownload={() => viewModel.downloadVoiceModel()}
+        oncancel={() => viewModel.cancelVoiceModelDownload()}
+      />
+    </section>
+  {/if}
 
   <!-- ═══════════════════════════════════════════════════════════════════
        IMAGE SECTION (AC-7)
        ═══════════════════════════════════════════════════════════════════ -->
-  <section>
-    <h2 class="font-mono text-lg font-bold text-[#cabeff] mb-4">Image</h2>
+  {#if viewModel.showAdvancedSections}
+    <section>
+      <h2 class="font-mono text-lg font-bold text-[#cabeff] mb-4">Image</h2>
 
-    {#if viewModel.imageConnections.length === 0}
-      <p class="text-sm text-[#938ea1]/60 font-sans italic mb-3">
-        No image connection yet — add one above to configure it.
-      </p>
-    {:else}
-      {#each viewModel.imageConnections as conn (conn.id)}
-        <div class="card card-bordered border-white/[0.08] bg-base-100/50 mb-3">
-          <div class="card-body p-4 space-y-3">
-            <span class="font-mono text-sm font-semibold">{conn.label}</span>
+      {#if viewModel.imageConnections.length === 0}
+        <p class="text-sm text-[#938ea1]/60 font-sans italic mb-3">
+          No image connection yet — add one above to configure it.
+        </p>
+      {:else}
+        {#each viewModel.imageConnections as conn (conn.id)}
+          <div class="card card-bordered border-white/[0.08] bg-base-100/50 mb-3">
+            <div class="card-body p-4 space-y-3">
+              <span class="font-mono text-sm font-semibold">{conn.label}</span>
 
-            <div class="flex gap-2">
-              {#each viewModel.imageSizePresets as preset}
-                <button
-                  type="button"
-                  class="btn btn-xs font-mono"
-                  onclick={() => viewModel.setImageSizePreset(conn.id, preset.id)}
-                >
-                  {preset.label}
-                </button>
-              {/each}
-            </div>
+              <div class="flex gap-2">
+                {#each viewModel.imageSizePresets as preset}
+                  <button
+                    type="button"
+                    class="btn btn-xs font-mono"
+                    onclick={() => viewModel.setImageSizePreset(conn.id, preset.id)}
+                  >
+                    {preset.label}
+                  </button>
+                {/each}
+              </div>
 
-            <div class="flex gap-2">
-              {#each viewModel.imageQualityLevels as level}
-                <button
-                  type="button"
-                  class="btn btn-xs font-mono"
-                  onclick={() => viewModel.setImageQuality(conn.id, level.id)}
-                >
-                  {level.label}
-                </button>
-              {/each}
-            </div>
+              <div class="flex gap-2">
+                {#each viewModel.imageQualityLevels as level}
+                  <button
+                    type="button"
+                    class="btn btn-xs font-mono"
+                    onclick={() => viewModel.setImageQuality(conn.id, level.id)}
+                  >
+                    {level.label}
+                  </button>
+                {/each}
+              </div>
 
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1] w-fit"
-              onclick={() => viewModel.toggleImageAdvanced(conn.id)}
-            >
-              {viewModel.isImageAdvancedOpenFor(conn.id) ? '▾' : '▸'}
-              Advanced (raw steps/cfg)
-            </button>
-            {#if viewModel.isImageAdvancedOpenFor(conn.id)}
-              <div class="flex gap-4 text-xs font-mono text-[#938ea1]">
-                <label for={`steps-${conn.id}`}>
-                  Steps
-                  <input
-                    id={`steps-${conn.id}`}
-                    type="number"
-                    class="input input-bordered input-xs w-20"
-                    value={viewModel.imageParamsFor(conn.id).steps}
-                    oninput={(e) =>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1] w-fit"
+                onclick={() => viewModel.toggleImageAdvanced(conn.id)}
+              >
+                {viewModel.isImageAdvancedOpenFor(conn.id) ? '▾' : '▸'}
+                Advanced (raw steps/cfg)
+              </button>
+              {#if viewModel.isImageAdvancedOpenFor(conn.id)}
+                <div class="flex gap-4 text-xs font-mono text-[#938ea1]">
+                  <label for={`steps-${conn.id}`}>
+                    Steps
+                    <input
+                      id={`steps-${conn.id}`}
+                      type="number"
+                      class="input input-bordered input-xs w-20"
+                      value={viewModel.imageParamsFor(conn.id).steps}
+                      oninput={(e) =>
                       viewModel.setImageParamField(
                         conn.id,
                         'steps',
                         Number((e.target as HTMLInputElement).value),
                       )}
-                    onchange={() => viewModel.commitConfigChanges()}
-                  >
-                </label>
-                <label for={`cfg-${conn.id}`}>
-                  CFG
-                  <input
-                    id={`cfg-${conn.id}`}
-                    type="number"
-                    class="input input-bordered input-xs w-20"
-                    value={viewModel.imageParamsFor(conn.id).cfg}
-                    oninput={(e) =>
+                      onchange={() => viewModel.commitConfigChanges()}
+                    >
+                  </label>
+                  <label for={`cfg-${conn.id}`}>
+                    CFG
+                    <input
+                      id={`cfg-${conn.id}`}
+                      type="number"
+                      class="input input-bordered input-xs w-20"
+                      value={viewModel.imageParamsFor(conn.id).cfg}
+                      oninput={(e) =>
                       viewModel.setImageParamField(
                         conn.id,
                         'cfg',
                         Number((e.target as HTMLInputElement).value),
                       )}
-                    onchange={() => viewModel.commitConfigChanges()}
-                  >
-                </label>
-              </div>
-            {/if}
+                      onchange={() => viewModel.commitConfigChanges()}
+                    >
+                  </label>
+                </div>
+              {/if}
 
-            <div class="flex gap-2">
-              <select
-                class="select select-bordered select-xs font-mono"
-                value={viewModel.imageParamsFor(conn.id).checkpoint}
-                onchange={(e) =>
+              <div class="flex gap-2">
+                <select
+                  class="select select-bordered select-xs font-mono"
+                  value={viewModel.imageParamsFor(conn.id).checkpoint}
+                  onchange={(e) =>
                   viewModel.setImageCheckpoint(conn.id, (e.target as HTMLSelectElement).value)}
-              >
-                {#each viewModel.imageCheckpoints as checkpoint}
-                  <option value={checkpoint}>{checkpoint}</option>
-                {/each}
-              </select>
+                >
+                  {#each viewModel.imageCheckpoints as checkpoint}
+                    <option value={checkpoint}>{checkpoint}</option>
+                  {/each}
+                </select>
 
-              <select
-                class="select select-bordered select-xs font-mono"
-                value={viewModel.activeStyleProfileId}
-                onchange={(e) =>
+                <select
+                  class="select select-bordered select-xs font-mono"
+                  value={viewModel.activeStyleProfileId}
+                  onchange={(e) =>
                   viewModel.setImageStyleProfile((e.target as HTMLSelectElement).value)}
-              >
-                {#each viewModel.imageStyleProfiles as profile}
-                  <option value={profile.id}>{profile.label}</option>
-                {/each}
-              </select>
+                >
+                  {#each viewModel.imageStyleProfiles as profile}
+                    <option value={profile.id}>{profile.label}</option>
+                  {/each}
+                </select>
 
-              <button
-                type="button"
-                class="btn btn-xs btn-primary font-mono"
-                disabled={viewModel.imagePreviewStateFor(conn.id).status === 'generating'}
-                onclick={() => viewModel.previewImage(conn.id)}
-              >
-                {viewModel.imagePreviewStateFor(conn.id).status === 'generating' ? 'Generating…' : 'Preview'}
-              </button>
+                <button
+                  type="button"
+                  class="btn btn-xs btn-primary font-mono"
+                  disabled={viewModel.imagePreviewStateFor(conn.id).status === 'generating'}
+                  onclick={() => viewModel.previewImage(conn.id)}
+                >
+                  {viewModel.imagePreviewStateFor(conn.id).status === 'generating' ? 'Generating…' : 'Preview'}
+                </button>
+              </div>
+
+              {#if viewModel.imagePreviewStateFor(conn.id).status === 'ready'}
+                <Image
+                  src={viewModel.imagePreviewUrlFor(conn.id)}
+                  alt="Generated preview"
+                  class="rounded-box max-h-48"
+                />
+              {:else if viewModel.imagePreviewStateFor(conn.id).status === 'error'}
+                <p class="text-xs text-error">{viewModel.imagePreviewErrorFor(conn.id)}</p>
+              {/if}
             </div>
-
-            {#if viewModel.imagePreviewStateFor(conn.id).status === 'ready'}
-              <Image
-                src={viewModel.imagePreviewUrlFor(conn.id)}
-                alt="Generated preview"
-                class="rounded-box max-h-48"
-              />
-            {:else if viewModel.imagePreviewStateFor(conn.id).status === 'error'}
-              <p class="text-xs text-error">{viewModel.imagePreviewErrorFor(conn.id)}</p>
-            {/if}
           </div>
-        </div>
-      {/each}
-    {/if}
-  </section>
+        {/each}
+      {/if}
+    </section>
+  {/if}
 
   <!-- ═══════════════════════════════════════════════════════════════════
        CONNECTION EDITOR MODAL
