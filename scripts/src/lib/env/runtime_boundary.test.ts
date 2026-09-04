@@ -143,16 +143,16 @@ describe('Node process smoke — execution proof, not just a source grep', () =>
     expect(stderr).toContain('Bun is not defined');
   });
 
+  // Spawns a fresh `node` process per extension (~20 of them); each pays
+  // jiti's own startup cost on top of node's, so bun's 5s default timeout
+  // is comfortably local-only — a cold CI runner (esp. Windows/macOS)
+  // needs real headroom.
   it('every real extension loads and registers under a real node process', () => {
     for (const entry of extensionEntries) {
       const { ok, stderr } = runUnderNode(entry);
       expect(ok, `${relative(repoRoot, entry)}: ${stderr}`).toBe(true);
     }
-  }, // Spawns a fresh `node` process per extension (~20 of them); each pays
-  // jiti's own startup cost on top of node's, so bun's 5s default timeout
-  // is comfortably local-only — a cold CI runner (esp. Windows/macOS)
-  // needs real headroom.
-  60_000);
+  }, 60_000);
 });
 
 describe('bunGlobalUses', () => {
