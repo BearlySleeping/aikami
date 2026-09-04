@@ -51,6 +51,25 @@ tasks:
       mergeArgs: 'replace'
       runInCI: false
 
+  # C-468: the deterministic, credential-free subset of `scripts` unit
+  # tests — contract-pipeline stage logic, herdr session bookkeeping, and
+  # the Bun/Node runtime boundary — scoped narrowly so this stays fast and
+  # never blanket-enables the rest of scripts' tests (many need live
+  # network/AI/cloud access and are intentionally excluded from CI).
+  # `inputs` lists only the directories this actually exercises so moon's
+  # affected-detection — and the three-OS workflow's path filter — skip an
+  # unrelated diff (e.g. docs-only changes) entirely.
+  automation-unit:
+    command: 'bun run test:automation-unit'
+    inputs:
+      - 'src/lib/agents/contract_pipeline/**/*'
+      - 'src/lib/herdr/**/*'
+      - 'src/lib/env/**/*'
+      - '@group(configs)'
+    options:
+      mergeArgs: 'replace'
+      runInCI: true
+
   typecheck:
     command: 'bun run typecheck'
     inputs:

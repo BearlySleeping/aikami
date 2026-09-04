@@ -229,7 +229,7 @@
 | C-465 | Ai Settings Section | 🛠️ implemented | ❓ `integrated` | v1 | full |
 | C-466 | Unify Settings Mounts | 👍 approved | — | v1 | full |
 | C-467 | Tauri Local Ai Install Wizard | 👍 approved | — | v1 | full |
-| C-468 | Agent Test Foundation | 📝 draft | — | v2 | thin |
+| C-468 | Agent Test Foundation | 🛠️ implemented | — | v2 | thin |
 | C-469 | Revision Bound Validation | 📝 draft | — | v2 | full |
 | C-470 | Pipeline Ownership | 📝 draft | — | v2 | full |
 | C-471 | Owned Service Lifecycle | 📝 draft | — | v2 | full |

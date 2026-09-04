@@ -14,6 +14,7 @@
     "format": "biome format .",
     "fix": "biome check --write . --error-on-warnings",
     "test": "bun test",
+    "test:automation-unit": "bun test src/lib/agents/contract_pipeline src/lib/herdr/session.test.ts src/lib/env",
     "lint-contracts": "bun run src/lib/ops/lint_contracts.ts",
     "mark-implemented": "bun run src/lib/ops/mark_contract_implemented.ts"
   },
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "cf": "0.8.0",
+    "jiti": "2.7.0",
     "png-to-ico": "3.0.2",
     "sharp": "0.35.4",
     "wrangler": "4.129.0"

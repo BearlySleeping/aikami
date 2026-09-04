@@ -22,6 +22,28 @@ import { dirname, join, relative, resolve } from 'node:path';
 const repoRoot = resolve(import.meta.dir, '../../../..');
 const extensionsDir = join(repoRoot, '.pi/extensions');
 
+/**
+ * Runs `file` in a real, separate `node` process (never bun — this repo's
+ * own `bun test` runner ships the `Bun` global, which would make a
+ * Bun-only violation invisible) and reports whether it threw.
+ *
+ * This is the execution-based half of the boundary guard: the regex checks
+ * below prove no *known* `Bun.*` spelling appears in source; this proves an
+ * extension shaped exactly like the real ones actually loads — or actually
+ * fails — under the runtime pi uses in production.
+ */
+const runUnderNode = (file: string): { ok: boolean; stderr: string } => {
+  const runner = join(import.meta.dir, 'fixtures/node_loader_runner.ts');
+  const result = Bun.spawnSync(['node', runner, file], {
+    stderr: 'pipe',
+    // contract_stage only registers inside a pipeline worker (see
+    // .pi/extensions/lib/gating.ts) — set the role so this smoke sees the
+    // same tool surface registration.test.ts does.
+    env: { ...process.env, CONTRACT_PIPELINE_ROLE: 'implementer' },
+  });
+  return { ok: result.exitCode === 0, stderr: result.stderr.toString() };
+};
+
 /** Every local module reachable from `entry` via relative imports. */
 const importGraph = (entry: string): string[] => {
   const seen = new Set<string>();
@@ -105,6 +127,28 @@ describe('pi extensions run under Node — no Bun globals in their import graph'
       expect(offenders).toEqual([]);
     });
   }
+});
+
+describe('Node process smoke — execution proof, not just a source grep', () => {
+  it('a clean extension loads and registers under a real node process', () => {
+    const fixture = join(import.meta.dir, 'fixtures/valid_extension.ts');
+    const { ok, stderr } = runUnderNode(fixture);
+    expect(ok, stderr).toBe(true);
+  });
+
+  it('a fixture that calls the Bun global fails the boundary under node', () => {
+    const fixture = join(import.meta.dir, 'fixtures/invalid_bun_only_extension.ts');
+    const { ok, stderr } = runUnderNode(fixture);
+    expect(ok).toBe(false);
+    expect(stderr).toContain('Bun is not defined');
+  });
+
+  it('every real extension loads and registers under a real node process', () => {
+    for (const entry of extensionEntries) {
+      const { ok, stderr } = runUnderNode(entry);
+      expect(ok, `${relative(repoRoot, entry)}: ${stderr}`).toBe(true);
+    }
+  });
 });
 
 describe('bunGlobalUses', () => {
