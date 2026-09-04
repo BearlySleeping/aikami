@@ -196,8 +196,8 @@ const { viewModel }: Props = $props();
       aria-modal="true"
       aria-label="Delete account confirmation"
       tabindex="-1"
-      onclick={(e) => { if (e.target === e.currentTarget) viewModel.closeDeleteDialog(); }}
-      onkeydown={(e) => { if (e.key === 'Escape') viewModel.closeDeleteDialog(); }}
+      onclick={(e) => { if (e.target === e.currentTarget) { viewModel.closeDeleteDialog(); } }}
+      onkeydown={(e) => { if (e.key === 'Escape') { viewModel.closeDeleteDialog(); } }}
     >
       <div class="modal-box max-w-md">
         <h3 class="text-lg font-bold text-error mb-2">Delete your account?</h3>
