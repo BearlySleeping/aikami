@@ -66,11 +66,11 @@ Keep C-392's heavy singleton backends and existing offset-aware frontend servers
 
 Extract registry, ownership/health policy and OS operations into small boundaries where useful; do not rewrite the whole service module first. Ownership evidence includes checkout/run/service identity and PID creation identity or an equivalent owned handle. Executable name alone is insufficient. Persisted ownership records are validated and stale records are diagnostic, not authority to kill a reused PID.
 
-Readiness uses service-specific probes and a development-only instance identity where feasible; no production endpoint or sensitive absolute-path disclosure is required. Consume opaque Herdr IDs from responses. Missing workspace/tab/port/probe data is unavailable, not ready. Shared backends are inspected/reused; only their owner or an explicit maintainer action may restart them.
+Readiness uses service-specific, instance-bound probes; no production endpoint or sensitive absolute-path disclosure is required. `ServiceDef` must define a probe for every reusable service that accepts the expected checkout/run/service identity and returns evidence carrying the observed instance identity. A TCP connection, `isPortReady`, or an HTTP status below 500 may establish liveness only and cannot authorize readiness or reuse. `assessServicePane` validates the probe evidence against the expected identity and returns `unavailable` when evidence is missing, malformed or mismatched. Consume opaque Herdr IDs from responses. Missing workspace/tab/port/probe data is unavailable, not ready. Shared backends are inspected/reused; only their owner or an explicit maintainer action may restart them.
 
 ## State & Data Models
 
-Version an ownership record with service, scope (`run`, `shared`, `external`), instance/run identifier, process identity, port and probe configuration. Health distinguishes starting, ready, failed and unavailable. Readiness evidence is tied to the intended instance, not just a port number.
+Version an ownership record with service, scope (`run`, `shared`, `external`), instance/run identifier, process identity, port and probe configuration. Health distinguishes starting, ready, failed and unavailable. Readiness evidence is tied to the intended instance, not just a port number; a reusable `ServiceDef` without an identity probe is invalid configuration.
 
 ## Quality Requirements
 
@@ -105,7 +105,7 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). Start/health/sto
 ### AC-2: Readiness proves the intended instance
 **Given** wrong-checkout, unrelated 404, missing workspace/tab, booting, crashed and healthy fixtures,
 **When** readiness is evaluated,
-**Then** only the intended ready instance passes; no-port processes require affirmative lifecycle evidence rather than absence of a crash.
+**Then** `assessServicePane` passes the expected instance identity to the service's required identity probe and only matching, valid evidence can return ready. Port/TCP/HTTP liveness alone never permits reuse; missing, malformed or mismatched probe evidence returns unavailable and blocks readiness and reuse. No-port processes require the same instance-bound evidence rather than absence of a crash.
 
 ### AC-3: Start/restart respects service scope
 **Given** a pure-script contract or one requiring only client/hub,
@@ -126,7 +126,7 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). Start/health/sto
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
 | AC-1 | Integration | proposed `herdr/service_ownership.test.ts` | service restart | pending implementation |
-| AC-2 | Unit/Integration | `herdr/session.test.ts`, instance probe fixtures | readiness | pending implementation |
+| AC-2 | Unit/Integration | `herdr/session.test.ts`, matching/missing/malformed/mismatched instance-probe fixtures for port and no-port services | readiness/reuse | pending implementation |
 | AC-3 | Unit | service selection/ensure-ready fixtures | contract preflight | pending implementation |
 | AC-4 | Integration | `env/process_info.test.ts`, owned child fixtures | cancellation/stop | pending implementation |
 | AC-5 | Unit | fake Herdr response fixtures | service creation | pending implementation |

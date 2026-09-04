@@ -69,8 +69,8 @@ A contributor can reproduce the project's supported agent resources and review a
 ### AC-4: A worktree does not silently use the wrong resource graph
 **Given** a worktree whose resource/dependency identity differs from the root checkout,
 **When** its agent runtime is prepared,
-**Then** it resolves compatible resources for that checkout or fails with explicit preparation instructions; it does not assume a shared node_modules link is compatible. An unchanged graph can reuse existing resources safely.
-**Verification**: fixture checkouts with matching/mismatching identities through the C-472 launch/preflight seam; no reimplementation of worktree provisioning.
+**Then** reuse is permitted only when the complete resource-graph identity matches: the relevant committed lockfile data, normalized `.pi/settings.json` package/extension/skill/prompt selections, and hashes of generated resource content selected by that configuration. If any identity input differs or is unavailable, preparation resolves compatible resources for that checkout or fails with explicit commands/instructions; it does not assume a shared node_modules link or generated resource directory is compatible.
+**Verification**: fixture checkouts exercise a complete match plus independent lockfile-data, `.pi/settings.json`-selection and generated-content mismatches through the existing C-472 launch/preflight seam. Every mismatch blocks reuse and resolves compatible resources or returns explicit preparation instructions; do not reimplement worktree provisioning.
 
 ### AC-5: Provenance and rollback are inspectable
 **Given** a recorded run or proposed update,

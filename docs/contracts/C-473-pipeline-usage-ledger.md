@@ -70,7 +70,7 @@ Record model/provider, effective thinking level, prompt/profile/config version, 
 
 ## State & Data Models
 
-Version per-generation usage records with event identity, token categories, monetary amount/currency/provenance, completeness and finalization status. Run totals include unsuccessful attempts. Legacy empty `usage` objects load as unknown/incomplete, not zero. Store hashes/identifiers, not complete prompts or API keys.
+Version per-generation usage records with event identity, token categories, monetary amount/currency/provenance, completeness and finalization status. Run and task totals include unsuccessful attempts. Monetary amounts aggregate into separate totals per currency; a converted total is permitted only when every conversion records a versioned conversion source, the applied rate and its timestamp. Legacy empty `usage` objects load as unknown/incomplete, not zero. Store hashes/identifiers, not complete prompts or API keys.
 
 ## Quality Requirements
 
@@ -103,9 +103,9 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). One ledger/repor
 **Then** its model, effective settings, token categories, elapsed time and cost provenance are persisted and visible in status output.
 
 ### AC-2: Retry/resume totals reconcile
-**Given** failed and successful generations, repeated events and an interrupted/resumed run,
+**Given** failed and successful generations, repeated events, an interrupted/resumed run and mixed-currency usage,
 **When** aggregation executes,
-**Then** totals include all distinct billable work exactly once and totalTokens is not merely the last event's value.
+**Then** run/task totals include all distinct billable work exactly once and totalTokens is not merely the last event's value. Monetary totals remain separate per currency unless a versioned conversion source, applied rate and timestamp are recorded for every converted amount; absent conversion metadata never produces a cross-currency sum.
 
 ### AC-3: Missing and external costs are honest
 **Given** providers or external tools with absent/estimated billing,
@@ -121,12 +121,12 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). One ledger/repor
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
 | AC-1 | Integration | proposed `contract_pipeline/usage_ledger.test.ts` | active worker/review | pending implementation |
-| AC-2 | Unit | same, duplicate/resume fixtures | run totals | pending implementation |
+| AC-2 | Unit | same, duplicate/resume and mixed-currency fixtures, including unsuccessful attempts | run/task totals | pending implementation |
 | AC-3 | Unit | proposed `usage_report.test.ts` | CLI/report | pending implementation |
 | AC-4 | Unit/Integration | legacy/redaction fixtures | status/resume | pending implementation |
 
 **Test Hooks:** C-468 automation tasks and C-472 fake controller; test representative provider usage shapes offline. Three-OS file-write tests; E2E browser/visual N/A. No paid run is required to prove normalization.
-**Watch Points:** inclusive cached-token fields, stream partials, message replay, review sessions persisting across attempts and costs reported in different currencies.
+**Watch Points:** inclusive cached-token fields, stream partials, message replay, review sessions persisting across attempts, costs reported in different currencies and unknown/incomplete legacy usage alongside currency totals.
 
 ## Implementation Sequence
 
