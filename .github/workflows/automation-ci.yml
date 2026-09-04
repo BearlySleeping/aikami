@@ -59,6 +59,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
+          # moon diffs against the base branch to resolve affected tasks —
+          # a shallow, single-branch checkout leaves `main` unresolvable
+          # ("ambiguous argument 'main'") and fails before any test runs.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup environment
