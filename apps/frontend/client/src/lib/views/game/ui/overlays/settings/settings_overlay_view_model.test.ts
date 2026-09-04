@@ -7,7 +7,7 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/game/ui/overlays/settings/settings_overlay_view_model.test.ts
 
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 // test_preload.ts provides global mocks for @aikami/frontend/services and $services.
@@ -33,7 +33,9 @@ const _PAUSE_SECTIONS = [
 mock.module('$lib/views/settings/settings_sections', () => ({
   sectionsForContext: (context: string) =>
     _PAUSE_SECTIONS.filter((s) => s.contexts.includes(context)),
+  // biome-ignore lint/style/useNamingConvention: mock must match real module export name
   SETTINGS_SECTIONS: _PAUSE_SECTIONS,
+  // biome-ignore lint/style/useNamingConvention: mock must match real module export name
   SETTINGS_GROUPS: [
     { id: 'play', label: 'Play' },
     { id: 'ai', label: 'AI' },
