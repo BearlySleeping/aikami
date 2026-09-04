@@ -12,11 +12,26 @@
 //
 // Published packs are transferred to the tombstone owner rather than removed
 // (AC-4), so other players who installed a pack are not punished.
+//
+// Transfer vs. destroy is keyed on whether the pack was ever reachable for
+// install, not on its current catalog visibility:
+//   - 'draft'   — the schema default; per packVersions.publishedAt's own doc
+//                 comment ("Null while unpublished"), a draft pack has never
+//                 published a version, so nobody can have installed it. Safe
+//                 to destroy.
+//   - 'public'  — catalog-visible and installable. Transfer.
+//   - 'unlisted' — installable via direct link, just hidden from the catalog
+//                 listing. The same "someone may have installed this" risk
+//                 as 'public' — an earlier version of this fix destroyed
+//                 unlisted packs, which broke that guarantee. Transfer.
+//   - 'removed' — was public (or unlisted) before moderation took it down;
+//                 existing installs predate the removal and still reference
+//                 it. Transfer, not destroy.
 
 import { accountBackups, packs, packVersions, users } from '@aikami/backend-database';
 import { DELETED_OWNER_ACCOUNT_ID } from '@aikami/constants';
 import type { AccountDeletionResult } from '@aikami/types';
-import { and, eq, inArray, ne } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { logger } from '$logger';
 
@@ -26,6 +41,13 @@ export type AccountDeleteEnv = {
   // biome-ignore lint/style/useNamingConvention: Cloudflare R2 binding name
   SAVES_BUCKET: import('@cloudflare/workers-types').R2Bucket;
 };
+
+/**
+ * Pack visibility states that were, at some point, reachable for install —
+ * these transfer to the tombstone owner rather than being destroyed. 'draft'
+ * is the only state excluded, per the file-header note.
+ */
+const TRANSFERABLE_VISIBILITY = ['public', 'unlisted', 'removed'] as const;
 
 const unauthorized = (): Response =>
   new Response(JSON.stringify({ error: 'unauthorized' }), {
@@ -82,15 +104,21 @@ export const handleDeleteAccount = async (
   // ── Phase 2: Transfer packs to tombstone owner ─────────────────────────
   // The packs FK is onDelete: 'restrict' — we must transfer before deleting
   // the user row, or the FK blocks the deletion.
+  //
+  // Only 'draft' packs are destroyed — see the file-header note. 'public',
+  // 'unlisted' and 'removed' all transfer, because each represents a pack
+  // that was, at some point, reachable for install.
   const packsToTransfer = await db
     .select({ id: packs.id })
     .from(packs)
-    .where(and(eq(packs.ownerAccountId, accountId), eq(packs.visibility, 'public')));
+    .where(
+      and(eq(packs.ownerAccountId, accountId), inArray(packs.visibility, TRANSFERABLE_VISIBILITY)),
+    );
 
   const packsToDelete = await db
     .select({ id: packs.id })
     .from(packs)
-    .where(and(eq(packs.ownerAccountId, accountId), ne(packs.visibility, 'public')));
+    .where(and(eq(packs.ownerAccountId, accountId), eq(packs.visibility, 'draft')));
 
   if (packsToDelete.length > 0) {
     const packIds = packsToDelete.map((pack) => pack.id);

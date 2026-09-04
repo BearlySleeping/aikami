@@ -345,6 +345,12 @@ export const localServicesMockBase = () => ({
   getOpenAiCompatRuntimeModelsUrl: _createCallableStub(),
   authService: _createServiceStub(),
   AuthService: class {},
+  // C-464: account_view_model.svelte.ts needs these two from '$services'.
+  // A test file that needs a real base/header shape should spread this base
+  // and override just these keys (see the doc comment on
+  // localServicesMockBase) rather than replacing the whole barrel.
+  hubApiBase: _createCallableStub(),
+  hubAuthHeaders: _createCallableStub(),
   gameStateSyncService: _createServiceStub(),
   personaCreationService: _createServiceStub(),
   PersonaCreationService: class {},

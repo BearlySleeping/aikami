@@ -9,6 +9,7 @@ import { execFileSync, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { runStream } from '../cli_utils.ts';
+import { isLinkedWorktree } from './git_worktree_detect.ts';
 import { isOutsideAgentWorkspace } from './guard_workspace_boundary.ts';
 import { isSopsEncrypted } from './secrets_backend.ts';
 import { syncContracts } from './sync_contracts.ts';
@@ -30,24 +31,10 @@ import { syncContracts } from './sync_contracts.ts';
  * never rides along in a PR diff and never conflicts on `git pull` after a
  * merge.
  *
- * `--git-dir` differs from `--git-common-dir` only in a linked worktree, so
- * this detects the condition itself rather than trusting the caller.
+ * `isLinkedWorktree` asks git directly rather than trusting the caller — see
+ * ops/git_worktree_detect.ts, shared with ops/sync_workspace.ts.
  */
-const inLinkedWorktree = (): boolean => {
-  try {
-    const gitDir = execSync('git rev-parse --absolute-git-dir', { encoding: 'utf8' }).trim();
-    const commonDir = execSync('git rev-parse --path-format=absolute --git-common-dir', {
-      encoding: 'utf8',
-    }).trim();
-    return gitDir !== commonDir;
-  } catch {
-    // Cannot tell — assume worktree, i.e. take the conservative branch that
-    // does NOT mutate shared dashboard files.
-    return true;
-  }
-};
-
-const isWorktree = !!process.env.CONTRACT_PIPELINE_WORKTREE || inLinkedWorktree();
+const isWorktree = !!process.env.CONTRACT_PIPELINE_WORKTREE || isLinkedWorktree();
 
 // ── Plaintext secret guard (AC-5) ─────────────────────────────────────
 // Reject commits that contain unencrypted .env.production / .env.staging

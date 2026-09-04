@@ -3,6 +3,7 @@
 // C-464 AC-1/2/7: Account settings section tests.
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { localServicesMockBase } from '../../../test_preload.ts';
 
 // Mock authService
 const mockSignOut = mock(async () => true);
@@ -17,7 +18,15 @@ const mockAuthService = {
   setCurrentUser: mock(() => {}),
 };
 
+// Spread the shared base and override only what this suite needs — replacing
+// the whole '$services' barrel here (as an earlier version of this file did)
+// strips every other export the shared preload provides, which corrupts
+// whichever other test file runs next in the same worker (it did: settings_
+// view_model.test.ts, which pulls in this ViewModel transitively, started
+// failing on a MISSING 'hubApiBase' export — the exact anti-pattern
+// localServicesMockBase's own doc comment warns about).
 mock.module('$services', () => ({
+  ...localServicesMockBase(),
   authService: mockAuthService,
   gameStateSyncService: {
     listSlots: mockListSlots,

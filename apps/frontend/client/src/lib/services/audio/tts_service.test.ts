@@ -11,6 +11,20 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
+// A couple of tests below dynamically import the REAL config_service.svelte.ts
+// (to monkeypatch resolveRole rather than mock the whole service). The shared
+// test_preload.ts stubs $lib/views/utils/crypto_vault to `{}` for suites that
+// never touch config_service directly, which breaks config_service's own
+// `import { clearVault, decrypt, encrypt } from '...'` — this file never
+// calls those functions (state is set directly on the singleton, load/save
+// are never invoked), so a no-op stub is enough. Same fix as the one
+// config_service.test.ts already applies for itself.
+mock.module('$lib/views/utils/crypto_vault', () => ({
+  encrypt: async (): Promise<void> => {},
+  decrypt: async (): Promise<string | undefined> => undefined,
+  clearVault: (): void => {},
+}));
+
 // ---------------------------------------------------------------------------
 // Worker mock
 // ---------------------------------------------------------------------------
@@ -88,6 +102,12 @@ const resetTtsService = async (): Promise<{
   svc._worker = null;
   svc._kokoroServerUrl = undefined;
   svc.isKokoroServerAvailable = false;
+  // A resolved narrator-voice role mutates selectedVoice directly
+  // (tts_service.svelte.ts sets it from the connection's voiceId); without
+  // resetting it here, a later test with no role resolved inherits whatever
+  // an earlier test's connection last set, since nothing reassigns it when
+  // roleResolution is undefined.
+  svc.selectedVoice = 'af_heart';
   return mod as unknown as {
     ttsService: import('./tts_service.svelte.ts').TtsServiceInterface;
   };
@@ -157,39 +177,50 @@ describe('TtsService — C-389 config-driven TTS', () => {
     setupFetchSpy();
     const { ttsService } = await resetTtsService();
 
-    // Stub the voice model as already downloaded.
+    // Stub the voice model as already downloaded. voiceModelService is a
+    // real singleton shared across this whole file — restore checkStatus in
+    // `finally` or a later test (e.g. the "no narrator-voice role" case,
+    // which expects the model NOT to be ready) silently inherits 'ready'.
     const voiceModel = await import('./voice_model_service.svelte.ts');
-    (voiceModel.voiceModelService as unknown as Service).checkStatus = mock(async () => ({
-      status: 'ready',
-    }));
+    const voiceModelSvc = voiceModel.voiceModelService as unknown as Service;
+    const originalCheckStatus = voiceModelSvc.checkStatus;
+    voiceModelSvc.checkStatus = mock(async () => ({ status: 'ready' }));
 
-    await ttsService.initialize();
+    try {
+      await ttsService.initialize();
 
-    expect(workerMockState.instances.length).toBeGreaterThan(0);
-    const initCall = (workerMockState.postMessage as ReturnType<typeof mock>).mock.calls[0]?.[0];
-    expect(initCall.action).toBe('initialize');
-    expect(initCall.wasmPath).toContain('/ort/');
-    expect(initCall.modelId).toBe('onnx-community/Kokoro-82M-ONNX');
-    expect(initCall.revision).not.toBe('main');
+      expect(workerMockState.instances.length).toBeGreaterThan(0);
+      const initCall = (workerMockState.postMessage as ReturnType<typeof mock>).mock.calls[0]?.[0];
+      expect(initCall.action).toBe('initialize');
+      expect(initCall.wasmPath).toContain('/ort/');
+      expect(initCall.modelId).toBe('onnx-community/Kokoro-82M-ONNX');
+      expect(initCall.revision).not.toBe('main');
+    } finally {
+      voiceModelSvc.checkStatus = originalCheckStatus;
+    }
   });
 
   test('worker ready response reports the wasm backend when WebGPU is absent', async () => {
     setupFetchSpy();
     const { ttsService } = await resetTtsService();
     const voiceModel = await import('./voice_model_service.svelte.ts');
-    (voiceModel.voiceModelService as unknown as Service).checkStatus = mock(async () => ({
-      status: 'ready',
-    }));
+    const voiceModelSvc = voiceModel.voiceModelService as unknown as Service;
+    const originalCheckStatus = voiceModelSvc.checkStatus;
+    voiceModelSvc.checkStatus = mock(async () => ({ status: 'ready' }));
     // No WebGPU in the test environment.
     Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true });
 
-    const initPromise = ttsService.initialize();
-    await new Promise((r) => setTimeout(r, 10));
-    simulateWorkerMessage({ type: 'ready', backend: 'wasm' });
-    await initPromise;
+    try {
+      const initPromise = ttsService.initialize();
+      await new Promise((r) => setTimeout(r, 10));
+      simulateWorkerMessage({ type: 'ready', backend: 'wasm' });
+      await initPromise;
 
-    expect(ttsService.status).toBe('ready');
-    expect(ttsService.backend).toBe('wasm');
+      expect(ttsService.status).toBe('ready');
+      expect(ttsService.backend).toBe('wasm');
+    } finally {
+      voiceModelSvc.checkStatus = originalCheckStatus;
+    }
   });
 
   test('synthesize() posts synthesize message when the worker is ready', async () => {

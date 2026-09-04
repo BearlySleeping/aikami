@@ -9,6 +9,18 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
+// config_service.svelte.ts is fully mocked below (both by its own relative
+// specifier and via '$services'), but crypto_vault is stubbed defensively
+// too — the real config_service.svelte.ts still imports
+// { clearVault, decrypt, encrypt } from it, and the shared test_preload.ts
+// stub (`{}`) breaks that import if any resolution path in the module graph
+// reaches the real config_service.svelte.ts instead of the mock above.
+mock.module('$lib/views/utils/crypto_vault', () => ({
+  encrypt: async (): Promise<void> => {},
+  decrypt: async (): Promise<string | undefined> => undefined,
+  clearVault: (): void => {},
+}));
+
 // Mock the engine factory BEFORE importing the service so loadCheckpoints /
 // generateImage delegate to a controllable engine.
 let mockEngineId: 'comfyui' | 'sdcpp' = 'comfyui';

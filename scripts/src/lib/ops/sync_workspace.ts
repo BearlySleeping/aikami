@@ -21,27 +21,31 @@
 // Windows contributors. `bun run <script>` is the one spelling that behaves
 // identically on Linux, macOS and Windows.
 //
-// 🔴 Why the "is moon installed locally" guard must be preserved.
+// 🔴 Why `moon sync` must never run in a linked worktree.
 //
-// It reads like defensive boilerplate for a fresh clone, but it is what keeps
-// `moon sync` OUT of contract-pipeline worktrees, and that matters more than
-// it looks:
+//   * `post-checkout` fires on `git worktree add`, and again on every branch
+//     switch inside the worktree, with the cwd set to that worktree.
+//   * If `moon sync` runs there, it writes tsconfig references and project
+//     sync artifacts into the worktree before the orchestrator takes its
+//     pre-stage `captureGitState` snapshot, and `commitAll`'s `git add -A`
+//     then sweeps those unrelated files into the implementation commit.
 //
-//   * `post-checkout` fires on `git worktree add`, with the cwd set to the
-//     brand-new worktree.
-//   * Pipeline worktrees get a `node_modules` holding only the `@aikami`
-//     workspace symlinks — no `.bin/moon`.
-//   * If `moon sync` DID run there, it would write tsconfig references and
-//     project sync artifacts into the worktree before the orchestrator takes
-//     its pre-stage `captureGitState` snapshot, and `commitAll`'s `git add -A`
-//     would then sweep those unrelated files into the implementation commit.
+// This used to be enforced by accident: the "is moon installed locally" guard
+// below found no `.bin/moon` in a worktree, because pipeline worktrees got a
+// `node_modules` holding only the `@aikami` workspace symlinks. That accident
+// no longer holds — herdr/worktree.ts now symlinks root's `node_modules/.bin`
+// into every worktree precisely so the pre-commit hook can find moon, biome
+// and tsc there. `isLinkedWorktree` is the explicit guard that replaces it;
+// the moon-binary check stays for the case it actually describes (a fresh
+// clone before `bun install`).
 //
 // So: sync the developer's main checkout, never a worktree. Silence is the
-// correct outcome when moon is not installed — a git hook must not fail a
-// checkout over a workspace nicety.
+// correct outcome in both cases — a git hook must not fail a checkout over a
+// workspace nicety.
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { isLinkedWorktree } from './git_worktree_detect.ts';
 
 const localMoonBinary = (): string | undefined => {
   // Bun/npm write `moon` (shell shim) on POSIX and `moon.cmd`/`moon.exe` on
@@ -56,10 +60,14 @@ const localMoonBinary = (): string | undefined => {
 };
 
 const main = (): void => {
+  if (isLinkedWorktree()) {
+    // See the header: a worktree must never gain `moon sync` artifacts.
+    return;
+  }
   const binary = localMoonBinary();
   if (!binary) {
-    // Fresh clone before `bun install`, or a pipeline worktree. Both are
-    // expected — exit 0 so the checkout/merge is never blocked.
+    // Fresh clone before `bun install` — exit 0 so the checkout/merge is
+    // never blocked.
     return;
   }
   try {
