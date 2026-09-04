@@ -509,6 +509,8 @@ export const localServicesMockBase = () => ({
     { id: 'openai-compat', label: 'OpenAI Compatible' },
   ] as const,
   PROVIDER_MODEL_FETCH: {},
+  // C-465: ai_settings_view_model.svelte.ts needs this from '$services'.
+  fetchModelsFromProvider: _createCallableStub(),
   choiceHistoryStore: _createServiceStub(),
   getExpressionAssetResolver: _createCallableStub(),
   sceneToMusicTags: _createCallableStub(),
