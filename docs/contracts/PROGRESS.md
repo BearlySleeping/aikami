@@ -226,7 +226,7 @@
 | C-462 | Client Side R2 Save Backup And Restore | 🛠️ implemented | ❓ `sandbox` | v2 | full |
 | C-463 | Provider Connection Role Model | 🛠️ implemented | ❓ `integrated` | v2 | full |
 | C-464 | Account Section And Deletion | 🛠️ implemented | ❓ `integrated` | v2 | full |
-| C-465 | Ai Settings Section | 📝 draft | ❓ `integrated` | v1 | full |
+| C-465 | Ai Settings Section | 👍 approved | ❓ `integrated` | v1 | full |
 
 ---
 

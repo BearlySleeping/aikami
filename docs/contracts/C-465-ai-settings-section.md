@@ -3,7 +3,7 @@ id: C-465
 title: "AI settings section — provider tree, status board, and role assignment"
 source: "Settings teardown review, 2026-09-03 (§6-7). Follows C-463 (PRs #236/#237) and C-464 (PRs #240/#241), which built the Provider/Connection/Role model and the settings-group shell this replaces the AI content of. C-464 is the highest claimed ID; C-465 is the next free one."
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04"
 | **Type** | full |
 | **Priority** | P1 — the model, the runtime wiring, and the settings shell it slots into are all already merged; this is the piece that makes them visible and operable |
 | **Dependencies** | C-463 (Provider/Connection/Role model, PRs #236/#237), PR #238 (settings groups + registry), PR #239 (generation/voice/image params reach the runtime), C-464 (Account section pattern to follow, PRs #240/#241) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` |
 | **Docs Impact** | user-facing → a short "Connecting an AI provider" page in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |
@@ -53,7 +53,7 @@ created_at: "2026-09-04"
 
 ## User Outcome
 
-After this contract, a player pastes one API key once, picks a model, and the connection works; adding a second model on the same account reuses the key automatically. They can see at a glance whether text, voice, and image are each connected, and — without ever needing to know the word "provider" — assign a cheaper model to background tasks and a better one to narration.
+After this contract, a player pastes one API key once, picks a model, and the connection works; adding a second model on the same account reuses the key automatically. They can see at a glance whether text, voice, and image are each connected, assign a cheaper model to background tasks and a better one to narration, and — for a connection they want to tune — adjust temperature and length without ever needing to know the word "provider".
 
 ## Success Measures
 
@@ -74,6 +74,7 @@ After this contract, a player pastes one API key once, picks a model, and the co
 | Local voice install | `VoiceModelDownload` (capability screen) | reuse verbatim |
 | Image style profile | `style_profile_service.svelte.ts` | reuse, surfaced in the image section |
 | Settings registry (`group`/`contexts`) | `settings_sections.ts` (#238) | modify — add/replace sections in the `ai` group |
+| Generation params reaching the request | `text_adapter_openai_compatible.ts` (#239) | reuse unchanged — this contract adds the control surface, not the plumbing |
 
 ## Overview
 
@@ -114,7 +115,7 @@ The add/edit connection form is the one from the teardown's §5 "The dropdown do
 
 ## State & Data Models
 
-No new top-level state. One schema decision this contract must make (see Open Questions): whether `VoiceArchetype[]` moves onto `VoiceParams` as an array field, or stays a separate per-account list keyed by provider. Sketch, pending that decision:
+No new top-level state. `VoiceParams` gains one additive array field, per Resolved Decision 1:
 
 ```ts
 // packages/shared/schemas — extends the existing VoiceParamsSchema, additive.
@@ -139,8 +140,8 @@ type VoiceParams = {
 
 ## Migration & Rollback
 
-- **Old data compatibility**: none of the underlying data changes shape (unless the VoiceArchetype decision below adds a field — additive, safe for old rows to lack it).
-- **Migration**: if archetypes move onto `VoiceParams`, migrate `state.voice.voiceArchetypes` onto the `narrator-voice` role's resolved connection once, on load, guarded so it never runs twice (same idempotency discipline as C-463's `migrateVaultV1ToV2`).
+- **Old data compatibility**: `VoiceParams` gains an additive `archetypes` field (Resolved Decision 1) — old rows simply lack it until migrated, no breaking shape change.
+- **Migration**: migrate `state.voice.voiceArchetypes` onto the `narrator-voice` role's resolved connection once, on load, guarded so it never runs twice (same idempotency discipline as C-463's `migrateVaultV1ToV2`).
 - **Rollback**: no schema removed, so rollback is a plain revert of the UI PR; the underlying provider/connection/role data is untouched either way.
 - **Feature flag or kill switch**: none — this replaces the only path to a section (`Connections`) that is already broken for the multi-model case, so there is no safe "half-shipped" state to flag around.
 - **Failure recovery**: N/A — no new persistent state to corrupt.
@@ -155,10 +156,10 @@ type VoiceParams = {
   - Deciding and implementing the VoiceArchetype schema question (Open Question 1).
   - `/dev/ai-settings` dev route with seeded fixtures (zero connections, one, several providers, one provider with three models, a rejected key) — this is also where the coverage currently in the deleted `providers_view_model.test.ts` gets re-homed, per C-463's own note that it needed re-homing here.
   - Removing `/dev/settings` (its only reason to exist — live volume sliders for a dev sandbox — is now redundant now that #239 made real settings persist correctly) is a two-line cleanup; do it here since this PR already touches the settings dev routes.
+  - **Generation-parameter UI** (decided — brought into scope): each text connection's editor gets an "Advanced" disclosure exposing `TextParams`' seven fields — temperature, topP, topK, repetitionPenalty, presencePenalty, maxTokens, contextSize — writing through `updateAiConnection()`'s `params`, the same field #239 already wired the gateway to read. Collapsed by default; a beginner never has to open it. Built-in presets (the existing `BUILT_IN_PRESETS` / `GenParamPreset` machinery) apply onto the connection's params rather than the old global `generationParams`.
 
 - **Out of Scope:**
   - **The three-mounts unification** (pause menu, `/capability` sharing this same registry via `contexts`). That field exists on the registry since #238 but nothing reads it yet — wiring it up is a separate contract. This section must render correctly standalone in the `page` context only.
-  - **Generation-parameter UI** (temperature/top-P/etc. sliders and presets). #239 made these reach the request; whether to expose them as a settings control at all — vs. leaving them as an advanced per-role default — is a real design question the teardown didn't fully settle, and bundling it here risks scope creep on an already-large contract. Track as a fast-follow if wanted.
   - Retiring text providers with no working adapter (already done, PR #234) or doing the same for voice/image registries.
   - The Tauri hardware-detection wizard and engine sidecars (separate contracts, unblocked by this one but not part of it).
   - Any change to `capability_view.svelte` / `capability_view_model.svelte.ts` beyond what compiling against this contract's changes requires.
@@ -167,7 +168,7 @@ type VoiceParams = {
 
 > 📋 Split rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#contract-size--split-rule)
 
-**For this contract:** one contract, but flagged for a possible mid-flight split along capability lines if AC count balloons during drafting. The status board + provider tree + Roles drawer are one cohesive outcome (they share the same data and the same "no re-entering a key" invariant); the voice and image capability-specific panels are logically separable from that core and from each other. If implementation reveals the voice/image panels are each substantial enough to be independently mergeable — plausible, since they involve real previews and local-install UX — split them into `C-465a` (provider tree + roles) and `C-465b` (voice) / `C-465c` (image) rather than force one enormous PR. Decide this explicitly before implementation starts, not mid-PR.
+**For this contract:** one contract, one PR (decided). The status board, provider tree, Roles drawer, generation-parameter disclosure, and the voice/image capability panels all share one invariant — a control the section shows must write through the same C-463 `params` field #239 already wired the gateway to read — and shipping any subset alone would leave that invariant unverifiable for the rest. Per the repo's own split rule, affected-area count is not a split signal on its own; this is one cohesive outcome specified with the level of care its AC count reflects.
 
 ## Acceptance Criteria
 
@@ -250,7 +251,21 @@ type VoiceParams = {
 |---|---|---|---|---|
 | AC-7 | Unit | image section ViewModel test | `/settings?group=ai` | Filled during verification |
 
-### AC-8: `/dev/ai-settings` covers the fixture matrix and the old test's assertions
+### AC-8: Generation-parameter changes reach the request, defaults stay silent
+**Given** a text connection's Advanced disclosure open
+**When** the user changes `temperature` and leaves the rest untouched
+**Then** `updateAiConnection()` is called with only `temperature` changed on that connection's `params`, and the very next request resolved through that connection (via `getActiveTextProvider()` or `resolveRole()`) carries the new value — while a connection whose Advanced disclosure was never opened continues to produce a request with no explicit generation-parameter fields, exactly as #239 specified.
+
+**Evidence Matrix**:
+| AC | Test Level | Required Artifact | Production Path | Evidence |
+|---|---|---|---|---|
+| AC-8 | Unit | text section ViewModel test; extend `text_adapters.test.ts` (#239) if the body-building contract needs a new fixture | `/settings?group=ai` | Filled during verification |
+
+**Watch Points**:
+- This is the one place a naive implementation most easily reintroduces the exact bug #239 fixed: writing a *default* value into `params` (e.g. `temperature: 0.7`) the moment the disclosure opens, rather than only on an actual edit, would silently start sending a field that was previously omitted for every connection a user merely glanced at.
+- Applying a built-in preset must update every field the preset defines, not merge partial values from a prior preset.
+
+### AC-9: `/dev/ai-settings` covers the fixture matrix and the old test's assertions
 **Given** the dev route
 **When** it loads with each of: zero connections, one connection, several providers, one provider with three models, a connection whose key fails verification
 **Then** each fixture renders without error, and the provider-verification, checkpoint-detection, and model-fetching assertions that lived in the now-deleted `providers_view_model.test.ts` (PR #233) are re-homed here.
@@ -258,9 +273,9 @@ type VoiceParams = {
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-8 | Unit + Manual | `/dev/ai-settings` fixtures; ported test assertions | `/dev/ai-settings` | Filled during verification |
+| AC-9 | Unit + Manual | `/dev/ai-settings` fixtures; ported test assertions | `/dev/ai-settings` | Filled during verification |
 
-### AC-9: No behavioral regression
+### AC-10: No behavioral regression
 **Given** the existing suites
 **When** the gate runs
 **Then** client unit is **1818+ pass**, the failing set is exactly the pre-existing baseline (no new suite names), and the type-safety guard baseline holds at its current level (`T1=14 T2=4 T3=1` as of PR #241, confirm before merge — later work may have moved it).
@@ -268,17 +283,17 @@ type VoiceParams = {
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-9 | Unit + E2E | `bun run fix && bun moon run :validate && bun run test` | `/settings?group=ai` | Filled during verification |
+| AC-10 | Unit + E2E | `bun run fix && bun moon run :validate && bun run test` | `/settings?group=ai` | Filled during verification |
 
 ## Implementation Sequence
 
-1. **Phase 0 (Decide the split)**: confirm whether this ships as one PR or splits per the Contract Size note — record the decision in Amendments before writing code.
-2. **Phase 1 (Editor + provider tree, test-first)**: write AC-1/AC-2/AC-3 against the new editor ViewModel before building the view; this is the highest-value, highest-risk piece.
-3. **Phase 2 (Status board + Roles drawer)**: AC-4, AC-5.
-4. **Phase 3 (Voice section)**: archetype schema decision, panel, AC-6.
-5. **Phase 4 (Image section)**: size presets, quality slider, style profile, AC-7.
-6. **Phase 5 (Dev route + test re-homing)**: AC-8, remove `/dev/settings`.
-7. **Phase 6 (Validation)**: `bun run fix && bun moon run :validate && bun run test`; AC-9.
+1. **Phase 1 (Editor + provider tree, test-first)**: write AC-1/AC-2/AC-3 against the new editor ViewModel before building the view; this is the highest-value, highest-risk piece.
+2. **Phase 2 (Status board + Roles drawer)**: AC-4, AC-5.
+3. **Phase 3 (Voice section)**: migrate `VoiceArchetype[]` onto `VoiceParams` (Resolved Decision 1), panel, AC-6.
+4. **Phase 4 (Image section)**: size presets, quality slider, style profile, AC-7.
+5. **Phase 5 (Generation-parameter disclosure, test-first)**: write AC-8's "stays silent until edited" assertion before wiring the disclosure open/close to anything — see its Watch Points.
+6. **Phase 6 (Dev route + test re-homing)**: AC-9, remove `/dev/settings`.
+7. **Phase 7 (Validation)**: `bun run fix && bun moon run :validate && bun run test`; AC-10.
 
 ## Edge Cases & Gotchas
 
@@ -287,13 +302,23 @@ type VoiceParams = {
 - **Role reassignment on delete**: deleting a connection that held a role assignment must not leave a dangling role pointing at a gone connection — `_assignCapabilityRoles`/`_reproject` already handle this at the service layer (PR #237); the UI must re-render the Roles drawer reactively when it happens, not require a manual refresh.
 - **Voice preview with no active campaign**: AC-6's "real line of dialogue" needs a defined fallback — do not let the preview silently do nothing or throw when there's no campaign context.
 
-## Open Questions
+## Resolved Decisions
 
-Must be resolved before status becomes `approved`:
+All three open questions were resolved by the author on 2026-09-04; the contract is
+`approved`. Recorded here rather than deleted, because each one shaped a scope
+boundary above.
 
-1. **Does `VoiceArchetype[]` move onto `VoiceParams`, or stay a separate per-provider list?** Moving it makes "switch providers, remap every NPC in one step" (the original design goal) work naturally, since archetypes travel with the connection. Keeping it separate is less invasive but leaves the disconnect between "which connection is `narrator-voice`" and "which archetypes exist" unresolved. *Recommendation*: move it onto `VoiceParams`, migrated once from `state.voice.voiceArchetypes` onto the connection that resolves the `narrator-voice` role.
-2. **Do generation-parameter controls (temperature etc.) get a UI in this contract, or stay advanced-only via defaults?** Explicitly Out of Scope above pending this answer — flagging here so approval forces a decision either way rather than it being silently dropped. *Recommendation*: out of scope for this contract; track as a fast-follow once the core section has shipped and real usage shows whether anyone wants it exposed.
-3. **Single PR or the three-way split named in Contract Size & Split Rule?** *Recommendation*: start as one PR; split only if Phase 1 alone proves large enough that review would be unreasonable, per the repo's own "split on independent mergeability, not size" rule — don't split preemptively.
+1. **`VoiceArchetype[]` moves onto `VoiceParams`.** Migrated once, on load, from
+   `state.voice.voiceArchetypes` onto the connection that resolves the
+   `narrator-voice` role — so "switch providers, remap every NPC in one step" works
+   because archetypes travel with the connection. See State & Data Models, and
+   Implementation Sequence Phase 3.
+2. **Generation-parameter controls are in scope.** Each text connection's editor
+   gets a collapsed Advanced disclosure over `TextParams`' seven fields, writing
+   through `updateAiConnection()`. See Scope Boundaries and AC-8 — whose Watch
+   Points name the exact way this could silently reintroduce the bug #239 fixed
+   if implemented naively (writing a default the moment the disclosure opens).
+3. **One contract, one PR.** No split. See Contract Size & Split Rule.
 
 ## Amendments
 
