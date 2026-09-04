@@ -53,7 +53,9 @@ const mockConfigService = {
   updateProvider: mock((_id: string, _patch: Record<string, unknown>) => {}),
   deleteAiConnection: mock((id: string) => {
     const idx = mockAiConnections.findIndex((c) => c.id === id);
-    if (idx >= 0) mockAiConnections.splice(idx, 1);
+    if (idx >= 0) {
+      mockAiConnections.splice(idx, 1);
+    }
   }),
   setRoleAssignment: mock((role: string, connectionId: string) => {
     mockRoleAssignments[role] = connectionId;
@@ -66,6 +68,7 @@ const mockConfigService = {
 mock.module('$services', () => ({
   ...localServicesMockBase(),
   configService: mockConfigService,
+  // biome-ignore lint/style/useNamingConvention: matches actual $services export name
   PROVIDER_MODEL_FETCH: { openrouter: {} },
   fetchModelsFromProvider: mock(async () => []),
 }));
@@ -76,7 +79,9 @@ beforeEach(async () => {
   // Clear all mock state
   mockProviders.length = 0;
   mockAiConnections.length = 0;
-  Object.keys(mockRoleAssignments).forEach((k) => delete mockRoleAssignments[k]);
+  for (const k of Object.keys(mockRoleAssignments)) {
+    delete mockRoleAssignments[k];
+  }
   nextId = 1;
   mockConfigService.load.mockClear();
   mockConfigService.save.mockClear();
