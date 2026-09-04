@@ -22,22 +22,17 @@ const { viewModel }: Props = $props();
       <div class="card bg-base-200">
         <div class="card-body">
           <p class="text-sm text-base-content/70 mb-4">
-            Your campaigns, saves and chat history live on this device. The game is fully
-            playable without an account. Sign in to back up your saves to the cloud and
-            restore them on another device.
+            Your campaigns, saves and chat history live on this device. The game is fully playable
+            without an account. Sign in to back up your saves to the cloud and restore them on
+            another device.
           </p>
           <div class="flex flex-col gap-3">
-            <a href="/auth/login" class="btn btn-primary w-full">
-              Sign in with Google
-            </a>
-            <a href="/auth/login" class="btn btn-outline w-full">
-              Sign in with Email
-            </a>
+            <a href="/auth/login" class="btn btn-primary w-full"> Sign in with Google </a>
+            <a href="/auth/login" class="btn btn-outline w-full"> Sign in with Email </a>
           </div>
         </div>
       </div>
     </section>
-
   {:else}
     <!-- ═══════════════════════════════════════════════════════════════════
          Signed-in state: Identity (AC-2)
@@ -48,8 +43,12 @@ const { viewModel }: Props = $props();
         <div class="card-body space-y-2">
           <div class="flex items-center gap-3">
             <div class="avatar placeholder">
-              <div class="bg-primary text-primary-content rounded-full w-12 h-12 flex items-center justify-center">
-                <span class="text-lg font-bold">{viewModel.displayName?.charAt(0)?.toUpperCase() ?? '?'}</span>
+              <div
+                class="bg-primary text-primary-content rounded-full w-12 h-12 flex items-center justify-center"
+              >
+                <span class="text-lg font-bold"
+                  >{viewModel.displayName?.charAt(0)?.toUpperCase() ?? '?'}</span
+                >
               </div>
             </div>
             <div>
@@ -59,9 +58,11 @@ const { viewModel }: Props = $props();
           </div>
           <p class="text-xs text-base-content/40">
             {#if viewModel.isOnline}
-              <span class="text-success">●</span> Online
+              <span class="text-success">●</span>
+              Online
             {:else}
-              <span class="text-base-content/30">●</span> Offline
+              <span class="text-base-content/30">●</span>
+              Offline
             {/if}
           </p>
         </div>
@@ -170,9 +171,8 @@ const { viewModel }: Props = $props();
       <div class="card bg-base-200 border border-error/20">
         <div class="card-body">
           <p class="text-sm text-base-content/70 mb-2">
-            Permanently delete your cloud account. This removes your identity,
-            community packs and backups from the server. Your on-device campaigns,
-            saves and chat history are untouched.
+            Permanently delete your cloud account. This removes your identity, community packs and
+            backups from the server. Your on-device campaigns, saves and chat history are untouched.
           </p>
           <button
             type="button"
@@ -202,8 +202,8 @@ const { viewModel }: Props = $props();
       <div class="modal-box max-w-md">
         <h3 class="text-lg font-bold text-error mb-2">Delete your account?</h3>
         <p class="text-sm text-base-content/70 mb-4">
-          This will permanently delete your cloud account, including all backups and
-          published community packs. Your on-device data is not affected.
+          This will permanently delete your cloud account, including all backups and published
+          community packs. Your on-device data is not affected.
         </p>
         <p class="text-sm font-semibold mb-2">
           Type <span class="font-mono bg-base-300 px-1 rounded">DELETE</span> to confirm.
@@ -215,13 +215,9 @@ const { viewModel }: Props = $props();
           placeholder="Type DELETE to confirm"
           value={viewModel.deleteConfirmText}
           oninput={(e) => viewModel.updateDeleteConfirmText((e.target as HTMLInputElement).value)}
-        />
+        >
         <div class="flex gap-2 justify-end">
-          <button
-            type="button"
-            class="btn btn-ghost"
-            onclick={() => viewModel.closeDeleteDialog()}
-          >
+          <button type="button" class="btn btn-ghost" onclick={() => viewModel.closeDeleteDialog()}>
             Cancel
           </button>
           <button

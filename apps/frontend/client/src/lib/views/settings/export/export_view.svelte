@@ -222,7 +222,7 @@ const { viewModel }: Props = $props();
               aria-label="Enable Offline Mode"
               checked={viewModel.offlineMode}
               onchange={() => viewModel.toggleOfflineMode()}
-            />
+            >
           </div>
         </div>
       </div>
@@ -242,7 +242,7 @@ const { viewModel }: Props = $props();
               aria-label="Opt out of telemetry"
               checked={viewModel.telemetryOptOut}
               onchange={() => viewModel.toggleTelemetry()}
-            />
+            >
           </div>
         </div>
       </div>
@@ -251,8 +251,8 @@ const { viewModel }: Props = $props();
       <div class="card bg-base-200 border border-error/20">
         <div class="card-body">
           <p class="text-sm text-base-content/70 mb-2">
-            Permanently delete all local data on this device. This removes campaigns,
-            saves, chat history, and settings. Your cloud account is untouched.
+            Permanently delete all local data on this device. This removes campaigns, saves, chat
+            history, and settings. Your cloud account is untouched.
           </p>
           <button
             type="button"
@@ -290,8 +290,8 @@ const { viewModel }: Props = $props();
       <div class="modal-box max-w-md">
         <h3 class="text-lg font-bold text-error mb-2">Delete all local data?</h3>
         <p class="text-sm text-base-content/70 mb-4">
-          This will permanently delete all campaigns, saves, chat history, and settings
-          on this device. Your cloud account and backups are not affected.
+          This will permanently delete all campaigns, saves, chat history, and settings on this
+          device. Your cloud account and backups are not affected.
         </p>
         <p class="text-sm font-semibold mb-2">
           Type <span class="font-mono bg-base-300 px-1 rounded">DELETE</span> to confirm.
@@ -303,7 +303,7 @@ const { viewModel }: Props = $props();
           placeholder="Type DELETE to confirm"
           value={viewModel.deleteLocalConfirmText}
           oninput={(e) => viewModel.updateDeleteLocalConfirmText((e.target as HTMLInputElement).value)}
-        />
+        >
         <div class="flex gap-2 justify-end">
           <button
             type="button"

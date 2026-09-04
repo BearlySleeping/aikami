@@ -54,8 +54,6 @@ export const fallback: RequestHandler = async ({ request, platform }) => {
         SAVES_BUCKET: env.SAVES_BUCKET,
       }
     : undefined;
-  const requestApp = isAccountDelete
-    ? createApp(accountDeleteEnv)
-    : app;
+  const requestApp = isAccountDelete ? createApp(accountDeleteEnv) : app;
   return await requestApp.handle(request);
 };

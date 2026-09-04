@@ -104,6 +104,5 @@ const { viewModel }: Props = $props();
         </button>
       {/if}
     </div>
-
   </div>
 </BaseViewModelContainer>
