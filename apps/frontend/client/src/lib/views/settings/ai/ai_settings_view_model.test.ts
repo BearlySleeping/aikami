@@ -89,6 +89,7 @@ const mockCampaignService: { activeCampaign: { name: string } | undefined } = {
 // AC-7: real image preview through the same generateImage() path #239 wired.
 const mockImageGenerationService = {
   checkpoints: [{ id: 'sd_xl_base_1.0', description: 'SDXL Base' }],
+  loadCheckpoints: mock(async () => {}),
   generateImage: mock(async (_options: Record<string, unknown>) => ({
     url: 'blob:preview-url',
     isDemo: false,
@@ -116,6 +117,7 @@ mock.module('$services', () => ({
 }));
 
 let getAiSettingsViewModel: typeof import('./ai_settings_view_model.svelte').getAiSettingsViewModel;
+let voicePreviewFallbackLine: typeof import('./ai_settings_view_model.svelte').VOICE_PREVIEW_FALLBACK_LINE;
 
 beforeEach(async () => {
   // Clear all mock state
@@ -136,10 +138,14 @@ beforeEach(async () => {
   mockFetchModelsFromProvider.mockClear();
   mockTtsService.speak.mockClear();
   mockCampaignService.activeCampaign = undefined;
+  mockImageGenerationService.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'SDXL Base' }];
+  mockImageGenerationService.loadCheckpoints.mockClear();
   mockImageGenerationService.generateImage.mockClear();
   mockStyleProfileService.setActiveProfile.mockClear();
 
-  ({ getAiSettingsViewModel } = await import('./ai_settings_view_model.svelte'));
+  ({ getAiSettingsViewModel, VOICE_PREVIEW_FALLBACK_LINE: voicePreviewFallbackLine } = await import(
+    './ai_settings_view_model.svelte'
+  ));
 });
 
 describe('AiSettingsViewModel — AC-1: Second model reuses key', () => {
@@ -486,8 +492,7 @@ describe('AiSettingsViewModel — AC-6: Voice archetypes', () => {
     expect(mockTtsService.speak).toHaveBeenCalledTimes(1);
     const [call] = mockTtsService.speak.mock.calls;
     expect(call?.[0].voiceId).toBe('af_heart');
-    expect(call?.[0].text).toBeTruthy();
-    expect(call?.[0].text).not.toBe('');
+    expect(call?.[0].text).toBe(voicePreviewFallbackLine);
   });
 
   test('preview uses a real line from the active campaign when one is playing', async () => {
@@ -514,12 +519,34 @@ describe('AiSettingsViewModel — AC-6: Voice archetypes', () => {
 });
 
 describe('AiSettingsViewModel — AC-7: Image preview uses the same ImageParams path', () => {
+  test('initialization loads checkpoint options from the image service', async () => {
+    mockImageGenerationService.checkpoints = [];
+    mockImageGenerationService.loadCheckpoints.mockImplementationOnce(async () => {
+      mockImageGenerationService.checkpoints = [
+        { id: 'loaded-checkpoint', description: 'Loaded checkpoint' },
+      ];
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+
+    await vm.initialize();
+
+    expect(mockImageGenerationService.loadCheckpoints).toHaveBeenCalledTimes(1);
+    expect(vm.imageCheckpoints).toEqual(['loaded-checkpoint']);
+  });
+
   test('generateImage() is called with the connection resolved checkpoint and size', async () => {
     const pid = mockConfigService.addProvider({ registryId: 'comfyui', label: 'This computer' });
     const cid = mockConfigService.addAiConnection({
       providerId: pid,
       capability: 'image',
       label: 'ComfyUI',
+      model: 'sd_xl_base_1.0',
+      params: { checkpoint: 'sd_xl_base_1.0', width: 512, height: 512, steps: 20, cfg: 7 },
+    });
+    const otherCid = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'image',
+      label: 'Other ComfyUI',
       model: 'sd_xl_base_1.0',
       params: { checkpoint: 'sd_xl_base_1.0', width: 512, height: 512, steps: 20, cfg: 7 },
     });
@@ -540,7 +567,79 @@ describe('AiSettingsViewModel — AC-7: Image preview uses the same ImageParams 
         cfgScale: 7,
       }),
     );
-    expect(vm.imagePreviewState).toEqual({ status: 'ready', url: 'blob:preview-url' });
+    expect(vm.imagePreviewStateFor(cid)).toEqual({ status: 'ready', url: 'blob:preview-url' });
+    expect(vm.imagePreviewStateFor(otherCid)).toEqual({ status: 'idle' });
+  });
+
+  test('advanced disclosure state is scoped to each image connection', async () => {
+    const pid = mockConfigService.addProvider({ registryId: 'comfyui', label: 'This computer' });
+    const firstCid = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'image',
+      label: 'First ComfyUI',
+      model: 'sd_xl_base_1.0',
+      params: { checkpoint: 'sd_xl_base_1.0', width: 512, height: 512, steps: 20, cfg: 7 },
+    });
+    const secondCid = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'image',
+      label: 'Second ComfyUI',
+      model: 'sd_xl_base_1.0',
+      params: { checkpoint: 'sd_xl_base_1.0', width: 512, height: 512, steps: 20, cfg: 7 },
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.toggleImageAdvanced(firstCid);
+
+    expect(vm.isImageAdvancedOpenFor(firstCid)).toBe(true);
+    expect(vm.isImageAdvancedOpenFor(secondCid)).toBe(false);
+  });
+});
+
+describe('AiSettingsViewModel — continuous settings persistence', () => {
+  test('updates voice params immediately and saves only on explicit commit', async () => {
+    const pid = mockConfigService.addProvider({ registryId: 'kokoro', label: 'Kokoro' });
+    mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'voice',
+      label: 'Kokoro TTS',
+      model: 'kokoro',
+      params: { voiceId: 'af_bella', speed: 1.0, pitch: 0 },
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.setVoiceSpeed(1.25);
+
+    expect(vm.voiceSpeed).toBe(1.25);
+    expect(mockConfigService.save).not.toHaveBeenCalled();
+
+    vm.commitConfigChanges();
+
+    expect(mockConfigService.save).toHaveBeenCalledTimes(1);
+  });
+
+  test('updates image params immediately and saves only on explicit commit', async () => {
+    const pid = mockConfigService.addProvider({ registryId: 'comfyui', label: 'This computer' });
+    const cid = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'image',
+      label: 'ComfyUI',
+      model: 'sd_xl_base_1.0',
+      params: { checkpoint: 'sd_xl_base_1.0', width: 512, height: 512, steps: 20, cfg: 7 },
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.setImageParamField(cid, 'steps', 30);
+
+    expect(vm.imageParamsFor(cid).steps).toBe(30);
+    expect(mockConfigService.save).not.toHaveBeenCalled();
+
+    vm.commitConfigChanges();
+
+    expect(mockConfigService.save).toHaveBeenCalledTimes(1);
   });
 });
 

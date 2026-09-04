@@ -5,7 +5,7 @@
 // connection editor, and capability-specific controls.
 
 import VoiceModelDownload from '@aikami/frontend/components/voice-model-download/voice_model_download.svelte';
-import { BaseViewModelContainer } from '$components';
+import { BaseViewModelContainer, Image } from '$components';
 import type { AiSettingsViewModelInterface } from './ai_settings_view_model.svelte';
 
 type Props = {
@@ -256,17 +256,17 @@ const { viewModel }: Props = $props();
        VOICE SECTION (AC-6)
        ═══════════════════════════════════════════════════════════════════ -->
   <section>
-    <h2 class="font-mono text-lg font-bold text-[#cabeff] mb-4">Voice</h2>
+    <h2 class="font-mono text-lg font-bold text-primary mb-4">Voice</h2>
 
     {#if viewModel.voiceConnections.length === 0}
-      <p class="text-sm text-[#938ea1]/60 font-sans italic mb-3">
+      <p class="text-sm text-base-content/60 font-sans italic mb-3">
         No voice connection yet — add one above to assign archetypes.
       </p>
     {:else}
-      <div class="card card-bordered border-white/[0.08] bg-base-100/50 mb-3">
+      <div class="card card-bordered border-base-300 bg-base-100/50 mb-3">
         <div class="card-body p-4 space-y-3">
           <div class="flex items-center gap-4">
-            <label class="text-xs font-mono text-[#938ea1] flex-1" for="voice-speed">
+            <label class="text-xs font-mono text-base-content/60 flex-1" for="voice-speed">
               Speed ({viewModel.voiceSpeed.toFixed(2)}x)
               <input
                 id="voice-speed"
@@ -277,9 +277,10 @@ const { viewModel }: Props = $props();
                 class="range range-xs w-full"
                 value={viewModel.voiceSpeed}
                 oninput={(e) => viewModel.setVoiceSpeed(Number((e.target as HTMLInputElement).value))}
+                onchange={() => viewModel.commitConfigChanges()}
               >
             </label>
-            <label class="text-xs font-mono text-[#938ea1] flex-1" for="voice-pitch">
+            <label class="text-xs font-mono text-base-content/60 flex-1" for="voice-pitch">
               Pitch ({viewModel.voicePitch})
               <input
                 id="voice-pitch"
@@ -290,6 +291,7 @@ const { viewModel }: Props = $props();
                 class="range range-xs w-full"
                 value={viewModel.voicePitch}
                 oninput={(e) => viewModel.setVoicePitch(Number((e.target as HTMLInputElement).value))}
+                onchange={() => viewModel.commitConfigChanges()}
               >
             </label>
           </div>
@@ -297,17 +299,19 @@ const { viewModel }: Props = $props();
           <div class="space-y-2">
             {#each viewModel.voiceArchetypes as archetype (archetype.id)}
               <div class="flex items-center gap-2 text-xs font-mono">
-                <span class="w-32 text-[#938ea1]">{archetype.label}</span>
+                <span class="w-32 text-base-content/60">{archetype.label}</span>
                 <input
                   type="text"
                   class="input input-bordered input-xs flex-1"
+                  aria-label={viewModel.voiceIdInputLabelFor(archetype.label)}
                   value={archetype.voiceId}
                   oninput={(e) =>
                     viewModel.setVoiceArchetype(archetype.id, (e.target as HTMLInputElement).value)}
+                  onchange={() => viewModel.commitConfigChanges()}
                 >
                 <button
                   type="button"
-                  class="btn btn-ghost btn-xs text-[#00e3fd]"
+                  class="btn btn-ghost btn-xs text-primary"
                   disabled={viewModel.voicePreviewState.status === 'playing'}
                   onclick={() => viewModel.previewVoiceArchetype(archetype.id)}
                 >
@@ -377,12 +381,12 @@ const { viewModel }: Props = $props();
             <button
               type="button"
               class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1] w-fit"
-              onclick={() => viewModel.toggleImageAdvanced()}
+              onclick={() => viewModel.toggleImageAdvanced(conn.id)}
             >
-              {viewModel.isImageAdvancedOpen ? '▾' : '▸'}
+              {viewModel.isImageAdvancedOpenFor(conn.id) ? '▾' : '▸'}
               Advanced (raw steps/cfg)
             </button>
-            {#if viewModel.isImageAdvancedOpen}
+            {#if viewModel.isImageAdvancedOpenFor(conn.id)}
               <div class="flex gap-4 text-xs font-mono text-[#938ea1]">
                 <label for={`steps-${conn.id}`}>
                   Steps
@@ -390,13 +394,14 @@ const { viewModel }: Props = $props();
                     id={`steps-${conn.id}`}
                     type="number"
                     class="input input-bordered input-xs w-20"
-                    value={(conn.params as { steps: number }).steps}
+                    value={viewModel.imageParamsFor(conn.id).steps}
                     oninput={(e) =>
                       viewModel.setImageParamField(
                         conn.id,
                         'steps',
                         Number((e.target as HTMLInputElement).value),
                       )}
+                    onchange={() => viewModel.commitConfigChanges()}
                   >
                 </label>
                 <label for={`cfg-${conn.id}`}>
@@ -405,13 +410,14 @@ const { viewModel }: Props = $props();
                     id={`cfg-${conn.id}`}
                     type="number"
                     class="input input-bordered input-xs w-20"
-                    value={(conn.params as { cfg: number }).cfg}
+                    value={viewModel.imageParamsFor(conn.id).cfg}
                     oninput={(e) =>
                       viewModel.setImageParamField(
                         conn.id,
                         'cfg',
                         Number((e.target as HTMLInputElement).value),
                       )}
+                    onchange={() => viewModel.commitConfigChanges()}
                   >
                 </label>
               </div>
@@ -420,7 +426,7 @@ const { viewModel }: Props = $props();
             <div class="flex gap-2">
               <select
                 class="select select-bordered select-xs font-mono"
-                value={(conn.params as { checkpoint: string }).checkpoint}
+                value={viewModel.imageParamsFor(conn.id).checkpoint}
                 onchange={(e) =>
                   viewModel.setImageCheckpoint(conn.id, (e.target as HTMLSelectElement).value)}
               >
@@ -443,21 +449,21 @@ const { viewModel }: Props = $props();
               <button
                 type="button"
                 class="btn btn-xs btn-primary font-mono"
-                disabled={viewModel.imagePreviewState.status === 'generating'}
+                disabled={viewModel.imagePreviewStateFor(conn.id).status === 'generating'}
                 onclick={() => viewModel.previewImage(conn.id)}
               >
-                {viewModel.imagePreviewState.status === 'generating' ? 'Generating…' : 'Preview'}
+                {viewModel.imagePreviewStateFor(conn.id).status === 'generating' ? 'Generating…' : 'Preview'}
               </button>
             </div>
 
-            {#if viewModel.imagePreviewState.status === 'ready'}
-              <img
-                src={viewModel.imagePreviewState.url}
+            {#if viewModel.imagePreviewStateFor(conn.id).status === 'ready'}
+              <Image
+                src={viewModel.imagePreviewUrlFor(conn.id)}
                 alt="Generated preview"
                 class="rounded-box max-h-48"
-              >
-            {:else if viewModel.imagePreviewState.status === 'error'}
-              <p class="text-xs text-error">{viewModel.imagePreviewState.error}</p>
+              />
+            {:else if viewModel.imagePreviewStateFor(conn.id).status === 'error'}
+              <p class="text-xs text-error">{viewModel.imagePreviewErrorFor(conn.id)}</p>
             {/if}
           </div>
         </div>

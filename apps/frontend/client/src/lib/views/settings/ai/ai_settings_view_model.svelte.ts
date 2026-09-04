@@ -191,10 +191,12 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   setActiveVoiceConnection(connectionId: ConnectionId): void;
   readonly voiceArchetypes: readonly VoiceArchetype[];
   setVoiceArchetype(archetypeId: string, voiceId: string): void;
+  voiceIdInputLabelFor(archetypeLabel: string): string;
   readonly voiceSpeed: number;
   readonly voicePitch: number;
   setVoiceSpeed(speed: number): void;
   setVoicePitch(pitch: number): void;
+  commitConfigChanges(): void;
   readonly voicePreviewState: VoicePreviewState;
   previewVoiceArchetype(archetypeId: string): Promise<void>;
   readonly showVoiceLocalDownload: boolean;
@@ -212,15 +214,18 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   setImageSizePreset(connectionId: ConnectionId, presetId: string): void;
   readonly imageQualityLevels: readonly ImageQualityLevel[];
   setImageQuality(connectionId: ConnectionId, levelId: string): void;
-  readonly isImageAdvancedOpen: boolean;
-  toggleImageAdvanced(): void;
+  isImageAdvancedOpenFor(connectionId: ConnectionId): boolean;
+  toggleImageAdvanced(connectionId: ConnectionId): void;
+  imageParamsFor(connectionId: ConnectionId): ImageParams;
   setImageParamField(connectionId: ConnectionId, field: 'steps' | 'cfg', value: number): void;
   readonly imageCheckpoints: readonly string[];
   setImageCheckpoint(connectionId: ConnectionId, checkpoint: string): void;
   readonly imageStyleProfiles: ReadonlyArray<{ id: string; label: string }>;
   readonly activeStyleProfileId: string;
   setImageStyleProfile(profileId: string): void;
-  readonly imagePreviewState: ImagePreviewState;
+  imagePreviewStateFor(connectionId: ConnectionId): ImagePreviewState;
+  imagePreviewUrlFor(connectionId: ConnectionId): string;
+  imagePreviewErrorFor(connectionId: ConnectionId): string;
   previewImage(connectionId: ConnectionId): Promise<void>;
 
   // ── Generation-parameter disclosure (AC-8) ──
@@ -264,8 +269,16 @@ const IMAGE_QUALITY_LEVELS: readonly ImageQualityLevel[] = [
   { id: 'high', label: 'High', steps: 35, cfg: 9 },
 ];
 
+const DEFAULT_IMAGE_PARAMS: ImageParams = {
+  checkpoint: '',
+  width: 512,
+  height: 512,
+  steps: 20,
+  cfg: 7,
+};
+
 /** Used for the voice preview when no campaign is active (AC-6, Edge Cases). */
-const VOICE_PREVIEW_FALLBACK_LINE =
+export const VOICE_PREVIEW_FALLBACK_LINE =
   'The tavern door creaks open as a gust of wind sweeps through the room.';
 
 // ---------------------------------------------------------------------------
@@ -327,6 +340,8 @@ export class AiSettingsViewModel
   private _activeVoiceConnectionId: ConnectionId | undefined = $state(undefined);
   private _activeImageConnectionId: ConnectionId | undefined = $state(undefined);
   private _genParamsDraft: Partial<TextParams> = $state({});
+  private _imagePreviewStates: Record<ConnectionId, ImagePreviewState> = $state({});
+  private _imageAdvancedOpenStates: Record<ConnectionId, boolean> = $state({});
 
   // ── State ──
   isEditorOpen = $state(false);
@@ -338,8 +353,6 @@ export class AiSettingsViewModel
   testingIds: Set<string> = $state(new Set());
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
   voicePreviewState: VoicePreviewState = $state({ status: 'idle' });
-  imagePreviewState: ImagePreviewState = $state({ status: 'idle' });
-  isImageAdvancedOpen = $state(false);
   isGenParamsOpen = $state(false);
 
   draft: EditorDraft = $state({
@@ -509,8 +522,11 @@ export class AiSettingsViewModel
           archetypes: this._voiceArchetypes,
         } as VoiceParams,
       });
-      void configService.save();
     }
+  }
+
+  voiceIdInputLabelFor(archetypeLabel: string): string {
+    return `Voice ID for ${archetypeLabel}`;
   }
 
   get voiceSpeed(): number {
@@ -527,6 +543,10 @@ export class AiSettingsViewModel
 
   setVoicePitch(pitch: number): void {
     this._updateActiveVoiceParams({ pitch });
+  }
+
+  commitConfigChanges(): void {
+    void configService.save();
   }
 
   async previewVoiceArchetype(archetypeId: string): Promise<void> {
@@ -607,6 +627,7 @@ export class AiSettingsViewModel
       return;
     }
     this._updateImageParams(connectionId, { width: preset.width, height: preset.height });
+    this.commitConfigChanges();
   }
 
   get imageQualityLevels(): readonly ImageQualityLevel[] {
@@ -619,10 +640,26 @@ export class AiSettingsViewModel
       return;
     }
     this._updateImageParams(connectionId, { steps: level.steps, cfg: level.cfg });
+    this.commitConfigChanges();
   }
 
-  toggleImageAdvanced(): void {
-    this.isImageAdvancedOpen = !this.isImageAdvancedOpen;
+  isImageAdvancedOpenFor(connectionId: ConnectionId): boolean {
+    return this._imageAdvancedOpenStates[connectionId] ?? false;
+  }
+
+  toggleImageAdvanced(connectionId: ConnectionId): void {
+    this._imageAdvancedOpenStates = {
+      ...this._imageAdvancedOpenStates,
+      [connectionId]: !this.isImageAdvancedOpenFor(connectionId),
+    };
+  }
+
+  imageParamsFor(connectionId: ConnectionId): ImageParams {
+    const conn = configService.getAiConnection(connectionId);
+    if (!conn || conn.capability !== 'image' || !('checkpoint' in conn.params)) {
+      return DEFAULT_IMAGE_PARAMS;
+    }
+    return conn.params;
   }
 
   setImageParamField(connectionId: ConnectionId, field: 'steps' | 'cfg', value: number): void {
@@ -635,6 +672,7 @@ export class AiSettingsViewModel
 
   setImageCheckpoint(connectionId: ConnectionId, checkpoint: string): void {
     this._updateImageParams(connectionId, { checkpoint });
+    this.commitConfigChanges();
   }
 
   get imageStyleProfiles(): ReadonlyArray<{ id: string; label: string }> {
@@ -649,14 +687,31 @@ export class AiSettingsViewModel
     styleProfileService.setActiveProfile(profileId);
   }
 
+  imagePreviewStateFor(connectionId: ConnectionId): ImagePreviewState {
+    return this._imagePreviewStates[connectionId] ?? { status: 'idle' };
+  }
+
+  imagePreviewUrlFor(connectionId: ConnectionId): string {
+    const state = this.imagePreviewStateFor(connectionId);
+    return state.status === 'ready' ? state.url : '';
+  }
+
+  imagePreviewErrorFor(connectionId: ConnectionId): string {
+    const state = this.imagePreviewStateFor(connectionId);
+    return state.status === 'error' ? state.error : '';
+  }
+
   async previewImage(connectionId: ConnectionId): Promise<void> {
     this.debug('previewImage', { connectionId });
     const conn = configService.getAiConnection(connectionId);
     if (!conn || conn.capability !== 'image') {
       return;
     }
-    const params = conn.params as ImageParams;
-    this.imagePreviewState = { status: 'generating' };
+    const params = this.imageParamsFor(connectionId);
+    this._imagePreviewStates = {
+      ...this._imagePreviewStates,
+      [connectionId]: { status: 'generating' },
+    };
     try {
       const result = await imageGenerationService.generateImage({
         prompt: styleProfileService.activeProfile?.positiveTags || 'A fantasy character portrait',
@@ -666,10 +721,16 @@ export class AiSettingsViewModel
         steps: params.steps,
         cfgScale: params.cfg,
       });
-      this.imagePreviewState = { status: 'ready', url: result.url };
+      this._imagePreviewStates = {
+        ...this._imagePreviewStates,
+        [connectionId]: { status: 'ready', url: result.url },
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.imagePreviewState = { status: 'error', error: message };
+      this._imagePreviewStates = {
+        ...this._imagePreviewStates,
+        [connectionId]: { status: 'error', error: message },
+      };
       this.error('previewImage:failed', error);
     }
   }
@@ -711,6 +772,7 @@ export class AiSettingsViewModel
   override async initialize(): Promise<void> {
     this.debug('initialize');
     await configService.load();
+    await imageGenerationService.loadCheckpoints();
     this._loadVoiceArchetypes();
     await super.initialize();
   }
@@ -1065,7 +1127,6 @@ export class AiSettingsViewModel
     configService.updateAiConnection(conn.id, {
       params: { ...(conn.params as VoiceParams), ...patch } as VoiceParams,
     });
-    void configService.save();
   }
 
   private _hasCloudVoiceConnection(): boolean {
@@ -1082,13 +1143,12 @@ export class AiSettingsViewModel
 
   private _updateImageParams(connectionId: ConnectionId, patch: Partial<ImageParams>): void {
     const conn = configService.getAiConnection(connectionId);
-    if (!conn) {
+    if (!conn || conn.capability !== 'image') {
       return;
     }
     configService.updateAiConnection(connectionId, {
-      params: { ...(conn.params as ImageParams), ...patch } as ImageParams,
+      params: { ...this.imageParamsFor(connectionId), ...patch },
     });
-    void configService.save();
   }
 
   private _registryLabel(registryId: string): string | undefined {
@@ -1123,7 +1183,7 @@ export class AiSettingsViewModel
       return { voiceId: '', speed: 1.0, pitch: 0 } as VoiceParams;
     }
     if (cap === 'image') {
-      return { checkpoint: '', width: 512, height: 512, steps: 20, cfg: 7 } as ImageParams;
+      return DEFAULT_IMAGE_PARAMS;
     }
     return {
       temperature: 0.7, topP: 1, topK: 40,
