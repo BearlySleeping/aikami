@@ -312,7 +312,16 @@ const _createCallableStub = () => {
   );
 };
 
-const _localServicesMock = () => ({
+/**
+ * Comprehensive `$services` barrel stub — every barrel export gets a stub
+ * so `mock.module()` never leaves a real, partially-loaded barrel to leak
+ * into other test files. Exported so a test file that needs its own
+ * per-test double for one service (e.g. `imageGenerationService`) can
+ * spread this as the base and override just that key, instead of
+ * replacing the whole barrel and reintroducing the leak this preload
+ * exists to prevent.
+ */
+export const localServicesMockBase = () => ({
   aiService: _createServiceStub(),
   AIService: class {},
   streamOrchestratorService: _createServiceStub(),
@@ -655,11 +664,11 @@ const _localServicesMock = () => ({
   __esModule: true,
 });
 
-mock.module(_LOCAL_SVC_PATH, _localServicesMock);
+mock.module(_LOCAL_SVC_PATH, localServicesMockBase);
 
 // Also mock the bare specifier — Bun resolves $services via tsconfig paths
 // before testing mock.module for bare specifiers.
-mock.module('$services', _localServicesMock);
+mock.module('$services', localServicesMockBase);
 
 // ── Mock $logger alias required by game services ──────────────────────────
 

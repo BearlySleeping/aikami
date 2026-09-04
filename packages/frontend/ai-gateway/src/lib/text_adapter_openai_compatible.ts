@@ -146,6 +146,30 @@ export const createOpenAiCompatibleTextAdapter = (
     };
   };
 
+  /**
+   * Maps the resolved connection's TextParams onto OpenAI-compatible
+   * generation fields — only when the resolution carries params and the
+   * target isn't Ollama, whose native /api/chat takes generation options in
+   * a different shape (its own `options` object, out of scope here).
+   * `contextSize` and `repetitionPenalty` have no OpenAI-compatible
+   * chat-completions field and are intentionally left unmapped.
+   */
+  const buildGenerationParams = (resolution: AiModeResolution): Record<string, unknown> => {
+    const { params, provider } = resolution;
+    if (!params || provider === 'ollama') {
+      return {};
+    }
+    return {
+      temperature: params.temperature,
+      // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+      top_p: params.topP,
+      // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+      max_tokens: params.maxTokens,
+      // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+      presence_penalty: params.presencePenalty,
+    };
+  };
+
   /** Builds the chat completion body. */
   const buildBody = (options2: {
     resolution: AiModeResolution;
@@ -161,6 +185,7 @@ export const createOpenAiCompatibleTextAdapter = (
       model: resolution.model,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
       stream,
+      ...buildGenerationParams(resolution),
     };
   };
 

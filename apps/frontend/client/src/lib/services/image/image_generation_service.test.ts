@@ -20,17 +20,27 @@ let mockGenerateRequest: Record<string, unknown> | undefined;
 let serviceProgressCapture: Array<{ progress: number; status: string }> = [];
 let serviceRef: ImageGenerationServiceInterface | undefined;
 
-// The service reads the legacy checkpoint via configService.state.image.checkpoint.
-// Provide a mutable stand-in so the migration branch is testable.
+// The service reads the legacy checkpoint via configService.state.image.checkpoint,
+// and (C-463) the portrait role's ImageParams via configService.resolveRole().
+// Provide a mutable stand-in so both branches are testable.
+let mockPortraitParams:
+  | { checkpoint?: string; width?: number; height?: number; steps?: number; cfg?: number }
+  | undefined;
 const mockConfigService = {
   state: {
     image: {
       checkpoint: '',
     },
   },
+  resolveRole: (role: string) =>
+    role === 'portrait' && mockPortraitParams ? { params: mockPortraitParams } : undefined,
 };
 
 mock.module('$services', () => ({
+  configService: mockConfigService,
+}));
+
+mock.module('../config/config_service.svelte.ts', () => ({
   configService: mockConfigService,
 }));
 
@@ -112,6 +122,7 @@ describe('ImageGenerationService — C-388 engine abstraction', () => {
     mockEngineId = 'comfyui';
     mockModels = [{ id: 'sd_xl_base_1.0', description: 'sd_xl_base_1.0.safetensors' }];
     mockGenerateRequest = undefined;
+    mockPortraitParams = undefined;
     serviceProgressCapture = [];
     service = createService(false);
     serviceRef = service;
@@ -146,6 +157,38 @@ describe('ImageGenerationService — C-388 engine abstraction', () => {
     await service.generateImage({ prompt: 'a cat' });
 
     expect(mockGenerateRequest?.negativePrompt).toBeUndefined();
+  });
+
+  // ═════════════════════════════════════════════════════════════════════
+  // C-463 PR: portrait role's ImageParams are defaults, call-site args win
+  // ═════════════════════════════════════════════════════════════════════
+
+  test('C-463: portrait role ImageParams fill width/height/steps/cfgScale/checkpoint when omitted', async () => {
+    mockPortraitParams = {
+      checkpoint: 'role_checkpoint',
+      width: 768,
+      height: 1024,
+      steps: 30,
+      cfg: 7,
+    };
+
+    await service.generateImage({ prompt: 'a cat' });
+
+    expect(mockGenerateRequest?.model).toBe('role_checkpoint');
+    expect(mockGenerateRequest?.width).toBe(768);
+    expect(mockGenerateRequest?.height).toBe(1024);
+    expect(mockGenerateRequest?.steps).toBe(30);
+    expect(mockGenerateRequest?.cfgScale).toBe(7);
+  });
+
+  test('C-463: an explicit width argument beats the portrait connection ImageParams.width', async () => {
+    mockPortraitParams = { width: 768, height: 1024 };
+
+    await service.generateImage({ prompt: 'a cat', width: 512 });
+
+    expect(mockGenerateRequest?.width).toBe(512);
+    // height still comes from the connection default.
+    expect(mockGenerateRequest?.height).toBe(1024);
   });
 
   // ═════════════════════════════════════════════════════════════════════

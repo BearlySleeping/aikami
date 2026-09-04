@@ -10,7 +10,7 @@
 // Contract: C-388 Image Engine Provider Abstraction
 
 import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
-import type { ImageEngineId } from '@aikami/types';
+import type { ImageEngineId, ImageParams } from '@aikami/types';
 import type { CheckpointInfo, ImageGenerationServiceOptions } from '$types';
 import { configService } from '../config/config_service.svelte.ts';
 import {
@@ -322,7 +322,19 @@ export class ImageGenerationService
       throw new Error('No image engine available — is ComfyUI or sd-server running?');
     }
 
-    const effectiveCheckpoint = checkpoint ?? this.selectedCheckpoint;
+    // C-463 wiring: the `portrait` role connection's ImageParams are the
+    // defaults for width/height/steps/cfgScale/checkpoint — any explicit
+    // call-site argument still wins.
+    const portraitParams = configService.resolveRole('portrait')?.params as
+      | ImageParams
+      | undefined;
+
+    const effectiveCheckpoint = checkpoint ?? portraitParams?.checkpoint ?? this.selectedCheckpoint;
+    const effectiveWidth = width ?? portraitParams?.width;
+    const effectiveHeight = height ?? portraitParams?.height;
+    const effectiveSteps = steps ?? portraitParams?.steps;
+    const effectiveCfgScale = cfgScale ?? portraitParams?.cfg;
+
     const request: ImageGenerationRequest = {
       positivePrompt: prompt,
       model: effectiveCheckpoint || undefined,
@@ -330,17 +342,17 @@ export class ImageGenerationService
     if (negativePrompt) {
       request.negativePrompt = negativePrompt;
     }
-    if (width !== undefined) {
-      request.width = width;
+    if (effectiveWidth !== undefined) {
+      request.width = effectiveWidth;
     }
-    if (height !== undefined) {
-      request.height = height;
+    if (effectiveHeight !== undefined) {
+      request.height = effectiveHeight;
     }
-    if (steps !== undefined) {
-      request.steps = steps;
+    if (effectiveSteps !== undefined) {
+      request.steps = effectiveSteps;
     }
-    if (cfgScale !== undefined) {
-      request.cfgScale = cfgScale;
+    if (effectiveCfgScale !== undefined) {
+      request.cfgScale = effectiveCfgScale;
     }
     if (seed !== undefined) {
       request.seed = seed;

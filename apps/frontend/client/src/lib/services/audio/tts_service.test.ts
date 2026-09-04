@@ -299,6 +299,76 @@ describe('TtsService — C-389 config-driven TTS', () => {
     expect(String(url)).toContain('http://10.0.0.7:6006/v1/audio/speech');
   });
 
+  // -----------------------------------------------------------------------
+  // C-463 wiring: narrator-voice role resolves through the connection
+  // -----------------------------------------------------------------------
+
+  test('initialize() resolves the narrator-voice connection URL and voice id when the role is assigned', async () => {
+    const fetchMock = mock(async (url: string | URL) => {
+      const href = typeof url === 'string' ? url : url.href;
+      if (href.includes(':7000')) {
+        return new Response('ok', { status: 200 });
+      }
+      return new Response('nope', { status: 404 });
+    });
+    // @ts-expect-error — replacing global fetch
+    globalThis.fetch = fetchMock;
+
+    const { ttsService } = await resetTtsService();
+    const configModule = await import('../config/config_service.svelte.ts');
+    const configSvc = configModule.configService as unknown as Service & {
+      resolveRole: (role: string) => unknown;
+    };
+    const originalResolveRole = configSvc.resolveRole;
+    configSvc.resolveRole = mock((role: string) =>
+      role === 'narrator-voice'
+        ? {
+            model: 'kokoro',
+            provider: 'kokoro',
+            endpoint: 'http://10.0.0.9:7000',
+            apiKey: undefined,
+            params: { voiceId: 'af_bella', speed: 1.2, pitch: 3 },
+          }
+        : undefined,
+    );
+
+    try {
+      await ttsService.initialize();
+
+      expect(ttsService.status).toBe('ready');
+      expect(ttsService.backend).toBe('server');
+      expect(ttsService.selectedVoice).toBe('af_bella');
+      for (const call of (fetchMock as ReturnType<typeof mock>).mock.calls) {
+        const href = typeof call[0] === 'string' ? call[0] : (call[0] as URL).href;
+        expect(href).toContain(':7000');
+      }
+    } finally {
+      configSvc.resolveRole = originalResolveRole;
+    }
+  });
+
+  test('initialize() falls back to runtimeConfigService unchanged when no narrator-voice role resolves', async () => {
+    setupFetchSpy();
+    const { ttsService } = await resetTtsService();
+    const configModule = await import('../config/config_service.svelte.ts');
+    const configSvc = configModule.configService as unknown as Service & {
+      resolveRole: (role: string) => unknown;
+    };
+    const originalResolveRole = configSvc.resolveRole;
+    configSvc.resolveRole = mock(() => undefined);
+
+    try {
+      await ttsService.initialize();
+
+      // No role resolved — same local-stack path as before this PR: no
+      // model downloaded yet, so initialize() reports not-downloaded.
+      expect(ttsService.status).toBe('not-downloaded');
+      expect(ttsService.selectedVoice).toBe('af_heart');
+    } finally {
+      configSvc.resolveRole = originalResolveRole;
+    }
+  });
+
   test('setTtsVolume updates state and clamps to 0–1', async () => {
     const { ttsService } = await resetTtsService();
 

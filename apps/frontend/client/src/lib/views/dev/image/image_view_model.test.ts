@@ -6,11 +6,15 @@
 // Contract: C-388 Image Engine Provider Abstraction
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { localServicesMockBase } from '$lib/test_preload.ts';
 
 // $state and $derived are polyfilled globally via test_preload.ts
 
 // ---------------------------------------------------------------------------
-// Mock the $services barrel before importing the ViewModel
+// Mock the $services barrel before importing the ViewModel.
+// Spreads the preload's comprehensive stub as a base and overrides only the
+// keys this file needs — replacing the whole barrel here leaks a partial
+// mock to every test file that runs afterward (see test_preload.ts).
 // ---------------------------------------------------------------------------
 
 let mockCheckpoints: Array<{ id: string; description: string }> = [];
@@ -22,6 +26,7 @@ let mockRefreshEngineCalled = false;
 let loadCheckpointsCalled = false;
 
 mock.module('$lib/services/index.ts', () => ({
+  ...localServicesMockBase(),
   imageGenerationService: {
     get checkpoints() {
       return mockCheckpoints;

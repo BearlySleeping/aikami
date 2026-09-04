@@ -5,7 +5,9 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { VoiceParams } from '@aikami/types';
 import type { TtsBackend, VoiceInfo } from '$types';
+import { configService } from '../config/config_service.svelte.ts';
 import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts';
 import { audioContextManager } from './audio_context_manager';
 import { audioService } from './audio_service.svelte.ts';
@@ -231,6 +233,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   private _worker: Worker | null = null; // kokoro-js worker (browser TTS)
   private _kokoroServerUrl: string | undefined; // server-mode TTS URL (C-389)
+  private _voiceSpeed: number | undefined; // from the narrator-voice connection's VoiceParams, when resolved
   private _abortController: AbortController | undefined;
   private _currentAudio: HTMLAudioElement | null = null;
   private _ttsGain: GainNode | undefined; // volume control for synthesized speech
@@ -497,8 +500,19 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     // C-389: resolve the runtime engine config first — TTS mode and the
     // server URL come from config.json, never from a baked-in default.
     await runtimeConfigService.loadConfig();
-    const mode = runtimeConfigService.getVoiceTtsMode();
-    const serverUrl = runtimeConfigService.getVoiceTtsUrl();
+
+    // C-463 wiring: prefer the `narrator-voice` role's connection for the
+    // server URL and voice params. Fall back to runtimeConfigService
+    // unchanged when no voice role resolves — that is the local-stack path
+    // and the common case today.
+    const roleResolution = configService.resolveRole('narrator-voice');
+    const voiceParams = roleResolution?.params as VoiceParams | undefined;
+    const mode = roleResolution?.endpoint ? 'server' : runtimeConfigService.getVoiceTtsMode();
+    const serverUrl = roleResolution?.endpoint || runtimeConfigService.getVoiceTtsUrl();
+    if (voiceParams?.voiceId) {
+      this.selectedVoice = voiceParams.voiceId;
+    }
+    this._voiceSpeed = voiceParams?.speed;
 
     // AC (voice.tts.mode = disabled): TTS is off; nothing is probed.
     if (mode === 'disabled') {
@@ -796,6 +810,8 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return undefined;
     }
 
+    // `pitch` (VoiceParams) has no field in the OpenAI-compatible speech
+    // request body Kokoro serves and is intentionally left unmapped here.
     const response = await fetch(`${this._kokoroServerUrl}/v1/audio/speech`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -805,6 +821,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         voice,
         // biome-ignore lint/style/useNamingConvention: API contract field name
         response_format: 'wav',
+        ...(this._voiceSpeed !== undefined ? { speed: this._voiceSpeed } : {}),
       }),
       signal,
     });
