@@ -19,7 +19,8 @@
       "!**/dist/*",
       "!**/build/*",
       "!apps/frontend/client/static",
-      "!**/*.svelte.ts"
+      "!**/*.svelte.ts",
+      "!**/src/lib/paraglide/**"
     ]
   },
   "formatter": {
