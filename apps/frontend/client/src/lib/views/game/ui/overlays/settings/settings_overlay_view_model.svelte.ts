@@ -13,9 +13,8 @@ import {
 import { gameOverlayService } from '$services';
 import {
   createSectionViewModel,
-  SETTINGS_SECTIONS,
+  sectionsForContext,
   type SettingsSection,
-  type SettingsContext,
   type SimpleSectionViewModel,
 } from '$lib/views/settings/settings_sections';
 
@@ -75,10 +74,8 @@ class SettingsOverlayViewModel
   constructor(options: BaseViewModelOptions) {
     super(options);
 
-    // Derive sections from the registry
-    this.pauseSections = SETTINGS_SECTIONS.filter(
-      (s) => (s.contexts as readonly SettingsContext[]).includes('pause' as SettingsContext),
-    );
+    // Derive sections from the registry using the shared helper
+    this.pauseSections = sectionsForContext('pause');
     this.activeSectionId = this.pauseSections[0]?.id ?? '';
   }
 
