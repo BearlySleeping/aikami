@@ -1,8 +1,7 @@
 // apps/frontend/client/src/lib/views/settings/export/export_view_model.svelte.ts
 //
-// ViewModel for the Export & Data settings tab (C-246, AC-6).
-// Bridges the exportService to the settings UI — lists chats, characters,
-// sessions, and provides download triggers for all export operations.
+// C-464 AC-8: Export & Data settings tab — export operations, offline mode,
+// telemetry opt-out, and delete local data.
 
 import {
   BaseViewModel,
@@ -10,7 +9,11 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ChatData, NpcData, PersonaData } from '@aikami/types';
-import { exportService } from '$services';
+import {
+  exportService,
+  readAiPrivacySettings,
+  writeAiPrivacySettings,
+} from '$services';
 import type { GameSession } from '$types';
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -41,6 +44,12 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
   /** Backup progress message. */
   readonly backupProgress: string;
 
+  // ── Privacy toggles (C-464 AC-8) ──
+  /** Offline mode — when true, no AI calls are attempted. */
+  readonly offlineMode: boolean;
+  /** Telemetry opt-out. */
+  readonly telemetryOptOut: boolean;
+
   // ── Chat exports ──
   exportChatAsJsonl(chat: ChatData): Promise<void>;
   exportChatAsPlainText(chat: ChatData): Promise<void>;
@@ -57,6 +66,19 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
 
   /** Formats a Firestore Timestamp or ISO string to a locale date. */
   formatDate(timestamp: unknown): string;
+
+  // ── Privacy actions (C-464 AC-8) ──
+  toggleOfflineMode(): void;
+  toggleTelemetry(): void;
+
+  // ── Delete local data (C-464 AC-7) ──
+  readonly isDeleteLocalDialogOpen: boolean;
+  readonly deleteLocalConfirmText: string;
+  readonly isDeletingLocal: boolean;
+  openDeleteLocalDialog(): void;
+  closeDeleteLocalDialog(): void;
+  updateDeleteLocalConfirmText(value: string): void;
+  confirmDeleteLocalData(): Promise<void>;
 };
 
 // ── Options ─────────────────────────────────────────────────────────────
@@ -74,6 +96,15 @@ export class ExportViewModel
   sessions: ExportableSession[] = $state([]);
   isLoading = $state(false);
   backupProgress = $state('');
+
+  // ── Privacy toggles (C-464 AC-8) ──
+  offlineMode = $state<boolean>(false);
+  telemetryOptOut = $state<boolean>(false);
+
+  // ── Delete local data (C-464 AC-7) ──
+  isDeleteLocalDialogOpen = $state(false);
+  deleteLocalConfirmText = $state('');
+  isDeletingLocal = $state(false);
 
   override async initialize(): Promise<void> {
     this.isLoading = true;
@@ -125,7 +156,7 @@ export class ExportViewModel
 
   formatDate(timestamp: unknown): string {
     if (!timestamp) {
-      return '—';
+      return '\u2014';
     }
     if (timestamp instanceof Date) {
       return timestamp.toLocaleDateString();
@@ -138,7 +169,60 @@ export class ExportViewModel
     ) {
       return (timestamp as { toDate: () => Date }).toDate().toLocaleDateString();
     }
-    return '—';
+    return '\u2014';
+  }
+
+  // ── Privacy actions (C-464 AC-8) ──
+
+  toggleOfflineMode(): void {
+    this.offlineMode = !this.offlineMode;
+    this._persistPrivacySettings();
+    this.debug('toggleOfflineMode', { offlineMode: this.offlineMode });
+  }
+
+  toggleTelemetry(): void {
+    this.telemetryOptOut = !this.telemetryOptOut;
+    this._persistPrivacySettings();
+    this.debug('toggleTelemetry', { telemetryOptOut: this.telemetryOptOut });
+  }
+
+  // ── Delete local data (C-464 AC-7) ──
+
+  openDeleteLocalDialog(): void {
+    this.deleteLocalConfirmText = '';
+    this.isDeleteLocalDialogOpen = true;
+  }
+
+  closeDeleteLocalDialog(): void {
+    this.isDeleteLocalDialogOpen = false;
+    this.deleteLocalConfirmText = '';
+  }
+
+  updateDeleteLocalConfirmText(value: string): void {
+    this.deleteLocalConfirmText = value;
+  }
+
+  async confirmDeleteLocalData(): Promise<void> {
+    if (this.deleteLocalConfirmText !== 'DELETE') {
+      return;
+    }
+    this.isDeletingLocal = true;
+    try {
+      await exportService.deleteAllLocalData();
+      localStorage.clear();
+      window.location.reload();
+    } catch (error) {
+      this.error('confirmDeleteLocalData', error);
+    } finally {
+      this.isDeletingLocal = false;
+    }
+  }
+
+  private _persistPrivacySettings(): void {
+    writeAiPrivacySettings({
+      offlineMode: this.offlineMode,
+      telemetryOptOut: this.telemetryOptOut,
+    });
   }
 
   // ── Internal ────────────────────────────────────────────────────────
@@ -152,6 +236,15 @@ export class ExportViewModel
     this.chats = chats;
     this.characters = exportableCharacters;
     this.sessions = sessions;
+
+    // Load persisted privacy settings (C-464 AC-8: keep the same key)
+    this._loadPrivacySettings();
+  }
+
+  private _loadPrivacySettings(): void {
+    const settings = readAiPrivacySettings();
+    this.offlineMode = settings.offlineMode;
+    this.telemetryOptOut = settings.telemetryOptOut;
   }
 
   async _loadChats(): Promise<ChatData[]> {

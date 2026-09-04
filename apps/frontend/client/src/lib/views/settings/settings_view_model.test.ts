@@ -65,7 +65,7 @@ describe('SettingsViewModel — group/section selection', () => {
   });
 
   test('visibleGroups lists all four groups in order', () => {
-    expect(vm.visibleGroups.map((g) => g.id)).toEqual(['play', 'ai', 'content', 'data']);
+    expect(vm.visibleGroups.map((g) => g.id)).toEqual(['account', 'play', 'ai', 'content', 'data']);
   });
 
   test('sectionsInActiveGroup only returns sections for the active group', () => {

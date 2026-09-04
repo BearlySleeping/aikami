@@ -20,3 +20,9 @@ export const userStatuses = [
 ] as const;
 
 export const signInProviderNames = ['google', 'github'] as const;
+
+/**
+ * The tombstone owner account id. Published packs are transferred here on
+ * deletion rather than removed — see C-464 AC-4.
+ */
+export const DELETED_OWNER_ACCOUNT_ID = 'deleted-user';

@@ -17,7 +17,7 @@
 // `__session` merge shim is needed (that was the old Firebase Hosting path,
 // removed with the Firebase auth routes).
 
-import { app } from '$lib/server/api';
+import { app, createApp } from '$lib/server/api';
 import { setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { setCatalogStatsEnv } from '$lib/server/api/catalog_stats.ts';
 import { setHealthDbEnv } from '$lib/server/api/health_db.ts';
@@ -44,5 +44,16 @@ export const fallback: RequestHandler = async ({ request, platform }) => {
   // biome-ignore lint/style/useNamingConvention: Cloudflare binding names
   setStorageEnv(env ? { SAVES_BUCKET: env.SAVES_BUCKET } : undefined);
 
-  return await app.handle(request);
+  const isAccountDelete =
+    request.method === 'DELETE' && new URL(request.url).pathname === '/api/account';
+  const accountDeleteEnv = env
+    ? {
+        // biome-ignore lint/style/useNamingConvention: Cloudflare binding name
+        DB: env.DB,
+        // biome-ignore lint/style/useNamingConvention: Cloudflare binding name
+        SAVES_BUCKET: env.SAVES_BUCKET,
+      }
+    : undefined;
+  const requestApp = isAccountDelete ? createApp(accountDeleteEnv) : app;
+  return await requestApp.handle(request);
 };

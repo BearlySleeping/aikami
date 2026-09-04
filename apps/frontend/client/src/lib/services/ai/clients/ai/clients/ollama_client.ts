@@ -2,6 +2,7 @@
 // packages/frontend/engine/src/ai_clients/ai/clients/ollama_client.ts
 
 import type { TSchema } from 'typebox';
+import { isOfflineModeEnabled } from '../../../../app/privacy_settings.ts';
 
 import type { FrontendAiInterface } from '../frontend_ai_interface.ts';
 import type {
@@ -101,6 +102,13 @@ class OllamaClient implements FrontendAiInterface {
         '',
         new Error('Ollama is not configured (text.url missing from config.json)'),
       );
+    }
+  }
+
+  /** Prevents prompt-bearing requests while the user has enabled Offline Mode. */
+  private _assertPromptsAllowed(): void {
+    if (isOfflineModeEnabled()) {
+      throw new Error('Offline Mode is enabled.');
     }
   }
 
@@ -271,6 +279,7 @@ class OllamaClient implements FrontendAiInterface {
     prompt: string,
     context?: Array<{ role: string; content: string }>,
   ): AsyncGenerator<string, void, undefined> {
+    this._assertPromptsAllowed();
     this._assertConfigured();
 
     const body: Record<string, unknown> = {
@@ -372,6 +381,7 @@ class OllamaClient implements FrontendAiInterface {
    * POST to Ollama's local API.
    */
   private async post<TResponse>(path: string, body: unknown): Promise<TResponse> {
+    this._assertPromptsAllowed();
     this._assertConfigured();
 
     const controller = new AbortController();

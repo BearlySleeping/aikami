@@ -21,6 +21,8 @@
 
 import { AssetStatsSchema, CategoryStatsSchema } from '@aikami/schemas';
 import { Elysia, t } from 'elysia';
+import { type AccountDeleteEnv, handleAccountDeleteRequest } from './account_delete.ts';
+import { handleRevokeAllSessions } from './account_sessions.ts';
 import { handleAsk } from './ask.ts';
 import { getBetterAuth } from './better_auth.ts';
 import { getCatalogStatsEnv, handleCatalogStats } from './catalog_stats.ts';
@@ -91,116 +93,133 @@ const betterAuthHandler = (request: Request): Response | Promise<Response> => {
   return auth.handler(request);
 };
 
-export const app = new Elysia({
-  prefix: '/api',
-  // Cloudflare Workers disallow `new Function` (code generation from strings).
-  // Elysia's AOT handler composition uses it, so disable AOT to use the
-  // dynamic handler that runs on Workers.
-  aot: false,
-})
-  .mount('/auth', betterAuthHandler)
-  .get(
-    '/health/db',
-    () => {
-      const env = getHealthDbEnv();
+/** Creates the API app with request-scoped account-deletion bindings. */
+export const createApp = (accountDeleteEnv?: AccountDeleteEnv) =>
+  new Elysia({
+    prefix: '/api',
+    // Cloudflare Workers disallow `new Function` (code generation from strings).
+    // Elysia's AOT handler composition uses it, so disable AOT to use the
+    // dynamic handler that runs on Workers.
+    aot: false,
+  })
+    .mount('/auth', betterAuthHandler)
+    .get(
+      '/health/db',
+      () => {
+        const env = getHealthDbEnv();
+        if (!env) {
+          return { status: 'unconfigured' as const };
+        }
+        return handleDbHealth();
+      },
+      {
+        response: dbHealthResponseSchema,
+      },
+    )
+    // C-426 AC-6/AC-7: Turso save backup/restore to R2, session-gated.
+    // 503 when the hub is not yet on a Worker with the SAVES_BUCKET binding.
+    .post('/saves/backup', ({ request }) => {
+      const env = getSaveBackupEnv();
       if (!env) {
-        return { status: 'unconfigured' as const };
-      }
-      return handleDbHealth();
-    },
-    {
-      response: dbHealthResponseSchema,
-    },
-  )
-  // C-426 AC-6/AC-7: Turso save backup/restore to R2, session-gated.
-  // 503 when the hub is not yet on a Worker with the SAVES_BUCKET binding.
-  .post('/saves/backup', ({ request }) => {
-    const env = getSaveBackupEnv();
-    if (!env) {
-      return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
-        status: 503,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return handleCreateBackup(request, env);
-  })
-  .get('/saves', ({ request }) => {
-    const env = getSaveBackupEnv();
-    if (!env) {
-      return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
-        status: 503,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return handleListBackups(request, env);
-  })
-  .get('/saves/:id', ({ request, params }) => {
-    const env = getSaveBackupEnv();
-    if (!env) {
-      return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
-        status: 503,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return handleGetBackup(request, env, params.id);
-  })
-  .delete('/saves/:id', ({ request, params }) => {
-    const env = getSaveBackupEnv();
-    if (!env) {
-      return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
-        status: 503,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return handleDeleteBackup(request, env, params.id);
-  })
-  // C-426: R2 object storage (avatars, etc.), session-gated. 503 when the
-  // hub is not yet on a Worker with the SAVES_BUCKET binding.
-  .post('/storage/upload', ({ request }) => {
-    const env = getStorageEnv();
-    if (!env) {
-      return new Response(JSON.stringify({ error: 'storage_unconfigured' }), {
-        status: 503,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return handleStorageUpload(request, env);
-  })
-  .get('/storage/url', ({ request }) => {
-    const env = getStorageEnv();
-    if (!env) {
-      return new Response(JSON.stringify({ error: 'storage_unconfigured' }), {
-        status: 503,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return handleStorageUrl(request, env);
-  })
-  .get(
-    '/catalog/stats',
-    () => {
-      const env = getCatalogStatsEnv();
-      if (!env) {
-        return new Response(JSON.stringify(null), {
-          status: 200,
+        return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
+          status: 503,
           headers: { 'content-type': 'application/json' },
         });
       }
-      return handleCatalogStats().then(
-        (result) =>
-          new Response(JSON.stringify(result), {
+      return handleCreateBackup(request, env);
+    })
+    .get('/saves', ({ request }) => {
+      const env = getSaveBackupEnv();
+      if (!env) {
+        return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return handleListBackups(request, env);
+    })
+    .get('/saves/:id', ({ request, params }) => {
+      const env = getSaveBackupEnv();
+      if (!env) {
+        return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return handleGetBackup(request, env, params.id);
+    })
+    .delete('/saves/:id', ({ request, params }) => {
+      const env = getSaveBackupEnv();
+      if (!env) {
+        return new Response(JSON.stringify({ error: 'saves_unconfigured' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return handleDeleteBackup(request, env, params.id);
+    })
+    // C-426: R2 object storage (avatars, etc.), session-gated. 503 when the
+    // hub is not yet on a Worker with the SAVES_BUCKET binding.
+    .post('/storage/upload', ({ request }) => {
+      const env = getStorageEnv();
+      if (!env) {
+        return new Response(JSON.stringify({ error: 'storage_unconfigured' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return handleStorageUpload(request, env);
+    })
+    .get('/storage/url', ({ request }) => {
+      const env = getStorageEnv();
+      if (!env) {
+        return new Response(JSON.stringify({ error: 'storage_unconfigured' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return handleStorageUrl(request, env);
+    })
+    .get(
+      '/catalog/stats',
+      () => {
+        const env = getCatalogStatsEnv();
+        if (!env) {
+          return new Response(JSON.stringify(null), {
             status: 200,
             headers: { 'content-type': 'application/json' },
-          }),
-      );
-    },
-    {
-      response: catalogStatsResponseSchema,
-    },
-  )
-  .post('/ask', handleAsk, {
-    body: askRequestSchema,
-    response: askResponseSchema,
-  });
+          });
+        }
+        return handleCatalogStats().then(
+          (result) =>
+            new Response(JSON.stringify(result), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+        );
+      },
+      {
+        response: catalogStatsResponseSchema,
+      },
+    )
+    // C-464 AC-3/4/5/6: Session-verified account deletion.
+    // 503 when the hub is not yet on a Worker with the SAVES_BUCKET binding.
+    .delete('/account', ({ request }) => {
+      if (!accountDeleteEnv) {
+        return new Response(JSON.stringify({ error: 'account_unconfigured' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return handleAccountDeleteRequest(request, accountDeleteEnv);
+    })
+    // C-464 AC-10: Revoke all sessions through Better Auth's session API.
+    .post('/account/sessions/revoke-all', ({ request }) => handleRevokeAllSessions(request))
+    .post('/ask', handleAsk, {
+      body: askRequestSchema,
+      response: askResponseSchema,
+    });
 
-export type App = typeof app;
+export const app = createApp();
+
+export type App = ReturnType<typeof createApp>;

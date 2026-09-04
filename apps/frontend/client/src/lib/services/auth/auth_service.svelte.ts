@@ -22,7 +22,7 @@ import {
 import type { AppResult, CurrentUser, RegisterForm, SignInProviderName } from '@aikami/types';
 import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { isTauri } from '$lib/views/utils/is_tauri';
-import { hubApiBase } from '../api/hub_api_client';
+import { hubApiBase, hubAuthHeaders } from '../api/hub_api_client';
 import {
   sendPasswordResetEmail as baSendPasswordResetEmail,
   signInWithEmailAndPassword as baSignInWithEmailAndPassword,
@@ -151,6 +151,8 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
    * Completes a device-flow authentication handoff for game clients.
    * Approves the Better Auth device-authorization code from the /link page.
    */
+  deleteAccount(): Promise<boolean>;
+
   completeDeviceHandoff(options: { code: string; uid: string }): Promise<void>;
 };
 
@@ -417,6 +419,29 @@ export class AuthService
   async getIdToken(): Promise<string | undefined> {
     // Better Auth has no Firebase ID token — the session is cookie-based.
     return undefined;
+  }
+
+  async deleteAccount(): Promise<boolean> {
+    this.log('deleteAccount');
+    try {
+      const base = hubApiBase();
+      const response = await fetch(`${base}/account`, {
+        method: 'DELETE',
+        headers: hubAuthHeaders(),
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        this.error('deleteAccount:failed', { status: response.status, body });
+        return false;
+      }
+      this.setCurrentUser(undefined);
+      this.log('deleteAccount:success');
+      return true;
+    } catch (error) {
+      this.error('deleteAccount', error);
+      return false;
+    }
   }
 
   async completeDeviceHandoff(options: { code: string; uid: string }): Promise<void> {

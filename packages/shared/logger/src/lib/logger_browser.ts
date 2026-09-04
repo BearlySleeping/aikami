@@ -33,6 +33,24 @@ export class HttpLogSink implements LogSink {
   private _buffer: LogEntry[] = [];
   private _flushTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** Whether persisted privacy settings prohibit telemetry egress. */
+  private static _telemetryOptedOut(): boolean {
+    try {
+      const stored = globalThis.localStorage?.getItem('aikami_ai_privacy_settings');
+      if (!stored) {
+        return false;
+      }
+      const parsed: unknown = JSON.parse(stored);
+      return (
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        (parsed as Record<string, unknown>).telemetryOptOut === true
+      );
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Whether the current origin can actually reach the ingestion endpoint.
    *
@@ -64,6 +82,9 @@ export class HttpLogSink implements LogSink {
     if (!HttpLogSink.externalLoggingEnabled) {
       return;
     }
+    if (HttpLogSink._telemetryOptedOut()) {
+      return;
+    }
     if (!HttpLogSink._canReachEndpoint()) {
       return;
     }
@@ -93,6 +114,10 @@ export class HttpLogSink implements LogSink {
     }
     // External logging disabled — drop any buffered entries without POSTing.
     if (!HttpLogSink.externalLoggingEnabled) {
+      this._buffer.length = 0;
+      return;
+    }
+    if (HttpLogSink._telemetryOptedOut()) {
       this._buffer.length = 0;
       return;
     }

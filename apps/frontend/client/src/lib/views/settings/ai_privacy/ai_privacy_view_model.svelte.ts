@@ -1,8 +1,9 @@
 // apps/frontend/client/src/lib/views/settings/ai_privacy/ai_privacy_view_model.svelte.ts
 //
-// AI & Privacy ViewModel — simplified panel for the Basic settings tier.
-// Shows AI connection status, a "Connect AI" call-to-action routing to
-// Capability Setup (C-318), an offline mode toggle, and telemetry opt-out.
+// C-464 AC-8: AI & Privacy ViewModel — shows only AI connection status and
+// a "Connect AI" call-to-action. Offline mode and telemetry toggles moved
+// to the Data section (export_view_model).
+
 import { TEXT_PROVIDERS } from '@aikami/constants';
 import {
   BaseViewModel,
@@ -26,17 +27,9 @@ export type AIPrivacyViewModelInterface = BaseViewModelInterface & {
   readonly aiConnectionStatus: AIConnectionStatus;
   /** Active provider label, if configured. */
   readonly activeProviderLabel: string | undefined;
-  /** Offline mode toggle — when true, no AI calls are attempted. */
-  readonly offlineMode: boolean;
-  /** Telemetry opt-out. */
-  readonly telemetryOptOut: boolean;
 
   /** Navigates to the Capability Setup flow (C-318). */
   connectAi(): Promise<void>;
-  /** Toggles offline mode. */
-  toggleOfflineMode(): void;
-  /** Toggles telemetry opt-out. */
-  toggleTelemetry(): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -48,8 +41,6 @@ export type AIPrivacyViewModelOptions = BaseViewModelOptions;
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const STORAGE_KEY = 'aikami_ai_privacy_settings';
 
 // Local providers don't need API keys — they are usable out of the box.
 // Cloud providers require a non-empty API key to be usable.
@@ -71,24 +62,11 @@ class AIPrivacyViewModel
   extends BaseViewModel<AIPrivacyViewModelOptions>
   implements AIPrivacyViewModelInterface
 {
-  offlineMode = $state<boolean>(false);
-  telemetryOptOut = $state<boolean>(false);
-
-  override async initialize(): Promise<void> {
-    this._loadFromStorage();
-    await super.initialize();
-  }
-
   get aiConnectionStatus(): AIConnectionStatus {
     if (!configService.isLoaded) {
       return 'loading';
     }
 
-    // C-230: API keys live in connections[] — the legacy text.apiKeys map
-    // was removed from ConfigService and is always undefined.
-    //
-    // 'connected' requires at least one USABLE connection: local providers
-    // are always usable (keyless), cloud providers need a non-empty API key.
     const { connections } = configService.state;
     const hasUsableConnection = connections.some(
       (c) => LOCAL_PROVIDERS.has(c.provider) || (c.apiKey?.trim().length ?? 0) > 0,
@@ -98,8 +76,6 @@ class AIPrivacyViewModel
       return 'not_configured';
     }
 
-    // Credentials are configured — return 'connected' to indicate readiness
-    // (actual runtime connectivity is not checked here; offline status is handled separately)
     return 'connected';
   }
 
@@ -120,49 +96,6 @@ class AIPrivacyViewModel
       pathParameters: undefined,
       queryParameters: { from: 'settings' },
     });
-  }
-
-  toggleOfflineMode(): void {
-    this.offlineMode = !this.offlineMode;
-    this._persist();
-    this.debug('toggleOfflineMode', { offlineMode: this.offlineMode });
-  }
-
-  toggleTelemetry(): void {
-    this.telemetryOptOut = !this.telemetryOptOut;
-    this._persist();
-    this.debug('toggleTelemetry', { telemetryOptOut: this.telemetryOptOut });
-  }
-
-  private _persist(): void {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          offlineMode: this.offlineMode,
-          telemetryOptOut: this.telemetryOptOut,
-        }),
-      );
-    } catch {
-      // localStorage may be unavailable
-    }
-  }
-
-  private _loadFromStorage(): void {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (typeof parsed.offlineMode === 'boolean') {
-          this.offlineMode = parsed.offlineMode;
-        }
-        if (typeof parsed.telemetryOptOut === 'boolean') {
-          this.telemetryOptOut = parsed.telemetryOptOut;
-        }
-      }
-    } catch {
-      // Invalid stored data — keep defaults
-    }
   }
 }
 

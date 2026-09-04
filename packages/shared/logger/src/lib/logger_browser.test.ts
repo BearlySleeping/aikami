@@ -166,3 +166,24 @@ describe('HttpLogSink external logging toggle', () => {
     }
   });
 });
+
+describe('HttpLogSink telemetry opt-out', () => {
+  test('drops entries instead of POSTing when telemetry is opted out', () => {
+    const originalLocalStorage = globalThis.localStorage;
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: { getItem: mock(() => JSON.stringify({ telemetryOptOut: true })) },
+    });
+
+    try {
+      const sink = new HttpLogSink();
+      writeAndFlush(sink);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', {
+        configurable: true,
+        value: originalLocalStorage,
+      });
+    }
+  });
+});

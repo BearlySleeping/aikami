@@ -200,5 +200,133 @@ const { viewModel }: Props = $props();
         </div>
       </div>
     </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         Privacy & Data (C-464 AC-7/AC-8)
+         ═══════════════════════════════════════════════════════════════════ -->
+    <section>
+      <h2 class="text-lg font-bold mb-4">Privacy & Data</h2>
+
+      <!-- Offline mode toggle -->
+      <div class="card bg-base-200 mb-3">
+        <div class="card-body">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="font-semibold">Offline Mode</p>
+              <p class="text-sm text-base-content/60">When enabled, no AI calls are attempted.</p>
+            </div>
+            <input
+              id="offline-mode-toggle"
+              type="checkbox"
+              class="toggle toggle-primary"
+              aria-label="Enable Offline Mode"
+              checked={viewModel.offlineMode}
+              onchange={() => viewModel.toggleOfflineMode()}
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Telemetry toggle -->
+      <div class="card bg-base-200 mb-3">
+        <div class="card-body">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="font-semibold">Telemetry</p>
+              <p class="text-sm text-base-content/60">Opt out of anonymous usage data.</p>
+            </div>
+            <input
+              id="telemetry-opt-out-toggle"
+              type="checkbox"
+              class="toggle toggle-primary"
+              aria-label="Opt out of telemetry"
+              checked={viewModel.telemetryOptOut}
+              onchange={() => viewModel.toggleTelemetry()}
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete local data -->
+      <div class="card bg-base-200 border border-error/20">
+        <div class="card-body">
+          <p class="text-sm text-base-content/70 mb-2">
+            Permanently delete all local data on this device. This removes campaigns, saves, chat
+            history, and settings. Your cloud account is untouched.
+          </p>
+          <button
+            type="button"
+            class="btn btn-error btn-outline w-full"
+            onclick={() => viewModel.openDeleteLocalDialog()}
+          >
+            Delete Local Data
+          </button>
+        </div>
+      </div>
+    </section>
+  {/if}
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       Delete local data confirmation dialog (AC-7)
+       ═══════════════════════════════════════════════════════════════════ -->
+  {#if viewModel.isDeleteLocalDialogOpen}
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Delete local data confirmation"
+      tabindex="-1"
+      onclick={(e) => {
+        if (e.target === e.currentTarget) {
+          viewModel.closeDeleteLocalDialog();
+        }
+      }}
+      onkeydown={(e) => {
+        if (e.key === 'Escape') {
+          viewModel.closeDeleteLocalDialog();
+        }
+      }}
+    >
+      <div class="modal-box max-w-md">
+        <h3 class="text-lg font-bold text-error mb-2">Delete all local data?</h3>
+        <p class="text-sm text-base-content/70 mb-4">
+          This will permanently delete all campaigns, saves, chat history, and settings on this
+          device. Your cloud account and backups are not affected.
+        </p>
+        <p class="text-sm font-semibold mb-2">
+          Type <span class="font-mono bg-base-300 px-1 rounded">DELETE</span> to confirm.
+        </p>
+        <input
+          id="delete-local-confirm-input"
+          type="text"
+          class="input input-bordered w-full mb-4"
+          placeholder="Type DELETE to confirm"
+          value={viewModel.deleteLocalConfirmText}
+          oninput={(e) => viewModel.updateDeleteLocalConfirmText((e.target as HTMLInputElement).value)}
+        >
+        <div class="flex gap-2 justify-end">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            onclick={() => viewModel.closeDeleteLocalDialog()}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-error"
+            disabled={viewModel.deleteLocalConfirmText !== 'DELETE' || viewModel.isDeletingLocal}
+            onclick={() => viewModel.confirmDeleteLocalData()}
+          >
+            {#if viewModel.isDeletingLocal}
+              <span class="loading loading-spinner loading-sm"></span>
+              Deleting…
+            {:else}
+              Delete Everything
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
   {/if}
 </BaseViewModelContainer>

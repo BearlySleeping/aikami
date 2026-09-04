@@ -4,7 +4,12 @@
 // NEVER import this file from production code or non-(dev) routes.
 
 import type { NpcData } from '@aikami/types';
-import { type ChatMessage, chatService, textGenerationService } from '$services';
+import {
+  type ChatMessage,
+  chatService,
+  isOfflineModeEnabled,
+  textGenerationService,
+} from '$services';
 import type { TextChatMessage } from '$types';
 import { ChatViewModel, type ChatViewModelOptions } from './chat_view_model.svelte.ts';
 
@@ -148,6 +153,11 @@ export class ChatDevViewModel extends ChatViewModel {
   // ── Send (dev override) ───────────────────────────────────────────────
 
   override async sendMessage(text: string): Promise<void> {
+    if (isOfflineModeEnabled()) {
+      chatService.setError('Offline Mode is enabled. Disable it to send AI prompts.');
+      return;
+    }
+
     // Block sends when network error is toggled
     if (this._networkErrorActive) {
       chatService.setError('⚠️ Simulated network error — AI service unreachable.');
@@ -254,6 +264,10 @@ export class ChatDevViewModel extends ChatViewModel {
     baseUrl: string;
     onChunk: (chunk: string) => void;
   }): Promise<void> {
+    if (isOfflineModeEnabled()) {
+      throw new Error('Offline Mode is enabled.');
+    }
+
     const { messages, model, baseUrl, onChunk } = options;
     const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
