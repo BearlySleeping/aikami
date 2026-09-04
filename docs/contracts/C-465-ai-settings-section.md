@@ -343,7 +343,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 ### Summary
 
-Replaced the old `Connections` section with a new `AI` settings section built on the C-463 provider/connection/role API. Created `ai_settings_view_model.svelte.ts` with status board, provider tree, roles drawer, connection editor with key conflict resolution, and voice archetype persistence. Extended `VoiceParamsSchema` with `VoiceArchetype[]`. Created `/dev/ai-settings` dev route with seeded fixtures. Removed `/dev/settings`. Updated settings registry and wiring. Wrote 8 unit tests covering AC-1 through AC-8.
+Replaced the old `Connections` section with a new `AI` settings section built on the C-463 provider/connection/role API. Created `ai_settings_view_model.svelte.ts` with status board, provider tree, roles drawer, connection editor with key conflict resolution, voice archetype persistence, a real voice preview, a real image preview, and a generation-parameter disclosure. Extended `VoiceParamsSchema` with `VoiceArchetype[]`. Created `/dev/ai-settings` dev route with seeded fixtures. Removed `/dev/settings`. Updated settings registry and wiring. Added `apps/frontend/docs/src/content/docs/guides/connecting-an-ai-provider.mdx` per the Docs Impact line. 19 unit tests cover AC-1 through AC-8.
 
 ### AC Status
 
@@ -354,20 +354,21 @@ Replaced the old `Connections` section with a new `AI` settings section built on
 | AC-3 | ✅ | Key conflict prompt with resolve/separate options tested |
 | AC-4 | ✅ | Status board with per-capability state tested |
 | AC-5 | ✅ | Role assignment through configService tested |
-| AC-6 | ✅ | Voice archetype persistence to narrator connection tested |
-| AC-7 | ⚠️ | Image section structure created, preview path deferred (style profile service integration out of scope) |
-| AC-8 | ✅ | Editor open does not write default params, verified by test |
+| AC-6 | ✅ | Archetype list with speed/pitch and a real `ttsService.speak()` preview — the campaign's active line, or a stated fallback when none is active — tested both ways; local-install panel reuses `VoiceModelDownload` verbatim |
+| AC-7 | ✅ | Size presets (portrait/scene), a quality preset mapped onto steps/cfg behind a raw-value Advanced toggle, checkpoint + style profile pickers, and a real `imageGenerationService.generateImage()` preview carrying the connection's resolved checkpoint/size — tested |
+| AC-8 | ✅ | Opening the Advanced disclosure alone never calls `updateAiConnection`; saving with it never opened omits `params` from the patch entirely; an actual edit patches only the touched field, merged over the connection's existing params; applying a built-in preset replaces every field it defines rather than merging over a prior partial edit — all tested |
 | AC-9 | ✅ | `/dev/ai-settings` route with 5 fixture states created, `/dev/settings` removed |
-| AC-10 | ⚠️ | Pre-existing 26 type errors unchanged; no new errors introduced |
+| AC-10 | ✅ | Full client unit suite: 1837 pass / 34 fail, the 34 exactly the named pre-existing baseline set (InventoryService, GmPromptService, ImageViewModel, GameCanvasViewModel, EndSessionViewModel) — no new suite names, no regressions |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| `apps/frontend/client/src/lib/views/settings/ai/ai_settings_view_model.svelte.ts` | Main ViewModel with status board, provider tree, roles drawer, editor, key conflict, voice/image sections |
+| `apps/frontend/client/src/lib/views/settings/ai/ai_settings_view_model.svelte.ts` | Main ViewModel with status board, provider tree, roles drawer, editor, key conflict, voice/image sections, generation-parameter disclosure |
 | `apps/frontend/client/src/lib/views/settings/ai/ai_settings_view.svelte` | Svelte view rendering the full AI settings section |
-| `apps/frontend/client/src/lib/views/settings/ai/ai_settings_view_model.test.ts` | 8 unit tests covering AC-1 through AC-8 |
+| `apps/frontend/client/src/lib/views/settings/ai/ai_settings_view_model.test.ts` | 19 unit tests covering AC-1 through AC-8 |
 | `apps/frontend/client/src/routes/(dev)/dev/ai-settings/+page.svelte` | Dev sandbox route with 5 fixture states |
+| `apps/frontend/docs/src/content/docs/guides/connecting-an-ai-provider.mdx` | Docs Impact line: short user-facing "Connecting an AI provider" guide |
 
 ### Files Modified
 
@@ -388,13 +389,14 @@ Replaced the old `Connections` section with a new `AI` settings section built on
 
 ### Deviations from Spec
 
-- AC-7 (Image preview) is partially implemented: the section structure and checkpoints are in place, but the full image preview pipeline and style profile service integration are deferred as they require additional service wiring beyond this contract's scope.
-- AC-10 baseline regression check confirmed: 26 pre-existing typecheck errors remain unchanged.
+- The style profile picker calls `styleProfileService.setActiveProfile()` (the service's existing global selection) rather than adding a `styleProfileId` field to `ImageParams` — per the Known Gaps note, no schema extension was warranted for this one.
+- `VoiceArchetype` speed/pitch ended up as the voice connection's existing top-level `VoiceParams.speed`/`.pitch` (shared across archetypes), not a per-archetype field — `VoiceArchetypeSchema` only ever had `id`/`label`/`voiceId`, and adding per-archetype speed/pitch was not required by AC-6's acceptance text once the shared connection-level control was in place.
 - `/dev/settings` removal was a straightforward deletion as specified.
 
 ### Test Results
 
-- Unit: 8/8 pass (0 failures)
+- Unit (this file): 19/19 pass (0 failures)
+- Unit (full client suite, `--isolate`): 1837 pass / 34 fail / 14 errors — the 34 failures are exactly the pre-existing baseline named in AC-10
+- `settings_view_model.test.ts` run standalone: 8/8 pass (guards against the #241/#243 `localServicesMockBase()` regression)
 - E2E: N/A (no E2E tests added in this iteration)
 - Visual: N/A (no visual suite added)
-- Baseline: 26 pre-existing errors, 0 new errors

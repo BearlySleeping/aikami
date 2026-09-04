@@ -11,6 +11,7 @@ import {
   PROVIDER_ENDPOINTS,
   buildVerifyUrl,
   buildVerifyHeaders,
+  type GenParamPreset,
 } from '@aikami/constants';
 import {
   BaseViewModel,
@@ -18,13 +19,18 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import {
+  campaignService,
   configService,
   type FetchedModel,
   fetchModelsFromProvider,
+  imageGenerationService,
   PROVIDER_MODEL_FETCH,
+  styleProfileService,
+  ttsService,
+  voiceModelService,
 } from '$services';
 import type { AiProvider, AiConnection, AiRole, VoiceArchetype, TextParams, ImageParams, VoiceParams } from '@aikami/types';
-import type { ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
+import type { ConnectionCapability, ConnectionId, ConnectionTestResult, VoiceModelState } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -74,6 +80,36 @@ export type EditorDraft = {
   showApiKey: boolean;
   isEditing: boolean;
   editingConnectionId: ConnectionId | undefined;
+};
+
+/** State of the voice archetype preview (AC-6). */
+export type VoicePreviewState =
+  | { status: 'idle' }
+  | { status: 'playing' }
+  | { status: 'error'; error: string };
+
+/** State of the image connection preview (AC-7). */
+export type ImagePreviewState =
+  | { status: 'idle' }
+  | { status: 'generating' }
+  | { status: 'ready'; url: string }
+  | { status: 'error'; error: string };
+
+/** A size preset applied to an image connection's params. */
+export type ImageSizePreset = {
+  id: string;
+  label: string;
+  role: AiRole;
+  width: number;
+  height: number;
+};
+
+/** A quality level mapped onto steps/cfg. */
+export type ImageQualityLevel = {
+  id: string;
+  label: string;
+  steps: number;
+  cfg: number;
 };
 
 /** Ambiguous-key prompt state. */
@@ -149,11 +185,51 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   assignRole(role: AiRole, connectionId: ConnectionId): void;
   clearRole(role: AiRole): void;
 
-  // ── Capability sections ──
+  // ── Voice section (AC-6) ──
+  readonly voiceConnections: readonly AiConnection[];
+  readonly activeVoiceConnectionId: ConnectionId | undefined;
+  setActiveVoiceConnection(connectionId: ConnectionId): void;
   readonly voiceArchetypes: readonly VoiceArchetype[];
   setVoiceArchetype(archetypeId: string, voiceId: string): void;
+  readonly voiceSpeed: number;
+  readonly voicePitch: number;
+  setVoiceSpeed(speed: number): void;
+  setVoicePitch(pitch: number): void;
+  readonly voicePreviewState: VoicePreviewState;
+  previewVoiceArchetype(archetypeId: string): Promise<void>;
+  readonly showVoiceLocalDownload: boolean;
+  readonly voiceModelState: VoiceModelState;
+  readonly voiceModelProgress: number;
+  readonly voiceModelSizeLabel: string;
+  downloadVoiceModel(): Promise<void>;
+  cancelVoiceModelDownload(): void;
+
+  // ── Image section (AC-7) ──
+  readonly imageConnections: readonly AiConnection[];
+  readonly activeImageConnectionId: ConnectionId | undefined;
+  setActiveImageConnection(connectionId: ConnectionId): void;
+  readonly imageSizePresets: readonly ImageSizePreset[];
+  setImageSizePreset(connectionId: ConnectionId, presetId: string): void;
+  readonly imageQualityLevels: readonly ImageQualityLevel[];
+  setImageQuality(connectionId: ConnectionId, levelId: string): void;
+  readonly isImageAdvancedOpen: boolean;
+  toggleImageAdvanced(): void;
+  setImageParamField(connectionId: ConnectionId, field: 'steps' | 'cfg', value: number): void;
   readonly imageCheckpoints: readonly string[];
-  readonly imageStyleProfiles: readonly string[];
+  setImageCheckpoint(connectionId: ConnectionId, checkpoint: string): void;
+  readonly imageStyleProfiles: ReadonlyArray<{ id: string; label: string }>;
+  readonly activeStyleProfileId: string;
+  setImageStyleProfile(profileId: string): void;
+  readonly imagePreviewState: ImagePreviewState;
+  previewImage(connectionId: ConnectionId): Promise<void>;
+
+  // ── Generation-parameter disclosure (AC-8) ──
+  readonly isGenParamsOpen: boolean;
+  toggleGenParamsDisclosure(): void;
+  readonly genParamsDisplay: TextParams | undefined;
+  setGenParamField(field: keyof TextParams, value: number): void;
+  readonly genParamPresets: readonly GenParamPreset[];
+  applyGenPreset(presetId: string): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -176,6 +252,21 @@ const ALL_ROLES: readonly AiRole[] = [
   'portrait', 'scene',
   'narrator-voice', 'npc-voice',
 ] as const;
+
+const IMAGE_SIZE_PRESETS: readonly ImageSizePreset[] = [
+  { id: 'portrait', label: 'Portrait (768×1024)', role: 'portrait', width: 768, height: 1024 },
+  { id: 'scene', label: 'Scene (1024×768)', role: 'scene', width: 1024, height: 768 },
+];
+
+const IMAGE_QUALITY_LEVELS: readonly ImageQualityLevel[] = [
+  { id: 'draft', label: 'Draft', steps: 15, cfg: 5 },
+  { id: 'standard', label: 'Standard', steps: 25, cfg: 7 },
+  { id: 'high', label: 'High', steps: 35, cfg: 9 },
+];
+
+/** Used for the voice preview when no campaign is active (AC-6, Edge Cases). */
+const VOICE_PREVIEW_FALLBACK_LINE =
+  'The tavern door creaks open as a gust of wind sweeps through the room.';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -233,6 +324,9 @@ export class AiSettingsViewModel
 {
   private _availableModels: FetchedModel[] = $state([]);
   private _voiceArchetypes: VoiceArchetype[] = $state([]);
+  private _activeVoiceConnectionId: ConnectionId | undefined = $state(undefined);
+  private _activeImageConnectionId: ConnectionId | undefined = $state(undefined);
+  private _genParamsDraft: Partial<TextParams> = $state({});
 
   // ── State ──
   isEditorOpen = $state(false);
@@ -243,6 +337,10 @@ export class AiSettingsViewModel
   testResults: Record<string, ConnectionTestResult> = $state({});
   testingIds: Set<string> = $state(new Set());
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
+  voicePreviewState: VoicePreviewState = $state({ status: 'idle' });
+  imagePreviewState: ImagePreviewState = $state({ status: 'idle' });
+  isImageAdvancedOpen = $state(false);
+  isGenParamsOpen = $state(false);
 
   draft: EditorDraft = $state({
     providerId: undefined,
@@ -374,7 +472,19 @@ export class AiSettingsViewModel
     return regEntry?.isLocal ?? false;
   }
 
-  // ── Voice archetypes ──
+  // ── Voice section (AC-6) ──
+
+  get voiceConnections(): readonly AiConnection[] {
+    return this._connectionsForCapability('voice');
+  }
+
+  get activeVoiceConnectionId(): ConnectionId | undefined {
+    return this._activeVoiceConnectionId ?? this.voiceConnections[0]?.id;
+  }
+
+  setActiveVoiceConnection(connectionId: ConnectionId): void {
+    this._activeVoiceConnectionId = connectionId;
+  }
 
   get voiceArchetypes(): readonly VoiceArchetype[] {
     return this._voiceArchetypes;
@@ -403,20 +513,197 @@ export class AiSettingsViewModel
     }
   }
 
-  // ── Image section ──
-
-  get imageCheckpoints(): readonly string[] {
-    // Read from the first image connection's params
-    const imgConn = configService.getAiConnections().find((c) => c.capability === 'image');
-    if (imgConn?.params && 'checkpoint' in imgConn.params) {
-      return [imgConn.params.checkpoint as string];
-    }
-    return [];
+  get voiceSpeed(): number {
+    return (this._activeVoiceConnection()?.params as VoiceParams | undefined)?.speed ?? 1;
   }
 
-  get imageStyleProfiles(): readonly string[] {
-    // Placeholder — styleProfileService integration deferred
-    return [];
+  get voicePitch(): number {
+    return (this._activeVoiceConnection()?.params as VoiceParams | undefined)?.pitch ?? 0;
+  }
+
+  setVoiceSpeed(speed: number): void {
+    this._updateActiveVoiceParams({ speed });
+  }
+
+  setVoicePitch(pitch: number): void {
+    this._updateActiveVoiceParams({ pitch });
+  }
+
+  async previewVoiceArchetype(archetypeId: string): Promise<void> {
+    this.debug('previewVoiceArchetype', { archetypeId });
+    const archetype = this._voiceArchetypes.find((a) => a.id === archetypeId);
+    if (!archetype) {
+      return;
+    }
+    this.voicePreviewState = { status: 'playing' };
+    try {
+      await ttsService.speak({ text: this._voicePreviewLine(), voiceId: archetype.voiceId });
+      this.voicePreviewState = { status: 'idle' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.voicePreviewState = { status: 'error', error: message };
+      this.error('previewVoiceArchetype:failed', error);
+    }
+  }
+
+  get showVoiceLocalDownload(): boolean {
+    return !this._hasCloudVoiceConnection();
+  }
+
+  get voiceModelState(): VoiceModelState {
+    return voiceModelService.state;
+  }
+
+  get voiceModelProgress(): number {
+    const state = voiceModelService.state;
+    if (state.status === 'downloading') {
+      return Math.round((state.receivedBytes / Math.max(1, state.totalBytes)) * 100);
+    }
+    if (state.status === 'verifying') {
+      return 100;
+    }
+    return 0;
+  }
+
+  get voiceModelSizeLabel(): string {
+    const bytes = voiceModelService.totalBytes;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async downloadVoiceModel(): Promise<void> {
+    this.debug('downloadVoiceModel');
+    try {
+      await voiceModelService.download();
+    } catch (error) {
+      this.warn('downloadVoiceModel:failed', error);
+    }
+  }
+
+  cancelVoiceModelDownload(): void {
+    voiceModelService.cancel();
+  }
+
+  // ── Image section (AC-7) ──
+
+  get imageConnections(): readonly AiConnection[] {
+    return this._connectionsForCapability('image');
+  }
+
+  get activeImageConnectionId(): ConnectionId | undefined {
+    return this._activeImageConnectionId ?? this.imageConnections[0]?.id;
+  }
+
+  setActiveImageConnection(connectionId: ConnectionId): void {
+    this._activeImageConnectionId = connectionId;
+  }
+
+  get imageSizePresets(): readonly ImageSizePreset[] {
+    return IMAGE_SIZE_PRESETS;
+  }
+
+  setImageSizePreset(connectionId: ConnectionId, presetId: string): void {
+    const preset = IMAGE_SIZE_PRESETS.find((p) => p.id === presetId);
+    if (!preset) {
+      return;
+    }
+    this._updateImageParams(connectionId, { width: preset.width, height: preset.height });
+  }
+
+  get imageQualityLevels(): readonly ImageQualityLevel[] {
+    return IMAGE_QUALITY_LEVELS;
+  }
+
+  setImageQuality(connectionId: ConnectionId, levelId: string): void {
+    const level = IMAGE_QUALITY_LEVELS.find((l) => l.id === levelId);
+    if (!level) {
+      return;
+    }
+    this._updateImageParams(connectionId, { steps: level.steps, cfg: level.cfg });
+  }
+
+  toggleImageAdvanced(): void {
+    this.isImageAdvancedOpen = !this.isImageAdvancedOpen;
+  }
+
+  setImageParamField(connectionId: ConnectionId, field: 'steps' | 'cfg', value: number): void {
+    this._updateImageParams(connectionId, { [field]: value });
+  }
+
+  get imageCheckpoints(): readonly string[] {
+    return imageGenerationService.checkpoints.map((c) => c.id);
+  }
+
+  setImageCheckpoint(connectionId: ConnectionId, checkpoint: string): void {
+    this._updateImageParams(connectionId, { checkpoint });
+  }
+
+  get imageStyleProfiles(): ReadonlyArray<{ id: string; label: string }> {
+    return styleProfileService.profiles.map((p) => ({ id: p.id, label: p.name }));
+  }
+
+  get activeStyleProfileId(): string {
+    return styleProfileService.activeProfileId;
+  }
+
+  setImageStyleProfile(profileId: string): void {
+    styleProfileService.setActiveProfile(profileId);
+  }
+
+  async previewImage(connectionId: ConnectionId): Promise<void> {
+    this.debug('previewImage', { connectionId });
+    const conn = configService.getAiConnection(connectionId);
+    if (!conn || conn.capability !== 'image') {
+      return;
+    }
+    const params = conn.params as ImageParams;
+    this.imagePreviewState = { status: 'generating' };
+    try {
+      const result = await imageGenerationService.generateImage({
+        prompt: styleProfileService.activeProfile?.positiveTags || 'A fantasy character portrait',
+        checkpoint: params.checkpoint,
+        width: params.width,
+        height: params.height,
+        steps: params.steps,
+        cfgScale: params.cfg,
+      });
+      this.imagePreviewState = { status: 'ready', url: result.url };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.imagePreviewState = { status: 'error', error: message };
+      this.error('previewImage:failed', error);
+    }
+  }
+
+  // ── Generation-parameter disclosure (AC-8) ──
+
+  toggleGenParamsDisclosure(): void {
+    this.isGenParamsOpen = !this.isGenParamsOpen;
+  }
+
+  get genParamsDisplay(): TextParams | undefined {
+    const conn = this.draft.editingConnectionId
+      ? configService.getAiConnection(this.draft.editingConnectionId)
+      : undefined;
+    if (!conn || conn.capability !== 'text') {
+      return undefined;
+    }
+    return { ...(conn.params as TextParams), ...this._genParamsDraft };
+  }
+
+  setGenParamField(field: keyof TextParams, value: number): void {
+    this._genParamsDraft = { ...this._genParamsDraft, [field]: value };
+  }
+
+  get genParamPresets(): readonly GenParamPreset[] {
+    return configService.getPresets();
+  }
+
+  applyGenPreset(presetId: string): void {
+    const preset = this.genParamPresets.find((p) => p.id === presetId);
+    if (!preset) {
+      return;
+    }
+    this._genParamsDraft = { ...preset.params };
   }
 
   // ── Lifecycle ──
@@ -459,6 +746,8 @@ export class AiSettingsViewModel
       isEditing: true,
       editingConnectionId: connectionId,
     };
+    this._genParamsDraft = {};
+    this.isGenParamsOpen = false;
     this.isEditorOpen = true;
   }
 
@@ -518,11 +807,14 @@ export class AiSettingsViewModel
       // Update existing connection
       const conn = configService.getAiConnection(this.draft.editingConnectionId);
       if (!conn) return;
-      configService.updateAiConnection(this.draft.editingConnectionId, {
-        label,
-        model,
-        // Params stay unchanged during edit for now
-      });
+      const patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>> = { label, model };
+      // AC-8: params are included in the patch ONLY when the Advanced
+      // disclosure was actually edited — opening it alone must never write
+      // a default value into a connection that never had one.
+      if (conn.capability === 'text' && Object.keys(this._genParamsDraft).length > 0) {
+        patch.params = { ...(conn.params as TextParams), ...this._genParamsDraft } as TextParams;
+      }
+      configService.updateAiConnection(this.draft.editingConnectionId, patch);
       // Update provider credential if changed
       const provider = this.draft.providerId
         ? configService.getProvider(this.draft.providerId)
@@ -566,12 +858,17 @@ export class AiSettingsViewModel
 
       // Create the new connection
       if (providerId) {
+        const defaultParams = this._defaultParams(cap);
+        const params =
+          cap === 'text' && Object.keys(this._genParamsDraft).length > 0
+            ? ({ ...(defaultParams as TextParams), ...this._genParamsDraft } as TextParams)
+            : defaultParams;
         configService.addAiConnection({
           providerId,
           capability: cap,
           label,
           model,
-          params: this._defaultParams(cap) as TextParams | ImageParams | VoiceParams,
+          params: params as TextParams | ImageParams | VoiceParams,
         });
       }
     }
@@ -751,6 +1048,47 @@ export class AiSettingsViewModel
       editingConnectionId: undefined,
     };
     this._availableModels = [];
+    this._genParamsDraft = {};
+    this.isGenParamsOpen = false;
+  }
+
+  private _activeVoiceConnection(): AiConnection | undefined {
+    const id = this.activeVoiceConnectionId;
+    return id ? configService.getAiConnection(id) : undefined;
+  }
+
+  private _updateActiveVoiceParams(patch: Partial<VoiceParams>): void {
+    const conn = this._activeVoiceConnection();
+    if (!conn) {
+      return;
+    }
+    configService.updateAiConnection(conn.id, {
+      params: { ...(conn.params as VoiceParams), ...patch } as VoiceParams,
+    });
+    void configService.save();
+  }
+
+  private _hasCloudVoiceConnection(): boolean {
+    return this.voiceConnections.some((c) => {
+      const provider = configService.getProvider(c.providerId);
+      return provider ? !LOCAL_PROVIDER_IDS.has(provider.registryId) : false;
+    });
+  }
+
+  private _voicePreviewLine(): string {
+    const campaign = campaignService.activeCampaign;
+    return campaign ? `Welcome back to ${campaign.name}.` : VOICE_PREVIEW_FALLBACK_LINE;
+  }
+
+  private _updateImageParams(connectionId: ConnectionId, patch: Partial<ImageParams>): void {
+    const conn = configService.getAiConnection(connectionId);
+    if (!conn) {
+      return;
+    }
+    configService.updateAiConnection(connectionId, {
+      params: { ...(conn.params as ImageParams), ...patch } as ImageParams,
+    });
+    void configService.save();
   }
 
   private _registryLabel(registryId: string): string | undefined {

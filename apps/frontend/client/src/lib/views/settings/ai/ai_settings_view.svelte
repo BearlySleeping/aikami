@@ -4,6 +4,7 @@
 // C-465: AI Settings view — status board, provider tree, roles drawer,
 // connection editor, and capability-specific controls.
 
+import VoiceModelDownload from '@aikami/frontend/components/voice-model-download/voice_model_download.svelte';
 import { BaseViewModelContainer } from '$components';
 import type { AiSettingsViewModelInterface } from './ai_settings_view_model.svelte';
 
@@ -252,6 +253,219 @@ const { viewModel }: Props = $props();
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════════════
+       VOICE SECTION (AC-6)
+       ═══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <h2 class="font-mono text-lg font-bold text-[#cabeff] mb-4">Voice</h2>
+
+    {#if viewModel.voiceConnections.length === 0}
+      <p class="text-sm text-[#938ea1]/60 font-sans italic mb-3">
+        No voice connection yet — add one above to assign archetypes.
+      </p>
+    {:else}
+      <div class="card card-bordered border-white/[0.08] bg-base-100/50 mb-3">
+        <div class="card-body p-4 space-y-3">
+          <div class="flex items-center gap-4">
+            <label class="text-xs font-mono text-[#938ea1] flex-1" for="voice-speed">
+              Speed ({viewModel.voiceSpeed.toFixed(2)}x)
+              <input
+                id="voice-speed"
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.05"
+                class="range range-xs w-full"
+                value={viewModel.voiceSpeed}
+                oninput={(e) => viewModel.setVoiceSpeed(Number((e.target as HTMLInputElement).value))}
+              >
+            </label>
+            <label class="text-xs font-mono text-[#938ea1] flex-1" for="voice-pitch">
+              Pitch ({viewModel.voicePitch})
+              <input
+                id="voice-pitch"
+                type="range"
+                min="-12"
+                max="12"
+                step="1"
+                class="range range-xs w-full"
+                value={viewModel.voicePitch}
+                oninput={(e) => viewModel.setVoicePitch(Number((e.target as HTMLInputElement).value))}
+              >
+            </label>
+          </div>
+
+          <div class="space-y-2">
+            {#each viewModel.voiceArchetypes as archetype (archetype.id)}
+              <div class="flex items-center gap-2 text-xs font-mono">
+                <span class="w-32 text-[#938ea1]">{archetype.label}</span>
+                <input
+                  type="text"
+                  class="input input-bordered input-xs flex-1"
+                  value={archetype.voiceId}
+                  oninput={(e) =>
+                    viewModel.setVoiceArchetype(archetype.id, (e.target as HTMLInputElement).value)}
+                >
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs text-[#00e3fd]"
+                  disabled={viewModel.voicePreviewState.status === 'playing'}
+                  onclick={() => viewModel.previewVoiceArchetype(archetype.id)}
+                >
+                  {viewModel.voicePreviewState.status === 'playing' ? '▶ Playing…' : '▶ Preview'}
+                </button>
+              </div>
+            {/each}
+          </div>
+
+          {#if viewModel.voicePreviewState.status === 'error'}
+            <p class="text-xs text-error">{viewModel.voicePreviewState.error}</p>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    <VoiceModelDownload
+      show={viewModel.showVoiceLocalDownload}
+      state={viewModel.voiceModelState}
+      progress={viewModel.voiceModelProgress}
+      sizeLabel={viewModel.voiceModelSizeLabel}
+      ondownload={() => viewModel.downloadVoiceModel()}
+      oncancel={() => viewModel.cancelVoiceModelDownload()}
+    />
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
+       IMAGE SECTION (AC-7)
+       ═══════════════════════════════════════════════════════════════════ -->
+  <section>
+    <h2 class="font-mono text-lg font-bold text-[#cabeff] mb-4">Image</h2>
+
+    {#if viewModel.imageConnections.length === 0}
+      <p class="text-sm text-[#938ea1]/60 font-sans italic mb-3">
+        No image connection yet — add one above to configure it.
+      </p>
+    {:else}
+      {#each viewModel.imageConnections as conn (conn.id)}
+        <div class="card card-bordered border-white/[0.08] bg-base-100/50 mb-3">
+          <div class="card-body p-4 space-y-3">
+            <span class="font-mono text-sm font-semibold">{conn.label}</span>
+
+            <div class="flex gap-2">
+              {#each viewModel.imageSizePresets as preset}
+                <button
+                  type="button"
+                  class="btn btn-xs font-mono"
+                  onclick={() => viewModel.setImageSizePreset(conn.id, preset.id)}
+                >
+                  {preset.label}
+                </button>
+              {/each}
+            </div>
+
+            <div class="flex gap-2">
+              {#each viewModel.imageQualityLevels as level}
+                <button
+                  type="button"
+                  class="btn btn-xs font-mono"
+                  onclick={() => viewModel.setImageQuality(conn.id, level.id)}
+                >
+                  {level.label}
+                </button>
+              {/each}
+            </div>
+
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1] w-fit"
+              onclick={() => viewModel.toggleImageAdvanced()}
+            >
+              {viewModel.isImageAdvancedOpen ? '▾' : '▸'}
+              Advanced (raw steps/cfg)
+            </button>
+            {#if viewModel.isImageAdvancedOpen}
+              <div class="flex gap-4 text-xs font-mono text-[#938ea1]">
+                <label for={`steps-${conn.id}`}>
+                  Steps
+                  <input
+                    id={`steps-${conn.id}`}
+                    type="number"
+                    class="input input-bordered input-xs w-20"
+                    value={(conn.params as { steps: number }).steps}
+                    oninput={(e) =>
+                      viewModel.setImageParamField(
+                        conn.id,
+                        'steps',
+                        Number((e.target as HTMLInputElement).value),
+                      )}
+                  >
+                </label>
+                <label for={`cfg-${conn.id}`}>
+                  CFG
+                  <input
+                    id={`cfg-${conn.id}`}
+                    type="number"
+                    class="input input-bordered input-xs w-20"
+                    value={(conn.params as { cfg: number }).cfg}
+                    oninput={(e) =>
+                      viewModel.setImageParamField(
+                        conn.id,
+                        'cfg',
+                        Number((e.target as HTMLInputElement).value),
+                      )}
+                  >
+                </label>
+              </div>
+            {/if}
+
+            <div class="flex gap-2">
+              <select
+                class="select select-bordered select-xs font-mono"
+                value={(conn.params as { checkpoint: string }).checkpoint}
+                onchange={(e) =>
+                  viewModel.setImageCheckpoint(conn.id, (e.target as HTMLSelectElement).value)}
+              >
+                {#each viewModel.imageCheckpoints as checkpoint}
+                  <option value={checkpoint}>{checkpoint}</option>
+                {/each}
+              </select>
+
+              <select
+                class="select select-bordered select-xs font-mono"
+                value={viewModel.activeStyleProfileId}
+                onchange={(e) =>
+                  viewModel.setImageStyleProfile((e.target as HTMLSelectElement).value)}
+              >
+                {#each viewModel.imageStyleProfiles as profile}
+                  <option value={profile.id}>{profile.label}</option>
+                {/each}
+              </select>
+
+              <button
+                type="button"
+                class="btn btn-xs btn-primary font-mono"
+                disabled={viewModel.imagePreviewState.status === 'generating'}
+                onclick={() => viewModel.previewImage(conn.id)}
+              >
+                {viewModel.imagePreviewState.status === 'generating' ? 'Generating…' : 'Preview'}
+              </button>
+            </div>
+
+            {#if viewModel.imagePreviewState.status === 'ready'}
+              <img
+                src={viewModel.imagePreviewState.url}
+                alt="Generated preview"
+                class="rounded-box max-h-48"
+              >
+            {:else if viewModel.imagePreviewState.status === 'error'}
+              <p class="text-xs text-error">{viewModel.imagePreviewState.error}</p>
+            {/if}
+          </div>
+        </div>
+      {/each}
+    {/if}
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════
        CONNECTION EDITOR MODAL
        ═══════════════════════════════════════════════════════════════════ -->
   {#if viewModel.isEditorOpen}
@@ -390,6 +604,146 @@ const { viewModel }: Props = $props();
               oninput={(e) => viewModel.setDraftField('label', (e.target as HTMLInputElement).value)}
             >
           </div>
+
+          <!-- Generation-parameter disclosure (AC-8) -->
+          {#if viewModel.draft.capability === 'text'}
+            <div>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1]"
+                onclick={() => viewModel.toggleGenParamsDisclosure()}
+              >
+                {viewModel.isGenParamsOpen ? '▾' : '▸'}
+                Advanced (generation parameters)
+              </button>
+              {#if viewModel.isGenParamsOpen}
+                {@const params = viewModel.genParamsDisplay}
+                <div class="mt-2 space-y-2">
+                  <div class="flex gap-2">
+                    {#each viewModel.genParamPresets as preset}
+                      <button
+                        type="button"
+                        class="btn btn-xs font-mono"
+                        onclick={() => viewModel.applyGenPreset(preset.id)}
+                      >
+                        {preset.name}
+                      </button>
+                    {/each}
+                  </div>
+                  {#if params}
+                    <div class="grid grid-cols-2 gap-2 text-xs font-mono text-[#938ea1]">
+                      <label for="param-temperature">
+                        Temperature
+                        <input
+                          id="param-temperature"
+                          type="number"
+                          step="0.01"
+                          class="input input-bordered input-xs w-full"
+                          value={params.temperature}
+                          oninput={(e) =>
+                            viewModel.setGenParamField(
+                              'temperature',
+                              Number((e.target as HTMLInputElement).value),
+                            )}
+                        >
+                      </label>
+                      <label for="param-topP">
+                        Top P
+                        <input
+                          id="param-topP"
+                          type="number"
+                          step="0.01"
+                          class="input input-bordered input-xs w-full"
+                          value={params.topP}
+                          oninput={(e) =>
+                            viewModel.setGenParamField(
+                              'topP',
+                              Number((e.target as HTMLInputElement).value),
+                            )}
+                        >
+                      </label>
+                      <label for="param-topK">
+                        Top K
+                        <input
+                          id="param-topK"
+                          type="number"
+                          class="input input-bordered input-xs w-full"
+                          value={params.topK}
+                          oninput={(e) =>
+                            viewModel.setGenParamField(
+                              'topK',
+                              Number((e.target as HTMLInputElement).value),
+                            )}
+                        >
+                      </label>
+                      <label for="param-repetitionPenalty">
+                        Repetition penalty
+                        <input
+                          id="param-repetitionPenalty"
+                          type="number"
+                          step="0.01"
+                          class="input input-bordered input-xs w-full"
+                          value={params.repetitionPenalty}
+                          oninput={(e) =>
+                            viewModel.setGenParamField(
+                              'repetitionPenalty',
+                              Number((e.target as HTMLInputElement).value),
+                            )}
+                        >
+                      </label>
+                      <label for="param-presencePenalty">
+                        Presence penalty
+                        <input
+                          id="param-presencePenalty"
+                          type="number"
+                          step="0.01"
+                          class="input input-bordered input-xs w-full"
+                          value={params.presencePenalty}
+                          oninput={(e) =>
+                            viewModel.setGenParamField(
+                              'presencePenalty',
+                              Number((e.target as HTMLInputElement).value),
+                            )}
+                        >
+                      </label>
+                      <label for="param-maxTokens">
+                        Max tokens
+                        <input
+                          id="param-maxTokens"
+                          type="number"
+                          class="input input-bordered input-xs w-full"
+                          value={params.maxTokens}
+                          oninput={(e) =>
+                            viewModel.setGenParamField(
+                              'maxTokens',
+                              Number((e.target as HTMLInputElement).value),
+                            )}
+                        >
+                      </label>
+                      <label for="param-contextSize">
+                        Context size
+                        <input
+                          id="param-contextSize"
+                          type="number"
+                          class="input input-bordered input-xs w-full"
+                          value={params.contextSize}
+                          oninput={(e) =>
+                            viewModel.setGenParamField(
+                              'contextSize',
+                              Number((e.target as HTMLInputElement).value),
+                            )}
+                        >
+                      </label>
+                    </div>
+                  {:else}
+                    <p class="text-xs text-[#938ea1]/60 italic">
+                      Save this connection first, then reopen it to tune generation parameters.
+                    </p>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
 
         <!-- Actions -->

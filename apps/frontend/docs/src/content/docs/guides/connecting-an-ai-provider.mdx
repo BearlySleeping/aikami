@@ -1,0 +1,34 @@
+---
+title: Connecting an AI Provider
+description: How to add a text, voice, or image provider in Settings → AI and reuse one account across models.
+---
+
+Settings → AI is where you connect the services that power narration, dialogue voices, and generated art.
+
+## Status board
+
+The top of the section shows one row per capability — **Text**, **Voice**, **Image** — each independently connected, offline, or not set up yet. Use **Test** on a row to re-check that capability's active connection.
+
+## Adding a provider
+
+Click **+ Add provider**, pick a provider from the dropdown, and paste your API key. Local providers (Ollama, ComfyUI, Kokoro) skip the key and ask for a server URL instead.
+
+If you already have a connection on that same provider account, the key field is **prefilled automatically** — you never have to paste it twice. Pasting a different key prompts you to choose between updating the shared account (every connection on it gets the new key) or creating a separate account.
+
+## Adding a second model on the same account
+
+Click **+ Add model** under an existing provider row. Pick the same provider again — the key is reused, so you only choose the model.
+
+## Roles & advanced
+
+Expand **Roles & advanced** to assign a connection to a job — e.g. a cheaper model for `summarization`, a better one for `narration`. Each text connection's editor also has a collapsed **Advanced** disclosure for generation parameters (temperature, top-P, top-K, and more) and built-in presets; it stays out of the way until you open it.
+
+## Voice
+
+The Voice section lists named archetypes (e.g. "Female — Warm") mapped to a voice ID, plus a shared speed/pitch for the active voice connection. **Preview** plays a real line — from your active campaign when one exists, otherwise a stated fallback line — through the archetype's voice. No local Kokoro model yet? A download panel appears in place of a cloud connection.
+
+## Image
+
+Each image connection gets a size preset (Portrait / Scene), a quality preset mapped onto steps/CFG (with the raw numbers behind an **Advanced** toggle), a checkpoint picker, and a style profile dropdown. **Preview** generates through the same pipeline the game uses — no separate preview-only path.
+
+See: `apps/frontend/client/src/lib/views/settings/ai/ai_settings_view.svelte`
