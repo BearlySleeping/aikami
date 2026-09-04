@@ -46,6 +46,13 @@ export const AiRoleSchema = Type.Union([
 // Params (carried by AiConnection.params, discriminated on capability)
 // ---------------------------------------------------------------------------
 
+/** Schema for a named voice archetype mapping. */
+export const VoiceArchetypeSchema = Type.Object({
+  id: Type.String(),
+  label: Type.String(),
+  voiceId: Type.String(),
+});
+
 /** Generation parameters for text connections. */
 export const TextParamsSchema = Type.Object({
   temperature: Type.Number(),
@@ -73,13 +80,6 @@ export const VoiceParamsSchema = Type.Object({
   pitch: Type.Number(),
   /** Named-role → this provider's voice id, e.g. "Female — warm" -> "af_bella". */
   archetypes: Type.Optional(Type.Array(VoiceArchetypeSchema)),
-});
-
-/** Schema for a named voice archetype mapping. */
-export const VoiceArchetypeSchema = Type.Object({
-  id: Type.String(),
-  label: Type.String(),
-  voiceId: Type.String(),
 });
 
 // ---------------------------------------------------------------------------
