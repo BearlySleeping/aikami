@@ -36,7 +36,10 @@ export type CapabilityStatus = 'connected' | 'offline' | 'not_configured' | 'loa
 /** Status board entry for one capability. */
 export type CapabilityStatusEntry = {
   capability: ConnectionCapability;
+  connectionId: ConnectionId | undefined;
   status: CapabilityStatus;
+  color: string;
+  dot: string;
   label: string;
   modelName: string | undefined;
   latencyMs: number | undefined;
@@ -91,6 +94,7 @@ export type KeyConflictPrompt = {
 // Interface
 // ---------------------------------------------------------------------------
 
+/** Presentation state and actions exposed by the AI settings ViewModel. */
 export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   // ── Status board ──
   readonly statusEntries: readonly CapabilityStatusEntry[];
@@ -104,6 +108,7 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly isEditorOpen: boolean;
   readonly modelOptions: readonly FetchedModel[];
   readonly isFetchingModels: boolean;
+  readonly fetchModelsError: string | undefined;
   readonly canFetchModels: boolean;
   readonly needsApiKey: boolean;
   readonly needsUrl: boolean;
@@ -132,7 +137,7 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   setDraftProvider(registryId: string): void;
   saveDraft(): void;
   deleteConnection(connectionId: ConnectionId): void;
-  testConnection(connectionId: ConnectionId): Promise<void>;
+  testConnection(connectionId: ConnectionId | undefined): Promise<void>;
   testDraftConnection(): Promise<void>;
   fetchModels(): Promise<void>;
   toggleApiKeyVisibility(): void;
@@ -176,35 +181,68 @@ const ALL_ROLES: readonly AiRole[] = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-function _registryForCapability(capability: ConnectionCapability) {
-  if (capability === 'image') return IMAGE_PROVIDERS;
-  if (capability === 'voice') return VOICE_PROVIDERS;
+const _registryForCapability = (capability: ConnectionCapability) => {
+  if (capability === 'image') {
+    return IMAGE_PROVIDERS;
+  }
+  if (capability === 'voice') {
+    return VOICE_PROVIDERS;
+  }
   return TEXT_PROVIDERS;
-}
+};
 
-function _deriveCapabilityStatus(providerCount: number): CapabilityStatus {
-  if (providerCount === 0) return 'not_configured';
+const _deriveCapabilityStatus = (options: {
+  connection: AiConnection | undefined;
+  testResults: Record<string, ConnectionTestResult>;
+  testingIds: Set<string>;
+}) => {
+  if (!options.connection) {
+    return 'not_configured';
+  }
+  if (options.testingIds.has(options.connection.id)) {
+    return 'loading';
+  }
+  const result = options.testResults[options.connection.id];
+  if (result && !result.ok) {
+    return 'offline';
+  }
   return 'connected';
-}
+};
+
+const _capabilityColor = (status: CapabilityStatus) => {
+  if (status === 'connected') {
+    return 'text-success';
+  }
+  if (status === 'offline') {
+    return 'text-error';
+  }
+  return 'text-base-content/40';
+};
+
+const _capabilityDot = (status: CapabilityStatus) =>
+  status === 'connected' || status === 'offline' ? '\u25CF' : '\u25CB';
 
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
 
-class AiSettingsViewModel
+/** Production implementation shared with the dev-only fixture subclass. */
+export class AiSettingsViewModel
   extends BaseViewModel<AiSettingsViewModelOptions>
   implements AiSettingsViewModelInterface
 {
+  private _availableModels: FetchedModel[] = $state([]);
+  private _voiceArchetypes: VoiceArchetype[] = $state([]);
+
   // ── State ──
   isEditorOpen = $state(false);
   isAddProviderOpen = $state(false);
   isRolesDrawerOpen = $state(false);
   isFetchingModels = $state(false);
+  fetchModelsError = $state<string | undefined>(undefined);
   testResults: Record<string, ConnectionTestResult> = $state({});
   testingIds: Set<string> = $state(new Set());
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
-  private _availableModels: FetchedModel[] = $state([]);
-  private _voiceArchetypes: VoiceArchetype[] = $state([]);
 
   draft: EditorDraft = $state({
     providerId: undefined,
@@ -226,17 +264,25 @@ class AiSettingsViewModel
     return capabilities.map((cap) => {
       const connections = this._connectionsForCapability(cap);
       const providers = this._providersForCapability(cap);
-      const status = _deriveCapabilityStatus(connections.length);
       const firstConn = connections[0];
+      const status = _deriveCapabilityStatus({
+        connection: firstConn,
+        testResults: this.testResults,
+        testingIds: this.testingIds,
+      });
+      const testResult = firstConn ? this.testResults[firstConn.id] : undefined;
       const provider = firstConn ? providers.find((p) => p.id === firstConn.providerId) : undefined;
       const registry = _registryForCapability(cap);
       const registryEntry = registry.find((r) => r.id === provider?.registryId);
       return {
         capability: cap,
+        connectionId: firstConn?.id,
         status,
+        color: _capabilityColor(status),
+        dot: _capabilityDot(status),
         label: cap.charAt(0).toUpperCase() + cap.slice(1),
         modelName: firstConn?.model,
-        latencyMs: undefined,
+        latencyMs: testResult?.ok ? testResult.latencyMs : undefined,
         providerLabel: registryEntry?.label,
       };
     });
@@ -267,12 +313,14 @@ class AiSettingsViewModel
   get connectionsWithRoles(): readonly ConnectionWithRoles[] {
     const assignments = configService.getRoleAssignments();
     const connections = configService.getAiConnections();
-    return connections.map((c) => {
-      const roles = (Object.keys(assignments) as AiRole[]).filter(
-        (r) => assignments[r] === c.id,
-      );
-      return { connection: c, roles };
-    });
+    return connections
+      .map((connection) => {
+        const roles = (Object.keys(assignments) as AiRole[]).filter(
+          (role) => assignments[role] === connection.id,
+        );
+        return { connection, roles };
+      })
+      .filter((entry) => entry.roles.length > 0);
   }
 
   get availableRoles(): readonly AiRole[] {
@@ -333,9 +381,12 @@ class AiSettingsViewModel
   }
 
   setVoiceArchetype(archetypeId: string, voiceId: string): void {
-    this._voiceArchetypes = this._voiceArchetypes.map((a) =>
-      a.id === archetypeId ? { ...a, voiceId } : a,
-    );
+    const hasArchetype = this._voiceArchetypes.some((archetype) => archetype.id === archetypeId);
+    this._voiceArchetypes = hasArchetype
+      ? this._voiceArchetypes.map((archetype) =>
+          archetype.id === archetypeId ? { ...archetype, voiceId } : archetype,
+        )
+      : [...this._voiceArchetypes, { id: archetypeId, label: archetypeId, voiceId }];
     // Persist to the narrator-voice connection's params
     const narratorConn = configService.getAiConnections().find((c) => {
       const roles = configService.getRoleAssignments();
@@ -375,26 +426,6 @@ class AiSettingsViewModel
     await configService.load();
     this._loadVoiceArchetypes();
     await super.initialize();
-  }
-
-  private _loadVoiceArchetypes(): void {
-    // Try to load from the narrator-voice connection first
-    const narratorConn = configService.getAiConnections().find((c) => {
-      const roles = configService.getRoleAssignments();
-      return roles['narrator-voice'] === c.id;
-    });
-    if (narratorConn?.params && 'archetypes' in narratorConn.params) {
-      const loaded = (narratorConn.params as { archetypes?: VoiceArchetype[] }).archetypes;
-      if (loaded && loaded.length > 0) {
-        this._voiceArchetypes = loaded;
-        return;
-      }
-    }
-    // Fallback to legacy voiceArchetypes from voice config
-    const legacy = configService.state.voice.voiceArchetypes;
-    if (legacy && legacy.length > 0) {
-      this._voiceArchetypes = legacy;
-    }
   }
 
   // ── Editor: open / close / save ──
@@ -444,7 +475,6 @@ class AiSettingsViewModel
 
   setDraftProvider(registryId: string): void {
     this.debug('setDraftProvider', { registryId });
-    const oldRegistryId = this.draft.registryId;
     this._availableModels = [];
 
     // Check if a provider with this registryId already exists
@@ -453,7 +483,8 @@ class AiSettingsViewModel
 
     // Detect key conflict: if user had a different key and now switches
     const oldApiKey = this.draft.apiKey;
-    const hasConflict = existingProvider && oldApiKey && oldApiKey !== prefillKey;
+    const hasConflict = Boolean(existingProvider && oldApiKey && oldApiKey !== prefillKey);
+    const conflictProvider = hasConflict ? existingProvider : undefined;
 
     this.draft = {
       ...this.draft,
@@ -464,11 +495,11 @@ class AiSettingsViewModel
       label: this._registryLabel(registryId) ?? registryId,
     };
 
-    if (hasConflict) {
+    if (conflictProvider) {
       this.keyConflictPrompt = {
         newKey: oldApiKey,
         providerLabel: this._registryLabel(registryId) ?? registryId,
-        sharedConnectionCount: this._connectionsForProvider(existingProvider!.id).length,
+        sharedConnectionCount: this._connectionsForProvider(conflictProvider.id).length,
         resolveUpdate: false,
         resolveSeparate: false,
       };
@@ -493,22 +524,34 @@ class AiSettingsViewModel
         // Params stay unchanged during edit for now
       });
       // Update provider credential if changed
-      if (this.draft.providerId && this.draft.apiKey) {
-        configService.updateProvider(this.draft.providerId, {
+      const provider = this.draft.providerId
+        ? configService.getProvider(this.draft.providerId)
+        : undefined;
+      if (provider && this.draft.apiKey && this.draft.apiKey !== provider.credential) {
+        configService.updateProvider(provider.id, {
           credential: this.draft.apiKey,
         });
       }
     } else {
       // Resolve or create provider
-      let providerId = this.draft.providerId;
-      if (!providerId) {
-        // Try to find existing or create new
-        const existing = this._findProviderByRegistry(reg);
-        if (existing) {
-          providerId = existing.id;
-          if (this.draft.apiKey && this.draft.apiKey !== existing.credential) {
-            // Key changed — update the shared provider
-            configService.updateProvider(existing.id, { credential: this.draft.apiKey });
+      const conflictPrompt = this.keyConflictPrompt;
+      let providerId: string | undefined;
+      if (conflictPrompt?.resolveSeparate) {
+        providerId = configService.addProvider({
+          registryId: reg,
+          label: this._registryLabel(reg) ?? reg,
+          credential: conflictPrompt.newKey,
+          baseUrl: this.draft.baseUrl || undefined,
+          source: 'stored',
+        });
+      } else {
+        const existingProvider = this.draft.providerId
+          ? configService.getProvider(this.draft.providerId)
+          : this._findProviderByRegistry(reg);
+        if (existingProvider) {
+          providerId = existingProvider.id;
+          if (this.draft.apiKey && this.draft.apiKey !== existingProvider.credential) {
+            configService.updateProvider(existingProvider.id, { credential: this.draft.apiKey });
           }
         } else {
           providerId = configService.addProvider({
@@ -545,8 +588,11 @@ class AiSettingsViewModel
 
   // ── Testing ──
 
-  async testConnection(connectionId: ConnectionId): Promise<void> {
+  async testConnection(connectionId: ConnectionId | undefined): Promise<void> {
     this.debug('testConnection', { connectionId });
+    if (!connectionId) {
+      return;
+    }
     const conn = configService.getAiConnection(connectionId);
     if (!conn) return;
     const provider = configService.getProvider(conn.providerId);
@@ -605,12 +651,16 @@ class AiSettingsViewModel
     const existing = this._findProviderByRegistry(reg);
     const apiKey = existing?.credential ?? this.draft.apiKey;
     this.isFetchingModels = true;
+    this.fetchModelsError = undefined;
     try {
       this._availableModels = await fetchModelsFromProvider({
         config,
         apiKey,
         timeoutMs: TEST_TIMEOUT_MS,
       });
+    } catch (error) {
+      this.fetchModelsError = error instanceof Error ? error.message : String(error);
+      this.error('fetchModels:failed', error);
     } finally {
       this.isFetchingModels = false;
     }
@@ -623,13 +673,22 @@ class AiSettingsViewModel
   // ── Key conflict resolution ──
 
   resolveKeyConflict(update: boolean): void {
-    if (!this.keyConflictPrompt) return;
+    if (!this.keyConflictPrompt) {
+      return;
+    }
     if (update) {
       const provider = this._findProviderByRegistry(this.draft.registryId);
       if (provider) {
         configService.updateProvider(provider.id, { credential: this.keyConflictPrompt.newKey });
+        this.draft = { ...this.draft, apiKey: this.keyConflictPrompt.newKey };
         void configService.save();
       }
+    } else {
+      this.keyConflictPrompt = {
+        ...this.keyConflictPrompt,
+        resolveSeparate: true,
+      };
+      this.saveDraft();
     }
     this.dismissKeyConflict();
   }
@@ -657,6 +716,26 @@ class AiSettingsViewModel
   }
 
   // ── Private helpers ──
+
+  private _loadVoiceArchetypes(): void {
+    // Try to load from the narrator-voice connection first
+    const narratorConn = configService.getAiConnections().find((c) => {
+      const roles = configService.getRoleAssignments();
+      return roles['narrator-voice'] === c.id;
+    });
+    if (narratorConn?.params && 'archetypes' in narratorConn.params) {
+      const loaded = (narratorConn.params as { archetypes?: VoiceArchetype[] }).archetypes;
+      if (loaded && loaded.length > 0) {
+        this._voiceArchetypes = loaded;
+        return;
+      }
+    }
+    // Fallback to legacy voiceArchetypes from voice config
+    const legacy = configService.state.voice.voiceArchetypes;
+    if (legacy && legacy.length > 0) {
+      this._voiceArchetypes = legacy;
+    }
+  }
 
   private _resetDraft(): void {
     this.draft = {
@@ -716,6 +795,7 @@ class AiSettingsViewModel
   }
 }
 
+/** Creates an instrumented AI settings ViewModel for production consumers. */
 export const getAiSettingsViewModel = (
   options: AiSettingsViewModelOptions,
 ): AiSettingsViewModelInterface => AiSettingsViewModel.create(options);

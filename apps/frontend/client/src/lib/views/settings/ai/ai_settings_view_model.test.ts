@@ -23,6 +23,7 @@ const mockAiConnections: Array<{
 }> = [];
 const mockRoleAssignments: Record<string, string> = {};
 let nextId = 1;
+const mockFetchModelsFromProvider = mock(async () => []);
 
 const mockConfigService = {
   isLoaded: true,
@@ -49,8 +50,18 @@ const mockConfigService = {
     mockAiConnections.push({ id, ...opts } as (typeof mockAiConnections)[0]);
     return id;
   }),
-  updateAiConnection: mock((_id: string, _patch: Record<string, unknown>) => {}),
-  updateProvider: mock((_id: string, _patch: Record<string, unknown>) => {}),
+  updateAiConnection: mock((id: string, patch: Record<string, unknown>) => {
+    const connection = mockAiConnections.find((candidate) => candidate.id === id);
+    if (connection) {
+      Object.assign(connection, patch);
+    }
+  }),
+  updateProvider: mock((id: string, patch: Record<string, unknown>) => {
+    const provider = mockProviders.find((candidate) => candidate.id === id);
+    if (provider) {
+      Object.assign(provider, patch);
+    }
+  }),
   deleteAiConnection: mock((id: string) => {
     const idx = mockAiConnections.findIndex((c) => c.id === id);
     if (idx >= 0) {
@@ -70,7 +81,7 @@ mock.module('$services', () => ({
   configService: mockConfigService,
   // biome-ignore lint/style/useNamingConvention: matches actual $services export name
   PROVIDER_MODEL_FETCH: { openrouter: {} },
-  fetchModelsFromProvider: mock(async () => []),
+  fetchModelsFromProvider: mockFetchModelsFromProvider,
 }));
 
 let getAiSettingsViewModel: typeof import('./ai_settings_view_model.svelte').getAiSettingsViewModel;
@@ -87,8 +98,11 @@ beforeEach(async () => {
   mockConfigService.save.mockClear();
   mockConfigService.addProvider.mockClear();
   mockConfigService.addAiConnection.mockClear();
+  mockConfigService.updateProvider.mockClear();
+  mockConfigService.updateAiConnection.mockClear();
   mockConfigService.setRoleAssignment.mockClear();
   mockConfigService.clearRoleAssignment.mockClear();
+  mockFetchModelsFromProvider.mockClear();
 
   ({ getAiSettingsViewModel } = await import('./ai_settings_view_model.svelte'));
 });
@@ -205,6 +219,38 @@ describe('AiSettingsViewModel — AC-3: Key conflict prompt', () => {
     );
     expect(vm.keyConflictPrompt).toBeUndefined();
   });
+
+  test('resolving conflict separately creates a provider for the new connection', async () => {
+    const existingProviderId = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-existing-key',
+    });
+    mockConfigService.addAiConnection({
+      providerId: existingProviderId,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet',
+      params: {},
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openAddProvider();
+    vm.setDraftField('apiKey', 'sk-or-v1-separate-key');
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('model', 'anthropic/claude-haiku');
+    vm.resolveKeyConflict(false);
+
+    const separateProvider = mockProviders.find((provider) => provider.id !== existingProviderId);
+    expect(separateProvider?.credential).toBe('sk-or-v1-separate-key');
+    expect(mockConfigService.addAiConnection).toHaveBeenLastCalledWith(
+      expect.objectContaining({ providerId: separateProvider?.id }),
+    );
+    expect(mockProviders.find((provider) => provider.id === existingProviderId)?.credential).toBe(
+      'sk-or-v1-existing-key',
+    );
+  });
 });
 
 describe('AiSettingsViewModel — AC-4: Status board', () => {
@@ -253,6 +299,36 @@ describe('AiSettingsViewModel — AC-4: Status board', () => {
 
     const imageEntry = vm.statusEntries.find((e) => e.capability === 'image');
     expect(imageEntry?.status).toBe('not_configured');
+  });
+
+  test('reflects in-flight, failed, and successful connection tests', async () => {
+    const providerId = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-key',
+    });
+    const connectionId = mockConfigService.addAiConnection({
+      providerId,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet',
+      params: {},
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.testingIds.add(connectionId);
+    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe('loading');
+
+    vm.testingIds.delete(connectionId);
+    vm.testResults[connectionId] = { ok: false, latencyMs: 10, error: 'Rejected' };
+    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe('offline');
+
+    vm.testResults[connectionId] = { ok: true, latencyMs: 42 };
+    const textEntry = vm.statusEntries.find((entry) => entry.capability === 'text');
+    expect(textEntry?.status).toBe('connected');
+    expect(textEntry?.latencyMs).toBe(42);
+    expect(textEntry?.connectionId).toBe(connectionId);
   });
 });
 
@@ -326,7 +402,74 @@ describe('AiSettingsViewModel — AC-6: Voice archetypes', () => {
 
     vm.setVoiceArchetype('female-warm', 'af_heart');
 
-    expect(mockConfigService.updateAiConnection).toHaveBeenCalled();
+    const expectedArchetype = {
+      id: 'female-warm',
+      label: 'female-warm',
+      voiceId: 'af_heart',
+    };
+    expect(mockConfigService.updateAiConnection).toHaveBeenCalledWith(
+      cid,
+      expect.objectContaining({
+        params: expect.objectContaining({ archetypes: [expectedArchetype] }),
+      }),
+    );
+    expect(vm.voiceArchetypes).toEqual([expectedArchetype]);
+
+    vm.setVoiceArchetype('male-calm', 'am_adam');
+    vm.setVoiceArchetype('female-warm', 'af_bella');
+
+    expect(vm.voiceArchetypes).toEqual([
+      { ...expectedArchetype, voiceId: 'af_bella' },
+      { id: 'male-calm', label: 'male-calm', voiceId: 'am_adam' },
+    ]);
+    expect(mockConfigService.updateAiConnection).toHaveBeenLastCalledWith(
+      cid,
+      expect.objectContaining({
+        params: expect.objectContaining({ archetypes: vm.voiceArchetypes }),
+      }),
+    );
+  });
+});
+
+describe('AiSettingsViewModel — provider credential persistence', () => {
+  test('updates a resolved provider before persisting the connection', async () => {
+    const providerId = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-existing-key',
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openAddProvider();
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('apiKey', 'sk-or-v1-updated-key');
+    vm.setDraftField('model', 'anthropic/claude-sonnet');
+    vm.saveDraft();
+
+    expect(mockConfigService.updateProvider).toHaveBeenCalledTimes(1);
+    expect(mockConfigService.updateProvider).toHaveBeenCalledWith(providerId, {
+      credential: 'sk-or-v1-updated-key',
+    });
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId }),
+    );
+    expect(mockProviders.find((provider) => provider.id === providerId)?.credential).toBe(
+      'sk-or-v1-updated-key',
+    );
+  });
+
+  test('surfaces model-fetch failures and resets loading state', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    mockFetchModelsFromProvider.mockImplementationOnce(async () => {
+      throw new Error('Model request failed');
+    });
+
+    await vm.fetchModels();
+
+    expect(vm.fetchModelsError).toBe('Model request failed');
+    expect(vm.isFetchingModels).toBe(false);
   });
 });
 

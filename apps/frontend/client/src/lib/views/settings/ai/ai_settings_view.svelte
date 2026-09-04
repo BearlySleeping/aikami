@@ -12,26 +12,6 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-function capabilityColor(status: string): string {
-  if (status === 'connected') {
-    return 'text-success';
-  }
-  if (status === 'offline') {
-    return 'text-error';
-  }
-  return 'text-base-content/40';
-}
-
-function capabilityDot(status: string): string {
-  if (status === 'connected') {
-    return '\u25CF';
-  }
-  if (status === 'offline') {
-    return '\u25CF';
-  }
-  return '\u25CB';
-}
 </script>
 
 <BaseViewModelContainer {viewModel} class="max-w-4xl mx-auto space-y-8">
@@ -46,8 +26,8 @@ function capabilityDot(status: string): string {
           <div class="card-body p-4">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <span class="text-lg {capabilityColor(entry.status)}">
-                  {capabilityDot(entry.status)}
+                <span class="text-lg {entry.color}">
+                  {entry.dot}
                 </span>
                 <div>
                   <span class="font-mono text-sm font-semibold">{entry.label}</span>
@@ -72,11 +52,11 @@ function capabilityDot(status: string): string {
                   >
                     Set up {entry.label} →
                   </button>
-                {:else}
+                {:else if entry.connectionId}
                   <button
                     type="button"
                     class="btn btn-xs btn-ghost font-mono text-[10px] text-[#938ea1]"
-                    onclick={() => viewModel.testConnection('')}
+                    onclick={() => viewModel.testConnection(entry.connectionId)}
                   >
                     Test
                   </button>
@@ -131,13 +111,15 @@ function capabilityDot(status: string): string {
                   {/if}
                 </div>
                 <div class="flex items-center gap-1">
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1]"
-                    onclick={() => viewModel.testConnection(entry.provider.id)}
-                  >
-                    Test
-                  </button>
+                  {#if entry.connections[0]}
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1]"
+                      onclick={() => viewModel.testConnection(entry.connections[0].id)}
+                    >
+                      Test
+                    </button>
+                  {/if}
                   <button
                     type="button"
                     class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1]"
@@ -243,6 +225,24 @@ function capabilityDot(status: string): string {
                     {/each}
                   </div>
                 {/if}
+              </div>
+            </div>
+          {/each}
+          {#each viewModel.unassignedConnections as connection (connection.id)}
+            <div class="card card-bordered border-white/[0.08] bg-base-100/30">
+              <div class="card-body p-3">
+                <span class="font-mono text-xs">Assign {connection.label}</span>
+                <div class="flex flex-wrap gap-1 mt-2">
+                  {#each viewModel.availableRoles as role}
+                    <button
+                      type="button"
+                      class="badge badge-xs badge-outline cursor-pointer"
+                      onclick={() => viewModel.assignRole(role, connection.id)}
+                    >
+                      {role}
+                    </button>
+                  {/each}
+                </div>
               </div>
             </div>
           {/each}
@@ -370,6 +370,9 @@ function capabilityDot(status: string): string {
                   </button>
                 {/each}
               </div>
+            {/if}
+            {#if viewModel.fetchModelsError}
+              <p class="mt-2 text-xs text-error">{viewModel.fetchModelsError}</p>
             {/if}
           </div>
 
