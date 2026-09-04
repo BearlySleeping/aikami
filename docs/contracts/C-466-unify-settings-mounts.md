@@ -3,13 +3,13 @@ id: C-466
 title: "Unify settings mounts — pause menu and onboarding on the shared registry"
 source: "Settings teardown review, 2026-09-03, and C-465's own Out of Scope: 'The three-mounts unification... That field exists on the registry since #238 but nothing reads it yet — wiring it up is a separate contract.' C-465 is the highest claimed ID; C-466 is the next free one."
 contract_type: full
-status: implemented
+status: approved
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
-  pr_number: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/246"
+  pr_number: 246
 created_at: "2026-09-04"
 ---
 

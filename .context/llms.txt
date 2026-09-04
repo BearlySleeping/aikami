@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-04
-> Files: 399 across 17 categories
+> Files: 416 across 17 categories
 
 ## Quick Start (Read These First)
 
@@ -373,6 +373,21 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Contract C-463: Provider, Connection, and Role — one model for AI configuration](contracts/C-463-provider-connection-role-model.md)
 - [Contract C-464: Account section — cloud sync, sign-out, and account deletion](contracts/C-464-account-section-and-deletion.md)
 - [Contract C-465: AI settings section — provider tree, status board, and role assignment](contracts/C-465-ai-settings-section.md)
+- [Contract C-466: Unify settings mounts — pause menu and onboarding on the shared registry](contracts/C-466-unify-settings-mounts.md)
+- [Contract C-467: Tauri local AI install wizard — hardware detection, engine sidecars, no Docker required](contracts/C-467-tauri-local-ai-install-wizard.md)
+- [Contract C-468: Repair Pi dependency loading and establish deterministic automation CI](contracts/C-468-agent-test-foundation.md)
+- [Contract C-469: Canonical fail-closed validation and revision-bound promotion](contracts/C-469-revision-bound-validation.md)
+- [Contract C-470: Fence pipeline ownership, contract allocation and stage results](contracts/C-470-pipeline-ownership.md)
+- [Contract C-471: Own service processes and verify the correct application is ready](contracts/C-471-owned-service-lifecycle.md)
+- [Contract C-472: Make worker lifecycle testable and simplify Herdr transport](contracts/C-472-testable-worker-lifecycle.md)
+- [Contract C-473: Record complete and honest pipeline usage and cost](contracts/C-473-pipeline-usage-ledger.md)
+- [Contract C-474: Load lean role contexts and resolve model configuration explicitly](contracts/C-474-role-context-profiles.md)
+- [Contract C-475: Test canonical coding examples and prevent active instruction drift](contracts/C-475-executable-agent-guidance.md)
+- [Contract C-476: Close strictness coverage gaps without a repo-wide cleanup](contracts/C-476-strictness-coverage-ratchet.md)
+- [Contract C-477: Test real Svelte reactivity and lifecycle alongside pure Bun tests](contracts/C-477-compiled-svelte-lifecycle-tests.md)
+- [Contract C-478: Pin agent resources and make updates reproducible](contracts/C-478-reproducible-agent-resources.md)
+- [Contract C-479: Verify credential-free contributor onboarding across Linux, macOS and Windows](contracts/C-479-portable-contributor-onboarding.md)
+- [Contract C-480: Evaluate agent quality and tune routing using cost per accepted task](contracts/C-480-agent-evaluation-and-routing.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
@@ -442,6 +457,8 @@ Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrat
 - [Scripts](scripts/README.md)
 ## strategy/
 
+- [Agent platform hardening — execution plan](strategy/agent-platform-hardening.md)
+- [PR 02 — repair active agent instructions](strategy/agent-platform-hardening/instruction-repair.md)
 - [Explicitly Deferred / Not MVP](strategy/deferred.md)
 - [Distribution & Onboarding Strategy — 2026-08-19](strategy/distribution-and-onboarding-2026-08-19.md)
 - [MVP Assessment — 2026-08-16](strategy/mvp-assessment-2026-08-16.md)
