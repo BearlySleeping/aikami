@@ -82,17 +82,32 @@ vcs:
   #    "older behaviour" is fine; failing the hook outright is not. Adding a
   #    NEW hook name is only safe once every active branch carries the script.
   #
-  #    This is why `post-merge` / `post-checkout` are gone. They ran
-  #    `moon sync`, and a failure there is NOT merely cosmetic: a non-zero
+  #    This is why `post-merge` / `post-checkout` are NOT declared here. They
+  #    run `moon sync`, and a failure there is NOT merely cosmetic: a non-zero
   #    post-checkout makes `git checkout` ITSELF exit non-zero, so every
   #    `git checkout && …` and every execFileSync git call breaks in any tree
   #    lacking the script — including a developer checking out an older
   #    branch in the main repo. The previous inline-shell form had the same
   #    defect on Windows, where moon emits PowerShell and the POSIX `if`
-  #    was a parse error. Nothing is lost by dropping them: `postinstall`
-  #    runs `moon sync`, and `pipeline.syncProjects` / `syncWorkspace` below
-  #    re-sync on every `moon run`. `bun run sync-workspace` remains for a
-  #    manual sync.
+  #    was a parse error.
+  #
+  #    🔴 They are not gone, though — they live as HAND-WRITTEN, committed
+  #    files at .moon/hooks/post-checkout and .moon/hooks/post-merge, which a
+  #    developer who just clones the repo gets on their first `bun install`
+  #    (postinstall → `moon sync` → core.hooksPath). Writing them by hand is
+  #    the whole point: moon's generated template opens `set -eo pipefail`,
+  #    while those files carry no `set -e`, swallow their output and `exit 0`
+  #    unconditionally — so an old tree degrades to doing nothing instead of
+  #    failing a checkout. `moon sync` leaves undeclared files in this
+  #    directory alone, and a branch predating them simply doesn't have them,
+  #    so git doesn't run them.
+  #
+  #    🔴 Do NOT "tidy up" by moving them into this block. That reintroduces
+  #    `set -eo pipefail` and the broken-checkout bug in one edit.
+  #    scripts/src/lib/ops/__tests__/git_hooks.test.ts fails if you do.
+  #
+  #    `pipeline.syncProjects` / `syncWorkspace` below still re-sync on every
+  #    `moon run`, and `bun run sync-workspace` remains for a manual sync.
   hooks:
     pre-commit:
       - "bun run pre-commit"

@@ -163,6 +163,17 @@ export type RunManifest = {
   usage: Record<string, StageUsage>;
   reviewDecision?: ContractReviewDecision;
   reconciliation?: ReconciliationResult;
+  /**
+   * Verdict of the pre-push gate (lint + format + typecheck in the worktree,
+   * see pre_push_gate.ts) for the code currently on the branch.
+   *
+   * 🔴 A failing gate does NOT block the run and does NOT set
+   * `blockedReason` — it must not consume a MAX_BLOCKED_ESCALATIONS budget.
+   * The branch is pushed regardless (a branch push runs no CI) and `output`
+   * is appended to the review captain's prompt as a must-fix before the PR
+   * is opened. Absent means the gate never ran for this run.
+   */
+  prePushValidation?: { ok: boolean; output: string; checkedAt: string };
   verificationFingerprint?: string;
   verificationContractHash?: string;
   /** Draft PR URL created after verification passes. */
