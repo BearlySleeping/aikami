@@ -15,7 +15,13 @@ import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 // Mock the settings sections module (used via $lib alias)
 const _PAUSE_SECTIONS = [
-  { id: 'controls', label: 'Controls', group: 'play', contexts: ['page', 'pause'], icon: 'keyboard' },
+  {
+    id: 'controls',
+    label: 'Controls',
+    group: 'play',
+    contexts: ['page', 'pause'],
+    icon: 'keyboard',
+  },
   { id: 'audio', label: 'Audio', group: 'play', contexts: ['page', 'pause'], icon: 'speaker' },
   { id: 'display', label: 'Display', group: 'play', contexts: ['page', 'pause'], icon: 'monitor' },
   { id: 'gameplay', label: 'Gameplay', group: 'play', contexts: ['page', 'pause'], icon: 'cog' },
@@ -84,13 +90,10 @@ await _augmentRouterService();
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-const { getSettingsOverlayViewModel } = await import(
-  './settings_overlay_view_model.svelte'
-);
+const { getSettingsOverlayViewModel } = await import('./settings_overlay_view_model.svelte');
 type Vm = ReturnType<typeof getSettingsOverlayViewModel>;
 
-const createVm = (): Vm =>
-  getSettingsOverlayViewModel({ className: 'SettingsOverlayViewModel' });
+const createVm = (): Vm => getSettingsOverlayViewModel({ className: 'SettingsOverlayViewModel' });
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 

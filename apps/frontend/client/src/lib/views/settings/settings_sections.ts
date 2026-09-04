@@ -4,6 +4,7 @@
 // Drives the group tab bar + section sub-nav in SettingsViewModel.
 // Also provides shared per-section ViewModel factory lookup for all mounts.
 
+import type { BaseViewModelInterface, BaseViewModelOptions } from '@aikami/frontend/services';
 import {
   getSettingsAudioViewModel,
   type SettingsAudioViewModelInterface,
@@ -17,13 +18,9 @@ import {
   type SettingsDisplayViewModelInterface,
 } from './display/settings_display_view_model.svelte';
 import {
-  getGameplayViewModel,
   type GameplayViewModelInterface,
+  getGameplayViewModel,
 } from './gameplay/gameplay_view_model.svelte';
-import {
-  type BaseViewModelInterface,
-  type BaseViewModelOptions,
-} from '@aikami/frontend/services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -180,7 +177,10 @@ export type SimpleSectionViewModel =
   | SettingsDisplayViewModelInterface
   | GameplayViewModelInterface;
 
-const SECTION_VM_FACTORIES: Record<string, (options: BaseViewModelOptions) => BaseViewModelInterface> = {
+const SECTION_VM_FACTORIES: Record<
+  string,
+  (options: BaseViewModelOptions) => BaseViewModelInterface
+> = {
   audio: (options: BaseViewModelOptions) => getSettingsAudioViewModel(options),
   controls: (options: BaseViewModelOptions) => getSettingsControlsViewModel(options),
   display: (options: BaseViewModelOptions) => getSettingsDisplayViewModel(options),

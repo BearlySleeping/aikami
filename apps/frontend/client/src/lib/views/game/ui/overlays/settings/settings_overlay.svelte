@@ -84,9 +84,7 @@ const { viewModel }: Props = $props();
           viewModel={viewModel.sectionViewModels.get('gameplay') as import('$lib/views/settings/gameplay/gameplay_view_model.svelte').GameplayViewModelInterface}
         />
       {:else}
-        <p class="text-sm text-base-content/60 text-center py-4">
-          Section not available
-        </p>
+        <p class="text-sm text-base-content/60 text-center py-4">Section not available</p>
       {/if}
     </div>
 

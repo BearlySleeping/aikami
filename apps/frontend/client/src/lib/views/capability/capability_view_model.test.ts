@@ -187,7 +187,13 @@ mock.module('$services', () => ({
   configService: (() => {
     let _nextId = 1;
     const state: {
-      connections: Array<{ id: string; provider: string; capability?: string; apiKey?: string; source?: string }>;
+      connections: Array<{
+        id: string;
+        provider: string;
+        capability?: string;
+        apiKey?: string;
+        source?: string;
+      }>;
       defaultConnectionId: null;
       defaultByCapability?: Record<string, string>;
     } = {
