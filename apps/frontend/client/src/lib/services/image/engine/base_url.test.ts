@@ -23,10 +23,16 @@ mock.module('../../config/config_service.svelte.ts', () => ({
   },
 }));
 
-import { describe, expect, mock, test } from 'bun:test';
-import { resolveImageBaseUrl } from './base_url.ts';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { resolveImageBaseUrl as ResolveImageBaseUrl } from './base_url.ts';
+
+let resolveImageBaseUrl: typeof ResolveImageBaseUrl;
 
 describe('resolveImageBaseUrl (C-389 runtime config)', () => {
+  beforeEach(async () => {
+    ({ resolveImageBaseUrl } = await import('./base_url.ts'));
+  });
+
   test('unconfigured image engine resolves to undefined — no baked-in URL', () => {
     mockImageUrl = undefined;
     mockPortraitResolution = undefined;
