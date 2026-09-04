@@ -30,9 +30,9 @@ import {
   getAutonomousSettingsViewModel,
 } from './autonomous/autonomous_settings_view_model.svelte';
 import {
-  type ConnectionManagerViewModelInterface,
-  getConnectionManagerViewModel,
-} from './connection/connection_manager_view_model.svelte';
+  type AiSettingsViewModelInterface,
+  getAiSettingsViewModel,
+} from './ai/ai_settings_view_model.svelte';
 import {
   getSettingsControlsViewModel,
   type SettingsControlsViewModelInterface,
@@ -94,7 +94,7 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
   readonly exportViewModel: ExportViewModelInterface;
-  readonly connectionViewModel: ConnectionManagerViewModelInterface;
+  readonly aiSettingsViewModel: AiSettingsViewModelInterface;
   readonly agentListViewModel: AgentListViewModelInterface;
   readonly agentEditorViewModel: AgentEditorViewModelInterface;
 
@@ -136,7 +136,7 @@ export class SettingsViewModel
   private _musicViewModel: SettingsMusicViewModelInterface | undefined;
   private _autonomousViewModel: AutonomousSettingsViewModelInterface | undefined;
   private _exportViewModel: ExportViewModelInterface | undefined;
-  private _connectionViewModel: ConnectionManagerViewModelInterface | undefined;
+  private _aiSettingsViewModel: AiSettingsViewModelInterface | undefined;
   private _agentListViewModel: AgentListViewModelInterface | undefined;
   private _agentEditorViewModel: AgentEditorViewModelInterface | undefined;
 
@@ -176,13 +176,13 @@ export class SettingsViewModel
     return this._exportViewModel;
   }
 
-  get connectionViewModel(): ConnectionManagerViewModelInterface {
-    if (!this._connectionViewModel) {
-      this._connectionViewModel = getConnectionManagerViewModel({
-        className: 'ConnectionManagerViewModel',
+  get aiSettingsViewModel(): AiSettingsViewModelInterface {
+    if (!this._aiSettingsViewModel) {
+      this._aiSettingsViewModel = getAiSettingsViewModel({
+        className: 'AiSettingsViewModel',
       });
     }
-    return this._connectionViewModel;
+    return this._aiSettingsViewModel;
   }
 
   get agentListViewModel(): AgentListViewModelInterface {
@@ -206,23 +206,27 @@ export class SettingsViewModel
   }
 
   get aiCapabilityBadge(): string {
-    const status = this.aiPrivacyViewModel.aiConnectionStatus;
-    if (status === 'loading') {
-      return 'Loading…';
-    }
-    if (status === 'connected') {
+    const entries = this.aiSettingsViewModel.statusEntries;
+    const textEntry = entries.find((e) => e.capability === 'text');
+    if (textEntry?.status === 'connected') {
       return 'AI: Connected';
+    }
+    const anyConnected = entries.some((e) => e.status === 'connected');
+    if (anyConnected) {
+      return 'AI: Partial';
     }
     return 'AI: Not Set Up';
   }
 
   get aiCapabilityBadgeColor(): string {
-    const status = this.aiPrivacyViewModel.aiConnectionStatus;
-    if (status === 'loading') {
-      return 'badge-ghost';
-    }
-    if (status === 'connected') {
+    const entries = this.aiSettingsViewModel.statusEntries;
+    const textEntry = entries.find((e) => e.capability === 'text');
+    if (textEntry?.status === 'connected') {
       return 'badge-success';
+    }
+    const anyConnected = entries.some((e) => e.status === 'connected');
+    if (anyConnected) {
+      return 'badge-warning';
     }
     return 'badge-ghost';
   }

@@ -90,12 +90,12 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     capabilityKey: 'ai',
   },
   {
-    id: 'connections',
-    label: 'Connections',
+    id: 'ai',
+    label: 'AI',
     group: 'ai',
     contexts: ['page'],
-    icon: 'link',
-    capabilityKey: 'connection',
+    icon: 'cpu',
+    capabilityKey: 'ai',
   },
 
   // ── Content ──────────────────────────────────────────────────────────

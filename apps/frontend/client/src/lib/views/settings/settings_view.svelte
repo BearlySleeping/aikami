@@ -8,10 +8,10 @@ import { BaseViewModelContainer } from '$components';
 import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
 import AgentListView from '../agent/list/agent_list_view.svelte';
 import AccountView from './account/account_view.svelte';
+import AiSettingsView from './ai/ai_settings_view.svelte';
 import AIPrivacyView from './ai_privacy/ai_privacy_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
 import AutonomousSettingsView from './autonomous/autonomous_settings_view.svelte';
-import ConnectionsListView from './connection/connections_list_view.svelte';
 import SettingsControlsView from './controls/settings_controls_view.svelte';
 import SettingsDisplayView from './display/settings_display_view.svelte';
 import ExportView from './export/export_view.svelte';
@@ -87,8 +87,8 @@ const { viewModel }: Props = $props();
       <GameplayView viewModel={viewModel.gameplayViewModel} />
     {:else if viewModel.activeSectionId === 'ai_privacy'}
       <AIPrivacyView viewModel={viewModel.aiPrivacyViewModel} />
-    {:else if viewModel.activeSectionId === 'connections'}
-      <ConnectionsListView viewModel={viewModel.connectionViewModel} />
+    {:else if viewModel.activeSectionId === 'ai'}
+      <AiSettingsView viewModel={viewModel.aiSettingsViewModel} />
     {:else if viewModel.activeSectionId === 'agents'}
       <AgentListView viewModel={viewModel.agentListViewModel} />
       <AgentEditorView viewModel={viewModel.agentEditorViewModel} />
