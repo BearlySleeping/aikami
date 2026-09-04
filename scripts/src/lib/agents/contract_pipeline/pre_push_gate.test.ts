@@ -91,6 +91,33 @@ describe('runPrePushGate', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('treats a missing Moon command as infrastructure rather than validation failure', () => {
+    const { runner, calls } = scriptedRunner([
+      { status: 1, output: 'error: Script not found "moon"' },
+    ]);
+
+    const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
+
+    expect(result).toEqual({ ran: false, ok: true, output: '' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('treats an invalid base reference as infrastructure before returning a verdict', () => {
+    const { runner, calls } = scriptedRunner([
+      { status: 0 },
+      {
+        status: 1,
+        output:
+          "fatal: ambiguous argument 'origin/missing...HEAD': unknown revision or path not in the working tree.",
+      },
+    ]);
+
+    const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/missing', runner });
+
+    expect(result).toEqual({ ran: false, ok: true, output: '' });
+    expect(calls).toHaveLength(2);
+  });
+
   it('truncates oversized diagnostics so they cannot crowd out the review prompt', () => {
     const huge = 'x'.repeat(MAX_GATE_OUTPUT_CHARS * 3);
     const { runner } = scriptedRunner([{ status: 0 }, { status: 1, output: huge }]);

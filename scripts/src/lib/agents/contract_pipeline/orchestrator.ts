@@ -46,7 +46,11 @@ import {
   writeManifest,
 } from './manifest_store.ts';
 import { validatePostconditions } from './postconditions.ts';
-import { formatGateNotesForPrompt, runPrePushGate } from './pre_push_gate.ts';
+import {
+  formatGateNotesForPrompt,
+  type PrePushGateResult,
+  runPrePushGate,
+} from './pre_push_gate.ts';
 import { loadReviewPrompt, type ReviewProfile } from './prompt_loader.ts';
 import { chimeOnFirstResponse } from './review_alarm.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
@@ -179,6 +183,18 @@ export const verifierFeedback = (options: {
     );
   }
   return parts.join('\n');
+};
+
+/** Return gate diagnostics only when they describe the requested revision. */
+export const prePushGateForRevision = (options: {
+  manifest: RunManifest;
+  revision: string;
+}): PrePushGateResult | undefined => {
+  const validation = options.manifest.prePushValidation;
+  if (!validation || options.revision === 'unknown' || validation.revision !== options.revision) {
+    return undefined;
+  }
+  return { ran: true, ok: validation.ok, output: validation.output };
 };
 
 const resultForPostconditionFailure = (options: {
@@ -396,6 +412,7 @@ const applyPrePushGate = (options: {
     ok: gate.ok,
     output: gate.output,
     checkedAt: new Date().toISOString(),
+    revision: currentCommit(options.cwd),
   };
   pipelineLog({
     runId: options.manifest.runId,
@@ -1349,6 +1366,9 @@ export const runContractPipeline = async (options: {
                     protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
                   });
                 } catch {}
+                if (manifest.prePushValidation) {
+                  manifest.prePushValidation.revision = currentCommit(wsCwd);
+                }
                 pushBranch({ cwd: wsCwd, branchName: manifest.reconciliation.headBranch });
                 pipelineLog({
                   runId: manifest.runId,
@@ -1371,6 +1391,9 @@ export const runContractPipeline = async (options: {
                   baseBranch: PIPELINE_BASE_BRANCH,
                   rootMode,
                 });
+                if (manifest.prePushValidation) {
+                  manifest.prePushValidation.revision = manifest.reconciliation.changeId;
+                }
                 pipelineLog({
                   runId: manifest.runId,
                   cwd: options.repoRoot,
@@ -1426,6 +1449,9 @@ export const runContractPipeline = async (options: {
                   baseBranch: PIPELINE_BASE_BRANCH,
                   rootMode,
                 });
+                if (manifest.prePushValidation) {
+                  manifest.prePushValidation.revision = manifest.reconciliation.changeId;
+                }
                 console.log(`\n🚀 YOLO: Branch pushed (verifier findings → CodeRabbit).\n`);
               } catch (e: unknown) {
                 const m = e instanceof Error ? e.message : String(e);
@@ -1632,15 +1658,12 @@ export const runContractPipeline = async (options: {
           // "report, don't fix". These are real lint/format/typecheck
           // diagnostics on the code in the branch, and CI will repeat them
           // verbatim the moment a PR exists — so they are must-fix-first.
-          const gateNotes = formatGateNotesForPrompt(
-            manifest.prePushValidation
-              ? {
-                  ran: true,
-                  ok: manifest.prePushValidation.ok,
-                  output: manifest.prePushValidation.output,
-                }
-              : undefined,
-          );
+          const reviewRevision = currentCommit(adapter.getWorkspacePath() || options.repoRoot);
+          const currentGate = prePushGateForRevision({ manifest, revision: reviewRevision });
+          if (manifest.prePushValidation && !currentGate) {
+            delete manifest.prePushValidation;
+          }
+          const gateNotes = formatGateNotesForPrompt(currentGate);
           const prompt = [basePrompt, gateNotes, infraNotes].filter(Boolean).join('\n');
           const started = await adapter.startReview({
             prompt,
@@ -1819,6 +1842,7 @@ export const runContractPipeline = async (options: {
             }
             delete manifest.verificationFingerprint;
             delete manifest.verificationContractHash;
+            delete manifest.prePushValidation;
             // 🔴 Clear HERE, not only in the implement-stage launch code below —
             // a crash/restart between this writeManifest and the next loop
             // iteration would otherwise persist a 'change' decision that the
@@ -1910,6 +1934,7 @@ export const runContractPipeline = async (options: {
           }
           delete manifest.verificationFingerprint;
           delete manifest.verificationContractHash;
+          delete manifest.prePushValidation;
           // 🔴 Same defense-in-depth as the isBlockedReview 'change' branch
           // above — clear immediately rather than relying solely on the
           // implement-stage launch code to do it on the next iteration.

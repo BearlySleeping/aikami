@@ -171,9 +171,10 @@ export type RunManifest = {
    * `blockedReason` — it must not consume a MAX_BLOCKED_ESCALATIONS budget.
    * The branch is pushed regardless (a branch push runs no CI) and `output`
    * is appended to the review captain's prompt as a must-fix before the PR
-   * is opened. Absent means the gate never ran for this run.
+   * is opened. `revision` prevents diagnostics from an earlier implementation
+   * attempt being shown for newer code. Absent means the gate never ran.
    */
-  prePushValidation?: { ok: boolean; output: string; checkedAt: string };
+  prePushValidation?: { ok: boolean; output: string; checkedAt: string; revision: string };
   verificationFingerprint?: string;
   verificationContractHash?: string;
   /** Draft PR URL created after verification passes. */

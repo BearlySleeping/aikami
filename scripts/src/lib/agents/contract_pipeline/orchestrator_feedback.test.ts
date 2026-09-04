@@ -5,7 +5,7 @@
 // either fallback recovery or a live human-in-the-loop review) reaches the
 // implementer, `summary` and `details` both included.
 import { describe, expect, it } from 'bun:test';
-import { verifierFeedback } from './orchestrator.ts';
+import { prePushGateForRevision, verifierFeedback } from './orchestrator.ts';
 import type { ContractStageResult, RunManifest, StageAttempt } from './types.ts';
 
 const baseManifest = (overrides: Partial<RunManifest> = {}): RunManifest => ({
@@ -112,5 +112,38 @@ describe('verifierFeedback', () => {
     const feedback = verifierFeedback({ manifest, attempt: 2 });
     expect(feedback).toContain('Redirect loop on /login');
     expect(feedback).not.toContain('Review Captain diagnosis');
+  });
+});
+
+describe('prePushGateForRevision', () => {
+  it('returns diagnostics produced by the current revision', () => {
+    const manifest = baseManifest({
+      prePushValidation: {
+        ok: false,
+        output: 'scripts:typecheck failed',
+        checkedAt: new Date().toISOString(),
+        revision: 'revision-current',
+      },
+    });
+
+    expect(prePushGateForRevision({ manifest, revision: 'revision-current' })).toEqual({
+      ran: true,
+      ok: false,
+      output: 'scripts:typecheck failed',
+    });
+  });
+
+  it('ignores diagnostics from an earlier or unknown revision', () => {
+    const manifest = baseManifest({
+      prePushValidation: {
+        ok: false,
+        output: 'stale failure',
+        checkedAt: new Date().toISOString(),
+        revision: 'revision-old',
+      },
+    });
+
+    expect(prePushGateForRevision({ manifest, revision: 'revision-new' })).toBeUndefined();
+    expect(prePushGateForRevision({ manifest, revision: 'unknown' })).toBeUndefined();
   });
 });

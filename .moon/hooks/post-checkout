@@ -8,9 +8,10 @@
 # the configured command verbatim. That is fatal for THIS hook specifically —
 # a non-zero post-checkout makes `git checkout` ITSELF exit non-zero, so every
 # `git checkout && …` chain and every execFileSync git call breaks. And since
-# `bun run <name>` resolves against whatever tree was just checked out,
-# checking out any branch older than the script IS that failure — permanently,
-# for every old branch, forever.
+# a package script resolves against whatever tree was just checked out,
+# checking out any branch older than that script IS that failure — permanently,
+# for every old branch, forever. The invocation below is instead anchored to
+# this trusted hook's directory and names the sync entrypoint directly.
 #
 # So this hook is incapable of failing: no `set -e`, output swallowed,
 # unconditional `exit 0`. A tree without the `sync-workspace` script, or a
@@ -29,5 +30,6 @@ if [ "$3" != "1" ]; then
   exit 0
 fi
 
-bun run sync-workspace >/dev/null 2>&1
+hook_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+bun run "$hook_directory/../../scripts/src/lib/ops/sync_workspace.ts" >/dev/null 2>&1
 exit 0

@@ -30,6 +30,7 @@ import { reportInfraIssue } from '../../ops/infra_report.ts';
 /** Cap on the diagnostics carried into the review prompt. */
 export const MAX_GATE_OUTPUT_CHARS = 4000;
 
+/** Outcome of running the pipeline's pre-push validation gate. */
 export type PrePushGateResult = {
   /**
    * Whether the gate actually reached a verdict. False means the gate could
@@ -62,6 +63,7 @@ const defaultRunner: GateRunner = ({ command, args, cwd }) => {
     windowsHide: true,
     // moon streams a lot; a generous cap beats a truncated diagnosis.
     maxBuffer: 32 * 1024 * 1024,
+    timeout: 5 * 60 * 1000,
   });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   return { status: result.status, output, spawnFailed: !!result.error };
@@ -71,6 +73,18 @@ const truncate = (text: string): string =>
   text.length <= MAX_GATE_OUTPUT_CHARS
     ? text
     : `${text.slice(0, MAX_GATE_OUTPUT_CHARS)}\n… (${text.length - MAX_GATE_OUTPUT_CHARS} more characters truncated)`;
+
+const GATE_SETUP_FAILURE_PATTERNS = [
+  /(?:script|module) not found ["'`]?moon\b/i,
+  /\bmoon(?:\.cmd|\.exe)?: (?:command )?not found\b/i,
+  /fatal: (?:ambiguous argument|bad revision|bad object)/i,
+  /unknown revision or path not in the working tree/i,
+  /invalid (?:base|reference|revision).*--base/i,
+] as const satisfies readonly RegExp[];
+
+/** Identify failures that prevent Moon from reaching project validation. */
+const isGateSetupFailure = (output: string): boolean =>
+  GATE_SETUP_FAILURE_PATTERNS.some((pattern) => pattern.test(output));
 
 /**
  * Auto-fix, then verify, the code about to be pushed.
@@ -101,7 +115,7 @@ export const runPrePushGate = (options: {
   const run = options.runner ?? defaultRunner;
   const affected = ['--affected', `--base=${options.base}`];
 
-  const steps: { label: string; args: string[]; verdict: boolean }[] = [
+  const steps = [
     // `:fix` failing is not a verdict — the following `:validate` is. A fix
     // task can exit non-zero on a lint rule it cannot auto-fix, which is
     // exactly the case validate is there to report properly.
@@ -111,20 +125,24 @@ export const runPrePushGate = (options: {
       verdict: false,
     },
     { label: ':validate', args: ['moon', 'run', ':validate', ...affected], verdict: true },
-  ];
+  ] as const satisfies readonly {
+    label: string;
+    args: readonly string[];
+    verdict: boolean;
+  }[];
 
   for (const step of steps) {
-    const result = run({ command: 'bun', args: step.args, cwd: options.cwd });
+    const result = run({ command: 'bun', args: [...step.args], cwd: options.cwd });
 
     // 🔴 Distinguish "the gate found problems" from "the gate could not run".
     // A missing moon binary or an unresolvable base ref is an infrastructure
     // failure, and silently reporting it as a code problem would send the
     // review captain hunting for lint errors that do not exist.
-    if (result.spawnFailed) {
+    if (result.spawnFailed || (result.status !== 0 && isGateSetupFailure(result.output))) {
       reportInfraIssue({
         component: 'pre_push_gate',
         operation: `bun ${step.args.join(' ')}`,
-        error: new Error(`Could not spawn the ${step.label} step: ${truncate(result.output)}`),
+        error: new Error(`Could not run the ${step.label} step: ${truncate(result.output)}`),
         context: { cwd: options.cwd, base: options.base },
         cwd: options.cwd,
         runId: options.runId,

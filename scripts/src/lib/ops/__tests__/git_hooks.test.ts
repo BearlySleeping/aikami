@@ -16,8 +16,18 @@
 // than in someone's terminal.
 
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { delimiter, join, resolve } from 'node:path';
 
 const REPO_ROOT = import.meta.dir ? resolve(import.meta.dir, '../../../../..') : resolve('.');
 const HOOKS = ['post-checkout', 'post-merge'];
@@ -45,9 +55,40 @@ describe('.moon/hooks fail-safe hooks', () => {
         expect(code.at(-1)).toBe('exit 0');
       });
 
-      it('swallows the output of the sync command', () => {
+      it('uses the trusted sync entrypoint and not a checked-out package script', () => {
         const source = readFileSync(path, 'utf8');
-        expect(source).toContain('bun run sync-workspace >/dev/null 2>&1');
+        expect(source).toContain(
+          'bun run "$hook_directory/../../scripts/src/lib/ops/sync_workspace.ts"',
+        );
+        expect(source).not.toContain('bun run sync-workspace');
+      });
+
+      it('stays silent and succeeds when the sync process fails', () => {
+        const temporaryDirectory = mkdtempSync(join(tmpdir(), 'aikami-git-hook-'));
+        const stubPath = join(temporaryDirectory, 'bun');
+        writeFileSync(
+          stubPath,
+          '#!/usr/bin/env bash\nprintf "sync stdout\\n"\nprintf "sync stderr\\n" >&2\nexit 17\n',
+        );
+        chmodSync(stubPath, 0o755);
+
+        try {
+          const args = hook === 'post-checkout' ? ['old', 'new', '1'] : [];
+          const result = spawnSync(path, args, {
+            cwd: REPO_ROOT,
+            encoding: 'utf8',
+            env: {
+              ...process.env,
+              PATH: `${temporaryDirectory}${delimiter}${process.env.PATH ?? ''}`,
+            },
+          });
+
+          expect(result.status).toBe(0);
+          expect(result.stdout).toBe('');
+          expect(result.stderr).toBe('');
+        } finally {
+          rmSync(temporaryDirectory, { recursive: true, force: true });
+        }
       });
     });
   }
