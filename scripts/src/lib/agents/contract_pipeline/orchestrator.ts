@@ -46,6 +46,11 @@ import {
   writeManifest,
 } from './manifest_store.ts';
 import { validatePostconditions } from './postconditions.ts';
+import {
+  formatGateNotesForPrompt,
+  type PrePushGateResult,
+  runPrePushGate,
+} from './pre_push_gate.ts';
 import { loadReviewPrompt, type ReviewProfile } from './prompt_loader.ts';
 import { chimeOnFirstResponse } from './review_alarm.ts';
 import { roleForStage, runStage } from './stage_runner.ts';
@@ -178,6 +183,18 @@ export const verifierFeedback = (options: {
     );
   }
   return parts.join('\n');
+};
+
+/** Return gate diagnostics only when they describe the requested revision. */
+export const prePushGateForRevision = (options: {
+  manifest: RunManifest;
+  revision: string;
+}): PrePushGateResult | undefined => {
+  const validation = options.manifest.prePushValidation;
+  if (!validation || options.revision === 'unknown' || validation.revision !== options.revision) {
+    return undefined;
+  }
+  return { ran: true, ok: validation.ok, output: validation.output };
 };
 
 const resultForPostconditionFailure = (options: {
@@ -360,6 +377,57 @@ const waitForReviewDecision = async (options: {
  *
  * Root mode: unchanged — commit + push the root contract branch directly.
  */
+/**
+ * Run the pre-push gate over the workspace and record the verdict.
+ *
+ * 🔴 Called BEFORE any `commitAll` that precedes a push, never after: the
+ * gate's `:fix` step edits the working tree, and those edits have to be in
+ * place when `git add -A` runs so they ride into the same commit instead of
+ * needing a follow-up.
+ *
+ * 🔴 Never throws and never blocks. A red gate is recorded on the manifest
+ * and handed to the review captain (formatGateNotesForPrompt), because the
+ * branch is worth pushing either way — a branch push runs no CI, and the
+ * `review` stage sits between the push and the PR. See pre_push_gate.ts.
+ */
+const applyPrePushGate = (options: {
+  manifest: RunManifest;
+  repoRoot: string;
+  cwd: string;
+}): void => {
+  const base = `origin/${PIPELINE_BASE_BRANCH}`;
+  console.log(`\n🔍 Pre-push validation (:fix + :validate, affected vs ${base})…\n`);
+  const gate = runPrePushGate({
+    cwd: options.cwd,
+    base,
+    runId: options.manifest.runId,
+  });
+  if (!gate.ran) {
+    // Could not run — already recorded as an infra issue. Leave any previous
+    // verdict alone rather than overwriting it with a non-result.
+    console.warn('⚠️  Pre-push validation could not run — see `bun run infra:report`.');
+    return;
+  }
+  options.manifest.prePushValidation = {
+    ok: gate.ok,
+    output: gate.output,
+    checkedAt: new Date().toISOString(),
+    revision: currentCommit(options.cwd),
+  };
+  pipelineLog({
+    runId: options.manifest.runId,
+    cwd: options.repoRoot,
+    message: gate.ok
+      ? 'Pre-push validation passed (:validate green on the affected set).'
+      : 'Pre-push validation FAILED — review captain briefed to fix before opening the PR.',
+  });
+  console.log(
+    gate.ok
+      ? '\n✅ Pre-push validation passed.\n'
+      : '\n🔴 Pre-push validation FAILED — the review captain must fix this before the PR.\n',
+  );
+};
+
 const reconcileWorkspace = async (options: {
   manifest: RunManifest;
   repoRoot: string;
@@ -1277,6 +1345,15 @@ export const runContractPipeline = async (options: {
             // Status is tracked in run manifest only — don't touch main contract.
             manifest.verificationFingerprint = after.fingerprint;
             manifest.verificationContractHash = '';
+            // 🔴 Before the branch/commit split below, so ONE call covers both
+            // arms — the "Branch updated" revision push and the first-time
+            // "Branch pushed" through reconcileWorkspace — and so the `:fix`
+            // edits are in the tree when either path's `git add -A` runs.
+            applyPrePushGate({
+              manifest,
+              repoRoot: options.repoRoot,
+              cwd: adapter.getWorkspacePath() || options.repoRoot,
+            });
             if (manifest.reconciliation?.headBranch) {
               try {
                 const wsCwd = adapter.getWorkspacePath() || options.repoRoot;
@@ -1289,6 +1366,9 @@ export const runContractPipeline = async (options: {
                     protectedPaths: WORKTREE_SKIP_WORKTREE_PATHS,
                   });
                 } catch {}
+                if (manifest.prePushValidation) {
+                  manifest.prePushValidation.revision = currentCommit(wsCwd);
+                }
                 pushBranch({ cwd: wsCwd, branchName: manifest.reconciliation.headBranch });
                 pipelineLog({
                   runId: manifest.runId,
@@ -1311,6 +1391,9 @@ export const runContractPipeline = async (options: {
                   baseBranch: PIPELINE_BASE_BRANCH,
                   rootMode,
                 });
+                if (manifest.prePushValidation) {
+                  manifest.prePushValidation.revision = manifest.reconciliation.changeId;
+                }
                 pipelineLog({
                   runId: manifest.runId,
                   cwd: options.repoRoot,
@@ -1352,12 +1435,23 @@ export const runContractPipeline = async (options: {
             // Force reconciliation: commit + push the branch so a PR can be created.
             if (!manifest.reconciliation?.headBranch) {
               try {
+                // The verify loop is exhausted, so the code was never gated
+                // above. Gate it here — YOLO opens a PR straight away, which
+                // is the one path where a red :validate reaches CI unseen.
+                applyPrePushGate({
+                  manifest,
+                  repoRoot: options.repoRoot,
+                  cwd: adapter.getWorkspacePath() || options.repoRoot,
+                });
                 manifest.reconciliation = await reconcileWorkspace({
                   manifest,
                   repoRoot: options.repoRoot,
                   baseBranch: PIPELINE_BASE_BRANCH,
                   rootMode,
                 });
+                if (manifest.prePushValidation) {
+                  manifest.prePushValidation.revision = manifest.reconciliation.changeId;
+                }
                 console.log(`\n🚀 YOLO: Branch pushed (verifier findings → CodeRabbit).\n`);
               } catch (e: unknown) {
                 const m = e instanceof Error ? e.message : String(e);
@@ -1560,7 +1654,17 @@ export const runContractPipeline = async (options: {
           const infraNotes = formatInfraNotesForPrompt(
             summarizeInfraIssues(readInfraIssuesForRun(options.repoRoot, manifest.runId)),
           );
-          const prompt = infraNotes ? `${basePrompt}\n${infraNotes}` : basePrompt;
+          // 🔴 Distinct from the infra notes above, which are explicitly
+          // "report, don't fix". These are real lint/format/typecheck
+          // diagnostics on the code in the branch, and CI will repeat them
+          // verbatim the moment a PR exists — so they are must-fix-first.
+          const reviewRevision = currentCommit(adapter.getWorkspacePath() || options.repoRoot);
+          const currentGate = prePushGateForRevision({ manifest, revision: reviewRevision });
+          if (manifest.prePushValidation && !currentGate) {
+            delete manifest.prePushValidation;
+          }
+          const gateNotes = formatGateNotesForPrompt(currentGate);
+          const prompt = [basePrompt, gateNotes, infraNotes].filter(Boolean).join('\n');
           const started = await adapter.startReview({
             prompt,
             contractPath: manifest.contractPath,
@@ -1738,6 +1842,7 @@ export const runContractPipeline = async (options: {
             }
             delete manifest.verificationFingerprint;
             delete manifest.verificationContractHash;
+            delete manifest.prePushValidation;
             // 🔴 Clear HERE, not only in the implement-stage launch code below —
             // a crash/restart between this writeManifest and the next loop
             // iteration would otherwise persist a 'change' decision that the
@@ -1829,6 +1934,7 @@ export const runContractPipeline = async (options: {
           }
           delete manifest.verificationFingerprint;
           delete manifest.verificationContractHash;
+          delete manifest.prePushValidation;
           // 🔴 Same defense-in-depth as the isBlockedReview 'change' branch
           // above — clear immediately rather than relying solely on the
           // implement-stage launch code to do it on the next iteration.
