@@ -20,6 +20,7 @@ import type {
   V1ConnectionSchema,
   V1VaultPayloadSchema,
   VaultPayloadV2Schema,
+  VoiceArchetypeSchema,
   VoiceParamsSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
@@ -107,15 +108,8 @@ export type VoiceOption = {
   label: string;
 };
 
-/** A named voice archetype mapped to a provider-specific voice ID. */
-export type VoiceArchetype = {
-  /** Unique archetype key (e.g. 'female-warm', 'male-deep'). */
-  id: string;
-  /** Human-readable label (e.g. 'Female — Warm'). */
-  label: string;
-  /** Provider-specific voice ID (e.g. 'af_heart' for Kokoro). */
-  voiceId: string;
-};
+/** A named voice archetype mapped to a provider-specific voice ID. Derived from VoiceArchetypeSchema. */
+export type VoiceArchetype = Static<typeof VoiceArchetypeSchema>;
 
 // ---------------------------------------------------------------------------
 // Config section types
