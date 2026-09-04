@@ -80,19 +80,17 @@ export const CREDIT_GROUPS: readonly CreditGroup[] = [
       {
         name: 'Marinara Engine',
         url: 'https://github.com/Pasta-Devs/Marinara-Engine',
-        description: 'Open-source HTML5 JRPG engine that inspired our web-based game architecture.',
+        description: 'HTML5 visual novel and RPG engine.',
       },
       {
         name: 'RisuAI',
         url: 'https://github.com/kwaroran/Risuai',
-        description:
-          'AI roleplay frontend that inspired our AI-driven character and dialogue systems.',
+        description: 'AI roleplay and character chat frontend.',
       },
       {
         name: 'SillyTavern',
         url: 'https://github.com/sillytavern/SillyTavern',
-        description:
-          'AI chat/roleplay platform that inspired our narrative and persona-driven design.',
+        description: 'AI chat and roleplay platform.',
       },
     ],
   },

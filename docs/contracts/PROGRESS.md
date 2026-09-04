@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-03)
+## Status Summary (Auto-generated: 2026-09-04)
 
-**218 active (0 without contract file), 119 archived, 0 duplicates**
+**217 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -225,7 +225,6 @@
 | C-461 | Generate Typebox Row Schemas From Drizzle | 🛠️ implemented | ❓ `sandbox` | v2 | thin |
 | C-462 | Client Side R2 Save Backup And Restore | 🛠️ implemented | ❓ `sandbox` | v2 | full |
 | C-463 | Provider Connection Role Model | 🛠️ implemented | ❓ `integrated` | v2 | full |
-| C-464 | Account Section And Deletion | 👍 approved | ❓ `integrated` | v2 | full |
 
 ---
 
