@@ -51,70 +51,9 @@ const { viewModel }: Props = $props();
           {/each}
         </div>
 
-        <!-- Connection list (filtered by active tab) -->
-        <div class="flex flex-col gap-3">
-          {#each viewModel.connectionEntries as entry}
-            <div class="flex items-center gap-2">
-              <div class="flex-1">
-                <button
-                  type="button"
-                  class="btn btn-lg w-full {entry.isDefault ? 'btn-primary' : 'btn-outline'} justify-start gap-2 h-auto py-3"
-                  onclick={() => viewModel.setDefaultConnection(entry.connection.id)}
-                >
-                  <span class="shrink-0">{entry.icon}</span>
-                  <span class="font-mono text-sm truncate">{entry.connection.name}</span>
-                  <span
-                    class="badge badge-sm ml-auto shrink-0 {entry.isDefault ? 'badge-accent' : 'badge-ghost'}"
-                  >
-                    {entry.providerLabel}
-                  </span>
-                  {#if entry.connection.model}
-                    <span class="badge badge-sm badge-outline shrink-0"
-                      >{entry.connection.model}</span
-                    >
-                  {/if}
-                </button>
-              </div>
-            </div>
-          {/each}
-
-          <!-- No connections — guidance + retry -->
-          {#if viewModel.connectionEntries.length === 0 && !viewModel.isDetecting}
-            <div class="alert alert-warning mt-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6 shrink-0 stroke-current"
-                fill="none"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <title>Warning</title>
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
-              <div>
-                <h3 class="font-bold">No Providers Detected</h3>
-                <p class="text-sm">Install the local service or add a provider to get started.</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              class="btn btn-sm btn-outline"
-              onclick={() => viewModel.startDetection()}
-            >
-              <span class="text-base">🔄</span>
-              Retry Detection
-            </button>
-          {/if}
-        </div>
-
         <!-- Shared AI settings component (C-466) — status board + provider tree -->
         <div class="mt-4 pt-4 border-t border-base-300">
-          <AiSettingsView viewModel={viewModel.aiSettingsViewModel} mode="onboarding" />
+          <AiSettingsView viewModel={viewModel.aiSettingsViewModel} />
         </div>
 
         <!-- Voice local download section (C-449 AC-2) -->

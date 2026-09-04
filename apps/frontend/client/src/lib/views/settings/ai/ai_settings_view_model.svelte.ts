@@ -132,6 +132,9 @@ export type KeyConflictPrompt = {
 
 /** Presentation state and actions exposed by the AI settings ViewModel. */
 export type AiSettingsViewModelInterface = BaseViewModelInterface & {
+  /** Whether page-only roles, voice, and image sections should render. */
+  readonly showAdvancedSections: boolean;
+
   // ── Status board ──
   readonly statusEntries: readonly CapabilityStatusEntry[];
 
@@ -241,7 +244,9 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
-export type AiSettingsViewModelOptions = BaseViewModelOptions & {};
+export type AiSettingsViewModelOptions = BaseViewModelOptions & {
+  showAdvancedSections?: boolean;
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -354,6 +359,7 @@ export class AiSettingsViewModel
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
   voicePreviewState: VoicePreviewState = $state({ status: 'idle' });
   isGenParamsOpen = $state(false);
+  readonly showAdvancedSections: boolean;
 
   draft: EditorDraft = $state({
     providerId: undefined,
@@ -367,6 +373,11 @@ export class AiSettingsViewModel
     isEditing: false,
     editingConnectionId: undefined,
   });
+
+  constructor(options: AiSettingsViewModelOptions) {
+    super(options);
+    this.showAdvancedSections = options.showAdvancedSections ?? true;
+  }
 
   // ── Derived: status board ──
 
@@ -925,13 +936,16 @@ export class AiSettingsViewModel
           cap === 'text' && Object.keys(this._genParamsDraft).length > 0
             ? ({ ...(defaultParams as TextParams), ...this._genParamsDraft } as TextParams)
             : defaultParams;
-        configService.addAiConnection({
+        const connectionId = configService.addAiConnection({
           providerId,
           capability: cap,
           label,
           model,
           params: params as TextParams | ImageParams | VoiceParams,
         });
+        if (!configService.state.defaultByCapability?.[cap]) {
+          configService.setDefaultConnection(connectionId);
+        }
       }
     }
 

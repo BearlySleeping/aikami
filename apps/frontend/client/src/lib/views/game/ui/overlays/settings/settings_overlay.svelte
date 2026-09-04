@@ -1,4 +1,5 @@
 <script lang="ts">
+import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/game/ui/overlays/settings/settings_overlay.svelte
 //
 // C-466: In-game settings overlay — registry-driven, shows every section
@@ -20,83 +21,77 @@ const { viewModel }: Props = $props();
 <!-- Overlay backdrop — semi-transparent, game world visible behind -->
 <!-- daisyUI v5 .modal-box requires the .modal.modal-open wrapper to be
      visible (opacity:0 otherwise) — see party_roster_view for the pattern. -->
-<div
-  class="modal modal-open backdrop-blur-sm"
-  role="dialog"
-  aria-modal="true"
-  aria-label="In-game settings"
-  tabindex="-1"
-  onclick={(e: MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      viewModel.close();
-    }
-  }}
-  onkeydown={(e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      viewModel.close();
-    }
-  }}
->
-  <div class="modal-box w-full max-w-lg max-h-[80vh] overflow-y-auto">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-bold">Settings</h2>
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm btn-circle"
-        onclick={() => viewModel.close()}
-        aria-label="Close settings"
-      >
-        ✕
-      </button>
-    </div>
-
-    <!-- Registry-driven tabs -->
-    <div class="tabs tabs-boxed bg-base-200 mb-4 justify-center">
-      {#each viewModel.pauseSections as section}
+<BaseViewModelContainer {viewModel}>
+  <div
+    class="modal modal-open backdrop-blur-sm"
+    role="dialog"
+    aria-modal="true"
+    aria-label="In-game settings"
+    tabindex="-1"
+    onclick={(e: MouseEvent) => {
+      if (e.target === e.currentTarget) {
+        viewModel.close();
+      }
+    }}
+    onkeydown={(e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        viewModel.close();
+      }
+    }}
+  >
+    <div class="modal-box w-full max-w-lg max-h-[80vh] overflow-y-auto">
+      <!-- Header -->
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold">Settings</h2>
         <button
           type="button"
-          class="tab tab-sm"
-          class:tab-active={viewModel.activeSectionId === section.id}
-          onclick={() => viewModel.setActiveSection(section.id)}
+          class="btn btn-ghost btn-sm btn-circle"
+          onclick={() => viewModel.close()}
+          aria-label="Close settings"
         >
-          {section.label}
+          ✕
         </button>
-      {/each}
-    </div>
+      </div>
 
-    <!-- Dynamic content — renders the active section's view -->
-    <div class="py-2">
-      {#if viewModel.activeSectionId === 'audio'}
-        <SettingsAudioView
-          viewModel={viewModel.sectionViewModels.get('audio') as import('$lib/views/settings/audio/settings_audio_view_model.svelte').SettingsAudioViewModelInterface}
-        />
-      {:else if viewModel.activeSectionId === 'display'}
-        <SettingsDisplayView
-          viewModel={viewModel.sectionViewModels.get('display') as import('$lib/views/settings/display/settings_display_view_model.svelte').SettingsDisplayViewModelInterface}
-        />
-      {:else if viewModel.activeSectionId === 'controls'}
-        <SettingsControlsView
-          viewModel={viewModel.sectionViewModels.get('controls') as import('$lib/views/settings/controls/settings_controls_view_model.svelte').SettingsControlsViewModelInterface}
-        />
-      {:else if viewModel.activeSectionId === 'gameplay'}
-        <GameplayView
-          viewModel={viewModel.sectionViewModels.get('gameplay') as import('$lib/views/settings/gameplay/gameplay_view_model.svelte').GameplayViewModelInterface}
-        />
-      {:else}
-        <p class="text-sm text-base-content/60 text-center py-4">Section not available</p>
-      {/if}
-    </div>
+      <!-- Registry-driven tabs -->
+      <div class="tabs tabs-boxed bg-base-200 mb-4 justify-center">
+        {#each viewModel.pauseSections as section}
+          <button
+            type="button"
+            class="tab tab-sm"
+            class:tab-active={viewModel.activeSectionId === section.id}
+            onclick={() => viewModel.setActiveSection(section.id)}
+          >
+            {section.label}
+          </button>
+        {/each}
+      </div>
 
-    <!-- Full Settings navigation action (AC-4) -->
-    <div class="mt-4 pt-3 border-t border-base-300">
-      <button
-        type="button"
-        class="btn btn-sm btn-ghost w-full justify-center text-base-content/60 hover:text-base-content"
-        onclick={() => viewModel.navigateToFullSettings()}
-      >
-        Full Settings →
-      </button>
+      <!-- Dynamic content — renders the active section's view -->
+      <div class="py-2">
+        {#if viewModel.activeAudioViewModel}
+          <SettingsAudioView viewModel={viewModel.activeAudioViewModel} />
+        {:else if viewModel.activeDisplayViewModel}
+          <SettingsDisplayView viewModel={viewModel.activeDisplayViewModel} />
+        {:else if viewModel.activeControlsViewModel}
+          <SettingsControlsView viewModel={viewModel.activeControlsViewModel} />
+        {:else if viewModel.activeGameplayViewModel}
+          <GameplayView viewModel={viewModel.activeGameplayViewModel} />
+        {:else}
+          <p class="text-sm text-base-content/60 text-center py-4">Section not available</p>
+        {/if}
+      </div>
+
+      <!-- Full Settings navigation action (AC-4) -->
+      <div class="mt-4 pt-3 border-t border-base-300">
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost w-full justify-center text-base-content/60 hover:text-base-content"
+          onclick={() => viewModel.navigateToFullSettings()}
+        >
+          Full Settings →
+        </button>
+      </div>
     </div>
   </div>
-</div>
+</BaseViewModelContainer>

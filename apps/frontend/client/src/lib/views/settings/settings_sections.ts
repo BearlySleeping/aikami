@@ -177,14 +177,48 @@ export type SimpleSectionViewModel =
   | SettingsDisplayViewModelInterface
   | GameplayViewModelInterface;
 
-const SECTION_VM_FACTORIES: Record<
-  string,
-  (options: BaseViewModelOptions) => BaseViewModelInterface
-> = {
-  audio: (options: BaseViewModelOptions) => getSettingsAudioViewModel(options),
-  controls: (options: BaseViewModelOptions) => getSettingsControlsViewModel(options),
-  display: (options: BaseViewModelOptions) => getSettingsDisplayViewModel(options),
-  gameplay: (options: BaseViewModelOptions) => getGameplayViewModel(options),
+/** Typed section mount returned by the shared lazy factory. */
+export type SimpleSectionViewModelMount =
+  | { id: 'audio'; viewModel: SettingsAudioViewModelInterface }
+  | { id: 'controls'; viewModel: SettingsControlsViewModelInterface }
+  | { id: 'display'; viewModel: SettingsDisplayViewModelInterface }
+  | { id: 'gameplay'; viewModel: GameplayViewModelInterface };
+
+const SECTION_VM_FACTORIES = {
+  audio: (options: BaseViewModelOptions): SimpleSectionViewModelMount => ({
+    id: 'audio',
+    viewModel: getSettingsAudioViewModel(options),
+  }),
+  controls: (options: BaseViewModelOptions): SimpleSectionViewModelMount => ({
+    id: 'controls',
+    viewModel: getSettingsControlsViewModel(options),
+  }),
+  display: (options: BaseViewModelOptions): SimpleSectionViewModelMount => ({
+    id: 'display',
+    viewModel: getSettingsDisplayViewModel(options),
+  }),
+  gameplay: (options: BaseViewModelOptions): SimpleSectionViewModelMount => ({
+    id: 'gameplay',
+    viewModel: getGameplayViewModel(options),
+  }),
+};
+
+const _hasSectionViewModelFactory = (
+  sectionId: string,
+): sectionId is keyof typeof SECTION_VM_FACTORIES => Object.hasOwn(SECTION_VM_FACTORIES, sectionId);
+
+/**
+ * Creates a typed section mount for the given section ID.
+ * Returns undefined if no factory is registered for that section.
+ */
+export const createSectionViewModelMount = (
+  sectionId: string,
+  options?: BaseViewModelOptions,
+): SimpleSectionViewModelMount | undefined => {
+  if (!_hasSectionViewModelFactory(sectionId)) {
+    return undefined;
+  }
+  return SECTION_VM_FACTORIES[sectionId](options ?? { className: 'SectionViewModel' });
 };
 
 /**
@@ -194,13 +228,10 @@ const SECTION_VM_FACTORIES: Record<
 export const createSectionViewModel = (
   sectionId: string,
   options?: BaseViewModelOptions,
-): BaseViewModelInterface | undefined => {
-  const factory = SECTION_VM_FACTORIES[sectionId];
-  return factory ? factory(options ?? { className: 'SectionViewModel' }) : undefined;
-};
+): BaseViewModelInterface | undefined => createSectionViewModelMount(sectionId, options)?.viewModel;
 
 /**
  * Returns whether a factory exists for the given section ID.
  */
 export const hasSectionViewModel = (sectionId: string): boolean =>
-  sectionId in SECTION_VM_FACTORIES;
+  _hasSectionViewModelFactory(sectionId);

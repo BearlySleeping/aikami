@@ -23,6 +23,7 @@ const mockAiConnections: Array<{
   params: Record<string, unknown>;
 }> = [];
 const mockRoleAssignments: Record<string, string> = {};
+const mockDefaultByCapability: Record<string, string> = {};
 let nextId = 1;
 const mockFetchModelsFromProvider = mock(async () => []);
 
@@ -33,6 +34,7 @@ const mockConfigService = {
     providers: mockProviders,
     aiConnections: mockAiConnections,
     roles: mockRoleAssignments,
+    defaultByCapability: mockDefaultByCapability,
   },
   load: mock(async () => {}),
   save: mock(async () => {}),
@@ -71,6 +73,12 @@ const mockConfigService = {
   }),
   setRoleAssignment: mock((role: string, connectionId: string) => {
     mockRoleAssignments[role] = connectionId;
+  }),
+  setDefaultConnection: mock((connectionId: string) => {
+    const connection = mockAiConnections.find((candidate) => candidate.id === connectionId);
+    if (connection) {
+      mockDefaultByCapability[connection.capability] = connectionId;
+    }
   }),
   clearRoleAssignment: mock((role: string) => {
     delete mockRoleAssignments[role];
@@ -126,6 +134,9 @@ beforeEach(async () => {
   for (const k of Object.keys(mockRoleAssignments)) {
     delete mockRoleAssignments[k];
   }
+  for (const capability of Object.keys(mockDefaultByCapability)) {
+    delete mockDefaultByCapability[capability];
+  }
   nextId = 1;
   mockConfigService.load.mockClear();
   mockConfigService.save.mockClear();
@@ -134,6 +145,7 @@ beforeEach(async () => {
   mockConfigService.updateProvider.mockClear();
   mockConfigService.updateAiConnection.mockClear();
   mockConfigService.setRoleAssignment.mockClear();
+  mockConfigService.setDefaultConnection.mockClear();
   mockConfigService.clearRoleAssignment.mockClear();
   mockFetchModelsFromProvider.mockClear();
   mockTtsService.speak.mockClear();
@@ -682,6 +694,50 @@ describe('AiSettingsViewModel — provider credential persistence', () => {
 
     expect(vm.fetchModelsError).toBe('Model request failed');
     expect(vm.isFetchingModels).toBe(false);
+  });
+});
+
+describe('AiSettingsViewModel — capability defaults', () => {
+  test('assigns the first connection for a capability as its default', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openAddProvider();
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('model', 'anthropic/claude-sonnet');
+    vm.saveDraft();
+
+    const createdConnectionId = mockAiConnections[0]?.id;
+    expect(createdConnectionId).toBeDefined();
+    expect(mockConfigService.setDefaultConnection).toHaveBeenCalledWith(createdConnectionId);
+    expect(mockDefaultByCapability.text).toBe(createdConnectionId);
+  });
+
+  test('preserves an existing capability default when adding another connection', async () => {
+    const providerId = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-existing-key',
+    });
+    const existingConnectionId = mockConfigService.addAiConnection({
+      providerId,
+      capability: 'text',
+      label: 'Existing model',
+      model: 'openai/gpt-4o',
+      params: {},
+    });
+    mockDefaultByCapability.text = existingConnectionId;
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    mockConfigService.setDefaultConnection.mockClear();
+
+    vm.openAddProvider();
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('model', 'anthropic/claude-sonnet');
+    vm.saveDraft();
+
+    expect(mockConfigService.setDefaultConnection).not.toHaveBeenCalled();
+    expect(mockDefaultByCapability.text).toBe(existingConnectionId);
   });
 });
 

@@ -12,11 +12,15 @@ import {
 } from '@aikami/frontend/services';
 import { gameOverlayService } from '$services';
 import {
-  createSectionViewModel,
+  createSectionViewModelMount,
   sectionsForContext,
   type SettingsSection,
-  type SimpleSectionViewModel,
+  type SimpleSectionViewModelMount,
 } from '$lib/views/settings/settings_sections';
+import type { SettingsAudioViewModelInterface } from '$lib/views/settings/audio/settings_audio_view_model.svelte';
+import type { SettingsControlsViewModelInterface } from '$lib/views/settings/controls/settings_controls_view_model.svelte';
+import type { SettingsDisplayViewModelInterface } from '$lib/views/settings/display/settings_display_view_model.svelte';
+import type { GameplayViewModelInterface } from '$lib/views/settings/gameplay/gameplay_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,16 +40,19 @@ export type SettingsOverlayViewModelInterface = BaseViewModelInterface & {
   /** Currently active section id. */
   readonly activeSectionId: string;
 
-  /** ViewModel for the currently active section. */
-  readonly activeSectionViewModel: SimpleSectionViewModel | undefined;
-
-  /** Section-ViewModel map keyed by section id. */
-  readonly sectionViewModels: ReadonlyMap<string, SimpleSectionViewModel>;
+  /** Ready, typed ViewModel for the active section, when Audio is selected. */
+  readonly activeAudioViewModel: SettingsAudioViewModelInterface | undefined;
+  /** Ready, typed ViewModel for the active section, when Controls is selected. */
+  readonly activeControlsViewModel: SettingsControlsViewModelInterface | undefined;
+  /** Ready, typed ViewModel for the active section, when Display is selected. */
+  readonly activeDisplayViewModel: SettingsDisplayViewModelInterface | undefined;
+  /** Ready, typed ViewModel for the active section, when Gameplay is selected. */
+  readonly activeGameplayViewModel: GameplayViewModelInterface | undefined;
 
   /** Whether the overlay is visible (used by the view). */
   readonly isOpen: boolean;
 
-  setActiveSection(id: string): void;
+  setActiveSection(id: string): Promise<void>;
   close(): void;
   /** Navigates to the full /settings page, deep-linked to the active section. */
   navigateToFullSettings(): Promise<void>;
@@ -65,8 +72,9 @@ class SettingsOverlayViewModel
   activeSectionId = $state<string>('');
   isOpen = $state(true);
 
-  /** Cached section ViewModels, created on first access. */
-  private _sectionViewModels = new Map<string, SimpleSectionViewModel>();
+  /** Cached section mounts, exposed only after their ViewModels initialize. */
+  private _sectionViewModelMounts = new Map<string, SimpleSectionViewModelMount>();
+  private _activeSectionMount: SimpleSectionViewModelMount | undefined = $state(undefined);
 
   /** Cache pre-edit state for revert on close. */
   private _preEditAudioVolume: number | undefined;
@@ -79,23 +87,43 @@ class SettingsOverlayViewModel
     this.activeSectionId = this.pauseSections[0]?.id ?? '';
   }
 
-  get sectionViewModels(): ReadonlyMap<string, SimpleSectionViewModel> {
-    return this._sectionViewModels;
+  get activeAudioViewModel(): SettingsAudioViewModelInterface | undefined {
+    return this._activeSectionMount?.id === 'audio'
+      ? this._activeSectionMount.viewModel
+      : undefined;
   }
 
-  get activeSectionViewModel(): SimpleSectionViewModel | undefined {
-    return this._getOrCreateViewModel(this.activeSectionId);
+  get activeControlsViewModel(): SettingsControlsViewModelInterface | undefined {
+    return this._activeSectionMount?.id === 'controls'
+      ? this._activeSectionMount.viewModel
+      : undefined;
+  }
+
+  get activeDisplayViewModel(): SettingsDisplayViewModelInterface | undefined {
+    return this._activeSectionMount?.id === 'display'
+      ? this._activeSectionMount.viewModel
+      : undefined;
+  }
+
+  get activeGameplayViewModel(): GameplayViewModelInterface | undefined {
+    return this._activeSectionMount?.id === 'gameplay'
+      ? this._activeSectionMount.viewModel
+      : undefined;
   }
 
   override async initialize(): Promise<void> {
-    this._preEditAudioVolume = this._getAudioVolume();
+    const audioMount = await this._getOrCreateViewModelMount('audio');
+    this._preEditAudioVolume = audioMount?.id === 'audio' ? audioMount.viewModel.masterVolume : undefined;
+    await this._activateSection(this.activeSectionId);
     await super.initialize();
   }
 
-  setActiveSection(id: string): void {
-    if (this.pauseSections.some((s) => s.id === id)) {
-      this.activeSectionId = id;
+  async setActiveSection(id: string): Promise<void> {
+    if (!this.pauseSections.some((s) => s.id === id)) {
+      return;
     }
+    this.activeSectionId = id;
+    await this._activateSection(id);
   }
 
   close(): void {
@@ -117,37 +145,44 @@ class SettingsOverlayViewModel
   override async dispose(): Promise<void> {
     // Revert audio changes that weren't explicitly saved
     if (this._preEditAudioVolume !== undefined) {
-      this._setAudioVolume(this._preEditAudioVolume);
+      const audioMount = this._sectionViewModelMounts.get('audio');
+      if (audioMount?.id === 'audio') {
+        audioMount.viewModel.setMasterVolume(this._preEditAudioVolume);
+      }
     }
+    for (const mount of this._sectionViewModelMounts.values()) {
+      await mount.viewModel.dispose();
+    }
+    this._sectionViewModelMounts.clear();
+    this._activeSectionMount = undefined;
     await super.dispose();
   }
 
   // ── Private helpers ──
 
-  private _getOrCreateViewModel(sectionId: string): SimpleSectionViewModel | undefined {
-    if (this._sectionViewModels.has(sectionId)) {
-      return this._sectionViewModels.get(sectionId);
+  private async _activateSection(sectionId: string): Promise<void> {
+    this._activeSectionMount = undefined;
+    const mount = await this._getOrCreateViewModelMount(sectionId);
+    if (this.activeSectionId === sectionId) {
+      this._activeSectionMount = mount;
     }
-    const vm = createSectionViewModel(sectionId);
-    if (!vm) {
+  }
+
+  private async _getOrCreateViewModelMount(
+    sectionId: string,
+  ): Promise<SimpleSectionViewModelMount | undefined> {
+    const existing = this._sectionViewModelMounts.get(sectionId);
+    if (existing) {
+      return existing;
+    }
+    const mount = createSectionViewModelMount(sectionId);
+    if (!mount) {
       return undefined;
     }
-    this._sectionViewModels.set(sectionId, vm as SimpleSectionViewModel);
-    return vm as SimpleSectionViewModel;
-  }
-
-  private _getAudioVolume(): number | undefined {
-    const audioVm = this._sectionViewModels.get('audio') as
-      | { masterVolume: number }
-      | undefined;
-    return audioVm?.masterVolume;
-  }
-
-  private _setAudioVolume(volume: number): void {
-    const audioVm = this._sectionViewModels.get('audio') as
-      | { setMasterVolume: (v: number) => void }
-      | undefined;
-    audioVm?.setMasterVolume(volume);
+    await mount.viewModel.initialize();
+    mount.viewModel.__mounted = true;
+    this._sectionViewModelMounts.set(sectionId, mount);
+    return mount;
   }
 }
 

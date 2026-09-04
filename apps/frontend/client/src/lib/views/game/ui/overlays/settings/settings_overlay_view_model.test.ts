@@ -7,14 +7,19 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/game/ui/overlays/settings/settings_overlay_view_model.test.ts
 
-import { describe, expect, mock, test } from 'bun:test';
+import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { SettingsSection } from '../../../../settings/settings_sections';
+import type {
+  getSettingsOverlayViewModel as getSettingsOverlayViewModelFactory,
+  SettingsOverlayViewModelInterface,
+} from './settings_overlay_view_model.svelte';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 // test_preload.ts provides global mocks for @aikami/frontend/services and $services.
 // We only mock modules that the overlay ViewModel imports via $lib aliases.
 
 // Mock the settings sections module (used via $lib alias)
-const _PAUSE_SECTIONS = [
+const _OVERLAY_SECTIONS = [
   {
     id: 'controls',
     label: 'Controls',
@@ -30,45 +35,63 @@ const _PAUSE_SECTIONS = [
   { id: 'export', label: 'Export & Data', group: 'data', contexts: ['page'], icon: 'download' },
 ];
 
-mock.module('$lib/views/settings/settings_sections', () => ({
-  sectionsForContext: (context: string) =>
-    _PAUSE_SECTIONS.filter((s) => s.contexts.includes(context)),
-  // biome-ignore lint/style/useNamingConvention: mock must match real module export name
-  SETTINGS_SECTIONS: _PAUSE_SECTIONS,
-  // biome-ignore lint/style/useNamingConvention: mock must match real module export name
-  SETTINGS_GROUPS: [
-    { id: 'play', label: 'Play' },
-    { id: 'ai', label: 'AI' },
-  ],
-  createSectionViewModel: mock((sectionId: string) => {
-    if (sectionId === 'audio') {
-      return { masterVolume: 0.8, setMasterVolume: mock((_v: number) => {}) };
-    }
-    return {};
-  }),
-  hasSectionViewModel: mock((sectionId: string) =>
-    ['audio', 'controls', 'display', 'gameplay'].includes(sectionId),
-  ),
-}));
+const _createSectionViewModelMount = mock((sectionId: string) => {
+  const baseViewModel = {
+    _className: `${sectionId}ViewModel`,
+    __mounted: false,
+    errorMessage: undefined,
+    showLoadingView: false,
+    initialize: mock(async () => {}),
+    dispose: mock(async () => {}),
+  };
+  if (sectionId === 'audio') {
+    return {
+      id: 'audio',
+      viewModel: {
+        ...baseViewModel,
+        masterVolume: 0.8,
+        setMasterVolume: mock((_volume: number) => {}),
+      },
+    };
+  }
+  return { id: sectionId, viewModel: baseViewModel };
+});
 
-// Mock the overlay's ViewModel file imports for section ViewModels
-mock.module('$lib/views/settings/audio/settings_audio_view_model.svelte', () => ({
-  getSettingsAudioViewModel: mock(() => ({
+const _registerOverlaySettingsSectionsMock = (): void => {
+  mock.module('$lib/views/settings/settings_sections', () => ({
+    sectionsForContext: (context: string) =>
+      _OVERLAY_SECTIONS.filter((section) => section.contexts.includes(context)),
+    createSectionViewModelMount: _createSectionViewModelMount,
+  }));
+};
+
+const _baseSectionViewModel = () => ({
+  _className: 'SectionViewModel',
+  __mounted: false,
+  errorMessage: undefined,
+  showLoadingView: false,
+  initialize: mock(async () => {}),
+  dispose: mock(async () => {}),
+});
+
+mock.module('../../../../settings/audio/settings_audio_view_model.svelte', () => ({
+  getSettingsAudioViewModel: () => ({
+    ..._baseSectionViewModel(),
     masterVolume: 0.8,
-    setMasterVolume: mock((_v: number) => {}),
-  })),
+    setMasterVolume: mock((_volume: number) => {}),
+  }),
 }));
 
-mock.module('$lib/views/settings/controls/settings_controls_view_model.svelte', () => ({
-  getSettingsControlsViewModel: mock(() => ({})),
+mock.module('../../../../settings/controls/settings_controls_view_model.svelte', () => ({
+  getSettingsControlsViewModel: _baseSectionViewModel,
 }));
 
-mock.module('$lib/views/settings/display/settings_display_view_model.svelte', () => ({
-  getSettingsDisplayViewModel: mock(() => ({})),
+mock.module('../../../../settings/display/settings_display_view_model.svelte', () => ({
+  getSettingsDisplayViewModel: _baseSectionViewModel,
 }));
 
-mock.module('$lib/views/settings/gameplay/gameplay_view_model.svelte', () => ({
-  getGameplayViewModel: mock(() => ({})),
+mock.module('../../../../settings/gameplay/gameplay_view_model.svelte', () => ({
+  getGameplayViewModel: _baseSectionViewModel,
 }));
 
 // Mock $services to provide gameOverlayService as an object (not a bare mock function)
@@ -88,18 +111,61 @@ const _augmentRouterService = async () => {
   rs.goToRoute = mock(async () => {});
 };
 
-await _augmentRouterService();
-
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-const { getSettingsOverlayViewModel } = await import('./settings_overlay_view_model.svelte');
-type Vm = ReturnType<typeof getSettingsOverlayViewModel>;
+let getSettingsOverlayViewModel: typeof getSettingsOverlayViewModelFactory;
+type Vm = SettingsOverlayViewModelInterface;
+let productionPauseSections: readonly SettingsSection[];
+let productionExpectedPauseSections: readonly SettingsSection[];
+let productionInheritedFactoryResults: {
+  hasConstructor: boolean;
+  hasToString: boolean;
+  constructorViewModel: unknown;
+  toStringViewModel: unknown;
+};
 
 const createVm = (): Vm => getSettingsOverlayViewModel({ className: 'SettingsOverlayViewModel' });
+
+beforeAll(async () => {
+  const productionSettingsSections = await import('../../../../settings/settings_sections');
+  productionExpectedPauseSections = productionSettingsSections.SETTINGS_SECTIONS.filter((section) =>
+    section.contexts.includes('pause'),
+  );
+  productionPauseSections = productionSettingsSections.sectionsForContext('pause');
+  productionInheritedFactoryResults = {
+    hasConstructor: productionSettingsSections.hasSectionViewModel('constructor'),
+    hasToString: productionSettingsSections.hasSectionViewModel('toString'),
+    constructorViewModel: productionSettingsSections.createSectionViewModel('constructor'),
+    toStringViewModel: productionSettingsSections.createSectionViewModel('toString'),
+  };
+});
+
+beforeEach(async () => {
+  _registerOverlaySettingsSectionsMock();
+  await _augmentRouterService();
+  ({ getSettingsOverlayViewModel } = await import('./settings_overlay_view_model.svelte'));
+});
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 describe('SettingsOverlayViewModel', () => {
+  test('production pause sections match the real registry', () => {
+    expect(productionPauseSections).toEqual(productionExpectedPauseSections);
+    expect(productionExpectedPauseSections.map((section) => section.id)).toEqual([
+      'controls',
+      'audio',
+      'display',
+      'gameplay',
+    ]);
+  });
+
+  test('production section factories reject inherited object keys', () => {
+    expect(productionInheritedFactoryResults.hasConstructor).toBe(false);
+    expect(productionInheritedFactoryResults.hasToString).toBe(false);
+    expect(productionInheritedFactoryResults.constructorViewModel).toBeUndefined();
+    expect(productionInheritedFactoryResults.toStringViewModel).toBeUndefined();
+  });
+
   test('AC-1: pauseSections includes all sections flagged with pause context', () => {
     const vm = createVm();
 
@@ -132,16 +198,16 @@ describe('SettingsOverlayViewModel', () => {
     expect(vm.activeSectionId).toBe(vm.pauseSections[0]?.id);
   });
 
-  test('AC-1: setActiveSection switches to a valid section', () => {
+  test('AC-1: setActiveSection switches to a valid section', async () => {
     const vm = createVm();
-    vm.setActiveSection('gameplay');
+    await vm.setActiveSection('gameplay');
     expect(vm.activeSectionId).toBe('gameplay');
   });
 
-  test('AC-1: setActiveSection ignores invalid section ids', () => {
+  test('AC-1: setActiveSection ignores invalid section ids', async () => {
     const vm = createVm();
     const original = vm.activeSectionId;
-    vm.setActiveSection('nonexistent');
+    await vm.setActiveSection('nonexistent');
     expect(vm.activeSectionId).toBe(original);
   });
 
@@ -161,16 +227,13 @@ describe('SettingsOverlayViewModel', () => {
 
   test('AC-3: audio volume reverts on dispose', async () => {
     const vm = createVm();
-    // Set active section to audio to trigger lazy creation of audio VM
-    vm.setActiveSection('audio');
-    // Access activeSectionViewModel to force creation
-    const _created = vm.activeSectionViewModel;
     await vm.initialize();
+    await vm.setActiveSection('audio');
 
-    const audioVm = vm.sectionViewModels.get('audio') as {
-      masterVolume: number;
-      setMasterVolume: (v: number) => void;
-    };
+    const audioVm = vm.activeAudioViewModel;
+    if (!audioVm) {
+      throw new Error('Audio ViewModel was not initialized');
+    }
     const originalVolume = audioVm.masterVolume;
 
     // Simulate volume change
@@ -189,7 +252,7 @@ describe('SettingsOverlayViewModel', () => {
     goToHrefMock.mockClear();
 
     const vm = createVm();
-    vm.setActiveSection('controls');
+    await vm.setActiveSection('controls');
     await vm.navigateToFullSettings();
 
     expect(goToHrefMock).toHaveBeenCalledTimes(1);
@@ -205,7 +268,7 @@ describe('SettingsOverlayViewModel', () => {
     goToHrefMock.mockClear();
 
     const vm = createVm();
-    vm.setActiveSection('gameplay');
+    await vm.setActiveSection('gameplay');
     await vm.navigateToFullSettings();
 
     const href = goToHrefMock.mock.calls[0]?.[0] as string;
@@ -220,12 +283,15 @@ describe('SettingsOverlayViewModel', () => {
     expect(vm.isOpen).toBe(false);
   });
 
-  test('sectionViewModels lazily creates VMs on access', () => {
+  test('active section exposes the same initialized ViewModel instance', async () => {
     const vm = createVm();
-    const vm1 = vm.activeSectionViewModel;
-    expect(vm1).toBeDefined();
-    // Access again — should return the same instance (same reference)
-    const vm2 = vm.activeSectionViewModel;
-    expect(vm1).toBe(vm2);
+    await vm.initialize();
+
+    const firstAccess = vm.activeControlsViewModel;
+    await vm.setActiveSection('controls');
+    const secondAccess = vm.activeControlsViewModel;
+
+    expect(firstAccess).toBeDefined();
+    expect(secondAccess).toBe(firstAccess);
   });
 });

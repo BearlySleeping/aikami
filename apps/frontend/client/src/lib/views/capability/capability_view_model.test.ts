@@ -10,6 +10,8 @@
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names for module mocking
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$lib/data/connection_defaults.ts';
+import type { AiSettingsViewModelInterface } from '$views/settings/ai/ai_settings_view_model.svelte';
 
 mock.module('@aikami/utils', () => ({
   AiTextProviderRequiredError: class AiTextProviderRequiredError extends Error {
@@ -24,110 +26,120 @@ mock.module('@aikami/utils', () => ({
 }));
 
 // Mock AiSettingsViewModel (C-466 replacement for ConnectionManagerViewModel)
+const aiSettingsViewModelMock = {
+  _className: 'CapabilityAiSettingsViewModel',
+  __mounted: false,
+  errorMessage: undefined,
+  showLoadingView: false,
+  initialize: mock(async () => {}),
+  dispose: mock(async () => {}),
+  showAdvancedSections: false,
+  statusEntries: [],
+  providerTree: [],
+  isEditorOpen: false,
+  isAddProviderOpen: false,
+  draft: {
+    providerId: undefined,
+    registryId: 'openrouter',
+    capability: 'text',
+    label: '',
+    model: '',
+    apiKey: '',
+    baseUrl: '',
+    showApiKey: false,
+    isEditing: false,
+    editingConnectionId: undefined,
+  },
+  openAddProvider: mock(() => {}),
+  closeAddProvider: mock(() => {}),
+  openEditConnection: mock(() => {}),
+  cancelEdit: mock(() => {}),
+  setDraftField: mock(() => {}),
+  setDraftProvider: mock(() => {}),
+  saveDraft: mock(() => {}),
+  deleteConnection: mock(() => {}),
+  testConnection: mock(async () => {}),
+  testDraftConnection: mock(async () => {}),
+  fetchModels: mock(async () => {}),
+  toggleApiKeyVisibility: mock(() => {}),
+  resolveKeyConflict: mock(() => {}),
+  dismissKeyConflict: mock(() => {}),
+  toggleRolesDrawer: mock(() => {}),
+  assignRole: mock(() => {}),
+  clearRole: mock(() => {}),
+  isRolesDrawerOpen: false,
+  connectionsWithRoles: [],
+  availableRoles: [],
+  unassignedConnections: [],
+  voiceConnections: [],
+  activeVoiceConnectionId: undefined,
+  setActiveVoiceConnection: mock(() => {}),
+  voiceArchetypes: [],
+  setVoiceArchetype: mock(() => {}),
+  voiceIdInputLabelFor: mock(() => ''),
+  voiceSpeed: 1,
+  voicePitch: 0,
+  setVoiceSpeed: mock(() => {}),
+  setVoicePitch: mock(() => {}),
+  commitConfigChanges: mock(() => {}),
+  voicePreviewState: { status: 'idle' },
+  previewVoiceArchetype: mock(async () => {}),
+  showVoiceLocalDownload: false,
+  voiceModelState: { status: 'not-downloaded', receivedBytes: 0, totalBytes: 92887435 },
+  voiceModelProgress: 0,
+  voiceModelSizeLabel: '',
+  downloadVoiceModel: mock(async () => {}),
+  cancelVoiceModelDownload: mock(() => {}),
+  imageConnections: [],
+  activeImageConnectionId: undefined,
+  setActiveImageConnection: mock(() => {}),
+  imageSizePresets: [],
+  setImageSizePreset: mock(() => {}),
+  imageQualityLevels: [],
+  setImageQuality: mock(() => {}),
+  isImageAdvancedOpenFor: mock(() => false),
+  toggleImageAdvanced: mock(() => {}),
+  imageParamsFor: mock(() => ({})),
+  setImageParamField: mock(() => {}),
+  imageCheckpoints: [],
+  setImageCheckpoint: mock(() => {}),
+  imageStyleProfiles: [],
+  activeStyleProfileId: '',
+  setImageStyleProfile: mock(() => {}),
+  imagePreviewStateFor: mock(() => ({ status: 'idle' })),
+  imagePreviewUrlFor: mock(() => ''),
+  imagePreviewErrorFor: mock(() => ''),
+  previewImage: mock(async () => {}),
+  isGenParamsOpen: false,
+  toggleGenParamsDisclosure: mock(() => {}),
+  genParamsDisplay: undefined,
+  setGenParamField: mock(() => {}),
+  genParamPresets: [],
+  applyGenPreset: mock(() => {}),
+  modelOptions: [],
+  isFetchingModels: false,
+  fetchModelsError: undefined,
+  canFetchModels: false,
+  needsApiKey: false,
+  needsUrl: false,
+  isLocalProvider: false,
+  providerOptions: [],
+  testResults: {},
+  testingIds: new Set<string>(),
+  keyConflictPrompt: undefined,
+} satisfies AiSettingsViewModelInterface;
+
+const getAiSettingsViewModelMock = mock(
+  (): AiSettingsViewModelInterface => aiSettingsViewModelMock,
+);
+
 mock.module('$views/settings/ai/ai_settings_view_model.svelte', () => ({
-  getAiSettingsViewModel: mock(() => ({
-    statusEntries: [],
-    providerTree: [],
-    isEditorOpen: false,
-    isAddProviderOpen: false,
-    draft: {
-      providerId: undefined,
-      registryId: 'openrouter',
-      capability: 'text',
-      label: '',
-      model: '',
-      apiKey: '',
-      baseUrl: '',
-      showApiKey: false,
-      isEditing: false,
-      editingConnectionId: undefined,
-    },
-    openAddProvider: mock(() => {}),
-    closeAddProvider: mock(() => {}),
-    openEditConnection: mock(() => {}),
-    cancelEdit: mock(() => {}),
-    setDraftField: mock(() => {}),
-    setDraftProvider: mock(() => {}),
-    saveDraft: mock(() => {}),
-    deleteConnection: mock(() => {}),
-    testConnection: mock(async () => {}),
-    testDraftConnection: mock(async () => {}),
-    fetchModels: mock(async () => {}),
-    toggleApiKeyVisibility: mock(() => {}),
-    resolveKeyConflict: mock(() => {}),
-    dismissKeyConflict: mock(() => {}),
-    toggleRolesDrawer: mock(() => {}),
-    assignRole: mock(() => {}),
-    clearRole: mock(() => {}),
-    isRolesDrawerOpen: false,
-    connectionsWithRoles: [],
-    availableRoles: [],
-    unassignedConnections: [],
-    voiceConnections: [],
-    activeVoiceConnectionId: undefined,
-    setActiveVoiceConnection: mock(() => {}),
-    voiceArchetypes: [],
-    setVoiceArchetype: mock(() => {}),
-    voiceIdInputLabelFor: mock(() => ''),
-    voiceSpeed: 1,
-    voicePitch: 0,
-    setVoiceSpeed: mock(() => {}),
-    setVoicePitch: mock(() => {}),
-    commitConfigChanges: mock(() => {}),
-    voicePreviewState: { status: 'idle' },
-    previewVoiceArchetype: mock(async () => {}),
-    showVoiceLocalDownload: false,
-    voiceModelState: { status: 'not-downloaded', receivedBytes: 0, totalBytes: 92887435 },
-    voiceModelProgress: 0,
-    voiceModelSizeLabel: '',
-    downloadVoiceModel: mock(async () => {}),
-    cancelVoiceModelDownload: mock(() => {}),
-    imageConnections: [],
-    activeImageConnectionId: undefined,
-    setActiveImageConnection: mock(() => {}),
-    imageSizePresets: [],
-    setImageSizePreset: mock(() => {}),
-    imageQualityLevels: [],
-    setImageQuality: mock(() => {}),
-    isImageAdvancedOpenFor: mock(() => false),
-    toggleImageAdvanced: mock(() => {}),
-    imageParamsFor: mock(() => ({})),
-    setImageParamField: mock(() => {}),
-    imageCheckpoints: [],
-    setImageCheckpoint: mock(() => {}),
-    imageStyleProfiles: [],
-    activeStyleProfileId: '',
-    setImageStyleProfile: mock(() => {}),
-    imagePreviewStateFor: mock(() => ({ status: 'idle' })),
-    imagePreviewUrlFor: mock(() => ''),
-    imagePreviewErrorFor: mock(() => ''),
-    previewImage: mock(async () => {}),
-    isGenParamsOpen: false,
-    toggleGenParamsDisclosure: mock(() => {}),
-    genParamsDisplay: undefined,
-    setGenParamField: mock(() => {}),
-    genParamPresets: [],
-    applyGenPreset: mock(() => {}),
-    modelOptions: [],
-    isFetchingModels: false,
-    fetchModelsError: undefined,
-    canFetchModels: false,
-    needsApiKey: false,
-    needsUrl: false,
-    isLocalProvider: false,
-    providerOptions: [],
-    testResults: {},
-    testingIds: new Set(),
-    keyConflictPrompt: undefined,
-  })),
+  getAiSettingsViewModel: getAiSettingsViewModelMock,
 }));
 
 mock.module('$types', () => ({
-  Connection: class {},
-  ConnectionCapability: 'text',
-  VoiceModelState: class {},
-  DEFAULT_IMAGE_OPTIONS: {},
-  DEFAULT_VOICE_OPTIONS: {},
+  DEFAULT_IMAGE_OPTIONS,
+  DEFAULT_VOICE_OPTIONS,
 }));
 
 mock.module('$lib/views/utils/crypto_vault', () => ({
@@ -276,6 +288,7 @@ const setDetectionResult = (
 describe('CapabilityViewModel', () => {
   beforeEach(async () => {
     setDetectionResult('not_found');
+    getAiSettingsViewModelMock.mockClear();
     const { configService } = await import('$services');
     (configService as unknown as { _resetForTest: () => void })._resetForTest();
   });
@@ -442,12 +455,17 @@ describe('CapabilityViewModel', () => {
 
   // ── C-466: AI settings ViewModel integration ─────────────────────────
 
-  test('AC-5: aiSettingsViewModel is available and has the expected interface', () => {
+  test('AC-5: creates and reuses the shared AI settings ViewModel', () => {
     const vm = createVm();
-    expect(vm.aiSettingsViewModel).toBeDefined();
-    expect(typeof vm.aiSettingsViewModel.openAddProvider).toBe('function');
-    expect(typeof vm.aiSettingsViewModel.saveDraft).toBe('function');
-    expect(Array.isArray(vm.aiSettingsViewModel.statusEntries)).toBe(true);
-    expect(Array.isArray(vm.aiSettingsViewModel.providerTree)).toBe(true);
+    const firstAccess = vm.aiSettingsViewModel;
+    const secondAccess = vm.aiSettingsViewModel;
+
+    expect(firstAccess).toBeDefined();
+    expect(secondAccess).toBe(firstAccess);
+    expect(getAiSettingsViewModelMock).toHaveBeenCalledTimes(1);
+    expect(getAiSettingsViewModelMock).toHaveBeenCalledWith({
+      className: 'CapabilityAiSettingsViewModel',
+      showAdvancedSections: false,
+    });
   });
 });

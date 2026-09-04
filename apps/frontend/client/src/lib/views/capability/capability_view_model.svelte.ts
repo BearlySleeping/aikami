@@ -69,7 +69,7 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   /** AiSettingsViewModel for rendering the shared AI settings component (C-466). */
   readonly aiSettingsViewModel: AiSettingsViewModelInterface;
 
-  /** Starts provider detection. Called on initialization. */
+  /** Starts provider detection after explicit user action. */
   startDetection(): Promise<void>;
   /** Switches to a different tab. */
   setActiveTab(tab: ConnectionCapability): void;
@@ -139,6 +139,7 @@ class CapabilityViewModel
 
     this.aiSettingsViewModel = getAiSettingsViewModel({
       className: 'CapabilityAiSettingsViewModel',
+      showAdvancedSections: false,
     });
   }
 
@@ -206,6 +207,8 @@ class CapabilityViewModel
   // ── Lifecycle ────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
+    // Intentionally do not auto-run startDetection(): local browser probes can
+    // trigger Private Network Access permission prompts.
     return super.initialize();
   }
 
@@ -527,6 +530,8 @@ class CapabilityViewModel
 
   private async _startCampaign(profile: CapabilityProfile): Promise<void> {
     try {
+      // Intentionally leave the campaign in the "creating" state; the
+      // onboarding coordinator completes setup after navigation.
       await campaignService.startNewCampaign({ capabilityProfile: profile });
 
       await routerService.goToRoute('setup', {
