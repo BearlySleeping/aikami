@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { runCommand, runSync, runSyncOrThrow, startCommand } from './process_runner.ts';
 
 describe('runCommand', () => {
@@ -71,8 +73,14 @@ describe('runCommand', () => {
   });
 
   test('runs in the requested cwd', async () => {
-    const result = await runCommand('pwd', [], { cwd: '/tmp' });
-    expect(result.stdout).toContain('tmp');
+    // `pwd` and a hardcoded '/tmp' are POSIX-only — Windows has neither.
+    // `node -p process.cwd()` and node:os's tmpdir() work on every runtime
+    // this file's own commands (sh, sleep, cat, true) otherwise assume.
+    // realpath both sides: macOS's tmpdir() is itself a symlink
+    // (/var/... -> /private/var/...) that a child process resolves away.
+    const cwd = tmpdir();
+    const result = await runCommand('node', ['-p', 'process.cwd()'], { cwd });
+    expect(realpathSync(result.stdout.trim())).toBe(realpathSync(cwd));
   });
 });
 
