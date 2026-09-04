@@ -81,7 +81,7 @@ describe('SettingsViewModel — group/section selection', () => {
     vm.setActiveGroup('ai');
     expect(vm.activeGroupId).toBe('ai');
     expect(vm.activeSectionId).toBe('ai_privacy');
-    expect(vm.sectionsInActiveGroup.map((s) => s.id)).toEqual(['ai_privacy', 'connections']);
+    expect(vm.sectionsInActiveGroup.map((s) => s.id)).toEqual(['ai_privacy', 'ai']);
   });
 
   test('setActiveSection changes only the section, not the group', () => {
