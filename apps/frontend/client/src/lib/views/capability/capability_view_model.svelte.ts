@@ -1,6 +1,9 @@
 // apps/frontend/client/src/lib/views/capability/capability_view_model.svelte.ts
 //
 // ViewModel for the pre-game capability detection screen.
+// C-466: rebuilt on AiSettingsViewModel — connection editing now uses
+// the shared AI settings component instead of the legacy ConnectionManager.
+//
 // Shows tabs (Text | Image | Voice), auto-detects local services,
 // auto-seeds connections, and starts the campaign through a unified
 // connection list with cloud/local icons and source badges.
@@ -25,12 +28,13 @@ import {
 } from '$services';
 import type { Connection, ConnectionCapability, VoiceModelState } from '$types';
 import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$types';
-import type { ConnectionManagerViewModelInterface } from '$views/settings/connection/connection_manager_view_model.svelte';
-import { getConnectionManagerViewModel } from '$views/settings/connection/connection_manager_view_model.svelte';
+import {
+  type AiSettingsViewModelInterface,
+  getAiSettingsViewModel,
+} from '$views/settings/ai/ai_settings_view_model.svelte';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-/** Connection entry info passed from ViewModel to View for rendering a row. */
 export type ConnectionEntry = {
   connection: Connection;
   /** 🖥️ for local, ☁️ for cloud. */
@@ -50,8 +54,6 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   readonly isDetecting: boolean;
   /** Currently active tab. */
   readonly activeTab: ConnectionCapability;
-  /** Whether the guided cloud connection modal is visible. */
-  readonly showCloudSetup: boolean;
   /** Error message to display, or empty string. */
   readonly errorMessage: string;
   /** Unified connection entries filtered by active tab. */
@@ -60,8 +62,12 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   readonly tabs: readonly { id: ConnectionCapability; label: string; hasProvider: boolean }[];
   /** Whether at least one text provider is configured (required to start). */
   readonly hasTextProvider: boolean;
-  /** ViewModel for the cloud connection editor panel. */
-  readonly cloudConnectionVm: ConnectionManagerViewModelInterface;
+  /** Whether at least one image provider is configured. */
+  readonly hasImageProvider: boolean;
+  /** Whether at least one voice provider is configured. */
+  readonly hasVoiceProvider: boolean;
+  /** AiSettingsViewModel for rendering the shared AI settings component (C-466). */
+  readonly aiSettingsViewModel: AiSettingsViewModelInterface;
 
   /** Starts provider detection. Called on initialization. */
   startDetection(): Promise<void>;
@@ -69,12 +75,10 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   setActiveTab(tab: ConnectionCapability): void;
   /** Sets a connection as default (does NOT navigate). */
   setDefaultConnection(connectionId: string): void;
-  /** Opens the connection editor pre-filled for an existing connection. */
-  editConnection(connectionId: string): void;
-  /** Opens the guided cloud connection modal for the active tab's capability. */
-  openCloudSetup(): void;
-  /** Closes the guided cloud connection modal. */
-  closeCloudSetup(): void;
+  /** Starts the campaign and navigates to /setup. */
+  startCampaign(): Promise<void>;
+
+  // ── Voice model download (C-449 AC-2) ──
   /** Whether to show the local voice model download section in the Voice tab. */
   readonly showVoiceLocalDownload: boolean;
   /** Voice model download state (mirrored from voiceModelService). */
@@ -83,14 +87,10 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   readonly voiceModelProgress: number;
   /** Voice model size label. */
   readonly voiceModelSizeLabel: string;
-
   /** Starts (or joins) the explicit voice model download. */
   downloadVoiceModel(): Promise<void>;
   /** Cancels an in-flight voice model download. */
   cancelVoiceModelDownload(): void;
-
-  /** Starts the campaign and navigates to /setup. */
-  startCampaign(): Promise<void>;
 };
 
 export type CapabilityViewModelOptions = BaseViewModelOptions;
@@ -123,39 +123,22 @@ class CapabilityViewModel
     isComplete: false,
     textStatus: 'pending',
     imageStatus: 'pending',
-    // C-417 AC-3: never default to 'detected' — every capability status must
-    // derive from an explicit probe result (shared DetectionStatus union).
-    // The text/image siblings already use 'pending'; voice was the lone
-    // literal 'detected' outlier. Pre-detection state is 'pending' until
-    // startDetection() lands a real probe result.
     voiceStatus: 'pending',
     summary: 'Connect an AI provider to get started.',
   });
 
   isDetecting = $state(false);
   activeTab = $state<ConnectionCapability>('text');
-  showCloudSetup = $state(false);
   errorMessage = $state('');
 
-  cloudConnectionVm: ConnectionManagerViewModelInterface;
+  /** Shared AI settings ViewModel for connection management (C-466). */
+  readonly aiSettingsViewModel: AiSettingsViewModelInterface;
 
   constructor(options: CapabilityViewModelOptions) {
     super(options);
-    this.cloudConnectionVm = getConnectionManagerViewModel({
-      className: 'CloudConnectionViewModel',
-    });
 
-    $effect(() => {
-      void this.cloudConnectionVm.isEditorOpen;
-      if (!this.cloudConnectionVm.isEditorOpen && this.showCloudSetup) {
-        this._handleEditorClosed();
-      }
-    });
-
-    // When the connection list changes (add/edit/delete), re-ensure defaults
-    $effect(() => {
-      void configService.state.connections;
-      this._ensureAllDefaults();
+    this.aiSettingsViewModel = getAiSettingsViewModel({
+      className: 'CapabilityAiSettingsViewModel',
     });
   }
 
@@ -223,12 +206,6 @@ class CapabilityViewModel
   // ── Lifecycle ────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    // Detection is intentionally NOT auto-run on page load. Probing local
-    // providers from an HTTPS origin triggers the browser's Private Network
-    // Access permission prompt (and CORS errors when Ollama isn't configured).
-    // Instead, users opt in by picking Ollama in the connection editor, which
-    // probes localhost and shows the setup guide. Detection stays available
-    // via the explicit "Retry Detection" action.
     return super.initialize();
   }
 
@@ -281,13 +258,8 @@ class CapabilityViewModel
     void configService.save();
   }
 
-  /** Opens the connection editor pre-filled for an existing connection. */
-  editConnection(connectionId: string): void {
-    this.cloudConnectionVm.openEdit(connectionId);
-    this.showCloudSetup = true;
-  }
+  // ── Campaign start ───────────────────────────────────────────────────
 
-  /** Starts the campaign and navigates to /setup. */
   async startCampaign(): Promise<void> {
     this.debug('startCampaign');
     await this._startCampaign({
@@ -295,16 +267,6 @@ class CapabilityViewModel
       imageProvider: this.hasImageProvider,
       voiceProvider: this.hasVoiceProvider,
     });
-  }
-
-  openCloudSetup(): void {
-    this.cloudConnectionVm.openCreateFor(this.activeTab);
-    this.showCloudSetup = true;
-  }
-
-  closeCloudSetup(): void {
-    this.cloudConnectionVm.cancelEdit();
-    this.showCloudSetup = false;
   }
 
   // ── Voice model download (C-449 AC-2) ────────────────────────────────
@@ -347,7 +309,6 @@ class CapabilityViewModel
       } else if (state.status === 'error') {
         this.errorMessage = state.message ?? 'Download failed';
       } else if (state.status === 'not-downloaded') {
-        // Cancellation or idle — not an error.
         this.errorMessage = '';
       } else {
         this.errorMessage = 'Download failed';
@@ -363,15 +324,11 @@ class CapabilityViewModel
     voiceModelService.cancel();
   }
 
-  private _handleEditorClosed(): void {
-    this.showCloudSetup = false;
-    this._ensureAllDefaults();
-  }
+  // ── Private helpers ──────────────────────────────────────────────────
 
   /**
    * Ensures every capability with at least one connection has a default
    * selected. Falls back to the first connection when none is set.
-   * Called on initial detection and when the connection list mutates.
    */
   private _ensureAllDefaults(): void {
     const connections = configService.state.connections ?? [];
@@ -392,7 +349,6 @@ class CapabilityViewModel
         : false;
 
       if (!stillExists) {
-        // Pick the first connection for this capability as the new default
         configService.setDefaultConnection(capConnections[0].id);
         changed = true;
       }
@@ -402,8 +358,6 @@ class CapabilityViewModel
       void configService.save();
     }
   }
-
-  // ── Private: provider labels ─────────────────────────────────────────
 
   /** Resolves a human-readable label for any connection provider, regardless of capability. */
   private _providerLabel(connection: Connection): string {
@@ -421,19 +375,15 @@ class CapabilityViewModel
     return TEXT_PROVIDERS.find((p) => p.id === connection.provider)?.label ?? connection.provider;
   }
 
-  // ── Private: source badges ───────────────────────────────────────────
-
   /**
    * Filters out phantom connections that appear usable but have no actual
    * credentials. Cloud providers seeded from env with empty API keys are
    * hidden until the user provides a real key.
    */
   private _isUsableConnection(connection: Connection): boolean {
-    // Local providers don't need API keys — always show them
     if (LOCAL_PROVIDERS.has(connection.provider)) {
       return true;
     }
-    // Cloud providers require a real (non-whitespace) API key
     return (connection.apiKey?.trim().length ?? 0) > 0;
   }
 
@@ -472,23 +422,14 @@ class CapabilityViewModel
 
   /**
    * Prunes stale auto-seeded connections from previous sessions and seeds
-   * fresh connections for currently detected providers. Source 'detected'
-   * connections represent auto-discovery — if the provider is no longer
-   * reachable, the connection should be removed.
+   * fresh connections for currently detected providers.
    */
   private _seedDetectedConnections(result: CapabilitySnapshot): void {
-    // 1. Remove ALL stale auto-seeded connections first.
-    //    These are connections created by previous detection runs that may
-    //    no longer be valid (e.g., Ollama was running before but isn't now).
     const fresh = configService.state.connections.filter((c) => c.source !== 'detected');
     if (fresh.length !== configService.state.connections.length) {
       configService.state.connections = fresh;
     }
 
-    // 2. Seed connections for currently detected providers.
-    //    Base URLs come from the runtime engine config (C-389) — never
-    //    baked-in localhost literals. Detection only reports 'detected'
-    //    when the runtime-configured endpoint answered.
     if (result.textStatus === 'detected' && result.textProviderId === 'ollama') {
       const textBaseUrl = runtimeConfigService.getTextUrl();
       this._seedConnection({
@@ -499,13 +440,6 @@ class CapabilityViewModel
         baseUrl: textBaseUrl ?? '',
       });
     } else if (result.textStatus === 'detected' && result.textProviderId === 'llamacpp') {
-      // C-406: the local-stack's bundled default (llama.cpp) — a genuine
-      // OpenAI-compatible local server, not Ollama, even though it commonly
-      // shares Ollama's default port. Keeping this a distinct provider id
-      // (not folded into 'ollama') matters beyond labelling: the chat
-      // adapter special-cases provider === 'ollama' to disable streaming
-      // and use Ollama's own /api/chat shape — misapplying that to
-      // llama.cpp would silently kill streaming for the common case.
       const textBaseUrl = runtimeConfigService.getTextUrl();
       this._seedConnection({
         capability: 'text',
@@ -581,7 +515,6 @@ class CapabilityViewModel
       source: 'detected',
     });
 
-    // Set per-capability default if this is the first connection for its capability
     const capDefault = configService.state.defaultByCapability?.[capability];
     if (!capDefault) {
       configService.setDefaultConnection(newId);
@@ -594,11 +527,6 @@ class CapabilityViewModel
 
   private async _startCampaign(profile: CapabilityProfile): Promise<void> {
     try {
-      // Leave the campaign in 'creating' — /setup hosts the onboarding
-      // coordinator (C-319/C-405), which attaches the persona and calls
-      // completeSetup() itself. Calling it here flips the campaign to
-      // 'playing' before character creation runs, so the onboarding gate
-      // (campaign.state !== 'creating') always rejects the persona.
       await campaignService.startNewCampaign({ capabilityProfile: profile });
 
       await routerService.goToRoute('setup', {

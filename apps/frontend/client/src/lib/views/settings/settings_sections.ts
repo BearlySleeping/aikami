@@ -2,6 +2,28 @@
 //
 // Typed registry of all settings sections and the groups they belong to.
 // Drives the group tab bar + section sub-nav in SettingsViewModel.
+// Also provides shared per-section ViewModel factory lookup for all mounts.
+
+import {
+  getSettingsAudioViewModel,
+  type SettingsAudioViewModelInterface,
+} from './audio/settings_audio_view_model.svelte';
+import {
+  getSettingsControlsViewModel,
+  type SettingsControlsViewModelInterface,
+} from './controls/settings_controls_view_model.svelte';
+import {
+  getSettingsDisplayViewModel,
+  type SettingsDisplayViewModelInterface,
+} from './display/settings_display_view_model.svelte';
+import {
+  getGameplayViewModel,
+  type GameplayViewModelInterface,
+} from './gameplay/gameplay_view_model.svelte';
+import {
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from '@aikami/frontend/services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,7 +115,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     id: 'ai',
     label: 'AI',
     group: 'ai',
-    contexts: ['page'],
+    contexts: ['page', 'onboarding'],
     icon: 'cpu',
     capabilityKey: 'ai',
   },
@@ -139,3 +161,46 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     icon: 'download',
   },
 ] as const satisfies readonly SettingsSection[];
+
+/**
+ * Returns the subset of settings sections whose contexts include the given context.
+ * Shared by the full Settings page, the pause overlay, and the onboarding screen.
+ */
+export const sectionsForContext = (context: SettingsContext): readonly SettingsSection[] =>
+  SETTINGS_SECTIONS.filter((s) => s.contexts.includes(context));
+
+// ---------------------------------------------------------------------------
+// Per-section ViewModel factory lookup
+// ---------------------------------------------------------------------------
+
+/** Union of section ViewModel interfaces that a simple mount (pause overlay) needs. */
+export type SimpleSectionViewModel =
+  | SettingsAudioViewModelInterface
+  | SettingsControlsViewModelInterface
+  | SettingsDisplayViewModelInterface
+  | GameplayViewModelInterface;
+
+const SECTION_VM_FACTORIES: Record<string, (options: BaseViewModelOptions) => BaseViewModelInterface> = {
+  audio: (options: BaseViewModelOptions) => getSettingsAudioViewModel(options),
+  controls: (options: BaseViewModelOptions) => getSettingsControlsViewModel(options),
+  display: (options: BaseViewModelOptions) => getSettingsDisplayViewModel(options),
+  gameplay: (options: BaseViewModelOptions) => getGameplayViewModel(options),
+};
+
+/**
+ * Creates a section ViewModel for the given section ID.
+ * Returns undefined if no factory is registered for that section.
+ */
+export const createSectionViewModel = (
+  sectionId: string,
+  options?: BaseViewModelOptions,
+): BaseViewModelInterface | undefined => {
+  const factory = SECTION_VM_FACTORIES[sectionId];
+  return factory ? factory(options ?? { className: 'SectionViewModel' }) : undefined;
+};
+
+/**
+ * Returns whether a factory exists for the given section ID.
+ */
+export const hasSectionViewModel = (sectionId: string): boolean =>
+  sectionId in SECTION_VM_FACTORIES;

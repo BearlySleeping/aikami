@@ -1,8 +1,11 @@
 <script lang="ts">
 import VoiceModelDownload from '@aikami/frontend/components/voice-model-download/voice_model_download.svelte';
 // apps/frontend/client/src/lib/views/capability/capability_view.svelte
+// C-466: rebuilt on the shared AI settings component — renders a reduced
+// view (status board + provider tree) via ai_settings_view.svelte instead
+// of the legacy ConnectionEditorPanel.
 import { BaseViewModelContainer } from '$components';
-import ConnectionEditorPanel from '$views/settings/connection/connection_editor_panel.svelte';
+import AiSettingsView from '$views/settings/ai/ai_settings_view.svelte';
 import type { CapabilityViewModelInterface } from './capability_view_model.svelte';
 
 type Props = {
@@ -72,31 +75,11 @@ const { viewModel }: Props = $props();
                   {/if}
                 </button>
               </div>
-              <button
-                type="button"
-                class="btn btn-sm btn-ghost btn-square shrink-0"
-                onclick={() => viewModel.editConnection(entry.connection.id)}
-                aria-label="Edit connection"
-              >
-                ✎
-              </button>
             </div>
           {/each}
 
-          <!-- Add provider -->
-          <button
-            type="button"
-            class="btn btn-lg btn-outline"
-            onclick={() => viewModel.openCloudSetup()}
-          >
-            <span class="text-lg">➕</span>
-            Add
-            {viewModel.tabs.find((t) => t.id === viewModel.activeTab)?.label ?? 'Provider'}
-            Connection
-          </button>
-
           <!-- No connections — guidance + retry -->
-          {#if viewModel.connectionEntries.length === 0 && !viewModel.isDetecting && !viewModel.showCloudSetup}
+          {#if viewModel.connectionEntries.length === 0 && !viewModel.isDetecting}
             <div class="alert alert-warning mt-2">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -127,6 +110,11 @@ const { viewModel }: Props = $props();
               Retry Detection
             </button>
           {/if}
+        </div>
+
+        <!-- Shared AI settings component (C-466) — status board + provider tree -->
+        <div class="mt-4 pt-4 border-t border-base-300">
+          <AiSettingsView viewModel={viewModel.aiSettingsViewModel} mode="onboarding" />
         </div>
 
         <!-- Voice local download section (C-449 AC-2) -->
@@ -163,9 +151,4 @@ const { viewModel }: Props = $props();
       </div>
     </div>
   </div>
-
-  <!-- Cloud Connection Modal -->
-  {#if viewModel.showCloudSetup}
-    <ConnectionEditorPanel viewModel={viewModel.cloudConnectionVm} />
-  {/if}
 </BaseViewModelContainer>

@@ -1,12 +1,13 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/ui/overlays/settings/settings_overlay.svelte
 //
-// In-game settings overlay — lightweight modal shown on top of the paused
-// game. Basic sections only: Controls, Audio, Display. Escape or Close
-// returns to the pause menu (not the start menu).
+// C-466: In-game settings overlay — registry-driven, shows every section
+// flagged with 'pause' context. Dynamic tab bar derived from the registry.
+// "Full Settings" action navigates to the full /settings page.
 import SettingsAudioView from '$lib/views/settings/audio/settings_audio_view.svelte';
 import SettingsControlsView from '$lib/views/settings/controls/settings_controls_view.svelte';
 import SettingsDisplayView from '$lib/views/settings/display/settings_display_view.svelte';
+import GameplayView from '$lib/views/settings/gameplay/gameplay_view.svelte';
 import type { SettingsOverlayViewModelInterface } from './settings_overlay_view_model.svelte';
 
 type Props = {
@@ -14,12 +15,6 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-const TABS: readonly { id: string; label: string }[] = [
-  { id: 'audio', label: 'Audio' },
-  { id: 'display', label: 'Display' },
-  { id: 'controls', label: 'Controls' },
-] as const;
 </script>
 
 <!-- Overlay backdrop — semi-transparent, game world visible behind -->
@@ -56,29 +51,54 @@ const TABS: readonly { id: string; label: string }[] = [
       </button>
     </div>
 
-    <!-- Tabs -->
+    <!-- Registry-driven tabs -->
     <div class="tabs tabs-boxed bg-base-200 mb-4 justify-center">
-      {#each TABS as tab}
+      {#each viewModel.pauseSections as section}
         <button
           type="button"
           class="tab tab-sm"
-          class:tab-active={viewModel.activeTab === tab.id}
-          onclick={() => viewModel.setActiveTab(tab.id as typeof viewModel.activeTab)}
+          class:tab-active={viewModel.activeSectionId === section.id}
+          onclick={() => viewModel.setActiveSection(section.id)}
         >
-          {tab.label}
+          {section.label}
         </button>
       {/each}
     </div>
 
-    <!-- Content -->
+    <!-- Dynamic content — renders the active section's view -->
     <div class="py-2">
-      {#if viewModel.activeTab === 'audio'}
-        <SettingsAudioView viewModel={viewModel.audioViewModel} />
-      {:else if viewModel.activeTab === 'display'}
-        <SettingsDisplayView viewModel={viewModel.displayViewModel} />
-      {:else if viewModel.activeTab === 'controls'}
-        <SettingsControlsView viewModel={viewModel.controlsViewModel} />
+      {#if viewModel.activeSectionId === 'audio'}
+        <SettingsAudioView
+          viewModel={viewModel.sectionViewModels.get('audio') as import('$lib/views/settings/audio/settings_audio_view_model.svelte').SettingsAudioViewModelInterface}
+        />
+      {:else if viewModel.activeSectionId === 'display'}
+        <SettingsDisplayView
+          viewModel={viewModel.sectionViewModels.get('display') as import('$lib/views/settings/display/settings_display_view_model.svelte').SettingsDisplayViewModelInterface}
+        />
+      {:else if viewModel.activeSectionId === 'controls'}
+        <SettingsControlsView
+          viewModel={viewModel.sectionViewModels.get('controls') as import('$lib/views/settings/controls/settings_controls_view_model.svelte').SettingsControlsViewModelInterface}
+        />
+      {:else if viewModel.activeSectionId === 'gameplay'}
+        <GameplayView
+          viewModel={viewModel.sectionViewModels.get('gameplay') as import('$lib/views/settings/gameplay/gameplay_view_model.svelte').GameplayViewModelInterface}
+        />
+      {:else}
+        <p class="text-sm text-base-content/60 text-center py-4">
+          Section not available
+        </p>
       {/if}
+    </div>
+
+    <!-- Full Settings navigation action (AC-4) -->
+    <div class="mt-4 pt-3 border-t border-base-300">
+      <button
+        type="button"
+        class="btn btn-sm btn-ghost w-full justify-center text-base-content/60 hover:text-base-content"
+        onclick={() => viewModel.navigateToFullSettings()}
+      >
+        Full Settings →
+      </button>
     </div>
   </div>
 </div>

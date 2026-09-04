@@ -10,9 +10,12 @@ import type { AiSettingsViewModelInterface } from './ai_settings_view_model.svel
 
 type Props = {
   viewModel: AiSettingsViewModelInterface;
+  /** Display mode — 'full' shows all sections (roles drawer, voice, image, gen params),
+   * 'onboarding' shows a reduced subset (status board + provider tree only). */
+  mode?: 'full' | 'onboarding';
 };
 
-const { viewModel }: Props = $props();
+let { viewModel, mode = 'full' }: Props = $props();
 </script>
 
 <BaseViewModelContainer {viewModel} class="max-w-4xl mx-auto space-y-8">
@@ -184,6 +187,7 @@ const { viewModel }: Props = $props();
   <!-- ═══════════════════════════════════════════════════════════════════
        ROLES DRAWER
        ═══════════════════════════════════════════════════════════════════ -->
+  {#if mode === 'full'}
   <section>
     <button
       type="button"
@@ -251,10 +255,12 @@ const { viewModel }: Props = $props();
       </div>
     {/if}
   </section>
+  {/if}
 
   <!-- ═══════════════════════════════════════════════════════════════════
        VOICE SECTION (AC-6)
        ═══════════════════════════════════════════════════════════════════ -->
+  {#if mode === 'full'}
   <section>
     <h2 class="font-mono text-lg font-bold text-primary mb-4">Voice</h2>
 
@@ -337,10 +343,12 @@ const { viewModel }: Props = $props();
       oncancel={() => viewModel.cancelVoiceModelDownload()}
     />
   </section>
+  {/if}
 
   <!-- ═══════════════════════════════════════════════════════════════════
        IMAGE SECTION (AC-7)
        ═══════════════════════════════════════════════════════════════════ -->
+  {#if mode === 'full'}
   <section>
     <h2 class="font-mono text-lg font-bold text-[#cabeff] mb-4">Image</h2>
 
@@ -818,5 +826,6 @@ const { viewModel }: Props = $props();
         </div>
       </div>
     </div>
+  {/if}
   {/if}
 </BaseViewModelContainer>
