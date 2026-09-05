@@ -23,7 +23,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — model/cost optimization currently has no usable run ledger |
 | **Dependencies** | C-472 |
-| **Status** | implemented |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — usage completeness, estimates and reports |
 | **Contract version** | 2.0.0 |
@@ -155,40 +155,3 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle).
 ## Status Lifecycle
 
 See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
-
-## Execution Report
-
-### Summary
-Extended the pipeline types with rich usage accounting (per-currency MonetaryAmount, CurrencyProvenance, UsageRecord, AggregatedUsage), implemented usage aggregation with deduplication and retry reconciliation, built a human-readable and machine-readable usage report system, and added 40 tests across 4 acceptance criteria covering active worker usage, retry/resume reconciliation, missing/external cost honesty, and legacy/privacy preservation.
-
-### AC Status
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | Active workers produce usage — model, tokens, cost provenance persisted and visible in aggregated output |
-| AC-2 | ✅ | Retry/resume totals reconcile — aggregatedTotalTokens is SUM not last event; duplicates deduped by eventId; mixed-currency kept separate without conversion metadata |
-| AC-3 | ✅ | Missing and external costs are honest — unknown/incomplete explicitly shown; estimated costs carry pricing version; report never shows absent billing as zero |
-| AC-4 | ✅ | Legacy data preserved — old empty manifests load as unknown/incomplete; secrets/prompt bodies excluded from UsageRecord shape |
-
-### Files Created
-| File | Purpose |
-|---|---|
-| `scripts/src/lib/agents/contract_pipeline/usage_ledger.ts` | Core aggregation: normalizeLegacyUsage, deduplicateRecords, aggregateUsage, computeManifestUsage, loadLegacyManifestUsage, mergeMonetaryAmounts |
-| `scripts/src/lib/agents/contract_pipeline/usage_ledger.test.ts` | 22 tests covering AC-1, AC-2, AC-4: legacy normalization, deduplication, retry reconciliation, mixed-currency, manifest aggregation |
-| `scripts/src/lib/agents/contract_pipeline/usage_report.ts` | CLI report formatting: formatUsageReport, formatUsageReportJson, formatMonetaryAmount, formatUsageRecord |
-| `scripts/src/lib/agents/contract_pipeline/usage_report.test.ts` | 18 tests covering AC-3, AC-4: unknown/estimated cost display, JSON report structure, privacy field verification |
-
-### Files Modified
-| File | Change |
-|---|---|
-| `scripts/src/lib/agents/contract_pipeline/types.ts` | Added CurrencyProvenance, MonetaryAmount, UsageRecord, AggregatedUsage types; extended StageAttempt with usageRecord field; added aggregatedUsage to RunManifest |
-| `scripts/src/lib/agents/contract_pipeline/index.ts` | Exported new types (AggregatedUsage, CurrencyProvenance, MonetaryAmount, UsageRecord) and functions (aggregateUsage, computeManifestUsage, etc.) |
-
-### Deviations from Spec
-None. The implementation matches the contract ACs, Evidence Matrix, and Architecture Directives.
-
-### Test Results
-- Unit: 40/40 PASS (0 failures) — 177 expect() calls
-- E2E: N/A (internal pipeline infrastructure, no browser routes)
-- Visual: N/A
-- Baseline: 0 pre-existing failures (250 pipeline tests pass), 0 new failures
-- Pre-existing typecheck error (TS2688: bun types not installed in scripts workspace) — confirmed not caused by this contract
