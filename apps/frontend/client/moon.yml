@@ -43,8 +43,31 @@ fileGroups:
     - 'src-tauri/**/*'
   unitTests:
     - 'src/**/*.test.ts'
+  i18n:
+    - 'messages/**/*'
+    - 'project.inlang/**/*'
+    - '!project.inlang/cache/**'
 
 tasks:
+  # `src/lib/paraglide` (gitignored) is only ever generated as a side effect
+  # of `paraglideVitePlugin`'s vite build hook — so `build`/`dev`/`test` all
+  # self-heal via vite, but `typecheck` (svelte-kit sync + a standalone
+  # tsc-style checker, no vite involved) does not and fails with "Cannot
+  # find module '$lib/paraglide/...'" on any checkout where nothing else
+  # has run vite first. Usually masked by moon's task cache reusing an old
+  # green result, or by `build` happening to run earlier in the same CI
+  # job — exposed by C-468 needing a lockfile change, which busts every
+  # project's typecheck cache (root-configs) including this one.
+  paraglide:
+    command: 'bun run paraglide'
+    inputs:
+      - '@group(i18n)'
+      - 'package.json'
+    outputs:
+      - 'src/lib/paraglide'
+    options:
+      cache: true
+
   dev:
     command: 'bun run dev'
     preset: 'server'
@@ -89,6 +112,21 @@ tasks:
   preview:
     command: 'bun run preview'
     preset: 'server'
+  # Overrides the inherited .moon/tasks/all.yml typecheck task (same
+  # command/inputs) only to add the `paraglide` dependency explained above.
+  typecheck:
+    command: 'bun'
+    args: ['run', 'typecheck']
+    deps:
+      - '~:paraglide'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '@group(root-configs)'
+    options:
+      mergeArgs: 'replace'
+      cache: true
+      runInCI: true
   test:
     command: 'bun run test:unit'
     inputs:

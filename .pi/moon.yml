@@ -40,6 +40,21 @@ tasks:
       mergeArgs: 'replace'
       runInCI: false
 
+  # C-468: the extension registration suite, run credential-free against a
+  # recording pi stand-in — no live Herdr server, cloud credentials or paid
+  # model. Same command as `test`, split out under an explicit CI-facing
+  # name because `test` stays runInCI: false for local convenience while
+  # this is the deterministic surface the three-OS automation-unit workflow
+  # (and moon ci) actually gates on.
+  automation-unit:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+    options:
+      mergeArgs: 'replace'
+      runInCI: true
+
   typecheck:
     command: 'bun run typecheck'
     inputs:

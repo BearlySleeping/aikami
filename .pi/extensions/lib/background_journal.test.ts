@@ -99,8 +99,11 @@ describe('background_journal', () => {
   });
 
   test('journalDir resolves a repo-relative base', () => {
+    // node:path.join uses the platform separator, so the expectation must
+    // too — a hardcoded '/repo/.pi/background-tasks' string only matches
+    // on POSIX and fails under Windows CI.
     const dir = journalDir('/repo');
     expect(dir).toBe(join('/repo', JOURNAL_DIR));
-    expect(dir).toBe('/repo/.pi/background-tasks');
+    expect(dir).toBe(join('/repo', '.pi', 'background-tasks'));
   });
 });

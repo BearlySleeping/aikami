@@ -1,0 +1,81 @@
+name: Automation Unit Tests
+
+# C-468: deterministic, credential-free CI foundation for the agent harness
+# (.pi extensions), the contract pipeline, and the Herdr helpers — the
+# regression suite `pr-checks.yml`'s `moon ci` never runs (both `pi:test`
+# and `scripts:test` are `runInCI: false`, and moon ci itself is Linux-only).
+#
+# Runs the narrow `automation-unit` Moon task on Linux, Windows and macOS —
+# see .pi/moon.yml and scripts/moon.yml for exactly what each covers and why
+# it's scoped the way it is. No live Herdr server, cloud credentials or paid
+# model is required; background_herdr.test.ts self-skips without herdr.
+#
+# Path-gated so a docs-only or unrelated diff never triggers this matrix.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+    paths:
+      - ".pi/**"
+      - "scripts/src/lib/agents/contract_pipeline/**"
+      - "scripts/src/lib/herdr/**"
+      - "scripts/src/lib/env/**"
+      - "scripts/package.json"
+      - "package.json"
+      - "bun.lock"
+      - ".bun-version"
+      - ".github/workflows/automation-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".pi/**"
+      - "scripts/src/lib/agents/contract_pipeline/**"
+      - "scripts/src/lib/herdr/**"
+      - "scripts/src/lib/env/**"
+      - "scripts/package.json"
+      - "package.json"
+      - "bun.lock"
+      - ".bun-version"
+      - ".github/workflows/automation-ci.yml"
+
+concurrency:
+  group: automation-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  automation-unit:
+    name: Automation unit — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    if: github.event.pull_request.draft != true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # moon diffs against the base branch to resolve affected tasks —
+          # a shallow, single-branch checkout leaves `main` unresolvable
+          # ("ambiguous argument 'main'") and fails before any test runs.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+        with:
+          node: "true"
+          install-deps: "true"
+
+      # AC-2 exercises pi's real Node extension loader; AC-3 wants this
+      # proven on all three OSes, not asserted only for Linux.
+      - name: Run automation-unit (pi + scripts)
+        run: bun moon run pi:automation-unit scripts:automation-unit
+
+      - name: Run measure-tools (Node dependency-graph smoke)
+        working-directory: .pi
+        run: bun run measure-tools
