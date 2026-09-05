@@ -3,12 +3,13 @@ id: C-470
 title: "Fence pipeline ownership, contract allocation and stage results"
 source: direct
 contract_type: full
-status: draft
+status: implemented
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/249"
+  pr_number: 249
 created_at: "2026-09-04T00:00:00Z"
 ---
 
@@ -23,7 +24,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — concurrent owners can corrupt a live run |
 | **Dependencies** | C-468, C-469; instruction-repair PR 02; merge in sequence to avoid overlapping controller edits |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — lock/resume compatibility and recovery |
 | **Contract version** | 2.0.0 |
@@ -153,6 +154,49 @@ None for scope approval. Network filesystems/cross-host ownership are explicitly
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
+
+## Execution Report
+
+### Summary
+
+Implemented ownership fencing across the contract pipeline: heartbeat-aware lock breaking prevents live owners from being evicted by manifest age (AC-1); owner-conditional release prevents old cleanup from damaging replacement owners (AC-2); generation-fenced result validation rejects late predecessor results (AC-3); exclusive ID reservation using atomic `wx` files prevents concurrent draft allocation races (AC-4). All changes are backward-compatible with legacy records.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Heartbeat check added before `lastUpdated` age check in `breakStaleLock`. A live heartbeating process (mtime within 2×LOCK_HEARTBEAT_MS) is never evicted regardless of manifest age. |
+| AC-2 | ✅ | `releaseLock` now checks PID before removing lock — only removes when lock belongs to the current process. |
+| AC-3 | ✅ | `generation` field added to `ContractStageResult` and `WorkerLaunchRequest`. `validateStageResult` and `readStageResult` accept optional `minGeneration` parameter. Legacy results without generation are treated as 0. |
+| AC-4 | ✅ | `reserveContractId` uses atomic `wx` file create for exclusive allocation. `releaseReservation` cleans up. `prepareDirectSource` in `contract_pipeline.ts` uses the new function. |
+| AC-5 | ✅ | Legacy records without `generation` field are read compatibly (treated as generation 0). All existing tests pass unchanged. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `scripts/src/lib/agents/contract_pipeline/ownership.test.ts` | 18 integration tests covering AC-1 through AC-4 with temp-directory fixtures |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `scripts/src/lib/agents/contract_pipeline/types.ts` | Added `generation` field to `ContractStageResult` and `WorkerLaunchRequest` |
+| `scripts/src/lib/agents/contract_pipeline/manifest_store.ts` | Added `generation` to `LockMetadata`; heartbeat-aware lock breaking in `breakStaleLock`; owner-conditional `releaseLock`; new `reserveContractId`, `releaseReservation`, `pruneStaleReservations` |
+| `scripts/src/lib/agents/contract_pipeline/stage_result.ts` | Added `minGeneration` parameter to `validateStageResult` and `readStageResult`; generation fencing rejects results with generation < minGeneration |
+| `scripts/src/lib/agents/contract_pipeline/stage_runner.ts` | Added `generation` parameter to `runStage`; passed through to `WorkerLaunchRequest` and `readStageResult` |
+| `scripts/src/lib/agents/contract_pipeline/orchestrator.ts` | Passes `generation: attempt` to `runStage` for result fencing |
+| `scripts/src/lib/agents/contract_pipeline.ts` | Imports `reserveContractId`/`releaseReservation`; uses `reserveContractId` in `prepareDirectSource` instead of max+1 scan |
+
+### Deviations from Spec
+
+None. All ACs implemented as specified.
+
+### Test Results
+
+- Unit: 18/18 PASS (0 failures) — new ownership tests
+- Pipeline suite: 204/204 PASS (0 failures) — all existing tests
+- Baseline: 1 pre-existing typecheck failure (tsconfig.json `"types": ["bun"]` — unrelated to this contract), 0 new failures
 
 ## Promotion Lifecycle
 
