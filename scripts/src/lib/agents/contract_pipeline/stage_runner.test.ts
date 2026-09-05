@@ -282,3 +282,137 @@ describe('runStage guard-halt settle window', () => {
     expect(Date.now() - started).toBeLessThan(1_000);
   });
 });
+
+// ── C-472 AC-2: Recovery scenarios ──────────────────────────
+
+describe('runStage recovery: process exit without result', () => {
+  it('returns blocked when hard timeout fires and no result was written', async () => {
+    // Worker exits without ever writing contract_stage_complete.
+    // The hard timeout produces 'blocked', not 'failed'.
+    const outcome = await runStage({
+      repoRoot,
+      runDirectory,
+      runId: RUN_ID,
+      stage: 'implement',
+      attempt: 1,
+      contractPath: 'docs/contracts/C-999-test.md',
+      idleTimeoutMs: 60_000,
+      hardTimeoutMs: 100,
+      pollIntervalMs: 5,
+      launchWorker: async () => ({ paneId: 'pane-no-result' }),
+      checkAgentWorking: async () => true,
+    });
+    expect(outcome.result.status).toBe('blocked');
+    expect(outcome.result.summary).toContain('timeout');
+  });
+
+  it('adopts the result produced by a relaunched dead worker', async () => {
+    let launches = 0;
+    let relaunchResult: ContractStageResult | undefined;
+    const outcome = await runStage({
+      repoRoot,
+      runDirectory,
+      runId: RUN_ID,
+      stage: 'implement',
+      attempt: 1,
+      contractPath: 'docs/contracts/C-999-test.md',
+      idleTimeoutMs: 10,
+      hardTimeoutMs: 10_000,
+      pollIntervalMs: 5,
+      launchWorker: async (request) => {
+        launches += 1;
+        if (launches === 2) {
+          relaunchResult = {
+            ...resultFor(1, 'passed'),
+            generation: request.generation,
+          };
+          writeStageResult({ resultPath: request.resultPath, result: relaunchResult });
+        }
+        return { paneId: launches === 1 ? 'pane-dead' : 'pane-relaunched' };
+      },
+      checkAgentWorking: async () => false,
+    });
+
+    expect(launches).toBe(2);
+    expect(relaunchResult).toBeDefined();
+    expect(outcome.paneId).toBe('pane-relaunched');
+    if (!relaunchResult) {
+      throw new Error('Expected the relaunched worker to produce a result.');
+    }
+    expect(outcome.result).toEqual(relaunchResult);
+  });
+});
+
+describe('runStage recovery: generation fencing prevents duplicate adoption', () => {
+  it('rejects a stale result from a predecessor generation', async () => {
+    // Worker 1 (generation 10) wrote a result, was replaced.
+    // Worker 2 (generation 11) is the current worker.
+    // Worker 1's late result must NOT be adopted.
+    const resultPath = join(runDirectory, 'stages', 'implement-1.json');
+    const outcome = await runStage({
+      repoRoot,
+      runDirectory,
+      runId: RUN_ID,
+      stage: 'implement',
+      attempt: 1,
+      contractPath: 'docs/contracts/C-999-test.md',
+      idleTimeoutMs: 60_000,
+      hardTimeoutMs: 100,
+      pollIntervalMs: 5,
+      generation: 11,
+      advanceGeneration: () => 12,
+      launchWorker: async () => {
+        // Write a result with the OLD generation (predecessor)
+        writeStageResult({
+          resultPath,
+          result: { ...resultFor(1, 'passed'), generation: 10 },
+        });
+        return { paneId: 'pane-test' };
+      },
+      checkAgentWorking: async () => true,
+    });
+    // Result with generation 10 should be fenced out — minGeneration is 11
+    expect(outcome.result.status).toBe('blocked');
+  });
+
+  it('adopts a result with matching generation', async () => {
+    const resultPath = join(runDirectory, 'stages', 'implement-1.json');
+    const outcome = await runStage({
+      repoRoot,
+      runDirectory,
+      runId: RUN_ID,
+      stage: 'implement',
+      attempt: 1,
+      contractPath: 'docs/contracts/C-999-test.md',
+      idleTimeoutMs: 60_000,
+      hardTimeoutMs: 60_000,
+      pollIntervalMs: 5,
+      generation: 5,
+      launchWorker: async () => {
+        // Write a result with matching generation
+        writeStageResult({
+          resultPath,
+          result: { ...resultFor(1, 'passed'), generation: 5 },
+        });
+        return { paneId: 'pane-test' };
+      },
+      checkAgentWorking: async () => true,
+    });
+    expect(outcome.result.status).toBe('passed');
+  });
+});
+
+describe('runStage recovery: duplicate event after crash', () => {
+  it('recovers from an orchestrator crash mid-attempt', async () => {
+    // Orchestrator crashed after launching the worker but before recording
+    // the result. The worker finished and wrote its result. The new
+    // orchestrator starts the same attempt again and finds the orphaned result.
+    seed(1, 'passed');
+    const { outcome, launched } = await run({
+      attempt: 1,
+    });
+    expect(outcome.paneId).toBe('recovered');
+    expect(outcome.result.status).toBe('passed');
+    expect(launched).toHaveLength(0);
+  });
+});

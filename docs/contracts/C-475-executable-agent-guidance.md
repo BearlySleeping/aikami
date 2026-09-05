@@ -3,7 +3,7 @@ id: C-475
 title: "Test canonical coding examples and prevent active instruction drift"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | thin |
 | **Priority** | P1 — contradictory examples and obsolete tools repeatedly regenerate incorrect work |
 | **Dependencies** | C-474; instruction-repair PR 02 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — concise normative guidance and executable references |
 | **Contract version** | 2.0.0 |

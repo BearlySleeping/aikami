@@ -41,17 +41,38 @@ export {
 export { roleForStage, runStage } from './stage_runner.ts';
 export { resolveNextStage, resolveReviewDecision, transition } from './state_machine.ts';
 export type {
+  AggregatedUsage,
   ContractPipelineStage,
   ContractReviewDecision,
   ContractStageResult,
   ContractWorkerRole,
+  CurrencyProvenance,
   GitStateSnapshot,
+  MonetaryAmount,
   ReconciliationResult,
   ReviewDecision,
   RunManifest,
   StageAttempt,
   StageRunOutcome,
   StageUsage,
+  UsageRecord,
   WorkerLaunchRequest,
 } from './types.ts';
 export { STATUS_TO_START_STAGE } from './types.ts';
+export {
+  aggregateUsage,
+  computeManifestUsage,
+  deduplicateRecords,
+  isUsageEmpty,
+  isUsageUnknown,
+  loadLegacyManifestUsage,
+  mergeMonetaryAmounts,
+  normalizeLegacyUsage,
+} from './usage_ledger.ts';
+export type { UsageReportOptions } from './usage_report.ts';
+export {
+  formatMonetaryAmount,
+  formatUsageRecord,
+  formatUsageReport,
+  formatUsageReportJson,
+} from './usage_report.ts';
