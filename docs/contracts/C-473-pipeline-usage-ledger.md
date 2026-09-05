@@ -3,7 +3,7 @@ id: C-473
 title: "Record complete and honest pipeline usage and cost"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — model/cost optimization currently has no usable run ledger |
 | **Dependencies** | C-472 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — usage completeness, estimates and reports |
 | **Contract version** | 2.0.0 |
