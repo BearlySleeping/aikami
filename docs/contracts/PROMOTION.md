@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 154 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 158 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -217,4 +217,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-478 | Reproducible Agent Resources | 📝 draft | v2 | thin |
 | C-479 | Portable Contributor Onboarding | 📝 draft | v2 | full |
 | C-480 | Agent Evaluation And Routing | 📝 draft | v2 | thin |
+| C-481 | Ai Configuration Convergence | 👍 approved | v1 | full |
+| C-482 | Managed Ai Runtime Lifecycle | 👍 approved | v1 | full |
+| C-483 | Guided Ai Setup | 📝 draft | v1 | thin |
+| C-484 | Capability First Settings | 📝 draft | v1 | thin |
 

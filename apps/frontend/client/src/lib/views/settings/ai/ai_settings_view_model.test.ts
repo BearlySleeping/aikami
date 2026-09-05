@@ -25,7 +25,10 @@ const mockAiConnections: Array<{
 const mockRoleAssignments: Record<string, string> = {};
 const mockDefaultByCapability: Record<string, string> = {};
 let nextId = 1;
-const mockFetchModelsFromProvider = mock(async () => []);
+const mockFetchModelsFromProvider = mock(
+  async (): Promise<Array<{ id: string; name: string }>> => [],
+);
+const mockFetchWithCredentialPolicy = mock(async () => new Response(undefined, { status: 200 }));
 
 const mockConfigService = {
   isLoaded: true,
@@ -118,6 +121,7 @@ mock.module('$services', () => ({
   // biome-ignore lint/style/useNamingConvention: matches actual $services export name
   PROVIDER_MODEL_FETCH: { openrouter: {} },
   fetchModelsFromProvider: mockFetchModelsFromProvider,
+  fetchWithCredentialPolicy: mockFetchWithCredentialPolicy,
   ttsService: mockTtsService,
   campaignService: mockCampaignService,
   imageGenerationService: mockImageGenerationService,
@@ -694,6 +698,78 @@ describe('AiSettingsViewModel — provider credential persistence', () => {
 
     expect(vm.fetchModelsError).toBe('Model request failed');
     expect(vm.isFetchingModels).toBe(false);
+  });
+
+  test('clears a model-fetch failure when the editor resets', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    mockFetchModelsFromProvider.mockImplementationOnce(async () => {
+      throw new Error('Model request failed');
+    });
+    await vm.fetchModels();
+
+    vm.cancelEdit();
+
+    expect(vm.fetchModelsError).toBeUndefined();
+  });
+});
+
+describe('AiSettingsViewModel — capability setup', () => {
+  test('opens provider setup for text and image capabilities', () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+
+    vm.openCapabilitySetup('image');
+
+    expect(vm.isEditorOpen).toBe(true);
+    expect(vm.draft.capability).toBe('image');
+    expect(vm.isVoiceSetupOpen).toBe(false);
+  });
+
+  test('opens the voice-specific setup flow for voice capability', () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+
+    vm.openCapabilitySetup('voice');
+
+    expect(vm.isVoiceSetupOpen).toBe(true);
+    expect(vm.isEditorOpen).toBe(false);
+  });
+});
+
+describe('AiSettingsViewModel — model query', () => {
+  test('filters fetched models without replacing the selected model', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    mockFetchModelsFromProvider.mockImplementationOnce(async () => [
+      { id: 'openai/gpt-4o', name: 'GPT-4o' },
+      { id: 'anthropic/claude-sonnet', name: 'Claude Sonnet' },
+    ]);
+    await vm.fetchModels();
+
+    vm.setModelQuery('claude');
+
+    expect(vm.modelQuery).toBe('claude');
+    expect(vm.draft.model).toBe('');
+    expect(vm.modelOptions.map((model) => model.id)).toEqual(['anthropic/claude-sonnet']);
+  });
+
+  test('preserves free-text models for providers without model discovery', () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    vm.openAddProvider('image');
+    vm.setDraftProvider('comfyui');
+
+    vm.setModelQuery('sdxl-custom');
+
+    expect(vm.modelQuery).toBe('sdxl-custom');
+    expect(vm.draft.model).toBe('sdxl-custom');
+  });
+
+  test('clears query and selected model when the provider changes', () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    vm.selectModel('openai/gpt-4o');
+
+    vm.setDraftProvider('openrouter');
+
+    expect(vm.modelQuery).toBe('');
+    expect(vm.draft.model).toBe('');
   });
 });
 

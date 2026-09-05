@@ -222,7 +222,14 @@ class ExportService
   // ── Chat ────────────────────────────────────────────────────────────
 
   async listChats(): Promise<ChatData[]> {
-    return await chatStorage.listChats();
+    const uid = authService.uid;
+    if (!uid) {
+      throw toAppError({
+        errorType: 'unauthenticated',
+        errorMessage: 'Sign in before exporting a backup.',
+      });
+    }
+    return await chatStorage.listChats(uid);
   }
 
   async exportChatAsJsonl(options: { chat: ChatData; npcName?: string }): Promise<void> {
@@ -288,10 +295,7 @@ class ExportService
   // ── Character ───────────────────────────────────────────────────────
 
   async listExportableCharacters(): Promise<Array<NpcData | PersonaData>> {
-    const uid = authService.uid;
-    if (!uid) {
-      throw toAppError({ errorType: 'unauthenticated', errorMessage: 'User not logged in.' });
-    }
+    const uid = authService.uid ?? '';
     const [npcs, personas] = await Promise.all([
       npcService.getUserNpcs({ uid }),
       personaService.getPersonas(uid),
@@ -349,9 +353,11 @@ class ExportService
   // ── Bulk backup ─────────────────────────────────────────────────────
 
   async exportBulkBackup(): Promise<void> {
-    const uid = authService.uid;
-    if (!uid) {
-      throw toAppError({ errorType: 'unauthenticated', errorMessage: 'User not logged in.' });
+    if (!authService.uid) {
+      throw toAppError({
+        errorType: 'unauthenticated',
+        errorMessage: 'Sign in before exporting a backup.',
+      });
     }
 
     this.isBackingUp = true;

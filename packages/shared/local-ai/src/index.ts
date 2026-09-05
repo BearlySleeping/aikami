@@ -26,7 +26,6 @@ export type {
 export * from './lib/detect.ts';
 export * from './lib/fixture_executor.ts';
 export * from './lib/manifest.ts';
-export * from './lib/probe_executor.contract_suite.ts';
 export * from './lib/probe_executor.ts';
 export * from './lib/recommend.ts';
 export * from './lib/tier_table.ts';

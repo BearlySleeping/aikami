@@ -21,9 +21,6 @@ mock.module('../agent/editor/agent_editor_view_model.svelte.ts', () => ({
 mock.module('../agent/list/agent_list_view_model.svelte.ts', () => ({
   getAgentListViewModel: () => _stubViewModel(),
 }));
-mock.module('./ai_privacy/ai_privacy_view_model.svelte', () => ({
-  getAIPrivacyViewModel: () => _stubViewModel(),
-}));
 mock.module('./audio/settings_audio_view_model.svelte', () => ({
   getSettingsAudioViewModel: () => _stubViewModel(),
 }));
@@ -64,8 +61,8 @@ describe('SettingsViewModel — group/section selection', () => {
     expect(vm.activeSectionId).toBe('controls');
   });
 
-  test('visibleGroups lists all four groups in order', () => {
-    expect(vm.visibleGroups.map((g) => g.id)).toEqual(['account', 'play', 'ai', 'content', 'data']);
+  test('visibleGroups lists all five groups in order', () => {
+    expect(vm.visibleGroups.map((g) => g.id)).toEqual(['play', 'ai', 'content', 'data', 'account']);
   });
 
   test('sectionsInActiveGroup only returns sections for the active group', () => {
@@ -80,8 +77,8 @@ describe('SettingsViewModel — group/section selection', () => {
   test('setActiveGroup switches group and activates its first section', () => {
     vm.setActiveGroup('ai');
     expect(vm.activeGroupId).toBe('ai');
-    expect(vm.activeSectionId).toBe('ai_privacy');
-    expect(vm.sectionsInActiveGroup.map((s) => s.id)).toEqual(['ai_privacy', 'ai']);
+    expect(vm.activeSectionId).toBe('ai');
+    expect(vm.sectionsInActiveGroup.map((s) => s.id)).toEqual(['ai']);
   });
 
   test('setActiveSection changes only the section, not the group', () => {
