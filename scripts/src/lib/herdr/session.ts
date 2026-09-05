@@ -1273,7 +1273,13 @@ const assessServicePane = async (
     return 'booting';
   }
 
-  const r = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
+  let r: PaneProcessInfo | null = null;
+  try {
+    r = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
+  } catch {
+    // herdr not available (e.g. CI) — cannot determine state, return booting
+    return 'booting';
+  }
   const procs = r?.result?.process_info?.foreground_processes;
 
   // process-info unavailable — never restart on missing data
