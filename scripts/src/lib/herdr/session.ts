@@ -62,13 +62,7 @@ import { reportInfraIssue } from '../ops/infra_report.ts';
 
 export type { AikamiMode } from '../env/mode';
 
-import {
-  killPid,
-  killPortUnsafe,
-  pidsOnPort,
-  processAgeSeconds,
-  processName,
-} from '../env/process_info';
+import { killPid, pidsOnPort, processAgeSeconds, processName } from '../env/process_info';
 import { findBash, posixQuote } from '../env/which';
 
 // ── Types ──────────────────────────────────────────────────
@@ -95,13 +89,64 @@ export type ServiceInput = DevService | 'all';
 /** How a service's readyPort should be probed: HTTP fetch or raw TCP connect. */
 export type ReadyCheck = 'http' | 'tcp';
 
+// ── C-471: Service ownership & identity types ────────────────
+
+/**
+ * Service scope: who owns this service instance.
+ * - `run`: started by and owned by this contract run — safe to restart/stop.
+ * - `shared`: shared infrastructure (AI engines, local-stack) — inspect only,
+ *   never restart without explicit maintainer action.
+ * - `external`: unknown or foreign process — never touch.
+ */
+export type ServiceScope = 'run' | 'shared' | 'external';
+
+/**
+ * Identity evidence for a running service instance. Used to verify that the
+ * process responding on a port is the intended instance, not a foreign or
+ * stale one.
+ */
+export type ServiceIdentity = {
+  /** Worktree checkout path or repo root the service was started from. */
+  checkout?: string;
+  /** Contract or run identifier (e.g. "C-471"). */
+  runId?: string;
+  /** Canonical service key. */
+  service: DevService;
+};
+
+/**
+ * Result of an instance-bound readiness probe.
+ */
+export type ProbeResult = {
+  ready: boolean;
+  /** Identity evidence the probe observed from the running instance. */
+  observedIdentity?: Partial<ServiceIdentity>;
+  /** Human-readable reason when not ready or identity mismatched. */
+  reason?: string;
+};
+
+/** Defines how Herdr starts, identifies, and checks one managed service. */
 export type ServiceDef = {
   name: string;
   command: (mode: AikamiMode) => string;
   cwd: (root: string) => string;
   readyPort?: (mode: AikamiMode) => number | undefined;
-  /** Readiness probe for readyPort — 'http' by default; raw-TCP services use 'tcp'. */
   readyCheck?: ReadyCheck;
+  /**
+   * Service ownership scope (C-471).
+   * - `run` (default): owned by this contract — safe to restart/stop.
+   * - `shared`: shared infrastructure — inspect/reuse only.
+   * - `external`: foreign — never touch.
+   */
+  scope: ServiceScope;
+  /**
+   * Instance-bound readiness probe (C-471 AC-2). Required for reusable
+   * services. When set, assessServicePane must verify probe evidence
+   * matches the expected identity before returning 'healthy'. A TCP
+   * connection or HTTP status below 500 establishes liveness only and
+   * cannot authorize reuse.
+   */
+  probe?: (expectedIdentity: ServiceIdentity) => Promise<ProbeResult>;
 };
 
 export type SessionConfig = {
@@ -130,8 +175,11 @@ export type ServiceStatus = {
   running: boolean;
   readyPort?: number;
   portOpen: boolean;
-  /** Health state derived from pane processes + port liveness. */
-  state: 'healthy' | 'booting' | 'crashed' | 'stopped';
+  scope: ServiceScope;
+  /** Health state derived from pane processes + port liveness, extended with identity verification (C-471). */
+  state: ReadinessState;
+  /** Reason when state is 'unavailable'. */
+  unavailableReason?: string;
 };
 
 export type SessionInfo = {
@@ -149,12 +197,14 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     command: (mode) => `bun run dev -- --mode ${mode}`,
     cwd: (root) => resolve(root, 'apps/frontend/client'),
     readyPort: (mode) => PORTS[mode].client,
+    scope: 'run',
   },
   hub: {
     name: 'hub',
     command: (mode) => `bun run dev -- --mode ${mode}`,
     cwd: (root) => resolve(root, 'apps/frontend/hub'),
     readyPort: (mode) => PORTS[mode].hub,
+    scope: 'run',
   },
   // C-437: wrangler dev --local — the real Workers runtime with D1 and R2
   // bindings, unlike the Vite `hub` service above which provides neither.
@@ -169,6 +219,7 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
         : 'echo "hub-worker is an emulator-only service — use wrangler deploy for staging/production"',
     cwd: (root) => resolve(root, 'apps/frontend/hub'),
     readyPort: (mode) => (mode === 'emulator' ? PORTS[mode].hubWorker : undefined),
+    scope: 'run',
   },
   // C-392: the voice/image/text dev engines delegate to the C-390
   // local-stack compose topology (apps/backend/local-stack/compose.yaml) via
@@ -180,18 +231,21 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     command: () => 'bun run dev',
     cwd: (root) => resolve(root, 'apps/backend/voice'),
     readyPort: (mode) => PORTS[mode].voice,
+    scope: 'shared',
   },
   image: {
     name: 'image',
     command: () => 'bun run dev',
     cwd: (root) => resolve(root, 'apps/backend/image'),
     readyPort: (mode) => PORTS[mode].image,
+    scope: 'shared',
   },
   text: {
     name: 'text',
     command: () => 'bun run dev',
     cwd: (root) => resolve(root, 'apps/backend/text'),
     readyPort: (mode) => PORTS[mode].text,
+    scope: 'shared',
   },
   // C-392 advanced, opt-in engines — Ollama and ComfyUI stay one command
   // away via the local-stack compose profiles. Both share a port with the
@@ -202,34 +256,40 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     command: () => 'bun run dev:ollama',
     cwd: (root) => resolve(root, 'apps/backend/text'),
     readyPort: (mode) => PORTS[mode].text,
+    scope: 'shared',
   },
   'image-comfyui': {
     name: 'image-comfyui',
     command: () => 'bun run dev:comfyui',
     cwd: (root) => resolve(root, 'apps/backend/image'),
     readyPort: (mode) => PORTS[mode].image,
+    scope: 'shared',
   },
 
   'preview-client': {
     name: 'preview-client',
     command: () => 'bun run scripts/src/lib/ops/preview_client.ts',
     cwd: (root) => root,
+    scope: 'run',
   },
   site: {
     name: 'site',
     command: (mode) => `bun run dev -- --mode ${mode}`,
     cwd: (root) => resolve(root, 'apps/frontend/site'),
     readyPort: (mode) => PORTS[mode].site,
+    scope: 'run',
   },
   'preview-site': {
     name: 'preview-site',
     command: () => 'bun run scripts/src/lib/ops/preview_site.ts',
     cwd: (root) => root,
+    scope: 'run',
   },
   'preview-hub': {
     name: 'preview-hub',
     command: () => 'bun run scripts/src/lib/ops/preview_hub.ts',
     cwd: (root) => root,
+    scope: 'run',
   },
   tauri: {
     name: 'tauri',
@@ -238,6 +298,7 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     // `bun moon run client:tauri-build`.
     command: () => 'bun run scripts/src/lib/ops/run_tauri.ts',
     cwd: (root) => root,
+    scope: 'run',
     // No HTTP port — the desktop window has nothing to poll.
   },
 };
@@ -281,6 +342,32 @@ const serviceFromTabLabel = (label: string): DevService | undefined => {
  *  the C-392 advanced engines (text-ollama, image-comfyui) stay on the same
  *  shared base ports as their modality. */
 const OFFSET_AWARE_SERVICES = new Set<DevService>(['client', 'hub', 'hub-worker', 'site']);
+
+// ── C-471: Scope-aware service selection ────────────────────
+
+/**
+ * Services that are always available regardless of scope — the minimum set
+ * for a pure-script contract that needs no optional AI backends.
+ */
+export const CORE_SERVICES: DevService[] = ['client', 'hub'];
+
+/**
+ * Filter services to only those within the requested scope (C-471 AC-3).
+ * A pure-script contract requesting only 'run' services will not start
+ * optional AI backends (voice/image/text, which are 'shared').
+ */
+export const servicesByScope = (
+  services: readonly DevService[],
+  allowedScopes: ServiceScope[],
+): DevService[] => services.filter((s) => allowedScopes.includes(SERVICE_DEFS[s].scope));
+
+/**
+ * Split a list of services into run-owned vs shared/external for safe
+ * cleanup. Only 'run'-scoped services are safe to restart/stop without
+ * explicit maintainer action.
+ */
+export const ownedServices = (services: readonly DevService[]): DevService[] =>
+  services.filter((s) => SERVICE_DEFS[s].scope === 'run');
 
 /** Resolve a service's ready port, shifted by a contract's port offset
  *  when that service is offset-aware. */
@@ -889,10 +976,10 @@ export const killPort = async (port: number): Promise<void> => {
   const pids = await pidsOnPort(port);
 
   if (pids.length === 0) {
-    // No lookup tool, or genuinely nothing listening. `fuser -k` is the POSIX
-    // last resort — it kills without an identity check, so it only runs when
-    // we could not identify a holder at all (no-op on Windows).
-    await killPortUnsafe(port);
+    // No lookup tool, or genuinely nothing listening. Do NOT fall back to
+    // fuser -k (killPortUnsafe) — it kills without an identity check and
+    // could terminate an unrelated process. (C-471 AC-1: unknown PID lookup
+    // never falls back to blind killing.)
     return;
   }
 
@@ -1186,7 +1273,13 @@ const assessServicePane = async (
     return 'booting';
   }
 
-  const r = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
+  let r: PaneProcessInfo | null = null;
+  try {
+    r = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
+  } catch {
+    // herdr not available (e.g. CI) — cannot determine state, return booting
+    return 'booting';
+  }
   const procs = r?.result?.process_info?.foreground_processes;
 
   // process-info unavailable — never restart on missing data
@@ -1212,6 +1305,119 @@ const assessServicePane = async (
     return 'booting';
   }
   return 'healthy';
+};
+
+// ── C-471: Identity-based readiness ──────────────────────────
+
+/**
+ * Build the expected identity for a service in the current run context.
+ */
+export const buildServiceIdentity = (serviceKey: DevService): ServiceIdentity => ({
+  checkout: process.env.CONTRACT_PIPELINE_WORKSPACE_PATH || process.cwd(),
+  runId: currentContractId(),
+  service: serviceKey,
+});
+
+/**
+ * Readiness state extended with identity verification (C-471 AC-2).
+ * `unavailable` means the port/service is alive but the instance does not
+ * match what we expect — a foreign or stale process is occupying the port.
+ */
+export type ReadinessState = 'healthy' | 'booting' | 'crashed' | 'stopped' | 'unavailable';
+
+/**
+ * Result of an identity-verified readiness check.
+ */
+export type ReadinessResult = {
+  state: ReadinessState;
+  reason?: string;
+  observedIdentity?: Partial<ServiceIdentity>;
+};
+
+const identityMismatchReason = (
+  expected: ServiceIdentity,
+  observed: Partial<ServiceIdentity> | undefined,
+): string | undefined => {
+  const fields = ['service', 'checkout', 'runId'] as const;
+  for (const field of fields) {
+    const expectedValue = expected[field];
+    if (expectedValue !== undefined && observed?.[field] !== expectedValue) {
+      return `Probe evidence is missing or mismatched for ${field}`;
+    }
+  }
+  return undefined;
+};
+
+/**
+ * Assess a service pane's readiness WITH identity verification (C-471 AC-2).
+ *
+ * When the service has an identity probe, pane-level health is validated
+ * against the expected instance identity. Port/TCP/HTTP liveness alone
+ * never permits reuse — only matching, valid probe evidence can return
+ * `healthy`. Missing, malformed or mismatched probe evidence returns
+ * `unavailable` and blocks readiness and reuse.
+ */
+export const assessServiceReadiness = async (
+  paneId: string,
+  serviceDef: ServiceDef,
+  expectedIdentity: ServiceIdentity,
+  port?: number,
+): Promise<ReadinessResult> => {
+  const paneState = await assessServicePane(paneId, port, serviceDef.readyCheck);
+
+  // Not healthy at the pane level → identity check is moot.
+  if (paneState !== 'healthy') {
+    return { state: paneState };
+  }
+
+  // Shared/external services may be reused across runs, so pane liveness
+  // alone cannot establish that the intended instance answered.
+  if (!serviceDef.probe) {
+    if (serviceDef.scope !== 'run') {
+      return {
+        state: 'unavailable',
+        reason: 'Reusable service has no instance-bound identity probe',
+      };
+    }
+    return { state: 'healthy' };
+  }
+
+  // Run the instance-bound probe.
+  let probeResult: ProbeResult;
+  try {
+    probeResult = await serviceDef.probe(expectedIdentity);
+  } catch (error) {
+    return {
+      state: 'unavailable',
+      reason: `Instance-bound probe failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  if (!probeResult || typeof probeResult !== 'object') {
+    return {
+      state: 'unavailable',
+      reason: 'Instance-bound probe returned malformed evidence',
+    };
+  }
+
+  if (probeResult.ready !== true) {
+    return {
+      state: 'unavailable',
+      reason: probeResult.reason ?? 'Instance-bound probe rejected the running service',
+      observedIdentity: probeResult.observedIdentity,
+    };
+  }
+
+  const mismatchReason = identityMismatchReason(expectedIdentity, probeResult.observedIdentity);
+  if (mismatchReason) {
+    return {
+      state: 'unavailable',
+      reason: mismatchReason,
+      observedIdentity: probeResult.observedIdentity,
+    };
+  }
+
+  return { state: 'healthy', observedIdentity: probeResult.observedIdentity };
 };
 
 // ── Tab management ─────────────────────────────────────────
@@ -1443,8 +1649,14 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
           const servicePane = existingPanes.find((p) => p.tab_id === tabId);
           const port = resolveReadyPort(service, mode, offset);
           if (servicePane) {
-            const state = await assessServicePane(servicePane.pane_id, port, svc.readyCheck);
-            if (state === 'crashed') {
+            const identity = buildServiceIdentity(service);
+            const readResult = await assessServiceReadiness(
+              servicePane.pane_id,
+              svc,
+              identity,
+              port,
+            );
+            if (readResult.state === 'crashed') {
               console.log(`  ↻ Tab: ${svc.name} crashed, restarting...`);
               // No --env here — this pane already has its offset env vars
               // from its original `tab create`, and they persist for the
@@ -1457,8 +1669,14 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
               ]);
               continue;
             }
-            if (state === 'booting') {
+            if (readResult.state === 'booting') {
               console.log(`  ⏳ Tab: ${svc.name} still booting, skipping`);
+              continue;
+            }
+            if (readResult.state === 'unavailable') {
+              console.log(
+                `  ⚠ Tab: ${svc.name} port occupied by foreign instance (${readResult.reason ?? 'identity mismatch'}), skipping`,
+              );
               continue;
             }
           }
@@ -1522,11 +1740,11 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
       if (!pane) {
         continue;
       }
+      const def = SERVICE_DEFS[service];
       const port = resolveReadyPort(service, mode, offset);
-      if (
-        (await assessServicePane(pane.pane_id, port, SERVICE_DEFS[service].readyCheck)) ===
-        'crashed'
-      ) {
+      const identity = buildServiceIdentity(service);
+      const readResult = await assessServiceReadiness(pane.pane_id, def, identity, port);
+      if (readResult.state === 'crashed') {
         crashedOthers.push(tabName);
       }
     }
@@ -1789,6 +2007,7 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
             name: 'pi',
             running: piRunning,
             portOpen: piRunning,
+            scope: SERVICE_DEFS['preview-client'].scope,
             state: piRunning ? 'healthy' : 'stopped',
           },
         ],
@@ -1817,11 +2036,12 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
         running,
         readyPort: resolveReadyPort(svc, wsMode, wsOffset),
         portOpen: false,
+        scope: def.scope,
         state: running ? 'booting' : 'stopped',
       };
     });
 
-    // Assess per-service health: pane processes + port liveness
+    // Assess per-service health: pane processes + port liveness + identity verification
     await Promise.all(
       servicesStatus
         .filter((s) => s.running)
@@ -1833,7 +2053,10 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
             return;
           }
           const port = resolveReadyPort(s.service, wsMode, wsOffset);
-          s.state = await assessServicePane(pane.pane_id, port, def.readyCheck);
+          const identity = buildServiceIdentity(s.service);
+          const result = await assessServiceReadiness(pane.pane_id, def, identity, port);
+          s.state = result.state;
+          s.unavailableReason = result.reason;
           if (port !== undefined) {
             s.portOpen = await isPortReady(port, def.readyCheck);
           }
@@ -1923,25 +2146,29 @@ export const waitForReady = async (
       const svc = SERVICE_DEFS[serviceKey];
       const port = resolveReadyPort(serviceKey, mode, offset);
       const deadline = Date.now() + timeoutMs;
+      const tabId = await findTab(wsId, svc.name);
+      const panes = await getWorkspacePanes(wsId);
+      const pane = tabId ? panes.find((candidate) => candidate.tab_id === tabId) : undefined;
+      if (!pane) {
+        console.error(`  ✗ ${svc.name} pane not found`);
+        failed.push(svc.name);
+        return;
+      }
+      const identity = buildServiceIdentity(serviceKey);
 
       // Services with no HTTP port (tauri, preview-*) can't be probed via
-      // isPortReady — verify the pane itself is still running instead of
-      // marking them ready unconditionally. When the wrapped command exits
-      // (e.g. run_tauri.ts quits because no binary exists), the pane is left
-      // with only shells and assessServicePane reports 'crashed'.
+      // isPortReady. assessServiceReadiness combines pane health with the
+      // same identity policy used for port-based services.
       if (port === undefined) {
-        const tabId = await findTab(wsId, svc.name);
-        const panes = await getWorkspacePanes(wsId);
-        const pane = tabId ? panes.find((p) => p.tab_id === tabId) : undefined;
-        if (!pane) {
-          console.error(`  ✗ ${svc.name} pane not found`);
-          failed.push(svc.name);
-          return;
-        }
         while (Date.now() < deadline) {
-          const state = await assessServicePane(pane.pane_id);
-          if (state !== 'crashed') {
+          const result = await assessServiceReadiness(pane.pane_id, svc, identity);
+          if (result.state === 'healthy') {
             console.log(`  ✓ ${svc.name} running (no port check)`);
+            return;
+          }
+          if (result.state === 'unavailable') {
+            console.error(`  ✗ ${svc.name} unavailable: ${result.reason ?? 'identity mismatch'}`);
+            failed.push(svc.name);
             return;
           }
           await new Promise((r) => setTimeout(r, 1000));
@@ -1952,8 +2179,14 @@ export const waitForReady = async (
       }
 
       while (Date.now() < deadline) {
-        if (await isPortReady(port, svc.readyCheck)) {
+        const result = await assessServiceReadiness(pane.pane_id, svc, identity, port);
+        if (result.state === 'healthy') {
           console.log(`  ✓ ${svc.name} ready on :${port}`);
+          return;
+        }
+        if (result.state === 'unavailable') {
+          console.error(`  ✗ ${svc.name} unavailable: ${result.reason ?? 'identity mismatch'}`);
+          failed.push(svc.name);
           return;
         }
         await new Promise((r) => setTimeout(r, 1000));

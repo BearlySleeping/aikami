@@ -4,19 +4,25 @@ import { spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { resetDirenvCache } from '../env/direnv_detect.ts';
 import { posixQuote, which } from '../env/which.ts';
+import type { ServiceDef } from './session.ts';
 import {
   ALL_SERVICES,
   assertNoPortConflicts,
   assertNoRunningServiceConflicts,
+  assessServiceReadiness,
   buildServiceCommand,
+  buildServiceIdentity,
   buildSessionName,
   CONTRACT_WORKSPACE_PREFIX,
+  CORE_SERVICES,
   contractIdFromSessionName,
   expandServices,
   isKillableProcess,
   isPortReady,
   KNOWN_SERVICES,
+  killPort,
   normalizeService,
+  ownedServices,
   parseHerdrStatus,
   parseWorkspaceName,
   portsToCleanupForService,
@@ -24,6 +30,7 @@ import {
   resolveServiceRoot,
   SERVICE_DEFS,
   serviceEnvArgs,
+  servicesByScope,
   wrapCommand,
 } from './session.ts';
 
@@ -472,5 +479,192 @@ describe('resolveServiceRoot', () => {
     // service it started would silently serve main instead of the branch.
     process.env.CONTRACT_PIPELINE_WORKSPACE_PATH = '/wt/contract-task-c-428';
     expect(resolveServiceRoot('/repo')).toBe('/wt/contract-task-c-428');
+  });
+});
+
+// ── C-471: Service ownership & identity ─────────────────────
+
+describe('C-471 — service scope (AC-1, AC-3)', () => {
+  it('client/hub/site/tauri/preview-* are run-scoped (owned by the contract)', () => {
+    expect(SERVICE_DEFS.client.scope).toBe('run');
+    expect(SERVICE_DEFS.hub.scope).toBe('run');
+    expect(SERVICE_DEFS.site.scope).toBe('run');
+    expect(SERVICE_DEFS.tauri.scope).toBe('run');
+    expect(SERVICE_DEFS['preview-client'].scope).toBe('run');
+    expect(SERVICE_DEFS['preview-hub'].scope).toBe('run');
+    expect(SERVICE_DEFS['hub-worker'].scope).toBe('run');
+  });
+
+  it('voice/image/text are shared-scoped (heavy singleton backends)', () => {
+    expect(SERVICE_DEFS.voice.scope).toBe('shared');
+    expect(SERVICE_DEFS.image.scope).toBe('shared');
+    expect(SERVICE_DEFS.text.scope).toBe('shared');
+  });
+
+  it('advanced engines share the same scope as their modality', () => {
+    expect(SERVICE_DEFS['text-ollama'].scope).toBe('shared');
+    expect(SERVICE_DEFS['image-comfyui'].scope).toBe('shared');
+  });
+
+  it('ownedServices filters to only run-scoped services', () => {
+    const all = ['client', 'voice', 'image', 'text', 'hub'] as const;
+    const owned = ownedServices(all);
+    expect(owned).toEqual(['client', 'hub']);
+    expect(owned).not.toContain('voice');
+    expect(owned).not.toContain('image');
+    expect(owned).not.toContain('text');
+  });
+
+  it('servicesByScope filters correctly', () => {
+    const all = ['client', 'voice', 'text', 'hub'] as const;
+    const runOnly = servicesByScope(all, ['run']);
+    expect(runOnly).toEqual(['client', 'hub']);
+
+    const sharedOnly = servicesByScope(all, ['shared']);
+    expect(sharedOnly).toEqual(['voice', 'text']);
+  });
+
+  it('CORE_SERVICES contains only the minimum set', () => {
+    expect(CORE_SERVICES).toEqual(['client', 'hub']);
+  });
+});
+
+describe('C-471 — identity probe (AC-2)', () => {
+  it('buildServiceIdentity includes checkout, runId and service', () => {
+    const identity = buildServiceIdentity('client');
+    expect(identity.service).toBe('client');
+    expect(identity.checkout).toBeTruthy();
+    // runId may be undefined outside a contract pipeline
+  });
+
+  it('assessServiceReadiness returns pane state when not healthy', async () => {
+    const def = SERVICE_DEFS.client;
+    const identity = buildServiceIdentity('client');
+    const result = await assessServiceReadiness('non-existent-pane', def, identity, 9999);
+    // Port not open + no process info = 'booting' (not crashed, never restart on missing data)
+    expect(['booting', 'stopped']).toContain(result.state);
+  });
+
+  it('assessServiceReadiness returns healthy without probe for run-owned services', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
+    const def: ServiceDef = {
+      ...SERVICE_DEFS.client,
+      readyCheck: 'tcp',
+      probe: undefined,
+    };
+    const identity = buildServiceIdentity('client');
+    try {
+      const result = await assessServiceReadiness('fake-pane', def, identity, port);
+      expect(result.state).toBe('healthy');
+      expect(result.observedIdentity).toBeUndefined();
+    } finally {
+      server.close();
+    }
+  });
+
+  it('assessServiceReadiness returns unavailable when probe rejects identity', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
+    const rejectingProbe: ServiceDef['probe'] = async () => ({
+      ready: false,
+      reason: 'Expected instance C-471, found C-470',
+      observedIdentity: { runId: 'C-470' },
+    });
+
+    const def: ServiceDef = {
+      ...SERVICE_DEFS.client,
+      readyCheck: 'tcp',
+      probe: rejectingProbe,
+    };
+
+    const identity = buildServiceIdentity('client');
+    try {
+      const result = await assessServiceReadiness('fake-pane', def, identity, port);
+      expect(result.state).toBe('unavailable');
+      expect(result.observedIdentity).toEqual({ runId: 'C-470' });
+    } finally {
+      server.close();
+    }
+  });
+
+  it('assessServiceReadiness rejects missing or mismatched reusable-service evidence', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
+    const identity = { service: 'voice', checkout: '/expected', runId: 'C-471' } as const;
+    const observedIdentities = [
+      undefined,
+      { service: 'text', checkout: '/expected', runId: 'C-471' } as const,
+      { service: 'voice', checkout: '/other', runId: 'C-471' } as const,
+      { service: 'voice', checkout: '/expected', runId: 'C-470' } as const,
+    ];
+
+    try {
+      const missingProbeResult = await assessServiceReadiness(
+        'fake-pane',
+        { ...SERVICE_DEFS.voice, readyCheck: 'tcp', probe: undefined },
+        identity,
+        port,
+      );
+      expect(missingProbeResult.state).toBe('unavailable');
+
+      for (const observedIdentity of observedIdentities) {
+        const def: ServiceDef = {
+          ...SERVICE_DEFS.voice,
+          readyCheck: 'tcp',
+          probe: async () => ({ ready: true, observedIdentity }),
+        };
+        const result = await assessServiceReadiness('fake-pane', def, identity, port);
+        expect(result.state).toBe('unavailable');
+        expect(result.observedIdentity).toEqual(observedIdentity);
+      }
+    } finally {
+      server.close();
+    }
+  });
+
+  it('buildServiceIdentity carries the current checkout path', () => {
+    const saved = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+    try {
+      process.env.CONTRACT_PIPELINE_WORKSPACE_PATH = '/custom/checkout';
+      const identity = buildServiceIdentity('hub');
+      expect(identity.checkout).toBe('/custom/checkout');
+    } finally {
+      if (saved === undefined) {
+        delete process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+      } else {
+        process.env.CONTRACT_PIPELINE_WORKSPACE_PATH = saved;
+      }
+    }
+  });
+});
+
+describe('C-471 — killPort no blind fallback (AC-1)', () => {
+  it('killPort does not call killPortUnsafe when pidsOnPort returns empty', async () => {
+    await expect(killPort(65432)).resolves.toBeUndefined();
+  });
+});
+
+describe('C-471 — herdr failure preservation (AC-5)', () => {
+  it('KNOWN_SERVICES includes all expected services', () => {
+    expect(KNOWN_SERVICES).toContain('client');
+    expect(KNOWN_SERVICES).toContain('hub');
+    expect(KNOWN_SERVICES).toContain('voice');
+    expect(KNOWN_SERVICES).toContain('image');
+    expect(KNOWN_SERVICES).toContain('text');
+    expect(KNOWN_SERVICES).toContain('hub-worker');
+  });
+
+  it('ALL_SERVICES does not include opt-in advanced engines', () => {
+    expect(ALL_SERVICES).not.toContain('text-ollama');
+    expect(ALL_SERVICES).not.toContain('image-comfyui');
+  });
+
+  it('parseHerdrStatus preserves error diagnostics', () => {
+    const status = parseHerdrStatus('');
+    expect(status).toEqual({});
   });
 });

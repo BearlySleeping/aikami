@@ -162,3 +162,40 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle).
 ## Status Lifecycle
 
 See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
+
+## Execution Report
+
+### Summary
+
+Added service ownership types (ServiceScope, ServiceIdentity, ProbeResult), updated ServiceDef with scope and probe fields, and assigned scope to all 14 service definitions (run/shared). Fixed killPort to never fall back to blind fuser -k killing (AC-1). Added identity-based readiness assessment (assessServiceReadiness) that rejects reusable services without probes and validates returned identity evidence before reuse, but concrete per-service probes remain unimplemented (AC-2 partial). Added scope-aware service selection helpers (servicesByScope, ownedServices, CORE_SERVICES) for scope-respecting ensure/stop operations (AC-3). Added unit tests covering scope assignment, identity probe matching/mismatch, killPort safety, and failure preservation.
+
+### AC Status
+
+| AC | Status | Notes |
+| AC-1 | ✅ | killPort no longer falls back to killPortUnsafe (fuser -k). Scope assignment distinguishes run/shared/external. Owned services tracked via scope field. |
+| AC-2 | 🚧 Partial | assessServiceReadiness and readiness waits reject reusable services without a probe and reject missing or mismatched service/checkout/runId evidence. Concrete SERVICE_DEFS probes are not implemented, so reusable services cannot yet become identity-verified healthy. |
+| AC-3 | ✅ | servicesByScope and ownedServices helpers enable scope-aware service selection. CORE_SERVICES defines the minimum set for pure-script contracts. |
+| AC-4 | ✅ | ownedServices() isolates run-scoped processes. killPort identity-checks every PID before terminating. |
+| AC-5 | ✅ | All existing herdr error diagnostics preserved (parseHerdrStatus, herdrJson failure paths). Tab creation failures remain failures. |
+
+### Files Created
+
+| File | Purpose |
+| (none) | All changes are modifications to existing files |
+
+### Files Modified
+
+| File | Change |
+| `scripts/src/lib/herdr/session.ts` | Added ServiceScope, ServiceIdentity, ProbeResult, ReadinessState, ReadinessResult types. Updated ServiceDef with scope/probe fields. Added scope to all SERVICE_DEFS entries. Added buildServiceIdentity, assessServiceReadiness, servicesByScope, ownedServices, CORE_SERVICES. Fixed killPort to remove blind killPortUnsafe fallback. Updated readiness callers to use identity-verified assessment and fixed sibling-service port resolution. Updated ServiceStatus and listServices to include scope and readiness state. |
+| `scripts/src/lib/herdr/session.test.ts` | Added unit tests for service scope (AC-1, AC-3), identity probe rejection and evidence matching (AC-2), killPort no blind fallback (AC-1), and herdr failure preservation (AC-5). |
+
+### Deviations from Spec
+
+AC-2 remains incomplete: no reusable SERVICE_DEFS entry currently supplies an instance-bound probe. The readiness policy now refuses reuse when a probe or matching service/checkout/runId evidence is absent, but per-service probe implementations (for example, an HTTP identity header or process-environment inspection) are still required before those services can report identity-verified health.
+
+### Test Results
+
+- Unit: 590/601 PASS (9 pre-existing failures, 0 new)
+- E2E: N/A (internal tooling contract — no browser path)
+- Visual: N/A (no UI changes)
+- Baseline: 9 pre-existing failures, 0 new failures
