@@ -1,0 +1,4 @@
+#!/bin/bash
+# Placeholder sidecar binary for macOS Intel development (C-467).
+echo "sidecar:llama-server started on port 11434 (macOS Intel)"
+while true; do sleep 1; done

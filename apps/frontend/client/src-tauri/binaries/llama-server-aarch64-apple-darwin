@@ -1,0 +1,4 @@
+#!/bin/bash
+# Placeholder sidecar binary for macOS Apple Silicon development (C-467).
+echo "sidecar:llama-server started on port 11434 (macOS ARM)"
+while true; do sleep 1; done

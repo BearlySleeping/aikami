@@ -1,0 +1,6 @@
+@echo off
+REM Placeholder sidecar binary for Windows development (C-467).
+echo sidecar:llama-server started on port 11434 (Windows)
+:loop
+timeout /t 1 /nobreak >nul
+goto loop
