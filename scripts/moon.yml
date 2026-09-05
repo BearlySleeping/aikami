@@ -34,6 +34,7 @@ tasks:
     deps:
       - '~:guard-mvvm-conventions'
       - '~:guard-service-conventions'
+      - '~:guard-service-mock-coverage'
       - '~:guard-image-component'
       - '~:guard-data-plane'
       - '~:guard-type-safety'
@@ -162,6 +163,21 @@ tasks:
       - 'src/lib/ops/guard_service_conventions_baseline.json'
       - '/apps/frontend/client/src/lib/services/**/*_service.svelte.ts'
       - '/apps/frontend/hub/src/lib/client/services/**/*_service.svelte.ts'
+    options:
+      cache: false
+      runInCI: true
+
+  # Every '$services' barrel export must have a matching key in
+  # test_preload.ts's localServicesMockBase() — the regression class behind
+  # PRs #241, #243, and the C-466/C-467 test-infra fix (2026-09-05). Ratchet
+  # guard; see guard_service_mock_coverage_baseline.json.
+  guard-service-mock-coverage:
+    command: 'bun run src/lib/ops/guard_service_mock_coverage.ts'
+    inputs:
+      - 'src/lib/ops/guard_service_mock_coverage.ts'
+      - 'src/lib/ops/guard_service_mock_coverage_baseline.json'
+      - '/apps/frontend/client/src/lib/services/**/*'
+      - '/apps/frontend/client/src/lib/test_preload.ts'
     options:
       cache: false
       runInCI: true
