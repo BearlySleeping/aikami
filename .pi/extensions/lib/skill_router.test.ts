@@ -99,7 +99,10 @@ describe('AC-2: Non-engine sessions avoid full catalogue', () => {
     // is loaded only on demand via loadPixiSkill().
     const skills = listPixiSkills();
     // Verify the index is compact: sum of IDs + labels + descriptions
-    const indexSize = skills.reduce((sum, s) => sum + s.id.length + s.label.length + s.description.length, 0);
+    const indexSize = skills.reduce(
+      (sum, s) => sum + s.id.length + s.label.length + s.description.length,
+      0,
+    );
     // The full Pixi catalogue is ~3,755 tokens * 4 chars/token ≈ 15,000 chars
     // The index should be significantly smaller
     expect(indexSize).toBeLessThan(5000);

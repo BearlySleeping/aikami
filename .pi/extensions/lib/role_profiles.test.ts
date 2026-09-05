@@ -10,9 +10,9 @@ import {
   getOptionalExtensions,
   getRoleProfile,
   isToolEnabledForRole,
+  type PipelineRole,
   preflightRoleProfile,
   resolveEnabledExtensions,
-  type PipelineRole,
 } from './role_profiles.ts';
 
 // ── AC-1: Profiles retain required capabilities ──
@@ -146,7 +146,13 @@ describe('AC-1: Resolved extension lists', () => {
 
 describe('AC-1: Preflight validation', () => {
   test('valid profile passes preflight with no issues', () => {
-    for (const role of ['writer', 'critic', 'implementer', 'verifier', 'review'] as PipelineRole[]) {
+    for (const role of [
+      'writer',
+      'critic',
+      'implementer',
+      'verifier',
+      'review',
+    ] as PipelineRole[]) {
       const issues = preflightRoleProfile({ role });
       const errors = issues.filter((i) => i.severity === 'error');
       expect(errors).toHaveLength(0);
@@ -160,7 +166,13 @@ describe('AC-1: Preflight validation', () => {
   });
 
   test('preflight does not produce warnings for valid profiles', () => {
-    for (const role of ['writer', 'critic', 'implementer', 'verifier', 'review'] as PipelineRole[]) {
+    for (const role of [
+      'writer',
+      'critic',
+      'implementer',
+      'verifier',
+      'review',
+    ] as PipelineRole[]) {
       const issues = preflightRoleProfile({ role });
       const warnings = issues.filter((i) => i.severity === 'warning');
       expect(warnings).toHaveLength(0);
