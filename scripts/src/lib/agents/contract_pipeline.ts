@@ -369,12 +369,18 @@ const handleIssueSource = (target: string): string => {
   }
 
   // If no existing contract, generate new ID and path
+  // 🔴 Use exclusive reservation so concurrent issue-source calls do not race
+  // on the same ID — see C-470 AC-4.
   if (!contractId) {
-    const maxId = existingContracts.reduce((max: number, f: string) => {
-      const match = f.match(/^C-(\d+)/);
-      return match ? Math.max(max, Number(match[1])) : max;
-    }, 0);
-    contractId = `C-${maxId + 1}`;
+    const reservedId = reserveContractId({
+      contractsDir,
+      cwd: repoRoot,
+    });
+    if (!reservedId) {
+      console.error('❌ Could not reserve a contract ID — all IDs exhausted.');
+      process.exit(1);
+    }
+    contractId = reservedId;
 
     // Build slug from title
     const slug = issueData.title
@@ -392,6 +398,8 @@ const handleIssueSource = (target: string): string => {
   }
   const existingContractFound = existsSync(contractPath);
   if (existingContractFound) {
+    // Release the reservation — the file already exists.
+    releaseReservation({ contractId, cwd: repoRoot });
     console.log(`✅ Contract already exists (reusing): ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
     console.log(`   Issue: ${issueUrl}`);
@@ -441,6 +449,8 @@ const handleIssueSource = (target: string): string => {
       .replace(/issue_url:\s*null/, `issue_url: "${issueUrl}"`);
 
     writeFileSync(contractPath, finalContent);
+    // Release the reservation now that the contract file exists.
+    releaseReservation({ contractId, cwd: repoRoot });
     console.log(`✅ Contract frozen from issue: ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
     console.log(`   Issue: ${issueUrl}`);
