@@ -29,7 +29,11 @@ import {
 } from '../herdr/session.ts';
 import { parseBacklog } from '../ops/parse_backlog.ts';
 import { resolveContract } from './contract_pipeline/contract_resolver.ts';
-import { readManifest } from './contract_pipeline/manifest_store.ts';
+import {
+  readManifest,
+  releaseReservation,
+  reserveContractId,
+} from './contract_pipeline/manifest_store.ts';
 import { runContractPipeline } from './contract_pipeline/orchestrator.ts';
 
 const sleep = async (milliseconds: number): Promise<void> =>
@@ -525,11 +529,17 @@ const prepareDirectSource = (repoRoot: string): string => {
     return reusedId;
   }
 
-  const maxId = existingContracts.reduce((max: number, f: string) => {
-    const match = f.match(/^C-(\d+)/);
-    return match ? Math.max(max, Number(match[1])) : max;
-  }, 0);
-  const contractId = `C-${maxId + 1}`;
+  // 🔴 Exclusive ID allocation: use atomic `wx` reservation to prevent
+  // concurrent pipeline instances from racing on the same ID.
+  const reservedId = reserveContractId({
+    contractsDir,
+    cwd: repoRoot,
+  });
+  if (!reservedId) {
+    console.error('❌ Could not reserve a contract ID — all IDs exhausted.');
+    process.exit(1);
+  }
+  const contractId = reservedId;
 
   // Create a minimal placeholder so resolveContract() can find it.
   // The interactive writer pi session waits for the user's feature
@@ -548,6 +558,8 @@ const prepareDirectSource = (repoRoot: string): string => {
 
   mkdirSync(contractsDir, { recursive: true });
   writeFileSync(placeholderPath, placeholder);
+  // Release the reservation now that the placeholder file exists.
+  releaseReservation({ contractId, cwd: repoRoot });
 
   console.log(
     [

@@ -383,6 +383,7 @@ export const runStage = async (options: {
       role,
       stage: options.stage,
       attempt: options.attempt,
+      generation: options.generation,
       userMessage: '🔴 FINAL RELAUNCH: Worker crashed. Resume and call contract_stage_complete.',
     });
     paneId = relaunched.paneId;

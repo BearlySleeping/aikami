@@ -59,6 +59,16 @@ export type ContractStageResult = {
   runId: string;
   stage: ContractWorkerRole;
   attempt: number;
+  /**
+   * Monotonically increasing generation counter scoping results to a specific
+   * worker invocation. When a worker is replaced within the same logical
+   * stage/attempt (relaunch, replacement), the generation is incremented so
+   * late results from the predecessor are not adopted.
+   *
+   * Absent (undefined) in legacy results — treated as generation 0 for
+   * compatibility.
+   */
+  generation?: number;
   status: 'passed' | 'changes_requested' | 'blocked' | 'failed';
   summary: string;
   findings: string[];
@@ -239,6 +249,8 @@ export type WorkerLaunchRequest = {
   role: ContractWorkerRole;
   stage: ContractPipelineStage;
   attempt: number;
+  /** Generation counter for result fencing — see ContractStageResult.generation. */
+  generation?: number;
   /** Optional user message sent after pi starts. Used for feedback
    *  on retries (keep system prompt static → DeepSeek cache valid). */
   userMessage?: string;

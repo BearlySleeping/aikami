@@ -1154,6 +1154,9 @@ export const runContractPipeline = async (options: {
               launchWorker: (req) => adapter.launchWorker(req),
               checkAgentWorking: (pid) => adapter.isWorkerActive(pid),
               nudgeWorker: interactiveStage ? undefined : (opts) => adapter.nudgeWorker(opts),
+              // Generation for result fencing: combine attempt with lock generation
+              // so replaced workers' late results are not adopted.
+              generation: attempt,
             });
         if (precondition) {
           pipelineLog({
