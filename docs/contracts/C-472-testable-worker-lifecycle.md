@@ -3,7 +3,7 @@ id: C-472
 title: "Make worker lifecycle testable and simplify Herdr transport"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — control-flow recovery is under-tested and PTY workarounds obscure completion |
 | **Dependencies** | C-469, C-470, C-471 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — lifecycle, capabilities and transport compatibility |
 | **Contract version** | 2.0.0 |
