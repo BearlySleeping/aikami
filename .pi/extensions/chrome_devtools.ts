@@ -4,12 +4,12 @@
 // Launches headless Chromium (from Nix devShell) and connects via CDP
 // to inspect the Client dev server running in herdr.
 //
-// Provides tools for:
-//   - browser_inspect:    DOM snapshot, console logs, computed styles
-//   - browser_screenshot: Capture viewport or full-page screenshot
-//   - browser_network:    Capture network waterfall (XHR, fetch, WS)
-//   - browser_console:    Stream/read console output
-//   - browser_lighthouse: Run a Lighthouse audit (performance, a11y, best-practices)
+// Provides actions for the `browser` namespace:
+//   - inspect:    DOM snapshot, console logs, computed styles
+//   - screenshot: Capture viewport or full-page screenshot
+//   - network:    Capture network waterfall (XHR, fetch, WS)
+//   - console:    Stream/read console output
+//   - lighthouse: Run a Lighthouse audit (performance, a11y, best-practices)
 //
 // Requires `chromium` in flake.nix (already added).
 // Uses the remote debugging port 9222 by default.

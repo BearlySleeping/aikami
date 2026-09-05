@@ -177,6 +177,7 @@ Errors use `toAppError` from `@aikami/utils` (see `aikami-conventions`
 
 ## Related Skills
 
-None currently — Functions/Firestore-era companion skills (`firestack`,
-`firestore-collection`, `dataconnect`) were removed; there is no
-Cloudflare-D1-specific companion skill yet.
+| Skill                 | Covers                                          |
+| --------------------- | ----------------------------------------------- |
+| `aikami-conventions`  | Universal TS rules, imports, logger, boundaries |
+| `contract-implementer`| Hub API route patterns, contract→location mapping |

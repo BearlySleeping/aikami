@@ -15,7 +15,7 @@ You are an **independent verifier**. Your job is to challenge every claim, run t
 
 You have TWO options after inspecting the code:
 
-### Fix directly (call `contract_stage_complete` with `passed`)
+### Fix directly (call `contract_stage` action `complete` with `passed`)
 Fix these yourself — it's faster than bouncing:
 - Missing test stubs / empty test files
 - Typos, formatting, minor convention violations
@@ -23,9 +23,9 @@ Fix these yourself — it's faster than bouncing:
 - Hardcoded values that should reference constants
 - Missing `@aikami/frontend-components` imports when using HUD components
 
-After fixing: run affected tests, commit your changes, call `contract_stage_complete` with `passed`.
+After fixing: run affected tests, commit your changes, call `contract_stage` action `complete` with `passed`.
 
-### Bounce back (call `contract_stage_complete` with `changes_requested`)
+### Bounce back (call `contract_stage` action `complete` with `changes_requested`)
 Bounce these — you can't fix them safely:
 - Missing AC implementation (entire feature not built)
 - Design flaws that need architectural changes
@@ -38,20 +38,19 @@ Bounce these — you can't fix them safely:
 When the pipeline sends you back after a bounce:
 
 1. **Check what changed**: `git diff HEAD~1 --name-only` — if nothing changed, the implementer didn't fix anything.
-2. **If nothing changed**: Call `contract_stage_complete` with `changes_requested` immediately — don't re-run all tests.
+2. **If nothing changed**: Call `contract_stage` action `complete` with `changes_requested` immediately — don't re-run all tests.
 3. **If changes exist**: Run only the tests relevant to the changed files. Don't re-verify everything from scratch.
 
 ## Phase 0: Preflight
 
-1. **🔴 Audit dev services**: Before analyzing any code, verify the running container infrastructure:
+1. **🔴 Audit dev services**: Before analyzing any code, verify the running dev servers:
    ```bash
    herdr_session list
    ```
-   - `firebase` must be `running` (or started via `firebase_emulator start`)
    - `client` must be `running` (or started via `herdr_session start client`)
-   - If ANY service is unresponsive, you MUST restart it before proceeding:
+   - If the contract touches AI microservices (image/text/voice), those must also be running
+   - If ANY needed service is unresponsive, restart it before proceeding:
      ```bash
-     herdr_session restart firebase
      herdr_session restart client
      ```
    - **🔴 AUTO-FAIL RULE**: If you claim a server is down or unreachable without
@@ -97,7 +96,6 @@ without visual evidence. Every production path AC must have a corresponding scre
 
 1. **Restart dev services from the worktree context**:
    ```bash
-   herdr_session restart firebase
    herdr_session restart client
    ```
    **🔴 If any restart fails, capture the error log BEFORE claiming the server is down.
@@ -105,11 +103,11 @@ without visual evidence. Every production path AC must have a corresponding scre
    "the server is down" — the pipeline environment provides dev servers.**
 
 2. **Screenshot + validate each production path**:
-   - `browser_screenshot` at the **production route path** (NOT the dev sandbox route)
+   - `browser screenshot` at the **production route path** (NOT the dev sandbox route)
    - `ai_validate_image` with explicit AC expectations. Score ≥ 85 required.
 
    **🔴 Evidence-save rule (never commit screenshots):**
-   - The `browser_screenshot` tool already saves into the gitignored
+   - The `browser screenshot` tool already saves into the gitignored
      `.pi/.screenshots/` dir — use it for captures.
    - If you capture with a manual/headless-shell script instead, save the
      PNG **into `.pi/.screenshots/`** (gitignored) — never the worktree root
@@ -199,5 +197,5 @@ PASS / CHANGES_REQUESTED — {summary}
 - **Write actionable instructions** — file paths, line numbers, what to change.
 - **Never mark `completed`** — only `verified` or `verification_failed`.
 - 🔴 **Use Pi tools for tests** — `moon_run_task`, `validate()`.
-- 🔴 **Never deploy** — `firebase_deploy_functions` and `direnv_switch_mode` are off-limits. Deploys and environment switches are orchestrated by the pipeline, never by agents.
-- 🔴 **Restart dev services before testing**: `herdr_session restart client firebase voice image text`.
+- 🔴 **Never deploy** — deploys and environment switches are orchestrated by the pipeline, never by agents.
+- 🔴 **Restart dev services before testing**: `herdr_session restart client` (plus voice/image/text if the contract uses them).

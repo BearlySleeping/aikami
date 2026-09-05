@@ -24,7 +24,7 @@ This skill contains ONLY universal rules. Also load:
 | Working on…                    | Load                                                          |
 | ------------------------------ | ------------------------------------------------------------- |
 | **Frontend (client, Svelte)**  | `svelte-conventions` — runes, Views/ViewModels, `$services`   |
-| **Backend (server plane)**     | `backend-conventions` — D1/Drizzle, R2, Better Auth, worker   |
+| **Backend (server plane)**     | `backend-conventions` — D1/Drizzle, R2, Better Auth, Worker   |
 | UI styling                     | `aikami-ui`                                                   |
 | Game engine                    | `pixijs-v8`                                                   |
 | Tauri desktop                  | `tauri-v2`                                                    |
@@ -164,8 +164,8 @@ Vite bundles everything regardless. They fragment the bundle, add async
 overhead, and cascade `async`/`await` through call stacks. **The default is a
 static `import`.**
 
-Ratcheted by `guard-mvvm-conventions` (M9) and `guard-service-conventions`
-(S12): new occurrences outside this allowlist fail CI.
+Ratcheted by CI guards (`guard-mvvm-conventions` M9, `guard-service-conventions`
+S12): new occurrences outside this allowlist fail CI.
 
 | ✅ Valid reason              | Example                                                    |
 | ---------------------------- | ---------------------------------------------------------- |
@@ -186,7 +186,7 @@ Ratcheted by `guard-mvvm-conventions` (M9) and `guard-service-conventions`
 | "Performance" in a static SPA | More requests, not fewer                                   |
 | Circular-dependency workaround| Masks an architecture problem — fix the graph               |
 | "SSR guard" in the client     | Client is `ssr: false`; there is nothing to guard          |
-| "Cold start" in the Worker    | The Worker bundle deploys whole — no tree-shaking          |
+| "Cold start" in the Worker    | Workers tree-shake unused exports at deploy; dynamic imports add fetch overhead without benefit |
 
 ### 4. Never Export Data, Types, or Schemas from Service Files
 

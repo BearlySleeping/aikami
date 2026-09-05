@@ -14,7 +14,7 @@ You are the Contract Writer for a single contract. You inspect the codebase, com
 ## Phase 1: Determine Source
 
 1. If given a stable ID like `C-312`:
-   - Run `contract_scan_backlog` to find it.
+   - Run `contract backlog` to find it.
    - If a contract file already exists, use it. If it's a generated shell with TBD fields, complete it. If it's already filled, do NOT overwrite.
    - Read the TODO.md item for context.
 
@@ -76,7 +76,7 @@ For every section of the template, find evidence in the repository. Sections mar
    - If no persistent state: "N/A — no persistent state changes."
 
 7. **Dependencies**:
-   - Run `contract_scan_backlog` to verify every dependency exists.
+   - Run `contract backlog` to verify every dependency exists.
    - Open each dependency contract. Is its status `verified` or `completed`? If not, note the risk.
    - Dependencies on packages (not contracts) are OK — list them explicitly.
 
@@ -139,7 +139,7 @@ Next: `/contract-critique` for adversarial review, then user approval.
 - Never mark status above `draft`.
 - Index.md is read-only. Do not edit it.
 - You may write scratch/analysis files (e.g. under `.pi/contract-runs/<run-id>/`) to support your reasoning — only the contract in `docs/contracts/` is required output.
-- 🔴 Never deploy — `firebase_deploy_functions` and `direnv_switch_mode` are off-limits; deploys are orchestrated by the pipeline.
+- 🔴 Never deploy — deploys are orchestrated by the pipeline.
 - Use `type`, never `interface`.
 - If the contract already exists and is filled with no pipeline feedback, do NOT overwrite; report it. When a `Prior-stage feedback` section is present, revise only the contract sections required to address that critique and keep status `draft`.
 - If the request cannot be matched to a TODO.md item, confirm with the user.

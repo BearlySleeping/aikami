@@ -19,8 +19,8 @@ scratch with worse tools. Default to **diagnose → hand off**, not
 2. If the cause isn't obvious from the findings, use `AskClaude` to consult
    Claude Opus for a second opinion. Don't just relay its answer — use it to
    sharpen your own diagnosis.
-3. Call `contract_workspace_log_failure` to capture what you found.
-4. Write your diagnosis as the `summary` on `contract_review_decision` and
+3. Call `contract_stage` action `log_failure` to capture what you found.
+4. Write your diagnosis as the `summary` on `contract_stage` action `review_decision` and
    call it with `change`. **This summary is what the implementer reads next**
    — be specific: name the exact files/functions involved, the exact
    behavior that's wrong, and what a correct fix looks like. A vague summary
@@ -47,7 +47,7 @@ skipping the gate.
 If you do fix something and are confident, you may offer to push it and
 create the PR (reconciliation never ran on this path, so nothing is pushed
 for you yet). Report the exact actions required — `git push origin HEAD`,
-then `gh_create_pr` with `draft: false` — and ask the user for explicit
+then `gh_pr` action `create` with `draft: false` — and ask the user for explicit
 authorization before running them. Do NOT push or create the PR without
 that authorization. Once the user authorizes, push and create the PR as
 described.
@@ -55,7 +55,7 @@ described.
 ### Still off-limits
 
 - Do NOT create new worktrees or branches — stay in this run's existing worktree.
-- Do NOT call `gh_merge_pr` or `gh_promote_pr` — merging is always a human or
+- Do NOT call `gh_pr` action `merge` or `gh_promote_pr` — merging is always a human or
   orchestrator decision, never yours to make alone from recovery mode.
 
 ### Decision mapping
@@ -66,4 +66,4 @@ described.
 | Fixed something small yourself, pushed, PR exists | `approve` |
 | Truly unresolvable without human input | `reject` — write a precise failure summary |
 
-🔴 Your LAST action must call `contract_review_decision`.
+🔴 Your LAST action must call `contract_stage` action `review_decision`.

@@ -11,10 +11,10 @@ import { runCommand } from './lib/process_runner';
 
 /** Fallback workspace summary — used if moon query fails. Update when projects change. */
 const FALLBACK_SUMMARY = `Workspace: aikami projects (moon)
-Apps:  client (apps/frontend/client), site (apps/frontend/site), docs (apps/frontend/docs), firebase (apps/backend/firebase), image (apps/backend/image), text (apps/backend/text), voice (apps/backend/voice), e2e (apps/e2e), scripts (scripts)
+Apps:  client (apps/frontend/client), site (apps/frontend/site), docs (apps/frontend/docs), image (apps/backend/image), text (apps/backend/text), voice (apps/backend/voice), e2e (apps/e2e), scripts (scripts)
 Libs:  constants, schemas, types, logger, utils, mocks (packages/shared/), frontend-* (packages/frontend/), backend-* (packages/backend/)
 
-🔴 Path prefix key: apps/frontend/ = client, site, docs | apps/backend/ = firebase, image, text, voice | packages/shared/ = constants, schemas, types, logger, utils, mocks, parser | packages/frontend/ = configs, dataconnect, engine, repositories, services, utils | packages/backend/ = ai, auth, chat, configs, database, image, svelte-kit, utils`;
+🔴 Path prefix key: apps/frontend/ = client, site, docs | apps/backend/ = image, text, voice | packages/shared/ = constants, schemas, types, logger, utils, mocks, parser | packages/frontend/ = configs, dataconnect, engine, repositories, services, utils | packages/backend/ = ai, auth, chat, configs, database, image, svelte-kit, utils`;
 
 export default function (pi: ExtensionAPI) {
   let workspaceSummary = FALLBACK_SUMMARY;
@@ -63,18 +63,7 @@ export default function (pi: ExtensionAPI) {
         };
       }
       const apps = ids.filter((id) =>
-        [
-          'client',
-          'site',
-          'docs',
-          'firebase',
-          'functions',
-          'scripts',
-          'e2e',
-          'image',
-          'text',
-          'voice',
-        ].includes(id),
+        ['client', 'site', 'docs', 'scripts', 'e2e', 'image', 'text', 'voice'].includes(id),
       );
       const libs = ids.filter((id) => !apps.includes(id));
       const parts: string[] = [];
@@ -109,7 +98,7 @@ export default function (pi: ExtensionAPI) {
   };
 
   /** All registered herdr services (for the "try one of" list). */
-  const HerdrServiceList = ['firebase', 'client', 'image', 'text', 'voice'];
+  const HerdrServiceList = ['client', 'image', 'text', 'voice'];
 
   pi.registerTool({
     name: 'moon_run_task',
@@ -465,7 +454,7 @@ export default function (pi: ExtensionAPI) {
       '\n🔴 Path prefix key: apps/frontend/ = client, site, docs | apps/backend/ = firebase, image, text, voice | packages/shared/ = constants, schemas, types, logger, utils, mocks, parser | packages/frontend/ = configs, dataconnect, engine, repositories, services, utils | packages/backend/ = ai, auth, chat, configs, database, image, svelte-kit, utils';
 
     const devServerRule =
-      '\n🔴 NEVER call moon_run_task for :dev or :preview targets — these are long-running servers that hang forever. Use herdr_session start <service> instead. Registered herdr services: firebase, client, image, text, voice.';
+      '\n🔴 NEVER call moon_run_task for :dev or :preview targets — these are long-running servers that hang forever. Use herdr_session start <service> instead. Registered herdr services: client, image, text, voice.';
     return {
       systemPrompt: `${event.systemPrompt}\n${workspaceSummary}${pathPrefixKey}${modeInfo}${devServerRule}`,
     };

@@ -14,7 +14,7 @@ Aikami's `.pi/` directory extends the global `~/.pi/` setup with project-specifi
 | Global extensions      | `~/.pi/agent/extensions/`            | All projects (auto-fallback, git-checkpoint, log-offloader, model-modes, scroll-to-end) |
 | Global skills          | `~/.pi/skills/`, `~/.agents/skills/` | All projects (browser-tools, find-skills)                                               |
 | **Project extensions** | `.pi/extensions/`                    | Aikami only — see the inventory below                                                   |
-| **Project skills**     | `.pi/skills/`                        | Aikami only — conventions, firestack, firestore, svelte, contracts, commands            |
+| **Project skills**     | `.pi/skills/`                        | Aikami only — conventions, svelte, contracts, commands, pixi, tauri, backend            |
 
 Models, observational memory, context-mode, theme, and Telegram bridge are global — configured in `~/.pi/`.
 
@@ -95,7 +95,6 @@ exists.
 | `moon_run_task`, `moon_detect_affected`, `moon_list_projects`           | Monorepo task orchestration                    |
 | `blackbox_test`                                                         | Full-stack blackbox integration tests          |
 | `direnv` (status, switch_mode, add_package, add_secret)                 | Environment mode, Nix packages, secrets        |
-| `firebase` (query, deploy_functions, emulator)                          | Firestore, Cloud Functions, emulator suite     |
 | `gcloud_exec`                                                           | Authenticated gcloud invocation                |
 | `service_logs`                                                          | Unified logs for Aikami services               |
 
@@ -209,15 +208,12 @@ stand-in pi API and asserts what registers — namespace action lists, no duplic
 | ---------------------- | ------------------------------------------------------------------------------------------------- |
 | `aikami-conventions`   | **🔴 LOAD FIRST** before ANY code — TS strictness, imports, arrow functions, `_` prefix, snake_case |
 | `svelte-conventions`   | Svelte 5 runes, zero-logic Views, ViewModel pattern, services, client aliases                    |
-| `backend-conventions`  | Controller → service → repository → BaseDatabaseService, backend testing                         |
+| `backend-conventions`  | Cloudflare D1 (Drizzle) + R2 + Better Auth + Elysia route handlers, backend testing             |
 | `aikami-ui`            | UI styling — DaisyUI primitives vs components, typography, semantic colors                       |
-| `dataconnect`          | Data Connect schemas + `bun moon run firebase:generate`                                          |
 | `svelte-page`          | Scaffolding SvelteKit pages (View + ViewModel)                                                   |
-| `firestore-collection` | Scaffolding new Firestore collections                                                            |
 | `new-project`          | Scaffolding new monorepo projects/packages                                                       |
 | `contract-implementer` | Implementing features from `docs/contracts/`                                                     |
 | `project-commands`     | Build, test, lint, deploy command reference                                                      |
-| `firestack`            | Firebase CLI — deploy, emulate, test rules                                                       |
 | `pixijs-v8`            | PixiJS v8 + bitECS + engine boundary                                                             |
 | `tauri-v2`             | Tauri v2 desktop app patterns                                                                    |
 

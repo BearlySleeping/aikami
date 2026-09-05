@@ -42,8 +42,7 @@ the user closes this tab and runs cleanup manually when they are done reading.
 
 ## 🔴 NEVER deploy
 
-NEVER call `firebase_deploy_functions` or `direnv_switch_mode` — deploys and
-environment switches are orchestrated by the pipeline, never by agents.
+NEVER deploy — deploys and environment switches are orchestrated by the pipeline, never by agents.
 
 ---
 
@@ -51,7 +50,7 @@ environment switches are orchestrated by the pipeline, never by agents.
 
 | Action | Tool / Command |
 |---|---|
-| Trigger autofix + wait for commit | `code_rabbit_autofix` Pi tool |
+| Trigger autofix + wait for commit | `code_rabbit` action `autofix` |
 | Trigger review only (no autofix) | Comment `@coderabbitai review` on PR |
 | Check review status | `gh pr view <number> --json reviews` |
 | Read CodeRabbit findings | `gh_pr_comments` or MCP `coderabbitai` tools |
@@ -91,7 +90,7 @@ part of it.
 
 ## Universal Rules
 
-- **Create the PR when your profile's flow calls for it** — never skip that step, and never call `gh_create_pr` again once one already exists.
+- **Create the PR when your profile's flow calls for it** — never skip that step, and never call `gh_pr create` again once one already exists.
 - **Verify before claiming** — use `gh pr view --json reviews`, don't guess.
 - **Do not re-run tests** if the verifier already passed. Trust the verifier's evidence.
 - **If you modify source files yourself**, say so plainly in your decision summary — whoever reads it next needs to know the code changed outside the normal implementer/verifier path.

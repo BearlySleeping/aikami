@@ -13,27 +13,25 @@ Single-session flow. You are architect, coder, QA, and docs writer in sequence. 
 - `aikami-conventions` (ALWAYS first)
 - If frontend UI / Svelte: also `svelte-conventions` + `aikami-ui`
 - If game code: `pixijs-v8`
-- If Cloud Functions: `firestack`
 - Testing phase: `testing`
 
 ## Phase 0: Preflight
 
-1. **Verify clean workspace**: 🔴 You run inside an isolated Git Worktree at `~/.herdr/worktrees/<repo>/` — `git` commands resolve correctly within the worktree. Use git:
+1. **Verify clean workspace**: 🔴 You run inside an isolated Git Worktree managed by herdr — `git` commands resolve correctly within the worktree. Use git:
    ```bash
    git status
    git log -1 --format="%H %s"
    ```
    The pipeline provisioned this worktree on top of `dev`. If `git status` shows unrelated in-flight changes, report them in your findings.
 
-2. **🔴 Audit dev services**: Before analyzing any code, verify the running container infrastructure:
+2. **🔴 Audit dev services**: Before analyzing any code, verify the running dev servers:
    ```bash
    herdr_session list
    ```
-   - `firebase` must be `running` (or started via `firebase_emulator start`)
    - `client` must be `running` (or started via `herdr_session start client`)
-   - If ANY service is unresponsive, you MUST restart it before proceeding:
+   - If the contract touches AI microservices (image/text/voice), those must also be running
+   - If ANY needed service is unresponsive, restart it before proceeding:
      ```bash
-     herdr_session restart firebase
      herdr_session restart client
      ```
    - **🔴 AUTO-FAIL RULE**: If you claim a server is down or unreachable without
@@ -130,13 +128,13 @@ Do NOT skip. The contract must pass these before status becomes `implemented`.
    - Ensure client dev server is running: `herdr_session restart client` if routes were added.
      **🔴 If `herdr_session restart client` fails, capture the error log BEFORE claiming the
      server is down. You MUST show the failed restart attempt output.**
-   - **`browser_screenshot` at the PRODUCTION route path** (NOT the dev sandbox route).
+   - **`browser screenshot` at the PRODUCTION route path** (NOT the dev sandbox route).
      The screenshot must capture the actual user-facing page, not an isolated sandbox.
    - **`ai_validate_image` with explicit AC expectations**. Score ≥ 85 required.
      Write a detailed expectation string that references specific AC criteria
      (layout, colors, text content, interactive elements).
    - **🔴 Evidence-save rule**: screenshots live in the gitignored
-     `.pi/.screenshots/` dir (the `browser_screenshot` tool writes there).
+     `.pi/.screenshots/` dir (the `browser screenshot` tool writes there).
      Never save captures to the worktree root or an `artifacts/` dir, and
      never `git add`/commit screenshot evidence — the branch is code only.
    - **Test state persistence**: reload the page — state must survive if persistence is an AC.
@@ -146,7 +144,7 @@ Do NOT skip. The contract must pass these before status becomes `implemented`.
      your stage will be automatically failed. The pipeline environment provides dev servers.
 
 4. **Sandbox check** (only if you created one):
-   - `browser_screenshot` the sandbox route.
+   - `browser screenshot` the sandbox route.
    - `ai_validate_image` — used for visual regression, not as primary completion gate.
 
 5. **Baseline regression check**: Run the same tests from Phase 0 step 7. New failures = stop and fix.
@@ -221,12 +219,12 @@ Decide from the contract's Target/Overview:
 - `validate()` for final verification
 - `moon_run_task` for per-project operations
 - 🔴 NEVER run raw shell `bun moon run` or `bun test` — use the Pi tools `moon_run_task` and `validate()` which have built-in timeouts. Raw shell commands will hang forever on large test suites.
-- 🔴 NEVER run long-lived servers in the main thread — use `herdr_session` / `firebase_emulator`
-- 🔴 NEVER deploy — `firebase_deploy_functions` and `direnv_switch_mode` are off-limits. Deploys and environment switches are orchestrated by the pipeline, never by agents.
-- 🔴 **In worktrees, always restart services before testing**: `herdr_session restart client firebase voice image text`. The main repo's dev servers are running the wrong code — you must restart from the worktree CWD.
+- 🔴 NEVER run long-lived servers in the main thread — use `herdr_session`
+- 🔴 NEVER deploy — deploys and environment switches are orchestrated by the pipeline, never by agents.
+- 🔴 **In worktrees, always restart services before testing**: `herdr_session restart client` (plus voice/image/text if the contract uses them). The main repo's dev servers are running the wrong code — you must restart from the worktree CWD.
 - 🔴 Route groups: literal `(dev)` — a `\(dev\)` directory breaks the route tree
-- 🔴 **Retry: when the verifier bounces changes back**, your task message includes the findings under "🔴 Verifier requested changes". Read them, fix each issue, run the affected tests, then call `contract_stage_complete`. Do NOT re-call without making code changes.
-- 🔴 **NEVER call `contract_stage_complete` with `passed` before you have written code.** `passed` means the implementation exists in the worktree — not that your preflight succeeded and you are about to start. If Phase 0 turns up a blocker, report `blocked` with the reason. If you are mid-way and out of budget, report `blocked` with what is done and what remains.
+- 🔴 **Retry: when the verifier bounces changes back**, your task message includes the findings under "🔴 Verifier requested changes". Read them, fix each issue, run the affected tests, then call `contract_stage` action `complete` with `passed`. Do NOT re-call without making code changes.
+- 🔴 **NEVER call `contract_stage` with `complete` action and `passed` status before you have written code.** `passed` means the implementation exists in the worktree — not that your preflight succeeded and you are about to start. If Phase 0 turns up a blocker, report `blocked` with the reason. If you are mid-way and out of budget, report `blocked` with what is done and what remains.
   The orchestrator independently diffs the worktree before and after your session: a `passed` with **zero observable change** (no edits, no commits) is overridden to `blocked` and escalated, regardless of what you put in `filesTouched` or `diffHash`. Reporting `passed` early does not advance the run — it burns the run's one escalation. (C-457, 2026-09-02.)
 - Report failures honestly — a partial implementation with a truthful report beats a fake ✅
 - End at `implemented`, never `completed` — the verifier handles the rest

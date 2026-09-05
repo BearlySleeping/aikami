@@ -19,7 +19,7 @@ At the start of this session, you were given a state JSON object. Always check i
 
 **If `autofixCycle >= maxAutofixCycles`:** You are in the FINAL autofix cycle.
 - If autofix still fails after this cycle, DO NOT loop again.
-- Instead, call `contract_review_decision` with `reject` and note in the summary
+- Instead, call `contract_stage` action `review_decision` with `reject` and note in the summary
   that the autofix limit was hit.
 - The orchestrator will degrade to manual review mode.
 
@@ -28,24 +28,24 @@ At the start of this session, you were given a state JSON object. Always check i
 You are completely forbidden from running full test suites or build commands.
 
 Code editing and local linting/typechecking (e.g., `biome check`, `tsc`) are ALLOWED as a FALLBACK when CodeRabbit autofix fails:
-- If `code_rabbit_autofix` reports that autofix could not resolve findings,
-  call `code_rabbit_findings` to get the fix prompts.
+- If `code_rabbit` action `autofix` reports that autofix could not resolve findings,
+  call `code_rabbit` action `findings` to get the fix prompts.
 - Apply fixes manually using `edit` based on the 🤖 Prompt for AI Agents.
 - You MAY run local linting or typechecking to verify your manual edits.
-- Commit + push (using `--no-verify`), then re-run `code_rabbit_autofix` to verify.
+- Commit + push (using `--no-verify`), then re-run `code_rabbit` action `autofix` to verify.
 - Only merge when findings are resolved or judged non-blocking.
 
 Git operations for sync + merge are ALLOWED (automation glue).
 If any step fails with an infrastructure error, stop immediately, report
-the diagnostic log, and call `contract_review_decision` with `blocked`.
+the diagnostic log, and call `contract_stage` action `review_decision` with `reject`.
 
 ## YOLO Execution Sequence
 
 ### Y1: Create PR
-Call `gh_create_pr` with `draft: false`. Use the contract summary as body.
+Call `gh_pr` action `create` with `draft: false`. Use the contract summary as body.
 
 ### Y2: Trigger + Await CodeRabbit Autofix
-Call `code_rabbit_autofix` with the PR number. This SINGLE tool call:
+Call `code_rabbit` action `autofix` with the PR number. This SINGLE tool call:
 1. Waits for CI checks to complete (no triggering mid-build)
 2. Checks for duplicate autofix commands (won't re-post if already in flight)
 3. Posts `@coderabbitai autofix` if needed
@@ -55,17 +55,17 @@ Call `code_rabbit_autofix` with the PR number. This SINGLE tool call:
 Do NOT manually post `gh pr comment` — the tool handles the trigger.
 Do NOT apply manual edits unless autofix fails (see fallback below).
 
-🔴 **AUTOFIX FALLBACK**: If `code_rabbit_autofix` reports that autofix could NOT
+🔴 **AUTOFIX FALLBACK**: If `code_rabbit` action `autofix` reports that autofix could NOT
 resolve findings (check `actionableCount > 0` in the response):
-1. Call `code_rabbit_findings` to get the structured findings with fix prompts
+1. Call `code_rabbit` action `findings` to get the structured findings with fix prompts
 2. Look for the "🤖 Prompt for all review comments with AI agents" section
 3. Apply the fixes yourself using `edit` on each file
 4. Commit + push your fixes (ensure you use `git commit --no-verify -m "..."`)
-5. Call `code_rabbit_autofix` again to verify
+5. Call `code_rabbit` action `autofix` again to verify
 6. Only proceed to Y3 when findings are resolved or you judge them non-blocking
 
 ### Y3: Sync Local Worktree
-If `code_rabbit_autofix` returned `autofixApplied: true`, CodeRabbit pushed changes
+If `code_rabbit` action `autofix` returned `autofixApplied: true`, CodeRabbit pushed changes
 directly to the remote branch. Your local worktree is now stale. You MUST sync it:
 
 ```bash
@@ -79,21 +79,21 @@ tries to finalize the merge.
 ### Y4: Merge + Cleanup
 You are the merge authority. The orchestrator will handle the final worktree cleanup.
 
-1. Call `gh_merge_pr` with the PR URL:
-   `gh_merge_pr({ pr: "<url>", method: "squash" })`
+1. Call `gh_pr` action `merge` with the PR URL:
+   `gh_pr({ action: "merge", params: { pr: "<url>", method: "squash" } })`
    🔴 If merge fails with "worktree" error, run gh from the main repo:
    `cd /path/to/main/repo && gh pr merge <num> --squash`
 2. Verify the merge succeeded (check the return value / output).
 3. 🔴 Delete the remote branch yourself:
    `git push origin --delete <headBranch>`
-4. Call `contract_review_decision` with `merge` as the final signal. Do NOT attempt to remove the worktree yourself.
+4. Call `contract_stage` action `review_decision` with `merge` as the final signal. Do NOT attempt to remove the worktree yourself.
 
 Do NOT run `validate()` or full test suites — CodeRabbit verified its autofix
 commit on its own platform. Trust CodeRabbit's platform verification.
 
-## 🔴 SYNC GUARDS (built into code_rabbit_autofix)
+## 🔴 SYNC GUARDS (built into code_rabbit autofix)
 
-The `code_rabbit_autofix` tool now has built-in guards:
+The `code_rabbit` action `autofix` tool now has built-in guards:
 1. **CI check gate**: Waits for all PR checks before triggering autofix
 2. **Duplicate prevention**: Checks if `@coderabbitai autofix` was already posted
 3. **State detection**: Reads CodeRabbit's reply to know if autofix applied/skipped/failed/rate_limited
@@ -103,12 +103,12 @@ You should NOT manually gate these — the tool handles them. Just check the
 returned `autofixApplied`, `autofixSkipped`, and `actionableCount` fields to decide next steps.
 
 ### Handling Tool Bails (Rate Limits & CI)
-If `code_rabbit_autofix` returns `autofixSkipped: true`, check the `reason` field:
-- If `reason === 'rate_limited'`: STOP immediately. Call `contract_review_decision` with `blocked` and state that CodeRabbit is rate limited.
-- If `reason === 'ci_checks_running'`: Do NOT fail. Wait/sleep for 2 minutes, then call `code_rabbit_autofix` again to re-check.
+If `code_rabbit` action `autofix` returns `autofixSkipped: true`, check the `reason` field:
+- If `reason === 'rate_limited'`: STOP immediately. Call `contract_stage` action `review_decision` with `reject` and state that CodeRabbit is rate limited.
+- If `reason === 'ci_checks_running'`: Do NOT fail. Wait/sleep for 2 minutes, then call `code_rabbit` action `autofix` again to re-check.
 
 ## 🔴 FINDINGS GATE
 
-Before merging, always check the `actionableCount` from `code_rabbit_autofix`:
+Before merging, always check the `actionableCount` from `code_rabbit` action `autofix`:
 - `actionableCount === 0` → safe to merge
-- `actionableCount > 0` → call `code_rabbit_findings`, judge if blocking, then decide
+- `actionableCount > 0` → call `code_rabbit` action `findings`, judge if blocking, then decide

@@ -12,7 +12,7 @@
 
 Aikami is a monorepo application platform bridging web and desktop paradigms. 
 
-**Tech stack**: Bun × SvelteKit 2 (SPA/PWA + SSR Hub on Cloud Run) × PixiJS v8 (Game) × bitECS × Turso (libSQL, offline-first) × Tauri v2 × Docker (Local AI Microservices) × Moon × Biome
+**Tech stack**: Bun × SvelteKit 2 (SPA/PWA + SSR Hub on Cloudflare Worker) × PixiJS v8 (Game) × bitECS × Turso (libSQL, offline-first) × Tauri v2 × Docker (Local AI Microservices) × Moon × Biome
 
 ## Key Docs by Topic
 

@@ -81,7 +81,7 @@ Sync commands:
 
 ## PR & Issue Linkage
 
-When a PR is created for a contract (via `gh_create_pr` or the contract pipeline):
+When a PR is created for a contract (via `gh_pr` action `create` or the contract pipeline):
 - The PR body auto-includes `Closes #<issue_number>` if the contract has a linked GitHub Issue.
 - The contract YAML frontmatter should be updated with `pr_url`.
 - The roadmap item transitions to **In Review**.

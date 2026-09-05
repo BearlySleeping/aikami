@@ -335,19 +335,19 @@ in tokens and time.
 | -------- | -------------------- | ------------------------------------------------ |
 | 1        | `read` source files  | Always — understand the code FIRST               |
 | 2        | `herdr_session read`  | Check live server logs for errors                |
-<!-- TODO(stale): `firestore_query` (a pi extension tool) was removed from this row — could not confirm whether a D1-equivalent query tool exists; verify against the live .pi extension list before relying on this row. -->
-| 4        | `browser_inspect`    | UI rendering bug, 404, blank page, env var check |
-| 5        | `browser_console`    | Evidence of a JS runtime error in the browser    |
-| 6        | `browser_network`    | Specific hypothesis about a failing API call     |
-| 7        | `browser_screenshot` | User asks to see the page, or final verification |
+<!-- TODO(stale): D1 query tool — verify against the live .pi extension list before relying on this row. -->
+| 4        | `browser inspect`    | UI rendering bug, 404, blank page, env var check |
+| 5        | `browser console`    | Evidence of a JS runtime error in the browser    |
+| 6        | `browser network`    | Specific hypothesis about a failing API call     |
+| 7        | `browser screenshot` | User asks to see the page, or final verification |
 
 ### Browser Tool Rules
 
-1. **`browser_inspect`** — Use ONCE with a focused `selector`. Exposes `PUBLIC_*` env vars. Do NOT inspect the same page repeatedly.
-2. **`browser_console`** — Only after browser_inspect, only when you suspect JS errors.
-3. **`browser_network`** — Only with a SPECIFIC hypothesis about a failing API call.
-4. **`browser_screenshot`** — Only when user asks to see the page, or final verification.
-5. **`browser_lighthouse`** — Specialized audit tool. Only for performance/accessibility questions.
+1. **`browser inspect`** — Use ONCE with a focused `selector`. Exposes `PUBLIC_*` env vars. Do NOT inspect the same page repeatedly.
+2. **`browser console`** — Only after browser inspect, only when you suspect JS errors.
+3. **`browser network`** — Only with a SPECIFIC hypothesis about a failing API call.
+4. **`browser screenshot`** — Only when user asks to see the page, or final verification.
+5. **`browser lighthouse`** — Specialized audit tool. Only for performance/accessibility questions.
 
 ### Common Debug Patterns
 
@@ -358,13 +358,13 @@ bash: ss -tlnp | grep <port>
 # Step 2: Read server logs
 herdr_session read client
 # Step 3: Check the DOM once
-browser_inspect selector="body"
+browser inspect selector="body"
 # Step 4: Read relevant source files
 
 # Pattern: "API call is failing"
 # Step 1: Read service/repository code
 # Step 2: Check herdr logs for backend errors
-# Step 3: browser_network ONLY if XHR/fetch
+# Step 3: browser network ONLY if XHR/fetch
 ```
 
 ### Debugging loop prevention

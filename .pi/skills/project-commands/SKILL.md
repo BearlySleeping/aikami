@@ -32,7 +32,7 @@ bun run herdr:start hub             # Hub SSR dev server
 bun moon run client:dev
 ```
 
-After starting a herdr workspace, wait 3-5 seconds then use `browser_inspect` to
+After starting a herdr workspace, wait 3-5 seconds then use `browser inspect` to
 verify the page is accessible.
 
 ### 2. Finite Tasks → Set Timeout & Predict Duration
@@ -284,7 +284,7 @@ The root `package.json` provides shortcuts for common operations:
 
 | Script               | Command                                 | Purpose                       |
 | -------------------- | --------------------------------------- | ----------------------------- |
-<!-- TODO(stale): this whole Setup table could not be verified against package.json — it lists `setup` at `scripts/setup/project.ts` and three `setup:firebase`/`setup:gmail-*` scripts, but package.json's actual "setup" script points to `scripts/src/lib/local_setup/index.ts` and defines no `setup:firebase`/`setup:gmail-oauth`/`setup:gmail-client` scripts at all. Out of the Firebase-purge scope for this pass — needs a full re-verification against package.json, not a word-swap. -->
+<!-- TODO(stale): this whole Setup table could not be verified against package.json — it lists `setup` at `scripts/setup/project.ts` and three `setup:gmail-*` scripts, but package.json's actual "setup" script points to `scripts/src/lib/local_setup/index.ts` and defines no `setup:gmail-oauth`/`setup:gmail-client` scripts at all. Out of the Firebase-purge scope for this pass — needs a full re-verification against package.json, not a word-swap. -->
 | `setup`              | `bun run scripts/src/lib/local_setup/index.ts` | Interactive project bootstrap |
 
 ### Operations (Daily)
@@ -310,17 +310,17 @@ bun run scripts -- logs <app> [flags]
 | -------------------------------- | ------------------------------------------------------------------------ |
 | `hub`, `client`, `site`, `docs`   | `cloudflare-worker` serviceType — logs are live-tail only via `bunx wrangler tail <workerName>` (Cloudflare Workers Observability is not queryable via `gcloud`) |
 | `client-tauri`                   | No server-side logs at all (desktop release) — command says so |
-| `image`, `text`, `voice`          | Self-hosted GPU boxes, not on Cloud Run — command says so; once their `serviceType` moves to a Cloud Run type in `deployment_config.ts`, this picks them up automatically |
+| `image`, `text`, `voice`          | Self-hosted GPU boxes — command says so; logs are available through herdr session read |
 
 | Flag                | Purpose                                                        |
 | -------------------- | --------------------------------------------------------------- |
 | `--mode`             | `staging` \| `production` (default: `$AIKAMI_MODE` or staging) |
 | `--tail`              | Stream live (required for Cloudflare Worker apps — no one-shot read) |
-| `--since <dur>`       | e.g. `1h`, `30m`, `2d` (Cloud Run targets only; maps to `gcloud --freshness`) |
+| `--since <dur>`       | e.g. `1h`, `30m`, `2d` (gcloud-backed targets only; maps to `gcloud --freshness`) |
 | `--lines <n>`         | Max entries for a one-shot read (default 50)                    |
 | `--severity <lvl>`    | `DEBUG`\|`INFO`\|`WARNING`\|`ERROR`\|`CRITICAL` — filters `severity>=lvl` |
 | `--message <text>`    | Substring match against the log message                         |
-| `--filter <raw>`      | Raw Cloud Logging filter fragment, ANDed onto the base filter (Cloud Run targets only) |
+| `--filter <raw>`      | Raw Cloud Logging filter fragment, ANDed onto the base filter (gcloud-backed targets only) |
 | `--json`              | Full structured JSON instead of the compact default              |
 
 ```bash
@@ -415,7 +415,7 @@ cd apps/frontend/client && bun run dev:production
 ```
 
 The `--mode` flag tells Vite which `.env.{mode}` file to load, which sets
-`PUBLIC_FIREBASE_PROJECT_ID`, `PUBLIC_MODE`, and other environment-specific
+`PUBLIC_MODE`, `PUBLIC_EMULATOR_PORT_OFFSET`, and other environment-specific
 variables.
 
 ---
@@ -437,11 +437,11 @@ inherit this environment.
 
 | Mode         | Project                | What it means                                                                                                                                             |
 | ------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `emulator`   | `demo-aikami-emulator` | Fully local — Firebase emulators, no GCP. Safe to break.                                                                                                  |
+| `emulator`   | `demo-aikami-emulator` | Fully local — herdr-managed dev servers, no GCP. Safe to break.                                                                                                  |
 | `staging`    | `aikami-staging`       | Live GCP project with real deployed services. Can also run locally against live backend. |
 | `production` | `aikami-production`    | Live production. Deploy with care.                                                                                                                        |
 
-<!-- TODO(stale): could not confirm whether "deployed Cloud Functions, live Firestore data" is still accurate for the staging project, given the Data Planes table elsewhere in this repo's CLAUDE.md says Firebase/Firestore/Cloud Run are decommissioned while packages/shared/constants/src/lib/project.ts still models GCP project ids, CLOUD_FUNCTIONS_REGION, and firestack-based emulation as live. Flagging rather than guessing which is current. -->
+<!-- TODO(stale): could not confirm whether "deployed services, live data" is still accurate for the staging project, given the Data Planes table elsewhere says Firebase/Firestore/Cloud Run are decommissioned. Flagging rather than guessing which is current. -->
 
 Source of truth for the mode → project-id mapping: `packages/shared/constants/src/lib/project.ts` (`MODE_PROJECT_MAP`).
 

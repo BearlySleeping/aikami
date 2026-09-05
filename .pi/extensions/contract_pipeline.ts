@@ -282,7 +282,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
 
           // When the Captain signals 'merge', verify the PR was actually merged.
           // The orchestrator only syncs main + cleans up — it trusts the Captain
-          // already called gh_merge_pr. If the PR is still open, warn loudly.
+          // already called gh_pr action merge. If the PR is still open, warn loudly.
           let mergeWarning = '';
           if (params.decision === 'merge' && manifest.prUrl) {
             try {
@@ -296,7 +296,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                   '',
                   '⚠️  WARNING: PR is still OPEN.',
                   `   ${manifest.prUrl}`,
-                  '   The merge may have failed. Call gh_merge_pr before re-signaling.',
+                  '   The merge may have failed. Call gh_pr action merge before re-signaling.',
                 ].join('\n');
                 console.warn(mergeWarning);
               } else if (state === 'MERGED') {
@@ -419,7 +419,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             };
           }
 
-          // Build PR title + body for gh_create_pr delegation.
+          // Build PR title + body for gh_pr action create delegation.
           const prTitle = `Pi Agent Resolution: Contract ${contractId}`;
           const prBody = [
             `## Automated Pull Request`,
@@ -448,8 +448,8 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                   `**Branch:** \`${headBranch}\``,
                   `**Base branch:** \`${baseBranch}\``,
                   '',
-                  `**Next: Call \`gh_create_pr\`** to create the Pull Request:`,
-                  `  - title: "${prTitle}"`,
+                  `**Next: Call \`gh_pr create\`** to create the Pull Request:` +
+                    `  - title: "${prTitle}"`,
                   `  - headBranch: "${headBranch}"`,
                   `  - baseBranch: "${baseBranch}"`,
                   '',
@@ -459,8 +459,8 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                   '```',
                   '',
                   'After the PR is created, you can: ',
-                  '- **Merge it** with `gh_merge_pr` when ready',
-                  '- **Check CI** with `gh_pr_status`',
+                  '- **Merge it** with `gh_pr merge` when ready',
+                  '- **Check CI** with `gh_pr status`',
                 ].join('\n'),
               },
             ],

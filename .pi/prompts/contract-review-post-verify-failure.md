@@ -11,7 +11,7 @@ not a code problem. Do not re-run the verifier's tests; trust its evidence.
 
 1. `git status` / `git log` in the worktree — is the branch actually there and pushed?
 2. Work out the exact recovery actions: retry the push (`git push origin
-   HEAD`) and retry PR creation (`gh_create_pr` with `draft: false`).
+   HEAD`) and retry PR creation (`gh_pr` action `create` with `draft: false`).
 3. 🔴 Get explicit user authorization BEFORE running them — report what you
    found and the exact commands you will run, and ask. Do NOT push or create
    the PR without that authorization. Once authorized, retry the push and PR
@@ -28,4 +28,4 @@ not a code problem. Do not re-run the verifier's tests; trust its evidence.
 | Diagnosable but needs another implementer pass (e.g. a real merge conflict) | `change` |
 | Not fixable from here (e.g. broken `gh` credentials) | `reject` — explain exactly what a human needs to do |
 
-🔴 Your LAST action must call `contract_review_decision`.
+🔴 Your LAST action must call `contract_stage` action `review_decision`.

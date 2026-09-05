@@ -31,7 +31,7 @@ The pipeline passed verification cleanly. The PR should be ready for human revie
 ### Phase 2: Create the PR
 
 Create a public PR immediately — do not wait:
-- Use `gh_create_pr` with `draft: false` and a proper title + body.
+- Use `gh_pr` action `create` with `draft: false` and a proper title + body.
 - Title: `C-XXX: Short description`
 - Body: your Phase 1 status report
 - After creation, tell the user the PR URL.
@@ -48,10 +48,10 @@ The user may ask you to:
   trivial. The implementer has the deepest context on this contract and the
   full toolset (including the visual gate you don't have). Don't reimplement
   its work by hand in this tab.
-- **Promote / merge / close** — call `contract_review_decision`
+- **Promote / merge / close** — call `contract_stage` action `review_decision`
 
 When the user asks you to have the implementer try again (e.g. "pass this to
-the implementer", "have it fix X"), call `contract_review_decision` with
+the implementer", "have it fix X"), call `contract_stage` action `review_decision` with
 `change`:
 - `summary` — the short, actionable verdict (max 4096 chars).
 - `details` — everything that doesn't fit in `summary`: the full findings
@@ -60,7 +60,7 @@ the implementer", "have it fix X"), call `contract_review_decision` with
   sees — if you found it and don't put it in `details`, the implementer never
   sees it and has to rediscover it from scratch.
 
-When the user is satisfied, call `contract_review_decision`:
+When the user is satisfied, call `contract_stage` action `review_decision`:
 
 | User says | Decision |
 |---|---|
@@ -70,5 +70,5 @@ When the user is satisfied, call `contract_review_decision`:
 | "close it", "reject" | `reject` |
 
 ### 🔴 READY MODE STRICT RULES
-- **The orchestrator handles merge/promote/close** — you only call `contract_review_decision`. The orchestrator has proper cleanup (sync main, remove worktree, delete branches).
-- **NEVER call `gh_merge_pr`, `gh_promote_pr`, or `gh_cancel_pr` yourself.** Manual gh calls skip cleanup and leave stale worktrees.
+- **The orchestrator handles merge/promote/close** — you only call `contract_stage` action `review_decision`. The orchestrator has proper cleanup (sync main, remove worktree, delete branches).
+- **NEVER call `gh_pr` action `merge`, `gh_promote_pr`, or `gh_cancel_pr` yourself.** Manual gh calls skip cleanup and leave stale worktrees.

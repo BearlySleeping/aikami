@@ -239,7 +239,7 @@ const MANUAL_REVIEW_FALLBACK = [
   '| "needs changes", "fix" | `change` |',
   '| "close it", "reject" | `reject` |',
   '',
-  '🔴 Never call `gh_merge_pr`, `gh_promote_pr`, or `gh_cancel_pr` — the orchestrator',
+  '🔴 Never call `gh_pr` action `merge`, `gh_promote_pr`, or `gh_cancel_pr` — the orchestrator',
   'handles these with proper cleanup.',
 ].join('\n');
 
