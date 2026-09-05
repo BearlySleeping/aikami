@@ -11,21 +11,18 @@
 //   bun run measure-tools
 //   CONTRACT_PIPELINE_ROLE=implementer bun run measure-tools   # worker surface
 //
-// Token counts are a length/4 approximation — good enough to compare runs and
-// spot a tool that has quietly become expensive. A tokenizer-derived count
-// is also shown when available (via Pi's native tokenizer).
+// Token counts use Pi's pinned length/4 estimator. The pinned Pi package does
+// not expose a native tokenizer, so all token metrics are approximation-only.
 //
 // AC-4: Measurement reflects the assembled surface — category contributions,
-// approximate vs tokenizer-derived counts, unavailable categories, and the
-// effective profile are all reported.
+// approximate counts, unavailable categories, and the effective profile are
+// all reported.
 
 import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { estimateTextTokens } from '@earendil-works/pi-ai/utils/estimate';
 
 const EXTENSIONS_DIR = join(dirname(import.meta.dir), 'extensions');
-
-/** Approximate tokens for a string. */
-const CHARS_PER_TOKEN = 4;
 
 // ── AC-4: Category classification ────────────────────────────
 
@@ -131,10 +128,10 @@ const toolCost = (tool: Tool): number => {
     (tool.promptSnippet ?? '') +
     (tool.promptGuidelines ?? []).join('') +
     JSON.stringify(tool.parameters ?? {});
-  return Math.round(payload.length / CHARS_PER_TOKEN);
+  return estimateTextTokens(payload);
 };
 
-/** Character length of one tool's prompt payload (for tokenizer comparison). */
+/** Character length of one tool's prompt payload (for estimator context). */
 const toolCharLength = (tool: Tool): number =>
   tool.name.length +
   tool.description.length +
@@ -190,12 +187,12 @@ console.log(
   `${'Total'.padEnd(20)} ${String(rows.length).padEnd(6)} ${String(total).padEnd(8)} 100.0`,
 );
 
-// ── AC-4: Tokenizer comparison ──────────────────────────────
+// ── AC-4: Approximate token estimate ────────────────────────
 
-console.log('\n── Tokenization info ──');
-console.log(`Approximate (÷4):  ${total} tokens`);
+console.log('\n── Approximate token estimate ──');
+console.log(`Pi estimate (÷4):  ${total} tokens`);
 console.log(`Raw characters:    ${totalChars}`);
-console.log(`Token ratio:       1:${(totalChars / Math.max(total, 1)).toFixed(1)} chars/token`);
+console.log('Approximation only: the pinned Pi package does not expose a native tokenizer.');
 
 // ── AC-4: Unavailable categories ────────────────────────────
 

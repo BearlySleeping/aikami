@@ -70,8 +70,8 @@ export type RoleProfile = {
   required: ToolCapability[];
   /** Optional capabilities — loaded when the task needs them, not always. */
   optional: ToolCapability[];
-  /** Extension keys that are explicitly forbidden for this role. */
-  forbidden: string[];
+  /** Capabilities that are explicitly forbidden for this role. */
+  forbidden: ToolCapability[];
 };
 
 /**
@@ -261,8 +261,8 @@ export type PreflightIssue = {
  * Uses Pi's supported resource filters / active-tool APIs when available
  * (via isPipelineWorker check), otherwise falls back to env-var inspection.
  */
-export const preflightRoleProfile = (options: { role: PipelineRole }): PreflightIssue[] => {
-  const profile = ROLE_PROFILES[options.role];
+export const preflightRoleProfile = (options: { role: string }): PreflightIssue[] => {
+  const profile = getRoleProfile(options.role);
   const issues: PreflightIssue[] = [];
 
   if (!profile) {
@@ -288,19 +288,23 @@ export const preflightRoleProfile = (options: { role: PipelineRole }): Preflight
     }
   }
 
-  // Check forbidden capabilities don't overlap with required ones
-  for (const forbidden of profile.forbidden) {
-    // forbidden stores extension keys; check if any required capability
-    // accidentally loads a forbidden key
-    for (const capability of profile.required) {
-      const exts = CAPABILITY_EXTENSIONS[capability] ?? [];
-      if (exts.includes(forbidden)) {
+  // Resolve both sides to extension keys before checking for conflicts.
+  const requiredExtensions = new Set(
+    profile.required.flatMap((capability) => CAPABILITY_EXTENSIONS[capability] ?? []),
+  );
+  for (const forbiddenCapability of profile.forbidden) {
+    for (const forbiddenExtension of CAPABILITY_EXTENSIONS[forbiddenCapability] ?? []) {
+      if (requiredExtensions.has(forbiddenExtension)) {
+        const requiredCapability = profile.required.find((capability) =>
+          CAPABILITY_EXTENSIONS[capability]?.includes(forbiddenExtension),
+        );
         issues.push({
-          key: forbidden,
+          key: forbiddenExtension,
           severity: 'error',
           message:
-            `Extension "${forbidden}" is both required (via capability "${capability}") ` +
-            `and explicitly forbidden for role "${options.role}". Resolve the conflict.`,
+            `Extension "${forbiddenExtension}" is both required (via capability "${requiredCapability}") ` +
+            `and forbidden (via capability "${forbiddenCapability}") for role "${options.role}". ` +
+            'Resolve the conflict.',
         });
       }
     }

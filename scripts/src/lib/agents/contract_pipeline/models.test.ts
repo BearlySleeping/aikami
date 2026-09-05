@@ -109,11 +109,11 @@ describe('AC-3: Env override detection', () => {
 describe('AC-3: Tier equivalence', () => {
   test('reports equivalence when pro and flash are the same slug', () => {
     // Default: both pro and flash point at the same DeepSeek-V4-Flash
-    const resolved = resolveModelConfiguration({ role: 'implementer' });
-    if (resolved.effectiveModel === resolveModelConfiguration({ role: 'critic' }).effectiveModel) {
-      expect(resolved.tierEquivalence).not.toBeNull();
-      expect(resolved.tierEquivalence).toContain('equivalent');
-    }
+    const pro = resolveModelConfiguration({ role: 'implementer' });
+    const flash = resolveModelConfiguration({ role: 'critic' });
+    expect(pro.effectiveModel).toBe(flash.effectiveModel);
+    expect(pro.tierEquivalence).not.toBeNull();
+    expect(pro.tierEquivalence).toContain('equivalent');
   });
 
   test('does NOT report equivalence when tiers are differentiated', () => {
@@ -121,19 +121,17 @@ describe('AC-3: Tier equivalence', () => {
     const resolved = resolveModelConfiguration({ role: 'implementer' });
     // pro is now differentiated from flash
     const flashModel = resolveModelConfiguration({ role: 'critic' });
-    if (resolved.effectiveModel !== flashModel.effectiveModel) {
-      expect(resolved.tierEquivalence).toBeNull();
-    }
+    expect(resolved.effectiveModel).not.toBe(flashModel.effectiveModel);
+    expect(resolved.tierEquivalence).toBeNull();
   });
 
-  test('warns when the role uses a tier that is equivalent to another', () => {
+  test('does not warn when default tiers are intentionally equivalent', () => {
     const resolved = resolveModelConfiguration({ role: 'implementer' });
     const tierWarnings = resolved.issues.filter(
       (i) => i.field.startsWith('tier:') && i.severity === 'warning',
     );
-    if (resolved.tierEquivalence) {
-      expect(tierWarnings.length).toBeGreaterThan(0);
-    }
+    expect(resolved.tierEquivalence).not.toBeNull();
+    expect(tierWarnings).toHaveLength(0);
   });
 });
 
@@ -165,6 +163,16 @@ describe('AC-3: Model override validation', () => {
     const issues = validateModelOverride({ tier: 'pro', value: undefined });
     expect(issues).toHaveLength(0);
   });
+
+  test('rejects an empty model override', () => {
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = '';
+    const resolved = resolveModelConfiguration({ role: 'implementer' });
+    const errors = resolved.issues.filter((issue) => issue.severity === 'error');
+
+    expect(resolved.requestedTierValue).toBe('');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.field).toBe('CONTRACT_PIPELINE_MODEL_PRO');
+  });
 });
 
 describe('AC-3: Thinking level validation', () => {
@@ -185,6 +193,28 @@ describe('AC-3: Thinking level validation', () => {
   test('no issues when thinking is not overridden', () => {
     const issues = validateThinkingOverride({ value: undefined });
     expect(issues).toHaveLength(0);
+  });
+
+  test('rejects an empty thinking override', () => {
+    process.env.CONTRACT_PIPELINE_THINKING = '';
+    const resolved = resolveModelConfiguration({ role: 'implementer' });
+    const errors = resolved.issues.filter((issue) => issue.severity === 'error');
+
+    expect(resolved.requestedThinking).toBe('');
+    expect(resolved.effectiveThinking).toBe('high');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.field).toBe('CONTRACT_PIPELINE_THINKING');
+  });
+
+  test('keeps invalid requested thinking distinct from the effective fallback', () => {
+    process.env.CONTRACT_PIPELINE_THINKING = 'turbo';
+    const resolved = resolveModelConfiguration({ role: 'implementer' });
+
+    expect(resolved.requestedThinking).toBe('turbo');
+    expect(resolved.effectiveThinking).toBe('high');
+    expect(resolved.issues.some((issue) => issue.field === 'CONTRACT_PIPELINE_THINKING')).toBe(
+      true,
+    );
   });
 });
 

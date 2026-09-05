@@ -4,71 +4,48 @@
 // Verifies category contributions, approximate counts, unavailable categories,
 // and effective profile reporting.
 
-import { afterEach, describe, expect, test } from 'bun:test';
-import { readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { describe, expect, test } from 'bun:test';
+import { resolve } from 'node:path';
 
-const EXTENSIONS_DIR = join(dirname(import.meta.dir), 'extensions');
+const REPO_ROOT = resolve(import.meta.dir, '../..');
+const MEASUREMENT_SCRIPT = resolve(import.meta.dir, 'measure_tool_surface.ts');
 
-const ENV_KEYS = ['CONTRACT_PIPELINE_ROLE'] as const;
-
-afterEach(() => {
-  for (const key of ENV_KEYS) {
-    delete process.env[key];
+const runMeasurement = (role?: string) => {
+  const env = { ...process.env };
+  if (role === undefined) {
+    delete env.CONTRACT_PIPELINE_ROLE;
+  } else {
+    env.CONTRACT_PIPELINE_ROLE = role;
   }
-});
+  return Bun.spawnSync({
+    cmd: [process.execPath, 'run', MEASUREMENT_SCRIPT],
+    cwd: REPO_ROOT,
+    env,
+    stderr: 'pipe',
+    stdout: 'pipe',
+  });
+};
 
-describe('AC-4: Extension files exist', () => {
-  test('extensions directory has tool files', () => {
-    const files = readdirSync(EXTENSIONS_DIR).filter(
-      (f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.startsWith('lib/'),
-    );
-    expect(files.length).toBeGreaterThan(5);
+describe('AC-4: Measurement CLI', () => {
+  test('reports collected tools, categories, and the default profile', () => {
+    const result = runMeasurement();
+    const output = result.stdout.toString();
+
+    expect(result.exitCode).toBe(0);
+    expect(output).toMatch(/TOTAL across \d+ registered tools/);
+    expect(output).toMatch(/gh_pr\s+github_cli\.ts/);
+    expect(output).toMatch(/github\s+\d+\s+\d+/);
+    expect(output).toContain('none (all tools loaded)');
+    expect(output).toContain('Approximation only');
+    expect(output).not.toContain('Token ratio');
   });
 
-  test('key extensions are present', () => {
-    const files = readdirSync(EXTENSIONS_DIR);
-    expect(files).toContain('github_cli.ts');
-    expect(files).toContain('contract_pipeline.ts');
-    expect(files).toContain('moon_integration.ts');
-    expect(files).toContain('chrome_devtools.ts');
-  });
-});
+  test('reports the selected pipeline role profile', () => {
+    const result = runMeasurement('implementer');
+    const output = result.stdout.toString();
 
-describe('AC-4: Category classification', () => {
-  test('known extensions map to expected categories', () => {
-    // This tests that the CATEGORY_MAP in measure_tool_surface.ts is
-    // synchronized with actual extension files
-    const files = readdirSync(EXTENSIONS_DIR).filter(
-      (f) => f.endsWith('.ts') && !f.endsWith('.test.ts'),
-    );
-    // At minimum, key files should be classifiable
-    expect(files).toContain('github_cli.ts');
-    expect(files).toContain('contract_pipeline.ts');
-  });
-});
-
-describe('AC-4: Role profile detection', () => {
-  test('no role = none profile', () => {
-    delete process.env.CONTRACT_PIPELINE_ROLE;
-    // Import the script and check detection via module export
-    // (the script is a CLI — test via direct function call pattern)
-    expect(true).toBe(true); // placeholder: verified in integration
-  });
-
-  test('CONTRACT_PIPELINE_ROLE=implementer selects implementer profile', () => {
-    process.env.CONTRACT_PIPELINE_ROLE = 'implementer';
-    expect(process.env.CONTRACT_PIPELINE_ROLE).toBe('implementer');
-  });
-});
-
-describe('AC-4: Tool count', () => {
-  test('collects tools from multiple extensions', async () => {
-    const files = readdirSync(EXTENSIONS_DIR).filter(
-      (f) => f.endsWith('.ts') && !f.endsWith('.test.ts'),
-    );
-    // At least the major extensions should be present
-    const extensionFiles = files.filter((f) => !f.startsWith('lib/'));
-    expect(extensionFiles.length).toBeGreaterThanOrEqual(15);
+    expect(result.exitCode).toBe(0);
+    expect(output).toMatch(/TOTAL across \d+ registered tools/);
+    expect(output).toContain('implementer (publication + browser + vision optional)');
   });
 });

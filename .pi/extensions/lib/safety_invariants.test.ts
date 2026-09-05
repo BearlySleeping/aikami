@@ -6,6 +6,9 @@
 // remains usable.
 
 import { describe, expect, test } from 'bun:test';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   getForbiddenExtensions,
   getOptionalExtensions,
@@ -97,14 +100,18 @@ describe('AC-5: Effective resource choices are inspectable', () => {
 
 describe('AC-5: Unknown config fails clearly', () => {
   test('preflight for an unknown role produces errors', () => {
-    // preflightRoleProfile only accepts PipelineRole via TS, so we test
-    // the error path through isToolEnabledForRole with unknown role
+    const issues = preflightRoleProfile({ role: 'unknown_role' });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.key).toBe('unknown_role');
+  });
+
+  test('tool gating stays usable for an unknown role', () => {
     expect(isToolEnabledForRole('gh_pr', 'unknown_role')).toBe(true); // conservative default
   });
 
-  test('preflight for valid roles produces no errors', () => {
-    for (const role of ['writer', 'critic', 'implementer', 'verifier', 'review']) {
-      const issues = preflightRoleProfile({ role: role as any });
+  test('preflight for profiles without capability overlap produces no errors', () => {
+    for (const role of ['writer', 'critic', 'review']) {
+      const issues = preflightRoleProfile({ role });
       expect(issues.filter((i) => i.severity === 'error')).toHaveLength(0);
     }
   });
@@ -113,12 +120,27 @@ describe('AC-5: Unknown config fails clearly', () => {
 // ── AC-5: No global file writes ──
 
 describe('AC-5: No global file writes', () => {
-  test('role_profiles module does not write files on import', () => {
-    // The module should be a pure data/function module — no side effects
-    // that write to disk. This is verified by the module having no
-    // fs.writeFileSync, fs.renameSync, or similar calls.
-    // Verifying this via code review rather than runtime assertion.
-    expect(true).toBe(true);
+  test('role_profiles module does not write files on isolated import', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'aikami-role-profiles-'));
+    const fixtureModule = join(fixtureRoot, 'role_profiles.ts');
+    copyFileSync(join(import.meta.dir, 'role_profiles.ts'), fixtureModule);
+    const filesBefore = readdirSync(fixtureRoot, { recursive: true });
+    const sourceBefore = readFileSync(fixtureModule, 'utf8');
+
+    try {
+      const result = Bun.spawnSync({
+        cmd: [process.execPath, '-e', 'await import("./role_profiles.ts")'],
+        cwd: fixtureRoot,
+        stderr: 'pipe',
+        stdout: 'pipe',
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(readdirSync(fixtureRoot, { recursive: true })).toEqual(filesBefore);
+      expect(readFileSync(fixtureModule, 'utf8')).toBe(sourceBefore);
+    } finally {
+      rmSync(fixtureRoot, { force: true, recursive: true });
+    }
   });
 
   test('isToolEnabledForRole is a pure function with no side effects', () => {

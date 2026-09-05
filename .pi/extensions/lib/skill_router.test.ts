@@ -4,7 +4,10 @@
 // Non-engine sessions avoid the Pixi API catalogue.
 // Engine sessions can discover the router and load needed files.
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 import {
   clearPixiSkillCache,
   hasPixiSkill,
@@ -14,15 +17,25 @@ import {
 
 // Resolve repoRoot for tests — the pi extension lib dir is under
 // <repoRoot>/.pi/extensions/lib/
-const REPO_ROOT = import.meta.dir
-  ? (() => {
-      // Navigate up from .pi/extensions/lib/ to repo root
-      const parts = import.meta.dir.split('/');
-      // Find '.pi' in the path
-      const piIndex = parts.lastIndexOf('.pi');
-      return parts.slice(0, piIndex).join('/');
-    })()
-  : process.cwd();
+const REPO_ROOT = resolve(import.meta.dir, '../../..');
+
+const fixtureRoots: string[] = [];
+
+const createSkillFixture = (options: { skillId: string; content: string }) => {
+  const repoRoot = mkdtempSync(resolve(tmpdir(), 'aikami-skill-router-'));
+  const skillFile = resolve(repoRoot, '.pi/generated-skills/pixijs', options.skillId, 'SKILL.md');
+  mkdirSync(resolve(skillFile, '..'), { recursive: true });
+  writeFileSync(skillFile, options.content);
+  fixtureRoots.push(repoRoot);
+  return { repoRoot, skillFile };
+};
+
+afterEach(() => {
+  clearPixiSkillCache();
+  for (const root of fixtureRoots.splice(0)) {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
 
 describe('AC-2: Skill listing', () => {
   test('lists all 26 Pixi skills', () => {
@@ -65,19 +78,49 @@ describe('AC-2: On-demand loading', () => {
   });
 
   test('loadPixiSkill caches content after first load', () => {
-    clearPixiSkillCache();
-    const first = loadPixiSkill({ repoRoot: REPO_ROOT, skillId: 'pixijs-ticker' });
-    const second = loadPixiSkill({ repoRoot: REPO_ROOT, skillId: 'pixijs-ticker' });
-    expect(first).toBe(second); // Same reference (cached)
+    const initialContent = '# Initial ticker content';
+    const updatedContent = '# Updated ticker content';
+    const { repoRoot, skillFile } = createSkillFixture({
+      skillId: 'pixijs-ticker',
+      content: initialContent,
+    });
+
+    expect(loadPixiSkill({ repoRoot, skillId: 'pixijs-ticker' })).toBe(initialContent);
+    writeFileSync(skillFile, updatedContent);
+    expect(loadPixiSkill({ repoRoot, skillId: 'pixijs-ticker' })).toBe(initialContent);
   });
 
   test('clearPixiSkillCache invalidates the cache', () => {
+    const initialContent = '# Initial sprite content';
+    const updatedContent = '# Updated sprite content';
+    const { repoRoot, skillFile } = createSkillFixture({
+      skillId: 'pixijs-scene-sprite',
+      content: initialContent,
+    });
+
+    expect(loadPixiSkill({ repoRoot, skillId: 'pixijs-scene-sprite' })).toBe(initialContent);
+    writeFileSync(skillFile, updatedContent);
+    expect(loadPixiSkill({ repoRoot, skillId: 'pixijs-scene-sprite' })).toBe(initialContent);
     clearPixiSkillCache();
-    loadPixiSkill({ repoRoot: REPO_ROOT, skillId: 'pixijs-scene-sprite' });
-    // Should not throw
-    clearPixiSkillCache();
-    const reloaded = loadPixiSkill({ repoRoot: REPO_ROOT, skillId: 'pixijs-scene-sprite' });
-    expect(reloaded).toBeDefined();
+    expect(loadPixiSkill({ repoRoot, skillId: 'pixijs-scene-sprite' })).toBe(updatedContent);
+  });
+
+  test('cache entries are isolated by repository root', () => {
+    const first = createSkillFixture({
+      skillId: 'pixijs-events',
+      content: '# First repository events',
+    });
+    const second = createSkillFixture({
+      skillId: 'pixijs-events',
+      content: '# Second repository events',
+    });
+
+    expect(loadPixiSkill({ repoRoot: first.repoRoot, skillId: 'pixijs-events' })).toBe(
+      '# First repository events',
+    );
+    expect(loadPixiSkill({ repoRoot: second.repoRoot, skillId: 'pixijs-events' })).toBe(
+      '# Second repository events',
+    );
   });
 });
 

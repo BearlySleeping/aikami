@@ -10,7 +10,7 @@
 // discarded to reduce metadata — it stays available for on-demand loading.
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 
@@ -95,6 +95,10 @@ const PIXI_SKILLS = [
 
 export type PixiSkillId = (typeof PIXI_SKILLS)[number]['id'];
 
+const PIXI_SKILL_IDS = new Set<string>(PIXI_SKILLS.map((skill) => skill.id));
+
+const isPixiSkillId = (skillId: string): skillId is PixiSkillId => PIXI_SKILL_IDS.has(skillId);
+
 // ── On-demand loading ────────────────────────────────────────
 
 /**
@@ -104,8 +108,8 @@ export type PixiSkillId = (typeof PIXI_SKILLS)[number]['id'];
 const PIXI_SKILLS_DIR = '.pi/generated-skills/pixijs';
 
 /** Resolve a Pixi skill ID to its SKILL.md path. */
-const skillPath = (repoRoot: string, skillId: string): string =>
-  join(repoRoot, PIXI_SKILLS_DIR, skillId, 'SKILL.md');
+const skillPath = (repoRoot: string, skillId: PixiSkillId): string =>
+  resolve(repoRoot, PIXI_SKILLS_DIR, skillId, 'SKILL.md');
 
 /** Map of skill IDs to cached content. */
 const loadedCache = new Map<string, string>();
@@ -118,16 +122,19 @@ export const loadPixiSkill = (options: {
   repoRoot: string;
   skillId: string;
 }): string | undefined => {
-  const cached = loadedCache.get(options.skillId);
+  if (!isPixiSkillId(options.skillId)) {
+    return undefined;
+  }
+  const path = skillPath(options.repoRoot, options.skillId);
+  const cached = loadedCache.get(path);
   if (cached !== undefined) {
     return cached;
   }
-  const path = skillPath(options.repoRoot, options.skillId);
   if (!existsSync(path)) {
     return undefined;
   }
   const content = readFileSync(path, 'utf-8');
-  loadedCache.set(options.skillId, content);
+  loadedCache.set(path, content);
   return content;
 };
 
@@ -135,6 +142,9 @@ export const loadPixiSkill = (options: {
  * Check if a Pixi skill exists.
  */
 export const hasPixiSkill = (options: { repoRoot: string; skillId: string }): boolean => {
+  if (!isPixiSkillId(options.skillId)) {
+    return false;
+  }
   const path = skillPath(options.repoRoot, options.skillId);
   return existsSync(path);
 };

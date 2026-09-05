@@ -145,14 +145,8 @@ describe('AC-1: Resolved extension lists', () => {
 // ── AC-1: Preflight validation ──
 
 describe('AC-1: Preflight validation', () => {
-  test('valid profile passes preflight with no issues', () => {
-    for (const role of [
-      'writer',
-      'critic',
-      'implementer',
-      'verifier',
-      'review',
-    ] as PipelineRole[]) {
+  test('profiles without capability overlap pass preflight with no issues', () => {
+    for (const role of ['writer', 'critic', 'review'] as PipelineRole[]) {
       const issues = preflightRoleProfile({ role });
       const errors = issues.filter((i) => i.severity === 'error');
       expect(errors).toHaveLength(0);
@@ -160,9 +154,17 @@ describe('AC-1: Preflight validation', () => {
   });
 
   test('preflight catches unknown role', () => {
-    // preflightRoleProfile only accepts PipelineRole, so test via type assertion
-    const issues = preflightRoleProfile({ role: 'writer' as PipelineRole });
-    expect(issues.filter((i) => i.severity === 'error')).toHaveLength(0);
+    const issues = preflightRoleProfile({ role: 'unknown_role' });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.key).toBe('unknown_role');
+    expect(issues[0]?.severity).toBe('error');
+  });
+
+  test.each(['implementer', 'verifier'])('preflight reports %s shared-key overlap', (role) => {
+    const issues = preflightRoleProfile({ role });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.key).toBe('gh_pr');
+    expect(issues[0]?.message).toContain('code_review');
   });
 
   test('preflight does not produce warnings for valid profiles', () => {

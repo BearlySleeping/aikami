@@ -138,7 +138,7 @@ export const validateModelOverride = (options: {
 }): ModelValidationIssue[] => {
   const issues: ModelValidationIssue[] = [];
 
-  if (!options.value) {
+  if (options.value === undefined) {
     return issues; // No override, using default — valid
   }
 
@@ -173,7 +173,7 @@ export const validateThinkingOverride = (options: {
 }): ModelValidationIssue[] => {
   const issues: ModelValidationIssue[] = [];
 
-  if (!options.value) {
+  if (options.value === undefined) {
     return issues;
   }
 
@@ -209,7 +209,7 @@ export const resolveModelConfiguration = (options: {
   const effectiveModel = resolveTier(requestedTier);
   const overridden = effectiveModel !== defaultModel;
 
-  const requestedThinking = CONTRACT_ROLE_THINKING_LEVEL[options.role] ?? 'high';
+  const requestedThinking = process.env.CONTRACT_PIPELINE_THINKING ?? 'high';
   const effectiveThinking = isThinkingLevel(requestedThinking) ? requestedThinking : 'high';
 
   // Validate overrides
@@ -223,17 +223,6 @@ export const resolveModelConfiguration = (options: {
     proModel === flashModel
       ? `pro and flash both resolve to "${proModel}" — they are equivalent. Override one tier via CONTRACT_PIPELINE_MODEL_PRO or CONTRACT_PIPELINE_MODEL_FLASH to differentiate.`
       : null;
-
-  // If tier equivalence exists and this role uses pro or flash, add a warning
-  if (tierEquivalence && (requestedTier === 'pro' || requestedTier === 'flash')) {
-    issues.push({
-      field: `tier:${requestedTier}`,
-      severity: 'warning',
-      message:
-        `Role "${options.role}" uses tier "${requestedTier}" which resolves to "${effectiveModel}". ` +
-        `Note: ${tierEquivalence}`,
-    });
-  }
 
   return {
     requestedTier,
