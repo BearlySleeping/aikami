@@ -1,7 +1,7 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-04
+> Generated: 2026-09-05
 > Files: 416 across 17 categories
 
 ## Quick Start (Read These First)
@@ -14,7 +14,7 @@
 
 ## Main Repo
 
-Monorepo: SvelteKit Client × Firebase backend × Bun runtime × Moon orchestrator.
+Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth) × Bun runtime × Moon orchestrator.
 
 ## architecture/
 
