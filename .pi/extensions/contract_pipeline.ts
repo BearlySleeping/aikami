@@ -176,6 +176,11 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           if (!Number.isInteger(attempt) || attempt < 1) {
             throw new Error('Pipeline attempt is invalid.');
           }
+          const generationValue = process.env.CONTRACT_PIPELINE_GENERATION;
+          const generation = generationValue === undefined ? undefined : Number(generationValue);
+          if (generation !== undefined && (!Number.isSafeInteger(generation) || generation < 0)) {
+            throw new Error('Pipeline generation is invalid.');
+          }
           const contractPath = environment('CONTRACT_PIPELINE_CONTRACT_PATH');
           const resultPath = environment('CONTRACT_PIPELINE_RESULT_PATH');
 
@@ -217,6 +222,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
               runId,
               stage: role,
               attempt,
+              generation,
               status: params.status,
               summary: params.summary,
               findings: params.findings,

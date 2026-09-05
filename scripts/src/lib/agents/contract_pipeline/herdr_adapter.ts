@@ -1024,6 +1024,9 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       'HERDR_DISABLE_SOUND=1',
       ...inheritedPathEnv(),
     ];
+    if (request.generation !== undefined) {
+      env.push(`CONTRACT_PIPELINE_GENERATION=${String(request.generation)}`);
+    }
     if (this._workspacePath) {
       env.push(`CONTRACT_PIPELINE_WORKSPACE_PATH=${this._workspacePath}`);
     }

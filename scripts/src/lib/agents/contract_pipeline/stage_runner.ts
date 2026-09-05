@@ -69,6 +69,7 @@ const settleGuardResult = async (options: {
   runId: string;
   role: ContractWorkerRole;
   attempt: number;
+  minGeneration: number;
   settleMs?: number;
 }): Promise<ContractStageResult> => {
   const settleMs = options.settleMs ?? GUARD_SETTLE_MS;
@@ -91,6 +92,7 @@ const settleGuardResult = async (options: {
       runId: options.runId,
       role: options.role,
       attempt: options.attempt,
+      minGeneration: options.minGeneration,
     });
     if (current && !isGuardHalt(current)) {
       console.log(
@@ -155,8 +157,20 @@ export const runStage = async (options: {
   launchWorker: (request: WorkerLaunchRequest) => Promise<{ paneId: string }>;
   checkAgentWorking?: (paneId: string) => Promise<boolean>;
   nudgeWorker?: (opts: { paneId: string; message: string }) => Promise<void>;
+  /** Generation counter for result fencing — passed through to WorkerLaunchRequest. */
+  generation?: number;
+  /** Persist and return the next generation when replacing a worker. */
+  advanceGeneration?: () => number;
 }): Promise<StageRunOutcome> => {
   const role = roleForStage(options.stage);
+  let expectedGeneration = options.generation ?? 0;
+  const advanceExpectedGeneration = (): void => {
+    const nextGeneration = options.advanceGeneration?.() ?? expectedGeneration + 1;
+    if (!Number.isSafeInteger(nextGeneration) || nextGeneration <= expectedGeneration) {
+      throw new Error(`Invalid replacement generation: ${nextGeneration}.`);
+    }
+    expectedGeneration = nextGeneration;
+  };
   const resultPath = join(
     options.runDirectory,
     'stages',
@@ -168,6 +182,7 @@ export const runStage = async (options: {
     runId: options.runId,
     role,
     attempt: options.attempt,
+    minGeneration: expectedGeneration,
   });
   if (orphaned) {
     console.log(`♻️  Adopting completed ${role} result from prior run (${orphaned.status}).`);
@@ -216,6 +231,7 @@ export const runStage = async (options: {
       runId: options.runId,
       role,
       attempt: options.attempt - 1,
+      minGeneration: expectedGeneration,
     });
     if (prevResult && prevResult.status === 'passed') {
       console.log(
@@ -258,6 +274,7 @@ export const runStage = async (options: {
       role,
       stage: options.stage,
       attempt: options.attempt,
+      generation: expectedGeneration,
       userMessage,
     });
     paneId = launched.paneId;
@@ -276,6 +293,7 @@ export const runStage = async (options: {
       runId: options.runId,
       role,
       attempt: options.attempt,
+      minGeneration: expectedGeneration,
     });
     if (result) {
       if (isGuardHalt(result)) {
@@ -285,6 +303,7 @@ export const runStage = async (options: {
           runId: options.runId,
           role,
           attempt: options.attempt,
+          minGeneration: expectedGeneration,
           settleMs: options.guardSettleMs,
         });
         return { result: settled, paneId };
@@ -323,6 +342,7 @@ export const runStage = async (options: {
       // 🔴 A relaunch spawns a NEW pane — adopt its paneId before the next
       // checkAgentWorking/nudgeWorker call, or health checks keep polling
       // the dead pane and every relaunch looks like another crash.
+      advanceExpectedGeneration();
       const relaunched = await options.launchWorker({
         runId: options.runId,
         resultPath,
@@ -334,6 +354,7 @@ export const runStage = async (options: {
         role,
         stage: options.stage,
         attempt: options.attempt,
+        generation: expectedGeneration,
         userMessage:
           '🔴 RELAUNCH: Worker crashed. Resume from prior findings and call contract_stage_complete.',
       });
@@ -374,6 +395,7 @@ export const runStage = async (options: {
     );
     relaunches += 1;
     idleMs = 0;
+    advanceExpectedGeneration();
     const relaunched = await options.launchWorker({
       runId: options.runId,
       resultPath,
@@ -383,6 +405,7 @@ export const runStage = async (options: {
       role,
       stage: options.stage,
       attempt: options.attempt,
+      generation: expectedGeneration,
       userMessage: '🔴 FINAL RELAUNCH: Worker crashed. Resume and call contract_stage_complete.',
     });
     paneId = relaunched.paneId;
@@ -394,6 +417,7 @@ export const runStage = async (options: {
         runId: options.runId,
         role,
         attempt: options.attempt,
+        minGeneration: expectedGeneration,
       });
       if (recovered) {
         console.log(`✅ Recovered ${role} result after relaunch: ${recovered.status}`);
@@ -414,6 +438,7 @@ export const runStage = async (options: {
       runId: options.runId,
       role,
       attempt: options.attempt,
+      minGeneration: expectedGeneration,
     });
     if (recovered) {
       console.log(`✅ Recovered ${role} result after idle timeout: ${recovered.status}`);
@@ -428,6 +453,7 @@ export const runStage = async (options: {
     runId: options.runId,
     role,
     attempt: options.attempt,
+    minGeneration: expectedGeneration,
   });
   if (lastChance) {
     return { result: lastChance, paneId };
@@ -437,6 +463,7 @@ export const runStage = async (options: {
     runId: options.runId,
     stage: role,
     attempt: options.attempt,
+    generation: expectedGeneration,
     status: 'blocked',
     summary: `Worker unresponsive for ${Math.round(options.hardTimeoutMs / 60_000)} min — hard timeout reached after ${relaunches} relaunch(es).`,
     findings: ['No valid contract_stage_complete result was produced before hard timeout.'],

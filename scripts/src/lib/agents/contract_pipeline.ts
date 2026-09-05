@@ -30,7 +30,11 @@ import {
 import { parseBacklog } from '../ops/parse_backlog.ts';
 import { resolveContract } from './contract_pipeline/contract_resolver.ts';
 import { readContractStatus } from './contract_pipeline/contract_status.ts';
-import { readManifest } from './contract_pipeline/manifest_store.ts';
+import {
+  readManifest,
+  releaseReservation,
+  reserveContractId,
+} from './contract_pipeline/manifest_store.ts';
 import { runContractPipeline } from './contract_pipeline/orchestrator.ts';
 
 const sleep = async (milliseconds: number): Promise<void> =>
@@ -366,12 +370,18 @@ const handleIssueSource = (target: string): string => {
   }
 
   // If no existing contract, generate new ID and path
+  // 🔴 Use exclusive reservation so concurrent issue-source calls do not race
+  // on the same ID — see C-470 AC-4.
   if (!contractId) {
-    const maxId = existingContracts.reduce((max: number, f: string) => {
-      const match = f.match(/^C-(\d+)/);
-      return match ? Math.max(max, Number(match[1])) : max;
-    }, 0);
-    contractId = `C-${maxId + 1}`;
+    const reservedId = reserveContractId({
+      contractsDir,
+      cwd: repoRoot,
+    });
+    if (!reservedId) {
+      console.error('❌ Could not reserve a contract ID — all IDs exhausted.');
+      process.exit(1);
+    }
+    contractId = reservedId;
 
     // Build slug from title
     const slug = issueData.title
@@ -389,6 +399,8 @@ const handleIssueSource = (target: string): string => {
   }
   const existingContractFound = existsSync(contractPath);
   if (existingContractFound) {
+    // Release the reservation — the file already exists.
+    releaseReservation({ contractId, cwd: repoRoot });
     console.log(`✅ Contract already exists (reusing): ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
     console.log(`   Issue: ${issueUrl}`);
@@ -438,6 +450,8 @@ const handleIssueSource = (target: string): string => {
       .replace(/issue_url:\s*null/, `issue_url: "${issueUrl}"`);
 
     writeFileSync(contractPath, finalContent);
+    // Release the reservation now that the contract file exists.
+    releaseReservation({ contractId, cwd: repoRoot });
     console.log(`✅ Contract frozen from issue: ${contractFileName}`);
     console.log(`   Path: ${contractPath}`);
     console.log(`   Issue: ${issueUrl}`);
@@ -526,11 +540,17 @@ const prepareDirectSource = (repoRoot: string): string => {
     return reusedId;
   }
 
-  const maxId = existingContracts.reduce((max: number, f: string) => {
-    const match = f.match(/^C-(\d+)/);
-    return match ? Math.max(max, Number(match[1])) : max;
-  }, 0);
-  const contractId = `C-${maxId + 1}`;
+  // 🔴 Exclusive ID allocation: use atomic `wx` reservation to prevent
+  // concurrent pipeline instances from racing on the same ID.
+  const reservedId = reserveContractId({
+    contractsDir,
+    cwd: repoRoot,
+  });
+  if (!reservedId) {
+    console.error('❌ Could not reserve a contract ID — all IDs exhausted.');
+    process.exit(1);
+  }
+  const contractId = reservedId;
 
   // Create a minimal placeholder so resolveContract() can find it.
   // The interactive writer pi session waits for the user's feature
@@ -549,6 +569,8 @@ const prepareDirectSource = (repoRoot: string): string => {
 
   mkdirSync(contractsDir, { recursive: true });
   writeFileSync(placeholderPath, placeholder);
+  // Release the reservation now that the placeholder file exists.
+  releaseReservation({ contractId, cwd: repoRoot });
 
   console.log(
     [

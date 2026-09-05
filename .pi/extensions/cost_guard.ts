@@ -281,6 +281,11 @@ export default function (pi: ExtensionAPI) {
         );
         const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
         const attempt = Number(process.env.CONTRACT_PIPELINE_ATTEMPT);
+        const generationValue = Number(process.env.CONTRACT_PIPELINE_GENERATION);
+        const generation =
+          Number.isSafeInteger(generationValue) && generationValue >= 0
+            ? generationValue
+            : undefined;
         if (runId && attempt >= 1) {
           writeStageResult({
             resultPath,
@@ -288,6 +293,7 @@ export default function (pi: ExtensionAPI) {
               runId,
               stage: role,
               attempt,
+              generation,
               status: 'blocked',
               summary: options.summary,
               findings: [options.finding],

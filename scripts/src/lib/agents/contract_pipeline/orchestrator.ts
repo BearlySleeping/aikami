@@ -37,6 +37,7 @@ import {
 import { settleEmptyImplementation } from './implement_guard.ts';
 import {
   acquireLock,
+  advanceLockGeneration,
   createManifest,
   pipelineLog,
   readManifest,
@@ -991,7 +992,7 @@ export const runContractPipeline = async (options: {
   // A mismatch would make checkWorkspaceAlive always return false in root
   // mode, breaking the lock on a live pipeline.
   const buildWsLabel = (cid: string): string => buildWorkspaceLabel({ contractId: cid, rootMode });
-  await acquireLock({
+  const lockMetadata = await acquireLock({
     contractId: manifest.contractId,
     runId: manifest.runId,
     cwd: options.repoRoot,
@@ -1154,6 +1155,14 @@ export const runContractPipeline = async (options: {
               launchWorker: (req) => adapter.launchWorker(req),
               checkAgentWorking: (pid) => adapter.isWorkerActive(pid),
               nudgeWorker: interactiveStage ? undefined : (opts) => adapter.nudgeWorker(opts),
+              // Fence every result to this lock owner. Replacements advance
+              // the persisted lock generation before they launch.
+              generation: lockMetadata.generation,
+              advanceGeneration: () =>
+                advanceLockGeneration({
+                  contractId: manifest.contractId,
+                  cwd: options.repoRoot,
+                }),
             });
         if (precondition) {
           pipelineLog({

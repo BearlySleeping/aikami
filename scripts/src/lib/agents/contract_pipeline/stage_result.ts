@@ -20,6 +20,12 @@ export const validateStageResult = (options: {
   runId: string;
   role: ContractWorkerRole;
   attempt: number;
+  /**
+   * When provided, only accept results whose generation >= this value.
+   * Results from a predecessor worker (lower generation) are rejected,
+   * preventing stale/fenced results from advancing the run.
+   */
+  minGeneration?: number;
 }): ContractStageResult | undefined => {
   if (typeof options.value !== 'object' || options.value === undefined) {
     return undefined;
@@ -49,6 +55,22 @@ export const validateStageResult = (options: {
   ) {
     return undefined;
   }
+
+  // 🔴 Generation fencing: reject results from a predecessor worker.
+  // Absent generation (legacy) is treated as 0. A malformed explicit value
+  // must not bypass the numeric comparison through JavaScript coercion.
+  if (
+    value.generation !== undefined &&
+    (!Number.isSafeInteger(value.generation) || value.generation < 0)
+  ) {
+    return undefined;
+  }
+  const resultGeneration = value.generation ?? 0;
+  const minGeneration = options.minGeneration ?? 0;
+  if (resultGeneration < minGeneration) {
+    return undefined;
+  }
+
   return value as ContractStageResult;
 };
 
@@ -69,6 +91,7 @@ export const readStageResult = (options: {
   runId: string;
   role: ContractWorkerRole;
   attempt: number;
+  minGeneration?: number;
 }): ContractStageResult | undefined => {
   if (!existsSync(options.resultPath)) {
     return undefined;
@@ -80,6 +103,7 @@ export const readStageResult = (options: {
       runId: options.runId,
       role: options.role,
       attempt: options.attempt,
+      minGeneration: options.minGeneration,
     });
   } catch {
     return undefined;
