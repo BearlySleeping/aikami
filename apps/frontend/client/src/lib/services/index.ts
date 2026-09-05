@@ -6,6 +6,7 @@ export {
   routerService,
 } from '@aikami/frontend/services';
 export type { SaveSlotEntry, SaveSlotMetadata } from '@aikami/types';
+export type { SidecarState, TextEngineConfig } from '$types';
 // ── Agent Pipeline ────────────────────────────────────────────────────
 export {
   AgentPipelineService,
@@ -22,8 +23,10 @@ export {
 } from './agent/index.ts';
 export * from './ai/ai_gateway_service.svelte.ts';
 export * from './ai/ai_service.svelte.ts';
+export * from './ai/local_ai_probe_executor';
 export * from './ai/local_task_pool_service.svelte.ts';
 export * from './ai/sentence_boundary_chunker';
+export * from './ai/sidecar_service.svelte.ts';
 export * from './ai/stream_orchestrator_service.svelte.ts';
 export * from './ai/text_generation_service.svelte.ts';
 export * from './api/hub_api_client';

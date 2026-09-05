@@ -20,14 +20,20 @@ import {
   campaignService,
   capabilityService,
   configService,
+  createTauriProbeExecutor,
   IMAGE_PROVIDERS,
   routerService,
   runtimeConfigService,
   VOICE_PROVIDERS,
   voiceModelService,
 } from '$services';
+import type { ProbeExecutor } from '@aikami/local-ai';
 import type { Connection, ConnectionCapability, VoiceModelState } from '$types';
 import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$types';
+import {
+  type LocalAiWizardViewModelInterface,
+  getLocalAiWizardViewModel,
+} from '../ai/local_ai_wizard_view_model.svelte';
 import {
   type AiSettingsViewModelInterface,
   getAiSettingsViewModel,
@@ -68,6 +74,12 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   readonly hasVoiceProvider: boolean;
   /** AiSettingsViewModel for rendering the shared AI settings component (C-466). */
   readonly aiSettingsViewModel: AiSettingsViewModelInterface;
+
+  /** Local AI install wizard ViewModel (C-467). */
+  readonly localAiWizardViewModel: LocalAiWizardViewModelInterface;
+
+  /** Whether to show the local AI wizard entry in the Text tab. */
+  readonly showLocalAiWizard: boolean;
 
   /** Starts provider detection after explicit user action. */
   startDetection(): Promise<void>;
@@ -134,6 +146,9 @@ class CapabilityViewModel
   /** Shared AI settings ViewModel for connection management (C-466). */
   readonly aiSettingsViewModel: AiSettingsViewModelInterface;
 
+  /** Local AI install wizard ViewModel (C-467). */
+  readonly localAiWizardViewModel: LocalAiWizardViewModelInterface;
+
   constructor(options: CapabilityViewModelOptions) {
     super(options);
 
@@ -141,6 +156,21 @@ class CapabilityViewModel
       className: 'CapabilityAiSettingsViewModel',
       showAdvancedSections: false,
     });
+
+    // Local AI wizard — uses fixture executor in tests, Tauri adapter in production.
+    // The executor is provided via the options or defaults to a no-op executor.
+    this.localAiWizardViewModel = getLocalAiWizardViewModel({
+      className: 'LocalAiWizardCapability',
+      executor: this._createWizardExecutor(),
+    });
+  }
+
+  /**
+   * Whether to show the local AI wizard entry in the Text tab.
+   * Shown when the text tab is active and no usable text provider exists.
+   */
+  get showLocalAiWizard(): boolean {
+    return this.activeTab === 'text' && !this.hasTextProvider;
   }
 
   // ── Derived ──────────────────────────────────────────────────────────
@@ -524,6 +554,30 @@ class CapabilityViewModel
     }
 
     void configService.save();
+  }
+
+  // ── Private: wizard executor factory ──────────────────────────────────
+
+  /**
+   * Creates a ProbeExecutor for the local AI wizard.
+   * In production (Tauri webview), uses the Tauri IPC adapter.
+   * In tests/browser, returns a no-op executor that reports not-found
+   * for every probe so the wizard degrades gracefully.
+   */
+  private _createWizardExecutor(): ProbeExecutor {
+    // Check if we're in a Tauri webview
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      return createTauriProbeExecutor();
+    }
+
+    // Fallback: no-op executor that returns not-found for everything.
+    // The wizard will degrade to a CPU-recommendation path.
+    const notFound = { ok: false as const, reason: 'not-found' as const, detail: 'Not in Tauri context' };
+    return {
+      run: async () => notFound,
+      readTextFile: async () => notFound,
+      statfs: async () => ({ ok: false as const }),
+    };
   }
 
   // ── Private: campaign start ──────────────────────────────────────────

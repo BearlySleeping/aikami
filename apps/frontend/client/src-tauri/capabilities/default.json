@@ -18,6 +18,24 @@
     "updater:default",
     "deep-link:default",
     "process:allow-restart",
+    "shell:default",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "binaries/llama-server",
+          "sidecar": true,
+          "args": [
+            "-m",
+            { "validator": "[^\\r\\n]+" },
+            "--port",
+            "11434",
+            "--host",
+            "127.0.0.1"
+          ]
+        }
+      ]
+    },
     {
       "identifier": "http:allow-fetch",
       "allow": [
