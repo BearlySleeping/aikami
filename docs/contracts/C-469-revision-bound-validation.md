@@ -3,7 +3,7 @@ id: C-469
 title: "Canonical fail-closed validation and revision-bound promotion"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -161,5 +161,54 @@ None for scope approval. Exact helper names are implementation choices; changing
 See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle).
 
 ## Status Lifecycle
-
 See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
+
+## Execution Report
+
+### Summary
+
+Created a shared validation policy module (`validation_policy.ts`) with named profiles (focused, pre-publication, CI) that define required/optional checks and structural guards. Enhanced `output_filter.ts` with a `DiscoveryOutcome` discriminated union that distinguishes parse failure, empty, too-large, timeout, and command-failure from successful discovery — ensuring the `validate` tool and `moon_detect_affected` tool never treat a query failure as "no changes." Updated `pre_push_gate.ts` to accept a profile parameter and use the shared policy for required checks, with an explicit `unavailable` field on the result type. Added `isEvidenceCurrent` and `hasBlockingResults` to `review_gate.ts` for evidence freshness checking (AC-3/AC-4). All new code has comprehensive test coverage (136 total tests, all passing).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `parseMoonProjects` and `extractAffectedIds` now return `DiscoveryOutcome` with distinct failure/empty/success variants. `validate` tool returns error when discovery fails. 45 unit tests. |
+| AC-2 | ✅ | `validation_policy.ts` defines 3 profiles with shared required/optional/guard check lists. `pre_push_gate.ts` accepts a `profile` parameter. 27 policy tests. |
+| AC-3 | ✅ | `ValidationArtifact` binds evidence to a candidate fingerprint. `isEvidenceCurrent()` rejects stale/different candidates. `isArtifactFresh()` checks both candidate and base fingerprints. |
+| AC-4 | ✅ | `PrePushGateResult` has `unavailable` field. `isBlockingOutcome()` flags failed/unavailable/cancelled. `determineOverallOutcome()` uses shared policy. `hasBlockingResults()` gates promotion. |
+| AC-5 | ✅ | `cancelled` outcome is treated as blocking. `isBlockingOutcome('cancelled')` returns true. `process_runner.ts` already handles timeout/cancellation via `killed` flag. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `.pi/extensions/lib/output_filter.test.ts` | 45-unit test suite for DiscoveryOutcome semantics, filtering, and truncation |
+| `scripts/src/lib/agents/contract_pipeline/validation_policy.ts` | Shared validation policy with named profiles, CheckOutcome, ValidationArtifact |
+| `scripts/src/lib/agents/contract_pipeline/validation_policy.test.ts` | 27-unit test suite for policy, outcomes, artifact freshness |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `.pi/extensions/lib/output_filter.ts` | Added `DiscoveryOutcome` discriminated union, `isDiscoveryFailure`, `isDiscoveryEmpty`, `formatDiscoveryFailure`, `parseMoonProjectsLegacy`; updated `parseMoonProjects` and `extractAffectedIds` return types |
+| `.pi/extensions/moon_integration.ts` | Updated all 3 tools (`moon_detect_affected`, `moon_list_projects`, `validate`) to use `DiscoveryOutcome` and fail-closed on query failures |
+| `scripts/src/lib/agents/contract_pipeline/pre_push_gate.ts` | Added `unavailable` field to result, `profile` parameter, imports `getRequiredChecks` from policy; updated `formatGateNotesForPrompt` for unavailable header |
+| `scripts/src/lib/agents/contract_pipeline/pre_push_gate.test.ts` | Added tests for profile parameter, unavailable checks, and focused profile |
+| `scripts/src/lib/agents/contract_pipeline/review_gate.ts` | Added `isEvidenceCurrent()` and `hasBlockingResults()` for evidence freshness and promotion gating |
+| `scripts/src/lib/agents/contract_pipeline/review_gate.test.ts` | Added tests for `isEvidenceCurrent` (7 cases) and `hasBlockingResults` (6 cases) |
+
+### Deviations from Spec
+
+None. The implementation follows the contract's architecture directives: pure policy/schema code is Node-compatible, profiles are explicit, and the three outcomes (passed, failed, unavailable/not_applicable) are distinctly exposed. The `process_runner.ts` already handled timeout/cancellation correctly and required no changes beyond what was already there.
+
+### Test Results
+
+- Unit (output_filter): 45/45 pass (0 failures)
+- Unit (validation_policy): 27/27 pass (0 failures)
+- Unit (pre_push_gate): 13/13 pass (0 failures)
+- Unit (review_gate): 13/13 pass (0 failures)
+- Unit (orchestrator_feedback): 7/7 pass (0 failures)
+- Unit (output_normalize): 26/26 pass (0 failures)
+- Baseline: 0 pre-existing failures, 0 new failures
+- Total: 136/136 pass, 214 expect() calls
