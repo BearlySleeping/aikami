@@ -1,13 +1,19 @@
 // apps/frontend/client/src-tauri/src/lib.rs
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+//
+// C-467: Tauri ProbeExecutor adapter — probe_run, probe_read_text_file,
+// probe_statfs commands that the planning core's ProbeExecutor seam
+// calls through Tauri IPC instead of process.execPath.
 
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use std::process::Stdio;
 
 use futures_util::StreamExt;
 use hex;
 use reqwest::Url;
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -15,6 +21,173 @@ use tauri_plugin_deep_link::DeepLinkExt;
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! Welcome to Aikami.", name)
+}
+
+// ── C-467: ProbeExecutor adapter commands ───────────────────────────────
+
+/// Discriminated probe result returned to the JS side.
+#[derive(Serialize)]
+struct ProbeResultPayload {
+    ok: bool,
+    stdout: String,
+    stderr: String,
+    exit_code: i32,
+    /// Present when ok=false; one of 'not-found', 'timeout', 'denied', 'failed'.
+    reason: Option<String>,
+    /// Optional detail string for failure reasons.
+    detail: Option<String>,
+}
+
+/// Runs a command with a timeout, matching the ProbeExecutor.run() contract.
+/// Returns raw stdout/stderr/exit_code — never builds or evaluates a shell
+/// string (C-467 Architecture Directives: security boundary).
+#[tauri::command]
+async fn probe_run(command: String, args: Vec<String>, timeout_ms: u64) -> ProbeResultPayload {
+    let result = run_probe_inner(&command, &args, timeout_ms).await;
+    match result {
+        Ok(output) => {
+            let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
+            let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
+            if output.status.success() {
+                ProbeResultPayload {
+                    ok: true,
+                    stdout: stdout_str,
+                    stderr: stderr_str,
+                    exit_code: output.status.code().unwrap_or(0),
+                    reason: None,
+                    detail: None,
+                }
+            } else {
+                ProbeResultPayload {
+                    ok: false,
+                    stdout: stdout_str,
+                    stderr: stderr_str,
+                    exit_code: output.status.code().unwrap_or(1),
+                    reason: Some("failed".to_string()),
+                    detail: Some(format!("exit code {}", output.status.code().unwrap_or(1))),
+                }
+            }
+        }
+        Err(e) => ProbeResultPayload {
+            ok: false,
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: -1,
+            reason: Some(e.kind),
+            detail: Some(e.message),
+        },
+    }
+}
+
+#[derive(Debug)]
+struct ProbeError {
+    kind: String,
+    message: String,
+}
+
+/// Runs a command with a timeout, returning std::process::Output on success
+/// or ProbeError on failure (not-found, timeout, or other).
+async fn run_probe_inner(
+    command: &str,
+    args: &[String],
+    timeout_ms: u64,
+) -> Result<std::process::Output, ProbeError> {
+    use std::time::Duration;
+    use tokio::process::Command;
+
+    let Ok(cmd) = Command::new(command)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+    else {
+        return Err(ProbeError {
+            kind: "not-found".to_string(),
+            message: format!("Cannot spawn: {command}"),
+        });
+    };
+
+    let duration = Duration::from_millis(timeout_ms);
+    match tokio::time::timeout(duration, cmd.wait_with_output()).await {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(e)) => Err(ProbeError {
+            kind: "failed".to_string(),
+            message: format!("Process error: {e}"),
+        }),
+        Err(_elapsed) => {
+            // timeout: kill_on_drop handles the child
+            Err(ProbeError {
+                kind: "timeout".to_string(),
+                message: format!("Timed out after {timeout_ms}ms"),
+            })
+        }
+    }
+}
+
+/// Reads a text file and returns its contents (byte-faithful). Matches
+/// ProbeExecutor.readTextFile().
+#[tauri::command]
+async fn probe_read_text_file(path: String) -> ProbeResultPayload {
+    match fs::read_to_string(&path) {
+        Ok(contents) => ProbeResultPayload {
+            ok: true,
+            stdout: contents,
+            stderr: String::new(),
+            exit_code: 0,
+            reason: None,
+            detail: None,
+        },
+        Err(e) => {
+            let (kind, detail) = match e.kind() {
+                std::io::ErrorKind::NotFound => ("not-found", format!("File not found: {path}")),
+                std::io::ErrorKind::PermissionDenied => {
+                    ("denied", format!("Permission denied: {path}"))
+                }
+                _ => ("failed", format!("IO error: {e}")),
+            };
+            ProbeResultPayload {
+                ok: false,
+                stdout: String::new(),
+                stderr: String::new(),
+                exit_code: -1,
+                reason: Some(kind.to_string()),
+                detail: Some(detail),
+            }
+        }
+    }
+}
+
+/// Free-space check against the volume backing a given path. Matches
+/// ProbeExecutor.statfs().
+#[tauri::command]
+async fn probe_statfs(path: String) -> Result<serde_json::Value, String> {
+    #[cfg(target_family = "unix")]
+    {
+        use std::mem::MaybeUninit;
+        let path_c = std::ffi::CString::new(path.as_str())
+            .map_err(|e| format!("Invalid path: {e}"))?;
+        let mut stat: MaybeUninit<libc::statvfs> = MaybeUninit::uninit();
+        // SAFETY: statvfs is safe to call on a valid C string; the struct
+        // is initialised by the kernel before returning.
+        let ret = unsafe { libc::statvfs(path_c.as_ptr(), stat.as_mut_ptr()) };
+        if ret != 0 {
+            return Ok(serde_json::json!({"ok": false}));
+        }
+        // SAFETY: statvfs returned 0, so the struct is fully initialised.
+        let info = unsafe { stat.assume_init() };
+        let free_bytes: u64 = info.f_frsize as u64 * info.f_bavail as u64;
+        return Ok(serde_json::json!({"freeBytes": free_bytes}));
+    }
+
+    #[cfg(not(target_family = "unix"))]
+    {
+        // On Windows, return unsupported rather than failing. The probe
+        // degrades gracefully when statfs is unavailable.
+        let _ = path;
+        Ok(serde_json::json!({"ok": false}))
+    }
 }
 
 /// Subdirectory inside the app data directory holding engine config + model
@@ -373,7 +546,10 @@ pub fn run() {
             read_runtime_config,
             download_model_file,
             read_model_file,
-            delete_model_files
+            delete_model_files,
+            probe_run,
+            probe_read_text_file,
+            probe_statfs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

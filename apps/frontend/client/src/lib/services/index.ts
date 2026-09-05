@@ -26,6 +26,8 @@ export * from './ai/local_task_pool_service.svelte.ts';
 export * from './ai/sentence_boundary_chunker';
 export * from './ai/stream_orchestrator_service.svelte.ts';
 export * from './ai/text_generation_service.svelte.ts';
+export * from './ai/sidecar_service.svelte.ts';
+export * from './ai/local_ai_probe_executor';
 export * from './api/hub_api_client';
 export * from './app/app.svelte.ts';
 export * from './app/preference.svelte.ts';

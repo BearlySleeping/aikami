@@ -6,6 +6,7 @@ import VoiceModelDownload from '@aikami/frontend/components/voice-model-download
 // of the legacy ConnectionEditorPanel.
 import { BaseViewModelContainer } from '$components';
 import AiSettingsView from '$views/settings/ai/ai_settings_view.svelte';
+import LocalAiWizardView from '../ai/local_ai_wizard_view.svelte';
 import type { CapabilityViewModelInterface } from './capability_view_model.svelte';
 
 type Props = {
@@ -55,6 +56,13 @@ const { viewModel }: Props = $props();
         <div class="mt-4 pt-4 border-t border-base-300">
           <AiSettingsView viewModel={viewModel.aiSettingsViewModel} />
         </div>
+
+        <!-- Local AI install wizard (C-467) — shown in the Text tab when no cloud/local provider is configured -->
+        {#if viewModel.showLocalAiWizard}
+          <div class="mt-2">
+            <LocalAiWizardView viewModel={viewModel.localAiWizardViewModel} />
+          </div>
+        {/if}
 
         <!-- Voice local download section (C-449 AC-2) -->
         <VoiceModelDownload

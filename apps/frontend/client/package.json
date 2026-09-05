@@ -55,6 +55,7 @@
     "wrangler": "4.129.0"
   },
   "dependencies": {
+    "@aikami/local-ai": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/frontend-components": "workspace:*",
     "@aikami/frontend-services": "workspace:*",
