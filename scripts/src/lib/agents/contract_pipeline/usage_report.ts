@@ -8,12 +8,15 @@ import type { AggregatedUsage, CurrencyProvenance, MonetaryAmount, UsageRecord }
 
 // ── Formatting helpers ──
 
-const PROVENANCE_LABELS: Record<CurrencyProvenance, string> = {
+const PROVENANCE_LABELS = {
   provider_reported: 'provider-reported',
   estimated: 'estimated',
   incomplete: 'incomplete',
   unknown: 'unknown',
-};
+} as const satisfies Record<CurrencyProvenance, string>;
+
+/** Presentation options for a human-readable usage report. */
+export type UsageReportOptions = { title?: string; verbose?: boolean };
 
 /** Format a number with locale-aware commas. */
 const _fmt = (n: number): string => n.toLocaleString();
@@ -57,10 +60,7 @@ const _formatDuration = (seconds: number): string => {
  * Shows all monetary amounts with provenance. Unknown/incomplete amounts are
  * explicitly marked and never shown as a complete zero.
  */
-export const formatUsageReport = (
-  usage: AggregatedUsage,
-  options?: { title?: string; verbose?: boolean },
-): string => {
+export const formatUsageReport = (usage: AggregatedUsage, options?: UsageReportOptions): string => {
   const lines: string[] = [];
   const title = options?.title ?? 'Usage Report';
 
@@ -197,15 +197,8 @@ export const formatUsageRecord = (record: UsageRecord): string => {
     parts.push(`${_fmt(record.inputTokens + record.outputTokens)} tokens`);
   }
 
-  // Show first monetary amount
-  const monetaryEntries = Object.entries(record.monetary);
-  if (monetaryEntries.length > 0) {
-    const [, amount] = monetaryEntries[0];
-    if (amount && amount.provenance !== 'unknown' && amount.amount > 0) {
-      parts.push(`${amount.amount.toFixed(4)} ${amount.currency}`);
-    } else if (amount && amount.provenance === 'unknown') {
-      parts.push('cost: unknown');
-    }
+  for (const amount of Object.values(record.monetary)) {
+    parts.push(formatMonetaryAmount(amount));
   }
 
   if (!record.complete) {

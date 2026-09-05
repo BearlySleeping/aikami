@@ -69,6 +69,7 @@ export {
   mergeMonetaryAmounts,
   normalizeLegacyUsage,
 } from './usage_ledger.ts';
+export type { UsageReportOptions } from './usage_report.ts';
 export {
   formatMonetaryAmount,
   formatUsageRecord,

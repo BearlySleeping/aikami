@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { AggregatedUsage, UsageRecord } from './types.ts';
+import { aggregateUsage, normalizeLegacyUsage } from './usage_ledger.ts';
 import {
   formatMonetaryAmount,
   formatUsageRecord,
@@ -249,9 +250,39 @@ describe('formatUsageRecord', () => {
     };
 
     const result = formatUsageRecord(record);
-    expect(result).toContain('cost: unknown');
+    expect(result).toContain('USD [unknown]');
     expect(result).toContain('incomplete');
     expect(result).toContain('coverage incomplete');
+  });
+
+  it('formats every currency including a non-first incomplete entry', () => {
+    const record: UsageRecord = {
+      model: 'claude-sonnet-5',
+      provider: 'anthropic',
+      thinkingLevel: 'medium',
+      configVersion: 'v1',
+      turns: 1,
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 150,
+      elapsedSeconds: 30,
+      toolErrors: 0,
+      retries: 0,
+      monetary: {
+        USD: { amount: 0.01, currency: 'USD', provenance: 'provider_reported' },
+        EUR: { amount: 0.02, currency: 'EUR', provenance: 'incomplete' },
+      },
+      complete: false,
+      eventId: 'evt-multi-currency',
+      finalizedAt: '2026-09-04T12:00:00Z',
+      externalCoverageComplete: true,
+    };
+
+    const result = formatUsageRecord(record);
+    expect(result).toContain('USD [provider-reported]');
+    expect(result).toContain('EUR [incomplete]');
   });
 
   it('returns no model activity for empty record', () => {
@@ -284,63 +315,47 @@ describe('formatUsageRecord', () => {
 // ── AC-4: Privacy preserved ──
 
 describe('AC-4: Privacy preserved', () => {
-  it('UsageRecord never stores prompt bodies or secrets', () => {
-    const record: UsageRecord = {
-      model: 'claude-sonnet-5',
-      provider: 'anthropic',
-      thinkingLevel: 'medium',
-      configVersion: 'v1',
-      turns: 3,
-      inputTokens: 500,
-      outputTokens: 200,
-      cacheReadTokens: 100,
-      cacheWriteTokens: 50,
-      totalTokens: 700,
-      elapsedSeconds: 120,
-      toolErrors: 0,
-      retries: 0,
-      monetary: { USD: { amount: 0.015, currency: 'USD', provenance: 'provider_reported' } },
-      complete: true,
-      eventId: 'evt-1',
-      finalizedAt: '2026-09-04T12:00:00Z',
-      externalCoverageComplete: true,
-    };
+  const sensitiveUsageSource = {
+    model: 'claude-sonnet-5',
+    turns: 3,
+    inputTokens: 500,
+    outputTokens: 200,
+    cacheReadTokens: 100,
+    cacheWriteTokens: 50,
+    totalTokens: 700,
+    cost: 0.015,
+    prompt: 'sensitive prompt body',
+    credential: 'sensitive credential value',
+  };
+  const normalizedRecord = normalizeLegacyUsage({
+    usage: sensitiveUsageSource,
+    runId: 'run-sensitive-source',
+    role: 'implementer',
+    attempt: 1,
+  });
+  const normalizedAggregate = aggregateUsage([normalizedRecord]);
 
-    // Verify the record shape has no field for prompts, secrets, or API keys.
-    // Token-related fields (inputTokens, outputTokens, etc.) are legitimate
-    // usage metrics — not sensitive credentials.
-    const keys = Object.keys(record) as (keyof UsageRecord)[];
-    const sensitivePatterns = ['prompt', 'secret', 'apikey', 'password', 'credential'];
-    const allowedTokenFields = [
-      'inputtokens',
-      'outputtokens',
-      'totaltokens',
-      'cachereadtokens',
-      'cachewritetokens',
-    ];
-    for (const key of keys) {
-      const keyLower = key.toLowerCase();
-      if (allowedTokenFields.includes(keyLower)) {
-        continue;
-      }
-      for (const pattern of sensitivePatterns) {
-        expect(keyLower).not.toContain(pattern);
-      }
-    }
+  it('normalization omits prompt bodies and credentials from the UsageRecord', () => {
+    const serialized = JSON.stringify(normalizedRecord);
+    expect(serialized).not.toContain(sensitiveUsageSource.prompt);
+    expect(serialized).not.toContain(sensitiveUsageSource.credential);
+    expect(serialized).not.toContain('prompt');
+    expect(serialized).not.toContain('credential');
   });
 
-  it('formatUsageReport does not expose internal details', () => {
-    const report = formatUsageReport(sampleAggregated);
-    // Should not contain sensitive patterns
-    expect(report).not.toContain('apiKey');
-    expect(report).not.toContain('secret');
-    expect(report).not.toContain('password');
+  it('formatUsageReport does not expose source prompts or credentials', () => {
+    const report = formatUsageReport(normalizedAggregate);
+    expect(report).not.toContain(sensitiveUsageSource.prompt);
+    expect(report).not.toContain(sensitiveUsageSource.credential);
+    expect(report).not.toContain('prompt');
+    expect(report).not.toContain('credential');
   });
 
-  it('formatUsageReportJson does not expose internal details', () => {
-    const json = formatUsageReportJson(sampleAggregated);
-    expect(json).not.toContain('apiKey');
-    expect(json).not.toContain('secret');
-    expect(json).not.toContain('password');
+  it('formatUsageReportJson does not expose source prompts or credentials', () => {
+    const json = formatUsageReportJson(normalizedAggregate);
+    expect(json).not.toContain(sensitiveUsageSource.prompt);
+    expect(json).not.toContain(sensitiveUsageSource.credential);
+    expect(json).not.toContain('prompt');
+    expect(json).not.toContain('credential');
   });
 });

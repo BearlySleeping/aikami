@@ -8,7 +8,13 @@
 // C-473 AC-4: Legacy data — old empty manifests remain readable.
 
 import { describe, expect, it } from 'bun:test';
-import type { ContractWorkerRole, RunManifest, StageUsage, UsageRecord } from './types.ts';
+import type {
+  ContractWorkerRole,
+  MonetaryAmount,
+  RunManifest,
+  StageUsage,
+  UsageRecord,
+} from './types.ts';
 import {
   aggregateUsage,
   computeManifestUsage,
@@ -79,6 +85,20 @@ describe('AC-1: Active workers produce usage', () => {
     expect(record.totalTokens).toBe(1500);
     expect(record.monetary.USD?.amount).toBe(0.03);
     expect(record.monetary.USD?.provenance).toBe('provider_reported');
+    expect(record.complete).toBe(true);
+  });
+
+  it('normalizeLegacyUsage preserves cache-only and aggregate token measurements', () => {
+    const record = normalizeLegacyUsage({
+      usage: { cacheReadTokens: 200, cacheWriteTokens: 100, totalTokens: 300 },
+      runId: RUN_ID,
+      role: ROLE,
+      attempt: 1,
+    });
+
+    expect(record.cacheReadTokens).toBe(200);
+    expect(record.cacheWriteTokens).toBe(100);
+    expect(record.totalTokens).toBe(300);
     expect(record.complete).toBe(true);
   });
 
@@ -163,20 +183,14 @@ describe('AC-2: Retry/resume totals reconcile', () => {
         inputTokens: 1200,
         outputTokens: 800,
         eventId: `${RUN_ID}-${ROLE}-2-0`,
-        attempt: undefined as unknown as number,
-      } as unknown as Partial<UsageRecord>),
+      }),
       makeRecord({
         totalTokens: 1800,
         inputTokens: 1100,
         outputTokens: 700,
         eventId: `${RUN_ID}-${ROLE}-3-0`,
-        attempt: undefined as unknown as number,
-      } as unknown as Partial<UsageRecord>),
+      }),
     ];
-
-    // Fix event IDs for distinct records
-    records[1] = { ...records[1], eventId: `${RUN_ID}-${ROLE}-2-0` };
-    records[2] = { ...records[2], eventId: `${RUN_ID}-${ROLE}-3-0` };
 
     const aggregated = aggregateUsage(records);
 
@@ -267,11 +281,14 @@ describe('AC-2: Retry/resume totals reconcile', () => {
     const aggregated = aggregateUsage(records);
 
     expect(aggregated.convertedTotal).toBeDefined();
-    expect(aggregated.convertedTotal?.amount).toBeGreaterThan(0);
-    expect(aggregated.convertedTotal?.conversion?.source).toBe('aggregate-currency-conversion');
+    expect(aggregated.convertedTotal?.amount).toBeCloseTo(0.0575);
+    expect(aggregated.convertedTotal?.conversion?.rate).toBeCloseTo(0.0575 / 0.055);
+    expect(aggregated.convertedTotal?.conversion?.source).toBe(
+      'aggregate-currency-conversion:provider+ecb-2026-09',
+    );
   });
 
-  it('single-currency usage uses that currency as converted total', () => {
+  it('single-currency usage without conversion metadata has no converted total', () => {
     const records = [
       makeRecord({
         monetary: {
@@ -281,12 +298,33 @@ describe('AC-2: Retry/resume totals reconcile', () => {
     ];
 
     const aggregated = aggregateUsage(records);
-    expect(aggregated.convertedTotal).toBeDefined();
-    expect(aggregated.convertedTotal?.amount).toBe(0.05);
-    expect(aggregated.convertedTotal?.currency).toBe('USD');
+    expect(aggregated.convertedTotal).toBeUndefined();
   });
 
-  it('failed attempts are counted separately and included in totals', () => {
+  it('single-currency usage with conversion metadata produces a converted total', () => {
+    const aggregated = aggregateUsage([
+      makeRecord({
+        monetary: {
+          EUR: {
+            amount: 0.05,
+            currency: 'EUR',
+            provenance: 'provider_reported',
+            conversion: {
+              rate: 1.1,
+              timestamp: '2026-09-04T12:00:00Z',
+              source: 'ecb-2026-09',
+            },
+          },
+        },
+      }),
+    ]);
+
+    expect(aggregated.convertedTotal?.amount).toBeCloseTo(0.055);
+    expect(aggregated.convertedTotal?.currency).toBe('USD');
+    expect(aggregated.convertedTotal?.provenance).toBe('estimated');
+  });
+
+  it('incomplete usage is counted once as unknown without implying attempt failure', () => {
     const records = [
       makeRecord({ totalTokens: 1500, inputTokens: 1000, outputTokens: 500, complete: true }),
       makeRecord({
@@ -299,21 +337,19 @@ describe('AC-2: Retry/resume totals reconcile', () => {
       }),
     ];
 
-    // Fix event ID
-    records[1] = { ...records[1], eventId: `${RUN_ID}-${ROLE}-2-0` };
-
     const aggregated = aggregateUsage(records);
-    // Failed attempt's tokens still counted
+    // Incomplete usage measurements still contribute their recorded tokens.
     expect(aggregated.aggregatedTotalTokens).toBe(2000);
     // Unknown/incomplete counted
-    expect(aggregated.unknownAttempts).toBeGreaterThanOrEqual(1);
+    expect(aggregated.unknownAttempts).toBe(1);
+    expect(aggregated.failedAttempts).toBe(0);
   });
 });
 
 // ── AC-4: Legacy data preserved ──
 
 describe('AC-4: Legacy data preserved', () => {
-  it('old empty manifests produce unknown/incomplete usage, never zero', () => {
+  it('old manifests with no attempts or usage produce an empty aggregate', () => {
     const manifest: RunManifest = {
       version: 3,
       runId: 'run-legacy-empty',
@@ -332,7 +368,7 @@ describe('AC-4: Legacy data preserved', () => {
 
     const aggregated = loadLegacyManifestUsage(manifest);
     expect(aggregated.unknownAttempts).toBe(0);
-    expect(aggregated.monetary.USD?.provenance).toBeUndefined();
+    expect(aggregated.monetary).toEqual({});
   });
 
   it('old manifest with empty StageUsage loads as unknown/incomplete', () => {
@@ -364,7 +400,7 @@ describe('AC-4: Legacy data preserved', () => {
     };
 
     const aggregated = loadLegacyManifestUsage(manifest);
-    expect(aggregated.unknownAttempts).toBeGreaterThanOrEqual(1);
+    expect(aggregated.unknownAttempts).toBe(1);
     // Cost should not be silently zero — it's unknown
     const usd = aggregated.monetary.USD;
     expect(usd).toBeDefined();
@@ -401,13 +437,13 @@ describe('AC-4: Legacy data preserved', () => {
     expect(isUsageEmpty(record)).toBe(false);
   });
 
-  it('mergeMonetaryAmounts preserves best provenance', () => {
-    const a: import('./types.ts').MonetaryAmount = {
+  it('mergeMonetaryAmounts preserves the least precise provenance', () => {
+    const a: MonetaryAmount = {
       amount: 0.01,
       currency: 'USD',
       provenance: 'provider_reported',
     };
-    const b: import('./types.ts').MonetaryAmount = {
+    const b: MonetaryAmount = {
       amount: 0.02,
       currency: 'USD',
       provenance: 'estimated',
@@ -415,17 +451,17 @@ describe('AC-4: Legacy data preserved', () => {
 
     const merged = mergeMonetaryAmounts(a, b);
     expect(merged.amount).toBe(0.03);
-    expect(merged.provenance).toBe('provider_reported');
+    expect(merged.provenance).toBe('estimated');
   });
 
-  it('mergeMonetaryAmounts falls back to estimated when no provider_reported', () => {
-    const a: import('./types.ts').MonetaryAmount = {
+  it('mergeMonetaryAmounts preserves unknown provenance in an aggregate', () => {
+    const a: MonetaryAmount = {
       amount: 0.01,
       currency: 'USD',
       provenance: 'estimated',
       pricingVersion: 'v1',
     };
-    const b: import('./types.ts').MonetaryAmount = {
+    const b: MonetaryAmount = {
       amount: 0.02,
       currency: 'USD',
       provenance: 'unknown',
@@ -433,7 +469,48 @@ describe('AC-4: Legacy data preserved', () => {
 
     const merged = mergeMonetaryAmounts(a, b);
     expect(merged.amount).toBe(0.03);
-    expect(merged.provenance).toBe('estimated');
+    expect(merged.provenance).toBe('unknown');
+  });
+
+  it('legacy usage map and attempt usage for one role are billed once', () => {
+    const usageMapRecord: StageUsage = {
+      model: 'usage-map-model',
+      turns: 2,
+      inputTokens: 400,
+      outputTokens: 100,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      totalTokens: 500,
+      cost: 0.01,
+    };
+    const manifest: RunManifest = {
+      version: 3,
+      runId: 'run-legacy-duplicate-role',
+      contractId: 'C-473',
+      contractPath: 'docs/contracts/C-473.md',
+      baseCommit: 'abc',
+      baselineFingerprint: 'def',
+      startTime: '2026-09-04T00:00:00Z',
+      lastUpdated: '2026-09-04T12:00:00Z',
+      currentStage: 'implement',
+      verifyLoops: 0,
+      attempts: [
+        {
+          stage: 'implement',
+          role: 'implementer',
+          attempt: 1,
+          paneId: 'pane-1',
+          startTime: '2026-09-04T10:00:00Z',
+          usage: { ...usageMapRecord, totalTokens: 700 },
+        },
+      ],
+      usage: { implementer: usageMapRecord },
+      autofixCycles: 0,
+    };
+
+    const aggregated = loadLegacyManifestUsage(manifest);
+    expect(aggregated.aggregatedTotalTokens).toBe(500);
+    expect(aggregated.monetary.USD?.amount).toBe(0.01);
   });
 });
 
@@ -558,6 +635,50 @@ describe('computeManifestUsage', () => {
     };
 
     const aggregated = computeManifestUsage(manifest);
-    expect(aggregated.unknownAttempts).toBeGreaterThanOrEqual(1);
+    expect(aggregated.unknownAttempts).toBe(1);
+    expect(aggregated.failedAttempts).toBe(0);
+  });
+
+  it('counts an explicit failed attempt result', () => {
+    const manifest: RunManifest = {
+      version: 3,
+      runId: RUN_ID,
+      contractId: 'C-473',
+      contractPath: 'docs/contracts/C-473.md',
+      baseCommit: 'abc',
+      baselineFingerprint: 'def',
+      startTime: '2026-09-04T00:00:00Z',
+      lastUpdated: '2026-09-04T12:00:00Z',
+      currentStage: 'implement',
+      verifyLoops: 0,
+      attempts: [
+        {
+          stage: 'implement',
+          role: 'implementer',
+          attempt: 1,
+          paneId: 'pane-1',
+          startTime: '2026-09-04T10:00:00Z',
+          usageRecord: makeRecord(),
+          result: {
+            runId: RUN_ID,
+            stage: 'implementer',
+            attempt: 1,
+            status: 'failed',
+            summary: 'failed',
+            findings: [],
+            filesTouched: [],
+            evidence: [],
+            contractHash: 'contract-hash',
+            diffHash: 'diff-hash',
+          },
+        },
+      ],
+      usage: {},
+      autofixCycles: 0,
+    };
+
+    const aggregated = computeManifestUsage(manifest);
+    expect(aggregated.failedAttempts).toBe(1);
+    expect(aggregated.unknownAttempts).toBe(0);
   });
 });

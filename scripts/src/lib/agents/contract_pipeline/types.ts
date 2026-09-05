@@ -179,6 +179,7 @@ export type MonetaryAmount = {
    * Absent conversion metadata means no cross-currency sum was produced.
    */
   conversion?: {
+    /** Target-currency units per one source-currency unit. */
     rate: number;
     timestamp: string;
     source: string;

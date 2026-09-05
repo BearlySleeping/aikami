@@ -23,6 +23,21 @@ const _unknownMonetary = (currency = 'USD'): MonetaryAmount => ({
   provenance: 'unknown',
 });
 
+const PROVENANCE_ORDER = {
+  provider_reported: 0,
+  estimated: 1,
+  incomplete: 2,
+  unknown: 3,
+} as const satisfies Record<CurrencyProvenance, number>;
+
+const _leastPreciseProvenance = (
+  a: CurrencyProvenance,
+  b: CurrencyProvenance,
+): CurrencyProvenance => ((PROVENANCE_ORDER[a] ?? 99) >= (PROVENANCE_ORDER[b] ?? 99) ? a : b);
+
+const _countFailedAttempts = (manifest: RunManifest): number =>
+  manifest.attempts.filter((attempt) => attempt.result?.status === 'failed').length;
+
 // ── Legacy normalization ──
 
 /**
@@ -40,7 +55,15 @@ export const normalizeLegacyUsage = (options: {
   generation?: number;
 }): UsageRecord => {
   const usage = options.usage;
-  const hasData = usage && (usage.inputTokens || usage.outputTokens || usage.cost || usage.turns);
+  const hasData =
+    usage &&
+    (usage.inputTokens ||
+      usage.outputTokens ||
+      usage.cacheReadTokens ||
+      usage.cacheWriteTokens ||
+      usage.totalTokens ||
+      usage.cost ||
+      usage.turns);
 
   if (!hasData) {
     return {
@@ -145,26 +168,15 @@ export const deduplicateRecords = (
 // ── Aggregation ──
 
 /**
- * Merge two MonetaryAmount values from the same currency. If both have
- * conversion metadata, they must match or the result is marked estimated.
- * The more precise provenance wins (provider_reported > estimated > incomplete > unknown).
+ * Merge two MonetaryAmount values from the same currency. The least precise
+ * provenance wins so the sum never overstates any contributing amount.
  */
 export const mergeMonetaryAmounts = (a: MonetaryAmount, b: MonetaryAmount): MonetaryAmount => {
   if (a.currency !== b.currency) {
     return a; // Different currencies — keep a (caller should not merge across currencies)
   }
 
-  const provenanceOrder: Record<CurrencyProvenance, number> = {
-    provider_reported: 0,
-    estimated: 1,
-    incomplete: 2,
-    unknown: 3,
-  };
-
-  const bestProvenance =
-    (provenanceOrder[a.provenance] ?? 99) <= (provenanceOrder[b.provenance] ?? 99)
-      ? a.provenance
-      : b.provenance;
+  const leastPreciseProvenance = _leastPreciseProvenance(a.provenance, b.provenance);
 
   const conversion = a.conversion ?? b.conversion;
   const pricingVersion = a.pricingVersion ?? b.pricingVersion;
@@ -172,7 +184,7 @@ export const mergeMonetaryAmounts = (a: MonetaryAmount, b: MonetaryAmount): Mone
   return {
     amount: a.amount + b.amount,
     currency: a.currency,
-    provenance: bestProvenance,
+    provenance: leastPreciseProvenance,
     pricingVersion,
     conversion,
   };
@@ -180,11 +192,11 @@ export const mergeMonetaryAmounts = (a: MonetaryAmount, b: MonetaryAmount): Mone
 
 /**
  * Aggregate an array of UsageRecords into a single AggregatedUsage.
- * Deduplicates by eventId first. Failed/unknown attempts are counted
- * separately and never silently absorbed into zero.
+ * Deduplicates by eventId first. Unknown attempts are counted separately and
+ * never silently absorbed into zero; manifest helpers add explicit failures.
  */
 export const aggregateUsage = (records: UsageRecord[]): AggregatedUsage => {
-  const { records: deduplicated, removed: _removed } = deduplicateRecords(records);
+  const { records: deduplicated } = deduplicateRecords(records);
 
   const models = new Set<string>();
   const providers = new Set<string>();
@@ -199,7 +211,7 @@ export const aggregateUsage = (records: UsageRecord[]): AggregatedUsage => {
   let totalToolErrors = 0;
   let totalRetries = 0;
   let unknownAttempts = 0;
-  let failedAttempts = 0;
+  const failedAttempts = 0;
   let externalCoverageComplete = true;
 
   for (const record of deduplicated) {
@@ -221,12 +233,7 @@ export const aggregateUsage = (records: UsageRecord[]): AggregatedUsage => {
     totalToolErrors += record.toolErrors;
     totalRetries += record.retries;
 
-    if (isUsageUnknown(record)) {
-      unknownAttempts++;
-    }
-
-    if (!record.complete) {
-      failedAttempts++;
+    if (isUsageUnknown(record) || !record.complete) {
       unknownAttempts++;
     }
 
@@ -248,28 +255,74 @@ export const aggregateUsage = (records: UsageRecord[]): AggregatedUsage => {
   let convertedTotal: MonetaryAmount | undefined;
   const currencies = Object.keys(monetary);
   if (currencies.length > 1) {
-    const allHaveConversion = currencies.every((c) => {
-      const m = monetary[c];
-      return m.conversion !== undefined && m.conversion.rate > 0;
+    const allHaveConversion = currencies.every((currency) => {
+      const amount = monetary[currency];
+      return (
+        amount?.conversion !== undefined &&
+        amount.conversion.rate > 0 &&
+        amount.conversion.source.length > 0 &&
+        amount.conversion.timestamp.length > 0
+      );
     });
 
     if (allHaveConversion) {
-      const totalAmount = currencies.reduce((acc, c) => acc + (monetary[c]?.amount ?? 0), 0);
-      convertedTotal = {
-        amount: totalAmount,
-        currency: 'USD',
-        provenance: 'estimated',
-        conversion: {
-          rate: 1,
-          timestamp: new Date().toISOString(),
-          source: 'aggregate-currency-conversion',
-        },
-      };
+      const sourceTotal = currencies.reduce(
+        (total, currency) => total + (monetary[currency]?.amount ?? 0),
+        0,
+      );
+      const totalAmount = currencies.reduce((total, currency) => {
+        const amount = monetary[currency];
+        if (!amount?.conversion) {
+          return total;
+        }
+        return total + amount.amount * amount.conversion.rate;
+      }, 0);
+
+      if (sourceTotal > 0) {
+        const conversionSources = [
+          ...new Set(
+            currencies
+              .map((currency) => monetary[currency]?.conversion?.source)
+              .filter((source) => source !== undefined),
+          ),
+        ];
+        const conversionTimestamp = currencies.reduce((latest, currency) => {
+          const timestamp = monetary[currency]?.conversion?.timestamp ?? '';
+          return timestamp > latest ? timestamp : latest;
+        }, '');
+        const convertedProvenance = currencies.reduce<CurrencyProvenance>(
+          (provenance, currency) =>
+            _leastPreciseProvenance(provenance, monetary[currency]?.provenance ?? 'unknown'),
+          'estimated',
+        );
+
+        convertedTotal = {
+          amount: totalAmount,
+          currency: 'USD',
+          provenance: convertedProvenance,
+          conversion: {
+            rate: totalAmount / sourceTotal,
+            timestamp: conversionTimestamp,
+            source: `aggregate-currency-conversion:${conversionSources.join('+')}`,
+          },
+        };
+      }
     }
   } else if (currencies.length === 1) {
     const single = monetary[currencies[0]];
-    if (single && single.amount > 0) {
-      convertedTotal = { ...single };
+    if (
+      single?.conversion &&
+      single.amount > 0 &&
+      single.conversion.rate > 0 &&
+      single.conversion.source.length > 0 &&
+      single.conversion.timestamp.length > 0
+    ) {
+      convertedTotal = {
+        ...single,
+        amount: single.amount * single.conversion.rate,
+        currency: 'USD',
+        provenance: _leastPreciseProvenance(single.provenance, 'estimated'),
+      };
     }
   }
 
@@ -331,7 +384,10 @@ export const computeManifestUsage = (manifest: RunManifest): AggregatedUsage => 
     }
   }
 
-  return aggregateUsage(records);
+  return {
+    ...aggregateUsage(records),
+    failedAttempts: _countFailedAttempts(manifest),
+  };
 };
 
 /**
@@ -340,6 +396,7 @@ export const computeManifestUsage = (manifest: RunManifest): AggregatedUsage => 
  */
 export const loadLegacyManifestUsage = (manifest: RunManifest): AggregatedUsage => {
   const records: UsageRecord[] = [];
+  const usageMapRoles = new Set(Object.keys(manifest.usage));
 
   // Process legacy usage map
   for (const [stage, usage] of Object.entries(manifest.usage)) {
@@ -355,10 +412,7 @@ export const loadLegacyManifestUsage = (manifest: RunManifest): AggregatedUsage 
 
   // Also include attempt-level usage if present
   for (const attempt of manifest.attempts) {
-    if (
-      attempt.usage &&
-      !records.find((r) => r.eventId.endsWith(`-${attempt.role}-${attempt.attempt}`))
-    ) {
+    if (attempt.usage && !usageMapRoles.has(attempt.role)) {
       records.push(
         normalizeLegacyUsage({
           usage: attempt.usage,
@@ -370,5 +424,8 @@ export const loadLegacyManifestUsage = (manifest: RunManifest): AggregatedUsage 
     }
   }
 
-  return aggregateUsage(records);
+  return {
+    ...aggregateUsage(records),
+    failedAttempts: _countFailedAttempts(manifest),
+  };
 };
