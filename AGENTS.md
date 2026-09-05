@@ -41,20 +41,20 @@ make a cloud call a boot dependency.
 ## 🧠 Skills — Load Before Coding
 
 Skills live in `.pi/skills/` (project rules) and `.pi/generated-skills/`
-(vendored upstream docs: PixiJS, daisyUI, herdr). Pi discovers them
-automatically — load the matching skill BEFORE writing code:
+(vendored upstream docs). Canonical coding examples live in
+`.pi/guidance/examples/`. Active guidance is tracked in
+`.pi/guidance/manifest.json`. See each skill's SKILL.md for details.
 
-| Task | Required skill(s) |
+**Required skills per task:**
+
+| Task | Skill |
 |---|---|
-| **Any code** | `aikami-conventions` (universal: logger, imports, TS rules, boundaries) |
-| Frontend / Svelte | `svelte-conventions` (runes, Views/ViewModels, services) |
-| Backend / API | `backend-conventions` (controller → service → repository) |
+| Any code | `aikami-conventions` (logger, imports, TS rules) |
+| Frontend / Svelte | `svelte-conventions` (runes, MVVM) |
+| Backend / API | `backend-conventions` (controller → service) |
 | UI styling | `aikami-ui` |
 | Game engine | `pixijs-v8` |
 | Testing | `testing` |
-
-Agents without skill support: read the SKILL.md files above directly from
-`.pi/skills/<name>/SKILL.md`.
 
 ## 🛑 Before Structural Changes
 
