@@ -3,7 +3,7 @@ id: C-474
 title: "Load lean role contexts and resolve model configuration explicitly"
 source: direct
 contract_type: thin
-status: implemented
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -101,46 +101,4 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
 
 ## Execution Report
 
-### Summary
-
-Implemented role profile tool gating (AC-1), progressive Pixi skill disclosure via on-demand router (AC-2), explicit model/thinking resolution with validation and tier-equivalence reporting (AC-3), enhanced tool surface measurement with category contributions and profile detection (AC-4), and safety invariants ensuring non-pipeline sessions remain unaffected (AC-5). All 5 acceptance criteria are covered by focused tests.
-
-### AC Status
-
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | Role profiles for writer/critic/implementer/verifier/review with capability-based tool gating; publication tools restricted to implementer/verifier/review; preflight validation with actionable errors |
-| AC-2 | ✅ | Progressive Pixi skill disclosure via `load_pixi_skill` tool; 26-skill index registered as one tool; on-demand loading with caching; non-engine sessions avoid full catalogue |
-| AC-3 | ✅ | `resolveModelConfiguration()` records requested/effective model/thinking settings; `validateModelOverride()` rejects invalid overrides; tier equivalence reported when pro and flash resolve to same slug |
-| AC-4 | ✅ | `measure_tool_surface.ts` enhanced with category contributions, tokenizer comparison, unavailable categories, and effective profile detection |
-| AC-5 | ✅ | Non-pipeline sessions load all tools; resource choices inspectable via public API; no global file writes; pure-function design |
-
-### Files Created
-
-| File | Purpose |
-|---|---|
-| `.pi/extensions/lib/role_profiles.ts` | Role profile definitions, capability-based tool gating, preflight validation |
-| `.pi/extensions/lib/role_profiles.test.ts` | 45 tests verifying AC-1: profile structure, tool gating, preflight, optional/forbidden capabilities |
-| `.pi/extensions/lib/skill_router.ts` | Progressive Pixi skill disclosure router with on-demand loading |
-| `.pi/extensions/lib/skill_router.test.ts` | 10 tests verifying AC-2: skill listing, on-demand loading, caching, non-engine surface avoidance |
-| `scripts/src/lib/agents/contract_pipeline/models.test.ts` | 27 tests verifying AC-3: model resolution, env override, tier equivalence, validation |
-| `.pi/scripts/measure_tool_surface.test.ts` | Tests verifying AC-4: extension file existence, category classification, profile detection |
-| `.pi/extensions/lib/safety_invariants.test.ts` | 11 tests verifying AC-5: non-pipeline usability, inspectability, pure functions |
-
-### Files Modified
-
-| File | Change |
-|---|---|
-| `scripts/src/lib/agents/contract_pipeline/models.ts` | Added `ModelResolution` type, `resolveModelConfiguration()`, `validateModelOverride()`, `validateThinkingOverride()`, `hasBlockingModelErrors()` — lazy env var reads for testability |
-| `.pi/scripts/measure_tool_surface.ts` | Added category contributions breakdown, tokenizer comparison, unavailable categories list, effective profile detection |
-
-### Deviations from Spec
-
-None. All ACs implemented as specified.
-
-### Test Results
-
-- Pipeline tests: 322 pass / 0 fail (includes 27 new AC-3 tests + 295 baseline)
-- Pi extension tests: 66 pass / 0 fail (45 AC-1 + 10 AC-2 + 11 AC-5)
-- Baseline: 295 pre-existing tests, 0 regressions
-- New tests total: 93 across 5 test files
+Not executed. No implementation or platform evidence is claimed by this planning document.
