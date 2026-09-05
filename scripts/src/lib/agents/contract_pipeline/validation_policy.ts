@@ -264,16 +264,23 @@ export const formatValidationReport = (options: {
   lines.push(`Time: ${options.artifact.timestamp}`);
 
   for (const check of options.artifact.checks) {
-    const icon =
-      check.outcome === 'passed'
-        ? '✅'
-        : check.outcome === 'failed'
-          ? '❌'
-          : check.outcome === 'unavailable'
-            ? '⚠️'
-            : check.outcome === 'cancelled'
-              ? '🚫'
-              : '⏭️';
+    let icon: string;
+    switch (check.outcome) {
+      case 'passed':
+        icon = '✅';
+        break;
+      case 'failed':
+        icon = '❌';
+        break;
+      case 'unavailable':
+        icon = '⚠️';
+        break;
+      case 'cancelled':
+        icon = '🚫';
+        break;
+      default:
+        icon = '⏭️';
+    }
     const diag = check.diagnostics ? `: ${check.diagnostics.slice(0, 200)}` : '';
     lines.push(`  ${icon} ${check.label} (${check.outcome})${diag}`);
   }

@@ -2,7 +2,6 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import {
-  type DiscoveryOutcome,
   extractAffectedIds,
   filterByTaskType,
   formatDiscoveryFailure,

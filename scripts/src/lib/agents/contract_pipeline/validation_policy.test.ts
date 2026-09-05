@@ -24,26 +24,26 @@ describe('getPolicy (AC-2)', () => {
   it('returns a policy for the focused profile', () => {
     const policy = getPolicy('focused');
     expect(policy).toBeDefined();
-    expect(policy!.profile).toBe('focused');
-    expect(policy!.requiredChecks.length).toBeGreaterThan(0);
-    expect(policy!.optionalChecks.length).toBe(0);
-    expect(policy!.excludedChecks).toContain(':build');
+    expect(policy?.profile).toBe('focused');
+    expect(policy?.requiredChecks.length).toBeGreaterThan(0);
+    expect(policy?.optionalChecks.length).toBe(0);
+    expect(policy?.excludedChecks).toContain(':build');
   });
 
   it('returns a policy for the pre_publication profile', () => {
     const policy = getPolicy('pre_publication');
     expect(policy).toBeDefined();
-    expect(policy!.profile).toBe('pre_publication');
-    expect(policy!.requiredChecks.length).toBeGreaterThan(0);
-    expect(policy!.structuralGuards.length).toBeGreaterThan(0);
+    expect(policy?.profile).toBe('pre_publication');
+    expect(policy?.requiredChecks.length).toBeGreaterThan(0);
+    expect(policy?.structuralGuards.length).toBeGreaterThan(0);
   });
 
   it('returns a policy for the ci profile', () => {
     const policy = getPolicy('ci');
     expect(policy).toBeDefined();
-    expect(policy!.profile).toBe('ci');
+    expect(policy?.profile).toBe('ci');
     // CI includes build and test as required
-    const tasks = policy!.requiredChecks.map((c) => c.task);
+    const tasks = policy?.requiredChecks.map((c) => c.task);
     expect(tasks).toContain(':build');
     expect(tasks).toContain(':test');
   });
@@ -55,8 +55,8 @@ describe('getPolicy (AC-2)', () => {
   it('equivalent policy inputs produce equivalent required checks (AC-2)', () => {
     const policy1 = getPolicy('focused');
     const policy2 = getPolicy('focused');
-    expect(policy1!.requiredChecks).toEqual(policy2!.requiredChecks);
-    expect(policy1!.structuralGuards).toEqual(policy2!.structuralGuards);
+    expect(policy1?.requiredChecks).toEqual(policy2?.requiredChecks);
+    expect(policy1?.structuralGuards).toEqual(policy2?.structuralGuards);
   });
 });
 
