@@ -24,7 +24,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — a failed query currently becomes successful validation |
 | **Dependencies** | C-468; instruction-repair PR 02 |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — canonical validation and publication semantics |
 | **Contract version** | 2.0.0 |
