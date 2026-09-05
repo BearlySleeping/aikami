@@ -7,7 +7,7 @@
 // Also: sidecar lifecycle management via tauri-plugin-shell.
 
 use std::fs;
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
 
@@ -19,10 +19,32 @@ use sha2::{Digest, Sha256};
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 
-
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! Welcome to Aikami.", name)
+}
+
+#[derive(Serialize)]
+struct RuntimeInfoPayload {
+    platform: &'static str,
+    arch: &'static str,
+}
+
+/// Returns the Rust target identifiers expected by detectHardware.
+#[tauri::command]
+fn runtime_info() -> Result<RuntimeInfoPayload, String> {
+    let platform = match std::env::consts::OS {
+        "linux" => "linux",
+        "macos" => "darwin",
+        "windows" => "win32",
+        other => return Err(format!("Unsupported runtime platform: {other}")),
+    };
+    let arch = match std::env::consts::ARCH {
+        "x86_64" => "x64",
+        "aarch64" => "arm64",
+        other => return Err(format!("Unsupported runtime architecture: {other}")),
+    };
+    Ok(RuntimeInfoPayload { platform, arch })
 }
 
 // ── C-467: ProbeExecutor adapter commands ───────────────────────────────
@@ -40,11 +62,83 @@ struct ProbeResultPayload {
     detail: Option<String>,
 }
 
+fn probe_failure(kind: &str, detail: String) -> ProbeResultPayload {
+    ProbeResultPayload {
+        ok: false,
+        stdout: String::new(),
+        stderr: String::new(),
+        exit_code: -1,
+        reason: Some(kind.to_string()),
+        detail: Some(detail),
+    }
+}
+
+fn args_equal(args: &[String], expected: &[&str]) -> bool {
+    args.iter().map(String::as_str).eq(expected.iter().copied())
+}
+
+/// Allows only the read-only hardware probes used by detectHardware and the
+/// fixed loopback health check used by SidecarService.
+fn is_allowed_probe(command: &str, args: &[String], timeout_ms: u64) -> bool {
+    if command == "curl" {
+        return timeout_ms == 3_000
+            && args_equal(
+                args,
+                &["-sf", "--max-time", "2", "http://127.0.0.1:11434/health"],
+            );
+    }
+
+    if timeout_ms != 1_000 {
+        return false;
+    }
+
+    match command {
+        "nvidia-smi" => args_equal(
+            args,
+            &[
+                "--query-gpu=name,memory.total,driver_version",
+                "--format=csv,noheader",
+            ],
+        ),
+        "rocm-smi" => args_equal(args, &["--showmeminfo", "vram"]),
+        "vulkaninfo" => args_equal(args, &["--summary"]),
+        "sysctl" => args_equal(args, &["hw.memsize"]) || args_equal(args, &["-n", "hw.ncpu"]),
+        "powershell" => {
+            args_equal(
+                args,
+                &[
+                    "-NoProfile",
+                    "-Command",
+                    "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+                ],
+            ) || args_equal(
+                args,
+                &[
+                    "-NoProfile",
+                    "-Command",
+                    "(Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors",
+                ],
+            )
+        }
+        "wmic" => args_equal(
+            args,
+            &["ComputerSystem", "get", "TotalPhysicalMemory", "/value"],
+        ),
+        "nproc" => args.is_empty(),
+        "docker" | "podman" => args_equal(args, &["info"]),
+        _ => false,
+    }
+}
+
 /// Runs a command with a timeout, matching the ProbeExecutor.run() contract.
 /// Returns raw stdout/stderr/exit_code — never builds or evaluates a shell
 /// string (C-467 Architecture Directives: security boundary).
 #[tauri::command]
 async fn probe_run(command: String, args: Vec<String>, timeout_ms: u64) -> ProbeResultPayload {
+    if !is_allowed_probe(&command, &args, timeout_ms) {
+        return probe_failure("denied", format!("Probe command is not allowed: {command}"));
+    }
+
     let result = run_probe_inner(&command, &args, timeout_ms).await;
     match result {
         Ok(output) => {
@@ -97,19 +191,26 @@ async fn run_probe_inner(
     use std::time::Duration;
     use tokio::process::Command;
 
-    let Ok(cmd) = Command::new(command)
+    let cmd = Command::new(command)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()
-    else {
-        return Err(ProbeError {
-            kind: "not-found".to_string(),
-            message: format!("Cannot spawn: {command}"),
-        });
-    };
+        .map_err(|error| {
+            let (kind, message) = match error.kind() {
+                ErrorKind::NotFound => ("not-found", format!("Cannot spawn: {command}")),
+                ErrorKind::PermissionDenied => {
+                    ("denied", format!("Permission denied spawning: {command}"))
+                }
+                _ => ("failed", format!("Cannot spawn {command}: {error}")),
+            };
+            ProbeError {
+                kind: kind.to_string(),
+                message,
+            }
+        })?;
 
     let duration = Duration::from_millis(timeout_ms);
     match tokio::time::timeout(duration, cmd.wait_with_output()).await {
@@ -131,8 +232,52 @@ async fn run_probe_inner(
 /// Reads a text file and returns its contents (byte-faithful). Matches
 /// ProbeExecutor.readTextFile().
 #[tauri::command]
-async fn probe_read_text_file(path: String) -> ProbeResultPayload {
-    match fs::read_to_string(&path) {
+async fn probe_read_text_file(app: tauri::AppHandle, path: String) -> ProbeResultPayload {
+    const SYSTEM_PROBE_PATHS: &[&str] = &[
+        "/proc/meminfo",
+        "/etc/cdi/nvidia.yaml",
+        "/etc/cdi/nvidia.json",
+        "/var/run/cdi/nvidia.yaml",
+        "/var/run/cdi/nvidia.json",
+        "/var/run/cdi/nvidia-container-toolkit.json",
+    ];
+
+    let read_path = if SYSTEM_PROBE_PATHS.contains(&path.as_str()) {
+        PathBuf::from(&path)
+    } else if path == "models.manifest.json" {
+        let assets = match assets_dir(&app).and_then(|dir| {
+            fs::canonicalize(&dir)
+                .map_err(|error| format!("Cannot resolve model assets directory: {error}"))
+        }) {
+            Ok(assets) => assets,
+            Err(detail) => return probe_failure("failed", detail),
+        };
+        let candidate = match fs::canonicalize(assets.join("models.manifest.json")) {
+            Ok(candidate) => candidate,
+            Err(error) => {
+                let kind = match error.kind() {
+                    ErrorKind::NotFound => "not-found",
+                    ErrorKind::PermissionDenied => "denied",
+                    _ => "failed",
+                };
+                return probe_failure(
+                    kind,
+                    format!("Cannot resolve models.manifest.json: {error}"),
+                );
+            }
+        };
+        if !candidate.starts_with(&assets) {
+            return probe_failure(
+                "denied",
+                "models.manifest.json resolves outside the model assets directory".to_string(),
+            );
+        }
+        candidate
+    } else {
+        return probe_failure("denied", format!("Probe file is not allowed: {path}"));
+    };
+
+    match fs::read_to_string(&read_path) {
         Ok(contents) => ProbeResultPayload {
             ok: true,
             stdout: contents,
@@ -143,10 +288,8 @@ async fn probe_read_text_file(path: String) -> ProbeResultPayload {
         },
         Err(e) => {
             let (kind, detail) = match e.kind() {
-                std::io::ErrorKind::NotFound => ("not-found", format!("File not found: {path}")),
-                std::io::ErrorKind::PermissionDenied => {
-                    ("denied", format!("Permission denied: {path}"))
-                }
+                ErrorKind::NotFound => ("not-found", format!("File not found: {path}")),
+                ErrorKind::PermissionDenied => ("denied", format!("Permission denied: {path}")),
                 _ => ("failed", format!("IO error: {e}")),
             };
             ProbeResultPayload {
@@ -168,8 +311,8 @@ async fn probe_statfs(path: String) -> Result<serde_json::Value, String> {
     #[cfg(target_family = "unix")]
     {
         use std::mem::MaybeUninit;
-        let path_c = std::ffi::CString::new(path.as_str())
-            .map_err(|e| format!("Invalid path: {e}"))?;
+        let path_c =
+            std::ffi::CString::new(path.as_str()).map_err(|e| format!("Invalid path: {e}"))?;
         let mut stat: MaybeUninit<libc::statvfs> = MaybeUninit::uninit();
         // SAFETY: statvfs is safe to call on a valid C string; the struct
         // is initialised by the kernel before returning.
@@ -196,6 +339,9 @@ async fn probe_statfs(path: String) -> Result<serde_json::Value, String> {
 /// assets. Matches the `$APPDATA/aikami-assets/**` fs capability allow-list.
 const ASSETS_SUBDIR: &str = "aikami-assets";
 const CONFIG_FILE: &str = "config.json";
+const MODEL_MANIFEST_FILE: &str = "models.manifest.json";
+const BUNDLED_MODEL_MANIFEST: &str =
+    include_str!("../../../../backend/local-stack/stack/models.manifest.json");
 
 /// Resolves `<app_data_dir>/aikami-assets`, creating it if missing.
 fn assets_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -206,6 +352,13 @@ fn assets_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = base.join(ASSETS_SUBDIR);
     fs::create_dir_all(&dir).map_err(|e| format!("Cannot create assets dir: {e}"))?;
     Ok(dir)
+}
+
+/// Refreshes the bundled model catalog in the approved app-data directory.
+fn write_model_manifest(app: &tauri::AppHandle) -> Result<(), String> {
+    let path = assets_dir(app)?.join(MODEL_MANIFEST_FILE);
+    fs::write(&path, BUNDLED_MODEL_MANIFEST)
+        .map_err(|e| format!("Cannot write model manifest: {e}"))
 }
 
 /// Validates that a webview-supplied relative path stays inside the assets
@@ -297,7 +450,7 @@ async fn download_model_file(
     checksum: String,
     file_name: String,
     expected_size: u64,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let dir = assets_dir(&app)?;
     let path = safe_asset_path(&dir, &file_name)?;
 
@@ -328,9 +481,7 @@ async fn download_model_file(
     fs::create_dir_all(parent).map_err(|e| format!("Cannot create model dir: {e}"))?;
     let temp_name = format!(
         "{}.part",
-        path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("model")
+        path.file_name().and_then(|n| n.to_str()).unwrap_or("model")
     );
     let temp_path = parent.join(temp_name);
 
@@ -385,7 +536,9 @@ async fn download_model_file(
     }
 
     fs::rename(&temp_path, &path).map_err(|e| format!("Cannot finalize model file: {e}"))?;
-    Ok(())
+    let absolute_path = fs::canonicalize(&path)
+        .map_err(|e| format!("Cannot resolve downloaded model path: {e}"))?;
+    Ok(absolute_path.to_string_lossy().into_owned())
 }
 
 /// Reads a previously downloaded model asset back as raw bytes so the webview
@@ -454,7 +607,9 @@ fn parse_startup_route() -> Option<String> {
 
 /// Picks the `aikami://...` deep link out of a CLI arg list, if present.
 fn extract_deep_link(args: &[String]) -> Option<String> {
-    args.iter().find(|arg| arg.starts_with("aikami://")).cloned()
+    args.iter()
+        .find(|arg| arg.starts_with("aikami://"))
+        .cloned()
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -505,6 +660,9 @@ pub fn run() {
             if let Err(e) = write_default_config(app.handle()) {
                 println!("Tauri setup — failed to write default config: {e}");
             }
+            if let Err(e) = write_model_manifest(app.handle()) {
+                println!("Tauri setup — failed to write model manifest: {e}");
+            }
 
             // Create the main window with the requested route baked into the
             // app URL. `WebviewUrl::App` resolves against `build.devUrl` in dev
@@ -517,11 +675,7 @@ pub fn run() {
                 .to_string();
             println!("Tauri setup — creating main window at route '/{}'", route);
 
-            tauri::WebviewWindowBuilder::new(
-                app,
-                "main",
-                tauri::WebviewUrl::App(route.into()),
-            )
+            tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App(route.into()))
                 .title("Aikami")
                 .inner_size(1200.0, 800.0)
                 .resizable(true)
@@ -537,15 +691,18 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_log::Builder::new().level(
-            if cfg!(debug_assertions) {
-                log::LevelFilter::Debug
-            } else {
-                log::LevelFilter::Info
-            }
-        ).build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(if cfg!(debug_assertions) {
+                    log::LevelFilter::Debug
+                } else {
+                    log::LevelFilter::Info
+                })
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             greet,
+            runtime_info,
             read_runtime_config,
             download_model_file,
             read_model_file,

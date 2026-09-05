@@ -6,6 +6,7 @@ export {
   routerService,
 } from '@aikami/frontend/services';
 export type { SaveSlotEntry, SaveSlotMetadata } from '@aikami/types';
+export type { SidecarState, TextEngineConfig } from '$types';
 // ── Agent Pipeline ────────────────────────────────────────────────────
 export {
   AgentPipelineService,

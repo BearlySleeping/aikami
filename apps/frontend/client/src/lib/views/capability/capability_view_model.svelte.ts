@@ -20,12 +20,14 @@ import {
   campaignService,
   capabilityService,
   configService,
+  createTauriProbeExecutor,
   IMAGE_PROVIDERS,
   routerService,
   runtimeConfigService,
   VOICE_PROVIDERS,
   voiceModelService,
 } from '$services';
+import type { ProbeExecutor } from '@aikami/local-ai';
 import type { Connection, ConnectionCapability, VoiceModelState } from '$types';
 import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$types';
 import {
@@ -562,17 +564,10 @@ class CapabilityViewModel
    * In tests/browser, returns a no-op executor that reports not-found
    * for every probe so the wizard degrades gracefully.
    */
-  private _createWizardExecutor(): import('@aikami/local-ai').ProbeExecutor {
+  private _createWizardExecutor(): ProbeExecutor {
     // Check if we're in a Tauri webview
     if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      // Dynamic import to avoid pulling @aikami/local-ai into the bundle
-      // when running outside Tauri
-      const { createTauriProbeExecutor } =
-        // guard-ignore lint/type-safety/casting: dynamic import for platform-specific code
-        (globalThis as unknown as Record<string, unknown>);
-      if (typeof createTauriProbeExecutor === 'function') {
-        return (createTauriProbeExecutor as () => import('@aikami/local-ai').ProbeExecutor)();
-      }
+      return createTauriProbeExecutor();
     }
 
     // Fallback: no-op executor that returns not-found for everything.

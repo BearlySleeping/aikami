@@ -58,33 +58,23 @@ const { viewModel }: Props = $props();
       {/if}
 
       <!-- Plan: show detected hardware + recommendation -->
-      {#if viewModel.step === 'plan' && viewModel.hardwareProfile && viewModel.stackPlan}
+      {#if viewModel.showPlan}
         <div class="flex flex-col gap-3 py-2">
           <!-- Hardware summary -->
           <div class="flex flex-col gap-1 text-sm">
             <div class="flex items-center gap-2">
               <span class="text-success">✓</span>
               <span class="text-base-content/80">
-                {#if viewModel.hardwareProfile.gpu.vendor !== 'none'}
-                  GPU: {viewModel.hardwareProfile.gpu.name ?? viewModel.hardwareProfile.gpu.vendor}
-                  {#if viewModel.hardwareProfile.gpu.vramMb}
-                    , {viewModel.hardwareProfile.gpu.vramMb}MB VRAM
-                  {/if}
-                {:else}
-                  GPU: Integrated (CPU-only mode)
-                {/if}
+                {viewModel.gpuSummary}
               </span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-success">✓</span>
-              <span class="text-base-content/80">RAM: {viewModel.hardwareProfile.ramMb}MB</span>
+              <span class="text-base-content/80">{viewModel.ramSummary}</span>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-success">✓</span>
-              <span class="text-base-content/80">
-                Disk:
-                {(viewModel.hardwareProfile.freeDiskBytes / (1024 * 1024 * 1024)).toFixed(0)}GB free
-              </span>
+              <span class="text-base-content/80">{viewModel.diskSummary}</span>
             </div>
           </div>
 
@@ -113,8 +103,31 @@ const { viewModel }: Props = $props();
         </div>
       {/if}
 
-      <!-- Starting / Downloading -->
-      {#if viewModel.step === 'starting' || viewModel.step === 'downloading'}
+      <!-- Downloading -->
+      {#if viewModel.step === 'downloading'}
+        <div class="flex flex-col gap-3 py-2">
+          <div class="flex items-center gap-2">
+            <span class="loading loading-spinner loading-sm text-primary"></span>
+            <span class="text-sm text-base-content/70">Downloading model...</span>
+          </div>
+          <progress
+            class="progress progress-primary w-full"
+            value={viewModel.downloadProgress}
+            max="100"
+          ></progress>
+          <span class="text-xs text-base-content/60">{viewModel.downloadProgress}%</span>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline"
+            onclick={() => viewModel.cancelDownload()}
+          >
+            Cancel
+          </button>
+        </div>
+      {/if}
+
+      <!-- Starting -->
+      {#if viewModel.step === 'starting'}
         <div class="flex flex-col gap-3 py-2">
           <div class="flex items-center gap-2">
             <span class="loading loading-spinner loading-sm text-primary"></span>
@@ -142,7 +155,7 @@ const { viewModel }: Props = $props();
       {#if viewModel.step === 'error'}
         <div class="flex flex-col gap-3 py-2">
           <div class="alert alert-error">
-            <span class="text-sm">{viewModel.errorMessage || 'An error occurred'}</span>
+            <span class="text-sm">{viewModel.displayError}</span>
           </div>
           <button type="button" class="btn btn-sm btn-outline" onclick={() => viewModel.retry()}>
             Retry

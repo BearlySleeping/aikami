@@ -39,6 +39,7 @@ const NVIDIA_FIXTURES = {
 
 // Mock configService before importing the ViewModel
 mock.module('$services', () => ({
+  getTauriRuntimeInfo: mock(async () => ({ platform: 'linux', arch: 'x64' })),
   configService: {
     state: {
       connections: [],
@@ -48,13 +49,15 @@ mock.module('$services', () => ({
     setDefaultConnection: mock(() => {}),
     save: mock(async () => {}),
   },
-}));
-
-// Mock sidecarService
-mock.module('$services/ai/sidecar_service.svelte', () => ({
   sidecarService: {
     state: { status: 'not-installed' },
-    config: { port: 11434, binaryName: 'llama-server', modelPath: '', healthEndpoint: '/health' },
+    config: {
+      host: '127.0.0.1',
+      port: 11434,
+      binaryName: 'binaries/llama-server',
+      modelPath: '',
+      healthEndpoint: '/health',
+    },
     start: mock(async () => {}),
     stop: mock(async () => {}),
     healthCheck: mock(async () => false),
@@ -208,32 +211,6 @@ describe('LocalAiWizardViewModel', () => {
     // The sidecar mock's start() resolves without changing state to 'running',
     // so we expect 'error' from the sidecar start failure
     expect(vm.step).toBe('error');
-  });
-
-  test('download step gracefully handles missing Tauri context', async () => {
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard-download-skip',
-      executor,
-      platform: 'linux',
-      arch: 'x64',
-    });
-
-    await vm.startDetection();
-
-    // Directly test _downloadModel - should skip when not in Tauri
-    // Access the private method through bracket notation
-    const downloadResult = await (
-      vm as unknown as {
-        _downloadModel(entry: { manifestId: string; bytes: number }): Promise<void>;
-      }
-    )._downloadModel({
-      manifestId: 'test-model',
-      bytes: 1024,
-    });
-
-    // Should resolve without error in non-Tauri context
-    expect(downloadResult).toBeUndefined();
   });
 
   test('contract suite placeholder — AC-1 requires Tauri runtime', async () => {

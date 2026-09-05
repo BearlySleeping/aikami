@@ -8,37 +8,20 @@
 // normal local AiProvider/AiConnection through configService.
 // AC-5: Quitting the app terminates all sidecar child processes.
 
-import { BaseClass, type BaseClassInterface } from '@aikami/utils';
 import type { ProbeResult, ProbeExecutor } from '@aikami/local-ai';
-
-// ── Types ─────────────────────────────────────────────────────────────
-
-/**
- * Sidecar process lifecycle state (C-467 State & Data Models).
- * Tracked client-side only, never synced.
- */
-export type SidecarState =
-  | { readonly status: 'not-installed' }
-  | { readonly status: 'downloading'; readonly progress: number }
-  | { readonly status: 'starting' }
-  | { readonly status: 'running'; readonly port: number }
-  | { readonly status: 'error'; readonly reason: string };
-
-/** Text engine sidecar configuration. */
-export type TextEngineConfig = {
-  /** Loopback port the engine binds to (EMULATOR_PORTS.text = 11434). */
-  readonly port: number;
-  /** Sidecar binary name registered in tauri.conf.json externalBin. */
-  readonly binaryName: string;
-  /** Model file path on disk (relative to app data dir). */
-  readonly modelPath: string;
-  /** Health-check endpoint path (e.g. "/health" for llama-server). */
-  readonly healthEndpoint: string;
-};
+import {
+  BaseFrontendClass,
+  type BaseFrontendClassInterface,
+  type BaseFrontendClassOptions,
+} from '@aikami/frontend/services';
+import type { SidecarChildProcess, SidecarState, TextEngineConfig } from '$types';
+import { registerTauriCloseHandler, spawnTauriSidecar } from './sidecar_tauri_adapter.ts';
 
 // ── Interface ─────────────────────────────────────────────────────────
 
-export type SidecarServiceInterface = BaseClassInterface & {
+export type SidecarServiceOptions = BaseFrontendClassOptions;
+
+export type SidecarServiceInterface = BaseFrontendClassInterface & {
   /** Current state of the text engine sidecar. */
   readonly state: SidecarState;
   /** Text engine config (port, binary name, model path). */
@@ -57,26 +40,31 @@ export type SidecarServiceInterface = BaseClassInterface & {
 // ── Constants ─────────────────────────────────────────────────────────
 
 const DEFAULT_PORT = 11434;
+const LOOPBACK_HOST = '127.0.0.1';
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
 const SIDECAR_START_TIMEOUT_MS = 10_000;
 const SIDECAR_POLL_INTERVAL_MS = 500;
 
 // ── Service ───────────────────────────────────────────────────────────
 
-class SidecarService extends BaseClass implements SidecarServiceInterface {
-  _state = $state<SidecarState>({ status: 'not-installed' });
-  _config: TextEngineConfig = {
+class SidecarService
+  extends BaseFrontendClass<SidecarServiceOptions>
+  implements SidecarServiceInterface
+{
+  private _state = $state<SidecarState>({ status: 'not-installed' });
+  private _config: TextEngineConfig = {
+    host: LOOPBACK_HOST,
     port: DEFAULT_PORT,
-    binaryName: 'llama-server',
+    binaryName: 'binaries/llama-server',
     modelPath: '',
     healthEndpoint: '/health',
   };
 
   /** Handle to the spawned sidecar child process for cleanup (AC-5). */
-  _childProcess: { kill: () => void } | null = null;
+  private _childProcess: SidecarChildProcess | undefined;
 
   /** Whether cleanup-on-quit has been registered. */
-  _cleanupRegistered = false;
+  private _cleanupRegistered = false;
 
   get state(): SidecarState {
     return this._state;
@@ -126,9 +114,10 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
 
         // Register cleanup on quit (first start only)
         if (!this._cleanupRegistered) {
-          this._registerCleanupOnQuit();
+          await this._registerCleanupOnQuit();
         }
       } else {
+        await this._terminateSidecar();
         this._state = { status: 'error', reason: 'Sidecar failed to start within timeout' };
       }
     } catch (error) {
@@ -142,7 +131,7 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
    * Stops a running sidecar. Kills the child process handle.
    */
   async stop(): Promise<void> {
-    if (this._state.status !== 'running') {
+    if (this._state.status !== 'running' && !this._childProcess) {
       return;
     }
 
@@ -151,7 +140,6 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
     try {
       await this._terminateSidecar();
       this._state = { status: 'not-installed' };
-      this._childProcess = null;
       this.info('sidecar:stopped');
     } catch (error) {
       this.warn('sidecar:stop-failed', error);
@@ -181,7 +169,7 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
    * AC-5: Quitting the app terminates all sidecar child processes.
    */
   registerCleanupOnQuit(): void {
-    this._registerCleanupOnQuit();
+    void this._registerCleanupOnQuit();
   }
 
   // ── Private: cleanup on quit (AC-5) ─────────────────────────────────
@@ -190,33 +178,25 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
    * Registers a cleanup handler that terminates the sidecar when the Tauri
    * app closes. Uses the Tauri window's onCloseRequested event.
    */
-  _registerCleanupOnQuit(): void {
+  private async _registerCleanupOnQuit(): Promise<void> {
     if (this._cleanupRegistered) {
       return;
     }
-    this._cleanupRegistered = true;
 
     // Use Tauri's window close-requested event to kill the sidecar.
     // This is a dynamic import because @tauri-apps/api is only available
     // inside a Tauri webview.
     try {
-      const register = async () => {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        const win = getCurrentWindow();
-        win.onCloseRequested(async () => {
-          this.debug('cleanup:app-quitting');
-          if (this._childProcess) {
-            this._childProcess.kill();
-            this._childProcess = null;
-          }
-          this._state = { status: 'not-installed' };
-        });
-        this.debug('cleanup:registered-on-close-requested');
-      };
-      void register();
-    } catch {
+      await registerTauriCloseHandler(async () => {
+        this.debug('cleanup:app-quitting');
+        await this._terminateSidecar();
+        this._state = { status: 'not-installed' };
+      });
+      this._cleanupRegistered = true;
+      this.debug('cleanup:registered-on-close-requested');
+    } catch (error) {
       // Not in Tauri context — no cleanup hook available
-      this.debug('cleanup:not-in-tauri-context');
+      this.debug('cleanup:not-in-tauri-context', { error });
     }
   }
 
@@ -226,15 +206,19 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
    * Performs a health check against the sidecar's loopback port using the
    * probe executor (which on Tauri uses the Rust IPC; in tests uses fixture).
    */
-  async _checkHealth(executor: ProbeExecutor): Promise<boolean> {
+  private async _checkHealth(executor: ProbeExecutor): Promise<boolean> {
     try {
       // Use curl via the probe executor as a portable health-check mechanism
-      const result: ProbeResult = await executor.run('curl', [
-        '-sf',
-        '--max-time',
-        '2',
-        `http://localhost:${this._config.port}${this._config.healthEndpoint}`,
-      ], { timeoutMs: HEALTH_CHECK_TIMEOUT_MS });
+      const result: ProbeResult = await executor.run(
+        'curl',
+        [
+          '-sf',
+          '--max-time',
+          '2',
+          `http://${this._config.host}:${this._config.port}${this._config.healthEndpoint}`,
+        ],
+        { timeoutMs: HEALTH_CHECK_TIMEOUT_MS },
+      );
 
       return result.ok;
     } catch {
@@ -252,26 +236,19 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
    * Uses dynamic import because @tauri-apps/plugin-shell is only available
    * inside a Tauri webview (permitted per aikami-conventions §3).
    */
-  async _launchSidecar(): Promise<void> {
+  private async _launchSidecar(): Promise<void> {
     try {
-      const { Command } = await import('@tauri-apps/plugin-shell');
-      const cmd = Command.sidecar('binaries/llama-server', [
-        '-m', this._config.modelPath,
-        '--port', String(this._config.port),
-        '--host', '127.0.0.1',
-      ]);
-
-      // Spawn the sidecar and track the child process handle
-      const child = await cmd.spawn();
-      this._childProcess = {
-        kill: () => {
-          try {
-            child.kill();
-          } catch {
-            // Process may already be dead
-          }
-        },
-      };
+      this._childProcess = await spawnTauriSidecar({
+        binaryName: this._config.binaryName,
+        args: [
+          '-m',
+          this._config.modelPath,
+          '--port',
+          String(this._config.port),
+          '--host',
+          this._config.host,
+        ],
+      });
 
       this.debug('_launchSidecar:spawned', {
         binary: this._config.binaryName,
@@ -290,10 +267,10 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
   /**
    * Terminates a running sidecar process. Kills the tracked child handle.
    */
-  async _terminateSidecar(): Promise<void> {
+  private async _terminateSidecar(): Promise<void> {
     if (this._childProcess) {
-      this._childProcess.kill();
-      this._childProcess = null;
+      await this._childProcess.kill();
+      this._childProcess = undefined;
       this.debug('_terminateSidecar:killed');
     } else {
       this.debug('_terminateSidecar:no-process-handle');
@@ -305,7 +282,7 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
   /**
    * Polls the health endpoint until the sidecar responds or timeout.
    */
-  async _waitForReady(executor: ProbeExecutor): Promise<boolean> {
+  private async _waitForReady(executor: ProbeExecutor): Promise<boolean> {
     const deadline = Date.now() + SIDECAR_START_TIMEOUT_MS;
 
     while (Date.now() < deadline) {
@@ -320,7 +297,7 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
   }
 
   /** Promise-based sleep helper. */
-  _sleep(ms: number): Promise<void> {
+  private _sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

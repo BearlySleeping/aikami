@@ -12,25 +12,20 @@ import type { ProbeExecutor, ProbeResult, StatfsResult } from '@aikami/local-ai'
 type ProbeFailureReason = Extract<ProbeResult, { readonly ok: false }>['reason'];
 
 /**
- * Key used to access Tauri's IPC internals on the global window object.
- * Tauri v2 exposes `window.__TAURI_INTERNALS__` when `withGlobalTauri: true`
- * is set in tauri.conf.json (already configured).
- */
-const TAURI_INTERNALS_KEY = '__TAURI_INTERNALS__';
-
-/**
  * Internal invoke helper — accesses Tauri's IPC bridge through the global
  * window object injected by `withGlobalTauri`.
  */
 const tauriInvoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
-  const internals = (
-    window as unknown as Record<
-      string,
-      { invoke: (cmd: string, args?: Record<string, unknown>) => Promise<T> }
-    >
-  )[TAURI_INTERNALS_KEY]; // guard-ignore lint/type-safety/casting: Tauri v2 global IPC bridge
-  return internals.invoke(cmd, args);
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+    throw new Error('Tauri IPC is unavailable outside the desktop webview');
+  }
+
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<T>(cmd, args);
 };
+
+const isProbeFailureReason = (value: unknown): value is ProbeFailureReason =>
+  value === 'not-found' || value === 'timeout' || value === 'denied' || value === 'failed';
 
 /** Result payload shape from the Rust-side probe_run/probe_read_text_file commands. */
 type ProbeResultPayload = {
@@ -39,9 +34,15 @@ type ProbeResultPayload = {
   stderr: string;
   // biome-ignore lint/style/useNamingConvention: matches Rust serde serialization
   exit_code: number;
-  reason?: string | null;
-  detail?: string | null;
+  reason?: unknown;
+  detail?: unknown;
 };
+
+/** Returns the native platform identifiers used by the hardware detector. */
+export const getTauriRuntimeInfo = (): Promise<{
+  readonly platform: 'linux' | 'darwin' | 'win32';
+  readonly arch: 'x64' | 'arm64';
+}> => tauriInvoke('runtime_info');
 
 /**
  * Creates a ProbeExecutor backed by Tauri IPC commands.
@@ -71,11 +72,11 @@ export const createTauriProbeExecutor = (): ProbeExecutor => ({
       };
     }
 
-    const reason = (payload.reason ?? 'failed') as ProbeFailureReason;
+    const reason = isProbeFailureReason(payload.reason) ? payload.reason : 'failed';
     return {
       ok: false,
       reason,
-      detail: payload.detail ?? undefined,
+      detail: typeof payload.detail === 'string' ? payload.detail : undefined,
     };
   },
 
@@ -91,11 +92,11 @@ export const createTauriProbeExecutor = (): ProbeExecutor => ({
       };
     }
 
-    const reason = (payload.reason ?? 'failed') as ProbeFailureReason;
+    const reason = isProbeFailureReason(payload.reason) ? payload.reason : 'failed';
     return {
       ok: false,
       reason,
-      detail: payload.detail ?? undefined,
+      detail: typeof payload.detail === 'string' ? payload.detail : undefined,
     };
   },
 

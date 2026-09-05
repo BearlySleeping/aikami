@@ -12,11 +12,22 @@
 //       local provider.
 // AC-4: Corrupted/interrupted downloads are never mistaken for ready.
 
-import { detectHardware, loadManifest, recommend, type ModelManifest } from '@aikami/local-ai';
-import type { ProbeExecutor, HardwareProfile, StackPlan } from '@aikami/local-ai';
 import { BaseViewModel, type BaseViewModelInterface, type BaseViewModelOptions } from '@aikami/frontend/services';
-import { configService } from '$services';
-import { sidecarService, type SidecarState } from '../../services/ai/sidecar_service.svelte';
+import {
+  detectHardware,
+  loadManifest,
+  recommend,
+  type HardwareProfile,
+  type ModelManifest,
+  type ProbeExecutor,
+  type StackPlan,
+} from '@aikami/local-ai';
+import {
+  configService,
+  getTauriRuntimeInfo,
+  sidecarService,
+  type SidecarState,
+} from '$services';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -43,6 +54,16 @@ export type LocalAiWizardViewModelInterface = BaseViewModelInterface & {
   readonly errorMessage: string;
   /** Download progress percentage (0–100). */
   readonly downloadProgress: number;
+  /** Whether the detected plan is ready to render. */
+  readonly showPlan: boolean;
+  /** User-facing GPU summary in GB units. */
+  readonly gpuSummary: string;
+  /** User-facing RAM summary in GB units. */
+  readonly ramSummary: string;
+  /** User-facing free-disk summary in GB units. */
+  readonly diskSummary: string;
+  /** Error text with a stable fallback. */
+  readonly displayError: string;
   /** Name of the first recommended model (or null). */
   readonly firstModelName: string | null;
   /** Sidecar port when running (or null). */
@@ -60,6 +81,43 @@ export type LocalAiWizardViewModelInterface = BaseViewModelInterface & {
   reset(): void;
 };
 
+type RuntimePlatform = NonNullable<LocalAiWizardViewModelOptions['platform']>;
+type RuntimeArch = NonNullable<LocalAiWizardViewModelOptions['arch']>;
+
+type ModelDownloadProgress = {
+  readonly file: string;
+  readonly receivedBytes: number;
+  readonly totalBytes: number;
+};
+
+type RuntimeInfo = {
+  readonly platform: RuntimePlatform;
+  readonly arch: RuntimeArch;
+};
+
+const detectRuntimePlatform = (): RuntimePlatform => {
+  if (typeof navigator === 'undefined') {
+    return 'linux';
+  }
+  const runtime = `${navigator.platform} ${navigator.userAgent}`.toLowerCase();
+  if (runtime.includes('win')) {
+    return 'win32';
+  }
+  if (runtime.includes('mac')) {
+    return 'darwin';
+  }
+  return 'linux';
+};
+
+const detectRuntimeArch = (): RuntimeArch => {
+  if (typeof navigator === 'undefined') {
+    return 'x64';
+  }
+  return /arm64|aarch64/.test(`${navigator.platform} ${navigator.userAgent}`.toLowerCase())
+    ? 'arm64'
+    : 'x64';
+};
+
 export type LocalAiWizardViewModelOptions = BaseViewModelOptions & {
   /** Injected probe executor. In production, use createTauriProbeExecutor(). */
   readonly executor: ProbeExecutor;
@@ -75,20 +133,23 @@ class LocalAiWizardViewModel
   extends BaseViewModel<LocalAiWizardViewModelOptions>
   implements LocalAiWizardViewModelInterface
 {
-  readonly _executor: ProbeExecutor;
-  readonly _platform: 'linux' | 'darwin' | 'win32';
-  readonly _arch: 'x64' | 'arm64';
+  private readonly _executor: ProbeExecutor;
+  private _platform: RuntimePlatform | undefined;
+  private _arch: RuntimeArch | undefined;
+  private _installToken = 0;
+  private _manifest: ModelManifest | undefined;
 
   step = $state<WizardStep>('idle');
   hardwareProfile = $state<HardwareProfile | null>(null);
   stackPlan = $state<StackPlan | null>(null);
   errorMessage = $state('');
+  downloadProgress = $state(0);
 
   constructor(options: LocalAiWizardViewModelOptions) {
     super(options);
     this._executor = options.executor;
-    this._platform = options.platform ?? 'linux';
-    this._arch = options.arch ?? 'x64';
+    this._platform = options.platform;
+    this._arch = options.arch;
   }
 
   /** Sidecar state (mirrored from sidecarService). */
@@ -96,13 +157,31 @@ class LocalAiWizardViewModel
     return sidecarService.state;
   }
 
-  /** Download progress (0–100) from the sidecar state. */
-  get downloadProgress(): number {
-    const s = sidecarService.state;
-    if (s.status === 'downloading') {
-      return s.progress;
+  get showPlan(): boolean {
+    return this.step === 'plan' && this.hardwareProfile !== null && this.stackPlan !== null;
+  }
+
+  get gpuSummary(): string {
+    const gpu = this.hardwareProfile?.gpu;
+    if (!gpu || gpu.vendor === 'none') {
+      return 'GPU: Integrated (CPU-only mode)';
     }
-    return 0;
+    const name = gpu.name ?? gpu.vendor;
+    const memory = gpu.vramMb ? `, ${(gpu.vramMb / 1024).toFixed(1)} GB VRAM` : '';
+    return `GPU: ${name}${memory}`;
+  }
+
+  get ramSummary(): string {
+    return `RAM: ${((this.hardwareProfile?.ramMb ?? 0) / 1024).toFixed(0)} GB`;
+  }
+
+  get diskSummary(): string {
+    const freeBytes = this.hardwareProfile?.freeDiskBytes ?? 0;
+    return `Disk: ${(freeBytes / 1024 / 1024 / 1024).toFixed(0)} GB free`;
+  }
+
+  get displayError(): string {
+    return this.errorMessage || 'An error occurred';
   }
 
   /** Name of the first recommended model (or null). */
@@ -117,12 +196,6 @@ class LocalAiWizardViewModel
       return s.port;
     }
     return null;
-  }
-
-  // ── Lifecycle ────────────────────────────────────────────────────────
-
-  override async initialize(): Promise<void> {
-    return super.initialize();
   }
 
   // ── Detection ────────────────────────────────────────────────────────
@@ -141,10 +214,11 @@ class LocalAiWizardViewModel
     this.errorMessage = '';
 
     try {
+      const runtime = await this._runtimeInfo();
       const profile = await detectHardware({
         executor: this._executor,
-        platform: this._platform,
-        arch: this._arch,
+        platform: runtime.platform,
+        arch: runtime.arch,
       });
 
       this.hardwareProfile = profile;
@@ -169,6 +243,7 @@ class LocalAiWizardViewModel
           entries: [],
         };
       }
+      this._manifest = manifest;
 
       const plan = await recommend({
         profile,
@@ -204,26 +279,37 @@ class LocalAiWizardViewModel
       return;
     }
 
+    const installToken = ++this._installToken;
     this.step = 'downloading';
     this.errorMessage = '';
+    this.downloadProgress = 0;
 
     try {
       // Step 1: Download the model via the Rust download_model_file command
       // (Tauri-only — in browser context this will fail gracefully).
-      await this._downloadModel(modelEntry);
+      const modelPath = await this._downloadModel(modelEntry);
+      if (!this._isInstallCurrent(installToken)) {
+        return;
+      }
 
       // Step 2: Start the sidecar with the downloaded model
       this.step = 'starting';
       await sidecarService.start({
-        modelPath: modelEntry.manifestId,
+        modelPath,
         executor: this._executor,
       });
+      if (!this._isInstallCurrent(installToken)) {
+        await sidecarService.stop();
+        return;
+      }
 
       if (sidecarService.state.status === 'running') {
-        this.step = 'ready';
-
         // Step 3: Register as a local provider through configService
-        this._registerLocalProvider();
+        await this._registerLocalProvider();
+        if (!this._isInstallCurrent(installToken)) {
+          return;
+        }
+        this.step = 'ready';
       } else {
         const reason = sidecarService.state.status === 'error'
           ? sidecarService.state.reason
@@ -232,6 +318,9 @@ class LocalAiWizardViewModel
         this.step = 'error';
       }
     } catch (error) {
+      if (!this._isInstallCurrent(installToken)) {
+        return;
+      }
       this.error('startInstall:failed', error);
       this.errorMessage = error instanceof Error ? error.message : 'Install failed';
       this.step = 'error';
@@ -243,39 +332,59 @@ class LocalAiWizardViewModel
    * Uses Tauri IPC invoke() which handles SHA-256 verification on the Rust
    * side (AC-4). Falls back gracefully when not in Tauri context.
    */
-  async _downloadModel(modelEntry: {
-    manifestId: string;
-    bytes: number;
-  }): Promise<void> {
+  private async _downloadModel(modelEntry: StackPlan['models'][number]): Promise<string> {
     // Check if we're in a Tauri webview
     if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
-      // Not in Tauri — skip download (e.g. in browser or test context)
-      this.debug('_downloadModel:skipped-not-tauri');
-      return;
+      throw new Error('Local model installation requires the desktop app');
     }
+
+    const manifestEntry = this._manifest?.entries.find((entry) => entry.id === modelEntry.manifestId);
+    if (!manifestEntry) {
+      throw new Error(`Model metadata is unavailable: ${modelEntry.manifestId}`);
+    }
+    const url = this._modelDownloadUrl(manifestEntry);
 
     try {
       // Use Tauri IPC invoke to call the Rust download_model_file command
-      const internals = (
-        window as unknown as Record<string, { invoke: (cmd: string, args: Record<string, unknown>) => Promise<unknown> }>
-        // guard-ignore lint/type-safety/casting: Tauri v2 global IPC bridge
-      )['__TAURI_INTERNALS__'];
-
-      // The model URL and checksum would come from the manifest in production.
-      // For now, we use the manifestId as the file name and a placeholder URL.
-      // In a real deployment, the manifest provides downloadUrl + sha256 for
-      // each entry.
-      await internals.invoke('download_model_file', {
-        url: `https://huggingface.co/models/${modelEntry.manifestId}`,
-        checksum: '', // SHA-256 from manifest
-        fileName: modelEntry.manifestId,
-        expectedSize: modelEntry.bytes,
+      const [{ invoke }, { listen }] = await Promise.all([
+        import('@tauri-apps/api/core'),
+        import('@tauri-apps/api/event'),
+      ]);
+      const unlisten = await listen<ModelDownloadProgress>('model-download-progress', (event) => {
+        const progress = event.payload;
+        if (
+          this.step !== 'downloading' ||
+          progress.file !== manifestEntry.targetPath ||
+          progress.totalBytes <= 0
+        ) {
+          return;
+        }
+        this.downloadProgress = Math.min(
+          100,
+          Math.round((progress.receivedBytes / progress.totalBytes) * 100),
+        );
       });
+
+      let modelPath: string;
+      try {
+        modelPath = await invoke<string>('download_model_file', {
+          url,
+          checksum: manifestEntry.sha256,
+          fileName: manifestEntry.targetPath,
+          expectedSize: manifestEntry.bytes,
+        });
+      } finally {
+        unlisten();
+      }
+      if (this.step === 'downloading') {
+        this.downloadProgress = 100;
+      }
 
       this.debug('_downloadModel:complete', {
         model: modelEntry.manifestId,
         size: modelEntry.bytes,
       });
+      return modelPath;
     } catch (error) {
       this.warn('_downloadModel:failed', error);
       throw error;
@@ -284,8 +393,10 @@ class LocalAiWizardViewModel
 
   /** Cancels download. */
   cancelDownload(): void {
-    this.debug('cancelDownload');
+    this._installToken += 1;
     void sidecarService.stop();
+    this.downloadProgress = 0;
+    this.errorMessage = '';
     this.step = 'plan';
   }
 
@@ -305,6 +416,8 @@ class LocalAiWizardViewModel
     this.hardwareProfile = null;
     this.stackPlan = null;
     this.errorMessage = '';
+    this.downloadProgress = 0;
+    this._installToken += 1;
   }
 
   // ── Private helpers ─────────────────────────────────────────────────
@@ -314,9 +427,9 @@ class LocalAiWizardViewModel
    * through configService, so it appears in the AI settings provider tree
    * like any other local connection (C-467 AC-3).
    */
-  _registerLocalProvider(): void {
+  private async _registerLocalProvider(): Promise<void> {
     const port = sidecarService.config.port;
-    const baseUrl = `http://localhost:${port}`;
+    const baseUrl = `http://${sidecarService.config.host}:${port}`;
 
     // Check if a llamacpp connection already exists
     const connections = configService.state.connections ?? [];
@@ -346,9 +459,39 @@ class LocalAiWizardViewModel
         source: 'detected',
       });
 
-      void configService.save();
       this.debug('_registerLocalProvider:registered', { baseUrl });
     }
+    await configService.save();
+  }
+
+  private _isInstallCurrent(installToken: number): boolean {
+    return installToken === this._installToken;
+  }
+
+  private _modelDownloadUrl(manifestEntry: ModelManifest['entries'][number]): string {
+    if ('url' in manifestEntry && typeof manifestEntry.url === 'string') {
+      return manifestEntry.url;
+    }
+    if ('repo' in manifestEntry && 'revision' in manifestEntry && 'file' in manifestEntry) {
+      return `https://huggingface.co/${manifestEntry.repo}/resolve/${manifestEntry.revision}/${manifestEntry.file}`;
+    }
+    throw new Error(`Model download URL is unavailable: ${manifestEntry.id}`);
+  }
+
+  private async _runtimeInfo(): Promise<RuntimeInfo> {
+    if (this._platform && this._arch) {
+      return { platform: this._platform, arch: this._arch };
+    }
+
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      const runtime = await getTauriRuntimeInfo();
+      this._platform = runtime.platform;
+      this._arch = runtime.arch;
+    }
+
+    this._platform ??= detectRuntimePlatform();
+    this._arch ??= detectRuntimeArch();
+    return { platform: this._platform, arch: this._arch };
   }
 }
 
