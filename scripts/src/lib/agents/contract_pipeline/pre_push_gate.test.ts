@@ -26,13 +26,13 @@ const scriptedRunner = (
 };
 
 describe('runPrePushGate', () => {
-  it('runs :fix then :validate against the given base and passes when validate is green', () => {
-    const { runner, calls } = scriptedRunner([{ status: 0 }, { status: 0 }]);
+  it('runs required checks then :validate against the given base', () => {
+    const { runner, calls } = scriptedRunner([{ status: 0 }, { status: 0 }, { status: 0 }]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
     expect(result).toEqual({ ran: true, ok: true, output: '' });
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
     expect(calls[0]?.args).toEqual([
       'moon',
       'run',
@@ -45,6 +45,13 @@ describe('runPrePushGate', () => {
     expect(calls[1]?.args).toEqual([
       'moon',
       'run',
+      ':typecheck',
+      '--affected',
+      '--base=origin/main',
+    ]);
+    expect(calls[2]?.args).toEqual([
+      'moon',
+      'run',
       ':validate',
       '--affected',
       '--base=origin/main',
@@ -52,17 +59,26 @@ describe('runPrePushGate', () => {
     expect(calls[0]?.cwd).toBe('/tmp/wt');
   });
 
-  it('accepts an explicit profile parameter (AC-2)', () => {
-    const { runner, calls } = scriptedRunner([{ status: 0 }, { status: 0 }]);
+  it('runs every required CI profile task (AC-2)', () => {
+    const { runner, calls } = scriptedRunner([
+      { status: 0 },
+      { status: 0 },
+      { status: 0 },
+      { status: 0 },
+      { status: 0 },
+    ]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner, profile: 'ci' });
 
     expect(result).toEqual({ ran: true, ok: true, output: '' });
-    expect(calls).toHaveLength(2);
+    const tasks = calls.map((call) => call.args[2]);
+    expect(tasks).toContain(':build');
+    expect(tasks).toContain(':test');
   });
 
   it('returns unavailable when a required check cannot be executed (AC-4)', () => {
     const { runner } = scriptedRunner([
+      { status: 0 },
       { status: 0 },
       { status: 1, output: 'error: Task not found ":validate"' },
     ]);
@@ -76,7 +92,11 @@ describe('runPrePushGate', () => {
 
   it('reports a verdict of failed when :validate is red, carrying the diagnostics', () => {
     const diagnostics = 'client:lint | × useBlockStatements: Block statements are preferred.';
-    const { runner } = scriptedRunner([{ status: 0 }, { status: 1, output: diagnostics }]);
+    const { runner } = scriptedRunner([
+      { status: 0 },
+      { status: 0 },
+      { status: 1, output: diagnostics },
+    ]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
@@ -89,6 +109,7 @@ describe('runPrePushGate', () => {
     // When the gate cannot run a required check but it's NOT a setup failure
     // (moon binary exists, base ref is valid), the result must be not-ok.
     const { runner } = scriptedRunner([
+      { status: 0 },
       { status: 0 },
       { status: 1, output: 'client:typecheck | × TS2345: Type mismatch' },
     ]);
@@ -105,12 +126,16 @@ describe('runPrePushGate', () => {
   // Treating it as one would block on problems that :validate then declares
   // green, and would skip the only step that actually produces diagnostics.
   it('does not treat a non-zero :fix as the verdict', () => {
-    const { runner, calls } = scriptedRunner([{ status: 1, output: 'unfixable' }, { status: 0 }]);
+    const { runner, calls } = scriptedRunner([
+      { status: 1, output: 'unfixable' },
+      { status: 0 },
+      { status: 0 },
+    ]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 
     expect(result).toEqual({ ran: true, ok: true, output: '' });
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
   });
 
   // 🔴 "The gate could not run" must never read as "the code is broken" — a
@@ -129,12 +154,14 @@ describe('runPrePushGate', () => {
   });
 
   it('uses focused profile when specified (AC-2)', () => {
-    const { runner, calls } = scriptedRunner([{ status: 0 }, { status: 0 }]);
+    const { runner, calls } = scriptedRunner([{ status: 0 }, { status: 0 }, { status: 0 }]);
 
     runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner, profile: 'focused' });
 
-    // Focused should still run :fix + :validate
-    expect(calls).toHaveLength(2);
+    const tasks = calls.map((call) => call.args[2]);
+    expect(tasks).toEqual([':fix', ':typecheck', ':validate']);
+    expect(tasks).not.toContain(':build');
+    expect(tasks).not.toContain(':test');
   });
 
   it('treats a missing Moon command as infrastructure rather than validation failure', () => {
@@ -166,7 +193,7 @@ describe('runPrePushGate', () => {
 
   it('truncates oversized diagnostics so they cannot crowd out the review prompt', () => {
     const huge = 'x'.repeat(MAX_GATE_OUTPUT_CHARS * 3);
-    const { runner } = scriptedRunner([{ status: 0 }, { status: 1, output: huge }]);
+    const { runner } = scriptedRunner([{ status: 0 }, { status: 0 }, { status: 1, output: huge }]);
 
     const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
 

@@ -85,6 +85,16 @@ describe('parseMoonProjects — DiscoveryOutcome (AC-1)', () => {
     }
   });
 
+  test('multibyte JSON above 512KB cap uses UTF-8 byte length', () => {
+    const large = 'é'.repeat(256_001);
+    const outcome = parseMoonProjects(large);
+    expect(outcome.kind).toBe('too_large');
+    if (outcome.kind === 'too_large') {
+      expect(outcome.byteCount).toBe(512_002);
+      expect(outcome.cap).toBe(512_000);
+    }
+  });
+
   test('malformed JSON → parse_failed', () => {
     const outcome = parseMoonProjects('{not valid json}');
     expect(outcome.kind).toBe('parse_failed');
@@ -95,6 +105,50 @@ describe('parseMoonProjects — DiscoveryOutcome (AC-1)', () => {
 
   test('JSON missing projects array → parse_failed', () => {
     const outcome = parseMoonProjects(JSON.stringify({ error: 'not found', status: 404 }));
+    expect(outcome.kind).toBe('parse_failed');
+  });
+
+  test('project without a valid ID → parse_failed', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            source: 'apps/frontend/client',
+            config: { layer: 'application', tags: [], dependsOn: [] },
+          },
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('parse_failed');
+  });
+
+  test('project with non-string tags → parse_failed', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            id: 'client',
+            source: 'apps/frontend/client',
+            config: { layer: 'application', tags: ['svelte', 42], dependsOn: [] },
+          },
+        ],
+      }),
+    );
+    expect(outcome.kind).toBe('parse_failed');
+  });
+
+  test('project with malformed dependency collection → parse_failed', () => {
+    const outcome = parseMoonProjects(
+      JSON.stringify({
+        projects: [
+          {
+            id: 'client',
+            source: 'apps/frontend/client',
+            config: { layer: 'application', tags: [], dependsOn: [{ name: 'types' }] },
+          },
+        ],
+      }),
+    );
     expect(outcome.kind).toBe('parse_failed');
   });
 

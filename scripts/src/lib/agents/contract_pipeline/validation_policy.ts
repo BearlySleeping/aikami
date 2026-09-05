@@ -82,7 +82,7 @@ export type ValidationArtifact = {
 // ── Profile Definitions ─────────────────────────────────────────────
 
 /** Focused profile: quick fix + typecheck during development. */
-const FOCUSED_POLICY: ProfilePolicy = {
+const FOCUSED_POLICY = {
   profile: 'focused',
   requiredChecks: [
     { task: ':fix', label: 'Fix (lint + format)', required: true, guard: false },
@@ -91,10 +91,10 @@ const FOCUSED_POLICY: ProfilePolicy = {
   optionalChecks: [],
   structuralGuards: [],
   excludedChecks: [':build', ':test', 'e2e:test'],
-};
+} as const satisfies ProfilePolicy;
 
 /** Pre-publication profile: everything needed before opening a PR. */
-const PRE_PUBLICATION_POLICY: ProfilePolicy = {
+const PRE_PUBLICATION_POLICY = {
   profile: 'pre_publication',
   requiredChecks: [
     { task: ':fix', label: 'Fix (lint + format)', required: true, guard: false },
@@ -113,10 +113,10 @@ const PRE_PUBLICATION_POLICY: ProfilePolicy = {
     },
   ],
   excludedChecks: [],
-};
+} as const satisfies ProfilePolicy;
 
 /** CI profile: full suite run by CI pipeline. */
-const CI_POLICY: ProfilePolicy = {
+const CI_POLICY = {
   profile: 'ci',
   requiredChecks: [
     { task: ':fix', label: 'Fix (lint + format)', required: true, guard: false },
@@ -134,15 +134,15 @@ const CI_POLICY: ProfilePolicy = {
     },
   ],
   excludedChecks: [],
-};
+} as const satisfies ProfilePolicy;
 
 // ── Policy Registry ─────────────────────────────────────────────────
 
-const POLICIES: Record<ValidationProfile, ProfilePolicy> = {
+const POLICIES = {
   focused: FOCUSED_POLICY,
   pre_publication: PRE_PUBLICATION_POLICY,
   ci: CI_POLICY,
-};
+} as const satisfies Record<ValidationProfile, ProfilePolicy>;
 
 /**
  * Get the policy definition for a named profile.
@@ -182,6 +182,7 @@ export const determineOverallOutcome = (options: {
   const requiredTasks = new Set(getRequiredChecks(options.profile).map((c) => c.task));
 
   let hasUnavailable = false;
+  const passedTasks = new Set<string>();
 
   for (const result of options.results) {
     if (!requiredTasks.has(result.check)) {
@@ -193,9 +194,12 @@ export const determineOverallOutcome = (options: {
     if (result.outcome === 'unavailable' || result.outcome === 'cancelled') {
       hasUnavailable = true;
     }
+    if (result.outcome === 'passed') {
+      passedTasks.add(result.check);
+    }
   }
 
-  if (hasUnavailable) {
+  if (hasUnavailable || [...requiredTasks].some((task) => !passedTasks.has(task))) {
     return 'unavailable';
   }
 
@@ -240,7 +244,6 @@ export const isArtifactFresh = (options: {
   // If base fingerprint changed, the diff context is different
   if (
     options.currentBaseFingerprint !== undefined &&
-    options.artifact.baseFingerprint !== undefined &&
     options.artifact.baseFingerprint !== options.currentBaseFingerprint
   ) {
     return false;

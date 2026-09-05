@@ -45,7 +45,6 @@ export const isEvidenceCurrent = (options: {
   // Different base fingerprint → diff context changed → stale
   if (
     options.currentBaseFingerprint !== undefined &&
-    options.artifact.baseFingerprint !== undefined &&
     options.artifact.baseFingerprint !== options.currentBaseFingerprint
   ) {
     return false;

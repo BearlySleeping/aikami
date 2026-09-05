@@ -111,6 +111,19 @@ describe('determineOverallOutcome (AC-4)', () => {
     expect(determineOverallOutcome({ profile, results })).toBe('passed');
   });
 
+  it('a passed result is required for every unique required task', () => {
+    const incompleteResults: CheckResult[] = [
+      { check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' },
+    ];
+    expect(determineOverallOutcome({ profile, results: incompleteResults })).toBe('unavailable');
+
+    const completeResults: CheckResult[] = [
+      ...incompleteResults,
+      { check: ':typecheck', label: 'Typecheck', outcome: 'passed', diagnostics: '' },
+    ];
+    expect(determineOverallOutcome({ profile, results: completeResults })).toBe('passed');
+  });
+
   it('a required check failed → failed', () => {
     const results: CheckResult[] = [
       { check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' },
@@ -154,7 +167,10 @@ describe('createValidationArtifact (AC-3)', () => {
     const artifact = createValidationArtifact({
       candidateFingerprint: 'abc123def456',
       profile: 'focused',
-      results: [{ check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' }],
+      results: [
+        { check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' },
+        { check: ':typecheck', label: 'Typecheck', outcome: 'passed', diagnostics: '' },
+      ],
     });
     expect(artifact.version).toBe(1);
     expect(artifact.candidateFingerprint).toBe('abc123def456');
@@ -209,6 +225,21 @@ describe('isArtifactFresh (AC-3)', () => {
     ).toBe(true);
   });
 
+  it('artifact without a base fingerprint is stale when the current base is defined', () => {
+    const noBase = createValidationArtifact({
+      candidateFingerprint: 'abc123',
+      profile: 'focused',
+      results: [],
+    });
+    expect(
+      isArtifactFresh({
+        artifact: noBase,
+        currentFingerprint: 'abc123',
+        currentBaseFingerprint: 'base-1',
+      }),
+    ).toBe(false);
+  });
+
   it('artifact without base fingerprint is still fresh when candidate matches', () => {
     const noBase = createValidationArtifact({
       candidateFingerprint: 'xyz',
@@ -226,7 +257,10 @@ describe('formatValidationReport', () => {
     const artifact = createValidationArtifact({
       candidateFingerprint: 'abc123',
       profile: 'focused',
-      results: [{ check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' }],
+      results: [
+        { check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' },
+        { check: ':typecheck', label: 'Typecheck', outcome: 'passed', diagnostics: '' },
+      ],
     });
     const report = formatValidationReport({ artifact, fresh: true });
     expect(report).toContain('Validation [focused]');

@@ -68,6 +68,66 @@ export const formatDiscoveryFailure = (outcome: DiscoveryOutcome): string => {
 // ── Moon Projects JSON Parser ────────────────────────────────────
 
 const MOON_JSON_MAX_RAW = 512_000; // 512KB hard cap
+const UTF8_ENCODER = new TextEncoder();
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0;
+
+const parseLightProject = (value: unknown): LightProject | undefined => {
+  if (!isRecord(value) || !isNonEmptyString(value.id) || !isNonEmptyString(value.source)) {
+    return undefined;
+  }
+
+  const config = value.config;
+  if (
+    !isRecord(config) ||
+    !isNonEmptyString(config.layer) ||
+    !Array.isArray(config.tags) ||
+    !config.tags.every((tag) => typeof tag === 'string') ||
+    !Array.isArray(config.dependsOn)
+  ) {
+    return undefined;
+  }
+
+  const deps: string[] = [];
+  for (const dependency of config.dependsOn) {
+    if (isNonEmptyString(dependency)) {
+      deps.push(dependency);
+      continue;
+    }
+    if (isRecord(dependency) && isNonEmptyString(dependency.id)) {
+      deps.push(dependency.id);
+      continue;
+    }
+    return undefined;
+  }
+
+  const projectMeta = config.project;
+  if (
+    projectMeta !== undefined &&
+    (!isRecord(projectMeta) ||
+      (projectMeta.description !== undefined && typeof projectMeta.description !== 'string'))
+  ) {
+    return undefined;
+  }
+
+  const desc =
+    isRecord(projectMeta) && typeof projectMeta.description === 'string'
+      ? projectMeta.description
+      : undefined;
+
+  return {
+    id: value.id,
+    layer: config.layer,
+    source: value.source,
+    tags: config.tags,
+    deps,
+    desc,
+  };
+};
 
 /**
  * Parses `moon query projects` JSON output into a typed outcome.
@@ -79,7 +139,7 @@ const MOON_JSON_MAX_RAW = 512_000; // 512KB hard cap
  * consistent failure handling.
  *
  * AC-1: Empty valid JSON → empty (not success, not failure).
- * AC-1: Valid JSON above 1.14 MB → too_large.
+ * AC-1: Valid JSON above 512 KB → too_large.
  * AC-1: Malformed JSON → parse_failed.
  */
 export function parseMoonProjects(raw: string): DiscoveryOutcome {
@@ -87,16 +147,25 @@ export function parseMoonProjects(raw: string): DiscoveryOutcome {
     return { kind: 'empty', reason: 'No output from moon query' };
   }
 
-  if (raw.length > MOON_JSON_MAX_RAW) {
-    return { kind: 'too_large', byteCount: raw.length, cap: MOON_JSON_MAX_RAW };
+  const rawByteCount = UTF8_ENCODER.encode(raw).byteLength;
+  if (rawByteCount > MOON_JSON_MAX_RAW) {
+    return { kind: 'too_large', byteCount: rawByteCount, cap: MOON_JSON_MAX_RAW };
   }
 
   try {
-    const data = JSON.parse(raw);
-    const projects = data?.projects;
+    const data: unknown = JSON.parse(raw);
+    if (!isRecord(data)) {
+      return {
+        kind: 'parse_failed',
+        error: 'Unexpected JSON structure',
+        rawPreview: raw.slice(0, 500),
+      };
+    }
+
+    const projects = data.projects;
     if (!Array.isArray(projects)) {
       // Valid JSON but wrong shape — likely an error response
-      const errorMsg = typeof data?.error === 'string' ? data.error : 'Unexpected JSON structure';
+      const errorMsg = typeof data.error === 'string' ? data.error : 'Unexpected JSON structure';
       return { kind: 'parse_failed', error: errorMsg, rawPreview: raw.slice(0, 500) };
     }
 
@@ -104,21 +173,18 @@ export function parseMoonProjects(raw: string): DiscoveryOutcome {
       return { kind: 'empty', reason: 'No projects returned by moon query' };
     }
 
-    const parsed = projects.map((p: Record<string, unknown>) => {
-      const config = (p.config as Record<string, unknown>) ?? {};
-      const depsRaw = (config.dependsOn as Array<{ id?: string } | string>) ?? [];
-      const deps = depsRaw.map((d) => (typeof d === 'string' ? d : (d.id ?? '?')));
-      const projectMeta = config.project as Record<string, unknown> | undefined;
-
-      return {
-        id: String(p.id ?? '?'),
-        layer: String(config.layer ?? '?'),
-        source: String(p.source ?? '?'),
-        tags: (config.tags as string[]) ?? [],
-        deps,
-        desc: String(projectMeta?.description ?? ''),
-      } as LightProject;
-    });
+    const parsed: LightProject[] = [];
+    for (const [index, project] of projects.entries()) {
+      const parsedProject = parseLightProject(project);
+      if (!parsedProject) {
+        return {
+          kind: 'parse_failed',
+          error: `Invalid project record at index ${index}`,
+          rawPreview: raw.slice(0, 500),
+        };
+      }
+      parsed.push(parsedProject);
+    }
 
     return { kind: 'success', projects: parsed };
   } catch (err) {

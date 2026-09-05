@@ -129,6 +129,16 @@ describe('isEvidenceCurrent (AC-3)', () => {
     ).toBe(false);
   });
 
+  it('missing artifact base fingerprint → stale when current base is defined', () => {
+    expect(
+      isEvidenceCurrent({
+        artifact: makeArtifact({ baseFingerprint: undefined }),
+        currentFingerprint: 'candidate-hash',
+        currentBaseFingerprint: 'base-hash',
+      }),
+    ).toBe(false);
+  });
+
   it('failed overall outcome → stale even with matching fingerprints', () => {
     expect(
       isEvidenceCurrent({

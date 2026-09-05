@@ -57,6 +57,20 @@ export default function (pi: ExtensionAPI) {
         signal,
         timeoutMs: DefaultTimeoutMs,
       });
+      if (result.code !== 0) {
+        const errorDetail = formatDiscoveryFailure({
+          kind: 'command_failed',
+          exitCode: result.code,
+          stderr: result.stderr || result.stdout,
+        });
+        return {
+          content: [
+            { type: 'text', text: `\u274c Failed to detect affected projects:\n${errorDetail}` },
+          ],
+          isError: true,
+          details: { code: result.code, affectedCount: 0, discoveryError: 'command_failed' },
+        };
+      }
       const raw = result.stdout || result.stderr;
       const outcome = extractAffectedIds(raw);
 
@@ -217,6 +231,18 @@ export default function (pi: ExtensionAPI) {
         signal,
         timeoutMs: DefaultTimeoutMs,
       });
+      if (result.code !== 0) {
+        const errorDetail = formatDiscoveryFailure({
+          kind: 'command_failed',
+          exitCode: result.code,
+          stderr: result.stderr || result.stdout,
+        });
+        return {
+          content: [{ type: 'text', text: `\u274c Failed to query projects:\n${errorDetail}` }],
+          isError: true,
+          details: { code: result.code, discoveryError: 'command_failed' },
+        };
+      }
       const raw = result.stdout || result.stderr;
       const outcome = parseMoonProjects(raw);
 
@@ -286,6 +312,23 @@ export default function (pi: ExtensionAPI) {
         signal,
         timeoutMs: DefaultTimeoutMs,
       });
+      if (affectedResult.code !== 0) {
+        const errorDetail = formatDiscoveryFailure({
+          kind: 'command_failed',
+          exitCode: affectedResult.code,
+          stderr: affectedResult.stderr || affectedResult.stdout,
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `\u274c Cannot validate — failed to detect affected projects:\n${errorDetail}`,
+            },
+          ],
+          isError: true,
+          details: { code: affectedResult.code, discoveryError: 'command_failed' },
+        };
+      }
       const affectedOutcome = extractAffectedIds(affectedResult.stdout || '');
 
       // AC-1: Discovery failure is NOT treated as "no changes"
