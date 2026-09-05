@@ -10,8 +10,9 @@
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names for module mocking
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$lib/data/connection_defaults.ts';
+import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$lib/data/connection_defaults';
 import type { AiSettingsViewModelInterface } from '$views/settings/ai/ai_settings_view_model.svelte';
+import { localServicesMockBase } from '../../test_preload.ts';
 
 mock.module('@aikami/utils', () => ({
   AiTextProviderRequiredError: class AiTextProviderRequiredError extends Error {
@@ -159,20 +160,8 @@ const _detectResult = {
   textModelName: undefined as string | undefined,
 };
 
-const _createSvcStub = () => {
-  const handler: ProxyHandler<Record<string, unknown>> = {
-    get(target, prop) {
-      if (!(prop in target)) {
-        (target as Record<string, unknown>)[prop] = mock(() => {});
-      }
-      return (target as Record<string, unknown>)[prop];
-    },
-  };
-  return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
-};
-
 mock.module('$services', () => ({
-  ..._createSvcStub(),
+  ...localServicesMockBase(),
   voiceModelService: {
     state: { status: 'not-downloaded', receivedBytes: 0, totalBytes: 92887435 },
     totalBytes: 92887435,

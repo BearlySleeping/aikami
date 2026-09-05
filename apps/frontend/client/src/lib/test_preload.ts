@@ -337,6 +337,11 @@ export const localServicesMockBase = () => ({
   AudioQueuePlayer: class {},
   ttsService: _createServiceStub(),
   TtsService: class {},
+  // C-467: local_ai_wizard_view_model.svelte.ts (wired into onboarding by
+  // C-466) imports these from '$services' — see the doc comment above.
+  sidecarService: _createServiceStub(),
+  getTauriRuntimeInfo: _createCallableStub(),
+  createTauriProbeExecutor: _createCallableStub(),
   voiceModelService: _createServiceStub(),
   VoiceModelService: class {},
   runtimeConfigService: _createServiceStub(),
