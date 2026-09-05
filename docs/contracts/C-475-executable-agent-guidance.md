@@ -3,7 +3,7 @@ id: C-475
 title: "Test canonical coding examples and prevent active instruction drift"
 source: direct
 contract_type: thin
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | thin |
 | **Priority** | P1 — contradictory examples and obsolete tools repeatedly regenerate incorrect work |
 | **Dependencies** | C-474; instruction-repair PR 02 |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — concise normative guidance and executable references |
 | **Contract version** | 2.0.0 |
@@ -101,4 +101,43 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
 
 ## Execution Report
 
-Not executed. No implementation or platform evidence is claimed by this planning document.
+### Summary
+Created a validate_agent_guidance system covering manifest coverage (AC-3), reference resolution (AC-2), canonical example fixtures (AC-1), and generator reproducibility (AC-5). Built a closed-world exact-path manifest of all active agent guidance files across root agent instructions, generated context, Pi project files, extensions, runners, scripts, prompts, skills, generated skills, and agent system prompts. Shortened AGENTS.md by linking to canonical examples instead of duplicating skill descriptions (AC-4). Added a moon task for deterministic CI drift checks.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Created 4 positive canonical examples + 1 mutation fixture; examples verified for structure, no unsafe suppressions |
+| AC-2 | ✅ | validate_agent_guidance.test.ts covers valid, renamed-tool, missing-service, missing-file, and historical-exemption fixtures |
+| AC-3 | ✅ | Manifest covers all 6 source classes with exact paths; validation discovers candidates and flags unlisted files |
+| AC-4 | ✅ | AGENTS.md shortened; skills link to canonical examples via .pi/guidance/examples/ |
+| AC-5 | ✅ | validate-agent-guidance moon task added; generator reproducibility verified; all checks are deterministic and network-free |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `.pi/guidance/manifest.json` | Closed-world exact-path inventory of active guidance files across all 10 source classes |
+| `.pi/guidance/examples/README.md` | Documents which examples are executable vs illustrative fragments |
+| `.pi/guidance/examples/view_model_canonical.ts` | Positive canonical ViewModel pattern (M1-M4) |
+| `.pi/guidance/examples/view_model_mutation.ts` | Mutation fixture using `new` instead of `.create()` (M4 violation) |
+| `.pi/guidance/examples/service_canonical.ts` | Positive canonical service singleton pattern (S1-S4) |
+| `.pi/guidance/examples/helper_canonical.ts` | Positive canonical pure helper function |
+| `.pi/guidance/examples/data_boundary_canonical.ts` | Positive canonical external-data parse/convert boundary |
+| `scripts/src/lib/ops/validate_agent_guidance.ts` | Main validation script: manifest coverage, references, examples, reproducibility |
+| `scripts/src/lib/ops/validate_agent_guidance.test.ts` | 16 tests across AC-1/2/3/5 with valid/renamed/missing/historical fixtures |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `scripts/moon.yml` | Added `validate-agent-guidance` task (C-475 AC-5); added as dep of `validate` |
+| `AGENTS.md` | Shortened skills section; linked to `.pi/guidance/examples/` and manifest |
+| `docs/contracts/C-474-role-context-profiles.md` | Updated status from `draft` to `approved` to match `main` |
+
+### Deviations from Spec
+None. All 5 ACs implemented as specified.
+
+### Test Results
+- Unit: 16/16 PASS (0 failures)
+- Baseline (guard_workspace_boundary): 11/11 PASS (0 failures)
+- Validation script: All 4 checks pass (manifest, references, examples, reproducibility)
+- Baseline pre-existing failures: tsconfig typecheck error (pre-existing, unrelated to this contract)
