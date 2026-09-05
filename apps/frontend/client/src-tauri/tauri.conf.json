@@ -40,14 +40,7 @@
       "endpoints": ["https://github.com/BearlySleeping/aikami/releases/latest/download/latest.json"]
     },
     "shell": {
-      "open": true,
-      "scope": [
-        {
-          "name": "binaries/llama-server",
-          "sidecar": true,
-          "args": true
-        }
-      ]
+      "open": true
     },
     "deep-link": {
       "desktop": {

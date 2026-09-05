@@ -253,6 +253,15 @@ export type ModelAssetStoreInterface = {
   download(bundleId: string): Promise<LocalModelState>;
   cancel(bundleId: string): void;
   remove(bundleId: string): Promise<void>;
+  /**
+   * Subscribes to state changes for a bundle (status transitions and
+   * download progress). `states` is a plain object mutated in place, so
+   * a framework's reactivity system won't see those writes on its own —
+   * consumers that need to re-render (e.g. a Svelte service wrapping this
+   * store) should mirror updates from this callback into their own
+   * reactive state. Returns an unsubscribe function.
+   */
+  subscribe(bundleId: string, listener: (state: LocalModelState) => void): () => void;
 };
 
 export class ModelAssetStore implements ModelAssetStoreInterface {
@@ -261,6 +270,7 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
   private readonly _states: Record<string, LocalModelState>;
   private readonly _inflight: Map<string, Promise<LocalModelState>>;
   private readonly _abortControllers: Map<string, AbortController>;
+  private readonly _listeners: Map<string, Set<(state: LocalModelState) => void>>;
 
   constructor(options: ModelAssetStoreOptions) {
     this._bundles = options.bundles;
@@ -268,6 +278,7 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
     this._states = {};
     this._inflight = new Map();
     this._abortControllers = new Map();
+    this._listeners = new Map();
 
     // Initialize states
     for (const bundleId of Object.keys(this._bundles)) {
@@ -277,6 +288,25 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
 
   get states(): Readonly<Record<string, LocalModelState>> {
     return this._states;
+  }
+
+  subscribe(bundleId: string, listener: (state: LocalModelState) => void): () => void {
+    let listeners = this._listeners.get(bundleId);
+    if (!listeners) {
+      listeners = new Set();
+      this._listeners.set(bundleId, listeners);
+    }
+    listeners.add(listener);
+    return () => {
+      listeners?.delete(listener);
+    };
+  }
+
+  private _setState(bundleId: string, state: LocalModelState): void {
+    this._states[bundleId] = state;
+    for (const listener of this._listeners.get(bundleId) ?? []) {
+      listener(state);
+    }
   }
 
   totalBytes(bundleId: string): number {
@@ -295,14 +325,14 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
 
     try {
       if (typeof caches === 'undefined') {
-        this._states[bundleId] = { status: 'not-downloaded', bytes: this.totalBytes(bundleId) };
+        this._setState(bundleId, { status: 'not-downloaded', bytes: this.totalBytes(bundleId) });
         return this._states[bundleId];
       }
 
       const cache = await caches.open(bundle.assets[0]?.cache ?? 'transformers-cache');
       const manifest = await cache.match(bundle.manifestKey);
       if (!manifest) {
-        this._states[bundleId] = { status: 'not-downloaded', bytes: this.totalBytes(bundleId) };
+        this._setState(bundleId, { status: 'not-downloaded', bytes: this.totalBytes(bundleId) });
         return this._states[bundleId];
       }
 
@@ -312,7 +342,7 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
       };
 
       if ((meta.version ?? 1) < bundle.manifestVersion) {
-        this._states[bundleId] = { status: 'not-downloaded', bytes: this.totalBytes(bundleId) };
+        this._setState(bundleId, { status: 'not-downloaded', bytes: this.totalBytes(bundleId) });
         return this._states[bundleId];
       }
 
@@ -331,14 +361,14 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
       ).every(Boolean);
 
       if (allPresent && entries.length > 0) {
-        this._states[bundleId] = { status: 'ready' };
+        this._setState(bundleId, { status: 'ready' });
       } else {
-        this._states[bundleId] = { status: 'not-downloaded', bytes: this.totalBytes(bundleId) };
+        this._setState(bundleId, { status: 'not-downloaded', bytes: this.totalBytes(bundleId) });
       }
 
       return this._states[bundleId];
     } catch (_error) {
-      this._states[bundleId] = { status: 'not-downloaded', bytes: this.totalBytes(bundleId) };
+      this._setState(bundleId, { status: 'not-downloaded', bytes: this.totalBytes(bundleId) });
       return this._states[bundleId];
     }
   }
@@ -374,42 +404,42 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
     this._abortControllers.set(bundle.id, controller);
     const total = this.totalBytes(bundle.id);
 
-    this._states[bundle.id] = { status: 'downloading', receivedBytes: 0, totalBytes: total };
+    this._setState(bundle.id, { status: 'downloading', receivedBytes: 0, totalBytes: total });
 
     try {
       let cumulativeBytes = 0;
 
       for (const asset of bundle.assets) {
         if (controller.signal.aborted) {
-          this._states[bundle.id] = { status: 'not-downloaded', bytes: total };
+          this._setState(bundle.id, { status: 'not-downloaded', bytes: total });
           return this._states[bundle.id];
         }
 
         await this._transport.downloadAsset(bundle, asset, {
           signal: controller.signal,
           onProgress: (receivedBytes) => {
-            this._states[bundle.id] = {
+            this._setState(bundle.id, {
               status: 'downloading',
               receivedBytes: cumulativeBytes + receivedBytes,
               totalBytes: total,
-            };
+            });
           },
         });
 
         cumulativeBytes += asset.bytes;
-        this._states[bundle.id] = {
+        this._setState(bundle.id, {
           status: 'downloading',
           receivedBytes: cumulativeBytes,
           totalBytes: total,
-        };
+        });
       }
 
       if (controller.signal.aborted) {
-        this._states[bundle.id] = { status: 'not-downloaded', bytes: total };
+        this._setState(bundle.id, { status: 'not-downloaded', bytes: total });
         return this._states[bundle.id];
       }
 
-      this._states[bundle.id] = { status: 'verifying' };
+      this._setState(bundle.id, { status: 'verifying' });
 
       // Write manifest
       const cache = await caches.open(bundle.assets[0]?.cache ?? 'transformers-cache');
@@ -421,15 +451,15 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
         }),
       );
 
-      this._states[bundle.id] = { status: 'ready' };
+      this._setState(bundle.id, { status: 'ready' });
       return this._states[bundle.id];
     } catch (error) {
       const aborted = controller.signal.aborted || (error as Error)?.name === 'AbortError';
       if (aborted) {
-        this._states[bundle.id] = { status: 'not-downloaded', bytes: total };
+        this._setState(bundle.id, { status: 'not-downloaded', bytes: total });
       } else {
         const message = error instanceof Error ? error.message : `Download failed for ${bundle.id}`;
-        this._states[bundle.id] = { status: 'error', message, retryable: true };
+        this._setState(bundle.id, { status: 'error', message, retryable: true });
       }
       return this._states[bundle.id];
     } finally {
@@ -451,7 +481,7 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
     this._abortControllers.get(bundleId)?.abort();
     this._abortControllers.delete(bundleId);
     this._inflight.delete(bundleId);
-    this._states[bundleId] = { status: 'not-downloaded', bytes: this.totalBytes(bundleId) };
+    this._setState(bundleId, { status: 'not-downloaded', bytes: this.totalBytes(bundleId) });
   }
 
   async remove(bundleId: string): Promise<void> {
@@ -473,9 +503,9 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
         await cache.delete(bundle.manifestKey);
       }
 
-      this._states[bundleId] = { status: 'not-downloaded', bytes: this.totalBytes(bundleId) };
+      this._setState(bundleId, { status: 'not-downloaded', bytes: this.totalBytes(bundleId) });
     } catch (error) {
-      this._states[bundleId] = { status: 'error', message: 'Remove failed', retryable: true };
+      this._setState(bundleId, { status: 'error', message: 'Remove failed', retryable: true });
       throw error;
     }
   }

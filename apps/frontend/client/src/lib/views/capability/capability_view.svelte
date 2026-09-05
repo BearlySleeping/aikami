@@ -1,11 +1,10 @@
 <script lang="ts">
-import VoiceModelDownload from '@aikami/frontend/components/voice-model-download/voice_model_download.svelte';
 // apps/frontend/client/src/lib/views/capability/capability_view.svelte
-// C-466: rebuilt on the shared AI settings component — renders a reduced
-// view (status board + provider tree) via ai_settings_view.svelte instead
-// of the legacy ConnectionEditorPanel.
+// Onboarding capability screen — one capability at a time. Each tab shows
+// either its connected provider(s) or a single "connect" call to action;
+// no Status board or Provider tree here (that's the Settings page's job).
 import { BaseViewModelContainer } from '$components';
-import AiSettingsView from '$views/settings/ai/ai_settings_view.svelte';
+import AiConnectionModals from '$views/settings/ai/ai_connection_modals.svelte';
 import LocalAiWizardView from '../ai/local_ai_wizard_view.svelte';
 import type { CapabilityViewModelInterface } from './capability_view_model.svelte';
 
@@ -14,6 +13,16 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+const activeLabel = $derived(viewModel.tabs.find((t) => t.id === viewModel.activeTab)?.label ?? '');
+
+const openSetup = (): void => {
+  if (viewModel.activeTab === 'voice') {
+    viewModel.aiSettingsViewModel.openVoiceSetup();
+  } else {
+    viewModel.aiSettingsViewModel.openAddProvider(viewModel.activeTab);
+  }
+};
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -52,9 +61,55 @@ const { viewModel }: Props = $props();
           {/each}
         </div>
 
-        <!-- Shared AI settings component (C-466) — status board + provider tree -->
-        <div class="mt-4 pt-4 border-t border-base-300">
-          <AiSettingsView viewModel={viewModel.aiSettingsViewModel} />
+        <!-- Active-capability panel — connected providers, or one CTA -->
+        <div>
+          {#if viewModel.connectionEntries.length > 0}
+            <div class="space-y-2">
+              {#each viewModel.connectionEntries as entry (entry.connection.id)}
+                <div class="card card-bordered bg-base-200">
+                  <div class="card-body flex-row items-center justify-between p-4">
+                    <div class="flex items-center gap-3">
+                      <span class="text-lg">{entry.icon}</span>
+                      <div>
+                        <p class="font-medium">{entry.providerLabel}</p>
+                        {#if entry.connection.model}
+                          <p class="text-xs text-base-content/60">{entry.connection.model}</p>
+                        {/if}
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        onclick={() => viewModel.aiSettingsViewModel.testConnection(entry.connection.id)}
+                      >
+                        Test
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-xs"
+                        onclick={() => viewModel.aiSettingsViewModel.openEditConnection(entry.connection.id)}
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+              <button type="button" class="btn btn-ghost btn-xs w-full" onclick={openSetup}>
+                + Add another {activeLabel} provider
+              </button>
+            </div>
+          {:else}
+            <div class="rounded-lg border border-dashed border-base-300 py-8 text-center">
+              <p class="mb-3 text-sm text-base-content/60">
+                No {activeLabel} provider connected yet.
+              </p>
+              <button type="button" class="btn btn-primary btn-sm" onclick={openSetup}>
+                {viewModel.activeTab === 'voice' ? 'Set up Voice' : `Connect a ${activeLabel} Provider`}
+              </button>
+            </div>
+          {/if}
         </div>
 
         <!-- Local AI install wizard (C-467) — shown in the Text tab when no cloud/local provider is configured -->
@@ -63,16 +118,6 @@ const { viewModel }: Props = $props();
             <LocalAiWizardView viewModel={viewModel.localAiWizardViewModel} />
           </div>
         {/if}
-
-        <!-- Voice local download section (C-449 AC-2) -->
-        <VoiceModelDownload
-          show={viewModel.showVoiceLocalDownload}
-          state={viewModel.voiceModelState}
-          progress={viewModel.voiceModelProgress}
-          sizeLabel={viewModel.voiceModelSizeLabel}
-          ondownload={() => viewModel.downloadVoiceModel()}
-          oncancel={() => viewModel.cancelVoiceModelDownload()}
-        />
 
         <!-- Start Campaign — disabled without a text provider -->
         <button
@@ -98,4 +143,6 @@ const { viewModel }: Props = $props();
       </div>
     </div>
   </div>
+
+  <AiConnectionModals viewModel={viewModel.aiSettingsViewModel} />
 </BaseViewModelContainer>

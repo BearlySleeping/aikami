@@ -10,11 +10,11 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { ProbeResult } from '@aikami/local-ai';
-import {
-  createFixtureExecutor,
-  detectHardware,
-  runProbeExecutorContractSuite,
-} from '@aikami/local-ai';
+import { createFixtureExecutor, detectHardware } from '@aikami/local-ai';
+// Test-only contract suite — deliberately not re-exported from the package's
+// public entry point (it imports bun:test, which must never reach the AC-0
+// boundary or a client bundle), so it's imported directly by relative path.
+import { runProbeExecutorContractSuite } from '../../../../packages/shared/local-ai/src/lib/probe_executor.contract_suite.ts';
 import { probeExecutor } from './probe_executor.ts';
 
 const ok = (stdout: string): ProbeResult => ({ ok: true, stdout, stderr: '', exitCode: 0 });

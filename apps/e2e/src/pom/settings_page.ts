@@ -22,9 +22,9 @@ export class SettingsPage {
     return this.page.getByRole('tablist', { name: 'Settings sections' }).getByRole('tab');
   }
 
-  /** The AI connection heading shown by the default AI section. */
+  /** The status heading shown by the AI section's connection status board. */
   get aiConnectionHeading(): Locator {
-    return this.page.getByRole('heading', { name: 'AI Connection' });
+    return this.page.getByRole('heading', { name: 'Status' });
   }
 
   /** The reset action shown by resettable settings sections. */

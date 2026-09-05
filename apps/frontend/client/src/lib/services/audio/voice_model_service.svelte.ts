@@ -31,8 +31,20 @@ class VoiceModelService
   extends BaseFrontendClass<VoiceModelServiceOptions>
   implements VoiceModelServiceInterface
 {
+  // ModelAssetStore mutates its `states` object in place — not a Svelte
+  // reactive value — so download progress would never re-render the UI
+  // without mirroring updates into this $state field via subscribe().
+  private _state: VoiceModelState = $state(_store.states['kokoro-82m'] as VoiceModelState);
+
+  constructor(options: VoiceModelServiceOptions) {
+    super(options);
+    _store.subscribe('kokoro-82m', (state) => {
+      this._state = state as VoiceModelState;
+    });
+  }
+
   get state(): VoiceModelState {
-    return _store.states['kokoro-82m'] as VoiceModelState;
+    return this._state;
   }
 
   get totalBytes(): number {

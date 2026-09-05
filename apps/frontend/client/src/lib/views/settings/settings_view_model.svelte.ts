@@ -8,6 +8,7 @@ import {
   type BaseViewModelOptions,
   routerService,
 } from '@aikami/frontend/services';
+import { readSearchParam, syncSearchParams } from '$lib/utils/url_search_params';
 import type { CustomAgentDefinition } from '$types';
 import {
   type AgentEditorViewModelInterface,
@@ -17,10 +18,6 @@ import {
   type AgentListViewModelInterface,
   getAgentListViewModel,
 } from '../agent/list/agent_list_view_model.svelte.ts';
-import {
-  type AIPrivacyViewModelInterface,
-  getAIPrivacyViewModel,
-} from './ai_privacy/ai_privacy_view_model.svelte';
 import {
   getSettingsAudioViewModel,
   type SettingsAudioViewModelInterface,
@@ -87,7 +84,6 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   // ── Sub-ViewModels ──
   readonly accountViewModel: AccountViewModelInterface;
   readonly gameplayViewModel: GameplayViewModelInterface;
-  readonly aiPrivacyViewModel: AIPrivacyViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
   readonly musicViewModel: SettingsMusicViewModelInterface;
   readonly autonomousViewModel: AutonomousSettingsViewModelInterface;
@@ -127,7 +123,6 @@ export class SettingsViewModel
   // ── Basic sub-ViewModels (always created) ──
   readonly accountViewModel: AccountViewModelInterface;
   readonly gameplayViewModel: GameplayViewModelInterface;
-  readonly aiPrivacyViewModel: AIPrivacyViewModelInterface;
   readonly audioViewModel: SettingsAudioViewModelInterface;
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
@@ -239,7 +234,6 @@ export class SettingsViewModel
     // Always create basic sub-ViewModels
     this.accountViewModel = getAccountViewModel({ className: 'AccountViewModel' });
     this.gameplayViewModel = getGameplayViewModel({ className: 'GameplayViewModel' });
-    this.aiPrivacyViewModel = getAIPrivacyViewModel({ className: 'AIPrivacyViewModel' });
     this.audioViewModel = getSettingsAudioViewModel({ className: 'SettingsAudioViewModel' });
     this.displayViewModel = getSettingsDisplayViewModel({ className: 'SettingsDisplayViewModel' });
     this.controlsViewModel = getSettingsControlsViewModel({
@@ -250,16 +244,16 @@ export class SettingsViewModel
   override async initialize(): Promise<void> {
     this.debug('initialize');
     // Deep-link a settings section via `?section=<id>` (e.g. /settings?section=audio),
-    // or a group via `?group=<id>` (e.g. /settings?group=ai).
+    // or a group via `?group=<id>` (e.g. /settings?group=ai). Restored on
+    // mount so a refresh lands back on the same tab.
     try {
-      const params = new URLSearchParams(window.location.search);
-      const sectionParam = params.get('section');
+      const sectionParam = readSearchParam('section');
       const section = SETTINGS_SECTIONS.find((s) => s.id === sectionParam);
       if (section) {
         this.activeSectionId = section.id;
         this.activeGroupId = section.group;
       } else {
-        const groupParam = params.get('group');
+        const groupParam = readSearchParam('group');
         if (groupParam && SETTINGS_GROUPS.some((g) => g.id === groupParam)) {
           this.setActiveGroup(groupParam as SettingsGroupId);
         }
@@ -276,6 +270,7 @@ export class SettingsViewModel
 
   setActiveSection(id: string): void {
     this.activeSectionId = id;
+    this._syncActiveTabToUrl();
   }
 
   setActiveGroup(id: SettingsGroupId): void {
@@ -283,6 +278,16 @@ export class SettingsViewModel
     const firstSection = this.allSections.find((s) => s.group === id);
     if (firstSection) {
       this.activeSectionId = firstSection.id;
+    }
+    this._syncActiveTabToUrl();
+  }
+
+  /** Mirrors the active section/group onto `?section=`/`?group=` so a refresh restores the tab. */
+  private _syncActiveTabToUrl(): void {
+    try {
+      syncSearchParams({ section: this.activeSectionId, group: this.activeGroupId });
+    } catch {
+      // location unavailable (tests) — safe to skip.
     }
   }
 

@@ -30,6 +30,7 @@ import {
   voiceModelService,
 } from '$services';
 import type { AiProvider, AiConnection, AiRole, VoiceArchetype, TextParams, ImageParams, VoiceParams } from '@aikami/types';
+import { fuzzyMatch } from '$lib/utils/fuzzy_match';
 import type { ConnectionCapability, ConnectionId, ConnectionTestResult, VoiceModelState } from '$types';
 
 // ---------------------------------------------------------------------------
@@ -141,11 +142,17 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   // ── Provider tree ──
   readonly providerTree: readonly ProviderTreeEntry[];
   readonly isAddProviderOpen: boolean;
+  /** Whether the voice setup modal (local model download vs. a provider connection) is open. */
+  readonly isVoiceSetupOpen: boolean;
 
   // ── Connection editor ──
   readonly draft: EditorDraft;
   readonly isEditorOpen: boolean;
   readonly modelOptions: readonly FetchedModel[];
+  /** Whether any models have been fetched (regardless of the current search filter). */
+  readonly hasFetchedModels: boolean;
+  /** Whether the model search results dropdown is open. */
+  readonly isModelDropdownOpen: boolean;
   readonly isFetchingModels: boolean;
   readonly fetchModelsError: string | undefined;
   readonly canFetchModels: boolean;
@@ -168,12 +175,23 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly testingIds: Set<string>;
 
   // ── Actions ──
-  openAddProvider(): void;
+  openAddProvider(capability?: ConnectionCapability): void;
   closeAddProvider(): void;
+  /** Opens the voice setup modal — leads with the local model download, with an option to connect a provider instead. */
+  openVoiceSetup(): void;
+  closeVoiceSetup(): void;
+  /** Switches from the voice setup modal to the standard connection editor, scoped to voice. */
+  openVoiceProviderSetup(): void;
   openEditConnection(connectionId: ConnectionId): void;
   cancelEdit(): void;
   setDraftField(field: string, value: unknown): void;
   setDraftProvider(registryId: string): void;
+  /** Updates the model search query and opens the results dropdown. */
+  setModelQuery(value: string): void;
+  /** Picks a model from the dropdown and closes it. */
+  selectModel(modelId: string): void;
+  /** Closes the model search results dropdown (e.g. on Enter or Escape). */
+  closeModelDropdown(): void;
   saveDraft(): void;
   deleteConnection(connectionId: ConnectionId): void;
   testConnection(connectionId: ConnectionId | undefined): Promise<void>;
@@ -351,8 +369,10 @@ export class AiSettingsViewModel
   // ── State ──
   isEditorOpen = $state(false);
   isAddProviderOpen = $state(false);
+  isVoiceSetupOpen = $state(false);
   isRolesDrawerOpen = $state(false);
   isFetchingModels = $state(false);
+  isModelDropdownOpen = $state(false);
   fetchModelsError = $state<string | undefined>(undefined);
   testResults: Record<string, ConnectionTestResult> = $state({});
   testingIds: Set<string> = $state(new Set());
@@ -466,7 +486,20 @@ export class AiSettingsViewModel
   }
 
   get modelOptions(): readonly FetchedModel[] {
-    return this._availableModels;
+    if (!this.isModelDropdownOpen) {
+      return [];
+    }
+    const query = this.draft.model.trim();
+    if (!query) {
+      return this._availableModels;
+    }
+    return this._availableModels.filter(
+      (m) => fuzzyMatch(query, m.id) || fuzzyMatch(query, m.name),
+    );
+  }
+
+  get hasFetchedModels(): boolean {
+    return this._availableModels.length > 0;
   }
 
   get canFetchModels(): boolean {
@@ -790,16 +823,31 @@ export class AiSettingsViewModel
 
   // ── Editor: open / close / save ──
 
-  openAddProvider(): void {
-    this.debug('openAddProvider');
+  openAddProvider(capability?: ConnectionCapability): void {
+    this.debug('openAddProvider', { capability });
     this.isAddProviderOpen = true;
     this.isEditorOpen = true;
-    this._resetDraft();
+    this._resetDraft(capability);
   }
 
   closeAddProvider(): void {
     this.isAddProviderOpen = false;
     this.cancelEdit();
+  }
+
+  openVoiceSetup(): void {
+    this.debug('openVoiceSetup');
+    this.isVoiceSetupOpen = true;
+  }
+
+  closeVoiceSetup(): void {
+    this.isVoiceSetupOpen = false;
+  }
+
+  openVoiceProviderSetup(): void {
+    this.debug('openVoiceProviderSetup');
+    this.isVoiceSetupOpen = false;
+    this.openAddProvider('voice');
   }
 
   openEditConnection(connectionId: ConnectionId): void {
@@ -835,9 +883,24 @@ export class AiSettingsViewModel
     this.draft = { ...this.draft, [field]: value };
   }
 
+  setModelQuery(value: string): void {
+    this.draft = { ...this.draft, model: value };
+    this.isModelDropdownOpen = true;
+  }
+
+  selectModel(modelId: string): void {
+    this.draft = { ...this.draft, model: modelId };
+    this.isModelDropdownOpen = false;
+  }
+
+  closeModelDropdown(): void {
+    this.isModelDropdownOpen = false;
+  }
+
   setDraftProvider(registryId: string): void {
     this.debug('setDraftProvider', { registryId });
     this._availableModels = [];
+    this.isModelDropdownOpen = false;
 
     // Check if a provider with this registryId already exists
     const existingProvider = this._findProviderByRegistry(registryId);
@@ -1031,6 +1094,7 @@ export class AiSettingsViewModel
         apiKey,
         timeoutMs: TEST_TIMEOUT_MS,
       });
+      this.isModelDropdownOpen = true;
     } catch (error) {
       this.fetchModelsError = error instanceof Error ? error.message : String(error);
       this.error('fetchModels:failed', error);
@@ -1110,11 +1174,11 @@ export class AiSettingsViewModel
     }
   }
 
-  private _resetDraft(): void {
+  private _resetDraft(capability: ConnectionCapability = 'text'): void {
     this.draft = {
       providerId: undefined,
-      registryId: 'openrouter',
-      capability: 'text',
+      registryId: _registryForCapability(capability)[0]?.id ?? 'openrouter',
+      capability,
       label: '',
       model: '',
       apiKey: '',
@@ -1124,6 +1188,7 @@ export class AiSettingsViewModel
       editingConnectionId: undefined,
     };
     this._availableModels = [];
+    this.isModelDropdownOpen = false;
     this._genParamsDraft = {};
     this.isGenParamsOpen = false;
   }
