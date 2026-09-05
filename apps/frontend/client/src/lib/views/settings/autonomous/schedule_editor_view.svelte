@@ -62,8 +62,10 @@ const cellBgFor = (status: AvailabilityStatus | undefined): string => {
 {#if viewModel}
   <BaseViewModelContainer {viewModel}>
     {#if viewModel?.isOpen}
+      <!-- daisyUI v5 .modal-box requires the .modal.modal-open wrapper to be
+           visible (opacity:0 otherwise) — see settings_overlay.svelte for the pattern. -->
       <div
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        class="modal modal-open backdrop-blur-sm bg-black/60"
         role="dialog"
         aria-modal="true"
         aria-label="Schedule Editor"

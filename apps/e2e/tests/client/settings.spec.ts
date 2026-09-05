@@ -17,13 +17,14 @@ test.describe('Settings — Grouped Shell (C-333)', () => {
 
   // ── AC-1: Group Tabs + Play Group Default ──
 
-  test('AC-1: settings page shows four group tabs with Play active by default', async () => {
-    await expect(settings.groupTabs).toHaveCount(4);
+  test('AC-1: settings page shows five group tabs with Play active by default', async () => {
+    await expect(settings.groupTabs).toHaveCount(5);
 
     await expect(settings.groupTab('Play')).toBeVisible();
     await expect(settings.groupTab('AI')).toBeVisible();
     await expect(settings.groupTab('Content')).toBeVisible();
     await expect(settings.groupTab('Data')).toBeVisible();
+    await expect(settings.groupTab('Account')).toBeVisible();
 
     await expect(settings.groupTab('Play')).toHaveAttribute('aria-selected', 'true');
 
@@ -35,14 +36,13 @@ test.describe('Settings — Grouped Shell (C-333)', () => {
     await expect(settings.sectionTab('Gameplay')).toBeVisible();
   });
 
-  test('AC-1: AI group shows AI & Privacy and Connections sections', async () => {
+  test('AC-1: AI group shows the AI section', async () => {
     await settings.selectAIGroup();
 
     await expect(settings.aiConnectionHeading).toBeVisible({ timeout: 5_000 });
 
-    await expect(settings.sectionTabs).toHaveCount(2);
-    await expect(settings.sectionTab('AI & Privacy')).toBeVisible();
-    await expect(settings.sectionTab('Connections')).toBeVisible();
+    await expect(settings.sectionTabs).toHaveCount(1);
+    await expect(settings.sectionTab('AI')).toBeVisible();
   });
 
   // ── AC-5: Per-Section Reset ──

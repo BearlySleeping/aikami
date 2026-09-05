@@ -23,7 +23,7 @@ const { viewModel }: Props = $props();
      visible (opacity:0 otherwise) — see party_roster_view for the pattern. -->
 <BaseViewModelContainer {viewModel}>
   <div
-    class="modal modal-open backdrop-blur-sm"
+    class="modal modal-open backdrop-blur-sm bg-black/60"
     role="dialog"
     aria-modal="true"
     aria-label="In-game settings"

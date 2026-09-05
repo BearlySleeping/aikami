@@ -61,11 +61,11 @@ export type SettingsSection = {
 // ---------------------------------------------------------------------------
 
 export const SETTINGS_GROUPS: readonly SettingsGroup[] = [
-  { id: 'account', label: 'Account' },
   { id: 'play', label: 'Play' },
   { id: 'ai', label: 'AI' },
   { id: 'content', label: 'Content' },
   { id: 'data', label: 'Data' },
+  { id: 'account', label: 'Account' },
 ] as const satisfies readonly SettingsGroup[];
 
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
@@ -100,14 +100,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   },
 
   // ── AI ───────────────────────────────────────────────────────────────
-  {
-    id: 'ai_privacy',
-    label: 'AI & Privacy',
-    group: 'ai',
-    contexts: ['page'],
-    icon: 'shield',
-    capabilityKey: 'ai',
-  },
   {
     id: 'ai',
     label: 'AI',

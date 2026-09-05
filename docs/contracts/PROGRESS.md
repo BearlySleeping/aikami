@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-05)
 
-**234 active (0 without contract file), 119 archived, 0 duplicates**
+**238 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -242,6 +242,10 @@
 | C-478 | Reproducible Agent Resources | 📝 draft | — | v2 | thin |
 | C-479 | Portable Contributor Onboarding | 📝 draft | — | v2 | full |
 | C-480 | Agent Evaluation And Routing | 📝 draft | — | v2 | thin |
+| C-481 | Ai Configuration Convergence | 👍 approved | — | v1 | full |
+| C-482 | Managed Ai Runtime Lifecycle | 👍 approved | — | v1 | full |
+| C-483 | Guided Ai Setup | 📝 draft | — | v1 | thin |
+| C-484 | Capability First Settings | 📝 draft | — | v1 | thin |
 
 ---
 

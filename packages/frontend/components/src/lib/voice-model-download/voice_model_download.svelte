@@ -26,7 +26,6 @@ let { show, state, progress, sizeLabel, ondownload, oncancel }: Props = $props()
 </script>
 
 {#if show}
-  <div class="divider text-sm text-base-content/60">Or download the local voice model</div>
   <div class="flex flex-col gap-2 p-3 bg-base-200 rounded-box">
     <div class="flex items-center justify-between">
       <span class="text-sm font-medium">Kokoro TTS Model</span>

@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-05
-> Files: 416 across 17 categories
+> Files: 427 across 18 categories
 
 ## Quick Start (Read These First)
 
@@ -388,6 +388,10 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-478: Pin agent resources and make updates reproducible](contracts/C-478-reproducible-agent-resources.md)
 - [Contract C-479: Verify credential-free contributor onboarding across Linux, macOS and Windows](contracts/C-479-portable-contributor-onboarding.md)
 - [Contract C-480: Evaluate agent quality and tune routing using cost per accepted task](contracts/C-480-agent-evaluation-and-routing.md)
+- [Contract C-481: Converge AI configuration, capability metadata and routing](contracts/C-481-ai-configuration-convergence.md)
+- [Contract C-482: Unify managed AI provisioning, model assets and runtime lifecycle](contracts/C-482-managed-ai-runtime-lifecycle.md)
+- [Contract C-483: Guided AI setup](contracts/C-483-guided-ai-setup.md)
+- [Contract C-484: Capability-first settings](contracts/C-484-capability-first-settings.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
@@ -437,6 +441,15 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Intro](intro/README.md)
 - [Setup Guide](intro/setup.md)
 - [Product Vision](intro/vision.md)
+## plans/
+
+- [Packet dispatch and review rules](plans/ai-setup/dispatch.md)
+- [P00 — establish the baseline (only entry point)](plans/ai-setup/packets/00_baseline.md)
+- [P01 — keep native AI installation out of the browser](plans/ai-setup/packets/01_desktop_gating.md)
+- [P02 — verify keyless local connections through their actual endpoint](plans/ai-setup/packets/02_local_verification.md)
+- [P03 — replace inferred Running labels with honest connection status](plans/ai-setup/packets/03_truthful_status.md)
+- [Dependency order and parallel lanes](plans/ai-setup/queue.md)
+- [AI setup and settings — execution plan](plans/ai-setup/README.md)
 ## README.md/
 
 - [Aikami Documentation](README.md)
