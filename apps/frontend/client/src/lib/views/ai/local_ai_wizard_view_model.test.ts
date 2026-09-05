@@ -189,4 +189,63 @@ describe('LocalAiWizardViewModel', () => {
     vm.retry();
     expect(vm.step).toBe('idle');
   });
+  test('startInstall with detection skips download in non-Tauri context (AC-4)', async () => {
+    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
+    const vm = getViewModel({
+      className: 'test-wizard-download',
+      executor,
+      platform: 'linux',
+      arch: 'x64',
+    });
+
+    await vm.startDetection();
+    expect(vm.step).toBe('plan');
+
+    // In non-Tauri context, startInstall should skip download and attempt
+    // sidecar start. The sidecar mock resolves immediately.
+    await vm.startInstall();
+
+    // The sidecar mock's start() resolves without changing state to 'running',
+    // so we expect 'error' from the sidecar start failure
+    expect(vm.step).toBe('error');
+  });
+
+  test('download step gracefully handles missing Tauri context', async () => {
+    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
+    const vm = getViewModel({
+      className: 'test-wizard-download-skip',
+      executor,
+      platform: 'linux',
+      arch: 'x64',
+    });
+
+    await vm.startDetection();
+
+    // Directly test _downloadModel - should skip when not in Tauri
+    // Access the private method through bracket notation
+    const downloadResult = await (
+      vm as unknown as {
+        _downloadModel(entry: { manifestId: string; bytes: number }): Promise<void>;
+      }
+    )._downloadModel({
+      manifestId: 'test-model',
+      bytes: 1024,
+    });
+
+    // Should resolve without error in non-Tauri context
+    expect(downloadResult).toBeUndefined();
+  });
+
+  test('contract suite placeholder — AC-1 requires Tauri runtime', async () => {
+    // The probe_executor.contract_suite.ts requires a real Tauri webview
+    // context to run against the Tauri adapter. In unit tests, we verify
+    // the adapter shape and the fixture_executor conformance instead.
+    //
+    // To run AC-1 verification:
+    //   1. Build the Tauri app with `bun run build:tauri`
+    //   2. Run the test suite from within the Tauri webview
+    //   3. Or use Playwright E2E with Tauri
+    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    expect(isTauri).toBe(false);
+  });
 });

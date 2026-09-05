@@ -25,6 +25,9 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": false,
+    "externalBin": [
+      "binaries/llama-server"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -37,6 +40,16 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg4QzFGREQwQjA0NjIxQ0IKUldUTElVYXcwUDNCaUNTbGllc3ZTengrT3ZJTVM2R0w0QjRFTGV4YVcyLzQ3cUhUZWVmQlZ2eHUK",
       "endpoints": ["https://github.com/BearlySleeping/aikami/releases/latest/download/latest.json"]
+    },
+    "shell": {
+      "open": true,
+      "scope": [
+        {
+          "name": "binaries/llama-server",
+          "sidecar": true,
+          "args": true
+        }
+      ]
     },
     "deep-link": {
       "desktop": {

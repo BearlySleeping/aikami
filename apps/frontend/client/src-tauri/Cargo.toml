@@ -28,6 +28,8 @@ tauri-plugin-deep-link = "2"
 # window. Registered on every platform (harmless where unused, e.g. macOS)
 # to keep lib.rs free of per-OS conditional compilation.
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# C-467: Sidecar process management — launch/terminate engine binaries.
+tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"

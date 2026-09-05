@@ -50,6 +50,8 @@ export type SidecarServiceInterface = BaseClassInterface & {
   stop(): Promise<void>;
   /** Health-checks a running sidecar; updates state on failure. */
   healthCheck(executor: ProbeExecutor): Promise<boolean>;
+  /** Registers an app-quit cleanup hook that terminates the sidecar. */
+  registerCleanupOnQuit(): void;
 };
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -70,6 +72,12 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
     healthEndpoint: '/health',
   };
 
+  /** Handle to the spawned sidecar child process for cleanup (AC-5). */
+  _childProcess: { kill: () => void } | null = null;
+
+  /** Whether cleanup-on-quit has been registered. */
+  _cleanupRegistered = false;
+
   get state(): SidecarState {
     return this._state;
   }
@@ -81,8 +89,9 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
   /**
    * Starts the text engine sidecar.
    * 1. Health-checks the port first (reuse if already running).
-   * 2. Launches the sidecar binary via Tauri shell command.
+   * 2. Launches the sidecar binary via Tauri shell sidecar API.
    * 3. Polls the health endpoint until ready or timeout.
+   * 4. Registers cleanup-on-quit on first start.
    */
   async start(options: { modelPath: string; executor: ProbeExecutor }): Promise<void> {
     const { modelPath, executor } = options;
@@ -105,9 +114,8 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
         return;
       }
 
-      // Launch the sidecar — use Tauri's sidecar API through invoke.
-      // The sidecar binary is bundled via externalBin and resolved by Tauri.
-      await this._launchSidecar(executor);
+      // Launch the sidecar through Tauri's shell plugin sidecar API
+      await this._launchSidecar();
 
       // Poll for readiness
       const started = await this._waitForReady(executor);
@@ -115,6 +123,11 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
       if (started) {
         this._state = { status: 'running', port: this._config.port };
         this.info('sidecar:started', { port: this._config.port, model: modelPath });
+
+        // Register cleanup on quit (first start only)
+        if (!this._cleanupRegistered) {
+          this._registerCleanupOnQuit();
+        }
       } else {
         this._state = { status: 'error', reason: 'Sidecar failed to start within timeout' };
       }
@@ -126,8 +139,7 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
   }
 
   /**
-   * Stops a running sidecar. Sends a terminate signal through Tauri's
-   * shell plugin.
+   * Stops a running sidecar. Kills the child process handle.
    */
   async stop(): Promise<void> {
     if (this._state.status !== 'running') {
@@ -139,6 +151,7 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
     try {
       await this._terminateSidecar();
       this._state = { status: 'not-installed' };
+      this._childProcess = null;
       this.info('sidecar:stopped');
     } catch (error) {
       this.warn('sidecar:stop-failed', error);
@@ -160,6 +173,51 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
       this._state = { status: 'error', reason: 'Sidecar is not responding' };
     }
     return healthy;
+  }
+
+  /**
+   * Registers an app-quit cleanup hook that terminates the sidecar.
+   * Uses Tauri's onCloseRequested event or process:before-exit hook.
+   * AC-5: Quitting the app terminates all sidecar child processes.
+   */
+  registerCleanupOnQuit(): void {
+    this._registerCleanupOnQuit();
+  }
+
+  // ── Private: cleanup on quit (AC-5) ─────────────────────────────────
+
+  /**
+   * Registers a cleanup handler that terminates the sidecar when the Tauri
+   * app closes. Uses the Tauri window's onCloseRequested event.
+   */
+  _registerCleanupOnQuit(): void {
+    if (this._cleanupRegistered) {
+      return;
+    }
+    this._cleanupRegistered = true;
+
+    // Use Tauri's window close-requested event to kill the sidecar.
+    // This is a dynamic import because @tauri-apps/api is only available
+    // inside a Tauri webview.
+    try {
+      const register = async () => {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        const win = getCurrentWindow();
+        win.onCloseRequested(async () => {
+          this.debug('cleanup:app-quitting');
+          if (this._childProcess) {
+            this._childProcess.kill();
+            this._childProcess = null;
+          }
+          this._state = { status: 'not-installed' };
+        });
+        this.debug('cleanup:registered-on-close-requested');
+      };
+      void register();
+    } catch {
+      // Not in Tauri context — no cleanup hook available
+      this.debug('cleanup:not-in-tauri-context');
+    }
   }
 
   // ── Private: health check ───────────────────────────────────────────
@@ -184,46 +242,62 @@ class SidecarService extends BaseClass implements SidecarServiceInterface {
     }
   }
 
-  // ── Private: sidecar launch (placeholder) ───────────────────────────
+  // ── Private: sidecar launch ─────────────────────────────────────────
 
   /**
-   * Launches the sidecar binary. Uses Tauri's shell plugin sidecar API.
-   * For now, this is a placeholder that uses the probe executor to start
-   * the process. In production, this would use @tauri-apps/plugin-shell's
-   * Command.sidecar() API.
+   * Launches the sidecar binary using Tauri's shell plugin sidecar API.
+   * The binary is declared in tauri.conf.json's externalBin and resolved
+   * by Tauri at a known path.
    *
-   * TODO(C-467): Replace with actual sidecar launch once the binary is
-   * bundled via externalBin in tauri.conf.json.
+   * Uses dynamic import because @tauri-apps/plugin-shell is only available
+   * inside a Tauri webview (permitted per aikami-conventions §3).
    */
-  async _launchSidecar(_executor: ProbeExecutor): Promise<void> {
-    // Sidecar launching is deferred — the shell plugin sidecar API requires
-    // the binary to be declared in tauri.conf.json's externalBin and bundled
-    // with the app. This implementation will be completed when the llama-server
-    // binary is available as a bundled sidecar.
-    this.debug('_launchSidecar:placeholder', {
-      binary: this._config.binaryName,
-      port: this._config.port,
-    });
+  async _launchSidecar(): Promise<void> {
+    try {
+      const { Command } = await import('@tauri-apps/plugin-shell');
+      const cmd = Command.sidecar('binaries/llama-server', [
+        '-m', this._config.modelPath,
+        '--port', String(this._config.port),
+        '--host', '127.0.0.1',
+      ]);
 
-    // For now, we assume the engine is started externally (Docker/native)
-    // and the health-check polling will find it. When the sidecar binary is
-    // bundled, this method will invoke:
-    //   const cmd = Command.sidecar('llama-server', [
-    //     '-m', this._config.modelPath,
-    //     '--port', String(this._config.port),
-    //     '--host', '127.0.0.1',
-    //   ]);
-    //   cmd.spawn();
-    throw new Error('Sidecar launch not yet implemented — engine must be started externally');
+      // Spawn the sidecar and track the child process handle
+      const child = await cmd.spawn();
+      this._childProcess = {
+        kill: () => {
+          try {
+            child.kill();
+          } catch {
+            // Process may already be dead
+          }
+        },
+      };
+
+      this.debug('_launchSidecar:spawned', {
+        binary: this._config.binaryName,
+        port: this._config.port,
+      });
+    } catch (error) {
+      // If we're not in Tauri context, log and re-throw
+      this.warn('_launchSidecar:failed', error);
+      throw new Error(
+        `Cannot launch sidecar: ${error instanceof Error ? error.message : String(error)}. ` +
+        'The sidecar binary must be bundled via externalBin in tauri.conf.json.',
+      );
+    }
   }
 
   /**
-   * Terminates a running sidecar process. Placeholder until the shell
-   * plugin's sidecar handle is available.
+   * Terminates a running sidecar process. Kills the tracked child handle.
    */
   async _terminateSidecar(): Promise<void> {
-    this.debug('_terminateSidecar:placeholder');
-    // TODO(C-467): Kill the sidecar child process handle.
+    if (this._childProcess) {
+      this._childProcess.kill();
+      this._childProcess = null;
+      this.debug('_terminateSidecar:killed');
+    } else {
+      this.debug('_terminateSidecar:no-process-handle');
+    }
   }
 
   // ── Private: readiness polling ──────────────────────────────────────

@@ -4,6 +4,7 @@
 // C-467: Tauri ProbeExecutor adapter — probe_run, probe_read_text_file,
 // probe_statfs commands that the planning core's ProbeExecutor seam
 // calls through Tauri IPC instead of process.execPath.
+// Also: sidecar lifecycle management via tauri-plugin-shell.
 
 use std::fs;
 use std::io::Write;
@@ -17,6 +18,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
+
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -528,6 +530,7 @@ pub fn run() {
 
             Ok(())
         })
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())

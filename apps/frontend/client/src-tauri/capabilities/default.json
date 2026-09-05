@@ -18,6 +18,9 @@
     "updater:default",
     "deep-link:default",
     "process:allow-restart",
+    "shell:default",
+    "shell:allow-execute",
+    "shell:allow-spawn",
     {
       "identifier": "http:allow-fetch",
       "allow": [

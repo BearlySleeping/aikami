@@ -1,0 +1,7 @@
+#!/bin/bash
+# Placeholder sidecar binary for development (C-467).
+# In production, this is replaced by the actual llama-server binary.
+# Simulates a long-running server process for development/testing.
+echo "sidecar:llama-server started on port 11434"
+# Keep running until killed
+while true; do sleep 1; done
