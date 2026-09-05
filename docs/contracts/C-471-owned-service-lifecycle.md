@@ -23,7 +23,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — restart can terminate unrelated/shared processes and readiness can test the wrong checkout |
 | **Dependencies** | C-468, C-470; instruction-repair PR 02; serialize shared orchestration edits |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — shared service ownership and start/stop semantics |
 | **Contract version** | 2.0.0 |
@@ -171,9 +171,8 @@ Added service ownership types (ServiceScope, ServiceIdentity, ProbeResult), upda
 ### AC Status
 
 | AC | Status | Notes |
-|---|---|---|
 | AC-1 | ✅ | killPort no longer falls back to killPortUnsafe (fuser -k). Scope assignment distinguishes run/shared/external. Owned services tracked via scope field. |
-| AC-2 | ✅ | assessServiceReadiness wraps assessServicePane with identity verification. Services with probes require matching evidence before returning healthy. Port/TCP liveness alone cannot permit reuse. |
+| AC-2 | ✅ | assessServiceReadiness wraps assessServicePane with identity verification. Services with probes require matching evidence before returning healthy. Port/TCP/HTTP liveness alone cannot permit reuse. |
 | AC-3 | ✅ | servicesByScope and ownedServices helpers enable scope-aware service selection. CORE_SERVICES defines the minimum set for pure-script contracts. |
 | AC-4 | ✅ | ownedServices() isolates run-scoped processes. killPort identity-checks every PID before terminating. |
 | AC-5 | ✅ | All existing herdr error diagnostics preserved (parseHerdrStatus, herdrJson failure paths). Tab creation failures remain failures. |
@@ -181,13 +180,11 @@ Added service ownership types (ServiceScope, ServiceIdentity, ProbeResult), upda
 ### Files Created
 
 | File | Purpose |
-|---|---|
 | (none) | All changes are modifications to existing files |
 
 ### Files Modified
 
 | File | Change |
-|---|---|
 | `scripts/src/lib/herdr/session.ts` | Added ServiceScope, ServiceIdentity, ProbeResult, ReadinessState, ReadinessResult types. Updated ServiceDef with scope/probe fields. Added scope to all SERVICE_DEFS entries. Added buildServiceIdentity, assessServiceReadiness, servicesByScope, ownedServices, CORE_SERVICES. Fixed killPort to remove blind killPortUnsafe fallback. Updated assessServicePane callers to use assessServiceReadiness. Updated ServiceStatus and listServices to include scope and readiness state. |
 | `scripts/src/lib/herdr/session.test.ts` | Added 16 unit tests across 4 describe blocks: service scope (AC-1, AC-3), identity probe (AC-2), killPort no blind fallback (AC-1), herdr failure preservation (AC-5). |
 
