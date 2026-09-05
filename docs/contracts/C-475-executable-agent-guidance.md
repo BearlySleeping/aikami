@@ -3,12 +3,13 @@ id: C-475
 title: "Test canonical coding examples and prevent active instruction drift"
 source: direct
 contract_type: thin
-status: approved
+status: draft
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/254"
+  pr_number: 254
 created_at: "2026-09-04T22:21:38Z"
 ---
 
@@ -23,7 +24,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | thin |
 | **Priority** | P1 — contradictory examples and obsolete tools repeatedly regenerate incorrect work |
 | **Dependencies** | C-474; instruction-repair PR 02 |
-| **Status** | approved |
+| **Status** | draft |
 | **Promotion** | — |
 | **Docs Impact** | internal — concise normative guidance and executable references |
 | **Contract version** | 2.0.0 |
