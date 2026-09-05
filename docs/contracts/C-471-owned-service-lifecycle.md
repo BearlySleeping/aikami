@@ -3,7 +3,7 @@ id: C-471
 title: "Own service processes and verify the correct application is ready"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — restart can terminate unrelated/shared processes and readiness can test the wrong checkout |
 | **Dependencies** | C-468, C-470; instruction-repair PR 02; serialize shared orchestration edits |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — shared service ownership and start/stop semantics |
 | **Contract version** | 2.0.0 |
