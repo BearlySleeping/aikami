@@ -57,7 +57,14 @@ export const validateStageResult = (options: {
   }
 
   // 🔴 Generation fencing: reject results from a predecessor worker.
-  // Absent generation (legacy) is treated as 0 and accepted.
+  // Absent generation (legacy) is treated as 0. A malformed explicit value
+  // must not bypass the numeric comparison through JavaScript coercion.
+  if (
+    value.generation !== undefined &&
+    (!Number.isSafeInteger(value.generation) || value.generation < 0)
+  ) {
+    return undefined;
+  }
   const resultGeneration = value.generation ?? 0;
   const minGeneration = options.minGeneration ?? 0;
   if (resultGeneration < minGeneration) {

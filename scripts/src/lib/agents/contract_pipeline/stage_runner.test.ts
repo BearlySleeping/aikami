@@ -72,7 +72,10 @@ const run = async (options: {
       // Stand in for a worker that completes immediately.
       writeStageResult({
         resultPath: request.resultPath,
-        result: resultFor(options.attempt, options.workerResult ?? 'passed'),
+        result: {
+          ...resultFor(options.attempt, options.workerResult ?? 'passed'),
+          generation: request.generation,
+        },
       });
       return { paneId: 'pane-test' };
     },
@@ -149,7 +152,9 @@ describe('runStage retry safeguard', () => {
     // that replacement ID — polling the dead pane would make every relaunch
     // look like another crash.
     const checkedPaneIds: string[] = [];
+    const launchGenerations: Array<number | undefined> = [];
     let launches = 0;
+    let replacementChecks = 0;
     const outcome = await runStage({
       repoRoot,
       runDirectory,
@@ -160,8 +165,11 @@ describe('runStage retry safeguard', () => {
       idleTimeoutMs: 60_000,
       hardTimeoutMs: 60_000,
       pollIntervalMs: 5,
-      launchWorker: async (_request) => {
+      generation: 10,
+      advanceGeneration: () => 11,
+      launchWorker: async (request) => {
         launches += 1;
+        launchGenerations.push(request.generation);
         if (launches === 1) {
           return { paneId: 'pane-original' };
         }
@@ -172,10 +180,14 @@ describe('runStage retry safeguard', () => {
       checkAgentWorking: async (paneId) => {
         checkedPaneIds.push(paneId);
         if (paneId === 'pane-relaunched') {
-          // The relaunched worker completes once it is being health-checked.
+          replacementChecks += 1;
+          // A late predecessor result must not satisfy the replacement.
           writeStageResult({
             resultPath: join(runDirectory, 'stages', 'implement-1.json'),
-            result: resultFor(1, 'passed'),
+            result: {
+              ...resultFor(1, 'passed'),
+              generation: replacementChecks === 1 ? 10 : 11,
+            },
           });
           return true;
         }
@@ -185,6 +197,8 @@ describe('runStage retry safeguard', () => {
       },
     });
     expect(launches).toBe(2);
+    expect(launchGenerations).toEqual([10, 11]);
+    expect(replacementChecks).toBe(2);
     expect(checkedPaneIds).toContain('pane-original');
     // The health check AFTER the relaunch must use the replacement pane ID.
     expect(checkedPaneIds).toContain('pane-relaunched');

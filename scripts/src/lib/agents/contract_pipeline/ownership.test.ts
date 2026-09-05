@@ -7,11 +7,21 @@
 // Never touches the live .pi/contract-runs store.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   acquireLock,
+  advanceLockGeneration,
+  pruneStaleReservations,
   readLockMetadata,
   releaseLock,
   releaseReservation,
@@ -92,6 +102,22 @@ const seedManifest = (options: {
   );
 };
 
+/** Write a reservation with a controlled owner and age. */
+const seedReservation = (options: { contractId: string; pid: number; ageMs: number }): string => {
+  const reservationsDir = join(cwd, RUNS_DIR, 'reservations');
+  mkdirSync(reservationsDir, { recursive: true });
+  const path = join(reservationsDir, `reserve-${options.contractId}.json`);
+  writeFileSync(
+    path,
+    JSON.stringify({
+      contractId: options.contractId,
+      pid: options.pid,
+      createdAt: new Date(Date.now() - options.ageMs).toISOString(),
+    }),
+  );
+  return path;
+};
+
 // ── AC-1: A healthy owner cannot be evicted by age ────────────
 
 describe('AC-1: A healthy owner cannot be evicted by age', () => {
@@ -101,8 +127,16 @@ describe('AC-1: A healthy owner cannot be evicted by age', () => {
     expect(lock).toBeDefined();
     expect(lock?.pid).toBe(process.pid);
     expect(lock?.runId).toBe('run-test-C-TEST-1');
+    expect(lock?.generation).toBe(1);
     // Cleanup
     releaseLock({ contractId: 'C-TEST-1', cwd });
+  });
+
+  it('persists replacement generations for the next lock owner', async () => {
+    await acquireLock({ contractId: 'C-TEST-GEN', runId: 'run-test-C-TEST-GEN', cwd });
+    expect(advanceLockGeneration({ contractId: 'C-TEST-GEN', cwd })).toBe(2);
+    expect(readLockMetadata({ contractId: 'C-TEST-GEN', cwd })?.generation).toBe(2);
+    releaseLock({ contractId: 'C-TEST-GEN', cwd });
   });
 
   it('refuses acquisition when the lock is held by a live process with a fresh heartbeat', async () => {
@@ -122,9 +156,20 @@ describe('AC-1: A healthy owner cannot be evicted by age', () => {
     });
 
     // Should throw because the heartbeat is fresh — the owner is alive.
+    let workspaceChecks = 0;
     await expect(
-      acquireLock({ contractId: 'C-TEST-2', runId: 'run-new-C-TEST-2', cwd }),
+      acquireLock({
+        contractId: 'C-TEST-2',
+        runId: 'run-new-C-TEST-2',
+        cwd,
+        checkWorkspaceAlive: async () => {
+          workspaceChecks += 1;
+          return false;
+        },
+      }),
     ).rejects.toThrow('Pipeline already running');
+    expect(workspaceChecks).toBe(0);
+    expect(readLockMetadata({ contractId: 'C-TEST-2', cwd })?.runId).toBe('run-other-C-TEST-2');
   });
 
   it('breaks a stale lock from a dead process, even with a recent lastUpdated', async () => {
@@ -134,6 +179,7 @@ describe('AC-1: A healthy owner cannot be evicted by age', () => {
       runId: 'run-dead-C-TEST-3',
       pid: DEAD_PID,
       heartbeatAgeMs: 1_000,
+      generation: 7,
     });
     seedManifest({
       runId: 'run-dead-C-TEST-3',
@@ -147,6 +193,7 @@ describe('AC-1: A healthy owner cannot be evicted by age', () => {
     const lock = readLockMetadata({ contractId: 'C-TEST-3', cwd });
     expect(lock).toBeDefined();
     expect(lock?.runId).toBe('run-new-C-TEST-3');
+    expect(lock?.generation).toBe(8);
     releaseLock({ contractId: 'C-TEST-3', cwd });
   });
 
@@ -321,6 +368,17 @@ describe('AC-3: Late worker results are fenced', () => {
     expect(validated).toBeDefined();
   });
 
+  it('rejects a malformed generation before applying the fence', () => {
+    const validated = validateStageResult({
+      value: { ...createResult(1), generation: 'not-a-number' },
+      runId: RUN_ID,
+      role: ROLE,
+      attempt: ATTEMPT,
+      minGeneration: 1,
+    });
+    expect(validated).toBeUndefined();
+  });
+
   it('readStageResult respects generation fencing', () => {
     const stagesDir = join(cwd, RUNS_DIR, RUN_ID, 'stages');
     mkdirSync(stagesDir, { recursive: true });
@@ -360,6 +418,9 @@ describe('AC-4: Draft IDs are allocated exclusively', () => {
 
     const id = reserveContractId({ contractsDir, cwd });
     expect(id).toBe('C-1');
+    const reservationPath = join(cwd, RUNS_DIR, 'reservations', 'reserve-C-1.json');
+    expect(existsSync(reservationPath)).toBe(true);
+    expect(JSON.parse(readFileSync(reservationPath, 'utf-8')).pid).toBe(process.pid);
   });
 
   it('allocates the next ID after existing contracts', () => {
@@ -391,6 +452,86 @@ describe('AC-4: Draft IDs are allocated exclusively', () => {
     // so the next available ID should be C-2.
     expect(id2).toBe('C-2');
     expect(id2).not.toBe(id1);
+  });
+
+  it('does not reclaim a fresh reservation while its owner is writing metadata', () => {
+    const contractsDir = join(cwd, 'docs/contracts');
+    const reservationsDir = join(cwd, RUNS_DIR, 'reservations');
+    mkdirSync(contractsDir, { recursive: true });
+    mkdirSync(reservationsDir, { recursive: true });
+    writeFileSync(join(reservationsDir, 'reserve-C-1.json'), '');
+
+    expect(reserveContractId({ contractsDir, cwd })).toBe('C-2');
+  });
+
+  it('allocates distinct IDs to separate processes racing for the same candidate', async () => {
+    const contractsDir = join(cwd, 'docs/contracts');
+    mkdirSync(contractsDir, { recursive: true });
+    const moduleUrl = new URL('./manifest_store.ts', import.meta.url).href;
+    const startAt = Date.now() + 500;
+    const source = `
+      import { reserveContractId } from ${JSON.stringify(moduleUrl)};
+      while (Date.now() < Number(process.env.RESERVATION_TEST_START)) {
+        await Bun.sleep(10);
+      }
+      const id = reserveContractId({
+        contractsDir: process.env.RESERVATION_TEST_CONTRACTS,
+        cwd: process.env.RESERVATION_TEST_CWD,
+      });
+      process.stdout.write(id ?? 'undefined');
+      await Bun.sleep(500);
+    `;
+    const spawnReservation = () =>
+      Bun.spawn({
+        cmd: [process.execPath, '--eval', source],
+        cwd,
+        env: {
+          ...process.env,
+          RESERVATION_TEST_START: String(startAt),
+          RESERVATION_TEST_CONTRACTS: contractsDir,
+          RESERVATION_TEST_CWD: cwd,
+        },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+    const children = [spawnReservation(), spawnReservation()];
+    const ids = await Promise.all(
+      children.map(async (child) => {
+        const [output, errorOutput, exitCode] = await Promise.all([
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+          child.exited,
+        ]);
+        expect(errorOutput).toBe('');
+        expect(exitCode).toBe(0);
+        return output.trim();
+      }),
+    );
+    expect(new Set(ids)).toEqual(new Set(['C-1', 'C-2']));
+  });
+
+  it('reclaims an expired reservation even when its PID is alive', () => {
+    const contractsDir = join(cwd, 'docs/contracts');
+    mkdirSync(contractsDir, { recursive: true });
+    const stalePath = seedReservation({
+      contractId: 'C-9',
+      pid: process.pid,
+      ageMs: 11 * 60 * 1000,
+    });
+
+    expect(reserveContractId({ contractsDir, cwd })).toBe('C-1');
+    expect(existsSync(stalePath)).toBe(false);
+  });
+
+  it('prunes an expired reservation even when its PID is alive', () => {
+    const stalePath = seedReservation({
+      contractId: 'C-9',
+      pid: process.pid,
+      ageMs: 11 * 60 * 1000,
+    });
+
+    pruneStaleReservations({ cwd });
+    expect(existsSync(stalePath)).toBe(false);
   });
 
   it('releases a reservation so the ID can be reused', () => {

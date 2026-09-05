@@ -46,7 +46,8 @@ const _lockCleanups = new Map<
  */
 export const LOCK_HEARTBEAT_MS = 30_000;
 
-type LockMetadata = {
+/** Persisted owner metadata used to fence pipeline and worker generations. */
+export type LockMetadata = {
   pid: number;
   contractId: string;
   runId: string;
@@ -57,9 +58,9 @@ type LockMetadata = {
    * generation, so a replacement worker can be distinguished from a late
    * result by its predecessor.
    *
-   * Absent (undefined) in legacy locks — treated as generation 0.
+   * Absent in legacy locks — normalized to generation 0 when read.
    */
-  generation?: number;
+  generation: number;
 };
 
 const buildLockPath = (options: { contractId: string; cwd: string }): string =>
@@ -85,6 +86,12 @@ const readLock = (path: string): LockMetadata | undefined => {
       contractId: value.contractId,
       runId: typeof value.runId === 'string' ? value.runId : '',
       createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+      generation:
+        typeof value.generation === 'number' &&
+        Number.isSafeInteger(value.generation) &&
+        value.generation >= 0
+          ? value.generation
+          : 0,
     };
   } catch {
     return undefined;
@@ -108,17 +115,18 @@ export const acquireLock = async (options: {
   runId: string;
   cwd: string;
   checkWorkspaceAlive?: WorkspaceAliveCheck;
-}): Promise<void> => {
+}): Promise<LockMetadata> => {
   const path = buildLockPath(options);
   mkdirSync(join(options.cwd, RUNS_DIR), { recursive: true });
 
-  const metadata: LockMetadata = {
+  const metadataForGeneration = (generation: number): LockMetadata => ({
     pid: process.pid,
     contractId: options.contractId,
     runId: options.runId,
     createdAt: new Date().toISOString(),
-    generation: Date.now(),
-  };
+    generation,
+  });
+  let metadata = metadataForGeneration(1);
 
   const create = (): void => {
     const descriptor = openSync(path, 'wx');
@@ -129,11 +137,28 @@ export const acquireLock = async (options: {
     }
   };
 
-  const breakStaleLock = async (): Promise<void> => {
+  const breakStaleLock = async (): Promise<LockMetadata | undefined> => {
     const existing = readLock(path);
     if (!existing || !isProcessAlive(existing.pid)) {
       removeFile(path);
-      return;
+      return existing;
+    }
+
+    // A fresh heartbeat is authoritative. Check it outside the manifest
+    // parser so the running-owner error cannot be swallowed as a parse error.
+    let heartbeatFresh = false;
+    try {
+      const lockMtimeMs = statSync(path).mtimeMs;
+      heartbeatFresh = Date.now() - lockMtimeMs <= LOCK_HEARTBEAT_MS * 2;
+    } catch {
+      // statSync failed (lock already gone) — heartbeat is not fresh.
+    }
+    if (heartbeatFresh) {
+      throw new Error(
+        `Pipeline already running for ${options.contractId} (PID ${existing.pid}, run ${existing.runId}).\n` +
+          `  Kill it: kill ${existing.pid}\n` +
+          `  Then re-run your command.`,
+      );
     }
 
     // Process is alive — check if its run is in a terminal state.
@@ -151,29 +176,7 @@ export const acquireLock = async (options: {
             `🔓 Breaking stale lock for ${existing.contractId} (run ${existing.runId} at ${raw.currentStage}).`,
           );
           removeFile(path);
-          return;
-        }
-        // Check if the lock's heartbeat (mtime) is still fresh — the
-        // authoritative liveness signal. A live process heartbeats every
-        // LOCK_HEARTBEAT_MS, so an mtime within 2x that window proves the
-        // orchestrator is alive and heartbeating. Only fall through to
-        // the manifest's lastUpdated check when the heartbeat is stale.
-        let heartbeatFresh = false;
-        try {
-          const lockMtimeMs = statSync(path).mtimeMs;
-          const heartbeatMaxAgeMs = LOCK_HEARTBEAT_MS * 2;
-          heartbeatFresh = Date.now() - lockMtimeMs <= heartbeatMaxAgeMs;
-        } catch {
-          // statSync failed (lock already gone) — heartbeat is not fresh.
-        }
-        if (heartbeatFresh) {
-          // Heartbeat is fresh — the orchestrator is alive. Do NOT break
-          // the lock, regardless of lastUpdated age. See C-470 AC-1.
-          throw new Error(
-            `Pipeline already running for ${options.contractId} (PID ${existing.pid}, run ${existing.runId}).\n` +
-              `  Kill it: kill ${existing.pid}\n` +
-              `  Then re-run your command.`,
-          );
+          return existing;
         }
 
         // Check if manifest hasn't been updated in 2+ hours — hung orchestrator
@@ -185,7 +188,7 @@ export const acquireLock = async (options: {
               `🔓 Breaking stale lock for ${existing.contractId} (run ${existing.runId} — last update ${Math.round((Date.now() - lastUpdate) / 1000 / 60)} min ago).`,
             );
             removeFile(path);
-            return;
+            return existing;
           }
         }
       } catch {
@@ -199,7 +202,7 @@ export const acquireLock = async (options: {
       if (!workspaceAlive) {
         // Workspace was killed but process lingered — break the lock.
         removeFile(path);
-        return;
+        return existing;
       }
     }
 
@@ -213,7 +216,8 @@ export const acquireLock = async (options: {
   try {
     create();
   } catch {
-    await breakStaleLock();
+    const previous = await breakStaleLock();
+    metadata = metadataForGeneration((previous?.generation ?? 0) + 1);
     try {
       create();
     } catch {
@@ -267,6 +271,7 @@ export const acquireLock = async (options: {
   process.once('exit', cleanup);
   process.once('SIGINT', signalCleanup);
   process.once('SIGTERM', terminationCleanup);
+  return metadata;
 };
 
 /**
@@ -291,6 +296,20 @@ export const readLockMetadata = (options: {
 }): LockMetadata | undefined => {
   const path = buildLockPath(options);
   return readLock(path);
+};
+
+/** Advance the current owner's persisted generation before replacing a worker. */
+export const advanceLockGeneration = (options: { contractId: string; cwd: string }): number => {
+  const path = buildLockPath(options);
+  const existing = readLock(path);
+  if (!existing || existing.pid !== process.pid) {
+    throw new Error(`Cannot advance pipeline lock generation for ${options.contractId}.`);
+  }
+  const updated: LockMetadata = { ...existing, generation: existing.generation + 1 };
+  const temporaryPath = `${path}.${process.pid}.tmp`;
+  writeFileSync(temporaryPath, JSON.stringify(updated, undefined, 2));
+  renameSync(temporaryPath, path);
+  return updated.generation;
 };
 
 /** Release a previously acquired contract lock. */
@@ -471,9 +490,49 @@ export const stageResultDir = (runDirectoryPath: string): string =>
  * the reservation is consumed or abandoned.
  */
 const RESERVATIONS_DIR = '.pi/contract-runs/reservations';
+const RESERVATION_FILE_PATTERN = /^reserve-C-(\d+)\.json$/;
 
 /** Maximum age of a reservation before it is considered stale and reclaimable. */
 export const RESERVATION_STALE_MS = 10 * 60 * 1000; // 10 minutes
+
+type ReservationMetadata = {
+  contractId: string;
+  pid: number;
+  createdAt: string;
+};
+
+const readReservation = (path: string): ReservationMetadata | undefined => {
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf-8')) as Partial<ReservationMetadata>;
+    if (
+      typeof value.contractId !== 'string' ||
+      typeof value.pid !== 'number' ||
+      typeof value.createdAt !== 'string'
+    ) {
+      return undefined;
+    }
+    return { contractId: value.contractId, pid: value.pid, createdAt: value.createdAt };
+  } catch {
+    return undefined;
+  }
+};
+
+const isReservationStale = (reservation: ReservationMetadata, now: number): boolean => {
+  const createdAt = new Date(reservation.createdAt).getTime();
+  return (
+    !isProcessAlive(reservation.pid) ||
+    !Number.isFinite(createdAt) ||
+    now - createdAt > RESERVATION_STALE_MS
+  );
+};
+
+const isReservationFileExpired = (path: string, now: number): boolean => {
+  try {
+    return now - statSync(path).mtimeMs > RESERVATION_STALE_MS;
+  } catch {
+    return true;
+  }
+};
 
 /**
  * Exclusively reserve a contract ID so concurrent pipeline instances each
@@ -518,35 +577,30 @@ export const reserveContractId = (options: {
   try {
     const entries = readdirSync(reservationsDir);
     for (const f of entries) {
-      if (!f.endsWith('.json')) {
+      const match = f.match(RESERVATION_FILE_PATTERN);
+      if (!match) {
         continue;
       }
-      // Parse reservation file name: "reserve-C-372-<pid>.json"
-      const match = f.match(/^reserve-C-(\d+)-/);
-      if (match) {
-        const id = Number(match[1]);
-        if (id > maxReserved) {
-          // Check if the reservation is still valid (process alive).
-          try {
-            const content = JSON.parse(readFileSync(join(reservationsDir, f), 'utf-8')) as {
-              pid: number;
-              createdAt: string;
-            };
-            const pidAlive = (() => {
-              try {
-                process.kill(content.pid, 0);
-                return true;
-              } catch {
-                return false;
-              }
-            })();
-            if (pidAlive) {
-              maxReserved = id;
-            }
-          } catch {
-            // Unreadable or missing — treat as abandoned.
-          }
+      const reservationPath = join(reservationsDir, f);
+      const reservation = readReservation(reservationPath);
+      const now = Date.now();
+      if (!reservation) {
+        // Another process may be between its exclusive create and metadata
+        // write. A fresh unreadable file still owns the candidate.
+        if (isReservationFileExpired(reservationPath, now)) {
+          removeFile(reservationPath);
+        } else {
+          maxReserved = Math.max(maxReserved, Number(match[1]));
         }
+        continue;
+      }
+      if (isReservationStale(reservation, now)) {
+        removeFile(reservationPath);
+        continue;
+      }
+      const id = Number(match[1]);
+      if (id > maxReserved) {
+        maxReserved = id;
       }
     }
   } catch {
@@ -558,7 +612,7 @@ export const reserveContractId = (options: {
   const maxAttempts = options.maxAttempts ?? 100;
   for (let offset = 1; offset <= maxAttempts; offset++) {
     const candidateId = `C-${maxReserved + offset}`;
-    const reservationPath = join(reservationsDir, `reserve-${candidateId}-${process.pid}.json`);
+    const reservationPath = join(reservationsDir, `reserve-${candidateId}.json`);
 
     try {
       const descriptor = openSync(reservationPath, 'wx');
@@ -587,12 +641,11 @@ export const reserveContractId = (options: {
  * process — in that case it's a no-op.
  */
 export const releaseReservation = (options: { contractId: string; cwd: string }): void => {
-  const reservationPath = join(
-    options.cwd,
-    RESERVATIONS_DIR,
-    `reserve-${options.contractId}-${process.pid}.json`,
-  );
-  removeFile(reservationPath);
+  const reservationPath = join(options.cwd, RESERVATIONS_DIR, `reserve-${options.contractId}.json`);
+  const reservation = readReservation(reservationPath);
+  if (reservation?.pid === process.pid) {
+    removeFile(reservationPath);
+  }
 };
 
 /**
@@ -603,28 +656,17 @@ export const pruneStaleReservations = (options: { cwd: string }): void => {
   try {
     const entries = readdirSync(reservationsDir);
     for (const f of entries) {
-      if (!f.endsWith('.json')) {
+      if (!RESERVATION_FILE_PATTERN.test(f)) {
         continue;
       }
-      try {
-        const content = JSON.parse(readFileSync(join(reservationsDir, f), 'utf-8')) as {
-          pid: number;
-          createdAt: string;
-        };
-        const pidAlive = (() => {
-          try {
-            process.kill(content.pid, 0);
-            return true;
-          } catch {
-            return false;
-          }
-        })();
-        if (!pidAlive) {
-          removeFile(join(reservationsDir, f));
-        }
-      } catch {
-        // Unreadable — remove it.
-        removeFile(join(reservationsDir, f));
+      const reservationPath = join(reservationsDir, f);
+      const reservation = readReservation(reservationPath);
+      const now = Date.now();
+      if (
+        (reservation && isReservationStale(reservation, now)) ||
+        (!reservation && isReservationFileExpired(reservationPath, now))
+      ) {
+        removeFile(reservationPath);
       }
     }
   } catch {
