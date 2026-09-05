@@ -159,7 +159,7 @@ const { viewModel }: Props = $props();
               placeholder={viewModel.hasFetchedModels
                 ? 'Search fetched models…'
                 : 'e.g. anthropic/claude-sonnet'}
-              value={viewModel.draft.model}
+              value={viewModel.modelQuery}
               oninput={(e) => viewModel.setModelQuery((e.target as HTMLInputElement).value)}
               onkeydown={(e) => {
                 if (e.key === 'Enter') {
@@ -223,7 +223,7 @@ const { viewModel }: Props = $props();
           <div>
             <button
               type="button"
-              class="btn btn-ghost btn-xs font-mono text-[10px] text-[#938ea1]"
+              class="btn btn-ghost btn-xs font-mono text-[10px] text-base-content/60"
               onclick={() => viewModel.toggleGenParamsDisclosure()}
             >
               {viewModel.isGenParamsOpen ? '▾' : '▸'}

@@ -23,6 +23,7 @@ import {
   configService,
   type FetchedModel,
   fetchModelsFromProvider,
+  fetchWithCredentialPolicy,
   imageGenerationService,
   PROVIDER_MODEL_FETCH,
   styleProfileService,
@@ -148,6 +149,8 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   // ── Connection editor ──
   readonly draft: EditorDraft;
   readonly isEditorOpen: boolean;
+  /** Text currently displayed in the model search/input field. */
+  readonly modelQuery: string;
   readonly modelOptions: readonly FetchedModel[];
   /** Whether any models have been fetched (regardless of the current search filter). */
   readonly hasFetchedModels: boolean;
@@ -175,6 +178,8 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly testingIds: Set<string>;
 
   // ── Actions ──
+  /** Opens the setup flow appropriate for a capability. */
+  openCapabilitySetup(capability: ConnectionCapability): void;
   openAddProvider(capability?: ConnectionCapability): void;
   closeAddProvider(): void;
   /** Opens the voice setup modal — leads with the local model download, with an option to connect a provider instead. */
@@ -359,6 +364,7 @@ export class AiSettingsViewModel
   implements AiSettingsViewModelInterface
 {
   private _availableModels: FetchedModel[] = $state([]);
+  private _modelQuery = $state('');
   private _voiceArchetypes: VoiceArchetype[] = $state([]);
   private _activeVoiceConnectionId: ConnectionId | undefined = $state(undefined);
   private _activeImageConnectionId: ConnectionId | undefined = $state(undefined);
@@ -489,7 +495,7 @@ export class AiSettingsViewModel
     if (!this.isModelDropdownOpen) {
       return [];
     }
-    const query = this.draft.model.trim();
+    const query = this._modelQuery.trim();
     if (!query) {
       return this._availableModels;
     }
@@ -500,6 +506,10 @@ export class AiSettingsViewModel
 
   get hasFetchedModels(): boolean {
     return this._availableModels.length > 0;
+  }
+
+  get modelQuery(): string {
+    return this._modelQuery;
   }
 
   get canFetchModels(): boolean {
@@ -823,6 +833,14 @@ export class AiSettingsViewModel
 
   // ── Editor: open / close / save ──
 
+  openCapabilitySetup(capability: ConnectionCapability): void {
+    if (capability === 'voice') {
+      this.openVoiceSetup();
+      return;
+    }
+    this.openAddProvider(capability);
+  }
+
   openAddProvider(capability?: ConnectionCapability): void {
     this.debug('openAddProvider', { capability });
     this.isAddProviderOpen = true;
@@ -867,6 +885,7 @@ export class AiSettingsViewModel
       isEditing: true,
       editingConnectionId: connectionId,
     };
+    this._modelQuery = conn.model;
     this._genParamsDraft = {};
     this.isGenParamsOpen = false;
     this.isEditorOpen = true;
@@ -884,12 +903,16 @@ export class AiSettingsViewModel
   }
 
   setModelQuery(value: string): void {
-    this.draft = { ...this.draft, model: value };
+    this._modelQuery = value;
+    if (!this.canFetchModels) {
+      this.draft = { ...this.draft, model: value };
+    }
     this.isModelDropdownOpen = true;
   }
 
   selectModel(modelId: string): void {
     this.draft = { ...this.draft, model: modelId };
+    this._modelQuery = modelId;
     this.isModelDropdownOpen = false;
   }
 
@@ -900,7 +923,9 @@ export class AiSettingsViewModel
   setDraftProvider(registryId: string): void {
     this.debug('setDraftProvider', { registryId });
     this._availableModels = [];
+    this._modelQuery = '';
     this.isModelDropdownOpen = false;
+    this.fetchModelsError = undefined;
 
     // Check if a provider with this registryId already exists
     const existingProvider = this._findProviderByRegistry(registryId);
@@ -915,6 +940,7 @@ export class AiSettingsViewModel
       ...this.draft,
       registryId,
       providerId: existingProvider?.id,
+      model: '',
       apiKey: prefillKey,
       // Keep label in sync
       label: this._registryLabel(registryId) ?? registryId,
@@ -1053,11 +1079,15 @@ export class AiSettingsViewModel
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
       try {
-        const response = await fetch(url, { headers, method: endpoint.method, signal: controller.signal });
+        const response = await fetchWithCredentialPolicy({
+          url,
+          hasCredential: true,
+          init: { headers, method: endpoint.method, signal: controller.signal },
+        });
         const elapsed = Math.round(performance.now() - startMs);
         this.testResults = {
           ...this.testResults,
-          [connectionId]: { ok: response.ok, latencyMs: elapsed },
+          [connectionId]: { ok: response?.ok ?? false, latencyMs: elapsed },
         };
       } finally {
         clearTimeout(timeoutId);
@@ -1188,7 +1218,9 @@ export class AiSettingsViewModel
       editingConnectionId: undefined,
     };
     this._availableModels = [];
+    this._modelQuery = '';
     this.isModelDropdownOpen = false;
+    this.fetchModelsError = undefined;
     this._genParamsDraft = {};
     this.isGenParamsOpen = false;
   }

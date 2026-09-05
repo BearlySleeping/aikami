@@ -50,13 +50,7 @@ let { viewModel }: Props = $props();
                   <button
                     type="button"
                     class="btn btn-xs btn-ghost font-mono text-[#00e3fd]"
-                    onclick={() => {
-                      if (entry.capability === 'voice') {
-                        viewModel.openVoiceSetup();
-                      } else {
-                        viewModel.openAddProvider(entry.capability);
-                      }
-                    }}
+                    onclick={() => viewModel.openCapabilitySetup(entry.capability)}
                   >
                     Set up {entry.label} →
                   </button>

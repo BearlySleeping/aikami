@@ -60,6 +60,10 @@ export type CapabilityViewModelInterface = BaseViewModelInterface & {
   readonly isDetecting: boolean;
   /** Currently active tab. */
   readonly activeTab: ConnectionCapability;
+  /** Display label for the active capability. */
+  readonly activeCapabilityLabel: string;
+  /** Setup action label for the active capability. */
+  readonly capabilitySetupLabel: string;
   /** Error message to display, or empty string. */
   readonly errorMessage: string;
   /** Unified connection entries filtered by active tab. */
@@ -171,6 +175,17 @@ class CapabilityViewModel
    */
   get showLocalAiWizard(): boolean {
     return this.activeTab === 'text' && !this.hasTextProvider;
+  }
+
+  get activeCapabilityLabel(): string {
+    return CAPABILITY_TABS.find((tab) => tab.id === this.activeTab)?.label ?? '';
+  }
+
+  get capabilitySetupLabel(): string {
+    if (this.activeTab === 'voice') {
+      return 'Set up Voice';
+    }
+    return `Connect a ${this.activeCapabilityLabel} Provider`;
   }
 
   // ── Derived ──────────────────────────────────────────────────────────

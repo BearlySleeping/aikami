@@ -51,6 +51,7 @@ const aiSettingsViewModelMock = {
     isEditing: false,
     editingConnectionId: undefined,
   },
+  openCapabilitySetup: mock(() => {}),
   openAddProvider: mock(() => {}),
   closeAddProvider: mock(() => {}),
   openEditConnection: mock(() => {}),
@@ -118,6 +119,7 @@ const aiSettingsViewModelMock = {
   genParamPresets: [],
   applyGenPreset: mock(() => {}),
   modelOptions: [],
+  modelQuery: '',
   isFetchingModels: false,
   fetchModelsError: undefined,
   canFetchModels: false,
@@ -315,6 +317,16 @@ describe('CapabilityViewModel', () => {
     expect(vm.activeTab).toBe('image');
     vm.setActiveTab('voice');
     expect(vm.activeTab).toBe('voice');
+  });
+
+  test('exposes active capability and setup labels', () => {
+    const vm = createVm();
+    expect(vm.activeCapabilityLabel).toBe('Text');
+    expect(vm.capabilitySetupLabel).toBe('Connect a Text Provider');
+
+    vm.setActiveTab('voice');
+    expect(vm.activeCapabilityLabel).toBe('Voice');
+    expect(vm.capabilitySetupLabel).toBe('Set up Voice');
   });
 
   test('has three tabs: text, image, voice', () => {

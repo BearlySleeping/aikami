@@ -29,6 +29,8 @@ export type ModelFetchConfig = {
   auth: ProviderEndpoint['auth'];
   /** Extra headers required by the provider. */
   extraHeaders?: Record<string, string>;
+  /** Additional HTTPS origins approved to receive credentials after a redirect. */
+  approvedOrigins?: readonly string[];
   /**
    * Parses the raw JSON response body into an array of { id, name }.
    * The parser receives the response body (unknown) and must return
@@ -42,6 +44,63 @@ export type ModelFetchConfig = {
   chatTestUrl?: string;
   /** Whether this provider uses OpenAI-compatible chat completions for model testing. */
   chatTestOpenAiCompat?: boolean;
+};
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_MODEL_FETCH_REDIRECTS = 5;
+
+const isAllowedCredentialUrl = (options: {
+  url: URL;
+  hasCredential: boolean;
+  approvedOrigins: ReadonlySet<string>;
+}): boolean => {
+  const { url, hasCredential, approvedOrigins } = options;
+  if (url.username || url.password) {
+    return false;
+  }
+  if (!hasCredential) {
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  }
+  return url.protocol === 'https:' && approvedOrigins.has(url.origin);
+};
+
+/**
+ * Fetches an endpoint without allowing credentials to cross an unencrypted or
+ * unapproved redirect hop.
+ */
+export const fetchWithCredentialPolicy = async (options: {
+  url: string | URL;
+  init: RequestInit;
+  hasCredential: boolean;
+  approvedOrigins?: readonly string[];
+}): Promise<Response | undefined> => {
+  const { init, hasCredential } = options;
+  let initialUrl: URL;
+  try {
+    initialUrl = new URL(options.url);
+  } catch {
+    return undefined;
+  }
+
+  const approvedOrigins = new Set([initialUrl.origin, ...(options.approvedOrigins ?? [])]);
+  let currentUrl = initialUrl;
+  for (let redirectCount = 0; redirectCount <= MAX_MODEL_FETCH_REDIRECTS; redirectCount++) {
+    if (!isAllowedCredentialUrl({ url: currentUrl, hasCredential, approvedOrigins })) {
+      return undefined;
+    }
+
+    const response = await fetch(currentUrl, { ...init, redirect: 'manual' });
+    if (!REDIRECT_STATUSES.has(response.status)) {
+      return response;
+    }
+
+    const location = response.headers.get('location');
+    if (!location || redirectCount === MAX_MODEL_FETCH_REDIRECTS) {
+      return undefined;
+    }
+    currentUrl = new URL(location, currentUrl);
+  }
+  return undefined;
 };
 
 // ---------------------------------------------------------------------------
@@ -200,17 +259,23 @@ export const fetchModelsFromProvider = async (options: {
     url = url.replace('{{key}}', encodeURIComponent(apiKey));
   }
 
+  const hasCredential = Boolean(apiKey);
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
-      headers,
-      method: 'GET',
-      signal: controller.signal,
+    const response = await fetchWithCredentialPolicy({
+      url,
+      hasCredential,
+      approvedOrigins: config.approvedOrigins,
+      init: {
+        headers,
+        method: 'GET',
+        signal: controller.signal,
+      },
     });
-
-    if (!response.ok) {
+    if (!response?.ok) {
       return [];
     }
 

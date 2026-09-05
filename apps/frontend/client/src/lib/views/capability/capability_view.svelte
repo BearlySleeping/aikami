@@ -13,16 +13,6 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-const activeLabel = $derived(viewModel.tabs.find((t) => t.id === viewModel.activeTab)?.label ?? '');
-
-const openSetup = (): void => {
-  if (viewModel.activeTab === 'voice') {
-    viewModel.aiSettingsViewModel.openVoiceSetup();
-  } else {
-    viewModel.aiSettingsViewModel.openAddProvider(viewModel.activeTab);
-  }
-};
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -96,17 +86,25 @@ const openSetup = (): void => {
                   </div>
                 </div>
               {/each}
-              <button type="button" class="btn btn-ghost btn-xs w-full" onclick={openSetup}>
-                + Add another {activeLabel} provider
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs w-full"
+                onclick={() => viewModel.aiSettingsViewModel.openCapabilitySetup(viewModel.activeTab)}
+              >
+                + Add another {viewModel.activeCapabilityLabel} provider
               </button>
             </div>
           {:else}
             <div class="rounded-lg border border-dashed border-base-300 py-8 text-center">
               <p class="mb-3 text-sm text-base-content/60">
-                No {activeLabel} provider connected yet.
+                No {viewModel.activeCapabilityLabel} provider connected yet.
               </p>
-              <button type="button" class="btn btn-primary btn-sm" onclick={openSetup}>
-                {viewModel.activeTab === 'voice' ? 'Set up Voice' : `Connect a ${activeLabel} Provider`}
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                onclick={() => viewModel.aiSettingsViewModel.openCapabilitySetup(viewModel.activeTab)}
+              >
+                {viewModel.capabilitySetupLabel}
               </button>
             </div>
           {/if}

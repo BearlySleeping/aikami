@@ -331,10 +331,12 @@ describe('ChatStorage (local SQLite)', () => {
     expect(chat.id).toBeTruthy();
   });
 
-  test('listChats returns all chats sorted by updated_at desc', async () => {
+  test('listChats returns only chats in the requested account scope', async () => {
     await storage.getOrCreateChat({ uid: 'u1', npcId: 'n1', npcName: 'One' });
     await storage.getOrCreateChat({ uid: 'u1', npcId: 'n2', npcName: 'Two' });
-    const chats = await storage.listChats();
+    await storage.getOrCreateChat({ uid: 'u2', npcId: 'n3', npcName: 'Other account' });
+    const chats = await storage.listChats('u1');
     expect(chats).toHaveLength(2);
+    expect(chats.every((chat) => chat.uid === 'u1')).toBe(true);
   });
 });

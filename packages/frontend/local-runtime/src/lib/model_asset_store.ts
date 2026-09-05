@@ -10,6 +10,7 @@
 
 import type { LocalModelAsset, LocalModelBundle } from '@aikami/constants';
 import type { LocalModelState } from '@aikami/types';
+import { logger } from '$logger';
 
 // ---------------------------------------------------------------------------
 // Transport interface
@@ -305,7 +306,11 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
   private _setState(bundleId: string, state: LocalModelState): void {
     this._states[bundleId] = state;
     for (const listener of this._listeners.get(bundleId) ?? []) {
-      listener(state);
+      try {
+        listener(state);
+      } catch (error) {
+        logger.error('ModelAssetStore:subscriber-failed', { bundleId, error });
+      }
     }
   }
 

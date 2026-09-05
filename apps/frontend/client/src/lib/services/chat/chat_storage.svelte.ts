@@ -75,8 +75,8 @@ export type ChatStorageInterface = BaseFrontendClassInterface & {
     backgroundImageUrl?: string;
   }): Promise<void>;
 
-  /** Lists all chats for the current user (export path). */
-  listChats(): Promise<ChatData[]>;
+  /** Lists all chats in an explicit user or guest scope (export path). */
+  listChats(uid: string): Promise<ChatData[]>;
 };
 
 // ---------------------------------------------------------------------------
@@ -286,11 +286,11 @@ class ChatStorage extends BaseFrontendClass<ChatStorageOptions> implements ChatS
   }
 
   /** @inheritdoc */
-  async listChats(): Promise<ChatData[]> {
+  async listChats(uid: string): Promise<ChatData[]> {
     const db = await getLocalDatabase();
     const result = await db.query({
-      sql: 'SELECT * FROM chats ORDER BY updated_at DESC',
-      args: [],
+      sql: 'SELECT * FROM chats WHERE uid = ? ORDER BY updated_at DESC',
+      args: [uid],
     });
     const chats: ChatData[] = [];
     for (const row of result.rows) {
