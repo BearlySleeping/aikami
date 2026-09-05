@@ -109,12 +109,25 @@ tasks:
       cache: false
       runInCI: false
 
+  # C-475 AC-5: agent guidance drift checks — manifest coverage, reference
+  # resolution, canonical example structure, and generator reproducibility.
+  # Runs in moon ci. No network, AI, or service dependencies.
+  validate-agent-guidance:
+    command: 'bun run src/lib/ops/validate_agent_guidance.ts'
+    inputs:
+      - 'src/lib/ops/validate_agent_guidance.ts'
+      - '/.pi/guidance/**/*'
+    options:
+      cache: false
+      runInCI: true
+
   # Extends the inherited validate (lint + format + typecheck from
   # .moon/tasks/all.yml) with the structural guards. Moon appends these deps
   # to the inherited ones, so `moon run :validate` now covers guards too.
   validate:
     deps:
       - '~:guard'
+      - '~:validate-agent-guidance'
     options:
       cache: false
       runInCI: true
