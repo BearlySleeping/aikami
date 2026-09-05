@@ -3,12 +3,13 @@ id: C-471
 title: "Own service processes and verify the correct application is ready"
 source: direct
 contract_type: full
-status: implemented
+status: approved
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/252"
+  pr_number: 252
 created_at: "2026-09-04T00:00:00Z"
 ---
 
@@ -23,7 +24,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — restart can terminate unrelated/shared processes and readiness can test the wrong checkout |
 | **Dependencies** | C-468, C-470; instruction-repair PR 02; serialize shared orchestration edits |
-| **Status** | implemented |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — shared service ownership and start/stop semantics |
 | **Contract version** | 2.0.0 |
