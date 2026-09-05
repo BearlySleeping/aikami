@@ -3,7 +3,7 @@ id: C-470
 title: "Fence pipeline ownership, contract allocation and stage results"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — concurrent owners can corrupt a live run |
 | **Dependencies** | C-468, C-469; instruction-repair PR 02; merge in sequence to avoid overlapping controller edits |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — lock/resume compatibility and recovery |
 | **Contract version** | 2.0.0 |
