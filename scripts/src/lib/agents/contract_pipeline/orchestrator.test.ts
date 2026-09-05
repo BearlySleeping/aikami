@@ -291,7 +291,7 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
       contractPath: 'docs/contracts/C-999.md',
       reviewDecisionPath: '/tmp/decision.json',
     });
-    expect(reviewResult.ok).toBe(true);
+    expect(reviewResult.taskDelivered).toBe(true);
     expect(adapter.reviewStarted).toBe(true);
     expect(adapter.reviewPrompt).toBe('Review this PR');
     expect(adapter.reviewBlocked).toBe(false);

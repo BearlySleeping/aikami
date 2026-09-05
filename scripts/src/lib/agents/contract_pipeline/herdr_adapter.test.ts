@@ -44,7 +44,8 @@ describe('buildWorkspaceLabel', () => {
 describe('ContractHerdrAdapterInterface structural contract', () => {
   it('FakeHerdrAdapter satisfies the interface structurally', () => {
     // TypeScript structural typing: if this compiles, the interface is satisfied.
-    const adapter: import('./types.ts').ContractHerdrAdapterInterface = new FakeHerdrAdapter();
+    const adapter: import('./herdr_adapter.ts').ContractHerdrAdapterInterface =
+      new FakeHerdrAdapter();
     expect(adapter).toBeDefined();
     expect(typeof adapter.initialize).toBe('function');
     expect(typeof adapter.getWorkspaceId).toBe('function');
@@ -195,7 +196,7 @@ describe('transport capability: review interaction', () => {
       contractPath: 'docs/contracts/C-472.md',
       reviewDecisionPath: '/tmp/decision.json',
     });
-    expect(result.ok).toBe(true);
+    expect(result.taskDelivered).toBe(true);
     expect(adapter.reviewStarted).toBe(true);
     expect(adapter.reviewPrompt).toContain('C-472');
   });

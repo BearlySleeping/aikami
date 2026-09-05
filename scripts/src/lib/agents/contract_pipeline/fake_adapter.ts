@@ -4,7 +4,8 @@
 // Implements ContractHerdrAdapterInterface with controllable state —
 // no live Herdr, no filesystem, no real Git operations.
 
-import type { ContractHerdrAdapterInterface, WorkerLaunchRequest } from './types.ts';
+import type { ContractHerdrAdapterInterface } from './herdr_adapter.ts';
+import type { WorkerLaunchRequest } from './types.ts';
 
 /** Controllable agent status for test scenarios. */
 export type FakeAgentState =
@@ -17,7 +18,7 @@ export type FakeAgentState =
 /** Simulated review start outcome. */
 export type FakeReviewOutcome = {
   paneId: string;
-  startResult: { ok: boolean; paneId: string };
+  startResult: { ok: boolean; paneId: string; taskDelivered: boolean };
 };
 
 /**
@@ -162,16 +163,17 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
     yolo?: boolean;
     blockedReview?: boolean;
     useWorktreeCwd?: boolean;
-  }): Promise<{ ok: boolean; paneId: string }> {
+  }): Promise<{ paneId: string; taskDelivered: boolean }> {
     this._reviewStarted = true;
     this._reviewPrompt = options.prompt;
     this._reviewBlocked = !!options.blockedReview;
     const paneId = 'fake-review-pane';
+    const taskDelivered = true;
     this.lastReviewStart = {
       paneId,
-      startResult: { ok: true, paneId },
+      startResult: { ok: true, paneId, taskDelivered },
     };
-    return this.lastReviewStart.startResult;
+    return { paneId, taskDelivered };
   }
 
   async sendReviewMessage(options: { paneId: string; message: string }): Promise<boolean> {
