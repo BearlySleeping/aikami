@@ -8,7 +8,6 @@
 // verifies the adapter interface contract through the FakeHerdrAdapter.
 
 import { describe, expect, it } from 'bun:test';
-import { join } from 'node:path';
 import { FakeHerdrAdapter } from './fake_adapter.ts';
 import { buildWorkspaceLabel, ghTokenFilePath } from './herdr_adapter.ts';
 
@@ -123,14 +122,24 @@ describe('transport capability: worker lifecycle', () => {
   it('tracks multiple worker launches with sequential IDs', async () => {
     const adapter = new FakeHerdrAdapter();
     await adapter.launchWorker({
-      runId: 'test', resultPath: '/tmp/r1.json', delivery: 'direct_prompt',
-      prompt: 'First', contractPath: 'docs/contracts/C-999.md',
-      role: 'implementer', stage: 'implement', attempt: 1,
+      runId: 'test',
+      resultPath: '/tmp/r1.json',
+      delivery: 'direct_prompt',
+      prompt: 'First',
+      contractPath: 'docs/contracts/C-999.md',
+      role: 'implementer',
+      stage: 'implement',
+      attempt: 1,
     });
     await adapter.launchWorker({
-      runId: 'test', resultPath: '/tmp/r2.json', delivery: 'direct_prompt',
-      prompt: 'Second', contractPath: 'docs/contracts/C-999.md',
-      role: 'verifier', stage: 'verify', attempt: 1,
+      runId: 'test',
+      resultPath: '/tmp/r2.json',
+      delivery: 'direct_prompt',
+      prompt: 'Second',
+      contractPath: 'docs/contracts/C-999.md',
+      role: 'verifier',
+      stage: 'verify',
+      attempt: 1,
     });
     expect(adapter.launchedWorkers).toHaveLength(2);
     expect(adapter.workerPaneIds).toEqual(['fake-worker-1', 'fake-worker-2']);

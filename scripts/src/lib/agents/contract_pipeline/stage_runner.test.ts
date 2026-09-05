@@ -283,7 +283,6 @@ describe('runStage guard-halt settle window', () => {
   });
 });
 
-
 // ── C-472 AC-2: Recovery scenarios ──────────────────────────
 
 describe('runStage recovery: process exit without result', () => {
@@ -307,7 +306,6 @@ describe('runStage recovery: process exit without result', () => {
     expect(outcome.result.summary).toContain('timeout');
   });
 });
-
 
 describe('runStage recovery: generation fencing prevents duplicate adoption', () => {
   it('rejects a stale result from a predecessor generation', async () => {

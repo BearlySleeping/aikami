@@ -4,25 +4,12 @@
 // Tests the orchestrator's pure functions and validates that the
 // adapter injection seam works for deterministic testing.
 
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FakeHerdrAdapter } from './fake_adapter.ts';
-import {
-  prePushGateForRevision,
-  ReviewAbandonedError,
-  runContractPipeline,
-  verifierFeedback,
-} from './orchestrator.ts';
-import { MAX_VERIFY_LOOPS } from './state_machine.ts';
+import { prePushGateForRevision, ReviewAbandonedError, verifierFeedback } from './orchestrator.ts';
 import type { ContractStageResult, RunManifest } from './types.ts';
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -73,8 +60,8 @@ describe('prePushGateForRevision', () => {
     });
     const result = prePushGateForRevision({ manifest, revision: 'abc123' });
     expect(result).toBeDefined();
-    expect(result!.ok).toBe(true);
-    expect(result!.output).toBe('All checks passed');
+    expect(result?.ok).toBe(true);
+    expect(result?.output).toBe('All checks passed');
   });
 
   it('returns undefined when no validation record exists', () => {
@@ -120,8 +107,8 @@ describe('prePushGateForRevision', () => {
     });
     const result = prePushGateForRevision({ manifest, revision: 'abc123' });
     expect(result).toBeDefined();
-    expect(result!.ok).toBe(false);
-    expect(result!.output).toBe('TypeScript errors found');
+    expect(result?.ok).toBe(false);
+    expect(result?.output).toBe('TypeScript errors found');
   });
 });
 
@@ -241,7 +228,7 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
     let factoryCalled = false;
     let adapterCreated: FakeHerdrAdapter | undefined;
 
-    const factory = (opts: { repoRoot: string; runId: string; contractId: string }) => {
+    const factory = (_opts: { repoRoot: string; runId: string; contractId: string }) => {
       factoryCalled = true;
       adapterCreated = new FakeHerdrAdapter();
       return adapterCreated;

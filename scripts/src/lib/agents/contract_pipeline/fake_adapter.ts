@@ -4,10 +4,7 @@
 // Implements ContractHerdrAdapterInterface with controllable state —
 // no live Herdr, no filesystem, no real Git operations.
 
-import type {
-  ContractHerdrAdapterInterface,
-  WorkerLaunchRequest,
-} from './types.ts';
+import type { ContractHerdrAdapterInterface, WorkerLaunchRequest } from './types.ts';
 
 /** Controllable agent status for test scenarios. */
 export type FakeAgentState =
