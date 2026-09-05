@@ -545,18 +545,29 @@ describe('C-471 — identity probe (AC-2)', () => {
     expect(['booting', 'stopped']).toContain(result.state);
   });
 
-  it('assessServiceReadiness returns healthy without probe for legacy services', async () => {
+  it('assessServiceReadiness returns healthy without probe for run-owned services', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
     const def: ServiceDef = {
       ...SERVICE_DEFS.client,
+      readyCheck: 'tcp',
       probe: undefined,
     };
     const identity = buildServiceIdentity('client');
-    const result = await assessServiceReadiness('fake-pane', def, identity, 9999);
-    expect(result.state).not.toBe('unavailable');
-    expect(result.observedIdentity).toBeUndefined();
+    try {
+      const result = await assessServiceReadiness('fake-pane', def, identity, port);
+      expect(result.state).toBe('healthy');
+      expect(result.observedIdentity).toBeUndefined();
+    } finally {
+      server.close();
+    }
   });
 
   it('assessServiceReadiness returns unavailable when probe rejects identity', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
     const rejectingProbe: ServiceDef['probe'] = async () => ({
       ready: false,
       reason: 'Expected instance C-471, found C-470',
@@ -565,12 +576,54 @@ describe('C-471 — identity probe (AC-2)', () => {
 
     const def: ServiceDef = {
       ...SERVICE_DEFS.client,
+      readyCheck: 'tcp',
       probe: rejectingProbe,
     };
 
     const identity = buildServiceIdentity('client');
-    const result = await assessServiceReadiness('fake-pane', def, identity, 9999);
-    expect(result.state).not.toBe('unavailable');
+    try {
+      const result = await assessServiceReadiness('fake-pane', def, identity, port);
+      expect(result.state).toBe('unavailable');
+      expect(result.observedIdentity).toEqual({ runId: 'C-470' });
+    } finally {
+      server.close();
+    }
+  });
+
+  it('assessServiceReadiness rejects missing or mismatched reusable-service evidence', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
+    const identity = { service: 'voice', checkout: '/expected', runId: 'C-471' } as const;
+    const observedIdentities = [
+      undefined,
+      { service: 'text', checkout: '/expected', runId: 'C-471' } as const,
+      { service: 'voice', checkout: '/other', runId: 'C-471' } as const,
+      { service: 'voice', checkout: '/expected', runId: 'C-470' } as const,
+    ];
+
+    try {
+      const missingProbeResult = await assessServiceReadiness(
+        'fake-pane',
+        { ...SERVICE_DEFS.voice, readyCheck: 'tcp', probe: undefined },
+        identity,
+        port,
+      );
+      expect(missingProbeResult.state).toBe('unavailable');
+
+      for (const observedIdentity of observedIdentities) {
+        const def: ServiceDef = {
+          ...SERVICE_DEFS.voice,
+          readyCheck: 'tcp',
+          probe: async () => ({ ready: true, observedIdentity }),
+        };
+        const result = await assessServiceReadiness('fake-pane', def, identity, port);
+        expect(result.state).toBe('unavailable');
+        expect(result.observedIdentity).toEqual(observedIdentity);
+      }
+    } finally {
+      server.close();
+    }
   });
 
   it('buildServiceIdentity carries the current checkout path', () => {

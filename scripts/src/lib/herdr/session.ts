@@ -125,6 +125,7 @@ export type ProbeResult = {
   reason?: string;
 };
 
+/** Defines how Herdr starts, identifies, and checks one managed service. */
 export type ServiceDef = {
   name: string;
   command: (mode: AikamiMode) => string;
@@ -1327,6 +1328,20 @@ export type ReadinessResult = {
   observedIdentity?: Partial<ServiceIdentity>;
 };
 
+const identityMismatchReason = (
+  expected: ServiceIdentity,
+  observed: Partial<ServiceIdentity> | undefined,
+): string | undefined => {
+  const fields = ['service', 'checkout', 'runId'] as const;
+  for (const field of fields) {
+    const expectedValue = expected[field];
+    if (expectedValue !== undefined && observed?.[field] !== expectedValue) {
+      return `Probe evidence is missing or mismatched for ${field}`;
+    }
+  }
+  return undefined;
+};
+
 /**
  * Assess a service pane's readiness WITH identity verification (C-471 AC-2).
  *
@@ -1349,19 +1364,49 @@ export const assessServiceReadiness = async (
     return { state: paneState };
   }
 
-  // No probe defined → pane-level health is sufficient (services without
-  // identity probes are treated as trusted or legacy).
+  // Shared/external services may be reused across runs, so pane liveness
+  // alone cannot establish that the intended instance answered.
   if (!serviceDef.probe) {
+    if (serviceDef.scope !== 'run') {
+      return {
+        state: 'unavailable',
+        reason: 'Reusable service has no instance-bound identity probe',
+      };
+    }
     return { state: 'healthy' };
   }
 
   // Run the instance-bound probe.
-  const probeResult = await serviceDef.probe(expectedIdentity);
+  let probeResult: ProbeResult;
+  try {
+    probeResult = await serviceDef.probe(expectedIdentity);
+  } catch (error) {
+    return {
+      state: 'unavailable',
+      reason: `Instance-bound probe failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 
-  if (!probeResult.ready) {
+  if (!probeResult || typeof probeResult !== 'object') {
+    return {
+      state: 'unavailable',
+      reason: 'Instance-bound probe returned malformed evidence',
+    };
+  }
+
+  if (probeResult.ready !== true) {
     return {
       state: 'unavailable',
       reason: probeResult.reason ?? 'Instance-bound probe rejected the running service',
+      observedIdentity: probeResult.observedIdentity,
+    };
+  }
+
+  const mismatchReason = identityMismatchReason(expectedIdentity, probeResult.observedIdentity);
+  if (mismatchReason) {
+    return {
+      state: 'unavailable',
+      reason: mismatchReason,
       observedIdentity: probeResult.observedIdentity,
     };
   }
@@ -1690,6 +1735,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         continue;
       }
       const def = SERVICE_DEFS[service];
+      const port = resolveReadyPort(service, mode, offset);
       const identity = buildServiceIdentity(service);
       const readResult = await assessServiceReadiness(pane.pane_id, def, identity, port);
       if (readResult.state === 'crashed') {
@@ -1955,6 +2001,7 @@ export const listServices = async (mode?: AikamiMode): Promise<SessionInfo[]> =>
             name: 'pi',
             running: piRunning,
             portOpen: piRunning,
+            scope: SERVICE_DEFS['preview-client'].scope,
             state: piRunning ? 'healthy' : 'stopped',
           },
         ],
@@ -2093,25 +2140,29 @@ export const waitForReady = async (
       const svc = SERVICE_DEFS[serviceKey];
       const port = resolveReadyPort(serviceKey, mode, offset);
       const deadline = Date.now() + timeoutMs;
+      const tabId = await findTab(wsId, svc.name);
+      const panes = await getWorkspacePanes(wsId);
+      const pane = tabId ? panes.find((candidate) => candidate.tab_id === tabId) : undefined;
+      if (!pane) {
+        console.error(`  ✗ ${svc.name} pane not found`);
+        failed.push(svc.name);
+        return;
+      }
+      const identity = buildServiceIdentity(serviceKey);
 
       // Services with no HTTP port (tauri, preview-*) can't be probed via
-      // isPortReady — verify the pane itself is still running instead of
-      // marking them ready unconditionally. When the wrapped command exits
-      // (e.g. run_tauri.ts quits because no binary exists), the pane is left
-      // with only shells and assessServicePane reports 'crashed'.
+      // isPortReady. assessServiceReadiness combines pane health with the
+      // same identity policy used for port-based services.
       if (port === undefined) {
-        const tabId = await findTab(wsId, svc.name);
-        const panes = await getWorkspacePanes(wsId);
-        const pane = tabId ? panes.find((p) => p.tab_id === tabId) : undefined;
-        if (!pane) {
-          console.error(`  ✗ ${svc.name} pane not found`);
-          failed.push(svc.name);
-          return;
-        }
         while (Date.now() < deadline) {
-          const state = await assessServicePane(pane.pane_id);
-          if (state !== 'crashed') {
+          const result = await assessServiceReadiness(pane.pane_id, svc, identity);
+          if (result.state === 'healthy') {
             console.log(`  ✓ ${svc.name} running (no port check)`);
+            return;
+          }
+          if (result.state === 'unavailable') {
+            console.error(`  ✗ ${svc.name} unavailable: ${result.reason ?? 'identity mismatch'}`);
+            failed.push(svc.name);
             return;
           }
           await new Promise((r) => setTimeout(r, 1000));
@@ -2122,8 +2173,14 @@ export const waitForReady = async (
       }
 
       while (Date.now() < deadline) {
-        if (await isPortReady(port, svc.readyCheck)) {
+        const result = await assessServiceReadiness(pane.pane_id, svc, identity, port);
+        if (result.state === 'healthy') {
           console.log(`  ✓ ${svc.name} ready on :${port}`);
+          return;
+        }
+        if (result.state === 'unavailable') {
+          console.error(`  ✗ ${svc.name} unavailable: ${result.reason ?? 'identity mismatch'}`);
+          failed.push(svc.name);
           return;
         }
         await new Promise((r) => setTimeout(r, 1000));
