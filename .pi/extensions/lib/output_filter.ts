@@ -1,4 +1,4 @@
-// .pi/extensions/lib/output-filter.ts
+// .pi/extensions/lib/output_filter.ts
 //
 // Shared output filtering utilities for pi extensions.
 // Reduces tool output size by:

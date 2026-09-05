@@ -1,4 +1,4 @@
-// .pi/extensions/lib/output-filter.test.ts
+// .pi/extensions/lib/output_filter.test.ts
 //
 // Tests for output_filter — covers DiscoveryOutcome semantics (AC-1),
 // parsing, filtering, and truncation.
