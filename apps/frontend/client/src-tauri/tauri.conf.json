@@ -25,9 +25,7 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": false,
-    "externalBin": [
-      "binaries/llama-server"
-    ],
+    "externalBin": ["binaries/llama-server"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

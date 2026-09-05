@@ -29,6 +29,7 @@ import {
 } from '../herdr/session.ts';
 import { parseBacklog } from '../ops/parse_backlog.ts';
 import { resolveContract } from './contract_pipeline/contract_resolver.ts';
+import { readContractStatus } from './contract_pipeline/contract_status.ts';
 import { readManifest } from './contract_pipeline/manifest_store.ts';
 import { runContractPipeline } from './contract_pipeline/orchestrator.ts';
 
@@ -1070,6 +1071,16 @@ const main = async (): Promise<void> => {
         console.error('   Create it first with `bun run contract` (interactive writer)');
         console.error('   or `bun run contract --source issue <#|url>` (freeze from GitHub).');
         process.exit(1);
+      }
+      // A draft contract fails the implementer's precondition check
+      // immediately (Phase 0 step 9), so default to running the critique
+      // stage first rather than burning an implement attempt on a run
+      // that's guaranteed to block.
+      if (!cli.critique && readContractStatus(resolved.path) === 'draft') {
+        console.log(
+          'ℹ️  Contract is still `draft` — defaulting to --critique before implementation.',
+        );
+        cli.critique = true;
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
