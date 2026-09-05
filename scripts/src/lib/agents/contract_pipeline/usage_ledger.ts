@@ -199,7 +199,7 @@ export const aggregateUsage = (records: UsageRecord[]): AggregatedUsage => {
   let totalToolErrors = 0;
   let totalRetries = 0;
   let unknownAttempts = 0;
-  const failedAttempts = 0;
+  let failedAttempts = 0;
   let externalCoverageComplete = true;
 
   for (const record of deduplicated) {
@@ -226,6 +226,7 @@ export const aggregateUsage = (records: UsageRecord[]): AggregatedUsage => {
     }
 
     if (!record.complete) {
+      failedAttempts++;
       unknownAttempts++;
     }
 
