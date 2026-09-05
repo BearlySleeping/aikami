@@ -13,10 +13,10 @@
 //
 // Exits non-zero on any violation.
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { resolve, relative, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { relative, resolve, sep } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 
@@ -267,22 +267,10 @@ const KNOWN_TOOLS = new Set([
 ]);
 
 // Known valid contract_stage action values
-const KNOWN_STAGE_ACTIONS = new Set([
-  'complete',
-  'review_decision',
-  'reconcile',
-  'log_failure',
-]);
+const KNOWN_STAGE_ACTIONS = new Set(['complete', 'review_decision', 'reconcile', 'log_failure']);
 
 // Known valid herdr_session action values
-const KNOWN_HERDR_ACTIONS = new Set([
-  'start',
-  'stop',
-  'restart',
-  'status',
-  'read',
-  'list',
-]);
+const KNOWN_HERDR_ACTIONS = new Set(['start', 'stop', 'restart', 'status', 'read', 'list']);
 
 // Known valid service names
 const KNOWN_SERVICES = new Set([
@@ -399,9 +387,10 @@ const checkReferences = (manifest: Manifest): CheckResult => {
   return {
     label: 'Reference resolution (AC-2)',
     passed: errors.length === 0,
-    details: errors.length > 0
-      ? errors
-      : ['All tool/action/service references resolve to known registries'],
+    details:
+      errors.length > 0
+        ? errors
+        : ['All tool/action/service references resolve to known registries'],
   };
 };
 
@@ -466,10 +455,8 @@ const checkExamples = (): CheckResult => {
       }
     }
 
-    if (example === 'data_boundary_canonical.ts') {
-      if (!content.includes('| undefined')) {
-        errors.push(`${example}: missing undefined return type for parse function`);
-      }
+    if (example === 'data_boundary_canonical.ts' && !content.includes('| undefined')) {
+      errors.push(`${example}: missing undefined return type for parse function`);
     }
   }
 
@@ -488,9 +475,10 @@ const checkExamples = (): CheckResult => {
   return {
     label: 'Canonical examples (AC-1)',
     passed: errors.length === 0,
-    details: errors.length > 0
-      ? errors
-      : ['All positive examples present and structured correctly; mutation fixture present'],
+    details:
+      errors.length > 0
+        ? errors
+        : ['All positive examples present and structured correctly; mutation fixture present'],
   };
 };
 
