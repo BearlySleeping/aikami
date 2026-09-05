@@ -3,7 +3,7 @@ id: C-469
 title: "Canonical fail-closed validation and revision-bound promotion"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — a failed query currently becomes successful validation |
 | **Dependencies** | C-468; instruction-repair PR 02 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — canonical validation and publication semantics |
 | **Contract version** | 2.0.0 |
@@ -127,7 +127,7 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). One outcome: rea
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit | proposed `.pi/extensions/lib/moon_integration.test.ts` | validation tool | pending implementation |
+| AC-1 | Unit | proposed `.pi/extensions/moon_integration.test.ts` | validation tool | pending implementation |
 | AC-2 | Integration | proposed `scripts/src/lib/agents/contract_pipeline/validation_policy.test.ts` | task planning | pending implementation |
 | AC-3 | Unit | `orchestrator_feedback.test.ts` and new artifact fixtures | pipeline review | pending implementation |
 | AC-4 | Integration | `review_gate.test.ts`, `pre_push_gate.test.ts` | ready/merge | pending implementation |
