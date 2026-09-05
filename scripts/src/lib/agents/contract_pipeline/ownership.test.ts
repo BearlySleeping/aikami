@@ -399,6 +399,9 @@ describe('AC-4: Draft IDs are allocated exclusively', () => {
 
     const id1 = reserveContractId({ contractsDir, cwd });
     expect(id1).toBe('C-1');
+    if (!id1) {
+      return;
+    }
 
     releaseReservation({ contractId: id1, cwd });
 

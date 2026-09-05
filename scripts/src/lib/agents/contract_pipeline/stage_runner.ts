@@ -155,6 +155,8 @@ export const runStage = async (options: {
   launchWorker: (request: WorkerLaunchRequest) => Promise<{ paneId: string }>;
   checkAgentWorking?: (paneId: string) => Promise<boolean>;
   nudgeWorker?: (opts: { paneId: string; message: string }) => Promise<void>;
+  /** Generation counter for result fencing — passed through to WorkerLaunchRequest. */
+  generation?: number;
 }): Promise<StageRunOutcome> => {
   const role = roleForStage(options.stage);
   const resultPath = join(
