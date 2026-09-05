@@ -3,12 +3,13 @@ id: C-474
 title: "Load lean role contexts and resolve model configuration explicitly"
 source: direct
 contract_type: thin
-status: approved
+status: draft
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/255"
+  pr_number: 255
 created_at: "2026-09-04T22:21:38Z"
 ---
 
@@ -22,8 +23,8 @@ created_at: "2026-09-04T22:21:38Z"
 | **Target** | Pi resource/tool selection, pipeline role prompts and `models.ts` |
 | **Type** | thin |
 | **Priority** | P1 — irrelevant always-on context and implicit model assumptions waste turns |
-| **Dependencies** | C-473; instruction-repair PR 02 (GitHub PR, not a contract — ensure the instruction-repair PR is merged before implementing this contract) |
-| **Status** | approved |
+| **Dependencies** | C-473; instruction-repair PR 02 |
+| **Status** | draft |
 | **Promotion** | — |
 | **Docs Impact** | internal — role profiles, resource discovery and effective model settings |
 | **Contract version** | 2.0.0 |
@@ -32,9 +33,9 @@ created_at: "2026-09-04T22:21:38Z"
 ## Problem & Baseline Evidence
 
 - **Current behavior:** `toolsForRole` returns undefined, loading all tools; both model tiers named pro/flash resolve to Flash. Local measurement counts only project-registered tools, not the assembled global/MCP/built-in/skill surface. Twenty-six Pixi descriptions add about 3,755 approximate tokens before wrappers, even for non-engine work.
-- **Reproduction:** compare writer/implementer/review resource registration and prompt construction. Inspect `.pi/settings.json`, `scripts/src/lib/agents/contract_pipeline/models.ts`, `scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts`, `scripts/src/lib/agents/contract_pipeline/prompt_loader.ts`, `.pi/extensions/lib/gating.ts` and `.pi/scripts/measure_tool_surface.ts`.
-- **Existing implementation to reuse:** `scripts/src/lib/agents/contract_pipeline/models.ts` (per-role model tier and thinking resolution), namespaced tools, TypeBox dispatch validation, skill routers, Pi's supported resource filters/active-tool APIs, C-472 role boundaries and C-473 configuration telemetry.
-- **Known gaps:** broad triggers and duplicate global/project instructions obscure the role task; configured and effective provider thinking settings may differ. The existing `models.ts` already maps both `pro` and `flash` tiers to the same model slug (`deepinfra/deepseek-ai/DeepSeek-V4-Flash`) — the resolution must surface this equivalence explicitly rather than silently accepting it.
+- **Reproduction:** compare writer/implementer/review resource registration and prompt construction. Inspect `.pi/settings.json`, `models.ts`, `herdr_adapter.ts`, `prompt_loader.ts`, `lib/gating.ts` and `measure_tool_surface.ts`.
+- **Existing implementation to reuse:** namespaced tools, TypeBox dispatch validation, skill routers, Pi's supported resource filters/active-tool APIs, C-472 role boundaries and C-473 configuration telemetry.
+- **Known gaps:** broad triggers and duplicate global/project instructions obscure the role task; configured and effective provider thinking settings may differ.
 - **Baseline tests:** C-468 registration/loader suites, C-472 scenario tests, C-473 usage tests.
 
 ## User Outcome
@@ -51,8 +52,8 @@ Each worker sees the tools and instructions it needs, and the maintainer can see
 ### AC-1: Profiles retain required capabilities without unrelated surface
 **Given** writer, critic, implementer, verifier and review profiles,
 **When** the loader assembles a session,
-**Then** each role retains completion/recovery and its required read/edit/test capabilities; only implementer, verifier and review profiles expose publication tools (PR creation, merge, branch push). Writer and critic profiles do not. Browser/local-AI tools are selected by task needs, not universally required. An optional capability can be explicitly enabled before a new session/turn using supported Pi APIs, not an untyped catch-all shell substitute.
-**Verification**: proposed `.pi/extensions/lib/role_profiles.test.ts` checks exact tool/resource inventories plus C-472 completion/recovery scenarios for every profile. Missing required extensions fail preflight with an actionable error; no silent fallback to all tools. Baseline test fixtures from C-468 and C-473 serve as the measurement comparison point.
+**Then** each role retains completion/recovery and its required read/edit/test capabilities; only appropriate profiles expose publication tools. Browser/local-AI tools are selected by task needs, not universally required. An optional capability can be explicitly enabled before a new session/turn using supported Pi APIs, not an untyped catch-all shell substitute.
+**Verification**: proposed `.pi/extensions/lib/role_profiles.test.ts` checks exact tool/resource inventories plus C-472 completion/recovery scenarios for every profile. Missing required extensions fail preflight with an actionable error; no silent fallback to all tools.
 
 ### AC-2: Specialized skills use progressive disclosure
 **Given** a non-Pixi task and an engine task,
@@ -63,7 +64,7 @@ Each worker sees the tools and instructions it needs, and the maintainer can see
 ### AC-3: Model and thinking choices are explicit and valid
 **Given** default settings, valid per-role overrides, unsupported thinking levels and unavailable model IDs,
 **When** a worker/review session is prepared,
-**Then** it records the requested and effective provider/model/thinking settings, rejects invalid overrides before paid work, and does not silently substitute a model or mislabel Flash as a stronger pro tier. When both `pro` and `flash` tiers resolve to the same model slug (the current `models.ts` default), the resolution reports the equivalence explicitly rather than allowing silent misattribution.
+**Then** it records the requested and effective provider/model/thinking settings, rejects invalid overrides before paid work, and does not silently substitute a model or mislabel Flash as a stronger pro tier.
 **Verification**: proposed pipeline model-configuration table tests using an offline provider-catalogue fixture. Test precedence once, including resumed runs and shell-safe values. Human model names in the plan are not hardcoded as provider slugs.
 
 ### AC-4: Measurement reflects the assembled surface
