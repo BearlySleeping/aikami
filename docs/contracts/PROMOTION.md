@@ -217,8 +217,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-478 | Reproducible Agent Resources | 📝 draft | v2 | thin |
 | C-479 | Portable Contributor Onboarding | 📝 draft | v2 | full |
 | C-480 | Agent Evaluation And Routing | 📝 draft | v2 | thin |
-| C-481 | Ai Configuration Convergence | 📝 draft | v1 | full |
-| C-482 | Managed Ai Runtime Lifecycle | 📝 draft | v1 | full |
+| C-481 | Ai Configuration Convergence | 👍 approved | v1 | full |
+| C-482 | Managed Ai Runtime Lifecycle | 👍 approved | v1 | full |
 | C-483 | Guided Ai Setup | 📝 draft | v1 | thin |
 | C-484 | Capability First Settings | 📝 draft | v1 | thin |
 

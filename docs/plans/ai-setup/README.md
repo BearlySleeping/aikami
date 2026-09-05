@@ -1,6 +1,6 @@
 # AI setup and settings — execution plan
 
-Status: planning approved; new contracts are **draft**, not execution-approved.
+Status: planning approved; **C-481 and C-482 approved**. C-483/C-484 remain **draft**. Contract approval does not bypass the queue's baseline, pilot or seam-review gates.
 Created: 2026-09-05. Research baseline: `3bb9af3b` plus 25 dirty/untracked paths; recheck before work.
 This pack does not authorize commits, PR creation, merges, deployment, or paid product inference.
 
@@ -8,7 +8,7 @@ This pack does not authorize commits, PR creation, merges, deployment, or paid p
 
 1. Run **[P00: baseline](packets/00_baseline.md)** with DeepSeek V4 Flash; it is read-only.
 2. Resolve which existing local changes belong in the approved baseline. Do not stash/commit them automatically.
-3. Review the four contracts below; explicitly approve before feature implementation.
+3. Review the contracts below; each must be explicitly approved before its feature implementation. C-481's and C-482's approvals are recorded in their specifications; the other two still require approval.
 4. Dispatch **[P01: desktop gating](packets/01_desktop_gating.md)**, then **[P02: local verification](packets/02_local_verification.md)**.
 5. After those two pilot PRs land, inspect cost/retries/review quality before increasing concurrency.
 6. Follow the dependency order in [queue.md](queue.md), not contract number order alone.
