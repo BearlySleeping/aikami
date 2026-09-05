@@ -9,7 +9,7 @@
 // referenced tool or service.
 
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
@@ -70,7 +70,9 @@ describe('AC-3: Manifest coverage', () => {
     const errors: string[] = [];
 
     for (const [path, entry] of Object.entries(manifest.entries)) {
-      if (!(entry as { active: boolean }).active) continue;
+      if (!(entry as { active: boolean }).active) {
+        continue;
+      }
       const fullPath = resolve(ROOT, path);
       if (!existsSync(fullPath)) {
         errors.push(`Missing: ${path}`);

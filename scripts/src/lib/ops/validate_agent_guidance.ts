@@ -13,10 +13,9 @@
 //
 // Exits non-zero on any violation.
 
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { relative, resolve, sep } from 'node:path';
+import { relative, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 
@@ -42,24 +41,15 @@ type CheckResult = {
 
 // ── Source classes ────────────────────────────────────────────────────────
 
-const SOURCE_CLASSES: Record<string, string> = {
-  root_agent: 'Root agent instructions (AGENTS.md, .claude/CLAUDE.md)',
-  generated_context: 'Generated context (.context/)',
-  pi_guidance: 'Pi project guidance (.pi/README.md, .pi/settings.json)',
-  pi_extensions: 'Pi extensions (.pi/extensions/*.ts)',
-  pi_runners: 'Pi runners (.pi/runners/)',
-  pi_scripts: 'Pi scripts (.pi/scripts/)',
-  agent_prompts: 'Agent prompts (.pi/prompts/)',
-  pi_skills: 'Project skills (.pi/skills/<name>/SKILL.md)',
-  generated_skills: 'Generated skills (.pi/generated-skills/)',
-  agent_system_prompts: 'Agent system prompts (scripts/src/lib/agents/)',
-};
+// Source classes are embedded in discoverCandidates() — no separate registry needed.
 
 // ── Discover candidates ──────────────────────────────────────────────────
 
 const walkDir = (dir: string): string[] => {
   const out: string[] = [];
-  if (!existsSync(dir)) return out;
+  if (!existsSync(dir)) {
+    return out;
+  }
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
     if (statSync(full).isDirectory()) {
@@ -77,7 +67,9 @@ const discoverCandidates = (): Map<string, string> => {
   // Root agent
   for (const p of ['AGENTS.md', '.claude/CLAUDE.md']) {
     const full = resolve(ROOT, p);
-    if (existsSync(full)) candidates.set(p, 'root_agent');
+    if (existsSync(full)) {
+      candidates.set(p, 'root_agent');
+    }
   }
 
   // Generated context
@@ -92,14 +84,18 @@ const discoverCandidates = (): Map<string, string> => {
   // Pi guidance
   for (const p of ['.pi/README.md', '.pi/settings.json']) {
     const full = resolve(ROOT, p);
-    if (existsSync(full)) candidates.set(p, 'pi_guidance');
+    if (existsSync(full)) {
+      candidates.set(p, 'pi_guidance');
+    }
   }
 
   // Pi extensions
   const extDir = resolve(ROOT, '.pi/extensions');
   if (existsSync(extDir)) {
     for (const f of walkDir(extDir)) {
-      if (f.endsWith('.ts')) candidates.set(relative(ROOT, f), 'pi_extensions');
+      if (f.endsWith('.ts')) {
+        candidates.set(relative(ROOT, f), 'pi_extensions');
+      }
     }
   }
 
@@ -107,7 +103,9 @@ const discoverCandidates = (): Map<string, string> => {
   const runnersDir = resolve(ROOT, '.pi/runners');
   if (existsSync(runnersDir)) {
     for (const f of walkDir(runnersDir)) {
-      if (f.endsWith('.gitkeep')) continue;
+      if (f.endsWith('.gitkeep')) {
+        continue;
+      }
       candidates.set(relative(ROOT, f), 'pi_runners');
     }
   }
@@ -116,7 +114,9 @@ const discoverCandidates = (): Map<string, string> => {
   const scriptsDir = resolve(ROOT, '.pi/scripts');
   if (existsSync(scriptsDir)) {
     for (const f of walkDir(scriptsDir)) {
-      if (f.endsWith('.ts')) candidates.set(relative(ROOT, f), 'pi_scripts');
+      if (f.endsWith('.ts')) {
+        candidates.set(relative(ROOT, f), 'pi_scripts');
+      }
     }
   }
 
@@ -124,7 +124,9 @@ const discoverCandidates = (): Map<string, string> => {
   const promptsDir = resolve(ROOT, '.pi/prompts');
   if (existsSync(promptsDir)) {
     for (const f of walkDir(promptsDir)) {
-      if (f.endsWith('.md')) candidates.set(relative(ROOT, f), 'agent_prompts');
+      if (f.endsWith('.md')) {
+        candidates.set(relative(ROOT, f), 'agent_prompts');
+      }
     }
   }
 
@@ -133,7 +135,9 @@ const discoverCandidates = (): Map<string, string> => {
   if (existsSync(skillsDir)) {
     for (const skillDir of readdirSync(skillsDir)) {
       const skillPath = resolve(skillsDir, skillDir);
-      if (!statSync(skillPath).isDirectory()) continue;
+      if (!statSync(skillPath).isDirectory()) {
+        continue;
+      }
       for (const f of walkDir(skillPath)) {
         const rel = relative(ROOT, f);
         candidates.set(rel, 'pi_skills');
@@ -168,7 +172,9 @@ const discoverCandidates = (): Map<string, string> => {
 
 const loadManifest = (): Manifest | undefined => {
   const path = resolve(ROOT, '.pi/guidance/manifest.json');
-  if (!existsSync(path)) return undefined;
+  if (!existsSync(path)) {
+    return undefined;
+  }
   try {
     return JSON.parse(readFileSync(path, 'utf-8')) as Manifest;
   } catch {
@@ -184,7 +190,9 @@ const checkManifestCoverage = (manifest: Manifest): CheckResult => {
 
   // Every active manifest entry must exist on disk
   for (const [path, entry] of Object.entries(manifest.entries)) {
-    if (!entry.active) continue;
+    if (!entry.active) {
+      continue;
+    }
     const fullPath = resolve(ROOT, path);
     if (!existsSync(fullPath)) {
       errors.push(`Manifest entry exists but file is missing: ${path}`);
@@ -193,8 +201,12 @@ const checkManifestCoverage = (manifest: Manifest): CheckResult => {
 
   // Every discovered candidate must be in the manifest (unless exempted)
   for (const [path, sourceClass] of candidates) {
-    if (manifest.entries[path]) continue;
-    if (manifest.exemptions[path]) continue;
+    if (manifest.entries[path]) {
+      continue;
+    }
+    if (manifest.exemptions[path]) {
+      continue;
+    }
     errors.push(`Unlisted active file (${sourceClass}): ${path}`);
   }
 
@@ -216,55 +228,7 @@ const checkManifestCoverage = (manifest: Manifest): CheckResult => {
 // ── Check 2: Reference resolution (AC-2) ─────────────────────────────────
 
 // Known valid tool/action names derived from registries
-const KNOWN_TOOLS = new Set([
-  'contract_stage',
-  'contract_stage_complete',
-  'review_decision',
-  'moon_run_task',
-  'moon_detect_affected',
-  'validate',
-  'read',
-  'edit',
-  'write',
-  'bash',
-  'bg',
-  'browser',
-  'herdr_session',
-  'herdr',
-  'poll_until',
-  'mcp',
-  'mcpScript',
-  'ask_user',
-  'act',
-  'see',
-  'state',
-  'run',
-  'vision',
-  'ctx_execute',
-  'ctx_execute_file',
-  'ctx_index',
-  'ctx_search',
-  'ctx_fetch_and_index',
-  'ctx_batch_execute',
-  'ctx_stats',
-  'ctx_doctor',
-  'ctx_upgrade',
-  'ctx_purge',
-  'ctx_insight',
-  'gh_pr',
-  'gh_issue',
-  'gh_project',
-  'gh_workflow',
-  'gh_release',
-  'gcloud_exec',
-  'direnv',
-  'code_rabbit',
-  'ai_describe_image',
-  'ai_validate_image',
-  'todo',
-  'AskClaude',
-  'edit_lines',
-]);
+// Known valid contract_stage action values
 
 // Known valid contract_stage action values
 const KNOWN_STAGE_ACTIONS = new Set(['complete', 'review_decision', 'reconcile', 'log_failure']);
@@ -273,75 +237,23 @@ const KNOWN_STAGE_ACTIONS = new Set(['complete', 'review_decision', 'reconcile',
 const KNOWN_HERDR_ACTIONS = new Set(['start', 'stop', 'restart', 'status', 'read', 'list']);
 
 // Known valid service names
-const KNOWN_SERVICES = new Set([
-  'client',
-  'hub',
-  'image',
-  'text',
-  'voice',
-  'preview-client',
-  'preview-hub',
-  'preview-site',
-  'site',
-  'tauri',
-  'text-ollama',
-  'image-comfyui',
-  'hub-worker',
-]);
 
 // Known valid moon project tags
-const KNOWN_MOON_TAGS = new Set([
-  'scripts',
-  'ci',
-  'ops',
-  'frontend',
-  'client',
-  'shared',
-  'schemas',
-  'types',
-  'utils',
-]);
 
 // Known valid service names (from SERVICE_DEFS)
-const KNOWN_SERVICE_NAMES = new Set([
-  'authService',
-  'backupService',
-  'vendorService',
-  'audioService',
-  'gameStateService',
-  'dialogService',
-  'chatService',
-  'settingsService',
-  'providerService',
-  'connectionService',
-  'downloadService',
-  'imageService',
-  'textService',
-  'voiceService',
-  'inventoryService',
-  'questService',
-  'combatService',
-  'partyService',
-  'mapService',
-  'npcService',
-  'saveService',
-  'engineService',
-  'bridgeService',
-  'assetService',
-  'notificationService',
-  'analyticsService',
-  'featureFlagService',
-  'experimentService',
-]);
 
 const checkReferences = (manifest: Manifest): CheckResult => {
   const errors: string[] = [];
 
   // Scan active guidance files for tool/action references
   for (const [path, entry] of Object.entries(manifest.entries)) {
-    if (!entry.active) continue;
+    if (!entry.active) {
+      continue;
+    }
     const fullPath = resolve(ROOT, path);
-    if (!existsSync(fullPath)) continue;
+    if (!existsSync(fullPath)) {
+      continue;
+    }
 
     let content: string;
     try {
@@ -485,8 +397,6 @@ const checkExamples = (): CheckResult => {
 // ── Check 4: Generator reproducibility (AC-5) ────────────────────────────
 
 const checkReproducibility = (): CheckResult => {
-  const errors: string[] = [];
-
   // Run generate_context.ts twice and compare
   const generatorPath = resolve(ROOT, 'scripts/src/lib/ops/generate_context.ts');
   if (!existsSync(generatorPath)) {
@@ -508,7 +418,6 @@ const checkReproducibility = (): CheckResult => {
 
   // Read current CONTEXT.md hash
   const content = readFileSync(contextPath, 'utf-8');
-  const hash = createHash('sha256').update(content).digest('hex');
 
   // Remove the timestamp line for deterministic comparison
   const lines = content.split('\n');
@@ -583,7 +492,9 @@ const main = (): void => {
       console.log(`   ${detail}`);
     }
     console.log();
-    if (!result.passed) allPassed = false;
+    if (!result.passed) {
+      allPassed = false;
+    }
   }
 
   if (allPassed) {
