@@ -4,7 +4,10 @@ import { Type } from 'typebox';
 import {
   extractAffectedIds,
   filterByTaskType,
+  formatDiscoveryFailure,
   formatProjectList,
+  isDiscoveryEmpty,
+  isDiscoveryFailure,
   parseMoonProjects,
 } from './lib/output_filter';
 import { runCommand } from './lib/process_runner';
@@ -30,9 +33,9 @@ export default function (pi: ExtensionAPI) {
     try {
       const result = await runCommand('bun', ['moon', 'query', 'projects']);
       if (result.code === 0 && result.stdout) {
-        const projects = parseMoonProjects(result.stdout);
-        if (projects) {
-          workspaceSummary = formatProjectList(projects)
+        const outcome = parseMoonProjects(result.stdout);
+        if (outcome.kind === 'success') {
+          workspaceSummary = formatProjectList(outcome.projects)
             .replace(/\*\*/g, '')
             .replace(/^/gm, 'Workspace: ');
         }
@@ -54,14 +57,51 @@ export default function (pi: ExtensionAPI) {
         signal,
         timeoutMs: DefaultTimeoutMs,
       });
+      if (result.code !== 0) {
+        const errorDetail = formatDiscoveryFailure({
+          kind: 'command_failed',
+          exitCode: result.code,
+          stderr: result.stderr || result.stdout,
+        });
+        return {
+          content: [
+            { type: 'text', text: `\u274c Failed to detect affected projects:\n${errorDetail}` },
+          ],
+          isError: true,
+          details: { code: result.code, affectedCount: 0, discoveryError: 'command_failed' },
+        };
+      }
       const raw = result.stdout || result.stderr;
-      const ids = extractAffectedIds(raw);
-      if (ids.length === 0) {
+      const outcome = extractAffectedIds(raw);
+
+      // AC-1: Non-success outcomes report the failure instead of returning empty
+      if (isDiscoveryFailure(outcome)) {
+        const errorDetail = formatDiscoveryFailure(outcome);
+        return {
+          content: [
+            { type: 'text', text: `\u274c Failed to detect affected projects:\n${errorDetail}` },
+          ],
+          isError: true,
+          details: { code: result.code, affectedCount: 0, discoveryError: outcome.kind },
+        };
+      }
+
+      if (isDiscoveryEmpty(outcome)) {
         return {
           content: [{ type: 'text', text: 'No affected projects detected.' }],
           details: { code: result.code, affectedCount: 0 },
         };
       }
+
+      if (outcome.kind !== 'success') {
+        return {
+          content: [{ type: 'text', text: '\u274c Unexpected discovery outcome.' }],
+          isError: true,
+          details: { code: result.code },
+        };
+      }
+
+      const ids = outcome.projects.map((p) => p.id);
       const apps = ids.filter((id) =>
         ['client', 'site', 'docs', 'scripts', 'e2e', 'image', 'text', 'voice'].includes(id),
       );
@@ -191,17 +231,42 @@ export default function (pi: ExtensionAPI) {
         signal,
         timeoutMs: DefaultTimeoutMs,
       });
-      const raw = result.stdout || result.stderr;
-      const projects = parseMoonProjects(raw);
-      if (projects) {
+      if (result.code !== 0) {
+        const errorDetail = formatDiscoveryFailure({
+          kind: 'command_failed',
+          exitCode: result.code,
+          stderr: result.stderr || result.stdout,
+        });
         return {
-          content: [{ type: 'text', text: formatProjectList(projects) }],
-          details: { code: result.code, projectCount: projects.length },
+          content: [{ type: 'text', text: `\u274c Failed to query projects:\n${errorDetail}` }],
+          isError: true,
+          details: { code: result.code, discoveryError: 'command_failed' },
         };
       }
+      const raw = result.stdout || result.stderr;
+      const outcome = parseMoonProjects(raw);
+
+      // AC-1: Discovery failure is reported distinctly
+      if (isDiscoveryFailure(outcome)) {
+        const errorDetail = formatDiscoveryFailure(outcome);
+        return {
+          content: [{ type: 'text', text: `\u274c Failed to query projects:\n${errorDetail}` }],
+          isError: true,
+          details: { code: result.code, discoveryError: outcome.kind },
+        };
+      }
+
+      if (outcome.kind === 'success') {
+        return {
+          content: [{ type: 'text', text: formatProjectList(outcome.projects) }],
+          details: { code: result.code, projectCount: outcome.projects.length },
+        };
+      }
+
+      // Empty or no-projects — still valid, just no results
       return {
-        content: [{ type: 'text', text: raw.slice(0, 2000) }],
-        details: { code: result.code },
+        content: [{ type: 'text', text: 'No projects found.' }],
+        details: { code: result.code, projectCount: 0 },
       };
     },
   });
@@ -247,16 +312,59 @@ export default function (pi: ExtensionAPI) {
         signal,
         timeoutMs: DefaultTimeoutMs,
       });
-      const affectedProjects = extractAffectedIds(affectedResult.stdout || '');
+      if (affectedResult.code !== 0) {
+        const errorDetail = formatDiscoveryFailure({
+          kind: 'command_failed',
+          exitCode: affectedResult.code,
+          stderr: affectedResult.stderr || affectedResult.stdout,
+        });
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `\u274c Cannot validate — failed to detect affected projects:\n${errorDetail}`,
+            },
+          ],
+          isError: true,
+          details: { code: affectedResult.code, discoveryError: 'command_failed' },
+        };
+      }
+      const affectedOutcome = extractAffectedIds(affectedResult.stdout || '');
 
-      if (affectedProjects.length === 0) {
+      // AC-1: Discovery failure is NOT treated as "no changes"
+      if (isDiscoveryFailure(affectedOutcome)) {
+        const errorDetail = formatDiscoveryFailure(affectedOutcome);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `\u274c Cannot validate — failed to detect affected projects:\n${errorDetail}`,
+            },
+          ],
+          isError: true,
+          details: { code: 1, discoveryError: affectedOutcome.kind },
+        };
+      }
+
+      if (isDiscoveryEmpty(affectedOutcome)) {
         return {
           content: [{ type: 'text', text: 'No affected projects. Nothing to validate.' }],
           details: { code: 0 },
         };
       }
 
-      const projList = affectedProjects.join(', ');
+      // After excluding failure and empty, only success with projects remains
+      if (affectedOutcome.kind !== 'success') {
+        return {
+          content: [
+            { type: 'text', text: '\u274c Cannot validate — unexpected discovery outcome.' },
+          ],
+          isError: true,
+          details: { code: 1 },
+        };
+      }
+      const affectedProjects = affectedOutcome.projects;
+      const projList = affectedProjects.map((p) => p.id).join(', ');
       const detailSections: string[] = [];
 
       // 2. Run fix + typecheck via workspace-level --affected.

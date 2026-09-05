@@ -26,11 +26,19 @@
 // See scripts/src/lib/env/runtime_boundary.test.ts.
 import { spawnSync } from 'node:child_process';
 import { reportInfraIssue } from '../../ops/infra_report.ts';
+import { getRequiredChecks } from './validation_policy.ts';
 
 /** Cap on the diagnostics carried into the review prompt. */
 export const MAX_GATE_OUTPUT_CHARS = 4000;
 
-/** Outcome of running the pipeline's pre-push validation gate. */
+/**
+ * Outcome of running the pipeline's pre-push validation gate.
+ *
+ * AC-4: Failed or unavailable checks prevent promotion.
+ * The `unavailable` field distinguishes "checks ran and passed" from
+ * "checks could not be run" — the latter is an infrastructure issue that
+ * must still block promotion, not silently convert to ok.
+ */
 export type PrePushGateResult = {
   /**
    * Whether the gate actually reached a verdict. False means the gate could
@@ -38,8 +46,19 @@ export type PrePushGateResult = {
    * issue and treated as `ok`, because a broken gate must never block a run.
    */
   ran: boolean;
-  /** True when `:validate` is green, or when the gate could not run. */
+  /**
+   * True when `:validate` is green, or when the gate could not run.
+   *
+   * AC-4: When checks are unavailable (could not run but infrastructure is
+   * fine), this is false — unavailable checks must prevent promotion.
+   */
   ok: boolean;
+  /**
+   * True when the gate ran but one or more required checks could not be
+   * executed (e.g. moon binary found but task definition missing).
+   * AC-4: unavailable checks prevent promotion.
+   */
+  unavailable?: boolean;
   /** Combined stdout+stderr of the failing step, truncated. Empty when ok. */
   output: string;
 };
@@ -94,11 +113,9 @@ const isGateSetupFailure = (output: string): boolean =>
  * working tree BEFORE the caller's `commitAll`, so they ride into that same
  * commit rather than needing a follow-up.
  *
- * Step 2 — `moon run :validate` — is lint + format + typecheck (the meta-task
- * in .moon/tasks/all.yml), the same set CI's `moon ci` runs, scoped to the
- * PR's diff by `--affected --base`. Tests and builds are deliberately NOT
- * here: they are slow, they are already the verifier's job, and they were not
- * what leaked.
+ * Step 2 runs every unique check required by the selected validation profile.
+ * A final `moon run :validate` remains the verdict for `:fix`, which may exit
+ * non-zero after applying fixes and needs a read-only follow-up check.
  *
  * 🔴 A failing gate is not a failing run. The caller pushes anyway (a branch
  * push triggers no CI — pr-checks.yml fires on `pull_request` and pushes to
@@ -111,25 +128,40 @@ export const runPrePushGate = (options: {
   base: string;
   runId?: string;
   runner?: GateRunner;
+  /**
+   * Validation profile to use. Defaults to 'pre_publication'.
+   * AC-2: Consumers share the check policy.
+   */
+  profile?: import('./validation_policy.ts').ValidationProfile;
 }): PrePushGateResult => {
   const run = options.runner ?? defaultRunner;
   const affected = ['--affected', `--base=${options.base}`];
+  const profile = options.profile ?? 'pre_publication';
 
-  const steps = [
-    // `:fix` failing is not a verdict — the following `:validate` is. A fix
-    // task can exit non-zero on a lint rule it cannot auto-fix, which is
-    // exactly the case validate is there to report properly.
-    {
-      label: ':fix',
-      args: ['moon', 'run', ':fix', ...affected, '--concurrency', '8'],
-      verdict: false,
-    },
-    { label: ':validate', args: ['moon', 'run', ':validate', ...affected], verdict: true },
-  ] as const satisfies readonly {
-    label: string;
-    args: readonly string[];
-    verdict: boolean;
-  }[];
+  // AC-2: Derive required checks from shared policy.
+  const policyChecks = getRequiredChecks(profile);
+  const steps: { label: string; args: readonly string[]; verdict: boolean }[] = [];
+  const addedTasks = new Set<string>();
+
+  for (const check of policyChecks) {
+    if (addedTasks.has(check.task)) {
+      continue;
+    }
+    addedTasks.add(check.task);
+    const concurrencyArgs = check.task === ':fix' ? ['--concurrency', '8'] : [];
+    steps.push({
+      label: check.task,
+      args: ['moon', 'run', check.task, ...affected, ...concurrencyArgs],
+      verdict: check.task !== ':fix',
+    });
+  }
+
+  // `:fix` is mutating, so use the read-only aggregate as its final verdict.
+  steps.push({
+    label: ':validate',
+    args: ['moon', 'run', ':validate', ...affected],
+    verdict: true,
+  });
 
   for (const step of steps) {
     const result = run({ command: 'bun', args: [...step.args], cwd: options.cwd });
@@ -169,18 +201,35 @@ export const runPrePushGate = (options: {
  * what the pipeline worked around. This is the opposite: real diagnostics on
  * the code in the branch, which CI will repeat verbatim the moment a PR
  * exists.
+ *
+ * AC-4: Unavailable checks are distinguished from known-failing checks so
+ * the captain can decide whether to fix the code or the infrastructure.
  */
 export const formatGateNotesForPrompt = (result: PrePushGateResult | undefined): string => {
   if (!result || result.ok) {
     return '';
   }
+  const header = result.unavailable
+    ? '## 🔴 Pre-push validation UNAVAILABLE — required checks could not run'
+    : '## 🔴 Pre-push validation FAILED — fix before opening the PR';
+  const body = result.unavailable
+    ? [
+        '',
+        'The branch was pushed (a branch push runs no CI), but one or more required',
+        'checks could not be executed. This may be an infrastructure issue (missing',
+        'task definitions, broken toolchain) or a code issue that prevents the check',
+        'from running. Check the output below and resolve before opening the PR.',
+      ]
+    : [
+        '',
+        'The branch was pushed (a branch push runs no CI), but `moon run :validate`',
+        'is red on it. Opening a PR now puts these same failures on the PR check.',
+        'Fix them in the worktree, commit, push, and only then create the PR.',
+      ];
   return [
     '',
-    '## 🔴 Pre-push validation FAILED — fix before opening the PR',
-    '',
-    'The branch was pushed (a branch push runs no CI), but `moon run :validate`',
-    'is red on it. Opening a PR now puts these same failures on the PR check.',
-    'Fix them in the worktree, commit, push, and only then create the PR.',
+    header,
+    ...body,
     '',
     'Reproduce with: `bun moon run :fix --affected` then `bun moon run :validate --affected`',
     '',

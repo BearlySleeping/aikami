@@ -1,4 +1,4 @@
-// .pi/extensions/lib/output-filter.ts
+// .pi/extensions/lib/output_filter.ts
 //
 // Shared output filtering utilities for pi extensions.
 // Reduces tool output size by:
@@ -18,45 +18,192 @@ export type LightProject = {
   desc?: string;
 };
 
+/**
+ * Distinct outcome of a project discovery attempt.
+ * Replaces a bare null/empty distinction so callers can distinguish
+ * "no projects changed" from "the query failed entirely."
+ *
+ * AC-1: Discovery distinguishes failure from no changes.
+ * AC-3: Evidence is bound to the actual candidate.
+ */
+export type DiscoveryOutcome =
+  | { kind: 'success'; projects: LightProject[] }
+  | { kind: 'empty'; reason?: string }
+  | { kind: 'parse_failed'; error: string; rawPreview: string }
+  | { kind: 'too_large'; byteCount: number; cap: number }
+  | { kind: 'command_failed'; exitCode: number | null; stderr: string }
+  | { kind: 'timeout'; stderr: string };
+
+/** True when the outcome represents a condition that must block promotion. */
+export const isDiscoveryFailure = (outcome: DiscoveryOutcome): boolean =>
+  outcome.kind === 'parse_failed' ||
+  outcome.kind === 'too_large' ||
+  outcome.kind === 'command_failed' ||
+  outcome.kind === 'timeout';
+
+/** True when the outcome means "no work to do" (not a failure). */
+export const isDiscoveryEmpty = (outcome: DiscoveryOutcome): boolean =>
+  outcome.kind === 'empty' || (outcome.kind === 'success' && outcome.projects.length === 0);
+
+/**
+ * Format a DiscoveryOutcome failure as a human-readable diagnostic string.
+ * Returns the formatted error message, or empty string if the outcome is
+ * not a failure.
+ */
+export const formatDiscoveryFailure = (outcome: DiscoveryOutcome): string => {
+  switch (outcome.kind) {
+    case 'parse_failed':
+      return `Parse failed: ${outcome.error}\nRaw preview: ${outcome.rawPreview}`;
+    case 'too_large':
+      return `Output too large: ${outcome.byteCount} bytes (cap: ${outcome.cap} bytes)`;
+    case 'command_failed':
+      return `Command failed (exit ${outcome.exitCode}): ${outcome.stderr}`;
+    case 'timeout':
+      return `Command timed out: ${outcome.stderr}`;
+    default:
+      return '';
+  }
+};
+
 // ── Moon Projects JSON Parser ────────────────────────────────────
 
 const MOON_JSON_MAX_RAW = 512_000; // 512KB hard cap
+const UTF8_ENCODER = new TextEncoder();
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0;
+
+const parseLightProject = (value: unknown): LightProject | undefined => {
+  if (!isRecord(value) || !isNonEmptyString(value.id) || !isNonEmptyString(value.source)) {
+    return undefined;
+  }
+
+  const config = value.config;
+  if (
+    !isRecord(config) ||
+    !isNonEmptyString(config.layer) ||
+    !Array.isArray(config.tags) ||
+    !config.tags.every((tag) => typeof tag === 'string') ||
+    !Array.isArray(config.dependsOn)
+  ) {
+    return undefined;
+  }
+
+  const deps: string[] = [];
+  for (const dependency of config.dependsOn) {
+    if (isNonEmptyString(dependency)) {
+      deps.push(dependency);
+      continue;
+    }
+    if (isRecord(dependency) && isNonEmptyString(dependency.id)) {
+      deps.push(dependency.id);
+      continue;
+    }
+    return undefined;
+  }
+
+  const projectMeta = config.project;
+  if (
+    projectMeta !== undefined &&
+    (!isRecord(projectMeta) ||
+      (projectMeta.description !== undefined && typeof projectMeta.description !== 'string'))
+  ) {
+    return undefined;
+  }
+
+  const desc =
+    isRecord(projectMeta) && typeof projectMeta.description === 'string'
+      ? projectMeta.description
+      : undefined;
+
+  return {
+    id: value.id,
+    layer: config.layer,
+    source: value.source,
+    tags: config.tags,
+    deps,
+    desc,
+  };
+};
 
 /**
- * Parses `moon query projects` JSON output into a lightweight array.
- * Only extracts id, layer, tags, deps, and description.
- * If parsing fails, returns null.
+ * Parses `moon query projects` JSON output into a typed outcome.
+ * Returns a DiscoveryOutcome that distinguishes success, empty, parse
+ * failure, oversized input, and other error conditions.
+ *
+ * This is the canonical entry point for project discovery — all consumers
+ * (validate tool, pre-push gate, session_start) must use this to ensure
+ * consistent failure handling.
+ *
+ * AC-1: Empty valid JSON → empty (not success, not failure).
+ * AC-1: Valid JSON above 512 KB → too_large.
+ * AC-1: Malformed JSON → parse_failed.
  */
-export function parseMoonProjects(raw: string): LightProject[] | null {
-  if (!raw || raw.length > MOON_JSON_MAX_RAW) {
-    return null;
+export function parseMoonProjects(raw: string): DiscoveryOutcome {
+  if (!raw || raw.trim().length === 0) {
+    return { kind: 'empty', reason: 'No output from moon query' };
+  }
+
+  const rawByteCount = UTF8_ENCODER.encode(raw).byteLength;
+  if (rawByteCount > MOON_JSON_MAX_RAW) {
+    return { kind: 'too_large', byteCount: rawByteCount, cap: MOON_JSON_MAX_RAW };
   }
 
   try {
-    const data = JSON.parse(raw);
-    const projects = data?.projects;
-    if (!Array.isArray(projects)) {
-      return null;
+    const data: unknown = JSON.parse(raw);
+    if (!isRecord(data)) {
+      return {
+        kind: 'parse_failed',
+        error: 'Unexpected JSON structure',
+        rawPreview: raw.slice(0, 500),
+      };
     }
 
-    return projects.map((p: Record<string, unknown>) => {
-      const config = (p.config as Record<string, unknown>) ?? {};
-      const depsRaw = (config.dependsOn as Array<{ id?: string } | string>) ?? [];
-      const deps = depsRaw.map((d) => (typeof d === 'string' ? d : (d.id ?? '?')));
-      const projectMeta = config.project as Record<string, unknown> | undefined;
+    const projects = data.projects;
+    if (!Array.isArray(projects)) {
+      // Valid JSON but wrong shape — likely an error response
+      const errorMsg = typeof data.error === 'string' ? data.error : 'Unexpected JSON structure';
+      return { kind: 'parse_failed', error: errorMsg, rawPreview: raw.slice(0, 500) };
+    }
 
-      return {
-        id: String(p.id ?? '?'),
-        layer: String(config.layer ?? '?'),
-        source: String(p.source ?? '?'),
-        tags: (config.tags as string[]) ?? [],
-        deps,
-        desc: String(projectMeta?.description ?? ''),
-      } as LightProject;
-    });
-  } catch {
-    return null;
+    if (projects.length === 0) {
+      return { kind: 'empty', reason: 'No projects returned by moon query' };
+    }
+
+    const parsed: LightProject[] = [];
+    for (const [index, project] of projects.entries()) {
+      const parsedProject = parseLightProject(project);
+      if (!parsedProject) {
+        return {
+          kind: 'parse_failed',
+          error: `Invalid project record at index ${index}`,
+          rawPreview: raw.slice(0, 500),
+        };
+      }
+      parsed.push(parsedProject);
+    }
+
+    return { kind: 'success', projects: parsed };
+  } catch (err) {
+    const message = err instanceof SyntaxError ? err.message : String(err);
+    return { kind: 'parse_failed', error: message, rawPreview: raw.slice(0, 500) };
   }
+}
+
+/**
+ * Backward-compatible helper — returns LightProject[] or null.
+ * Prefer parseMoonProjects for new code so callers can distinguish
+ * failure reasons.
+ */
+export function parseMoonProjectsLegacy(raw: string): LightProject[] | null {
+  const outcome = parseMoonProjects(raw);
+  if (outcome.kind === 'success') {
+    return outcome.projects;
+  }
+  return null;
 }
 
 /**
@@ -88,16 +235,23 @@ export function formatProjectList(projects: LightProject[]): string {
 }
 
 /**
- * Extracts just the project IDs from affected moon query output.
+ * Extracts affected project IDs from moon query output.
+ * Returns a DiscoveryOutcome so callers can distinguish "no changes"
+ * from "the query failed" — the latter MUST NOT be treated as success.
+ *
+ * AC-1: Non-success outcomes propagate upward for fail-closed behavior.
  */
-export function extractAffectedIds(raw: string): string[] {
-  const projects = parseMoonProjects(raw);
-  if (projects) {
-    return projects.map((p) => p.id);
+export function extractAffectedIds(raw: string): DiscoveryOutcome {
+  const outcome = parseMoonProjects(raw);
+  if (outcome.kind === 'success') {
+    return { kind: 'success', projects: outcome.projects };
   }
-  // Fallback: try to extract IDs from non-JSON output
-  const lines = raw.split('\n').filter(Boolean);
-  return lines.filter((l) => /^[a-z][a-z0-9-]*$/.test(l.trim()));
+  // For empty result: return empty success (valid, no changes)
+  if (outcome.kind === 'empty') {
+    return { kind: 'success', projects: [] };
+  }
+  // All other failures propagate upward
+  return outcome;
 }
 
 // ── Moon Run Output Filter ───────────────────────────────────────
