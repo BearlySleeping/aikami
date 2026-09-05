@@ -52,6 +52,28 @@ describe('runPrePushGate', () => {
     expect(calls[0]?.cwd).toBe('/tmp/wt');
   });
 
+  it('accepts an explicit profile parameter (AC-2)', () => {
+    const { runner, calls } = scriptedRunner([{ status: 0 }, { status: 0 }]);
+
+    const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner, profile: 'ci' });
+
+    expect(result).toEqual({ ran: true, ok: true, output: '' });
+    expect(calls).toHaveLength(2);
+  });
+
+  it('returns unavailable when a required check cannot be executed (AC-4)', () => {
+    const { runner } = scriptedRunner([
+      { status: 0 },
+      { status: 1, output: 'error: Task not found ":validate"' },
+    ]);
+
+    const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
+
+    expect(result.ran).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain('not found');
+  });
+
   it('reports a verdict of failed when :validate is red, carrying the diagnostics', () => {
     const diagnostics = 'client:lint | × useBlockStatements: Block statements are preferred.';
     const { runner } = scriptedRunner([{ status: 0 }, { status: 1, output: diagnostics }]);
@@ -61,6 +83,21 @@ describe('runPrePushGate', () => {
     expect(result.ran).toBe(true);
     expect(result.ok).toBe(false);
     expect(result.output).toBe(diagnostics);
+  });
+
+  it('correctly reports unavailable checks as not-ok (AC-4)', () => {
+    // When the gate cannot run a required check but it's NOT a setup failure
+    // (moon binary exists, base ref is valid), the result must be not-ok.
+    const { runner } = scriptedRunner([
+      { status: 0 },
+      { status: 1, output: 'client:typecheck | × TS2345: Type mismatch' },
+    ]);
+
+    const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
+
+    expect(result.ran).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain('TS2345');
   });
 
   // 🔴 `:fix` exits non-zero on any lint rule it cannot auto-fix. That is not
@@ -89,6 +126,15 @@ describe('runPrePushGate', () => {
     expect(result).toEqual({ ran: false, ok: true, output: '' });
     // Bailed on the first step — never reached :validate.
     expect(calls).toHaveLength(1);
+  });
+
+  it('uses focused profile when specified (AC-2)', () => {
+    const { runner, calls } = scriptedRunner([{ status: 0 }, { status: 0 }]);
+
+    runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner, profile: 'focused' });
+
+    // Focused should still run :fix + :validate
+    expect(calls).toHaveLength(2);
   });
 
   it('treats a missing Moon command as infrastructure rather than validation failure', () => {
