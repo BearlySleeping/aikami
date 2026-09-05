@@ -3,7 +3,7 @@ id: C-472
 title: "Make worker lifecycle testable and simplify Herdr transport"
 source: direct
 contract_type: full
-status: implemented
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -156,41 +156,6 @@ None for scope approval. Minimum Herdr version/capabilities are measured during 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | — | — | — | — |
-
-## Execution Report
-
-### Summary
-Created a testable worker lifecycle with deterministic scenario testing infrastructure for the contract pipeline. Built a `FakeHerdrAdapter` implementing the full `ContractHerdrAdapterInterface` for injecting into orchestrator scenario tests without a live Herdr. Created `orchestrator.test.ts` with pure-function tests for `prePushGateForRevision`, extended `verifierFeedback` scenarios, and adapter injection validation. Created `herdr_adapter.test.ts` with 20 transport-capability tests covering agent status polling, worker lifecycle, pane lifecycle, and review interaction. Enhanced `stage_runner.test.ts` with recovery scenarios for process exit without result, generation fencing, and crash recovery. No user-facing docs needed — internal pipeline infrastructure.
-
-### AC Status
-| AC | Status | Notes |
-|---|---|---|
-| AC-1 | ✅ | Scenario harness via FakeHerdrAdapter + orchestrator.test.ts covers happy path stage progression and adapter injection seam |
-| AC-2 | ✅ | stage_runner.test.ts enhanced with recovery scenarios: hard timeout, dead worker, generation fencing, duplicate crash recovery |
-| AC-3 | ✅ | herdr_adapter.test.ts + review_pane.test.ts cover interactive transport: agent status, pane safety, composer guard, review start |
-| AC-4 | ✅ | Transport capability tests distinguish alive/dead/disconnected states; pane lifecycle tests verify cancellation detection |
-| AC-5 | ✅ | Capability fixtures in herdr_adapter.test.ts verify blocked vs normal review distinction; existing postcondition tests preserved |
-
-### Files Created
-| File | Purpose |
-|---|---|
-| `scripts/src/lib/agents/contract_pipeline/fake_adapter.ts` | FakeHerdrAdapter implementing ContractHerdrAdapterInterface with controllable test state |
-| `scripts/src/lib/agents/contract_pipeline/orchestrator.test.ts` | Scenario tests for pure orchestrator functions + adapter injection validation |
-| `scripts/src/lib/agents/contract_pipeline/herdr_adapter.test.ts` | Transport capability tests: agent status, worker lifecycle, pane lifecycle, review interaction |
-
-### Files Modified
-| File | Change |
-|---|---|
-| `scripts/src/lib/agents/contract_pipeline/stage_runner.test.ts` | Added recovery scenarios: hard timeout, dead worker, generation fencing, duplicate crash recovery (C-472 AC-2) |
-
-### Deviations from Spec
-None. The scope boundaries were respected — this is pipeline/orchestrator infrastructure, not a user-facing feature. The Evidence Matrix requested `orchestrator.test.ts`, `stage_runner.test.ts` enhancements, `herdr_adapter.test.ts`, and capability fixtures — all delivered. The full orchestrator lifecycle (runContractPipeline) cannot be tested deterministically without also mocking Git and manifest_store, which would be an invasive refactor beyond this contract's scope; the adapter injection seam is validated through FakeHerdrAdapter.
-
-### Test Results
-- Unit: 250/250 PASS (0 failures) — all contract_pipeline tests
-- E2E: N/A — internal pipeline infrastructure, no browser tests
-- Visual: N/A — no UI components
-- Baseline: Pre-existing typecheck failures (TS2688: missing bun types in workspace), 0 new failures
 
 ## Promotion Lifecycle
 
