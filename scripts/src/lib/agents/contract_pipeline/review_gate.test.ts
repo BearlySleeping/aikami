@@ -185,9 +185,7 @@ describe('hasBlockingResults (AC-4, AC-5)', () => {
   it('unavailable required check is blocking', () => {
     expect(
       hasBlockingResults({
-        results: [
-          { outcome: 'unavailable', required: true },
-        ],
+        results: [{ outcome: 'unavailable', required: true }],
       }),
     ).toBe(true);
   });
@@ -195,9 +193,7 @@ describe('hasBlockingResults (AC-4, AC-5)', () => {
   it('cancelled required check is blocking (AC-5)', () => {
     expect(
       hasBlockingResults({
-        results: [
-          { outcome: 'cancelled', required: true },
-        ],
+        results: [{ outcome: 'cancelled', required: true }],
       }),
     ).toBe(true);
   });
@@ -216,9 +212,7 @@ describe('hasBlockingResults (AC-4, AC-5)', () => {
   it('not_applicable is not blocking', () => {
     expect(
       hasBlockingResults({
-        results: [
-          { outcome: 'not_applicable', required: true },
-        ],
+        results: [{ outcome: 'not_applicable', required: true }],
       }),
     ).toBe(false);
   });

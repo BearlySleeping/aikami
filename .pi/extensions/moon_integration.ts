@@ -2,6 +2,7 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import {
+  type DiscoveryOutcome,
   extractAffectedIds,
   filterByTaskType,
   formatDiscoveryFailure,
@@ -9,7 +10,6 @@ import {
   isDiscoveryEmpty,
   isDiscoveryFailure,
   parseMoonProjects,
-  type DiscoveryOutcome,
 } from './lib/output_filter';
 import { runCommand } from './lib/process_runner';
 
@@ -65,7 +65,9 @@ export default function (pi: ExtensionAPI) {
       if (isDiscoveryFailure(outcome)) {
         const errorDetail = formatDiscoveryFailure(outcome);
         return {
-          content: [{ type: 'text', text: `\u274c Failed to detect affected projects:\n${errorDetail}` }],
+          content: [
+            { type: 'text', text: `\u274c Failed to detect affected projects:\n${errorDetail}` },
+          ],
           isError: true,
           details: { code: result.code, affectedCount: 0, discoveryError: outcome.kind },
         };
@@ -291,7 +293,12 @@ export default function (pi: ExtensionAPI) {
       if (isDiscoveryFailure(affectedOutcome)) {
         const errorDetail = formatDiscoveryFailure(affectedOutcome);
         return {
-          content: [{ type: 'text', text: `\u274c Cannot validate — failed to detect affected projects:\n${errorDetail}` }],
+          content: [
+            {
+              type: 'text',
+              text: `\u274c Cannot validate — failed to detect affected projects:\n${errorDetail}`,
+            },
+          ],
           isError: true,
           details: { code: 1, discoveryError: affectedOutcome.kind },
         };
@@ -307,7 +314,9 @@ export default function (pi: ExtensionAPI) {
       // After excluding failure and empty, only success with projects remains
       if (affectedOutcome.kind !== 'success') {
         return {
-          content: [{ type: 'text', text: '\u274c Cannot validate — unexpected discovery outcome.' }],
+          content: [
+            { type: 'text', text: '\u274c Cannot validate — unexpected discovery outcome.' },
+          ],
           isError: true,
           details: { code: 1 },
         };

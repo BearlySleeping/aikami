@@ -50,12 +50,7 @@ export type ProfilePolicy = {
  * Outcome of a single check execution.
  * AC-4: 'unavailable' and 'cancelled' are distinct from 'failed' and 'passed'.
  */
-export type CheckOutcome =
-  | 'passed'
-  | 'failed'
-  | 'unavailable'
-  | 'cancelled'
-  | 'not_applicable';
+export type CheckOutcome = 'passed' | 'failed' | 'unavailable' | 'cancelled' | 'not_applicable';
 
 /**
  * Result of one check run.
@@ -110,7 +105,12 @@ const PRE_PUBLICATION_POLICY: ProfilePolicy = {
     { task: ':test', label: 'Test all affected', required: false, guard: false },
   ],
   structuralGuards: [
-    { task: ':typecheck', label: 'TypeScript typecheck (structural guard)', required: true, guard: true },
+    {
+      task: ':typecheck',
+      label: 'TypeScript typecheck (structural guard)',
+      required: true,
+      guard: true,
+    },
   ],
   excludedChecks: [],
 };
@@ -126,7 +126,12 @@ const CI_POLICY: ProfilePolicy = {
   ],
   optionalChecks: [],
   structuralGuards: [
-    { task: ':typecheck', label: 'TypeScript typecheck (structural guard)', required: true, guard: true },
+    {
+      task: ':typecheck',
+      label: 'TypeScript typecheck (structural guard)',
+      required: true,
+      guard: true,
+    },
   ],
   excludedChecks: [],
 };
@@ -174,9 +179,7 @@ export const determineOverallOutcome = (options: {
   profile: ValidationProfile;
   results: readonly CheckResult[];
 }): 'passed' | 'failed' | 'unavailable' => {
-  const requiredTasks = new Set(
-    getRequiredChecks(options.profile).map((c) => c.task),
-  );
+  const requiredTasks = new Set(getRequiredChecks(options.profile).map((c) => c.task));
 
   let hasUnavailable = false;
 
@@ -262,10 +265,15 @@ export const formatValidationReport = (options: {
 
   for (const check of options.artifact.checks) {
     const icon =
-      check.outcome === 'passed' ? '✅' :
-      check.outcome === 'failed' ? '❌' :
-      check.outcome === 'unavailable' ? '⚠️' :
-      check.outcome === 'cancelled' ? '🚫' : '⏭️';
+      check.outcome === 'passed'
+        ? '✅'
+        : check.outcome === 'failed'
+          ? '❌'
+          : check.outcome === 'unavailable'
+            ? '⚠️'
+            : check.outcome === 'cancelled'
+              ? '🚫'
+              : '⏭️';
     const diag = check.diagnostics ? `: ${check.diagnostics.slice(0, 200)}` : '';
     lines.push(`  ${icon} ${check.label} (${check.outcome})${diag}`);
   }

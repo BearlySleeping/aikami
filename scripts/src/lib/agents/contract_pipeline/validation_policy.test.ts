@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  type CheckResult,
   createValidationArtifact,
   determineOverallOutcome,
   formatValidationReport,
@@ -14,7 +15,6 @@ import {
   getRequiredChecks,
   isArtifactFresh,
   isBlockingOutcome,
-  type CheckResult,
   type ValidationProfile,
 } from './validation_policy.ts';
 
@@ -154,9 +154,7 @@ describe('createValidationArtifact (AC-3)', () => {
     const artifact = createValidationArtifact({
       candidateFingerprint: 'abc123def456',
       profile: 'focused',
-      results: [
-        { check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' },
-      ],
+      results: [{ check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' }],
     });
     expect(artifact.version).toBe(1);
     expect(artifact.candidateFingerprint).toBe('abc123def456');
@@ -169,9 +167,7 @@ describe('createValidationArtifact (AC-3)', () => {
     const artifact = createValidationArtifact({
       candidateFingerprint: 'hash1',
       profile: 'focused',
-      results: [
-        { check: ':fix', label: 'Fix', outcome: 'failed', diagnostics: 'lint error' },
-      ],
+      results: [{ check: ':fix', label: 'Fix', outcome: 'failed', diagnostics: 'lint error' }],
     });
     expect(artifact.overallOutcome).toBe('failed');
   });
@@ -182,9 +178,7 @@ describe('isArtifactFresh (AC-3)', () => {
     candidateFingerprint: 'abc123',
     baseFingerprint: 'base-1',
     profile: 'focused',
-    results: [
-      { check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' },
-    ],
+    results: [{ check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' }],
   });
 
   it('same candidate → fresh', () => {
@@ -232,9 +226,7 @@ describe('formatValidationReport', () => {
     const artifact = createValidationArtifact({
       candidateFingerprint: 'abc123',
       profile: 'focused',
-      results: [
-        { check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' },
-      ],
+      results: [{ check: ':fix', label: 'Fix', outcome: 'passed', diagnostics: '' }],
     });
     const report = formatValidationReport({ artifact, fresh: true });
     expect(report).toContain('Validation [focused]');

@@ -5,6 +5,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  type DiscoveryOutcome,
   extractAffectedIds,
   filterByTaskType,
   filterFixOutput,
@@ -15,9 +16,8 @@ import {
   formatProjectList,
   isDiscoveryEmpty,
   isDiscoveryFailure,
-  parseMoonProjects,
-  type DiscoveryOutcome,
   type LightProject,
+  parseMoonProjects,
 } from './output_filter.ts';
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -133,7 +133,11 @@ describe('isDiscoveryFailure / isDiscoveryEmpty', () => {
   });
 
   test('parse_failed → is failure, not empty', () => {
-    const outcome: DiscoveryOutcome = { kind: 'parse_failed', error: 'Invalid token', rawPreview: 'x' };
+    const outcome: DiscoveryOutcome = {
+      kind: 'parse_failed',
+      error: 'Invalid token',
+      rawPreview: 'x',
+    };
     expect(isDiscoveryFailure(outcome)).toBe(true);
     expect(isDiscoveryEmpty(outcome)).toBe(false);
   });
@@ -145,7 +149,11 @@ describe('isDiscoveryFailure / isDiscoveryEmpty', () => {
   });
 
   test('command_failed → is failure, not empty', () => {
-    const outcome: DiscoveryOutcome = { kind: 'command_failed', exitCode: 1, stderr: 'moon not found' };
+    const outcome: DiscoveryOutcome = {
+      kind: 'command_failed',
+      exitCode: 1,
+      stderr: 'moon not found',
+    };
     expect(isDiscoveryFailure(outcome)).toBe(true);
     expect(isDiscoveryEmpty(outcome)).toBe(false);
   });
@@ -167,7 +175,11 @@ describe('isDiscoveryFailure / isDiscoveryEmpty', () => {
 
 describe('formatDiscoveryFailure', () => {
   test('formats parse_failed', () => {
-    const msg = formatDiscoveryFailure({ kind: 'parse_failed', error: 'Unexpected token', rawPreview: '{bad}' });
+    const msg = formatDiscoveryFailure({
+      kind: 'parse_failed',
+      error: 'Unexpected token',
+      rawPreview: '{bad}',
+    });
     expect(msg).toContain('Unexpected token');
     expect(msg).toContain('{bad}');
   });
@@ -179,7 +191,11 @@ describe('formatDiscoveryFailure', () => {
   });
 
   test('formats command_failed', () => {
-    const msg = formatDiscoveryFailure({ kind: 'command_failed', exitCode: 127, stderr: 'not found' });
+    const msg = formatDiscoveryFailure({
+      kind: 'command_failed',
+      exitCode: 127,
+      stderr: 'not found',
+    });
     expect(msg).toContain('127');
     expect(msg).toContain('not found');
   });
@@ -228,7 +244,9 @@ describe('formatProjectList', () => {
   });
 
   test('single app project', () => {
-    const text = formatProjectList([sampleProject({ id: 'client', source: 'apps/client', layer: 'application' })]);
+    const text = formatProjectList([
+      sampleProject({ id: 'client', source: 'apps/client', layer: 'application' }),
+    ]);
     expect(text).toContain('client (apps/client)');
     expect(text).toContain('Total: 1 projects');
   });

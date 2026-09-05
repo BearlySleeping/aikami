@@ -1,7 +1,7 @@
 // scripts/src/lib/agents/contract_pipeline/review_gate.ts
 import type { ContractPipelineStage } from './types.ts';
+import type { CheckOutcome, ValidationArtifact } from './validation_policy.ts';
 import { isBlockingOutcome } from './validation_policy.ts';
-import type { ValidationArtifact, CheckOutcome } from './validation_policy.ts';
 
 /** Determine whether a verified run may start its final review session. */
 export const canEnterReview = (options: {
@@ -62,8 +62,7 @@ export const isEvidenceCurrent = (options: {
  */
 export const hasBlockingResults = (options: {
   results: readonly { outcome: CheckOutcome; required: boolean }[];
-}): boolean =>
-  options.results.some((r) => r.required && isBlockingOutcome(r.outcome));
+}): boolean => options.results.some((r) => r.required && isBlockingOutcome(r.outcome));
 
 /**
  * Route review edits through critique when the contract changed, otherwise verification.
