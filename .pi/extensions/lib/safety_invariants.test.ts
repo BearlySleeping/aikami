@@ -58,22 +58,24 @@ describe('AC-5: Effective resource choices are inspectable', () => {
     for (const role of ['writer', 'critic', 'implementer', 'verifier', 'review']) {
       const profile = getRoleProfile(role);
       expect(profile).toBeDefined();
-      expect(profile!.description).toBeTruthy();
-      expect(Array.isArray(profile!.required)).toBe(true);
-      expect(Array.isArray(profile!.optional)).toBe(true);
-      expect(Array.isArray(profile!.forbidden)).toBe(true);
+      expect(profile?.description).toBeTruthy();
+      expect(Array.isArray(profile?.required)).toBe(true);
+      expect(Array.isArray(profile?.optional)).toBe(true);
+      expect(Array.isArray(profile?.forbidden)).toBe(true);
     }
   });
 
   test('resolveEnabledExtensions shows what is active for each role', () => {
     const writerExts = resolveEnabledExtensions('writer');
     expect(writerExts).toBeDefined();
-    expect(writerExts!.length).toBeGreaterThan(0);
+    expect(writerExts?.length).toBeGreaterThan(0);
 
     const implementerExts = resolveEnabledExtensions('implementer');
     expect(implementerExts).toBeDefined();
     // Implementer has more extensions than writer
-    expect(implementerExts!.length).toBeGreaterThanOrEqual(writerExts!.length);
+    const implLen = (implementerExts as NonNullable<typeof implementerExts>).length;
+    const writerLen = (writerExts as NonNullable<typeof writerExts>).length;
+    expect(implLen).toBeGreaterThanOrEqual(writerLen);
   });
 
   test('getForbiddenExtensions shows what is blocked for each role', () => {

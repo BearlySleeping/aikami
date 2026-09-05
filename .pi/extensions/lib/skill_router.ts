@@ -197,6 +197,7 @@ export const registerSkillRouter = (pi: ExtensionAPI, repoRoot: string): void =>
       }
       return {
         content: [{ type: 'text' as const, text: content }],
+        details: undefined,
       };
     },
   });

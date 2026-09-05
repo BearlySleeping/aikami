@@ -53,7 +53,7 @@ describe('AC-2: On-demand loading', () => {
     clearPixiSkillCache();
     const content = loadPixiSkill({ repoRoot: REPO_ROOT, skillId: 'pixijs-core-concepts' });
     expect(content).toBeDefined();
-    expect(content!.length).toBeGreaterThan(0);
+    expect(content?.length).toBeGreaterThan(0);
     // Should contain PixiJS-related content
     expect(content).toMatch(/pixi|Pixi|PIXI/i);
   });

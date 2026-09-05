@@ -23,10 +23,10 @@ describe('AC-1: Role profile structure', () => {
   test.each(ROLES)('%s profile exists with description and capability arrays', (role) => {
     const profile = getRoleProfile(role);
     expect(profile).toBeDefined();
-    expect(profile!.description).toBeTruthy();
-    expect(Array.isArray(profile!.required)).toBe(true);
-    expect(Array.isArray(profile!.optional)).toBe(true);
-    expect(Array.isArray(profile!.forbidden)).toBe(true);
+    expect(profile?.description).toBeTruthy();
+    expect(Array.isArray(profile?.required)).toBe(true);
+    expect(Array.isArray(profile?.optional)).toBe(true);
+    expect(Array.isArray(profile?.forbidden)).toBe(true);
   });
 
   test('returns undefined for unknown role', () => {
@@ -43,8 +43,8 @@ describe('AC-1: All roles retain completion/recovery', () => {
     '%s includes completion and contract_pipeline capabilities',
     (role) => {
       const profile = getRoleProfile(role);
-      expect(profile!.required).toContain('completion');
-      expect(profile!.required).toContain('contract_pipeline');
+      expect(profile?.required).toContain('completion');
+      expect(profile?.required).toContain('contract_pipeline');
     },
   );
 });
@@ -54,9 +54,9 @@ describe('AC-1: All roles retain read/edit/test capabilities', () => {
     '%s includes read_source, edit_source and test_runner',
     (role) => {
       const profile = getRoleProfile(role);
-      expect(profile!.required).toContain('read_source');
-      expect(profile!.required).toContain('edit_source');
-      expect(profile!.required).toContain('test_runner');
+      expect(profile?.required).toContain('read_source');
+      expect(profile?.required).toContain('edit_source');
+      expect(profile?.required).toContain('test_runner');
     },
   );
 });
@@ -68,27 +68,27 @@ describe('AC-1: Publication tool gating', () => {
 
   test('writer does NOT have publication capability', () => {
     const profile = getRoleProfile('writer');
-    expect(profile!.required).not.toContain('publication');
+    expect(profile?.required).not.toContain('publication');
   });
 
   test('critic does NOT have publication capability', () => {
     const profile = getRoleProfile('critic');
-    expect(profile!.required).not.toContain('publication');
+    expect(profile?.required).not.toContain('publication');
   });
 
   test('implementer has publication capability', () => {
     const profile = getRoleProfile('implementer');
-    expect(profile!.required).toContain('publication');
+    expect(profile?.required).toContain('publication');
   });
 
   test('verifier has publication capability', () => {
     const profile = getRoleProfile('verifier');
-    expect(profile!.required).toContain('publication');
+    expect(profile?.required).toContain('publication');
   });
 
   test('review has publication capability', () => {
     const profile = getRoleProfile('review');
-    expect(profile!.required).toContain('publication');
+    expect(profile?.required).toContain('publication');
   });
 
   test.each(PUBLICATION_KEYS)('writer explicitly forbids %s', (key) => {
@@ -121,7 +121,7 @@ describe('AC-1: Resolved extension lists', () => {
   test('writer resolved extensions include completion, read, edit, test, pipeline', () => {
     const exts = resolveEnabledExtensions('writer');
     expect(exts).toBeDefined();
-    expect(exts!.length).toBeGreaterThan(0);
+    expect(exts?.length).toBeGreaterThan(0);
     // Writer should have contract_stage (completion + contract_pipeline)
     expect(exts).toContain('contract_stage');
     expect(exts).toContain('contract_factory');
@@ -186,24 +186,24 @@ describe('AC-1: Optional capabilities', () => {
   test('writer and critic have mcp_context as optional', () => {
     for (const role of ['writer', 'critic'] as PipelineRole[]) {
       const profile = getRoleProfile(role);
-      expect(profile!.optional).toContain('mcp_context');
+      expect(profile?.optional).toContain('mcp_context');
     }
   });
 
   test('implementer and verifier have browser and ai_vision as optional', () => {
     for (const role of ['implementer', 'verifier'] as PipelineRole[]) {
       const profile = getRoleProfile(role);
-      expect(profile!.optional).toContain('browser');
-      expect(profile!.optional).toContain('ai_vision');
+      expect(profile?.optional).toContain('browser');
+      expect(profile?.optional).toContain('ai_vision');
     }
   });
 
   test('review has all optional capabilities', () => {
     const profile = getRoleProfile('review');
-    expect(profile!.optional).toContain('browser');
-    expect(profile!.optional).toContain('ai_vision');
-    expect(profile!.optional).toContain('cloud_infra');
-    expect(profile!.optional).toContain('mcp_context');
+    expect(profile?.optional).toContain('browser');
+    expect(profile?.optional).toContain('ai_vision');
+    expect(profile?.optional).toContain('cloud_infra');
+    expect(profile?.optional).toContain('mcp_context');
   });
 
   test('getOptionalExtensions returns keys for role', () => {
