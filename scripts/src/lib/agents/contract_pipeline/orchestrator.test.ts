@@ -4,12 +4,20 @@
 // Tests the orchestrator's pure functions and validates that the
 // adapter injection seam works for deterministic testing.
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FakeHerdrAdapter } from './fake_adapter.ts';
-import { prePushGateForRevision, ReviewAbandonedError, verifierFeedback } from './orchestrator.ts';
+import { writeManifest } from './manifest_store.ts';
+import {
+  prePushGateForRevision,
+  ReviewAbandonedError,
+  runContractPipeline,
+  verifierFeedback,
+} from './orchestrator.ts';
+import * as stateMachine from './state_machine.ts';
 import type { ContractStageResult, RunManifest } from './types.ts';
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -215,6 +223,16 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'orchestrator-scenario-'));
+    execFileSync('git', ['init', '-b', 'main'], { cwd: tmpDir });
+    execFileSync('git', ['config', 'user.email', 'test@test.invalid'], { cwd: tmpDir });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: tmpDir });
+    mkdirSync(join(tmpDir, 'docs', 'contracts'), { recursive: true });
+    writeFileSync(
+      join(tmpDir, 'docs', 'contracts', 'C-999-test.md'),
+      ['---', 'id: C-999', 'status: draft', '---', '', '| **Status** | draft |', ''].join('\n'),
+    );
+    execFileSync('git', ['add', '-A'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'initial contract'], { cwd: tmpDir });
     adapter = new FakeHerdrAdapter({ workspacePath: tmpDir });
   });
 
@@ -222,23 +240,66 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('accepts a FakeHerdrAdapter through the adapterFactory option', async () => {
-    // The adapterFactory option is the injection seam for testing.
-    // This test verifies the seam exists and the adapter is called.
+  it('runs the pipeline through adapterFactory and applies the stage transition', async () => {
     let factoryCalled = false;
-    let adapterCreated: FakeHerdrAdapter | undefined;
+    let transitionInput: Parameters<typeof stateMachine.resolveNextStage>[0] | undefined;
+    const runId = 'run-test-C-472-adapter';
+    const contractPath = join(tmpDir, 'docs', 'contracts', 'C-999-test.md');
+    const pipelineAdapter = new FakeHerdrAdapter({ workspacePath: '' });
+    writeManifest({
+      cwd: tmpDir,
+      manifest: baseManifest({
+        runId,
+        contractPath,
+        currentStage: 'implement',
+        verifyLoops: 1,
+        blockedEscalations: 1,
+        skipAuthoring: true,
+        rootMode: true,
+      }),
+    });
 
-    const factory = (_opts: { repoRoot: string; runId: string; contractId: string }) => {
+    const factory = (options: { repoRoot: string; runId: string; contractId: string }) => {
       factoryCalled = true;
-      adapterCreated = new FakeHerdrAdapter();
-      return adapterCreated;
+      expect(options).toEqual({ repoRoot: tmpDir, runId, contractId: 'C-999' });
+      return pipelineAdapter;
     };
+    const resolveNextStage = stateMachine.resolveNextStage;
+    const transitionSpy = spyOn(stateMachine, 'resolveNextStage').mockImplementation((options) => {
+      transitionInput = options;
+      return resolveNextStage(options);
+    });
 
-    // Verify the factory signature matches what runContractPipeline expects.
-    expect(typeof factory).toBe('function');
-    const result = factory({ repoRoot: tmpDir, runId: 'test', contractId: 'C-999' });
-    expect(result).toBeInstanceOf(FakeHerdrAdapter);
+    const result = await runContractPipeline({
+      repoRoot: tmpDir,
+      resumeRunId: runId,
+      skipAuthoring: true,
+      rootMode: true,
+      adapterFactory: factory,
+    }).finally(() => transitionSpy.mockRestore());
+
     expect(factoryCalled).toBe(true);
+    expect(result.workspaceId).toBe('fake-ws');
+    expect(result.pipelinePaneId).toBe('fake-pipeline');
+    expect(pipelineAdapter.launchedWorkers).toHaveLength(0);
+    expect(result.attempts).toHaveLength(1);
+    expect(result.attempts[0]?.stage).toBe('implement');
+    const attemptResult = result.attempts[0]?.result;
+    expect(attemptResult?.status).toBe('blocked');
+    if (!attemptResult) {
+      throw new Error('Expected the pipeline to record the stage result.');
+    }
+    expect(transitionInput).toBeDefined();
+    if (!transitionInput) {
+      throw new Error('Expected the pipeline to resolve a stage transition.');
+    }
+    expect(transitionInput.currentStage).toBe('implement');
+    expect(transitionInput.verdict).toBe(attemptResult);
+    expect(transitionInput.verifyLoops).toBe(1);
+    expect(transitionInput.blockedEscalations).toBe(1);
+    expect(result.verifyLoops).toBe(1);
+    expect(result.blockedEscalations).toBe(1);
+    expect(result.currentStage).toBe('blocked');
   });
 
   it('FakeHerdrAdapter returns controllable values through its interface', async () => {
@@ -319,48 +380,5 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
 
     adapter.setAgentState({ status: 'idle', paneText: 'Hello, world' });
     expect(await adapter.readPaneText('pane-1')).toBe('Hello, world');
-  });
-});
-
-// ── State transition scenarios (pure, no adapter needed) ─────
-
-describe('lifecycle scenario: happy path stage progression', () => {
-  // Pure transition tests — verifies that resolveNextStage produces
-  // the expected stage sequence for a happy-path run.
-  // (resolveNextStage itself is tested in state_machine.test.ts;
-  //  this validates the orchestrator's usage pattern.)
-
-  it('passes correct parameters to resolveNextStage for each stage', () => {
-    const stages: Array<{
-      currentStage: string;
-      verdictStatus: ContractStageResult['status'];
-      expectedNext: string;
-    }> = [
-      { currentStage: 'write_contract', verdictStatus: 'passed', expectedNext: 'critique' },
-      { currentStage: 'critique', verdictStatus: 'passed', expectedNext: 'implement' },
-      { currentStage: 'implement', verdictStatus: 'passed', expectedNext: 'verify' },
-      { currentStage: 'verify', verdictStatus: 'passed', expectedNext: 'review' },
-    ];
-
-    for (const s of stages) {
-      const { resolveNextStage } = require('./state_machine.ts');
-      const result = resolveNextStage({
-        currentStage: s.currentStage,
-        verdict: {
-          runId: 'test',
-          stage: s.currentStage,
-          attempt: 1,
-          status: s.verdictStatus,
-          summary: 'ok',
-          findings: [],
-          filesTouched: [],
-          evidence: [],
-          contractHash: '',
-          diffHash: '',
-        },
-        verifyLoops: 0,
-      });
-      expect(result.next).toBe(s.expectedNext);
-    }
   });
 });

@@ -13,7 +13,7 @@ export type FakeAgentState =
   | { status: 'working'; paneText: string | null }
   | { status: 'blocked'; paneText: string | null }
   | { status: 'done'; paneText: string | null }
-  | { status: 'unknown'; paneText: string | null };
+  | { status: undefined; paneText: string | null };
 
 /** Simulated review start outcome. */
 export type FakeReviewOutcome = {
@@ -66,58 +66,59 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
 
   // ── Controllable test state ──────────────────────────────────
 
-  /** Set the agent status reported by getAgentStatus. */
+  /** Set the status and pane text returned by subsequent agent queries. Returns no value. */
   setAgentState(state: FakeAgentState): void {
     this._agentState = state;
   }
 
-  /** Set whether isWorkerActive returns true. */
+  /** Set the worker activity result returned by isWorkerActive. Returns no value. */
   setWorkerActive(active: boolean): void {
     this._workerActive = active;
   }
 
-  /** Set whether isPaneAlive returns true. */
+  /** Set the pane liveness result returned by isPaneAlive. Returns no value. */
   setPaneAlive(alive: boolean): void {
     this._paneAlive = alive;
   }
 
-  /** Nudges sent via nudgeWorker. */
+  /** Return a read-only view of nudges recorded by nudgeWorker. */
   get nudges(): ReadonlyArray<{ paneId: string; message: string }> {
     return this._nudges;
   }
 
-  /** Messages sent via sendReviewMessage. */
+  /** Return a read-only view of messages recorded by sendReviewMessage. */
   get reviewMessages(): ReadonlyArray<{ paneId: string; message: string }> {
     return this._reviewMessages;
   }
 
-  /** Workers launched via launchWorker. */
+  /** Return a read-only view of worker requests recorded by launchWorker. */
   get launchedWorkers(): ReadonlyArray<WorkerLaunchRequest> {
     return this._launchedWorkers;
   }
 
-  /** Pane IDs returned by launchWorker. */
+  /** Return a read-only view of pane IDs allocated by launchWorker. */
   get workerPaneIds(): ReadonlyArray<string> {
     return this._workerPaneIds;
   }
 
-  /** Whether startReview was called. */
+  /** Return whether startReview has been called. */
   get reviewStarted(): boolean {
     return this._reviewStarted;
   }
 
-  /** The prompt passed to startReview. */
+  /** Return the prompt from the latest startReview call, or an empty string before one. */
   get reviewPrompt(): string {
     return this._reviewPrompt;
   }
 
-  /** Whether startReview was called with blockedReview. */
+  /** Return whether the latest startReview call requested a blocked review. */
   get reviewBlocked(): boolean {
     return this._reviewBlocked;
   }
 
   // ── ContractHerdrAdapterInterface implementation ─────────────
 
+  /** Return the configured workspace and pipeline pane identifiers without external setup. */
   async initialize(): Promise<{ workspaceId: string; pipelinePaneId: string }> {
     return {
       workspaceId: this._workspaceId,
@@ -125,18 +126,22 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
     };
   }
 
+  /** Return the configured workspace identifier. */
   getWorkspaceId(): string {
     return this._workspaceId;
   }
 
+  /** Return the configured workspace checkout path. */
   getWorkspacePath(): string {
     return this._workspacePath;
   }
 
+  /** Return the configured worktree branch name. */
   getWorktreeBranch(): string {
     return this._worktreeBranch;
   }
 
+  /** Record a worker request and return a newly allocated sequential fake pane ID. */
   async launchWorker(request: WorkerLaunchRequest): Promise<{ paneId: string }> {
     this._launchedWorkers.push(request);
     const paneId = `fake-worker-${this._workerPaneIds.length + 1}`;
@@ -144,18 +149,22 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
     return { paneId };
   }
 
+  /** Return the configured worker activity state without inspecting the pane ID. */
   async isWorkerActive(_paneId: string): Promise<boolean> {
     return this._workerActive;
   }
 
+  /** Record a worker nudge and resolve without a value. */
   async nudgeWorker(options: { paneId: string; message: string }): Promise<void> {
     this._nudges.push(options);
   }
 
+  /** Return the configured pane liveness state without inspecting the pane ID. */
   async isPaneAlive(_paneId: string): Promise<boolean> {
     return this._paneAlive;
   }
 
+  /** Record review startup details and return the fixed review pane and delivery result. */
   async startReview(options: {
     prompt: string;
     contractPath: string;
@@ -176,15 +185,18 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
     return { paneId, taskDelivered };
   }
 
+  /** Record a review message and resolve true to indicate successful delivery. */
   async sendReviewMessage(options: { paneId: string; message: string }): Promise<boolean> {
     this._reviewMessages.push(options);
     return true;
   }
 
+  /** Return the configured agent status unchanged, including undefined when unreported. */
   async getAgentStatus(_paneId: string): Promise<string | undefined> {
     return this._agentState.status;
   }
 
+  /** Return the configured pane text, including null when no text is available. */
   async readPaneText(_paneId: string): Promise<string | null> {
     return this._agentState.paneText;
   }

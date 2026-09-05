@@ -8,6 +8,7 @@
 // verifies the adapter interface contract through the FakeHerdrAdapter.
 
 import { describe, expect, it } from 'bun:test';
+import { join } from 'node:path';
 import { FakeHerdrAdapter } from './fake_adapter.ts';
 import { buildWorkspaceLabel, ghTokenFilePath } from './herdr_adapter.ts';
 
@@ -16,7 +17,7 @@ import { buildWorkspaceLabel, ghTokenFilePath } from './herdr_adapter.ts';
 describe('ghTokenFilePath', () => {
   it('constructs the token path from repoRoot and runId', () => {
     const path = ghTokenFilePath({ repoRoot: '/home/user/repo', runId: 'run-test-abc' });
-    expect(path).toBe('/home/user/repo/.pi/contract-runs/run-test-abc/gh-token');
+    expect(path).toBe(join('/home/user/repo', '.pi', 'contract-runs', 'run-test-abc', 'gh-token'));
   });
 });
 
@@ -65,41 +66,41 @@ describe('ContractHerdrAdapterInterface structural contract', () => {
 // ── Transport capability scenarios ──────────────────────────
 
 describe('transport capability: agent status polling', () => {
-  it('detects a working agent from status', () => {
+  it('detects a working agent from status', async () => {
     const adapter = new FakeHerdrAdapter({
       initialState: { status: 'working', paneText: null },
     });
     // Working means the agent is mid-response — NOT safe to interrupt.
     // This is verified via canSendToReviewPane in review_pane.test.ts.
-    expect(adapter.getAgentStatus('pane-1')).resolves.toBe('working');
+    await expect(adapter.getAgentStatus('pane-1')).resolves.toBe('working');
   });
 
-  it('detects an idle agent from status', () => {
+  it('detects an idle agent from status', async () => {
     const adapter = new FakeHerdrAdapter({
       initialState: { status: 'idle', paneText: '' },
     });
-    expect(adapter.getAgentStatus('pane-1')).resolves.toBe('idle');
+    await expect(adapter.getAgentStatus('pane-1')).resolves.toBe('idle');
   });
 
-  it('detects a blocked agent from status', () => {
+  it('detects a blocked agent from status', async () => {
     const adapter = new FakeHerdrAdapter({
       initialState: { status: 'blocked', paneText: null },
     });
-    expect(adapter.getAgentStatus('pane-1')).resolves.toBe('blocked');
+    await expect(adapter.getAgentStatus('pane-1')).resolves.toBe('blocked');
   });
 
-  it('detects a done agent from status', () => {
+  it('detects a done agent from status', async () => {
     const adapter = new FakeHerdrAdapter({
       initialState: { status: 'done', paneText: null },
     });
-    expect(adapter.getAgentStatus('pane-1')).resolves.toBe('done');
+    await expect(adapter.getAgentStatus('pane-1')).resolves.toBe('done');
   });
 
-  it('reports unknown when status cannot be determined', () => {
+  it('returns undefined when status is not reported', async () => {
     const adapter = new FakeHerdrAdapter({
-      initialState: { status: 'unknown', paneText: null },
+      initialState: { status: undefined, paneText: null },
     });
-    expect(adapter.getAgentStatus('pane-1')).resolves.toBe('unknown');
+    await expect(adapter.getAgentStatus('pane-1')).resolves.toBeUndefined();
   });
 });
 

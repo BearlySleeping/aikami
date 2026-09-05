@@ -305,6 +305,42 @@ describe('runStage recovery: process exit without result', () => {
     expect(outcome.result.status).toBe('blocked');
     expect(outcome.result.summary).toContain('timeout');
   });
+
+  it('adopts the result produced by a relaunched dead worker', async () => {
+    let launches = 0;
+    let relaunchResult: ContractStageResult | undefined;
+    const outcome = await runStage({
+      repoRoot,
+      runDirectory,
+      runId: RUN_ID,
+      stage: 'implement',
+      attempt: 1,
+      contractPath: 'docs/contracts/C-999-test.md',
+      idleTimeoutMs: 10,
+      hardTimeoutMs: 10_000,
+      pollIntervalMs: 5,
+      launchWorker: async (request) => {
+        launches += 1;
+        if (launches === 2) {
+          relaunchResult = {
+            ...resultFor(1, 'passed'),
+            generation: request.generation,
+          };
+          writeStageResult({ resultPath: request.resultPath, result: relaunchResult });
+        }
+        return { paneId: launches === 1 ? 'pane-dead' : 'pane-relaunched' };
+      },
+      checkAgentWorking: async () => false,
+    });
+
+    expect(launches).toBe(2);
+    expect(relaunchResult).toBeDefined();
+    expect(outcome.paneId).toBe('pane-relaunched');
+    if (!relaunchResult) {
+      throw new Error('Expected the relaunched worker to produce a result.');
+    }
+    expect(outcome.result).toEqual(relaunchResult);
+  });
 });
 
 describe('runStage recovery: generation fencing prevents duplicate adoption', () => {
