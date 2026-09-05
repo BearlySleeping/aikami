@@ -145,6 +145,155 @@ export type StageUsage = {
   cost: number;
 };
 
+// ── C-473: Richer usage types ──
+
+/**
+ * Provenance of a monetary amount: how the cost was determined.
+ * - `provider_reported`: the provider SDK returned a concrete cost.
+ * - `estimated`: derived from versioned pricing table (carries `pricingVersion`).
+ * - `unknown`: no cost data available (displayed explicitly, never zero).
+ * - `incomplete`: partial data (stream interrupted, partial response).
+ */
+export type CurrencyProvenance = 'provider_reported' | 'estimated' | 'unknown' | 'incomplete';
+
+/**
+ * A single monetary amount in one currency, with provenance and optional
+ * conversion metadata. When `amount` is the result of a cross-currency
+ * conversion, `conversion` records the applied rate, source and timestamp.
+ */
+export type MonetaryAmount = {
+  /** Numeric amount in `currency` units. */
+  amount: number;
+  /** ISO 4217 currency code (e.g. 'USD', 'EUR'). */
+  currency: string;
+  /** How this amount was determined. */
+  provenance: CurrencyProvenance;
+  /**
+   * Versioned pricing table identifier when provenance is `estimated`.
+   * Example: 'claude-sonnet-5-2026-09'.
+   */
+  pricingVersion?: string;
+  /**
+   * Present only when this amount was converted from another currency.
+   * Every conversion MUST record the applied rate, source and timestamp.
+   * Absent conversion metadata means no cross-currency sum was produced.
+   */
+  conversion?: {
+    rate: number;
+    timestamp: string;
+    source: string;
+  };
+};
+
+/**
+ * Extended per-attempt usage record with full provenance, completeness
+ * and event identity for deduplication.
+ */
+export type UsageRecord = {
+  /** Provider model identifier (e.g. 'claude-sonnet-5-20260904'). */
+  model: string;
+  /** Provider identifier (e.g. 'anthropic', 'openai', 'openrouter'). */
+  provider: string;
+  /** Effective thinking level applied. */
+  thinkingLevel: string;
+  /** Prompt/config/profile version used for this generation. */
+  configVersion: string;
+  /** Number of assistant turns/messages. */
+  turns: number;
+  /** Input tokens (prompt). */
+  inputTokens: number;
+  /** Output tokens (completion). */
+  outputTokens: number;
+  /** Cache read tokens (provider-reported, may overlap with inputTokens). */
+  cacheReadTokens: number;
+  /** Cache write tokens. */
+  cacheWriteTokens: number;
+  /** Total tokens from provider (may be aggregate, not merely last event). */
+  totalTokens: number;
+  /** Elapsed wall-clock time in seconds. */
+  elapsedSeconds: number;
+  /** Number of tool errors during this attempt. */
+  toolErrors: number;
+  /** Number of retries within this attempt. */
+  retries: number;
+  /** Monetary amounts, keyed by ISO 4217 currency code. */
+  monetary: Record<string, MonetaryAmount>;
+  /** Whether this record represents a complete usage measurement. */
+  complete: boolean;
+  /**
+   * Unique event identity for deduplication. Derived from runId + stage +
+   * attempt + generation so identical attempts produce the same identity.
+   */
+  eventId: string;
+  /** ISO timestamp when usage was finalized. */
+  finalizedAt: string;
+  /**
+   * True when external review/vision/delegation usage was captured.
+   * False when coverage is incomplete — never silently zero.
+   */
+  externalCoverageComplete: boolean;
+  /**
+   * Writer/critic/implementer/verifier/review paths that contributed.
+   * Set only when the adapter exposes them; otherwise coverage is
+   * reported as incomplete.
+   */
+  contributingRoles?: ContractWorkerRole[];
+};
+
+/**
+ * Aggregated usage totals for a run or task. Monetary amounts are
+ * kept separate per currency unless every converted amount carries
+ * versioned conversion metadata.
+ */
+export type AggregatedUsage = {
+  /** Total turns across all attempts. */
+  totalTurns: number;
+  /** Total input tokens. */
+  totalInputTokens: number;
+  /** Total output tokens. */
+  totalOutputTokens: number;
+  /** Total cache read tokens. */
+  totalCacheReadTokens: number;
+  /** Total cache write tokens. */
+  totalCacheWriteTokens: number;
+  /**
+   * Aggregated total tokens — sum of individual event totals, NOT merely
+   * the last event's totalTokens value (the legacy bug, C-473 AC-2).
+   */
+  aggregatedTotalTokens: number;
+  /** Elapsed wall-clock time in seconds. */
+  totalElapsedSeconds: number;
+  /** Total tool errors. */
+  totalToolErrors: number;
+  /** Total retries. */
+  totalRetries: number;
+  /**
+   * Monetary amounts per currency. Cross-currency conversion produces
+   * a combined total only when every converted amount carries versioned
+   * conversion metadata.
+   */
+  monetary: Record<string, MonetaryAmount>;
+  /**
+   * Cross-currency converted total. Present ONLY when every converted
+   * amount records a versioned conversion source, applied rate and
+   * timestamp. Absent otherwise.
+   */
+  convertedTotal?: MonetaryAmount;
+  /**
+   * Number of attempts with unknown/incomplete usage (empty legacy
+   * objects or interrupted runs). Never counted as zero cost.
+   */
+  unknownAttempts: number;
+  /** Number of failed attempts included in totals. */
+  failedAttempts: number;
+  /** Models used across all attempts. */
+  models: string[];
+  /** Providers used. */
+  providers: string[];
+  /** Whether all external coverage (review/vision/delegation) was captured. */
+  externalCoverageComplete: boolean;
+};
+
 /** One stage attempt recorded in the run manifest. */
 export type StageAttempt = {
   stage: ContractPipelineStage;
@@ -155,6 +304,8 @@ export type StageAttempt = {
   endTime?: string;
   result?: ContractStageResult;
   usage?: StageUsage;
+  /** Extended usage record when available. */
+  usageRecord?: UsageRecord;
 };
 
 /** Durable v3 manifest stored under .pi/contract-runs/<runId>/. */
@@ -171,6 +322,8 @@ export type RunManifest = {
   verifyLoops: number;
   attempts: StageAttempt[];
   usage: Record<string, StageUsage>;
+  /** Aggregated run usage (C-473). Computed from attempts on finalization. */
+  aggregatedUsage?: AggregatedUsage;
   reviewDecision?: ContractReviewDecision;
   reconciliation?: ReconciliationResult;
   /**
