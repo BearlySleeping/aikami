@@ -3,7 +3,7 @@ id: C-467
 title: "Tauri local AI install wizard — hardware detection, engine sidecars, no Docker required"
 source: "Original settings-teardown request — 'think of how to integrate... download local text and image via hardware detect[ion], install wizard inside tauri/client.' C-390/C-391 already solved this for the Docker/CLI path; the desktop app itself has no equivalent. C-466 is the highest claimed ID; C-467 is the next free one."
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
