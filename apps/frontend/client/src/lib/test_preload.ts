@@ -516,6 +516,8 @@ export const localServicesMockBase = () => ({
   PROVIDER_MODEL_FETCH: {},
   // C-465: ai_settings_view_model.svelte.ts needs this from '$services'.
   fetchModelsFromProvider: _createCallableStub(),
+  // C-466: credential-policy wrapper for model-fetch requests.
+  fetchWithCredentialPolicy: _createCallableStub(),
   choiceHistoryStore: _createServiceStub(),
   getExpressionAssetResolver: _createCallableStub(),
   sceneToMusicTags: _createCallableStub(),
