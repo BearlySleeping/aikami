@@ -1,9 +1,11 @@
 // scripts/src/lib/agents/contract_pipeline/orchestrator_precondition.test.ts
 //
-// Covers checkImplementPrecondition()'s fast-fail: a `draft` contract must be
-// caught in milliseconds, before a worker is ever spawned, and it must be
-// caught off `main`'s committed content — not repoRoot's on-disk mirror,
-// which can lag behind it. See the C-443 incident note on the function.
+// Covers checkImplementPrecondition()'s fast-fail: a `draft` or `superseded`
+// contract must be caught in milliseconds, before a worker is ever spawned —
+// a superseded parent is a multi-PR spec whose children are the runnable
+// units. The status must be read off `main`'s committed content — not
+// repoRoot's on-disk mirror, which can lag behind it. See the C-443 incident
+// note on the function.
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -37,6 +39,7 @@ const draftBody = [
   '',
 ].join('\n');
 const approvedBody = draftBody.replaceAll('draft', 'approved');
+const supersededBody = draftBody.replaceAll('draft', 'superseded');
 
 let root: string;
 let remote: string;
@@ -111,6 +114,24 @@ describe('checkImplementPrecondition', () => {
     });
     // main says approved — must proceed, even though disk still says draft.
     expect(result).toBeUndefined();
+  });
+
+  it('blocks a superseded parent that was split into child contracts', () => {
+    writeFileSync(contractPath, supersededBody);
+    commitContractToMain({ repoRoot: root, contractPath, message: 'docs: supersede' });
+    // Desync the worktree to `approved`, so reading the wrong source would
+    // return undefined rather than accidentally agreeing with `main`.
+    writeFileSync(contractPath, approvedBody);
+    expect(git(['show', `main:${CONTRACT_REL}`], root)).toContain('superseded');
+
+    const result = checkImplementPrecondition({
+      repoRoot: root,
+      contractPath,
+      runId: 'run-test-C-999',
+      attempt: 1,
+    });
+    expect(result?.status).toBe('blocked');
+    expect(result?.summary).toContain('superseded');
   });
 
   it('proceeds when the contract is not on main yet', () => {

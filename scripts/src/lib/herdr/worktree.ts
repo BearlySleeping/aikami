@@ -682,10 +682,22 @@ export CONTRACT_PIPELINE_WORKTREE=1
   // folder name". Fix: create node_modules as a real directory, copy .bun cache
   // from root, create @aikami symlinks to worktree's own source dirs, and
   // junction per-app node_modules for vite/pixi.js.
+  //
+  // 🔴 This seeding is WINDOWS-ONLY and must stay gated on `win32`. It builds a
+  // deliberately partial tree — `.bun`, `.bin`, `@aikami/*` and per-app
+  // junctions — and never links the ordinary top-level deps (`@types/bun`,
+  // `@types/node`, `typescript`, …) that live as root-level symlinks into
+  // `.bun`. Running it on Linux/macOS (as it did until C-476) left every fresh
+  // worktree with a 3-entry node_modules, so `tsc` could not resolve
+  // `types: ["bun"]` and pre-push validation died with TS2688 — after the
+  // implementer and verifier had both already passed. The `else` branch below
+  // was unreachable on a fresh checkout, because a fresh checkout never has a
+  // node_modules to find. On POSIX the plain install is both correct and fast:
+  // bun hardlinks out of the shared global cache.
   let installed = false;
   if (options.install !== false) {
     const worktreeNodeModules = join(checkoutPath, 'node_modules');
-    if (!existsSync(worktreeNodeModules)) {
+    if (process.platform === 'win32' && !existsSync(worktreeNodeModules)) {
       mkdirSync(worktreeNodeModules, { recursive: true });
       // Junction .bun cache from root (non-workspace deps)
       // 🔴 cpSync fails with EPERM on symlinks inside the cache. Use junction instead.
@@ -783,7 +795,8 @@ export CONTRACT_PIPELINE_WORKTREE=1
       }
       installed = true;
     } else {
-      // node_modules already exists — run bun install normally
+      // Every POSIX worktree, and any Windows worktree that already has a
+      // node_modules, installs normally.
       const timeoutMs = options.installTimeoutMs ?? 180_000;
       try {
         execSync('bun install --frozen-lockfile', {
@@ -807,9 +820,53 @@ export CONTRACT_PIPELINE_WORKTREE=1
         });
       }
     }
+
+    // ── 6. Post-condition: the dep tree must actually be complete ──
+    // 🔴 The TS2688 failure this guards against was silent: bootstrap reported
+    // success, the implementer and verifier both passed, and the missing deps
+    // only surfaced at pre-push — the most expensive possible place to learn
+    // the worktree was never usable. Diffing against root's own top-level
+    // entries keeps this self-maintaining: it needs no hardcoded package list
+    // and stays correct as dependencies come and go.
+    const missing = missingWorktreeDeps({ checkoutPath, repoRoot });
+    if (missing.length > 0) {
+      console.warn(
+        `⚠️  Incomplete node_modules in ${checkoutPath} — missing ${missing.join(', ')}. ` +
+          `Typecheck will fail (TS2688). Run: cd ${checkoutPath} && bun install`,
+      );
+      reportInfraIssue({
+        component: 'worktree_bootstrap',
+        operation: 'verify node_modules',
+        error: new Error(`Missing top-level node_modules entries: ${missing.join(', ')}`),
+        context: { checkoutPath, missing: missing.join(','), platform: process.platform },
+        cwd: repoRoot,
+      });
+      installed = false;
+    }
   }
 
   return { installed };
+};
+
+/**
+ * Top-level `node_modules` entries present in the root checkout but absent from
+ * the worktree. `@aikami/*` is excluded: worktrees deliberately point those at
+ * their own source dirs rather than root's. Dotted entries (`.bun`, `.bin`,
+ * `.cache`) are excluded too — they are caches and shim dirs, not deps.
+ */
+export const missingWorktreeDeps = (options: {
+  checkoutPath: string;
+  repoRoot: string;
+}): string[] => {
+  const { checkoutPath, repoRoot } = options;
+  const rootNodeModules = join(repoRoot, 'node_modules');
+  const worktreeNodeModules = join(checkoutPath, 'node_modules');
+  if (!existsSync(rootNodeModules)) {
+    return [];
+  }
+  return readdirSync(rootNodeModules)
+    .filter((entry) => !entry.startsWith('.') && entry !== '@aikami')
+    .filter((entry) => !existsSync(join(worktreeNodeModules, entry)));
 };
 
 /** Copy gitignored-but-required files from the root checkout into the worktree. */

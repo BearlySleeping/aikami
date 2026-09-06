@@ -3,12 +3,13 @@ id: C-478
 title: "Pin agent resources and make updates reproducible"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/261"
+  pr_number: 261
 created_at: "2026-09-04T22:21:38Z"
 ---
 
@@ -22,8 +23,8 @@ created_at: "2026-09-04T22:21:38Z"
 | **Target** | `.pi` resource configuration, update scripts and provenance |
 | **Type** | thin |
 | **Priority** | P1 — floating package/skill updates change agent behavior without a reproducible environment |
-| **Dependencies** | C-468, C-474, C-475 |
-| **Status** | draft |
+| **Dependencies** | C-468, C-472, C-474, C-475 |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — install/check/update workflow and rollback |
 | **Contract version** | 2.0.0 |
@@ -70,7 +71,7 @@ A contributor can reproduce the project's supported agent resources and review a
 **Given** a worktree whose resource/dependency identity differs from the root checkout,
 **When** its agent runtime is prepared,
 **Then** reuse is permitted only when the complete resource-graph identity matches: the relevant committed lockfile data, normalized `.pi/settings.json` package/extension/skill/prompt selections, and hashes of generated resource content selected by that configuration. If any identity input differs or is unavailable, preparation resolves compatible resources for that checkout or fails with explicit commands/instructions; it does not assume a shared node_modules link or generated resource directory is compatible.
-**Verification**: fixture checkouts exercise a complete match plus independent lockfile-data, `.pi/settings.json`-selection and generated-content mismatches through the existing C-472 launch/preflight seam. Every mismatch blocks reuse and resolves compatible resources or returns explicit preparation instructions; do not reimplement worktree provisioning.
+**Verification**: fixture checkouts exercise a complete match plus independent lockfile-data, `.pi/settings.json`-selection and generated-content mismatches. Where C-472's launch/preflight seam is available (C-472 approved, pending implementation), reuse it; otherwise the implementer builds equivalent fixture-driven identity checks locally without reimplementing full worktree provisioning. Every mismatch blocks reuse and resolves compatible resources or returns explicit preparation instructions.
 
 ### AC-5: Provenance and rollback are inspectable
 **Given** a recorded run or proposed update,
