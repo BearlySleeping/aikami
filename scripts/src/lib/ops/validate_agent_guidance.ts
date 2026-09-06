@@ -13,27 +13,29 @@
 //
 // Exits non-zero on any violation.
 
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
+import { KNOWN_SERVICES } from '../herdr/session';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-type ManifestEntry = {
+export type ManifestEntry = {
   readonly class: string;
   readonly active: boolean;
 };
 
-type Manifest = {
+export type Manifest = {
   readonly version: number;
   readonly description: string;
   readonly entries: Record<string, ManifestEntry>;
   readonly exemptions: Record<string, { readonly reason: string }>;
 };
 
-type CheckResult = {
+export type CheckResult = {
   readonly label: string;
   readonly passed: boolean;
   readonly details: readonly string[];
@@ -61,77 +63,77 @@ const walkDir = (dir: string): string[] => {
   return out;
 };
 
-const discoverCandidates = (): Map<string, string> => {
+const discoverCandidates = (root = ROOT): Map<string, string> => {
   const candidates = new Map<string, string>();
 
   // Root agent
   for (const p of ['AGENTS.md', '.claude/CLAUDE.md']) {
-    const full = resolve(ROOT, p);
+    const full = resolve(root, p);
     if (existsSync(full)) {
       candidates.set(p, 'root_agent');
     }
   }
 
   // Generated context
-  const contextDir = resolve(ROOT, '.context');
+  const contextDir = resolve(root, '.context');
   if (existsSync(contextDir)) {
     for (const f of walkDir(contextDir)) {
-      const rel = relative(ROOT, f);
+      const rel = relative(root, f);
       candidates.set(rel, 'generated_context');
     }
   }
 
   // Pi guidance
   for (const p of ['.pi/README.md', '.pi/settings.json']) {
-    const full = resolve(ROOT, p);
+    const full = resolve(root, p);
     if (existsSync(full)) {
       candidates.set(p, 'pi_guidance');
     }
   }
 
   // Pi extensions
-  const extDir = resolve(ROOT, '.pi/extensions');
+  const extDir = resolve(root, '.pi/extensions');
   if (existsSync(extDir)) {
     for (const f of walkDir(extDir)) {
       if (f.endsWith('.ts')) {
-        candidates.set(relative(ROOT, f), 'pi_extensions');
+        candidates.set(relative(root, f), 'pi_extensions');
       }
     }
   }
 
   // Pi runners
-  const runnersDir = resolve(ROOT, '.pi/runners');
+  const runnersDir = resolve(root, '.pi/runners');
   if (existsSync(runnersDir)) {
     for (const f of walkDir(runnersDir)) {
       if (f.endsWith('.gitkeep')) {
         continue;
       }
-      candidates.set(relative(ROOT, f), 'pi_runners');
+      candidates.set(relative(root, f), 'pi_runners');
     }
   }
 
   // Pi scripts
-  const scriptsDir = resolve(ROOT, '.pi/scripts');
+  const scriptsDir = resolve(root, '.pi/scripts');
   if (existsSync(scriptsDir)) {
     for (const f of walkDir(scriptsDir)) {
       if (f.endsWith('.ts')) {
-        candidates.set(relative(ROOT, f), 'pi_scripts');
+        candidates.set(relative(root, f), 'pi_scripts');
       }
     }
   }
 
   // Agent prompts
-  const promptsDir = resolve(ROOT, '.pi/prompts');
+  const promptsDir = resolve(root, '.pi/prompts');
   if (existsSync(promptsDir)) {
     for (const f of walkDir(promptsDir)) {
       if (f.endsWith('.md')) {
-        candidates.set(relative(ROOT, f), 'agent_prompts');
+        candidates.set(relative(root, f), 'agent_prompts');
       }
     }
   }
 
   // Project skills — each <name>/SKILL.md + lint_rules.json
-  const skillsDir = resolve(ROOT, '.pi/skills');
+  const skillsDir = resolve(root, '.pi/skills');
   if (existsSync(skillsDir)) {
     for (const skillDir of readdirSync(skillsDir)) {
       const skillPath = resolve(skillsDir, skillDir);
@@ -139,28 +141,28 @@ const discoverCandidates = (): Map<string, string> => {
         continue;
       }
       for (const f of walkDir(skillPath)) {
-        const rel = relative(ROOT, f);
+        const rel = relative(root, f);
         candidates.set(rel, 'pi_skills');
       }
     }
   }
 
   // Generated skills
-  const genSkillsDir = resolve(ROOT, '.pi/generated-skills');
+  const genSkillsDir = resolve(root, '.pi/generated-skills');
   if (existsSync(genSkillsDir)) {
     for (const f of walkDir(genSkillsDir)) {
       if (f.endsWith('SKILL.md')) {
-        candidates.set(relative(ROOT, f), 'generated_skills');
+        candidates.set(relative(root, f), 'generated_skills');
       }
     }
   }
 
   // Agent system prompts
-  const agentsDir = resolve(ROOT, 'scripts/src/lib/agents');
+  const agentsDir = resolve(root, 'scripts/src/lib/agents');
   if (existsSync(agentsDir)) {
     for (const f of walkDir(agentsDir)) {
       if (f.endsWith('.ts') && (f.includes('prompt_loader') || f.includes('prompt'))) {
-        candidates.set(relative(ROOT, f), 'agent_system_prompts');
+        candidates.set(relative(root, f), 'agent_system_prompts');
       }
     }
   }
@@ -182,6 +184,11 @@ const loadManifest = (): Manifest | undefined => {
   }
 };
 
+const hasValidExemption = (manifest: Manifest, path: string): boolean => {
+  const exemption = manifest.exemptions[path];
+  return typeof exemption?.reason === 'string' && exemption.reason.trim().length > 0;
+};
+
 // ── Check 1: Manifest coverage (AC-3) ────────────────────────────────────
 
 const checkManifestCoverage = (manifest: Manifest): CheckResult => {
@@ -201,10 +208,14 @@ const checkManifestCoverage = (manifest: Manifest): CheckResult => {
 
   // Every discovered candidate must be in the manifest (unless exempted)
   for (const [path, sourceClass] of candidates) {
-    if (manifest.entries[path]) {
+    if (manifest.entries[path]?.active === true) {
       continue;
     }
-    if (manifest.exemptions[path]) {
+    if (hasValidExemption(manifest, path)) {
+      continue;
+    }
+    if (manifest.entries[path]) {
+      errors.push(`Discovered active file has an inactive manifest entry: ${path}`);
       continue;
     }
     errors.push(`Unlisted active file (${sourceClass}): ${path}`);
@@ -227,30 +238,112 @@ const checkManifestCoverage = (manifest: Manifest): CheckResult => {
 
 // ── Check 2: Reference resolution (AC-2) ─────────────────────────────────
 
-// Known valid tool/action names derived from registries
-// Known valid contract_stage action values
+type ReferenceRegistries = {
+  readonly herdrActions: ReadonlySet<string>;
+  readonly services: ReadonlySet<string>;
+  readonly stageActions: ReadonlySet<string>;
+};
 
-// Known valid contract_stage action values
-const KNOWN_STAGE_ACTIONS = new Set(['complete', 'review_decision', 'reconcile', 'log_failure']);
+const quotedValues = (source: string): Set<string> =>
+  new Set(Array.from(source.matchAll(/['"]([\w-]+)['"]/g), (match) => match[1]));
 
-// Known valid herdr_session action values
-const KNOWN_HERDR_ACTIONS = new Set(['start', 'stop', 'restart', 'status', 'read', 'list']);
+const loadReferenceRegistries = (): ReferenceRegistries => {
+  const contractPipeline = readFileSync(
+    resolve(ROOT, '.pi/extensions/contract_pipeline.ts'),
+    'utf-8',
+  );
+  const herdrExtension = readFileSync(
+    resolve(ROOT, '.pi/extensions/herdr_orchestrator.ts'),
+    'utf-8',
+  );
+  const stageActions = new Set(
+    Array.from(
+      contractPipeline.matchAll(/defineAction\s*\(\s*\{\s*action:\s*['"]([\w-]+)['"]/g),
+      (match) => match[1],
+    ),
+  );
+  const herdrTool = herdrExtension.match(
+    /name:\s*['"]herdr_session['"][\s\S]*?action:\s*Type\.String\s*\(\s*\{\s*enum:\s*\[([^\]]+)\]/,
+  );
 
-// Known valid service names
+  return {
+    stageActions,
+    herdrActions: quotedValues(herdrTool?.[1] ?? ''),
+    services: new Set(KNOWN_SERVICES),
+  };
+};
 
-// Known valid moon project tags
+const lineAt = (content: string, index: number): number =>
+  content.slice(0, index).split('\n').length;
 
-// Known valid service names (from SERVICE_DEFS)
+const checkStageReferences = (options: {
+  content: string;
+  errors: string[];
+  path: string;
+  registry: ReadonlySet<string>;
+}): void => {
+  const patterns = [
+    /\bcontract_stage\s*\(\s*\{[^}]*?\baction\s*:\s*['"]([^'"]+)['"]/gs,
+    /`contract_stage`\s+action\s+`([^`]+)`/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of options.content.matchAll(pattern)) {
+      const action = match[1];
+      if (action && !options.registry.has(action)) {
+        options.errors.push(
+          `${options.path}:${lineAt(options.content, match.index)}: unknown contract_stage action "${action}"`,
+        );
+      }
+    }
+  }
+};
 
-const checkReferences = (manifest: Manifest): CheckResult => {
+const checkHerdrReferences = (options: {
+  content: string;
+  errors: string[];
+  path: string;
+  registries: ReferenceRegistries;
+}): void => {
+  const patterns = [
+    /`herdr_session\s+([\w-]+)(?:\s+([\w-]+))?`/g,
+    /^\s*(?:[-*]\s+)?herdr_session\s+([\w-]+)(?:\s+([\w-]+))?/gm,
+  ];
+  const seen = new Set<string>();
+  for (const pattern of patterns) {
+    for (const match of options.content.matchAll(pattern)) {
+      const action = match[1];
+      const service = match[2];
+      const key = `${match.index}:${action}:${service ?? ''}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      const line = lineAt(options.content, match.index);
+      if (action && !options.registries.herdrActions.has(action)) {
+        options.errors.push(`${options.path}:${line}: unknown herdr_session action "${action}"`);
+      }
+      if (service && !options.registries.services.has(service)) {
+        options.errors.push(`${options.path}:${line}: unknown herdr_session service "${service}"`);
+      }
+    }
+  }
+};
+
+/** Resolves active guidance references against the extension and service registries. */
+export const checkReferences = (options: { manifest: Manifest; root?: string }): CheckResult => {
   const errors: string[] = [];
+  const root = options.root ?? ROOT;
+  const registries = loadReferenceRegistries();
 
-  // Scan active guidance files for tool/action references
-  for (const [path, entry] of Object.entries(manifest.entries)) {
-    if (!entry.active) {
+  // Scan discovered guidance so an inactive manifest entry cannot hide stale references.
+  for (const [path] of discoverCandidates(root)) {
+    if (options.manifest.entries[path]?.active !== true) {
+      if (!hasValidExemption(options.manifest, path)) {
+        errors.push(`${path}: discovered guidance is neither active nor explicitly exempted`);
+      }
       continue;
     }
-    const fullPath = resolve(ROOT, path);
+    const fullPath = resolve(root, path);
     if (!existsSync(fullPath)) {
       continue;
     }
@@ -262,38 +355,8 @@ const checkReferences = (manifest: Manifest): CheckResult => {
       continue;
     }
 
-    // Check contract_stage references
-    const stageRefs = content.match(/contract_stage\s*\(\s*\{[^}]*action:\s*['"](\w+)['"]/g);
-    if (stageRefs) {
-      for (const ref of stageRefs) {
-        const actionMatch = ref.match(/action:\s*['"](\w+)['"]/);
-        if (actionMatch && !KNOWN_STAGE_ACTIONS.has(actionMatch[1])) {
-          errors.push(`${path}: unknown contract_stage action "${actionMatch[1]}"`);
-        }
-      }
-    }
-
-    // Check herdr_session references
-    const herdrRefs = content.match(/herdr_session\s+(start|stop|restart|status|read|list)\b/g);
-    if (herdrRefs) {
-      for (const ref of herdrRefs) {
-        const actionMatch = ref.match(/herdr_session\s+(\w+)/);
-        if (actionMatch && !KNOWN_HERDR_ACTIONS.has(actionMatch[1])) {
-          errors.push(`${path}: unknown herdr_session action "${actionMatch[1]}"`);
-        }
-      }
-    }
-
-    // Check tool references (contract_stage action values)
-    const toolRefs = content.match(/contract_stage\s*\(\s*\{[^}]*action:\s*['"](\w+)['"]/g);
-    if (toolRefs) {
-      for (const ref of toolRefs) {
-        const actionMatch = ref.match(/action:\s*['"](\w+)['"]/);
-        if (actionMatch && !KNOWN_STAGE_ACTIONS.has(actionMatch[1])) {
-          errors.push(`${path}: unknown contract_stage action value "${actionMatch[1]}"`);
-        }
-      }
-    }
+    checkStageReferences({ content, errors, path, registry: registries.stageActions });
+    checkHerdrReferences({ content, errors, path, registries });
   }
 
   return {
@@ -336,6 +399,38 @@ const checkExamples = (): CheckResult => {
     }
 
     const content = readFileSync(examplePath, 'utf-8');
+
+    const typeScriptResult = spawnSync(
+      'tsgo',
+      [
+        '--noEmit',
+        '--strict',
+        '--skipLibCheck',
+        '--module',
+        'Preserve',
+        '--moduleResolution',
+        'Bundler',
+        '--target',
+        'ESNext',
+        '--types',
+        'bun',
+        examplePath,
+      ],
+      { cwd: ROOT, encoding: 'utf-8' },
+    );
+    if (typeScriptResult.status !== 0) {
+      const output = `${typeScriptResult.stdout}${typeScriptResult.stderr}`.trim();
+      errors.push(`${example}: TypeScript validation failed${output ? ` — ${output}` : ''}`);
+    }
+
+    const biomeResult = spawnSync('biome', ['check', examplePath], {
+      cwd: ROOT,
+      encoding: 'utf-8',
+    });
+    if (biomeResult.status !== 0) {
+      const output = `${biomeResult.stdout}${biomeResult.stderr}`.trim();
+      errors.push(`${example}: Biome validation failed${output ? ` — ${output}` : ''}`);
+    }
 
     // Check no unsafe suppressions
     if (/@ts-ignore|@ts-expect-error/.test(content)) {
@@ -397,6 +492,8 @@ const checkExamples = (): CheckResult => {
 // ── Check 4: Generator reproducibility (AC-5) ────────────────────────────
 
 const checkReproducibility = (): CheckResult => {
+  const errors: string[] = [];
+
   // Run generate_context.ts twice and compare
   const generatorPath = resolve(ROOT, 'scripts/src/lib/ops/generate_context.ts');
   if (!existsSync(generatorPath)) {
@@ -416,21 +513,59 @@ const checkReproducibility = (): CheckResult => {
     };
   }
 
-  // Read current CONTEXT.md hash
-  const content = readFileSync(contextPath, 'utf-8');
+  const originalContent = readFileSync(contextPath, 'utf-8');
+  const normalize = (content: string): string =>
+    content
+      .split('\n')
+      .filter((line) => !line.startsWith('> Generated:'))
+      .join('\n');
+  let firstOutput = '';
+  let secondOutput = '';
 
-  // Remove the timestamp line for deterministic comparison
-  const lines = content.split('\n');
-  const stableLines = lines.filter((l) => !l.startsWith('> Generated:'));
-  const stableHash = createHash('sha256').update(stableLines.join('\n')).digest('hex');
+  try {
+    for (const run of [1, 2]) {
+      const result = spawnSync(process.execPath, ['run', generatorPath], {
+        cwd: ROOT,
+        encoding: 'utf-8',
+      });
+      if (result.status !== 0) {
+        const output = `${result.stdout}${result.stderr}`.trim();
+        errors.push(`generate_context.ts run ${run} failed${output ? ` — ${output}` : ''}`);
+        break;
+      }
+      const generated = readFileSync(contextPath, 'utf-8');
+      if (run === 1) {
+        firstOutput = normalize(generated);
+      } else {
+        secondOutput = normalize(generated);
+      }
+    }
+
+    if (errors.length === 0 && firstOutput !== secondOutput) {
+      errors.push('generate_context.ts produced different normalized output across two runs');
+    }
+  } catch (error) {
+    errors.push(`Generator reproducibility check failed: ${String(error)}`);
+  } finally {
+    try {
+      writeFileSync(contextPath, originalContent, 'utf-8');
+    } catch (error) {
+      errors.push(`Failed to restore original .context/CONTEXT.md: ${String(error)}`);
+    }
+  }
+
+  const stableHash = createHash('sha256').update(firstOutput).digest('hex');
 
   return {
     label: 'Generator reproducibility (AC-5)',
-    passed: true,
-    details: [
-      `CONTEXT.md content hash (stable): ${stableHash.slice(0, 12)}...`,
-      'Deterministic content verified — timestamp is the only varying line',
-    ],
+    passed: errors.length === 0,
+    details:
+      errors.length > 0
+        ? errors
+        : [
+            `CONTEXT.md content hash (stable): ${stableHash.slice(0, 12)}...`,
+            'Deterministic content verified — timestamp is the only varying line',
+          ],
   };
 };
 
@@ -472,7 +607,7 @@ const main = (): void => {
     results.push(checkManifestCoverage(manifest));
   }
   if (!manifestOnly && !examplesOnly && !reproducibilityOnly) {
-    results.push(checkReferences(manifest));
+    results.push(checkReferences({ manifest }));
   }
   if (!manifestOnly && !referencesOnly && !reproducibilityOnly) {
     results.push(checkExamples());
@@ -506,4 +641,6 @@ const main = (): void => {
   }
 };
 
-main();
+if (import.meta.main) {
+  main();
+}

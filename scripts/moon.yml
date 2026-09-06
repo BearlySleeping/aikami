@@ -116,18 +116,21 @@ tasks:
     command: 'bun run src/lib/ops/validate_agent_guidance.ts'
     inputs:
       - 'src/lib/ops/validate_agent_guidance.ts'
+      - 'src/lib/ops/generate_context.ts'
+      - 'src/lib/herdr/session.ts'
+      - '/AGENTS.md'
+      - '/.claude/CLAUDE.md'
+      - '/.context/**/*'
+      - '/.pi/README.md'
+      - '/.pi/settings.json'
+      - '/.pi/extensions/**/*.ts'
       - '/.pi/guidance/**/*'
-    options:
-      cache: false
-      runInCI: true
-
-  # Extends the inherited validate (lint + format + typecheck from
-  # .moon/tasks/all.yml) with the structural guards. Moon appends these deps
-  # to the inherited ones, so `moon run :validate` now covers guards too.
-  validate:
-    deps:
-      - '~:guard'
-      - '~:validate-agent-guidance'
+      - '/.pi/runners/**/*'
+      - '/.pi/scripts/**/*.ts'
+      - '/.pi/prompts/**/*.md'
+      - '/.pi/skills/**/*'
+      - '/.pi/generated-skills/**/*'
+      - 'src/lib/agents/**/*.ts'
     options:
       cache: false
       runInCI: true

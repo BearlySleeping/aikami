@@ -8,9 +8,11 @@
 // These tests verify the validation script's logic without invoking any
 // referenced tool or service.
 
-import { describe, expect, it } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { checkReferences, type Manifest } from './validate_agent_guidance';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const MANIFEST_PATH = resolve(ROOT, '.pi/guidance/manifest.json');
@@ -19,36 +21,65 @@ const EXAMPLES_DIR = resolve(ROOT, '.pi/guidance/examples');
 // ── AC-2: Reference resolution ───────────────────────────────────────────
 
 describe('AC-2: Reference resolution', () => {
-  const KNOWN_STAGE_ACTIONS = new Set(['complete', 'review_decision', 'reconcile', 'log_failure']);
+  const fixtureRoots: string[] = [];
 
-  it('accepts valid contract_stage action values', () => {
-    // These are the known valid actions from stage_result.ts
-    const validActions = ['complete', 'review_decision', 'reconcile', 'log_failure'];
-    for (const action of validActions) {
-      expect(KNOWN_STAGE_ACTIONS.has(action)).toBe(true);
+  const validateFixture = (content: string, active = true) => {
+    const root = mkdtempSync(join(tmpdir(), 'aikami-guidance-'));
+    fixtureRoots.push(root);
+    writeFileSync(resolve(root, 'AGENTS.md'), content, 'utf-8');
+    const manifest: Manifest = {
+      version: 1,
+      description: 'Controlled reference fixture',
+      entries: {
+        'AGENTS.md': { class: 'root_agent', active },
+      },
+      exemptions: {},
+    };
+    return checkReferences({ manifest, root });
+  };
+
+  afterEach(() => {
+    for (const root of fixtureRoots.splice(0)) {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 
-  it('rejects renamed/misspelled contract_stage action values', () => {
-    const invalidActions = ['finish', 'submit', 'approve', 'reject', 'done', 'completed'];
-    for (const action of invalidActions) {
-      expect(KNOWN_STAGE_ACTIONS.has(action)).toBe(false);
-    }
+  it('accepts references resolved from the action and service registries', () => {
+    const result = validateFixture(
+      "contract_stage({ action: 'complete' });\n`herdr_session restart client`\n",
+    );
+
+    expect(result.passed).toBe(true);
+    expect(result.details).toEqual([
+      'All tool/action/service references resolve to known registries',
+    ]);
   });
 
-  it('rejects removed/obsolete tool names', () => {
-    // Tool names that no longer exist in the current system
-    const obsoleteTools = [
-      'firestore',
-      'dataconnect',
-      'neon_postgres',
-      'cloud_run',
-      'firebase_function',
-    ];
-    // These should not be in any known registry
-    for (const tool of obsoleteTools) {
-      expect(KNOWN_STAGE_ACTIONS.has(tool)).toBe(false);
-    }
+  it.each(['finish', 'submit', 'completed'])(
+    'rejects renamed, obsolete, or misspelled contract_stage action %s',
+    (action) => {
+      const result = validateFixture(`contract_stage({ action: '${action}' });\n`);
+
+      expect(result.passed).toBe(false);
+      expect(result.details.join('\n')).toContain(`unknown contract_stage action "${action}"`);
+    },
+  );
+
+  it('rejects unknown herdr actions and services', () => {
+    const result = validateFixture('herdr_session destroy firebase\n');
+
+    expect(result.passed).toBe(false);
+    expect(result.details.join('\n')).toContain('unknown herdr_session action "destroy"');
+    expect(result.details.join('\n')).toContain('unknown herdr_session service "firebase"');
+  });
+
+  it('does not let an inactive manifest entry hide discovered guidance', () => {
+    const result = validateFixture("contract_stage({ action: 'finish' });\n", false);
+
+    expect(result.passed).toBe(false);
+    expect(result.details.join('\n')).toContain(
+      'AGENTS.md: discovered guidance is neither active nor explicitly exempted',
+    );
   });
 });
 
