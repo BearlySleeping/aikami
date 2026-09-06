@@ -22,6 +22,8 @@ export const TEST_KOKORO_BUNDLE: LocalModelBundle = {
   manifestKey: 'kokoro-82m-manifest',
   assets: [
     {
+      repo: 'k2-fsa/sherpa-onnx',
+      revision: 'f46687f7e41512228ae953af24a11b2640ea0f22',
       path: 'config.json',
       bytes: 44,
       sha256: 'df34b4f930b23447cd4dc410fabfb42eb3f24e803e6c3f97d618fb359380a36f',
@@ -29,6 +31,8 @@ export const TEST_KOKORO_BUNDLE: LocalModelBundle = {
       key: 'kokoro-82m-config.json',
     },
     {
+      repo: 'k2-fsa/sherpa-onnx',
+      revision: 'f46687f7e41512228ae953af24a11b2640ea0f22',
       path: 'tokenizer.json',
       bytes: 4_608,
       sha256: 'ee301fc39cf903ddbb463564630a28767785e3a11edd6d8226e92d4b4ef131bb',
@@ -36,6 +40,8 @@ export const TEST_KOKORO_BUNDLE: LocalModelBundle = {
       key: 'kokoro-82m-tokenizer.json',
     },
     {
+      repo: 'k2-fsa/sherpa-onnx',
+      revision: 'f46687f7e41512228ae953af24a11b2640ea0f22',
       path: 'model_quantized.onnx',
       bytes: 92_360_543,
       sha256: '0d55b15d4b735d61a21b0105136bc81b8768c4db94753193c19354fa863cd556',
@@ -43,6 +49,8 @@ export const TEST_KOKORO_BUNDLE: LocalModelBundle = {
       key: 'kokoro-82m-model_quantized.onnx',
     },
     {
+      repo: 'k2-fsa/sherpa-onnx',
+      revision: 'f46687f7e41512228ae953af24a11b2640ea0f22',
       path: 'voice.bin',
       bytes: 522_240,
       sha256: 'd583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b',
@@ -63,6 +71,8 @@ export const TEST_QWEN3_BUNDLE: LocalModelBundle = {
   manifestKey: 'qwen3-1b-manifest',
   assets: [
     {
+      repo: 'Qwen/Qwen3-1B',
+      revision: 'da1453100cf3ff33ef56d17983fc7a8648706db6',
       path: 'model.safetensors',
       bytes: 1_000_000_000,
       sha256: '0000000000000000000000000000000000000000000000000000000000000000',
@@ -70,6 +80,8 @@ export const TEST_QWEN3_BUNDLE: LocalModelBundle = {
       key: 'qwen3-1b-model.safetensors',
     },
     {
+      repo: 'Qwen/Qwen3-1B',
+      revision: 'da1453100cf3ff33ef56d17983fc7a8648706db6',
       path: 'tokenizer.json',
       bytes: 500_000,
       sha256: '1111111111111111111111111111111111111111111111111111111111111111',
@@ -77,6 +89,8 @@ export const TEST_QWEN3_BUNDLE: LocalModelBundle = {
       key: 'qwen3-1b-tokenizer.json',
     },
     {
+      repo: 'Qwen/Qwen3-1B',
+      revision: 'da1453100cf3ff33ef56d17983fc7a8648706db6',
       path: 'config.json',
       bytes: 1_024,
       sha256: '2222222222222222222222222222222222222222222222222222222222222222',

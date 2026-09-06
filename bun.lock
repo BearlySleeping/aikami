@@ -374,6 +374,7 @@
       "name": "@aikami/frontend-local-runtime",
       "dependencies": {
         "@aikami/constants": "workspace:*",
+        "@aikami/local-ai": "workspace:*",
         "@aikami/logger": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",

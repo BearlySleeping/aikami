@@ -17,6 +17,8 @@ const TEST_BUNDLE: LocalModelBundle = {
   manifestKey: 'test-model-manifest',
   assets: [
     {
+      repo: 'test-org/test-repo',
+      revision: 'main',
       path: 'model.bin',
       bytes: 100,
       sha256: 'ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae',

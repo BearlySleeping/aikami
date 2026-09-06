@@ -9,6 +9,7 @@
 // on the Tauri path, listener registered before invoke.
 
 import type { LocalModelAsset, LocalModelBundle } from '@aikami/constants';
+import { resolveBundleAssetUrl } from '@aikami/local-ai';
 import type { LocalModelState } from '@aikami/types';
 import { logger } from '$logger';
 
@@ -62,13 +63,17 @@ const tauriInvoke = (cmd: string, args?: Record<string, unknown>): Promise<unkno
 
 export class BrowserAssetTransport implements AssetTransport {
   async downloadAsset(
-    bundle: LocalModelBundle,
+    _bundle: LocalModelBundle,
     asset: LocalModelAsset,
     options: { signal: AbortSignal; onProgress: ProgressCallback },
   ): Promise<void> {
     const { signal, onProgress } = options;
-    const origin = 'https://huggingface.co';
-    const url = `${origin}/${bundle.repo}/resolve/${bundle.revision}/${asset.path}`;
+    // Use the canonical artifact resolver instead of hand-building URLs.
+    const url = resolveBundleAssetUrl({
+      repo: asset.repo,
+      revision: asset.revision,
+      file: asset.path,
+    });
 
     const response = await fetch(url, { signal });
     if (!response.ok || !response.body) {
@@ -138,13 +143,17 @@ export class BrowserAssetTransport implements AssetTransport {
 
 export class TauriAssetTransport implements AssetTransport {
   async downloadAsset(
-    bundle: LocalModelBundle,
+    _bundle: LocalModelBundle,
     asset: LocalModelAsset,
     options: { signal: AbortSignal; onProgress: ProgressCallback },
   ): Promise<void> {
     const { signal, onProgress } = options;
-    const origin = 'https://huggingface.co';
-    const url = `${origin}/${bundle.repo}/resolve/${bundle.revision}/${asset.path}`;
+    // Use the canonical artifact resolver instead of hand-building URLs.
+    const url = resolveBundleAssetUrl({
+      repo: asset.repo,
+      revision: asset.revision,
+      file: asset.path,
+    });
 
     // C-389 CR: cancellation takes effect between files
     if (signal.aborted) {

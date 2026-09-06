@@ -15,6 +15,8 @@
 import { createHash } from 'node:crypto';
 
 type Asset = {
+  repo: string;
+  revision: string;
   path: string;
   bytes: number;
   sha256: string;
@@ -80,7 +82,7 @@ const generateBundle = async (): Promise<void> => {
     console.error(`  Fetching ${url}...`);
     const buffer = await downloadFile(url);
     const hash = sha256Hex(buffer);
-    assets.push({ path: file, bytes: buffer.length, sha256: hash });
+    assets.push({ repo, revision, path: file, bytes: buffer.length, sha256: hash });
     console.error(`    ${buffer.length} bytes, SHA-256: ${hash}`);
   }
 
@@ -90,6 +92,8 @@ const generateBundle = async (): Promise<void> => {
   console.log('assets: [');
   for (const asset of assets) {
     console.log(`  {
+    repo: '${asset.repo}',
+    revision: '${asset.revision}',
     path: '${asset.path}',
     bytes: ${asset.bytes},
     sha256: '${asset.sha256}',

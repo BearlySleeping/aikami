@@ -6,6 +6,10 @@
 
 /** Path inside the HF repo, byte size, and pinned SHA-256. */
 export type LocalModelAsset = {
+  /** HuggingFace repo containing this asset. */
+  readonly repo: string;
+  /** Revision used to resolve this asset. */
+  readonly revision: string;
   /** Path inside the HF repo. */
   readonly path: string;
   readonly bytes: number;
@@ -36,6 +40,7 @@ export type LocalModelBundle = {
 const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-ONNX';
 const KOKORO_REVISION = 'f46687f7e41512228ae953af24a11b2640ea0f22';
 const KOKORO_VOICE_REPO = 'onnx-community/Kokoro-82M-v1.0-ONNX';
+const KOKORO_VOICE_REVISION = 'main';
 
 const TRANSFORMERS_CACHE = 'transformers-cache';
 const KOKORO_VOICES_CACHE = 'kokoro-voices';
@@ -43,7 +48,7 @@ const KOKORO_VOICES_CACHE = 'kokoro-voices';
 const kokoroCacheKey = (path: string): string => `/models/${KOKORO_MODEL_ID}/${path}`;
 
 const kokoroVoiceCacheKey = (path: string): string =>
-  `https://huggingface.co/${KOKORO_VOICE_REPO}/resolve/main/${path}`;
+  `https://huggingface.co/${KOKORO_VOICE_REPO}/resolve/${KOKORO_VOICE_REVISION}/${path}`;
 
 export const KOKORO_BUNDLE: LocalModelBundle = {
   id: 'kokoro-82m',
@@ -54,6 +59,8 @@ export const KOKORO_BUNDLE: LocalModelBundle = {
   modality: 'voice',
   assets: [
     {
+      repo: KOKORO_MODEL_ID,
+      revision: KOKORO_REVISION,
       path: 'config.json',
       bytes: 44,
       sha256: 'df34b4f930b23447cd4dc410fabfb42eb3f24e803e6c3f97d618fb359380a36f',
@@ -61,6 +68,8 @@ export const KOKORO_BUNDLE: LocalModelBundle = {
       key: kokoroCacheKey('config.json'),
     },
     {
+      repo: KOKORO_MODEL_ID,
+      revision: KOKORO_REVISION,
       path: 'tokenizer.json',
       bytes: 4_608,
       sha256: 'ee301fc39cf903ddbb463564630a28767785e3a11edd6d8226e92d4b4ef131bb',
@@ -68,6 +77,8 @@ export const KOKORO_BUNDLE: LocalModelBundle = {
       key: kokoroCacheKey('tokenizer.json'),
     },
     {
+      repo: KOKORO_MODEL_ID,
+      revision: KOKORO_REVISION,
       path: 'onnx/model_quantized.onnx',
       bytes: 92_360_543,
       sha256: '0d55b15d4b735d61a21b0105136bc81b8768c4db94753193c19354fa863cd556',
@@ -75,6 +86,8 @@ export const KOKORO_BUNDLE: LocalModelBundle = {
       key: kokoroCacheKey('onnx/model_quantized.onnx'),
     },
     {
+      repo: KOKORO_VOICE_REPO,
+      revision: KOKORO_VOICE_REVISION,
       path: 'voices/af_heart.bin',
       bytes: 522_240,
       sha256: 'd583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b',
@@ -104,6 +117,8 @@ export const QWEN3_BUNDLE: LocalModelBundle = {
   modality: 'text',
   assets: [
     {
+      repo: QWEN3_MODEL_ID,
+      revision: QWEN3_REVISION,
       path: 'config.json',
       bytes: 44,
       sha256: 'placeholder', // FIXME: gen_model_bundle.ts will replace this
@@ -111,6 +126,8 @@ export const QWEN3_BUNDLE: LocalModelBundle = {
       key: qwen3CacheKey('config.json'),
     },
     {
+      repo: QWEN3_MODEL_ID,
+      revision: QWEN3_REVISION,
       path: 'tokenizer.json',
       bytes: 4_608,
       sha256: 'placeholder',
@@ -118,6 +135,8 @@ export const QWEN3_BUNDLE: LocalModelBundle = {
       key: qwen3CacheKey('tokenizer.json'),
     },
     {
+      repo: QWEN3_MODEL_ID,
+      revision: QWEN3_REVISION,
       path: 'onnx/model_q4f16.onnx',
       bytes: 570_000_000, // approximate — gen_model_bundle.ts will compute exact
       sha256: 'placeholder',
