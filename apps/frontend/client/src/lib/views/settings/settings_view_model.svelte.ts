@@ -83,7 +83,7 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly sectionsInActiveGroup: readonly SettingsSection[];
 
   // ── Search ──
-  searchQuery: string;
+  readonly searchQuery: string;
   readonly filteredSections: readonly (SettingsSection & { groupLabel: string })[];
   readonly isSearching: boolean;
   setSearchQuery(query: string): void;
@@ -133,6 +133,20 @@ export class SettingsViewModel
   extends BaseViewModel<SettingsViewModelOptions>
   implements SettingsViewModelInterface
 {
+  // ── Advanced sub-ViewModels (lazily created) ──
+  private _musicViewModel: SettingsMusicViewModelInterface | undefined;
+  private _autonomousViewModel: AutonomousSettingsViewModelInterface | undefined;
+  private _exportViewModel: ExportViewModelInterface | undefined;
+  private _aiSettingsViewModel: AiSettingsViewModelInterface | undefined;
+  private _storyDialogueViewModel: CapabilityDetailViewModelInterface | undefined;
+  private _artworkViewModel: CapabilityDetailViewModelInterface | undefined;
+  private _readAloudViewModel: CapabilityDetailViewModelInterface | undefined;
+  private _agentListViewModel: AgentListViewModelInterface | undefined;
+  private _agentEditorViewModel: AgentEditorViewModelInterface | undefined;
+
+  // ── Preview/revert state ──
+  private _preEditAudioVolume: number | undefined;
+
   // ── Section registry ──
   readonly allSections = SETTINGS_SECTIONS;
   activeSectionId = $state<string>(SETTINGS_SECTIONS[0].id);
@@ -147,20 +161,6 @@ export class SettingsViewModel
   readonly audioViewModel: SettingsAudioViewModelInterface;
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
-
-  // ── Advanced sub-ViewModels (lazily created) ──
-  private _musicViewModel: SettingsMusicViewModelInterface | undefined;
-  private _autonomousViewModel: AutonomousSettingsViewModelInterface | undefined;
-  private _exportViewModel: ExportViewModelInterface | undefined;
-  private _aiSettingsViewModel: AiSettingsViewModelInterface | undefined;
-  private _storyDialogueViewModel: CapabilityDetailViewModelInterface | undefined;
-  private _artworkViewModel: CapabilityDetailViewModelInterface | undefined;
-  private _readAloudViewModel: CapabilityDetailViewModelInterface | undefined;
-  private _agentListViewModel: AgentListViewModelInterface | undefined;
-  private _agentEditorViewModel: AgentEditorViewModelInterface | undefined;
-
-  // ── Preview/revert state ──
-  private _preEditAudioVolume: number | undefined;
 
   // ── Getters ──
 

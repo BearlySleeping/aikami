@@ -179,9 +179,9 @@ describe('SettingsViewModel — search', () => {
   });
 
   test('filteredSections returns sections matching by id', () => {
-    vm.setSearchQuery('gameplay');
+    vm.setSearchQuery('read-aloud');
     const results = vm.filteredSections;
-    expect(results.some((s) => s.id === 'gameplay')).toBe(true);
+    expect(results.some((s) => s.id === 'read-aloud')).toBe(true);
   });
 
   test('filteredSections is empty when query is empty', () => {

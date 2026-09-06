@@ -16,6 +16,7 @@ import {
   getAiSettingsViewModel,
 } from './ai_settings_view_model.svelte';
 
+/** Presentation state and actions for configuring one AI capability. */
 export type CapabilityDetailViewModelInterface = BaseViewModelInterface & {
   readonly capability: ConnectionCapability;
   readonly status: string;
@@ -31,6 +32,7 @@ export type CapabilityDetailViewModelInterface = BaseViewModelInterface & {
   readonly isConfigured: boolean;
 };
 
+/** Identifies the AI capability exposed by a capability detail ViewModel. */
 export type CapabilityDetailViewModelOptions = BaseViewModelOptions & {
   capability: ConnectionCapability;
 };
@@ -51,10 +53,6 @@ class CapabilityDetailViewModel
   override async initialize(): Promise<void> {
     await this.aiSettingsViewModel.initialize();
     await super.initialize();
-  }
-
-  private _getStatusEntry() {
-    return this.aiSettingsViewModel.statusEntries.find((e) => e.capability === this.capability);
   }
 
   get connectionId(): string | undefined {
@@ -116,8 +114,13 @@ class CapabilityDetailViewModel
       await this.aiSettingsViewModel.testConnection(entry.connectionId);
     }
   }
+
+  private _getStatusEntry() {
+    return this.aiSettingsViewModel.statusEntries.find((e) => e.capability === this.capability);
+  }
 }
 
+/** Creates an instrumented detail ViewModel for the requested AI capability. */
 export const getCapabilityDetailViewModel = (
   options: CapabilityDetailViewModelOptions,
 ): CapabilityDetailViewModelInterface => CapabilityDetailViewModel.create(options);

@@ -65,7 +65,7 @@ want to do:
 | **Artwork** | Set up image generation for portraits, scenes, and item art |
 | **Read Aloud** | Configure text-to-speech voice for narration and dialogue |
 | **Connections** | Manage provider endpoints, API keys, and accounts |
-| **Advanced Routing** | Assign different models to different features and configure fallbacks |
+| **Advanced Routing** | Review routing information; configuration is not currently available, so use AI Overview |
 
 Keys are stored client-side in an encrypted vault. You can search settings by
 typing into the search bar at the top of the settings page.
