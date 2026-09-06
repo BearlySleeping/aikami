@@ -60,6 +60,25 @@ import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 const DEFAULT_BASE = PIPELINE_BASE_BRANCH;
 
+type OrganizationProjectV2Response = {
+  data: {
+    organization: {
+      projectV2: unknown;
+    };
+  };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+/** Safely identifies a successful organization project lookup response. */
+const hasOrganizationProjectV2 = (value: unknown): value is OrganizationProjectV2Response => {
+  if (!isRecord(value) || !isRecord(value.data) || !isRecord(value.data.organization)) {
+    return false;
+  }
+  return Boolean(value.data.organization.projectV2);
+};
+
 /** Format a byte count for release asset sizes. */
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) {
@@ -2397,12 +2416,7 @@ export default function (pi: ExtensionAPI) {
             );
 
             // If organization fails, fall back to user
-            if (
-              !result.success ||
-              !result.json ||
-              // biome-ignore lint/suspicious/noExplicitAny: GitHub API response shape is unknown
-              !(result.json as any).data?.organization?.projectV2 // guard-ignore lint/type-safety/casting: GitHub API response is untyped
-            ) {
+            if (!result.success || !result.json || !hasOrganizationProjectV2(result.json)) {
               result = await runGh(
                 [
                   'api',

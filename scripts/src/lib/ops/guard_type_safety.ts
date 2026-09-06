@@ -58,20 +58,11 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import { annotate } from './gha_annotate.ts';
+import { identitiesMatch, isExcludedDir, simpleHash } from './guard_type_safety_helpers.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
 const SCAN_ROOTS = ['apps', 'packages', 'scripts', '.pi'].map((dir) => resolve(ROOT, dir));
 const BASELINE_PATH = resolve(import.meta.dir, 'guard_type_safety_baseline.json');
-
-const EXCLUDED_DIR_NAMES = new Set([
-  'node_modules',
-  '.svelte-kit',
-  'build',
-  'dist',
-  '.git',
-  'generated-skills',
-  'git',
-]);
 
 // .pi/git/ is vendored third-party code; .pi/generated-skills/ is auto-generated.
 // Both are excluded by the biome.json `!` rule and should not be in the guard either.
@@ -107,9 +98,6 @@ const RULE_LABEL: Record<Rule, string> = {
 
 // ── File discovery ───────────────────────────────────────────────────────
 
-const isExcludedDir = (name: string): boolean =>
-  EXCLUDED_DIR_NAMES.has(name) || name.includes('.cache');
-
 const walk = (dir: string): string[] => {
   const out: string[] = [];
   if (!existsSync(dir)) {
@@ -119,7 +107,8 @@ const walk = (dir: string): string[] => {
     const full = resolve(dir, entry);
     const stats = statSync(full);
     if (stats.isDirectory()) {
-      if (isExcludedDir(entry)) {
+      const relPath = relative(ROOT, full).split(sep).join('/');
+      if (isExcludedDir({ name: entry, relPath })) {
         continue;
       }
       out.push(...walk(full));
@@ -234,19 +223,6 @@ const findIgnoredCastingLines = (rawContent: string): Set<number> => {
   return ignored;
 };
 
-/**
- * Compute a simple hash for a violation snippet. Uses a fast FNV-1a-like
- * hash for stability (not crypto, not dependent on file paths).
- */
-const simpleHash = (input: string): string => {
-  let hash = 2166136261 >>> 0;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0').slice(0, 8);
-};
-
 const findViolations = (options: { rawContent: string; relPath: string }): Violation[] => {
   const { rawContent, relPath } = options;
   const violations: Violation[] = [];
@@ -331,25 +307,6 @@ const identitiesOf = (violations: Violation[]): ViolationIdentity[] => {
   return identities;
 };
 
-/**
- * Compare violation identities between current and expected.
- * Returns true if the identities are equivalent (same rules, same hashes).
- */
-const identitiesMatch = (current: ViolationIdentity[], expected: ViolationIdentity[]): boolean => {
-  if (current.length !== expected.length) {
-    return false;
-  }
-  for (let i = 0; i < current.length; i++) {
-    if (current[i].rule !== expected[i].rule) {
-      return false;
-    }
-    if (current[i].hash !== expected[i].hash) {
-      return false;
-    }
-  }
-  return true;
-};
-
 // ── Main ─────────────────────────────────────────────────────────────────
 
 const updateBaseline = Bun.argv.includes('--update-baseline');
@@ -412,7 +369,14 @@ for (const relPath of [...allPaths].sort()) {
   }
 
   // C-476 AC-4: Identity-aware comparison — detect same-count replacement
-  if (lines.length === 0 && expected.identities && currentViolations.length > 0) {
+  if (
+    lines.length === 0 &&
+    current.t1 === expected.t1 &&
+    current.t2 === expected.t2 &&
+    current.t3 === expected.t3 &&
+    expected.identities &&
+    currentViolations.length > 0
+  ) {
     const currentIdentities = identitiesOf(currentViolations);
     if (!identitiesMatch(currentIdentities, expected.identities)) {
       failed = true;

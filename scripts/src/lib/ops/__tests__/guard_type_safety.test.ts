@@ -5,22 +5,7 @@
 // comparison scenarios.
 
 import { describe, expect, test } from 'bun:test';
-
-// We test the helper functions directly by importing them.
-// The simpleHash and identitiesMatch functions are exported for testing.
-// Since they're not exported, we re-implement the logic inline.
-
-/**
- * FNV-1a-like hash, matching the implementation in guard_type_safety.ts.
- */
-const simpleHash = (input: string): string => {
-  let hash = 2166136261 >>> 0;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0').slice(0, 8);
-};
+import { identitiesMatch, isExcludedDir, simpleHash } from '../guard_type_safety_helpers.ts';
 
 type Rule = 't1' | 't2' | 't3';
 type ViolationIdentity = { rule: Rule; hash: string };
@@ -39,20 +24,15 @@ const identitiesOf = (violations: { rule: Rule; snippet: string }[]): ViolationI
   return identities;
 };
 
-const identitiesMatch = (current: ViolationIdentity[], expected: ViolationIdentity[]): boolean => {
-  if (current.length !== expected.length) {
-    return false;
-  }
-  for (let i = 0; i < current.length; i++) {
-    if (current[i].rule !== expected[i].rule) {
-      return false;
-    }
-    if (current[i].hash !== expected[i].hash) {
-      return false;
-    }
-  }
-  return true;
-};
+describe('isExcludedDir', () => {
+  test('excludes the vendored .pi/git directory', () => {
+    expect(isExcludedDir({ name: 'git', relPath: '.pi/git' })).toBe(true);
+  });
+
+  test('includes unrelated directories named git', () => {
+    expect(isExcludedDir({ name: 'git', relPath: 'packages/example/git' })).toBe(false);
+  });
+});
 
 describe('simpleHash', () => {
   test('produces consistent output for same input', () => {

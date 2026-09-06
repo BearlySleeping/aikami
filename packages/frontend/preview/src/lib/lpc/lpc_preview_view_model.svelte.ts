@@ -492,6 +492,19 @@ class LpcPreviewViewModel
     this._canvasHeight = height;
     if (this.pixiApp) {
       this.pixiApp.renderer.resize(width, height);
+      this._positionPreviewContainers();
+      this.pixiApp.render();
+    }
+  }
+
+  private _positionPreviewContainers(): void {
+    if (this._characterContainer) {
+      this._characterContainer.x = this.entityX;
+      this._characterContainer.y = this.entityY;
+    }
+    if (this._gridGraphics) {
+      this._gridGraphics.x = this.entityX;
+      this._gridGraphics.y = this.entityY;
     }
   }
 
@@ -669,11 +682,10 @@ class LpcPreviewViewModel
       }
 
       container.scale.set(currentZoom, currentZoom);
-      container.x = this._canvasWidth / 2;
-      container.y = this._canvasHeight / 2;
 
       this.pixiApp.stage.addChild(container);
       this._characterContainer = container;
+      this._positionPreviewContainers();
       this.compositionFailed = false;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -746,14 +758,13 @@ class LpcPreviewViewModel
     const gridContainer = new Container();
     gridContainer.eventMode = 'none';
     gridContainer.scale.set(this.zoom, this.zoom);
-    gridContainer.x = this._canvasWidth / 2;
-    gridContainer.y = this._canvasHeight / 2;
     gfx.x = -32;
     gfx.y = -32;
     gridContainer.addChild(gfx);
 
     this.pixiApp.stage.addChild(gridContainer);
     this._gridGraphics = gridContainer;
+    this._positionPreviewContainers();
   }
 
   // ── State serialisation ─────────────────────────────────────────────

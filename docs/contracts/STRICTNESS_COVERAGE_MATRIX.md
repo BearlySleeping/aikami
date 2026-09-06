@@ -26,7 +26,7 @@
 
 | Rule | `apps/frontend/client` | `apps/frontend/hub` | `apps/frontend/site` | `apps/frontend/docs` | `packages/shared` | `packages/frontend` | `packages/backend` | `apps/backend` | `scripts` | `.pi` | `apps/e2e` |
 |------|---|---|---|---|---|---|---|---|---|---|---|
-| `useNamingConvention` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫 tests |
+| `useNamingConvention` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫 | 🚫 | 🚫 tests |
 | `useFilenamingConvention` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `useArrowFunction` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `noNonNullAssertion` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -74,7 +74,9 @@
 | `apps/e2e/**` | `noExplicitAny` | Test mocks and fixture types |
 | `apps/e2e/**` | `useNamingConvention` | Test naming patterns |
 | `scripts/**` | `noConsole` | CLI tools produce stdout/stderr output |
+| `scripts/**` | `useNamingConvention` | CLI, environment, and external payload identifiers follow tool-defined names |
 | `.pi/**` | `noConsole` | Pi agent extensions and scripts use `console.log` for TUI/logging output |
+| `.pi/**` | `useNamingConvention` | Agent extension and external API identifiers follow host-defined names |
 | `**/*.d.ts` | `useConsistentTypeDefinitions` | Declaration files use `interface` for ambient declarations |
 | `**/*.d.ts` | `useNamingConvention` | Declaration files follow ambient naming conventions |
 
