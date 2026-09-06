@@ -43,7 +43,7 @@ const acceptance = async (sandboxPath: string): Promise<AcceptanceOutcome> => {
   const hasGetter =
     /export\s+const\s+getCount\s*=/.test(content) || /get\s+count\s*\(/.test(content);
 
-  if (bareExport && !hasGetter) {
+  if (bareExport) {
     return {
       accepted: false,
       diagnostics:
@@ -60,7 +60,7 @@ const acceptance = async (sandboxPath: string): Promise<AcceptanceOutcome> => {
   return { accepted: true, diagnostics: '' };
 };
 
-export const task: EvalTask = {
+export const task = {
   id: 'svelte_reactivity_v1',
   version: 1,
   category: 'svelte_reactivity',
@@ -70,4 +70,5 @@ export const task: EvalTask = {
   prompt: `${TARGET} exports the live $state counter as a plain binding, so importers see a frozen snapshot. Expose a getter (function or accessor) instead so every read stays reactive. Do not change increment()'s behavior.`,
   heldOut: false,
   acceptance,
-};
+  acceptanceDependencies: [TARGET],
+} as const satisfies EvalTask;

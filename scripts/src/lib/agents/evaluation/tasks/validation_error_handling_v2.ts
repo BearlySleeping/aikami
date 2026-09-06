@@ -2,8 +2,7 @@
 //
 // C-480 AC-1: held-out validation/error-handling task.
 
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { candidateRunnerFingerprint, runCandidateTest } from '../candidate_runner.ts';
 import type { AcceptanceOutcome, EvalTask } from '../types.ts';
 
 const TARGET = 'parse_hex_color.ts';
@@ -21,54 +20,33 @@ export const parseHexColor = (raw: string): { r: number; g: number; b: number } 
 };
 `;
 
-const importFresh = async (path: string): Promise<Record<string, unknown>> =>
-  (await import(`${pathToFileURL(path).href}?t=${Date.now()}-${Math.random()}`)) as Record<
-    string,
-    unknown
-  >;
+const ACCEPTANCE_TEST_SOURCE = `
+const fn = candidate.parseHexColor;
+if (typeof fn !== 'function') {
+  return { accepted: false, diagnostics: 'parseHexColor must remain an exported function.' };
+}
+try {
+  const result = fn('#ff00aa');
+  if (JSON.stringify(result) !== JSON.stringify({ r: 255, g: 0, b: 170 })) {
+    return { accepted: false, diagnostics: 'parseHexColor("#ff00aa") => ' + JSON.stringify(result) };
+  }
+} catch (error) {
+  return { accepted: false, diagnostics: 'Threw on valid input: ' + String(error) };
+}
+for (const input of ['#fff', '#gggggg', 'ff00aa', '#ff00aaff', '']) {
+  let threw = false;
+  try { fn(input); } catch { threw = true; }
+  if (!threw) {
+    return { accepted: false, diagnostics: 'parseHexColor("' + input + '") must throw — invalid color did not raise an error.' };
+  }
+}
+return { accepted: true, diagnostics: '' };
+`;
 
-const acceptance = async (sandboxPath: string): Promise<AcceptanceOutcome> => {
-  let mod: Record<string, unknown>;
-  try {
-    mod = await importFresh(join(sandboxPath, TARGET));
-  } catch (err) {
-    return { accepted: false, diagnostics: `Module failed to import: ${String(err)}` };
-  }
-  const fn = mod.parseHexColor;
-  if (typeof fn !== 'function') {
-    return { accepted: false, diagnostics: 'parseHexColor must remain an exported function.' };
-  }
-  const call = fn as (raw: string) => { r: number; g: number; b: number };
+const acceptance = (sandboxPath: string): Promise<AcceptanceOutcome> =>
+  runCandidateTest({ sandboxPath, target: TARGET, testSource: ACCEPTANCE_TEST_SOURCE });
 
-  let ok: unknown;
-  try {
-    ok = call('#ff00aa');
-  } catch (err) {
-    return { accepted: false, diagnostics: `Threw on valid input: ${String(err)}` };
-  }
-  if (JSON.stringify(ok) !== JSON.stringify({ r: 255, g: 0, b: 170 })) {
-    return { accepted: false, diagnostics: `parseHexColor("#ff00aa") => ${JSON.stringify(ok)}` };
-  }
-
-  const invalidCases = ['#fff', '#gggggg', 'ff00aa', '#ff00aaff', ''];
-  for (const input of invalidCases) {
-    let threw = false;
-    try {
-      call(input);
-    } catch {
-      threw = true;
-    }
-    if (!threw) {
-      return {
-        accepted: false,
-        diagnostics: `parseHexColor("${input}") must throw — invalid color did not raise an error.`,
-      };
-    }
-  }
-  return { accepted: true, diagnostics: '' };
-};
-
-export const task: EvalTask = {
+export const task = {
   id: 'validation_error_handling_v2',
   version: 1,
   category: 'validation_error_handling',
@@ -77,4 +55,5 @@ export const task: EvalTask = {
   prompt: `Fix parseHexColor() in ${TARGET} to throw on any string that is not exactly "#" + 6 hex digits.`,
   heldOut: true,
   acceptance,
-};
+  acceptanceDependencies: [candidateRunnerFingerprint(), TARGET, ACCEPTANCE_TEST_SOURCE],
+} as const satisfies EvalTask;

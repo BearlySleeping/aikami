@@ -8,11 +8,18 @@
 // whatever attempts already completed (AC-4).
 
 import { runAcceptance } from './acceptance_runner.ts';
-import { RunBudget } from './budget.ts';
+import type { RunBudget } from './budget.ts';
 import type { EvalProviderAdapter } from './provider.ts';
 import { buildReport } from './reporter.ts';
 import { computeTaskHashes, getTask, listVisibleTasks } from './task_registry.ts';
-import type { AttemptResult, EvalConfig, EvalReport, EvalTask, RunAuthorization } from './types.ts';
+import type {
+  AttemptResult,
+  EvalConfig,
+  EvalReport,
+  EvalTask,
+  RunAuthorization,
+  UsageRecord,
+} from './types.ts';
 import { prepareSandbox } from './worktree_fixture.ts';
 
 export type RunnerOptions = {
@@ -74,6 +81,17 @@ export const runEvaluation = async (options: RunnerOptions): Promise<EvalReport>
   const authorizedTaskIds = new Set(options.authorization.authorizedTasks);
   const authorizedConfigIds = new Set(options.authorization.authorizedConfigIds);
   const attempts: AttemptResult[] = [];
+  const plannedTaskCount = tasks.filter((task) => authorizedTaskIds.has(task.id)).length;
+  const plannedConfigCount = options.configs.filter((config) =>
+    authorizedConfigIds.has(config.id),
+  ).length;
+  const plannedAttemptCount = plannedTaskCount * plannedConfigCount * options.repetitions;
+  const runWideCostCap = options.budget.caps?.maxCostUsd;
+  if (runWideCostCap === undefined) {
+    throw new Error('Authorized RunBudget is missing its run-wide cost cap.');
+  }
+  const perAttemptCapUsd =
+    options.perAttemptCapUsd ?? runWideCostCap / Math.max(1, plannedAttemptCount);
 
   outer: for (const task of tasks) {
     if (!authorizedTaskIds.has(task.id)) {
@@ -89,14 +107,33 @@ export const runEvaluation = async (options: RunnerOptions): Promise<EvalReport>
           break outer;
         }
 
-        const attempt = await runOneAttempt({
-          task,
-          config,
-          repetition,
-          provider: options.provider,
-          budget: options.budget,
-          perAttemptCapUsd: options.perAttemptCapUsd ?? options.budget.caps?.maxCostUsd ?? 0,
-        });
+        const attemptStartedAt = Date.now();
+        let attempt: AttemptResult;
+        try {
+          attempt = await runOneAttempt({
+            task,
+            config,
+            repetition,
+            provider: options.provider,
+            budget: options.budget,
+            perAttemptCapUsd,
+          });
+        } catch (error) {
+          attempt = providerErrorAttempt({
+            task,
+            config,
+            repetition,
+            elapsedSeconds: (Date.now() - attemptStartedAt) / 1000,
+            error,
+          });
+          attempts.push(attempt);
+          options.budget.record({
+            usage: attempt.usage,
+            elapsedMinutes: attempt.usage.elapsedSeconds / 60,
+          });
+          options.budget.cancelOwnedWork();
+          break outer;
+        }
         attempts.push(attempt);
 
         const elapsedMinutes = attempt.usage.elapsedSeconds / 60;
@@ -106,6 +143,47 @@ export const runEvaluation = async (options: RunnerOptions): Promise<EvalReport>
   }
 
   return buildReport({ runId: options.runId, authorization: options.authorization, attempts });
+};
+
+const providerErrorAttempt = (options: {
+  task: EvalTask;
+  config: EvalConfig;
+  repetition: number;
+  elapsedSeconds: number;
+  error: unknown;
+}): AttemptResult => {
+  const usage: UsageRecord = {
+    model: options.config.catalogue.model,
+    provider: options.config.catalogue.provider,
+    thinkingLevel: options.config.thinking,
+    configVersion: '1',
+    turns: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 0,
+    elapsedSeconds: options.elapsedSeconds,
+    toolErrors: 1,
+    retries: 0,
+    monetary: { USD: { amount: 0, currency: 'USD', provenance: 'unknown' } },
+    complete: false,
+    eventId: `${options.task.id}-${options.config.id}-${Date.now()}-provider-error`,
+    finalizedAt: new Date().toISOString(),
+    externalCoverageComplete: false,
+  };
+  return {
+    taskId: options.task.id,
+    configId: options.config.id,
+    repetition: options.repetition,
+    outcome: 'error',
+    firstPass: false,
+    retries: 0,
+    toolFailures: 1,
+    usage,
+    hashes: computeTaskHashes({ task: options.task, config: options.config }),
+    diagnostics: `Provider attempt rejected: ${options.error instanceof Error ? options.error.message : String(options.error)}`,
+  };
 };
 
 const runOneAttempt = async (options: {
@@ -161,5 +239,3 @@ const runOneAttempt = async (options: {
     await sandbox.cleanup();
   }
 };
-
-export { RunBudget };

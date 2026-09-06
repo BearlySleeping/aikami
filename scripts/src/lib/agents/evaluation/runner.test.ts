@@ -136,6 +136,7 @@ describe('C-480 runner', () => {
     expect(report.attempts.every((a) => a.outcome === 'accepted')).toBe(true);
     expect(new Set(report.attempts.map((a) => a.hashes.taskHash)).size).toBe(1);
     expect(report.summaries[0]?.sampleSize).toBe(repetitions);
+    expect(provider.runCalls[0]?.budgetEnv?.PI_SOFT_SPEND).toBe(String(100 / repetitions));
   });
 
   it('budget exhaustion cancels remaining owned attempts and keeps partial results', async () => {
@@ -173,8 +174,35 @@ describe('C-480 runner', () => {
       budget,
     });
 
-    expect(report.attempts.length).toBeGreaterThan(0);
-    expect(report.attempts.length).toBeLessThan(repetitions);
+    expect(report.attempts).toHaveLength(2);
     expect(budget.exhausted).toBe(true);
+    expect(budget.exhaustedReason).toBe('cost');
+  });
+
+  it('records a rejected provider promise as an error and stops further attempts', async () => {
+    const budget = new RunBudget({ maxCostUsd: 10, maxTurns: 100, maxElapsedMinutes: 60 });
+    const authorization: RunAuthorization = {
+      mode: 'paid',
+      caps: budget.caps,
+      authorizedTasks: [TASK_ID],
+      authorizedConfigIds: [CONFIG.id],
+      authorizedAt: new Date().toISOString(),
+    };
+    const provider = new FakeEvalProvider();
+
+    const report = await runEvaluation({
+      runId: 'provider-error-run',
+      authorization,
+      configs: [CONFIG],
+      taskIds: [TASK_ID],
+      repetitions: 3,
+      provider,
+      budget,
+    });
+
+    expect(report.attempts).toHaveLength(1);
+    expect(report.attempts[0]?.outcome).toBe('error');
+    expect(report.attempts[0]?.diagnostics).toContain('no scripted attempt queued');
+    expect(provider.runCalls).toHaveLength(1);
   });
 });

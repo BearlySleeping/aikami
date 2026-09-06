@@ -19,6 +19,10 @@ export const BOUNDED_ESCALATION_POLICY =
   "task to the next stronger family in this comparison once, then stop — mirroring the pipeline's " +
   'MAX_BLOCKED_ESCALATIONS=1 rule. No config may escalate itself more than once per task.';
 
+/** Minimum observed acceptance rate a config must reach before recommendation. */
+export const MIN_ACCEPTANCE_RATE = 0.8;
+
+/** Human-reviewable routing verdict for one task/config comparison. */
 export type ConfigRecommendation = {
   readonly configId: string;
   readonly taskId: string;
@@ -54,35 +58,47 @@ export const recommendPerTask = (report: EvalReport): readonly ConfigRecommendat
       continue;
     }
 
-    const viable = summaries.filter((s) => s.costPerAcceptedTaskUsd !== null);
+    const viable = summaries.filter(
+      (summary): summary is ConfigTaskSummary & { costPerAcceptedTaskUsd: number } =>
+        summary.costPerAcceptedTaskUsd !== null && summary.acceptanceRate >= MIN_ACCEPTANCE_RATE,
+    );
     if (viable.length === 0) {
       for (const summary of summaries) {
         recommendations.push({
           configId: summary.configId,
           taskId,
           verdict: 'inconclusive',
-          reason: 'No config accepted any attempt for this task — no recommendation can be made.',
+          reason: `No config met the ${(MIN_ACCEPTANCE_RATE * 100).toFixed(0)}% minimum acceptance rate for this task — no recommendation can be made.`,
         });
       }
       continue;
     }
 
     const cheapest = viable.reduce((best, current) =>
-      (current.costPerAcceptedTaskUsd ?? Number.POSITIVE_INFINITY) <
-      (best.costPerAcceptedTaskUsd ?? Number.POSITIVE_INFINITY)
-        ? current
-        : best,
+      current.costPerAcceptedTaskUsd < best.costPerAcceptedTaskUsd ? current : best,
     );
 
     for (const summary of summaries) {
       const isCheapest = summary.configId === cheapest.configId;
+      let reason: string;
+      if (isCheapest) {
+        reason = `Lowest measured cost per accepted task ($${cheapest.costPerAcceptedTaskUsd.toFixed(4)}) among configs meeting the ${(MIN_ACCEPTANCE_RATE * 100).toFixed(0)}% minimum acceptance rate; observed ${(summary.acceptanceRate * 100).toFixed(0)}% over ${summary.sampleSize} repetitions.`;
+      } else if (
+        summary.costPerAcceptedTaskUsd !== null &&
+        summary.acceptanceRate >= MIN_ACCEPTANCE_RATE &&
+        summary.costPerAcceptedTaskUsd === cheapest.costPerAcceptedTaskUsd
+      ) {
+        reason = `Equal measured cost per accepted task to ${cheapest.configId}; the first qualifying config remains the recommendation.`;
+      } else if (summary.acceptanceRate < MIN_ACCEPTANCE_RATE) {
+        reason = `Observed acceptance rate ${(summary.acceptanceRate * 100).toFixed(0)}% is below the ${(MIN_ACCEPTANCE_RATE * 100).toFixed(0)}% minimum.`;
+      } else {
+        reason = `Higher measured cost per accepted task than ${cheapest.configId} for this task.`;
+      }
       recommendations.push({
         configId: summary.configId,
         taskId,
         verdict: isCheapest ? 'recommended' : 'not_recommended',
-        reason: isCheapest
-          ? `Lowest measured cost per accepted task ($${(summary.costPerAcceptedTaskUsd ?? 0).toFixed(4)}) among comparable configs at ${(summary.acceptanceRate * 100).toFixed(0)}% acceptance over ${summary.sampleSize} repetitions.`
-          : `Higher measured cost per accepted task than ${cheapest.configId} for this task.`,
+        reason,
       });
     }
   }

@@ -7,19 +7,22 @@
 // `count` — not flaky, reliably wrong. The fix must not read-then-await-
 // then-write shared state.
 
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { candidateRunnerFingerprint, runCandidateTest } from '../candidate_runner.ts';
 import type { AcceptanceOutcome, EvalTask } from '../types.ts';
 
 const TARGET = 'concurrent_counter.ts';
 
-const BASE_SOURCE = `// Run \`count\` concurrent "increments" against a shared counter and return
-// the final value. Must equal \`count\` — no lost updates.
-export const incrementAllConcurrently = async (count: number): Promise<number> => {
+const BASE_SOURCE = `// Run \`count\` concurrent increments against a shared counter and return
+// the final value. Every worker must call the supplied operation exactly once,
+// and the final value must equal \`count\` — no skipped work or lost updates.
+export const incrementAllConcurrently = async (
+  count: number,
+  increment: () => Promise<void>,
+): Promise<number> => {
   let counter = 0;
   const workers = Array.from({ length: count }, async () => {
     const current = counter;
-    await Promise.resolve();
+    await increment();
     counter = current + 1;
   });
   await Promise.all(workers);
@@ -27,44 +30,34 @@ export const incrementAllConcurrently = async (count: number): Promise<number> =
 };
 `;
 
-const importFresh = async (path: string): Promise<Record<string, unknown>> =>
-  (await import(`${pathToFileURL(path).href}?t=${Date.now()}-${Math.random()}`)) as Record<
-    string,
-    unknown
-  >;
-
-const acceptance = async (sandboxPath: string): Promise<AcceptanceOutcome> => {
-  let mod: Record<string, unknown>;
+const ACCEPTANCE_TEST_SOURCE = `
+const fn = candidate.incrementAllConcurrently;
+if (typeof fn !== 'function') {
+  return { accepted: false, diagnostics: 'incrementAllConcurrently must remain an exported function.' };
+}
+for (const count of [1, 10, 50]) {
+  let invocationCount = 0;
+  const increment = async () => {
+    invocationCount += 1;
+    await Promise.resolve();
+  };
   try {
-    mod = await importFresh(join(sandboxPath, TARGET));
-  } catch (err) {
-    return { accepted: false, diagnostics: `Module failed to import: ${String(err)}` };
-  }
-  const fn = mod.incrementAllConcurrently;
-  if (typeof fn !== 'function') {
-    return {
-      accepted: false,
-      diagnostics: 'incrementAllConcurrently must remain an exported function.',
-    };
-  }
-  const call = fn as (count: number) => Promise<number>;
-
-  for (const count of [1, 10, 50]) {
-    let result: number;
-    try {
-      result = await call(count);
-    } catch (err) {
-      return { accepted: false, diagnostics: `Threw for count=${count}: ${String(err)}` };
+    const result = await fn(count, increment);
+    if (invocationCount !== count) {
+      return { accepted: false, diagnostics: 'increment callback ran ' + invocationCount + ' times for count=' + count + ', expected exactly ' + count + '.' };
     }
     if (result !== count) {
-      return {
-        accepted: false,
-        diagnostics: `incrementAllConcurrently(${count}) => ${result}, expected ${count} (lost update).`,
-      };
+      return { accepted: false, diagnostics: 'incrementAllConcurrently(' + count + ') => ' + result + ', expected ' + count + ' (lost update).' };
     }
+  } catch (error) {
+    return { accepted: false, diagnostics: 'Threw for count=' + count + ': ' + String(error) };
   }
-  return { accepted: true, diagnostics: '' };
-};
+}
+return { accepted: true, diagnostics: '' };
+`;
+
+const acceptance = (sandboxPath: string): Promise<AcceptanceOutcome> =>
+  runCandidateTest({ sandboxPath, target: TARGET, testSource: ACCEPTANCE_TEST_SOURCE });
 
 export const task: EvalTask = {
   id: 'process_concurrency_v1',
@@ -72,7 +65,8 @@ export const task: EvalTask = {
   category: 'process_concurrency',
   description: 'Fix a deterministic lost-update race in concurrent counter increments.',
   base: { [TARGET]: BASE_SOURCE },
-  prompt: `incrementAllConcurrently() in ${TARGET} loses updates under concurrency. Fix it so the final count always equals the requested count.`,
+  prompt: `incrementAllConcurrently() in ${TARGET} loses updates under concurrency. Fix it so every worker invokes the supplied increment operation exactly once and the final count always equals the requested count.`,
   heldOut: false,
   acceptance,
+  acceptanceDependencies: [candidateRunnerFingerprint(), TARGET, ACCEPTANCE_TEST_SOURCE],
 };

@@ -10,6 +10,7 @@
 
 import type { AcceptanceOutcome, EvalTask } from './types.ts';
 
+/** Runs a host-owned frozen acceptance oracle and converts checker failures to diagnostics. */
 export const runAcceptance = async (options: {
   task: EvalTask;
   sandboxPath: string;

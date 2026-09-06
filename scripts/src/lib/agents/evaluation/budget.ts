@@ -12,6 +12,7 @@ import type { BudgetCaps, UsageRecord } from './types.ts';
 
 export type BudgetExhaustedReason = 'cost' | 'turns' | 'elapsed_minutes' | 'unknown_billing';
 
+/** Enforces explicit run-wide cost, turn and elapsed-time caps for paid evaluations. */
 export class RunBudget {
   private readonly _caps: BudgetCaps | undefined;
   private _spentUsd = 0;
@@ -29,18 +30,22 @@ export class RunBudget {
     return this._caps !== undefined;
   }
 
+  /** Explicit caps authorizing paid work, or undefined for plan-only runs. */
   get caps(): BudgetCaps | undefined {
     return this._caps;
   }
 
+  /** First cap axis that stopped the run, or undefined while capacity remains. */
   get exhaustedReason(): BudgetExhaustedReason | undefined {
     return this._exhaustedReason;
   }
 
+  /** Whether any cap axis has stopped further attempts. */
   get exhausted(): boolean {
     return this._exhaustedReason !== undefined;
   }
 
+  /** Known USD spend recorded across completed or interrupted attempts. */
   get spentUsd(): number {
     return this._spentUsd;
   }
@@ -108,8 +113,8 @@ export class RunBudget {
     if (!this._caps) {
       throw new Error('RunBudget.attemptEnv called without authorization — no caps set.');
     }
-    const soft = Math.min(perAttemptCapUsd, this._caps.maxCostUsd).toFixed(2);
-    const hard = (Math.min(perAttemptCapUsd, this._caps.maxCostUsd) * 1.5).toFixed(2);
+    const soft = String(Math.min(perAttemptCapUsd, this._caps.maxCostUsd));
+    const hard = String(Math.min(perAttemptCapUsd, this._caps.maxCostUsd) * 1.5);
     return {
       PI_SOFT_SPEND: soft,
       PI_HARD_SPEND: hard,

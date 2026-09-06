@@ -4,8 +4,7 @@
 // instead of using node:path, which breaks on native Windows and mishandles
 // trailing separators/empty segments everywhere.
 
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { candidateRunnerFingerprint, runCandidateTest } from '../candidate_runner.ts';
 import type { AcceptanceOutcome, EvalTask } from '../types.ts';
 
 const TARGET = 'build_asset_path.ts';
@@ -17,51 +16,34 @@ export const buildAssetPath = (base: string, ...segments: string[]): string =>
   base + '/' + segments.join('/');
 `;
 
-const importFresh = async (path: string): Promise<Record<string, unknown>> =>
-  (await import(`${pathToFileURL(path).href}?t=${Date.now()}-${Math.random()}`)) as Record<
-    string,
-    unknown
-  >;
-
-const acceptance = async (sandboxPath: string): Promise<AcceptanceOutcome> => {
-  let mod: Record<string, unknown>;
+const ACCEPTANCE_TEST_SOURCE = `
+const fn = candidate.buildAssetPath;
+if (typeof fn !== 'function') {
+  return { accepted: false, diagnostics: 'buildAssetPath must remain an exported function.' };
+}
+const path = await import('node:path');
+const cases = [
+  { args: ['assets', 'sprites', 'hero.png'], expected: path.join('assets', 'sprites', 'hero.png') },
+  { args: ['assets/', 'hero.png'], expected: path.join('assets/', 'hero.png') },
+  { args: ['assets'], expected: path.join('assets') },
+];
+for (const { args, expected } of cases) {
   try {
-    mod = await importFresh(join(sandboxPath, TARGET));
-  } catch (err) {
-    return { accepted: false, diagnostics: `Module failed to import: ${String(err)}` };
-  }
-  const fn = mod.buildAssetPath;
-  if (typeof fn !== 'function') {
-    return { accepted: false, diagnostics: 'buildAssetPath must remain an exported function.' };
-  }
-  const call = fn as (base: string, ...segments: string[]) => string;
-
-  const cases: Array<{ args: string[]; expected: string }> = [
-    { args: ['assets', 'sprites', 'hero.png'], expected: join('assets', 'sprites', 'hero.png') },
-    // Trailing separator on the base must not produce a doubled separator.
-    { args: ['assets/', 'hero.png'], expected: join('assets/', 'hero.png') },
-    { args: ['assets'], expected: join('assets') },
-  ];
-
-  for (const { args, expected } of cases) {
-    let result: unknown;
-    try {
-      const [base, ...segments] = args as [string, ...string[]];
-      result = call(base, ...segments);
-    } catch (err) {
-      return { accepted: false, diagnostics: `Threw on ${JSON.stringify(args)}: ${String(err)}` };
-    }
+    const result = fn(...args);
     if (result !== expected) {
-      return {
-        accepted: false,
-        diagnostics: `buildAssetPath(${JSON.stringify(args)}) => ${JSON.stringify(result)}, expected ${JSON.stringify(expected)}`,
-      };
+      return { accepted: false, diagnostics: 'buildAssetPath(' + JSON.stringify(args) + ') => ' + JSON.stringify(result) + ', expected ' + JSON.stringify(expected) };
     }
+  } catch (error) {
+    return { accepted: false, diagnostics: 'Threw on ' + JSON.stringify(args) + ': ' + String(error) };
   }
-  return { accepted: true, diagnostics: '' };
-};
+}
+return { accepted: true, diagnostics: '' };
+`;
 
-export const task: EvalTask = {
+const acceptance = (sandboxPath: string): Promise<AcceptanceOutcome> =>
+  runCandidateTest({ sandboxPath, target: TARGET, testSource: ACCEPTANCE_TEST_SOURCE });
+
+export const task = {
   id: 'cross_platform_scripting_v1',
   version: 1,
   category: 'cross_platform_scripting',
@@ -70,4 +52,5 @@ export const task: EvalTask = {
   prompt: `buildAssetPath() in ${TARGET} hardcodes '/'. Rewrite it using node:path so separators, trailing slashes and empty segments are handled correctly on every OS.`,
   heldOut: false,
   acceptance,
-};
+  acceptanceDependencies: [candidateRunnerFingerprint(), TARGET, ACCEPTANCE_TEST_SOURCE],
+} as const satisfies EvalTask;

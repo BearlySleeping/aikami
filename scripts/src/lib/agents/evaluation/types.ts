@@ -50,6 +50,8 @@ export type EvalTask = {
   readonly heldOut: boolean;
   /** Runs against the sandbox directory; never sees the task's own source. */
   readonly acceptance: (sandboxPath: string) => Promise<AcceptanceOutcome>;
+  /** Stable sources/values closed over by `acceptance`, included in its evidence hash. */
+  readonly acceptanceDependencies?: readonly string[];
 };
 
 /** Content hashes recorded per attempt so evidence is bound to a frozen task. */
@@ -73,6 +75,7 @@ export type CatalogueEntry = {
   readonly reason?: string;
 };
 
+/** Provider reasoning-effort setting held constant within a comparable config. */
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 /** Cache condition of the attempt — cold and warm runs are never mixed invisibly (AC-2). */
@@ -87,6 +90,7 @@ export type EvalConfig = {
   readonly cacheCondition: CacheCondition;
 };
 
+/** Terminal classification recorded for each task/config repetition. */
 export type AttemptOutcome = 'accepted' | 'rejected' | 'error' | 'halted';
 
 /** Result of one task × config × repetition attempt. */
@@ -110,6 +114,7 @@ export type BudgetCaps = {
   readonly maxElapsedMinutes: number;
 };
 
+/** Explicit run mode and paid-work scope captured alongside evaluation evidence. */
 export type RunAuthorization = {
   readonly mode: 'plan' | 'paid';
   readonly caps?: BudgetCaps;

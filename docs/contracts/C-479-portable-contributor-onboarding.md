@@ -169,22 +169,22 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
 
 ### Summary
 
-Executed as a manual, single-machine (Linux) audit rather than the full three-OS
-verification the contract calls for — no CI or second/third physical OS was
-available in this session. Verified AC-1, AC-2 and AC-3 against the existing
+Executed a manual, single-machine (Linux) spot-check rather than the full
+repeatable, three-OS verification the contract calls for — no proposed test
+fixtures, CI run or second/third physical OS was available in this session.
+Collected partial evidence for AC-1, AC-2 and AC-3 against the existing
 `scripts/src/lib/local_setup/` implementation using a disposable git worktree
-and an isolated `HOME`, found them already compliant, and fixed the one
-verified-stale doc claim from the Problem statement (AC-5). AC-4's macOS/native
-Windows/NixOS evidence was **not** produced here and must not be read as
-satisfied — see AC Status below.
+and an isolated `HOME`, and fixed one verified-stale doc claim from the Problem
+statement (AC-5). The recorded commands do not establish complete compliance;
+see AC Status for the uncovered requirements.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ (Linux only) | Fresh `git worktree` + `HOME` pointed at an empty scratch dir + trimmed `PATH`-only env: `bun install` and `bun run setup:env` both completed with no cloud/AI credentials, no age key, no network calls beyond package registries. |
-| AC-2 | ✅ | `bun run setup --doctor` reviewed and exercised: read-only (no writes/installs observed or possible from the code path — no `spawn`/`exec` outside `--version` probes and one throwaway symlink-capability check that self-cleans), reports required vs. optional distinctly, exits non-zero only on missing essentials/failed extra checks. |
-| AC-3 | ✅ (Linux only) | Re-ran `bun run setup:env` after hand-editing `apps/frontend/client/.env.emulator` (`PUBLIC_LOG_LEVEL=debug-custom`); rerun preserved the custom value and left every other key stable — matches the documented local-overridable-keys/existing-value-wins behavior in `decrypt_secrets.ts`. |
+| AC-1 | ⚠️ partial (Linux manual only) | Fresh `git worktree` + `HOME` pointed at an empty scratch dir + trimmed `PATH`-only env: `bun install` and `bun run setup:env` both completed with no cloud/AI credentials or age key. The proposed automated fresh-home/bootstrap fixture was not produced, and this run did not cover every supported setup path or OS. |
+| AC-2 | ⚠️ partial (manual only) | `bun run setup --doctor` was reviewed and exercised: it reported required vs. optional checks distinctly and returned non-zero for missing essentials/failed extra checks. The proposed `doctor.test.ts` read-only fixture was not produced, so the code review and one run do not establish the full no-write/no-install contract. |
+| AC-3 | ⚠️ partial (Linux manual only) | Re-ran `bun run setup:env` after hand-editing `apps/frontend/client/.env.emulator` (`PUBLIC_LOG_LEVEL=debug-custom`); rerun preserved that value and left other observed keys stable. The required preservation/interruption fixtures and non-Linux coverage were not produced. |
 | AC-4 | ❌ not produced | No macOS, native Windows or NixOS machine available in this session. The C-468 three-OS CI matrix (`ubuntu-latest, windows-latest, macos-latest`) referenced by this contract's Test Hooks is the correct source for this evidence and was not re-run or newly authored here. |
 | AC-5 | ✅ (partial) | Fixed the contract's own cited stale claim: `docs/intro/setup.md` and `docs/guides/dev-workflow.md` both said the client dev server serves `http://localhost:5173`; verified against `apps/frontend/client/vite.config.ts:128` and `packages/shared/constants/src/lib/development_ports.ts` (`OFFSETTABLE_PORTS.client = 5274`) and corrected both to `5274`. No other hardcoded-port claims found in those two docs. Did not do a full doc audit of every setup-adjacent page, nor produce new supported-OS/architecture evidence beyond AC-1-3 above. |
 
@@ -206,10 +206,10 @@ satisfied — see AC Status below.
   the remaining work, sized well beyond what one Linux session can responsibly
   claim to prove.
 - No source/implementation files under `scripts/src/lib/local_setup/` or
-  `scripts/src/lib/env/` were changed — the manual audit found the existing
-  read-only doctor, credential-free `setup:env`, and idempotent local-config
-  behavior already met AC-1/2/3 as designed; only the stale documentation
-  needed a fix.
+  `scripts/src/lib/env/` were changed. The manual Linux observations support
+  the limited behaviors recorded above, but the missing automated fixtures,
+  interruption cases and platform coverage prevent an AC-1/2/3 compliance
+  claim; only the stale documentation was changed in this session.
 
 ### Test Results
 

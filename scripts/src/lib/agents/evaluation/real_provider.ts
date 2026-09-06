@@ -29,7 +29,12 @@ type PiEvent = {
   };
 };
 
+/** Runs real `pi` evaluation attempts inside disposable candidate sandboxes. */
 export class RealEvalProvider {
+  /**
+   * Executes one task/config attempt and returns parsed usage, failure counts
+   * and crash diagnostics from the spawned provider process.
+   */
   async runAttempt(options: RunAttemptOptions): Promise<RunAttemptResult> {
     const start = Date.now();
     const args = [
@@ -56,6 +61,7 @@ export class RealEvalProvider {
     let costTotal = 0;
     let costSeen = false;
     let toolFailures = 0;
+    let stderr = '';
 
     const exitCode = await new Promise<number>((resolve) => {
       const child = spawn('pi', args, {
@@ -65,6 +71,9 @@ export class RealEvalProvider {
       });
 
       let buffer = '';
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
       child.stdout.on('data', (chunk: Buffer) => {
         buffer += chunk.toString();
         const lines = buffer.split('\n');
@@ -139,7 +148,9 @@ export class RealEvalProvider {
       toolFailures,
       elapsedSeconds,
       crashed,
-      diagnostics: crashed ? `pi exited with code ${exitCode} and produced no assistant turn.` : '',
+      diagnostics: crashed
+        ? `pi exited with code ${exitCode} and produced no assistant turn.${stderr.trim() ? ` stderr: ${stderr.trim()}` : ''}`
+        : '',
     };
   }
 }

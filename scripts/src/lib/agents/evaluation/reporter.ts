@@ -29,7 +29,7 @@ const summarizeGroup = (attempts: readonly AttemptResult[]): ConfigTaskSummary =
   const totalElapsedSeconds = attempts.reduce((sum, a) => sum + a.usage.elapsedSeconds, 0);
 
   const unknownBillingCount = attempts.filter((a) =>
-    Object.values(a.usage.monetary).every(
+    Object.values(a.usage.monetary).some(
       (m) => m.provenance === 'unknown' || m.provenance === 'incomplete',
     ),
   ).length;
@@ -62,6 +62,7 @@ const summarizeGroup = (attempts: readonly AttemptResult[]): ConfigTaskSummary =
   };
 };
 
+/** Builds immutable per-config summaries and whole-run usage from recorded attempts. */
 export const buildReport = (options: {
   runId: string;
   authorization: RunAuthorization;

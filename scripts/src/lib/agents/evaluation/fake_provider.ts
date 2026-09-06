@@ -43,6 +43,7 @@ const defaultUsage = (overrides: Partial<UsageRecord> = {}): UsageRecord => ({
   ...overrides,
 });
 
+/** Deterministic FIFO provider used to exercise evaluation runs without network or spend. */
 export class FakeEvalProvider {
   private readonly _queues = new Map<string, ScriptedAttempt[]>();
   readonly runCalls: RunAttemptOptions[] = [];
@@ -54,6 +55,11 @@ export class FakeEvalProvider {
     this._queues.set(taskId, queue);
   }
 
+  /**
+   * Applies the next queued patch for a task. Throws when that task has no
+   * queued response; `runEvaluation` records that rejection as an error and
+   * stops launching further attempts.
+   */
   async runAttempt(options: RunAttemptOptions): Promise<RunAttemptResult> {
     this.runCalls.push(options);
     const queue = this._queues.get(options.task.id);

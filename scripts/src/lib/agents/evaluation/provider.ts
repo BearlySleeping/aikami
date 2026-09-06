@@ -8,6 +8,7 @@
 
 import type { EvalConfig, EvalTask, UsageRecord } from './types.ts';
 
+/** Inputs supplied to a provider for one isolated task/config attempt. */
 export type RunAttemptOptions = {
   readonly task: EvalTask;
   readonly config: EvalConfig;
@@ -17,6 +18,7 @@ export type RunAttemptOptions = {
   readonly budgetEnv?: Readonly<Record<string, string>>;
 };
 
+/** Provider execution result and complete usage evidence for one attempt. */
 export type RunAttemptResult = {
   readonly usage: UsageRecord;
   readonly retries: number;
@@ -27,6 +29,7 @@ export type RunAttemptResult = {
   readonly diagnostics: string;
 };
 
+/** Adapter contract implemented by real and deterministic evaluation providers. */
 export type EvalProviderAdapter = {
   runAttempt(options: RunAttemptOptions): Promise<RunAttemptResult>;
 };

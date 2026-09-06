@@ -74,4 +74,71 @@ describe('AC-1: frozen acceptance check cannot be weakened from inside the sandb
       await sandbox.cleanup();
     }
   });
+
+  it('rejects a pure-function shortcut that mutates the supplied input', async () => {
+    const task = requireTask('pure_typescript_v1');
+    const sandbox = await prepareSandbox(task);
+    try {
+      await writeFile(
+        join(sandbox.path, 'unique_sorted.ts'),
+        'export const uniqueSorted = (values: number[]): number[] => { values.sort((a, b) => a - b); return [...new Set(values)]; };\n',
+      );
+      const result = await runAcceptance({ task, sandboxPath: sandbox.path });
+      expect(result.accepted).toBe(false);
+      expect(result.diagnostics).toContain('mutated its input');
+    } finally {
+      await sandbox.cleanup();
+    }
+  });
+
+  it('rejects a concurrency shortcut that never invokes the supplied operation', async () => {
+    const task = requireTask('process_concurrency_v1');
+    const sandbox = await prepareSandbox(task);
+    try {
+      await writeFile(
+        join(sandbox.path, 'concurrent_counter.ts'),
+        'export const incrementAllConcurrently = async (count: number): Promise<number> => count;\n',
+      );
+      const result = await runAcceptance({ task, sandboxPath: sandbox.path });
+      expect(result.accepted).toBe(false);
+      expect(result.diagnostics).toContain('increment callback ran 0 times');
+    } finally {
+      await sandbox.cleanup();
+    }
+  });
+
+  it('rejects changed clamp code even when the expected expression appears in a comment', async () => {
+    const task = requireTask('instruction_repair_v1');
+    const sandbox = await prepareSandbox(task);
+    try {
+      await writeFile(
+        join(sandbox.path, 'clamp.ts'),
+        '// Correct clamp uses Math.min(Math.max(value, min), max).\nexport const clamp = (value: number): number => value;\n',
+      );
+      const result = await runAcceptance({ task, sandboxPath: sandbox.path });
+      expect(result.accepted).toBe(false);
+      expect(result.diagnostics).toContain('implementation must not change');
+    } finally {
+      await sandbox.cleanup();
+    }
+  });
+
+  it('rejects a direct count export even when a getter is also present', async () => {
+    const task = requireTask('svelte_reactivity_v1');
+    const sandbox = await prepareSandbox(task);
+    try {
+      await writeFile(
+        join(sandbox.path, 'counter_store.svelte.ts'),
+        `let count = $state(0);
+export const increment = (): void => { count += 1; };
+export const getCount = (): number => count;
+export { count };\n`,
+      );
+      const result = await runAcceptance({ task, sandboxPath: sandbox.path });
+      expect(result.accepted).toBe(false);
+      expect(result.diagnostics).toContain('Still exports count by value');
+    } finally {
+      await sandbox.cleanup();
+    }
+  });
 });

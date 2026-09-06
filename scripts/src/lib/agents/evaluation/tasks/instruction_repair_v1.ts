@@ -20,7 +20,14 @@ const acceptance = async (sandboxPath: string): Promise<AcceptanceOutcome> => {
   const stillWrong = /Returns the larger of `value` and `min`, ignoring `max` entirely\./.test(
     content,
   );
-  const bodyUnchanged = /Math\.min\(Math\.max\(value, min\), max\)/.test(content);
+  const implementationSource = content
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/.*$/gm, '')
+    .trim();
+  const bodyUnchanged =
+    /^export\s+const\s+clamp\s*=\s*\(\s*value\s*:\s*number\s*,\s*min\s*:\s*number\s*,\s*max\s*:\s*number\s*\)\s*:\s*number\s*=>\s*Math\.min\(\s*Math\.max\(\s*value\s*,\s*min\s*\)\s*,\s*max\s*\)\s*;?$/.test(
+      implementationSource,
+    );
 
   if (!bodyUnchanged) {
     return { accepted: false, diagnostics: 'clamp() implementation must not change.' };
@@ -41,7 +48,7 @@ const acceptance = async (sandboxPath: string): Promise<AcceptanceOutcome> => {
   return { accepted: true, diagnostics: '' };
 };
 
-export const task: EvalTask = {
+export const task = {
   id: 'instruction_repair_v1',
   version: 1,
   category: 'instruction_repair',
@@ -53,4 +60,5 @@ export const task: EvalTask = {
     'Correct the comment to accurately describe the implementation. Do not change the implementation.',
   heldOut: false,
   acceptance,
-};
+  acceptanceDependencies: [TARGET],
+} as const satisfies EvalTask;

@@ -86,4 +86,18 @@ describe('AC-1: frozen task registry', () => {
     expect(hashesA.baseHash).not.toBe(hashesB.baseHash);
     expect(hashesA.acceptanceHash).not.toBe(hashesB.acceptanceHash);
   });
+
+  it('changes acceptanceHash when a closed-over acceptance dependency changes', () => {
+    const task = getTask('process_concurrency_v1');
+    if (!task) {
+      throw new Error('fixture task missing');
+    }
+    const original = computeTaskHashes({ task, config: CONFIG });
+    const changedDependency = {
+      ...task,
+      acceptanceDependencies: [...(task.acceptanceDependencies ?? []), 'changed-helper-source'],
+    };
+    const changed = computeTaskHashes({ task: changedDependency, config: CONFIG });
+    expect(changed.acceptanceHash).not.toBe(original.acceptanceHash);
+  });
 });

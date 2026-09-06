@@ -98,9 +98,27 @@ describe('AC-4: budget authorization', () => {
   it('attemptEnv sets PI_SOFT_SPEND/PI_HARD_SPEND/PI_MAX_TURNS/PI_MAX_RUN_MINUTES', () => {
     const budget = new RunBudget({ maxCostUsd: 5, maxTurns: 50, maxElapsedMinutes: 30 });
     const env = budget.attemptEnv(2);
-    expect(env.PI_SOFT_SPEND).toBe('2.00');
-    expect(env.PI_HARD_SPEND).toBe('3.00');
+    expect(env.PI_SOFT_SPEND).toBe('2');
+    expect(env.PI_HARD_SPEND).toBe('3');
     expect(env.PI_MAX_TURNS).toBe('50');
     expect(env.PI_MAX_RUN_MINUTES).toBe('30');
+  });
+
+  it('attemptEnv preserves sub-cent per-attempt and run-wide caps', () => {
+    const perAttemptBudget = new RunBudget({
+      maxCostUsd: 1,
+      maxTurns: 50,
+      maxElapsedMinutes: 30,
+    });
+    expect(perAttemptBudget.attemptEnv(0.001).PI_SOFT_SPEND).toBe('0.001');
+    expect(perAttemptBudget.attemptEnv(0.001).PI_HARD_SPEND).toBe('0.0015');
+
+    const runWideBudget = new RunBudget({
+      maxCostUsd: 0.0005,
+      maxTurns: 50,
+      maxElapsedMinutes: 30,
+    });
+    expect(runWideBudget.attemptEnv(1).PI_SOFT_SPEND).toBe('0.0005');
+    expect(runWideBudget.attemptEnv(1).PI_HARD_SPEND).toBe('0.00075');
   });
 });

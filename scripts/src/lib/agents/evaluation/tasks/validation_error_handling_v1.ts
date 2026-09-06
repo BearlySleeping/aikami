@@ -3,8 +3,7 @@
 // C-480 AC-1: validation/error-handling task — a parser must reject invalid
 // input with a specific error rather than silently returning a bad value.
 
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { candidateRunnerFingerprint, runCandidateTest } from '../candidate_runner.ts';
 import type { AcceptanceOutcome, EvalTask } from '../types.ts';
 
 const TARGET = 'parse_port.ts';
@@ -17,62 +16,33 @@ export const parsePort = (raw: string): number => {
 };
 `;
 
-const importFresh = async (path: string): Promise<Record<string, unknown>> =>
-  (await import(`${pathToFileURL(path).href}?t=${Date.now()}-${Math.random()}`)) as Record<
-    string,
-    unknown
-  >;
-
-const acceptance = async (sandboxPath: string): Promise<AcceptanceOutcome> => {
-  let mod: Record<string, unknown>;
+const ACCEPTANCE_TEST_SOURCE = `
+const fn = candidate.parsePort;
+if (typeof fn !== 'function') {
+  return { accepted: false, diagnostics: 'parsePort must remain an exported function.' };
+}
+for (const [input, expected] of [['80', 80], ['65535', 65535], ['1', 1]]) {
   try {
-    mod = await importFresh(join(sandboxPath, TARGET));
-  } catch (err) {
-    return { accepted: false, diagnostics: `Module failed to import: ${String(err)}` };
-  }
-  const fn = mod.parsePort;
-  if (typeof fn !== 'function') {
-    return { accepted: false, diagnostics: 'parsePort must remain an exported function.' };
-  }
-  const call = fn as (raw: string) => number;
-
-  const validCases: Array<[string, number]> = [
-    ['80', 80],
-    ['65535', 65535],
-    ['1', 1],
-  ];
-  for (const [input, expected] of validCases) {
-    let result: unknown;
-    try {
-      result = call(input);
-    } catch (err) {
-      return { accepted: false, diagnostics: `Threw on valid input "${input}": ${String(err)}` };
-    }
+    const result = fn(input);
     if (result !== expected) {
-      return {
-        accepted: false,
-        diagnostics: `parsePort("${input}") => ${String(result)}, expected ${expected}`,
-      };
+      return { accepted: false, diagnostics: 'parsePort("' + input + '") => ' + String(result) + ', expected ' + expected };
     }
+  } catch (error) {
+    return { accepted: false, diagnostics: 'Threw on valid input "' + input + '": ' + String(error) };
   }
+}
+for (const input of ['0', '65536', '-1', 'abc', '3.5', '']) {
+  let threw = false;
+  try { fn(input); } catch { threw = true; }
+  if (!threw) {
+    return { accepted: false, diagnostics: 'parsePort("' + input + '") must throw — invalid port did not raise an error.' };
+  }
+}
+return { accepted: true, diagnostics: '' };
+`;
 
-  const invalidCases = ['0', '65536', '-1', 'abc', '3.5', ''];
-  for (const input of invalidCases) {
-    let threw = false;
-    try {
-      call(input);
-    } catch {
-      threw = true;
-    }
-    if (!threw) {
-      return {
-        accepted: false,
-        diagnostics: `parsePort("${input}") must throw — invalid port did not raise an error.`,
-      };
-    }
-  }
-  return { accepted: true, diagnostics: '' };
-};
+const acceptance = (sandboxPath: string): Promise<AcceptanceOutcome> =>
+  runCandidateTest({ sandboxPath, target: TARGET, testSource: ACCEPTANCE_TEST_SOURCE });
 
 export const task: EvalTask = {
   id: 'validation_error_handling_v1',
@@ -83,4 +53,5 @@ export const task: EvalTask = {
   prompt: `Fix parsePort() in ${TARGET} to throw on any input that is not an integer in [1, 65535].`,
   heldOut: false,
   acceptance,
+  acceptanceDependencies: [candidateRunnerFingerprint(), TARGET, ACCEPTANCE_TEST_SOURCE],
 };

@@ -9,7 +9,10 @@ import { describe, expect, it } from 'bun:test';
 import { buildReport, MIN_REPETITIONS_FOR_CONFIDENCE } from './reporter.ts';
 import type { AttemptResult, RunAuthorization, UsageRecord } from './types.ts';
 
-const AUTH: RunAuthorization = { mode: 'plan', authorizedAt: new Date().toISOString() };
+const AUTH = {
+  mode: 'plan',
+  authorizedAt: new Date().toISOString(),
+} as const satisfies RunAuthorization;
 
 const usage = (overrides: Partial<UsageRecord> = {}): UsageRecord => ({
   model: 'm',
@@ -117,6 +120,24 @@ describe('AC-3: whole cost of acceptance', () => {
     expect(summary?.unknownBillingCount).toBe(1);
     // Only the known $1 counts toward the 2 accepted attempts' shared cost.
     expect(summary?.costPerAcceptedTaskUsd).toBeCloseTo(0.5, 6);
+  });
+
+  it('counts an attempt when any monetary currency has incomplete provenance', () => {
+    const report = buildReport({
+      runId: 'r3-mixed-currency',
+      authorization: AUTH,
+      attempts: [
+        attempt({
+          usage: usage({
+            monetary: {
+              USD: { amount: 1, currency: 'USD', provenance: 'provider_reported' },
+              EUR: { amount: 0, currency: 'EUR', provenance: 'incomplete' },
+            },
+          }),
+        }),
+      ],
+    });
+    expect(report.summaries[0]?.unknownBillingCount).toBe(1);
   });
 
   it('marks a group inconclusive below the minimum repetition count and conclusive at/above it', () => {

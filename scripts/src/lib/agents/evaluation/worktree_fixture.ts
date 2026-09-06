@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { EvalTask } from './types.ts';
 
+/** Disposable filesystem seeded for exactly one candidate attempt. */
 export type TaskSandbox = {
   readonly path: string;
   readonly cleanup: () => Promise<void>;

@@ -47,9 +47,9 @@ const sha256 = (content: string): string => createHash('sha256').update(content)
  * Compute the frozen hashes for one task under one config. `taskHash`
  * covers everything about the task's identity (id/version/category/
  * description/prompt/heldOut); `baseHash` covers only the seeded starting
- * files; `acceptanceHash` covers the checker function's own source (via
- * `Function.prototype.toString`, which is stable for a given build);
- * `configHash` covers the comparable-run inputs (AC-2).
+ * files; `acceptanceHash` covers the checker function's own source plus
+ * immutable fingerprints for its closed-over dependencies; `configHash`
+ * covers the comparable-run inputs (AC-2).
  */
 export const computeTaskHashes = (options: { task: EvalTask; config: EvalConfig }): TaskHashes => {
   const { task, config } = options;
@@ -64,7 +64,10 @@ export const computeTaskHashes = (options: { task: EvalTask; config: EvalConfig 
   });
 
   const baseContent = JSON.stringify(task.base, Object.keys(task.base).sort());
-  const acceptanceSource = task.acceptance.toString();
+  const acceptanceSource = JSON.stringify({
+    implementation: task.acceptance.toString(),
+    dependencies: task.acceptanceDependencies ?? [],
+  });
   const configIdentity = JSON.stringify({
     family: config.family,
     provider: config.catalogue.provider,
