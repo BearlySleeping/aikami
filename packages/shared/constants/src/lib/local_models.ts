@@ -134,3 +134,28 @@ export const LOCAL_MODEL_BUNDLES: Record<string, LocalModelBundle> = {
   'kokoro-82m': KOKORO_BUNDLE,
   'qwen3-0.6b': QWEN3_BUNDLE,
 } as const;
+
+export type ResolveBundleAssetUrlOptions = {
+  /** The HF repo ID. */
+  readonly repo: string;
+  /** The pinned revision. */
+  readonly revision: string;
+  /** The file path inside the repo. */
+  readonly file: string;
+  /**
+   * Base origin for HuggingFace downloads. Defaults to https://huggingface.co.
+   */
+  readonly hfOrigin?: string;
+};
+
+/**
+ * Resolves a download URL from bundle+asset coordinates (repo, revision, file).
+ * This is the canonical URL builder for the bundle system
+ * (LocalModelBundle + LocalModelAsset). Keeps URL construction in one place
+ * so no transport or store reconstructs the pattern.
+ */
+export const resolveBundleAssetUrl = (options: ResolveBundleAssetUrlOptions): string => {
+  const { repo, revision, file } = options;
+  const hfOrigin = options.hfOrigin ?? 'https://huggingface.co';
+  return `${hfOrigin}/${repo}/resolve/${revision}/${file}`;
+};

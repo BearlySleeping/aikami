@@ -9,6 +9,7 @@
 // on the Tauri path, listener registered before invoke.
 
 import type { LocalModelAsset, LocalModelBundle } from '@aikami/constants';
+import { resolveBundleAssetUrl } from '@aikami/constants';
 import type { LocalModelState } from '@aikami/types';
 import { logger } from '$logger';
 
@@ -67,8 +68,12 @@ export class BrowserAssetTransport implements AssetTransport {
     options: { signal: AbortSignal; onProgress: ProgressCallback },
   ): Promise<void> {
     const { signal, onProgress } = options;
-    const origin = 'https://huggingface.co';
-    const url = `${origin}/${bundle.repo}/resolve/${bundle.revision}/${asset.path}`;
+    // Use the canonical artifact resolver instead of hand-building URLs.
+    const url = resolveBundleAssetUrl({
+      repo: bundle.repo,
+      revision: bundle.revision,
+      file: asset.path,
+    });
 
     const response = await fetch(url, { signal });
     if (!response.ok || !response.body) {
@@ -143,8 +148,12 @@ export class TauriAssetTransport implements AssetTransport {
     options: { signal: AbortSignal; onProgress: ProgressCallback },
   ): Promise<void> {
     const { signal, onProgress } = options;
-    const origin = 'https://huggingface.co';
-    const url = `${origin}/${bundle.repo}/resolve/${bundle.revision}/${asset.path}`;
+    // Use the canonical artifact resolver instead of hand-building URLs.
+    const url = resolveBundleAssetUrl({
+      repo: bundle.repo,
+      revision: bundle.revision,
+      file: asset.path,
+    });
 
     // C-389 CR: cancellation takes effect between files
     if (signal.aborted) {

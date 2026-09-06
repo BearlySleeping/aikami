@@ -18,6 +18,7 @@ import {
   detectHardware,
   loadManifest,
   recommend,
+  resolveArtifact,
   type HardwareProfile,
   type ModelManifest,
   type ProbeExecutor,
@@ -486,13 +487,13 @@ class LocalAiWizardViewModel
   }
 
   private _modelDownloadUrl(manifestEntry: ModelManifest['entries'][number]): string {
-    if ('url' in manifestEntry && typeof manifestEntry.url === 'string') {
-      return manifestEntry.url;
+    // Use the canonical artifact resolver instead of hand-building URLs.
+    try {
+      const resolved = resolveArtifact({ entry: manifestEntry });
+      return resolved.url;
+    } catch {
+      throw new Error(`Model download URL is unavailable: ${manifestEntry.id}`);
     }
-    if ('repo' in manifestEntry && 'revision' in manifestEntry && 'file' in manifestEntry) {
-      return `https://huggingface.co/${manifestEntry.repo}/resolve/${manifestEntry.revision}/${manifestEntry.file}`;
-    }
-    throw new Error(`Model download URL is unavailable: ${manifestEntry.id}`);
   }
 
   private async _runtimeInfo(): Promise<RuntimeInfo> {
