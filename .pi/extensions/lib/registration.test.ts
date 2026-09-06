@@ -125,7 +125,7 @@ describe('extension registration', () => {
       'workspace_complete',
       'workspace_list',
     ],
-    contract_stage: ['complete', 'review_decision', 'reconcile', 'log_failure'],
+    contract_stage: ['complete', 'review_decision', 'validate', 'reconcile', 'log_failure'],
     browser: ['inspect', 'screenshot', 'console', 'network', 'lighthouse'],
     direnv: ['status', 'switch_mode', 'add_package', 'add_secret'],
     code_rabbit: ['autofix', 'findings', 'wait'],

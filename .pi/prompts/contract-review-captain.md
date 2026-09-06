@@ -69,13 +69,15 @@ NEVER deploy — deploys and environment switches are orchestrated by the pipeli
 Only in READY mode, when the user explicitly asks you to apply fixes:
 
 1. Read CodeRabbit comments/findings via `gh_pr_comments` or MCP tools
-2. For each fixable issue: read the file, apply `edit`, commit + push
+2. For each fixable issue: read the file, apply `edit`
 
-```bash
-git add -A
-git commit --no-verify -m "fix: apply CodeRabbit auto-fixes — {description}"
-git push origin HEAD
-```
+3. Re-validate — `contract_stage` action `validate`. It runs `moon run :fix`,
+   re-runs `:validate`, commits, and pushes.
+
+🔴 Do NOT hand-roll `git add -A && git commit --no-verify && git push`. Every
+pipeline commit path uses `--no-verify`, so a raw commit runs no lint, no
+format and no typecheck — your edit reaches CI completely unchecked. The
+`validate` action is the only commit path that is checked.
 
 🔴 **Do NOT comment `@coderabbitai review` (or otherwise re-trigger a review)
 after applying fixes, even if the user's request also said "and merge" or
@@ -91,7 +93,8 @@ part of it.
 ## Universal Rules
 
 - **Create the PR when your profile's flow calls for it** — never skip that step, and never call `gh_pr create` again once one already exists.
+- 🔴 **Every file you touch must go through `contract_stage` action `validate` before it is pushed.** It is the only checked commit path (all others pass `--no-verify`), and `gh_pr create` is blocked until its verdict is green for the exact commit on the remote. Re-running one `moon run <task>` you happen to know about is not a substitute — that is precisely how C-484 put a `client:format` failure on CI.
 - **Verify before claiming** — use `gh pr view --json reviews`, don't guess.
-- **Do not re-run tests** if the verifier already passed. Trust the verifier's evidence.
+- **Do not re-run tests** if the verifier already passed. Trust the verifier's evidence. This does NOT excuse you from re-validating your own edits — tests are the verifier's evidence, lint/format/typecheck on code you wrote after it are not.
 - **If you modify source files yourself**, say so plainly in your decision summary — whoever reads it next needs to know the code changed outside the normal implementer/verifier path.
 - 🔴 **Your injected profile section is the authority on what you may and may not do.** It was chosen to match this run's actual outcome — follow it exactly, and don't borrow permissions from a profile that isn't yours.

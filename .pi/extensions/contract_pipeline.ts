@@ -7,14 +7,29 @@ import { StringEnum } from '@earendil-works/pi-ai';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { captureGitState } from '../../scripts/src/lib/agents/contract_pipeline/git_state';
-import { readManifest } from '../../scripts/src/lib/agents/contract_pipeline/manifest_store';
+import {
+  readManifest,
+  writeManifest,
+} from '../../scripts/src/lib/agents/contract_pipeline/manifest_store';
+import { runPrePushGate } from '../../scripts/src/lib/agents/contract_pipeline/pre_push_gate';
+import {
+  createWorkspaceGitReader,
+  deriveRunRepoRoot,
+  evaluatePublicationGate,
+  formatPublicationBlocks,
+} from '../../scripts/src/lib/agents/contract_pipeline/publication_gate';
 import { writeStageResult } from '../../scripts/src/lib/agents/contract_pipeline/stage_result';
 import type {
   ContractReviewDecision,
   ContractWorkerRole,
 } from '../../scripts/src/lib/agents/contract_pipeline/types';
 import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
-import { getGitHeadCommit, runGit } from '../../scripts/src/lib/agents/git_worktree';
+import {
+  commitAll,
+  getGitHeadCommit,
+  pushBranch,
+  runGit,
+} from '../../scripts/src/lib/agents/git_worktree';
 import { publishWorktree } from '../../scripts/src/lib/herdr/worktree';
 import { isEnabled, isPipelineWorker } from './lib/gating.ts';
 import { runSyncOrThrow } from './lib/process_runner.ts';
@@ -45,31 +60,27 @@ const hashContract = (path: string): string =>
 const toPosix = (path: string): string => path.replace(/\\/g, '/');
 
 /**
- * Derive the absolute repository root from a result or review path env var.
+ * The current run's ID, from the environment.
  *
- * These paths are absolute and contain `.pi/contract-runs/` inside the repo root.
- * When an agent runs inside a Git Worktree, `process.cwd()` resolves to the worktree
- * directory — which does NOT contain `.pi/contract-runs/`. The repo root is the
- * authoritative location for manifest/store operations.
- *
- * On Windows these env vars are backslash-separated, so the search is done on
- * a posix-normalized copy — same length as the original, so the found index
- * still slices the original path correctly.
+ * `CONTRACT_PIPELINE_RUN_ID` is authoritative; the result path is a fallback
+ * because it embeds the run ID (`.../.pi/contract-runs/<run-id>/stages/...`)
+ * and is set on every worker even when the run ID somehow is not.
  */
-const deriveRepoRoot = (): string => {
-  const candidates = [
-    process.env.CONTRACT_PIPELINE_RESULT_PATH,
-    process.env.CONTRACT_PIPELINE_REVIEW_PATH,
-  ];
-  for (const p of candidates) {
-    if (p) {
-      const idx = toPosix(p).indexOf('/.pi/contract-runs/');
-      if (idx !== -1) {
-        return p.slice(0, idx);
-      }
-    }
+const deriveRunId = (): string => {
+  const explicit = process.env.CONTRACT_PIPELINE_RUN_ID;
+  if (explicit) {
+    return explicit;
   }
-  return process.cwd();
+  const resultPath = process.env.CONTRACT_PIPELINE_RESULT_PATH;
+  if (!resultPath) {
+    throw new Error('Missing CONTRACT_PIPELINE_RUN_ID and CONTRACT_PIPELINE_RESULT_PATH.');
+  }
+  const match = toPosix(resultPath).match(/contract-runs\/(run-[^/]+)\//);
+  if (!match?.[1]) {
+    throw new Error(`Cannot derive run ID from CONTRACT_PIPELINE_RESULT_PATH: ${resultPath}`);
+  }
+  console.warn(`⚠️  CONTRACT_PIPELINE_RUN_ID not set — derived ${match[1]} from result path.`);
+  return match[1];
 };
 
 const atomicWrite = (options: { path: string; value: unknown }): void => {
@@ -147,27 +158,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
         async execute(_toolCallId, params) {
           // Derive runId from CONTRACT_PIPELINE_RUN_ID, with fallback from RESULT_PATH.
           // The result path contains the run ID: .../.pi/contract-runs/run-XXXX/stages/...
-          let runId: string;
-          try {
-            runId = environment('CONTRACT_PIPELINE_RUN_ID');
-          } catch {
-            const resultPath = process.env.CONTRACT_PIPELINE_RESULT_PATH;
-            if (!resultPath) {
-              throw new Error(
-                'Missing CONTRACT_PIPELINE_RUN_ID and CONTRACT_PIPELINE_RESULT_PATH.',
-              );
-            }
-            const m = toPosix(resultPath).match(/contract-runs\/(run-[^/]+)\//);
-            if (!m?.[1]) {
-              throw new Error(
-                `Cannot derive run ID from CONTRACT_PIPELINE_RESULT_PATH: ${resultPath}`,
-              );
-            }
-            runId = m[1];
-            console.warn(
-              `⚠️  CONTRACT_PIPELINE_RUN_ID not set — derived ${runId} from result path.`,
-            );
-          }
+          const runId = deriveRunId();
           const role = environment('CONTRACT_PIPELINE_ROLE') as ContractWorkerRole;
           if (!['writer', 'critic', 'implementer', 'verifier'].includes(role)) {
             throw new Error(`Role ${role} cannot complete a worker stage.`);
@@ -265,7 +256,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           }
           const runId = environment('CONTRACT_PIPELINE_RUN_ID');
           const reviewPath = environment('CONTRACT_PIPELINE_REVIEW_PATH');
-          const repoRoot = deriveRepoRoot();
+          const repoRoot = deriveRunRepoRoot();
           const manifest = readManifest({ runId, cwd: repoRoot });
           if (!manifest) {
             throw new Error(`Run manifest not found: ${runId}`);
@@ -321,6 +312,168 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
               },
             ],
             details: decision,
+          };
+        },
+      }),
+      defineAction({
+        action: 'validate',
+        summary:
+          'Auto-fix, re-validate, commit and push the workspace — the gate that unblocks PR creation',
+
+        parameters: Type.Object({
+          workspacePath: Type.Optional(
+            Type.String({
+              description:
+                'Absolute path to the Git Worktree. Defaults to CONTRACT_PIPELINE_WORKSPACE_PATH.',
+            }),
+          ),
+          push: Type.Optional(
+            Type.Boolean({
+              default: true,
+              description:
+                'Push the branch after committing fixes. Leave true — `gh_pr create` refuses ' +
+                'to publish a branch whose local HEAD is not on the remote.',
+            }),
+          ),
+        }),
+        // 🔴 This is the ONLY sanctioned way to re-establish a green verdict
+        // after an agent edits files in the workspace. Running individual
+        // `moon run <task>` commands by hand is what produced the C-484
+        // format failure: the captain re-ran the one guard it had been told
+        // about and never touched `:fix`, so its un-indented hand edit shipped.
+        async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+          const wsPath =
+            params.workspacePath ?? process.env.CONTRACT_PIPELINE_WORKSPACE_PATH ?? _wsPath;
+          if (!wsPath || !existsSync(wsPath)) {
+            return {
+              content: [{ type: 'text', text: `❌ Worktree not found: \`${wsPath ?? 'unset'}\`` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          const repoRoot = deriveRunRepoRoot();
+          const runId = deriveRunId();
+          const base = `origin/${PIPELINE_BASE_BRANCH}`;
+
+          const gate = runPrePushGate({ cwd: wsPath, base, runId });
+          if (!gate.ran) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: [
+                    '⚠️  Validation could not run (see `bun run infra:report`).',
+                    '',
+                    'The recorded verdict was left untouched, so `gh_pr create` will still',
+                    'refuse if it is stale. Resolve the tooling problem and run this again.',
+                  ].join('\n'),
+                },
+              ],
+              isError: true,
+              details: { ran: false },
+            };
+          }
+
+          // `:fix` rewrote files in place — commit them so the verdict below
+          // is recorded against a revision that actually contains them.
+          let head = getGitHeadCommit(wsPath);
+          let committed = false;
+          try {
+            const after = commitAll({
+              cwd: wsPath,
+              message: 'style: apply `moon run :fix` before publication',
+              authorName: 'Pi Agent',
+              authorEmail: 'agent@pi.internal',
+            });
+            committed = after !== head;
+            head = after;
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            return {
+              content: [{ type: 'text', text: `❌ Could not commit auto-fixes: ${message}` }],
+              isError: true,
+              details: {},
+            };
+          }
+
+          // 🔴 Bind the verdict to the post-commit revision. A verdict stored
+          // against a revision the branch has already moved past is exactly
+          // the stale evidence publication_gate.ts exists to reject.
+          const manifest = readManifest({ runId, cwd: repoRoot });
+          if (manifest) {
+            manifest.prePushValidation = {
+              ok: gate.ok,
+              output: gate.output,
+              checkedAt: new Date().toISOString(),
+              revision: head,
+            };
+            writeManifest({ manifest, cwd: repoRoot });
+          }
+
+          let pushed = false;
+          let pushError: string | undefined;
+          if (params.push !== false && gate.ok) {
+            try {
+              pushBranch({
+                cwd: wsPath,
+                branchName: runGit('rev-parse --abbrev-ref HEAD', { cwd: wsPath }),
+              });
+              pushed = true;
+            } catch (err: unknown) {
+              pushError = err instanceof Error ? err.message : String(err);
+            }
+          }
+
+          const publication = evaluatePublicationGate({
+            git: createWorkspaceGitReader(wsPath),
+            manifest: readManifest({ runId, cwd: repoRoot }),
+          });
+
+          const pushLine = ((): string => {
+            if (pushed) {
+              return 'Branch pushed.';
+            }
+            return pushError ? `⚠️  Push failed: ${pushError}` : '';
+          })();
+
+          const lines = gate.ok
+            ? [
+                `✅ **Validation passed** on \`${head.slice(0, 12)}\`.`,
+                '',
+                committed
+                  ? '`moon run :fix` changed files — they were committed for you.'
+                  : 'No auto-fixable changes were needed.',
+                pushLine,
+                '',
+                publication.ok
+                  ? '`gh_pr create` is now unblocked.'
+                  : formatPublicationBlocks(publication),
+              ]
+            : [
+                '🔴 **Validation FAILED** — `gh_pr create` stays blocked.',
+                '',
+                'Fix the failures below, then run `contract_stage` action `validate` again.',
+                'Do NOT open the PR in the meantime; CI repeats these verbatim.',
+                '',
+                '```',
+                gate.output,
+                '```',
+              ];
+
+          return {
+            content: [{ type: 'text', text: lines.filter((line) => line !== '').join('\n') }],
+            isError: !gate.ok,
+            details: {
+              ok: gate.ok,
+              revision: head,
+              committed,
+              pushed,
+              publishable: publication.ok,
+              blocks: publication.blocks.map((block) => block.code),
+              workspacePath: wsPath,
+              cwd: ctx.cwd,
+            },
           };
         },
       }),
