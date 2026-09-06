@@ -158,7 +158,16 @@ const walk = (dir: string, matches: (name: string) => boolean): string[] => {
       continue;
     }
     const full = resolve(dir, entry);
-    if (statSync(full).isDirectory()) {
+    // 🔴 TOCTOU: skip entries that vanish between readdirSync and statSync
+    // (e.g. a live Chromium profile's lock/socket files) rather than crashing
+    // the whole guard on an unrelated ENOENT.
+    let isDir: boolean;
+    try {
+      isDir = statSync(full).isDirectory();
+    } catch {
+      continue;
+    }
+    if (isDir) {
       out.push(...walk(full, matches));
     } else if (matches(entry)) {
       out.push(full);

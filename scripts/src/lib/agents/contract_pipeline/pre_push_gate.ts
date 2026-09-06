@@ -88,10 +88,30 @@ const defaultRunner: GateRunner = ({ command, args, cwd }) => {
   return { status: result.status, output, spawnFailed: !!result.error };
 };
 
-const truncate = (text: string): string =>
-  text.length <= MAX_GATE_OUTPUT_CHARS
+const truncate = (text: string, limit: number = MAX_GATE_OUTPUT_CHARS): string =>
+  text.length <= limit
     ? text
-    : `${text.slice(0, MAX_GATE_OUTPUT_CHARS)}\n… (${text.length - MAX_GATE_OUTPUT_CHARS} more characters truncated)`;
+    : `${text.slice(0, limit)}\n… (${text.length - limit} more characters truncated)`;
+
+/**
+ * Named tasks that make up the `:validate` aggregate (see
+ * `.moon/tasks/all.yml`'s `validate` task and `scripts/moon.yml`'s `guard`
+ * task). Kept in sync by hand — these are stable structural targets, not
+ * derived from the affected-file graph, so there is no single source to
+ * read them from at runtime without shelling out to `moon` again.
+ */
+const VALIDATE_CONSTITUENT_TASKS = [
+  { task: ':lint', label: 'Lint' },
+  { task: ':format', label: 'Format' },
+  { task: ':typecheck', label: 'Typecheck' },
+  { task: 'scripts:guard-mvvm-conventions', label: 'Guard: MVVM conventions' },
+  { task: 'scripts:guard-service-conventions', label: 'Guard: service conventions' },
+  { task: 'scripts:guard-service-mock-coverage', label: 'Guard: service mock coverage' },
+  { task: 'scripts:guard-image-component', label: 'Guard: image component' },
+  { task: 'scripts:guard-data-plane', label: 'Guard: data plane' },
+  { task: 'scripts:guard-type-safety', label: 'Guard: type safety' },
+  { task: 'scripts:validate-agent-guidance', label: 'Agent guidance' },
+] as const;
 
 const GATE_SETUP_FAILURE_PATTERNS = [
   /(?:script|module) not found ["'`]?moon\b/i,
@@ -104,6 +124,56 @@ const GATE_SETUP_FAILURE_PATTERNS = [
 /** Identify failures that prevent Moon from reaching project validation. */
 const isGateSetupFailure = (output: string): boolean =>
   GATE_SETUP_FAILURE_PATTERNS.some((pattern) => pattern.test(output));
+
+/**
+ * When the aggregate `:validate` step is red, re-run each of its known
+ * constituent tasks individually so the diagnostic names exactly which
+ * check failed, instead of handing the review captain one opaque blob of
+ * interleaved moon output to search through by hand.
+ *
+ * 🔴 C-482 (2026-09-06): a `guard-type-safety` violation was buried in a
+ * wall of passing `:validate` output, and the review captain spent a dozen
+ * manual `moon run <task>` invocations re-deriving which check had actually
+ * failed before it could fix anything. This does that re-derivation once,
+ * automatically, right here.
+ *
+ * Best-effort: if none of the individual re-runs reproduce a failure (a
+ * flaky task, or a check outside this fixed list), falls back to the raw
+ * `:validate` output rather than hiding it.
+ */
+const attributeValidateFailure = (options: {
+  run: GateRunner;
+  cwd: string;
+  affected: readonly string[];
+  fallback: string;
+}): string => {
+  const failing: { label: string; task: string; output: string }[] = [];
+  for (const { task, label } of VALIDATE_CONSTITUENT_TASKS) {
+    const result = options.run({
+      command: 'bun',
+      args: ['moon', 'run', task, ...options.affected],
+      cwd: options.cwd,
+    });
+    // Best-effort: a spawn hiccup or an unrelated setup failure on the
+    // re-run must not hide the original diagnostic — just skip attributing it.
+    if (result.spawnFailed || (result.status !== 0 && isGateSetupFailure(result.output))) {
+      continue;
+    }
+    if (result.status !== 0) {
+      failing.push({ label, task, output: result.output });
+    }
+  }
+
+  if (failing.length === 0) {
+    return options.fallback;
+  }
+
+  const perTaskBudget = Math.max(500, Math.floor(MAX_GATE_OUTPUT_CHARS / failing.length));
+  const attributed = failing
+    .map(({ label, task, output }) => `### ${label} (${task})\n${truncate(output, perTaskBudget)}`)
+    .join('\n\n');
+  return truncate(attributed);
+};
 
 /**
  * Auto-fix, then verify, the code about to be pushed.
@@ -186,7 +256,19 @@ export const runPrePushGate = (options: {
       continue;
     }
     if (result.status !== 0) {
-      return { ran: true, ok: false, output: truncate(result.output) };
+      // The aggregate `:validate` step's own output is an interleaved blob
+      // across every affected project and check — re-derive which specific
+      // check(s) failed before handing this to the review captain.
+      const output =
+        step.label === ':validate'
+          ? attributeValidateFailure({
+              run,
+              cwd: options.cwd,
+              affected,
+              fallback: truncate(result.output),
+            })
+          : truncate(result.output);
+      return { ran: true, ok: false, output };
     }
   }
 

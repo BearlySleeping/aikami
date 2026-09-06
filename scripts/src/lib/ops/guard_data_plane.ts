@@ -52,7 +52,16 @@ const walk = (dir: string, exts: readonly string[]): string[] => {
       continue;
     }
     const full = resolve(dir, entry);
-    if (statSync(full).isDirectory()) {
+    // 🔴 TOCTOU: skip entries that vanish between readdirSync and statSync
+    // (e.g. a live Chromium profile's lock/socket files) rather than crashing
+    // the whole guard on an unrelated ENOENT.
+    let isDir: boolean;
+    try {
+      isDir = statSync(full).isDirectory();
+    } catch {
+      continue;
+    }
+    if (isDir) {
       out.push(...walk(full, exts));
     } else if (exts.some((ext) => entry.endsWith(ext))) {
       out.push(full);

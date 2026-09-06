@@ -12,6 +12,9 @@ const EXCLUDED_DIR_NAMES = new Set([
   'dist',
   '.git',
   'generated-skills',
+  // A live Playwright/Chromium instance churns lock/socket files here —
+  // nothing under it is source, and walking it races the browser process.
+  '.chromium-profile',
 ]);
 
 /** Excludes generated directories and only the vendored `.pi/git` directory. */

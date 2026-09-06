@@ -105,7 +105,17 @@ const walk = (dir: string): string[] => {
   }
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
-    const stats = statSync(full);
+    // 🔴 TOCTOU: entries that exist at readdirSync-time can vanish before
+    // statSync runs — e.g. a running Chromium instance's `.pi/.chromium-profile`
+    // lock/socket files, or any concurrent writer. Skip rather than crash the
+    // whole guard (and the pre-push gate with it) on an ENOENT that has
+    // nothing to do with the code being checked.
+    let stats: ReturnType<typeof statSync>;
+    try {
+      stats = statSync(full);
+    } catch {
+      continue;
+    }
     if (stats.isDirectory()) {
       const relPath = relative(ROOT, full).split(sep).join('/');
       if (isExcludedDir({ name: entry, relPath })) {

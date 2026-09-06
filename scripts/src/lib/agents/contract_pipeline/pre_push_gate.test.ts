@@ -191,6 +191,62 @@ describe('runPrePushGate', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('attributes a :validate failure to the specific constituent task that failed', () => {
+    // fix, typecheck, :validate (red) — then the attribution re-runs every
+    // constituent task; only guard-type-safety is scripted to fail.
+    const outcomes: { status: number | null; output?: string }[] = [
+      { status: 0 }, // :fix
+      { status: 0 }, // :typecheck
+      { status: 1, output: 'opaque interleaved :validate blob' }, // :validate
+    ];
+    // :lint, :format, :typecheck, guard-mvvm, guard-service, guard-mock,
+    // guard-image, guard-data-plane → all pass.
+    for (let i = 0; i < 8; i++) {
+      outcomes.push({ status: 0 });
+    }
+    outcomes.push({ status: 1, output: '❌ T1 `as unknown as X` — 2 found, baseline allows 0' }); // guard-type-safety
+    outcomes.push({ status: 0 }); // validate-agent-guidance
+
+    const { runner, calls } = scriptedRunner(outcomes);
+    const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
+
+    expect(result.ran).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain('Guard: type safety');
+    expect(result.output).toContain('baseline allows 0');
+    expect(result.output).not.toContain('opaque interleaved');
+    // fix + typecheck + validate (3) + 10 constituent re-runs.
+    expect(calls).toHaveLength(13);
+    expect(calls.at(-3)?.args).toEqual([
+      'moon',
+      'run',
+      'scripts:guard-data-plane',
+      '--affected',
+      '--base=origin/main',
+    ]);
+    expect(calls.at(-2)?.args).toEqual([
+      'moon',
+      'run',
+      'scripts:guard-type-safety',
+      '--affected',
+      '--base=origin/main',
+    ]);
+  });
+
+  it('falls back to the raw :validate output when no constituent re-run reproduces the failure', () => {
+    const diagnostics = 'flaky :validate failure that did not reproduce';
+    const { runner } = scriptedRunner([
+      { status: 0 },
+      { status: 0 },
+      { status: 1, output: diagnostics },
+    ]);
+
+    const result = runPrePushGate({ cwd: '/tmp/wt', base: 'origin/main', runner });
+
+    expect(result.ok).toBe(false);
+    expect(result.output).toBe(diagnostics);
+  });
+
   it('truncates oversized diagnostics so they cannot crowd out the review prompt', () => {
     const huge = 'x'.repeat(MAX_GATE_OUTPUT_CHARS * 3);
     const { runner } = scriptedRunner([{ status: 0 }, { status: 0 }, { status: 1, output: huge }]);
