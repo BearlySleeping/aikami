@@ -12,10 +12,8 @@ import {
 } from '@aikami/frontend/services';
 import {
   TEXT_PROVIDERS,
-  IMAGE_PROVIDERS,
-  VOICE_PROVIDERS,
 } from '@aikami/constants';
-import type { CapabilitySnapshot, ConnectionEntry, DetectionStatus } from '@aikami/types';
+import type { CapabilitySnapshot, ConnectionEntry } from '@aikami/types';
 import { capabilityService, configService, runtimeConfigService } from '$services';
 import type { Connection, ConnectionCapability } from '$types';
 
@@ -467,7 +465,6 @@ class SetupSubflowViewModel
   }
 
   private _buildPlan(snapshot: CapabilitySnapshot, providers: DiscoveredProvider[]): void {
-    const enabledCaps = this._capabilityToggles.filter((t) => t.enabled);
     const resourceWarnings: string[] = [];
 
     // Check for download requirements.
