@@ -1,9 +1,14 @@
 <script lang="ts">
 // apps/frontend/client/src/routes/capability/+page.svelte
-import CapabilityView from '$views/capability/capability_view.svelte';
-import { getCapabilityViewModel } from '$views/capability/capability_view_model.svelte';
+//
+// Capability route — entry point for AI setup. Presents three paths:
+// Recommended, Connect existing, Text-only. Uses the shared setup subflow.
+// Contract: C-483 AC-1
 
-const viewModel = getCapabilityViewModel({ className: 'CapabilityViewModel' });
+import SetupEntryView from '$views/setup_subflow/setup_entry_view.svelte';
+import { getSetupEntryViewModel } from '$views/setup_subflow/setup_entry_view_model.svelte';
+
+const viewModel = getSetupEntryViewModel({ className: 'SetupEntryViewModel' });
 </script>
 
-<CapabilityView {viewModel} />
+<SetupEntryView {viewModel} />
