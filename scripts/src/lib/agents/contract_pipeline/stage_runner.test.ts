@@ -210,6 +210,49 @@ describe('runStage retry safeguard', () => {
     // The in-loop relaunch only fires after DEAD_CHECK_GRACE_MS (5s) of
     // confirmed non-working — longer than bun's default 5s per-test timeout.
   }, 30_000);
+
+  it('C-472: relaunch preserves the original role prompt and feedback', async () => {
+    // A relaunched worker used to get a bare resume line (or an empty
+    // string) as its system prompt, wiping out the role instructions and
+    // acceptance criteria the original launch carried. The replacement
+    // worker must see the SAME prompt, plus the original feedback, plus a
+    // relaunch notice appended — not a substitute for either.
+    const requests: WorkerLaunchRequest[] = [];
+    const outcome = await runStage({
+      repoRoot,
+      runDirectory,
+      runId: RUN_ID,
+      stage: 'implement',
+      attempt: 1,
+      contractPath: 'docs/contracts/C-999-test.md',
+      idleTimeoutMs: 60_000,
+      hardTimeoutMs: 60_000,
+      pollIntervalMs: 5,
+      feedback: 'Verifier found: missing null check in foo.ts.',
+      generation: 10,
+      advanceGeneration: () => 11,
+      launchWorker: async (request) => {
+        requests.push(request);
+        if (requests.length === 1) {
+          return { paneId: 'pane-original' };
+        }
+        writeStageResult({
+          resultPath: join(runDirectory, 'stages', 'implement-1.json'),
+          result: { ...resultFor(1, 'passed'), generation: 11 },
+        });
+        return { paneId: 'pane-relaunched' };
+      },
+      checkAgentWorking: async (paneId) => paneId !== 'pane-original',
+    });
+
+    expect(requests).toHaveLength(2);
+    const [original, relaunch] = requests;
+    expect(relaunch?.prompt).toBe(original?.prompt);
+    expect(relaunch?.prompt.length).toBeGreaterThan(0);
+    expect(relaunch?.userMessage).toContain('Verifier found: missing null check in foo.ts.');
+    expect(relaunch?.userMessage).toContain('RELAUNCH');
+    expect(outcome.result.status).toBe('passed');
+  }, 30_000);
 });
 
 describe('runStage guard-halt settle window', () => {

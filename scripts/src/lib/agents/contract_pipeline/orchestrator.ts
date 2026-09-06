@@ -33,6 +33,7 @@ import {
   ContractHerdrAdapter,
   type ContractHerdrAdapterInterface,
   ghTokenFilePath,
+  workerUsageLogPath,
 } from './herdr_adapter.ts';
 import { settleEmptyImplementation } from './implement_guard.ts';
 import {
@@ -76,6 +77,7 @@ import {
   PIPELINE_BASE_BRANCH,
   STATUS_TO_START_STAGE,
 } from './types.ts';
+import { normalizeLegacyUsage, readUsageLog } from './usage_ledger.ts';
 
 /** Hard wall-clock caps — only hit when herdr is unreachable. Working agents never killed. */
 const STAGE_HARD_CAPS: Record<string, number> = {
@@ -1310,6 +1312,30 @@ export const runContractPipeline = async (options: {
         }
         result = enforceStageStatus({ stage, result, contractPath: manifest.contractPath });
 
+        // C-473: collect usage from the active launch path. `runStage`'s
+        // precondition-skip / recovered-result outcomes never launched a
+        // worker (paneId is a synthetic 'precondition-skipped' / 'recovered'
+        // / 'recovered-prev' marker), so there is no worker log to read for
+        // those — usage stays unknown rather than fabricated as zero.
+        const workerWasLaunched = outcome.paneId !== 'precondition-skipped';
+        const usage = workerWasLaunched
+          ? readUsageLog(
+              workerUsageLogPath({
+                repoRoot: options.repoRoot,
+                runId: manifest.runId,
+                stage,
+                attempt,
+              }),
+            )
+          : undefined;
+        const usageRecord = normalizeLegacyUsage({
+          usage,
+          runId: manifest.runId,
+          role,
+          attempt,
+          generation: lockMetadata.generation,
+        });
+
         manifest.attempts.push({
           stage,
           role,
@@ -1318,6 +1344,8 @@ export const runContractPipeline = async (options: {
           startTime,
           endTime: new Date().toISOString(),
           result,
+          usage,
+          usageRecord,
         });
         if (stage === 'critique' && result.status === 'passed') {
           // Compute the approved content and commit it straight to main —

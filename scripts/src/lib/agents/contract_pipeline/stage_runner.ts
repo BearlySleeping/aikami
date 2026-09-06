@@ -347,16 +347,22 @@ export const runStage = async (options: {
         runId: options.runId,
         resultPath,
         delivery: 'direct_prompt',
-        prompt: options.feedback?.trim()
-          ? `Resume the ${role} stage for ${options.runId}. Check CONTRACT_PIPELINE_RESULT_PATH first — if valid, ONLY call contract_stage_complete with that status. Otherwise continue work.`
-          : '',
+        // 🔴 C-472: relaunch must preserve the original role prompt, contract
+        // and feedback — a replacement worker with no system prompt has no
+        // acceptance criteria or contract context to resume from. Only the
+        // task-brief user message changes to note this is a resume.
+        prompt,
         contractPath: options.contractPath,
         role,
         stage: options.stage,
         attempt: options.attempt,
         generation: expectedGeneration,
-        userMessage:
+        userMessage: [
+          userMessage,
           '🔴 RELAUNCH: Worker crashed. Resume from prior findings and call contract_stage_complete.',
+        ]
+          .filter((part) => part?.trim())
+          .join('\n\n'),
       });
       paneId = relaunched.paneId;
       // Relaunch succeeded — continue polling
@@ -400,13 +406,20 @@ export const runStage = async (options: {
       runId: options.runId,
       resultPath,
       delivery: 'direct_prompt',
-      prompt: `Resume the ${role} stage for ${options.runId}. Check CONTRACT_PIPELINE_RESULT_PATH — if valid, call contract_stage_complete with that status. Otherwise continue.`,
+      // 🔴 C-472: same rationale as the mid-loop relaunch above — preserve
+      // the original role prompt rather than substituting a bare resume line.
+      prompt,
       contractPath: options.contractPath,
       role,
       stage: options.stage,
       attempt: options.attempt,
       generation: expectedGeneration,
-      userMessage: '🔴 FINAL RELAUNCH: Worker crashed. Resume and call contract_stage_complete.',
+      userMessage: [
+        userMessage,
+        '🔴 FINAL RELAUNCH: Worker crashed. Resume and call contract_stage_complete.',
+      ]
+        .filter((part) => part?.trim())
+        .join('\n\n'),
     });
     paneId = relaunched.paneId;
     // Give relaunch 30s to produce a result

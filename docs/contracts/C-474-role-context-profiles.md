@@ -24,7 +24,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type**             | thin                                                                                              |
 | **Priority**         | P1 — irrelevant always-on context and implicit model assumptions waste turns                      |
 | **Dependencies**     | C-473; instruction-repair PR 02                                                                   |
-| **Status**           | draft                                                                                             |
+| **Status**           | in_progress                                                                                        |
 | **Promotion**        | —                                                                                                 |
 | **Docs Impact**      | internal — role profiles, resource discovery and effective model settings                         |
 | **Contract version** | 2.0.0                                                                                             |
@@ -107,4 +107,47 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
 
 ## Execution Report
 
-Not executed. No implementation or platform evidence is claimed by this planning document.
+### Summary
+
+`.pi/extensions/lib/role_profiles.ts` (with its own `role_profiles.test.ts`)
+existed on `main` but was never called from the live pipeline — the active
+launch path (`herdr_adapter.ts`'s `toolsForRole`) hardcoded `return
+undefined`, so every worker loaded the full tool surface regardless of role.
+This pass wires `resolveEnabledExtensions(role)` into `toolsForRole`, so
+`pi --tools ...` on each worker launch now reflects that role's REQUIRED
+capabilities only (optional capabilities, e.g. browser/vision, stay off by
+default, per the module's own design). Verified against the installed `pi`
+CLI's actual registered tool names (`read`, `edit`, `write`, `bash`,
+`contract_stage`, `gh_pr`, `moon_run_task`, etc. — see
+`.pi/extensions/*.ts`'s `registerTool`/`registerNamespace` calls) before
+wiring, since `--tools` is a literal-name allowlist and a wrong name would
+silently strip a tool a worker needs, not error loudly.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `toolsForRole` now resolves each role's required-capability extensions via `resolveEnabledExtensions`. `completion`/`contract_pipeline` are required for every role, so `contract_stage_complete` can never be filtered out. Publication tools (`gh_pr`, `gh_release`, `gh_workflow`) are enabled only for implementer/verifier, not writer/critic. Covered by new tests in `herdr_adapter.test.ts`. |
+| AC-2 | ❌ not done | Skill router / progressive disclosure for Pixi metadata is unchanged. |
+| AC-3 | ❌ not done | Model/thinking validation against an offline provider-catalogue fixture is unchanged. |
+| AC-4 | ❌ not done | `measure_tool_surface.ts`-style assembled-surface measurement is unchanged. |
+| AC-5 | ❌ not done | Personal-config/global-file safety fixtures are unchanged. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `scripts/src/lib/agents/contract_pipeline/herdr_adapter.ts` | `toolsForRole` now imports and calls `resolveEnabledExtensions` from `.pi/extensions/lib/role_profiles.ts` instead of always returning `undefined`. |
+| `scripts/src/lib/agents/contract_pipeline/herdr_adapter.test.ts` | Added coverage: every role resolves a non-empty tool list, `contract_stage` is always included, `gh_pr` is implementer/verifier-only. |
+
+### Deviations from Spec
+
+Only AC-1 is addressed. AC-2 through AC-5 are unstarted and sized for
+separate follow-up work — this pass fixes the specific "the profile module
+exists but is never called" gap identified by a post-implementation review,
+not the full contract scope.
+
+### Test Results
+
+- Unit: `bun test src/lib/agents/contract_pipeline` — 342/342 pass (0 new
+  failures).

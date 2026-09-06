@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
 import { FakeHerdrAdapter } from './fake_adapter.ts';
-import { buildWorkspaceLabel, ghTokenFilePath } from './herdr_adapter.ts';
+import { buildWorkspaceLabel, ghTokenFilePath, toolsForRole } from './herdr_adapter.ts';
 
 // ── Pure functions ──────────────────────────────────────────
 
@@ -18,6 +18,29 @@ describe('ghTokenFilePath', () => {
   it('constructs the token path from repoRoot and runId', () => {
     const path = ghTokenFilePath({ repoRoot: '/home/user/repo', runId: 'run-test-abc' });
     expect(path).toBe(join('/home/user/repo', '.pi', 'contract-runs', 'run-test-abc', 'gh-token'));
+  });
+});
+
+describe('toolsForRole (C-474)', () => {
+  it('resolves a non-empty tool list for every worker role', () => {
+    for (const role of ['writer', 'critic', 'implementer', 'verifier'] as const) {
+      const tools = toolsForRole(role);
+      expect(tools).toBeDefined();
+      expect(tools?.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('always includes the completion tool so contract_stage_complete stays reachable', () => {
+    for (const role of ['writer', 'critic', 'implementer', 'verifier'] as const) {
+      expect(toolsForRole(role)).toContain('contract_stage');
+    }
+  });
+
+  it('grants publication tools (gh_pr) only to implementer/verifier, not writer/critic', () => {
+    expect(toolsForRole('implementer')).toContain('gh_pr');
+    expect(toolsForRole('verifier')).toContain('gh_pr');
+    expect(toolsForRole('writer')).not.toContain('gh_pr');
+    expect(toolsForRole('critic')).not.toContain('gh_pr');
   });
 });
 

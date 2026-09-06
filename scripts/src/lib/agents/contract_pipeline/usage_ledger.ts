@@ -4,6 +4,7 @@
 // Handles deduplication, retry reconciliation, legacy compatibility and
 // honest representation of missing/estimated costs.
 
+import { existsSync, readFileSync } from 'node:fs';
 import type {
   AggregatedUsage,
   ContractWorkerRole,
@@ -13,6 +14,91 @@ import type {
   StageUsage,
   UsageRecord,
 } from './types.ts';
+
+// ── Active-path collection (C-473 AC-1) ──
+
+/** Shape of one `pi --mode json` assistant-turn event carrying usage. */
+type PiUsageEvent = {
+  type?: string;
+  message?: {
+    role?: string;
+    model?: string;
+    usage?: {
+      input?: number;
+      output?: number;
+      cacheRead?: number;
+      cacheWrite?: number;
+      totalTokens?: number;
+      cost?: { total?: number };
+    };
+  };
+};
+
+const emptyStageUsage = (): StageUsage => ({
+  model: '',
+  turns: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  totalTokens: 0,
+  cost: 0,
+});
+
+/**
+ * Parse a `pi --mode json` JSONL event stream into a `StageUsage` summary.
+ *
+ * Shared between the legacy direct-spawn worker path (`worker.ts`) and the
+ * active Herdr launch path (`herdr_adapter.ts`), which tees the same worker
+ * stdout into a per-attempt log instead of piping it through a child
+ * process directly. Tolerant of interleaved non-JSON lines (herdr pane
+ * banners, shell echoes) — those are skipped, never thrown on.
+ */
+export const parseUsageFromJsonlText = (text: string): StageUsage => {
+  const usage = emptyStageUsage();
+  for (const line of text.split('\n')) {
+    if (!line.trim()) {
+      continue;
+    }
+    let event: PiUsageEvent;
+    try {
+      event = JSON.parse(line) as PiUsageEvent;
+    } catch {
+      continue;
+    }
+    if (event.type !== 'message_end' || event.message?.role !== 'assistant') {
+      continue;
+    }
+    const eventUsage = event.message.usage;
+    usage.turns += 1;
+    usage.model = event.message.model ?? usage.model;
+    usage.inputTokens += eventUsage?.input ?? 0;
+    usage.outputTokens += eventUsage?.output ?? 0;
+    usage.cacheReadTokens += eventUsage?.cacheRead ?? 0;
+    usage.cacheWriteTokens += eventUsage?.cacheWrite ?? 0;
+    usage.totalTokens = eventUsage?.totalTokens ?? usage.totalTokens;
+    usage.cost += eventUsage?.cost?.total ?? 0;
+  }
+  return usage;
+};
+
+/**
+ * Read and parse a worker's JSONL usage log from disk.
+ * Returns `undefined` (never a zeroed `StageUsage`) when the log is missing
+ * — a missing log is unknown coverage, not proof of zero cost. See
+ * {@link normalizeLegacyUsage}, which turns `undefined` into an explicit
+ * `unknown`-provenance record rather than a silent zero.
+ */
+export const readUsageLog = (logPath: string): StageUsage | undefined => {
+  if (!existsSync(logPath)) {
+    return undefined;
+  }
+  try {
+    return parseUsageFromJsonlText(readFileSync(logPath, 'utf-8'));
+  } catch {
+    return undefined;
+  }
+};
 
 // ── Helpers ──
 
