@@ -78,7 +78,8 @@ describe('SettingsViewModel — group/section selection', () => {
     vm.setActiveGroup('ai');
     expect(vm.activeGroupId).toBe('ai');
     expect(vm.activeSectionId).toBe('ai');
-    expect(vm.sectionsInActiveGroup.map((s) => s.id)).toEqual(['ai']);
+    expect(vm.sectionsInActiveGroup.length).toBe(6);
+    expect(vm.sectionsInActiveGroup[0].id).toBe('ai');
   });
 
   test('setActiveSection changes only the section, not the group', () => {
@@ -136,5 +137,67 @@ describe('SettingsViewModel — deep links', () => {
     await vm.initialize();
     expect(vm.activeSectionId).toBe('controls');
     expect(vm.activeGroupId).toBe('play');
+  });
+});
+
+describe('SettingsViewModel — search', () => {
+  let vm: SettingsViewModelType;
+
+  beforeEach(async () => {
+    const { SettingsViewModel } = await import('./settings_view_model.svelte.ts');
+    vm = SettingsViewModel.create({ className: 'SettingsViewModel' });
+  });
+
+  test('isSearching is false by default', () => {
+    expect(vm.isSearching).toBe(false);
+  });
+
+  test('setSearchQuery updates searchQuery and isSearching', () => {
+    vm.setSearchQuery('audio');
+    expect(vm.searchQuery).toBe('audio');
+    expect(vm.isSearching).toBe(true);
+  });
+
+  test('clearSearch resets the query', () => {
+    vm.setSearchQuery('audio');
+    vm.clearSearch();
+    expect(vm.searchQuery).toBe('');
+    expect(vm.isSearching).toBe(false);
+  });
+
+  test('filteredSections returns sections matching by label', () => {
+    vm.setSearchQuery('audio');
+    const results = vm.filteredSections;
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.some((s) => s.id === 'audio')).toBe(true);
+  });
+
+  test('filteredSections returns sections matching by searchTags', () => {
+    vm.setSearchQuery('keyboard');
+    const results = vm.filteredSections;
+    expect(results.some((s) => s.id === 'controls')).toBe(true);
+  });
+
+  test('filteredSections returns sections matching by id', () => {
+    vm.setSearchQuery('gameplay');
+    const results = vm.filteredSections;
+    expect(results.some((s) => s.id === 'gameplay')).toBe(true);
+  });
+
+  test('filteredSections is empty when query is empty', () => {
+    expect(vm.filteredSections).toEqual([]);
+  });
+
+  test('filteredSections includes groupLabel for each result', () => {
+    vm.setSearchQuery('audio');
+    const results = vm.filteredSections;
+    for (const r of results) {
+      expect(r.groupLabel).toBeTruthy();
+    }
+  });
+
+  test('filteredSections is empty when nothing matches', () => {
+    vm.setSearchQuery('xyznonexistent');
+    expect(vm.filteredSections).toEqual([]);
   });
 });

@@ -27,6 +27,10 @@ import {
   getAiSettingsViewModel,
 } from './ai/ai_settings_view_model.svelte';
 import {
+  type CapabilityDetailViewModelInterface,
+  getCapabilityDetailViewModel,
+} from './ai/capability_detail_view_model.svelte';
+import {
   getSettingsAudioViewModel,
   type SettingsAudioViewModelInterface,
 } from './audio/settings_audio_view_model.svelte';
@@ -60,6 +64,7 @@ import {
   SETTINGS_SECTIONS,
   type SettingsGroup,
   type SettingsGroupId,
+  type SettingsPlatform,
   type SettingsSection,
 } from './settings_sections';
 
@@ -77,6 +82,16 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly activeGroupId: SettingsGroupId;
   readonly sectionsInActiveGroup: readonly SettingsSection[];
 
+  // ── Search ──
+  searchQuery: string;
+  readonly filteredSections: readonly (SettingsSection & { groupLabel: string })[];
+  readonly isSearching: boolean;
+  setSearchQuery(query: string): void;
+  clearSearch(): void;
+
+  // ── Platform filtering ──
+  readonly platform: SettingsPlatform;
+
   // ── Capability badges ──
   readonly aiCapabilityBadge: string;
   readonly aiCapabilityBadgeColor: string;
@@ -91,6 +106,9 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly controlsViewModel: SettingsControlsViewModelInterface;
   readonly exportViewModel: ExportViewModelInterface;
   readonly aiSettingsViewModel: AiSettingsViewModelInterface;
+  readonly storyDialogueViewModel: CapabilityDetailViewModelInterface;
+  readonly artworkViewModel: CapabilityDetailViewModelInterface;
+  readonly readAloudViewModel: CapabilityDetailViewModelInterface;
   readonly agentListViewModel: AgentListViewModelInterface;
   readonly agentEditorViewModel: AgentEditorViewModelInterface;
 
@@ -120,6 +138,9 @@ export class SettingsViewModel
   activeSectionId = $state<string>(SETTINGS_SECTIONS[0].id);
   activeGroupId = $state<SettingsGroupId>(SETTINGS_SECTIONS[0].group);
 
+  // ── Search ──
+  searchQuery = $state<string>('');
+
   // ── Basic sub-ViewModels (always created) ──
   readonly accountViewModel: AccountViewModelInterface;
   readonly gameplayViewModel: GameplayViewModelInterface;
@@ -132,6 +153,9 @@ export class SettingsViewModel
   private _autonomousViewModel: AutonomousSettingsViewModelInterface | undefined;
   private _exportViewModel: ExportViewModelInterface | undefined;
   private _aiSettingsViewModel: AiSettingsViewModelInterface | undefined;
+  private _storyDialogueViewModel: CapabilityDetailViewModelInterface | undefined;
+  private _artworkViewModel: CapabilityDetailViewModelInterface | undefined;
+  private _readAloudViewModel: CapabilityDetailViewModelInterface | undefined;
   private _agentListViewModel: AgentListViewModelInterface | undefined;
   private _agentEditorViewModel: AgentEditorViewModelInterface | undefined;
 
@@ -146,6 +170,47 @@ export class SettingsViewModel
 
   get sectionsInActiveGroup(): readonly SettingsSection[] {
     return this.allSections.filter((s) => s.group === this.activeGroupId);
+  }
+
+  /** Sections matching the current search query across all groups. */
+  get filteredSections(): (SettingsSection & { groupLabel: string })[] {
+    const query = this.searchQuery.toLowerCase().trim();
+    if (!query) {
+      return [];
+    }
+    const groupMap = new Map(SETTINGS_GROUPS.map((g) => [g.id, g.label]));
+    return SETTINGS_SECTIONS.filter((s) => {
+      const searchable = [
+        s.label.toLowerCase(),
+        s.id.toLowerCase(),
+        ...(s.searchTags ?? []).map((t) => t.toLowerCase()),
+      ];
+      return searchable.some((term) => term.includes(query));
+    }).map((s) => ({ ...s, groupLabel: groupMap.get(s.group) ?? '' }));
+  }
+
+  get isSearching(): boolean {
+    return this.searchQuery.trim().length > 0;
+  }
+
+  /** Detect platform from user agent. */
+  get platform(): SettingsPlatform {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.userAgent.includes('Tauri')) {
+        return 'native';
+      }
+    } catch {
+      // unavailable during tests
+    }
+    return 'web';
+  }
+
+  setSearchQuery(query: string): void {
+    this.searchQuery = query;
+  }
+
+  clearSearch(): void {
+    this.searchQuery = '';
   }
 
   get musicViewModel(): SettingsMusicViewModelInterface {
@@ -178,6 +243,36 @@ export class SettingsViewModel
       });
     }
     return this._aiSettingsViewModel;
+  }
+
+  get storyDialogueViewModel(): CapabilityDetailViewModelInterface {
+    if (!this._storyDialogueViewModel) {
+      this._storyDialogueViewModel = getCapabilityDetailViewModel({
+        className: 'StoryDialogueViewModel',
+        capability: 'text',
+      });
+    }
+    return this._storyDialogueViewModel;
+  }
+
+  get artworkViewModel(): CapabilityDetailViewModelInterface {
+    if (!this._artworkViewModel) {
+      this._artworkViewModel = getCapabilityDetailViewModel({
+        className: 'ArtworkViewModel',
+        capability: 'image',
+      });
+    }
+    return this._artworkViewModel;
+  }
+
+  get readAloudViewModel(): CapabilityDetailViewModelInterface {
+    if (!this._readAloudViewModel) {
+      this._readAloudViewModel = getCapabilityDetailViewModel({
+        className: 'ReadAloudViewModel',
+        capability: 'voice',
+      });
+    }
+    return this._readAloudViewModel;
   }
 
   get agentListViewModel(): AgentListViewModelInterface {

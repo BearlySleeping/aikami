@@ -54,8 +54,21 @@ voice.
 
 ## Where to configure it
 
-Everything lives under **Settings** in the client — providers, keys, endpoints,
-and per-NPC overrides. Keys are stored client-side.
+Everything lives under **Settings** → **AI** in the client. Settings are
+organised by task — not by provider tree — so you find controls by what you
+want to do:
+
+| Section | What you can do |
+| --- | --- |
+| **AI Overview** | See all AI capabilities at a glance — status, connected model, and quick actions |
+| **Story & Dialogue** | Configure the text generation model used by the Game Master and NPCs |
+| **Artwork** | Set up image generation for portraits, scenes, and item art |
+| **Read Aloud** | Configure text-to-speech voice for narration and dialogue |
+| **Connections** | Manage provider endpoints, API keys, and accounts |
+| **Advanced Routing** | Assign different models to different features and configure fallbacks |
+
+Keys are stored client-side in an encrypted vault. You can search settings by
+typing into the search bar at the top of the settings page.
 
 :::tip
 Start with the hosted web client and a cloud key to see whether you like the
