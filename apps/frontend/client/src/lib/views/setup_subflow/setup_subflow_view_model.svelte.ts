@@ -83,6 +83,14 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   readonly isTextReady: boolean;
   /** Snapshot from capability detection. */
   readonly snapshot: CapabilitySnapshot | null;
+  /** Whether discovery produced at least one provider. */
+  readonly hasDiscoveredProviders: boolean;
+  /** Resource warnings prepared for plan presentation. */
+  readonly resourceWarnings: readonly string[];
+  /** Whether the plan has resource warnings. */
+  readonly hasResourceWarnings: boolean;
+  /** Error message with a safe presentation fallback. */
+  readonly displayErrorMessage: string;
 
   /** Selects an entry path. */
   selectEntryPath(path: SetupEntryPath): void;
@@ -146,6 +154,8 @@ class SetupSubflowViewModel
   extends BaseViewModel<SetupSubflowViewModelOptions>
   implements SetupSubflowViewModelInterface
 {
+  private _discoveryOperationId = 0;
+
   step = $state<SetupFlowStep>('entry');
   entryPath = $state<SetupEntryPath | null>(null);
   errorMessage = $state('');
@@ -179,6 +189,22 @@ class SetupSubflowViewModel
       return false;
     }
     return this.snapshot.textStatus === 'detected' || this.snapshot.textStatus === 'configured';
+  }
+
+  get hasDiscoveredProviders(): boolean {
+    return this._discoveredProviders.length > 0;
+  }
+
+  get resourceWarnings(): readonly string[] {
+    return this._planSummary?.resourceWarnings ?? [];
+  }
+
+  get hasResourceWarnings(): boolean {
+    return this.resourceWarnings.length > 0;
+  }
+
+  get displayErrorMessage(): string {
+    return this.errorMessage || 'An error occurred';
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -221,12 +247,16 @@ class SetupSubflowViewModel
       return;
     }
 
+    const operationId = ++this._discoveryOperationId;
     this.isDetecting = true;
     this.errorMessage = '';
     this.step = 'detecting';
 
     try {
       const snapshot = await capabilityService.detect();
+      if (operationId !== this._discoveryOperationId) {
+        return;
+      }
       this.snapshot = snapshot;
 
       // Build discovered providers from snapshot.
@@ -272,11 +302,16 @@ class SetupSubflowViewModel
       this.step = 'plan';
       this.debug('startDiscovery:complete', { providers: providers.length });
     } catch (error) {
+      if (operationId !== this._discoveryOperationId) {
+        return;
+      }
       this.warn('startDiscovery:failed', error);
       this.errorMessage = 'Discovery failed. You can enter provider details manually.';
       this.step = 'error';
     } finally {
-      this.isDetecting = false;
+      if (operationId === this._discoveryOperationId) {
+        this.isDetecting = false;
+      }
     }
   }
 
@@ -322,13 +357,12 @@ class SetupSubflowViewModel
     this.errorMessage = '';
     if (this.step === 'plan') {
       this.step = 'results';
-    } else if (this.step === 'results') {
-      this.step = 'entry';
-      this.entryPath = null;
-    } else {
-      this.step = 'entry';
-      this.entryPath = null;
+      return;
     }
+
+    this._invalidateDiscovery();
+    this.step = 'entry';
+    this.entryPath = null;
   }
 
   reset(): void {
@@ -385,31 +419,38 @@ class SetupSubflowViewModel
       return;
     }
 
-    // Detect and auto-seed if we have a snapshot.
-    if (this.snapshot?.textStatus === 'detected' && this.snapshot.textProviderId) {
-      const textBaseUrl = runtimeConfigService.getTextUrl();
-      configService.addConnection({
-        name: `${this.snapshot.textProviderId} (local)`,
-        provider: this.snapshot.textProviderId,
-        capability: 'text',
-        apiKey: '',
-        baseUrl: textBaseUrl ?? '',
-        model: this.snapshot.textModelName ?? '',
-        generationParams: {
-          temperature: 0.7,
-          topP: 0.95,
-          topK: 40,
-          repetitionPenalty: 1,
-          presencePenalty: 0,
-          maxTokens: 1024,
-          contextSize: 4096,
-        },
-        isDefault: connections.length === 0,
-        source: 'detected',
-      });
+    const snapshot = this.snapshot;
+    if (snapshot?.textStatus !== 'detected' || !snapshot.textProviderId) {
+      throw new Error('A usable text provider is required before setup can complete.');
     }
 
+    // Preserve detected local providers without inventing configuration when detection failed.
+    const textBaseUrl = runtimeConfigService.getTextUrl();
+    configService.addConnection({
+      name: `${snapshot.textProviderId} (local)`,
+      provider: snapshot.textProviderId,
+      capability: 'text',
+      apiKey: '',
+      baseUrl: textBaseUrl ?? '',
+      model: snapshot.textModelName ?? '',
+      generationParams: {
+        temperature: 0.7,
+        topP: 0.95,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 1024,
+        contextSize: 4096,
+      },
+      isDefault: connections.length === 0,
+      source: 'detected',
+    });
     await configService.save();
+  }
+
+  private _invalidateDiscovery(): void {
+    this._discoveryOperationId += 1;
+    this.isDetecting = false;
   }
 
   private async _ensureImageProvider(): Promise<void> {

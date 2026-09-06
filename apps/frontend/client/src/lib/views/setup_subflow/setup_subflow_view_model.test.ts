@@ -25,21 +25,23 @@ const configServiceMock = {
   save: mock(async () => {}),
 };
 
+const createDetectedSnapshot = (): CapabilitySnapshot => ({
+  isComplete: true,
+  textStatus: 'detected',
+  textProviderId: 'ollama',
+  textModelName: 'llama3.2',
+  imageStatus: 'not_found',
+  voiceStatus: 'not_found',
+  summary: 'Local AI detected',
+  detectedAt: new Date().toISOString(),
+});
+
+const detectMock = mock(async (): Promise<CapabilitySnapshot> => createDetectedSnapshot());
+
 mock.module('$services', () => ({
   configService: configServiceMock,
   capabilityService: {
-    detect: mock(
-      async (): Promise<CapabilitySnapshot> => ({
-        isComplete: true,
-        textStatus: 'detected',
-        textProviderId: 'ollama',
-        textModelName: 'llama3.2',
-        imageStatus: 'not_found',
-        voiceStatus: 'not_found',
-        summary: 'Local AI detected',
-        detectedAt: new Date().toISOString(),
-      }),
-    ),
+    detect: detectMock,
   },
   runtimeConfigService: {
     getTextUrl: mock(() => 'http://localhost:11434'),
@@ -56,6 +58,8 @@ describe('SetupSubflowViewModel', () => {
 
   beforeEach(() => {
     configServiceMock.state = { connections: [], defaultByCapability: {} };
+    detectMock.mockClear();
+    detectMock.mockImplementation(async () => createDetectedSnapshot());
     vm = getSetupSubflowViewModel({ className: 'SetupSubflowTest' });
   });
 
@@ -157,17 +161,53 @@ describe('SetupSubflowViewModel', () => {
   });
 
   test('startDiscovery handles errors gracefully', async () => {
-    // Override detect to throw
-    const { capabilityService } = await import('$services');
-    (capabilityService.detect as ReturnType<typeof mock>).mockRejectedValueOnce(
-      new Error('Connection refused'),
-    );
+    detectMock.mockRejectedValueOnce(new Error('Connection refused'));
 
     vm.selectEntryPath('recommended');
     await vm.startDiscovery();
 
     expect(vm.step).toBe('error');
     expect(vm.errorMessage.length).toBeGreaterThan(0);
+  });
+
+  test('goBack ignores a discovery result that completes after cancellation', async () => {
+    const deferredDetection = Promise.withResolvers<CapabilitySnapshot>();
+    detectMock.mockImplementationOnce(async () => deferredDetection.promise);
+    vm.selectEntryPath('recommended');
+
+    const discoveryPromise = vm.startDiscovery();
+    vm.goBack();
+    deferredDetection.resolve(createDetectedSnapshot());
+    await discoveryPromise;
+
+    expect(vm.step).toBe('entry');
+    expect(vm.isDetecting).toBeFalse();
+    expect(vm.snapshot).toBeNull();
+    expect(vm.discoveredProviders).toHaveLength(0);
+  });
+
+  test('a canceled discovery error cannot clear a newer discovery state', async () => {
+    const canceledDetection = Promise.withResolvers<CapabilitySnapshot>();
+    const activeDetection = Promise.withResolvers<CapabilitySnapshot>();
+    detectMock.mockImplementationOnce(async () => canceledDetection.promise);
+    detectMock.mockImplementationOnce(async () => activeDetection.promise);
+    vm.selectEntryPath('recommended');
+
+    const canceledPromise = vm.startDiscovery();
+    vm.goBack();
+    vm.selectEntryPath('recommended');
+    const activePromise = vm.startDiscovery();
+    canceledDetection.reject(new Error('Canceled request failed'));
+    await canceledPromise;
+
+    expect(vm.step).toBe('detecting');
+    expect(vm.isDetecting).toBeTrue();
+    expect(vm.errorMessage).toBe('');
+
+    activeDetection.resolve(createDetectedSnapshot());
+    await activePromise;
+    expect(vm.step).toBe('plan');
+    expect(vm.isDetecting).toBeFalse();
   });
 
   // ── Plan application ───────────────────────────────────────────────────
@@ -190,6 +230,32 @@ describe('SetupSubflowViewModel', () => {
 
     expect(configServiceMock.addConnection.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(configServiceMock.save.mock.calls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('applyPlan does not become ready without a capability snapshot', async () => {
+    vm.selectEntryPath('recommended');
+
+    await vm.applyPlan();
+
+    expect(vm.step).toBe('error');
+    expect(vm.isApplying).toBeFalse();
+  });
+
+  test('applyPlan does not become ready when text was not found', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      textStatus: 'not_found',
+      textProviderId: undefined,
+      textModelName: undefined,
+      summary: 'No text AI detected',
+    });
+    vm.selectEntryPath('recommended');
+    await vm.startDiscovery();
+
+    await vm.applyPlan();
+
+    expect(vm.step).toBe('error');
+    expect(vm.isApplying).toBeFalse();
   });
 
   // ── Navigation ─────────────────────────────────────────────────────────
@@ -228,13 +294,10 @@ describe('SetupSubflowViewModel', () => {
     vm.selectEntryPath('recommended');
     await vm.startDiscovery();
 
-    // Force error state
-    const { capabilityService } = await import('$services');
-    (capabilityService.detect as ReturnType<typeof mock>).mockRejectedValueOnce(
-      new Error('test error'),
-    );
+    detectMock.mockRejectedValueOnce(new Error('test error'));
+    await vm.startDiscovery();
+    expect(vm.step).toBe('error');
 
-    // Error was already handled, retry
     vm.retry();
     expect(vm.step).toBe('plan');
   });
