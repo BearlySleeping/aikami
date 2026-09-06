@@ -9,7 +9,6 @@ import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
 import AgentListView from '../agent/list/agent_list_view.svelte';
 import AccountView from './account/account_view.svelte';
 import AiSettingsView from './ai/ai_settings_view.svelte';
-import AIPrivacyView from './ai_privacy/ai_privacy_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
 import AutonomousSettingsView from './autonomous/autonomous_settings_view.svelte';
 import SettingsControlsView from './controls/settings_controls_view.svelte';
@@ -85,8 +84,6 @@ const { viewModel }: Props = $props();
       <SettingsDisplayView viewModel={viewModel.displayViewModel} />
     {:else if viewModel.activeSectionId === 'gameplay'}
       <GameplayView viewModel={viewModel.gameplayViewModel} />
-    {:else if viewModel.activeSectionId === 'ai_privacy'}
-      <AIPrivacyView viewModel={viewModel.aiPrivacyViewModel} />
     {:else if viewModel.activeSectionId === 'ai'}
       <AiSettingsView viewModel={viewModel.aiSettingsViewModel} />
     {:else if viewModel.activeSectionId === 'agents'}

@@ -28,7 +28,6 @@ const { viewModel }: Props = $props();
           </p>
           <div class="flex flex-col gap-3">
             <a href="/auth/login" class="btn btn-primary w-full"> Sign in with Google </a>
-            <a href="/auth/login" class="btn btn-outline w-full"> Sign in with Email </a>
           </div>
         </div>
       </div>
@@ -190,8 +189,10 @@ const { viewModel }: Props = $props();
        Delete confirmation dialog (AC-7)
        ═══════════════════════════════════════════════════════════════════ -->
   {#if viewModel.isDeleteDialogOpen}
+    <!-- daisyUI v5 .modal-box requires the .modal.modal-open wrapper to be
+         visible (opacity:0 otherwise) — see settings_overlay.svelte for the pattern. -->
     <div
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      class="modal modal-open backdrop-blur-sm bg-black/60"
       role="dialog"
       aria-modal="true"
       aria-label="Delete account confirmation"

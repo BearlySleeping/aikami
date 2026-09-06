@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-04)
+## Status Summary (Auto-generated: 2026-09-05)
 
-**234 active (0 without contract file), 119 archived, 0 duplicates**
+**238 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -227,21 +227,25 @@
 | C-463 | Provider Connection Role Model | 🛠️ implemented | ❓ `integrated` | v2 | full |
 | C-464 | Account Section And Deletion | 🛠️ implemented | ❓ `integrated` | v2 | full |
 | C-465 | Ai Settings Section | 🛠️ implemented | ❓ `integrated` | v1 | full |
-| C-466 | Unify Settings Mounts | 👍 approved | — | v1 | full |
-| C-467 | Tauri Local Ai Install Wizard | 👍 approved | — | v1 | full |
+| C-466 | Unify Settings Mounts | 🛠️ implemented | — | v1 | full |
+| C-467 | Tauri Local Ai Install Wizard | 🛠️ implemented | — | v1 | full |
 | C-468 | Agent Test Foundation | 🛠️ implemented | — | v2 | thin |
-| C-469 | Revision Bound Validation | 📝 draft | — | v2 | full |
-| C-470 | Pipeline Ownership | 📝 draft | — | v2 | full |
-| C-471 | Owned Service Lifecycle | 📝 draft | — | v2 | full |
-| C-472 | Testable Worker Lifecycle | 📝 draft | — | v2 | full |
-| C-473 | Pipeline Usage Ledger | 📝 draft | — | v2 | full |
-| C-474 | Role Context Profiles | 📝 draft | — | v2 | thin |
-| C-475 | Executable Agent Guidance | 📝 draft | — | v2 | thin |
-| C-476 | Strictness Coverage Ratchet | 📝 draft | — | v2 | thin |
+| C-469 | Revision Bound Validation | 🛠️ implemented | — | v2 | full |
+| C-470 | Pipeline Ownership | 🛠️ implemented | — | v2 | full |
+| C-471 | Owned Service Lifecycle | 👍 approved | — | v2 | full |
+| C-472 | Testable Worker Lifecycle | 👍 approved | — | v2 | full |
+| C-473 | Pipeline Usage Ledger | 👍 approved | — | v2 | full |
+| C-474 | Role Context Profiles | 👍 approved | — | v2 | thin |
+| C-475 | Executable Agent Guidance | 👍 approved | — | v2 | thin |
+| C-476 | Strictness Coverage Ratchet | 👍 approved | — | v2 | thin |
 | C-477 | Compiled Svelte Lifecycle Tests | 📝 draft | — | v2 | full |
 | C-478 | Reproducible Agent Resources | 📝 draft | — | v2 | thin |
 | C-479 | Portable Contributor Onboarding | 📝 draft | — | v2 | full |
 | C-480 | Agent Evaluation And Routing | 📝 draft | — | v2 | thin |
+| C-481 | Ai Configuration Convergence | 👍 approved | — | v1 | full |
+| C-482 | Managed Ai Runtime Lifecycle | 👍 approved | — | v1 | full |
+| C-483 | Guided Ai Setup | 📝 draft | — | v1 | thin |
+| C-484 | Capability First Settings | 📝 draft | — | v1 | thin |
 
 ---
 

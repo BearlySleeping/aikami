@@ -3,7 +3,7 @@ id: C-476
 title: "Close strictness coverage gaps without a repo-wide cleanup"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | thin |
 | **Priority** | P1 — advertised strictness is not enforced on important agent-written code |
 | **Dependencies** | C-469, C-475 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — rule/enforcement/exception matrix |
 | **Contract version** | 2.0.0 |
