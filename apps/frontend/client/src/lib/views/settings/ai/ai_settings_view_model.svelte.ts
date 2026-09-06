@@ -5,16 +5,26 @@
 // panels, and generation-parameter disclosure.
 
 import {
+  type GenParamPreset,
   IMAGE_PROVIDERS,
   TEXT_PROVIDERS,
   VOICE_PROVIDERS,
-  type GenParamPreset,
 } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type {
+  AiConnection,
+  AiProvider,
+  AiRole,
+  ImageParams,
+  TextParams,
+  VoiceArchetype,
+  VoiceParams,
+} from '@aikami/types';
+import { fuzzyMatch } from '$lib/utils/fuzzy_match';
 import {
   campaignService,
   configService,
@@ -27,9 +37,12 @@ import {
   verifyConnection,
   voiceModelService,
 } from '$services';
-import type { AiProvider, AiConnection, AiRole, VoiceArchetype, TextParams, ImageParams, VoiceParams } from '@aikami/types';
-import { fuzzyMatch } from '$lib/utils/fuzzy_match';
-import type { ConnectionCapability, ConnectionId, ConnectionTestResult, VoiceModelState } from '$types';
+import type {
+  ConnectionCapability,
+  ConnectionId,
+  ConnectionTestResult,
+  VoiceModelState,
+} from '$types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -182,7 +195,11 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly testResults: Record<string, ConnectionTestResult>;
   readonly testingIds: Set<string>;
   /** Resolves the current verification status for one connection. */
-  connectionStatusFor(connectionId: ConnectionId): { label: string; colorClass: string; dot: string };
+  connectionStatusFor(connectionId: ConnectionId): {
+    label: string;
+    colorClass: string;
+    dot: string;
+  };
 
   // ── Actions ──
   /** Opens the setup flow appropriate for a capability. */
@@ -284,13 +301,25 @@ export type AiSettingsViewModelOptions = BaseViewModelOptions & {
 
 const TEST_TIMEOUT_MS = 15_000;
 const LOCAL_PROVIDER_IDS = new Set([
-  'ollama', 'llamacpp', 'ooba', 'comfyui', 'webui', 'kokoro', 'voicevox', 'fish-speech',
+  'ollama',
+  'llamacpp',
+  'ooba',
+  'comfyui',
+  'webui',
+  'kokoro',
+  'voicevox',
+  'fish-speech',
 ]);
 
 const ALL_ROLES: readonly AiRole[] = [
-  'narration', 'dialogue', 'summarization', 'structured',
-  'portrait', 'scene',
-  'narrator-voice', 'npc-voice',
+  'narration',
+  'dialogue',
+  'summarization',
+  'structured',
+  'portrait',
+  'scene',
+  'narrator-voice',
+  'npc-voice',
 ] as const;
 
 const IMAGE_SIZE_PRESETS: readonly ImageSizePreset[] = [
@@ -541,15 +570,21 @@ export class AiSettingsViewModel
     const regEntry = _registryForCapability(this.draft.capability).find(
       (p) => p.id === this.draft.registryId,
     );
-    if (!regEntry) return true;
+    if (!regEntry) {
+      return true;
+    }
     return !regEntry.isLocal && regEntry.needsKey;
   }
 
   get needsUrl(): boolean {
     const cap = this.draft.capability;
     const reg = this.draft.registryId;
-    if (cap === 'image') return ['comfyui', 'webui', 'openai-compat'].includes(reg);
-    if (cap === 'voice') return ['kokoro', 'voicevox', 'fish-speech'].includes(reg);
+    if (cap === 'image') {
+      return ['comfyui', 'webui', 'openai-compat'].includes(reg);
+    }
+    if (cap === 'voice') {
+      return ['kokoro', 'voicevox', 'fish-speech'].includes(reg);
+    }
     return ['ollama', 'llamacpp', 'ooba', 'custom'].includes(reg);
   }
 
@@ -731,7 +766,7 @@ export class AiSettingsViewModel
 
   imageParamsFor(connectionId: ConnectionId): ImageParams {
     const conn = configService.getAiConnection(connectionId);
-    if (!conn || conn.capability !== 'image' || !('checkpoint' in conn.params)) {
+    if (conn?.capability !== 'image' || !('checkpoint' in conn.params)) {
       return DEFAULT_IMAGE_PARAMS;
     }
     return conn.params;
@@ -779,7 +814,7 @@ export class AiSettingsViewModel
   async previewImage(connectionId: ConnectionId): Promise<void> {
     this.debug('previewImage', { connectionId });
     const conn = configService.getAiConnection(connectionId);
-    if (!conn || conn.capability !== 'image') {
+    if (conn?.capability !== 'image') {
       return;
     }
     const params = this.imageParamsFor(connectionId);
@@ -820,7 +855,7 @@ export class AiSettingsViewModel
     const conn = this.draft.editingConnectionId
       ? configService.getAiConnection(this.draft.editingConnectionId)
       : undefined;
-    if (!conn || conn.capability !== 'text') {
+    if (conn?.capability !== 'text') {
       return undefined;
     }
     return { ...(conn.params as TextParams), ...this._genParamsDraft };
@@ -892,7 +927,9 @@ export class AiSettingsViewModel
   openEditConnection(connectionId: ConnectionId): void {
     this.debug('openEditConnection', { connectionId });
     const conn = configService.getAiConnection(connectionId);
-    if (!conn) return;
+    if (!conn) {
+      return;
+    }
     const provider = configService.getProvider(conn.providerId);
     this.draft = {
       providerId: conn.providerId,
@@ -989,7 +1026,9 @@ export class AiSettingsViewModel
     if (this.draft.isEditing && this.draft.editingConnectionId) {
       // Update existing connection
       const conn = configService.getAiConnection(this.draft.editingConnectionId);
-      if (!conn) return;
+      if (!conn) {
+        return;
+      }
       const patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>> = { label, model };
       // AC-8: params are included in the patch ONLY when the Advanced
       // disclosure was actually edited — opening it alone must never write
@@ -1085,9 +1124,13 @@ export class AiSettingsViewModel
       return;
     }
     const conn = configService.getAiConnection(connectionId);
-    if (!conn) return;
+    if (!conn) {
+      return;
+    }
     const provider = configService.getProvider(conn.providerId);
-    if (!provider) return;
+    if (!provider) {
+      return;
+    }
 
     // Increment generation — stale responses with a lower generation
     // will be discarded, preventing duplicate/stale overwrites.
@@ -1132,7 +1175,11 @@ export class AiSettingsViewModel
   }
 
   /** Resolves the current verification status for one connection. */
-  connectionStatusFor(connectionId: ConnectionId): { label: string; colorClass: string; dot: string } {
+  connectionStatusFor(connectionId: ConnectionId): {
+    label: string;
+    colorClass: string;
+    dot: string;
+  } {
     if (this.testingIds.has(connectionId)) {
       return { label: 'testing…', colorClass: 'text-warning', dot: '◌' };
     }
@@ -1159,7 +1206,9 @@ export class AiSettingsViewModel
     this.debug('fetchModels');
     const reg = this.draft.registryId;
     const config = PROVIDER_MODEL_FETCH[reg];
-    if (!config) return;
+    if (!config) {
+      return;
+    }
     const existing = this._findProviderByRegistry(reg);
     const apiKey = existing?.credential ?? this.draft.apiKey;
     this.isFetchingModels = true;
@@ -1303,7 +1352,7 @@ export class AiSettingsViewModel
 
   private _updateImageParams(connectionId: ConnectionId, patch: Partial<ImageParams>): void {
     const conn = configService.getAiConnection(connectionId);
-    if (!conn || conn.capability !== 'image') {
+    if (conn?.capability !== 'image') {
       return;
     }
     configService.updateAiConnection(connectionId, {
@@ -1314,7 +1363,9 @@ export class AiSettingsViewModel
   private _registryLabel(registryId: string): string | undefined {
     for (const reg of [TEXT_PROVIDERS, VOICE_PROVIDERS, IMAGE_PROVIDERS]) {
       const found = reg.find((p) => p.id === registryId);
-      if (found) return found.label;
+      if (found) {
+        return found.label;
+      }
     }
     return undefined;
   }
@@ -1332,9 +1383,7 @@ export class AiSettingsViewModel
   }
 
   private _providersForCapability(cap: ConnectionCapability): AiProvider[] {
-    const registryIds = new Set<string>(
-      _registryForCapability(cap).map((r) => r.id),
-    );
+    const registryIds = new Set<string>(_registryForCapability(cap).map((r) => r.id));
     return configService.getProviders().filter((p) => registryIds.has(p.registryId));
   }
 
@@ -1412,9 +1461,13 @@ export class AiSettingsViewModel
       return DEFAULT_IMAGE_PARAMS;
     }
     return {
-      temperature: 0.7, topP: 1, topK: 40,
-      repetitionPenalty: 1, presencePenalty: 0,
-      maxTokens: 2048, contextSize: 4096,
+      temperature: 0.7,
+      topP: 1,
+      topK: 40,
+      repetitionPenalty: 1,
+      presencePenalty: 0,
+      maxTokens: 2048,
+      contextSize: 4096,
     } as TextParams;
   }
 }

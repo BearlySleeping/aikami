@@ -1,4 +1,3 @@
-import { userObjectKey } from '@aikami/schemas';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -6,6 +5,7 @@ import {
   createR2Storage,
   type R2StorageInterface,
 } from '@aikami/frontend/services';
+import { userObjectKey } from '@aikami/schemas';
 import { hubApiBase } from '../api/hub_api_client';
 
 export type StorageServiceOptions = BaseFrontendClassOptions & {

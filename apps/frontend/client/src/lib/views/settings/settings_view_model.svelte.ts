@@ -19,6 +19,14 @@ import {
   getAgentListViewModel,
 } from '../agent/list/agent_list_view_model.svelte.ts';
 import {
+  type AccountViewModelInterface,
+  getAccountViewModel,
+} from './account/account_view_model.svelte';
+import {
+  type AiSettingsViewModelInterface,
+  getAiSettingsViewModel,
+} from './ai/ai_settings_view_model.svelte';
+import {
   getSettingsAudioViewModel,
   type SettingsAudioViewModelInterface,
 } from './audio/settings_audio_view_model.svelte';
@@ -26,10 +34,6 @@ import {
   type AutonomousSettingsViewModelInterface,
   getAutonomousSettingsViewModel,
 } from './autonomous/autonomous_settings_view_model.svelte';
-import {
-  type AiSettingsViewModelInterface,
-  getAiSettingsViewModel,
-} from './ai/ai_settings_view_model.svelte';
 import {
   getSettingsControlsViewModel,
   type SettingsControlsViewModelInterface,
@@ -42,10 +46,6 @@ import {
   type ExportViewModelInterface,
   getExportViewModel,
 } from './export/export_view_model.svelte';
-import {
-  type AccountViewModelInterface,
-  getAccountViewModel,
-} from './account/account_view_model.svelte';
 import {
   type GameplayViewModelInterface,
   getGameplayViewModel,

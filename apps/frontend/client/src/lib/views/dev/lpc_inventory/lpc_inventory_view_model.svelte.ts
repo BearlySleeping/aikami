@@ -120,7 +120,8 @@ export class LpcInventoryViewModel
     // Iron Armour plate) on equip and reverts on unequip — mirrors the
     // existing __PIXI_LPC_PREVIEW_LOADED__ window hook pattern.
     if (typeof window !== 'undefined') {
-      (window as any).__LPC_PREVIEW_RECIPES__ = recipes.map( // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+      // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+      (window as unknown as Record<string, unknown>).__LPC_PREVIEW_RECIPES__ = recipes.map(
         (recipe) => ({ slot: recipe.slot, assetId: recipe.assetId }),
       );
     }

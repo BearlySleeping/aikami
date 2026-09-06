@@ -623,7 +623,8 @@ export class ChatViewModel
   }
 
   async deleteMessage(messageId: string): Promise<void> {
-    const msgs = (chatService.messages as unknown as MessageData[]).filter( // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
+    // guard-ignore lint/type-safety/casting: chat service message array typed as readonly; runtime mutation safe within VM scope
+    const msgs = (chatService.messages as unknown as MessageData[]).filter(
       (m) => m.id !== messageId,
     );
     chatService.setMessages(msgs);

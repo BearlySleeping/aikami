@@ -75,7 +75,7 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     this.uiViewModel.handleKeyDown(event);
   }
 
-override async dispose(): Promise<void> {
+  override async dispose(): Promise<void> {
     await this.canvasViewModel.dispose();
     await this.uiViewModel.dispose();
     await gameCompositionRoot.dispose();

@@ -32,8 +32,6 @@ type PreviewSprite = Sprite & { _originalIndex?: number };
 const MaxLayers = 8;
 const CanvasWidth = 960;
 const CanvasHeight = 540;
-const EntityX = CanvasWidth / 2;
-const EntityY = CanvasHeight / 2 - 32;
 
 // ── Template constants exposed via the interface ──────────────────────────
 
@@ -487,7 +485,9 @@ class LpcPreviewViewModel
   }
 
   resize(width: number, height: number): void {
-    if (width === this._canvasWidth && height === this._canvasHeight) return;
+    if (width === this._canvasWidth && height === this._canvasHeight) {
+      return;
+    }
     this._canvasWidth = width;
     this._canvasHeight = height;
     if (this.pixiApp) {
@@ -907,7 +907,7 @@ class LpcPreviewViewModel
 
       if (typeof window !== 'undefined') {
         // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
-        (window as any).__PIXI_LOADED__ = true;
+        (window as unknown as Record<string, unknown>).__PIXI_LOADED__ = true;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

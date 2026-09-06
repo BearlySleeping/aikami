@@ -18,7 +18,7 @@ import {
 } from '@aikami/frontend/services';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import { EMULATOR_GOOGLE_PERSONA_DATA, EMULATOR_NPCS, EMULATOR_PERSONA_DATA } from '@aikami/mocks';
-import type { NpcCreateData, PersonaData } from '@aikami/types';
+import type { PersonaData } from '@aikami/types';
 import type { CustomAgentDefinition } from '$types';
 
 export type EmulatorSeedServiceOptions = BaseFrontendClassOptions & {

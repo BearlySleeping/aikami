@@ -15,6 +15,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
+import type { ProbeExecutor } from '@aikami/local-ai';
 import type { CapabilityProfile, CapabilitySnapshot } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import {
@@ -28,17 +29,16 @@ import {
   VOICE_PROVIDERS,
   voiceModelService,
 } from '$services';
-import type { ProbeExecutor } from '@aikami/local-ai';
 import type { Connection, ConnectionCapability, VoiceModelState } from '$types';
 import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$types';
-import {
-  type LocalAiWizardViewModelInterface,
-  getLocalAiWizardViewModel,
-} from '../ai/local_ai_wizard_view_model.svelte';
 import {
   type AiSettingsViewModelInterface,
   getAiSettingsViewModel,
 } from '$views/settings/ai/ai_settings_view_model.svelte';
+import {
+  getLocalAiWizardViewModel,
+  type LocalAiWizardViewModelInterface,
+} from '../ai/local_ai_wizard_view_model.svelte';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -589,7 +589,11 @@ class CapabilityViewModel
 
     // Fallback: no-op executor that returns not-found for everything.
     // The wizard will degrade to a CPU-recommendation path.
-    const notFound = { ok: false as const, reason: 'not-found' as const, detail: 'Not in Tauri context' };
+    const notFound = {
+      ok: false as const,
+      reason: 'not-found' as const,
+      detail: 'Not in Tauri context',
+    };
     return {
       run: async () => notFound,
       readTextFile: async () => notFound,

@@ -19,7 +19,7 @@
       "!**/dist/*",
       "!**/build/*",
       "!apps/frontend/client/static",
-      "!**/src/lib/paraglide/**"
+      "!**/src/lib/paraglide"
     ]
   },
   "formatter": {

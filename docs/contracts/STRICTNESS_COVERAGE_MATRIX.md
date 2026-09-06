@@ -93,6 +93,30 @@
 | Generated skills (`.pi/generated-skills/`) | 🚫 excluded | — | — |
 | SvelteKit build artifacts (`.svelte-kit`) | 🚫 excluded | — | — |
 
+### H. Recorded Debt — reviewed suppressions carried by this PR
+
+Removing the blanket `!**/*.svelte.ts` Biome exclusion (AC-2) brought ~330
+rune-bearing files under lint and format for the first time. All violations it
+surfaced were fixed in place except the one below, which is recorded here rather
+than silently removed, per AC-5 ("report remaining debt rather than marking it
+fixed").
+
+| Location | Rule | Why it is deferred |
+|----------|------|--------------------|
+| `apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts` | `noUnusedPrivateClassMembers` | `_memoryRetrievalService` is assigned from constructor options but never read — the C-458 recent-history signal was never wired into `_computeRelationshipBoost`. Deleting it would drop `memoryRetrievalService` from the public options type and discard the integration seam, which is a behavior change and out of scope for C-476. Suppressed with a reasoned `biome-ignore` and tracked here. |
+
+Two mechanical consequences of the same change are also worth recording, since
+both were invisible before `.svelte.ts` was linted:
+
+- The formatter re-wraps long casts past 100 columns, which detaches a trailing
+  `// guard-ignore lint/type-safety/casting:` comment from its cast. 16 such
+  comments were moved onto their own line **above** the cast — the guard's
+  stable, documented form — with no change to any reason text. The
+  `guard_type_safety` baseline is unchanged at T1=14 T2=4 T3=1.
+- `apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts`
+  gained a named `CombatVmInternals` type so its two casts fit on one line and
+  cannot be re-wrapped away from their comments again.
+
 ## Scope Boundaries
 
 This matrix documents the **current** enforcement state after C-476. Changes to any cell require a PR with explicit reviewer approval and an updated matrix entry.

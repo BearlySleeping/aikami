@@ -277,8 +277,6 @@ export class PersonaCreateViewModel
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    const model = (import.meta.env.PUBLIC_OPENROUTER_MODEL as string) || undefined;
-
     this.messages = [
       {
         role: 'system',
