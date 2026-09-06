@@ -206,6 +206,26 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/role_profiles.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/role_profiles.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/safety_invariants.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/skill_router.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/skill_router.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/tool_namespace.ts": {
       "class": "pi_extensions",
       "active": true
@@ -231,6 +251,10 @@
       "active": true
     },
     ".pi/scripts/measure_tool_surface.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/measure_tool_surface.test.ts": {
       "class": "pi_scripts",
       "active": true
     },
