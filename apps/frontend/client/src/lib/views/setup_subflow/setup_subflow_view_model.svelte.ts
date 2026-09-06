@@ -13,7 +13,7 @@ import {
 } from '@aikami/frontend/services';
 import type { CapabilitySnapshot, ConnectionEntry } from '@aikami/types';
 import { capabilityService, configService, runtimeConfigService } from '$services';
-import type { Connection, ConnectionCapability } from '$types';
+import type { ConnectionCapability } from '$types';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -406,7 +406,7 @@ class SetupSubflowViewModel
         },
         isDefault: connections.length === 0,
         source: 'detected',
-      } as unknown as Connection);
+      });
     }
 
     await configService.save();
@@ -431,9 +431,18 @@ class SetupSubflowViewModel
         baseUrl: imageBaseUrl ?? '',
         model: '',
         imageOptions: { checkpoint: '', width: 512, height: 512, steps: 20, cfg: 7 },
+        generationParams: {
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40,
+          repetitionPenalty: 1,
+          presencePenalty: 0,
+          maxTokens: 1024,
+          contextSize: 4096,
+        },
         isDefault: connections.length === 0,
         source: 'detected',
-      } as unknown as Connection);
+      });
     }
 
     await configService.save();
@@ -457,9 +466,18 @@ class SetupSubflowViewModel
         baseUrl: '',
         model: '',
         voiceOptions: { voiceId: 'default', speed: 1, pitch: 0 },
+        generationParams: {
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40,
+          repetitionPenalty: 1,
+          presencePenalty: 0,
+          maxTokens: 1024,
+          contextSize: 4096,
+        },
         isDefault: connections.length === 0,
         source: 'detected',
-      } as unknown as Connection);
+      });
     }
 
     await configService.save();
