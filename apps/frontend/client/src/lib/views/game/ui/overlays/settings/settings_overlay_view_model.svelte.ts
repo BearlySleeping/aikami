@@ -10,17 +10,17 @@ import {
   type BaseViewModelOptions,
   routerService,
 } from '@aikami/frontend/services';
-import { gameOverlayService } from '$services';
-import {
-  createSectionViewModelMount,
-  sectionsForContext,
-  type SettingsSection,
-  type SimpleSectionViewModelMount,
-} from '$lib/views/settings/settings_sections';
 import type { SettingsAudioViewModelInterface } from '$lib/views/settings/audio/settings_audio_view_model.svelte';
 import type { SettingsControlsViewModelInterface } from '$lib/views/settings/controls/settings_controls_view_model.svelte';
 import type { SettingsDisplayViewModelInterface } from '$lib/views/settings/display/settings_display_view_model.svelte';
 import type { GameplayViewModelInterface } from '$lib/views/settings/gameplay/gameplay_view_model.svelte';
+import {
+  createSectionViewModelMount,
+  type SettingsSection,
+  type SimpleSectionViewModelMount,
+  sectionsForContext,
+} from '$lib/views/settings/settings_sections';
+import { gameOverlayService } from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,7 +113,8 @@ class SettingsOverlayViewModel
 
   override async initialize(): Promise<void> {
     const audioMount = await this._getOrCreateViewModelMount('audio');
-    this._preEditAudioVolume = audioMount?.id === 'audio' ? audioMount.viewModel.masterVolume : undefined;
+    this._preEditAudioVolume =
+      audioMount?.id === 'audio' ? audioMount.viewModel.masterVolume : undefined;
     await this._activateSection(this.activeSectionId);
     await super.initialize();
   }

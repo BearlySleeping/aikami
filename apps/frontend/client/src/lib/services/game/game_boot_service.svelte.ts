@@ -1276,7 +1276,8 @@ class GameBootService
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
       catalog: projectLpcCatalog(generatedLpcSlots),
-      getLpcAssetPath: getLpcAssetPath as unknown as ( // guard-ignore lint/type-safety/casting: callback type narrowing for asset path resolver
+      // guard-ignore lint/type-safety/casting: callback type narrowing for asset path resolver
+      getLpcAssetPath: getLpcAssetPath as unknown as (
         slot: string,
         assetId: string,
         state: string,

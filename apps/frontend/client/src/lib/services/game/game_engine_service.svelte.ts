@@ -21,9 +21,9 @@ import type {
   PackConfig,
   PersonaData,
 } from '@aikami/types';
+import { getLpcAssetPath, getLpcCatalog, wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
 import { audioContextManager, equipmentService, personaService } from '$services';
 import { authService } from '$services/auth/auth_service.svelte';
-import { getLpcAssetPath, getLpcCatalog, wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 import { assetManager } from '../assets/asset_manager.svelte';
 import { assetTagResolver } from '../assets/registry_resolver';
@@ -647,7 +647,7 @@ class GameEngineService
             if (event.gameHour === hour) {
               window.clearTimeout(fallback);
               offReady();
-              (window as any).__AIKAMI_VISUAL_READY__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+              (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
             }
           });
           // Bounded fallback: if the worker never confirms the requested
@@ -658,7 +658,7 @@ class GameEngineService
           // determinism instead of a hard failure).
           const fallback = window.setTimeout(() => {
             offReady();
-            (window as any).__AIKAMI_VISUAL_READY__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+            (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
           }, VISUAL_READY_FALLBACK_MS);
           bridge.send({
             type: 'SET_ENVIRONMENT_CONFIG',
@@ -668,7 +668,7 @@ class GameEngineService
         }
         // Normal boot / empty param — the default environment is already in
         // effect, so the world is immediately ready for capture.
-        (window as any).__AIKAMI_VISUAL_READY__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+        (window as unknown as Record<string, unknown>).__AIKAMI_VISUAL_READY__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
       }
     });
 
@@ -783,8 +783,10 @@ class GameEngineService
 
       const textureManager = new TextureManager();
 
-      const pipeline = this._buildLpcPipeline(lpcCatalog.slots, (slot, assetId, state) =>
-        getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState), // guard-ignore lint/type-safety/casting: bridge send() command literal or LPC state enum cast
+      const pipeline = this._buildLpcPipeline(
+        lpcCatalog.slots,
+        (slot, assetId, state) =>
+          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState), // guard-ignore lint/type-safety/casting: bridge send() command literal or LPC state enum cast
       );
 
       const playerData = this._buildPlayerData();
@@ -981,7 +983,11 @@ class GameEngineService
 
   private _buildLpcPipeline(
     generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[],
-    getLpcAssetPath: (_slot: string, assetId: string, state: LpcAnimationState) => string | null,
+    resolveLpcAssetPath: (
+      _slot: string,
+      assetId: string,
+      state: LpcAnimationState,
+    ) => string | null,
   ) {
     // C-400: single source of truth — the engine's shared createLpcPipeline
     // (projected catalog + pure resolver + asset URL resolver). The
@@ -990,7 +996,8 @@ class GameEngineService
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
       catalog: projectLpcCatalog(generatedLpcSlots),
-      getLpcAssetPath: getLpcAssetPath as unknown as ( // guard-ignore lint/type-safety/casting: bridge send() command literal or LPC state enum cast
+      // guard-ignore lint/type-safety/casting: bridge send() command literal or LPC state enum cast
+      getLpcAssetPath: resolveLpcAssetPath as unknown as (
         slot: string,
         assetId: string,
         state: string,
@@ -1086,8 +1093,7 @@ class GameEngineService
 
     // C-422 AC-4: Conditionally extend the onboarding arc behind a feature flag
     const extendedArcEnabled =
-      typeof import.meta !== 'undefined' &&
-      import.meta.env?.PUBLIC_EXTENDED_ONBOARDING_ARC === '1';
+      typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_EXTENDED_ONBOARDING_ARC === '1';
 
     const onboarding = (
       extendedArcEnabled ? this._extendOnboardingArc(manifest.onboarding) : manifest.onboarding

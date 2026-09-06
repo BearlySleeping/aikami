@@ -1866,7 +1866,8 @@ class DialogueOverlayViewModel
           kind,
           npcId: this._npcData.npcId,
           npcName: this._npcData.npcName,
-          command: command as unknown as Parameters< // guard-ignore lint/type-safety/casting: rAF polyfill or dev VM internals access
+          // guard-ignore lint/type-safety/casting: rAF polyfill or dev VM internals access
+          command: command as unknown as Parameters<
             NpcDialogueServiceInterface['executeCommand']
           >[0]['command'],
         });
@@ -1882,7 +1883,8 @@ class DialogueOverlayViewModel
           kind,
           npcId: this._npcData.npcId,
           npcName: this._npcData.npcName,
-          command: command as unknown as Parameters< // guard-ignore lint/type-safety/casting: rAF polyfill or dev VM internals access
+          // guard-ignore lint/type-safety/casting: rAF polyfill or dev VM internals access
+          command: command as unknown as Parameters<
             NpcDialogueServiceInterface['executeCommand']
           >[0]['command'],
         });

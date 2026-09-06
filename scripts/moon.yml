@@ -230,6 +230,7 @@ tasks:
     command: 'bun run src/lib/ops/guard_type_safety.ts'
     inputs:
       - 'src/lib/ops/guard_type_safety.ts'
+      - 'src/lib/ops/guard_type_safety_helpers.ts'
       - 'src/lib/ops/guard_type_safety_baseline.json'
       - '/apps/**/*'
       - '!/apps/**/node_modules/**'
@@ -240,6 +241,8 @@ tasks:
       - '!/packages/**/node_modules/**'
       - '!/packages/**/dist/**'
       - '!/packages/**/build/**'
+      - '/.pi/**/*'
+      - '!/.pi/generated-skills/**'
     options:
       cache: false
       runInCI: true

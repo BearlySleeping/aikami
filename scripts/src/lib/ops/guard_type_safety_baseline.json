@@ -2,71 +2,175 @@
   "apps/frontend/client/src/lib/views/game/simulation/simulation_view_model.svelte.ts": {
     "t1": 0,
     "t2": 1,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t2",
+        "hash": "3712d70f"
+      }
+    ]
   },
   "apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/zone-transition/+page.svelte": {
     "t1": 1,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "2d177e7c"
+      }
+    ]
   },
   "apps/frontend/hub/src/lib/server/api/better_auth.ts": {
     "t1": 1,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "d95123e0"
+      }
+    ]
   },
   "apps/frontend/hub/src/lib/server/api/save_backup.ts": {
     "t1": 1,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "b68de280"
+      }
+    ]
   },
   "apps/frontend/hub/src/lib/test_preload.ts": {
     "t1": 1,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "a44d6448"
+      }
+    ]
   },
   "apps/frontend/site/astro.config.ts": {
     "t1": 0,
     "t2": 1,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t2",
+        "hash": "6c71c5c5"
+      }
+    ]
   },
   "packages/backend/configs/src/lib/environment.ts": {
     "t1": 0,
     "t2": 0,
-    "t3": 1
+    "t3": 1,
+    "identities": [
+      {
+        "rule": "t3",
+        "hash": "536a3ac3"
+      }
+    ]
   },
   "packages/frontend/engine/src/game_world.ts": {
     "t1": 3,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "041defd1"
+      },
+      {
+        "rule": "t1",
+        "hash": "2d177e7c"
+      },
+      {
+        "rule": "t1",
+        "hash": "2d177e7c"
+      }
+    ]
   },
   "packages/frontend/engine/src/pixi_app.ts": {
     "t1": 1,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "041defd1"
+      }
+    ]
   },
   "packages/frontend/engine/src/serialization/ecs_serializer.ts": {
     "t1": 2,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "1b9a11e3"
+      },
+      {
+        "rule": "t1",
+        "hash": "1b9a11e3"
+      }
+    ]
   },
   "packages/frontend/local-runtime/src/lib/fixtures.ts": {
     "t1": 1,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "291e2a10"
+      }
+    ]
   },
   "packages/frontend/local-runtime/src/lib/model_asset_store.ts": {
     "t1": 2,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "2d177e7c"
+      },
+      {
+        "rule": "t1",
+        "hash": "2d177e7c"
+      }
+    ]
   },
   "packages/frontend/utils/src/lib/browser/mobile_logger.ts": {
     "t1": 0,
     "t2": 2,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t2",
+        "hash": "18380421"
+      },
+      {
+        "rule": "t2",
+        "hash": "b1472792"
+      }
+    ]
   },
   "packages/shared/schemas/src/lib/project/project.ts": {
     "t1": 1,
     "t2": 0,
-    "t3": 0
+    "t3": 0,
+    "identities": [
+      {
+        "rule": "t1",
+        "hash": "4d17b0dc"
+      }
+    ]
   }
 }

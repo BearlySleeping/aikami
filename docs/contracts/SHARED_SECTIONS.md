@@ -42,7 +42,11 @@ Rules:
 
 ## Testing Conventions
 
-For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Visual Runner** handles AI visual assessment (`src/visual/suites/*.visual.ts`). Do NOT create `*_visual.spec.ts` files or use the old `scripts/*_visual.ts` pattern. See `.pi/skills/testing/SKILL.md` for conventions.
+For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Visual Runner** handles AI visual assessment (`src/visual/suites/*.visual.ts`). Do NOT create `*_visual.spec.ts` files or use the old `scripts/*_visual.ts` pattern.
+
+**Pure Bun unit tests** (`bun test --preload`) test domain logic with identity rune polyfills — they **cannot** verify Svelte 5 reactivity (`$state`/`$derived`/`$effect`). For reactive/lifecycle verification, use the **compiled Playwright lane** which runs against real compiled Svelte components via the dev sandbox at `apps/e2e/tests/client/reactive_lifecycle.spec.ts`.
+
+See `.pi/skills/testing/SKILL.md` for full conventions and the compiled-component testing pattern.
 
 ---
 

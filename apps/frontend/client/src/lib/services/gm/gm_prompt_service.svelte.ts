@@ -6,6 +6,7 @@
 //
 // Contract: C-235 GM Narrative Director
 
+import { CLASS_REGISTRY } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -13,18 +14,22 @@ import {
 } from '@aikami/frontend/services';
 import { resolveMacros } from '@aikami/parser';
 import type { BridgeContext } from '@aikami/types';
-import { CLASS_REGISTRY } from '@aikami/constants';
-import { characterService, choiceHistoryStore, combatService, playerStateService, timeService } from '$services';
+import {
+  characterService,
+  choiceHistoryStore,
+  combatService,
+  narrativeDirectorService,
+  playerStateService,
+  timeService,
+} from '$services';
+import type { AddressMode } from '$types';
 // Direct imports to break the barrel cycle: the barrel re-exports
 // gm_prompt_service before it re-exports these services (C-456).
 import { partyRosterService } from '../game/party_roster_service.svelte.ts';
 import { worldStateService } from '../game/world_state_service.svelte.ts';
-import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
-import type { AddressMode } from '$types';
 // Imported directly to break the barrel cycle: the barrel re-exports
 // gm_prompt_service before it re-exports lorebookStore.
 import { lorebookStore } from '../lorebook/lorebook_store.svelte.ts';
-import { narrativeDirectorService } from '$services';
 import type { GmCombatContext, GmPromptContext, PromptSection } from './gm_types';
 
 // ---------------------------------------------------------------------------
@@ -33,7 +38,6 @@ import type { GmCombatContext, GmPromptContext, PromptSection } from './gm_types
 
 /** Hard cap for assembled prompt byte budget (C-457). */
 const PROMPT_BUDGET_CAP = 6144;
-
 
 // ---------------------------------------------------------------------------
 // Types
@@ -285,7 +289,9 @@ class GmPromptService
 
     if (referencedMemory && referencedMemory.length > 0) {
       const memLines: string[] = ['', '[NARRATIVE GUIDANCE]'];
-      memLines.push('The following events from campaign history are relevant to the current scene:');
+      memLines.push(
+        'The following events from campaign history are relevant to the current scene:',
+      );
       for (const mem of referencedMemory) {
         memLines.push(`- [${mem.sourceType}] ${mem.content}`);
       }
@@ -459,7 +465,8 @@ class GmPromptService
       worldName: worldOutput?.worldName ?? 'Unknown World',
       regionName: worldOutput?.locations?.[0] ?? 'Unknown Region',
       locationName: currentLocation?.name ?? 'Town Square',
-      locationDescription: currentLocation?.description ?? 'A bustling town square with merchants and townsfolk.',
+      locationDescription:
+        currentLocation?.description ?? 'A bustling town square with merchants and townsfolk.',
       timeOfDay: `${timeService.gameHour}:${String(timeService.gameMinute).padStart(2, '0')}`,
       weather: this._describeWeather(),
       activeQuests: this._gatherActiveQuests(),

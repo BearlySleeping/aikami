@@ -151,7 +151,10 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
   /** Adds a new AI connection and returns its ID. */
   addAiConnection(options: Omit<AiConnection, 'id' | 'createdAt' | 'updatedAt'>): ConnectionId;
   /** Updates an existing AI connection by ID. */
-  updateAiConnection(id: ConnectionId, patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>): void;
+  updateAiConnection(
+    id: ConnectionId,
+    patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>,
+  ): void;
   /** Deletes an AI connection by ID. */
   deleteAiConnection(id: ConnectionId): void;
   /** Returns an AI connection by ID, or undefined. */
@@ -480,7 +483,10 @@ class ConfigService
         ) {
           this.state.defaultConnectionId = legacySource.defaultConnectionId as ConnectionId | null;
         }
-        if (legacySource.defaultByCapability && typeof legacySource.defaultByCapability === 'object') {
+        if (
+          legacySource.defaultByCapability &&
+          typeof legacySource.defaultByCapability === 'object'
+        ) {
           this.state.defaultByCapability = legacySource.defaultByCapability as Record<
             string,
             string | null
@@ -528,7 +534,9 @@ class ConfigService
           };
         }
         if (Array.isArray(parsed.lorebooks)) {
-          this.state.lorebooks = parsed.lorebooks.map(this._normalizeLorebook) as unknown as import('@aikami/types').LorebookEntry[]; // guard-ignore lint/type-safety/casting: config service internal state - parsed JSON guaranteed by upstream schema validation
+          this.state.lorebooks = parsed.lorebooks.map(
+            this._normalizeLorebook,
+          ) as unknown as import('@aikami/types').LorebookEntry[]; // guard-ignore lint/type-safety/casting: config service internal state - parsed JSON guaranteed by upstream schema validation
         }
         if (Array.isArray(parsed.activeLorebookIds)) {
           this.state.activeLorebookIds = parsed.activeLorebookIds as string[];
@@ -642,52 +650,52 @@ class ConfigService
     isDefault: boolean;
   }): Connection {
     const { aiConn, provider, isDefault } = options;
-      const textParams = aiConn.capability === 'text' ? (aiConn.params as TextParams) : undefined;
-      const genParams = {
-        temperature: textParams?.temperature ?? 0.7,
-        topP: textParams?.topP ?? 0.9,
-        topK: textParams?.topK ?? 40,
-        repetitionPenalty: textParams?.repetitionPenalty ?? 1.1,
-        presencePenalty: textParams?.presencePenalty ?? 0,
-        maxTokens: textParams?.maxTokens ?? 1024,
-        contextSize: textParams?.contextSize ?? 4096,
+    const textParams = aiConn.capability === 'text' ? (aiConn.params as TextParams) : undefined;
+    const genParams = {
+      temperature: textParams?.temperature ?? 0.7,
+      topP: textParams?.topP ?? 0.9,
+      topK: textParams?.topK ?? 40,
+      repetitionPenalty: textParams?.repetitionPenalty ?? 1.1,
+      presencePenalty: textParams?.presencePenalty ?? 0,
+      maxTokens: textParams?.maxTokens ?? 1024,
+      contextSize: textParams?.contextSize ?? 4096,
+    };
+    let imageOptions: Connection['imageOptions'];
+    if (aiConn.capability === 'image') {
+      const imageParams = aiConn.params as ImageParams;
+      imageOptions = {
+        checkpoint: imageParams.checkpoint,
+        width: imageParams.width,
+        height: imageParams.height,
+        steps: imageParams.steps,
+        cfg: imageParams.cfg,
       };
-      let imageOptions: Connection['imageOptions'];
-      if (aiConn.capability === 'image') {
-        const imageParams = aiConn.params as ImageParams;
-        imageOptions = {
-          checkpoint: imageParams.checkpoint,
-          width: imageParams.width,
-          height: imageParams.height,
-          steps: imageParams.steps,
-          cfg: imageParams.cfg,
-        };
-      }
-      let voiceOptions: Connection['voiceOptions'];
-      if (aiConn.capability === 'voice') {
-        const voiceParams = aiConn.params as VoiceParams;
-        voiceOptions = {
-          voiceId: voiceParams.voiceId,
-          speed: voiceParams.speed,
-          pitch: voiceParams.pitch,
-        };
-      }
+    }
+    let voiceOptions: Connection['voiceOptions'];
+    if (aiConn.capability === 'voice') {
+      const voiceParams = aiConn.params as VoiceParams;
+      voiceOptions = {
+        voiceId: voiceParams.voiceId,
+        speed: voiceParams.speed,
+        pitch: voiceParams.pitch,
+      };
+    }
 
     return {
-        id: aiConn.id,
-        name: aiConn.label,
-        capability: aiConn.capability,
-        provider: provider?.registryId ?? '',
-        apiKey: provider?.credential ?? '',
-        baseUrl: provider?.baseUrl ?? '',
-        model: aiConn.model,
-        generationParams: genParams,
-        isDefault,
-        source: provider?.source ?? 'stored',
-        createdAt: aiConn.createdAt,
-        updatedAt: aiConn.updatedAt,
-        imageOptions,
-        voiceOptions,
+      id: aiConn.id,
+      name: aiConn.label,
+      capability: aiConn.capability,
+      provider: provider?.registryId ?? '',
+      apiKey: provider?.credential ?? '',
+      baseUrl: provider?.baseUrl ?? '',
+      model: aiConn.model,
+      generationParams: genParams,
+      isDefault,
+      source: provider?.source ?? 'stored',
+      createdAt: aiConn.createdAt,
+      updatedAt: aiConn.updatedAt,
+      imageOptions,
+      voiceOptions,
     };
   }
 
@@ -825,7 +833,8 @@ class ConfigService
       params: this._paramsFromLegacy(connection, capability),
     });
 
-    const claimsDefault = connection.isDefault || this.state.roles[PRIMARY_ROLE[capability]] == null;
+    const claimsDefault =
+      connection.isDefault || this.state.roles[PRIMARY_ROLE[capability]] == null;
     if (claimsDefault) {
       this._assignCapabilityRoles({ id, capability });
     }
@@ -948,9 +957,7 @@ class ConfigService
   }
 
   updateProvider(id: ProviderId, patch: Partial<Omit<AiProvider, 'id'>>): void {
-    this.state.providers = this.state.providers.map((p) =>
-      p.id === id ? { ...p, ...patch } : p,
-    );
+    this.state.providers = this.state.providers.map((p) => (p.id === id ? { ...p, ...patch } : p));
     this._reproject();
   }
 
@@ -961,9 +968,7 @@ class ConfigService
         .filter((connection) => connection.providerId === id)
         .map((connection) => connection.id),
     );
-    this.state.aiConnections = this.state.aiConnections.filter(
-      (c) => c.providerId !== id,
-    );
+    this.state.aiConnections = this.state.aiConnections.filter((c) => c.providerId !== id);
     this._clearRolesForConnectionIds(deletedConnectionIds);
     this.state.providers = this.state.providers.filter((p) => p.id !== id);
     this._reproject();
@@ -993,7 +998,10 @@ class ConfigService
     return id;
   }
 
-  updateAiConnection(id: ConnectionId, patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>): void {
+  updateAiConnection(
+    id: ConnectionId,
+    patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>,
+  ): void {
     const previous = this.state.aiConnections.find((c) => c.id === id);
     this.state.aiConnections = this.state.aiConnections.map((c) =>
       c.id === id ? { ...c, ...patch, id: c.id, updatedAt: new Date().toISOString() } : c,
@@ -1391,9 +1399,9 @@ class ConfigService
     // Resolved through the provider, which is where the credential lives.
     // Prefer the capability's primary-role connection when it is on this
     // provider, so a user with two accounts gets the one they chose.
-    const onProvider = (connection: AiConnection): boolean =>
-      connection.capability === capability &&
-      this.state.providers.find((p) => p.id === connection.providerId)?.registryId === provider;
+    const onProvider = (candidate: AiConnection): boolean =>
+      candidate.capability === capability &&
+      this.state.providers.find((p) => p.id === candidate.providerId)?.registryId === provider;
 
     const primaryId = this.state.roles[PRIMARY_ROLE[capability]];
     const preferred = primaryId
@@ -1487,7 +1495,10 @@ class ConfigService
   }
 
   getLorebook(options: { id: string }): Lorebook | undefined {
-    return this.state.lorebooks.find((lb) => lb.id === options.id) as unknown as Lorebook | undefined; // guard-ignore lint/type-safety/casting: config service internal state - parsed JSON guaranteed by upstream schema validation
+    // guard-ignore lint/type-safety/casting: config service internal state - parsed JSON guaranteed by upstream schema validation
+    return this.state.lorebooks.find((lb) => lb.id === options.id) as unknown as
+      | Lorebook
+      | undefined;
   }
 
   addEntry(options: {

@@ -107,13 +107,11 @@ const hasConnectionForCapability = (capability: string): boolean => {
 };
 
 /** Builds a capability profile from current AI settings. */
-const buildCapabilityProfile = (): CapabilityProfile => {
-  return {
-    textProvider: hasConnectionForCapability('text'),
-    imageProvider: hasConnectionForCapability('image'),
-    voiceProvider: hasConnectionForCapability('voice'),
-  };
-};
+const buildCapabilityProfile = (): CapabilityProfile => ({
+  textProvider: hasConnectionForCapability('text'),
+  imageProvider: hasConnectionForCapability('image'),
+  voiceProvider: hasConnectionForCapability('voice'),
+});
 
 /**
  * Returns true when the AI gate bypass is active for QA/CI testing.
@@ -123,7 +121,7 @@ const buildCapabilityProfile = (): CapabilityProfile => {
 const isAiGateBypassed = (): boolean => {
   if (
     typeof window !== 'undefined' &&
-    (window as any).__AIKAMI_AI_GATE_BYPASS__ // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+    (window as unknown as Record<string, unknown>).__AIKAMI_AI_GATE_BYPASS__ // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
   ) {
     return true;
   }

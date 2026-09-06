@@ -24,7 +24,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | full |
 | **Priority** | P1 — identity rune polyfills cannot verify reactivity, effects or disposal |
 | **Dependencies** | C-468, C-475 |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — correct division of pure, compiled-component and production-route tests |
 | **Contract version** | 2.0.0 |

@@ -12,24 +12,23 @@
 //       local provider.
 // AC-4: Corrupted/interrupted downloads are never mistaken for ready.
 
-import { BaseViewModel, type BaseViewModelInterface, type BaseViewModelOptions } from '@aikami/frontend/services';
-import { isTauri } from '$lib/views/utils/is_tauri';
+import {
+  BaseViewModel,
+  type BaseViewModelInterface,
+  type BaseViewModelOptions,
+} from '@aikami/frontend/services';
 import {
   detectHardware,
-  loadManifest,
-  recommend,
   resolveArtifact,
   type HardwareProfile,
+  loadManifest,
   type ModelManifest,
   type ProbeExecutor,
+  recommend,
   type StackPlan,
 } from '@aikami/local-ai';
-import {
-  configService,
-  getTauriRuntimeInfo,
-  sidecarService,
-  type SidecarState,
-} from '$services';
+import { isTauri } from '$lib/views/utils/is_tauri';
+import { configService, getTauriRuntimeInfo, type SidecarState, sidecarService } from '$services';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -329,9 +328,8 @@ class LocalAiWizardViewModel
         }
         this.step = 'ready';
       } else {
-        const reason = sidecarService.state.status === 'error'
-          ? sidecarService.state.reason
-          : 'Unknown error';
+        const reason =
+          sidecarService.state.status === 'error' ? sidecarService.state.reason : 'Unknown error';
         this.errorMessage = `Failed to start: ${reason}`;
         this.step = 'error';
       }
@@ -356,7 +354,9 @@ class LocalAiWizardViewModel
       throw new Error('Local model installation requires the desktop app');
     }
 
-    const manifestEntry = this._manifest?.entries.find((entry) => entry.id === modelEntry.manifestId);
+    const manifestEntry = this._manifest?.entries.find(
+      (entry) => entry.id === modelEntry.manifestId,
+    );
     if (!manifestEntry) {
       throw new Error(`Model metadata is unavailable: ${modelEntry.manifestId}`);
     }

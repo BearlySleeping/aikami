@@ -57,7 +57,9 @@ export type NamespaceAction<TParams extends TSchema = TSchema> = {
  */
 export const defineAction = <TParams extends TSchema>(
   action: NamespaceAction<TParams>,
-): NamespaceAction => action as unknown as NamespaceAction;
+): NamespaceAction =>
+  // guard-ignore lint/type-safety/casting: Generic type erasure — NamespaceAction<TParams> -> NamespaceAction is a subtype widening
+  action as unknown as NamespaceAction;
 
 export type NamespaceOptions = {
   /** Registered tool name, e.g. "gh_pr". */
@@ -108,6 +110,7 @@ const _typeHint = (schema: Record<string, unknown>): string => {
  * Returns an empty string for schemas with no properties.
  */
 export const summarizeSchema = (schema: TSchema): string => {
+  // guard-ignore lint/type-safety/casting: TypeBox schema internals — accessing properties/required fields
   const node = schema as unknown as {
     properties?: Record<string, Record<string, unknown>>;
     required?: string[];
