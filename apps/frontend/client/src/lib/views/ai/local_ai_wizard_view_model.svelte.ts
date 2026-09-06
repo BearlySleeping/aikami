@@ -13,6 +13,7 @@
 // AC-4: Corrupted/interrupted downloads are never mistaken for ready.
 
 import { BaseViewModel, type BaseViewModelInterface, type BaseViewModelOptions } from '@aikami/frontend/services';
+import { isTauri } from '$lib/views/utils/is_tauri';
 import {
   detectHardware,
   loadManifest,
@@ -210,6 +211,14 @@ class LocalAiWizardViewModel
       return;
     }
 
+    // P01: hardware detection is only supported in the Tauri desktop webview.
+    // Do not invoke probes, shell, filesystem or download IPC on unsupported hosts.
+    if (!isTauri()) {
+      this.errorMessage = 'Local AI hardware detection requires the desktop app.';
+      this.step = 'error';
+      return;
+    }
+
     this.step = 'detecting';
     this.errorMessage = '';
 
@@ -272,6 +281,14 @@ class LocalAiWizardViewModel
    * corrupted/interrupted download is never mistaken for ready).
    */
   async startInstall(): Promise<void> {
+    // P01: model download and sidecar operations are only supported in the
+    // Tauri desktop webview. Do not invoke download IPC on unsupported hosts.
+    if (!isTauri()) {
+      this.errorMessage = 'Local model installation requires the desktop app.';
+      this.step = 'error';
+      return;
+    }
+
     const modelEntry = this.stackPlan?.models[0];
     if (!modelEntry) {
       this.errorMessage = 'No model selected. Please run detection first.';

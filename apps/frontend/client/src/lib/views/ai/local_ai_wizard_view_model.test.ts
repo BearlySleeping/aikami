@@ -6,7 +6,7 @@
 // AC-2: Hardware detection produces a plan matching real hardware.
 // AC-4: Corrupted/interrupted downloads are never mistaken for ready.
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { createFixtureExecutor } from '@aikami/local-ai';
 
 // ── Fixtures ──────────────────────────────────────────────────────────
@@ -72,6 +72,13 @@ describe('LocalAiWizardViewModel', () => {
   beforeEach(async () => {
     const mod = await import('./local_ai_wizard_view_model.svelte');
     getViewModel = mod.getLocalAiWizardViewModel;
+    // Set __TAURI__ so detection/install tests work in the simulated desktop context.
+    // P01 added isTauri() guards to startDetection() and startInstall().
+    (window as Record<string, unknown>).__TAURI__ = true;
+  });
+
+  afterEach(() => {
+    delete (window as Record<string, unknown>).__TAURI__;
   });
 
   test('starts in idle state', () => {
@@ -222,7 +229,64 @@ describe('LocalAiWizardViewModel', () => {
     //   1. Build the Tauri app with `bun run build:tauri`
     //   2. Run the test suite from within the Tauri webview
     //   3. Or use Playwright E2E with Tauri
-    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-    expect(isTauri).toBe(false);
+    const hasTauriInternals = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    expect(hasTauriInternals).toBe(false);
+  });
+
+  // ── P01: Unsupported-host guards ───────────────────────────────────
+
+  test('P01: startDetection returns error when not in Tauri (browser)', async () => {
+    delete (window as Record<string, unknown>).__TAURI__;
+
+    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
+    const vm = getViewModel({
+      className: 'test-wizard-browser',
+      executor,
+      platform: 'linux',
+      arch: 'x64',
+    });
+
+    await vm.startDetection();
+
+    expect(vm.step).toBe('error');
+    expect(vm.errorMessage).toContain('requires the desktop app');
+    // Verify no probes were invoked by checking hardware profile was never set
+    expect(vm.hardwareProfile).toBeNull();
+    expect(vm.stackPlan).toBeNull();
+  });
+
+  test('P01: startInstall returns error when not in Tauri (browser)', async () => {
+    delete (window as Record<string, unknown>).__TAURI__;
+
+    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
+    const vm = getViewModel({
+      className: 'test-wizard-browser-install',
+      executor,
+      platform: 'linux',
+      arch: 'x64',
+    });
+
+    await vm.startInstall();
+
+    expect(vm.step).toBe('error');
+    expect(vm.errorMessage).toContain('requires the desktop app');
+  });
+
+  test('P01: startDetection still works in Tauri context (desktop)', async () => {
+    (window as Record<string, unknown>).__TAURI__ = true;
+
+    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
+    const vm = getViewModel({
+      className: 'test-wizard-desktop',
+      executor,
+      platform: 'linux',
+      arch: 'x64',
+    });
+
+    await vm.startDetection();
+
+    expect(vm.step).toBe('plan');
+    expect(vm.hardwareProfile).not.toBeNull();
+    expect(vm.stackPlan).not.toBeNull();
   });
 });

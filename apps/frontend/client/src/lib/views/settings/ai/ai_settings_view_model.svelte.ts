@@ -8,9 +8,6 @@ import {
   IMAGE_PROVIDERS,
   TEXT_PROVIDERS,
   VOICE_PROVIDERS,
-  PROVIDER_ENDPOINTS,
-  buildVerifyUrl,
-  buildVerifyHeaders,
   type GenParamPreset,
 } from '@aikami/constants';
 import {
@@ -23,11 +20,11 @@ import {
   configService,
   type FetchedModel,
   fetchModelsFromProvider,
-  fetchWithCredentialPolicy,
   imageGenerationService,
   PROVIDER_MODEL_FETCH,
   styleProfileService,
   ttsService,
+  verifyConnection,
   voiceModelService,
 } from '$services';
 import type { AiProvider, AiConnection, AiRole, VoiceArchetype, TextParams, ImageParams, VoiceParams } from '@aikami/types';
@@ -60,8 +57,9 @@ export type ProviderTreeEntry = {
   connections: AiConnection[];
   registryLabel: string;
   isLocal: boolean;
-  isRunning: boolean;
   connectionCount: number;
+  statusLabel: string;
+  statusColorClass: string;
 };
 
 /** A connection with its role assignments. */
@@ -176,6 +174,7 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   // ── Testing ──
   readonly testResults: Record<string, ConnectionTestResult>;
   readonly testingIds: Set<string>;
+  readonly connectionStatusFor: (connectionId: ConnectionId) => { label: string; colorClass: string; dot: string; };
 
   // ── Actions ──
   /** Opens the setup flow appropriate for a capability. */
@@ -372,6 +371,9 @@ export class AiSettingsViewModel
   private _imagePreviewStates: Record<ConnectionId, ImagePreviewState> = $state({});
   private _imageAdvancedOpenStates: Record<ConnectionId, boolean> = $state({});
 
+  /** Generation counter per connection — used to discard stale test responses. */
+  private _testGeneration: Record<ConnectionId, number> = {};
+
   // ── State ──
   isEditorOpen = $state(false);
   isAddProviderOpen = $state(false);
@@ -445,13 +447,15 @@ export class AiSettingsViewModel
       const conns = aiConnections.filter((c) => c.providerId === p.id);
       const registry = _registryForCapability(conns[0]?.capability ?? 'text');
       const regEntry = registry.find((r) => r.id === p.registryId);
+      const status = this._providerStatus(conns);
       return {
         provider: p,
         connections: conns,
         registryLabel: regEntry?.label ?? p.registryId,
         isLocal: LOCAL_PROVIDER_IDS.has(p.registryId),
-        isRunning: true,
         connectionCount: conns.length,
+        statusLabel: status.label,
+        statusColorClass: status.colorClass,
       };
     });
   }
@@ -977,6 +981,8 @@ export class AiSettingsViewModel
         patch.params = { ...(conn.params as TextParams), ...this._genParamsDraft } as TextParams;
       }
       configService.updateAiConnection(this.draft.editingConnectionId, patch);
+      // Invalidate stale test result on edit (endpoint or credential may have changed)
+      this._clearTestResult(this.draft.editingConnectionId);
       // Update provider credential if changed
       const provider = this.draft.providerId
         ? configService.getProvider(this.draft.providerId)
@@ -1045,6 +1051,7 @@ export class AiSettingsViewModel
   deleteConnection(connectionId: ConnectionId): void {
     this.debug('deleteConnection', { connectionId });
     configService.deleteAiConnection(connectionId);
+    this._clearTestResult(connectionId);
     void configService.save();
   }
 
@@ -1060,48 +1067,60 @@ export class AiSettingsViewModel
     const provider = configService.getProvider(conn.providerId);
     if (!provider) return;
 
+    // Increment generation — stale responses with a lower generation
+    // will be discarded, preventing duplicate/stale overwrites.
+    const generation = (this._testGeneration[connectionId] ?? 0) + 1;
+    this._testGeneration[connectionId] = generation;
+
     const newTestingIds = new Set(this.testingIds);
     newTestingIds.add(connectionId);
     this.testingIds = newTestingIds;
 
-    const startMs = performance.now();
     try {
-      const endpoint = PROVIDER_ENDPOINTS[provider.registryId];
-      if (!endpoint || !provider.credential) {
-        this.testResults = {
-          ...this.testResults,
-          [connectionId]: { ok: false, latencyMs: Math.round(performance.now() - startMs), error: 'No endpoint or key' },
-        };
+      const result = await verifyConnection({
+        provider,
+        baseUrl: provider.baseUrl,
+      });
+
+      // Discard if a newer test has been started
+      if (this._testGeneration[connectionId] !== generation) {
         return;
       }
-      const url = buildVerifyUrl({ endpoint, apiKey: provider.credential });
-      const headers = buildVerifyHeaders({ endpoint, apiKey: provider.credential });
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-      try {
-        const response = await fetchWithCredentialPolicy({
-          url,
-          hasCredential: true,
-          init: { headers, method: endpoint.method, signal: controller.signal },
-        });
-        const elapsed = Math.round(performance.now() - startMs);
-        this.testResults = {
-          ...this.testResults,
-          [connectionId]: { ok: response?.ok ?? false, latencyMs: elapsed },
-        };
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    } catch (err) {
+
       this.testResults = {
         ...this.testResults,
-        [connectionId]: { ok: false, latencyMs: Math.round(performance.now() - startMs), error: String(err) },
+        [connectionId]: result,
       };
+    } catch (err) {
+      // Should not happen — verifyConnection catches all errors internally.
+      // This is a safety net for unexpected synchronous throws.
+      if (this._testGeneration[connectionId] === generation) {
+        this.testResults = {
+          ...this.testResults,
+          [connectionId]: { ok: false, latencyMs: 0, error: String(err) },
+        };
+      }
     } finally {
       const newIds = new Set(this.testingIds);
       newIds.delete(connectionId);
       this.testingIds = newIds;
     }
+  }
+
+  get connectionStatusFor(): (connectionId: ConnectionId) => { label: string; colorClass: string; dot: string; } {
+    return (connectionId: ConnectionId) => {
+      if (this.testingIds.has(connectionId)) {
+        return { label: 'testing…', colorClass: 'text-warning', dot: '◌' };
+      }
+      const result = this.testResults[connectionId];
+      if (!result) {
+        return { label: 'not checked', colorClass: 'text-base-content/40', dot: '○' };
+      }
+      if (result.ok) {
+        return { label: `reachable (${result.latencyMs}ms)`, colorClass: 'text-success', dot: '●' };
+      }
+      return { label: result.error ? `unreachable: ${result.error}` : 'unreachable', colorClass: 'text-error', dot: '●' };
+    };
   }
 
   async testDraftConnection(): Promise<void> {
@@ -1287,6 +1306,56 @@ export class AiSettingsViewModel
       _registryForCapability(cap).map((r) => r.id),
     );
     return configService.getProviders().filter((p) => registryIds.has(p.registryId));
+  }
+
+  private _providerStatus(connections: AiConnection[]): { label: string; colorClass: string } {
+    if (connections.length === 0) {
+      return { label: 'no connections', colorClass: 'badge-ghost' };
+    }
+
+    // Check if any connection is currently being tested
+    for (const conn of connections) {
+      if (this.testingIds.has(conn.id)) {
+        return { label: 'testing…', colorClass: 'badge-warning' };
+      }
+    }
+
+    // Check if any connection has failed
+    for (const conn of connections) {
+      const result = this.testResults[conn.id];
+      if (result && !result.ok) {
+        return { label: 'unreachable', colorClass: 'badge-error' };
+      }
+    }
+
+    // Check if all connections have passed
+    let allTested = true;
+    for (const conn of connections) {
+      const result = this.testResults[conn.id];
+      if (!result) {
+        allTested = false;
+        break;
+      }
+    }
+    if (allTested) {
+      return { label: 'reachable', colorClass: 'badge-success' };
+    }
+
+    // Configured but never tested
+    return { label: 'not checked', colorClass: 'badge-ghost' };
+  }
+
+  private _clearTestResult(connectionId: ConnectionId): void {
+    if (connectionId in this.testResults) {
+      const { [connectionId]: _removed, ...rest } = this.testResults;
+      this.testResults = rest;
+    }
+    if (this.testingIds.has(connectionId)) {
+      const newIds = new Set(this.testingIds);
+      newIds.delete(connectionId);
+      this.testingIds = newIds;
+    }
+    delete this._testGeneration[connectionId];
   }
 
   private _defaultParams(cap: ConnectionCapability): TextParams | ImageParams | VoiceParams {

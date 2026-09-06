@@ -28,7 +28,7 @@ let nextId = 1;
 const mockFetchModelsFromProvider = mock(
   async (): Promise<Array<{ id: string; name: string }>> => [],
 );
-const mockFetchWithCredentialPolicy = mock(async () => new Response(undefined, { status: 200 }));
+const mockVerifyConnection = mock(async () => ({ ok: true, latencyMs: 42 }));
 
 const mockConfigService = {
   isLoaded: true,
@@ -115,13 +115,19 @@ const mockStyleProfileService = {
   setActiveProfile: mock((_id: string) => {}),
 };
 
+mock.module('$lib/utils/fuzzy_match', () => ({
+  fuzzyMatch: mock((query: string, target: string) =>
+    target.toLowerCase().includes(query.toLowerCase()),
+  ),
+}));
+
 mock.module('$services', () => ({
   ...localServicesMockBase(),
   configService: mockConfigService,
   // biome-ignore lint/style/useNamingConvention: matches actual $services export name
   PROVIDER_MODEL_FETCH: { openrouter: {} },
   fetchModelsFromProvider: mockFetchModelsFromProvider,
-  fetchWithCredentialPolicy: mockFetchWithCredentialPolicy,
+  verifyConnection: mockVerifyConnection,
   ttsService: mockTtsService,
   campaignService: mockCampaignService,
   imageGenerationService: mockImageGenerationService,
@@ -152,6 +158,7 @@ beforeEach(async () => {
   mockConfigService.setDefaultConnection.mockClear();
   mockConfigService.clearRoleAssignment.mockClear();
   mockFetchModelsFromProvider.mockClear();
+  mockVerifyConnection.mockClear();
   mockTtsService.speak.mockClear();
   mockCampaignService.activeCampaign = undefined;
   mockImageGenerationService.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'SDXL Base' }];
@@ -921,5 +928,412 @@ describe('AiSettingsViewModel — AC-8: Generation params reach the request, def
 
     const creative = BUILT_IN_PRESETS.find((p) => p.id === 'creative');
     expect(vm.genParamsDisplay).toEqual(creative?.params);
+  });
+});
+
+describe('AiSettingsViewModel — P02: testConnection delegates to verifyConnection', () => {
+  const seedConnection = (overrides?: Record<string, unknown>) => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-test-key',
+      baseUrl: undefined,
+      source: 'stored',
+      ...overrides,
+    });
+    return mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet',
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
+    });
+  };
+
+  test('delegates to verifyConnection and stores the result', async () => {
+    const cid = seedConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testConnection(cid);
+
+    expect(mockVerifyConnection).toHaveBeenCalledTimes(1);
+    expect(vm.testResults[cid]).toEqual({ ok: true, latencyMs: 42 });
+    expect(vm.testingIds.has(cid)).toBe(false);
+  });
+
+  test('passes provider and baseUrl to verifyConnection', async () => {
+    const cid = seedConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testConnection(cid);
+
+    const [options] = mockVerifyConnection.mock.calls[0] ?? [];
+    expect(options.provider?.registryId).toBe('openrouter');
+    expect(options.provider?.credential).toBe('sk-or-v1-test-key');
+  });
+
+  test('passes provider baseUrl when set', async () => {
+    const cid = seedConnection({
+      registryId: 'ollama',
+      credential: undefined,
+      baseUrl: 'http://localhost:11434',
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testConnection(cid);
+
+    const [options] = mockVerifyConnection.mock.calls[0] ?? [];
+    expect(options.baseUrl).toBe('http://localhost:11434');
+  });
+
+  test('sets testingIds during test and clears after', async () => {
+    const cid = seedConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    // Make verifyConnection hang so we can check loading state
+    let resolveVerify: (value: unknown) => void;
+    const hangPromise = new Promise((resolve) => {
+      resolveVerify = resolve;
+    });
+    mockVerifyConnection.mockImplementationOnce(async () => hangPromise);
+
+    const testPromise = vm.testConnection(cid);
+    expect(vm.testingIds.has(cid)).toBe(true);
+
+    resolveVerify!({ ok: true, latencyMs: 10 });
+    await testPromise;
+
+    expect(vm.testingIds.has(cid)).toBe(false);
+  });
+
+  test('stale response does not overwrite newer result', async () => {
+    const cid = seedConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    // Simulate two rapid test calls where the first response arrives after
+    // the second has already completed.
+    let resolveSlow: (value: unknown) => void;
+    const slowPromise = new Promise((resolve) => {
+      resolveSlow = resolve;
+    });
+
+    // First call — will be slow
+    mockVerifyConnection.mockImplementationOnce(async () => slowPromise);
+    // Second call — fast, returns success
+    mockVerifyConnection.mockImplementationOnce(async () => ({
+      ok: true,
+      latencyMs: 5,
+    }));
+
+    const firstPromise = vm.testConnection(cid);
+    await vm.testConnection(cid);
+
+    // Now resolve the first (stale) response
+    resolveSlow!({ ok: true, latencyMs: 999 });
+    await firstPromise;
+
+    // The result should be the fast one, not the slow stale one
+    expect(vm.testResults[cid]?.latencyMs).toBe(5);
+  });
+
+  test('handles verifyConnection error gracefully', async () => {
+    const cid = seedConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    mockVerifyConnection.mockImplementationOnce(async () => ({
+      ok: false,
+      latencyMs: 100,
+      error: 'Connection refused',
+    }));
+
+    await vm.testConnection(cid);
+
+    expect(vm.testResults[cid]).toEqual({ ok: false, latencyMs: 100, error: 'Connection refused' });
+  });
+
+  test('no-op when connectionId is undefined', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testConnection(undefined);
+
+    expect(mockVerifyConnection).not.toHaveBeenCalled();
+  });
+
+  test('no-op when connection does not exist', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testConnection('nonexistent');
+
+    expect(mockVerifyConnection).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P03 — Replace inferred Running labels with honest connection status
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AiSettingsViewModel — P03: provider tree status replaces inferred Running badge', () => {
+  const seedLocalProvider = (
+    overrides?: Partial<{
+      registryId: string;
+      credential: string | undefined;
+      baseUrl: string;
+    }>,
+  ) => {
+    const pid = mockConfigService.addProvider({
+      registryId: overrides?.registryId ?? 'ollama',
+      label: 'Ollama',
+      credential: overrides?.credential,
+      baseUrl: overrides?.baseUrl ?? 'http://localhost:11434',
+    });
+    const cid = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'Local model',
+      model: 'llama3',
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
+    });
+    return { pid, cid };
+  };
+
+  const seedCloudProvider = (
+    overrides?: Partial<{
+      registryId: string;
+      credential: string | undefined;
+    }>,
+  ) => {
+    const pid = mockConfigService.addProvider({
+      registryId: overrides?.registryId ?? 'openrouter',
+      label: 'OpenRouter',
+      credential: overrides?.credential ?? 'sk-or-v1-key',
+    });
+    const cid = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet',
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
+    });
+    return { pid, cid };
+  };
+
+  test('AC-1: untested local provider shows not checked, not running', async () => {
+    seedLocalProvider();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    expect(vm.providerTree.length).toBe(1);
+    const entry = vm.providerTree[0];
+    expect(entry).toBeDefined();
+    expect(entry.isLocal).toBe(true);
+    // Must NOT say "running" or "reachable" — no test was ever run
+    expect(entry.statusLabel).toBe('not checked');
+    expect(entry.statusColorClass).toBe('badge-ghost');
+  });
+
+  test('AC-1: untested cloud provider shows not checked with same semantics', async () => {
+    seedCloudProvider();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    const entry = vm.providerTree[0];
+    expect(entry).toBeDefined();
+    expect(entry.isLocal).toBe(false);
+    // Same status semantics as local — locality does not determine status
+    expect(entry.statusLabel).toBe('not checked');
+    expect(entry.statusColorClass).toBe('badge-ghost');
+  });
+
+  test('AC-3: testing provider shows testing…', async () => {
+    const { cid } = seedLocalProvider();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.testingIds.add(cid);
+
+    const entry = vm.providerTree[0];
+    expect(entry.statusLabel).toBe('testing…');
+    expect(entry.statusColorClass).toBe('badge-warning');
+  });
+
+  test('AC-2: all connections reachable shows reachable', async () => {
+    const { cid } = seedLocalProvider();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.testResults[cid] = { ok: true, latencyMs: 42 };
+
+    const entry = vm.providerTree[0];
+    expect(entry.statusLabel).toBe('reachable');
+    expect(entry.statusColorClass).toBe('badge-success');
+  });
+
+  test('AC-3: unreachable connection shows unreachable', async () => {
+    const { cid } = seedLocalProvider();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.testResults[cid] = { ok: false, latencyMs: 100, error: 'Connection refused' };
+
+    const entry = vm.providerTree[0];
+    expect(entry.statusLabel).toBe('unreachable');
+    expect(entry.statusColorClass).toBe('badge-error');
+  });
+
+  test('AC-3: one failed connection reports unreachable even with sibling passing', async () => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'ollama',
+      label: 'Ollama',
+      baseUrl: 'http://localhost:11434',
+    });
+    const goodId = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'Working model',
+      model: 'llama3',
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
+    });
+    const badId = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'Broken model',
+      model: 'broken-model',
+      params: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 40,
+        repetitionPenalty: 1,
+        presencePenalty: 0,
+        maxTokens: 2048,
+        contextSize: 4096,
+      },
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.testResults[goodId] = { ok: true, latencyMs: 42 };
+    vm.testResults[badId] = { ok: false, latencyMs: 100, error: 'Timeout' };
+
+    const entry = vm.providerTree[0];
+    // One failure makes the whole provider unreachable, but individual
+    // connection status must distinguish good from bad
+    expect(entry.statusLabel).toBe('unreachable');
+    expect(entry.statusColorClass).toBe('badge-error');
+
+    // Per-connection status must not incorrectly report the working sibling
+    expect(vm.connectionStatusFor(goodId).label).toContain('reachable');
+    expect(vm.connectionStatusFor(goodId).colorClass).toBe('text-success');
+    expect(vm.connectionStatusFor(badId).label).toContain('unreachable');
+    expect(vm.connectionStatusFor(badId).colorClass).toBe('text-error');
+  });
+
+  test('AC-5: no network request on mount or initialize', async () => {
+    seedLocalProvider();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    // Must not trigger any connection test during mount
+    expect(mockVerifyConnection).not.toHaveBeenCalled();
+    // providerTree must still render without network activity
+    expect(vm.providerTree.length).toBe(1);
+  });
+
+  test('AC-4: deleting a connection clears its test result', async () => {
+    const { cid } = seedLocalProvider();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.testResults[cid] = { ok: true, latencyMs: 42 };
+    expect(cid in vm.testResults).toBe(true);
+
+    vm.deleteConnection(cid);
+
+    expect(cid in vm.testResults).toBe(false);
+    // Provider now has no connections → status changes
+    expect(vm.providerTree[0].statusLabel).toBe('no connections');
+  });
+
+  test('AC-4: editing a connection invalidates its test result', async () => {
+    const { cid } = seedLocalProvider();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.testResults[cid] = { ok: true, latencyMs: 42 };
+    expect(cid in vm.testResults).toBe(true);
+
+    // Open editor and save (simulating credential/endpoint change)
+    vm.openEditConnection(cid);
+    vm.saveDraft();
+
+    // Test result must be cleared after edit
+    expect(cid in vm.testResults).toBe(false);
+  });
+
+  test('connectionStatusFor returns per-connection status', async () => {
+    const { cid } = seedLocalProvider();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    // Untested
+    expect(vm.connectionStatusFor(cid).label).toBe('not checked');
+    expect(vm.connectionStatusFor(cid).colorClass).toBe('text-base-content/40');
+
+    // Testing
+    vm.testingIds.add(cid);
+    expect(vm.connectionStatusFor(cid).label).toBe('testing…');
+    expect(vm.connectionStatusFor(cid).colorClass).toBe('text-warning');
+    vm.testingIds.delete(cid);
+
+    // Reachable
+    vm.testResults[cid] = { ok: true, latencyMs: 50 };
+    expect(vm.connectionStatusFor(cid).label).toContain('reachable');
+    expect(vm.connectionStatusFor(cid).label).toContain('50ms');
+    expect(vm.connectionStatusFor(cid).colorClass).toBe('text-success');
+
+    // Unreachable with error
+    vm.testResults[cid] = { ok: false, latencyMs: 200, error: 'Timeout' };
+    expect(vm.connectionStatusFor(cid).label).toContain('unreachable');
+    expect(vm.connectionStatusFor(cid).label).toContain('Timeout');
+    expect(vm.connectionStatusFor(cid).colorClass).toBe('text-error');
   });
 });

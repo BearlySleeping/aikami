@@ -16,6 +16,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { CapabilityProfile, CapabilitySnapshot } from '@aikami/types';
+import { isTauri } from '$lib/views/utils/is_tauri';
 import {
   campaignService,
   capabilityService,
@@ -171,10 +172,11 @@ class CapabilityViewModel
 
   /**
    * Whether to show the local AI wizard entry in the Text tab.
-   * Shown when the text tab is active and no usable text provider exists.
+   * Only shown in the Tauri desktop webview (not browser)
+   * when the text tab is active and no usable text provider exists.
    */
   get showLocalAiWizard(): boolean {
-    return this.activeTab === 'text' && !this.hasTextProvider;
+    return isTauri() && this.activeTab === 'text' && !this.hasTextProvider;
   }
 
   get activeCapabilityLabel(): string {
