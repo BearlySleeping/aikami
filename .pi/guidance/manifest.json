@@ -262,6 +262,34 @@
       "class": "pi_scripts",
       "active": true
     },
+    ".pi/scripts/resource_manifest.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_manifest.test.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_provenance.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_check.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_check.test.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_update.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
+    ".pi/scripts/resource_update.test.ts": {
+      "class": "pi_scripts",
+      "active": true
+    },
     ".pi/prompts/cleanup.md": {
       "class": "agent_prompts",
       "active": true
