@@ -23,12 +23,14 @@
 > 🔴 **Run `bun run contract` from `main`**, not from a feature-branch
 > worktree — a worktree misses the approval commit.
 
+Taken from docs/research/astra-game-review.md
+
 ---
 
 ## The one finding that reorders everything
 
-The review's central claim is that Aikami has *"more definitions of
-'implemented' than convincing evidence of 'fun'."* That is not a vibe. It is
+The review's central claim is that Aikami has _"more definitions of
+'implemented' than convincing evidence of 'fun'."_ That is not a vibe. It is
 a mechanical property of the current pipeline, and there is a clean proof:
 
 **[C-456](C-456-group-chat-and-systemic-npc-interactions.md) is
@@ -42,8 +44,8 @@ No production code path invokes either.
 
 The template already anticipated this — the Evidence Matrix has a
 **Production Path** column. Nothing enforces it:
-`scripts/src/lib/ops/lint_contracts.ts:494` checks only that the *section
-exists*, never that the column is filled with a real route.
+`scripts/src/lib/ops/lint_contracts.ts:494` checks only that the _section
+exists_, never that the column is filled with a real route.
 
 So Phase 0 fixes the measurement first. Otherwise the twelve contracts below
 can all ship exactly the way C-456 did.
@@ -52,23 +54,23 @@ can all ship exactly the way C-456 did.
 
 ## Verified baseline (re-check before drafting; do not re-derive)
 
-| # | Finding | Verified location |
-|---|---|---|
-| V-1 | Free-text skill checks use a hardcoded `0` ability modifier | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:1309` — `const modValue = 0; // TODO: read from character sheet when available` |
-| V-2 | Same path omits `playerContext`; the service defaults to "Level 1 Fighter" | same file; default in `npc_dialogue_service.svelte.ts` |
-| V-3 | Production NPC persona is a single generic line | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:1615` — `` persona: `You are ${npcName}, a character in a fantasy world.` `` |
-| V-4 | Content-pack NPCs carry no personality/agenda/knowledge | `content/packs/emberwatch/manifest.json` — each NPC has only `name`, `defaultDialogueKey`, `appearanceLayers`, `isVendor`, `initialSuggestions` |
-| V-5 | Emberwatch is 3 maps / 3 NPCs / 1 quest / 1 encounter / 7 items / 18 dialogues / 3 factions, no companion | `content/packs/emberwatch/manifest.json` v3.2.0 |
-| V-6 | Group-chat methods have no production callers | `autonomous_message_service.svelte.ts:425`, `:444` — tests only |
-| V-7 | Memory query takes the **keyword-overlap** branch precisely when entries *have* embeddings | `apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts:174-182` — `if (hasPrecomputedEmbeddings) { /* use keyword overlap scoring */ }`. The condition is inverted relative to the service's documented behaviour |
-| V-8 | The pure rules kernel has no callers outside its own file | `packages/shared/utils/src/lib/rules/rules_kernel.ts:293` (`resolveCommand`), only self-referenced at `:331` |
-| V-9 | `trust_change` and `relationship_update` are validated then **dropped** | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:1889` and `:1954` — both `push` to `valid` with no state mutation, while sibling cases (`flag_set`, `inventory_grant`) do call `questStateService` / `inventoryService` |
-| V-10 | Branch switching restores message arrays only | `dialogue_overlay_view_model.svelte.ts:1624` (`createBranch`), `:1654` (`switchBranch`) — `messages`/`_baseMessages` copies, no inventory/quest/relationship/RNG restore |
-| V-11 | Release gate's start-button matcher cannot match the real label | `apps/e2e/tests/client/release_gate.spec.ts:64` matches `/new game\|start\|play/i`; the production start menu renders **"New Adventure"** (`apps/frontend/client/src/lib/views/start/start_view.svelte:90`) |
-| V-12 | Release gate's combat leg is conditional | `release_gate.spec.ts:116-121` — `if (inCombat) { ... }` |
-| V-13 | Release gate's "HP preserved" assertion only checks positivity | `release_gate.spec.ts:476` captures `hpBefore`, `:500` asserts `expect(hpAfter).toBeGreaterThan(0)` — never compares the two |
-| V-14 | LPC loader hardcodes a single animation state | `packages/frontend/engine/src/game_world.ts:3532` — `const stateStr = 'walk'; // default state for engine`; geometry inferred from texture dimensions in `packages/shared/lpc/src/lib/sheet_geometry.ts` |
-| V-15 | Evidence Matrix "Production Path" is unenforced | `scripts/src/lib/ops/lint_contracts.ts:494-505` — presence check only |
+| #    | Finding                                                                                                   | Verified location                                                                                                                                                                                                                                  |
+| ---- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V-1  | Free-text skill checks use a hardcoded `0` ability modifier                                               | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:1309` — `const modValue = 0; // TODO: read from character sheet when available`                                                                |
+| V-2  | Same path omits `playerContext`; the service defaults to "Level 1 Fighter"                                | same file; default in `npc_dialogue_service.svelte.ts`                                                                                                                                                                                             |
+| V-3  | Production NPC persona is a single generic line                                                           | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:1615` — `` persona: `You are ${npcName}, a character in a fantasy world.` ``                                                                                            |
+| V-4  | Content-pack NPCs carry no personality/agenda/knowledge                                                   | `content/packs/emberwatch/manifest.json` — each NPC has only `name`, `defaultDialogueKey`, `appearanceLayers`, `isVendor`, `initialSuggestions`                                                                                                    |
+| V-5  | Emberwatch is 3 maps / 3 NPCs / 1 quest / 1 encounter / 7 items / 18 dialogues / 3 factions, no companion | `content/packs/emberwatch/manifest.json` v3.2.0                                                                                                                                                                                                    |
+| V-6  | Group-chat methods have no production callers                                                             | `autonomous_message_service.svelte.ts:425`, `:444` — tests only                                                                                                                                                                                    |
+| V-7  | Memory query takes the **keyword-overlap** branch precisely when entries _have_ embeddings                | `apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts:174-182` — `if (hasPrecomputedEmbeddings) { /* use keyword overlap scoring */ }`. The condition is inverted relative to the service's documented behaviour                |
+| V-8  | The pure rules kernel has no callers outside its own file                                                 | `packages/shared/utils/src/lib/rules/rules_kernel.ts:293` (`resolveCommand`), only self-referenced at `:331`                                                                                                                                       |
+| V-9  | `trust_change` and `relationship_update` are validated then **dropped**                                   | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:1889` and `:1954` — both `push` to `valid` with no state mutation, while sibling cases (`flag_set`, `inventory_grant`) do call `questStateService` / `inventoryService` |
+| V-10 | Branch switching restores message arrays only                                                             | `dialogue_overlay_view_model.svelte.ts:1624` (`createBranch`), `:1654` (`switchBranch`) — `messages`/`_baseMessages` copies, no inventory/quest/relationship/RNG restore                                                                           |
+| V-11 | Release gate's start-button matcher cannot match the real label                                           | `apps/e2e/tests/client/release_gate.spec.ts:64` matches `/new game\|start\|play/i`; the production start menu renders **"New Adventure"** (`apps/frontend/client/src/lib/views/start/start_view.svelte:90`)                                        |
+| V-12 | Release gate's combat leg is conditional                                                                  | `release_gate.spec.ts:116-121` — `if (inCombat) { ... }`                                                                                                                                                                                           |
+| V-13 | Release gate's "HP preserved" assertion only checks positivity                                            | `release_gate.spec.ts:476` captures `hpBefore`, `:500` asserts `expect(hpAfter).toBeGreaterThan(0)` — never compares the two                                                                                                                       |
+| V-14 | LPC loader hardcodes a single animation state                                                             | `packages/frontend/engine/src/game_world.ts:3532` — `const stateStr = 'walk'; // default state for engine`; geometry inferred from texture dimensions in `packages/shared/lpc/src/lib/sheet_geometry.ts`                                           |
+| V-15 | Evidence Matrix "Production Path" is unenforced                                                           | `scripts/src/lib/ops/lint_contracts.ts:494-505` — presence check only                                                                                                                                                                              |
 
 ### Already covered — do NOT write new contracts for these
 
@@ -126,13 +128,13 @@ that gets asserted end to end.
 
 ## C-485 — Enforce a production path in the Evidence Matrix
 
-| Field | Value |
-|---|---|
-| **Priority** | P0 — every contract after this one inherits the bar it sets |
-| **Type** | full |
-| **Target** | `docs/contracts/TEMPLATE.md`, `docs/contracts/THIN_TEMPLATE.md`, `docs/contracts/SHARED_SECTIONS.md`, `scripts/src/lib/ops/lint_contracts.ts`, new `scripts/src/lib/ops/guard_orphaned_capability.ts` + baseline JSON, `package.json` `guard:all`, `.pi/skills/contract-calibration/SKILL.md` |
-| **Depends on** | None |
-| **Docs impact** | internal |
+| Field           | Value                                                                                                                                                                                                                                                                                         |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P0 — every contract after this one inherits the bar it sets                                                                                                                                                                                                                                   |
+| **Type**        | full                                                                                                                                                                                                                                                                                          |
+| **Target**      | `docs/contracts/TEMPLATE.md`, `docs/contracts/THIN_TEMPLATE.md`, `docs/contracts/SHARED_SECTIONS.md`, `scripts/src/lib/ops/lint_contracts.ts`, new `scripts/src/lib/ops/guard_orphaned_capability.ts` + baseline JSON, `package.json` `guard:all`, `.pi/skills/contract-calibration/SKILL.md` |
+| **Depends on**  | None                                                                                                                                                                                                                                                                                          |
+| **Docs impact** | internal                                                                                                                                                                                                                                                                                      |
 
 ### Problem & baseline evidence
 
@@ -142,8 +144,8 @@ column. The result is V-6: C-456 reached `implemented` with every AC green
 and no production caller for the capability it shipped. C-457–C-460 shipped
 through the same gate and should be re-audited under the new rule.
 
-The failure mode is specific and repeatable: an AC phrased as *"`X()` returns
-N participants — verified by unit test"* is independently verifiable, satisfies
+The failure mode is specific and repeatable: an AC phrased as _"`X()` returns
+N participants — verified by unit test"_ is independently verifiable, satisfies
 the template, and proves nothing about whether a player can ever reach `X()`.
 
 ### Acceptance gate
@@ -185,13 +187,13 @@ worse than the simple heuristic.
 
 ## C-486 — Replace the conditional release gate with one unconditional journey
 
-| Field | Value |
-|---|---|
-| **Priority** | P0 — the gate currently cannot fail for the reasons it exists |
-| **Type** | full |
-| **Target** | `apps/e2e/tests/client/release_gate.spec.ts`, `apps/e2e/src/pom/game_page.ts` |
-| **Depends on** | None (but C-495 will extend the journey later — leave the spec structured for that) |
-| **Docs impact** | internal |
+| Field           | Value                                                                               |
+| --------------- | ----------------------------------------------------------------------------------- |
+| **Priority**    | P0 — the gate currently cannot fail for the reasons it exists                       |
+| **Type**        | full                                                                                |
+| **Target**      | `apps/e2e/tests/client/release_gate.spec.ts`, `apps/e2e/src/pom/game_page.ts`       |
+| **Depends on**  | None (but C-495 will extend the journey later — leave the spec structured for that) |
+| **Docs impact** | internal                                                                            |
 
 ### Problem & baseline evidence
 
@@ -244,13 +246,13 @@ red gate by loosening an assertion — call that out in Watch Points.
 
 ## C-487 — Free-text skill checks honour the real character sheet
 
-| Field | Value |
-|---|---|
-| **Priority** | P0 — this teaches players their character sheet is decorative |
-| **Type** | full |
-| **Target** | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` (~`:1309`), `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts`, `packages/shared/utils/src/lib/rules/rules_kernel.ts` |
-| **Depends on** | None |
-| **Docs impact** | user-facing |
+| Field           | Value                                                                                                                                                                                                                                               |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P0 — this teaches players their character sheet is decorative                                                                                                                                                                                       |
+| **Type**        | full                                                                                                                                                                                                                                                |
+| **Target**      | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` (~`:1309`), `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts`, `packages/shared/utils/src/lib/rules/rules_kernel.ts` |
+| **Depends on**  | None                                                                                                                                                                                                                                                |
+| **Docs impact** | user-facing                                                                                                                                                                                                                                         |
 
 ### Problem & baseline evidence
 
@@ -286,8 +288,8 @@ those choices — attempting something through dialogue — ignores all of them.
 
 ### Out of scope
 
-- Routing the *result* through `resolveCommand` — that is C-489. This
-  contract fixes the *inputs* to the roll.
+- Routing the _result_ through `resolveCommand` — that is C-489. This
+  contract fixes the _inputs_ to the roll.
 - New skills, spells, or class features.
 - Combat-path modifiers (already sourced from the sheet).
 
@@ -301,13 +303,13 @@ contracts' Watch Points cross-referencing each other.
 
 ## C-488 — Authored NPC identity in the content pack
 
-| Field | Value |
-|---|---|
-| **Priority** | P0 — "a name plus 'fantasy NPC' is not a character"; blocks C-493/C-494/C-495 |
-| **Type** | full |
-| **Target** | `packages/shared/schemas/src/lib/game/` (pack NPC schema), `packages/shared/types/`, `content/packs/emberwatch/manifest.json`, the pack loader (C-315), `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:1615`, `apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts` |
-| **Depends on** | None |
-| **Docs impact** | user-facing (pack authoring format) |
+| Field           | Value                                                                                                                                                                                                                                                                                                            |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P0 — "a name plus 'fantasy NPC' is not a character"; blocks C-493/C-494/C-495                                                                                                                                                                                                                                    |
+| **Type**        | full                                                                                                                                                                                                                                                                                                             |
+| **Target**      | `packages/shared/schemas/src/lib/game/` (pack NPC schema), `packages/shared/types/`, `content/packs/emberwatch/manifest.json`, the pack loader (C-315), `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:1615`, `apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts` |
+| **Depends on**  | None                                                                                                                                                                                                                                                                                                             |
+| **Docs impact** | user-facing (pack authoring format)                                                                                                                                                                                                                                                                              |
 
 ### Problem & baseline evidence
 
@@ -322,7 +324,7 @@ context and is **not** used by the main NPC dialogue path. The richer brain
 exists; the interaction players actually reach does not use it.
 
 Correction to the review, worth writing into the contract so the implementer
-does not "fix" a non-bug: the intent prompt *does* receive recent conversation
+does not "fix" a non-bug: the intent prompt _does_ receive recent conversation
 and game-state facts via `buildGameStateFacts()`, including relationship and
 faction facts. The gap is the **persona/agenda/knowledge definition**, and the
 fact that the roll-resolution prompt does not receive those same facts.
@@ -357,7 +359,7 @@ fact that the roll-resolution prompt does not receive those same facts.
   the assembler; do not restructure service ownership in this contract.
 - Memory retrieval feeding the persona — that is C-492.
 - Writing the actual Emberwatch dilemma content — C-495 owns the story; this
-  contract only requires that the *fields exist and are populated*.
+  contract only requires that the _fields exist and are populated_.
 - Character-card (SillyTavern/chub) import mapping. Note in the contract that
   imported prose must **not** automatically confer permission to alter world
   state, but do not build the importer here.
@@ -372,13 +374,13 @@ better. Require a measured before/after token count in the Execution Report.
 
 ## C-489 — One authority path for consequences
 
-| Field | Value |
-|---|---|
-| **Priority** | P0 — the game currently makes promises it silently fails to keep |
-| **Type** | full |
-| **Target** | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:1881-1965` (`_validateAndApplyDeltas`), `packages/shared/utils/src/lib/rules/rules_kernel.ts:293` (`resolveCommand`), relationship/faction state services (C-341) |
-| **Depends on** | [C-487](#c-487--free-text-skill-checks-honour-the-real-character-sheet) |
-| **Docs impact** | internal |
+| Field           | Value                                                                                                                                                                                                                                        |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P0 — the game currently makes promises it silently fails to keep                                                                                                                                                                             |
+| **Type**        | full                                                                                                                                                                                                                                         |
+| **Target**      | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:1881-1965` (`_validateAndApplyDeltas`), `packages/shared/utils/src/lib/rules/rules_kernel.ts:293` (`resolveCommand`), relationship/faction state services (C-341) |
+| **Depends on**  | [C-487](#c-487--free-text-skill-checks-honour-the-real-character-sheet)                                                                                                                                                                      |
+| **Docs impact** | internal                                                                                                                                                                                                                                     |
 
 ### Problem & baseline evidence
 
@@ -395,7 +397,7 @@ Three defects in one seam:
   relationship math happen elsewhere, so "AI proposes, rules decide" has
   multiple authorities and the pure one is not among them.
 - **Ordering.** Some paths narrate first and validate afterwards. If the NPC
-  says *"Here, take the wand"* and the mutation fails, the player experiences
+  says _"Here, take the wand"_ and the mutation fails, the player experiences
   the game itself breaking a promise.
 
 Bounds checking is not authority. It does not answer: is this NPC entitled to
@@ -431,7 +433,7 @@ advantage? did the claimed event actually happen?
 
 - Migrating combat resolution wholesale into the kernel. AC-6 covers the
   dialogue/delta path only; a combat migration is its own contract.
-- Event *recording* — that is C-491. This contract decides and applies;
+- Event _recording_ — that is C-491. This contract decides and applies;
   C-491 writes down what happened and who saw it.
 - Any new delta kinds.
 
@@ -445,13 +447,13 @@ an unreachable kernel left in place is not.
 
 ## C-490 — Transcript branching must not imply rewinding the world
 
-| Field | Value |
-|---|---|
-| **Priority** | P1 — a reference-tool feature that does not transfer cleanly to a consequential RPG |
-| **Type** | thin |
-| **Target** | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:1624-1685`, the dialogue overlay's message-action UI |
-| **Depends on** | None |
-| **Docs impact** | user-facing |
+| Field           | Value                                                                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P1 — a reference-tool feature that does not transfer cleanly to a consequential RPG                                                                      |
+| **Type**        | thin                                                                                                                                                     |
+| **Target**      | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:1624-1685`, the dialogue overlay's message-action UI |
+| **Depends on**  | None                                                                                                                                                     |
+| **Docs impact** | user-facing                                                                                                                                              |
 
 ### Problem & baseline evidence
 
@@ -494,18 +496,18 @@ Upgrade to a full contract if AC-3 turns out to touch the save schema.
 
 ## C-491 — Committed narrative event record
 
-| Field | Value |
-|---|---|
-| **Priority** | P0 — the backbone for memory, companions and consequence; nothing in Phase 2 works without it |
-| **Type** | full |
-| **Target** | new event record in `packages/shared/schemas/` + `packages/shared/types/`, save/serialization path (C-117/C-132/C-334), journal, `npc_dialogue_service.svelte.ts` |
-| **Depends on** | [C-489](#c-489--one-authority-path-for-consequences) |
-| **Docs impact** | internal |
+| Field           | Value                                                                                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P0 — the backbone for memory, companions and consequence; nothing in Phase 2 works without it                                                                     |
+| **Type**        | full                                                                                                                                                              |
+| **Target**      | new event record in `packages/shared/schemas/` + `packages/shared/types/`, save/serialization path (C-117/C-132/C-334), journal, `npc_dialogue_service.svelte.ts` |
+| **Depends on**  | [C-489](#c-489--one-authority-path-for-consequences)                                                                                                              |
+| **Docs impact** | internal                                                                                                                                                          |
 
 ### Problem & baseline evidence
 
 Consequences today are scattered across flags, inventory and (soon)
-relationship deltas, with no record of *what happened, when, and who saw it*.
+relationship deltas, with no record of _what happened, when, and who saw it_.
 That makes every downstream feature guess: the journal cannot summarise, the
 companion cannot react to something it witnessed, and memory cannot
 distinguish a fact from a claim.
@@ -548,13 +550,13 @@ drafting agent collapse them into "store the events".
 
 ## C-492 — Memory retrieval correctness and production wiring
 
-| Field | Value |
-|---|---|
-| **Priority** | P1 — the current implementation does the opposite of what its own docs say |
-| **Type** | full |
-| **Target** | `apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts` (branch at `:181`), the memory singleton's initialization/background-index entry points, the production boot path |
-| **Depends on** | [C-491](#c-491--committed-narrative-event-record) |
-| **Docs impact** | internal |
+| Field           | Value                                                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P1 — the current implementation does the opposite of what its own docs say                                                                                                                  |
+| **Type**        | full                                                                                                                                                                                        |
+| **Target**      | `apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts` (branch at `:181`), the memory singleton's initialization/background-index entry points, the production boot path |
+| **Depends on**  | [C-491](#c-491--committed-narrative-event-record)                                                                                                                                           |
+| **Docs impact** | internal                                                                                                                                                                                    |
 
 ### Problem & baseline evidence
 
@@ -572,7 +574,7 @@ if (hasPrecomputedEmbeddings) {
   // With pre-computed embeddings, use keyword overlap scoring
 ```
 
-The normal indexed case — entries *with* embeddings — takes the
+The normal indexed case — entries _with_ embeddings — takes the
 **keyword-overlap** branch. The cosine-similarity path the service documents
 runs only when embeddings are absent. Additionally, no production caller was
 found for the singleton's initialization / background-index-on-load methods.
@@ -611,20 +613,20 @@ architecture.
 ### Notes
 
 AC-1 is the fork. Evidence that keyword retrieval is sufficient at this
-content scale is a *good* result and should be recorded, not treated as a
+content scale is a _good_ result and should be recorded, not treated as a
 regression.
 
 ---
 
 ## C-493 — Wire group scenes into the production party path
 
-| Field | Value |
-|---|---|
-| **Priority** | P1 — closes C-456's production gap; the capability already exists and is tested |
-| **Type** | thin |
-| **Target** | `apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts:425,444`, the "Talk to Party" overlay, `apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts` poller startup, `npc_awareness_service.svelte.ts` |
-| **Depends on** | [C-488](#c-488--authored-npc-identity-in-the-content-pack) |
-| **Docs impact** | user-facing |
+| Field           | Value                                                                                                                                                                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P1 — closes C-456's production gap; the capability already exists and is tested                                                                                                                                                                           |
+| **Type**        | thin                                                                                                                                                                                                                                                      |
+| **Target**      | `apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts:425,444`, the "Talk to Party" overlay, `apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts` poller startup, `npc_awareness_service.svelte.ts` |
+| **Depends on**  | [C-488](#c-488--authored-npc-identity-in-the-content-pack)                                                                                                                                                                                                |
+| **Docs impact** | user-facing                                                                                                                                                                                                                                               |
 
 ### Problem & baseline evidence
 
@@ -663,13 +665,13 @@ system.** Connect and simplify what exists, around one real scene.
 
 ## C-494 — One companion who reacts
 
-| Field | Value |
-|---|---|
-| **Priority** | P1 — "I disapprove: −5" is bookkeeping; a companion is a character |
-| **Type** | full |
-| **Target** | `content/packs/emberwatch/manifest.json` (new companion NPC), party roster (C-340/C-212), `npc_dialogue_service.svelte.ts`, C-491's event record |
-| **Depends on** | [C-488](#c-488--authored-npc-identity-in-the-content-pack), [C-491](#c-491--committed-narrative-event-record), [C-492](#c-492--memory-retrieval-correctness-and-production-wiring) |
-| **Docs impact** | user-facing |
+| Field           | Value                                                                                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P1 — "I disapprove: −5" is bookkeeping; a companion is a character                                                                                                                 |
+| **Type**        | full                                                                                                                                                                               |
+| **Target**      | `content/packs/emberwatch/manifest.json` (new companion NPC), party roster (C-340/C-212), `npc_dialogue_service.svelte.ts`, C-491's event record                                   |
+| **Depends on**  | [C-488](#c-488--authored-npc-identity-in-the-content-pack), [C-491](#c-491--committed-narrative-event-record), [C-492](#c-492--memory-retrieval-correctness-and-production-wiring) |
+| **Docs impact** | user-facing                                                                                                                                                                        |
 
 ### Problem & baseline evidence
 
@@ -716,13 +718,13 @@ passed.
 
 ## C-495 — Emberwatch dramatic structure
 
-| Field | Value |
-|---|---|
-| **Priority** | P1 — the review's core complaint: the dramatic possibility space is small |
-| **Type** | full |
-| **Target** | `content/packs/emberwatch/manifest.json` (v4), quest graph (C-339), endings, `apps/e2e/tests/client/release_gate.spec.ts` (extend C-486's journey) |
-| **Depends on** | [C-488](#c-488--authored-npc-identity-in-the-content-pack), [C-491](#c-491--committed-narrative-event-record), [C-494](#c-494--one-companion-who-reacts) |
-| **Docs impact** | user-facing |
+| Field           | Value                                                                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P1 — the review's core complaint: the dramatic possibility space is small                                                                                |
+| **Type**        | full                                                                                                                                                     |
+| **Target**      | `content/packs/emberwatch/manifest.json` (v4), quest graph (C-339), endings, `apps/e2e/tests/client/release_gate.spec.ts` (extend C-486's journey)       |
+| **Depends on**  | [C-488](#c-488--authored-npc-identity-in-the-content-pack), [C-491](#c-491--committed-narrative-event-record), [C-494](#c-494--one-companion-who-reacts) |
+| **Docs impact** | user-facing                                                                                                                                              |
 
 ### Problem & baseline evidence
 
@@ -780,7 +782,7 @@ maps.
 ### Notes
 
 AC-5 is the replayability mechanism and the easiest to get wrong: randomness
-creates the *situation*, the player's decisions create what is *unique*.
+creates the _situation_, the player's decisions create what is _unique_.
 A drafting agent will be tempted to make each NPC roll their own truth —
 forbid it explicitly in Watch Points.
 
@@ -794,13 +796,13 @@ reading a green check.
 
 ## C-496 — Sprite atlas and animation manifest import path
 
-| Field | Value |
-|---|---|
-| **Priority** | P2 — needed whether the art is AI-generated, commissioned, or hand-made |
-| **Type** | full |
-| **Target** | `packages/shared/schemas/` (atlas manifest schema), `packages/shared/lpc/src/lib/sheet_geometry.ts`, `packages/frontend/engine/src/game_world.ts:3532` |
-| **Depends on** | None |
-| **Docs impact** | user-facing (asset authoring format) |
+| Field           | Value                                                                                                                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Priority**    | P2 — needed whether the art is AI-generated, commissioned, or hand-made                                                                                |
+| **Type**        | full                                                                                                                                                   |
+| **Target**      | `packages/shared/schemas/` (atlas manifest schema), `packages/shared/lpc/src/lib/sheet_geometry.ts`, `packages/frontend/engine/src/game_world.ts:3532` |
+| **Depends on**  | None                                                                                                                                                   |
+| **Docs impact** | user-facing (asset authoring format)                                                                                                                   |
 
 ### Problem & baseline evidence
 
@@ -847,13 +849,13 @@ with timing and alignment.
 
 ## C-497 — Camera framing and default-asset review
 
-| Field | Value |
-|---|---|
-| **Priority** | P2 — scale and composition strongly affect perceived sprite quality; cheap to fix, highly visible |
-| **Type** | thin |
-| **Target** | camera/zoom configuration (C-161, C-199), the `/game` diagnostic boot defaults, hotbar component |
-| **Depends on** | None |
-| **Docs impact** | internal |
+| Field           | Value                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------- |
+| **Priority**    | P2 — scale and composition strongly affect perceived sprite quality; cheap to fix, highly visible |
+| **Type**        | thin                                                                                              |
+| **Target**      | camera/zoom configuration (C-161, C-199), the `/game` diagnostic boot defaults, hotbar component  |
+| **Depends on**  | None                                                                                              |
+| **Docs impact** | internal                                                                                          |
 
 ### Problem & baseline evidence
 
@@ -887,21 +889,21 @@ Do not judge LPC through a badly framed presentation.
 
 ## C-498 — A preset means the character is ready
 
-| Field | Value |
-|---|---|
-| **Priority** | P2 — the fastest-looking route to play currently takes the longest |
-| **Type** | thin |
-| **Target** | `apps/frontend/client/src/lib/views/character/` creation flow, starter-character presets |
-| **Depends on** | None (coordinate with [C-483](C-483-guided-ai-setup.md) / [C-484](C-484-capability-first-settings.md), which own the AI-setup half of onboarding) |
-| **Docs impact** | user-facing |
+| Field           | Value                                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Priority**    | P2 — the fastest-looking route to play currently takes the longest                                                                                |
+| **Type**        | thin                                                                                                                                              |
+| **Target**      | `apps/frontend/client/src/lib/views/character/` creation flow, starter-character presets                                                          |
+| **Depends on**  | None (coordinate with [C-483](C-483-guided-ai-setup.md) / [C-484](C-484-capability-first-settings.md), which own the AI-setup half of onboarding) |
+| **Docs impact** | user-facing                                                                                                                                       |
 
 ### Problem & baseline evidence
 
 In the observed session, character creation put the AI chat at the top and
 presets below it. Selecting the "Thaldrin" preset opened a long character-sheet
 form — missing portrait placeholder, small LPC preview, editable HP, AC, speed,
-class, alignment, proficiencies. A preset should mean *"this character is
-ready"*, not *"please finish filling out this form"*.
+class, alignment, proficiencies. A preset should mean _"this character is
+ready"_, not _"please finish filling out this form"_.
 
 ### Acceptance gate
 
@@ -932,7 +934,7 @@ ready"*, not *"please finish filling out this form"*.
   outfit variation on one character). Evaluate them **inside the real map at
   real gameplay scale**, not in an image viewer. Measure: attempts per
   acceptable character, manual cleanup required, whether it looks good while
-  *moving*, whether the whole cast looks like one game, license/provenance,
+  _moving_, whether the whole cast looks like one game, license/provenance,
   and workflow reproducibility. Compare against a curated LPC set and, if
   possible, one artist-made sample. **Cost per accepted animated character is
   the metric, not cost per generated image.** Do not integrate an image
@@ -961,7 +963,7 @@ ready"*, not *"please finish filling out this form"*.
 - **Seeds are premises, not conclusions.** Every `file:line` above was
   verified on `main` at `eacfc371` on 2026-09-06. Re-check before drafting —
   if a line has moved or the code has changed, the contract's Problem section
-  must reflect what is there *now*, not what this doc says.
+  must reflect what is there _now_, not what this doc says.
 - **Out-of-scope lists are load-bearing.** They are the main defence against a
   cheap model helpfully refactoring adjacent systems. Copy them into the
   contract's Scope Boundaries verbatim and expand rather than replace.

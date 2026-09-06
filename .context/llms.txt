@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-06
-> Files: 425 across 18 categories
+> Files: 426 across 18 categories
 
 ## Quick Start (Read These First)
 
@@ -459,6 +459,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Project Review: Adopt vs Avoid](reference/project-review.md)
 ## research/
 
+- [Executive verdict](research/astra-game-review.md)
 - [Aikami Database Architecture — Investigation Summary (for external review)](research/database-architecture-inquiry.md)
 - [Aikami Data Layer — Review & Recommendation](research/database-architecture-recommendation.md)
 - [Game Engine / World Setup — Research Brief for Critical Review](research/game_engine_architecture_brief.md)
