@@ -1,0 +1,152 @@
+{
+  "manifestVersion": 1,
+  "updatedAt": "2026-09-04T22:21:38.000Z",
+  "resources": {
+    "context-mode": {
+      "name": "context-mode",
+      "type": "npm-package",
+      "description": "Pi context management — search, index, stats, upgrade",
+      "source": { "kind": "npm", "package": "context-mode", "version": "1.0.169" },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "pi-mcp-adapter": {
+      "name": "pi-mcp-adapter",
+      "type": "npm-package",
+      "description": "Pi MCP adapter for model context protocol",
+      "source": { "kind": "npm", "package": "pi-mcp-adapter", "version": "2.32.1" },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "pi-cache-optimizer": {
+      "name": "pi-cache-optimizer",
+      "type": "npm-package",
+      "description": "Pi cache optimizer for improved performance",
+      "source": { "kind": "npm", "package": "pi-cache-optimizer", "version": "2.8.7" },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "pi-deepinfra": {
+      "name": "pi-deepinfra",
+      "type": "npm-package",
+      "description": "Pi DeepInfra integration for model access",
+      "source": { "kind": "npm", "package": "pi-deepinfra", "version": "0.1.3" },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "pi-deepseek-optimized": {
+      "name": "pi-deepseek-optimized",
+      "type": "npm-package",
+      "description": "Pi DeepSeek optimized model integration",
+      "source": {
+        "kind": "git",
+        "url": "github.com/jrimmer/pi-deepseek-optimized",
+        "revision": "HEAD",
+        "subdir": ""
+      },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "pixijs": {
+      "name": "pixijs",
+      "type": "git-skill",
+      "description": "PixiJS v8 skills from upstream pixijs-skills repo",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/pixijs/pixijs-skills.git",
+        "revision": "HEAD",
+        "subdir": "skills"
+      },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "daisyui": {
+      "name": "daisyui",
+      "type": "git-skill",
+      "description": "daisyUI component skills from upstream daisyui repo",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/saadeghi/daisyui.git",
+        "revision": "HEAD",
+        "subdir": "skills/daisyui"
+      },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "herdr": {
+      "name": "herdr",
+      "type": "git-skill",
+      "description": "Herdr orchestration skill from upstream repo",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/ogulcancelik/herdr.git",
+        "revision": "HEAD",
+        "subdir": "skills/herdr"
+      },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "coderabbit": {
+      "name": "coderabbit",
+      "type": "git-skill",
+      "description": "CodeRabbit review skills from upstream repo",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/coderabbitai/skills.git",
+        "revision": "HEAD",
+        "subdir": "skills"
+      },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "modern-web-guidance": {
+      "name": "modern-web-guidance",
+      "type": "generated-skill",
+      "description": "Modern web development guidance from context-mode npm package",
+      "source": { "kind": "npm", "package": "context-mode", "version": "1.0.169" },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    },
+    "bun.lock": {
+      "name": "bun.lock",
+      "type": "local-skill",
+      "description": "Bun lockfile for .pi dependencies — exact version pins for all npm resources",
+      "source": { "kind": "local", "relativePath": "bun.lock" },
+      "installed": {
+        "contentHash": "",
+        "fileCount": 0,
+        "recordedAt": "2026-09-04T22:21:38.000Z"
+      }
+    }
+  }
+}
