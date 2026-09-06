@@ -140,8 +140,10 @@ describe('atomicPromoteToCache', () => {
     });
 
     const finalResponse = await mockCache.match('final-key-1');
-    expect(finalResponse).toBeDefined();
-    const finalBytes = await finalResponse!.arrayBuffer();
+    if (!finalResponse) {
+      throw new Error('expected final-key-1 to be cached after promotion');
+    }
+    const finalBytes = await finalResponse.arrayBuffer();
     expect(new Uint8Array(finalBytes)).toEqual(data);
   });
 
@@ -191,7 +193,7 @@ describe('isRangeResponse', () => {
 describe('extractEtag', () => {
   test('extracts ETag from response headers', () => {
     const response = new Response(null, {
-      headers: { ETag: '"abc123"' },
+      headers: { eTag: '"abc123"' },
     });
     expect(extractEtag(response)).toBe('"abc123"');
   });

@@ -19,12 +19,12 @@ import {
 } from '@aikami/frontend/services';
 import {
   detectHardware,
-  resolveArtifact,
   type HardwareProfile,
   loadManifest,
   type ModelManifest,
   type ProbeExecutor,
   recommend,
+  resolveArtifact,
   type StackPlan,
 } from '@aikami/local-ai';
 import { isTauri } from '$lib/views/utils/is_tauri';
