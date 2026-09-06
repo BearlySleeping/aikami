@@ -325,7 +325,7 @@ const verifyCloudProvider = async (
 
     return { ok: true, latencyMs: elapsed(), modelCount };
   } catch (err) {
-    return { ok: false, latencyMs: elapsed(), error: normalizeError(err) };
+    return { ok: false, latencyMs: elapsed(), error: normalizeError(err, apiKey) };
   } finally {
     cleanup();
   }
@@ -400,9 +400,29 @@ const createTimeoutSignal = (options: {
 };
 
 /**
+ * Redacts anything that looks like a credential from a diagnostic string.
+ *
+ * AC-6: keys are never included in diagnostic output. Google's verification
+ * URL carries the key as a `?key=` query parameter (see buildVerifyUrl), and
+ * a transport error's message can quote the URL it failed on — so the raw
+ * message is not safe to display. Any query value named like a secret is
+ * replaced, and the caller's own key is redacted verbatim when supplied.
+ */
+const redactSecrets = (message: string, apiKey?: string): string => {
+  let safe = message.replace(
+    /([?&](?:key|api[-_]?key|access[-_]?token|token)=)[^&\s'"]+/gi,
+    '$1[redacted]',
+  );
+  if (apiKey && apiKey.length > 0) {
+    safe = safe.split(apiKey).join('[redacted]');
+  }
+  return safe;
+};
+
+/**
  * Normalizes an error into a user-readable message, excluding secrets.
  */
-const normalizeError = (err: unknown): string => {
+const normalizeError = (err: unknown, apiKey?: string): string => {
   if (err instanceof DOMException) {
     if (err.name === 'AbortError') {
       return 'Connection timed out';
@@ -416,16 +436,16 @@ const normalizeError = (err: unknown): string => {
     if (err.name === 'NetworkError') {
       return 'Network request failed — connection refused';
     }
-    return err.message;
+    return redactSecrets(err.message, apiKey);
   }
   if (err instanceof TypeError) {
     if (err.message.includes('fetch')) {
       return 'Network request failed — connection refused';
     }
-    return err.message;
+    return redactSecrets(err.message, apiKey);
   }
   if (err instanceof Error) {
-    return err.message;
+    return redactSecrets(err.message, apiKey);
   }
-  return String(err);
+  return redactSecrets(String(err), apiKey);
 };

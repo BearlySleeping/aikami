@@ -1008,6 +1008,11 @@ export class AiSettingsViewModel
         configService.updateProvider(provider.id, {
           credential: this.draft.apiKey,
         });
+        // P03 AC-4: the credential is shared by every connection on this
+        // account, so a rotation invalidates the sibling rows' results too —
+        // otherwise they keep displaying a "reachable" that was measured
+        // against the previous key.
+        this._clearTestResultsForProvider(provider.id);
       }
     } else {
       // Resolve or create provider
@@ -1365,6 +1370,21 @@ export class AiSettingsViewModel
 
     // Configured but never tested
     return { label: 'not checked', colorClass: 'badge-ghost' };
+  }
+
+  /**
+   * Drops the cached verification results for every connection on one
+   * provider. Used when the shared endpoint/credential changes: the stored
+   * result describes the old account and must not survive the edit.
+   */
+  private _clearTestResultsForProvider(providerId: string): void {
+    const ids = new Set(this._connectionsForProvider(providerId).map((c) => c.id));
+    if (ids.size === 0) {
+      return;
+    }
+    this.testResults = Object.fromEntries(
+      Object.entries(this.testResults).filter(([id]) => !ids.has(id)),
+    );
   }
 
   private _clearTestResult(connectionId: ConnectionId): void {

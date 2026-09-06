@@ -880,6 +880,7 @@ class ConfigService
     const id = crypto.randomUUID();
     const provider: AiProvider = { id, ...options };
     this.state.providers = [...this.state.providers, provider];
+    this._reproject();
     return id;
   }
 
@@ -887,6 +888,7 @@ class ConfigService
     this.state.providers = this.state.providers.map((p) =>
       p.id === id ? { ...p, ...patch } : p,
     );
+    this._reproject();
   }
 
   deleteProvider(id: ProviderId): void {
@@ -901,6 +903,7 @@ class ConfigService
     );
     this._clearRolesForConnectionIds(deletedConnectionIds);
     this.state.providers = this.state.providers.filter((p) => p.id !== id);
+    this._reproject();
   }
 
   getProvider(id: ProviderId): AiProvider | undefined {
@@ -923,6 +926,7 @@ class ConfigService
       updatedAt: now,
     };
     this.state.aiConnections = [...this.state.aiConnections, conn];
+    this._reproject();
     return id;
   }
 
@@ -930,11 +934,13 @@ class ConfigService
     this.state.aiConnections = this.state.aiConnections.map((c) =>
       c.id === id ? { ...c, ...patch, id: c.id, updatedAt: new Date().toISOString() } : c,
     );
+    this._reproject();
   }
 
   deleteAiConnection(id: ConnectionId): void {
     this.state.aiConnections = this.state.aiConnections.filter((c) => c.id !== id);
     this._clearRolesForConnectionIds(new Set([id]));
+    this._reproject();
   }
 
   getAiConnection(id: ConnectionId): AiConnection | undefined {
@@ -949,12 +955,14 @@ class ConfigService
 
   setRoleAssignment(role: AiRole, connectionId: ConnectionId): void {
     this.state.roles = { ...this.state.roles, [role]: connectionId };
+    this._reproject();
   }
 
   clearRoleAssignment(role: AiRole): void {
     const next = { ...this.state.roles };
     delete next[role];
     this.state.roles = next;
+    this._reproject();
   }
 
   getRoleAssignments(): RoleAssignments {

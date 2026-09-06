@@ -502,3 +502,56 @@ describe('verifyConnection — timeout and cancellation', () => {
     expect(result.error).toBe('Connection timed out');
   });
 });
+
+// ---------------------------------------------------------------------------
+// P02 AC-6 — keys never reach diagnostic output
+// ---------------------------------------------------------------------------
+
+const googleProvider = (overrides?: Record<string, unknown>) => ({
+  id: 'prov-google',
+  registryId: 'google',
+  label: 'Google (Gemini)',
+  credential: 'AIzaSy-super-secret-key',
+  baseUrl: '',
+  source: 'stored' as const,
+  ...overrides,
+});
+
+describe('verifyConnection — credential redaction (AC-6)', () => {
+  test('a transport error quoting the verification URL does not leak the key', async () => {
+    // Google carries its key in the query string (buildVerifyUrl), and fetch
+    // failures commonly quote the URL they failed on.
+    const provider = googleProvider();
+    const fetchFn = mock(async (url: string | URL) => {
+      throw new Error(`request to ${String(url)} failed`);
+    }) as unknown as FetchTransport;
+
+    const result = await verifyConnection({ provider }, fetchFn);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).not.toContain('AIzaSy-super-secret-key');
+    expect(result.error).toContain('[redacted]');
+  });
+
+  test('an error naming the key redacts it verbatim', async () => {
+    const provider = googleProvider();
+    const fetchFn = mockFetchError(new Error('auth failed for AIzaSy-super-secret-key'));
+
+    const result = await verifyConnection({ provider }, fetchFn);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).not.toContain('AIzaSy-super-secret-key');
+  });
+
+  test('a header-auth provider error carries no credential', async () => {
+    const provider = openrouterProvider({ credential: 'sk-or-v1-live-abcdef123456' });
+    const fetchFn = mockFetchError(
+      new Error('connect ECONNREFUSED (key sk-or-v1-live-abcdef123456)'),
+    );
+
+    const result = await verifyConnection({ provider }, fetchFn);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).not.toContain('sk-or-v1-live-abcdef123456');
+  });
+});

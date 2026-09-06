@@ -136,6 +136,22 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
   }
 };
 
+/** Joins RawAudio's chunk list into the single PCM buffer we post back. */
+const concatChunks = (chunks: Float32Array[]): Float32Array => {
+  const [first] = chunks;
+  if (chunks.length === 1 && first) {
+    return first;
+  }
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const merged = new Float32Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return merged;
+};
+
 const handleSynthesize = async (options: { text: string; voice: string }): Promise<void> => {
   const { text, voice } = options;
 
@@ -165,9 +181,12 @@ const handleSynthesize = async (options: { text: string; voice: string }): Promi
       { voice } as Parameters<typeof session.generate>[1],
     );
 
-    // Transfer the PCM buffer ownership to the main thread for zero-copy
-    // postMessage. The buffer is no longer usable in the worker afterwards.
-    const pcmData = result.audio;
+    // @huggingface/transformers 4.x widened RawAudio.audio to
+    // `Float32Array | Float32Array[]` (a single chunk, or several). 3.x typed
+    // it as a bare Float32Array, so which one we see depends on the resolved
+    // transitive version — flatten both shapes rather than depend on that.
+    const rawAudio: Float32Array | Float32Array[] = result.audio;
+    const pcmData = Array.isArray(rawAudio) ? concatChunks(rawAudio) : rawAudio;
     const sampleRate = result.sampling_rate;
 
     const response: SynthesizeResponse = { type: 'complete', pcmData, sampleRate };

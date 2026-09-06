@@ -1015,3 +1015,159 @@ describe('ConfigService × AiGateway — C-322 connection visibility', () => {
     }
   }, 10_000);
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// P04: canonical C-463 mutators keep the legacy projections in agreement.
+//
+// `addProvider` / `updateProvider` / `deleteProvider`,
+// `addAiConnection` / `updateAiConnection` / `deleteAiConnection` and
+// `setRoleAssignment` / `clearRoleAssignment` wrote the canonical state but
+// never reprojected. Consumers reading `state.connections`,
+// `state.defaultByCapability` or `state.defaultConnectionId` — the capability
+// screen and the AI gateway among them — kept serving the pre-mutation
+// answer until something else happened to reproject, or the app reloaded.
+// ═══════════════════════════════════════════════════════════════════════
+
+describe('P04: canonical mutators reproject legacy views', () => {
+  const _params = {
+    temperature: 0.7,
+    topP: 0.9,
+    topK: 40,
+    repetitionPenalty: 1.1,
+    presencePenalty: 0,
+    maxTokens: 1024,
+    contextSize: 4096,
+  };
+
+  const _getConfig = async () => {
+    const mod = await import('./config_service.svelte.ts');
+    return mod.configService;
+  };
+
+  const _reset = async () => {
+    const configService = await _getConfig();
+    configService.state.providers = [];
+    configService.state.aiConnections = [];
+    configService.state.roles = {};
+    configService.state.connections = [];
+    configService.state.defaultByCapability = {};
+    configService.state.defaultConnectionId = null;
+  };
+
+  /** Creates a provider + text connection through the canonical API only. */
+  const _seed = async (over: { credential?: string; baseUrl?: string } = {}) => {
+    const configService = await _getConfig();
+    const providerId = configService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: over.credential ?? 'sk-or-canonical',
+      baseUrl: over.baseUrl ?? '',
+      source: 'stored',
+    });
+    const connectionId = configService.addAiConnection({
+      providerId,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet-4.5',
+      params: _params,
+    });
+    return { configService, providerId, connectionId };
+  };
+
+  beforeEach(async () => {
+    await _reset();
+  });
+
+  test('addAiConnection projects into the legacy connections array', async () => {
+    const { configService, connectionId } = await _seed();
+
+    const projected = configService.state.connections.find((c) => c.id === connectionId);
+    expect(projected).toBeDefined();
+    expect(projected?.model).toBe('anthropic/claude-sonnet-4.5');
+    expect(projected?.provider).toBe('openrouter');
+    expect(projected?.apiKey).toBe('sk-or-canonical');
+  });
+
+  test('updateAiConnection reprojects the edited model', async () => {
+    const { configService, connectionId } = await _seed();
+
+    configService.updateAiConnection(connectionId, { model: 'anthropic/claude-haiku-4.5' });
+
+    const projected = configService.state.connections.find((c) => c.id === connectionId);
+    expect(projected?.model).toBe('anthropic/claude-haiku-4.5');
+  });
+
+  test('updateProvider reprojects the shared credential onto every sibling', async () => {
+    const { configService, providerId } = await _seed();
+    // A second connection on the SAME account.
+    const siblingId = configService.addAiConnection({
+      providerId,
+      capability: 'text',
+      label: 'Haiku',
+      model: 'anthropic/claude-haiku-4.5',
+      params: _params,
+    });
+
+    configService.updateProvider(providerId, { credential: 'sk-or-rotated' });
+
+    const keys = configService.state.connections.map((c) => c.apiKey);
+    expect(keys.every((k) => k === 'sk-or-rotated')).toBe(true);
+    expect(configService.state.connections.find((c) => c.id === siblingId)?.apiKey).toBe(
+      'sk-or-rotated',
+    );
+  });
+
+  test('deleteAiConnection removes the row from the legacy projection', async () => {
+    const { configService, connectionId } = await _seed();
+
+    configService.deleteAiConnection(connectionId);
+
+    expect(configService.state.connections.find((c) => c.id === connectionId)).toBeUndefined();
+  });
+
+  test('deleteProvider removes its connections from the legacy projection', async () => {
+    const { configService, providerId, connectionId } = await _seed();
+
+    configService.deleteProvider(providerId);
+
+    expect(configService.state.connections.find((c) => c.id === connectionId)).toBeUndefined();
+    expect(configService.state.connections).toHaveLength(0);
+  });
+
+  test('setRoleAssignment reprojects isDefault and the capability default', async () => {
+    const { configService, connectionId } = await _seed();
+
+    configService.setRoleAssignment('narration', connectionId);
+
+    expect(configService.state.defaultByCapability.text).toBe(connectionId);
+    expect(configService.state.defaultConnectionId).toBe(connectionId);
+    expect(configService.state.connections.find((c) => c.id === connectionId)?.isDefault).toBe(
+      true,
+    );
+  });
+
+  test('clearRoleAssignment reprojects the cleared default', async () => {
+    const { configService, connectionId } = await _seed();
+    configService.setRoleAssignment('narration', connectionId);
+
+    configService.clearRoleAssignment('narration');
+
+    expect(configService.state.defaultConnectionId).toBeNull();
+    expect(configService.state.connections.find((c) => c.id === connectionId)?.isDefault).toBe(
+      false,
+    );
+  });
+
+  test('a connection added canonically is visible to the gateway without a reload', async () => {
+    const { configService } = await _seed();
+    const gatewayMod = await import('../ai/ai_gateway_service.svelte.ts');
+
+    // The gateway reads the legacy projection; before P04 this stayed empty
+    // for anything created through the canonical API.
+    const result = await gatewayMod.aiGatewayService.detect('text');
+
+    expect(result.available).toBe(true);
+    expect(result.mode).toBe('byok');
+    expect(configService.state.connections.length).toBeGreaterThan(0);
+  });
+});

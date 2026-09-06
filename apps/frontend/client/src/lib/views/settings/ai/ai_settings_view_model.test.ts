@@ -1378,3 +1378,138 @@ describe('AiSettingsViewModel — P03: provider tree status replaces inferred Ru
     expect(vm.connectionStatusFor(cid).colorClass).toBe('text-error');
   });
 });
+
+describe('AiSettingsViewModel — P03: truthful status presentation', () => {
+  const _params = {
+    temperature: 0.7,
+    topP: 1,
+    topK: 40,
+    repetitionPenalty: 1,
+    presencePenalty: 0,
+    maxTokens: 2048,
+    contextSize: 4096,
+  };
+
+  /** Seeds one provider carrying two sibling connections on the same account. */
+  const seedSiblings = () => {
+    const providerId = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-original',
+      baseUrl: undefined,
+      source: 'stored',
+    });
+    const first = mockConfigService.addAiConnection({
+      providerId,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet',
+      params: _params,
+    });
+    const second = mockConfigService.addAiConnection({
+      providerId,
+      capability: 'text',
+      label: 'Haiku',
+      model: 'anthropic/claude-haiku',
+      params: _params,
+    });
+    return { providerId, first, second };
+  };
+
+  test('a local connection is "not checked" until it is actually tested', async () => {
+    const providerId = mockConfigService.addProvider({
+      registryId: 'ollama',
+      label: 'Ollama',
+      credential: undefined,
+      baseUrl: 'http://localhost:11434',
+      source: 'stored',
+    });
+    const cid = mockConfigService.addAiConnection({
+      providerId,
+      capability: 'text',
+      label: 'Llama',
+      model: 'llama3.2',
+      params: _params,
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    // AC-1: locality alone must never read as running/ready.
+    const status = vm.connectionStatusFor(cid);
+    expect(status.label).toBe('not checked');
+    expect(status.label).not.toContain('running');
+    expect(status.label).not.toContain('ready');
+  });
+
+  test('a reachable result reports reachability, not model readiness', async () => {
+    const { first } = seedSiblings();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testConnection(first);
+
+    // AC-2: reachable + latency, with no claim about generation.
+    const status = vm.connectionStatusFor(first);
+    expect(status.label).toContain('reachable');
+    expect(status.label).not.toContain('ready');
+  });
+
+  test('a sibling on the same provider stays unchecked after one test', async () => {
+    const { first, second } = seedSiblings();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testConnection(first);
+
+    // AC-3: one tested connection says nothing about its siblings.
+    expect(vm.connectionStatusFor(second).label).toBe('not checked');
+  });
+
+  test('rotating the shared credential invalidates every sibling result', async () => {
+    const { providerId, first, second } = seedSiblings();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    await vm.testConnection(first);
+    await vm.testConnection(second);
+    expect(vm.connectionStatusFor(first).label).toContain('reachable');
+    expect(vm.connectionStatusFor(second).label).toContain('reachable');
+
+    // AC-4: the credential is shared, so the measurement is stale for both.
+    vm.openEditConnection(first);
+    vm.setDraftField('apiKey', 'sk-or-v1-rotated');
+    vm.saveDraft();
+
+    expect(vm.connectionStatusFor(first).label).toBe('not checked');
+    expect(vm.connectionStatusFor(second).label).toBe('not checked');
+    expect(mockConfigService.getProvider(providerId)?.credential).toBe('sk-or-v1-rotated');
+  });
+
+  test('a deleted connection does not leave a result behind for a new one', async () => {
+    const { first } = seedSiblings();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    await vm.testConnection(first);
+
+    vm.deleteConnection(first);
+
+    expect(vm.testResults[first]).toBeUndefined();
+  });
+
+  test('a failed check reads as unreachable with text, not colour alone', async () => {
+    const { first } = seedSiblings();
+    mockVerifyConnection.mockResolvedValueOnce({
+      ok: false,
+      latencyMs: 12,
+      error: 'connection refused',
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testConnection(first);
+
+    // AC-3: failures are legible as text, not only as a colour class.
+    const status = vm.connectionStatusFor(first);
+    expect(status.label).toContain('unreachable');
+    expect(status.label).toContain('connection refused');
+  });
+});
