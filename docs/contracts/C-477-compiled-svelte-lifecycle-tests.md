@@ -3,7 +3,7 @@ id: C-477
 title: "Test real Svelte reactivity and lifecycle alongside pure Bun tests"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | full |
 | **Priority** | P1 — identity rune polyfills cannot verify reactivity, effects or disposal |
 | **Dependencies** | C-468, C-475 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — correct division of pure, compiled-component and production-route tests |
 | **Contract version** | 2.0.0 |
@@ -138,7 +138,7 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). One outcome: a w
 
 1. Demonstrate the polyfill limitation and select the smallest existing-stack compiled entrypoint.
 2. Add positive and deliberately broken update/cleanup/async fixtures, with one representative real subject.
-3. Wire focused tasks, run isolation/platform smokes and update guidance with exact test capabilities.
+3. Wire focused tasks, run isolation/platform smokes and update guidance with exact test capabilities. Also update the testing conventions in `SHARED_SECTIONS.md` where they currently imply polyfills test reactivity, reflecting the new compiled lane's capabilities.
 
 ## Edge Cases & Gotchas
 
