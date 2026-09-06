@@ -3,7 +3,7 @@ id: C-479
 title: "Verify credential-free contributor onboarding across Linux, macOS and Windows"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | full |
 | **Priority** | P1 — setup must be a verified contributor path, not knowledge specific to the maintainer's machine |
 | **Dependencies** | C-471, C-472, C-478 |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal/contributor-facing — setup guide and task-specific prerequisites |
 | **Contract version** | 2.0.0 |
