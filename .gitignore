@@ -244,6 +244,7 @@ test-results/
 
 *.gd.uid
 examples
+!.pi/guidance/examples/
 .direnv/
 apps/frontend/client/src-tauri/target/
 apps/frontend/client/src-tauri/gen/
