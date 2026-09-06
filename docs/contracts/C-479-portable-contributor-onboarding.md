@@ -164,3 +164,55 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle).
 ## Status Lifecycle
 
 See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
+
+## Execution Report
+
+### Summary
+
+Executed a manual, single-machine (Linux) spot-check rather than the full
+repeatable, three-OS verification the contract calls for — no proposed test
+fixtures, CI run or second/third physical OS was available in this session.
+Collected partial evidence for AC-1, AC-2 and AC-3 against the existing
+`scripts/src/lib/local_setup/` implementation using a disposable git worktree
+and an isolated `HOME`, and fixed one verified-stale doc claim from the Problem
+statement (AC-5). The recorded commands do not establish complete compliance;
+see AC Status for the uncovered requirements.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ⚠️ partial (Linux manual only) | Fresh `git worktree` + `HOME` pointed at an empty scratch dir + trimmed `PATH`-only env: `bun install` and `bun run setup:env` both completed with no cloud/AI credentials or age key. The proposed automated fresh-home/bootstrap fixture was not produced, and this run did not cover every supported setup path or OS. |
+| AC-2 | ⚠️ partial (manual only) | `bun run setup --doctor` was reviewed and exercised: it reported required vs. optional checks distinctly and returned non-zero for missing essentials/failed extra checks. The proposed `doctor.test.ts` read-only fixture was not produced, so the code review and one run do not establish the full no-write/no-install contract. |
+| AC-3 | ⚠️ partial (Linux manual only) | Re-ran `bun run setup:env` after hand-editing `apps/frontend/client/.env.emulator` (`PUBLIC_LOG_LEVEL=debug-custom`); rerun preserved that value and left other observed keys stable. The required preservation/interruption fixtures and non-Linux coverage were not produced. |
+| AC-4 | ❌ not produced | No macOS, native Windows or NixOS machine available in this session. The C-468 three-OS CI matrix (`ubuntu-latest, windows-latest, macos-latest`) referenced by this contract's Test Hooks is the correct source for this evidence and was not re-run or newly authored here. |
+| AC-5 | ✅ (partial) | Fixed the contract's own cited stale claim: `docs/intro/setup.md` and `docs/guides/dev-workflow.md` both said the client dev server serves `http://localhost:5173`; verified against `apps/frontend/client/vite.config.ts:128` and `packages/shared/constants/src/lib/development_ports.ts` (`OFFSETTABLE_PORTS.client = 5274`) and corrected both to `5274`. No other hardcoded-port claims found in those two docs. Did not do a full doc audit of every setup-adjacent page, nor produce new supported-OS/architecture evidence beyond AC-1-3 above. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `docs/intro/setup.md` | Corrected the quickstart dev-server URL from the Vite default (`:5173`) to the actual emulator client port (`:5274`). |
+| `docs/guides/dev-workflow.md` | Same port correction in the Daily Commands table. |
+
+### Deviations from Spec
+
+- This contract's Implementation Sequence and Evidence Matrix assume a
+  fresh-environment/three-OS test harness (proposed `bootstrap.test.ts`,
+  `doctor.test.ts`, CI jobs) that was not built or run here. What's recorded
+  above is a manual spot-check, not the automated, repeatable evidence the
+  contract specifies — it should not be used to promote this contract's
+  status. Building that harness and running the real three-OS/NixOS smokes is
+  the remaining work, sized well beyond what one Linux session can responsibly
+  claim to prove.
+- No source/implementation files under `scripts/src/lib/local_setup/` or
+  `scripts/src/lib/env/` were changed. The manual Linux observations support
+  the limited behaviors recorded above, but the missing automated fixtures,
+  interruption cases and platform coverage prevent an AC-1/2/3 compliance
+  claim; only the stale documentation was changed in this session.
+
+### Test Results
+
+- No new automated tests added (none of AC-1-4's proposed fixtures were
+  built). Existing repo test suite was not run as part of this change since
+  only documentation files were touched.

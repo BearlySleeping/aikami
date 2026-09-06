@@ -64,6 +64,7 @@ tasks:
     command: 'bun run test:automation-unit'
     inputs:
       - 'src/lib/agents/contract_pipeline/**/*'
+      - 'src/lib/agents/evaluation/**/*'
       - 'src/lib/herdr/**/*'
       - 'src/lib/env/**/*'
       - '@group(configs)'

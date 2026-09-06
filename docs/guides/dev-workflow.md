@@ -39,7 +39,7 @@ since customized in `.env.emulator` — only fills in what's still missing.
 ## Daily Commands
 
 ```bash
-bun run dev              # Start Client dev server (http://localhost:5173)
+bun run dev              # Start Client dev server (http://localhost:5274)
 bun moon run hub:dev     # Start Hub dev server (apps/frontend/hub)
 bun run dev:all           # Start all dev services in a herdr workspace
 bun run typecheck         # Typecheck all 22 projects

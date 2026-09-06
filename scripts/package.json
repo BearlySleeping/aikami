@@ -14,7 +14,7 @@
     "format": "biome format .",
     "fix": "biome check --write . --error-on-warnings",
     "test": "bun test",
-    "test:automation-unit": "bun test src/lib/agents/contract_pipeline src/lib/herdr/session.test.ts src/lib/env",
+    "test:automation-unit": "bun test src/lib/agents/contract_pipeline src/lib/agents/evaluation src/lib/herdr/session.test.ts src/lib/env",
     "lint-contracts": "bun run src/lib/ops/lint_contracts.ts",
     "mark-implemented": "bun run src/lib/ops/mark_contract_implemented.ts"
   },

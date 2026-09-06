@@ -6,7 +6,7 @@
 git clone https://github.com/BearlySleeping/aikami && cd aikami
 bun install
 bun run setup:env    # writes local .env files — no cloud account needed
-bun run dev          # → http://localhost:5173
+bun run dev          # → http://localhost:5274
 ```
 
 If that worked, you're set up. The rest of this page is for when it didn't, or
