@@ -1,13 +1,15 @@
 // packages/shared/schemas/src/lib/domain/providers_config.ts
 //
 // TypeBox schemas for the Provider / Connection / Role AI configuration model
-// (C-463). Replaces the flat ConnectionEntry model with three separated types:
+// (C-481). Replaces the flat ConnectionEntry model with three separated types:
 // AiProvider (credential+host), AiConnection (model+params), and
 // RoleAssignments (which connection for which job).
 //
-// Contract: C-463
+// V3 adds routing (defaults + overrides) and capability-discriminated params.
+//
+// Contracts: C-463, C-481
 
-import Type from 'typebox';
+import Type, { type Static } from 'typebox';
 
 // ---------------------------------------------------------------------------
 // Shared enums
@@ -136,6 +138,88 @@ export const AiConnectionSchema = Type.Object({
 export const RoleAssignmentsSchema = Type.Partial(
   Type.Record(AiRoleSchema, Type.String({ format: 'uuid' })),
 );
+
+// ---------------------------------------------------------------------------
+// Routing — capability defaults and role overrides
+// ---------------------------------------------------------------------------
+
+/**
+ * Routing schema: sparse capability defaults and sparse role overrides.
+ *
+ * - An absent override inherits its capability default.
+ * - A connection ID pins that role to a specific connection.
+ * - `null` explicitly disables that role.
+ * - A missing default means that capability is unavailable.
+ * - Reset-to-default removes the override; disable writes `null`.
+ */
+const RoutingTargetSchema = Type.Union([Type.String({ format: 'uuid' }), Type.Null()]);
+
+/** Schema for role overrides — allows null to explicitly disable a role. */
+export const RoleOverridesSchema = Type.Partial(
+  Type.Object({
+    narration: RoutingTargetSchema,
+    dialogue: RoutingTargetSchema,
+    summarization: RoutingTargetSchema,
+    structured: RoutingTargetSchema,
+    portrait: RoutingTargetSchema,
+    scene: RoutingTargetSchema,
+    'narrator-voice': RoutingTargetSchema,
+    'npc-voice': RoutingTargetSchema,
+  }),
+  { additionalProperties: false },
+);
+
+/** Routing schema: sparse capability defaults and sparse role overrides. */
+export const RoutingSchema = Type.Object(
+  {
+    /** Per-capability default connection IDs. Sparse — absent means unavailable. */
+    defaults: Type.Optional(
+      Type.Partial(
+        Type.Object({
+          text: RoutingTargetSchema,
+          image: RoutingTargetSchema,
+          voice: RoutingTargetSchema,
+        }),
+        { additionalProperties: false },
+      ),
+    ),
+    /** Per-role overrides. Sparse — absent inherits from capability default. */
+    overrides: Type.Optional(RoleOverridesSchema),
+  },
+  { additionalProperties: false },
+);
+
+/** Routing type. */
+export type Routing = Static<typeof RoutingSchema>;
+
+// ---------------------------------------------------------------------------
+// V3 vault payload
+// ---------------------------------------------------------------------------
+
+/**
+ * Schema for the v3 vault payload. Adds `routing` alongside the v2 fields.
+ * `voiceApiKey` and `imageApiKey` are removed — keys live on providers only.
+ * `legacy` is removed — v3 has its own recovery snapshot.
+ */
+export const VaultPayloadV3Schema = Type.Object({
+  /** Schema version for migration detection. 3 = current. */
+  schemaVersion: Type.Literal(3),
+  /** All providers with their credentials. */
+  providers: Type.Array(AiProviderSchema),
+  /** All connections referencing providers. */
+  connections: Type.Array(AiConnectionSchema),
+  /** Role assignments (which connection for which job) — for backward compat. */
+  roles: RoleAssignmentsSchema,
+  /** Routing — capability defaults and role overrides. */
+  routing: RoutingSchema,
+  /** User-defined generation parameter presets (built-in presets merged on load). */
+  userPresets: Type.Optional(Type.Array(Type.Any())),
+  /**
+   * Encrypted pre-upgrade snapshot for rollback. Stored alongside the active
+   * payload, not inside it. Only present during the v2→v3 migration window.
+   */
+  recoverySnapshot: Type.Optional(Type.Any()),
+});
 
 // ---------------------------------------------------------------------------
 // V2 vault payload

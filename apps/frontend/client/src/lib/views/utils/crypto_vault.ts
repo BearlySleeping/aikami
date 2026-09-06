@@ -1,7 +1,7 @@
-// apps/frontend/client/src/lib/utils/crypto_vault.ts
+// apps/frontend/client/src/lib/views/utils/crypto_vault.ts
 //
 // AES-GCM encryption wrapper using the Web Crypto API.
-// API keys and secrets are encrypted at rest in localStorage under `aikami_vault`.
+// API keys and secrets are encrypted at rest in localStorage under `aikami_vault_v3`.
 // If no custom master PIN is set, encryption is keyed by a random per-origin
 // secret (not derivable from browser attributes). Vaults encrypted with the
 // legacy machine-fingerprint key are migrated to that secret on first read.
@@ -9,7 +9,10 @@
 import { logger } from '$logger';
 
 /** localStorage key for the encrypted vault payload. */
-const VAULT_KEY = 'aikami_vault';
+const VAULT_KEY = 'aikami_vault_v3';
+
+/** Legacy encrypted vault key, read only when no v3 vault exists. */
+const LEGACY_VAULT_KEY = 'aikami_vault';
 
 /** localStorage key for the random per-origin vault secret. */
 const VAULT_SECRET_KEY = 'aikami_vault_secret';
@@ -114,7 +117,7 @@ const decryptWith = async (pin: string, raw: string): Promise<string | undefined
 /**
  * Encrypts a plaintext string with AES-GCM using the given PIN.
  * Stores the resulting cipher (salt + IV + ciphertext, all base64-encoded)
- * in localStorage under `aikami_vault`.
+ * in localStorage under `aikami_vault_v3`.
  *
  * When no PIN is supplied, keys off the per-origin random secret (never the
  * machine fingerprint).
@@ -169,7 +172,9 @@ export const encrypt = async (options: { text: string; pin?: string }): Promise<
 export const decrypt = async (options: { pin?: string }): Promise<string | undefined> => {
   logger.debug('decrypt');
 
-  const raw = localStorage.getItem(VAULT_KEY);
+  // Once an isolated v3 record exists, never fall back to a legacy copy when
+  // its PIN is wrong or its ciphertext is corrupt.
+  const raw = localStorage.getItem(VAULT_KEY) ?? localStorage.getItem(LEGACY_VAULT_KEY);
   if (!raw) {
     return undefined;
   }
@@ -199,4 +204,5 @@ export const decrypt = async (options: { pin?: string }): Promise<string | undef
 export const clearVault = (): void => {
   logger.debug('clearVault');
   localStorage.removeItem(VAULT_KEY);
+  localStorage.removeItem(LEGACY_VAULT_KEY);
 };

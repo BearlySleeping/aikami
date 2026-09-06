@@ -10,6 +10,28 @@
 // — the user supplies the URL at runtime) and AWS Bedrock (region-varying
 // endpoint). A provider having `apiBaseUrl` here does not imply a client
 // integration exists yet — some ids below are label-only stubs.
+//
+// C-481: Added verificationStrategy, supportsModelDiscovery, capabilities,
+// and typed helper functions so that locality, URL/key rules, verification
+// strategy and model-discovery support are read from one definition rather
+// than re-derived in connection_verifier.ts and ai_settings_view_model.
+
+// ---------------------------------------------------------------------------
+// Verification strategy
+// --------------------------------------------------------------------------
+
+/** How a provider's endpoint/credentials are verified. */
+export type VerificationStrategy =
+  /** Ollama-native: probe /api/tags */
+  | 'ollama'
+  /** OpenAI-compatible: probe /v1/models */
+  | 'openai_compat'
+  /** Cloud provider with fixed API endpoint: probe with auth header */
+  | 'cloud_header_auth'
+  /** Cloud provider with query-param API key (e.g. Google) */
+  | 'cloud_query_auth'
+  /** No verification strategy defined */
+  | 'none';
 
 /** A provider descriptor shared by text, voice, and image provider registries. */
 type ProviderDescriptor = {
@@ -21,7 +43,16 @@ type ProviderDescriptor = {
   isLocal: boolean;
   /** Fixed cloud API origin, e.g. 'https://api.openai.com'. Omitted for local/custom-URL and region-varying providers. */
   apiBaseUrl?: string;
+  /** Verification strategy for this provider. C-481 */
+  verificationStrategy: VerificationStrategy;
+  /** Whether this provider supports model discovery/listing. C-481 */
+  supportsModelDiscovery: boolean;
+  /** Which AI capabilities this provider supports. C-481 */
+  capabilities: ReadonlyArray<'text' | 'image' | 'voice'>;
 };
+
+/** AI capability used to select capability-specific provider metadata. */
+export type ProviderCapability = ProviderDescriptor['capabilities'][number];
 
 /** Text generation provider descriptors. */
 export const TEXT_PROVIDERS = [
@@ -32,6 +63,9 @@ export const TEXT_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://openrouter.ai',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
   },
   {
     id: 'openai',
@@ -40,6 +74,9 @@ export const TEXT_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://api.openai.com',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: true,
+    capabilities: ['text', 'image', 'voice'],
   },
   {
     id: 'anthropic',
@@ -48,6 +85,9 @@ export const TEXT_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://api.anthropic.com',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
   },
   {
     id: 'google',
@@ -56,6 +96,9 @@ export const TEXT_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://generativelanguage.googleapis.com',
+    verificationStrategy: 'cloud_query_auth',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
   },
   {
     id: 'deepseek',
@@ -64,6 +107,9 @@ export const TEXT_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://api.deepseek.com',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
   },
   {
     id: 'mistral',
@@ -72,6 +118,9 @@ export const TEXT_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://api.mistral.ai',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
   },
   {
     id: 'ollama',
@@ -80,6 +129,9 @@ export const TEXT_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
+    verificationStrategy: 'ollama',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
   },
   {
     id: 'llamacpp',
@@ -88,6 +140,9 @@ export const TEXT_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
+    verificationStrategy: 'openai_compat',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
   },
   {
     id: 'ooba',
@@ -96,6 +151,9 @@ export const TEXT_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
+    verificationStrategy: 'openai_compat',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
   },
   {
     id: 'custom',
@@ -104,6 +162,9 @@ export const TEXT_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: false,
+    verificationStrategy: 'openai_compat',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
   },
 ] as const satisfies ReadonlyArray<ProviderDescriptor>;
 
@@ -123,6 +184,9 @@ export const VOICE_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
+    verificationStrategy: 'openai_compat',
+    supportsModelDiscovery: false,
+    capabilities: ['voice'],
   },
   {
     id: 'elevenlabs',
@@ -131,6 +195,9 @@ export const VOICE_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://api.elevenlabs.io',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: false,
+    capabilities: ['voice'],
   },
   {
     id: 'voicevox',
@@ -139,6 +206,9 @@ export const VOICE_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
+    verificationStrategy: 'openai_compat',
+    supportsModelDiscovery: false,
+    capabilities: ['voice'],
   },
   {
     id: 'openai',
@@ -147,6 +217,9 @@ export const VOICE_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://api.openai.com',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: false,
+    capabilities: ['voice'],
   },
   {
     id: 'fish-speech',
@@ -155,6 +228,9 @@ export const VOICE_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
+    verificationStrategy: 'openai_compat',
+    supportsModelDiscovery: false,
+    capabilities: ['voice'],
   },
 ] as const satisfies ReadonlyArray<ProviderDescriptor>;
 
@@ -174,6 +250,9 @@ export const IMAGE_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
+    verificationStrategy: 'none',
+    supportsModelDiscovery: true,
+    capabilities: ['image'],
   },
   {
     id: 'webui',
@@ -182,6 +261,9 @@ export const IMAGE_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
+    verificationStrategy: 'none',
+    supportsModelDiscovery: true,
+    capabilities: ['image'],
   },
   {
     id: 'novelai',
@@ -190,6 +272,9 @@ export const IMAGE_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://image.novelai.net',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: false,
+    capabilities: ['image'],
   },
   {
     id: 'dalle',
@@ -198,6 +283,9 @@ export const IMAGE_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://api.openai.com',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: false,
+    capabilities: ['image'],
   },
   {
     id: 'stability',
@@ -206,6 +294,9 @@ export const IMAGE_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://api.stability.ai',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: false,
+    capabilities: ['image'],
   },
   {
     id: 'fal',
@@ -214,6 +305,9 @@ export const IMAGE_PROVIDERS = [
     needsKey: true,
     isLocal: false,
     apiBaseUrl: 'https://fal.run',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: false,
+    capabilities: ['image'],
   },
   {
     id: 'openai-compat',
@@ -222,11 +316,122 @@ export const IMAGE_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: false,
+    verificationStrategy: 'openai_compat',
+    supportsModelDiscovery: true,
+    capabilities: ['image'],
   },
 ] as const satisfies ReadonlyArray<ProviderDescriptor>;
 
 /** Provider identifier extracted from IMAGE_PROVIDERS union. */
 export type ImageProvider = (typeof IMAGE_PROVIDERS)[number]['id'];
+
+// ---------------------------------------------------------------------------
+// Typed accessors (C-481)
+// ---------------------------------------------------------------------------
+
+/** Combined type for all provider descriptors. */
+export type AnyProviderDescriptor =
+  | (typeof TEXT_PROVIDERS)[number]
+  | (typeof VOICE_PROVIDERS)[number]
+  | (typeof IMAGE_PROVIDERS)[number];
+
+const ALL_PROVIDER_DESCRIPTORS: ReadonlyArray<AnyProviderDescriptor> = [
+  ...TEXT_PROVIDERS,
+  ...VOICE_PROVIDERS,
+  ...IMAGE_PROVIDERS,
+];
+
+const descriptorSupportsCapability = (
+  descriptor: AnyProviderDescriptor,
+  capability: ProviderCapability,
+): boolean => descriptor.capabilities.some((supported) => supported === capability);
+
+/**
+ * Look up a provider descriptor by registry ID across all registries.
+ * When a capability is supplied, its own registry wins over cross-capability
+ * metadata advertised by another registry entry with the same ID.
+ * Returns undefined if no provider with that ID exists.
+ */
+export const findProviderDescriptor = (
+  registryId: string,
+  capability?: ProviderCapability,
+): AnyProviderDescriptor | undefined => {
+  if (!capability) {
+    return ALL_PROVIDER_DESCRIPTORS.find((provider) => provider.id === registryId);
+  }
+
+  let preferred: AnyProviderDescriptor | undefined;
+  if (capability === 'text') {
+    preferred = TEXT_PROVIDERS.find((provider) => provider.id === registryId);
+  } else if (capability === 'voice') {
+    preferred = VOICE_PROVIDERS.find((provider) => provider.id === registryId);
+  } else {
+    preferred = IMAGE_PROVIDERS.find((provider) => provider.id === registryId);
+  }
+  if (preferred) {
+    return preferred;
+  }
+
+  return ALL_PROVIDER_DESCRIPTORS.find(
+    (provider) => provider.id === registryId && descriptorSupportsCapability(provider, capability),
+  );
+};
+
+/**
+ * Whether a provider is local (not cloud). Reads from the canonical definition,
+ * not from a re-derived set. C-481.
+ */
+export const isLocalProvider = (registryId: string): boolean =>
+  findProviderDescriptor(registryId)?.isLocal ?? false;
+
+/**
+ * Whether a provider requires a URL (custom endpoint). C-481.
+ */
+export const providerNeedsUrl = (registryId: string): boolean => {
+  const descriptor = findProviderDescriptor(registryId);
+  return descriptor ? 'needsUrl' in descriptor && descriptor.needsUrl === true : false;
+};
+
+/**
+ * Whether a provider requires an API key. C-481.
+ */
+export const providerNeedsKey = (registryId: string): boolean =>
+  findProviderDescriptor(registryId)?.needsKey ?? false;
+
+/**
+ * Get the verification strategy for a provider. C-481.
+ */
+export const getVerificationStrategy = (registryId: string): VerificationStrategy =>
+  findProviderDescriptor(registryId)?.verificationStrategy ?? 'none';
+
+/**
+ * Whether a provider supports model discovery/listing. C-481.
+ */
+export const providerSupportsModelDiscovery = (registryId: string): boolean =>
+  findProviderDescriptor(registryId)?.supportsModelDiscovery ?? false;
+
+/**
+ * Get the capabilities a provider supports. C-481.
+ */
+export const getProviderCapabilities = (registryId: string): ReadonlyArray<ProviderCapability> => [
+  ...new Set(
+    ALL_PROVIDER_DESCRIPTORS.filter((provider) => provider.id === registryId).flatMap(
+      (provider) => provider.capabilities,
+    ),
+  ),
+];
+
+/**
+ * Check if a provider supports a specific capability. C-481.
+ */
+export const providerSupportsCapability = (
+  registryId: string,
+  capability: ProviderCapability,
+): boolean => findProviderDescriptor(registryId, capability) !== undefined;
+
+// ---------------------------------------------------------------------------
+// Built-in generation parameter presets (read-only)
+// ---------------------------------------------------------------------------
 
 /** Built-in generation parameter presets (read-only). */
 export const BUILT_IN_PRESETS = [

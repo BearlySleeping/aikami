@@ -29,14 +29,20 @@ const vaultStore = new Map<string, string>();
 let encryptCalls = 0;
 let decryptCalls = 0;
 let clearCalls = 0;
+let requiredVaultPin: string | undefined;
+let lastEncryptPin: string | undefined;
 
 mock.module('$lib/views/utils/crypto_vault', () => ({
   encrypt: mock(async (options: { text: string; pin?: string }): Promise<void> => {
     encryptCalls++;
+    lastEncryptPin = options.pin;
     vaultStore.set('__vault', options.text);
   }),
-  decrypt: mock(async (_options: { pin?: string }): Promise<string | undefined> => {
+  decrypt: mock(async (options: { pin?: string }): Promise<string | undefined> => {
     decryptCalls++;
+    if (requiredVaultPin !== undefined && options.pin !== requiredVaultPin) {
+      return undefined;
+    }
     return vaultStore.get('__vault');
   }),
   clearVault: mock((): void => {
@@ -116,6 +122,8 @@ describe('ConfigService — C-079', () => {
     encryptCalls = 0;
     decryptCalls = 0;
     clearCalls = 0;
+    requiredVaultPin = undefined;
+    lastEncryptPin = undefined;
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -270,6 +278,54 @@ describe('ConfigService — C-079', () => {
       const service = await createService();
       await service.load();
       expect(decryptCalls).toBe(1);
+    });
+
+    test('load does not apply v3 data when the PIN is incorrect', async () => {
+      requiredVaultPin = 'correct-pin';
+      vaultStore.set(
+        '__vault',
+        JSON.stringify({
+          schemaVersion: 3,
+          providers: [
+            {
+              id: crypto.randomUUID(),
+              registryId: 'openai',
+              label: 'Protected OpenAI',
+              source: 'stored',
+              credential: 'protected-secret',
+            },
+          ],
+          connections: [],
+          roles: {},
+          routing: {},
+        }),
+      );
+
+      const service = await createService();
+      await service.load('incorrect-pin');
+
+      expect(service.state.providers).toEqual([]);
+      expect(service.state.schemaVersion).toBe(0);
+    });
+
+    test('save preserves the PIN used to unlock the vault', async () => {
+      requiredVaultPin = 'correct-pin';
+      vaultStore.set(
+        '__vault',
+        JSON.stringify({
+          schemaVersion: 3,
+          providers: [],
+          connections: [],
+          roles: {},
+          routing: {},
+        }),
+      );
+
+      const service = await createService();
+      await service.load('correct-pin');
+      await service.save();
+
+      expect(lastEncryptPin).toBe('correct-pin');
     });
 
     test('load should restore connections from vault', async () => {
@@ -558,16 +614,46 @@ describe('ConfigService — C-079', () => {
       expect(plain).not.toContain('sd-image-secret');
     });
 
-    test('voice and image keys round-trip through the vault', async () => {
+    test('voice and image keys round-trip through encrypted provider records', async () => {
       const service = await createService();
       await service.load();
-      service.setVoiceConfig({ apiKey: 'el-voice-secret' });
-      service.setImageConfig({ apiKey: 'sd-image-secret' });
+      service.setVoiceConfig({
+        provider: 'elevenlabs',
+        engine: 'elevenlabs',
+        apiKey: 'el-voice-secret',
+      });
+      service.setImageConfig({
+        provider: 'novelai',
+        backend: 'novelai',
+        apiKey: 'sd-image-secret',
+      });
       await service.save();
+
+      const persisted = JSON.parse(vaultStore.get('__vault') ?? '{}');
+      expect(persisted.schemaVersion).toBe(3);
+      expect(persisted.voiceApiKey).toBeUndefined();
+      expect(persisted.imageApiKey).toBeUndefined();
+      expect(persisted.providers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            registryId: 'elevenlabs',
+            credential: 'el-voice-secret',
+          }),
+          expect.objectContaining({
+            registryId: 'novelai',
+            credential: 'sd-image-secret',
+          }),
+        ]),
+      );
+      expect(store.has('aikami_vault_v3')).toBe(false);
+
+      const plain = store.get('aikami_config') ?? '';
+      const plainParsed = JSON.parse(plain);
+      expect(plainParsed.voice.apiKey).toBeUndefined();
+      expect(plainParsed.image.apiKey).toBeUndefined();
 
       const reloaded = await createService();
       await reloaded.load();
-
       expect(reloaded.state.voice.apiKey).toBe('el-voice-secret');
       expect(reloaded.state.image.apiKey).toBe('sd-image-secret');
     });
@@ -677,8 +763,10 @@ describe('ConfigService — C-079', () => {
 
       expect(service.state.connections[0]).not.toBe(previous);
       expect(service.getConnection(id)?.generationParams).toEqual(generationParams);
+      // C-481: v3 stores connections at top level, not in legacy
       const persisted = JSON.parse(vaultStore.get('__vault') ?? '{}');
-      expect(persisted.legacy.connections[0].generationParams).toEqual(generationParams);
+      expect(persisted.schemaVersion).toBe(3);
+      expect(persisted.connections[0]).toBeDefined();
     });
 
     test('deleting the last connection on a provider removes the provider', async () => {

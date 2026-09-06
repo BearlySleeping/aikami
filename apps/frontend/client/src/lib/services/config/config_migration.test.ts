@@ -8,7 +8,12 @@
 // Contract: C-463
 
 import { describe, expect, test } from 'bun:test';
-import { type MigrationOptions, migrateVaultV1ToV2 } from './config_migration.ts';
+import type { VaultPayloadV2 } from '@aikami/types';
+import {
+  type MigrationOptions,
+  migrateVaultV1ToV2,
+  migrateVaultV2ToV3,
+} from './config_migration.ts';
 
 // Deterministic ID factory for testing
 const testIdFactory = (prefix = 'prov-'): (() => string) => {
@@ -326,6 +331,208 @@ describe('C-463 Migration: v1 → v2', () => {
       const textConns = v2.connections.filter((c) => c.capability === 'text');
       // Should only have 1 text connection (the v1 one), not a duplicate from models
       expect(textConns).toHaveLength(1);
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// C-481: V2 → V3 migration
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('C-481 Migration: v2 → v3', () => {
+  describe('Basic migration', () => {
+    test('migrates empty v2 to v3', () => {
+      const v2: VaultPayloadV2 = {
+        schemaVersion: 2,
+        providers: [],
+        connections: [],
+        roles: {},
+        userPresets: [],
+      };
+      const v3 = migrateVaultV2ToV3(v2);
+      expect(v3.schemaVersion).toBe(3);
+      expect(v3.providers).toEqual([]);
+      expect(v3.connections).toEqual([]);
+      expect(v3.routing.defaults).toBeUndefined();
+      expect(v3.routing.overrides).toBeUndefined();
+    });
+
+    test('migrates v2 with connections to v3', () => {
+      const v2: VaultPayloadV2 = {
+        schemaVersion: 2,
+        providers: [
+          {
+            id: 'prov-1',
+            registryId: 'openrouter',
+            label: 'OR',
+            source: 'stored',
+            credential: 'sk-key',
+          },
+        ],
+        connections: [
+          {
+            id: 'conn-1',
+            providerId: 'prov-1',
+            capability: 'text',
+            label: 'Claude',
+            model: 'anthropic/claude-opus-4',
+            params: {
+              temperature: 0.7,
+              topP: 0.9,
+              topK: 40,
+              repetitionPenalty: 1.1,
+              presencePenalty: 0,
+              maxTokens: 1024,
+              contextSize: 4096,
+            },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        roles: { narration: 'conn-1', dialogue: 'conn-1' },
+        userPresets: [],
+      };
+      const v3 = migrateVaultV2ToV3(v2);
+      expect(v3.schemaVersion).toBe(3);
+      expect(v3.providers).toHaveLength(1);
+      expect(v3.connections).toHaveLength(1);
+      // Capability default should be the text connection
+      expect(v3.routing.defaults).toBeDefined();
+      expect(v3.routing.defaults?.text).toBe('conn-1');
+      // No overrides since all roles point to the default
+      expect(v3.routing.overrides).toBeUndefined();
+    });
+
+    test('preserves user presets', () => {
+      const v2: VaultPayloadV2 = {
+        schemaVersion: 2,
+        providers: [],
+        connections: [],
+        roles: {},
+        userPresets: [{ id: 'custom-1', name: 'My Preset', params: {}, isBuiltIn: false }],
+      };
+      const v3 = migrateVaultV2ToV3(v2);
+      expect(v3.userPresets).toHaveLength(1);
+      expect(v3.userPresets?.[0].id).toBe('custom-1');
+    });
+
+    test('removes orphaned providers', () => {
+      const v2: VaultPayloadV2 = {
+        schemaVersion: 2,
+        providers: [
+          { id: 'prov-1', registryId: 'openrouter', label: 'OR', source: 'stored' },
+          { id: 'prov-2', registryId: 'ollama', label: 'Ollama', source: 'stored' },
+        ],
+        connections: [
+          {
+            id: 'conn-1',
+            providerId: 'prov-1',
+            capability: 'text',
+            label: 'Claude',
+            model: 'anthropic/claude-opus-4',
+            params: {
+              temperature: 0.7,
+              topP: 0.9,
+              topK: 40,
+              repetitionPenalty: 1.1,
+              presencePenalty: 0,
+              maxTokens: 1024,
+              contextSize: 4096,
+            },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        roles: { narration: 'conn-1' },
+        userPresets: [],
+      };
+      const v3 = migrateVaultV2ToV3(v2);
+      expect(v3.providers).toHaveLength(1);
+      expect(v3.providers[0].id).toBe('prov-1');
+    });
+
+    test('creates overrides for roles that differ from defaults', () => {
+      const v2: VaultPayloadV2 = {
+        schemaVersion: 2,
+        providers: [{ id: 'prov-1', registryId: 'openrouter', label: 'OR', source: 'stored' }],
+        connections: [
+          {
+            id: 'conn-1',
+            providerId: 'prov-1',
+            capability: 'text',
+            label: 'Claude',
+            model: 'anthropic/claude-opus-4',
+            params: {
+              temperature: 0.7,
+              topP: 0.9,
+              topK: 40,
+              repetitionPenalty: 1.1,
+              presencePenalty: 0,
+              maxTokens: 1024,
+              contextSize: 4096,
+            },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'conn-2',
+            providerId: 'prov-1',
+            capability: 'text',
+            label: 'GPT',
+            model: 'openai/gpt-4o',
+            params: {
+              temperature: 0.7,
+              topP: 0.9,
+              topK: 40,
+              repetitionPenalty: 1.1,
+              presencePenalty: 0,
+              maxTokens: 1024,
+              contextSize: 4096,
+            },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        roles: { narration: 'conn-1', dialogue: 'conn-2' },
+        userPresets: [],
+      };
+      const v3 = migrateVaultV2ToV3(v2);
+      expect(v3.routing.defaults).toBeDefined();
+      expect(v3.routing.defaults?.text).toBe('conn-1'); // conn-1 has 1 vote, conn-2 has 1 vote, picks first
+      expect(v3.routing.overrides).toBeDefined();
+      expect(v3.routing.overrides?.dialogue).toBe('conn-2'); // differs from default
+      expect(v3.routing.overrides?.narration).toBeUndefined(); // matches default
+    });
+
+    test('removes cross-capability roles before building the v3 payload', () => {
+      const v2: VaultPayloadV2 = {
+        schemaVersion: 2,
+        providers: [
+          { id: 'prov-voice', registryId: 'elevenlabs', label: 'Voice', source: 'stored' },
+        ],
+        connections: [
+          {
+            id: 'conn-voice',
+            providerId: 'prov-voice',
+            capability: 'voice',
+            label: 'Narrator',
+            model: 'eleven_multilingual_v2',
+            params: { voiceId: 'voice-1', speed: 1, pitch: 0 },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        roles: { narration: 'conn-voice', 'narrator-voice': 'conn-voice' },
+        userPresets: [],
+      };
+
+      const v3 = migrateVaultV2ToV3(v2);
+
+      expect(v3.roles.narration).toBeUndefined();
+      expect(v3.roles['narrator-voice']).toBe('conn-voice');
+      expect(v3.routing.defaults?.text).toBeUndefined();
+      expect(v3.routing.defaults?.voice).toBe('conn-voice');
+      expect(v3.routing.overrides?.narration).toBeUndefined();
     });
   });
 });

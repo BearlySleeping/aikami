@@ -8,7 +8,9 @@
 // C-463: Now manages AiProvider/AiConnection/RoleAssignments alongside the
 // legacy ConnectionEntry shape. On load, v1 vaults are migrated to v2.
 //
-// Contract: C-463
+// C-481: V3 storage with routing. V2 vaults are migrated to v3 on load.
+//
+// Contracts: C-463, C-481
 
 import { BUILT_IN_PRESETS, DEFAULT_VOICE_ARCHETYPES, type GenParamPreset } from '@aikami/constants';
 import {
@@ -25,6 +27,7 @@ import type {
   ImageParams,
   ProviderId,
   RoleAssignments,
+  Routing,
   TextParams,
   VoiceConfig,
   VoiceParams,
@@ -38,7 +41,7 @@ import type {
   Lorebook,
   LorebookEntry,
 } from '$types';
-import { migrateVaultV1ToV2 } from './config_migration.ts';
+import { migrateVaultV1ToV2, migrateVaultV2ToV3 } from './config_migration.ts';
 
 // ---------------------------------------------------------------------------
 // Re-exports from @aikami/constants and @aikami/types for backward compatibility
@@ -302,6 +305,7 @@ const DEFAULT_STATE: ConfigState = {
   providers: [],
   aiConnections: [],
   roles: {},
+  routing: {},
   schemaVersion: 0,
   generationParams: { ...DEFAULT_GENERATION_PARAMS },
   image: { ...DEFAULT_IMAGE_CONFIG },
@@ -324,6 +328,8 @@ class ConfigService
   extends BaseFrontendClass<ConfigServiceOptions>
   implements ConfigServiceInterface
 {
+  private _vaultPin: string | undefined;
+
   state = $state<ConfigState>({ ...DEFAULT_STATE });
   isLoaded = $state(false);
 
@@ -337,17 +343,20 @@ class ConfigService
     let vaultVoiceApiKey: string | undefined;
     let vaultImageApiKey: string | undefined;
 
-    // 1. Load from encrypted vault
+    // 1. Load only through the encrypted vault boundary. crypto_vault owns
+    // the isolated v3 namespace and validates the supplied PIN.
     const raw = await decrypt({ pin });
+
     if (raw) {
+      this._vaultPin = pin;
       try {
         const vault = JSON.parse(raw) as Record<string, unknown>;
 
-        // C-463: Detect v1 vs v2 vault by schemaVersion
+        // C-463: Detect v1 vs v2 vs v3 vault by schemaVersion
         const schemaVersion = (vault.schemaVersion as number) ?? 0;
 
-        if (schemaVersion === 2) {
-          // ── v2 vault: load the new shape directly ────────────────
+        if (schemaVersion === 3) {
+          // ── v3 vault: load directly ──────────────────────────────
           if (Array.isArray(vault.providers)) {
             this.state.providers = vault.providers as AiProvider[];
           }
@@ -357,23 +366,57 @@ class ConfigService
           if (vault.roles && typeof vault.roles === 'object') {
             this.state.roles = vault.roles as RoleAssignments;
           }
-          this.state.schemaVersion = 2;
+          if (vault.routing && typeof vault.routing === 'object') {
+            this.state.routing = vault.routing as Routing;
+          }
+          this.state.schemaVersion = 3;
+          this._reproject();
+        } else if (schemaVersion === 2) {
+          // ── v2 vault: migrate to v3 in memory ────────────────────
+          if (Array.isArray(vault.providers)) {
+            this.state.providers = vault.providers as AiProvider[];
+          }
+          if (Array.isArray(vault.connections)) {
+            this.state.aiConnections = vault.connections as AiConnection[];
+          }
+          if (vault.roles && typeof vault.roles === 'object') {
+            this.state.roles = vault.roles as RoleAssignments;
+          }
+
+          // Vaults written by the first C-463 build kept UI-created rows only
+          // under `legacy`, because the legacy CRUD did not write through.
+          this._absorbLegacyPayload(vault.legacy);
+          this._reproject();
+
+          // Migrate to v3 routing in memory
+          const v3 = migrateVaultV2ToV3({
+            schemaVersion: 2,
+            providers: this.state.providers,
+            connections: this.state.aiConnections,
+            roles: this.state.roles,
+            userPresets: vault.userPresets as GenParamPreset[] | undefined,
+          });
+          this.state.providers = v3.providers;
+          this.state.aiConnections = v3.connections;
+          this.state.roles = v3.roles;
+          this.state.routing = v3.routing;
+          this.state.schemaVersion = 3;
+
+          this.info('migration:v2-to-v3-completed', {
+            providersCreated: v3.providers.length,
+            connectionsMigrated: v3.connections.length,
+            rolesSeeded: Object.keys(v3.roles).length,
+          });
+
           if (typeof vault.voiceApiKey === 'string') {
             vaultVoiceApiKey = vault.voiceApiKey;
           }
           if (typeof vault.imageApiKey === 'string') {
             vaultImageApiKey = vault.imageApiKey;
           }
-
-          // Vaults written by the first C-463 build kept UI-created rows only
-          // under `legacy`, because the legacy CRUD did not write through.
-          // Absorb them into the real model so `legacy` stops being load-bearing.
-          this._absorbLegacyPayload(vault.legacy);
-          this._reproject();
         } else {
-          // ── v1 vault: migrate to v2 ──────────────────────────────
+          // ── v1 vault: migrate to v2, then v3 in memory ───────────
           try {
-            // Prune stale connections first (existing behavior)
             if (Array.isArray(vault.connections)) {
               const cleaned = (vault.connections as Connection[]).filter(
                 (c) =>
@@ -393,17 +436,17 @@ class ConfigService
               vault.connections = cleaned;
             }
 
-            // Run migration
             const v2 = migrateVaultV1ToV2(vault as Record<string, unknown>);
+            const v3 = migrateVaultV2ToV3(v2);
 
-            this.state.providers = v2.providers;
-            this.state.aiConnections = v2.connections;
-            this.state.roles = v2.roles;
-            this.state.schemaVersion = 2;
+            this.state.providers = v3.providers;
+            this.state.aiConnections = v3.connections;
+            this.state.roles = v3.roles;
+            this.state.routing = v3.routing;
+            this.state.schemaVersion = 3;
 
-            // Keep user presets from migrated vault
-            if (Array.isArray(v2.userPresets)) {
-              const userPresets = v2.userPresets as GenParamPreset[];
+            if (Array.isArray(v3.userPresets)) {
+              const userPresets = v3.userPresets as GenParamPreset[];
               const builtInIds = new Set<string>(BUILT_IN_PRESETS.map((p) => p.id));
               this.state.presets = [
                 ...BUILT_IN_PRESETS,
@@ -413,22 +456,19 @@ class ConfigService
 
             this._reproject();
 
-            this.info('migration:completed', {
-              providersCreated: v2.providers.length,
-              connectionsMigrated: v2.connections.length,
-              rolesSeeded: Object.keys(v2.roles).length,
+            this.info('migration:v1-to-v3-completed', {
+              providersCreated: v3.providers.length,
+              connectionsMigrated: v3.connections.length,
+              rolesSeeded: Object.keys(v3.roles).length,
             });
           } catch (migrationError) {
-            // AC-6: Failed migration never writes partial vault.
-            // Log a warning, fall back to empty state.
             this.warn('load:migration-failed', { error: String(migrationError) });
             this.state = this._makeDefaultState();
-            this.state.schemaVersion = 2;
+            this.state.schemaVersion = 3;
           }
         }
 
         // Legacy: load defaultConnectionId and defaultByCapability for ViewModel compat.
-        // In v2 vaults these are stored inside `legacy`.
         const legacySource =
           schemaVersion === 2
             ? ((vault.legacy as Record<string, unknown> | undefined) ?? vault)
@@ -501,11 +541,23 @@ class ConfigService
     // 3. Apply vault-held provider keys over the plain config. A key still
     //    sitting in the plain blob is pre-migration cleartext — keep it so
     //    nothing is lost, and the next save() moves it into the vault.
-    if (vaultVoiceApiKey) {
-      this.state.voice = { ...this.state.voice, apiKey: vaultVoiceApiKey };
+    const voiceApiKey =
+      vaultVoiceApiKey ??
+      this._getProviderCredential({
+        registryId: this.state.voice.provider,
+        baseUrl: this.state.voice.url,
+      });
+    const imageApiKey =
+      vaultImageApiKey ??
+      this._getProviderCredential({
+        registryId: this.state.image.provider,
+        baseUrl: this.state.image.url,
+      });
+    if (voiceApiKey) {
+      this.state.voice = { ...this.state.voice, apiKey: voiceApiKey };
     }
-    if (vaultImageApiKey) {
-      this.state.image = { ...this.state.image, apiKey: vaultImageApiKey };
+    if (imageApiKey) {
+      this.state.image = { ...this.state.image, apiKey: imageApiKey };
     }
 
     // 4. Reconcile defaults: drop any pointing at a pruned connection, then
@@ -518,34 +570,24 @@ class ConfigService
   async save(): Promise<void> {
     this.debug('ConfigService.save');
 
-    // C-463: Build v2 vault payload. Credentials live on providers.
+    // Legacy voice/image setters still expose standalone config keys. Move
+    // them onto their provider records before the encrypted v3 serialization.
+    this._syncLegacyConfigCredentials();
+
+    // C-481: Build v3 vault payload. No voiceApiKey/imageApiKey — keys live
+    // on providers. No legacy field — v3 has its own recovery path.
     const userPresets = this.state.presets.filter((p) => !p.isBuiltIn);
 
-    // Build legacy payload for rollback (exactly one release).
-    // Always populated — the loader reads `defaultByCapability`,
-    // `voiceApiKey` etc. from `legacy` in v2 vaults.
-    const legacyPayload = {
-      connections: this.state.connections,
-      defaultConnectionId: this.state.defaultConnectionId,
-      defaultByCapability: this.state.defaultByCapability,
-      voiceApiKey: this.state.voice.apiKey ?? '',
-      imageApiKey: this.state.image.apiKey ?? '',
-      userPresets,
-    };
-
     const vaultPayload = JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       providers: this.state.providers,
       connections: this.state.aiConnections,
       roles: this.state.roles,
+      routing: this.state.routing,
       userPresets,
-      voiceApiKey: this.state.voice.apiKey ?? '',
-      imageApiKey: this.state.image.apiKey ?? '',
-      // Rollback only — the loader must not depend on this. See
-      // `_absorbLegacyPayload`, which exists because it once did.
-      legacy: legacyPayload,
     });
-    await encrypt({ text: vaultPayload });
+
+    await encrypt({ text: vaultPayload, pin: this._vaultPin });
 
     // Plain config (non-sensitive). `apiKey` is stripped from voice/image —
     // it used to be written here in cleartext alongside the encrypted vault.
@@ -564,6 +606,7 @@ class ConfigService
   async reset(): Promise<void> {
     this.debug('ConfigService.reset');
     this.state = this._makeDefaultState();
+    this._vaultPin = undefined;
     await clearVault();
     localStorage.removeItem(PLAIN_CONFIG_KEY);
   }
@@ -578,6 +621,7 @@ class ConfigService
       providers: [],
       aiConnections: [],
       roles: {},
+      routing: {},
       schemaVersion: 0,
       generationParams: { ...DEFAULT_GENERATION_PARAMS },
       image: { ...DEFAULT_IMAGE_CONFIG },
@@ -1007,7 +1051,7 @@ class ConfigService
     }
 
     const aiConn = this.state.aiConnections.find((c) => c.id === connectionId);
-    if (!aiConn) {
+    if (!aiConn || aiConn.capability !== ROLE_CAPABILITY[role]) {
       return undefined;
     }
 
@@ -1073,6 +1117,66 @@ class ConfigService
       baseUrl: options.baseUrl || undefined,
       source: options.source,
     });
+  }
+
+  /** Returns a credential only from the provider matching the legacy selection. */
+  private _getProviderCredential(options: {
+    registryId: string;
+    baseUrl?: string;
+  }): string | undefined {
+    const baseUrl = options.baseUrl ?? '';
+    return this.state.providers.find(
+      (provider) =>
+        provider.registryId === options.registryId && (provider.baseUrl ?? '') === baseUrl,
+    )?.credential;
+  }
+
+  /** Migrates standalone compatibility keys onto their matching providers. */
+  private _syncLegacyConfigCredentials(): void {
+    const entries = [
+      {
+        registryId: this.state.voice.provider,
+        baseUrl: this.state.voice.url,
+        credential: this.state.voice.apiKey,
+      },
+      {
+        registryId: this.state.image.provider,
+        baseUrl: this.state.image.url,
+        credential: this.state.image.apiKey,
+      },
+    ];
+
+    for (const entry of entries) {
+      if (!entry.registryId || entry.credential === undefined) {
+        continue;
+      }
+      const baseUrl = entry.baseUrl ?? '';
+      const existing = this.state.providers.find(
+        (provider) =>
+          provider.registryId === entry.registryId && (provider.baseUrl ?? '') === baseUrl,
+      );
+      if (existing) {
+        this.state.providers = this.state.providers.map((provider) =>
+          provider.id === existing.id
+            ? { ...provider, credential: entry.credential || undefined }
+            : provider,
+        );
+      } else if (entry.credential) {
+        this.state.providers = [
+          ...this.state.providers,
+          {
+            id: crypto.randomUUID(),
+            registryId: entry.registryId,
+            label: entry.registryId,
+            credential: entry.credential,
+            baseUrl: entry.baseUrl,
+            source: 'stored',
+          },
+        ];
+      }
+    }
+
+    this._reproject();
   }
 
   /**

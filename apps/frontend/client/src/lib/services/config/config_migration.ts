@@ -1,25 +1,11 @@
 // apps/frontend/client/src/lib/services/config/config_migration.ts
 //
-// Pure migration function: v1 vault payload → v2 vault payload (C-463).
+// Pure migration functions:
+// - v1 vault payload → v2 vault payload (C-463)
+// - v2 vault payload → v3 vault payload (C-481)
 // No service dependency — unit-testable without configService.
 //
-// Migration rules:
-// 1. Group v1 connections by (provider, baseUrl ?? '', apiKey ?? '').
-//    Each distinct triple becomes one AiProvider. Two rows with the same
-//    provider id but different keys are two accounts and must NOT be merged.
-// 2. Every v1 connection becomes one AiConnection pointing at its group's
-//    provider, carrying model and its params.
-// 3. Seed roles from defaultByCapability — the text default fills all text
-//    roles, the image default fills image roles, the voice default fills
-//    voice roles. Fall back to first connection of that capability.
-// 4. Carry source from v1 connection onto the provider. Where rows in one
-//    group disagree, prefer 'stored' > 'env' > 'detected'.
-// 5. Move standalone voiceApiKey / imageApiKey onto matching provider, or
-//    into a new provider if none matches.
-// 6. Convert each models[] row into a text AiConnection. Skip rows whose
-//    (provider, model) pair is already covered by a migrated connection.
-//
-// Contract: C-463
+// Contract: C-463, C-481
 
 import type {
   AiConnection,
@@ -28,9 +14,11 @@ import type {
   ConnectionCapability,
   ProviderSource,
   RoleAssignments,
+  Routing,
   V1Connection,
   V1VaultPayload,
   VaultPayloadV2,
+  VaultPayloadV3,
 } from '@aikami/types';
 import { DEFAULT_IMAGE_OPTIONS, DEFAULT_VOICE_OPTIONS } from '$lib/data/connection_defaults.ts';
 
@@ -387,4 +375,148 @@ export const migrateVaultV1ToV2 = (
   };
 
   return v2;
+};
+
+// ---------------------------------------------------------------------------
+// V2 → V3 migration (C-481)
+// ---------------------------------------------------------------------------
+
+/** Options for migrateVaultV2ToV3. */
+export type V2ToV3MigrationOptions = {
+  /** ID factory for deterministic testing. Defaults to crypto.randomUUID. */
+  idFactory?: () => string;
+};
+
+/**
+ * Migrates a v2 vault payload to the v3 shape.
+ *
+ * Rules:
+ * 1. Convert roles to routing: capability defaults from roles, overrides
+ *    from explicit roles that differ from defaults.
+ * 2. Remove voiceApiKey/imageApiKey — keys are already on providers.
+ * 3. Remove legacy field — v3 has its own recovery snapshot.
+ * 4. Preserve providers, connections, roles (for backward compat), userPresets.
+ * 5. Remove provider entries that have no connections (orphaned providers).
+ *
+ * This is a PURE function — given the same v2 payload and id factory, it
+ * always produces the same v3 payload. No side effects, no service access.
+ */
+export const migrateVaultV2ToV3 = (
+  v2: VaultPayloadV2,
+  _options?: V2ToV3MigrationOptions,
+): VaultPayloadV3 => {
+  // ── Step 1: Build capability defaults from roles ──────────────────────
+  const getCapabilityForConnection = (connId: string): ConnectionCapability | undefined => {
+    const conn = v2.connections.find((c) => c.id === connId);
+    return conn?.capability;
+  };
+
+  // Derive capability defaults: for each capability, find the most-assigned
+  // connection in roles that matches that capability
+  const capDefaults: Record<string, string | null> = {};
+  const roleToCap: Record<AiRole, ConnectionCapability> = {
+    narration: 'text',
+    dialogue: 'text',
+    summarization: 'text',
+    structured: 'text',
+    portrait: 'image',
+    scene: 'image',
+    'narrator-voice': 'voice',
+    'npc-voice': 'voice',
+  };
+
+  // Cross-capability assignments cannot resolve safely. Remove them before
+  // deriving routing and before carrying the compatibility roles into v3.
+  const roles: RoleAssignments = {};
+  for (const [role, connId] of Object.entries(v2.roles)) {
+    const typedRole = role as AiRole;
+    const capability = roleToCap[typedRole];
+    if (connId && capability && getCapabilityForConnection(connId) === capability) {
+      roles[typedRole] = connId;
+    }
+  }
+
+  // For each capability, find the connection ID used by most roles of that cap
+  const capVotes: Record<string, Map<string, number>> = {
+    text: new Map(),
+    image: new Map(),
+    voice: new Map(),
+  };
+  for (const [role, connId] of Object.entries(roles)) {
+    const cap = roleToCap[role as AiRole];
+    if (!cap || !connId) {
+      continue;
+    }
+    const connCap = getCapabilityForConnection(connId);
+    if (connCap !== cap) {
+      continue;
+    }
+    const votes = capVotes[cap];
+    votes.set(connId, (votes.get(connId) ?? 0) + 1);
+  }
+
+  for (const cap of ['text', 'image', 'voice'] as ConnectionCapability[]) {
+    const votes = capVotes[cap];
+    if (votes.size === 0) {
+      // No default for this capability
+      capDefaults[cap] = null;
+    } else {
+      // Most-voted connection is the default
+      let maxVotes = 0;
+      let bestConnId: string | null = null;
+      for (const [connId, count] of votes) {
+        if (count > maxVotes) {
+          maxVotes = count;
+          bestConnId = connId;
+        }
+      }
+      capDefaults[cap] = bestConnId;
+    }
+  }
+
+  // ── Step 2: Build overrides from roles that differ from defaults ──────
+  const overrides: Record<string, string | null> = {};
+  for (const [role, connId] of Object.entries(roles)) {
+    const cap = roleToCap[role as AiRole];
+    if (!cap) {
+      continue;
+    }
+    const defaultConnId = capDefaults[cap];
+    // An override exists when the role's assignment differs from the capability default
+    // or when it's explicitly set to a different connection
+    if (connId !== undefined && connId !== defaultConnId) {
+      overrides[role] = connId;
+    }
+  }
+
+  // Clean up null defaults — if no connection exists for a capability, remove the entry
+  for (const cap of ['text', 'image', 'voice'] as ConnectionCapability[]) {
+    if (capDefaults[cap] === null) {
+      const connsForCap = v2.connections.filter((c) => c.capability === cap);
+      if (connsForCap.length === 0) {
+        delete capDefaults[cap];
+      }
+    }
+  }
+
+  const routing: Routing = {
+    defaults: Object.keys(capDefaults).length > 0 ? capDefaults : undefined,
+    overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+  };
+
+  // ── Step 3: Remove orphaned providers (no connections reference them) ──
+  const usedProviderIds = new Set(v2.connections.map((c) => c.providerId));
+  const providers = v2.providers.filter((p) => usedProviderIds.has(p.id));
+
+  // ── Step 4: Assemble v3 payload ───────────────────────────────────────
+  const v3: VaultPayloadV3 = {
+    schemaVersion: 3,
+    providers,
+    connections: v2.connections,
+    roles,
+    routing,
+    userPresets: v2.userPresets,
+  };
+
+  return v3;
 };
