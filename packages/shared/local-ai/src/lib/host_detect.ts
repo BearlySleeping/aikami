@@ -9,15 +9,13 @@
  * Detects the Tauri global (`__TAURI_INTERNALS__`) which is injected
  * by the Tauri runtime and never present in a plain browser.
  */
-export const isTauriHost = (): boolean =>
-  (globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined;
+export const isTauriHost = (): boolean => '__TAURI_INTERNALS__' in globalThis;
 
 /**
  * Checks whether the code is running in a plain browser (not Tauri).
  * In environments without a DOM (Node, Bun), this returns false.
  */
-export const isBrowserHost = (): boolean =>
-  (globalThis as unknown as Record<string, unknown>).window !== undefined && !isTauriHost();
+export const isBrowserHost = (): boolean => 'window' in globalThis && !isTauriHost();
 
 /**
  * Checks whether the runtime is a Tauri host AND supports the given
