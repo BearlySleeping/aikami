@@ -2,7 +2,8 @@
 
 Read [README.md](README.md) and [dispatch.md](dispatch.md) first. P00 is the **only entry point**.
 A dependency means its evidence is accepted and code is on the approved `main` baseline, not merely being written in another worktree.
-Rows after P03 are scoped work packages, **not pre-approved single PRs**: write the next packet just in time and split into independently safe slices when the diff budget requires it.
+Every row from P05 onward is exactly **one approved contract and one PR**, executed with `bun run contract C-xxx`.
+The four parent contracts C-481 to C-484 are **superseded**: they were multi-PR specifications, so they were split into C-485 to C-501 (one row each). Do not run the pipeline against a superseded parent.
 No dependent agent may invent an API from an unmerged branch. Shared barrel/schema edits need an integration owner even when implementations are otherwise disjoint.
 
 ## Queue
@@ -14,26 +15,26 @@ No dependent agent may invent an API from an unmerged branch. Shared barrel/sche
 | P02 | [Keyless local connection verification](packets/02_local_verification.md) | P01 | Flash | User endpoint tested without requiring a key; cloud regression |
 | P03 | [Truthful provider status](packets/03_truthful_status.md) | P02 | Flash | Local identity alone never yields Running/Ready |
 | P04 | [Repair legacy projections](packets/04_config_projection.md) through existing C-463 mutators | P02 | Flash | Add/edit/delete/role changes agree across consumers before reload |
-| P05 | [C-481 capability/provider/identity seam](packets/05_seam_freeze.md) and typed API freeze | P03, P04; C-481 approved | Flash | Schema/registry/identity tests; reviewed public seam |
-| P06 | C-481 canonical writes, validated loading and migration safety | P05 | Flash | Real persisted-fixture migration, failure recovery and idempotence |
-| P07 | C-481 shared connection setup/test/model-discovery operations | P06 | Flash | Endpoint/auth reuse; two distinct endpoints remain distinct |
-| P08 | C-481 route all consumers through canonical resolution | P07 | Flash | Text/image/TTS routing and reload parity; premium migration check |
-| R01 | C-482 restricted redirects and downloader integrity | P02; C-482 approved; pilot accepted | Flash + Claude check | CDN redirects succeed; hostile redirect/path/checksum cases fail |
-| R02 | C-482 shared catalog and native-vs-container model planning | R01, P05 | Flash | No Docker downgrade in native plan; compatible budgets and licenses |
-| R03 | C-482 durable setup jobs, cancellation and restart recovery | R02 | Flash | Underlying transfer stops; retry/restart does not corrupt valid assets |
-| R04 | C-482 owned process lifecycle, port conflicts and on-demand restart | R03 | Flash + premium check | External server untouched; correct owned process/model after restart |
-| R05 | C-482 provision through canonical setup operations | R04, P08 | Flash | Install -> verify -> persist -> real text request; no duplicate registration |
-| T01 | Text vertical-slice checkpoint on existing production mounts | R05 | Flash evidence; premium verifier | Existing server, online mock, packaged native text; offline reopen |
-| U01 | C-483 reusable setup subflows and presentation models | T01; C-483 approved | Flash | Focused components consume shared services; no giant settings VM dependency |
-| U02 | C-483 guided first-run routes and resumable presentation | U01 | Flash | Recommended/existing/text-only, review consent, back/leave/resume |
-| S01 | C-484 searchable settings navigation/context filtering | P08; C-484 approved; pilot accepted | Flash | Deep links, pause behavior, keyboard/mobile and platform filtering |
-| S02 | C-484 capability pages, connections and advanced routing | S01, U01 | Flash | Same setup subflows as onboarding; shared key and override tests |
-| S03 | C-484 local resources and data/privacy presentation | S02, R05 | Flash | Manage owned assets; disconnect never deletes external models |
-| U03 | C-483 optional image/read-aloud integration | U02, S02 | Flash | Mixed-provider setup; text-ready play survives optional failure |
-| F01 | Production integration, supported-platform verification, cleanup | U03, S03 | Flash evidence; OpenAI or Claude verifier | All parent ACs, no new failures, docs and packaged journeys |
+| P05 | [C-485](../../contracts/C-485-ai-config-seam-freeze.md) — [capability/provider/identity seam](packets/05_seam_freeze.md) and typed API freeze | P03, P04 | Flash | Schema/registry/identity tests; reviewed public seam |
+| P06 | [C-486](../../contracts/C-486-ai-config-v3-writes-migration.md) — canonical writes, validated loading and migration safety | P05 | Flash | Real persisted-fixture migration, failure recovery and idempotence |
+| P07 | [C-487](../../contracts/C-487-shared-connection-setup-operations.md) — shared connection setup/test/model-discovery operations | P06 | Flash | Endpoint/auth reuse; two distinct endpoints remain distinct |
+| P08 | [C-488](../../contracts/C-488-canonical-resolution-routing.md) — route all consumers through canonical resolution | P07 | Flash | Text/image/TTS routing and reload parity; premium migration check |
+| R01 | [C-489](../../contracts/C-489-downloader-redirect-integrity.md) — restricted redirects and downloader integrity | P02; pilot accepted | Flash + Claude check | CDN redirects succeed; hostile redirect/path/checksum cases fail |
+| R02 | [C-490](../../contracts/C-490-shared-model-catalog-planning.md) — shared catalog and native-vs-container model planning | R01, P05 | Flash | No Docker downgrade in native plan; compatible budgets and licenses |
+| R03 | [C-491](../../contracts/C-491-durable-setup-jobs.md) — durable setup jobs, cancellation and restart recovery | R02 | Flash | Underlying transfer stops; retry/restart does not corrupt valid assets |
+| R04 | [C-492](../../contracts/C-492-owned-process-lifecycle.md) — owned process lifecycle, port conflicts and on-demand restart | R03 | Flash + premium check | External server untouched; correct owned process/model after restart |
+| R05 | [C-493](../../contracts/C-493-provision-through-canonical-setup.md) — provision through canonical setup operations | R04, P08 | Flash | Install -> verify -> persist -> real text request; no duplicate registration |
+| T01 | [C-494](../../contracts/C-494-text-vertical-slice-checkpoint.md) — text vertical-slice checkpoint on existing production mounts | R05 | Flash evidence; premium verifier | Existing server, online mock, packaged native text; offline reopen |
+| U01 | [C-495](../../contracts/C-495-setup-subflow-components.md) — reusable setup subflows and presentation models | T01 | Flash | Focused components consume shared services; no giant settings VM dependency |
+| U02 | [C-496](../../contracts/C-496-guided-first-run-routes.md) — guided first-run routes and resumable presentation | U01 | Flash | Recommended/existing/text-only, review consent, back/leave/resume |
+| S01 | [C-498](../../contracts/C-498-settings-navigation-search.md) — searchable settings navigation/context filtering | P08; pilot accepted | Flash | Deep links, pause behavior, keyboard/mobile and platform filtering |
+| S02 | [C-499](../../contracts/C-499-capability-pages-connections.md) — capability pages, connections and advanced routing | S01, U01 | Flash | Same setup subflows as onboarding; shared key and override tests |
+| S03 | [C-500](../../contracts/C-500-local-resources-privacy.md) — local resources and data/privacy presentation | S02, R05 | Flash | Manage owned assets; disconnect never deletes external models |
+| U03 | [C-497](../../contracts/C-497-optional-modality-integration.md) — optional image/read-aloud integration | U02, S02 | Flash | Mixed-provider setup; text-ready play survives optional failure |
+| F01 | [C-501](../../contracts/C-501-ai-setup-production-integration.md) — production integration, supported-platform verification, cleanup | U03, S03 | Flash evidence; OpenAI or Claude verifier | All parent ACs, no new failures, docs and packaged journeys |
 
-P04 is a repair of the existing model, not permission to introduce a new schema before C-481 approval.
-R01 is part of C-482's reviewed security policy; do not solve it by enabling arbitrary redirects.
+P04 is a repair of the existing model, not permission to introduce a new schema before C-485 lands.
+R01 (C-489) is part of the reviewed download security policy; do not solve it by enabling arbitrary redirects.
 T01 uses the existing production UI wired to the new services; U01/U02 then improve that proven journey.
 Pilot accepted means P01 and P02 have review/validation evidence and measured retry/spend results, with user agreement to continue.
 
@@ -41,7 +42,7 @@ Pilot accepted means P01 and P02 have review/validation evidence and measured re
 
 | When | Lane A | Lane B | Boundary |
 |---|---|---|---|
-| Immediately | P00 baseline evidence | OpenAI C-481 or Claude C-482 critique, read-only | No code or baseline mutation by reviewers |
+| Immediately | P00 baseline evidence | OpenAI C-485..C-488 or Claude C-489..C-493 critique, read-only | No code or baseline mutation by reviewers |
 | Pilot | P01 then P02 | Read-only contract critique / scenario inventory | Do not run both pilot implementations simultaneously |
 | After pilot | P03 status presentation | P04 config projection repair | Disjoint source/test files; coordinate shared preload/POM changes |
 | After pilot and runtime approval | P03/P04/P05 configuration lane | R01 downloader lane | Client TS vs Rust download modules; shared exports owned by Lane A |
@@ -57,8 +58,8 @@ Unit tests may run independently; real client/Tauri/GPU services and release val
 ## Model checkpoints
 
 - Flash means `deepinfra/deepseek-ai/DeepSeek-V4-Flash`, thinking `high`; confirm the effective settings, not just the role name.
-- Before P05: one OpenAI architecture/migration critique of C-481; approve the seam once.
-- Before R01: one Pro-authenticated Claude Opus critique of C-482, especially redirects, paths, ownership and recovery.
+- Before P05: one OpenAI architecture/migration critique of C-485 to C-488 as a set; approve the seam once.
+- Before R01: one Pro-authenticated Claude Opus critique of C-489 to C-493, especially redirects, paths, ownership and recovery.
 - After P08: OpenAI checks migration fixtures, effective routing and persistence; not a second broad redesign.
 - At T01: Claude or OpenAI checks actual packaged-runtime evidence; mocks do not prove packaging.
 - At F01: one independent premium verifier checks the acceptance matrix; CodeRabbit still reviews each PR diff.
@@ -70,4 +71,5 @@ Only one newly review-ready PR per 60-minute slot, targeted at `main`; record th
 Use the queue's earliest ready dependency first, allowing an independent R/S slice into an otherwise idle slot.
 Prepare at most two review-ready changes ahead; rebase and revalidate against accepted main before submission.
 Each PR needs focused tests plus affected validation; parent completion additionally needs full contract evidence.
-Never mark a parent implemented because one queue row passed, and never use an hourly slot to submit knowingly failing work.
+One contract is one PR; never use an hourly slot to submit knowingly failing work.
+C-494 (T01) and C-501 (F01) are checkpoints over already-merged rows: they add evidence and integration, not a second implementation of an earlier row.
