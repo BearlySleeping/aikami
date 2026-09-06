@@ -3,7 +3,7 @@ id: C-481
 title: "Converge AI configuration, capability metadata and routing"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-05T15:34:22Z"
 ---
