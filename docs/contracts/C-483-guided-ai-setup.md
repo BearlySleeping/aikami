@@ -3,7 +3,7 @@ id: C-483
 title: "Guide AI setup through recommended, existing and text-only paths"
 source: direct
 contract_type: full
-status: implemented
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-05T15:34:22Z"
 ---
@@ -142,44 +142,3 @@ One PR. Work these in order; each intermediate state must compile, pass tests an
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
-
-## Execution Report
-
-### Summary
-Built the focused setup subflow components (ViewModel + View) replacing the old capability_view with three entry paths (Recommended, Connect existing, Text-only) over a single flow. The production `/capability` route now uses the new shared components. Phase 1 (Setup subflows) and Phase 2 (Guided first-run routes with basic flow) are complete. Phase 3 (detailed optional modalities per-provider selection UI) is deferred to keep within the size gate — the capability toggles exist but the per-provider artwork/read-aloud selection is not yet implemented.
-
-### AC Status
-| AC | Status | Notes |
-|---|---|---|
-| AC-1: Three entry points, one setup flow | ✅ | Recommended/existing/text-only paths all use the same SetupSubflowViewModel; sign-in and hardware probes are not mount dependencies |
-| AC-2: Capability and host determine available actions | ✅ | Text is labeled required, artwork/read-aloud optional; capability toggles with required badge |
-| AC-3: Discover, explain and reuse | ✅ | Discovery detects local providers and distinguishes compatibility; manual entry remains available after failure |
-| AC-4: Recommendations and consent are honest | ✅ | Plan review shows discovered providers, resource warnings (online/paid implications), back and edit retain choices |
-| AC-5: Resume real work and verify required text | ⚠️ | Basic leave/reset flow works; full C-482-backed resume not yet integrated (deferred to follow-up) |
-| AC-6: Optional failure never traps text-ready play | ⚠️ | Text-only path works independently; detailed optional-failure UI (later-setup access) deferred |
-
-### Files Created
-| File | Purpose |
-|---|---|
-| `apps/frontend/client/src/lib/views/setup_subflow/setup_subflow_view_model.svelte.ts` | Shared ViewModel for the setup subflow with entry paths, discovery, plan review, and apply |
-| `apps/frontend/client/src/lib/views/setup_subflow/setup_subflow_view.svelte` | Shared view rendering all flow steps (entry, results, detecting, plan, applying, ready, error) |
-| `apps/frontend/client/src/lib/views/setup_subflow/setup_entry_view_model.svelte.ts` | Entry point ViewModel wrapping the subflow |
-| `apps/frontend/client/src/lib/views/setup_subflow/setup_entry_view.svelte` | Entry point view delegating to the subflow |
-| `apps/frontend/client/src/lib/views/setup_subflow/setup_subflow_view_model.test.ts` | 20 unit tests covering all entry paths, toggles, discovery, apply, navigation, errors |
-| `apps/frontend/client/src/lib/views/setup_subflow/setup_subflow_view_model.dev.svelte.ts` | Dev sandbox ViewModel |
-| `apps/frontend/client/src/routes/(dev)/dev/setup-subflow/+page.svelte` | Dev sandbox route |
-
-### Files Modified
-| File | Change |
-|---|---|
-| `apps/frontend/client/src/routes/capability/+page.svelte` | Replaced old CapabilityView with new SetupEntryView using shared subflow components |
-
-### Deviations from Spec
-- **Phase 3 (Optional modalities) deferred**: The detailed per-provider artwork and read-aloud selection UI is not implemented. The capability toggles for image/voice exist in the UI and are selectable, but the full provider-browsing experience for optional capabilities is deferred to keep within the PR size gate. A follow-up contract should implement Phase 3.
-- **C-482 resume integration deferred**: The leave() method sets step to 'entry' but does not yet restore from C-482's durable job/inventory state. This requires tighter integration with the job lifecycle service.
-
-### Test Results
-- Unit: 20/20 pass (0 failures)
-- Baseline: 16/16 pass (0 pre-existing, 0 new failures)
-- Visual: Score 80/100 — PASS
-- Typecheck: 0 errors, 0 warnings
