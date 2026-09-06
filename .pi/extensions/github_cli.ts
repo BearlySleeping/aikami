@@ -2400,7 +2400,8 @@ export default function (pi: ExtensionAPI) {
             if (
               !result.success ||
               !result.json ||
-              !(result.json as any).data?.organization?.projectV2
+              // biome-ignore lint/suspicious/noExplicitAny: GitHub API response shape is unknown
+              !(result.json as any).data?.organization?.projectV2 // guard-ignore lint/type-safety/casting: GitHub API response is untyped
             ) {
               result = await runGh(
                 [

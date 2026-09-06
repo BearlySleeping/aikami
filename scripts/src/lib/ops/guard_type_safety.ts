@@ -16,12 +16,14 @@
 // must run --update-baseline to lock the improvement in (a silent drop
 // would let the count creep back up unnoticed later).
 //
-// Scans apps/**, packages/**, scripts/** — .ts and .svelte files. Skips
-// node_modules, .svelte-kit, build, dist, and any directory whose name
-// contains ".cache" (a stale apps/frontend/client/node_modules/.cache/
-// svelte-check-rs/ tree — itself under node_modules and already excluded —
-// is the specific offender that motivated this rule; the extra check is
-// defense in depth for any future .cache tree outside node_modules).
+// C-476 AC-4: The baseline now also stores violation identities (rule +
+// snippet hash) so same-count replacement is detected. If a file has the
+// same number of violations but different violation content, the guard
+// flags it as a change requiring --update-baseline.
+//
+// Scans apps/**, packages/**, scripts/**, .pi/** — .ts and .svelte files.
+// Skips node_modules, .svelte-kit, build, dist, .git, generated-skills,
+// and .pi/git/ (vendored third-party code).
 //
 // T1/T2 are exempt in test files (*.test.ts, *.spec.ts, **/tests/**,
 // **/__tests__/**, apps/e2e/**) — T3 applies everywhere. Matches inside
@@ -58,14 +60,42 @@ import { relative, resolve, sep } from 'node:path';
 import { annotate } from './gha_annotate.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
-const SCAN_ROOTS = ['apps', 'packages', 'scripts'].map((dir) => resolve(ROOT, dir));
+const SCAN_ROOTS = ['apps', 'packages', 'scripts', '.pi'].map((dir) => resolve(ROOT, dir));
 const BASELINE_PATH = resolve(import.meta.dir, 'guard_type_safety_baseline.json');
 
-const EXCLUDED_DIR_NAMES = new Set(['node_modules', '.svelte-kit', 'build', 'dist', '.git']);
+const EXCLUDED_DIR_NAMES = new Set([
+  'node_modules',
+  '.svelte-kit',
+  'build',
+  'dist',
+  '.git',
+  'generated-skills',
+  'git',
+]);
+
+// .pi/git/ is vendored third-party code; .pi/generated-skills/ is auto-generated.
+// Both are excluded by the biome.json `!` rule and should not be in the guard either.
 
 type Rule = 't1' | 't2' | 't3';
 type RuleCounts = { t1: number; t2: number; t3: number };
-type Baseline = Record<string, RuleCounts>;
+
+/** A single violation identity for same-count replacement detection (C-476 AC-4). */
+type ViolationIdentity = {
+  rule: Rule;
+  /** Short content hash of the violation snippet. */
+  hash: string;
+};
+
+/**
+ * Baseline entry. Stores both per-rule counts and an array of violation
+ * identities for identity-aware comparison. The `identities` field is
+ * optional for backward compatibility with pre-C-476 baselines.
+ */
+type BaselineEntry = RuleCounts & {
+  identities?: ViolationIdentity[];
+};
+
+type Baseline = Record<string, BaselineEntry>;
 
 type Violation = { rule: Rule; line: number; snippet: string };
 
@@ -204,6 +234,19 @@ const findIgnoredCastingLines = (rawContent: string): Set<number> => {
   return ignored;
 };
 
+/**
+ * Compute a simple hash for a violation snippet. Uses a fast FNV-1a-like
+ * hash for stability (not crypto, not dependent on file paths).
+ */
+const simpleHash = (input: string): string => {
+  let hash = 2166136261 >>> 0;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0').slice(0, 8);
+};
+
 const findViolations = (options: { rawContent: string; relPath: string }): Violation[] => {
   const { rawContent, relPath } = options;
   const violations: Violation[] = [];
@@ -272,6 +315,41 @@ const countsOf = (violations: Violation[]): RuleCounts => {
   return counts;
 };
 
+/** Build a set of violation identities from the current violations. */
+const identitiesOf = (violations: Violation[]): ViolationIdentity[] => {
+  const identities = violations.map((v) => ({
+    rule: v.rule,
+    hash: simpleHash(v.snippet),
+  }));
+  // Sort for deterministic comparison
+  identities.sort((a, b) => {
+    if (a.rule !== b.rule) {
+      return a.rule.localeCompare(b.rule);
+    }
+    return a.hash.localeCompare(b.hash);
+  });
+  return identities;
+};
+
+/**
+ * Compare violation identities between current and expected.
+ * Returns true if the identities are equivalent (same rules, same hashes).
+ */
+const identitiesMatch = (current: ViolationIdentity[], expected: ViolationIdentity[]): boolean => {
+  if (current.length !== expected.length) {
+    return false;
+  }
+  for (let i = 0; i < current.length; i++) {
+    if (current[i].rule !== expected[i].rule) {
+      return false;
+    }
+    if (current[i].hash !== expected[i].hash) {
+      return false;
+    }
+  }
+  return true;
+};
+
 // ── Main ─────────────────────────────────────────────────────────────────
 
 const updateBaseline = Bun.argv.includes('--update-baseline');
@@ -292,7 +370,10 @@ for (const root of SCAN_ROOTS) {
 if (updateBaseline) {
   const baseline: Baseline = {};
   for (const [relPath, violations] of [...fileViolations].sort(([a], [b]) => a.localeCompare(b))) {
-    baseline[relPath] = countsOf(violations);
+    baseline[relPath] = {
+      ...countsOf(violations),
+      identities: identitiesOf(violations),
+    };
   }
   writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
   const totals = Object.values(baseline).reduce(
@@ -311,7 +392,8 @@ const allPaths = new Set([...fileViolations.keys(), ...Object.keys(baseline)]);
 
 let failed = false;
 for (const relPath of [...allPaths].sort()) {
-  const current = countsOf(fileViolations.get(relPath) ?? []);
+  const currentViolations = fileViolations.get(relPath) ?? [];
+  const current = countsOf(currentViolations);
   const expected = baseline[relPath] ?? { t1: 0, t2: 0, t3: 0 };
   const lines: string[] = [];
 
@@ -329,12 +411,23 @@ for (const relPath of [...allPaths].sort()) {
     }
   }
 
+  // C-476 AC-4: Identity-aware comparison — detect same-count replacement
+  if (lines.length === 0 && expected.identities && currentViolations.length > 0) {
+    const currentIdentities = identitiesOf(currentViolations);
+    if (!identitiesMatch(currentIdentities, expected.identities)) {
+      failed = true;
+      lines.push(
+        `[IDENTITY] Violation identity mismatch — same count but different violations. Run --update-baseline to accept the new set.`,
+      );
+    }
+  }
+
   if (lines.length > 0) {
     console.error(`❌ ${relPath}`);
     for (const line of lines) {
       console.error(`      ${line}`);
     }
-    for (const v of fileViolations.get(relPath) ?? []) {
+    for (const v of currentViolations) {
       console.error(`        line ${v.line}: ${v.snippet}`);
       annotate({
         file: relPath,

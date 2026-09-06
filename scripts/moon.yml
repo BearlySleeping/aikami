@@ -240,6 +240,8 @@ tasks:
       - '!/packages/**/node_modules/**'
       - '!/packages/**/dist/**'
       - '!/packages/**/build/**'
+      - '/.pi/**/*'
+      - '!/.pi/generated-skills/**'
     options:
       cache: false
       runInCI: true
