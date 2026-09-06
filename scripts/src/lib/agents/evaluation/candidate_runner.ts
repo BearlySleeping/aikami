@@ -6,6 +6,7 @@
 // and the host forcibly terminates checks that exceed the fixed deadline.
 
 import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AcceptanceOutcome } from './types.ts';
 
@@ -76,15 +77,22 @@ export const runCandidateTest = (options: {
 }): Promise<AcceptanceOutcome> =>
   new Promise((resolve) => {
     const targetPath = join(options.sandboxPath, options.target);
+    // Node's permission model matches against the REAL (symlink-resolved)
+    // path, not necessarily the string we pass around: macOS's os.tmpdir()
+    // is a symlink (/tmp -> /private/tmp) and Windows can hand back an 8.3
+    // short-name form (`RUNNER~1`) that differs from the long path used to
+    // build this string. Grant the resolved path so `--allow-fs-read`
+    // actually matches what the permission check compares against.
+    const resolvedTargetPath = realpathSync.native(targetPath);
     const child = spawn(
       'node',
       [
         '--no-warnings',
         '--permission',
-        `--allow-fs-read=${targetPath}`,
+        `--allow-fs-read=${resolvedTargetPath}`,
         '--eval',
         CHILD_SOURCE,
-        targetPath,
+        resolvedTargetPath,
         options.testSource,
       ],
       {

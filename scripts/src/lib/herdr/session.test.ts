@@ -359,7 +359,11 @@ describe('wrapCommand', () => {
     const wrapped = wrapCommand('bun run dev', 'cmd');
     expect(wrapped).toMatch(/^".*bash.*" ".*\.sh"$/);
     expect(wrapped).not.toContain("'");
-    expect(wrapped).not.toContain('-c');
+    // Standalone `-c` token check, not a raw substring match: the random
+    // temp-script suffix (base36) can legitimately start with the letter
+    // "c" right after the filename's own hyphen (e.g. `...-c4anlfemql7.sh`),
+    // which a bare `.not.toContain('-c')` would flag as a false positive.
+    expect(wrapped).not.toMatch(/(^|\s)-c(\s|$)/);
     expect(wrapped).not.toContain('Press Enter to close');
   });
 
