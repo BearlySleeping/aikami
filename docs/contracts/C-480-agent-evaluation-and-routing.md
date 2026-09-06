@@ -3,7 +3,7 @@ id: C-480
 title: "Evaluate agent quality and tune routing using cost per accepted task"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | thin |
 | **Priority** | P2 — replace model/token-price assumptions with comparable observed outcomes |
 | **Dependencies** | C-473, C-474, C-475, C-476, C-477, C-478, C-479 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — evaluation protocol, model routing and budget decisions |
 | **Contract version** | 2.0.0 |
@@ -101,4 +101,22 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
 
 ## Execution Report
 
-Not executed. No implementation, paid evaluation or platform evidence is claimed by this planning document.
+Implemented the offline evaluation harness under `scripts/src/lib/agents/evaluation/`. No paid comparison run was executed and no model/thinking/routing default was changed — both remain explicitly out of scope for this PR.
+
+- **AC-1 (frozen tasks):** 8 versioned tasks in `tasks/*.ts` cover all six required categories (instruction repair, pure TypeScript, validation/error handling, process concurrency, Svelte reactivity, cross-platform scripting), 2 of them held out (`pure_typescript_v2`, `validation_error_handling_v2`). `task_registry.ts` hashes task/base/acceptance/config content. Each acceptance check runs from the host import graph, never from a file inside the sandbox — `acceptance_runner.test.ts` verifies a patch that plants a fake "acceptance" file inside the sandbox cannot make an unsolved task pass.
+- **AC-2 (equivalent conditions):** `catalogue.ts` resolves Flash/Sonnet/Opus/Astra family labels against the installed provider catalogue via `pi auth check --json`, never treating a family label as a literal slug. A family with no valid candidate fails preflight (`catalogue.test.ts`); `EvalConfig` records provider/model/thinking/cache-condition per run.
+- **AC-3 (whole cost of acceptance):** `reporter.ts` aggregates accepted/rejected/errored/halted attempts (reusing `aggregateUsage` from the C-473 ledger), reporting acceptance rate, first-pass rate, retries, tool failures, elapsed time, cost-per-accepted-task (`null`, never zero, when a group has no acceptances), unknown-billing counts and sample size beside every rate (`reporter.test.ts`).
+- **AC-4 (bounded paid authorization):** `budget.ts`'s `RunBudget` refuses to record usage or start an attempt without explicit caps; exhaustion (cost, turns, minutes, or unknown billing) cancels further owned attempts while keeping already-recorded results (`budget.test.ts`, `runner.test.ts`). The CLI (`cli.ts`) requires `--paid` plus `--max-cost`/`--max-turns`/`--max-minutes`/`--tasks` together; the default is offline plan mode.
+- **AC-5 (proposed, not self-applied):** `recommendation.ts` formats a per-task recommendation from an `EvalReport` and never writes any file (`recommendation.test.ts` snapshots this and confirms Flash wins when it is cheapest and comparable).
+
+Deviations from the original module sketch, both to keep the harness testable without external dependencies:
+- Per-attempt isolation (`worktree_fixture.ts`) uses a plain temp directory rather than a real `herdr`-provisioned git worktree — the herdr path requires a live daemon, which would make every offline test network/service-dependent. Evaluation tasks are small, self-contained file sets with no git-history dependency, so a disposable directory gives the same isolation guarantee.
+- The runner spawns `pi` directly (`real_provider.ts`), parsing the same `message_end`/`message.usage` JSON-stream shape as the legacy `contract_pipeline/worker.ts` path, because the herdr-pane adapter (`herdr_adapter.ts`) has no usage parsing wired to it at all in this codebase.
+
+**Verification:**
+- `bun test scripts/src/lib/agents/evaluation` — 32 pass, 0 fail.
+- `bun run test:automation-unit` (now includes `src/lib/agents/evaluation`) — 521 pass, 0 fail.
+- `bunx tsgo --noEmit` in `scripts/` — clean.
+- `bunx biome check` over the new files — clean.
+- `bun run src/lib/agents/evaluation/cli.ts` (no flags) — ran plan mode only; catalogue preflight correctly reported the configured Flash candidates as `UNAVAILABLE` in this environment (no matching `pi auth check` credential), spent nothing, launched no provider.
+- `--paid` mode was not run — no maintainer spend authorization was granted for this contract (Edge Cases).
