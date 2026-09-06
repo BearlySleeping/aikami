@@ -3,7 +3,7 @@ id: C-478
 title: "Pin agent resources and make updates reproducible"
 source: direct
 contract_type: thin
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -24,7 +24,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | thin |
 | **Priority** | P1 — floating package/skill updates change agent behavior without a reproducible environment |
 | **Dependencies** | C-468, C-472, C-474, C-475 |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — install/check/update workflow and rollback |
 | **Contract version** | 2.0.0 |
