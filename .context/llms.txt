@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-06
-> Files: 423 across 18 categories
+> Files: 425 across 18 categories
 
 ## Quick Start (Read These First)
 
@@ -154,6 +154,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Archived Contracts](contracts/archived/README.md)
 - [Contract Audit Report: C-119–C-249](contracts/AUDIT_C-119_C-249.md)
 - [Contract Backlog — C-452 onward](contracts/BACKLOG_C452_PLUS.md)
+- [Contract Backlog — C-485 onward (external review response)](contracts/BACKLOG_C485_PLUS.md)
 - [C 011 blackbox testing](contracts/C-011-blackbox-testing.md)
 - [C 014 database abstraction and dataconnect](contracts/C-014-database-abstraction-and-dataconnect.md)
 - [C 015 ai service abstraction](contracts/C-015-ai-service-abstraction.md)
@@ -399,6 +400,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Feature Promotion Matrix](contracts/PROMOTION.md)
 - [Contracts](contracts/README.md)
 - [Shared Contract Sections](contracts/SHARED_SECTIONS.md)
+- [Strictness Coverage Matrix](contracts/STRICTNESS_COVERAGE_MATRIX.md)
 - [Contract {FEATURE_CODE}: {TITLE}](contracts/TEMPLATE.md)
 - [Contract {FEATURE_CODE}: {TITLE}](contracts/THIN_TEMPLATE.md)
 ## decisions/
