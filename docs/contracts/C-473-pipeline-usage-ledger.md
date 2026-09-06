@@ -3,12 +3,12 @@ id: C-473
 title: "Record complete and honest pipeline usage and cost"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: null
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: https://github.com/BearlySleeping/aikami/pull/250
 created_at: "2026-09-04T00:00:00Z"
 ---
 
@@ -16,18 +16,18 @@ created_at: "2026-09-04T00:00:00Z"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | Accepted agent-platform audit; PR 07 in [execution plan](../strategy/agent-platform-hardening.md) |
-| **Target** | Worker event collection, pipeline manifest usage and status reports |
-| **Type** | full |
-| **Priority** | P1 — model/cost optimization currently has no usable run ledger |
-| **Dependencies** | C-472 |
-| **Status** | approved |
-| **Promotion** | — |
-| **Docs Impact** | internal — usage completeness, estimates and reports |
-| **Contract version** | 2.0.0 |
-| **Execution** | Claude Sonnet 5 / medium; target 8–20 files, maximum 99 |
+| Field                | Value                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| **Source**           | Accepted agent-platform audit; PR 07 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Target**           | Worker event collection, pipeline manifest usage and status reports                               |
+| **Type**             | full                                                                                              |
+| **Priority**         | P1 — model/cost optimization currently has no usable run ledger                                   |
+| **Dependencies**     | C-472                                                                                             |
+| **Status**           | approved                                                                                          |
+| **Promotion**        | —                                                                                                 |
+| **Docs Impact**      | internal — usage completeness, estimates and reports                                              |
+| **Contract version** | 2.0.0                                                                                             |
+| **Execution**        | Claude Sonnet 5 / medium; target 8–20 files, maximum 99                                           |
 
 ## Problem & Baseline Evidence
 
@@ -47,12 +47,12 @@ Fixture token/cost totals reconcile exactly across ordinary runs, retries, dupli
 
 ## Existing System & Reuse Map
 
-| Capability | Existing source | Action |
-|---|---|---|
-| Model usage events | current Pi worker stream/session APIs | collect |
-| Usage type/status | pipeline `types.ts`, `status.ts` | version/extend |
-| Spend protection | `.pi/extensions/cost_guard.ts` | reuse observations; do not replace |
-| Worker lifecycle | C-472 controller | attach idempotent ledger events |
+| Capability         | Existing source                       | Action                             |
+| ------------------ | ------------------------------------- | ---------------------------------- |
+| Model usage events | current Pi worker stream/session APIs | collect                            |
+| Usage type/status  | pipeline `types.ts`, `status.ts`      | version/extend                     |
+| Spend protection   | `.pi/extensions/cost_guard.ts`        | reuse observations; do not replace |
+| Worker lifecycle   | C-472 controller                      | attach idempotent ledger events    |
 
 ## Overview
 
@@ -98,32 +98,37 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). One ledger/repor
 ## Acceptance Criteria
 
 ### AC-1: Active workers and review produce usage
+
 **Given** captured provider-event fixtures through the active C-472 path,
 **When** a stage/review completes,
 **Then** its model, effective settings, token categories, elapsed time and cost provenance are persisted and visible in status output.
 
 ### AC-2: Retry/resume totals reconcile
+
 **Given** failed and successful generations, repeated events, an interrupted/resumed run and mixed-currency usage,
 **When** aggregation executes,
 **Then** run/task totals include all distinct billable work exactly once and totalTokens is not merely the last event's value. Monetary totals remain separate per currency unless a versioned conversion source, applied rate and timestamp are recorded for every converted amount; absent conversion metadata never produces a cross-currency sum.
 
 ### AC-3: Missing and external costs are honest
+
 **Given** providers or external tools with absent/estimated billing,
 **When** the report computes cost per accepted task,
 **Then** unknown/incomplete portions are explicit and never shown as a complete zero; estimates carry the applied pricing source/version.
 
 ### AC-4: Legacy data and privacy are preserved
+
 **Given** old empty manifests, malformed events or sensitive provider payloads,
 **When** collection/reporting executes,
 **Then** old runs remain readable, malformed data is reported, and secrets/prompt bodies do not enter the usage ledger.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-1 | Integration | proposed `contract_pipeline/usage_ledger.test.ts` | active worker/review | pending implementation |
-| AC-2 | Unit | same, duplicate/resume and mixed-currency fixtures, including unsuccessful attempts | run/task totals | pending implementation |
-| AC-3 | Unit | proposed `usage_report.test.ts` | CLI/report | pending implementation |
-| AC-4 | Unit/Integration | legacy/redaction fixtures | status/resume | pending implementation |
+
+| AC   | Test Level       | Required Artifact                                                                   | Production Path      | Evidence               |
+| ---- | ---------------- | ----------------------------------------------------------------------------------- | -------------------- | ---------------------- |
+| AC-1 | Integration      | proposed `contract_pipeline/usage_ledger.test.ts`                                   | active worker/review | pending implementation |
+| AC-2 | Unit             | same, duplicate/resume and mixed-currency fixtures, including unsuccessful attempts | run/task totals      | pending implementation |
+| AC-3 | Unit             | proposed `usage_report.test.ts`                                                     | CLI/report           | pending implementation |
+| AC-4 | Unit/Integration | legacy/redaction fixtures                                                           | status/resume        | pending implementation |
 
 **Test Hooks:** C-468 automation tasks and C-472 fake controller; test representative provider usage shapes offline. Three-OS file-write tests; E2E browser/visual N/A. No paid run is required to prove normalization.
 **Watch Points:** inclusive cached-token fields, stream partials, message replay, review sessions persisting across attempts, costs reported in different currencies and unknown/incomplete legacy usage alongside currency totals.
@@ -145,8 +150,8 @@ None for scope approval. Unavailable external billing stays unknown; no new exte
 ## Amendments
 
 | Version | Date | Change | Approved by |
-|---|---|---|---|
-| — | — | — | — |
+| ------- | ---- | ------ | ----------- |
+| —       | —    | —      | —           |
 
 ## Promotion Lifecycle
 
