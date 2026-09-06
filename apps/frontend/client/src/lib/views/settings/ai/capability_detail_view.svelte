@@ -5,6 +5,7 @@
 // Shows status, model, provider, and action buttons.
 // Contract: C-484 AC-2
 
+import { BaseViewModelContainer } from '$components';
 import type { CapabilityDetailViewModelInterface } from './capability_detail_view_model.svelte';
 
 type Props = {
@@ -13,6 +14,7 @@ type Props = {
 const { viewModel }: Props = $props();
 </script>
 
+<BaseViewModelContainer {viewModel}>
 <div class="max-w-2xl mx-auto space-y-6">
   <!-- Status card -->
   <div class="card card-bordered border-base-300 bg-base-100">
@@ -62,3 +64,4 @@ const { viewModel }: Props = $props();
     </div>
   {/if}
 </div>
+</BaseViewModelContainer>
