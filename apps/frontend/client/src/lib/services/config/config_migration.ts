@@ -426,7 +426,11 @@ export const migrateVaultV2ToV3 = (
   };
 
   // For each capability, find the connection ID used by most roles of that cap
-  const capVotes: Record<string, Map<string, number>> = { text: new Map(), image: new Map(), voice: new Map() };
+  const capVotes: Record<string, Map<string, number>> = {
+    text: new Map(),
+    image: new Map(),
+    voice: new Map(),
+  };
   for (const [role, connId] of Object.entries(v2.roles)) {
     const cap = roleToCap[role as AiRole];
     if (!cap || !connId) continue;

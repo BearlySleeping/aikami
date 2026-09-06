@@ -141,8 +141,7 @@ export const aborted = (message = 'Operation aborted'): ConfigError =>
 // ---------------------------------------------------------------------------
 
 /** Type guard for ConfigError. */
-export const isConfigError = (error: unknown): error is ConfigError =>
-  error instanceof ConfigError;
+export const isConfigError = (error: unknown): error is ConfigError => error instanceof ConfigError;
 
 // ---------------------------------------------------------------------------
 // Redaction

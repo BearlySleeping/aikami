@@ -567,7 +567,9 @@ describe('ConfigService — C-079', () => {
 
       // C-481: v3 vault does not have voiceApiKey/imageApiKey fields.
       // Keys belong on providers, not on separate vault entries.
-      const persisted = JSON.parse(store.get('aikami_vault_v3') ?? vaultStore.get('__vault') ?? '{}');
+      const persisted = JSON.parse(
+        store.get('aikami_vault_v3') ?? vaultStore.get('__vault') ?? '{}',
+      );
       expect(persisted.schemaVersion).toBe(3);
       expect(persisted.voiceApiKey).toBeUndefined();
       expect(persisted.imageApiKey).toBeUndefined();
@@ -686,7 +688,9 @@ describe('ConfigService — C-079', () => {
       expect(service.state.connections[0]).not.toBe(previous);
       expect(service.getConnection(id)?.generationParams).toEqual(generationParams);
       // C-481: v3 stores connections at top level, not in legacy
-      const persisted = JSON.parse(store.get('aikami_vault_v3') ?? vaultStore.get('__vault') ?? '{}');
+      const persisted = JSON.parse(
+        store.get('aikami_vault_v3') ?? vaultStore.get('__vault') ?? '{}',
+      );
       expect(persisted.schemaVersion).toBe(3);
       expect(persisted.connections[0]).toBeDefined();
     });

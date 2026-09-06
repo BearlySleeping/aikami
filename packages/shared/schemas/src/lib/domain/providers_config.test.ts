@@ -7,10 +7,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
-import {
-  RoutingSchema,
-  VaultPayloadV3Schema,
-} from './providers_config.ts';
+import { RoutingSchema, VaultPayloadV3Schema } from './providers_config.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -97,70 +94,90 @@ describe('C-481: RoutingSchema', () => {
   test('validates routing with defaults (valid UUIDs)', () => {
     const uuid1 = UUID();
     const uuid2 = UUID();
-    expect(validate(RoutingSchema, {
-      defaults: { text: uuid1, image: uuid2 },
-    })).toBe(true);
+    expect(
+      validate(RoutingSchema, {
+        defaults: { text: uuid1, image: uuid2 },
+      }),
+    ).toBe(true);
   });
 
   test('validates routing with null defaults (explicitly disabled)', () => {
-    expect(validate(RoutingSchema, {
-      defaults: { text: null },
-    })).toBe(true);
+    expect(
+      validate(RoutingSchema, {
+        defaults: { text: null },
+      }),
+    ).toBe(true);
   });
 
   test('validates routing with overrides (valid UUIDs)', () => {
     const uuid1 = UUID();
     const uuid2 = UUID();
-    expect(validate(RoutingSchema, {
-      overrides: { narration: uuid1, dialogue: uuid2 },
-    })).toBe(true);
+    expect(
+      validate(RoutingSchema, {
+        overrides: { narration: uuid1, dialogue: uuid2 },
+      }),
+    ).toBe(true);
   });
 
   test('validates routing with both defaults and overrides', () => {
     const uuid1 = UUID();
     const uuid2 = UUID();
     const uuid3 = UUID();
-    expect(validate(RoutingSchema, {
-      defaults: { text: uuid1, voice: uuid3 },
-      overrides: { narration: uuid2, 'narrator-voice': null },
-    })).toBe(true);
+    expect(
+      validate(RoutingSchema, {
+        defaults: { text: uuid1, voice: uuid3 },
+        overrides: { narration: uuid2, 'narrator-voice': null },
+      }),
+    ).toBe(true);
   });
 
   test('accepts routing with text default only (sparse)', () => {
     const uuid1 = UUID();
-    expect(validate(RoutingSchema, {
-      defaults: { text: uuid1 },
-    })).toBe(true);
+    expect(
+      validate(RoutingSchema, {
+        defaults: { text: uuid1 },
+      }),
+    ).toBe(true);
   });
 
   test('accepts routing with null default', () => {
-    expect(validate(RoutingSchema, {
-      defaults: { text: null },
-    })).toBe(true);
+    expect(
+      validate(RoutingSchema, {
+        defaults: { text: null },
+      }),
+    ).toBe(true);
   });
 
   test('rejects non-uuid connection id in defaults', () => {
-    expect(validate(RoutingSchema, {
-      defaults: { text: 'not-a-uuid' },
-    })).toBe(false);
+    expect(
+      validate(RoutingSchema, {
+        defaults: { text: 'not-a-uuid' },
+      }),
+    ).toBe(false);
   });
 
   test('rejects non-uuid connection id in overrides', () => {
-    expect(validate(RoutingSchema, {
-      overrides: { narration: 'not-a-uuid' },
-    })).toBe(false);
+    expect(
+      validate(RoutingSchema, {
+        overrides: { narration: 'not-a-uuid' },
+      }),
+    ).toBe(false);
   });
 
   test('allows null connection id in defaults (explicit disable)', () => {
-    expect(validate(RoutingSchema, {
-      defaults: { text: null },
-    })).toBe(true);
+    expect(
+      validate(RoutingSchema, {
+        defaults: { text: null },
+      }),
+    ).toBe(true);
   });
 
   test('allows null connection id in overrides (explicit disable)', () => {
-    expect(validate(RoutingSchema, {
-      overrides: { narration: null },
-    })).toBe(true);
+    expect(
+      validate(RoutingSchema, {
+        overrides: { narration: null },
+      }),
+    ).toBe(true);
   });
 
   test('three routing states are distinguishable: absent vs pinned vs disabled', () => {

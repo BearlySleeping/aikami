@@ -327,7 +327,8 @@ export type ImageProvider = (typeof IMAGE_PROVIDERS)[number]['id'];
 // ---------------------------------------------------------------------------
 
 /** Combined type for all provider descriptors. */
-export type AnyProviderDescriptor = (typeof TEXT_PROVIDERS)[number]
+export type AnyProviderDescriptor =
+  | (typeof TEXT_PROVIDERS)[number]
   | (typeof VOICE_PROVIDERS)[number]
   | (typeof IMAGE_PROVIDERS)[number];
 
@@ -350,7 +351,7 @@ export const isLocalProvider = (registryId: string): boolean =>
  */
 export const providerNeedsUrl = (registryId: string): boolean => {
   const descriptor = findProviderDescriptor(registryId);
-  return descriptor ? ('needsUrl' in descriptor && descriptor.needsUrl === true) : false;
+  return descriptor ? 'needsUrl' in descriptor && descriptor.needsUrl === true : false;
 };
 
 /**
@@ -374,14 +375,18 @@ export const providerSupportsModelDiscovery = (registryId: string): boolean =>
 /**
  * Get the capabilities a provider supports. C-481.
  */
-export const getProviderCapabilities = (registryId: string): ReadonlyArray<'text' | 'image' | 'voice'> =>
+export const getProviderCapabilities = (
+  registryId: string,
+): ReadonlyArray<'text' | 'image' | 'voice'> =>
   findProviderDescriptor(registryId)?.capabilities ?? [];
 
 /**
  * Check if a provider supports a specific capability. C-481.
  */
-export const providerSupportsCapability = (registryId: string, capability: 'text' | 'image' | 'voice'): boolean =>
-  getProviderCapabilities(registryId).includes(capability);
+export const providerSupportsCapability = (
+  registryId: string,
+  capability: 'text' | 'image' | 'voice',
+): boolean => getProviderCapabilities(registryId).includes(capability);
 
 // ---------------------------------------------------------------------------
 // Built-in generation parameter presets (read-only)
