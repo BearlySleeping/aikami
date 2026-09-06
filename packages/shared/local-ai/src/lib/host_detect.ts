@@ -13,7 +13,6 @@ export const isTauriHost = (): boolean =>
   (globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined;
 
 /**
-/**
  * Checks whether the code is running in a plain browser (not Tauri).
  * In environments without a DOM (Node, Bun), this returns false.
  */
