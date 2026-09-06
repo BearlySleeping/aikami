@@ -262,6 +262,20 @@ type Vm = ReturnType<typeof getCapabilityViewModel>;
 
 const createVm = (): Vm => getCapabilityViewModel({ className: 'CapabilityViewModel' });
 
+const enableTauriForTest = (): (() => void) => {
+  const tauriWindow = window as Record<string, unknown>;
+  const hadTauri = Object.hasOwn(tauriWindow, '__TAURI__');
+  const originalTauri = tauriWindow.__TAURI__;
+  tauriWindow.__TAURI__ = true;
+  return () => {
+    if (hadTauri) {
+      tauriWindow.__TAURI__ = originalTauri;
+    } else {
+      delete tauriWindow.__TAURI__;
+    }
+  };
+};
+
 const setDetectionResult = (
   textStatus: string,
   imageStatus = 'not_found',
@@ -482,8 +496,7 @@ describe('CapabilityViewModel', () => {
   });
 
   test('P01: showLocalAiWizard is true in Tauri desktop without text provider', () => {
-    const originalTauri = (window as Record<string, unknown>).__TAURI__;
-    (window as Record<string, unknown>).__TAURI__ = true;
+    const restoreTauri = enableTauriForTest();
     try {
       const vm = createVm();
       vm.setActiveTab('text');
@@ -491,7 +504,7 @@ describe('CapabilityViewModel', () => {
       expect(vm.hasTextProvider).toBe(false);
       expect(vm.showLocalAiWizard).toBe(true);
     } finally {
-      (window as Record<string, unknown>).__TAURI__ = originalTauri;
+      restoreTauri();
     }
   });
 
@@ -506,8 +519,7 @@ describe('CapabilityViewModel', () => {
       apiKey: 'test-key',
     });
 
-    const originalTauri = (window as Record<string, unknown>).__TAURI__;
-    (window as Record<string, unknown>).__TAURI__ = true;
+    const restoreTauri = enableTauriForTest();
     try {
       const vm = createVm();
       vm.setActiveTab('text');
@@ -515,33 +527,31 @@ describe('CapabilityViewModel', () => {
       expect(vm.hasTextProvider).toBe(true);
       expect(vm.showLocalAiWizard).toBe(false);
     } finally {
-      (window as Record<string, unknown>).__TAURI__ = originalTauri;
+      restoreTauri();
     }
   });
 
   test('P01: showLocalAiWizard is false on image tab even in Tauri', () => {
-    const originalTauri = (window as Record<string, unknown>).__TAURI__;
-    (window as Record<string, unknown>).__TAURI__ = true;
+    const restoreTauri = enableTauriForTest();
     try {
       const vm = createVm();
       vm.setActiveTab('image');
 
       expect(vm.showLocalAiWizard).toBe(false);
     } finally {
-      (window as Record<string, unknown>).__TAURI__ = originalTauri;
+      restoreTauri();
     }
   });
 
   test('P01: showLocalAiWizard is false on voice tab even in Tauri', () => {
-    const originalTauri = (window as Record<string, unknown>).__TAURI__;
-    (window as Record<string, unknown>).__TAURI__ = true;
+    const restoreTauri = enableTauriForTest();
     try {
       const vm = createVm();
       vm.setActiveTab('voice');
 
       expect(vm.showLocalAiWizard).toBe(false);
     } finally {
-      (window as Record<string, unknown>).__TAURI__ = originalTauri;
+      restoreTauri();
     }
   });
 });

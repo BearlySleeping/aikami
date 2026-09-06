@@ -83,7 +83,7 @@ const authenticatedLocalProvider = (overrides?: Record<string, unknown>) => ({
   registryId: 'custom',
   label: 'Custom API (auth)',
   credential: 'sk-test-token',
-  baseUrl: 'http://192.168.1.101:8000',
+  baseUrl: 'https://192.168.1.101:8000',
   source: 'stored' as const,
   ...overrides,
 });
@@ -285,6 +285,17 @@ describe('verifyConnection — OpenAI-compatible (keyless)', () => {
     expect(headers?.Authorization).toBe('Bearer sk-test-token');
   });
 
+  test('rejects credentials over HTTP without sending a request', async () => {
+    const fetchFn = mockFetch(jsonResponse({ object: 'list', data: [] }));
+    const provider = authenticatedLocalProvider({ baseUrl: 'http://192.168.1.101:8000' });
+
+    const result = await verifyConnection({ provider }, fetchFn);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Credentials require an HTTPS endpoint');
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   test('returns error on invalid response shape', async () => {
     const fetchFn = mockFetch(jsonResponse({ models: [] }));
     const result = await verifyConnection({ provider: customProvider() }, fetchFn);
@@ -466,20 +477,28 @@ describe('verifyConnection — timeout and cancellation', () => {
   });
 
   test('has bounded latency (no infinite hang)', async () => {
-    // This test verifies the timeout signal is created — we can't easily
-    // test the wall-clock timeout without slowing tests, but we verify
-    // the abort signal chain is wired correctly.
-    const controller = new AbortController();
-    const fetchFn = mock(async (_url: string | URL, init: RequestInit) => {
-      // The signal should be present
-      expect(init.signal).toBeDefined();
-      return jsonResponse({ models: [] });
-    });
-
-    const result = await verifyConnection(
-      { provider: ollamaProvider(), signal: controller.signal },
-      fetchFn,
+    const fetchFn: FetchTransport = mock(
+      (_url: string | URL, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init.signal;
+          if (!signal) {
+            reject(new Error('Expected timeout signal'));
+            return;
+          }
+          const rejectOnAbort = () => {
+            reject(new DOMException('The operation was aborted', 'AbortError'));
+          };
+          if (signal.aborted) {
+            rejectOnAbort();
+            return;
+          }
+          signal.addEventListener('abort', rejectOnAbort, { once: true });
+        }),
     );
-    expect(result.ok).toBe(true);
+
+    const result = await verifyConnection({ provider: ollamaProvider(), timeoutMs: 10 }, fetchFn);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe('Connection timed out');
   });
 });

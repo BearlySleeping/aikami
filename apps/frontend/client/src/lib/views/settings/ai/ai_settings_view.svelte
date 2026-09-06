@@ -138,9 +138,9 @@ let { viewModel }: Props = $props();
                       <span class="text-[#cabeff]">├</span>
                       <span>{conn.label}</span>
                       <span class="badge badge-xs badge-ghost">{conn.capability}</span>
-                      <span class="text-[10px] {viewModel.connectionStatusFor(conn.id).colorClass}">
-                        {viewModel.connectionStatusFor(conn.id).dot}
-                        {viewModel.connectionStatusFor(conn.id).label}
+                      <span class="text-[10px] {conn.statusColorClass}">
+                        {conn.statusDot}
+                        {conn.statusLabel}
                       </span>
                       {#if connRoles.length > 0}
                         <span class="text-[#938ea1]/60"> · {connRoles.join(', ')} </span>

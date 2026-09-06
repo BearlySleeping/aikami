@@ -54,12 +54,19 @@ export type CapabilityStatusEntry = {
 /** A provider with its nested connections, for the provider tree. */
 export type ProviderTreeEntry = {
   provider: AiProvider;
-  connections: AiConnection[];
+  connections: ProviderTreeConnection[];
   registryLabel: string;
   isLocal: boolean;
   connectionCount: number;
   statusLabel: string;
   statusColorClass: string;
+};
+
+/** A provider-tree connection with its resolved verification status. */
+export type ProviderTreeConnection = AiConnection & {
+  statusLabel: string;
+  statusColorClass: string;
+  statusDot: string;
 };
 
 /** A connection with its role assignments. */
@@ -174,7 +181,8 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   // ── Testing ──
   readonly testResults: Record<string, ConnectionTestResult>;
   readonly testingIds: Set<string>;
-  readonly connectionStatusFor: (connectionId: ConnectionId) => { label: string; colorClass: string; dot: string; };
+  /** Resolves the current verification status for one connection. */
+  connectionStatusFor(connectionId: ConnectionId): { label: string; colorClass: string; dot: string };
 
   // ── Actions ──
   /** Opens the setup flow appropriate for a capability. */
@@ -372,7 +380,7 @@ export class AiSettingsViewModel
   private _imageAdvancedOpenStates: Record<ConnectionId, boolean> = $state({});
 
   /** Generation counter per connection — used to discard stale test responses. */
-  private _testGeneration: Record<ConnectionId, number> = {};
+  private _testGeneration: Record<ConnectionId, number> = $state({});
 
   // ── State ──
   isEditorOpen = $state(false);
@@ -445,12 +453,21 @@ export class AiSettingsViewModel
     const aiConnections = configService.getAiConnections();
     return providers.map((p) => {
       const conns = aiConnections.filter((c) => c.providerId === p.id);
+      const connections = conns.map((connection): ProviderTreeConnection => {
+        const status = this.connectionStatusFor(connection.id);
+        return {
+          ...connection,
+          statusLabel: status.label,
+          statusColorClass: status.colorClass,
+          statusDot: status.dot,
+        };
+      });
       const registry = _registryForCapability(conns[0]?.capability ?? 'text');
       const regEntry = registry.find((r) => r.id === p.registryId);
       const status = this._providerStatus(conns);
       return {
         provider: p,
-        connections: conns,
+        connections,
         registryLabel: regEntry?.label ?? p.registryId,
         isLocal: LOCAL_PROVIDER_IDS.has(p.registryId),
         connectionCount: conns.length,
@@ -1101,25 +1118,30 @@ export class AiSettingsViewModel
         };
       }
     } finally {
-      const newIds = new Set(this.testingIds);
-      newIds.delete(connectionId);
-      this.testingIds = newIds;
+      if (this._testGeneration[connectionId] === generation) {
+        const newIds = new Set(this.testingIds);
+        newIds.delete(connectionId);
+        this.testingIds = newIds;
+      }
     }
   }
 
-  get connectionStatusFor(): (connectionId: ConnectionId) => { label: string; colorClass: string; dot: string; } {
-    return (connectionId: ConnectionId) => {
-      if (this.testingIds.has(connectionId)) {
-        return { label: 'testing…', colorClass: 'text-warning', dot: '◌' };
-      }
-      const result = this.testResults[connectionId];
-      if (!result) {
-        return { label: 'not checked', colorClass: 'text-base-content/40', dot: '○' };
-      }
-      if (result.ok) {
-        return { label: `reachable (${result.latencyMs}ms)`, colorClass: 'text-success', dot: '●' };
-      }
-      return { label: result.error ? `unreachable: ${result.error}` : 'unreachable', colorClass: 'text-error', dot: '●' };
+  /** Resolves the current verification status for one connection. */
+  connectionStatusFor(connectionId: ConnectionId): { label: string; colorClass: string; dot: string } {
+    if (this.testingIds.has(connectionId)) {
+      return { label: 'testing…', colorClass: 'text-warning', dot: '◌' };
+    }
+    const result = this.testResults[connectionId];
+    if (!result) {
+      return { label: 'not checked', colorClass: 'text-base-content/40', dot: '○' };
+    }
+    if (result.ok) {
+      return { label: `reachable (${result.latencyMs}ms)`, colorClass: 'text-success', dot: '●' };
+    }
+    return {
+      label: result.error ? `unreachable: ${result.error}` : 'unreachable',
+      colorClass: 'text-error',
+      dot: '●',
     };
   }
 
@@ -1355,7 +1377,7 @@ export class AiSettingsViewModel
       newIds.delete(connectionId);
       this.testingIds = newIds;
     }
-    delete this._testGeneration[connectionId];
+    this._testGeneration[connectionId] = (this._testGeneration[connectionId] ?? 0) + 1;
   }
 
   private _defaultParams(cap: ConnectionCapability): TextParams | ImageParams | VoiceParams {

@@ -4,6 +4,8 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { BUILT_IN_PRESETS } from '@aikami/constants';
+import { createDeferred } from '@aikami/utils';
+import type { ConnectionTestResult } from '$types';
 import { localServicesMockBase } from '../../../test_preload.ts';
 
 // Mock configService with a controlled test state
@@ -1003,16 +1005,13 @@ describe('AiSettingsViewModel — P02: testConnection delegates to verifyConnect
     await vm.initialize();
 
     // Make verifyConnection hang so we can check loading state
-    let resolveVerify: (value: unknown) => void;
-    const hangPromise = new Promise((resolve) => {
-      resolveVerify = resolve;
-    });
-    mockVerifyConnection.mockImplementationOnce(async () => hangPromise);
+    const deferredVerify = createDeferred<ConnectionTestResult, Error>();
+    mockVerifyConnection.mockImplementationOnce(async () => deferredVerify.promise);
 
     const testPromise = vm.testConnection(cid);
     expect(vm.testingIds.has(cid)).toBe(true);
 
-    resolveVerify!({ ok: true, latencyMs: 10 });
+    deferredVerify.resolve({ ok: true, latencyMs: 10 });
     await testPromise;
 
     expect(vm.testingIds.has(cid)).toBe(false);
@@ -1025,13 +1024,10 @@ describe('AiSettingsViewModel — P02: testConnection delegates to verifyConnect
 
     // Simulate two rapid test calls where the first response arrives after
     // the second has already completed.
-    let resolveSlow: (value: unknown) => void;
-    const slowPromise = new Promise((resolve) => {
-      resolveSlow = resolve;
-    });
+    const deferredSlow = createDeferred<ConnectionTestResult, Error>();
 
     // First call — will be slow
-    mockVerifyConnection.mockImplementationOnce(async () => slowPromise);
+    mockVerifyConnection.mockImplementationOnce(async () => deferredSlow.promise);
     // Second call — fast, returns success
     mockVerifyConnection.mockImplementationOnce(async () => ({
       ok: true,
@@ -1042,10 +1038,49 @@ describe('AiSettingsViewModel — P02: testConnection delegates to verifyConnect
     await vm.testConnection(cid);
 
     // Now resolve the first (stale) response
-    resolveSlow!({ ok: true, latencyMs: 999 });
+    deferredSlow.resolve({ ok: true, latencyMs: 999 });
     await firstPromise;
 
     // The result should be the fast one, not the slow stale one
+    expect(vm.testResults[cid]?.latencyMs).toBe(5);
+  });
+
+  test('an older test finishing does not clear a newer test loading state', async () => {
+    const cid = seedConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    const first = createDeferred<ConnectionTestResult, Error>();
+    const second = createDeferred<ConnectionTestResult, Error>();
+    mockVerifyConnection.mockImplementationOnce(async () => first.promise);
+    mockVerifyConnection.mockImplementationOnce(async () => second.promise);
+
+    const firstPromise = vm.testConnection(cid);
+    const secondPromise = vm.testConnection(cid);
+    first.resolve({ ok: true, latencyMs: 10 });
+    await firstPromise;
+
+    expect(vm.testingIds.has(cid)).toBe(true);
+
+    second.resolve({ ok: true, latencyMs: 5 });
+    await secondPromise;
+    expect(vm.testingIds.has(cid)).toBe(false);
+  });
+
+  test('an edit prevents an older test from sharing the next test generation', async () => {
+    const cid = seedConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    const first = createDeferred<ConnectionTestResult, Error>();
+    mockVerifyConnection.mockImplementationOnce(async () => first.promise);
+    mockVerifyConnection.mockImplementationOnce(async () => ({ ok: true, latencyMs: 5 }));
+
+    const firstPromise = vm.testConnection(cid);
+    vm.openEditConnection(cid);
+    vm.saveDraft();
+    await vm.testConnection(cid);
+    first.resolve({ ok: true, latencyMs: 999 });
+    await firstPromise;
+
     expect(vm.testResults[cid]?.latencyMs).toBe(5);
   });
 
@@ -1265,6 +1300,12 @@ describe('AiSettingsViewModel — P03: provider tree status replaces inferred Ru
     expect(vm.connectionStatusFor(goodId).colorClass).toBe('text-success');
     expect(vm.connectionStatusFor(badId).label).toContain('unreachable');
     expect(vm.connectionStatusFor(badId).colorClass).toBe('text-error');
+    expect(entry.connections.find((connection) => connection.id === goodId)?.statusColorClass).toBe(
+      'text-success',
+    );
+    expect(entry.connections.find((connection) => connection.id === badId)?.statusColorClass).toBe(
+      'text-error',
+    );
   });
 
   test('AC-5: no network request on mount or initialize', async () => {

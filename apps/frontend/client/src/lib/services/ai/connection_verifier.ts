@@ -56,6 +56,8 @@ export type VerifyConnectionOptions = {
   baseUrl?: string;
   /** Optional AbortSignal for timeout/cancellation. */
   signal?: AbortSignal;
+  /** Maximum probe duration in milliseconds. */
+  timeoutMs?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -72,14 +74,14 @@ export type VerifyConnectionOptions = {
  * - Cloud providers: uses `PROVIDER_ENDPOINTS` with API-key auth.
  * - Unsupported protocols: returns `{ ok: false, error: '…' }`.
  *
- * @param options  Provider, optional resolved base URL, optional signal.
+ * @param options  Provider, optional resolved base URL, signal, and timeout.
  * @param fetchFn  Injectable fetch (defaults to globalThis.fetch).
  */
 export const verifyConnection = async (
   options: VerifyConnectionOptions,
   fetchFn: FetchTransport = globalThis.fetch.bind(globalThis),
 ): Promise<ConnectionTestResult> => {
-  const { provider, baseUrl, signal } = options;
+  const { provider, baseUrl, signal, timeoutMs } = options;
   const registryId = provider.registryId;
 
   const startMs = performance.now();
@@ -88,12 +90,12 @@ export const verifyConnection = async (
   try {
     // ── Ollama native ────────────────────────────────────────────────
     if (OLLAMA_NATIVE.has(registryId)) {
-      return verifyOllama(provider, baseUrl, elapsed, fetchFn, signal);
+      return verifyOllama(provider, baseUrl, elapsed, fetchFn, signal, timeoutMs);
     }
 
     // ── OpenAI-compatible ────────────────────────────────────────────
     if (OPENAI_COMPAT.has(registryId)) {
-      return verifyOpenAiCompat(provider, baseUrl, elapsed, fetchFn, signal);
+      return verifyOpenAiCompat(provider, baseUrl, elapsed, fetchFn, signal, timeoutMs);
     }
 
     // ── Cloud providers with API key ─────────────────────────────────
@@ -114,7 +116,7 @@ export const verifyConnection = async (
       };
     }
 
-    return verifyCloudProvider(endpoint, provider.credential, elapsed, fetchFn, signal);
+    return verifyCloudProvider(endpoint, provider.credential, elapsed, fetchFn, signal, timeoutMs);
   } catch (err) {
     return {
       ok: false,
@@ -153,6 +155,7 @@ const verifyOllama = async (
   elapsed: () => number,
   fetchFn: FetchTransport,
   outerSignal?: AbortSignal,
+  timeoutMs?: number,
 ): Promise<ConnectionTestResult> => {
   const url = buildProbeUrl(baseUrlOverride ?? provider.baseUrl, '/api/tags');
   if (!url) {
@@ -163,12 +166,12 @@ const verifyOllama = async (
     };
   }
 
-  const combinedSignal = createTimeoutSignal(outerSignal);
+  const { signal, cleanup } = createTimeoutSignal({ outerSignal, timeoutMs });
 
   try {
     const response = await fetchFn(url, {
       method: 'GET',
-      signal: combinedSignal,
+      signal,
     });
 
     if (!response.ok) {
@@ -192,6 +195,8 @@ const verifyOllama = async (
     return { ok: true, latencyMs: elapsed(), modelCount: models.length };
   } catch (err) {
     return { ok: false, latencyMs: elapsed(), error: normalizeError(err) };
+  } finally {
+    cleanup();
   }
 };
 
@@ -207,6 +212,7 @@ const verifyOpenAiCompat = async (
   elapsed: () => number,
   fetchFn: FetchTransport,
   outerSignal?: AbortSignal,
+  timeoutMs?: number,
 ): Promise<ConnectionTestResult> => {
   const raw = baseUrlOverride ?? provider.baseUrl;
   if (!raw) {
@@ -217,19 +223,38 @@ const verifyOpenAiCompat = async (
   const normalized = raw.replace(/\/+$/, '').replace(/\/v1$/, '');
   const url = `${normalized}/v1/models`;
 
-  const combinedSignal = createTimeoutSignal(outerSignal);
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return { ok: false, latencyMs: elapsed(), error: 'Invalid endpoint URL' };
+  }
+
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return { ok: false, latencyMs: elapsed(), error: 'Unsupported endpoint protocol' };
+  }
+
+  if (provider.credential && parsedUrl.protocol !== 'https:') {
+    return {
+      ok: false,
+      latencyMs: elapsed(),
+      error: 'Credentials require an HTTPS endpoint',
+    };
+  }
+
+  const { signal, cleanup } = createTimeoutSignal({ outerSignal, timeoutMs });
 
   // Build auth headers if the provider has a credential
   const headers: Record<string, string> = {};
   if (provider.credential) {
-    headers['Authorization'] = `Bearer ${provider.credential}`;
+    headers.Authorization = `Bearer ${provider.credential}`;
   }
 
   try {
     const response = await fetchFn(url, {
       method: 'GET',
       headers: Object.keys(headers).length > 0 ? headers : undefined,
-      signal: combinedSignal,
+      signal,
     });
 
     if (!response.ok) {
@@ -253,6 +278,8 @@ const verifyOpenAiCompat = async (
     return { ok: true, latencyMs: elapsed(), modelCount: obj.data.length };
   } catch (err) {
     return { ok: false, latencyMs: elapsed(), error: normalizeError(err) };
+  } finally {
+    cleanup();
   }
 };
 
@@ -265,16 +292,17 @@ const verifyCloudProvider = async (
   elapsed: () => number,
   fetchFn: FetchTransport,
   outerSignal?: AbortSignal,
+  timeoutMs?: number,
 ): Promise<ConnectionTestResult> => {
   const url = buildVerifyUrl({ endpoint, apiKey });
   const headers = buildVerifyHeaders({ endpoint, apiKey });
-  const combinedSignal = createTimeoutSignal(outerSignal);
+  const { signal, cleanup } = createTimeoutSignal({ outerSignal, timeoutMs });
 
   try {
     const response = await fetchFn(url, {
       method: endpoint.method,
       headers,
-      signal: combinedSignal,
+      signal,
     });
 
     if (!response.ok) {
@@ -298,6 +326,8 @@ const verifyCloudProvider = async (
     return { ok: true, latencyMs: elapsed(), modelCount };
   } catch (err) {
     return { ok: false, latencyMs: elapsed(), error: normalizeError(err) };
+  } finally {
+    cleanup();
   }
 };
 
@@ -307,7 +337,9 @@ const verifyCloudProvider = async (
 
 /** Builds a probe URL from a base + path. Returns undefined when base is empty. */
 const buildProbeUrl = (base: string | undefined, path: string): string | undefined => {
-  if (!base) return undefined;
+  if (!base) {
+    return undefined;
+  }
   return `${base.replace(/\/+$/, '')}${path}`;
 };
 
@@ -334,40 +366,37 @@ const parseJsonResponse = async (
 };
 
 /**
- * Creates an AbortSignal with a built-in timeout, combined with an
- * optional external signal. The combined signal aborts when EITHER
- * source aborts (timeout OR external cancellation).
+ * Creates an AbortSignal with a built-in timeout, combined with an optional
+ * external signal, plus cleanup for the timer and external listener.
  */
-const createTimeoutSignal = (outerSignal?: AbortSignal): AbortSignal => {
+const createTimeoutSignal = (options: {
+  outerSignal?: AbortSignal;
+  timeoutMs?: number;
+}): { signal: AbortSignal; cleanup: () => void } => {
+  const { outerSignal, timeoutMs = TEST_TIMEOUT_MS } = options;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let onOuterAbort: (() => void) | undefined;
+
+  const cleanup = () => {
+    clearTimeout(timeoutId);
+    if (outerSignal && onOuterAbort) {
+      outerSignal.removeEventListener('abort', onOuterAbort);
+    }
+  };
 
   if (outerSignal) {
     if (outerSignal.aborted) {
-      clearTimeout(timeoutId);
       controller.abort(outerSignal.reason);
-      return controller.signal;
+    } else {
+      onOuterAbort = () => {
+        controller.abort(outerSignal.reason);
+      };
+      outerSignal.addEventListener('abort', onOuterAbort, { once: true });
     }
-    const onOuterAbort = () => {
-      clearTimeout(timeoutId);
-      controller.abort(outerSignal.reason);
-    };
-    outerSignal.addEventListener('abort', onOuterAbort, { once: true });
-    // Clean up the listener when our controller aborts
-    controller.signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timeoutId);
-        outerSignal.removeEventListener('abort', onOuterAbort);
-      },
-      { once: true },
-    );
   }
 
-  // Clean up timeout on abort
-  controller.signal.addEventListener('abort', () => clearTimeout(timeoutId), { once: true });
-
-  return controller.signal;
+  return { signal: controller.signal, cleanup };
 };
 
 /**
@@ -375,14 +404,24 @@ const createTimeoutSignal = (outerSignal?: AbortSignal): AbortSignal => {
  */
 const normalizeError = (err: unknown): string => {
   if (err instanceof DOMException) {
-    if (err.name === 'AbortError') return 'Connection timed out';
-    if (err.name === 'TimeoutError') return 'Connection timed out';
-    if (err.name === 'NotAllowedError') return 'Network request blocked by browser policy';
-    if (err.name === 'NetworkError') return 'Network request failed — connection refused';
+    if (err.name === 'AbortError') {
+      return 'Connection timed out';
+    }
+    if (err.name === 'TimeoutError') {
+      return 'Connection timed out';
+    }
+    if (err.name === 'NotAllowedError') {
+      return 'Network request blocked by browser policy';
+    }
+    if (err.name === 'NetworkError') {
+      return 'Network request failed — connection refused';
+    }
     return err.message;
   }
   if (err instanceof TypeError) {
-    if (err.message.includes('fetch')) return 'Network request failed — connection refused';
+    if (err.message.includes('fetch')) {
+      return 'Network request failed — connection refused';
+    }
     return err.message;
   }
   if (err instanceof Error) {
