@@ -16,10 +16,13 @@ import type {
   ImageParamsSchema,
   ProviderSourceSchema,
   RoleAssignmentsSchema,
+  RoleOverridesSchema,
+  RoutingSchema,
   TextParamsSchema,
   V1ConnectionSchema,
   V1VaultPayloadSchema,
   VaultPayloadV2Schema,
+  VaultPayloadV3Schema,
   VoiceArchetypeSchema,
   VoiceParamsSchema,
 } from '@aikami/schemas';
@@ -61,6 +64,15 @@ export type AiConnection = Static<typeof AiConnectionSchema>;
 
 /** What the game uses a connection FOR. Replaces defaultByCapability. */
 export type RoleAssignments = Static<typeof RoleAssignmentsSchema>;
+
+/** Role overrides — allows null to explicitly disable a role. */
+export type RoleOverrides = Static<typeof RoleOverridesSchema>;
+
+/** Routing — capability defaults and role overrides. */
+export type Routing = Static<typeof RoutingSchema>;
+
+/** V3 vault payload shape. */
+export type VaultPayloadV3 = Static<typeof VaultPayloadV3Schema>;
 
 /** V2 vault payload shape. */
 export type VaultPayloadV2 = Static<typeof VaultPayloadV2Schema>;
@@ -292,8 +304,10 @@ export type ConfigState = {
   aiConnections: AiConnection[];
   /** C-463: Role assignments (which connection for which job). */
   roles: RoleAssignments;
-  /** C-463: Schema version of the persisted vault (0 = not set, 1 = v1, 2 = v2). */
+  /** C-481: Schema version of the persisted vault (0 = not set, 1 = v1, 2 = v2, 3 = v3). */
   schemaVersion: number;
+  /** C-481: Routing — capability defaults and role overrides. */
+  routing: Routing;
   /** Generation parameter presets (built-in + user-defined). */
   presets: PresetEntry[];
   /** Lorebooks (world info collections) persisted in localStorage. */

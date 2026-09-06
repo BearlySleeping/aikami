@@ -81,3 +81,5 @@ export * from './lib/media/voice.ts';
 export * from './lib/onboarding.ts';
 export * from './lib/project/project.ts';
 export * from './lib/runtime/runtime_engine_config.ts';
+export * from './lib/config_errors.ts';
+export * from './lib/storage_seam.ts';
