@@ -17,11 +17,11 @@ const { viewModel }: Props = $props();
     <p class="my-1" data-testid="label-display">Label: {viewModel.label}</p>
     <p class="my-1" data-testid="tick-display">Ticks: {viewModel.tickCount}</p>
 
-    {#if viewModel.isAsyncPending}
+    {#if viewModel.showAsyncPending}
       <p class="my-1 text-amber-500" data-testid="async-status">Async: pending...</p>
-    {:else if viewModel.asyncResult}
+    {:else if viewModel.showAsyncResult}
       <p class="my-1" data-testid="async-result">Async: {viewModel.asyncResult}</p>
-    {:else}
+    {:else if viewModel.showAsyncIdle}
       <p class="my-1 text-gray-500" data-testid="async-status">Async: idle</p>
     {/if}
 
@@ -36,14 +36,14 @@ const { viewModel }: Props = $props();
       <button
         type="button"
         data-testid="btn-async-fast"
-        onclick={() => viewModel.startAsyncOperation({ delayMs: 50, result: 'fast result' })}
+        onclick={() => viewModel.startFastAsyncOperation()}
       >
         Async Fast
       </button>
       <button
         type="button"
         data-testid="btn-async-slow"
-        onclick={() => viewModel.startAsyncOperation({ delayMs: 5000, result: 'slow result' })}
+        onclick={() => viewModel.startSlowAsyncOperation()}
       >
         Async Slow
       </button>

@@ -113,10 +113,15 @@ behavior, use the compiled Playwright E2E lane:
 | Runner | `bun test --preload ./src/lib/test_preload.ts` | `cd apps/e2e && bun run test` (Playwright) |
 | Runes | Identity polyfills | Real Svelte 5 compiler transform |
 | Reactivity | ❌ — cannot observe reactive updates | ✅ — $state/$derived/$effect work |
-| Lifecycle | ❌ — no onMount/dispose | ✅ — mount/unmount, effect cleanup |
-| Async stale updates | ❌ — no real async scheduler | ✅ — AbortController patterns |
+| Lifecycle | ✅ — disposal logic with timers/resources | ✅ — component mount/unmount, real $effect cleanup |
+| Async stale updates | ✅ — setTimeout and AbortController patterns | ✅ — browser-integrated cancellation behavior |
 | Speed | Fast (no browser) | Slower (browser startup) |
 | Location | `apps/frontend/client/src/lib/` | `apps/e2e/tests/client/` |
+
+Use Pure Bun for direct lifecycle disposal logic and stale-update prevention
+that can be exercised with `setTimeout` and `AbortController`. Use the compiled
+Playwright lane when the behavior depends on component mount/unmount, real
+`$effect` cleanup, or DOM reactivity.
 
 **Test fixture location**: compiled lifecycle test components live in
 `apps/frontend/client/src/lib/views/reactive_lifecycle/` with a dev sandbox

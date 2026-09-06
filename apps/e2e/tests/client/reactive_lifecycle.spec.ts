@@ -125,7 +125,7 @@ test.describe('Compiled Svelte reactivity (C-477)', () => {
       await page.disposeButton.click();
 
       // Wait longer than the original delay — the async result should NOT appear
-      await page.page.waitForTimeout(200);
+      await page.page.waitForTimeout(5500);
 
       // After dispose, the async should be idle (cancelled) and no result shown
       // The component may still show the pending indicator that was there at

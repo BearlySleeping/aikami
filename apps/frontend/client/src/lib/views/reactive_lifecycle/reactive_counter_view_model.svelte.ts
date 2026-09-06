@@ -37,12 +37,20 @@ export type ReactiveCounterViewModelInterface = BaseViewModelInterface & {
   readonly asyncResult: string | undefined;
   /** True while an async operation is in flight. */
   readonly isAsyncPending: boolean;
+  /** True when the pending async state should be rendered. */
+  readonly showAsyncPending: boolean;
+  /** True when the completed async result should be rendered. */
+  readonly showAsyncResult: boolean;
+  /** True when no async operation or result should be rendered. */
+  readonly showAsyncIdle: boolean;
 
   increment(): void;
   decrement(): void;
   reset(): void;
-  /** Starts a simulated async operation that dispose() can cancel. */
-  startAsyncOperation(options: { delayMs: number; result: string }): void;
+  /** Starts the short successful operation used by the fixture. */
+  startFastAsyncOperation(): void;
+  /** Starts the slow cancellable operation used by the fixture. */
+  startSlowAsyncOperation(): void;
 };
 
 // ---------------------------------------------------------------------------
@@ -80,7 +88,11 @@ class ReactiveCounterViewModel
   constructor(options: ReactiveCounterViewModelOptions) {
     super(options);
     this.count = options.initialCount ?? 0;
+  }
+
+  override async initialize(): Promise<void> {
     this._startTickEffect();
+    await super.initialize();
   }
 
   increment(): void {
@@ -98,11 +110,42 @@ class ReactiveCounterViewModel
     this.isAsyncPending = false;
   }
 
+  startFastAsyncOperation(): void {
+    this._startAsyncOperation({ delayMs: 50, result: 'fast result' });
+  }
+
+  startSlowAsyncOperation(): void {
+    this._startAsyncOperation({ delayMs: 5000, result: 'slow result' });
+  }
+
+  /**
+   * Cancels the in-flight async operation, then defers to BaseViewModel, whose
+   * dispose() fires every cleanup registered through registerEffectRoot — that
+   * is what clears the interval and sets effectCleanupFired.
+   */
+  override async dispose(): Promise<void> {
+    this._asyncController?.abort();
+    this._asyncController = undefined;
+    await super.dispose();
+  }
+
+  get showAsyncPending(): boolean {
+    return this.isAsyncPending;
+  }
+
+  get showAsyncResult(): boolean {
+    return !this.isAsyncPending && this.asyncResult !== undefined;
+  }
+
+  get showAsyncIdle(): boolean {
+    return !this.isAsyncPending && this.asyncResult === undefined;
+  }
+
   /**
    * Starts a simulated async operation. The ViewModel can be disposed while
    * the operation is pending — the AbortController prevents stale updates.
    */
-  startAsyncOperation(options: { delayMs: number; result: string }): void {
+  private _startAsyncOperation(options: { delayMs: number; result: string }): void {
     this._asyncController?.abort();
     this._asyncController = new AbortController();
     const { signal } = this._asyncController;
@@ -121,17 +164,6 @@ class ReactiveCounterViewModel
       clearTimeout(timer);
       this.isAsyncPending = false;
     });
-  }
-
-  /**
-   * Cancels the in-flight async operation, then defers to BaseViewModel, whose
-   * dispose() fires every cleanup registered through registerEffectRoot — that
-   * is what clears the interval and sets effectCleanupFired.
-   */
-  override async dispose(): Promise<void> {
-    this._asyncController?.abort();
-    this._asyncController = undefined;
-    await super.dispose();
   }
 
   private _startTickEffect(): void {
