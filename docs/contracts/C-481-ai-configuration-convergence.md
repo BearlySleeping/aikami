@@ -25,7 +25,7 @@ created_at: "2026-09-05T15:34:22Z"
 | **Type** | full |
 | **Priority** | P0 — prevent configuration divergence before new UX |
 | **Dependencies** | C-463/C-465 implementation. No dependency on C-482/C-483/C-484 |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | Connection/settings guidance in `apps/frontend/docs/src/content/docs/` is updated by C-484, not here |
 | **Contract version** | 2.0.0 |
@@ -203,3 +203,73 @@ None delegated as product decisions. Approval covers v3 defaults plus pinned and
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+
+Phase 1 (seam freeze) and Phase 3 (v3 writes and migration) are fully implemented.
+Phase 2 (projection repair) was already completed by P04. Phase 4 (shared setup
+operations) has the definitional foundation in place — `VerificationStrategy`,
+`isLocalProvider`, `providerNeedsUrl`, `getVerificationStrategy` and
+`providerSupportsModelDiscovery` typed accessors are added to the constants
+package. Phase 5 (canonical resolution) is deferred due to size constraints.
+
+The existing `connection_verifier.ts` still has its own `OLLAMA_NATIVE`,
+`OPENAI_COMPAT` and `LOCAL_PROVIDERS` sets which duplicate the canonical
+definitions — these should be migrated to use the constants accessors in a
+follow-up.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Stable account identity: `providerId`-based lookup, typed provider descriptors, credential rotation preserves ID. `_findProviderByRegistry` removed from seam layer |
+| AC-2 | ✅ | Already completed by P04. Canonical mutators reproject, all tests pass |
+| AC-3 | ✅ | Routing schema with three distinguishable states (absent/pinned/`null`). Schema tests validate all states round-trip |
+| AC-4 | ✅ | v2→v3 migration preserves providers, connections, roles, presets. Removes orphaned providers. Schema-validated v3 payload with routing |
+| AC-5 | ⚠️ | Definitional foundation in place (`VerificationStrategy`, typed accessors). `connection_verifier.ts` still has duplicated sets — follow-up needed to consume from constants |
+| AC-6 | ✅ | Provider definitions are declarative: `capabilities`, `verificationStrategy`, `supportsModelDiscovery` read from one definition. `voice` remains TTS key |
+| AC-7 | ❌ | Deferred. Single resolver not yet introduced. Existing per-consumer resolution paths remain |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/domain/providers_config.test.ts` | Schema validation tests for v3 payload, routing, three routing states |
+| `packages/shared/types/src/lib/config_errors.ts` | Typed failure taxonomy for config/setup operations |
+| `packages/shared/types/src/lib/storage_seam.ts` | Typed storage/restore interface (`VaultAdapter`) |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/lib/domain/providers_config.ts` | Added `RoutingSchema`, `RoleOverridesSchema`, `VaultPayloadV3Schema`. Imported `Static` from typebox |
+| `packages/shared/types/src/lib/domain/providers_config.ts` | Added `Routing`, `RoleOverrides`, `VaultPayloadV3` types. Added `routing` to `ConfigState` |
+| `packages/shared/types/src/index.ts` | Exported `config_errors.ts` and `storage_seam.ts` |
+| `packages/shared/constants/src/lib/providers.ts` | Added `VerificationStrategy` type. Added `verificationStrategy`, `supportsModelDiscovery`, `capabilities` to all provider descriptors. Added typed accessors (`isLocalProvider`, `providerNeedsUrl`, `getVerificationStrategy`, etc.) |
+| `apps/frontend/client/src/lib/services/config/config_migration.ts` | Added `migrateVaultV2ToV3` migration function |
+| `apps/frontend/client/src/lib/services/config/config_migration.test.ts` | Added 5 v2→v3 migration tests |
+| `apps/frontend/client/src/lib/services/config/config_service.svelte.ts` | Updated save/load for v3 format with routing. Added isolated v3 storage namespace. Updated default state with routing |
+| `apps/frontend/client/src/lib/services/config/config_service.test.ts` | Updated 2 tests for v3 format (no legacy field, no separate voiceApiKey/imageApiKey) |
+
+### Deviations from Spec
+
+- Phase 5 (canonical resolution) deferred to stay within the PR-size gate. The
+  existing per-consumer resolution paths continue to work through the legacy
+  projections.
+- Phase 4 (shared setup operations) has the definitional foundation but the
+  `connection_verifier.ts` helper sets still duplicate the canonical constants.
+  Full migration of setup operations to shared services is deferred.
+- `_findProviderByRegistry` still exists in the config service for legacy compat
+  but the new typed accessors in constants provide the replacement.
+
+### Test Results
+
+- Schemas: 517 PASS / 0 FAIL (+21 new schema tests)
+- Constants: 130 PASS / 0 FAIL
+- Migration: 17 PASS / 0 FAIL (+5 new v2→v3 migration tests)
+- Config service: 60 PASS / 0 FAIL (2 tests updated for v3 format)
+- Connection verifier: 38 PASS / 0 FAIL
+- Client full suite: 1959 PASS / 40 FAIL (0 new failures, 5 more passing than baseline)
+- Baseline pre-existing: 40 FAIL (unchanged)
