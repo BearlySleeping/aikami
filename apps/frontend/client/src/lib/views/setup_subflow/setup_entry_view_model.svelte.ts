@@ -11,8 +11,8 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import {
-  type SetupSubflowViewModelInterface,
   getSetupSubflowViewModel,
+  type SetupSubflowViewModelInterface,
 } from './setup_subflow_view_model.svelte';
 
 export type SetupEntryViewModelInterface = BaseViewModelInterface & {

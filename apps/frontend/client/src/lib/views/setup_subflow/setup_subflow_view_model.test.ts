@@ -28,16 +28,18 @@ const configServiceMock = {
 mock.module('$services', () => ({
   configService: configServiceMock,
   capabilityService: {
-    detect: mock(async (): Promise<CapabilitySnapshot> => ({
-      isComplete: true,
-      textStatus: 'detected',
-      textProviderId: 'ollama',
-      textModelName: 'llama3.2',
-      imageStatus: 'not_found',
-      voiceStatus: 'not_found',
-      summary: 'Local AI detected',
-      detectedAt: new Date().toISOString(),
-    })),
+    detect: mock(
+      async (): Promise<CapabilitySnapshot> => ({
+        isComplete: true,
+        textStatus: 'detected',
+        textProviderId: 'ollama',
+        textModelName: 'llama3.2',
+        imageStatus: 'not_found',
+        voiceStatus: 'not_found',
+        summary: 'Local AI detected',
+        detectedAt: new Date().toISOString(),
+      }),
+    ),
   },
   runtimeConfigService: {
     getTextUrl: mock(() => 'http://localhost:11434'),

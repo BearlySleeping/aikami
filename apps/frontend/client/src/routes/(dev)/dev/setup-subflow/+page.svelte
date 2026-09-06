@@ -11,8 +11,6 @@ const viewModel = getSetupSubflowViewModel({ className: 'DevSetupSubflow' });
 </script>
 
 <div class="min-h-screen bg-base-300 p-4">
-  <div class="mb-4 text-center text-sm text-base-content/50">
-    Dev Sandbox — Setup Subflow
-  </div>
+  <div class="mb-4 text-center text-sm text-base-content/50">Dev Sandbox — Setup Subflow</div>
   <SetupSubflowView {viewModel} />
 </div>

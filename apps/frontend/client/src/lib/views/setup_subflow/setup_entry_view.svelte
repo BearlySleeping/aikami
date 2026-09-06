@@ -6,8 +6,8 @@
 // Contract: C-483 AC-1
 
 import { BaseViewModelContainer } from '$components';
-import SetupSubflowView from './setup_subflow_view.svelte';
 import type { SetupEntryViewModelInterface } from './setup_entry_view_model.svelte';
+import SetupSubflowView from './setup_subflow_view.svelte';
 
 type Props = {
   viewModel: SetupEntryViewModelInterface;

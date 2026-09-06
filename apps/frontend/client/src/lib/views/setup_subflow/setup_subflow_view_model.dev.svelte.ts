@@ -5,9 +5,9 @@
 // Contract: C-483
 
 import {
+  getSetupSubflowViewModel,
   type SetupSubflowViewModelInterface,
   type SetupSubflowViewModelOptions,
-  getSetupSubflowViewModel,
 } from './setup_subflow_view_model.svelte';
 
 /**

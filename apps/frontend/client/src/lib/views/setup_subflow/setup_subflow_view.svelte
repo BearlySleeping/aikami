@@ -22,9 +22,7 @@ const { viewModel }: Props = $props();
         <!-- Header -->
         <div class="text-center">
           <h1 class="text-2xl font-bold text-base-content">AI Setup</h1>
-          <p class="mt-1 text-sm text-base-content/60">
-            Configure AI capabilities for your game
-          </p>
+          <p class="mt-1 text-sm text-base-content/60">Configure AI capabilities for your game</p>
         </div>
 
         <!-- Entry step — choose a path -->
@@ -52,20 +50,21 @@ const { viewModel }: Props = $props();
               Text Only (Skip Optional)
             </button>
           </div>
-
         <!-- Results step — feature selection -->
         {:else if viewModel.step === 'results'}
           <div class="flex flex-col gap-3">
             <p class="text-sm text-base-content/70">Select capabilities to set up:</p>
             {#each viewModel.capabilityToggles as toggle (toggle.id)}
-              <label class="flex cursor-pointer items-center gap-3 rounded-lg border border-base-300 p-3 hover:bg-base-200">
+              <label
+                class="flex cursor-pointer items-center gap-3 rounded-lg border border-base-300 p-3 hover:bg-base-200"
+              >
                 <input
                   type="checkbox"
                   class="checkbox checkbox-primary"
                   checked={toggle.enabled}
                   disabled={toggle.required}
                   onchange={() => viewModel.toggleCapability(toggle.id)}
-                />
+                >
                 <div class="flex-1">
                   <p class="font-medium">
                     {toggle.label}
@@ -101,21 +100,15 @@ const { viewModel }: Props = $props();
               </button>
             </div>
           </div>
-
         <!-- Detecting step -->
         {:else if viewModel.step === 'detecting'}
           <div class="flex flex-col items-center gap-3 py-8">
             <span class="loading loading-spinner loading-lg text-primary"></span>
             <p class="text-sm text-base-content/60">Scanning for AI providers...</p>
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs"
-              onclick={() => viewModel.goBack()}
-            >
+            <button type="button" class="btn btn-ghost btn-xs" onclick={() => viewModel.goBack()}>
               Cancel
             </button>
           </div>
-
         <!-- Plan step — review -->
         {:else if viewModel.step === 'plan'}
           <div class="flex flex-col gap-4">
@@ -187,14 +180,12 @@ const { viewModel }: Props = $props();
               </button>
             </div>
           </div>
-
         <!-- Applying step -->
         {:else if viewModel.step === 'applying'}
           <div class="flex flex-col items-center gap-3 py-8">
             <span class="loading loading-spinner loading-lg text-primary"></span>
             <p class="text-sm text-base-content/60">Applying configuration...</p>
           </div>
-
         <!-- Ready step -->
         {:else if viewModel.step === 'ready'}
           <div class="flex flex-col items-center gap-4 py-4">
@@ -204,23 +195,14 @@ const { viewModel }: Props = $props();
               Your AI setup is complete. You can start playing now or configure more options later.
             </p>
             <div class="flex gap-2">
-              <button
-                type="button"
-                class="btn btn-primary"
-                onclick={() => viewModel.leave()}
-              >
+              <button type="button" class="btn btn-primary" onclick={() => viewModel.leave()}>
                 Start Playing
               </button>
-              <button
-                type="button"
-                class="btn btn-outline"
-                onclick={() => viewModel.reset()}
-              >
+              <button type="button" class="btn btn-outline" onclick={() => viewModel.reset()}>
                 Set Up More
               </button>
             </div>
           </div>
-
         <!-- Error step -->
         {:else if viewModel.step === 'error'}
           <div class="flex flex-col items-center gap-4 py-4">
@@ -228,18 +210,10 @@ const { viewModel }: Props = $props();
               <span>{viewModel.errorMessage || 'An error occurred'}</span>
             </div>
             <div class="flex gap-2">
-              <button
-                type="button"
-                class="btn btn-outline"
-                onclick={() => viewModel.retry()}
-              >
+              <button type="button" class="btn btn-outline" onclick={() => viewModel.retry()}>
                 Retry
               </button>
-              <button
-                type="button"
-                class="btn btn-ghost"
-                onclick={() => viewModel.goBack()}
-              >
+              <button type="button" class="btn btn-ghost" onclick={() => viewModel.goBack()}>
                 Go Back
               </button>
             </div>

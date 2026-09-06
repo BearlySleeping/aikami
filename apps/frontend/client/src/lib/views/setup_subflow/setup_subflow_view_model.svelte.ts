@@ -5,14 +5,12 @@
 // text-only) over a single flow. Calls C-481's shared services directly.
 // Contract: C-483 AC-1, AC-2, AC-3, AC-4, AC-5, AC-6
 
+import { TEXT_PROVIDERS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import {
-  TEXT_PROVIDERS,
-} from '@aikami/constants';
 import type { CapabilitySnapshot, ConnectionEntry } from '@aikami/types';
 import { capabilityService, configService, runtimeConfigService } from '$services';
 import type { Connection, ConnectionCapability } from '$types';
@@ -133,7 +131,13 @@ const CAPABILITY_DEFINITIONS: readonly CapabilityToggle[] = [
 ];
 
 const LOCAL_PROVIDER_IDS = new Set([
-  'ollama', 'llamacpp', 'ooba', 'comfyui', 'webui', 'kokoro', 'voicevox',
+  'ollama',
+  'llamacpp',
+  'ooba',
+  'comfyui',
+  'webui',
+  'kokoro',
+  'voicevox',
 ]);
 
 // ── ViewModel ──────────────────────────────────────────────────────────
@@ -231,7 +235,9 @@ class SetupSubflowViewModel
         providers.push({
           provider: snapshot.textProviderId,
           capability: 'text',
-          label: TEXT_PROVIDERS.find((p) => p.id === snapshot.textProviderId)?.label ?? snapshot.textProviderId,
+          label:
+            TEXT_PROVIDERS.find((p) => p.id === snapshot.textProviderId)?.label ??
+            snapshot.textProviderId,
           isLocal: LOCAL_PROVIDER_IDS.has(snapshot.textProviderId),
           isCompatible: true,
           modelName: snapshot.textModelName,
@@ -286,9 +292,7 @@ class SetupSubflowViewModel
     this.step = 'applying';
 
     try {
-      const enabledCaps = this._capabilityToggles
-        .filter((t) => t.enabled)
-        .map((t) => t.id);
+      const enabledCaps = this._capabilityToggles.filter((t) => t.enabled).map((t) => t.id);
 
       // Detect and seed connections for enabled capabilities.
       if (enabledCaps.includes('text')) {
@@ -392,9 +396,13 @@ class SetupSubflowViewModel
         baseUrl: textBaseUrl ?? '',
         model: this.snapshot.textModelName ?? '',
         generationParams: {
-          temperature: 0.7, topP: 0.95, topK: 40,
-          repetitionPenalty: 1, presencePenalty: 0,
-          maxTokens: 1024, contextSize: 4096,
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40,
+          repetitionPenalty: 1,
+          presencePenalty: 0,
+          maxTokens: 1024,
+          contextSize: 4096,
         },
         isDefault: connections.length === 0,
         source: 'detected',
@@ -469,13 +477,16 @@ class SetupSubflowViewModel
 
     // Check for download requirements.
     if (snapshot.textStatus === 'not_found') {
-      resourceWarnings.push('A text AI provider is required. You can use a cloud service or install Ollama.');
+      resourceWarnings.push(
+        'A text AI provider is required. You can use a cloud service or install Ollama.',
+      );
     }
 
     // Determine online/paid requirements.
-    const hasOnlineOnly = providers.length === 0
-      && snapshot.textStatus !== 'detected'
-      && snapshot.textStatus !== 'configured';
+    const hasOnlineOnly =
+      providers.length === 0 &&
+      snapshot.textStatus !== 'detected' &&
+      snapshot.textStatus !== 'configured';
     if (hasOnlineOnly) {
       resourceWarnings.push('Some features require an internet connection for cloud AI services.');
     }
