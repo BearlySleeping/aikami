@@ -1,20 +1,27 @@
 # AI setup and settings — execution plan
 
-Status: planning approved; **C-481 and C-482 approved**. C-483/C-484 remain **draft**. Contract approval does not bypass the queue's baseline, pilot or seam-review gates.
-Created: 2026-09-05. Research baseline: `3bb9af3b` plus 25 dirty/untracked paths; recheck before work.
-This pack does not authorize commits, PR creation, merges, deployment, or paid product inference.
+Status: **four approved contracts, four PRs.** C-481, C-482, C-483 and C-484 are all approved and
+runnable with `bun run contract C-xxx`.
+Created: 2026-09-05. Re-merged 2026-09-06. Research baseline: `3bb9af3b`; source review at `acb7a18e`.
+Recheck every baseline premise against current `main` before each run.
 
 ## Start here
 
-1. Run **[P00: baseline](packets/00_baseline.md)** with DeepSeek V4 Flash; it is read-only.
-2. Resolve which existing local changes belong in the approved baseline. Do not stash/commit them automatically.
-3. Review the contracts below; each must be explicitly approved before its feature implementation. C-481's and C-482's approvals are recorded in their specifications; the other two still require approval.
-4. Dispatch **[P01: desktop gating](packets/01_desktop_gating.md)**, then **[P02: local verification](packets/02_local_verification.md)**.
-5. After those two pilot PRs land, inspect cost/retries/review quality before increasing concurrency.
-6. Follow the dependency order in [queue.md](queue.md), not contract number order alone.
+Run the contracts in order, one at a time, each producing one PR:
 
-Run one packet per agent session: read [dispatch.md](dispatch.md) and the selected packet, implement only that packet, then stop at the handoff.
-Do **not** run a whole `bun run contract C-481` as the first step: a contract contains multiple review-sized slices, and the pipeline may advance to PR/review automatically.
+```bash
+bun run contract C-481   # configuration, migration, setup operations, routing
+bun run contract C-482   # downloads, catalog, jobs, owned runtime lifecycle
+bun run contract C-483   # guided setup: subflows, first-run routes, optional modalities
+bun run contract C-484   # capability-first settings + programme close-out
+```
+
+Each contract depends on the previous one being **merged on `main`** — not merely written in another
+worktree. Run `bun contract` from `main`, not from a feature-branch worktree.
+
+The earlier packet-based execution (P00–P05) and the C-485…C-501 split are **withdrawn**. Their
+scope lives inside the four contracts above; their concrete baseline evidence was folded into the
+contracts' *Problem & Baseline Evidence* sections. Do not reintroduce a packet layer.
 
 ## Product decisions carried forward
 
@@ -42,40 +49,45 @@ Do **not** run a whole `bun run contract C-481` as the first step: a contract co
 | Sound effects / ambience generation | Separate reserved design case; not TTS or volume settings |
 | Video generation | Reserved design case, not an enabled feature |
 
-Music, ambience, STT and video need typed capability-specific adapters/configuration later. Long-running jobs must not assume every request is streamed text.
-Dynamic music cues, looping/mixing, microphone UX and video playback are separate future features, not hidden scope in this refactor.
-New managed image engines or in-app Docker management are **not promised** here; unavailable install paths must be absent, not nonfunctional buttons.
+Music, ambience, STT and video need typed capability-specific adapters and configuration later.
+Long-running jobs must not assume every request is streamed text. Dynamic music cues, looping and
+mixing, microphone UX and video playback are separate future features, not hidden scope here.
+New managed image engines and in-app Docker management are **not promised**; unavailable install
+paths must be absent, not nonfunctional buttons.
 
-## Durable specifications
+## The four contracts
 
-| Contract | Weight | New guarantee / existing work reused |
+| Contract | Delivers | Phases inside the one PR |
 |---|---|---|
-| [C-481](../../contracts/C-481-ai-configuration-convergence.md) | Full | Canonical configuration/routing, identity and compatibility; follows C-463/C-465 |
-| [C-482](../../contracts/C-482-managed-ai-runtime-lifecycle.md) | Full | Shared catalog/planning, durable jobs, safe native lifecycle; follows C-389/C-391/C-467 |
-| [C-483](../../contracts/C-483-guided-ai-setup.md) | Thin | Guided setup using C-481/C-482 operations; follows C-466 |
-| [C-484](../../contracts/C-484-capability-first-settings.md) | Thin | Searchable task-first settings using the same operations; follows C-465/C-466 |
+| [C-481](../../contracts/C-481-ai-configuration-convergence.md) | Canonical configuration, routing, identity, migration and shared setup operations | seam freeze → projection repair → v3 writes + migration → setup operations → canonical resolution |
+| [C-482](../../contracts/C-482-managed-ai-runtime-lifecycle.md) | Trustworthy downloads, one artifact catalog, durable jobs, owned process lifecycle | redirect integrity → host gating → catalog + planning → durable jobs → lifecycle → provision + text slice |
+| [C-483](../../contracts/C-483-guided-ai-setup.md) | Reusable setup subflows and the guided first-run journey | subflows → guided routes → optional modalities |
+| [C-484](../../contracts/C-484-capability-first-settings.md) | Task-first settings, capability pages, local resources, and programme close-out | navigation → capability pages + connections → local resources + privacy → acceptance matrix, shim removal, docs |
 
-Old contracts remain historical specifications. Do not mark them superseded/completed or rewrite their execution reports to hide discovered failures.
-The queue's repair packets restore existing promises; the new contracts specify changed guarantees. A slice landing does not complete its parent contract.
+Old contracts remain historical specifications. Do not mark them superseded or completed, and do not
+rewrite execution reports to hide discovered failures.
+
+## PR size
+
+Each contract is **one PR**, target ~50 changed files including tests, hard stop at 100.
+Every contract carries its own size gate and an ordered phase list. If a run reaches the cap, it
+stops at the last complete phase, leaves no two live write paths, and reports the remainder as an
+explicit follow-up — it does not silently narrow an acceptance criterion.
 
 ## Model allocation
 
-| Job | Model / account | Limit |
-|---|---|---|
-| Baseline, repair packets, bounded implementation, tests, ordinary fixes | `deepinfra/deepseek-ai/DeepSeek-V4-Flash`, thinking `high` | Default worker; two failed attempts on the same issue then escalate |
-| C-481 architecture/migration critique | Strong OpenAI reasoning model through the funded API account | One focused review; no invented model slug |
-| C-482 download/IPC/ownership critique | Claude Opus through a confirmed Pro-authenticated Claude Code session | One independent review; API billing is not Pro allowance |
-| Migration, packaged-runtime and final integration checkpoints | OpenAI **or** Claude, chosen by remaining budget and risk | Not both on every PR |
-| PR diff review | CodeRabbit | One newly submitted review-ready PR per hour |
+Every stage of every contract runs on `deepinfra/deepseek-ai/DeepSeek-V4-Flash` with thinking `high`.
+Pipeline defaults live in `scripts/src/lib/agents/contract_pipeline/models.ts`: both `pro` and `flash`
+already resolve to DeepSeek V4 Flash, so role names do not imply independent models. Environment
+overrides may change defaults — resolve and record the effective model, provider, thinking level and
+billing account before execution.
 
-Actual pipeline defaults live in `scripts/src/lib/agents/contract_pipeline/models.ts`: both `pro` and `flash` currently resolve to DeepSeek V4 Flash. Role names do not imply independent models.
-Resolve and record the effective model, provider, thinking and billing account before execution; environment overrides may change defaults. No routing settings are changed by this plan.
-Keep an initial **$10–15 premium review/escalation envelope** as a proposed cap, confirm before spending, then reassess after P01/P02. This is not a total-cost estimate or spend authorization.
-Existing C-473/C-480 usage/evaluation work is reusable if available, but completing that separate program is not a prerequisite; manual cost records suffice.
+Escalate to a premium model only after two failed attempts on the same issue, a security-invariant
+change, or a necessary schema/API deviation. CodeRabbit still reviews each PR diff.
 
 ## Completion and review
 
-Use [queue.md](queue.md) for order/file ownership and [dispatch.md](dispatch.md) for review gates and the launch prompt.
-Success means tested production journeys and packaged desktop restart/recovery, not only green mocks or completed screens.
-Planning files and application changes must remain separate review scopes. Each file in this initial pack is under 100 lines; later reports must also respect the PR diff gate or request an exception.
-Generated contract dashboards and `INDEX.md` were not edited; sync only through existing tooling when the approved planning changes are published.
+Success means tested production journeys and packaged desktop restart/recovery, not green mocks or
+completed screens. Planning files and application changes stay separate review scopes. Generated
+contract dashboards (`PROGRESS.md`, `PROMOTION.md`, `INDEX.md`) are synced only through the existing
+tooling, never edited by hand.

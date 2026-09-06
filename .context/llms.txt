@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-06
-> Files: 446 across 18 categories
+> Files: 423 across 18 categories
 
 ## Quick Start (Read These First)
 
@@ -391,24 +391,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-481: Converge AI configuration, capability metadata and routing](contracts/C-481-ai-configuration-convergence.md)
 - [Contract C-482: Unify managed AI provisioning, model assets and runtime lifecycle](contracts/C-482-managed-ai-runtime-lifecycle.md)
 - [Contract C-483: Guided AI setup](contracts/C-483-guided-ai-setup.md)
-- [Contract C-484: Capability-first settings](contracts/C-484-capability-first-settings.md)
-- [Contract C-485: AI configuration seam and typed API freeze](contracts/C-485-ai-config-seam-freeze.md)
-- [Contract C-486: Canonical v3 writes and migration safety](contracts/C-486-ai-config-v3-writes-migration.md)
-- [Contract C-487: Shared connection setup and verification operations](contracts/C-487-shared-connection-setup-operations.md)
-- [Contract C-488: Canonical resolution for all AI consumers](contracts/C-488-canonical-resolution-routing.md)
-- [Contract C-489: Restricted redirects and downloader integrity](contracts/C-489-downloader-redirect-integrity.md)
-- [Contract C-490: Shared catalog and native-vs-container planning](contracts/C-490-shared-model-catalog-planning.md)
-- [Contract C-491: Durable setup jobs, cancellation and restart recovery](contracts/C-491-durable-setup-jobs.md)
-- [Contract C-492: Owned process lifecycle, ports and on-demand restart](contracts/C-492-owned-process-lifecycle.md)
-- [Contract C-493: Provisioning through canonical setup operations](contracts/C-493-provision-through-canonical-setup.md)
-- [Contract C-494: Text vertical-slice checkpoint](contracts/C-494-text-vertical-slice-checkpoint.md)
-- [Contract C-495: Reusable setup subflows and presentation models](contracts/C-495-setup-subflow-components.md)
-- [Contract C-496: Guided first-run routes and resumable presentation](contracts/C-496-guided-first-run-routes.md)
-- [Contract C-497: Optional image and read-aloud integration](contracts/C-497-optional-modality-integration.md)
-- [Contract C-498: Searchable settings navigation and context filtering](contracts/C-498-settings-navigation-search.md)
-- [Contract C-499: Capability pages, connections and advanced routing](contracts/C-499-capability-pages-connections.md)
-- [Contract C-500: Local resources and data/privacy presentation](contracts/C-500-local-resources-privacy.md)
-- [Contract C-501: Production integration and supported-platform verification](contracts/C-501-ai-setup-production-integration.md)
+- [Contract C-484: Capability-first settings and production integration](contracts/C-484-capability-first-settings.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
@@ -460,14 +443,8 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Product Vision](intro/vision.md)
 ## plans/
 
-- [Packet dispatch and review rules](plans/ai-setup/dispatch.md)
-- [P00 — establish the baseline (only entry point)](plans/ai-setup/packets/00_baseline.md)
-- [P01 — keep native AI installation out of the browser](plans/ai-setup/packets/01_desktop_gating.md)
-- [P02 — verify keyless local connections through their actual endpoint](plans/ai-setup/packets/02_local_verification.md)
-- [P03 — replace inferred Running labels with honest connection status](plans/ai-setup/packets/03_truthful_status.md)
-- [P04 — repair legacy projections through the existing C-463 mutators](plans/ai-setup/packets/04_config_projection.md)
-- [P05 — C-481 capability/provider/identity seam and typed API freeze](plans/ai-setup/packets/05_seam_freeze.md)
-- [Dependency order and parallel lanes](plans/ai-setup/queue.md)
+- [Execution rules](plans/ai-setup/dispatch.md)
+- [Execution order](plans/ai-setup/queue.md)
 - [AI setup and settings — execution plan](plans/ai-setup/README.md)
 ## README.md/
 
