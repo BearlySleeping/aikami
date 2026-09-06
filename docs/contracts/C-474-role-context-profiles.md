@@ -3,7 +3,7 @@ id: C-474
 title: "Load lean role contexts and resolve model configuration explicitly"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
