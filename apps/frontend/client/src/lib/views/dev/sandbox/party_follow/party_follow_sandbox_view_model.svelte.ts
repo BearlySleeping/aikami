@@ -371,7 +371,6 @@ class PartyFollowSandboxViewModel
     }
   }
 
-
   /**
    * Resolves ECS entity IDs for spawned NPCs by scanning the GameWorld's
    * public npcMeta map. Called after the worker has processed SPAWN_NPC commands.

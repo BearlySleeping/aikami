@@ -19,8 +19,7 @@
       "!**/dist/*",
       "!**/build/*",
       "!apps/frontend/client/static",
-      "!**/*.svelte.ts",
-      "!**/src/lib/paraglide/**"
+      "!**/src/lib/paraglide"
     ]
   },
   "formatter": {
@@ -178,12 +177,38 @@
       }
     },
     {
-      "includes": ["apps/e2e/**", "scripts/**", ".pi/**"],
+      "includes": ["apps/e2e/**"],
       "linter": {
         "rules": {
           "suspicious": {
             "noConsole": "off",
             "noExplicitAny": "off"
+          },
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          },
+          "style": {
+            "useNamingConvention": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [".pi/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
           },
           "style": {
             "useNamingConvention": "off"

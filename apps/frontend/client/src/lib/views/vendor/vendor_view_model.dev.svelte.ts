@@ -51,7 +51,8 @@ export const getVendorDevViewModel = (options: {
 
   const _originalHaggle = vm.haggle.bind(vm);
   vm.haggle = async (message: string) => {
-    const self = vm as unknown as { // guard-ignore lint/type-safety/casting: dev VM accessing private vendor state for test instrumentation
+    // guard-ignore lint/type-safety/casting: dev VM accessing private vendor state for test instrumentation
+    const self = vm as unknown as {
       isHaggling: boolean;
       refusesToSell: boolean;
       messages: Array<{ id: string; role: 'player' | 'vendor'; content: string }>;

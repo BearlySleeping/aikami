@@ -220,7 +220,9 @@ class NarrativeDirectorService
    * Graceful degradation: returns empty array when retrieval is unavailable,
    * disabled, or has no relevant results — never throws.
    */
-  private async _queryRelevantMemory(): Promise<ReadonlyArray<import('@aikami/types').MemoryResult>> {
+  private async _queryRelevantMemory(): Promise<
+    ReadonlyArray<import('@aikami/types').MemoryResult>
+  > {
     try {
       const lastDirection =
         this._sceneDirections.length > 0
@@ -294,9 +296,7 @@ class NarrativeDirectorService
         ? [
             '',
             'Relevant past events from campaign history:',
-            ...referencedMemory.map(
-              (m, i) => `${i + 1}. [${m.sourceType}] ${m.content}`,
-            ),
+            ...referencedMemory.map((m, i) => `${i + 1}. [${m.sourceType}] ${m.content}`),
             '',
           ].join('\n')
         : '';

@@ -17,10 +17,14 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { MemoryIndexable, MemoryQuery, MemoryResult, MemoryRetrievalBackend } from '@aikami/types';
-
-import { lorebookStore } from '../lorebook/lorebook_store.svelte.ts';
+import type {
+  MemoryIndexable,
+  MemoryQuery,
+  MemoryResult,
+  MemoryRetrievalBackend,
+} from '@aikami/types';
 import { sessionSummaryService } from '../gm/session_summary_service.svelte.ts';
+import { lorebookStore } from '../lorebook/lorebook_store.svelte.ts';
 import { LocalEmbeddingBackend } from './local_embedding_backend';
 
 // ---------------------------------------------------------------------------
@@ -123,7 +127,9 @@ class MemoryRetrievalService
 
   /** @inheritdoc */
   async init(): Promise<void> {
-    if (this._initialised) return;
+    if (this._initialised) {
+      return;
+    }
     this._initialised = true;
 
     try {
@@ -165,19 +171,25 @@ class MemoryRetrievalService
 
   /** @inheritdoc */
   async indexLorebookEntries(entries: MemoryIndexable[]): Promise<void> {
-    if (!this._enabled || !this._isReady || entries.length === 0) return;
+    if (!this._enabled || !this._isReady || entries.length === 0) {
+      return;
+    }
     await this._backend.index(entries);
   }
 
   /** @inheritdoc */
   async indexSessionSummary(summary: MemoryIndexable): Promise<void> {
-    if (!this._enabled || !this._isReady) return;
+    if (!this._enabled || !this._isReady) {
+      return;
+    }
     await this._backend.index([summary]);
   }
 
   /** @inheritdoc */
   async indexAll(): Promise<void> {
-    if (!this._enabled || !this._isReady || this._isIndexing) return;
+    if (!this._enabled || !this._isReady || this._isIndexing) {
+      return;
+    }
 
     this._isIndexing = true;
     this.debug('indexAll:start');
@@ -196,7 +208,9 @@ class MemoryRetrievalService
         }>) {
           // Build a rich text representation that includes keywords for better matching
           const contentParts = [entry.content];
-          if (entry.name) contentParts.unshift(`[${entry.name}]`);
+          if (entry.name) {
+            contentParts.unshift(`[${entry.name}]`);
+          }
           if (entry.keywords?.length) {
             contentParts.push(`Keywords: ${entry.keywords.join(', ')}`);
           }
@@ -216,9 +230,7 @@ class MemoryRetrievalService
         const summaryText = [
           summary.synopsis,
           ...(summary.keyEvents ?? []),
-          ...(summary.npcInteractions ?? []).map(
-            (npc) => `NPC ${npc.npcName}: ${npc.context}`,
-          ),
+          ...(summary.npcInteractions ?? []).map((npc) => `NPC ${npc.npcName}: ${npc.context}`),
         ].join(' ');
 
         indexables.push({

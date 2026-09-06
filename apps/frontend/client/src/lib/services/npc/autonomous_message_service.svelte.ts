@@ -10,7 +10,6 @@ import {
   AUTONOMOUS_CONTEXT_MESSAGE_COUNT,
   DEFAULT_IDLE_THRESHOLD_MS,
   DEFAULT_POLLER_INTERVAL_MS,
-  MAX_AUTONOMOUS_MESSAGES_PER_TICK,
   MAX_GROUP_PARTICIPANTS,
   MOBILE_LOW_BATTERY_THRESHOLD,
 } from '@aikami/constants';
@@ -25,7 +24,6 @@ import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { chatService } from '../chat/chat.svelte.ts';
 import { relationshipService } from '../game/relationship_service.svelte.ts';
 import { npcScheduleService } from './npc_schedule_service.svelte.ts';
-import type { CharacterRelationship } from '@aikami/types';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -71,10 +69,7 @@ export type AutonomousMessageServiceInterface = BaseFrontendClassInterface & {
    * @param count - Maximum number to select (default: MAX_GROUP_PARTICIPANTS).
    * @returns Selected NPC IDs in weighted sampling order.
    */
-  selectGroupParticipants(options: {
-    npcIds: readonly string[];
-    count?: number;
-  }): string[];
+  selectGroupParticipants(options: { npcIds: readonly string[]; count?: number }): string[];
 
   /**
    * Generates responses for multiple NPCs in sequence, so each
@@ -118,7 +113,15 @@ class AutonomousMessageService
    * Optional memory retrieval service for recent-history signal (C-458).
    * When unavailable, the relationship boost uses relationship data only.
    */
-  private _memoryRetrievalService: { query: (q: { text: string; limit?: number }) => Promise<Array<{ relevanceScore: number }>> } | undefined;
+  // C-458 seam: assigned in the constructor but not yet read —
+  // _computeRelationshipBoost still scores on relationship data alone. Kept
+  // deliberately; deleting it would drop `memoryRetrievalService` from the
+  // public options type and silently discard the integration point. Recorded
+  // as debt in docs/contracts/STRICTNESS_COVERAGE_MATRIX.md.
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: C-458 seam pending wiring, see above
+  private _memoryRetrievalService:
+    | { query: (q: { text: string; limit?: number }) => Promise<Array<{ relevanceScore: number }>> }
+    | undefined;
 
   constructor(options: AutonomousMessageServiceOptions) {
     super(options);
@@ -372,10 +375,7 @@ class AutonomousMessageService
    * For group-addressed turns, this replaces the single-NPC selection
    * used by the idle poller.
    */
-  private _selectWeightedRandomN(
-    npcIds: string[],
-    count: number,
-  ): string[] {
+  private _selectWeightedRandomN(npcIds: string[], count: number): string[] {
     if (npcIds.length === 0 || count <= 0) {
       return [];
     }
@@ -422,10 +422,7 @@ class AutonomousMessageService
   // ── Public: Group-addressed turn API (C-456) ─────────────────────
 
   /** @inheritdoc */
-  selectGroupParticipants(options: {
-    npcIds: readonly string[];
-    count?: number;
-  }): string[] {
+  selectGroupParticipants(options: { npcIds: readonly string[]; count?: number }): string[] {
     const { npcIds, count = MAX_GROUP_PARTICIPANTS } = options;
 
     if (npcIds.length === 0 || count <= 0) {
@@ -569,9 +566,14 @@ class AutonomousMessageService
       // Derive boost from trust + affinity (-100..100 each → -200..200 sum)
       // Normalize to [-0.5, 0.5] range
       const sum = relationship.trust + relationship.affinity;
-      const boost = (sum / 400); // -200/400 = -0.5, 200/400 = 0.5
+      const boost = sum / 400; // -200/400 = -0.5, 200/400 = 0.5
 
-      this.debug('_computeRelationshipBoost', { npcId, trust: relationship.trust, affinity: relationship.affinity, boost });
+      this.debug('_computeRelationshipBoost', {
+        npcId,
+        trust: relationship.trust,
+        affinity: relationship.affinity,
+        boost,
+      });
       return boost;
     } catch {
       // Graceful degradation: relationship service unavailable
@@ -584,15 +586,17 @@ class AutonomousMessageService
    * The caller must have already queried getSchedule() for the NPC.
    */
   private _getCachedSchedule(npcId: string): NpcSchedule {
-    return npcScheduleService.getCachedSchedule(npcId) ?? {
-      npcId,
-      days: [],
-      autonomousEnabled: true,
-      talkativeness: 0.5,
-      cooldownMinutes: 15,
-      generated: false,
-      updatedAt: new Date().toISOString(),
-    };
+    return (
+      npcScheduleService.getCachedSchedule(npcId) ?? {
+        npcId,
+        days: [],
+        autonomousEnabled: true,
+        talkativeness: 0.5,
+        cooldownMinutes: 15,
+        generated: false,
+        updatedAt: new Date().toISOString(),
+      }
+    );
   }
 
   // ── Private: Message generation ─────────────────────────────────────

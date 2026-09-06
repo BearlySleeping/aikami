@@ -25,15 +25,13 @@ import { encodeLpcPreviewState, type LpcPreviewState } from './preview_url_state
 
 export type { LpcPreviewState };
 
-type PreviewSprite = Sprite & {_originalIndex?: number};
+type PreviewSprite = Sprite & { _originalIndex?: number };
 
 // ── Constants ────────────────────────────────────────────────────────────
 
 const MaxLayers = 8;
 const CanvasWidth = 960;
 const CanvasHeight = 540;
-const EntityX = CanvasWidth / 2;
-const EntityY = CanvasHeight / 2 - 32;
 
 // ── Template constants exposed via the interface ──────────────────────────
 
@@ -54,10 +52,12 @@ const DIR_LABELS: Record<number, string> = {
   [LpcDirection.Right]: 'Right',
 };
 
-export const ANIMATION_STATE_OPTIONS: readonly { value: number; label: string }[] =
-  Object.values(LpcAnimationState).map((value) => ({ value, label: STATE_LABELS[value] ?? String(value) }));
-export const DIRECTION_OPTIONS: readonly { value: number; label: string }[] =
-  Object.values(LpcDirection).map((value) => ({ value, label: DIR_LABELS[value] ?? String(value) }));
+export const ANIMATION_STATE_OPTIONS: readonly { value: number; label: string }[] = Object.values(
+  LpcAnimationState,
+).map((value) => ({ value, label: STATE_LABELS[value] ?? String(value) }));
+export const DIRECTION_OPTIONS: readonly { value: number; label: string }[] = Object.values(
+  LpcDirection,
+).map((value) => ({ value, label: DIR_LABELS[value] ?? String(value) }));
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -163,10 +163,18 @@ class LpcPreviewViewModel
   // ── Public reactive state ──────────────────────────────────────────
 
   readonly maxLayers = MaxLayers;
-  get canvasWidth(): number { return this._canvasWidth; }
-  get canvasHeight(): number { return this._canvasHeight; }
-  get entityX(): number { return this._canvasWidth / 2; }
-  get entityY(): number { return this._canvasHeight / 2 - 32; }
+  get canvasWidth(): number {
+    return this._canvasWidth;
+  }
+  get canvasHeight(): number {
+    return this._canvasHeight;
+  }
+  get entityX(): number {
+    return this._canvasWidth / 2;
+  }
+  get entityY(): number {
+    return this._canvasHeight / 2 - 32;
+  }
 
   readonly animationStateOptions = ANIMATION_STATE_OPTIONS;
   readonly directionOptions = DIRECTION_OPTIONS;
@@ -477,11 +485,26 @@ class LpcPreviewViewModel
   }
 
   resize(width: number, height: number): void {
-    if (width === this._canvasWidth && height === this._canvasHeight) return;
+    if (width === this._canvasWidth && height === this._canvasHeight) {
+      return;
+    }
     this._canvasWidth = width;
     this._canvasHeight = height;
     if (this.pixiApp) {
       this.pixiApp.renderer.resize(width, height);
+      this._positionPreviewContainers();
+      this.pixiApp.render();
+    }
+  }
+
+  private _positionPreviewContainers(): void {
+    if (this._characterContainer) {
+      this._characterContainer.x = this.entityX;
+      this._characterContainer.y = this.entityY;
+    }
+    if (this._gridGraphics) {
+      this._gridGraphics.x = this.entityX;
+      this._gridGraphics.y = this.entityY;
     }
   }
 
@@ -558,49 +581,49 @@ class LpcPreviewViewModel
     try {
       const newSprites: PreviewSprite[] = [];
 
-		const layerPromises = currentRecipes.map(async (recipe, i) => {
-			if (!recipe) {
-				return;
-			}
+      const layerPromises = currentRecipes.map(async (recipe, i) => {
+        if (!recipe) {
+          return;
+        }
 
-			const recipeSlot = recipe.slot;
-			const recipeAssetId = recipe.assetId;
+        const recipeSlot = recipe.slot;
+        const recipeAssetId = recipe.assetId;
 
-			let texture = await this._loadSheetTexture(recipeSlot, recipeAssetId, currentState);
+        let texture = await this._loadSheetTexture(recipeSlot, recipeAssetId, currentState);
 
-			if (
-				(!texture || texture === Texture.EMPTY) &&
-				recipeSlot === 'head' &&
-				LPC_DEFAULT_HEAD_ASSET_ID !== recipeAssetId
-			) {
-				this.warn('lpc.headFallback', {
-					original: recipeAssetId,
-					fallback: LPC_DEFAULT_HEAD_ASSET_ID,
-				});
-				texture = await this._loadSheetTexture('head', LPC_DEFAULT_HEAD_ASSET_ID, currentState);
-			}
+        if (
+          (!texture || texture === Texture.EMPTY) &&
+          recipeSlot === 'head' &&
+          LPC_DEFAULT_HEAD_ASSET_ID !== recipeAssetId
+        ) {
+          this.warn('lpc.headFallback', {
+            original: recipeAssetId,
+            fallback: LPC_DEFAULT_HEAD_ASSET_ID,
+          });
+          texture = await this._loadSheetTexture('head', LPC_DEFAULT_HEAD_ASSET_ID, currentState);
+        }
 
-			if (!texture || texture === Texture.EMPTY) {
-				return;
-			}
+        if (!texture || texture === Texture.EMPTY) {
+          return;
+        }
 
-			const layout = detectLpcSheetLayout(texture);
-			const col = currentFrame % layout.columns;
-			const row = layout.rows > 1 ? currentDirection % layout.rows : 0;
-			const x = col * layout.pitch;
-			const y = row * layout.pitch;
+        const layout = detectLpcSheetLayout(texture);
+        const col = currentFrame % layout.columns;
+        const row = layout.rows > 1 ? currentDirection % layout.rows : 0;
+        const x = col * layout.pitch;
+        const y = row * layout.pitch;
 
-			if (x + layout.pitch > texture.width || y + layout.pitch > texture.height) {
-				return;
-			}
+        if (x + layout.pitch > texture.width || y + layout.pitch > texture.height) {
+          return;
+        }
 
-			const frameTexture = new Texture({
-				source: texture.source,
-				frame: new Rectangle(x, y, layout.pitch, layout.pitch),
-			});
+        const frameTexture = new Texture({
+          source: texture.source,
+          frame: new Rectangle(x, y, layout.pitch, layout.pitch),
+        });
 
-			const anchor = getLpcSpriteAnchor(layout);
-			const sprite: PreviewSprite = new Sprite(frameTexture)
+        const anchor = getLpcSpriteAnchor(layout);
+        const sprite: PreviewSprite = new Sprite(frameTexture);
         sprite.eventMode = 'none';
         sprite.x = anchor.x;
         sprite.y = anchor.y;
@@ -611,7 +634,7 @@ class LpcPreviewViewModel
           layerRole: recipe.layerRole ?? 'front',
           direction: 2,
         });
-			sprite._originalIndex = i;
+        sprite._originalIndex = i;
 
         const effectiveColor =
           this.layerOverrides[i] && this.paletteColors[i] ? this.paletteColors[i] : this.globalTint;
@@ -644,8 +667,8 @@ class LpcPreviewViewModel
         if (a.zIndex !== b.zIndex) {
           return a.zIndex - b.zIndex;
         }
-        const aIdx = a._originalIndex?? 0
-        const bIdx = b._originalIndex ?? 0
+        const aIdx = a._originalIndex ?? 0;
+        const bIdx = b._originalIndex ?? 0;
         return aIdx - bIdx;
       });
 
@@ -659,11 +682,10 @@ class LpcPreviewViewModel
       }
 
       container.scale.set(currentZoom, currentZoom);
-      container.x = this._canvasWidth / 2;
-      container.y = this._canvasHeight / 2;
 
       this.pixiApp.stage.addChild(container);
       this._characterContainer = container;
+      this._positionPreviewContainers();
       this.compositionFailed = false;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -736,14 +758,13 @@ class LpcPreviewViewModel
     const gridContainer = new Container();
     gridContainer.eventMode = 'none';
     gridContainer.scale.set(this.zoom, this.zoom);
-    gridContainer.x = this._canvasWidth / 2;
-    gridContainer.y = this._canvasHeight / 2;
     gfx.x = -32;
     gfx.y = -32;
     gridContainer.addChild(gfx);
 
     this.pixiApp.stage.addChild(gridContainer);
     this._gridGraphics = gridContainer;
+    this._positionPreviewContainers();
   }
 
   // ── State serialisation ─────────────────────────────────────────────
@@ -896,8 +917,8 @@ class LpcPreviewViewModel
       this._setStatus('LPC preview initialized.', 'info');
 
       if (typeof window !== 'undefined') {
- // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
-		  (window as any).__PIXI_LOADED__ = true;
+        // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+        (window as unknown as Record<string, unknown>).__PIXI_LOADED__ = true;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -4,12 +4,12 @@
 // pipeline. Gates behind auth; surfaces backup, list, restore, and delete
 // operations via BackupService.
 
+import type { BackupEntry } from '@aikami/frontend/services';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { BackupEntry } from '@aikami/frontend/services';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import { authService, backupService } from '$services';
 
@@ -196,6 +196,5 @@ class BackupViewModel
 // Factory
 // ---------------------------------------------------------------------------
 
-export const getBackupViewModel = (
-  options: BackupViewModelOptions,
-): BackupViewModelInterface => BackupViewModel.create(options);
+export const getBackupViewModel = (options: BackupViewModelOptions): BackupViewModelInterface =>
+  BackupViewModel.create(options);

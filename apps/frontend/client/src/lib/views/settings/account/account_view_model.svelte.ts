@@ -181,6 +181,5 @@ class AccountViewModel
   }
 }
 
-export const getAccountViewModel = (
-  options: AccountViewModelOptions,
-): AccountViewModelInterface => AccountViewModel.create(options);
+export const getAccountViewModel = (options: AccountViewModelOptions): AccountViewModelInterface =>
+  AccountViewModel.create(options);

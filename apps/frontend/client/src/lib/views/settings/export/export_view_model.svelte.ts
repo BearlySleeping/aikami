@@ -9,11 +9,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { ChatData, NpcData, PersonaData } from '@aikami/types';
-import {
-  exportService,
-  readAiPrivacySettings,
-  writeAiPrivacySettings,
-} from '$services';
+import { exportService, readAiPrivacySettings, writeAiPrivacySettings } from '$services';
 import type { GameSession } from '$types';
 
 // ── Types ───────────────────────────────────────────────────────────────

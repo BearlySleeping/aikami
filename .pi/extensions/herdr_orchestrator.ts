@@ -1121,6 +1121,7 @@ export default function (pi: ExtensionAPI) {
           details: {},
         };
       }
+      // guard-ignore lint/type-safety/casting: Pi agent SDK return type — handler() output is structurally compatible
       return handler() as unknown as import('@earendil-works/pi-agent-core').AgentToolResult<
         Record<string, unknown>
       >;

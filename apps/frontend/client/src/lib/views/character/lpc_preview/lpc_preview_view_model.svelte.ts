@@ -337,7 +337,7 @@ class LpcPreviewViewModel
 
       // Signal Playwright visual tests that PixiJS is ready
       if (typeof window !== 'undefined') {
-        (window as any).__PIXI_LPC_PREVIEW_LOADED__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+        (window as unknown as Record<string, unknown>).__PIXI_LPC_PREVIEW_LOADED__ = true; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
       }
 
       this._isInitialized = true;

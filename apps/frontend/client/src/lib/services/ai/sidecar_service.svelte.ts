@@ -8,12 +8,12 @@
 // normal local AiProvider/AiConnection through configService.
 // AC-5: Quitting the app terminates all sidecar child processes.
 
-import type { ProbeResult, ProbeExecutor } from '@aikami/local-ai';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import type { ProbeExecutor, ProbeResult } from '@aikami/local-ai';
 import type { SidecarChildProcess, SidecarState, TextEngineConfig } from '$types';
 import { registerTauriCloseHandler, spawnTauriSidecar } from './sidecar_tauri_adapter.ts';
 
@@ -259,7 +259,7 @@ class SidecarService
       this.warn('_launchSidecar:failed', error);
       throw new Error(
         `Cannot launch sidecar: ${error instanceof Error ? error.message : String(error)}. ` +
-        'The sidecar binary must be bundled via externalBin in tauri.conf.json.',
+          'The sidecar binary must be bundled via externalBin in tauri.conf.json.',
       );
     }
   }

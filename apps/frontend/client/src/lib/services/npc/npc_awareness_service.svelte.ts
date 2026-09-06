@@ -12,11 +12,11 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { partyRosterService } from '../game/party_roster_service.svelte.ts';
+import { worldStateService } from '../game/world_state_service.svelte.ts';
 import type { GmNpcContext } from '../gm/gm_types';
 // Direct imports to avoid barrel circular dependency — see gm_prompt_service.svelte.ts
 import { npcService } from './npc_service.svelte.ts';
-import { partyRosterService } from '../game/party_roster_service.svelte.ts';
-import { worldStateService } from '../game/world_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -138,7 +138,6 @@ class NpcAwarenessService
   }
 }
 
-export const npcAwarenessService: NpcAwarenessServiceInterface =
-  NpcAwarenessService.create({
-    className: 'NpcAwarenessService',
-  }) as NpcAwarenessServiceInterface;
+export const npcAwarenessService: NpcAwarenessServiceInterface = NpcAwarenessService.create({
+  className: 'NpcAwarenessService',
+}) as NpcAwarenessServiceInterface;

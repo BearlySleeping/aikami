@@ -306,6 +306,7 @@ export default function (pi: ExtensionAPI) {
         parameters: Type.Object({
           mode: Type.String({
             description: 'Target mode',
+            // guard-ignore lint/type-safety/casting: TypeBox enum accepts string[] but VALID_MODES is `as const` tuple
             enum: VALID_MODES as unknown as string[],
           }),
         }),

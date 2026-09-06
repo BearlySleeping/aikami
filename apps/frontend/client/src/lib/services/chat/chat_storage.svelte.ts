@@ -327,7 +327,8 @@ class ChatStorage extends BaseFrontendClass<ChatStorageOptions> implements ChatS
       args: [row.id],
     });
 
-    const messages: MessageData[] = (history.rows as unknown as HistoryRow[]).map((h) => ({ // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
+    // guard-ignore lint/type-safety/casting: DB row parsing - Turso query returns unknown rows, schema validated at insert time
+    const messages: MessageData[] = (history.rows as unknown as HistoryRow[]).map((h) => ({
       id: String(h.id),
       text: h.content,
       sender: h.role === 'user' ? ('user' as const) : ('ai' as const),

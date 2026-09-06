@@ -325,9 +325,7 @@ export class ImageGenerationService
     // C-463 wiring: the `portrait` role connection's ImageParams are the
     // defaults for width/height/steps/cfgScale/checkpoint — any explicit
     // call-site argument still wins.
-    const portraitParams = configService.resolveRole('portrait')?.params as
-      | ImageParams
-      | undefined;
+    const portraitParams = configService.resolveRole('portrait')?.params as ImageParams | undefined;
 
     const effectiveCheckpoint = checkpoint ?? portraitParams?.checkpoint ?? this.selectedCheckpoint;
     const effectiveWidth = width ?? portraitParams?.width;
