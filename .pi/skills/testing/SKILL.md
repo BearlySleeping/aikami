@@ -99,8 +99,41 @@ before the real module is evaluated.
 | Issue | Details |
 |-------|---------|
 | `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. The global barrel mocks in `test_preload.ts` mitigate most cases. |
-| `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Tests must treat `$state` fields as plain values. |
+| `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Pure Bun tests must treat `$state` fields as plain values. For real reactivity tests, use the compiled Playwright lane (see below). |
 | PixiJS / WebGPU | Not available in Bun. Tests that touch the game engine are skipped in CI (handled by E2E). |
+
+### Compiled Component / Lifecycle Testing (C-477)
+
+Pure Bun tests cannot verify Svelte 5 reactivity because rune polyfills are identity
+functions without reactive semantics. For real `$state` / `$derived` / `$effect`
+behavior, use the compiled Playwright E2E lane:
+
+| Aspect | Pure Bun (unit) | Compiled Playwright (E2E) |
+|--------|-----------------|---------------------------|
+| Runner | `bun test --preload ./src/lib/test_preload.ts` | `cd apps/e2e && bun run test` (Playwright) |
+| Runes | Identity polyfills | Real Svelte 5 compiler transform |
+| Reactivity | ❌ — cannot observe reactive updates | ✅ — $state/$derived/$effect work |
+| Lifecycle | ✅ — disposal logic with timers/resources | ✅ — component mount/unmount, real $effect cleanup |
+| Async stale updates | ✅ — setTimeout and AbortController patterns | ✅ — browser-integrated cancellation behavior |
+| Speed | Fast (no browser) | Slower (browser startup) |
+| Location | `apps/frontend/client/src/lib/` | `apps/e2e/tests/client/` |
+
+Use Pure Bun for direct lifecycle disposal logic and stale-update prevention
+that can be exercised with `setTimeout` and `AbortController`. Use the compiled
+Playwright lane when the behavior depends on component mount/unmount, real
+`$effect` cleanup, or DOM reactivity.
+
+**Test fixture location**: compiled lifecycle test components live in
+`apps/frontend/client/src/lib/views/reactive_lifecycle/` with a dev sandbox
+route at `(dev)/dev/reactive-lifecycle/`. Playwright E2E tests in
+`apps/e2e/tests/client/reactive_lifecycle.spec.ts` interact with the compiled
+components through the dev sandbox.
+
+**Pattern**:
+1. Create a ViewModel using real `$state`, `$derived`, `$effect.root`
+2. Create a View that renders the ViewModel's state
+3. Host the View in a dev sandbox route `(dev)/dev/<feature>/`
+4. Write Playwright E2E tests that navigate to the sandbox and verify DOM updates
 
 ---
 
