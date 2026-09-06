@@ -34,7 +34,33 @@ export const prepareSandbox = async (task: EvalTask): Promise<TaskSandbox> => {
   return {
     path: dir,
     cleanup: async () => {
-      await rm(dir, { recursive: true, force: true });
+      await removeWithRetry(dir);
     },
   };
+};
+
+const TRANSIENT_REMOVE_CODES = new Set(['EBUSY', 'ENOTEMPTY', 'EPERM']);
+const REMOVE_RETRY_DELAYS_MS = [50, 100, 200, 400, 800];
+
+/**
+ * Remove a directory tree, retrying on Windows' transient "still in use"
+ * errors. A just-exited child process (the isolated candidate check in
+ * candidate_runner.ts) can hold the OS's file lock for a few milliseconds
+ * after `child.kill`/exit resolves, so an immediate `rm` can fail with
+ * EBUSY even though nothing is genuinely still using the directory.
+ */
+const removeWithRetry = async (path: string): Promise<void> => {
+  for (const delayMs of REMOVE_RETRY_DELAYS_MS) {
+    try {
+      await rm(path, { recursive: true, force: true });
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (!(code && TRANSIENT_REMOVE_CODES.has(code))) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  await rm(path, { recursive: true, force: true });
 };
