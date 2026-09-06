@@ -3,11 +3,17 @@ id: C-483
 title: "Guide AI setup through recommended, existing and text-only paths"
 source: direct
 contract_type: thin
-status: draft
+status: superseded
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-05T15:34:22Z"
 ---
 # Contract C-483: Guided AI setup
+
+> **Execution note (2026-09-06)**: this specification is no longer executed as a single
+> pipeline run. Its scope is delivered by PR-sized child contracts — C-495, C-496, C-497 —
+> each runnable with `bun run contract C-xxx`. This document remains the durable
+> architecture specification the children reference; do not run `bun run contract`
+> against it. Start with C-495.
 
 ## Metadata
 | Field | Value |
@@ -17,7 +23,7 @@ created_at: "2026-09-05T15:34:22Z"
 | **Type** | thin |
 | **Priority** | P1 — make proven setup operations understandable |
 | **Dependencies** | C-481 through P08; C-482 through T01; U03 also needs C-484 S02; milestone dependencies avoid whole-contract cycles |
-| **Status** | draft |
+| **Status** | superseded |
 | **Promotion** | — |
 | **Docs Impact** | Short first-run setup guidance in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |

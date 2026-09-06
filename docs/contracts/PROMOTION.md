@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 158 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 175 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -217,8 +217,25 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-478 | Reproducible Agent Resources | 📝 draft | v2 | thin |
 | C-479 | Portable Contributor Onboarding | 📝 draft | v2 | full |
 | C-480 | Agent Evaluation And Routing | 📝 draft | v2 | thin |
-| C-481 | Ai Configuration Convergence | 👍 approved | v1 | full |
-| C-482 | Managed Ai Runtime Lifecycle | 👍 approved | v1 | full |
-| C-483 | Guided Ai Setup | 📝 draft | v1 | thin |
-| C-484 | Capability First Settings | 📝 draft | v1 | thin |
+| C-481 | Ai Configuration Convergence | 👻 superseded | v1 | full |
+| C-482 | Managed Ai Runtime Lifecycle | 👻 superseded | v1 | full |
+| C-483 | Guided Ai Setup | 👻 superseded | v1 | thin |
+| C-484 | Capability First Settings | 👻 superseded | v1 | thin |
+| C-485 | Ai Config Seam Freeze | 👍 approved | v2 | thin |
+| C-486 | Ai Config V3 Writes Migration | 👍 approved | v2 | thin |
+| C-487 | Shared Connection Setup Operations | 👍 approved | v2 | thin |
+| C-488 | Canonical Resolution Routing | 👍 approved | v2 | thin |
+| C-489 | Downloader Redirect Integrity | 👍 approved | v2 | thin |
+| C-490 | Shared Model Catalog Planning | 👍 approved | v2 | thin |
+| C-491 | Durable Setup Jobs | 👍 approved | v2 | thin |
+| C-492 | Owned Process Lifecycle | 👍 approved | v2 | thin |
+| C-493 | Provision Through Canonical Setup | 👍 approved | v2 | thin |
+| C-494 | Text Vertical Slice Checkpoint | 👍 approved | v2 | thin |
+| C-495 | Setup Subflow Components | 👍 approved | v2 | thin |
+| C-496 | Guided First Run Routes | 👍 approved | v2 | thin |
+| C-497 | Optional Modality Integration | 👍 approved | v2 | thin |
+| C-498 | Settings Navigation Search | 👍 approved | v2 | thin |
+| C-499 | Capability Pages Connections | 👍 approved | v2 | thin |
+| C-500 | Local Resources Privacy | 👍 approved | v2 | thin |
+| C-501 | Ai Setup Production Integration | 👍 approved | v2 | thin |
 

@@ -256,9 +256,10 @@ const enforceStageStatus = (options: {
  * repoRoot's on-disk mirror (see `readMainContent`'s doc comment for why
  * that distinction matters: it's the same gap that made `isolateContractInWorktree`
  * seed a stale copy in the first place). Returns undefined (proceed
- * normally) whenever the contract is on main at all — this is a narrow
- * short-circuit for the one condition Phase 0 treats as a hard stop, not a
- * general re-implementation of the preflight.
+ * normally) unless main's status is one Phase 0 treats as a hard stop —
+ * `draft` (never approved) or `superseded` (split into child contracts).
+ * This is a narrow short-circuit, not a general re-implementation of the
+ * preflight.
  */
 export const checkImplementPrecondition = (options: {
   repoRoot: string;
@@ -276,24 +277,45 @@ export const checkImplementPrecondition = (options: {
     return undefined;
   }
   const status = parseContractStatus(mainContent);
-  if (status !== 'draft') {
-    return undefined;
+  if (status === 'draft') {
+    return {
+      runId: options.runId,
+      stage: 'implementer',
+      attempt: options.attempt,
+      status: 'blocked',
+      summary:
+        'Contract is still in `draft` status — implementation cannot begin (Phase 0 step 9).',
+      findings: [
+        'Contract status is `draft`, not `approved`, on `main`.',
+        'The critique stage either has not run yet or has not stamped the contract approved.',
+      ],
+      filesTouched: [],
+      evidence: [],
+      contractHash: '',
+      diffHash: '',
+    };
   }
-  return {
-    runId: options.runId,
-    stage: 'implementer',
-    attempt: options.attempt,
-    status: 'blocked',
-    summary: 'Contract is still in `draft` status — implementation cannot begin (Phase 0 step 9).',
-    findings: [
-      'Contract status is `draft`, not `approved`, on `main`.',
-      'The critique stage either has not run yet or has not stamped the contract approved.',
-    ],
-    filesTouched: [],
-    evidence: [],
-    contractHash: '',
-    diffHash: '',
-  };
+  // A superseded parent was split into child contracts; running it would
+  // implement a multi-PR specification in one pass. Fail before spawning a
+  // worker rather than after a full preflight has already been paid for.
+  if (status === 'superseded') {
+    return {
+      runId: options.runId,
+      stage: 'implementer',
+      attempt: options.attempt,
+      status: 'blocked',
+      summary: 'Contract is `superseded` — run the child contracts it points at instead.',
+      findings: [
+        'Contract status is `superseded`, not `approved`, on `main`.',
+        'The contract body names the replacement contracts; run those individually.',
+      ],
+      filesTouched: [],
+      evidence: [],
+      contractHash: '',
+      diffHash: '',
+    };
+  }
+  return undefined;
 };
 
 const readReviewDecision = (path: string, runId: string): ContractReviewDecision | undefined => {

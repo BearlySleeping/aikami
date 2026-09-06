@@ -3,11 +3,17 @@ id: C-482
 title: "Unify managed AI provisioning, model assets and runtime lifecycle"
 source: direct
 contract_type: full
-status: approved
+status: superseded
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-05T15:34:22Z"
 ---
 # Contract C-482: Unify managed AI provisioning, model assets and runtime lifecycle
+
+> **Execution note (2026-09-06)**: this specification is no longer executed as a single
+> pipeline run. Its scope is delivered by PR-sized child contracts — C-489, C-490, C-491, C-492, C-493 —
+> each runnable with `bun run contract C-xxx`. This document remains the durable
+> architecture specification the children reference; do not run `bun run contract`
+> against it. Start with C-489.
 
 ## Metadata
 | Field | Value |
@@ -17,7 +23,7 @@ created_at: "2026-09-05T15:34:22Z"
 | **Type** | full |
 | **Priority** | P0 — make installation and restart trustworthy |
 | **Dependencies** | Implemented C-389/C-390/C-391/C-467; C-481 P05 seam before R02 and P08 before R05; R01 needs only queue P02 plus pilot acceptance, not the C-481 seam |
-| **Status** | approved |
+| **Status** | superseded |
 | **Promotion** | — |
 | **Docs Impact** | Desktop/local AI setup guidance in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.1.0 |

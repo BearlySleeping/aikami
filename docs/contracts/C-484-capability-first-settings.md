@@ -3,11 +3,17 @@ id: C-484
 title: "Make settings task-first with capability pages and local resources"
 source: direct
 contract_type: thin
-status: draft
+status: superseded
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-05T15:34:22Z"
 ---
 # Contract C-484: Capability-first settings
+
+> **Execution note (2026-09-06)**: this specification is no longer executed as a single
+> pipeline run. Its scope is delivered by PR-sized child contracts — C-498, C-499, C-500 —
+> each runnable with `bun run contract C-xxx`. This document remains the durable
+> architecture specification the children reference; do not run `bun run contract`
+> against it. Start with C-498.
 
 ## Metadata
 | Field | Value |
@@ -17,7 +23,7 @@ created_at: "2026-09-05T15:34:22Z"
 | **Type** | thin |
 | **Priority** | P1 — replace provider-tree-first configuration with user tasks |
 | **Dependencies** | C-481 P08 before S01; C-483 U01 before S02; C-482 R05 before S03; milestone dependencies, not full parent completion |
-| **Status** | draft |
+| **Status** | superseded |
 | **Promotion** | — |
 | **Docs Impact** | Settings/AI configuration guidance in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 1.0.0 |

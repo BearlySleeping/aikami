@@ -3,11 +3,17 @@ id: C-481
 title: "Converge AI configuration, capability metadata and routing"
 source: direct
 contract_type: full
-status: approved
+status: superseded
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-05T15:34:22Z"
 ---
 # Contract C-481: Converge AI configuration, capability metadata and routing
+
+> **Execution note (2026-09-06)**: this specification is no longer executed as a single
+> pipeline run. Its scope is delivered by PR-sized child contracts — C-485, C-486, C-487, C-488 —
+> each runnable with `bun run contract C-xxx`. This document remains the durable
+> architecture specification the children reference; do not run `bun run contract`
+> against it. Start with C-485.
 
 ## Metadata
 | Field | Value |
@@ -17,7 +23,7 @@ created_at: "2026-09-05T15:34:22Z"
 | **Type** | full |
 | **Priority** | P0 — prevent configuration divergence before new UX |
 | **Dependencies** | C-463/C-465 implementation; queue P03/P04 repairs; no dependency on C-482 implementation |
-| **Status** | approved |
+| **Status** | superseded |
 | **Promotion** | — |
 | **Docs Impact** | Update `apps/frontend/docs/src/content/docs/` connection/settings guidance at integration |
 | **Contract version** | 1.1.0 |
