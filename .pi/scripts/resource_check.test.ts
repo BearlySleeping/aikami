@@ -1,4 +1,4 @@
-// .pi/scripts/resource-check.test.ts
+// .pi/scripts/resource_check.test.ts
 //
 // C-478 AC-2: Check-only mode is read-only and offline.
 // Tests verify no mutations occur and meaningful nonzero exits for mismatches.

@@ -1,4 +1,4 @@
-// .pi/scripts/resource-update.test.ts
+// .pi/scripts/resource_update.test.ts
 //
 // C-478 AC-3: Updates are explicit, reviewable, and failure-safe.
 // Tests use local fake-upstream fixtures — no external fetches.

@@ -1,4 +1,4 @@
-// .pi/scripts/resource-manifest.test.ts
+// .pi/scripts/resource_manifest.test.ts
 //
 // C-478 AC-1/4/5: Resource manifest, worktree identity, provenance report.
 // Tests run against local fixtures — no network, no external fetches.

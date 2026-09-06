@@ -1,4 +1,4 @@
-// .pi/scripts/resource-manifest.ts
+// .pi/scripts/resource_manifest.ts
 //
 // C-478: Resource manifest — exact version/revision tracking, content
 // provenance, worktree identity, and provenance report generation.

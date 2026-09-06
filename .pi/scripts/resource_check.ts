@@ -278,3 +278,12 @@ export const main = async (): Promise<void> => {
 
   process.exit(result.hasIssues ? 1 : 0);
 };
+
+// Only auto-run when executed directly (not when imported as a module by tests)
+const isDirectExecution = process.argv[1]?.endsWith('resource_check.ts');
+if (isDirectExecution) {
+  main().catch((err: Error) => {
+    console.error('resource-check failed:', err.message);
+    process.exit(2);
+  });
+}
