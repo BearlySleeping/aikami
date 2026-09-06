@@ -262,6 +262,20 @@ type Vm = ReturnType<typeof getCapabilityViewModel>;
 
 const createVm = (): Vm => getCapabilityViewModel({ className: 'CapabilityViewModel' });
 
+const enableTauriForTest = (): (() => void) => {
+  const tauriWindow = window as Record<string, unknown>;
+  const hadTauri = Object.hasOwn(tauriWindow, '__TAURI__');
+  const originalTauri = tauriWindow.__TAURI__;
+  tauriWindow.__TAURI__ = true;
+  return () => {
+    if (hadTauri) {
+      tauriWindow.__TAURI__ = originalTauri;
+    } else {
+      delete tauriWindow.__TAURI__;
+    }
+  };
+};
+
 const setDetectionResult = (
   textStatus: string,
   imageStatus = 'not_found',
@@ -468,5 +482,76 @@ describe('CapabilityViewModel', () => {
       className: 'CapabilityAiSettingsViewModel',
       showAdvancedSections: false,
     });
+  });
+
+  // ── P01: Desktop-only local AI wizard ──────────────────────────────
+
+  test('P01: showLocalAiWizard is false in browser (non-Tauri) even without text provider', () => {
+    // In the test environment (browser), __TAURI__ is not set
+    const vm = createVm();
+    vm.setActiveTab('text');
+
+    expect(vm.hasTextProvider).toBe(false);
+    expect(vm.showLocalAiWizard).toBe(false);
+  });
+
+  test('P01: showLocalAiWizard is true in Tauri desktop without text provider', () => {
+    const restoreTauri = enableTauriForTest();
+    try {
+      const vm = createVm();
+      vm.setActiveTab('text');
+
+      expect(vm.hasTextProvider).toBe(false);
+      expect(vm.showLocalAiWizard).toBe(true);
+    } finally {
+      restoreTauri();
+    }
+  });
+
+  test('P01: showLocalAiWizard is false in Tauri desktop when text provider exists', async () => {
+    const { configService } = await import('$services');
+    configService.addConnection({
+      provider: 'openrouter',
+      capability: 'text',
+      name: 'OpenRouter',
+      model: '',
+      baseUrl: '',
+      apiKey: 'test-key',
+    });
+
+    const restoreTauri = enableTauriForTest();
+    try {
+      const vm = createVm();
+      vm.setActiveTab('text');
+
+      expect(vm.hasTextProvider).toBe(true);
+      expect(vm.showLocalAiWizard).toBe(false);
+    } finally {
+      restoreTauri();
+    }
+  });
+
+  test('P01: showLocalAiWizard is false on image tab even in Tauri', () => {
+    const restoreTauri = enableTauriForTest();
+    try {
+      const vm = createVm();
+      vm.setActiveTab('image');
+
+      expect(vm.showLocalAiWizard).toBe(false);
+    } finally {
+      restoreTauri();
+    }
+  });
+
+  test('P01: showLocalAiWizard is false on voice tab even in Tauri', () => {
+    const restoreTauri = enableTauriForTest();
+    try {
+      const vm = createVm();
+      vm.setActiveTab('voice');
+
+      expect(vm.showLocalAiWizard).toBe(false);
+    } finally {
+      restoreTauri();
+    }
   });
 });

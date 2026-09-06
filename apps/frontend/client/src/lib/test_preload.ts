@@ -348,6 +348,13 @@ export const localServicesMockBase = () => ({
   RuntimeConfigService: class {},
   getOllamaRuntimeEndpoints: _createCallableStub(),
   getOpenAiCompatRuntimeModelsUrl: _createCallableStub(),
+  // P02: connection_verifier.ts is re-exported from '$services' and imported
+  // by ai_settings_view_model.svelte.ts. verifyConnection resolves a real
+  // ConnectionTestResult shape because callers read `.ok` off the awaited
+  // value — a bare _createCallableStub() would hand them `undefined`.
+  verifyConnection: mock(async () => ({ ok: true, latencyMs: 0 })),
+  isLocalProvider: mock(() => false),
+  hasVerificationStrategy: mock(() => false),
   authService: _createServiceStub(),
   AuthService: class {},
   // C-464: account_view_model.svelte.ts needs these two from '$services'.

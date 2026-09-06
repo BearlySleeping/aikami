@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-06
-> Files: 427 across 18 categories
+> Files: 429 across 18 categories
 
 ## Quick Start (Read These First)
 
@@ -448,6 +448,8 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [P01 — keep native AI installation out of the browser](plans/ai-setup/packets/01_desktop_gating.md)
 - [P02 — verify keyless local connections through their actual endpoint](plans/ai-setup/packets/02_local_verification.md)
 - [P03 — replace inferred Running labels with honest connection status](plans/ai-setup/packets/03_truthful_status.md)
+- [P04 — repair legacy projections through the existing C-463 mutators](plans/ai-setup/packets/04_config_projection.md)
+- [P05 — C-481 capability/provider/identity seam and typed API freeze](plans/ai-setup/packets/05_seam_freeze.md)
 - [Dependency order and parallel lanes](plans/ai-setup/queue.md)
 - [AI setup and settings — execution plan](plans/ai-setup/README.md)
 ## README.md/

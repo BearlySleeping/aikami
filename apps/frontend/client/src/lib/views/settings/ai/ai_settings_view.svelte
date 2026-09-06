@@ -103,14 +103,9 @@ let { viewModel }: Props = $props();
                 <div class="flex items-center gap-2">
                   <span class="text-sm">{entry.isLocal ? '▣' : '☁'}</span>
                   <span class="font-mono text-sm font-semibold">{entry.registryLabel}</span>
-                  {#if entry.isLocal}
-                    <span class="badge badge-xs badge-success font-mono">running</span>
-                  {:else}
-                    <span class="badge badge-xs badge-ghost font-mono"
-                      >{entry.connectionCount}
-                      connection{entry.connectionCount !== 1 ? 's' : ''}</span
-                    >
-                  {/if}
+                  <span class="badge badge-xs font-mono {entry.statusColorClass}"
+                    >{entry.statusLabel}</span
+                  >
                 </div>
                 <div class="flex items-center gap-1">
                   {#if entry.connections[0]}
@@ -143,6 +138,10 @@ let { viewModel }: Props = $props();
                       <span class="text-[#cabeff]">├</span>
                       <span>{conn.label}</span>
                       <span class="badge badge-xs badge-ghost">{conn.capability}</span>
+                      <span class="text-[10px] {conn.statusColorClass}">
+                        {conn.statusDot}
+                        {conn.statusLabel}
+                      </span>
                       {#if connRoles.length > 0}
                         <span class="text-[#938ea1]/60"> · {connRoles.join(', ')} </span>
                       {/if}

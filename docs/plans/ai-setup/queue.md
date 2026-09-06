@@ -13,8 +13,8 @@ No dependent agent may invent an API from an unmerged branch. Shared barrel/sche
 | P01 | [Desktop-only installation gating](packets/01_desktop_gating.md) | P00 | Flash | Browser has no native install/probe action; desktop retains entry |
 | P02 | [Keyless local connection verification](packets/02_local_verification.md) | P01 | Flash | User endpoint tested without requiring a key; cloud regression |
 | P03 | [Truthful provider status](packets/03_truthful_status.md) | P02 | Flash | Local identity alone never yields Running/Ready |
-| P04 | Repair legacy projections through existing C-463 mutators | P02 | Flash | Add/edit/delete/role changes agree across consumers before reload |
-| P05 | C-481 capability/provider/identity seam and typed API freeze | P03, P04; C-481 approved | Flash | Schema/registry/identity tests; reviewed public seam |
+| P04 | [Repair legacy projections](packets/04_config_projection.md) through existing C-463 mutators | P02 | Flash | Add/edit/delete/role changes agree across consumers before reload |
+| P05 | [C-481 capability/provider/identity seam](packets/05_seam_freeze.md) and typed API freeze | P03, P04; C-481 approved | Flash | Schema/registry/identity tests; reviewed public seam |
 | P06 | C-481 canonical writes, validated loading and migration safety | P05 | Flash | Real persisted-fixture migration, failure recovery and idempotence |
 | P07 | C-481 shared connection setup/test/model-discovery operations | P06 | Flash | Endpoint/auth reuse; two distinct endpoints remain distinct |
 | P08 | C-481 route all consumers through canonical resolution | P07 | Flash | Text/image/TTS routing and reload parity; premium migration check |
