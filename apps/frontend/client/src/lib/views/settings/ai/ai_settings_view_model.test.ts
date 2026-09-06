@@ -1484,6 +1484,34 @@ describe('AiSettingsViewModel — P03: truthful status presentation', () => {
     expect(mockConfigService.getProvider(providerId)?.credential).toBe('sk-or-v1-rotated');
   });
 
+  test('an in-flight sibling probe cannot restore a pre-rotation result', async () => {
+    const { providerId, first, second } = seedSiblings();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    // Hold the sibling's probe open across the credential rotation.
+    let release: ((value: unknown) => void) | undefined;
+    mockVerifyConnection.mockImplementationOnce(
+      async () =>
+        await new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const pending = vm.testConnection(second);
+
+    vm.openEditConnection(first);
+    vm.setDraftField('apiKey', 'sk-or-v1-rotated');
+    vm.saveDraft();
+
+    release?.({ ok: true, latencyMs: 42 });
+    await pending;
+
+    // The probe measured the replaced key — its result must be discarded.
+    expect(vm.connectionStatusFor(second).label).toBe('not checked');
+    expect(vm.testingIds.has(second)).toBe(false);
+    expect(mockConfigService.getProvider(providerId)?.credential).toBe('sk-or-v1-rotated');
+  });
+
   test('a deleted connection does not leave a result behind for a new one', async () => {
     const { first } = seedSiblings();
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });

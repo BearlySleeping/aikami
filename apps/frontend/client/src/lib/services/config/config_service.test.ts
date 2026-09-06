@@ -1158,6 +1158,40 @@ describe('P04: canonical mutators reproject legacy views', () => {
     );
   });
 
+  test('setRoleAssignment rejects a connection of the wrong capability', async () => {
+    const { configService, providerId } = await _seed();
+    const voiceId = configService.addAiConnection({
+      providerId,
+      capability: 'voice',
+      label: 'Kokoro',
+      model: 'af_heart',
+      params: { voiceId: 'af_heart', speed: 1, pitch: 0 },
+    });
+
+    // `narration` is a text role — a voice connection must not take it.
+    configService.setRoleAssignment('narration', voiceId);
+
+    expect(configService.getRoleAssignments().narration).toBeUndefined();
+    expect(configService.state.defaultByCapability.text).toBeUndefined();
+    expect(configService.state.defaultConnectionId).toBeNull();
+  });
+
+  test('changing a connection capability clears the roles it can no longer serve', async () => {
+    const { configService, connectionId } = await _seed();
+    configService.setRoleAssignment('narration', connectionId);
+    expect(configService.state.defaultConnectionId).toBe(connectionId);
+
+    // The text connection becomes a voice one; `narration` cannot follow it.
+    configService.updateAiConnection(connectionId, {
+      capability: 'voice',
+      params: { voiceId: 'af_heart', speed: 1, pitch: 0 },
+    });
+
+    expect(configService.getRoleAssignments().narration).toBeUndefined();
+    expect(configService.state.defaultConnectionId).toBeNull();
+    expect(configService.state.defaultByCapability.text).toBeUndefined();
+  });
+
   test('a connection added canonically is visible to the gateway without a reload', async () => {
     const { configService } = await _seed();
     const gatewayMod = await import('../ai/ai_gateway_service.svelte.ts');

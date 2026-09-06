@@ -1193,6 +1193,9 @@ export class AiSettingsViewModel
       const provider = this._findProviderByRegistry(this.draft.registryId);
       if (provider) {
         configService.updateProvider(provider.id, { credential: this.keyConflictPrompt.newKey });
+        // Same invalidation as the saveDraft rotation path: this account's
+        // stored results were measured against the replaced key.
+        this._clearTestResultsForProvider(provider.id);
         this.draft = { ...this.draft, apiKey: this.keyConflictPrompt.newKey };
         void configService.save();
       }
@@ -1378,13 +1381,14 @@ export class AiSettingsViewModel
    * result describes the old account and must not survive the edit.
    */
   private _clearTestResultsForProvider(providerId: string): void {
-    const ids = new Set(this._connectionsForProvider(providerId).map((c) => c.id));
-    if (ids.size === 0) {
-      return;
+    // Delegate per connection rather than filtering `testResults` directly:
+    // dropping the stored result is not enough on its own. A probe already in
+    // flight against the old credential would still pass its generation check
+    // and write a pre-rotation result back. _clearTestResult advances the
+    // generation and clears the in-flight marker together.
+    for (const connection of this._connectionsForProvider(providerId)) {
+      this._clearTestResult(connection.id);
     }
-    this.testResults = Object.fromEntries(
-      Object.entries(this.testResults).filter(([id]) => !ids.has(id)),
-    );
   }
 
   private _clearTestResult(connectionId: ConnectionId): void {

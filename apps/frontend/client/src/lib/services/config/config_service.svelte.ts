@@ -243,6 +243,25 @@ const PRIMARY_ROLE: Record<ConnectionCapability, AiRole> = {
   voice: 'narrator-voice',
 };
 
+/**
+ * The capability each role can be served by. A role may only point at a
+ * connection of its own capability: `_reproject()` prunes roles whose
+ * connection is *gone*, but it cannot tell that a surviving connection has
+ * become the wrong kind. Without this, a voice connection could be projected
+ * as `defaultByCapability.text`, and a capability-aware consumer that filters
+ * it out is then left with no text provider at all.
+ */
+const ROLE_CAPABILITY: Record<AiRole, ConnectionCapability> = {
+  narration: 'text',
+  dialogue: 'text',
+  summarization: 'text',
+  structured: 'text',
+  portrait: 'image',
+  scene: 'image',
+  'narrator-voice': 'voice',
+  'npc-voice': 'voice',
+};
+
 const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   autoSpeech: false,
   engine: 'kokoro',
@@ -931,9 +950,16 @@ class ConfigService
   }
 
   updateAiConnection(id: ConnectionId, patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>): void {
+    const previous = this.state.aiConnections.find((c) => c.id === id);
     this.state.aiConnections = this.state.aiConnections.map((c) =>
       c.id === id ? { ...c, ...patch, id: c.id, updatedAt: new Date().toISOString() } : c,
     );
+    // A capability change orphans every role that pointed here for the old
+    // one. _reproject() only prunes roles whose connection is gone, so drop
+    // the now-incompatible assignments before it publishes them.
+    if (previous && patch.capability !== undefined && patch.capability !== previous.capability) {
+      this._clearIncompatibleRolesFor(id);
+    }
     this._reproject();
   }
 
@@ -954,6 +980,11 @@ class ConfigService
   // ── C-463: Role management ─────────────────────────────────────────
 
   setRoleAssignment(role: AiRole, connectionId: ConnectionId): void {
+    // A role may only be served by a connection of its own capability.
+    const connection = this.state.aiConnections.find((c) => c.id === connectionId);
+    if (!connection || connection.capability !== ROLE_CAPABILITY[role]) {
+      return;
+    }
     this.state.roles = { ...this.state.roles, [role]: connectionId };
     this._reproject();
   }
@@ -1177,6 +1208,26 @@ class ConfigService
    * capability_view_model runs an $effect over it and an unconditional new
    * array would wake it on every no-op.
    */
+  /**
+   * Drops every role assignment pointing at `connectionId` whose capability no
+   * longer matches that connection.
+   */
+  private _clearIncompatibleRolesFor(connectionId: ConnectionId): void {
+    const connection = this.state.aiConnections.find((c) => c.id === connectionId);
+    if (!connection) {
+      return;
+    }
+    const next = Object.fromEntries(
+      Object.entries(this.state.roles).filter(
+        ([role, id]) =>
+          id !== connectionId || ROLE_CAPABILITY[role as AiRole] === connection.capability,
+      ),
+    );
+    if (Object.keys(next).length !== Object.keys(this.state.roles).length) {
+      this.state.roles = next;
+    }
+  }
+
   private _reproject(): void {
     // Drop role assignments whose connection is gone.
     const valid = new Set(this.state.aiConnections.map((c) => c.id));
