@@ -75,6 +75,32 @@ describe('validateRedirectHop', () => {
     }
   });
 
+  test('drops username-only credentials from a cross-origin redirect', () => {
+    const result = validateRedirectHop({
+      location: 'https://user@cdn-lfs.huggingface.co/file.gguf',
+      fromUrl: initialUrl,
+      hopCount: 0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.url.username).toBe('');
+      expect(result.url.password).toBe('');
+    }
+  });
+
+  test('drops password-only credentials from a cross-origin redirect', () => {
+    const result = validateRedirectHop({
+      location: 'https://:pass@cdn-lfs.huggingface.co/file.gguf',
+      fromUrl: initialUrl,
+      hopCount: 0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.url.username).toBe('');
+      expect(result.url.password).toBe('');
+    }
+  });
+
   test('rejects HTTP downgrade from HTTPS', () => {
     const result = validateRedirectHop({
       location: 'http://cdn-lfs.huggingface.co/file.gguf',

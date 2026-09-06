@@ -164,7 +164,8 @@ export const validateRedirectHop = (options: {
     return { ok: false, reason: `redirect to unapproved host: ${url.hostname}:${port}` };
   }
 
-  return { ok: true, url };
+  const validatedUrl = fromUrl ? dropCredentialsIfCrossOrigin(url, fromUrl.origin) : url;
+  return { ok: true, url: validatedUrl };
 };
 
 /**
@@ -215,7 +216,7 @@ export const validateRedirectChain = (options: {
  * reference URL. Returns the sanitized URL string.
  */
 export const dropCredentialsIfCrossOrigin = (url: URL, referenceOrigin: string): URL => {
-  if (url.origin !== referenceOrigin && url.username) {
+  if (url.origin !== referenceOrigin && (url.username || url.password)) {
     const sanitized = new URL(url.toString());
     sanitized.username = '';
     sanitized.password = '';
