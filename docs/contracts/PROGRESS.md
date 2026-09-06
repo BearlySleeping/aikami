@@ -1,6 +1,6 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-05)
+## Status Summary (Auto-generated: 2026-09-06)
 
 **238 active (0 without contract file), 119 archived, 0 duplicates**
 
@@ -235,8 +235,8 @@
 | C-471 | Owned Service Lifecycle | 👍 approved | — | v2 | full |
 | C-472 | Testable Worker Lifecycle | 👍 approved | — | v2 | full |
 | C-473 | Pipeline Usage Ledger | 👍 approved | — | v2 | full |
-| C-474 | Role Context Profiles | 👍 approved | — | v2 | thin |
-| C-475 | Executable Agent Guidance | 👍 approved | — | v2 | thin |
+| C-474 | Role Context Profiles | 📝 draft | — | v2 | thin |
+| C-475 | Executable Agent Guidance | 📝 draft | — | v2 | thin |
 | C-476 | Strictness Coverage Ratchet | 👍 approved | — | v2 | thin |
 | C-477 | Compiled Svelte Lifecycle Tests | 📝 draft | — | v2 | full |
 | C-478 | Reproducible Agent Resources | 📝 draft | — | v2 | thin |

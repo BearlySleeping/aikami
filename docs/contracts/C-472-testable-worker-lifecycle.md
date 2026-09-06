@@ -3,12 +3,12 @@ id: C-472
 title: "Make worker lifecycle testable and simplify Herdr transport"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: null
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: https://github.com/BearlySleeping/aikami/pull/251
 created_at: "2026-09-04T00:00:00Z"
 ---
 
@@ -16,18 +16,18 @@ created_at: "2026-09-04T00:00:00Z"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | Accepted agent-platform audit; PR 06 in [execution plan](../strategy/agent-platform-hardening.md) |
-| **Target** | Pipeline orchestrator/stage runner/Herdr adapter and their deterministic tests |
-| **Type** | full |
-| **Priority** | P1 — control-flow recovery is under-tested and PTY workarounds obscure completion |
-| **Dependencies** | C-469, C-470, C-471 |
-| **Status** | approved |
-| **Promotion** | — |
-| **Docs Impact** | internal — lifecycle, capabilities and transport compatibility |
-| **Contract version** | 2.0.0 |
-| **Execution** | Claude Sonnet 5 / high; Opus/high design review; target 12–35 files, maximum 99 |
+| Field                | Value                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| **Source**           | Accepted agent-platform audit; PR 06 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Target**           | Pipeline orchestrator/stage runner/Herdr adapter and their deterministic tests                    |
+| **Type**             | full                                                                                              |
+| **Priority**         | P1 — control-flow recovery is under-tested and PTY workarounds obscure completion                 |
+| **Dependencies**     | C-469, C-470, C-471                                                                               |
+| **Status**           | approved                                                                                          |
+| **Promotion**        | —                                                                                                 |
+| **Docs Impact**      | internal — lifecycle, capabilities and transport compatibility                                    |
+| **Contract version** | 2.0.0                                                                                             |
+| **Execution**        | Claude Sonnet 5 / high; Opus/high design review; target 12–35 files, maximum 99                   |
 
 ## Problem & Baseline Evidence
 
@@ -47,13 +47,13 @@ Every lifecycle scenario below runs with fake agents and injected time, without 
 
 ## Existing System & Reuse Map
 
-| Capability | Existing source | Action |
-|---|---|---|
-| Transitions | `state_machine.ts` | preserve pure core |
-| Effects | `orchestrator.ts` | extract small injected boundaries |
-| Worker/review I/O | `herdr_adapter.ts`, `stage_runner.ts` | consolidate |
-| Review input safety | `review_pane.ts`, `review_gate.ts` | retain tests |
-| Process execution | existing process wrappers and Node runtime boundary | reuse |
+| Capability          | Existing source                                     | Action                            |
+| ------------------- | --------------------------------------------------- | --------------------------------- |
+| Transitions         | `state_machine.ts`                                  | preserve pure core                |
+| Effects             | `orchestrator.ts`                                   | extract small injected boundaries |
+| Worker/review I/O   | `herdr_adapter.ts`, `stage_runner.ts`               | consolidate                       |
+| Review input safety | `review_pane.ts`, `review_gate.ts`                  | retain tests                      |
+| Process execution   | existing process wrappers and Node runtime boundary | reuse                             |
 
 ## Overview
 
@@ -101,38 +101,44 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). Tests lead extra
 ## Acceptance Criteria
 
 ### AC-1: The complete loop is exercised without live agents
+
 **Given** fake clock/transport/Git/store adapters,
 **When** happy path, verifier bounce, failed validation, review change, reject and interrupted-resume scenarios run,
 **Then** transitions/effects match the expected sequence and required gates cannot be skipped.
 
 ### AC-2: Recovery preserves task identity and instructions
+
 **Given** crash, late completion, guard halt, duplicate event or process exit without result,
 **When** recovery/relaunch runs,
 **Then** fencing remains correct, original instructions and feedback survive, and missing completion produces a typed failure rather than a false pass.
 
 ### AC-3: Interactive transport respects user control
+
 **Given** receptive, working, blocked and nonempty-composer fixtures,
 **When** the captain/writer is started or retasked,
 **Then** a task is submitted at most once when permitted; no approval is answered automatically and no human input is overwritten.
 
 ### AC-4: Cancellation and unavailable transport are distinct
+
 **Given** an active worker, a disconnected Herdr transport or a cancelled run,
 **When** supervision executes,
 **Then** transport uncertainty cannot trigger duplicate workers, cancellation stops only owned work, and retries/time budgets are bounded and explainable.
 
 ### AC-5: Sensitive effects have trusted boundaries
+
 **Given** a worker requests publication, edits protected policy or reports a forged success artifact,
 **When** the controller evaluates the event,
 **Then** generation/validation/capability checks reject unauthorized advancement while legitimate scratch/evidence writes remain allowed. Document that shell-capable workers are not an OS sandbox.
 
 **Evidence Matrix**:
-| AC | Test Level | Required Artifact | Production Path | Evidence |
-|---|---|---|---|---|
-| AC-1 | Integration | proposed `contract_pipeline/orchestrator.test.ts` | full run | pending implementation |
-| AC-2 | Integration | `stage_runner.test.ts`, scenario fixtures | recovery | pending implementation |
+
+| AC   | Test Level       | Required Artifact                                       | Production Path   | Evidence               |
+| ---- | ---------------- | ------------------------------------------------------- | ----------------- | ---------------------- |
+| AC-1 | Integration      | proposed `contract_pipeline/orchestrator.test.ts`       | full run          | pending implementation |
+| AC-2 | Integration      | `stage_runner.test.ts`, scenario fixtures               | recovery          | pending implementation |
 | AC-3 | Unit/Integration | `review_pane.test.ts`, proposed `herdr_adapter.test.ts` | interactive agent | pending implementation |
-| AC-4 | Integration | controller/transport fault fixtures | cancel/resume | pending implementation |
-| AC-5 | Unit/Integration | proposed controller capability fixtures | sensitive effects | pending implementation |
+| AC-4 | Integration      | controller/transport fault fixtures                     | cancel/resume     | pending implementation |
+| AC-5 | Unit/Integration | proposed controller capability fixtures                 | sensitive effects | pending implementation |
 
 **Test Hooks:** C-468 automation targets on three OS families. Add an opt-in Herdr smoke against a disposable named test session; never stop the user's server. Browser/visual: N/A. Required correctness suite uses no model tokens.
 **Watch Points:** same logical attempt versus replacement generation; alive versus working; event delivery after cancellation; resumable review decisions; preservation of human input.
@@ -154,8 +160,8 @@ None for scope approval. Minimum Herdr version/capabilities are measured during 
 ## Amendments
 
 | Version | Date | Change | Approved by |
-|---|---|---|---|
-| — | — | — | — |
+| ------- | ---- | ------ | ----------- |
+| —       | —    | —      | —           |
 
 ## Promotion Lifecycle
 

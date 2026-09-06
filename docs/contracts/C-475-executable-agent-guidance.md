@@ -3,13 +3,13 @@ id: C-475
 title: "Test canonical coding examples and prevent active instruction drift"
 source: direct
 contract_type: thin
-status: draft
+status: implemented
 github:
-  issue_number: null
-  issue_url: null
-  project_item_id: null
-  pr_url: "https://github.com/BearlySleeping/aikami/pull/254"
-  pr_number: 254
+    issue_number: null
+    issue_url: null
+    project_item_id: null
+    pr_url: "https://github.com/BearlySleeping/aikami/pull/254"
+    pr_number: 254
 created_at: "2026-09-04T22:21:38Z"
 ---
 
@@ -17,18 +17,18 @@ created_at: "2026-09-04T22:21:38Z"
 
 ## Metadata
 
-| Field | Value |
-|---|---|
-| **Source** | Accepted agent-platform audit; PR 09 in [execution plan](../strategy/agent-platform-hardening.md) |
-| **Target** | Active agent guidance, canonical example fixtures and instruction checks |
-| **Type** | thin |
-| **Priority** | P1 — contradictory examples and obsolete tools repeatedly regenerate incorrect work |
-| **Dependencies** | C-474; instruction-repair PR 02 |
-| **Status** | draft |
-| **Promotion** | — |
-| **Docs Impact** | internal — concise normative guidance and executable references |
-| **Contract version** | 2.0.0 |
-| **Execution** | Claude Sonnet 5 / medium; target 10–30 files, maximum 99 |
+| Field                | Value                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| **Source**           | Accepted agent-platform audit; PR 09 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Target**           | Active agent guidance, canonical example fixtures and instruction checks                          |
+| **Type**             | thin                                                                                              |
+| **Priority**         | P1 — contradictory examples and obsolete tools repeatedly regenerate incorrect work               |
+| **Dependencies**     | C-474; instruction-repair PR 02                                                                   |
+| **Status**           | draft                                                                                             |
+| **Promotion**        | —                                                                                                 |
+| **Docs Impact**      | internal — concise normative guidance and executable references                                   |
+| **Contract version** | 2.0.0                                                                                             |
+| **Execution**        | Claude Sonnet 5 / medium; target 10–30 files, maximum 99                                          |
 
 ## Problem & Baseline Evidence
 
@@ -50,30 +50,35 @@ An agent can copy a small correct example and follow current instructions withou
 ## Acceptance Criteria
 
 ### AC-1: Canonical examples are executable and internally consistent
+
 **Given** selected examples for a View/ViewModel factory, a service, a pure helper and an external-data boundary,
 **When** their positive fixtures are compiled and linted under the relevant project configuration,
 **Then** they pass without unsafe blanket suppressions and the skill excerpts cannot diverge unnoticed. Intentionally invalid examples are separately labelled and assert the expected diagnostic.
 **Verification**: proposed `.pi` guidance/example tests, using existing compilers and framework tooling. Include a mutation fixture that exports/instantiates the ViewModel in the prohibited way and ensure the appropriate check rejects it. Mark illustrative fragments as non-executable instead of pretending they compile.
 
 ### AC-2: References are checked against real registries
+
 **Given** examples naming tools/actions, services, skills, Moon projects or local files,
 **When** the active-guidance check runs,
 **Then** wrong names, unsupported action values and missing required references fail with file/line diagnostics. It derives accepted values from registries/configuration, not another manually duplicated list.
 **Verification**: proposed `scripts/src/lib/ops/validate_agent_guidance.test.ts` with valid, renamed-tool, missing-service, missing-file and historical-exemption fixtures. Never invoke the referenced tool as part of validation.
 
 ### AC-3: Active and historical guidance are distinguished
+
 **Given** archived specs, migration notes, vendor references and current instructions,
 **When** the checker evaluates them,
 **Then** only explicitly selected active guidance is normative; history remains readable without false failures. The manifest is a closed-world, exact-path inventory of every active guidance file from these source classes: root agent instructions (`AGENTS.md`, `.claude/CLAUDE.md`); generated context (`.context/`); Pi project/readme, prompt, autofix, background-task and runner guidance; every project skill and referenced guidance file under `.pi/skills/`; every configured generated skill and referenced guidance file under `.pi/generated-skills/`; and agent system prompts under `scripts/src/lib/agents/`. Each entry records its class and whether it is active or an exact historical exemption. Globs and directory-wide exemptions are not manifest entries. Any discovered active candidate absent from the manifest, any manifest path that disappears, and any active file covered only by an exemption fails validation. Historical exemptions are exact paths with reasons, so archived contracts, migration notes and discussions remain readable without becoming active guidance. Any active-rule exception has a reason and a narrow scope, not a broad directory exclusion.
 **Verification**: manifest coverage checks compare exact manifest entries with candidates discovered from every source class above. Fixtures add one unlisted active file in each class and require failure, plus an intentional obsolete listed active service example that must fail while an exact-path historical discussion exemption passes.
 
 ### AC-4: Guidance is shorter without losing architectural invariants
+
 **Given** the post-PR-02/C-474 baseline,
 **When** repeated workflow/style material is consolidated,
 **Then** AGENTS.md retains short universal invariants, role prompts contain workflow, skills link to canonical examples, and generated context describes current configuration. Cancellation/resource cleanup, external-data validation and performance measurement have concise references rather than new always-loaded essays.
 **Verification**: before/after category measurements from C-474, human review of invariant coverage and updated profile/example snapshots. Do not claim static imports universally outperform lazy boundaries.
 
 ### AC-5: Drift checks run deterministically in CI
+
 **Given** changes to active guidance, registries or generators,
 **When** the C-468 tooling CI selects checks,
 **Then** drift tests run without network/AI/services, preserve nonzero exits and do not rewrite source during a check. Generating twice from identical inputs produces identical relevant content.
@@ -89,8 +94,8 @@ An agent can copy a small correct example and follow current instructions withou
 ## Amendments
 
 | Version | Date | Change | Approved by |
-|---|---|---|---|
-| — | — | — | — |
+| ------- | ---- | ------ | ----------- |
+| —       | —    | —      | —           |
 
 ## Promotion Lifecycle
 

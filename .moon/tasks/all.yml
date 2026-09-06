@@ -161,6 +161,8 @@ tasks:
       - "~:lint"
       - "~:format"
       - "~:typecheck"
+      - "scripts:guard"
+      - "scripts:validate-agent-guidance"
     options:
       cache: false
       runInCI: true
