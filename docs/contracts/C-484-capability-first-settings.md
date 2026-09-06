@@ -25,7 +25,7 @@ created_at: "2026-09-05T15:34:22Z"
 | **Type** | full |
 | **Priority** | P1 — replace provider-tree-first configuration with user tasks, then close the programme |
 | **Dependencies** | **C-481, C-482 and C-483 merged** |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | Setup, settings and AI configuration guidance in `apps/frontend/docs/src/content/docs/` is updated here |
 | **Contract version** | 2.0.0 |
