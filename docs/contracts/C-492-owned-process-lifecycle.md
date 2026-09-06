@@ -61,12 +61,12 @@ After this contract, a player who already runs their own AI server keeps full co
 
 **Verification**: occupied-port fixture; assert a typed visible failure and no scope widening.
 
-### AC-3: Restart returns the correct process and model
+### AC-3: Restart restores the same owned runtime, not the same OS process
 **Given** an owned engine previously running a specific model
 **When** the app restarts it on demand
-**Then** the same owned process and model are restored.
+**Then** the same **owned runtime record** — its identity, artifact and model — is restored, the newly spawned OS process is registered as owned under that same record, and it serves that model. A restart necessarily creates a new PID; the invariant is the runtime record's continuity, never PID equality.
 
-**Verification**: restart tests asserting process identity and loaded model.
+**Verification**: restart tests asserting the runtime record ID, artifact path and loaded model are unchanged, that the new PID is registered as owned, and that the new PID differs from the old one (so a test cannot pass by never having restarted).
 
 ### AC-4: Native commands validate their inputs
 **Given** a native lifecycle command

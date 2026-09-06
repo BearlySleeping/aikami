@@ -22,7 +22,7 @@ created_at: "2026-09-06T03:20:00Z"
 | **Target** | `apps/frontend/client/src/lib/views/settings/` navigation and the existing pause mount |
 | **Type** | thin |
 | **Priority** | P1 — the shell every later settings page hangs from |
-| **Dependencies** | C-488 |
+| **Dependencies** | C-488 (P08). Queue row S01 additionally requires *pilot accepted* — see [queue.md](../../plans/ai-setup/queue.md); the queue is the authoritative execution gate, C-488 alone is not sufficient to start. |
 | **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |
@@ -54,12 +54,12 @@ After this contract, a player finds a setting by searching for what it does, on 
 
 **Verification**: production visual captures at both widths; structural assertions on the rendered navigation.
 
-### AC-2: Search finds sections, including empty results
-**Given** a search query
-**When** it matches or matches nothing
-**Then** matching sections are reachable by keyboard and an empty result is stated clearly.
+### AC-2: Search indexes individual settings, not only sections
+**Given** a search index built from **task records** — one per addressable setting or action, each carrying its label, its synonyms in the words a player would actually type, and the route plus section that reveals it
+**When** a query matches a task record, matches only a section, or matches nothing
+**Then** a task-record match navigates to the section *and* reveals the specific setting; a section match reaches the section; an empty result is stated clearly. All three are reachable by keyboard.
 
-**Verification**: keyboard, search and empty-result E2E with semantic focus assertions.
+**Verification**: assert the index contains a task record per addressable setting (not one per section); an E2E query naming a *setting action* — not a section name — lands on that setting; keyboard and empty-result E2E with semantic focus assertions. A test that only searches section names cannot satisfy this AC.
 
 ### AC-3: Existing deep links and pause semantics survive
 **Given** current deep links and the pause overlay
@@ -68,7 +68,14 @@ After this contract, a player finds a setting by searching for what it does, on 
 
 **Verification**: route and search-param mapping tests; the existing settings and pause regression suite; a no-network guest load.
 
-### AC-4: Nothing is silently dropped
+### AC-4: Context and platform filtering are verified
+**Given** the four combinations of context (pause overlay vs full settings) and platform (browser vs native desktop)
+**When** navigation, search results and the item list are rendered
+**Then** each combination shows exactly its permitted items: pause shows only pause-context sections while Full Settings shows all; native-only actions (managed install, local process control, filesystem paths) are absent in the browser and present on desktop; search results are filtered by the same policy as the navigation, so a hidden item is never reachable through search.
+
+**Verification**: a 2x2 matrix test over {pause, full} x {browser, native} asserting the expected item set per cell, plus one search assertion per cell proving search honors the same filter. The policy is read from one shared context/platform registry, not re-derived per view.
+
+### AC-5: Nothing is silently dropped
 **Given** the existing settings surface
 **When** it is reorganized
 **Then** music DJ, agents, automation, exports and account actions all remain reachable.

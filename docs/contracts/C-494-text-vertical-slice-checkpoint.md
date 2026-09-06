@@ -24,7 +24,7 @@ created_at: "2026-09-06T03:20:00Z"
 | **Priority** | P1 — proves the configuration and runtime lanes actually meet |
 | **Dependencies** | C-493 |
 | **Status** | approved |
-| **Promotion** | `integrated` |
+| **Promotion** | — |
 | **Docs Impact** | internal → none |
 | **Contract version** | 2.0.0 |
 
@@ -68,12 +68,15 @@ After this contract, a player can complete text setup on a real build — using 
 
 **Verification**: packaged-build run with captured evidence; a mocked global is explicitly not acceptable.
 
-### AC-4: Offline reopen retains configuration
+### AC-4: Offline reopen retains configuration and reports honestly
 **Given** a configured app and no network
 **When** it is reopened
-**Then** it boots, retains its configuration and remains usable without any cloud call or sign-in.
+**Then** three things hold, stated separately because AC-2 configures an online provider that genuinely cannot work offline:
+1. **Boot** succeeds with no cloud call and no sign-in, and the full configuration is retained.
+2. **Local capabilities** — a managed native or reachable local engine — remain usable and generate.
+3. **Cloud and unreachable external capabilities** report unavailable up front, without attempting a network call and without presenting themselves as ready.
 
-**Verification**: offline reopen E2E asserting zero network dependencies on boot.
+**Verification**: offline reopen E2E asserting zero network dependencies on boot; a local generation succeeds; the cloud connection from AC-2 surfaces unavailable with zero outbound requests attempted.
 
 ## Edge Cases & Gotchas
 

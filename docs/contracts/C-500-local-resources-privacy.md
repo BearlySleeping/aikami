@@ -47,19 +47,19 @@ After this contract, a player manages what the app installed — disk use, start
 
 ## Acceptance Criteria
 
-### AC-1: Owned assets expose real job state
-**Given** managed assets in running, stopped, downloading and failed states
+### AC-1: Owned assets expose real job state, including ready-to-start
+**Given** managed assets in running, **stopped-but-ready-to-start**, downloading and failed states
 **When** Local resources opens
-**Then** each shows download, status, disk, start/stop, repair and removal actions derived from C-491's durable state.
+**Then** each shows download, status, disk, start/stop, repair and removal actions derived from C-491's durable state. A ready-to-start asset — installed and verified, process not running — presents a **start** action and a ready status; it must not present a running status, and must not present a stop action that only makes sense while running.
 
-**Verification**: fixtures per state asserting presentation derives from job state, not local component memory.
+**Verification**: one fixture per state including an explicit ready-to-start fixture; assert presentation derives from job state plus runtime observation, not local component memory; assert the ready-to-start fixture renders start (not stop) and never reports Running.
 
 ### AC-2: Disconnecting an external service is never destructive
 **Given** an external service the player installed themselves
 **When** they disconnect it
 **Then** only the app's connection is removed — no delete, stop or reconfigure reaches that service.
 
-**Verification**: non-destructive disconnect tests asserting zero lifecycle calls.
+**Verification**: non-destructive disconnect tests asserting zero lifecycle calls, run over **two** fixtures — an explicitly external service, and a legacy record whose ownership is unknown. The unknown fixture must take the same non-destructive path: zero delete, zero stop and zero reconfigure calls. Without it the default-to-external rule is documented but unenforced, and the destructive case is the one that cannot be undone.
 
 ### AC-3: Web hides native controls but keeps browser assets
 **Given** a browser host

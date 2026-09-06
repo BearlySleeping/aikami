@@ -54,21 +54,28 @@ After this contract, a player's model download succeeds through a legitimate CDN
 
 **Verification**: fixture redirect chains within policy; assert success and verified digest.
 
-### AC-2: Hostile redirects fail closed
+### AC-2: Every hop is HTTPS, including the first request
+**Given** a catalog artifact URL, an approved origin configured with an `http://` scheme, and a same-origin `https → http` redirect
+**When** a download or any credential-bearing request runs
+**Then** it fails closed in all three cases: the approved-origin policy admits HTTPS origins only, the initial request is HTTPS or is refused before a socket opens, and a downgrade is rejected even when the host and port are unchanged.
+
+**Verification**: assert the policy rejects an `http://` approved-origin entry; assert an `http://` artifact URL never issues a request; assert a same-origin downgrade hop fails with the same typed error as a cross-origin one. Credentials are never attached to a non-HTTPS request in any of these paths.
+
+### AC-3: Hostile redirects fail closed
 **Given** a redirect to a disallowed scheme, host, port or destination class, or a chain exceeding the hop cap
 **When** the download runs
 **Then** it fails visibly with a typed error and installs nothing.
 
 **Verification**: one test per rejection class including downgrade to HTTP, unapproved host, and hop-cap exhaustion.
 
-### AC-3: Credentials never cross an origin
+### AC-4: Credentials never cross an origin
 **Given** a credential-bearing request that is redirected to a different origin
 **When** the hop is followed
 **Then** credentials and auth headers are dropped before the request is issued.
 
 **Verification**: recording transport asserts absent auth headers on the cross-origin hop.
 
-### AC-4: Paths and integrity are validated
+### AC-5: Paths and integrity are validated
 **Given** an artifact name containing traversal segments, or a payload whose bytes do not match the pinned checksum or size
 **When** it is written or verified
 **Then** the write is refused or the artifact is rejected and removed, and a partial or interrupted download is never treated as ready.

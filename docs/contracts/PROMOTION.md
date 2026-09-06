@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 173 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 175 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -230,10 +230,12 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-491 | Durable Setup Jobs | 👍 approved | v2 | thin |
 | C-492 | Owned Process Lifecycle | 👍 approved | v2 | thin |
 | C-493 | Provision Through Canonical Setup | 👍 approved | v2 | thin |
+| C-494 | Text Vertical Slice Checkpoint | 👍 approved | v2 | thin |
 | C-495 | Setup Subflow Components | 👍 approved | v2 | thin |
 | C-496 | Guided First Run Routes | 👍 approved | v2 | thin |
 | C-497 | Optional Modality Integration | 👍 approved | v2 | thin |
 | C-498 | Settings Navigation Search | 👍 approved | v2 | thin |
 | C-499 | Capability Pages Connections | 👍 approved | v2 | thin |
 | C-500 | Local Resources Privacy | 👍 approved | v2 | thin |
+| C-501 | Ai Setup Production Integration | 👍 approved | v2 | thin |
 

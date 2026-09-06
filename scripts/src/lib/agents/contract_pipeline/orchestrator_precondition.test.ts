@@ -119,6 +119,10 @@ describe('checkImplementPrecondition', () => {
   it('blocks a superseded parent that was split into child contracts', () => {
     writeFileSync(contractPath, supersededBody);
     commitContractToMain({ repoRoot: root, contractPath, message: 'docs: supersede' });
+    // Desync the worktree to `approved`, so reading the wrong source would
+    // return undefined rather than accidentally agreeing with `main`.
+    writeFileSync(contractPath, approvedBody);
+    expect(git(['show', `main:${CONTRACT_REL}`], root)).toContain('superseded');
 
     const result = checkImplementPrecondition({
       repoRoot: root,

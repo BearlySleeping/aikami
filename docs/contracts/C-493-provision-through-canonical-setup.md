@@ -59,7 +59,7 @@ After this contract, a player can install a local engine and immediately use it 
 **When** provisioning runs again
 **Then** the existing account and connection are reused rather than duplicated, and no second credential record is created.
 
-**Verification**: repeat-provision tests asserting stable `providerId` and connection count.
+**Verification**: repeat-provision tests asserting stable `providerId`, unchanged connection count, **and** unchanged credential-record count with a stable credential-record identity. Counting connections alone passes while provisioning appends a duplicate credential each run.
 
 ### AC-3: Failure leaves nothing half-registered
 **Given** a provisioning failure at download, verification or persistence

@@ -42,7 +42,7 @@ After this contract, a player can start a download, leave the screen, come back 
 
 ## Scope Boundaries
 
-- **In Scope:** durable job state outside the ViewModel; real cancellation reaching the underlying transfer; restart recovery; retry-safe resumption that never corrupts a valid artifact.
+- **In Scope:** durable job state outside the ViewModel; real cancellation reaching the underlying transfer; restart recovery; retry-safe resumption that never corrupts a valid artifact; an ownership precondition guarding every destructive job path.
 - **Out of Scope:** process lifecycle and ports (C-492), provisioning integration (C-493), and UI presentation of jobs (C-500).
 
 ## Acceptance Criteria
@@ -67,6 +67,13 @@ After this contract, a player can start a download, leave the screen, come back 
 **Then** the valid artifact is left intact and the partial one is resumed or discarded safely, with verification re-anchored to the pinned checksum.
 
 **Verification**: idempotence tests for both cases plus a crash-mid-write case.
+
+### AC-4: Lifecycle actions refuse assets the app does not own
+**Given** a job or artifact path outside the app-owned asset root — a user's pre-existing model file, or a job record naming an unowned path
+**When** cancel, retry, restart/resume or cleanup runs
+**Then** the operation is rejected on an ownership precondition **before** any transfer is started or any byte is deleted, and the unowned file is left untouched.
+
+**Verification**: unowned-path fixtures for each of the four paths; assert zero delete and zero transfer calls, and assert the rejection happens before the destructive call rather than being detected after it.
 
 ## Edge Cases & Gotchas
 

@@ -22,7 +22,7 @@ created_at: "2026-09-06T03:20:00Z"
 | **Target** | `apps/frontend/client/src/lib/views/` focused setup components and their ViewModels |
 | **Type** | thin |
 | **Priority** | P1 — both onboarding and settings depend on these components |
-| **Dependencies** | C-494 |
+| **Dependencies** | C-487 (the shared setup operations these components call), C-494 (checkpoint gate) |
 | **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal → none |

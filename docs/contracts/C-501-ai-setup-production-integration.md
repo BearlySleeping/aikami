@@ -24,7 +24,7 @@ created_at: "2026-09-06T03:20:00Z"
 | **Priority** | P1 — the only contract that may claim the parents are delivered |
 | **Dependencies** | C-497, C-500 |
 | **Status** | approved |
-| **Promotion** | `release_verified` |
+| **Promotion** | — |
 | **Docs Impact** | user-facing → setup and settings guidance in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
 

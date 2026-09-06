@@ -86,7 +86,8 @@ After this contract, a developer can build the remaining AI configuration work a
 
 - **Public API freeze**: prefer fewer, well-named exports — every export here is one C-486 through C-488 and C-490 must build against. Return the frozen export list in the execution report; that list is the real deliverable.
 - **Four distinct facts**: feature support, reachability, selected-model compatibility and last successful generation must stay distinguishable in the types. C-465 and the P03 work established this in presentation; the seam must not collapse it again.
-- **No speculative framework**: no new persistence system or capability registry that C-481 assigns to later slices. Wire schemas/types/constants stay in shared packages; no app imports from shared packages.
+- **No speculative framework**: no new persistence system or capability registry that C-481 assigns to later slices.
+- **Dependency direction**: schemas, types and constants live in `packages/shared/*` and apps import them (`@aikami/schemas`, `@aikami/types`, `@aikami/constants`) — that is the whole point of the freeze. The forbidden direction is the reverse: no shared package may import from `apps/**`, and no app may re-export a shared type as its own.
 
 ## Amendments
 

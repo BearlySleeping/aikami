@@ -52,6 +52,8 @@ After this contract, a player's existing accounts, models, routing choices and p
 **When** the vault is loaded
 **Then** each is validated with its version-appropriate schema, an unknown future version never enters the v1 path, and once v3 exists no legacy copy is silently re-imported or fallen back to.
 
+The one exception is the v2→v3 migration itself: it validates and absorbs `legacy.connections` rows **exactly once**, as part of producing the v3 candidate. A load that already finds v3 must never consult `legacy` — so rows are neither dropped at migration time nor re-imported on every subsequent load.
+
 **Verification**: synthetic encrypted fixtures per version; explicit assertions that unknown versions are rejected with recovery rather than migrated.
 
 ### AC-2: Absent, locked, corrupt and unsupported are distinguished
@@ -85,7 +87,7 @@ After this contract, a player's existing accounts, models, routing choices and p
 ## Edge Cases & Gotchas
 
 - **Legacy identity**: legacy `models[]` identity includes endpoint and account context, not just registry and model. Do not attach standalone voice/image keys to a guessed provider.
-- **Overlap**: a v2 payload may hold canonical rows *and* rows only in `legacy.connections`. Absorb missing IDs once, preserve canonical rows and explicit assignments on overlap.
+- **Overlap**: a v2 payload may hold canonical rows *and* rows only in `legacy.connections`. Absorb missing IDs once **during the v2→v3 migration only**, preserving canonical rows and explicit assignments on overlap. Re-running the migration over an already-migrated v3 record must be a no-op; a v3 load must not read `legacy` at all. Test both: absorb-once, and idempotent re-run.
 - **Still-live consumers**: legacy readers get read-only compatibility adapters. Temporary legacy mutation methods must translate into the canonical transaction, never write a second store.
 
 ## Amendments
