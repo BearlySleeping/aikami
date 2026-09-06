@@ -18,6 +18,7 @@ on:
     paths:
       - ".pi/**"
       - "scripts/src/lib/agents/contract_pipeline/**"
+      - "scripts/src/lib/agents/evaluation/**"
       - "scripts/src/lib/herdr/**"
       - "scripts/src/lib/env/**"
       - "scripts/package.json"
@@ -30,6 +31,7 @@ on:
     paths:
       - ".pi/**"
       - "scripts/src/lib/agents/contract_pipeline/**"
+      - "scripts/src/lib/agents/evaluation/**"
       - "scripts/src/lib/herdr/**"
       - "scripts/src/lib/env/**"
       - "scripts/package.json"
