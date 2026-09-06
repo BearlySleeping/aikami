@@ -240,7 +240,7 @@
 | C-476 | Strictness Coverage Ratchet | 🛠️ implemented | — | v2 | thin |
 | C-477 | Compiled Svelte Lifecycle Tests | 🛠️ implemented | — | v2 | full |
 | C-478 | Reproducible Agent Resources | 🛠️ implemented | — | v2 | thin |
-| C-479 | Portable Contributor Onboarding | 📝 draft | — | v2 | full |
+| C-479 | Portable Contributor Onboarding | 👍 approved | — | v2 | full |
 | C-480 | Agent Evaluation And Routing | 📝 draft | — | v2 | thin |
 | C-481 | Ai Configuration Convergence | 🛠️ implemented | — | v2 | full |
 | C-482 | Managed Ai Runtime Lifecycle | 👍 approved | — | v2 | full |

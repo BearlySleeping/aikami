@@ -3,7 +3,7 @@ id: C-479
 title: "Verify credential-free contributor onboarding across Linux, macOS and Windows"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-04T22:21:38Z"
 | **Type** | full |
 | **Priority** | P1 — setup must be a verified contributor path, not knowledge specific to the maintainer's machine |
 | **Dependencies** | C-471, C-472, C-478 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal/contributor-facing — setup guide and task-specific prerequisites |
 | **Contract version** | 2.0.0 |
@@ -31,7 +31,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 ## Problem & Baseline Evidence
 
-- **Current behavior:** `docs/intro/setup.md` advertises a Bun-only path but also contains outdated service/port/prerequisite claims and says macOS is untested. Maintainer Nix/direnv state can conceal missing dependencies or unsafe environment assumptions.
+- **Current behavior:** `docs/intro/setup.md` leads with a Bun-only quickstart but contains at least one verified-stale claim: line 9 tells contributors `bun run dev` serves `http://localhost:5173` (Vite's stock default), while the actual emulator-mode client port is `5274` (`packages/shared/constants/src/lib/development_ports.ts`, `OFFSETTABLE_PORTS.client`; `apps/frontend/client/vite.config.ts` falls back to `5274`, never `5173`). The doc says macOS is untested (line 140) — that claim is currently accurate and should stay unless AC-4 changes it. Maintainer Nix/direnv state can conceal missing dependencies or unsafe environment assumptions.
 - **Reproduction:** follow the guide in a fresh isolated home/checkout without maintainer keys or global agent configuration. Inspect actual `setup:env`, Moon toolchain and local setup entrypoints before promising that a command is credential-free.
 - **Existing implementation to reuse:** local setup checks, `scripts/src/lib/env/` helpers, SOPS tooling, `.bun-version`, `.moon/toolchains.yml`, flake/direnv, C-468 platform matrix and C-478 resource checks.
 - **Known gaps:** native Windows without Git Bash, macOS/BSD differences, noninteractive modes and NixOS browser/loader behavior need explicit evidence. C-449 AC-4 owns maintainer Cloudflare/SOPS onboarding; do not duplicate that scope.
@@ -49,7 +49,7 @@ Documented minimal commands work on fresh Linux, macOS and native Windows with t
 
 | Capability | Existing source | Action |
 |---|---|---|
-| Machine checks | `scripts/src/lib/local_setup/index.ts` | extend/reconcile |
+| Machine checks | `scripts/src/lib/local_setup/index.ts` (already has `--check`/`--json`/`--doctor`, read-only) | extend/reconcile |
 | Runtime/platform detection | `scripts/src/lib/env/` | reuse |
 | Preferred toolchain | `flake.nix`, `.envrc`, `flake.lock` | preserve and verify |
 | Local configuration | current `setup:env` implementation and examples | make safe offline/local behavior explicit |
@@ -134,7 +134,7 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). One contributor-
 | AC-4 | Integration | three-OS tooling CI and actual NixOS smoke record | native/Nix setup | pending implementation |
 | AC-5 | Documentation/Integration | verified setup guide and C-475 reference checks | contributor instructions | pending implementation |
 
-**Test Hooks:** reuse C-468's path-gated tooling matrix, add fresh-home/bootstrap jobs only when setup/toolchain files change. Local application HTTP/behavior smoke is required; visual-model scoring is N/A. Optional desktop/GPU checks remain separate. Record unavailable platform evidence honestly and do not mark that AC verified.
+**Test Hooks:** reuse C-468's path-gated tooling matrix (`.github/workflows/automation-ci.yml`, `os: [ubuntu-latest, windows-latest, macos-latest]`), add fresh-home/bootstrap jobs only when setup/toolchain files change. Local application HTTP/behavior smoke is required; visual-model scoring is N/A. Optional desktop/GPU checks remain separate. Record unavailable platform evidence honestly and do not mark that AC verified.
 **Watch Points:** ambient credentials masking dependencies; HOME changes damaging real config; Windows paths/CRLF; Nix-installed binaries not matching native versions; old examples leaking retired services.
 
 ## Implementation Sequence
