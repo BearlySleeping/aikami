@@ -34,7 +34,7 @@ export type VaultStatus =
 /** Result of a vault unlock attempt. */
 export type VaultUnlockResult =
   /** Successfully unlocked. */
-  | { kind: 'unlocked'; data: string }
+  | { kind: 'unlocked'; data: string; revision: string }
   /** Wrong PIN. */
   | { kind: 'wrong_pin' }
   /** Vault is corrupt. */
@@ -51,7 +51,7 @@ export type VaultUnlockResult =
 /** Result of a vault write operation. */
 export type VaultWriteResult =
   /** Successfully written. */
-  | { kind: 'written' }
+  | { kind: 'written'; revision: string }
   /** Write failed — storage full or quota exceeded. */
   | { kind: 'storage_failed'; detail?: string }
   /** Conflict — a newer revision exists. */
@@ -77,7 +77,7 @@ export type VaultWriteResult =
  *   recoverably), and expose crash/retry semantics.
  * - Failure retains the last committed state and any recoverable draft.
  */
-export interface VaultAdapter {
+export type VaultAdapter = {
   /** Check vault status without reading its contents. */
   checkStatus(): Promise<VaultStatus>;
 
@@ -103,4 +103,4 @@ export interface VaultAdapter {
 
   /** Clear all vault data. For reset/wipe operations. */
   clear(): Promise<void>;
-}
+};

@@ -403,7 +403,7 @@ export type V2ToV3MigrationOptions = {
  */
 export const migrateVaultV2ToV3 = (
   v2: VaultPayloadV2,
-  options?: V2ToV3MigrationOptions,
+  _options?: V2ToV3MigrationOptions,
 ): VaultPayloadV3 => {
   // ── Step 1: Build capability defaults from roles ──────────────────────
   const getCapabilityForConnection = (connId: string): ConnectionCapability | undefined => {
@@ -425,17 +425,32 @@ export const migrateVaultV2ToV3 = (
     'npc-voice': 'voice',
   };
 
+  // Cross-capability assignments cannot resolve safely. Remove them before
+  // deriving routing and before carrying the compatibility roles into v3.
+  const roles: RoleAssignments = {};
+  for (const [role, connId] of Object.entries(v2.roles)) {
+    const typedRole = role as AiRole;
+    const capability = roleToCap[typedRole];
+    if (connId && capability && getCapabilityForConnection(connId) === capability) {
+      roles[typedRole] = connId;
+    }
+  }
+
   // For each capability, find the connection ID used by most roles of that cap
   const capVotes: Record<string, Map<string, number>> = {
     text: new Map(),
     image: new Map(),
     voice: new Map(),
   };
-  for (const [role, connId] of Object.entries(v2.roles)) {
+  for (const [role, connId] of Object.entries(roles)) {
     const cap = roleToCap[role as AiRole];
-    if (!cap || !connId) continue;
+    if (!cap || !connId) {
+      continue;
+    }
     const connCap = getCapabilityForConnection(connId);
-    if (connCap !== cap) continue; // Skip cross-capability assignments
+    if (connCap !== cap) {
+      continue;
+    }
     const votes = capVotes[cap];
     votes.set(connId, (votes.get(connId) ?? 0) + 1);
   }
@@ -461,9 +476,11 @@ export const migrateVaultV2ToV3 = (
 
   // ── Step 2: Build overrides from roles that differ from defaults ──────
   const overrides: Record<string, string | null> = {};
-  for (const [role, connId] of Object.entries(v2.roles)) {
+  for (const [role, connId] of Object.entries(roles)) {
     const cap = roleToCap[role as AiRole];
-    if (!cap) continue;
+    if (!cap) {
+      continue;
+    }
     const defaultConnId = capDefaults[cap];
     // An override exists when the role's assignment differs from the capability default
     // or when it's explicitly set to a different connection
@@ -496,7 +513,7 @@ export const migrateVaultV2ToV3 = (
     schemaVersion: 3,
     providers,
     connections: v2.connections,
-    roles: v2.roles,
+    roles,
     routing,
     userPresets: v2.userPresets,
   };

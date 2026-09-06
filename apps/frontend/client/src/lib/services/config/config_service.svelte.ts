@@ -320,12 +320,6 @@ const DEFAULT_STATE: ConfigState = {
 
 const PLAIN_CONFIG_KEY = 'aikami_config';
 
-/**
- * C-481: Isolated v3 storage namespace. Older binaries cannot parse or
- * overwrite v3 data via their unversioned vault key.
- */
-const VAULT_V3_NAMESPACE = 'aikami_vault_v3';
-
 // ---------------------------------------------------------------------------
 // Service implementation
 // ---------------------------------------------------------------------------
@@ -334,6 +328,8 @@ class ConfigService
   extends BaseFrontendClass<ConfigServiceOptions>
   implements ConfigServiceInterface
 {
+  private _vaultPin: string | undefined;
+
   state = $state<ConfigState>({ ...DEFAULT_STATE });
   isLoaded = $state(false);
 
@@ -347,11 +343,12 @@ class ConfigService
     let vaultVoiceApiKey: string | undefined;
     let vaultImageApiKey: string | undefined;
 
-    // 1. Load from encrypted vault — try v3 namespace first (C-481)
-    const rawV3 = localStorage.getItem(VAULT_V3_NAMESPACE);
-    const raw = rawV3 ?? await decrypt({ pin });
+    // 1. Load only through the encrypted vault boundary. crypto_vault owns
+    // the isolated v3 namespace and validates the supplied PIN.
+    const raw = await decrypt({ pin });
 
     if (raw) {
+      this._vaultPin = pin;
       try {
         const vault = JSON.parse(raw) as Record<string, unknown>;
 
@@ -544,11 +541,23 @@ class ConfigService
     // 3. Apply vault-held provider keys over the plain config. A key still
     //    sitting in the plain blob is pre-migration cleartext — keep it so
     //    nothing is lost, and the next save() moves it into the vault.
-    if (vaultVoiceApiKey) {
-      this.state.voice = { ...this.state.voice, apiKey: vaultVoiceApiKey };
+    const voiceApiKey =
+      vaultVoiceApiKey ??
+      this._getProviderCredential({
+        registryId: this.state.voice.provider,
+        baseUrl: this.state.voice.url,
+      });
+    const imageApiKey =
+      vaultImageApiKey ??
+      this._getProviderCredential({
+        registryId: this.state.image.provider,
+        baseUrl: this.state.image.url,
+      });
+    if (voiceApiKey) {
+      this.state.voice = { ...this.state.voice, apiKey: voiceApiKey };
     }
-    if (vaultImageApiKey) {
-      this.state.image = { ...this.state.image, apiKey: vaultImageApiKey };
+    if (imageApiKey) {
+      this.state.image = { ...this.state.image, apiKey: imageApiKey };
     }
 
     // 4. Reconcile defaults: drop any pointing at a pruned connection, then
@@ -560,6 +569,10 @@ class ConfigService
 
   async save(): Promise<void> {
     this.debug('ConfigService.save');
+
+    // Legacy voice/image setters still expose standalone config keys. Move
+    // them onto their provider records before the encrypted v3 serialization.
+    this._syncLegacyConfigCredentials();
 
     // C-481: Build v3 vault payload. No voiceApiKey/imageApiKey — keys live
     // on providers. No legacy field — v3 has its own recovery path.
@@ -574,12 +587,7 @@ class ConfigService
       userPresets,
     });
 
-    // C-481: Write to isolated v3 namespace. The old crypto_vault path is
-    // preserved for backward compat but no longer the primary write target.
-    localStorage.setItem(VAULT_V3_NAMESPACE, vaultPayload);
-
-    // Also write via encrypt for backward compatibility with v2 readers
-    await encrypt({ text: vaultPayload });
+    await encrypt({ text: vaultPayload, pin: this._vaultPin });
 
     // Plain config (non-sensitive). `apiKey` is stripped from voice/image —
     // it used to be written here in cleartext alongside the encrypted vault.
@@ -598,6 +606,7 @@ class ConfigService
   async reset(): Promise<void> {
     this.debug('ConfigService.reset');
     this.state = this._makeDefaultState();
+    this._vaultPin = undefined;
     await clearVault();
     localStorage.removeItem(PLAIN_CONFIG_KEY);
   }
@@ -1042,7 +1051,7 @@ class ConfigService
     }
 
     const aiConn = this.state.aiConnections.find((c) => c.id === connectionId);
-    if (!aiConn) {
+    if (!aiConn || aiConn.capability !== ROLE_CAPABILITY[role]) {
       return undefined;
     }
 
@@ -1108,6 +1117,66 @@ class ConfigService
       baseUrl: options.baseUrl || undefined,
       source: options.source,
     });
+  }
+
+  /** Returns a credential only from the provider matching the legacy selection. */
+  private _getProviderCredential(options: {
+    registryId: string;
+    baseUrl?: string;
+  }): string | undefined {
+    const baseUrl = options.baseUrl ?? '';
+    return this.state.providers.find(
+      (provider) =>
+        provider.registryId === options.registryId && (provider.baseUrl ?? '') === baseUrl,
+    )?.credential;
+  }
+
+  /** Migrates standalone compatibility keys onto their matching providers. */
+  private _syncLegacyConfigCredentials(): void {
+    const entries = [
+      {
+        registryId: this.state.voice.provider,
+        baseUrl: this.state.voice.url,
+        credential: this.state.voice.apiKey,
+      },
+      {
+        registryId: this.state.image.provider,
+        baseUrl: this.state.image.url,
+        credential: this.state.image.apiKey,
+      },
+    ];
+
+    for (const entry of entries) {
+      if (!entry.registryId || entry.credential === undefined) {
+        continue;
+      }
+      const baseUrl = entry.baseUrl ?? '';
+      const existing = this.state.providers.find(
+        (provider) =>
+          provider.registryId === entry.registryId && (provider.baseUrl ?? '') === baseUrl,
+      );
+      if (existing) {
+        this.state.providers = this.state.providers.map((provider) =>
+          provider.id === existing.id
+            ? { ...provider, credential: entry.credential || undefined }
+            : provider,
+        );
+      } else if (entry.credential) {
+        this.state.providers = [
+          ...this.state.providers,
+          {
+            id: crypto.randomUUID(),
+            registryId: entry.registryId,
+            label: entry.registryId,
+            credential: entry.credential,
+            baseUrl: entry.baseUrl,
+            source: 'stored',
+          },
+        ];
+      }
+    }
+
+    this._reproject();
   }
 
   /**

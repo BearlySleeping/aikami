@@ -6,6 +6,7 @@
 // Contract: C-481
 
 import { describe, expect, test } from 'bun:test';
+import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { RoutingSchema, VaultPayloadV3Schema } from './providers_config.ts';
 
@@ -13,8 +14,7 @@ import { RoutingSchema, VaultPayloadV3Schema } from './providers_config.ts';
 // Helpers
 // ---------------------------------------------------------------------------
 
-const validate = (schema: ReturnType<typeof Value.Check>, data: unknown): boolean =>
-  Value.Check(schema, data);
+const validate = (schema: TSchema, data: unknown): boolean => Value.Check(schema, data);
 
 const UUID = () => crypto.randomUUID();
 
@@ -160,6 +160,22 @@ describe('C-481: RoutingSchema', () => {
     expect(
       validate(RoutingSchema, {
         overrides: { narration: 'not-a-uuid' },
+      }),
+    ).toBe(false);
+  });
+
+  test('rejects unknown capability keys in defaults', () => {
+    expect(
+      validate(RoutingSchema, {
+        defaults: { unsupported: UUID() },
+      }),
+    ).toBe(false);
+  });
+
+  test('rejects unknown role keys in overrides', () => {
+    expect(
+      validate(RoutingSchema, {
+        overrides: { unsupported: UUID() },
       }),
     ).toBe(false);
   });

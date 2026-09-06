@@ -398,7 +398,7 @@ describe('C-481 Migration: v2 → v3', () => {
       expect(v3.connections).toHaveLength(1);
       // Capability default should be the text connection
       expect(v3.routing.defaults).toBeDefined();
-      expect(v3.routing.defaults!.text).toBe('conn-1');
+      expect(v3.routing.defaults?.text).toBe('conn-1');
       // No overrides since all roles point to the default
       expect(v3.routing.overrides).toBeUndefined();
     });
@@ -413,7 +413,7 @@ describe('C-481 Migration: v2 → v3', () => {
       };
       const v3 = migrateVaultV2ToV3(v2);
       expect(v3.userPresets).toHaveLength(1);
-      expect(v3.userPresets![0].id).toBe('custom-1');
+      expect(v3.userPresets?.[0].id).toBe('custom-1');
     });
 
     test('removes orphaned providers', () => {
@@ -498,10 +498,41 @@ describe('C-481 Migration: v2 → v3', () => {
       };
       const v3 = migrateVaultV2ToV3(v2);
       expect(v3.routing.defaults).toBeDefined();
-      expect(v3.routing.defaults!.text).toBe('conn-1'); // conn-1 has 1 vote, conn-2 has 1 vote, picks first
+      expect(v3.routing.defaults?.text).toBe('conn-1'); // conn-1 has 1 vote, conn-2 has 1 vote, picks first
       expect(v3.routing.overrides).toBeDefined();
-      expect(v3.routing.overrides!.dialogue).toBe('conn-2'); // differs from default
-      expect(v3.routing.overrides!.narration).toBeUndefined(); // matches default
+      expect(v3.routing.overrides?.dialogue).toBe('conn-2'); // differs from default
+      expect(v3.routing.overrides?.narration).toBeUndefined(); // matches default
+    });
+
+    test('removes cross-capability roles before building the v3 payload', () => {
+      const v2: VaultPayloadV2 = {
+        schemaVersion: 2,
+        providers: [
+          { id: 'prov-voice', registryId: 'elevenlabs', label: 'Voice', source: 'stored' },
+        ],
+        connections: [
+          {
+            id: 'conn-voice',
+            providerId: 'prov-voice',
+            capability: 'voice',
+            label: 'Narrator',
+            model: 'eleven_multilingual_v2',
+            params: { voiceId: 'voice-1', speed: 1, pitch: 0 },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        roles: { narration: 'conn-voice', 'narrator-voice': 'conn-voice' },
+        userPresets: [],
+      };
+
+      const v3 = migrateVaultV2ToV3(v2);
+
+      expect(v3.roles.narration).toBeUndefined();
+      expect(v3.roles['narrator-voice']).toBe('conn-voice');
+      expect(v3.routing.defaults?.text).toBeUndefined();
+      expect(v3.routing.defaults?.voice).toBe('conn-voice');
+      expect(v3.routing.overrides?.narration).toBeUndefined();
     });
   });
 });

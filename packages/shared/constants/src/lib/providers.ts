@@ -51,6 +51,9 @@ type ProviderDescriptor = {
   capabilities: ReadonlyArray<'text' | 'image' | 'voice'>;
 };
 
+/** AI capability used to select capability-specific provider metadata. */
+export type ProviderCapability = ProviderDescriptor['capabilities'][number];
+
 /** Text generation provider descriptors. */
 export const TEXT_PROVIDERS = [
   {
@@ -332,12 +335,47 @@ export type AnyProviderDescriptor =
   | (typeof VOICE_PROVIDERS)[number]
   | (typeof IMAGE_PROVIDERS)[number];
 
+const ALL_PROVIDER_DESCRIPTORS: ReadonlyArray<AnyProviderDescriptor> = [
+  ...TEXT_PROVIDERS,
+  ...VOICE_PROVIDERS,
+  ...IMAGE_PROVIDERS,
+];
+
+const descriptorSupportsCapability = (
+  descriptor: AnyProviderDescriptor,
+  capability: ProviderCapability,
+): boolean => descriptor.capabilities.some((supported) => supported === capability);
+
 /**
  * Look up a provider descriptor by registry ID across all registries.
+ * When a capability is supplied, its own registry wins over cross-capability
+ * metadata advertised by another registry entry with the same ID.
  * Returns undefined if no provider with that ID exists.
  */
-export const findProviderDescriptor = (registryId: string): AnyProviderDescriptor | undefined =>
-  [...TEXT_PROVIDERS, ...VOICE_PROVIDERS, ...IMAGE_PROVIDERS].find((p) => p.id === registryId);
+export const findProviderDescriptor = (
+  registryId: string,
+  capability?: ProviderCapability,
+): AnyProviderDescriptor | undefined => {
+  if (!capability) {
+    return ALL_PROVIDER_DESCRIPTORS.find((provider) => provider.id === registryId);
+  }
+
+  let preferred: AnyProviderDescriptor | undefined;
+  if (capability === 'text') {
+    preferred = TEXT_PROVIDERS.find((provider) => provider.id === registryId);
+  } else if (capability === 'voice') {
+    preferred = VOICE_PROVIDERS.find((provider) => provider.id === registryId);
+  } else {
+    preferred = IMAGE_PROVIDERS.find((provider) => provider.id === registryId);
+  }
+  if (preferred) {
+    return preferred;
+  }
+
+  return ALL_PROVIDER_DESCRIPTORS.find(
+    (provider) => provider.id === registryId && descriptorSupportsCapability(provider, capability),
+  );
+};
 
 /**
  * Whether a provider is local (not cloud). Reads from the canonical definition,
@@ -375,18 +413,21 @@ export const providerSupportsModelDiscovery = (registryId: string): boolean =>
 /**
  * Get the capabilities a provider supports. C-481.
  */
-export const getProviderCapabilities = (
-  registryId: string,
-): ReadonlyArray<'text' | 'image' | 'voice'> =>
-  findProviderDescriptor(registryId)?.capabilities ?? [];
+export const getProviderCapabilities = (registryId: string): ReadonlyArray<ProviderCapability> => [
+  ...new Set(
+    ALL_PROVIDER_DESCRIPTORS.filter((provider) => provider.id === registryId).flatMap(
+      (provider) => provider.capabilities,
+    ),
+  ),
+];
 
 /**
  * Check if a provider supports a specific capability. C-481.
  */
 export const providerSupportsCapability = (
   registryId: string,
-  capability: 'text' | 'image' | 'voice',
-): boolean => getProviderCapabilities(registryId).includes(capability);
+  capability: ProviderCapability,
+): boolean => findProviderDescriptor(registryId, capability) !== undefined;
 
 // ---------------------------------------------------------------------------
 // Built-in generation parameter presets (read-only)

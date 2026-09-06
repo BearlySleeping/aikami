@@ -152,29 +152,42 @@ export const RoleAssignmentsSchema = Type.Partial(
  * - A missing default means that capability is unavailable.
  * - Reset-to-default removes the override; disable writes `null`.
  */
-/**
- * Schema for role overrides — allows null to explicitly disable a role.
- * Note: Typebox Record doesn't constrain keys via union when partial.
- * Application code validates keys. TypeScript enforces at compile time.
- */
-export const RoleOverridesSchema = Type.Record(
-  Type.String(),
-  Type.Union([Type.String({ format: 'uuid' }), Type.Null()]),
+const RoutingTargetSchema = Type.Union([Type.String({ format: 'uuid' }), Type.Null()]);
+
+/** Schema for role overrides — allows null to explicitly disable a role. */
+export const RoleOverridesSchema = Type.Partial(
+  Type.Object({
+    narration: RoutingTargetSchema,
+    dialogue: RoutingTargetSchema,
+    summarization: RoutingTargetSchema,
+    structured: RoutingTargetSchema,
+    portrait: RoutingTargetSchema,
+    scene: RoutingTargetSchema,
+    'narrator-voice': RoutingTargetSchema,
+    'npc-voice': RoutingTargetSchema,
+  }),
+  { additionalProperties: false },
 );
 
-/**
- * Routing schema: sparse capability defaults and sparse role overrides.
- * Note: Typebox Record doesn't constrain keys via union. Application code
- * validates keys. TypeScript enforces at compile time.
- */
-export const RoutingSchema = Type.Object({
-  /** Per-capability default connection IDs. Sparse — absent means unavailable. */
-  defaults: Type.Optional(
-    Type.Record(Type.String(), Type.Union([Type.String({ format: 'uuid' }), Type.Null()])),
-  ),
-  /** Per-role overrides. Sparse — absent inherits from capability default. */
-  overrides: Type.Optional(RoleOverridesSchema),
-});
+/** Routing schema: sparse capability defaults and sparse role overrides. */
+export const RoutingSchema = Type.Object(
+  {
+    /** Per-capability default connection IDs. Sparse — absent means unavailable. */
+    defaults: Type.Optional(
+      Type.Partial(
+        Type.Object({
+          text: RoutingTargetSchema,
+          image: RoutingTargetSchema,
+          voice: RoutingTargetSchema,
+        }),
+        { additionalProperties: false },
+      ),
+    ),
+    /** Per-role overrides. Sparse — absent inherits from capability default. */
+    overrides: Type.Optional(RoleOverridesSchema),
+  },
+  { additionalProperties: false },
+);
 
 /** Routing type. */
 export type Routing = Static<typeof RoutingSchema>;
