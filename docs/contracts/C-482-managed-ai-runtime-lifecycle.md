@@ -24,7 +24,7 @@ created_at: "2026-09-05T15:34:22Z"
 | **Type** | full |
 | **Priority** | P0 — make installation and restart trustworthy |
 | **Dependencies** | Implemented C-389/C-390/C-391/C-467; **C-481 merged** (its frozen seams and canonical setup operations) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | Desktop/local AI setup guidance is updated by C-484, not here |
 | **Contract version** | 2.0.0 |
