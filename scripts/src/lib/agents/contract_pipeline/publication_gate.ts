@@ -83,10 +83,16 @@ export type PublicationBlock = {
 };
 
 export type PublicationGateResult = {
-  /** True when the branch is safe to open a PR from. */
+  /** True when no hard precondition blocks PR creation. */
   ok: boolean;
-  /** Every unmet precondition. Empty when `ok`. */
+  /** Every unmet hard precondition. Empty when publication is allowed. */
   blocks: readonly PublicationBlock[];
+  /**
+   * Advisory findings that do NOT block PR creation. A red validation verdict
+   * lands here: the branch may be published with the user's permission (or
+   * automatically under YOLO), but the failures will repeat on CI.
+   */
+  warnings: readonly PublicationBlock[];
   /** Local HEAD of the workspace, or undefined when git could not be read. */
   head?: string;
   /** Current branch name, or undefined when git could not be read. */
@@ -148,14 +154,14 @@ const VALIDATE_REMEDY =
 /**
  * Decide whether a pipeline workspace may become a pull request.
  *
- * The five blocks, and the failure each one prevents:
+ * The hard blocks (and the one warning), and the failure each one prevents:
  *
  * | Block               | Prevents |
  * |---------------------|----------|
  * | `dirty_worktree`    | Edits that exist locally but never reach the PR. |
  * | `never_validated`   | A PR from a branch nothing ever checked. |
  * | `stale_validation`  | 🔴 The C-484 case: a green verdict for an older commit. |
- * | `failed_validation` | A PR opened on top of a known-red gate. |
+ * | `failed_validation` | (warning, not a block) A PR opened on top of a known-red gate. |
  * | `unpushed_commits`  | The fix commit sitting only in the worktree. |
  *
  * 🔴 Returns `indeterminate` (and `ok: true`) when the workspace cannot be
@@ -178,10 +184,11 @@ export const evaluatePublicationGate = (options: {
     status = options.git.status();
     remote = options.git.remoteHead(branch);
   } catch {
-    return { ok: true, blocks: [], indeterminate: true };
+    return { ok: true, blocks: [], warnings: [], indeterminate: true };
   }
 
   const blocks: PublicationBlock[] = [];
+  const warnings: PublicationBlock[] = [];
 
   if (status.trim().length > 0) {
     const changed = status
@@ -213,10 +220,12 @@ export const evaluatePublicationGate = (options: {
       remedy: VALIDATE_REMEDY,
     });
   } else if (!validation.ok) {
-    blocks.push({
+    warnings.push({
       code: 'failed_validation',
       message: `Validation is RED on ${head.slice(0, 12)}. CI will repeat these failures verbatim.`,
-      remedy: `Fix the reported failures, commit, then ${VALIDATE_REMEDY}`,
+      remedy:
+        `Ask the user for permission to proceed (YOLO proceeds automatically). ` +
+        `CodeRabbit can fix the failures on the PR; otherwise fix and run ${VALIDATE_REMEDY}`,
     });
   }
 
@@ -239,21 +248,48 @@ export const evaluatePublicationGate = (options: {
     });
   }
 
-  return { ok: blocks.length === 0, blocks, head, branch };
+  return { ok: blocks.length === 0, blocks, warnings, head, branch };
 };
 
+const renderPublicationItems = (items: readonly PublicationBlock[]): string[] =>
+  items.flatMap((item, index) => [
+    `**${index + 1}. ${item.code}** — ${item.message}`,
+    `   → ${item.remedy}`,
+    '',
+  ]);
+
 /** Render a blocked gate as the refusal an agent sees in place of a PR. */
-export const formatPublicationBlocks = (result: PublicationGateResult): string =>
-  [
+export const formatPublicationBlocks = (result: PublicationGateResult): string => {
+  const parts = [
     '❌ **PR creation blocked — the branch is not in a publishable state.**',
     '',
-    'A contract PR may only be opened from a commit that has a GREEN validation',
-    'verdict AND is already on the remote. One or both is untrue right now:',
+    'One or more hard preconditions below are unmet. Clear each one, then call',
+    '`gh_pr create` again.',
     '',
-    ...result.blocks.flatMap((block, index) => [
-      `**${index + 1}. ${block.code}** — ${block.message}`,
-      `   → ${block.remedy}`,
+    ...renderPublicationItems(result.blocks),
+  ];
+  if (result.warnings.length > 0) {
+    parts.push(
       '',
-    ]),
-    'Clear every item above, then call `gh_pr create` again.',
+      '⚠️ **Non-blocking** — these do not stop PR creation on their own, but must',
+      'be surfaced to the user:',
+      '',
+      ...renderPublicationItems(result.warnings),
+    );
+  }
+  return parts.join('\n');
+};
+
+/** Render warnings for an otherwise-publishable branch (shown on PR-created success). */
+export const formatPublicationWarning = (result: PublicationGateResult): string | undefined => {
+  if (result.warnings.length === 0) {
+    return undefined;
+  }
+  return [
+    '⚠️ **PR created on top of a non-green validation verdict.**',
+    '',
+    ...renderPublicationItems(result.warnings),
+    'CI will repeat these failures on the PR — let CodeRabbit fix them, or fix and',
+    're-run `contract_stage` action `validate`.',
   ].join('\n');
+};

@@ -265,14 +265,14 @@ describe('formatGateNotesForPrompt', () => {
     expect(formatGateNotesForPrompt({ ran: false, ok: true, output: '' })).toBe('');
   });
 
-  it('frames a failure as must-fix-before-PR and includes the diagnostics', () => {
+  it('frames a failure as permission-gated and includes the diagnostics', () => {
     const notes = formatGateNotesForPrompt({
       ran: true,
       ok: false,
       output: 'hub:format | × src/lib/server/api/account_delete.ts',
     });
 
-    expect(notes).toContain('fix before opening the PR');
+    expect(notes).toContain('explicit permission');
     expect(notes).toContain('account_delete.ts');
   });
 });

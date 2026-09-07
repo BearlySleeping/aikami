@@ -451,10 +451,13 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                   : formatPublicationBlocks(publication),
               ]
             : [
-                '🔴 **Validation FAILED** — `gh_pr create` stays blocked.',
+                '🔴 **Validation FAILED**.',
                 '',
                 'Fix the failures below, then run `contract_stage` action `validate` again.',
-                'Do NOT open the PR in the meantime; CI repeats these verbatim.',
+                '',
+                'You MAY still open the PR with explicit permission from the user (YOLO proceeds',
+                'without asking) so CodeRabbit can fix them — a red verdict no longer blocks',
+                '`gh_pr create`. CI repeats these failures verbatim either way.',
                 '',
                 '```',
                 gate.output,
@@ -471,6 +474,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
               pushed,
               publishable: publication.ok,
               blocks: publication.blocks.map((block) => block.code),
+              warnings: publication.warnings.map((warning) => warning.code),
               workspacePath: wsPath,
               cwd: ctx.cwd,
             },

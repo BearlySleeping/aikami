@@ -293,7 +293,7 @@ export const formatGateNotesForPrompt = (result: PrePushGateResult | undefined):
   }
   const header = result.unavailable
     ? '## 🔴 Pre-push validation UNAVAILABLE — required checks could not run'
-    : '## 🔴 Pre-push validation FAILED — fix before opening the PR';
+    : '## 🔴 Pre-push validation FAILED';
   const body = result.unavailable
     ? [
         '',
@@ -305,8 +305,11 @@ export const formatGateNotesForPrompt = (result: PrePushGateResult | undefined):
     : [
         '',
         'The branch was pushed (a branch push runs no CI), but `moon run :validate`',
-        'is red on it. Opening a PR now puts these same failures on the PR check.',
-        'Fix them in the worktree, then re-validate — and only then create the PR.',
+        'is red on it. CI will repeat these failures on the PR check.',
+        '',
+        'You MAY still create the PR — ask the user for explicit permission first.',
+        '(YOLO mode: proceed without asking.) CodeRabbit can then fix the failures',
+        'on the PR. Otherwise fix them in the worktree, then re-validate.',
       ];
   return [
     '',
@@ -320,8 +323,9 @@ export const formatGateNotesForPrompt = (result: PrePushGateResult | undefined):
     // one verdict, bound to the commit it checked.
     'After each round of fixes, call `contract_stage` action `validate` — it applies',
     '`:fix`, re-runs `:validate`, commits, pushes, and records the verdict against the',
-    'resulting commit. `gh_pr create` REFUSES to open a PR until that verdict is green',
-    'for the exact commit on the remote, so there is no path around it.',
+    'resulting commit. `gh_pr create` REFUSES only on hard blocks (dirty worktree,',
+    'stale or unrecorded verdict, unpushed commits). A RED verdict is a warning,',
+    'not a refusal — with user permission (or in YOLO), PR creation proceeds.',
     '',
     '```',
     result.output,

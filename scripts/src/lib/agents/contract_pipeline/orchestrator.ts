@@ -444,12 +444,12 @@ const applyPrePushGate = (options: {
     cwd: options.repoRoot,
     message: gate.ok
       ? 'Pre-push validation passed (:validate green on the affected set).'
-      : 'Pre-push validation FAILED — review captain briefed to fix before opening the PR.',
+      : 'Pre-push validation FAILED — review captain may open the PR only with user permission.',
   });
   console.log(
     gate.ok
       ? '\n✅ Pre-push validation passed.\n'
-      : '\n🔴 Pre-push validation FAILED — the review captain must fix this before the PR.\n',
+      : '\n🔴 Pre-push validation FAILED — the PR may only be opened with user permission (YOLO proceeds automatically).\n',
   );
 };
 

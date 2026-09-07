@@ -60,6 +60,7 @@ import {
   deriveRunRepoRoot,
   evaluatePublicationGate,
   formatPublicationBlocks,
+  formatPublicationWarning,
 } from '../../scripts/src/lib/agents/contract_pipeline/publication_gate';
 import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
 import { currentBranch, ensureGitHubRepo, resolvePrSelector, runGh } from './lib/gh.ts';
@@ -803,7 +804,7 @@ function formatCheckStatus(raw: string): string {
 }
 
 /**
- * Refuse to open a contract-pipeline PR from an unpublishable branch.
+ * Assess whether a contract-pipeline PR may be opened from this branch.
  *
  * 🔴 The C-484 lesson (PR #266, 2026-09-07). The pre-push gate ran once, in
  * the orchestrator, and correctly went red. The review captain then fixed the
@@ -817,16 +818,22 @@ function formatCheckStatus(raw: string): string {
  * point every path must pass through, so the invariant is enforced here.
  * See publication_gate.ts for the individual blocks and their remedies.
  *
- * Returns the refusal text, or undefined when publication is allowed —
- * including outside a pipeline worker, and whenever the gate cannot read
+ * A RED validation verdict is a WARNING, not a refusal: the review captain
+ * may publish it with the user's permission (YOLO proceeds automatically) so
+ * CodeRabbit can fix the failures on the PR. Hard blocks (dirty worktree,
+ * stale/unrecorded verdict, unpushed commits) still refuse.
+ *
+ * Returns empty outside a pipeline worker and whenever the gate cannot read
  * the workspace (a gate that cannot run must not become a wall).
  */
-const pipelinePublicationRefusal = (headBranch: string): string | undefined => {
+const pipelinePublicationAssessment = (
+  headBranch: string,
+): { refusal?: string; warning?: string } => {
   const role = process.env.CONTRACT_PIPELINE_ROLE;
   const workspacePath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
   const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
   if (!role || !workspacePath || !runId || !existsSync(workspacePath)) {
-    return undefined;
+    return {};
   }
 
   let result: ReturnType<typeof evaluatePublicationGate>;
@@ -838,13 +845,13 @@ const pipelinePublicationRefusal = (headBranch: string): string | undefined => {
     });
   } catch {
     // Unreadable manifest or git failure — indeterminate, so allow.
-    return undefined;
+    return {};
   }
 
-  if (result.ok || result.indeterminate) {
-    return undefined;
+  if (result.indeterminate || result.ok) {
+    return { warning: formatPublicationWarning(result) };
   }
-  return formatPublicationBlocks(result);
+  return { refusal: formatPublicationBlocks(result) };
 };
 
 // ── Extension ───────────────────────────────────────────────────────────────
@@ -888,11 +895,11 @@ export default function (pi: ExtensionAPI) {
           }
 
           // 🔴 Hard precondition inside a contract-pipeline worker — see
-          // pipelinePublicationRefusal above. No-op everywhere else.
-          const refusal = pipelinePublicationRefusal(params.headBranch);
-          if (refusal) {
+          // pipelinePublicationAssessment above. No-op everywhere else.
+          const assessment = pipelinePublicationAssessment(params.headBranch);
+          if (assessment.refusal) {
             return {
-              content: [{ type: 'text', text: refusal }],
+              content: [{ type: 'text', text: assessment.refusal }],
               isError: true,
               details: { blockedBy: 'publication_gate' },
             };
@@ -1070,6 +1077,7 @@ export default function (pi: ExtensionAPI) {
                     ? `**Contract:** \`${contractUpdated}\` linked to the PR and pushed to main`
                     : '',
                   contractSyncNote ? `⚠️ **Contract not linked:** ${contractSyncNote}` : '',
+                  assessment.warning,
                   '',
                   `You can merge this PR with: \`gh_merge_pr("${prUrl}")\``,
                 ]
