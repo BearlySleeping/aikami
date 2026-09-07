@@ -3,7 +3,7 @@ id: C-485
 title: "Enforce a production path in the Evidence Matrix"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-07T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — every contract after this one inherits the bar it sets |
 | **Dependencies** | None |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — contract templates, the calibration skill, and a baseline debt inventory |
 | **Contract version** | 2.0.0 |
