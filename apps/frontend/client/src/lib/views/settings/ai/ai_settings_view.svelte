@@ -312,14 +312,23 @@ let { viewModel }: Props = $props();
                     viewModel.setVoiceArchetype(archetype.id, (e.target as HTMLInputElement).value)}
                     onchange={() => viewModel.commitConfigChanges()}
                   >
-                  <button
-                    type="button"
-                    class="btn btn-ghost btn-xs text-primary"
-                    disabled={viewModel.voicePreviewState.status === 'playing'}
-                    onclick={() => viewModel.previewVoiceArchetype(archetype.id)}
-                  >
-                    {viewModel.voicePreviewState.status === 'playing' ? '▶ Playing…' : '▶ Preview'}
-                  </button>
+                  {#if viewModel.voicePreviewState.status === 'synthesizing' || viewModel.voicePreviewState.status === 'playing'}
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs text-primary"
+                      onclick={() => viewModel.stopVoicePreview()}
+                    >
+                      {viewModel.voicePreviewState.status === 'synthesizing' ? '… Synthesizing' : '■ Stop'}
+                    </button>
+                  {:else}
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs text-primary"
+                      onclick={() => viewModel.previewVoiceArchetype(archetype.id)}
+                    >
+                      ▶ Preview
+                    </button>
+                  {/if}
                 </div>
               {/each}
             </div>

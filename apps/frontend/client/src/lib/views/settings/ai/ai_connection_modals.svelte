@@ -43,6 +43,49 @@ const { viewModel }: Props = $props();
         oncancel={() => viewModel.cancelVoiceModelDownload()}
       />
 
+      {#if viewModel.voiceModelState.status === 'ready'}
+        <div class="mt-3 rounded-lg border border-base-300 p-3">
+          {#if viewModel.voiceRuntimeStatus === 'initializing'}
+            <p class="text-xs font-mono text-base-content/60">
+              <span class="loading loading-spinner loading-xs"></span>
+              Preparing voice engine…
+            </p>
+          {:else if viewModel.voiceRuntimeStatus === 'error'}
+            <p class="text-xs text-error mb-2">
+              {viewModel.voiceRuntimeError ?? 'Voice engine failed to start.'}
+            </p>
+            <button
+              type="button"
+              class="btn btn-outline btn-sm w-full font-mono text-xs"
+              onclick={() => viewModel.retryVoiceRuntime()}
+            >
+              Retry
+            </button>
+          {:else if viewModel.voiceRuntimeStatus === 'ready'}
+            {#if viewModel.voicePreviewState.status === 'synthesizing' || viewModel.voicePreviewState.status === 'playing'}
+              <button
+                type="button"
+                class="btn btn-outline btn-sm w-full font-mono text-xs"
+                onclick={() => viewModel.stopVoicePreview()}
+              >
+                Stop
+              </button>
+            {:else}
+              <button
+                type="button"
+                class="btn btn-outline btn-sm w-full font-mono text-xs"
+                onclick={() => viewModel.testVoice()}
+              >
+                Test Voice
+              </button>
+            {/if}
+            {#if viewModel.voicePreviewState.status === 'error'}
+              <p class="text-xs text-error mt-2">{viewModel.voicePreviewState.error}</p>
+            {/if}
+          {/if}
+        </div>
+      {/if}
+
       <div class="divider text-xs font-mono text-base-content/40">or</div>
 
       <button

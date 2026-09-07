@@ -41,6 +41,7 @@ import type {
   ConnectionCapability,
   ConnectionId,
   ConnectionTestResult,
+  TtsStatus,
   VoiceModelState,
 } from '$types';
 
@@ -102,9 +103,14 @@ export type EditorDraft = {
   editingConnectionId: ConnectionId | undefined;
 };
 
-/** State of the voice archetype preview (AC-6). */
+/**
+ * State of a voice preview (AC-6). `synthesizing` covers the request/worker
+ * round trip; `playing` only holds while {@link TtsServiceInterface.isPlaying}
+ * is actually true — a resolved synthesis promise is not audible success.
+ */
 export type VoicePreviewState =
   | { status: 'idle' }
+  | { status: 'synthesizing' }
   | { status: 'playing' }
   | { status: 'error'; error: string };
 
@@ -252,6 +258,12 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   commitConfigChanges(): void;
   readonly voicePreviewState: VoicePreviewState;
   previewVoiceArchetype(archetypeId: string): Promise<void>;
+  /**
+   * Speaks a sample line with the currently selected voice — the Test
+   * Voice action for the local Kokoro setup modal, which has no archetype
+   * list of its own.
+   */
+  testVoice(): Promise<void>;
   /** Stops an in-progress voice preview (playback and/or in-flight synthesis). */
   stopVoicePreview(): void;
   readonly showVoiceLocalDownload: boolean;
@@ -260,6 +272,16 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly voiceModelSizeLabel: string;
   downloadVoiceModel(): Promise<void>;
   cancelVoiceModelDownload(): void;
+  /**
+   * Runtime status of the TTS engine (distinct from {@link voiceModelState},
+   * which only reports whether bytes are cached on disk). `ready` is the
+   * only status where Test Voice can actually produce audio.
+   */
+  readonly voiceRuntimeStatus: TtsStatus;
+  /** Sanitized runtime error, when {@link voiceRuntimeStatus} is 'error'. */
+  readonly voiceRuntimeError: string | null;
+  /** Re-initializes the TTS runtime after a failed init, without re-downloading the model. */
+  retryVoiceRuntime(): Promise<void>;
 
   // ── Image section (AC-7) ──
   readonly imageConnections: readonly AiConnection[];
@@ -434,7 +456,8 @@ export class AiSettingsViewModel
   testResults: Record<string, ConnectionTestResult> = $state({});
   testingIds: Set<string> = $state(new Set());
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
-  voicePreviewState: VoicePreviewState = $state({ status: 'idle' });
+  /** Sanitized error from the last failed preview/test, or undefined. {@link voicePreviewState} derives from this plus the live ttsService state — never set directly. */
+  private _voicePreviewError: string | undefined = $state(undefined);
   isGenParamsOpen = $state(false);
   saveError: string | undefined = $state(undefined);
   readonly showAdvancedSections: boolean;
@@ -681,20 +704,48 @@ export class AiSettingsViewModel
     void configService.save();
   }
 
+  /**
+   * Derives preview/test state from the live ttsService signals instead of
+   * a value set-and-forget at call time — {@link TtsServiceInterface.speak}
+   * resolves once synthesis is scheduled, not once playback actually ends,
+   * so "playing" must track {@link TtsServiceInterface.isPlaying} directly
+   * or the UI reports success while audio is still (or never) playing.
+   */
+  get voicePreviewState(): VoicePreviewState {
+    if (this._voicePreviewError) {
+      return { status: 'error', error: this._voicePreviewError };
+    }
+    if (ttsService.isSynthesizing) {
+      return { status: 'synthesizing' };
+    }
+    if (ttsService.isPlaying) {
+      return { status: 'playing' };
+    }
+    return { status: 'idle' };
+  }
+
   async previewVoiceArchetype(archetypeId: string): Promise<void> {
     this.debug('previewVoiceArchetype', { archetypeId });
     const archetype = this._voiceArchetypes.find((a) => a.id === archetypeId);
     if (!archetype) {
       return;
     }
-    this.voicePreviewState = { status: 'playing' };
+    await this._speakPreviewLine({ voiceId: archetype.voiceId });
+  }
+
+  async testVoice(): Promise<void> {
+    this.debug('testVoice');
+    await this._speakPreviewLine({});
+  }
+
+  private async _speakPreviewLine(options: { voiceId?: string }): Promise<void> {
+    this._voicePreviewError = undefined;
     try {
-      await ttsService.speak({ text: this._voicePreviewLine(), voiceId: archetype.voiceId });
-      this.voicePreviewState = { status: 'idle' };
+      await ttsService.speak({ text: this._voicePreviewLine(), voiceId: options.voiceId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.voicePreviewState = { status: 'error', error: message };
-      this.error('previewVoiceArchetype:failed', error);
+      this._voicePreviewError = message;
+      this.error('voicePreview:failed', error);
     }
   }
 
@@ -722,6 +773,20 @@ export class AiSettingsViewModel
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  get voiceRuntimeStatus(): TtsStatus {
+    return ttsService.status;
+  }
+
+  get voiceRuntimeError(): string | null {
+    return ttsService.errorMessage;
+  }
+
+  async retryVoiceRuntime(): Promise<void> {
+    this.debug('retryVoiceRuntime');
+    ttsService.reset();
+    await ttsService.initialize();
+  }
+
   async downloadVoiceModel(): Promise<void> {
     this.debug('downloadVoiceModel');
     try {
@@ -732,8 +797,7 @@ export class AiSettingsViewModel
       // Downloaded bytes alone are not "speech ready" — bring the runtime
       // up so Test Voice actually works right after download, instead of
       // reporting success on cached bytes the worker hasn't loaded yet.
-      ttsService.reset();
-      await ttsService.initialize();
+      await this.retryVoiceRuntime();
     } catch (error) {
       this.warn('downloadVoiceModel:failed', error);
     }
@@ -741,7 +805,7 @@ export class AiSettingsViewModel
 
   stopVoicePreview(): void {
     ttsService.stop();
-    this.voicePreviewState = { status: 'idle' };
+    this._voicePreviewError = undefined;
   }
 
   cancelVoiceModelDownload(): void {
@@ -954,6 +1018,18 @@ export class AiSettingsViewModel
   openVoiceSetup(): void {
     this.debug('openVoiceSetup');
     this.isVoiceSetupOpen = true;
+
+    // Reconcile: a model downloaded in an earlier session is already on
+    // disk (voiceModelService reports it instantly, no network involved),
+    // but the runtime the worker path needs is only brought up on first
+    // use elsewhere (chat/dialogue). Bring it up here too so Test Voice
+    // works without requiring the user to leave Settings and start a
+    // conversation first — no new download, no synthesis, just readiness.
+    if (this.voiceModelState.status === 'ready' && ttsService.status === 'uninitialized') {
+      void ttsService.initialize().catch((error: unknown) => {
+        this.warn('openVoiceSetup:runtime-init-failed', error);
+      });
+    }
   }
 
   closeVoiceSetup(): void {

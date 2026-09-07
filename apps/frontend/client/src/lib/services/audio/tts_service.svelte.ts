@@ -5,7 +5,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { VoiceParams } from '@aikami/types';
-import type { TtsBackend, VoiceInfo } from '$types';
+import type { TtsBackend, TtsStatus, VoiceInfo } from '$types';
 import { configService } from '../config/config_service.svelte.ts';
 import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts';
 import { audioContextManager } from './audio_context_manager';
@@ -45,15 +45,6 @@ const isLocalhostUrl = (url: string): boolean => {
     return false;
   }
 };
-
-/** Lifecycle status of the native Kokoro TTS engine. */
-type TtsStatus =
-  | 'uninitialized'
-  | 'initializing'
-  | 'ready'
-  | 'error'
-  | 'not-downloaded'
-  | 'disabled';
 
 type TtsOptions = BaseFrontendClassOptions;
 
