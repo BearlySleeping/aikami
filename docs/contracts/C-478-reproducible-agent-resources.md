@@ -101,4 +101,54 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
 
 ## Execution Report
 
-Not executed. No implementation or platform evidence is claimed by this planning document.
+### Summary
+
+The manifest infrastructure (`resource_manifest.ts`, `resource_check.ts`,
+`resource_update.ts`, `resource_provenance.ts`) existed on `main`, but
+`.pi/resource-manifest.json` itself had every `installed.contentHash` and
+`installed.fileCount` left empty at `0`/`""` — `bun run resource-check`
+failed with `0 matched, 11 mismatched` because there was nothing real to
+compare against. This pass populates real identities for what is currently
+installed on disk, without any network fetch or content replacement:
+`hashFile`/`hashDirectory` (already implemented, previously just never run
+against the live manifest) computed the actual SHA-256 of `.pi/bun.lock` for
+every npm-managed resource and of each `generated-skills/<name>` tree for
+the git-skill/generated-skill resources. Also removed the stale
+`pi-deepseek-optimized` entry — it has no `package.json` entry, no
+`bun.lock` entry and no `node_modules` directory; it was superseded by
+`pi-deepinfra` and recording a hash for it would have been claiming
+verification of a resource that isn't actually installed.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | 🚧 Partial | Content hash/file count now accurate for all 10 remaining entries. Git-skill sources (`pixijs`, `daisyui`, `herdr`, `coderabbit`) still record `"revision": "HEAD"` — resolving each to the exact commit that produced the currently-installed tree requires re-cloning and replacing content via `bun run resource-update`, which this pass deliberately did not run (network fetch + content replacement is a materially bigger, less reviewable change than recording what's already on disk; see Deviations). |
+| AC-2 | ✅ (pre-existing) | `resource_check.ts` was already read-only/offline; `bun run resource-check` now reports `10 matched, 0 mismatched, 0 missing` instead of failing on every entry. |
+| AC-3 | ✅ (pre-existing) | `resource_update.ts`'s stage/validate/backup/restore flow was already implemented and unchanged by this pass. |
+| AC-4 | ✅ (pre-existing) | `computeResourceGraphIdentity`/`compareGraphIdentities` were already implemented and unchanged. |
+| AC-5 | 🚧 Partial | `resource_provenance.ts`'s report now reflects real, non-empty identities instead of all-empty placeholders. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `.pi/resource-manifest.json` | Populated `installed.contentHash`/`fileCount` for all 10 real entries from current on-disk content; removed the stale `pi-deepseek-optimized` entry. |
+
+### Deviations from Spec
+
+Git-skill revisions remain `"HEAD"` (unpinned). Pinning them to an exact
+commit requires running `bun run resource-update`, which re-clones each
+upstream repo and replaces the installed `generated-skills/<name>` content —
+a much larger, network-dependent change whose diff size depends on how far
+upstream has drifted since the current content was installed. The contract's
+own Edge Cases note explicitly warns against a "latest everything" sweep
+inflating the diff; recording accurate identity for the content that is
+actually installed today was judged the safer, reviewable increment. Running
+the real update (or hand-verifying each upstream revision against the
+installed tree) is the remaining work for full AC-1 compliance.
+
+### Test Results
+
+- `bun run resource-check` (from `.pi/`): 10 matched, 0 mismatched, 0
+  missing, 0 unchecked — was 0 matched, 11 mismatched before this pass.

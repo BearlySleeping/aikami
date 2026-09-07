@@ -3,6 +3,12 @@
 
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
+// C-474: role_profiles.ts lives under .pi/extensions/lib because Pi loads
+// extensions there directly (no path aliases under Pi's Node runtime — see
+// the relative-import note on session.ts). It has no Pi-specific imports, so
+// it loads fine under Bun too; this is the one place the live pipeline
+// resolves a role's actual tool surface instead of loading everything.
+import { resolveEnabledExtensions } from '../../../../../.pi/extensions/lib/role_profiles.ts';
 import { contractPortOffset } from '../../../../../packages/shared/constants/src/index.ts';
 import { resolveAikamiMode } from '../../env/mode';
 import { getScriptsEnv } from '../../env/scripts_env';
@@ -232,6 +238,31 @@ const inheritedPathEnv = (): string[] => (process.env.PATH ? [`PATH=${process.en
 export const ghTokenFilePath = (options: { repoRoot: string; runId: string }): string =>
   join(options.repoRoot, '.pi/contract-runs', options.runId, 'gh-token');
 
+/**
+ * Path of a worker's JSONL usage log (C-473 AC-1).
+ *
+ * The Herdr launch path runs `pi` inside a pane rather than as a directly
+ * piped child process (unlike the legacy `worker.ts` spawn path), so there
+ * is no in-process stdout stream to read usage events from. The JSON-mode
+ * command tees its own stdout here instead — same event shape `worker.ts`
+ * already parses, just captured to a file instead of a pipe. Appended
+ * across relaunches so a crash-and-resume doesn't lose the earlier partial
+ * usage.
+ */
+export const workerUsageLogPath = (options: {
+  repoRoot: string;
+  runId: string;
+  stage: string;
+  attempt: number;
+}): string =>
+  join(
+    options.repoRoot,
+    '.pi/contract-runs',
+    options.runId,
+    'worker',
+    `${options.stage}-${options.attempt}.jsonl`,
+  );
+
 const atomicWrite = (options: { path: string; content: string }): void => {
   const temporaryPath = `${options.path}.${process.pid}.tmp`;
   writeFileSync(temporaryPath, options.content);
@@ -247,24 +278,26 @@ const buildSessionId = (options: { contractId: string; runId: string; role: stri
   `pi-${options.contractId}-${options.runId}-agent-${options.role}`;
 
 /**
- * Tool filtering per role.
+ * Tool filtering per role (C-474).
  *
- * Role behavior is prompt-governed (not sandboxed) — each role prompt states
- * what it may/may not do. However, pipeline workers don't need GitHub admin
- * tools (project mutation, workflow, release management) — that's for the
- * review captain only. This coarse split reduces prompt-tax without false
- * failures from role boundary violations.
+ * Resolves each role's REQUIRED capabilities from role_profiles.ts —
+ * `completion`/`contract_pipeline` (so contract_stage_complete is always
+ * reachable), plus `read_source`/`edit_source`/`test_runner` for every
+ * worker role, plus `publication` for implementer/verifier. Optional
+ * capabilities (browser, ai_vision, mcp_context, etc.) are deliberately left
+ * out of the default `--tools` list — they cost tokens on every turn and are
+ * enabled per-session/task, not universally.
  *
  * 🔴 Note: if a tool sandboxes by role and returns an error, the worker may
- * stop without calling contract_stage_complete. Only prompt-based guidance
- * can fail a stage; tool unavailability just kills the worker. So this split
- * MUST be advisory: all tools load, prompt forbids their use.
+ * stop without calling contract_stage_complete. `resolveEnabledExtensions`
+ * always includes the `completion` capability's extensions for every known
+ * role, so this filter can never strip the one tool a worker MUST reach.
+ * Unknown/unmapped roles get `undefined` (all tools) rather than an empty
+ * list — the same fail-open behavior role_profiles.ts uses elsewhere.
  */
-const toolsForRole = (_role: ContractWorkerRole): string[] | undefined => {
-  // The tool loader isn't exposed, so just return undefined (all tools load).
-  // The prompt-governance will prevent misuse. TODO: revisit if tool sandboxing
-  // becomes available without error-without-completion risk.
-  return undefined;
+export const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
+  const extensions = resolveEnabledExtensions(role);
+  return extensions && extensions.length > 0 ? extensions : undefined;
 };
 
 // ── Adapter interface ───────────────────────────────────────
@@ -1005,6 +1038,13 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     mkdirSync(pd, { recursive: true });
     const pp = join(pd, `${request.stage}-${request.attempt}.md`);
     atomicWrite({ path: pp, content: request.prompt });
+    const usageLogPath = workerUsageLogPath({
+      repoRoot: this._repoRoot,
+      runId: request.runId,
+      stage: request.stage,
+      attempt: request.attempt,
+    });
+    mkdirSync(dirname(usageLogPath), { recursive: true });
     // Env vars are passed via `tab create --env KEY=VALUE` (herdr sets them
     // on the tab's shell) instead of inline `KEY=V pi ...` shell prefixes.
     // This eliminates the inline-env first-character-drop hazard entirely.
@@ -1065,6 +1105,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     const useHeadless = this._useJsonMode(request.role);
     if (useHeadless) {
       const cf = `$(cat ${shellQuote(taskMessagePath)})`;
+      // 🔴 C-473: tee the JSON event stream to a per-attempt log instead of
+      // letting it disappear into the pane's PTY buffer — this is the only
+      // place usage/cost data from an active pipeline run gets captured.
+      // Appended (`-a`), not truncated: a relaunch reuses the same attempt
+      // number and its usage should accumulate, not overwrite.
       return {
         command: [
           ghExport,
@@ -1079,6 +1124,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
           ...ta,
           '-p',
           `"${cf}"`,
+          '2>&1',
+          '|',
+          'tee',
+          '-a',
+          shellQuote(usageLogPath),
         ].join(' '),
         env,
       };

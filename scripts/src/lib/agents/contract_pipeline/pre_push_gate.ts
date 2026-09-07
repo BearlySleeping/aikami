@@ -306,14 +306,22 @@ export const formatGateNotesForPrompt = (result: PrePushGateResult | undefined):
         '',
         'The branch was pushed (a branch push runs no CI), but `moon run :validate`',
         'is red on it. Opening a PR now puts these same failures on the PR check.',
-        'Fix them in the worktree, commit, push, and only then create the PR.',
+        'Fix them in the worktree, then re-validate — and only then create the PR.',
       ];
   return [
     '',
     header,
     ...body,
     '',
-    'Reproduce with: `bun moon run :fix --affected` then `bun moon run :validate --affected`',
+    // 🔴 Never point at individual `moon run <task>` commands here. C-484:
+    // this line used to say "reproduce with :fix then :validate", the captain
+    // re-ran only the single guard named in the diagnostic below, and its own
+    // un-indented hand edit reached CI as a `client:format` failure. One tool,
+    // one verdict, bound to the commit it checked.
+    'After each round of fixes, call `contract_stage` action `validate` — it applies',
+    '`:fix`, re-runs `:validate`, commits, pushes, and records the verdict against the',
+    'resulting commit. `gh_pr create` REFUSES to open a PR until that verdict is green',
+    'for the exact commit on the remote, so there is no path around it.',
     '',
     '```',
     result.output,

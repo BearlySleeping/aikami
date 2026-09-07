@@ -54,6 +54,13 @@ import { Type } from 'typebox';
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 import { commitContractContent } from '../../scripts/src/lib/agents/contract_pipeline/contract_sync';
+import { readManifest } from '../../scripts/src/lib/agents/contract_pipeline/manifest_store';
+import {
+  createWorkspaceGitReader,
+  deriveRunRepoRoot,
+  evaluatePublicationGate,
+  formatPublicationBlocks,
+} from '../../scripts/src/lib/agents/contract_pipeline/publication_gate';
 import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
 import { currentBranch, ensureGitHubRepo, resolvePrSelector, runGh } from './lib/gh.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
@@ -795,6 +802,51 @@ function formatCheckStatus(raw: string): string {
   return [summary, '', ...statusLines].join('\n');
 }
 
+/**
+ * Refuse to open a contract-pipeline PR from an unpublishable branch.
+ *
+ * 🔴 The C-484 lesson (PR #266, 2026-09-07). The pre-push gate ran once, in
+ * the orchestrator, and correctly went red. The review captain then fixed the
+ * flagged violation by hand, re-ran only the single guard it had been told
+ * about, committed with `--no-verify`, pushed, and opened the PR — carrying
+ * an un-indented edit that `client:format` rejected on CI. Every step after
+ * the orchestrator's one-shot gate was unvalidated, and the prompt was the
+ * only thing standing between a hand edit and a public PR.
+ *
+ * A prompt is guidance. This is a precondition: PR creation is the choke
+ * point every path must pass through, so the invariant is enforced here.
+ * See publication_gate.ts for the individual blocks and their remedies.
+ *
+ * Returns the refusal text, or undefined when publication is allowed —
+ * including outside a pipeline worker, and whenever the gate cannot read
+ * the workspace (a gate that cannot run must not become a wall).
+ */
+const pipelinePublicationRefusal = (headBranch: string): string | undefined => {
+  const role = process.env.CONTRACT_PIPELINE_ROLE;
+  const workspacePath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+  const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
+  if (!role || !workspacePath || !runId || !existsSync(workspacePath)) {
+    return undefined;
+  }
+
+  let result: ReturnType<typeof evaluatePublicationGate>;
+  try {
+    result = evaluatePublicationGate({
+      git: createWorkspaceGitReader(workspacePath),
+      manifest: readManifest({ runId, cwd: deriveRunRepoRoot() }),
+      branch: headBranch,
+    });
+  } catch {
+    // Unreadable manifest or git failure — indeterminate, so allow.
+    return undefined;
+  }
+
+  if (result.ok || result.indeterminate) {
+    return undefined;
+  }
+  return formatPublicationBlocks(result);
+};
+
 // ── Extension ───────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
@@ -832,6 +884,17 @@ export default function (pi: ExtensionAPI) {
               content: [{ type: 'text', text: `❌ ${repoCheck.reason}` }],
               isError: true,
               details: {},
+            };
+          }
+
+          // 🔴 Hard precondition inside a contract-pipeline worker — see
+          // pipelinePublicationRefusal above. No-op everywhere else.
+          const refusal = pipelinePublicationRefusal(params.headBranch);
+          if (refusal) {
+            return {
+              content: [{ type: 'text', text: refusal }],
+              isError: true,
+              details: { blockedBy: 'publication_gate' },
             };
           }
 

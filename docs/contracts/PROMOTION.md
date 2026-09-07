@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 158 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 160 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -210,7 +210,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-471 | Owned Service Lifecycle | 👍 approved | v2 | full |
 | C-472 | Testable Worker Lifecycle | 👍 approved | v2 | full |
 | C-473 | Pipeline Usage Ledger | 👍 approved | v2 | full |
-| C-474 | Role Context Profiles | 📝 draft | v2 | thin |
+| C-474 | Role Context Profiles | 🔄 in_progress | v2 | thin |
 | C-475 | Executable Agent Guidance | 📝 draft | v2 | thin |
 | C-476 | Strictness Coverage Ratchet | 🛠️ implemented | v2 | thin |
 | C-477 | Compiled Svelte Lifecycle Tests | 🛠️ implemented | v2 | full |
@@ -221,4 +221,6 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-482 | Managed Ai Runtime Lifecycle | 🛠️ implemented | v2 | full |
 | C-483 | Guided Ai Setup | 👍 approved | v2 | full |
 | C-484 | Capability First Settings | 👍 approved | v2 | full |
+| C-485 | Production Path Evidence Gate | 📝 draft | v2 | full |
+| C-486 | Unconditional Release Journey | 📝 draft | v2 | full |
 

@@ -10,8 +10,11 @@ not a code problem. Do not re-run the verifier's tests; trust its evidence.
 ### Fix it yourself — you have the access to do this in one pass
 
 1. `git status` / `git log` in the worktree — is the branch actually there and pushed?
-2. Work out the exact recovery actions: retry the push (`git push origin
-   HEAD`) and retry PR creation (`gh_pr` action `create` with `draft: false`).
+2. Work out the exact recovery actions: retry the push (`contract_stage`
+   action `validate` re-checks, commits and pushes in one step) and retry PR
+   creation (`gh_pr` action `create` with `draft: false`). If `gh_pr create`
+   refuses, it is telling you the branch is not publishable — read the named
+   blocks and clear them; do not work around it.
 3. 🔴 Get explicit user authorization BEFORE running them — report what you
    found and the exact commands you will run, and ask. Do NOT push or create
    the PR without that authorization. Once authorized, retry the push and PR

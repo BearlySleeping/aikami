@@ -1,65 +1,65 @@
 {
   "manifestVersion": 1,
-  "updatedAt": "2026-09-04T22:21:38.000Z",
+  "updatedAt": "2026-09-06T23:30:00.325Z",
   "resources": {
     "context-mode": {
       "name": "context-mode",
       "type": "npm-package",
       "description": "Pi context management — search, index, stats, upgrade",
-      "source": { "kind": "npm", "package": "context-mode", "version": "1.0.169" },
+      "source": {
+        "kind": "npm",
+        "package": "context-mode",
+        "version": "1.0.169"
+      },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "e2373db7b31068a6c39fde2dd1a7ede6cdf0d30a46ffcea65ce4585ac79148b5",
+        "fileCount": 1,
+        "recordedAt": "2026-09-06T23:30:00.321Z"
       }
     },
     "pi-mcp-adapter": {
       "name": "pi-mcp-adapter",
       "type": "npm-package",
       "description": "Pi MCP adapter for model context protocol",
-      "source": { "kind": "npm", "package": "pi-mcp-adapter", "version": "2.32.1" },
+      "source": {
+        "kind": "npm",
+        "package": "pi-mcp-adapter",
+        "version": "2.32.1"
+      },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "e2373db7b31068a6c39fde2dd1a7ede6cdf0d30a46ffcea65ce4585ac79148b5",
+        "fileCount": 1,
+        "recordedAt": "2026-09-06T23:30:00.321Z"
       }
     },
     "pi-cache-optimizer": {
       "name": "pi-cache-optimizer",
       "type": "npm-package",
       "description": "Pi cache optimizer for improved performance",
-      "source": { "kind": "npm", "package": "pi-cache-optimizer", "version": "2.8.7" },
+      "source": {
+        "kind": "npm",
+        "package": "pi-cache-optimizer",
+        "version": "2.8.7"
+      },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "e2373db7b31068a6c39fde2dd1a7ede6cdf0d30a46ffcea65ce4585ac79148b5",
+        "fileCount": 1,
+        "recordedAt": "2026-09-06T23:30:00.321Z"
       }
     },
     "pi-deepinfra": {
       "name": "pi-deepinfra",
       "type": "npm-package",
       "description": "Pi DeepInfra integration for model access",
-      "source": { "kind": "npm", "package": "pi-deepinfra", "version": "0.1.3" },
-      "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
-      }
-    },
-    "pi-deepseek-optimized": {
-      "name": "pi-deepseek-optimized",
-      "type": "npm-package",
-      "description": "Pi DeepSeek optimized model integration",
       "source": {
-        "kind": "git",
-        "url": "github.com/jrimmer/pi-deepseek-optimized",
-        "revision": "HEAD",
-        "subdir": ""
+        "kind": "npm",
+        "package": "pi-deepinfra",
+        "version": "0.1.3"
       },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "e2373db7b31068a6c39fde2dd1a7ede6cdf0d30a46ffcea65ce4585ac79148b5",
+        "fileCount": 1,
+        "recordedAt": "2026-09-06T23:30:00.321Z"
       }
     },
     "pixijs": {
@@ -73,9 +73,9 @@
         "subdir": "skills"
       },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "9d232b3fffc438d43cfa843b0c265325aeda39d7139d3481de2aaba4c4678400",
+        "fileCount": 64,
+        "recordedAt": "2026-09-06T23:30:00.324Z"
       }
     },
     "daisyui": {
@@ -89,9 +89,9 @@
         "subdir": "skills/daisyui"
       },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "a189f532280844ca5a13128d94527919e2badd6a5b4cd17a76627674c8b71c11",
+        "fileCount": 73,
+        "recordedAt": "2026-09-06T23:30:00.325Z"
       }
     },
     "herdr": {
@@ -105,9 +105,9 @@
         "subdir": "skills/herdr"
       },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "81b3df6224373346fbcb11f2e0e14d303e0faa3a33186619f6a5221254c57e84",
+        "fileCount": 1,
+        "recordedAt": "2026-09-06T23:30:00.325Z"
       }
     },
     "coderabbit": {
@@ -121,31 +121,38 @@
         "subdir": "skills"
       },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "62e126dbb8d866edeb095771365154edfd3a5d867105da4475d7c326c8692ead",
+        "fileCount": 3,
+        "recordedAt": "2026-09-06T23:30:00.325Z"
       }
     },
     "modern-web-guidance": {
       "name": "modern-web-guidance",
       "type": "generated-skill",
       "description": "Modern web development guidance from context-mode npm package",
-      "source": { "kind": "npm", "package": "context-mode", "version": "1.0.169" },
+      "source": {
+        "kind": "npm",
+        "package": "context-mode",
+        "version": "1.0.169"
+      },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "b5337e19781b455211c1107e19c8c507d8495455145adf74dce705ffbbdf6122",
+        "fileCount": 1,
+        "recordedAt": "2026-09-06T23:30:00.325Z"
       }
     },
     "bun.lock": {
       "name": "bun.lock",
       "type": "local-skill",
       "description": "Bun lockfile for .pi dependencies — exact version pins for all npm resources",
-      "source": { "kind": "local", "relativePath": "bun.lock" },
+      "source": {
+        "kind": "local",
+        "relativePath": "bun.lock"
+      },
       "installed": {
-        "contentHash": "",
-        "fileCount": 0,
-        "recordedAt": "2026-09-04T22:21:38.000Z"
+        "contentHash": "e2373db7b31068a6c39fde2dd1a7ede6cdf0d30a46ffcea65ce4585ac79148b5",
+        "fileCount": 1,
+        "recordedAt": "2026-09-06T23:30:00.321Z"
       }
     }
   }

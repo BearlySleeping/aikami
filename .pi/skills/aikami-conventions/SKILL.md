@@ -159,10 +159,14 @@ governed by the next rule.
 
 ### 🔴 3. Dynamic Imports: `await import()` — Avoid Unless Proven Necessary
 
-The client is a static SPA. Dynamic imports do **not** reduce bundle size —
-Vite bundles everything regardless. They fragment the bundle, add async
-overhead, and cascade `async`/`await` through call stacks. **The default is a
-static `import`.**
+The client is a static SPA that boots its whole app on load — Vite still
+splits a dynamic `import()` into its own chunk, but for an ordinary
+project module (not one of the exceptions below) that chunk is fetched
+immediately anyway, so splitting it out only adds a network/parse waterfall
+and cascades `async`/`await` through call stacks for no size benefit. The
+exceptions below are the cases where the split genuinely defers work —
+a massive library, a conditional branch, or code that must not run outside
+its target environment. **The default is a static `import`.**
 
 Ratcheted by CI guards (`guard-mvvm-conventions` M9, `guard-service-conventions`
 S12): new occurrences outside this allowlist fail CI.

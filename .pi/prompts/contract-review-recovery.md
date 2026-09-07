@@ -46,10 +46,14 @@ skipping the gate.
 
 If you do fix something and are confident, you may offer to push it and
 create the PR (reconciliation never ran on this path, so nothing is pushed
-for you yet). Report the exact actions required — `git push origin HEAD`,
-then `gh_pr` action `create` with `draft: false` — and ask the user for explicit
-authorization before running them. Do NOT push or create the PR without
-that authorization. Once the user authorizes, push and create the PR as
+for you yet). Report the exact actions required — `contract_stage` action
+`validate` (which fixes, validates, commits and pushes), then `gh_pr` action
+`create` with `draft: false` — and ask the user for explicit authorization
+before running them. Do NOT push or create the PR without that authorization.
+
+🔴 Go through `contract_stage` action `validate`, not a raw
+`git commit --no-verify && git push`. It is the only checked commit path, and
+`gh_pr create` refuses to publish a branch whose HEAD has no green verdict. Once the user authorizes, push and create the PR as
 described.
 
 ### Still off-limits

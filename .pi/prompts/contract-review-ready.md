@@ -36,6 +36,31 @@ Create a public PR immediately — do not wait:
 - Body: your Phase 1 status report
 - After creation, tell the user the PR URL.
 
+#### 🔴 If you edited ANY file, re-validate first
+
+`gh_pr create` refuses to open a PR unless a GREEN validation verdict exists
+for the exact commit that is on the remote. That is a hard precondition, not
+advice — you cannot talk your way past it, and you should not try.
+
+The one command that clears it:
+
+```
+contract_stage  action: validate  workspacePath: <the worktree>
+```
+
+It applies `moon run :fix`, re-runs `:validate`, commits the fixes, pushes,
+and records the verdict against the resulting commit.
+
+🔴 **Never substitute individual `moon run <task>` calls for this.** Running
+the one guard named in a diagnostic tells you that guard is happy and nothing
+else. C-484 shipped a `client:format` failure to CI exactly that way: the
+hand fix for an MVVM violation was never re-indented, `guard-mvvm-conventions`
+passed, and `:fix` — which would have rewritten the file in place — was never
+run.
+
+This applies to every edit you make: the pre-push gate's must-fix items,
+CodeRabbit autofixes, and "small stuff" in Phase 3 alike.
+
 ### Phase 3: Wait for the User
 
 The user may ask you to:
@@ -43,7 +68,8 @@ The user may ask you to:
 - **Apply fixes yourself** — only for genuinely small stuff (typo, wrong
   constant, missing import) that you're confident about without the
   implementer's full toolset or the verifier's test/visual gate: edit files
-  in the worktree, commit + push.
+  in the worktree, then call `contract_stage` action `validate` to fix,
+  validate, commit and push in one step.
 - **Send it back to the implementer** — the default for anything beyond
   trivial. The implementer has the deepest context on this contract and the
   full toolset (including the visual gate you don't have). Don't reimplement

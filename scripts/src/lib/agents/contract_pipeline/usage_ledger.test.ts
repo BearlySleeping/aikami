@@ -24,6 +24,7 @@ import {
   loadLegacyManifestUsage,
   mergeMonetaryAmounts,
   normalizeLegacyUsage,
+  parseUsageFromJsonlText,
 } from './usage_ledger.ts';
 
 const RUN_ID = 'run-test-C-473';
@@ -57,6 +58,27 @@ const makeRecord = (overrides: Partial<UsageRecord> = {}): UsageRecord => ({
 // ── AC-1: Active workers produce usage ──
 
 describe('AC-1: Active workers produce usage', () => {
+  it('ignores assistant message_end events without usage data', () => {
+    const usage = parseUsageFromJsonlText(
+      [
+        JSON.stringify({ type: 'message_end', message: { role: 'assistant', model: 'no-usage' } }),
+        JSON.stringify({
+          type: 'message_end',
+          message: {
+            role: 'assistant',
+            model: 'claude-sonnet-5',
+            usage: { input: 10, output: 5, totalTokens: 15, cost: { total: 0.01 } },
+          },
+        }),
+      ].join('\n'),
+    );
+
+    expect(usage.turns).toBe(1);
+    expect(usage.model).toBe('claude-sonnet-5');
+    expect(usage.totalTokens).toBe(15);
+    expect(usage.cost).toBe(0.01);
+  });
+
   it('normalizeLegacyUsage preserves all token categories and cost', () => {
     const legacy: StageUsage = {
       model: 'claude-sonnet-5',
