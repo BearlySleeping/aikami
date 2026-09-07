@@ -983,7 +983,7 @@ export class GameOverlayService
     if (!success) {
       // Fallback: navigate to full settings page
       await routerService.goToRoute('settings', {
-        queryParameters: { from: 'game' },
+        queryParameters: undefined,
         pathParameters: undefined,
       });
     }

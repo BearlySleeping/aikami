@@ -5,7 +5,7 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { VoiceParams } from '@aikami/types';
-import type { TtsBackend, VoiceInfo } from '$types';
+import type { TtsBackend, TtsStatus, VoiceInfo } from '$types';
 import { configService } from '../config/config_service.svelte.ts';
 import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts';
 import { audioContextManager } from './audio_context_manager';
@@ -25,23 +25,47 @@ const isTauriRuntime = (): boolean =>
  * be silently CSP-blocked in the desktop webview, so they are rejected with
  * a warning instead (C-389 CR). Browser builds are unrestricted.
  */
+/**
+ * Registry IDs whose server speaks the exact Kokoro-shaped
+ * `/v1/audio/speech` + `/v1/voices` surface this runtime implements
+ * end-to-end (request shape AND health-check). Cloud providers advertised
+ * in the registry (ElevenLabs, OpenAI TTS) use different real APIs that
+ * this runtime does not implement yet — sending them the Kokoro request
+ * shape would silently fail or, worse, appear to "work" against the wrong
+ * endpoint. Their stored configuration is preserved; playback is reported
+ * as unsupported instead.
+ */
+const SUPPORTED_SERVER_VOICE_PROVIDERS = new Set(['kokoro', 'voicevox', 'fish-speech']);
+
 const isLocalhostUrl = (url: string): boolean => {
   try {
     const parsed = new URL(url);
-    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    return (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '[::1]' ||
+      parsed.hostname === '::1'
+    );
   } catch {
     return false;
   }
 };
 
-/** Lifecycle status of the native Kokoro TTS engine. */
-type TtsStatus =
-  | 'uninitialized'
-  | 'initializing'
-  | 'ready'
-  | 'error'
-  | 'not-downloaded'
-  | 'disabled';
+/**
+ * Whether a Bearer credential may be sent to this endpoint. HTTPS protects it
+ * in transit; plain HTTP does not, so the key is only allowed over loopback,
+ * where the request never leaves the machine. A stored connection can hold any
+ * URL — nothing upstream validates the protocol — so this is checked at the
+ * point of transmission rather than trusted from configuration.
+ */
+const canCarryCredential = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || isLocalhostUrl(url);
+  } catch {
+    return false;
+  }
+};
 
 type TtsOptions = BaseFrontendClassOptions;
 
@@ -233,9 +257,22 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   private _worker: Worker | null = null; // kokoro-js worker (browser TTS)
   private _kokoroServerUrl: string | undefined; // server-mode TTS URL (C-389)
   private _voiceSpeed: number | undefined; // from the narrator-voice connection's VoiceParams, when resolved
+  private _voiceApiKey: string | undefined; // credential for a cloud server-mode voice provider (e.g. OpenAI TTS)
   private _abortController: AbortController | undefined;
   private _currentAudio: HTMLAudioElement | null = null;
   private _ttsGain: GainNode | undefined; // volume control for synthesized speech
+  /**
+   * The worker request whose completion is still wanted. Every speak() calls
+   * stop() first, so a second request can be posted while the worker is still
+   * synthesizing the first — without an id, that first 'complete' would
+   * resolve the second caller and play the wrong audio. resolve/reject
+   * are absent for fire-and-forget synthesize() calls, which still need the
+   * id so their audio is played and a stale one is not.
+   */
+  private _activeWorkerRequest:
+    | { id: number; resolve?: () => void; reject?: (error: Error) => void }
+    | undefined;
+  private _workerRequestSeq = 0;
 
   // --- Playback state (gapless scheduling, word tracking) ---
   private _streamEnded = false;
@@ -300,7 +337,9 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
     try {
-      const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/voices`);
+      const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/voices`, {
+        headers: this._authHeaders(),
+      });
       if (!response.ok) {
         this.error('loadVoices:fetch-failed', { status: response.status });
         return;
@@ -323,42 +362,71 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    // Cancel any in-progress request
-    this.stop();
-
-    const abortController = new AbortController();
-    this._abortController = abortController;
-    const { signal } = abortController;
-
-    this.isSynthesizing = true;
-
-    try {
-      const buffer = await this._requestSpeech({
-        text,
-        voice: voiceId ?? this.selectedVoice,
-        signal,
+    if (this.status === 'not-downloaded') {
+      this.debug('speak:not-downloaded', {
+        hint: 'Download the voice model from Settings → Audio first.',
       });
-      if (signal.aborted) {
-        return;
-      }
-      if (!buffer) {
-        return;
-      }
+      return;
+    }
 
-      // Play the WAV audio through the gapless AudioBufferSourceNode queue.
-      // Pass words so the rAF tracking loop can detect when playback ends.
-      const words = text.split(/\s+/).filter(Boolean);
-      this.startStream({ messageId: `tts_${Date.now()}`, text });
-      await this.enqueueChunk({ buffer, words });
-      this.endStream();
-    } catch (error: unknown) {
-      if ((error as Error).name === 'AbortError') {
-        return;
-      }
-      this.error('speak:failed', error);
+    if (this.status === 'disabled') {
+      this.debug('speak:disabled');
+      return;
+    }
+
+    const voice = voiceId ?? this.selectedVoice;
+
+    // Same backend dispatch as synthesize() — preview and gameplay must
+    // never diverge on which engine actually produces the audio.
+    if (this.backend === 'server' && this.isKokoroServerAvailable && this._kokoroServerUrl) {
+      await this._synthesizeViaServer({ text, voice });
+      return;
+    }
+
+    if (this._worker && this.status === 'ready') {
+      await this._speakViaWorker({ text, voice });
+      return;
+    }
+
+    this.debug('speak:not-ready', {
+      status: this.status,
+      backend: this.backend,
+      hasWorker: !!this._worker,
+    });
+  }
+
+  /**
+   * Worker-backed speak(): posts the synthesize request and awaits the
+   * worker's 'complete'/'error' message so callers (voice previews) can
+   * know when playback has actually been scheduled — the same worker
+   * message protocol {@link synthesize} drives, just made awaitable.
+   */
+  private async _speakViaWorker(options: { text: string; voice: string }): Promise<void> {
+    this.stop();
+    this.isSynthesizing = true;
+    const id = ++this._workerRequestSeq;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        this._activeWorkerRequest = { id, resolve, reject };
+        this._worker?.postMessage({
+          action: 'synthesize',
+          text: options.text,
+          voice: options.voice,
+          requestId: id,
+        });
+      });
+    } catch (error) {
+      this.error('speak:worker-failed', error);
+      // Rethrow so an awaiting caller (the voice preview error handler) sees
+      // the failure instead of hanging on a swallowed rejection.
+      throw error;
     } finally {
-      this.isSynthesizing = false;
-      this._abortController = undefined;
+      // Only clear when this request is still the active one — a newer
+      // speak() that superseded it owns the slot now.
+      if (this._activeWorkerRequest?.id === id) {
+        this.isSynthesizing = false;
+        this._activeWorkerRequest = undefined;
+      }
     }
   }
 
@@ -368,6 +436,14 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     if (controller) {
       controller.abort();
       this._abortController = undefined;
+    }
+
+    // Reject a pending worker-backed speak() so it never hangs a caller.
+    // Clearing the slot also makes the in-flight worker response stale, so a
+    // completion that arrives after stop() plays nothing.
+    if (this._activeWorkerRequest) {
+      this._activeWorkerRequest.reject?.(new Error('stop() called before synthesis completed'));
+      this._activeWorkerRequest = undefined;
     }
 
     // Stop HTMLAudioElement playback
@@ -512,12 +588,41 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       this.selectedVoice = voiceParams.voiceId;
     }
     this._voiceSpeed = voiceParams?.speed;
+    this._voiceApiKey = roleResolution?.apiKey || undefined;
 
     // AC (voice.tts.mode = disabled): TTS is off; nothing is probed.
     if (mode === 'disabled') {
       this.status = 'disabled';
       this.backend = 'unavailable';
       this.info('initialize:disabled');
+      return;
+    }
+
+    // The Kokoro-shaped OpenAI-compatible speech request this runtime sends
+    // is only implemented for providers that actually speak that shape.
+    // A stored connection for an unsupported provider (e.g. ElevenLabs, a
+    // different request/response format entirely) is preserved as-is, but
+    // reported honestly as unsupported rather than silently POSTed the
+    // wrong request shape and misread as "unreachable".
+    const registryId = roleResolution?.provider;
+    if (mode === 'server' && registryId && !SUPPORTED_SERVER_VOICE_PROVIDERS.has(registryId)) {
+      this.status = 'error';
+      this.backend = 'unavailable';
+      this.errorMessage = `${registryId} is not yet supported by the local speech runtime. The configuration is saved, but voice playback for this provider is unavailable.`;
+      this.warn('initialize:unsupported-voice-provider', { provider: registryId });
+      return;
+    }
+
+    // A credential must never be sent over a cleartext non-loopback link.
+    // Silently dropping the key would produce a confusing 401 instead, so
+    // the endpoint is rejected with an explanation and the key is discarded.
+    if (mode === 'server' && serverUrl && this._voiceApiKey && !canCarryCredential(serverUrl)) {
+      this._voiceApiKey = undefined;
+      this.status = 'error';
+      this.backend = 'unavailable';
+      this.errorMessage =
+        'This voice server needs an API key but is configured over plain http://. Use https:// (or a localhost address) so the key is not sent in the clear.';
+      this.warn('initialize:insecure-voice-endpoint-with-credential');
       return;
     }
 
@@ -569,6 +674,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
           pcmData?: Float32Array;
           sampleRate?: number;
           message?: string;
+          requestId?: number;
         };
 
         switch (payload.type) {
@@ -578,7 +684,14 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
             this.info('initialize:ready', { backend: this.backend });
             break;
 
-          case 'complete':
+          case 'complete': {
+            const active = this._activeWorkerRequest;
+            if (!active || payload.requestId !== active.id) {
+              // A superseded or stopped request finishing late. Playing it
+              // would emit audio the user already cancelled.
+              this.debug('kokoro:complete-stale', { requestId: payload.requestId });
+              break;
+            }
             if (payload.pcmData && payload.sampleRate !== undefined) {
               this.debug('kokoro:complete', {
                 pcmLength: payload.pcmData.length,
@@ -592,14 +705,38 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
                 sampleRate: payload.sampleRate,
               });
             }
+            if (active.resolve) {
+              // Awaitable speak(): resolve, but leave the slot in place for
+              // _speakViaWorker's finally — clearing it here would prevent
+              // that finally from resetting isSynthesizing.
+              active.resolve();
+            } else {
+              // Fire-and-forget synthesize(): nothing awaits, so the slot is
+              // released here.
+              this._activeWorkerRequest = undefined;
+            }
             break;
+          }
 
-          case 'error':
+          case 'error': {
+            const active = this._activeWorkerRequest;
+            if (payload.requestId !== undefined && payload.requestId !== active?.id) {
+              this.debug('kokoro:error-stale', { requestId: payload.requestId });
+              break;
+            }
             this.status = 'error';
             this.backend = 'unavailable';
             this.errorMessage = payload.message ?? 'Kokoro worker error';
             this.error('kokoro:worker-error', { message: this.errorMessage });
+            if (active?.reject) {
+              // Awaitable speak(): reject so the caller's catch (voice preview
+              // error handler) can surface it. The slot stays for its finally.
+              active.reject(new Error(this.errorMessage));
+            } else {
+              this._activeWorkerRequest = undefined;
+            }
             break;
+          }
 
           default:
             break;
@@ -611,6 +748,8 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         this.backend = 'unavailable';
         this.errorMessage = error.message || 'Unknown worker error';
         this.error('kokoro:worker-onerror', { message: this.errorMessage });
+        this._activeWorkerRequest?.reject?.(new Error(this.errorMessage));
+        this._activeWorkerRequest = undefined;
       };
 
       // ORT WASM is served from the R2 distribution plane when configured
@@ -706,7 +845,9 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    this._worker.postMessage({ action: 'synthesize', text, voice });
+    const id = ++this._workerRequestSeq;
+    this._activeWorkerRequest = { id };
+    this._worker.postMessage({ action: 'synthesize', text, voice, requestId: id });
   }
 
   /**
@@ -798,6 +939,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
    *
    * @returns The WAV ArrayBuffer, or undefined when the request failed.
    */
+  /** Bearer header for the configured voice server, or nothing when keyless. */
+  private _authHeaders(): Record<string, string> {
+    // biome-ignore lint/style/useNamingConvention: HTTP header name
+    return this._voiceApiKey ? { Authorization: `Bearer ${this._voiceApiKey}` } : {};
+  }
+
   private async _requestSpeech(options: {
     text: string;
     voice: string;
@@ -813,7 +960,10 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     // request body Kokoro serves and is intentionally left unmapped here.
     const response = await fetch(`${this._kokoroServerUrl}/v1/audio/speech`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...this._authHeaders(),
+      },
       body: JSON.stringify({
         model: 'tts-1',
         input: text,
@@ -848,18 +998,19 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     }
 
     try {
-      const response = await fetch(`${url}/v1/audio/speech`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'tts-1',
-          input: 'test',
-          voice: 'af_heart',
-        }),
+      // A GET against the voices listing is a real health check with no
+      // synthesis cost — the previous probe POSTed a full speech request,
+      // paying for audio generation just to learn the server exists.
+      // A server that protects /v1/audio/speech usually protects /v1/voices
+      // with the same credential — an unauthenticated probe would 401 and be
+      // misread as "server unavailable".
+      const response = await fetch(`${url}/v1/voices`, {
+        method: 'GET',
+        headers: this._authHeaders(),
         signal: AbortSignal.timeout(5000),
       });
 
-      if (response.ok || response.status === 422) {
+      if (response.ok) {
         this.isKokoroServerAvailable = true;
         this.debug('checkKokoroServer:found', { url });
         return;

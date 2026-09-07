@@ -20,6 +20,8 @@ import {
 export type CapabilityDetailViewModelInterface = BaseViewModelInterface & {
   readonly capability: ConnectionCapability;
   readonly status: string;
+  /** Human-readable label for {@link status} — never the raw enum value. */
+  readonly statusLabel: string;
   readonly statusColor: string;
   readonly modelName: string | undefined;
   readonly providerLabel: string | undefined;
@@ -47,7 +49,10 @@ class CapabilityDetailViewModel
   constructor(options: CapabilityDetailViewModelOptions) {
     super(options);
     this.capability = options.capability;
-    this.aiSettingsViewModel = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    this.aiSettingsViewModel = getAiSettingsViewModel({
+      className: 'AiSettingsViewModel',
+      capability: options.capability,
+    });
   }
 
   override async initialize(): Promise<void> {
@@ -67,6 +72,21 @@ class CapabilityDetailViewModel
     return entry.status;
   }
 
+  get statusLabel(): string {
+    switch (this.status) {
+      case 'reachable':
+        return 'Reachable';
+      case 'unreachable':
+        return 'Unreachable';
+      case 'testing':
+        return 'Testing…';
+      case 'not_tested':
+        return 'Configured · Not tested';
+      default:
+        return 'Not configured';
+    }
+  }
+
   get statusColor(): string {
     const entry = this._getStatusEntry();
     if (!entry) {
@@ -84,7 +104,7 @@ class CapabilityDetailViewModel
   }
 
   get isConfigured(): boolean {
-    return this.status === 'connected' || this.status === 'offline';
+    return this.status !== 'not_configured';
   }
 
   get isTesting(): boolean {

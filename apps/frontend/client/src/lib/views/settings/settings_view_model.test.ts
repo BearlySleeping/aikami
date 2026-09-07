@@ -77,9 +77,9 @@ describe('SettingsViewModel — group/section selection', () => {
   test('setActiveGroup switches group and activates its first section', () => {
     vm.setActiveGroup('ai');
     expect(vm.activeGroupId).toBe('ai');
-    expect(vm.activeSectionId).toBe('ai');
-    expect(vm.sectionsInActiveGroup.length).toBe(6);
-    expect(vm.sectionsInActiveGroup[0].id).toBe('ai');
+    expect(vm.activeSectionId).toBe('story-dialogue');
+    expect(vm.sectionsInActiveGroup.length).toBe(3);
+    expect(vm.sectionsInActiveGroup[0].id).toBe('story-dialogue');
   });
 
   test('setActiveSection changes only the section, not the group', () => {

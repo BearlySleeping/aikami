@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/start/start_view_model.test.ts
 // Contract: C-317 Rebuild the Start Menu Around Campaigns, Not Personas
-// Contract: C-323 AC-3 (start menu routes to capability screen instead of dialog)
+// Contract: C-323 AC-3 (start menu routes to setup instead of a dialog)
 // Contract: C-345 (pack browser) — wired into startNewGame by C-405
 // Contract: C-405 AC-1/AC-2/AC-3 (default path skips world generation)
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -397,7 +397,7 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
       expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
     });
 
-    test('routes to capability screen when text provider is missing', async () => {
+    test('routes to setup screen when text provider is missing', async () => {
       const vm = createViewModel();
       await vm.initialize();
 
@@ -409,7 +409,10 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
       await vm.startNewAdventure();
 
       expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('capability');
+      expect(routeCalls[0].route).toBe('setup');
+      expect(routeCalls[0].options?.queryParameters).toEqual({
+        reason: 'text-provider-required',
+      });
     });
 
     test('routes directly when no campaigns exist', async () => {

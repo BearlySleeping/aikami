@@ -1496,7 +1496,7 @@ class DialogueOverlayViewModel
       return;
     }
     this.debug('speakMessage:speaking', { length: text.length });
-    void ttsService.speak({ text });
+    void ttsService.speak({ text }).catch(() => {});
   }
 
   /** @inheritdoc */

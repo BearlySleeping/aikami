@@ -1,9 +1,9 @@
 // apps/frontend/client/src/lib/views/setup/setup_view_model.svelte.ts
 //
-// ViewModel for the Setup route — the legacy new-campaign landing route.
+// ViewModel for the new-campaign route — the new-campaign landing route.
 // C-405: this route no longer fronts the world-generation wizard. It hosts
-// the onboarding coordinator (fast persona creation) so stale bookmarks and
-// the remaining legacy callers land on persona creation, never the wizard.
+// the onboarding coordinator (fast persona creation) so new campaigns land
+// on persona creation, never the wizard.
 //
 // Contract: C-233 World Generation Wizard (superseded by C-405)
 // Contract: C-405 Cut World Generation from the Critical Path
@@ -53,7 +53,7 @@ class SetupViewModel
     // BaseViewModelContainer in OnboardingCoordinatorView.
     // Do NOT call initialize() manually here — it would race with
     // the container's onMount and cause double initialization.
-    this.debug('SetupViewModel.initialize — ready on /setup');
+    this.debug('SetupViewModel.initialize — ready on /new-campaign');
   }
 }
 

@@ -36,10 +36,10 @@ export class WorldGenWizardPage {
   // ── Navigation ────────────────────────────────────────────
 
   /**
-   * Navigate to the setup page (wizard entry point) and wait for render.
+   * Navigate to the wizard's production route and wait for render.
    */
   async gotoSetup(): Promise<void> {
-    await this.page.goto('/setup');
+    await this.page.goto('/worldgen');
     await this.page.locator('progress.progress').waitFor({ timeout: 10000 });
   }
 

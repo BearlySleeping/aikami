@@ -29,16 +29,6 @@ export const routes = {
     routeId: '/link',
     type: 'public',
   },
-  capability: {
-    getPath: () => '/capability',
-    queryParameters: undefined as
-      | undefined
-      | {
-          reason?: string;
-        },
-    routeId: '/capability',
-    type: 'public',
-  },
   game: {
     getPath: () => '/game',
     queryParameters: undefined,
@@ -66,10 +56,16 @@ export const routes = {
     queryParameters: undefined as
       | undefined
       | {
-          'skip-wizard'?: string;
+          reason?: string;
           from?: string;
         },
     routeId: '/setup',
+    type: 'public',
+  },
+  newCampaign: {
+    getPath: () => '/new-campaign',
+    queryParameters: undefined,
+    routeId: '/new-campaign',
     type: 'public',
   },
   worldgen: {

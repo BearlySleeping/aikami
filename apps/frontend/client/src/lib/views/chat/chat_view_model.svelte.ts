@@ -276,7 +276,7 @@ export class ChatViewModel
       this._ttsInitialised = true;
       this._chunker.onSentence(({ sentence }) => {
         if (this.streamingTtsEnabled) {
-          ttsService.speak({ text: sentence });
+          ttsService.speak({ text: sentence }).catch(() => {});
         }
       });
       // Fire-and-forget TTS worker init
@@ -1010,6 +1010,8 @@ export class ChatViewModel
     this.isPlayingTts = true;
     try {
       await ttsService.speak({ text: msg.text });
+    } catch {
+      // Worker/server synthesis failure — playback simply did not start.
     } finally {
       this.isPlayingTts = false;
     }

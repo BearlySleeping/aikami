@@ -181,7 +181,7 @@ class PersonaListViewModel
 
   /** @inheritdoc */
   async createPersona(): Promise<void> {
-    await routerService.goToRoute('setup', {
+    await routerService.goToRoute('newCampaign', {
       queryParameters: undefined,
       pathParameters: undefined,
     });

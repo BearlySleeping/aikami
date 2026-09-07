@@ -499,8 +499,8 @@ class StartViewModel
     } catch (error) {
       if (isAiTextProviderRequiredError(error)) {
         this.warn(`${options.logKey}:no-text-provider`, { error: String(error) });
-        // Soft advisory — route to capability screen instead of blocking
-        await routerService.goToRoute('capability', {
+        // Soft advisory — route to setup screen instead of blocking
+        await routerService.goToRoute('setup', {
           queryParameters: { reason: 'text-provider-required' },
           pathParameters: undefined,
         });
@@ -665,7 +665,7 @@ class StartViewModel
   /** @inheritdoc */
   async goToOptions(): Promise<void> {
     await routerService.goToRoute('settings', {
-      queryParameters: { from: 'start' },
+      queryParameters: undefined,
       pathParameters: undefined,
     });
   }

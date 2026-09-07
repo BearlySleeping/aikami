@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts
 //
 // Singleton service that shapes AI capability snapshots for the pre-game
-// capability screen and in-game boot diagnostics. Every provider
+// setup screen and in-game boot diagnostics. Every provider
 // availability decision is delegated to the AI Provider Gateway (C-320) —
 // this service only maps gateway detection results into the existing
 // CapabilitySnapshot shape.
@@ -26,8 +26,13 @@ export type CapabilityServiceOptions = BaseFrontendClassOptions;
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type CapabilityServiceInterface = BaseFrontendClassInterface & {
-  /** Runs full capability detection: text + image + voice. */
-  detect(): Promise<CapabilitySnapshot>;
+  /**
+   * Runs capability detection. By default checks text + image + voice;
+   * pass `capabilities` to probe only the capabilities the caller actually
+   * requested (e.g. a setup flow where the user only enabled text + voice)
+   * — un-requested capabilities are reported as `skipped`, never scanned.
+   */
+  detect(options?: { capabilities?: readonly AiCapability[] }): Promise<CapabilitySnapshot>;
   /** Detects text AI availability via the gateway. */
   detectText(): Promise<DetectionStatus>;
   /** Detects image AI availability via the gateway. */
@@ -46,19 +51,25 @@ class CapabilityService
    * not block image/voice results. Individual gateway failures degrade to
    * an 'error' status; the snapshot itself always completes.
    */
-  async detect(): Promise<CapabilitySnapshot> {
+  async detect(options?: { capabilities?: readonly AiCapability[] }): Promise<CapabilitySnapshot> {
+    const requested = options?.capabilities;
+    const wants = (capability: AiCapability): boolean =>
+      !requested || requested.includes(capability);
+
     const [textResult, imageResult, voiceResult] = await Promise.all([
-      this._safeDetect('text'),
-      this._safeDetect('image'),
-      this._safeDetect('voice'),
+      wants('text') ? this._safeDetect('text') : undefined,
+      wants('image') ? this._safeDetect('image') : undefined,
+      wants('voice') ? this._safeDetect('voice') : undefined,
     ]);
 
-    const textStatus = this._toStatus(textResult);
-    const imageStatus = this._toStatus(imageResult);
-    const voiceStatus = this._toStatus(voiceResult);
+    const textStatus = wants('text') ? this._toStatus(textResult) : 'skipped';
+    const imageStatus = wants('image') ? this._toStatus(imageResult) : 'skipped';
+    const voiceStatus = wants('voice') ? this._toStatus(voiceResult) : 'skipped';
 
     const providerId = textResult?.available ? textResult.provider : undefined;
     const modelName = textResult?.available ? this._resolveTextModel() : undefined;
+    const imageProviderId = imageResult?.available ? imageResult.provider : undefined;
+    const voiceProviderId = voiceResult?.available ? voiceResult.provider : undefined;
 
     return {
       isComplete: true,
@@ -66,7 +77,9 @@ class CapabilityService
       textProviderId: providerId,
       textModelName: modelName,
       imageStatus,
+      imageProviderId,
       voiceStatus,
+      voiceProviderId,
       detectedAt: new Date().toISOString(),
       summary: this._buildSummary({ textStatus, imageStatus, voiceStatus, providerId, modelName }),
     };

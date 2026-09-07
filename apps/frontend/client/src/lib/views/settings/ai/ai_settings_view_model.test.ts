@@ -2,7 +2,7 @@
 //
 // C-465 AC-1/2/3/4/5/6/7/8: AI Settings section tests.
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { BUILT_IN_PRESETS } from '@aikami/constants';
 import { createDeferred } from '@aikami/utils';
 import type { ConnectionTestResult } from '$types';
@@ -31,6 +31,19 @@ const mockFetchModelsFromProvider = mock(
   async (): Promise<Array<{ id: string; name: string }>> => [],
 );
 const mockVerifyConnection = mock(async () => ({ ok: true, latencyMs: 42 }));
+// Defaults to false so the save-verification gate stays out of the way of
+// tests about other behaviour; the gate's own suite flips it on.
+const mockHasVerificationStrategy = mock(() => false);
+const mockProviderModelFetch: Record<string, unknown> = {
+  openrouter: {
+    auth: { location: 'header', name: 'Authorization', prefix: 'Bearer ' },
+    chatTestOpenAiCompat: true,
+    chatTestUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    url: 'https://openrouter.ai/api/v1/models',
+    parseResponse: (_json: unknown) => [],
+  },
+};
+const mockFetchWithCredentialPolicy = mock(async () => new Response('{}', { status: 200 }));
 
 const mockConfigService = {
   isLoaded: true,
@@ -91,8 +104,27 @@ const mockConfigService = {
   getPresets: mock(() => [...BUILT_IN_PRESETS]),
 };
 
-// AC-6: real TTS preview.
-const mockTtsService = { speak: mock(async (_options: { text: string; voiceId?: string }) => {}) };
+// AC-6: real TTS preview. isSynthesizing/isPlaying/status/errorMessage are
+// plain mutable fields (not $state) — tests set them directly to drive the
+// ViewModel's derived voicePreviewState/voiceRuntimeStatus getters.
+const mockTtsService = {
+  speak: mock(async (_options: { text: string; voiceId?: string }) => {}),
+  stop: mock(() => {}),
+  reset: mock(() => {}),
+  initialize: mock(async () => {}),
+  isSynthesizing: false,
+  isPlaying: false,
+  status: 'uninitialized' as string,
+  errorMessage: null as string | null,
+};
+
+// Kokoro model download state — tests drive `state.status` directly.
+const mockVoiceModelService = {
+  state: { status: 'not-downloaded' } as { status: string; message?: string },
+  totalBytes: 0,
+  cancel: mock(() => {}),
+  download: mock(async () => ({ status: 'ready' })),
+};
 
 // AC-6: real-campaign-line fallback (Edge Cases & Gotchas — "no active campaign").
 const mockCampaignService: { activeCampaign: { name: string } | undefined } = {
@@ -127,10 +159,13 @@ mock.module('$services', () => ({
   ...localServicesMockBase(),
   configService: mockConfigService,
   // biome-ignore lint/style/useNamingConvention: matches actual $services export name
-  PROVIDER_MODEL_FETCH: { openrouter: {} },
+  PROVIDER_MODEL_FETCH: mockProviderModelFetch,
   fetchModelsFromProvider: mockFetchModelsFromProvider,
+  fetchWithCredentialPolicy: mockFetchWithCredentialPolicy,
   verifyConnection: mockVerifyConnection,
+  hasVerificationStrategy: mockHasVerificationStrategy,
   ttsService: mockTtsService,
+  voiceModelService: mockVoiceModelService,
   campaignService: mockCampaignService,
   imageGenerationService: mockImageGenerationService,
   styleProfileService: mockStyleProfileService,
@@ -160,8 +195,17 @@ beforeEach(async () => {
   mockConfigService.setDefaultConnection.mockClear();
   mockConfigService.clearRoleAssignment.mockClear();
   mockFetchModelsFromProvider.mockClear();
+  mockFetchWithCredentialPolicy.mockClear();
   mockVerifyConnection.mockClear();
   mockTtsService.speak.mockClear();
+  mockTtsService.stop.mockClear();
+  mockTtsService.reset.mockClear();
+  mockTtsService.initialize.mockClear();
+  mockTtsService.isSynthesizing = false;
+  mockTtsService.isPlaying = false;
+  mockTtsService.status = 'uninitialized';
+  mockTtsService.errorMessage = null;
+  mockVoiceModelService.state = { status: 'not-downloaded' };
   mockCampaignService.activeCampaign = undefined;
   mockImageGenerationService.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'SDXL Base' }];
   mockImageGenerationService.loadCheckpoints.mockClear();
@@ -207,9 +251,63 @@ describe('AiSettingsViewModel — AC-1: Second model reuses key', () => {
     // Then the key should be prefilled from the existing provider
     expect(vm.draft.apiKey).toBe('sk-or-v1-test-key');
   });
+
+  test('prefills key from the default provider and exposes its label as a hint', async () => {
+    mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-init-key',
+    });
+
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openAddProvider();
+
+    expect(vm.draft.registryId).toBe('openrouter');
+    expect(vm.draft.apiKey).toBe('sk-or-v1-init-key');
+    expect(vm.draft.label).toBe('');
+    expect(vm.labelHint).toBe('OpenRouter');
+    expect(vm.draft.providerId).toBeDefined();
+  });
+
+  test('auto-generated labels avoid duplicates by appending a number', async () => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-test-key',
+    });
+    mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'OpenRouter',
+      model: '',
+      params: {},
+    });
+    mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'OpenRouter 2',
+      model: '',
+      params: {},
+    });
+
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider();
+
+    await vm.saveDraft();
+
+    const created = mockAiConnections[mockAiConnections.length - 1];
+    expect(created?.label).toBe('OpenRouter 3');
+  });
 });
 
 describe('AiSettingsViewModel — AC-3: Key conflict prompt', () => {
+  afterEach(() => {
+    mockHasVerificationStrategy.mockReturnValue(false);
+  });
+
   test('shows conflict prompt when key differs from existing provider', async () => {
     const pid = mockConfigService.addProvider({
       registryId: 'openrouter',
@@ -317,6 +415,41 @@ describe('AiSettingsViewModel — AC-3: Key conflict prompt', () => {
       'sk-or-v1-existing-key',
     );
   });
+
+  test('separate-provider resolution survives asynchronous verification', async () => {
+    mockHasVerificationStrategy.mockReturnValue(true);
+    const verification = createDeferred<ConnectionTestResult, Error>();
+    mockVerifyConnection.mockImplementationOnce(async () => verification.promise);
+    const existingProviderId = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-existing-key',
+    });
+    mockConfigService.addAiConnection({
+      providerId: existingProviderId,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet',
+      params: {},
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openAddProvider();
+    vm.setDraftField('apiKey', 'sk-or-v1-separate-key');
+    vm.setDraftProvider('openrouter');
+    vm.resolveKeyConflict(false);
+    expect(vm.keyConflictPrompt).toBeUndefined();
+
+    verification.resolve({ ok: true, latencyMs: 42 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const separateProvider = mockProviders.find((provider) => provider.id !== existingProviderId);
+    expect(separateProvider?.credential).toBe('sk-or-v1-separate-key');
+    expect(mockConfigService.addAiConnection).toHaveBeenLastCalledWith(
+      expect.objectContaining({ providerId: separateProvider?.id }),
+    );
+  });
 });
 
 describe('AiSettingsViewModel — AC-4: Status board', () => {
@@ -330,7 +463,7 @@ describe('AiSettingsViewModel — AC-4: Status board', () => {
     }
   });
 
-  test('shows connected for text when a text connection exists', async () => {
+  test('shows not_tested for text when a text connection exists but has not been verified', async () => {
     const pid = mockConfigService.addProvider({
       registryId: 'openrouter',
       label: 'OpenRouter',
@@ -357,7 +490,7 @@ describe('AiSettingsViewModel — AC-4: Status board', () => {
 
     const textEntry = vm.statusEntries.find((e) => e.capability === 'text');
     expect(textEntry).toBeDefined();
-    expect(textEntry?.status).toBe('connected');
+    expect(textEntry?.status).toBe('not_tested');
     expect(textEntry?.modelName).toBe('anthropic/claude-sonnet');
 
     const voiceEntry = vm.statusEntries.find((e) => e.capability === 'voice');
@@ -384,15 +517,17 @@ describe('AiSettingsViewModel — AC-4: Status board', () => {
     await vm.initialize();
 
     vm.testingIds.add(connectionId);
-    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe('loading');
+    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe('testing');
 
     vm.testingIds.delete(connectionId);
     vm.testResults[connectionId] = { ok: false, latencyMs: 10, error: 'Rejected' };
-    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe('offline');
+    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe(
+      'unreachable',
+    );
 
     vm.testResults[connectionId] = { ok: true, latencyMs: 42 };
     const textEntry = vm.statusEntries.find((entry) => entry.capability === 'text');
-    expect(textEntry?.status).toBe('connected');
+    expect(textEntry?.status).toBe('reachable');
     expect(textEntry?.latencyMs).toBe(42);
     expect(textEntry?.connectionId).toBe(connectionId);
   });
@@ -540,6 +675,101 @@ describe('AiSettingsViewModel — AC-6: Voice archetypes', () => {
 
     const [call] = mockTtsService.speak.mock.calls;
     expect(call?.[0].text).toContain('The Sunken Citadel');
+  });
+});
+
+describe('AiSettingsViewModel — voice runtime completion (browser Kokoro)', () => {
+  test('voicePreviewState reflects live ttsService signals, not a fire-and-forget flag', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    expect(vm.voicePreviewState).toEqual({ status: 'idle' });
+
+    mockTtsService.isSynthesizing = true;
+    expect(vm.voicePreviewState).toEqual({ status: 'synthesizing' });
+
+    mockTtsService.isSynthesizing = false;
+    mockTtsService.isPlaying = true;
+    expect(vm.voicePreviewState).toEqual({ status: 'playing' });
+
+    // A resolved speak() promise while audio is still playing must not be
+    // reported as idle/success — the "playing" status remains until
+    // ttsService itself reports playback has ended.
+    vm.setVoiceArchetype('female-warm', 'af_heart');
+    mockTtsService.speak.mockImplementationOnce(async () => {});
+    await vm.previewVoiceArchetype('female-warm');
+    expect(mockTtsService.speak).toHaveBeenCalledTimes(1);
+    expect(vm.voicePreviewState).toEqual({ status: 'playing' });
+
+    mockTtsService.isPlaying = false;
+    expect(vm.voicePreviewState).toEqual({ status: 'idle' });
+  });
+
+  test('stopVoicePreview calls ttsService.stop() and clears any error', async () => {
+    mockTtsService.speak.mockImplementationOnce(async () => {
+      throw new Error('worker error');
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.setVoiceArchetype('female-warm', 'af_heart');
+    await vm.previewVoiceArchetype('female-warm');
+    expect(vm.voicePreviewState).toEqual({ status: 'error', error: 'worker error' });
+
+    vm.stopVoicePreview();
+
+    expect(mockTtsService.stop).toHaveBeenCalledTimes(1);
+    expect(vm.voicePreviewState).toEqual({ status: 'idle' });
+  });
+
+  test('testVoice speaks the preview line with the default voice (no archetype override)', async () => {
+    mockCampaignService.activeCampaign = undefined;
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testVoice();
+
+    expect(mockTtsService.speak).toHaveBeenCalledTimes(1);
+    const [call] = mockTtsService.speak.mock.calls;
+    expect(call?.[0].voiceId).toBeUndefined();
+    expect(call?.[0].text).toBe(voicePreviewFallbackLine);
+  });
+
+  test('testVoice surfaces a failure through voicePreviewState instead of throwing', async () => {
+    mockTtsService.speak.mockImplementationOnce(async () => {
+      throw new Error('not supported by this provider');
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testVoice();
+
+    expect(vm.voicePreviewState).toEqual({
+      status: 'error',
+      error: 'not supported by this provider',
+    });
+  });
+
+  test('voiceRuntimeStatus/voiceRuntimeError mirror the live ttsService state, distinct from download state', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    expect(vm.voiceRuntimeStatus).toBe('uninitialized');
+    expect(vm.voiceRuntimeError).toBeNull();
+
+    mockTtsService.status = 'error';
+    mockTtsService.errorMessage = 'Kokoro worker error';
+    expect(vm.voiceRuntimeStatus).toBe('error');
+    expect(vm.voiceRuntimeError).toBe('Kokoro worker error');
+  });
+
+  test('retryVoiceRuntime resets and re-initializes the TTS runtime without re-downloading', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.retryVoiceRuntime();
+
+    expect(mockTtsService.reset).toHaveBeenCalledTimes(1);
+    expect(mockTtsService.initialize).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -731,21 +961,23 @@ describe('AiSettingsViewModel — capability setup', () => {
 
     expect(vm.isEditorOpen).toBe(true);
     expect(vm.draft.capability).toBe('image');
-    expect(vm.isVoiceSetupOpen).toBe(false);
   });
 
-  test('opens the voice-specific setup flow for voice capability', () => {
+  test('opens the connection editor scoped to voice with Kokoro default', () => {
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
 
     vm.openCapabilitySetup('voice');
 
-    expect(vm.isVoiceSetupOpen).toBe(true);
-    expect(vm.isEditorOpen).toBe(false);
+    expect(vm.isEditorOpen).toBe(true);
+    expect(vm.draft.capability).toBe('voice');
+    expect(vm.draft.registryId).toBe('kokoro');
+    expect(vm.isLocalBinaryProvider).toBe(true);
+    expect(vm.needsUrl).toBe(false);
   });
 });
 
 describe('AiSettingsViewModel — model query', () => {
-  test('filters fetched models without replacing the selected model', async () => {
+  test('a typed model lands in the draft while fetched results still filter', async () => {
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
     mockFetchModelsFromProvider.mockImplementationOnce(async () => [
       { id: 'openai/gpt-4o', name: 'GPT-4o' },
@@ -756,7 +988,9 @@ describe('AiSettingsViewModel — model query', () => {
     vm.setModelQuery('claude');
 
     expect(vm.modelQuery).toBe('claude');
-    expect(vm.draft.model).toBe('');
+    // The field is a real input, not only a search box — the typed ID must be
+    // saved, not silently discarded.
+    expect(vm.draft.model).toBe('claude');
     expect(vm.modelOptions.map((model) => model.id)).toEqual(['anthropic/claude-sonnet']);
   });
 
@@ -1116,6 +1350,71 @@ describe('AiSettingsViewModel — P02: testConnection delegates to verifyConnect
     await vm.testConnection('nonexistent');
 
     expect(mockVerifyConnection).not.toHaveBeenCalled();
+  });
+});
+
+describe('AiSettingsViewModel — Kokoro connection test uses local readiness', () => {
+  const seedKokoroConnection = () => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'kokoro',
+      label: 'Kokoro (local)',
+      credential: undefined,
+      baseUrl: undefined,
+      source: 'stored',
+    });
+    return mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'voice',
+      label: 'Kokoro',
+      model: '',
+      params: {},
+    });
+  };
+
+  test('does not call verifyConnection for the bundled Kokoro binary', async () => {
+    const cid = seedKokoroConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    mockVoiceModelService.state = { status: 'ready' };
+    mockTtsService.status = 'ready';
+
+    await vm.testConnection(cid);
+
+    expect(mockVerifyConnection).not.toHaveBeenCalled();
+    expect(vm.testResults[cid]?.ok).toBe(true);
+  });
+
+  test('reports the model as not downloaded when the Kokoro model is missing', async () => {
+    const cid = seedKokoroConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    mockVoiceModelService.state = { status: 'not-downloaded' };
+
+    await vm.testConnection(cid);
+
+    expect(mockVerifyConnection).not.toHaveBeenCalled();
+    expect(vm.testResults[cid]?.ok).toBe(false);
+    expect(vm.testResults[cid]?.error).toBe('Voice model not downloaded');
+  });
+
+  test('initializes the TTS runtime when the model is ready but the runtime is not', async () => {
+    const cid = seedKokoroConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    mockVoiceModelService.state = { status: 'ready' };
+    mockTtsService.status = 'uninitialized';
+    mockTtsService.initialize.mockImplementationOnce(async () => {
+      mockTtsService.status = 'ready';
+    });
+
+    await vm.testConnection(cid);
+
+    expect(mockTtsService.reset).toHaveBeenCalled();
+    expect(mockTtsService.initialize).toHaveBeenCalled();
+    expect(vm.testResults[cid]?.ok).toBe(true);
   });
 });
 
@@ -1539,5 +1838,326 @@ describe('AiSettingsViewModel — P03: truthful status presentation', () => {
     const status = vm.connectionStatusFor(first);
     expect(status.label).toContain('unreachable');
     expect(status.label).toContain('connection refused');
+  });
+});
+
+describe('AiSettingsViewModel — the save gate verifies before it writes', () => {
+  const openNewTextDraft = async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('text');
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('apiKey', 'sk-typo');
+    return vm;
+  };
+
+  beforeEach(() => {
+    mockHasVerificationStrategy.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    mockHasVerificationStrategy.mockReturnValue(false);
+  });
+
+  test('a key that fails verification is refused, not silently accepted', async () => {
+    mockVerifyConnection.mockResolvedValueOnce({
+      ok: false,
+      latencyMs: 30,
+      error: 'HTTP 401',
+    });
+    const vm = await openNewTextDraft();
+
+    await vm.saveDraft();
+
+    expect(mockConfigService.addAiConnection).not.toHaveBeenCalled();
+    expect(vm.isSaveBlocked).toBeTrue();
+    expect(vm.draftTestResult?.error).toBe('HTTP 401');
+    // The editor stays open so the key can be corrected in place.
+    expect(vm.isEditorOpen).toBeTrue();
+  });
+
+  test('a key that verifies is written without a second probe', async () => {
+    const vm = await openNewTextDraft();
+
+    await vm.saveDraft();
+
+    expect(mockVerifyConnection).toHaveBeenCalledTimes(1);
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+    expect(vm.isSaveBlocked).toBeFalse();
+    expect(vm.isEditorOpen).toBeFalse();
+  });
+
+  test('saveDraftAnyway is the escape hatch for an endpoint we cannot reach', async () => {
+    mockVerifyConnection.mockResolvedValueOnce({ ok: false, latencyMs: 5, error: 'offline' });
+    const vm = await openNewTextDraft();
+    await vm.saveDraft();
+    expect(vm.isSaveBlocked).toBeTrue();
+
+    await vm.saveDraftAnyway();
+
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+    expect(vm.isEditorOpen).toBeFalse();
+  });
+
+  test('editing the key after a failure clears the block and the stale result', async () => {
+    mockVerifyConnection.mockResolvedValueOnce({ ok: false, latencyMs: 5, error: 'HTTP 401' });
+    const vm = await openNewTextDraft();
+    await vm.saveDraft();
+    expect(vm.isSaveBlocked).toBeTrue();
+
+    vm.setDraftField('apiKey', 'sk-corrected');
+
+    expect(vm.isSaveBlocked).toBeFalse();
+    expect(vm.draftTestResult).toBeUndefined();
+    vm.cancelEdit();
+  });
+
+  test('a provider with no verification strategy saves without a probe', async () => {
+    mockHasVerificationStrategy.mockReturnValue(false);
+    const vm = await openNewTextDraft();
+
+    await vm.saveDraft();
+
+    expect(mockVerifyConnection).not.toHaveBeenCalled();
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+  });
+
+  test('testDraftConnection probes the unsaved draft, so no save is needed first', async () => {
+    const vm = await openNewTextDraft();
+
+    await vm.testDraftConnection();
+
+    expect(mockConfigService.addAiConnection).not.toHaveBeenCalled();
+    expect(vm.draftTestResult?.ok).toBeTrue();
+    const [options] = mockVerifyConnection.mock.calls[0] ?? [];
+    expect((options as { provider: { credential: string } }).provider.credential).toBe('sk-typo');
+    vm.cancelEdit();
+  });
+});
+
+describe('AiSettingsViewModel — generation parameters on an unsaved connection', () => {
+  test('the Advanced disclosure is editable before the connection is saved', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('text');
+
+    vm.toggleGenParamsDisclosure();
+
+    // Previously undefined, which the View rendered as "save this connection
+    // first" — a display bug, since the create path already merges these.
+    expect(vm.genParamsDisplay).toBeDefined();
+    expect(vm.genParamsDisplay?.temperature).toBe(0.7);
+    vm.cancelEdit();
+  });
+
+  test('a parameter edited before the first save is written with the new connection', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('text');
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('apiKey', 'sk-key');
+    vm.toggleGenParamsDisclosure();
+    vm.setGenParamField('temperature', 0.31);
+
+    await vm.saveDraft();
+
+    const [opts] = mockConfigService.addAiConnection.mock.calls[0] ?? [];
+    expect((opts as { params: { temperature: number } }).params.temperature).toBe(0.31);
+  });
+
+  test('a non-text draft still has no generation parameters to show', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('image');
+
+    expect(vm.genParamsDisplay).toBeUndefined();
+    vm.cancelEdit();
+  });
+});
+
+describe('AiSettingsViewModel — cancelling a voice preview is not a failure', () => {
+  const originalSpeak = mockTtsService.speak;
+
+  afterEach(() => {
+    mockTtsService.speak = originalSpeak;
+  });
+
+  test('stopVoicePreview leaves the preview idle, not in error', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    // speak() rejects the way ttsService.stop() rejects an in-flight request.
+    let rejectSpeak: ((error: Error) => void) | undefined;
+    mockTtsService.speak = mock(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSpeak = reject;
+        }),
+    );
+
+    const preview = vm.testVoice();
+    vm.stopVoicePreview();
+    rejectSpeak?.(new Error('stop() called before synthesis completed'));
+    await preview;
+
+    expect(vm.voicePreviewState.status).toBe('idle');
+  });
+
+  test('a genuine synthesis failure still surfaces as an error', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    mockTtsService.speak = mock(async () => {
+      throw new Error('engine exploded');
+    });
+
+    await vm.testVoice();
+
+    expect(vm.voicePreviewState.status).toBe('error');
+  });
+});
+
+describe('AiSettingsViewModel — a failed persist must not duplicate the connection', () => {
+  beforeEach(() => {
+    mockHasVerificationStrategy.mockReturnValue(false);
+  });
+
+  test('retrying after a failed save updates the row instead of adding a second', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('text');
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('apiKey', 'sk-key');
+
+    mockConfigService.save.mockImplementationOnce(async () => {
+      throw new Error('vault write failed');
+    });
+    await vm.saveDraft();
+
+    expect(vm.saveError).toBeDefined();
+    expect(vm.isEditorOpen).toBeTrue();
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+
+    // The retry must land on the row the failed attempt already created.
+    await vm.saveDraft();
+
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+    expect(mockConfigService.updateAiConnection).toHaveBeenCalledTimes(1);
+    expect(mockAiConnections.length).toBe(1);
+  });
+});
+
+describe('AiSettingsViewModel — editing an existing connection', () => {
+  const seedTextConnection = () => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-test-key',
+    });
+    const cid = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet',
+      params: {},
+    });
+    return { pid, cid };
+  };
+
+  test('openEditConnection prefills the stored API key and model', async () => {
+    const { cid } = seedTextConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openEditConnection(cid);
+
+    expect(vm.draft.isEditing).toBe(true);
+    expect(vm.draft.apiKey).toBe('sk-or-v1-test-key');
+    expect(vm.draft.model).toBe('anthropic/claude-sonnet');
+    expect(vm.modelQuery).toBe('anthropic/claude-sonnet');
+  });
+
+  test('persists a Server URL edit to the provider account', async () => {
+    const { pid, cid } = seedTextConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openEditConnection(cid);
+    vm.setDraftField('baseUrl', 'http://localhost:11434');
+    await vm.saveDraft();
+
+    const provider = mockProviders.find((p) => p.id === pid) as { baseUrl?: string } | undefined;
+    expect(provider?.baseUrl).toBe('http://localhost:11434');
+  });
+
+  test('switching the provider dropdown repoints the connection', async () => {
+    const { pid, cid } = seedTextConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openEditConnection(cid);
+    vm.setDraftProvider('ollama');
+    await vm.saveDraft();
+
+    const conn = mockAiConnections.find((c) => c.id === cid);
+    expect(conn?.providerId).not.toBe(pid);
+    const provider = mockProviders.find((p) => p.id === conn?.providerId);
+    expect(provider?.registryId).toBe('ollama');
+  });
+});
+
+describe('AiSettingsViewModel — model chat-test', () => {
+  const seedTextConnection = (model = 'anthropic/claude-sonnet') => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-test-key',
+    });
+    return mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'Sonnet',
+      model,
+      params: {},
+    });
+  };
+
+  test('sends a "hi" chat completion to the selected model', async () => {
+    const cid = seedTextConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openEditConnection(cid);
+
+    await vm.testDraftModel();
+
+    expect(mockFetchWithCredentialPolicy).toHaveBeenCalledTimes(1);
+    const [options] = mockFetchWithCredentialPolicy.mock.calls[0] as [
+      { url: string; init: RequestInit },
+    ];
+    expect(options.url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    const body = JSON.parse(String(options.init.body)) as {
+      model: string;
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(body.model).toBe('anthropic/claude-sonnet');
+    expect(body.messages[0]).toEqual({ role: 'user', content: 'hi' });
+    expect(vm.draftModelTestResult?.ok).toBe(true);
+    expect(typeof vm.draftModelTestResult?.latencyMs).toBe('number');
+    expect(vm.isTestingDraftModel).toBe(false);
+  });
+
+  test('reports a missing model without making a request', async () => {
+    const cid = seedTextConnection('');
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openEditConnection(cid);
+
+    await vm.testDraftModel();
+
+    expect(mockFetchWithCredentialPolicy).not.toHaveBeenCalled();
+    expect(vm.draftModelTestResult).toEqual({
+      ok: false,
+      latencyMs: 0,
+      error: 'No model selected',
+    });
   });
 });

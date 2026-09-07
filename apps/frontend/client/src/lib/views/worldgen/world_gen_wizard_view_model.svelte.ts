@@ -98,7 +98,7 @@ export type WorldGenWizardViewModelInterface = BaseViewModelInterface & {
   // ── Generation ──
   generateWorld(): Promise<void>;
   retryGeneration(): Promise<void>;
-  /** Navigates to /capability to change the AI connection. */
+  /** Navigates to /setup to change the AI connection. */
   changeConnection(): Promise<void>;
   acceptWorld(): Promise<void>;
 
@@ -419,9 +419,9 @@ export class WorldGenWizardViewModel
     await this._performGeneration();
   }
 
-  /** Navigates back to capability screen to change the AI connection. */
+  /** Navigates back to setup screen to change the AI connection. */
   async changeConnection(): Promise<void> {
-    await routerService.goToRoute('capability', {
+    await routerService.goToRoute('setup', {
       queryParameters: { reason: 'generation-failed' },
       pathParameters: undefined,
     });

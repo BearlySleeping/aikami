@@ -8,7 +8,7 @@ import {
   type BaseViewModelOptions,
   routerService,
 } from '@aikami/frontend/services';
-import { readSearchParam, syncSearchParams } from '$lib/utils/url_search_params';
+import { readSearchParam } from '$lib/utils/url_search_params';
 import type { CustomAgentDefinition } from '$types';
 import {
   type AgentEditorViewModelInterface,
@@ -298,11 +298,11 @@ export class SettingsViewModel
   get aiCapabilityBadge(): string {
     const entries = this.aiSettingsViewModel.statusEntries;
     const textEntry = entries.find((e) => e.capability === 'text');
-    if (textEntry?.status === 'connected') {
+    if (textEntry?.status === 'reachable') {
       return 'AI: Connected';
     }
-    const anyConnected = entries.some((e) => e.status === 'connected');
-    if (anyConnected) {
+    const anyReachable = entries.some((e) => e.status === 'reachable');
+    if (anyReachable) {
       return 'AI: Partial';
     }
     return 'AI: Not Set Up';
@@ -311,11 +311,11 @@ export class SettingsViewModel
   get aiCapabilityBadgeColor(): string {
     const entries = this.aiSettingsViewModel.statusEntries;
     const textEntry = entries.find((e) => e.capability === 'text');
-    if (textEntry?.status === 'connected') {
+    if (textEntry?.status === 'reachable') {
       return 'badge-success';
     }
-    const anyConnected = entries.some((e) => e.status === 'connected');
-    if (anyConnected) {
+    const anyReachable = entries.some((e) => e.status === 'reachable');
+    if (anyReachable) {
       return 'badge-warning';
     }
     return 'badge-ghost';
@@ -365,7 +365,6 @@ export class SettingsViewModel
 
   setActiveSection(id: string): void {
     this.activeSectionId = id;
-    this._syncActiveTabToUrl();
   }
 
   setActiveGroup(id: SettingsGroupId): void {
@@ -373,16 +372,6 @@ export class SettingsViewModel
     const firstSection = this.allSections.find((s) => s.group === id);
     if (firstSection) {
       this.activeSectionId = firstSection.id;
-    }
-    this._syncActiveTabToUrl();
-  }
-
-  /** Mirrors the active section/group onto `?section=`/`?group=` so a refresh restores the tab. */
-  private _syncActiveTabToUrl(): void {
-    try {
-      syncSearchParams({ section: this.activeSectionId, group: this.activeGroupId });
-    } catch {
-      // location unavailable (tests) — safe to skip.
     }
   }
 

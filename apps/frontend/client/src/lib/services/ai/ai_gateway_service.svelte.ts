@@ -37,6 +37,7 @@ import {
 } from '@aikami/frontend/services';
 import type { AiCapability, AiDetectionResult, AiModeResolution, TextParams } from '@aikami/types';
 import { ttsService } from '../audio/tts_service.svelte.ts';
+import { voiceModelService } from '../audio/voice_model_service.svelte.ts';
 import { configService } from '../config/config_service.svelte.ts';
 import {
   getOllamaRuntimeEndpoints,
@@ -189,6 +190,8 @@ class AiGatewayService
               status: ttsService.status,
               serverAvailable: ttsService.isKokoroServerAvailable,
             }),
+            hasDownloadedModel: async () =>
+              (await voiceModelService.checkStatus()).status === 'ready',
           }),
       },
       onDispatch: (resolution) =>

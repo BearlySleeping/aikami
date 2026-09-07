@@ -57,7 +57,7 @@ export class GamePage {
 
   /**
    * Navigate from the start menu, through onboarding, to the game.
-   * Simulates the full cold-launch flow: / → start menu → /setup → /game.
+   * Simulates the full cold-launch flow: / → start menu → /new-campaign → /game.
    */
   async gotoColdLaunch(): Promise<void> {
     // Start at root
@@ -66,11 +66,11 @@ export class GamePage {
     // Click the real "New Adventure" start button via the POM method
     await this.startNewAdventure();
 
-    // Wait for navigation to /setup or /game
-    await this.page.waitForURL(/\/(setup|game)/, { timeout: 15_000 });
+    // Wait for navigation to /new-campaign or /game
+    await this.page.waitForURL(/\/(new-campaign|game)/, { timeout: 15_000 });
 
-    // If we land on /setup, go through onboarding quickly
-    if (this.page.url().includes('/setup')) {
+    // If we land on /new-campaign, go through onboarding quickly
+    if (this.page.url().includes('/new-campaign')) {
       await this._completeOnboarding();
     }
 
@@ -474,15 +474,15 @@ export class GamePage {
     await expect(capabilityMsg.first()).toBeVisible({ timeout: 10_000 });
   }
 
-  /** Assert the start menu does NOT proceed to /setup (AI capability gate active). */
+  /** Assert the start menu does NOT proceed to /new-campaign or /game (AI capability gate active). */
   async expectCannotStartNewGame(): Promise<void> {
     const { expect } = await import('@playwright/test');
     const startButton = this.page.getByRole('button', { name: /new game|start|play/i });
     if (await startButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await startButton.click();
       await this.page.waitForTimeout(2000);
-      // Should still be on the same page (not navigated to /setup or /game)
-      await expect(this.page).not.toHaveURL(/\/(setup|game)/, { timeout: 5000 });
+      // Should still be on the same page (not navigated to /new-campaign or /game)
+      await expect(this.page).not.toHaveURL(/\/(new-campaign|game)/, { timeout: 5000 });
     }
   }
 
