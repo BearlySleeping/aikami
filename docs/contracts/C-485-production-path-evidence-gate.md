@@ -19,7 +19,7 @@ created_at: "2026-09-07T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — every contract after this one inherits the bar it sets |
 | **Dependencies** | None |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — contract templates, the calibration skill, and a baseline debt inventory |
 | **Contract version** | 2.0.0 |
