@@ -53,7 +53,9 @@ before running them. Do NOT push or create the PR without that authorization.
 
 🔴 Go through `contract_stage` action `validate`, not a raw
 `git commit --no-verify && git push`. It is the only checked commit path, and
-`gh_pr create` refuses to publish a branch whose HEAD has no green verdict. Once the user authorizes, push and create the PR as
+`gh_pr create` refuses to publish a branch whose HEAD has no verdict at all,
+a stale verdict, uncommitted changes, or unpushed commits. A RED verdict is
+not a refusal — once the user authorizes, push and create the PR as
 described.
 
 ### Still off-limits

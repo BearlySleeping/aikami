@@ -102,18 +102,32 @@ export const runCandidateTest = (options: {
       },
     );
 
-    let settled = false;
+    let decided = false;
+    let finalOutcome: AcceptanceOutcome | undefined;
+    let resolved = false;
     let stderr = '';
-    const finish = (outcome: AcceptanceOutcome): void => {
-      if (settled) {
+    const resolveOnce = (outcome: AcceptanceOutcome): void => {
+      if (resolved) {
         return;
       }
-      settled = true;
+      resolved = true;
+      resolve(outcome);
+    };
+    const finish = (outcome: AcceptanceOutcome): void => {
+      if (decided) {
+        return;
+      }
+      decided = true;
+      finalOutcome = outcome;
       clearTimeout(timeout);
       if (child.exitCode === null && child.signalCode === null) {
+        // Still running: kill and defer settlement until 'close'. On Windows
+        // the sandbox directory is the child's cwd, so the caller's cleanup
+        // (rm -rf) fails with EBUSY until the process is fully reaped.
         child.kill('SIGKILL');
+        return;
       }
-      resolve(outcome);
+      resolveOnce(outcome);
     };
 
     child.stderr?.on('data', (chunk: Buffer) => {
@@ -126,16 +140,24 @@ export const runCandidateTest = (options: {
       }
     });
     child.once('error', (error) => {
-      finish({ accepted: false, diagnostics: `Candidate subprocess failed: ${error.message}` });
+      // Spawn failure: no process ever held the directory, settle directly.
+      resolveOnce({
+        accepted: false,
+        diagnostics: `Candidate subprocess failed: ${error.message}`,
+      });
     });
     child.once('close', (code, signal) => {
-      if (!settled) {
-        const detail = stderr.trim();
-        finish({
-          accepted: false,
-          diagnostics: `Candidate subprocess exited before returning a result (code ${String(code)}, signal ${String(signal)}).${detail ? ` stderr: ${detail}` : ''}`,
-        });
+      if (decided) {
+        resolveOnce(
+          finalOutcome ?? { accepted: false, diagnostics: 'Candidate subprocess was terminated.' },
+        );
+        return;
       }
+      const detail = stderr.trim();
+      finish({
+        accepted: false,
+        diagnostics: `Candidate subprocess exited before returning a result (code ${String(code)}, signal ${String(signal)}).${detail ? ` stderr: ${detail}` : ''}`,
+      });
     });
 
     const timeout = setTimeout(() => {

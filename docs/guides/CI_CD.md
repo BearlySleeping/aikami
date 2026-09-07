@@ -96,6 +96,79 @@ Key jobs, in order:
 
 ---
 
+## Cutting a release
+
+Two things are deliberately kept apart:
+
+| | Trigger | What ships | How often |
+| --- | --- | --- | --- |
+| **Web deploy** | push to `staging` / `production` | client, hub, site, docs, D1, worker | every push — spam it |
+| **Desktop release** | `bun run release` | Tauri bundles + `latest.json` | when you decide |
+
+`resolve-plan` subtracts `client-tauri` from every push-triggered run, so
+merging into `staging` never starts a 25-minute desktop build. A desktop build
+happens only when a GitHub Release is *published*, which is what
+`bun run release` does.
+
+```bash
+# on staging — cut or refresh the rolling staging release
+bun run release                # advances the rolling staging version
+bun run release --minor        # start a new version instead
+bun run release --dry-run      # print every git/gh mutation, perform none
+
+# on production — promote it
+bun run release --promote
+```
+
+### The model
+
+```text
+main ──spam──┐
+             ├─► staging ──push──► web deploys (automatic)
+             │            └─────► bun run release
+             │                      → rolling `staging` prerelease
+             │                      → desktop built with mode=staging
+             └─► production ─push──► web deploys (automatic)
+                           └─────► bun run release --promote
+                                     → v0.2.0, marked Latest
+                                     → desktop rebuilt with mode=production
+```
+
+**One rolling staging release, not one per push.** The repo is public; a
+`v0.2.0-rc.7` prerelease per staging cut would bury the real releases. There is
+exactly one entry titled *Staging (rolling)*, republished each cut, so the
+releases page reads `v0.2.0` / `Staging` / `v0.1.0`. Being a prerelease, it is
+never GitHub's "Latest" and never appears at `/releases/latest`.
+
+**The version is committed, not derived from the tag.** `bun run release`
+writes it into `Cargo.toml` and `tauri.conf.json` and commits — the rolling tag
+is the literal string `staging`, so there is no version to derive from it. A
+semver tag still wins when there is one, so every historical `v*` release
+resolves exactly as before. See `scripts/src/lib/release/version.ts`.
+
+**Staging bundles embed a plain semver** (`0.2.0`, never `0.2.0-rc.7`), so the
+version a tester reports is exact. Every repeated staging cut advances the
+patch version, ensuring clients polling the rolling endpoint see an upgrade;
+`--minor` and `--major` select a larger release line explicitly.
+
+**Promote rebuilds; it does not copy the staging bundles.** They embed staging
+`PUBLIC_` vars and the staging updater endpoint, so shipping them as production
+would point users at staging. The reuse path in `ci_planning.ts` is per-mode
+for exactly this reason.
+
+### Update channels
+
+Set at build time via `--config`, never listed together in `tauri.conf.json` —
+Tauri tries endpoints in order, so listing both would have every stable install
+poll staging too.
+
+| Mode | Endpoint |
+| --- | --- |
+| production | `/releases/latest/download/latest.json` (excludes prereleases) |
+| staging | `/releases/download/staging/latest.json` (the rolling tag is the stable URL) |
+
+---
+
 ## Deploying by hand
 
 ```bash

@@ -198,6 +198,7 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 1.1.0 | 2026-09-02 | Implementation: budget enforcement, placeholder wiring, drop logging | C-457 pipeline |
+| 2.0.0 | 2026-09-07 | C-485 audit: AC-1 and AC-3 lacked a production path (N/A). Status preserved, ACs unchanged. | C-485 |
 
 ## Promotion Lifecycle
 

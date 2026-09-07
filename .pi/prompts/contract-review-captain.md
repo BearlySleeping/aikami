@@ -93,7 +93,7 @@ part of it.
 ## Universal Rules
 
 - **Create the PR when your profile's flow calls for it** — never skip that step, and never call `gh_pr create` again once one already exists.
-- 🔴 **Every file you touch must go through `contract_stage` action `validate` before it is pushed.** It is the only checked commit path (all others pass `--no-verify`), and `gh_pr create` is blocked until its verdict is green for the exact commit on the remote. Re-running one `moon run <task>` you happen to know about is not a substitute — that is precisely how C-484 put a `client:format` failure on CI.
+- 🔴 **Every file you touch must go through `contract_stage` action `validate` before it is pushed.** It is the only checked commit path (all others pass `--no-verify`), and `gh_pr create` is blocked until a verdict exists for the exact commit on the remote. A RED verdict is a warning, not a refusal — you may publish it with the user's explicit permission (YOLO proceeds without asking) so CodeRabbit can fix the failures. Re-running one `moon run <task>` you happen to know about is not a substitute — that is precisely how C-484 put a `client:format` failure on CI.
 - **Verify before claiming** — use `gh pr view --json reviews`, don't guess.
 - **Do not re-run tests** if the verifier already passed. Trust the verifier's evidence. This does NOT excuse you from re-validating your own edits — tests are the verifier's evidence, lint/format/typecheck on code you wrote after it are not.
 - **If you modify source files yourself**, say so plainly in your decision summary — whoever reads it next needs to know the code changed outside the normal implementer/verifier path.

@@ -39,6 +39,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { c, log, ok, parseCliArgs, run, warn } from '../cli_utils';
 import { initScriptsEnv } from '../env/scripts_env';
+import { resolveReleaseVersion } from '../release/version';
 import { computeAppChecksum, generateVersionString, getTauriCache } from './cache';
 import { APP_CONFIG } from './deployment_config';
 
@@ -211,11 +212,17 @@ async function decideLeg(
   }
   // Different release than the one that built these artifacts. The checksum
   // matching only proves the SOURCE didn't change — the target version still
-  // might have (ci_run.ts derives the embedded version from the release tag,
-  // not from checksummed source), so reusing bytes built for a different
-  // version would ship a binary whose own version string disagrees with the
-  // latest.json this release publishes. Only reuse when they'd match.
-  const targetVersion = releaseTag.replace(/^v/, '');
+  // might have (it comes from the release tag or the committed version, see
+  // release/version.ts, neither of which the checksum covers), so reusing
+  // bytes built for a different version would ship a binary whose own version
+  // string disagrees with the latest.json this release publishes. Only reuse
+  // when they'd match.
+  //
+  // Note this cache is per-MODE (getTauriCache(mode)), so a staging build is
+  // never a reuse candidate for a production release — which is correct:
+  // staging bundles embed staging PUBLIC_ vars and the staging updater
+  // endpoint, and shipping those as production would point users at staging.
+  const targetVersion = resolveReleaseVersion(releaseTag, ROOT_DIR);
   if (cached.version !== targetVersion) {
     log(
       `  ${leg.platform}: unchanged checksum but version changed (${cached.version} → ${targetVersion}) → build`,

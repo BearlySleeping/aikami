@@ -163,7 +163,7 @@ concurrency:
   # concurrency-evaluation time. release/workflow_dispatch match
   # resolve-plan's own logic (production default, or the dispatch input);
   # push derives it from the branch name, same as resolve-plan does.
-  group: deploy-${{ github.event.inputs.mode || (github.event_name == 'push' && github.ref_name == 'staging' && 'staging') || 'production' }}-${{ github.event_name == 'push' && 'web' || 'release' }}
+  group: deploy-${{ github.event.inputs.mode || (github.event_name == 'push' && github.ref_name == 'staging' && 'staging') || (github.event_name == 'release' && github.event.release.prerelease && 'staging') || 'production' }}-${{ github.event_name == 'push' && 'web' || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
 permissions:
@@ -220,11 +220,22 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           INPUT_MODE: ${{ github.event.inputs.mode }}
+          IS_PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             MODE="$INPUT_MODE"
           elif [ "$EVENT_NAME" = "release" ]; then
-            MODE="production"
+            # A prerelease IS the staging cut (the rolling `staging` release
+            # published by `bun run release`). Without this branch every
+            # release resolved to production, so publishing a staging
+            # prerelease would build a desktop bundle carrying production
+            # secrets and the production updater endpoint, and ship it to
+            # testers as "staging".
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              MODE="staging"
+            else
+              MODE="production"
+            fi
           elif [ "$REF_NAME" = "production" ] || [ "$REF_NAME" = "staging" ]; then
             MODE="$REF_NAME"
           else

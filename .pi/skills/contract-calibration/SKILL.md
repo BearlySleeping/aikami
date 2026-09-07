@@ -106,7 +106,7 @@ carry the value are:
 | **Watch Points** | The traps. This is the single highest-value section |
 | **Migration & Rollback** | Writing it is what *surfaces* data-compat traps you would otherwise ship |
 | **Scope Boundaries → Out of Scope** | Stops scope creep and "helpful" adjacent refactors |
-| **Acceptance Criteria** | Each must be independently verifiable — that is the real constraint |
+| **Acceptance Criteria** | Each must be independently verifiable — that is the real constraint. A unit test alone cannot satisfy an AC for a player-facing capability; every contract needs at least one AC with a resolvable production route, named entry point, or declared tooling command (the `production-path` lint rule enforces this at `approved`). |
 | **Problem & Baseline Evidence** | Concrete file:line and command output, so the implementer can confirm the premise still holds |
 
 Sections to cut hard when the tier is thin: Overview, Design Reference,

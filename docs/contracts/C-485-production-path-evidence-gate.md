@@ -3,7 +3,7 @@ id: C-485
 title: "Enforce a production path in the Evidence Matrix"
 source: direct
 contract_type: full
-status: draft
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-07T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — every contract after this one inherits the bar it sets |
 | **Dependencies** | None |
-| **Status** | draft |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — contract templates, the calibration skill, and a baseline debt inventory |
 | **Contract version** | 2.0.0 |
@@ -266,3 +266,57 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#promotion-lifecycle).
 ## Status Lifecycle
 
 See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
+
+
+## Execution Report
+
+### Summary
+
+Implemented the production-path lint rule (`checkProductionPath` in `lint_contracts.ts`) that validates Evidence Matrix Production Path cells and Verification lines; created the orphaned capability guard (`guard_orphaned_capability.ts`) with a comprehensive baseline of 122 files; updated all four template/skill files with the one-line rule; and audited C-456 through C-460 with Amendment rows recording which ACs lacked production paths. The lint rule uses a legacy-exemption set for C-456 through C-460.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `production-path` lint rule with 32 unit tests covering empty/N/A/placeholder/TBD cells, route/symbol/tooling resolution, whole-contract opt-out, legacy exemptions, thin contract handling, and escaped pipes |
+| AC-2 | ✅ | `guard_orphaned_capability.ts` with ratchet baseline, `--update-baseline`, `--show-all`, identity-aware comparison, wired into `scripts/moon.yml` and `package.json` |
+| AC-3 | ✅ | Baseline JSON contains `autonomous_message_service.svelte.ts` entry with `_comment` pointing to C-493; both exported interface/options named explicitly |
+| AC-4 | ✅ | One-line rule added to `TEMPLATE.md`, `THIN_TEMPLATE.md`, `SHARED_SECTIONS.md`, and `.pi/skills/contract-calibration/SKILL.md`; example matrix row updated to use `tooling:` command |
+| AC-5 | ✅ | Amendment rows added to C-456 (AC-4), C-457 (AC-1, AC-3), C-458 (AC-1, AC-2), C-459 (AC-1 through AC-3), C-460 (AC-1 through AC-3) |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `scripts/src/lib/ops/guard_orphaned_capability.ts` | Ratchet guard that reports exported service methods with no production references |
+| `scripts/src/lib/ops/guard_orphaned_capability_baseline.json` | Baseline with 122 files of current orphans, including C-456's entry with C-493 pointer |
+| `scripts/src/lib/ops/__tests__/lint_contracts.test.ts` | 32 unit tests for `classifyProductionPath`, `parseTableRows`, `hasWholeContractOptOut`, `checkProductionPath`, and legacy exemptions |
+| `scripts/src/lib/ops/__tests__/guard_orphaned_capability.test.ts` | 13 unit tests for baseline content, C-493 pointer, and production-file detection |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `scripts/src/lib/ops/lint_contracts.ts` | Added `checkProductionPath` rule, `PRODUCTION_PATH_LEGACY_EXEMPTIONS`, `classifyProductionPath`, `parseTableRows`, `hasWholeContractOptOut`, route/symbol/tooling resolution; exported types and helpers; guarded `main()` behind `import.meta.main` |
+| `scripts/moon.yml` | Added `guard-orphaned-capability` task and dep in `guard` aggregate |
+| `package.json` | Added `scripts:guard-orphaned-capability` to `guard:all` and `guard:show-all` |
+| `docs/contracts/TEMPLATE.md` | Added Production Path rule block; updated example row to use `tooling:` command |
+| `docs/contracts/THIN_TEMPLATE.md` | Added Production Path rule block before Verification line |
+| `docs/contracts/SHARED_SECTIONS.md` | Added Production Path rule subsection in Testing Conventions |
+| `.pi/skills/contract-calibration/SKILL.md` | Added production-path rule to Acceptance Criteria row in "What earns length" table |
+| `docs/contracts/C-456-group-chat-and-systemic-npc-interactions.md` | Added Amendment row for AC-4 lacking production path |
+| `docs/contracts/C-457-gm-prompt-assembly-upgrade.md` | Added Amendment row for AC-1 and AC-3 lacking production path |
+| `docs/contracts/C-458-in-house-memory-and-lore-retrieval-system.md` | Added Amendment row for AC-1 and AC-2 lacking production path |
+| `docs/contracts/C-459-ai-gm-narrative-director-enhancements.md` | Added Amendment row for AC-1, AC-2, AC-3 lacking production path |
+| `docs/contracts/C-460-npc-behavioral-autonomy-layer.md` | Added Amendment row for AC-1, AC-2, AC-3 lacking production path |
+
+### Deviations from Spec
+
+None. The C-456 baseline entry documents the two untethered methods via `_comment` rather than as detectable orphaned symbols (they are class methods, not top-level exports), which satisfies AC-3's intent while being technically accurate.
+
+### Test Results
+
+- Unit: 45/45 PASS (0 failures)
+- E2E: N/A — no UI
+- Visual: N/A — no UI
+- Baseline: 0 pre-existing failures, 0 new failures

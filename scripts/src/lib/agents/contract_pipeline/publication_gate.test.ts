@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   evaluatePublicationGate,
   formatPublicationBlocks,
+  formatPublicationWarning,
   type GitReader,
 } from './publication_gate.ts';
 import type { RunManifest } from './types.ts';
@@ -44,7 +45,7 @@ describe('evaluatePublicationGate', () => {
     expect(codes(result)).toContain('stale_validation');
   });
 
-  it('blocks when validation is red at HEAD', () => {
+  it('warns — but does not block — when validation is red at HEAD', () => {
     const result = evaluatePublicationGate({
       git: gitReader(),
       manifest: manifestWith({
@@ -54,7 +55,9 @@ describe('evaluatePublicationGate', () => {
         revision: HEAD,
       }),
     });
-    expect(codes(result)).toEqual(['failed_validation']);
+    expect(result.ok).toBe(true);
+    expect(codes(result)).toEqual([]);
+    expect(result.warnings.map((w) => w.code)).toEqual(['failed_validation']);
   });
 
   it('blocks when no verdict was ever recorded', () => {
@@ -158,5 +161,20 @@ describe('evaluatePublicationGate', () => {
     expect(text).toContain('stale_validation');
     expect(text).toContain('unpushed_commits');
     expect(text).toContain('contract_stage');
+  });
+
+  it('renders a standalone warning for a red verdict without hard blocks', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        ok: false,
+        output: 'client:format',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+    });
+    const warning = formatPublicationWarning(result);
+    expect(warning).toContain('failed_validation');
+    expect(warning).toContain('non-green validation');
   });
 });

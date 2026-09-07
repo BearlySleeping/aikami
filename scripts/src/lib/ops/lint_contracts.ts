@@ -19,21 +19,23 @@
  */
 
 import { execSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ── Types ──────────────────────────────────────────────────
 
 type Severity = 'error' | 'warning';
 
-type LintIssue = {
+/** A single contract-lint diagnostic with its source file and rule identity. */
+export type LintIssue = {
   file: string;
   severity: Severity;
   rule: string;
   message: string;
 };
 
-type ContractInfo = {
+/** Parsed contract metadata used by status-aware lint checks. */
+export type ContractInfo = {
   filename: string;
   id: string;
   content: string;
@@ -74,6 +76,514 @@ const APPROVED_OR_LATER = new Set([
 
 // Sections that thin contracts omit — skip structural-completeness checks for these
 const THIN_SKIP_CHECKS = new Set(['missing-evidence-matrix', 'open-questions']);
+
+// ── Production Path ─────────────────────────────────────────────
+// Contracts approved before C-485 lands. These are exempt from the
+// production-path rule but retain their audit-only Amendments rows.
+// C-456 through C-460 must be present in this set.
+// See C-485 AC-5 for the audit requirement.
+export const PRODUCTION_PATH_LEGACY_EXEMPTIONS = new Set([
+  'C-456',
+  'C-457',
+  'C-458',
+  'C-459',
+  'C-460',
+]);
+
+// ── Utility: resolve a product reference ────────────────────────
+// Routes (/game/..., /settings/...) must exist as a SvelteKit route.
+// file.ts#exportedSymbol must resolve to an existing production file.
+// tooling: `<command>` must match a checked-in package.json script or Moon task.
+
+/** Check if a route path has a corresponding SvelteKit route file. */
+const routeExists = (route: string): boolean => {
+  const clientRouteDir = join(REPO_ROOT, 'apps/frontend/client/src/routes');
+  if (!existsSync(clientRouteDir)) {
+    return false;
+  }
+  const routeToken = route.trim().split(/\s+/, 1)[0] ?? '';
+  const parts = routeToken.replace(/^\//, '').split('/').filter(Boolean);
+
+  const resolvesFrom = (currentDir: string, partIndex: number): boolean => {
+    if (partIndex === parts.length) {
+      return readdirSync(currentDir).some((entry) =>
+        /^\+(?:page|layout)\.(?:svelte|ts|js)$/.test(entry),
+      );
+    }
+
+    const part = parts[partIndex] ?? '';
+    const directories = readdirSync(currentDir).filter((entry) => {
+      const path = join(currentDir, entry);
+      return existsSync(path) && statSync(path).isDirectory();
+    });
+    const exact = directories.filter((entry) => entry === part);
+    const groups = directories.filter((entry) => /^\([^)]+\)$/.test(entry));
+    const dynamic = directories.filter((entry) => /^\[{1,2}[^\]]+\]{1,2}$/.test(entry));
+
+    for (const entry of exact) {
+      if (resolvesFrom(join(currentDir, entry), partIndex + 1)) {
+        return true;
+      }
+    }
+    for (const entry of groups) {
+      if (resolvesFrom(join(currentDir, entry), partIndex)) {
+        return true;
+      }
+    }
+    for (const entry of dynamic) {
+      if (resolvesFrom(join(currentDir, entry), partIndex + 1)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  return resolvesFrom(clientRouteDir, 0);
+};
+
+/** Check if a file.ts#exportedSymbol reference exists. */
+const symbolExists = (ref: string): boolean => {
+  const hashIdx = ref.lastIndexOf('#');
+  if (hashIdx === -1) {
+    return false;
+  }
+  const filePath = ref.slice(0, hashIdx);
+  const symbolName = ref.slice(hashIdx + 1);
+  if (!filePath || !symbolName) {
+    return false;
+  }
+  const fullPath = join(REPO_ROOT, filePath);
+  if (!existsSync(fullPath)) {
+    return false;
+  }
+  try {
+    const content = readFileSync(fullPath, 'utf-8');
+    if (symbolName === 'default') {
+      return /export\s+default\s+/.test(content);
+    }
+    // Match direct declarations and explicit named export lists in this file.
+    const exportRe = new RegExp(
+      `export\\s+(?:default\\s+)?(?:async\\s+)?(?:const|function|class|type|interface|enum|let|var)\\s+${escapeRegex(symbolName)}\\b`,
+    );
+    if (exportRe.test(content)) {
+      return true;
+    }
+    const namedExportRe = new RegExp(
+      `export\\s+\\{[^}]*(?:\\b${escapeRegex(symbolName)}\\b(?:\\s+as\\s+\\w+)?|\\b\\w+\\s+as\\s+${escapeRegex(symbolName)}\\b)[^}]*\\}`,
+    );
+    return namedExportRe.test(content);
+  } catch {
+    return false;
+  }
+};
+
+const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Check if a tooling command reference resolves. */
+const toolingCommandExists = (command: string): boolean => {
+  const normalized = command.trim();
+  const bunMatch = normalized.match(/^bun\s+run\s+(?:(?:--cwd(?:=|\s+)\S+)\s+)?([^\s]+)/);
+  if (bunMatch) {
+    const scriptName = bunMatch[1] ?? '';
+    const cwdMatch = normalized.match(/^bun\s+run\s+--cwd(?:=|\s+)(\S+)/);
+    const packagePath = join(REPO_ROOT, cwdMatch?.[1] ?? '', 'package.json');
+    try {
+      const packageJson = JSON.parse(readFileSync(packagePath, 'utf-8')) as {
+        scripts?: Record<string, string>;
+      };
+      if (scriptName in (packageJson.scripts ?? {})) {
+        return true;
+      }
+    } catch {
+      // Continue to checked-in Moon commands.
+    }
+  }
+
+  const moonMatch = normalized.match(/^(?:bun\s+)?moon\s+run\s+(?:([\w-]+):)?([\w-]+)/);
+  const projectId = moonMatch?.[1];
+  const taskName = moonMatch?.[2];
+  const workspaceConfig = readFileSync(join(REPO_ROOT, '.moon/workspace.yml'), 'utf-8');
+  const projectPaths = new Map<string, string>();
+  for (const match of workspaceConfig.matchAll(/^\s{2}([\w-]+):\s*"([^"]+)"\s*$/gm)) {
+    if (match[1] && match[2]) {
+      projectPaths.set(match[1], match[2]);
+    }
+  }
+  if (projectId && !projectPaths.has(projectId)) {
+    return false;
+  }
+  const moonConfigPaths = [join(REPO_ROOT, '.moon/tasks/all.yml')];
+  if (!projectId || projectId === 'scripts') {
+    moonConfigPaths.push(join(REPO_ROOT, '.moon/tasks/scripts.yml'));
+  }
+  const selectedProjects = projectId ? [projectPaths.get(projectId)] : [...projectPaths.values()];
+  for (const projectPath of selectedProjects) {
+    if (projectPath) {
+      moonConfigPaths.push(join(REPO_ROOT, projectPath, 'moon.yml'));
+    }
+  }
+  for (const moonConfigPath of moonConfigPaths) {
+    try {
+      const moonConfig = readFileSync(moonConfigPath, 'utf-8');
+      const commandLineRe = new RegExp(
+        `^\\s+(?:command|script):\\s*['"]${escapeRegex(normalized)}['"]\\s*$`,
+        'm',
+      );
+      if (
+        (taskName && new RegExp(`^  ${escapeRegex(taskName)}:`, 'm').test(moonConfig)) ||
+        commandLineRe.test(moonConfig)
+      ) {
+        return true;
+      }
+    } catch {
+      // Continue through the remaining task configuration files.
+    }
+  }
+  return false;
+};
+
+// ── Evidence Matrix row parser ──────────────────────────────────
+// Parses a markdown table into rows of cells.
+// Handles escaped pipes (\\|) inside cells.
+
+/** Parses Evidence Matrix data rows while preserving empty cells and escaped pipes. */
+export const parseTableRows = (tableText: string): string[][] => {
+  const lines = tableText.split('\n').filter((l) => l.trim().startsWith('|'));
+  if (lines.length < 3) {
+    return []; // Need header + separator + at least one data row
+  }
+  // Skip header (line 0) and separator (line 1)
+  const dataRows = lines.slice(2);
+  return dataRows
+    .map((line) => {
+      // Split on pipes not preceded by backslash, skip leading/trailing empty cells
+      const rawCells: string[] = [];
+      let current = '';
+      const escaped = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '\\' && i + 1 < line.length && line[i + 1] === '|') {
+          current += '|';
+          i++; // skip the |
+          continue;
+        }
+        if (ch === '|' && !escaped) {
+          rawCells.push(current);
+          current = '';
+          continue;
+        }
+        current += ch;
+      }
+      rawCells.push(current);
+      // Strip leading empty cell (from the opening |) and trailing empty cell (from closing |)
+      const cells = rawCells
+        .slice(1, -1) // remove leading and trailing empty cells from the outer pipes
+        .map((c) => c.trim());
+      return cells;
+    })
+    .filter((cells) => cells.length >= 4); // Need at least AC, Test Level, Required Artifact, Production Path
+};
+
+const leadingReferenceToken = (cell: string): string => {
+  const trimmed = cell.trim();
+  const codeSpan = trimmed.match(/^`([^`]+)`/);
+  return codeSpan?.[1] ?? trimmed.split(/\s+/, 1)[0] ?? '';
+};
+
+/** Classify a single Production Path cell value \u2014 format check only, no filesystem resolution.
+ * Returns null if the format is valid, or an error message for invalid/placeholder cells.
+ * Resolution (route/file/symbol existence) is checked separately in checkProductionPath. */
+export const classifyProductionPath = (cell: string): string | null => {
+  const trimmed = cell.trim();
+  // Empty cell
+  if (!trimmed) {
+    return 'Empty Production Path cell';
+  }
+  // Bare N/A
+  if (/^N\/A\s*$/i.test(trimmed)) {
+    return 'Bare N/A without reason \u2014 use N/A \u2014 <reason>';
+  }
+  // Template placeholder: {N/A | /game/...}
+  if (/^\{[^}]+\}$/.test(trimmed)) {
+    return 'Template placeholder \u2014 fill in a real production path';
+  }
+  // TBD marker
+  if (/\bTBD\b/i.test(trimmed)) {
+    return 'TBD \u2014 fill in a real production path';
+  }
+  // Whitespace-only or just dashes
+  if (/^[\s\u2014-]+$/.test(trimmed)) {
+    return 'Invalid Production Path \u2014 must be a resolvable reference';
+  }
+  // N/A \u2014 <reason> \u2014 only valid as whole-contract opt-out in Metadata, not at row level
+  if (/^N\/A\s*[\u2014-]\s*\S+/i.test(trimmed)) {
+    return 'Row-level N/A \u2014 <reason> is not accepted; use Metadata-level opt-out instead';
+  }
+  // Valid format: tooling: `<command>`
+  if (/^tooling:\s*`/.test(trimmed)) {
+    return null;
+  }
+  const referenceToken = leadingReferenceToken(trimmed);
+  // Valid format: route reference starting with /
+  if (/^\/(?:\w|$)/.test(referenceToken)) {
+    return null;
+  }
+  // Valid format: file.ts#exportedSymbol
+  if (/\.[jt]sx?#\w+/.test(referenceToken)) {
+    return null;
+  }
+  // Valid format: Named component/ViewModel reference
+  if (/^[A-Z]\w+/.test(referenceToken)) {
+    return null;
+  }
+  // Unknown format \u2014 treat as unresolvable
+  return `Unresolvable Production Path: ${trimmed}`;
+};
+
+/** Returns whether Metadata declares a reasoned whole-contract production-surface opt-out. */
+export const hasWholeContractOptOut = (info: ContractInfo): boolean => {
+  // Match: | **Production Surface** | none — <reason> |
+  // Where <reason> is non-empty (at least one non-space, non-pipe char)
+  const optOutRe = /\|\s*\*\*Production Surface\*\*\s*\|\s*none\s*[\u2014-]\s+[^|\s][^|]*\s*\|/i;
+  return optOutRe.test(info.content);
+};
+
+let namedProductionSourcesCache: Set<string> | undefined;
+
+const namedProductionSources = (): Set<string> => {
+  if (namedProductionSourcesCache) {
+    return namedProductionSourcesCache;
+  }
+
+  const sourceRoots = [
+    join(REPO_ROOT, 'apps/frontend/client/src'),
+    join(REPO_ROOT, 'apps/frontend/hub/src'),
+    join(REPO_ROOT, 'packages/frontend'),
+  ];
+  const toPascalCase = (value: string): string =>
+    value
+      .split(/[^A-Za-z0-9]+/)
+      .filter(Boolean)
+      .map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
+      .join('');
+
+  const names = new Set<string>();
+  const walk = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (
+        entry.name.startsWith('.') ||
+        entry.name === 'node_modules' ||
+        entry.name === '__tests__'
+      ) {
+        continue;
+      }
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (
+        !entry.isFile() ||
+        (!entry.name.endsWith('.svelte') && !entry.name.endsWith('.svelte.ts'))
+      ) {
+        continue;
+      }
+      const stem = entry.name.replace(/\.svelte(?:\.ts)?$/, '');
+      names.add(toPascalCase(stem));
+    }
+  };
+
+  for (const root of sourceRoots) {
+    if (existsSync(root)) {
+      walk(root);
+    }
+  }
+  namedProductionSourcesCache = names;
+  return names;
+};
+
+const namedProductionSourceExists = (name: string): boolean => namedProductionSources().has(name);
+
+const resolveProductionReference = (reference: string): boolean => {
+  const trimmed = reference.trim();
+  const toolingMatch = trimmed.match(/^tooling:\s*`(.+?)`/);
+  if (toolingMatch) {
+    return toolingCommandExists(toolingMatch[1] ?? '');
+  }
+
+  const token = leadingReferenceToken(trimmed);
+  if (/^\/(?:\w|$)/.test(token)) {
+    return routeExists(token);
+  }
+  if (/\.[jt]sx?#\w+$/.test(token)) {
+    return symbolExists(token);
+  }
+  if (/^[A-Z]\w+$/.test(token)) {
+    return namedProductionSourceExists(token);
+  }
+  return false;
+};
+
+const productionReferencesIn = (text: string): string[] => {
+  const references: string[] = [];
+  const toolingMatch = text.match(/tooling:\s*`.+?`/);
+  if (toolingMatch) {
+    references.push(toolingMatch[0]);
+  }
+  const fileMatch = text.match(/[\w./-]+\.[jt]sx?#\w+/);
+  if (fileMatch) {
+    references.push(fileMatch[0]);
+  }
+  const routeMatch = text.match(/(?:^|\s)(\/\w[\w./[\]-]*)/);
+  if (routeMatch?.[1]) {
+    references.push(routeMatch[1]);
+  }
+  for (const match of text.matchAll(/\b[A-Z]\w+\b/g)) {
+    if (match[0].startsWith('AC')) {
+      continue;
+    }
+    references.push(match[0]);
+  }
+  return [...new Set(references)];
+};
+
+/** Validates that an approved v2 contract names a resolvable production surface. */
+export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
+  if (info.version !== 2 || !APPROVED_OR_LATER.has(info.status)) {
+    return [];
+  }
+
+  // Legacy exemption
+  if (PRODUCTION_PATH_LEGACY_EXEMPTIONS.has(info.id.toUpperCase())) {
+    return [];
+  }
+
+  // Whole-contract opt-out
+  if (hasWholeContractOptOut(info)) {
+    return [];
+  }
+
+  const issues: LintIssue[] = [];
+
+  if (info.contractType === 'thin') {
+    // For thin contracts, check the Verification line of each AC
+    const acSections = info.content.split(/^### /m).filter((s) => /^AC-\d+:/i.test(s));
+    let hasValidPath = false;
+    const missingAcs: string[] = [];
+    for (const section of acSections) {
+      const acIdMatch = section.match(/^(AC-\d+)/i);
+      const acId = acIdMatch?.[1] ?? 'unknown';
+      // Check for **Verification**: line
+      const verMatch = section.match(/\*\*Verification\*\*:\s*(.+)/);
+      if (verMatch) {
+        const references = productionReferencesIn(verMatch[1] ?? '');
+        if (references.some(resolveProductionReference)) {
+          hasValidPath = true;
+        } else {
+          missingAcs.push(acId);
+        }
+      } else {
+        missingAcs.push(acId);
+      }
+    }
+    if (!hasValidPath && missingAcs.length > 0) {
+      issues.push({
+        file: info.filename,
+        severity: 'error',
+        rule: 'production-path',
+        message: `No AC has a production path in its Verification line. Missing: ${missingAcs.join(', ')}`,
+      });
+    }
+    return issues;
+  }
+
+  // Full contract: parse Evidence Matrix
+  const matrixSection = info.content.match(/\*\*Evidence Matrix\*\*[\s\S]*?(?=\n## |$)/i);
+  if (!matrixSection) {
+    // If no Evidence Matrix (thin contracts already handled), skip
+    // checkEvidenceMatrix will catch the missing matrix
+    return [];
+  }
+
+  const tableText = matrixSection[0];
+  const rows = parseTableRows(tableText);
+  if (rows.length === 0) {
+    // No data rows — fail
+    issues.push({
+      file: info.filename,
+      severity: 'error',
+      rule: 'production-path',
+      message: 'Evidence Matrix has no data rows with production paths',
+    });
+    return issues;
+  }
+
+  // Detect Production Path column by header name (4th column = index 3)
+  // Production Path is always column index 3 (0=AC, 1=Test Level, 2=Required Artifact, 3=Production Path, 4=Evidence)
+  const prodPathCol = 3;
+
+  const acErrors: string[] = [];
+  let hasValidPath = false;
+  for (const [rowIndex, row] of rows.entries()) {
+    const acId = row[0] ?? '';
+    const rowLabel = acId || `row ${rowIndex + 1}`;
+    const pathCell = row[prodPathCol] ?? '';
+    const formatResult = classifyProductionPath(pathCell);
+    if (formatResult !== null) {
+      acErrors.push(`${rowLabel}: ${formatResult}`);
+      continue;
+    }
+    // Format is valid; now check resolution
+    let resolved = false;
+    const referenceToken = leadingReferenceToken(pathCell);
+    // tooling: `<command>`
+    const toolingMatch = pathCell.match(/^tooling:\s*`(.+?)`/);
+    if (toolingMatch) {
+      const cmd = toolingMatch[1] ?? '';
+      if (toolingCommandExists(cmd)) {
+        resolved = true;
+      } else {
+        acErrors.push(`${rowLabel}: Tooling command not found: \`${cmd}\``);
+      }
+    }
+    // Route reference: /game/...
+    else if (/^\/(?:\w|$)/.test(referenceToken)) {
+      if (routeExists(referenceToken)) {
+        resolved = true;
+      } else {
+        acErrors.push(`${rowLabel}: Route not found: ${referenceToken}`);
+      }
+    }
+    // file.ts#exportedSymbol
+    else if (/\.[jt]sx?#\w+/.test(referenceToken)) {
+      if (symbolExists(referenceToken)) {
+        resolved = true;
+      } else {
+        acErrors.push(`${rowLabel}: Symbol not found: ${referenceToken}`);
+      }
+    }
+    // Named component/ViewModel reference
+    else if (namedProductionSourceExists(referenceToken)) {
+      resolved = true;
+    } else {
+      acErrors.push(`${rowLabel}: Component not found: ${referenceToken}`);
+    }
+    if (resolved) {
+      hasValidPath = true;
+    }
+  }
+
+  if (!hasValidPath) {
+    issues.push({
+      file: info.filename,
+      severity: 'error',
+      rule: 'production-path',
+      message: `No AC has a valid Production Path. Errors: ${acErrors.join('; ') || 'no resolvable references found'}`,
+    });
+  }
+
+  return issues;
+};
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -532,6 +1042,7 @@ const lintContract = (info: ContractInfo): LintIssue[] => {
     if (!THIN_SKIP_CHECKS.has('open-questions') || info.contractType !== 'thin') {
       issues.push(...checkOpenQuestions(info));
     }
+    issues.push(...checkProductionPath(info));
   }
 
   if (info.version === 2 && IMPLEMENTED_OR_LATER.has(info.status)) {
@@ -744,4 +1255,6 @@ const main = () => {
   process.exit(errors.length > 0 ? 1 : 0);
 };
 
-main();
+if (import.meta.main) {
+  main();
+}

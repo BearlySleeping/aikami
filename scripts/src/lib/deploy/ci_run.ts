@@ -29,6 +29,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { c, error, log, ok, parseCliArgs, runStream, warn } from '../cli_utils';
 import { initScriptsEnv } from '../env/scripts_env';
+import { resolveReleaseVersion } from '../release/version';
 import { getTauriCache, setTauriCache } from './cache';
 import { APP_CONFIG } from './deployment_config';
 import { buildTauriArtifacts, uploadArtifactsToRelease } from './tauri_release';
@@ -208,11 +209,12 @@ async function main(): Promise<void> {
 
   if (leg.action === 'build') {
     // ── Build leg ────────────────────────────────────────────────────
-    // Release runs derive the app version from the tag itself (v0.1.1 →
-    // 0.1.1) rather than a committed Cargo.toml/tauri.conf.json version —
-    // no version-bump commit needed to cut a release. workflow_dispatch runs
-    // have no tag and keep using the committed version, same as a local build.
-    const versionOverride = releaseTag ? releaseTag.replace(/^v/, '') : undefined;
+    // A semver tag still wins (v0.1.1 → 0.1.1), so every historical release
+    // behaves exactly as before. The rolling `staging` tag isn't a version,
+    // so those runs fall back to the committed Cargo.toml/tauri.conf.json
+    // version that `bun run release` bumped in the tagged commit. See
+    // release/version.ts.
+    const versionOverride = resolveReleaseVersion(releaseTag, ROOT_DIR);
     const { artifacts, version } = await buildTauriArtifacts(config, mode, ROOT_DIR, {
       bundles: leg.bundles,
       // The shared web build was produced by the build-web job and downloaded
