@@ -252,6 +252,11 @@ export class GamePage {
     await expect(dialogueOverlay).toBeVisible({ timeout: 10_000 });
   }
 
+  /** Return the number of choices currently rendered in the dialogue overlay. */
+  async getDialogueChoiceCount(): Promise<number> {
+    return this.page.locator('[data-testid^="dialogue-choice-"], .dialogue-choice').count();
+  }
+
   /** Assert free-text input is visible (C-371: replaces static verb menu). */
   async expectFreeTextInput(): Promise<void> {
     const { expect } = await import('@playwright/test');
@@ -323,6 +328,14 @@ export class GamePage {
     await expect(this.page.locator('[data-testid="combat-attack-btn"]')).toBeVisible({
       timeout: 15_000,
     });
+  }
+
+  /** Return whether the combat Attack button is currently visible. */
+  async isCombatAttackButtonVisible(): Promise<boolean> {
+    return this.page
+      .locator('[data-testid="combat-attack-btn"]')
+      .isVisible({ timeout: 1000 })
+      .catch(() => false);
   }
 
   /** Click the Attack button in combat. */
@@ -482,7 +495,10 @@ export class GamePage {
    */
   async startNewAdventure(): Promise<void> {
     const { expect } = await import('@playwright/test');
-    const newAdventureBtn = this.page.getByRole('button', { name: 'New Adventure' });
+    const newAdventureBtn = this.page.getByRole('button', {
+      name: 'New Adventure',
+      exact: true,
+    });
     await expect(newAdventureBtn).toBeVisible({ timeout: 10_000 });
     await newAdventureBtn.click();
   }

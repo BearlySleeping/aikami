@@ -117,8 +117,7 @@ test.describe('Release Gate', () => {
 
       // Fight until resolution
       for (let round = 0; round < 20; round++) {
-        const attackBtn = page.locator('[data-testid="combat-attack-btn"]');
-        if (!(await attackBtn.isVisible({ timeout: 1000 }).catch(() => false))) {
+        if (!(await game.isCombatAttackButtonVisible())) {
           break;
         }
         await game.waitForCombatActionReady();
@@ -215,8 +214,7 @@ test.describe('Release Gate', () => {
       expect(dialogueText).not.toContain('*]');
 
       // AC-2c: 2-4 choices visible
-      const choices = page.locator('[data-testid^="dialogue-choice-"], .dialogue-choice');
-      const choiceCount = await choices.count();
+      const choiceCount = await game.getDialogueChoiceCount();
       expect(choiceCount).toBeGreaterThanOrEqual(2);
       expect(choiceCount).toBeLessThanOrEqual(4);
     });
@@ -252,7 +250,7 @@ test.describe('Release Gate', () => {
             () => (document.activeElement as HTMLElement)?.innerText || '',
           );
           // Use the same label as startNewAdventure() — "New Adventure"
-          if (/new adventure/i.test(text)) {
+          if (text.trim() === 'New Adventure') {
             await page.keyboard.press('Enter');
             break;
           }
@@ -306,8 +304,7 @@ test.describe('Release Gate', () => {
       await page.waitForTimeout(1000);
 
       // Dialogue — choose option with Tab + Enter (must appear)
-      const dialogueOverlay = page.locator('[data-testid="dialogue-overlay"], .dialogue-overlay');
-      await expect(dialogueOverlay).toBeVisible({ timeout: 10_000 });
+      await game.expectDialogueVisible();
 
       // Tab to first choice and press Enter
       await page.keyboard.press('Tab');
@@ -365,6 +362,8 @@ test.describe('Release Gate', () => {
     test('should block gameplay when no AI provider is available and QA bypass is false', async ({
       page,
     }) => {
+      const game = new GamePage(page);
+
       // Navigate to root without QA bypass
       await page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
 
@@ -392,9 +391,7 @@ test.describe('Release Gate', () => {
       await expect(offlineButton).not.toBeVisible({ timeout: 3000 });
 
       // AC-4c: Clicking "New Adventure" should not reach /setup or /game
-      const newAdventureBtn = page.getByRole('button', { name: 'New Adventure' });
-      await expect(newAdventureBtn).toBeVisible({ timeout: 3000 });
-      await newAdventureBtn.click();
+      await game.startNewAdventure();
       await page.waitForTimeout(3000);
 
       // Must not have navigated to game-related routes
