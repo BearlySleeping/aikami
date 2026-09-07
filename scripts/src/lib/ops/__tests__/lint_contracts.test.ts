@@ -280,6 +280,28 @@ describe('checkProductionPath', () => {
     expect(issues).toHaveLength(0);
   });
 
+  test('resolves a Moon task inherited by the scripts project', () => {
+    const content = [
+      '**Evidence Matrix**:',
+      '| AC | Test Level | Required Artifact | Production Path | Evidence |',
+      '|---|---|---|---|---|',
+      '| AC-1 | Integration | `guard.test.ts` | tooling: `moon run scripts:guard` | Filled |',
+    ].join('\n');
+
+    expect(checkProductionPath(makeContract({ content }))).toHaveLength(0);
+  });
+
+  test('rejects a Moon task that is not inherited by the named project', () => {
+    const content = [
+      '**Evidence Matrix**:',
+      '| AC | Test Level | Required Artifact | Production Path | Evidence |',
+      '|---|---|---|---|---|',
+      '| AC-1 | Integration | `guard.test.ts` | tooling: `moon run client:guard` | Filled |',
+    ].join('\n');
+
+    expect(checkProductionPath(makeContract({ content }))).toHaveLength(1);
+  });
+
   test('accepts whole-contract opt-out even with empty matrix cells', () => {
     const content = [
       '## Metadata',
@@ -342,7 +364,7 @@ describe('checkProductionPath', () => {
       '**When** action',
       '**Then** outcome',
       '',
-      '**Verification**: tooling: `bun run test:unit`',
+      '**Verification**: tooling: `bun run test`',
       '',
       '### AC-2: Another feature',
       '**Given** precondition',
@@ -354,6 +376,99 @@ describe('checkProductionPath', () => {
     const info = makeContract({ contractType: 'thin', content });
     const issues = checkProductionPath(info);
     expect(issues).toHaveLength(0);
+  });
+
+  test('rejects a thin-contract tooling command with no matching script', () => {
+    const content = [
+      '## Acceptance Criteria',
+      '',
+      '### AC-1: Some feature',
+      '**Verification**: tooling: `bun run definitely-not-a-script`',
+    ].join('\n');
+    const info = makeContract({ contractType: 'thin', content });
+
+    expect(checkProductionPath(info)).toHaveLength(1);
+  });
+
+  test('accepts a route followed by a description', () => {
+    const content = [
+      '**Evidence Matrix**:',
+      '| AC | Test Level | Required Artifact | Production Path | Evidence |',
+      '|---|---|---|---|---|',
+      '| AC-1 | E2E | `game.spec.ts` | /game (party screen) | Filled |',
+    ].join('\n');
+
+    expect(checkProductionPath(makeContract({ content }))).toHaveLength(0);
+  });
+
+  test('accepts a code-formatted root route followed by a description', () => {
+    const content = [
+      '**Evidence Matrix**:',
+      '| AC | Test Level | Required Artifact | Production Path | Evidence |',
+      '|---|---|---|---|---|',
+      '| AC-1 | E2E | `start.spec.ts` | `/` (start menu) | Filled |',
+    ].join('\n');
+
+    expect(checkProductionPath(makeContract({ content }))).toHaveLength(0);
+  });
+
+  test('resolves routes nested beneath transparent route groups', () => {
+    const content = [
+      '**Evidence Matrix**:',
+      '| AC | Test Level | Required Artifact | Production Path | Evidence |',
+      '|---|---|---|---|---|',
+      '| AC-1 | E2E | `sandbox.spec.ts` | /dev/sandbox | Filled |',
+    ].join('\n');
+
+    expect(checkProductionPath(makeContract({ content }))).toHaveLength(0);
+  });
+
+  test('resolves an exported async function', () => {
+    const content = [
+      '**Evidence Matrix**:',
+      '| AC | Test Level | Required Artifact | Production Path | Evidence |',
+      '|---|---|---|---|---|',
+      '| AC-1 | Integration | `character_importer.test.ts` | apps/frontend/client/src/lib/views/utils/character_importer.ts#parsePngCard | Filled |',
+    ].join('\n');
+
+    expect(checkProductionPath(makeContract({ content }))).toHaveLength(0);
+  });
+
+  test('resolves a named component against its source file', () => {
+    const content = [
+      '**Evidence Matrix**:',
+      '| AC | Test Level | Required Artifact | Production Path | Evidence |',
+      '|---|---|---|---|---|',
+      '| AC-1 | E2E | `chat.spec.ts` | ChatView | Filled |',
+    ].join('\n');
+
+    expect(checkProductionPath(makeContract({ content }))).toHaveLength(0);
+  });
+
+  test('rejects a named component without a source file', () => {
+    const content = [
+      '**Evidence Matrix**:',
+      '| AC | Test Level | Required Artifact | Production Path | Evidence |',
+      '|---|---|---|---|---|',
+      '| AC-1 | E2E | `missing.spec.ts` | DefinitelyMissingView | Filled |',
+    ].join('\n');
+
+    const issues = checkProductionPath(makeContract({ content }));
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toContain('Component not found');
+  });
+
+  test('attributes an empty unnamed row by row index', () => {
+    const content = [
+      '**Evidence Matrix**:',
+      '| AC | Test Level | Required Artifact | Production Path | Evidence |',
+      '|---|---|---|---|---|',
+      '| | | | | |',
+    ].join('\n');
+
+    const issues = checkProductionPath(makeContract({ content }));
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toContain('row 1: Empty Production Path cell');
   });
 });
 

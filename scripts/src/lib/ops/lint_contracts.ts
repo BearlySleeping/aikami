@@ -26,6 +26,7 @@ import { join } from 'node:path';
 
 type Severity = 'error' | 'warning';
 
+/** A single contract-lint diagnostic with its source file and rule identity. */
 export type LintIssue = {
   file: string;
   severity: Severity;
@@ -33,6 +34,7 @@ export type LintIssue = {
   message: string;
 };
 
+/** Parsed contract metadata used by status-aware lint checks. */
 export type ContractInfo = {
   filename: string;
   id: string;
@@ -92,41 +94,51 @@ export const PRODUCTION_PATH_LEGACY_EXEMPTIONS = new Set([
 // Routes (/game/..., /settings/...) must exist as a SvelteKit route.
 // file.ts#exportedSymbol must resolve to an existing production file.
 // tooling: `<command>` must match a checked-in package.json script or Moon task.
-// Barrel re-exports are followed to the originating symbol.
 
 /** Check if a route path has a corresponding SvelteKit route file. */
 const routeExists = (route: string): boolean => {
-  // Check for a SvelteKit route file under apps/frontend/client/src/routes
   const clientRouteDir = join(REPO_ROOT, 'apps/frontend/client/src/routes');
   if (!existsSync(clientRouteDir)) {
     return false;
   }
-  // Walk the route path segments
-  const parts = route.replace(/^\//, '').split('/');
-  let currentDir = clientRouteDir;
-  for (const part of parts) {
-    // Skip dynamic params like [id] — they match any dir starting with [
-    const candidates = readdirSync(currentDir).filter(
-      (f) =>
-        f === part ||
-        f.startsWith('[') ||
-        // Handle route groups (parenthesized)
-        f === `(${part})`,
-    );
-    if (candidates.length === 0) {
-      return false;
+  const routeToken = route.trim().split(/\s+/, 1)[0] ?? '';
+  const parts = routeToken.replace(/^\//, '').split('/').filter(Boolean);
+
+  const resolvesFrom = (currentDir: string, partIndex: number): boolean => {
+    if (partIndex === parts.length) {
+      return readdirSync(currentDir).some((entry) =>
+        /^\+(?:page|layout)\.(?:svelte|ts|js)$/.test(entry),
+      );
     }
-    const next = candidates[0];
-    if (!next) {
-      return false;
+
+    const part = parts[partIndex] ?? '';
+    const directories = readdirSync(currentDir).filter((entry) => {
+      const path = join(currentDir, entry);
+      return existsSync(path) && statSync(path).isDirectory();
+    });
+    const exact = directories.filter((entry) => entry === part);
+    const groups = directories.filter((entry) => /^\([^)]+\)$/.test(entry));
+    const dynamic = directories.filter((entry) => /^\[{1,2}[^\]]+\]{1,2}$/.test(entry));
+
+    for (const entry of exact) {
+      if (resolvesFrom(join(currentDir, entry), partIndex + 1)) {
+        return true;
+      }
     }
-    const nextPath = join(currentDir, next);
-    if (!existsSync(nextPath) || !statSync(nextPath).isDirectory()) {
-      return false;
+    for (const entry of groups) {
+      if (resolvesFrom(join(currentDir, entry), partIndex)) {
+        return true;
+      }
     }
-    currentDir = nextPath;
-  }
-  return true;
+    for (const entry of dynamic) {
+      if (resolvesFrom(join(currentDir, entry), partIndex + 1)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  return resolvesFrom(clientRouteDir, 0);
 };
 
 /** Check if a file.ts#exportedSymbol reference exists. */
@@ -146,19 +158,19 @@ const symbolExists = (ref: string): boolean => {
   }
   try {
     const content = readFileSync(fullPath, 'utf-8');
-    // Check for export of the symbol: `export const symbolName`, `export function symbolName`, `export class symbolName`
-    // Also check barrel re-exports: `export { symbolName } from` or `export * from`
+    if (symbolName === 'default') {
+      return /export\s+default\s+/.test(content);
+    }
+    // Match direct declarations and explicit named export lists in this file.
     const exportRe = new RegExp(
-      `export\\s+(const|function|class|type|interface|enum|let|var)\\s+${escapeRegex(symbolName)}\\b`,
+      `export\\s+(?:default\\s+)?(?:async\\s+)?(?:const|function|class|type|interface|enum|let|var)\\s+${escapeRegex(symbolName)}\\b`,
     );
-    const reExportRe = new RegExp(
-      `export\\s+\\{\\s*${escapeRegex(symbolName)}\\s*(?:as\\s+\\w+)?\\s*\\}`,
-    );
-    if (exportRe.test(content) || reExportRe.test(content)) {
+    if (exportRe.test(content)) {
       return true;
     }
-    // Also check named exports at the end: `export { ..., symbolName, ... }`
-    const namedExportRe = new RegExp(`export\\s+\\{[^}]*\\b${escapeRegex(symbolName)}\\b[^}]*\\}`);
+    const namedExportRe = new RegExp(
+      `export\\s+\\{[^}]*(?:\\b${escapeRegex(symbolName)}\\b(?:\\s+as\\s+\\w+)?|\\b\\w+\\s+as\\s+${escapeRegex(symbolName)}\\b)[^}]*\\}`,
+    );
     return namedExportRe.test(content);
   } catch {
     return false;
@@ -169,33 +181,63 @@ const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$
 
 /** Check if a tooling command reference resolves. */
 const toolingCommandExists = (command: string): boolean => {
-  const pkgJsonPath = join(REPO_ROOT, 'package.json');
-  try {
-    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-    const scripts = pkg.scripts ?? {};
-    if (scripts[command]) {
-      return true;
+  const normalized = command.trim();
+  const bunMatch = normalized.match(/^bun\s+run\s+(?:(?:--cwd(?:=|\s+)\S+)\s+)?([^\s]+)/);
+  if (bunMatch) {
+    const scriptName = bunMatch[1] ?? '';
+    const cwdMatch = normalized.match(/^bun\s+run\s+--cwd(?:=|\s+)(\S+)/);
+    const packagePath = join(REPO_ROOT, cwdMatch?.[1] ?? '', 'package.json');
+    try {
+      const packageJson = JSON.parse(readFileSync(packagePath, 'utf-8')) as {
+        scripts?: Record<string, string>;
+      };
+      if (scriptName in (packageJson.scripts ?? {})) {
+        return true;
+      }
+    } catch {
+      // Continue to checked-in Moon commands.
     }
-  } catch {
-    // continue
   }
-  // Check moon.yml tasks — look for the command in scripts/moon.yml
-  const moonYmlPath = join(REPO_ROOT, 'scripts', 'moon.yml');
-  try {
-    const moonYml = readFileSync(moonYmlPath, 'utf-8');
-    if (moonYml.includes(`'${command}'`) || moonYml.includes(`"${command}"`)) {
-      return true;
+
+  const moonMatch = normalized.match(/^(?:bun\s+)?moon\s+run\s+(?:([\w-]+):)?([\w-]+)/);
+  const projectId = moonMatch?.[1];
+  const taskName = moonMatch?.[2];
+  const workspaceConfig = readFileSync(join(REPO_ROOT, '.moon/workspace.yml'), 'utf-8');
+  const projectPaths = new Map<string, string>();
+  for (const match of workspaceConfig.matchAll(/^\s{2}([\w-]+):\s*"([^"]+)"\s*$/gm)) {
+    if (match[1] && match[2]) {
+      projectPaths.set(match[1], match[2]);
     }
-  } catch {
-    // continue
   }
-  // Also check root moon tasks for project-scoped references
-  // Accept `moon run scripts:guard` style commands
-  if (/^moon\s+run\s+\w+:\w+/.test(command)) {
-    return true;
+  if (projectId && !projectPaths.has(projectId)) {
+    return false;
   }
-  if (/^bun\s+run\s+\S+/.test(command)) {
-    return true;
+  const moonConfigPaths = [join(REPO_ROOT, '.moon/tasks/all.yml')];
+  if (!projectId || projectId === 'scripts') {
+    moonConfigPaths.push(join(REPO_ROOT, '.moon/tasks/scripts.yml'));
+  }
+  const selectedProjects = projectId ? [projectPaths.get(projectId)] : [...projectPaths.values()];
+  for (const projectPath of selectedProjects) {
+    if (projectPath) {
+      moonConfigPaths.push(join(REPO_ROOT, projectPath, 'moon.yml'));
+    }
+  }
+  for (const moonConfigPath of moonConfigPaths) {
+    try {
+      const moonConfig = readFileSync(moonConfigPath, 'utf-8');
+      const commandLineRe = new RegExp(
+        `^\\s+(?:command|script):\\s*['"]${escapeRegex(normalized)}['"]\\s*$`,
+        'm',
+      );
+      if (
+        (taskName && new RegExp(`^  ${escapeRegex(taskName)}:`, 'm').test(moonConfig)) ||
+        commandLineRe.test(moonConfig)
+      ) {
+        return true;
+      }
+    } catch {
+      // Continue through the remaining task configuration files.
+    }
   }
   return false;
 };
@@ -204,6 +246,7 @@ const toolingCommandExists = (command: string): boolean => {
 // Parses a markdown table into rows of cells.
 // Handles escaped pipes (\\|) inside cells.
 
+/** Parses Evidence Matrix data rows while preserving empty cells and escaped pipes. */
 export const parseTableRows = (tableText: string): string[][] => {
   const lines = tableText.split('\n').filter((l) => l.trim().startsWith('|'));
   if (lines.length < 3) {
@@ -241,6 +284,12 @@ export const parseTableRows = (tableText: string): string[][] => {
     .filter((cells) => cells.length >= 4); // Need at least AC, Test Level, Required Artifact, Production Path
 };
 
+const leadingReferenceToken = (cell: string): string => {
+  const trimmed = cell.trim();
+  const codeSpan = trimmed.match(/^`([^`]+)`/);
+  return codeSpan?.[1] ?? trimmed.split(/\s+/, 1)[0] ?? '';
+};
+
 /** Classify a single Production Path cell value \u2014 format check only, no filesystem resolution.
  * Returns null if the format is valid, or an error message for invalid/placeholder cells.
  * Resolution (route/file/symbol existence) is checked separately in checkProductionPath. */
@@ -274,23 +323,24 @@ export const classifyProductionPath = (cell: string): string | null => {
   if (/^tooling:\s*`/.test(trimmed)) {
     return null;
   }
+  const referenceToken = leadingReferenceToken(trimmed);
   // Valid format: route reference starting with /
-  if (/^\/\w+/.test(trimmed)) {
+  if (/^\/(?:\w|$)/.test(referenceToken)) {
     return null;
   }
   // Valid format: file.ts#exportedSymbol
-  if (/\.[jt]sx?#\w+/.test(trimmed)) {
+  if (/\.[jt]sx?#\w+/.test(referenceToken)) {
     return null;
   }
   // Valid format: Named component/ViewModel reference
-  if (/^[A-Z]\w+/.test(trimmed)) {
+  if (/^[A-Z]\w+/.test(referenceToken)) {
     return null;
   }
   // Unknown format \u2014 treat as unresolvable
   return `Unresolvable Production Path: ${trimmed}`;
 };
 
-/** Check if Metadata contains a whole-contract opt-out Production Surface row. */
+/** Returns whether Metadata declares a reasoned whole-contract production-surface opt-out. */
 export const hasWholeContractOptOut = (info: ContractInfo): boolean => {
   // Match: | **Production Surface** | none — <reason> |
   // Where <reason> is non-empty (at least one non-space, non-pipe char)
@@ -298,6 +348,106 @@ export const hasWholeContractOptOut = (info: ContractInfo): boolean => {
   return optOutRe.test(info.content);
 };
 
+let namedProductionSourcesCache: Set<string> | undefined;
+
+const namedProductionSources = (): Set<string> => {
+  if (namedProductionSourcesCache) {
+    return namedProductionSourcesCache;
+  }
+
+  const sourceRoots = [
+    join(REPO_ROOT, 'apps/frontend/client/src'),
+    join(REPO_ROOT, 'apps/frontend/hub/src'),
+    join(REPO_ROOT, 'packages/frontend'),
+  ];
+  const toPascalCase = (value: string): string =>
+    value
+      .split(/[^A-Za-z0-9]+/)
+      .filter(Boolean)
+      .map((part) => `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`)
+      .join('');
+
+  const names = new Set<string>();
+  const walk = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (
+        entry.name.startsWith('.') ||
+        entry.name === 'node_modules' ||
+        entry.name === '__tests__'
+      ) {
+        continue;
+      }
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (
+        !entry.isFile() ||
+        (!entry.name.endsWith('.svelte') && !entry.name.endsWith('.svelte.ts'))
+      ) {
+        continue;
+      }
+      const stem = entry.name.replace(/\.svelte(?:\.ts)?$/, '');
+      names.add(toPascalCase(stem));
+    }
+  };
+
+  for (const root of sourceRoots) {
+    if (existsSync(root)) {
+      walk(root);
+    }
+  }
+  namedProductionSourcesCache = names;
+  return names;
+};
+
+const namedProductionSourceExists = (name: string): boolean => namedProductionSources().has(name);
+
+const resolveProductionReference = (reference: string): boolean => {
+  const trimmed = reference.trim();
+  const toolingMatch = trimmed.match(/^tooling:\s*`(.+?)`/);
+  if (toolingMatch) {
+    return toolingCommandExists(toolingMatch[1] ?? '');
+  }
+
+  const token = leadingReferenceToken(trimmed);
+  if (/^\/(?:\w|$)/.test(token)) {
+    return routeExists(token);
+  }
+  if (/\.[jt]sx?#\w+$/.test(token)) {
+    return symbolExists(token);
+  }
+  if (/^[A-Z]\w+$/.test(token)) {
+    return namedProductionSourceExists(token);
+  }
+  return false;
+};
+
+const productionReferencesIn = (text: string): string[] => {
+  const references: string[] = [];
+  const toolingMatch = text.match(/tooling:\s*`.+?`/);
+  if (toolingMatch) {
+    references.push(toolingMatch[0]);
+  }
+  const fileMatch = text.match(/[\w./-]+\.[jt]sx?#\w+/);
+  if (fileMatch) {
+    references.push(fileMatch[0]);
+  }
+  const routeMatch = text.match(/(?:^|\s)(\/\w[\w./[\]-]*)/);
+  if (routeMatch?.[1]) {
+    references.push(routeMatch[1]);
+  }
+  for (const match of text.matchAll(/\b[A-Z]\w+\b/g)) {
+    if (match[0].startsWith('AC')) {
+      continue;
+    }
+    references.push(match[0]);
+  }
+  return [...new Set(references)];
+};
+
+/** Validates that an approved v2 contract names a resolvable production surface. */
 export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
   if (info.version !== 2 || !APPROVED_OR_LATER.has(info.status)) {
     return [];
@@ -326,14 +476,8 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
       // Check for **Verification**: line
       const verMatch = section.match(/\*\*Verification\*\*:\s*(.+)/);
       if (verMatch) {
-        const verText = verMatch[1] ?? '';
-        // Check if verification contains a production path reference
-        if (
-          /\/\w+/.test(verText) || // route
-          /\.[jt]sx?#\w+/.test(verText) || // file.ts#symbol
-          /tooling:\s*`/.test(verText) || // tooling command
-          /^[A-Z]\w+/.test(verText) // named component
-        ) {
+        const references = productionReferencesIn(verMatch[1] ?? '');
+        if (references.some(resolveProductionReference)) {
           hasValidPath = true;
         } else {
           missingAcs.push(acId);
@@ -380,59 +524,61 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
 
   const acErrors: string[] = [];
   let hasValidPath = false;
-  for (const row of rows) {
+  for (const [rowIndex, row] of rows.entries()) {
     const acId = row[0] ?? '';
+    const rowLabel = acId || `row ${rowIndex + 1}`;
     const pathCell = row[prodPathCol] ?? '';
     const formatResult = classifyProductionPath(pathCell);
     if (formatResult !== null) {
-      if (acId) {
-        acErrors.push(`${acId}: ${formatResult}`);
-      }
+      acErrors.push(`${rowLabel}: ${formatResult}`);
       continue;
     }
     // Format is valid; now check resolution
     let resolved = false;
+    const referenceToken = leadingReferenceToken(pathCell);
     // tooling: `<command>`
     const toolingMatch = pathCell.match(/^tooling:\s*`(.+?)`/);
     if (toolingMatch) {
       const cmd = toolingMatch[1] ?? '';
       if (toolingCommandExists(cmd)) {
         resolved = true;
-      } else if (acId) {
-        acErrors.push(`${acId}: Tooling command not found: \`${cmd}\``);
+      } else {
+        acErrors.push(`${rowLabel}: Tooling command not found: \`${cmd}\``);
       }
     }
     // Route reference: /game/...
-    else if (/^\/\w+/.test(pathCell)) {
-      if (routeExists(pathCell)) {
+    else if (/^\/(?:\w|$)/.test(referenceToken)) {
+      if (routeExists(referenceToken)) {
         resolved = true;
-      } else if (acId) {
-        acErrors.push(`${acId}: Route not found: ${pathCell}`);
+      } else {
+        acErrors.push(`${rowLabel}: Route not found: ${referenceToken}`);
       }
     }
     // file.ts#exportedSymbol
-    else if (/\.[jt]sx?#\w+/.test(pathCell)) {
-      if (symbolExists(pathCell)) {
+    else if (/\.[jt]sx?#\w+/.test(referenceToken)) {
+      if (symbolExists(referenceToken)) {
         resolved = true;
-      } else if (acId) {
-        acErrors.push(`${acId}: Symbol not found: ${pathCell}`);
+      } else {
+        acErrors.push(`${rowLabel}: Symbol not found: ${referenceToken}`);
       }
     }
-    // Named component/ViewModel reference \u2014 accept as resolved
-    else {
+    // Named component/ViewModel reference
+    else if (namedProductionSourceExists(referenceToken)) {
       resolved = true;
+    } else {
+      acErrors.push(`${rowLabel}: Component not found: ${referenceToken}`);
     }
     if (resolved) {
       hasValidPath = true;
     }
   }
 
-  if (!hasValidPath && acErrors.length > 0) {
+  if (!hasValidPath) {
     issues.push({
       file: info.filename,
       severity: 'error',
       rule: 'production-path',
-      message: `No AC has a valid Production Path. Errors: ${acErrors.join('; ')}`,
+      message: `No AC has a valid Production Path. Errors: ${acErrors.join('; ') || 'no resolvable references found'}`,
     });
   }
 

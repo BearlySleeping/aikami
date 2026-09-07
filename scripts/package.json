@@ -30,6 +30,7 @@
     "jiti": "2.7.0",
     "png-to-ico": "3.0.2",
     "sharp": "0.35.4",
+    "typescript": "6.0.3",
     "wrangler": "4.129.0"
   }
 }

@@ -27,6 +27,7 @@ created_at: "{created_at}"
 | **Promotion** | `sandbox` \| `integrated` \| `release_verified` \| — |
 | **Docs Impact** | {user-facing → page in `apps/frontend/docs/src/content/docs/` \| internal → none} |
 | **Contract version** | 2.0.0 |
+| **Production Surface** | {production route or entry point; or exactly `none — <reason>` for a whole-contract opt-out} |
 
 ## Problem & Baseline Evidence
 
@@ -112,12 +113,12 @@ If no persistent state is affected: "N/A — no persistent state changes."
 **When** {action — what happens}
 **Then** {expected outcome — what should be true}
 
-> 🔴 **Production Path rule**: Every contract needs at least one AC whose **Production Path** is a resolvable production route (`/game/...`, `/settings/...`), a named production entry point (`file.ts#exportedSymbol`, `ComponentName`), or a declared tooling command (`tooling: \`command\``). A unit test alone cannot satisfy an AC for a player-facing capability. Row-level `N/A` or `N/A — <reason>` alone fails; use `| **Production Surface** | none — <reason> |` in Metadata for a whole-contract opt-out.
+> 🔴 **Production Path rule**: Every contract needs at least one AC whose **Production Path** is a resolvable production route (`/game/...`, `/settings/...`), a named production entry point (`file.ts#exportedSymbol`, `ComponentName`), or a declared tooling command (`tooling: \`command\``). A unit test alone cannot satisfy an AC for a player-facing capability; cite its production route or entry point and validate it with a production smoke, E2E, or visual journey. Row-level `N/A` or `N/A — <reason>` alone fails; use `| **Production Surface** | none — <reason> |` in Metadata for a whole-contract opt-out.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | {Unit \| Integration \| E2E \| Visual} | `{test file path}` | tooling: \`moon run {project}:test\` | Filled during verification |
+| AC-1 | E2E | `apps/e2e/tests/client/{feature}.spec.ts` | `/game/{player-journey}` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: {specific `moon_run_task` command to validate this}

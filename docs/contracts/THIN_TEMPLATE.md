@@ -27,6 +27,7 @@ created_at: "{created_at}"
 | **Promotion** | `sandbox` \| `integrated` \| `release_verified` \| — |
 | **Docs Impact** | {user-facing → page in `apps/frontend/docs/src/content/docs/` \| internal → none} |
 | **Contract version** | 2.0.0 |
+| **Production Surface** | {production route or entry point; or exactly `none — <reason>` for a whole-contract opt-out} |
 
 ## Problem & Baseline Evidence
 
@@ -52,7 +53,7 @@ After this contract, a {player|creator|developer} can ...
 **When** {action — what happens}
 **Then** {expected outcome — what should be true}
 
-> 🔴 **Production Path rule**: Every contract needs at least one AC whose **Verification** line references a production route, a named entry point, or a declared tooling command. A unit test alone cannot satisfy an AC for a player-facing capability.
+> 🔴 **Production Path rule**: Every contract needs at least one AC whose **Verification** line references a production route, a named entry point, or a declared tooling command. A unit test alone cannot satisfy an AC for a player-facing capability. Row-level `N/A` or `N/A — <reason>` alone fails; use `| **Production Surface** | none — <reason> |` in Metadata for a whole-contract opt-out.
 
 **Verification**: {command or manual check that proves this AC is met}
 

@@ -27,7 +27,7 @@ created_at: "2026-09-02"
 | **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing (indirect — NPCs feel more alive) |
-| **Contract version** | 1.0.0 |
+| **Contract version** | 2.0.0 |
 
 ## Problem & Baseline Evidence
 

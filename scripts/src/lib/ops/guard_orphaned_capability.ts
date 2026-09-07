@@ -33,7 +33,8 @@
 // See guard_type_safety.ts for the identity-aware ratchet pattern this mirrors.
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve, sep } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
+import ts from 'typescript';
 import { annotate } from './gha_annotate.ts';
 
 const ROOT = resolve(import.meta.dir, '../../../..');
@@ -67,7 +68,7 @@ const EXCLUDED_DIRS = new Set([
 
 // ── Helpers ────────────────────────────────────────────────
 
-const relPath = (file: string): string => file.replace(`${ROOT}/`, '').split(sep).join('/');
+const relPath = (file: string): string => relative(ROOT, file).split(sep).join('/');
 
 /** Recursively find all .ts and .svelte files under services dir. */
 const collectServiceFiles = (): string[] => {
@@ -98,42 +99,139 @@ const collectServiceFiles = (): string[] => {
   return results;
 };
 
-/** Extract exported symbol names from source content. */
-const extractExports = (content: string): string[] => {
-  const exports: string[] = [];
-  // Match: export const symbolName, export function symbolName, export class symbolName
-  const namedRe = /export\s+(?:const|function|class|type|interface|enum|let|var)\s+(\w+)/g;
-  let m: RegExpExecArray | null;
-  while (true) {
-    m = namedRe.exec(content);
-    if (m === null) {
-      break;
-    }
-    exports.push(m[1] ?? '');
-  }
-  // Match: export { symbolName, ... }
-  const bracketRe = /export\s+\{\s*([\w\s,]+)\s*\}/g;
-  while (true) {
-    m = bracketRe.exec(content);
-    if (m === null) {
-      break;
-    }
-    const names = (m[1] ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.includes(':'));
-    for (const name of names) {
-      // Handle `symbolName as alias` — use the original name
-      const asMatch = name.match(/^(\w+)\s+as\s+/);
-      exports.push(asMatch ? (asMatch[1] ?? '') : name);
-    }
-  }
-  // Filter out common noise
-  return [...new Set(exports)].filter(
-    (s) =>
-      !s.startsWith('_') &&
-      !['undefined', 'null', 'true', 'false', 'number', 'string', 'boolean'].includes(s),
+const hasModifier = (node: ts.Node, kind: ts.SyntaxKind): boolean =>
+  Boolean(
+    ts.canHaveModifiers(node) && ts.getModifiers(node)?.some((modifier) => modifier.kind === kind),
   );
+
+const declarationName = (node: ts.DeclarationStatement): string | undefined =>
+  node.name && ts.isIdentifier(node.name) ? node.name.text : undefined;
+
+const unwrapExpression = (expression: ts.Expression): ts.Expression => {
+  let current = expression;
+  while (
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isParenthesizedExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+};
+
+const exportedServiceClasses = (sourceFile: ts.SourceFile): Set<string> => {
+  const classNames = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (
+      ts.isClassDeclaration(statement) &&
+      statement.name &&
+      hasModifier(statement, ts.SyntaxKind.ExportKeyword)
+    ) {
+      classNames.add(statement.name.text);
+      continue;
+    }
+    if (
+      !ts.isVariableStatement(statement) ||
+      !hasModifier(statement, ts.SyntaxKind.ExportKeyword)
+    ) {
+      continue;
+    }
+    for (const declaration of statement.declarationList.declarations) {
+      const initializer = declaration.initializer
+        ? unwrapExpression(declaration.initializer)
+        : undefined;
+      if (
+        initializer &&
+        ts.isCallExpression(initializer) &&
+        ts.isPropertyAccessExpression(initializer.expression) &&
+        initializer.expression.name.text === 'create' &&
+        ts.isIdentifier(initializer.expression.expression)
+      ) {
+        classNames.add(initializer.expression.expression.text);
+      }
+    }
+  }
+  return classNames;
+};
+
+/**
+ * Extracts top-level exports and public methods exposed by exported service classes.
+ * Class methods use `ClassName.methodName` identities so baseline entries remain stable.
+ */
+export const extractExports = (content: string): string[] => {
+  const sourceFile = ts.createSourceFile('service.ts', content, ts.ScriptTarget.Latest, true);
+  const exports = new Set<string>();
+  const serviceClassNames = exportedServiceClasses(sourceFile);
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isExportDeclaration(statement) && !statement.moduleSpecifier && statement.exportClause) {
+      if (ts.isNamedExports(statement.exportClause)) {
+        for (const element of statement.exportClause.elements) {
+          exports.add(element.propertyName?.text ?? element.name.text);
+        }
+      }
+      continue;
+    }
+
+    if (ts.isVariableStatement(statement) && hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name)) {
+          exports.add(declaration.name.text);
+        }
+      }
+      continue;
+    }
+
+    if (
+      !hasModifier(statement, ts.SyntaxKind.ExportKeyword) ||
+      !(
+        ts.isFunctionDeclaration(statement) ||
+        ts.isClassDeclaration(statement) ||
+        ts.isTypeAliasDeclaration(statement) ||
+        ts.isInterfaceDeclaration(statement) ||
+        ts.isEnumDeclaration(statement)
+      )
+    ) {
+      continue;
+    }
+
+    const name = declarationName(statement);
+    if (name) {
+      exports.add(name);
+    }
+  }
+
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isClassDeclaration(statement) ||
+      !statement.name ||
+      !serviceClassNames.has(statement.name.text)
+    ) {
+      continue;
+    }
+    for (const member of statement.members) {
+      if (
+        !ts.isMethodDeclaration(member) ||
+        !member.name ||
+        hasModifier(member, ts.SyntaxKind.PrivateKeyword) ||
+        hasModifier(member, ts.SyntaxKind.ProtectedKeyword) ||
+        ts.isPrivateIdentifier(member.name)
+      ) {
+        continue;
+      }
+      const methodName =
+        ts.isIdentifier(member.name) || ts.isStringLiteral(member.name)
+          ? member.name.text
+          : undefined;
+      if (methodName && !methodName.startsWith('_')) {
+        exports.add(`${statement.name.text}.${methodName}`);
+      }
+    }
+  }
+
+  return [...exports].filter((symbol) => !symbol.startsWith('_')).sort();
 };
 
 /**
@@ -142,9 +240,8 @@ const extractExports = (content: string): string[] => {
  *   - *.test.ts, *.spec.ts
  *   - __tests__/ directories
  *   - *.d.ts declaration files
- *   - Test utilities / fixtures
  */
-const isProductionFile = (filePath: string): boolean => {
+export const isProductionFile = (filePath: string): boolean => {
   const normalized = filePath.replace(/\\/g, '/');
   if (normalized.includes('/__tests__/')) {
     return false;
@@ -162,73 +259,222 @@ const isProductionFile = (filePath: string): boolean => {
   return true;
 };
 
-/**
- * Scan for references to a symbol across the production codebase.
- * Counts the number of files (not occurrences) that reference the symbol
- * outside of its own declaration file.
- */
-const findProductionReferences = (options: { symbol: string; declaringFile: string }): string[] => {
-  const { symbol, declaringFile } = options;
-  const refFiles: string[] = [];
-  const normalizedDeclaring = declaringFile.replace(/\\/g, '/');
+const isTypeOnlyNode = (node: ts.Node): boolean => {
+  let current: ts.Node | undefined = node;
+  while (current) {
+    if (
+      ts.isTypeNode(current) ||
+      ts.isInterfaceDeclaration(current) ||
+      ts.isTypeAliasDeclaration(current) ||
+      ts.isImportDeclaration(current) ||
+      ts.isImportEqualsDeclaration(current) ||
+      ts.isExportDeclaration(current)
+    ) {
+      return true;
+    }
+    if (ts.isStatement(current) || ts.isSourceFile(current)) {
+      return false;
+    }
+    current = current.parent;
+  }
+  return false;
+};
 
-  // Scan production directories for references
+const isDeclarationIdentifier = (node: ts.Identifier): boolean => {
+  const parent = node.parent;
+  if (
+    (ts.isPropertyAccessExpression(parent) && parent.name === node) ||
+    (ts.isPropertyAssignment(parent) && parent.initializer === node) ||
+    ts.isShorthandPropertyAssignment(parent)
+  ) {
+    return false;
+  }
+  return (
+    ((ts.isVariableDeclaration(parent) ||
+      ts.isParameter(parent) ||
+      ts.isBindingElement(parent) ||
+      ts.isFunctionDeclaration(parent) ||
+      ts.isFunctionExpression(parent) ||
+      ts.isClassDeclaration(parent) ||
+      ts.isClassExpression(parent) ||
+      ts.isMethodDeclaration(parent) ||
+      ts.isPropertyDeclaration(parent) ||
+      ts.isGetAccessorDeclaration(parent) ||
+      ts.isSetAccessorDeclaration(parent) ||
+      ts.isEnumMember(parent)) &&
+      parent.name === node) ||
+    (ts.isLabeledStatement(parent) && parent.label === node)
+  );
+};
+
+const sourceReferenceNames = (sourceFile: ts.SourceFile): Set<string> => {
+  const names = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node) && !isTypeOnlyNode(node) && !isDeclarationIdentifier(node)) {
+      names.add(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return names;
+};
+
+type ProductionSource = {
+  filePath: string;
+  sourceFile: ts.SourceFile;
+};
+
+let productionSourcesCache: ProductionSource[] | undefined;
+let productionReferenceIndexCache: Map<string, Set<string>> | undefined;
+
+/** Extracts executable script and template-expression code from a Svelte component. */
+export const extractSvelteCode = (content: string): string => {
+  const chunks: string[] = [];
+  const withoutComments = content.replace(/<!--[\s\S]*?-->/g, '');
+  const template = withoutComments
+    .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (match, script: string) => {
+      chunks.push(script);
+      return ' '.repeat(match.length);
+    })
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, (match) => ' '.repeat(match.length));
+
+  for (let index = 0; index < template.length; index++) {
+    if (template[index] !== '{') {
+      continue;
+    }
+    const expressionStart = index + 1;
+    let depth = 1;
+    let quote: '"' | "'" | '`' | undefined;
+    let escaped = false;
+    for (index = expressionStart; index < template.length; index++) {
+      const character = template[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (quote) {
+        if (character === quote) {
+          quote = undefined;
+        }
+        continue;
+      }
+      if (character === '"' || character === "'" || character === '`') {
+        quote = character;
+        continue;
+      }
+      if (character === '{') {
+        depth++;
+      } else if (character === '}') {
+        depth--;
+        if (depth === 0) {
+          chunks.push(template.slice(expressionStart, index));
+          break;
+        }
+      }
+    }
+  }
+
+  return chunks.join('\n');
+};
+
+const productionSources = (): ProductionSource[] => {
+  if (productionSourcesCache) {
+    return productionSourcesCache;
+  }
+
+  const results: ProductionSource[] = [];
   const scanDirs = [
     resolve(ROOT, 'apps/frontend/client/src'),
     resolve(ROOT, 'apps/frontend/hub/src'),
     resolve(ROOT, 'packages/frontend'),
   ];
+  const walk = (directory: string): void => {
+    try {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const fullPath = resolve(directory, entry.name);
+        if (entry.isDirectory()) {
+          if (!EXCLUDED_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
+            walk(fullPath);
+          }
+          continue;
+        }
+        if (
+          !entry.isFile() ||
+          (!entry.name.endsWith('.ts') && !entry.name.endsWith('.svelte')) ||
+          !isProductionFile(fullPath)
+        ) {
+          continue;
+        }
+        try {
+          const content = readFileSync(fullPath, 'utf-8');
+          const analyzableContent = fullPath.endsWith('.svelte')
+            ? extractSvelteCode(content)
+            : content;
+          results.push({
+            filePath: fullPath.replace(/\\/g, '/'),
+            sourceFile: ts.createSourceFile(
+              fullPath,
+              analyzableContent,
+              ts.ScriptTarget.Latest,
+              true,
+              fullPath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+            ),
+          });
+        } catch {
+          // Skip unreadable source files.
+        }
+      }
+    } catch {
+      // Skip inaccessible directories.
+    }
+  };
 
   for (const scanDir of scanDirs) {
-    if (!existsSync(scanDir)) {
-      continue;
+    if (existsSync(scanDir)) {
+      walk(scanDir);
     }
-    const walk = (dir: string): void => {
-      try {
-        const entries = readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = resolve(dir, entry.name);
-          if (entry.isDirectory()) {
-            if (!EXCLUDED_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-              walk(fullPath);
-            }
-          } else if (entry.isFile()) {
-            const normalizedPath = fullPath.replace(/\\/g, '/');
-            // Skip the declaring file itself
-            if (normalizedPath === normalizedDeclaring) {
-              continue;
-            }
-            // Only check production files
-            if (!isProductionFile(normalizedPath)) {
-              continue;
-            }
-            // Check .ts, .svelte files
-            if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.svelte')) {
-              continue;
-            }
-            try {
-              const content = readFileSync(fullPath, 'utf-8');
-              // Simple word-boundary check for the symbol reference
-              const symbolRe = new RegExp(`\\b${escapeRegex(symbol)}\\b`);
-              if (symbolRe.test(content)) {
-                refFiles.push(normalizedPath);
-              }
-            } catch {
-              // skip unreadable files
-            }
-          }
-        }
-      } catch {
-        // skip inaccessible dirs
-      }
-    };
-    walk(scanDir);
   }
-
-  return refFiles;
+  productionSourcesCache = results;
+  return results;
 };
 
-const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const productionReferenceIndex = (): Map<string, Set<string>> => {
+  if (productionReferenceIndexCache) {
+    return productionReferenceIndexCache;
+  }
+
+  const index = new Map<string, Set<string>>();
+  for (const source of productionSources()) {
+    for (const name of sourceReferenceNames(source.sourceFile)) {
+      const files = index.get(name) ?? new Set<string>();
+      files.add(source.filePath);
+      index.set(name, files);
+    }
+  }
+  productionReferenceIndexCache = index;
+  return index;
+};
+
+/**
+ * Scan for references to a symbol across the production codebase.
+ * Counts the number of files (not occurrences) that reference the symbol
+ * outside of its own declaration file.
+ */
+export const findProductionReferences = (options: {
+  symbol: string;
+  declaringFile: string;
+}): string[] => {
+  const { symbol, declaringFile } = options;
+  const normalizedDeclaring = declaringFile.replace(/\\/g, '/');
+  const referenceName = symbol.includes('.') ? symbol.slice(symbol.lastIndexOf('.') + 1) : symbol;
+  return [...(productionReferenceIndex().get(referenceName) ?? [])].filter(
+    (filePath) => filePath !== normalizedDeclaring,
+  );
+};
 
 /** Compute a simple hash for a list of orphan symbols (for identity-aware comparison). */
 const orphanHash = (symbols: string[]): string => {
@@ -245,6 +491,10 @@ const orphanHash = (symbols: string[]): string => {
 // ── Main ────────────────────────────────────────────────────
 
 const main = () => {
+  if (process.env.AIKAMI_GUARD_PROJECT && process.env.AIKAMI_GUARD_PROJECT !== 'scripts') {
+    return;
+  }
+
   const args = process.argv.slice(2);
   const updateBaseline = args.includes('--update-baseline');
   const showAll = args.includes('--show-all');
@@ -390,4 +640,6 @@ const main = () => {
   process.exit(exitCode);
 };
 
-main();
+if (import.meta.main) {
+  main();
+}
