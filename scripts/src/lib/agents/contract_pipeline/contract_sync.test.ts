@@ -20,7 +20,7 @@
 // contract_sync.ts) fixes this: the commit no longer depends on — and cannot
 // disturb — whatever branch repoRoot has checked out.
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, it as baseIt, beforeEach, describe, expect } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -34,6 +34,16 @@ import {
   pullContractFromWorktree,
   toGitPath,
 } from './contract_sync.ts';
+
+/**
+ * Windows CI slowness guard: this suite's shared `beforeEach` spawns ~13 git
+ * subprocesses per test and the git-heavy bodies spawn more, which routinely
+ * exceeds bun's 5s default timeout on windows-latest. Bun then kills the
+ * in-flight `git push` mid-write, failing the hook with a misleading
+ * "Command failed: git push" error. Give every test here a generous ceiling.
+ */
+const it = (name: string, fn: () => undefined | Promise<unknown>): void =>
+  baseIt(name, fn, { timeout: 30_000 });
 
 const git = (args: string[], cwd: string): string =>
   execFileSync('git', args, {
