@@ -129,9 +129,14 @@ describe('TtsService — C-389 config-driven TTS', () => {
     setupWorkerMock();
   });
 
+  /** Restores voiceModelService.checkStatus after a test that stubbed it. */
+  let restoreCheckStatus: (() => void) | undefined;
+
   afterEach(() => {
     teardownWorkerMock();
     delete (globalThis as Record<string, unknown>).fetch;
+    restoreCheckStatus?.();
+    restoreCheckStatus = undefined;
   });
 
   // -----------------------------------------------------------------------
@@ -237,11 +242,143 @@ describe('TtsService — C-389 config-driven TTS', () => {
       voice: 'af_bella',
     });
 
+    // requestId correlates the response with this request — a stale
+    // completion from a superseded synthesis must not play.
     expect(workerMockState.postMessage).toHaveBeenCalledWith({
       action: 'synthesize',
       text: 'Hello world.',
       voice: 'af_bella',
+      requestId: expect.any(Number),
     });
+  });
+
+  // -----------------------------------------------------------------------
+  // Worker request correlation — a stale completion must not play
+  // -----------------------------------------------------------------------
+
+  /**
+   * Brings the service up through the real initialize() path so the mock
+   * Worker's onmessage is the actual handler under test. Setting _worker to a
+   * bare object instead would leave onmessage unwired, and every assertion
+   * about stale completions would pass without exercising anything.
+   */
+  const initializeWorkerBackedService = async (): Promise<{
+    ttsService: import('./tts_service.svelte.ts').TtsServiceInterface;
+    playSpy: ReturnType<typeof mock>;
+  }> => {
+    setupFetchSpy();
+    const { ttsService } = await resetTtsService();
+    const voiceModel = await import('./voice_model_service.svelte.ts');
+    const voiceModelSvc = voiceModel.voiceModelService as unknown as Service;
+    const originalCheckStatus = voiceModelSvc.checkStatus;
+    restoreCheckStatus = () => {
+      voiceModelSvc.checkStatus = originalCheckStatus;
+    };
+    voiceModelSvc.checkStatus = mock(async () => ({ status: 'ready' }));
+    Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true });
+
+    const initPromise = ttsService.initialize();
+    await new Promise((r) => setTimeout(r, 10));
+    simulateWorkerMessage({ type: 'ready', backend: 'wasm' });
+    await initPromise;
+
+    const playSpy = mock(async () => {});
+    (ttsService as unknown as Service).playAudioBuffer = playSpy;
+    return { ttsService, playSpy };
+  };
+
+  const lastRequestId = (): number =>
+    (workerMockState.postMessage as ReturnType<typeof mock>).mock.calls.at(-1)?.[0]
+      .requestId as number;
+
+  test('a superseded synthesis completing late plays nothing', async () => {
+    const { ttsService, playSpy } = await initializeWorkerBackedService();
+
+    await ttsService.synthesize({ text: 'first', voice: 'af_bella' });
+    const firstId = lastRequestId();
+    await ttsService.synthesize({ text: 'second', voice: 'af_bella' });
+    expect(lastRequestId()).not.toBe(firstId);
+
+    // The first request finishes after the second was posted.
+    simulateWorkerMessage({
+      type: 'complete',
+      pcmData: new Float32Array([0.1]),
+      sampleRate: 24000,
+      requestId: firstId,
+    });
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  test('a completion arriving after stop() plays nothing', async () => {
+    const { ttsService, playSpy } = await initializeWorkerBackedService();
+
+    await ttsService.synthesize({ text: 'cancelled', voice: 'af_bella' });
+    const id = lastRequestId();
+    ttsService.stop();
+
+    simulateWorkerMessage({
+      type: 'complete',
+      pcmData: new Float32Array([0.1]),
+      sampleRate: 24000,
+      requestId: id,
+    });
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  test('the matching completion does play', async () => {
+    const { ttsService, playSpy } = await initializeWorkerBackedService();
+
+    await ttsService.synthesize({ text: 'current', voice: 'af_bella' });
+
+    simulateWorkerMessage({
+      type: 'complete',
+      pcmData: new Float32Array([0.1]),
+      sampleRate: 24000,
+      requestId: lastRequestId(),
+    });
+
+    expect(playSpy).toHaveBeenCalled();
+  });
+
+  // -----------------------------------------------------------------------
+  // Credentials are never sent over a cleartext non-loopback link
+  // -----------------------------------------------------------------------
+
+  test('checkKokoroServer() sends the configured key on the health probe', async () => {
+    const fetchMock = mock(
+      async () => new Response(JSON.stringify({ voices: [] }), { status: 200 }),
+    );
+    // @ts-expect-error — replacing global fetch
+    globalThis.fetch = fetchMock;
+    const { ttsService } = await resetTtsService();
+    const svc = ttsService as unknown as Service;
+    svc._kokoroServerUrl = 'https://voice.example.com';
+    svc._voiceApiKey = 'sk-voice';
+
+    await ttsService.checkKokoroServer();
+
+    const init = (fetchMock as ReturnType<typeof mock>).mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-voice');
+    expect(ttsService.isKokoroServerAvailable).toBe(true);
+  });
+
+  test('checkKokoroServer() stays unauthenticated when no key is configured', async () => {
+    const fetchMock = mock(
+      async () => new Response(JSON.stringify({ voices: [] }), { status: 200 }),
+    );
+    // @ts-expect-error — replacing global fetch
+    globalThis.fetch = fetchMock;
+    const { ttsService } = await resetTtsService();
+    const svc = ttsService as unknown as Service;
+    svc._kokoroServerUrl = 'http://localhost:8880';
+    svc._voiceApiKey = undefined;
+
+    await ttsService.checkKokoroServer();
+
+    const init = (fetchMock as ReturnType<typeof mock>).mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
   });
 
   // -----------------------------------------------------------------------

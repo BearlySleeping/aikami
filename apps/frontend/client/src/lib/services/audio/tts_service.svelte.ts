@@ -40,7 +40,28 @@ const SUPPORTED_SERVER_VOICE_PROVIDERS = new Set(['kokoro', 'voicevox', 'fish-sp
 const isLocalhostUrl = (url: string): boolean => {
   try {
     const parsed = new URL(url);
-    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    return (
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '[::1]' ||
+      parsed.hostname === '::1'
+    );
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Whether a Bearer credential may be sent to this endpoint. HTTPS protects it
+ * in transit; plain HTTP does not, so the key is only allowed over loopback,
+ * where the request never leaves the machine. A stored connection can hold any
+ * URL — nothing upstream validates the protocol — so this is checked at the
+ * point of transmission rather than trusted from configuration.
+ */
+const canCarryCredential = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' || isLocalhostUrl(url);
   } catch {
     return false;
   }
@@ -240,8 +261,18 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   private _abortController: AbortController | undefined;
   private _currentAudio: HTMLAudioElement | null = null;
   private _ttsGain: GainNode | undefined; // volume control for synthesized speech
-  /** Resolves/rejects the in-flight speak() call once the worker path reports completion. */
-  private _pendingWorkerSpeak: { resolve: () => void; reject: (error: Error) => void } | undefined;
+  /**
+   * The worker request whose completion is still wanted. Every speak() calls
+   * stop() first, so a second request can be posted while the worker is still
+   * synthesizing the first — without an id, that first 'complete' would
+   * resolve the second caller and play the wrong audio. resolve/reject
+   * are absent for fire-and-forget synthesize() calls, which still need the
+   * id so their audio is played and a stale one is not.
+   */
+  private _activeWorkerRequest:
+    | { id: number; resolve?: () => void; reject?: (error: Error) => void }
+    | undefined;
+  private _workerRequestSeq = 0;
 
   // --- Playback state (gapless scheduling, word tracking) ---
   private _streamEnded = false;
@@ -306,7 +337,9 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
     try {
-      const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/voices`);
+      const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/voices`, {
+        headers: this._authHeaders(),
+      });
       if (!response.ok) {
         this.error('loadVoices:fetch-failed', { status: response.status });
         return;
@@ -371,20 +404,26 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   private async _speakViaWorker(options: { text: string; voice: string }): Promise<void> {
     this.stop();
     this.isSynthesizing = true;
+    const id = ++this._workerRequestSeq;
     try {
       await new Promise<void>((resolve, reject) => {
-        this._pendingWorkerSpeak = { resolve, reject };
+        this._activeWorkerRequest = { id, resolve, reject };
         this._worker?.postMessage({
           action: 'synthesize',
           text: options.text,
           voice: options.voice,
+          requestId: id,
         });
       });
     } catch (error) {
       this.error('speak:worker-failed', error);
     } finally {
-      this.isSynthesizing = false;
-      this._pendingWorkerSpeak = undefined;
+      // Only clear when this request is still the active one — a newer
+      // speak() that superseded it owns the slot now.
+      if (this._activeWorkerRequest?.id === id) {
+        this.isSynthesizing = false;
+        this._activeWorkerRequest = undefined;
+      }
     }
   }
 
@@ -397,9 +436,11 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     }
 
     // Reject a pending worker-backed speak() so it never hangs a caller.
-    if (this._pendingWorkerSpeak) {
-      this._pendingWorkerSpeak.reject(new Error('stop() called before synthesis completed'));
-      this._pendingWorkerSpeak = undefined;
+    // Clearing the slot also makes the in-flight worker response stale, so a
+    // completion that arrives after stop() plays nothing.
+    if (this._activeWorkerRequest) {
+      this._activeWorkerRequest.reject?.(new Error('stop() called before synthesis completed'));
+      this._activeWorkerRequest = undefined;
     }
 
     // Stop HTMLAudioElement playback
@@ -569,6 +610,19 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
+    // A credential must never be sent over a cleartext non-loopback link.
+    // Silently dropping the key would produce a confusing 401 instead, so
+    // the endpoint is rejected with an explanation and the key is discarded.
+    if (mode === 'server' && serverUrl && this._voiceApiKey && !canCarryCredential(serverUrl)) {
+      this._voiceApiKey = undefined;
+      this.status = 'error';
+      this.backend = 'unavailable';
+      this.errorMessage =
+        'This voice server needs an API key but is configured over plain http://. Use https:// (or a localhost address) so the key is not sent in the clear.';
+      this.warn('initialize:insecure-voice-endpoint-with-credential');
+      return;
+    }
+
     // Server mode: probe ONLY the configured URL (AC-7 — no blind
     // localhost probing). Unreachable → fall through to browser TTS.
     if (mode === 'server' && serverUrl) {
@@ -617,6 +671,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
           pcmData?: Float32Array;
           sampleRate?: number;
           message?: string;
+          requestId?: number;
         };
 
         switch (payload.type) {
@@ -626,7 +681,14 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
             this.info('initialize:ready', { backend: this.backend });
             break;
 
-          case 'complete':
+          case 'complete': {
+            const active = this._activeWorkerRequest;
+            if (!active || payload.requestId !== active.id) {
+              // A superseded or stopped request finishing late. Playing it
+              // would emit audio the user already cancelled.
+              this.debug('kokoro:complete-stale', { requestId: payload.requestId });
+              break;
+            }
             if (payload.pcmData && payload.sampleRate !== undefined) {
               this.debug('kokoro:complete', {
                 pcmLength: payload.pcmData.length,
@@ -640,18 +702,25 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
                 sampleRate: payload.sampleRate,
               });
             }
-            this._pendingWorkerSpeak?.resolve();
-            this._pendingWorkerSpeak = undefined;
+            active.resolve?.();
+            this._activeWorkerRequest = undefined;
             break;
+          }
 
-          case 'error':
+          case 'error': {
+            const active = this._activeWorkerRequest;
+            if (payload.requestId !== undefined && payload.requestId !== active?.id) {
+              this.debug('kokoro:error-stale', { requestId: payload.requestId });
+              break;
+            }
             this.status = 'error';
             this.backend = 'unavailable';
             this.errorMessage = payload.message ?? 'Kokoro worker error';
             this.error('kokoro:worker-error', { message: this.errorMessage });
-            this._pendingWorkerSpeak?.reject(new Error(this.errorMessage));
-            this._pendingWorkerSpeak = undefined;
+            active?.reject?.(new Error(this.errorMessage));
+            this._activeWorkerRequest = undefined;
             break;
+          }
 
           default:
             break;
@@ -663,8 +732,8 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         this.backend = 'unavailable';
         this.errorMessage = error.message || 'Unknown worker error';
         this.error('kokoro:worker-onerror', { message: this.errorMessage });
-        this._pendingWorkerSpeak?.reject(new Error(this.errorMessage));
-        this._pendingWorkerSpeak = undefined;
+        this._activeWorkerRequest?.reject?.(new Error(this.errorMessage));
+        this._activeWorkerRequest = undefined;
       };
 
       // ORT WASM is served from the R2 distribution plane when configured
@@ -760,7 +829,9 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    this._worker.postMessage({ action: 'synthesize', text, voice });
+    const id = ++this._workerRequestSeq;
+    this._activeWorkerRequest = { id };
+    this._worker.postMessage({ action: 'synthesize', text, voice, requestId: id });
   }
 
   /**
@@ -852,6 +923,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
    *
    * @returns The WAV ArrayBuffer, or undefined when the request failed.
    */
+  /** Bearer header for the configured voice server, or nothing when keyless. */
+  private _authHeaders(): Record<string, string> {
+    // biome-ignore lint/style/useNamingConvention: HTTP header name
+    return this._voiceApiKey ? { Authorization: `Bearer ${this._voiceApiKey}` } : {};
+  }
+
   private async _requestSpeech(options: {
     text: string;
     voice: string;
@@ -869,8 +946,7 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // biome-ignore lint/style/useNamingConvention: HTTP header name
-        ...(this._voiceApiKey ? { Authorization: `Bearer ${this._voiceApiKey}` } : {}),
+        ...this._authHeaders(),
       },
       body: JSON.stringify({
         model: 'tts-1',
@@ -909,8 +985,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       // A GET against the voices listing is a real health check with no
       // synthesis cost — the previous probe POSTed a full speech request,
       // paying for audio generation just to learn the server exists.
+      // A server that protects /v1/audio/speech usually protects /v1/voices
+      // with the same credential — an unauthenticated probe would 401 and be
+      // misread as "server unavailable".
       const response = await fetch(`${url}/v1/voices`, {
         method: 'GET',
+        headers: this._authHeaders(),
         signal: AbortSignal.timeout(5000),
       });
 

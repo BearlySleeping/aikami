@@ -16,6 +16,7 @@ import {
 } from '@aikami/frontend/services';
 import type { CapabilitySnapshot, ConnectionEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
+import { isTauri } from '$lib/views/utils/is_tauri';
 import {
   campaignService,
   capabilityService,
@@ -42,12 +43,17 @@ export type SetupEntryPath = 'recommended' | 'existing' | 'text-only';
 /** Where the flow was entered from — decides what "done" navigates to. */
 export type SetupOrigin = 'new-adventure' | 'settings' | 'direct';
 
-/** Step within the shared setup flow. */
+/**
+ * Step within the shared setup flow.
+ *
+ * `plan` is the hub: it reviews what is configured, what discovery found,
+ * and which optional capabilities are still available, and it is always
+ * reachable so a saved-but-wrong connection can be corrected.
+ */
 export type SetupFlowStep =
   | 'idle'
   | 'entry'
   | 'detecting'
-  | 'results'
   | 'plan'
   | 'manual'
   | 'applying'
@@ -63,6 +69,12 @@ export type DiscoveredProvider = {
   readonly isCompatible: boolean;
   readonly modelName: string | undefined;
   readonly baseUrl: string | undefined;
+  /** Stable {#each} key. */
+  readonly key: string;
+  /** Local-vs-cloud glyph, resolved here so the View holds no conditional. */
+  readonly icon: string;
+  /** Capability plus model, already formatted for display. */
+  readonly detailText: string;
 };
 
 /** A capability toggle for the feature selection step. */
@@ -72,6 +84,35 @@ export type CapabilityToggle = {
   readonly required: boolean;
   enabled: boolean;
   readonly description: string;
+};
+
+/**
+ * One capability as presented on the plan screen — what it is, whether it
+ * is already backed by a usable connection, and what discovery found for
+ * it. Drives both the review list and the per-capability edit action.
+ */
+export type CapabilityRow = {
+  readonly id: ConnectionCapability;
+  readonly label: string;
+  readonly description: string;
+  readonly required: boolean;
+  readonly enabled: boolean;
+  /** A usable connection already exists for this capability. */
+  readonly configured: boolean;
+  /** Name of the connection backing it, when configured. */
+  readonly connectionName: string | undefined;
+  /** Label of a provider discovery found but that has not been saved yet. */
+  readonly discoveredLabel: string | undefined;
+  /** The single secondary line to render — connection name, discovery, or description. */
+  readonly statusText: string;
+  /** "Change" or "Set up". */
+  readonly actionLabel: string;
+  /** Status glyph for the required row. */
+  readonly icon: string;
+  /** Button classes for this row's action. */
+  readonly actionButtonClass: string;
+  /** Whether the row's checkbox reads as on. */
+  readonly checked: boolean;
 };
 
 /** Summary of a plan step. */
@@ -117,13 +158,62 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   readonly editorViewModel: AiSettingsViewModelInterface;
   /** Capability currently being configured manually, when step === 'manual'. */
   readonly manualCapability: ConnectionCapability | null;
+  /** Per-capability review rows for the plan screen. */
+  readonly capabilityRows: readonly CapabilityRow[];
+  /** The required (text) row, for the plan screen's Required section. */
+  readonly requiredRow: CapabilityRow | undefined;
+  /** The optional rows, for the plan screen's Optional section. */
+  readonly optionalRows: readonly CapabilityRow[];
+  /** Title for the current step. */
+  readonly headingTitle: string;
+  /** Subtitle for the current step; empty when the step needs none. */
+  readonly headingSubtitle: string;
+  /** Whether the current step has a subtitle to render. */
+  readonly hasHeadingSubtitle: boolean;
+  /** Closing message on the ready screen, worded for the path taken. */
+  readonly readyMessage: string;
+  /** Why Continue is disabled, when it is. */
+  readonly blockedHint: string;
+  /** Whether the plan screen should show the "nothing found" empty state. */
+  readonly showNoProvidersMessage: boolean;
+  /** Whether Continue on the plan screen is unavailable. */
+  readonly isContinueDisabled: boolean;
+  /** Whether {@link blockedHint} has something to say. */
+  readonly hasBlockedHint: boolean;
+
+  // Step predicates — the View branches on booleans, never on step equality.
+  readonly isEntryStep: boolean;
+  readonly isDetectingStep: boolean;
+  readonly isPlanStep: boolean;
+  readonly isManualStep: boolean;
+  readonly isApplyingStep: boolean;
+  readonly isReadyStep: boolean;
+  readonly isErrorStep: boolean;
+
+  /** Reopens the connection editor for the capability being configured, keeping it scoped. */
+  reopenManualEditor(): void;
+  /** Entry path: scan for what is already available. */
+  selectRecommended(): void;
+  /** Entry path: enter provider details by hand. */
+  selectExisting(): void;
+  /** Entry path: configure text and nothing else. */
+  selectTextOnly(): void;
+  /** Whether the app is running in the Tauri desktop shell — decides which install advice is truthful. */
+  readonly isDesktop: boolean;
+  /** Platform-appropriate message for the "nothing found" state on the plan screen. */
+  readonly noProvidersMessage: string;
+  /** Whether a discovery scan has actually run — the "nothing found" state is only honest after one. */
+  readonly hasScanned: boolean;
+
+  /** Returns from the ready screen to the review screen, so a saved choice can still be changed. */
+  reviewSetup(): void;
 
   /** Selects an entry path. */
   selectEntryPath(path: SetupEntryPath): void;
   /** Toggles a capability on/off. */
   toggleCapability(capability: ConnectionCapability): void;
-  /** Continues from the results (feature-selection) step — discovery for Recommended, manual entry for Connect Existing. */
-  continueFromResults(): Promise<void>;
+  /** Re-runs discovery from the plan screen. */
+  rescan(): Promise<void>;
   /** Starts provider discovery for the enabled capabilities only. */
   startDiscovery(): Promise<void>;
   /** Opens the shared connection editor for manual configuration of one capability. */
@@ -173,6 +263,27 @@ const CAPABILITY_DEFINITIONS: readonly CapabilityToggle[] = [
   },
 ];
 
+/**
+ * Per-step header copy. A single fixed title made every screen look like the
+ * same screen, which is what made the three entry paths feel identical.
+ */
+const STEP_HEADINGS: Record<SetupFlowStep, { title: string; subtitle: string }> = {
+  idle: { title: 'Set up your AI', subtitle: '' },
+  entry: {
+    title: 'Set up your AI',
+    subtitle: 'Aikami needs a text AI to tell the story. Pick how you want to connect one.',
+  },
+  detecting: { title: 'Looking around', subtitle: 'Checking what AI is available to you.' },
+  plan: {
+    title: 'Your setup',
+    subtitle: 'Review what will be used, and change anything you like.',
+  },
+  manual: { title: 'Add a connection', subtitle: 'Enter the service and credentials to use.' },
+  applying: { title: 'Saving your setup', subtitle: '' },
+  ready: { title: 'All set', subtitle: '' },
+  error: { title: 'Something went wrong', subtitle: '' },
+};
+
 const LOCAL_PROVIDER_IDS = new Set([
   'ollama',
   'llamacpp',
@@ -183,6 +294,12 @@ const LOCAL_PROVIDER_IDS = new Set([
   'voicevox',
   'fish-speech',
 ]);
+
+/** Capability plus optional model, formatted once so the View renders a plain string. */
+const _providerDetailText = (
+  capability: ConnectionCapability,
+  modelName: string | undefined,
+): string => (modelName ? `${capability} · ${modelName}` : capability);
 
 const _labelForProvider = (capability: ConnectionCapability, providerId: string): string => {
   if (capability === 'image') {
@@ -202,6 +319,8 @@ class SetupSubflowViewModel
 {
   private _discoveryOperationId = 0;
   private _applyOperationId = 0;
+  /** The in-flight discovery run, so a second request joins it instead of racing it. */
+  private _pendingDiscovery: Promise<void> | null = null;
   private readonly _origin: SetupOrigin;
 
   readonly editorViewModel: AiSettingsViewModelInterface;
@@ -274,6 +393,156 @@ class SetupSubflowViewModel
     return this.errorMessage || 'An error occurred';
   }
 
+  get isDesktop(): boolean {
+    return isTauri();
+  }
+
+  get hasScanned(): boolean {
+    return this.snapshot !== null;
+  }
+
+  reviewSetup(): void {
+    this.errorMessage = '';
+    this.step = 'plan';
+  }
+
+  get noProvidersMessage(): string {
+    return this.isDesktop
+      ? 'Nothing found on this computer. Add a provider below — a cloud service, or a server you already run.'
+      : 'Nothing reachable from this browser. Add a provider below — a cloud service, or a local server you already run.';
+  }
+
+  get capabilityRows(): readonly CapabilityRow[] {
+    return this._capabilityToggles.map((toggle) => {
+      const connection = this._connectionFor(toggle.id);
+      const discovered = this._discoveredProviders.find((p) => p.capability === toggle.id);
+      const configured = Boolean(connection);
+      const discoveredLabel = configured ? undefined : discovered?.label;
+
+      let statusText: string;
+      if (connection) {
+        statusText = `Using ${connection.name}`;
+      } else if (discoveredLabel) {
+        statusText = `Found: ${discoveredLabel}`;
+      } else if (toggle.required) {
+        statusText = 'Not set up yet';
+      } else {
+        statusText = toggle.description;
+      }
+
+      return {
+        id: toggle.id,
+        label: toggle.label,
+        description: toggle.description,
+        required: toggle.required,
+        enabled: toggle.enabled,
+        configured,
+        connectionName: connection?.name,
+        discoveredLabel,
+        statusText,
+        actionLabel: configured ? 'Change' : 'Set up',
+        icon: configured ? '✅' : '⚠️',
+        actionButtonClass: configured ? 'btn btn-sm btn-ghost' : 'btn btn-sm btn-primary',
+        checked: toggle.enabled || configured,
+      };
+    });
+  }
+
+  get requiredRow(): CapabilityRow | undefined {
+    return this.capabilityRows.find((row) => row.required);
+  }
+
+  get optionalRows(): readonly CapabilityRow[] {
+    return this.capabilityRows.filter((row) => !row.required);
+  }
+
+  get headingTitle(): string {
+    return STEP_HEADINGS[this.step]?.title ?? STEP_HEADINGS.entry.title;
+  }
+
+  get headingSubtitle(): string {
+    return STEP_HEADINGS[this.step]?.subtitle ?? '';
+  }
+
+  get hasHeadingSubtitle(): boolean {
+    return this.headingSubtitle.length > 0;
+  }
+
+  get readyMessage(): string {
+    return this.entryPath === 'text-only'
+      ? 'Text is set up. You can add artwork and read-aloud any time from Settings.'
+      : 'Your AI setup is complete. You can change any of it later in Settings.';
+  }
+
+  get blockedHint(): string {
+    if (this.canApplyPlan) {
+      return '';
+    }
+    return `Set up ${this.requiredRow?.label ?? 'text'} to continue.`;
+  }
+
+  get showNoProvidersMessage(): boolean {
+    return this.hasScanned && !this.hasDiscoveredProviders;
+  }
+
+  get isContinueDisabled(): boolean {
+    return this.isApplying || !this.canApplyPlan;
+  }
+
+  get hasBlockedHint(): boolean {
+    return this.blockedHint.length > 0;
+  }
+
+  get isEntryStep(): boolean {
+    return this.step === 'entry';
+  }
+
+  get isDetectingStep(): boolean {
+    return this.step === 'detecting';
+  }
+
+  get isPlanStep(): boolean {
+    return this.step === 'plan';
+  }
+
+  get isManualStep(): boolean {
+    return this.step === 'manual';
+  }
+
+  get isApplyingStep(): boolean {
+    return this.step === 'applying';
+  }
+
+  get isReadyStep(): boolean {
+    return this.step === 'ready';
+  }
+
+  get isErrorStep(): boolean {
+    return this.step === 'error';
+  }
+
+  selectRecommended(): void {
+    this.selectEntryPath('recommended');
+  }
+
+  selectExisting(): void {
+    this.selectEntryPath('existing');
+  }
+
+  selectTextOnly(): void {
+    this.selectEntryPath('text-only');
+  }
+
+  /**
+   * Reopens the editor for the capability currently being configured. Going
+   * through openManualSetup keeps voice on its own setup modal — calling
+   * openAddProvider() directly would drop the scope and show the generic
+   * connection editor instead.
+   */
+  reopenManualEditor(): void {
+    this.openManualSetup(this.manualCapability ?? 'text');
+  }
+
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -290,28 +559,42 @@ class SetupSubflowViewModel
 
   // ── Entry path selection ───────────────────────────────────────────────
 
+  /**
+   * The three entry buttons now diverge immediately, so the choice the user
+   * makes is the choice they see happen. Recommended scans; the other two
+   * open the connection editor. None of them lead to a shared checkbox list
+   * that made the buttons look interchangeable — optional capabilities are
+   * offered on the plan screen, after there is something to add them to.
+   */
   selectEntryPath(path: SetupEntryPath): void {
     this.entryPath = path;
     this.errorMessage = '';
 
-    if (path === 'text-only') {
-      // Text-only skips optional selection — go straight to configuring text.
-      this._capabilityToggles = this._capabilityToggles.map((t) => ({
-        ...t,
-        enabled: t.id === 'text',
-      }));
-      if (this._hasUsableConnection('text')) {
-        this.step = 'ready';
-        return;
-      }
-      // A viable text choice is required before text-only can complete —
-      // open the real editor rather than applying nothing and pretending
-      // setup succeeded.
-      void this.openManualSetup('text');
-    } else {
-      // Recommended or existing — show feature selection.
-      this.step = 'results';
+    // Every path starts from the required capability only. Image and voice
+    // are opt-in from the plan screen.
+    this._capabilityToggles = this._capabilityToggles.map((t) => ({
+      ...t,
+      enabled: t.required,
+    }));
+
+    if (path === 'recommended') {
+      // "Recommended" means we go looking — no questions first.
+      void this.startDiscovery();
+      return;
     }
+
+    if (this._hasUsableConnection('text')) {
+      // Text is already usable, so there is nothing to enter. Text-only
+      // asked for nothing more and is done; "connect my own" lands on the
+      // review screen, where the existing choice is visible and editable.
+      this.step = path === 'text-only' ? 'ready' : 'plan';
+      return;
+    }
+
+    // "Connect something I already use" and "Text only" both mean the user
+    // will supply the details — open the real editor rather than applying
+    // nothing and pretending setup succeeded.
+    this.openManualSetup('text');
   }
 
   toggleCapability(capability: ConnectionCapability): void {
@@ -321,32 +604,30 @@ class SetupSubflowViewModel
     }
   }
 
-  async continueFromResults(): Promise<void> {
-    if (this.entryPath === 'existing') {
-      // Connect Something I Already Use: skip auto-discovery entirely and
-      // go straight to manual entry/reuse for the first enabled capability
-      // that needs it — a real distinction from Recommended, not a second
-      // path that behaves identically.
-      const first = this._capabilityToggles.find(
-        (t) => t.enabled && !this._hasUsableConnection(t.id),
-      );
-      if (first) {
-        await this.openManualSetup(first.id);
-      } else {
-        this.step = 'ready';
-      }
-      return;
-    }
+  async rescan(): Promise<void> {
     await this.startDiscovery();
   }
 
   // ── Discovery ──────────────────────────────────────────────────────────
 
   async startDiscovery(): Promise<void> {
-    if (this.isDetecting) {
-      return;
+    if (this._pendingDiscovery) {
+      // A scan is already running — join it rather than starting a second
+      // one, so "Scan again" during a scan is a no-op the caller can await.
+      return this._pendingDiscovery;
     }
+    const run = this._runDiscovery();
+    this._pendingDiscovery = run;
+    try {
+      await run;
+    } finally {
+      if (this._pendingDiscovery === run) {
+        this._pendingDiscovery = null;
+      }
+    }
+  }
 
+  private async _runDiscovery(): Promise<void> {
     const enabledIds = this._capabilityToggles.filter((t) => t.enabled).map((t) => t.id);
 
     const operationId = ++this._discoveryOperationId;
@@ -400,6 +681,9 @@ class SetupSubflowViewModel
         isCompatible: true,
         modelName: snapshot.textModelName,
         baseUrl: runtimeConfigService.getTextUrl() ?? undefined,
+        key: `${snapshot.textProviderId}-text`,
+        icon: LOCAL_PROVIDER_IDS.has(snapshot.textProviderId) ? '🖥️' : '☁️',
+        detailText: _providerDetailText('text', snapshot.textModelName),
       });
     }
     if (
@@ -415,6 +699,9 @@ class SetupSubflowViewModel
         isCompatible: true,
         modelName: undefined,
         baseUrl: runtimeConfigService.getImageUrl() ?? undefined,
+        key: `${snapshot.imageProviderId}-image`,
+        icon: LOCAL_PROVIDER_IDS.has(snapshot.imageProviderId) ? '🖥️' : '☁️',
+        detailText: _providerDetailText('image', undefined),
       });
     }
     if (
@@ -430,6 +717,9 @@ class SetupSubflowViewModel
         isCompatible: true,
         modelName: undefined,
         baseUrl: undefined,
+        key: `${snapshot.voiceProviderId}-voice`,
+        icon: LOCAL_PROVIDER_IDS.has(snapshot.voiceProviderId) ? '🖥️' : '☁️',
+        detailText: _providerDetailText('voice', undefined),
       });
     }
 
@@ -453,23 +743,21 @@ class SetupSubflowViewModel
 
     if (capability === 'text' || (capability === null && this.entryPath === 'text-only')) {
       if (this._hasUsableConnection('text')) {
-        this.step = 'ready';
+        // Text-only asked for nothing else, so it is done. Every other path
+        // returns to the review screen, where the new connection is listed
+        // and can still be corrected.
+        this.step = this.entryPath === 'text-only' ? 'ready' : 'plan';
         return;
       }
       // Still not configured (user cancelled) — let them choose again
       // rather than silently pretending setup succeeded.
-      this.step = this.entryPath === 'text-only' ? 'entry' : 'results';
+      this.step = 'entry';
       return;
     }
 
-    // Optional capability (image/voice) configured or skipped — continue
-    // toward the next unconfigured enabled capability, or finish.
-    const next = this._capabilityToggles.find((t) => t.enabled && !this._hasUsableConnection(t.id));
-    if (next) {
-      void this.openManualSetup(next.id);
-      return;
-    }
-    this.step = this.isTextReady ? 'ready' : 'results';
+    // An optional capability was configured or skipped — back to review,
+    // which lists what is now set up and what is still available.
+    this.step = 'plan';
   }
 
   // ── Apply plan (Recommended path) ───────────────────────────────────────
@@ -535,15 +823,9 @@ class SetupSubflowViewModel
     this.errorMessage = '';
     if (this.step === 'manual') {
       this.manualCapability = null;
-      if (this.entryPath === 'text-only') {
-        this.step = 'entry';
-      } else {
-        this.step = this.snapshot ? 'plan' : 'results';
-      }
-      return;
-    }
-    if (this.step === 'plan') {
-      this.step = 'results';
+      // Back out to the review screen when there is something to review —
+      // otherwise to the entry choice.
+      this.step = this.snapshot || this._hasUsableConnection('text') ? 'plan' : 'entry';
       return;
     }
 
@@ -621,11 +903,7 @@ class SetupSubflowViewModel
 
   retry(): void {
     this.errorMessage = '';
-    if (this.snapshot) {
-      this.step = 'plan';
-    } else {
-      this.step = 'results';
-    }
+    this.step = this.snapshot ? 'plan' : 'entry';
   }
 
   // ── Private helpers ────────────────────────────────────────────────────
@@ -683,7 +961,19 @@ class SetupSubflowViewModel
     }
 
     const connections = (configService.state.connections ?? []) as ConnectionEntry[];
-    const baseUrl = capability === 'image' ? (runtimeConfigService.getImageUrl() ?? '') : '';
+    const baseUrl =
+      capability === 'image'
+        ? (runtimeConfigService.getImageUrl() ?? '')
+        : (runtimeConfigService.getVoiceTtsUrl() ?? '');
+
+    // A local provider is only usable once it carries a concrete endpoint or
+    // model (_isUsable). Writing a blank row would leave the capability
+    // unconfigured forever AND make every later applyPlan add another copy,
+    // so seed nothing and let the user configure it explicitly instead.
+    if (LOCAL_PROVIDER_IDS.has(providerId) && !baseUrl.trim()) {
+      this.warn('_ensureDetectedProvider:no-endpoint', { capability, providerId });
+      return;
+    }
     const generationParams = {
       temperature: 0.7,
       topP: 0.95,
@@ -726,8 +1016,12 @@ class SetupSubflowViewModel
   }
 
   private _hasUsableConnection(capability: ConnectionCapability): boolean {
+    return this._connectionFor(capability) !== undefined;
+  }
+
+  private _connectionFor(capability: ConnectionCapability): ConnectionEntry | undefined {
     const connections = (configService.state.connections ?? []) as ConnectionEntry[];
-    return connections.some((c) => (c.capability ?? 'text') === capability && this._isUsable(c));
+    return connections.find((c) => (c.capability ?? 'text') === capability && this._isUsable(c));
   }
 
   private _isUsable(connection: ConnectionEntry): boolean {
@@ -744,18 +1038,23 @@ class SetupSubflowViewModel
     const resourceWarnings: string[] = [];
 
     if (snapshot.textStatus === 'not_found' && !this._hasUsableConnection('text')) {
+      // Only the desktop build can install a local runtime, so only it may
+      // suggest one. Telling a browser tab to install Ollama is advice it
+      // cannot act on.
       resourceWarnings.push(
-        'A text AI provider is required. You can use a cloud service or install Ollama.',
+        this.isDesktop
+          ? 'A text AI is required to play. Connect a cloud service below, or install Ollama and scan again.'
+          : 'A text AI is required to play. Connect a cloud service below, or point this at a local server you already run.',
       );
     }
 
+    // Deliberately no "requires an internet connection" notice: it fires
+    // exactly when the user is already choosing a cloud provider, where it
+    // states the obvious and reads as a warning about their own choice.
     const hasOnlineOnly =
       this._discoveredProviders.length === 0 &&
       snapshot.textStatus !== 'detected' &&
       snapshot.textStatus !== 'configured';
-    if (hasOnlineOnly) {
-      resourceWarnings.push('Some features require an internet connection for cloud AI services.');
-    }
 
     this._planSummary = {
       capabilities: this._capabilityToggles,

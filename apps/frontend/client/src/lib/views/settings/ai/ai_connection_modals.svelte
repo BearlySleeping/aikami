@@ -391,10 +391,6 @@ const { viewModel }: Props = $props();
                       >
                     </label>
                   </div>
-                {:else}
-                  <p class="text-xs text-[#938ea1]/60 italic">
-                    Save this connection first, then reopen it to tune generation parameters.
-                  </p>
                 {/if}
               </div>
             {/if}
@@ -402,14 +398,57 @@ const { viewModel }: Props = $props();
         {/if}
       </div>
 
+      <!-- Verification result — the save gate's evidence, shown before it blocks -->
+      {#if viewModel.isTestingDraft}
+        <p class="mt-4 text-xs font-mono text-base-content/60">
+          <span class="loading loading-spinner loading-xs"></span>
+          Checking connection…
+        </p>
+      {:else if viewModel.draftTestResult}
+        {@const result = viewModel.draftTestResult}
+        {#if result.ok}
+          <p class="mt-4 text-xs font-mono text-success">● Reachable ({result.latencyMs}ms)</p>
+        {:else}
+          <div class="alert alert-error mt-4 py-2">
+            <span class="text-xs">{result.error ?? 'Connection failed'}</span>
+          </div>
+        {/if}
+      {/if}
+
+      {#if viewModel.saveError}
+        <div class="alert alert-error mt-4 py-2">
+          <span class="text-xs">{viewModel.saveError}</span>
+        </div>
+      {/if}
+
       <!-- Actions -->
       <div class="flex gap-2 justify-end mt-6">
         <button type="button" class="btn btn-ghost" onclick={() => viewModel.cancelEdit()}>
           Cancel
         </button>
+        {#if viewModel.canVerifyDraft}
+          <button
+            type="button"
+            class="btn btn-outline font-mono text-xs"
+            disabled={viewModel.isTestingDraft}
+            onclick={() => viewModel.testDraftConnection()}
+          >
+            Test
+          </button>
+        {/if}
+        {#if viewModel.isSaveBlocked}
+          <button
+            type="button"
+            class="btn btn-outline btn-warning font-mono text-xs"
+            onclick={() => viewModel.saveDraftAnyway()}
+          >
+            Save anyway
+          </button>
+        {/if}
         <button
           type="button"
           class="btn btn-primary font-mono text-xs"
+          disabled={viewModel.isTestingDraft}
           onclick={() => viewModel.saveDraft()}
         >
           {viewModel.draft.isEditing ? 'Save Changes' : 'Add Connection'}

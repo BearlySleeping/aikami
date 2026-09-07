@@ -56,6 +56,12 @@ type SynthesizeMessage = {
   action: 'synthesize';
   text: string;
   voice: string;
+  /**
+   * Correlates this request with its response. The main thread starts a new
+   * synthesis before the previous one finishes (every speak() calls stop()
+   * first), so an untagged 'complete' cannot be told apart from a stale one.
+   */
+  requestId: number;
 };
 
 type WorkerMessage = InitializeMessage | SynthesizeMessage;
@@ -70,11 +76,15 @@ type SynthesizeResponse = {
   type: 'complete';
   pcmData: Float32Array;
   sampleRate: number;
+  /** Echoes the requesting {@link SynthesizeMessage.requestId}. */
+  requestId: number;
 };
 
 type ErrorResponse = {
   type: 'error';
   message: string;
+  /** Echoes the requesting {@link SynthesizeMessage.requestId}, when the failure belongs to one. */
+  requestId?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -152,13 +162,18 @@ const concatChunks = (chunks: Float32Array[]): Float32Array => {
   return merged;
 };
 
-const handleSynthesize = async (options: { text: string; voice: string }): Promise<void> => {
-  const { text, voice } = options;
+const handleSynthesize = async (options: {
+  text: string;
+  voice: string;
+  requestId: number;
+}): Promise<void> => {
+  const { text, voice, requestId } = options;
 
   if (!session) {
     const response: ErrorResponse = {
       type: 'error',
       message: 'Kokoro session not initialized. Call initialize first.',
+      requestId,
     };
     self.postMessage(response);
     return;
@@ -168,6 +183,7 @@ const handleSynthesize = async (options: { text: string; voice: string }): Promi
     const response: ErrorResponse = {
       type: 'error',
       message: 'Empty text — nothing to synthesize.',
+      requestId,
     };
     self.postMessage(response);
     return;
@@ -189,11 +205,11 @@ const handleSynthesize = async (options: { text: string; voice: string }): Promi
     const pcmData = Array.isArray(rawAudio) ? concatChunks(rawAudio) : rawAudio;
     const sampleRate = result.sampling_rate;
 
-    const response: SynthesizeResponse = { type: 'complete', pcmData, sampleRate };
+    const response: SynthesizeResponse = { type: 'complete', pcmData, sampleRate, requestId };
     self.postMessage(response, { transfer: [pcmData.buffer] });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Synthesis failed';
-    const response: ErrorResponse = { type: 'error', message };
+    const response: ErrorResponse = { type: 'error', message, requestId };
     self.postMessage(response);
   }
 };
@@ -211,7 +227,7 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
       break;
 
     case 'synthesize':
-      handleSynthesize({ text: data.text, voice: data.voice });
+      handleSynthesize({ text: data.text, voice: data.voice, requestId: data.requestId });
       break;
 
     default:

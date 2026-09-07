@@ -26,6 +26,35 @@ export type SetupEntryViewModelInterface = BaseViewModelInterface & {
 export type SetupEntryViewModelOptions = BaseViewModelOptions & {
   /** Where the flow was entered from — see {@link SetupOrigin}. Defaults to 'direct'. */
   origin?: SetupOrigin;
+  /** The route's query string, mapped to an origin by {@link resolveSetupOrigin}. */
+  searchParams?: ReadableSearchParams;
+};
+
+/**
+ * The read-only slice of URLSearchParams this mapping needs. SvelteKit hands
+ * routes a ReadonlyURLSearchParams, which is not assignable to URLSearchParams.
+ */
+export type ReadableSearchParams = { get(name: string): string | null };
+
+/**
+ * Maps the /capability route's query string onto a {@link SetupOrigin}.
+ *
+ * `?from=settings` means completion returns to Settings;
+ * `?reason=text-provider-required` marks entry from the New Adventure gate,
+ * where completion resumes campaign creation. Neither (a bookmark, or dev
+ * navigation) is 'direct'.
+ *
+ * Lives here rather than in +page.svelte because views carry no conditionals
+ * or data transformation.
+ */
+export const resolveSetupOrigin = (searchParams: ReadableSearchParams | undefined): SetupOrigin => {
+  if (searchParams?.get('from') === 'settings') {
+    return 'settings';
+  }
+  if (searchParams?.get('reason') === 'text-provider-required') {
+    return 'new-adventure';
+  }
+  return 'direct';
 };
 
 class SetupEntryViewModel
@@ -39,7 +68,7 @@ class SetupEntryViewModel
 
     this.subflow = getSetupSubflowViewModel({
       className: 'SetupEntrySubflow',
-      origin: options.origin,
+      origin: options.origin ?? resolveSetupOrigin(options.searchParams),
     });
   }
 

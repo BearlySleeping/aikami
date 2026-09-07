@@ -20,36 +20,15 @@ const { viewModel }: Props = $props();
   <div class="flex min-h-screen items-center justify-center bg-base-200 p-4">
     <div class="card bg-base-100 w-full max-w-lg shadow-xl">
       <div class="card-body gap-4">
-        <!-- Header -->
+        <!-- Header — names the step, so no two screens read the same -->
         <div class="text-center">
-          <h1 class="text-2xl font-bold text-base-content">AI Setup</h1>
-          <p class="mt-1 text-sm text-base-content/60">Configure AI capabilities for your game</p>
+          <h1 class="text-2xl font-bold text-base-content">{viewModel.headingTitle}</h1>
+          {#if viewModel.hasHeadingSubtitle}
+            <p class="mt-1 text-sm text-base-content/60">{viewModel.headingSubtitle}</p>
+          {/if}
         </div>
 
-        <SetupSubflowContent
-          step={viewModel.step}
-          entryPath={viewModel.entryPath}
-          capabilityToggles={viewModel.capabilityToggles}
-          discoveredProviders={viewModel.discoveredProviders}
-          hasDiscoveredProviders={viewModel.hasDiscoveredProviders}
-          resourceWarnings={viewModel.resourceWarnings}
-          hasResourceWarnings={viewModel.hasResourceWarnings}
-          isDetecting={viewModel.isDetecting}
-          isApplying={viewModel.isApplying}
-          canApplyPlan={viewModel.canApplyPlan}
-          errorMessage={viewModel.displayErrorMessage}
-          editorViewModel={viewModel.editorViewModel}
-          onSelectEntryPath={(path) => viewModel.selectEntryPath(path)}
-          onToggleCapability={(capability) => viewModel.toggleCapability(capability)}
-          onContinueFromResults={() => viewModel.continueFromResults()}
-          onOpenManualSetup={(capability) => viewModel.openManualSetup(capability)}
-          onFinishManualSetup={() => viewModel.finishManualSetup()}
-          onApplyPlan={() => viewModel.applyPlan()}
-          onGoBack={() => viewModel.goBack()}
-          onLeave={() => viewModel.leave()}
-          onReset={() => viewModel.reset()}
-          onRetry={() => viewModel.retry()}
-        />
+        <SetupSubflowContent {viewModel} />
       </div>
     </div>
   </div>

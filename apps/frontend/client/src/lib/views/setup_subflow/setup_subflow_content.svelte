@@ -1,159 +1,136 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/setup_subflow/setup_subflow_content.svelte
 //
-// Pure presentation for setup steps. Receives display state and callbacks so
-// the View remains a direct ViewModel adapter.
+// Presentation for the setup steps. Every label, glyph and class comes from
+// the ViewModel — the markup holds no conditionals, transformations or
+// derived state (svelte-conventions § View Structural Constraints).
 
-import type { ConnectionCapability } from '$types';
 import AiConnectionModals from '../settings/ai/ai_connection_modals.svelte';
-import type { AiSettingsViewModelInterface } from '../settings/ai/ai_settings_view_model.svelte';
-import type {
-  CapabilityToggle,
-  DiscoveredProvider,
-  SetupEntryPath,
-  SetupFlowStep,
-} from './setup_subflow_view_model.svelte';
+import type { SetupSubflowViewModelInterface } from './setup_subflow_view_model.svelte';
 
 type Props = {
-  step: SetupFlowStep;
-  entryPath: SetupEntryPath | null;
-  capabilityToggles: readonly CapabilityToggle[];
-  discoveredProviders: readonly DiscoveredProvider[];
-  hasDiscoveredProviders: boolean;
-  resourceWarnings: readonly string[];
-  hasResourceWarnings: boolean;
-  isDetecting: boolean;
-  isApplying: boolean;
-  canApplyPlan: boolean;
-  errorMessage: string;
-  editorViewModel: AiSettingsViewModelInterface;
-  onSelectEntryPath(path: SetupEntryPath): void;
-  onToggleCapability(capability: ConnectionCapability): void;
-  onContinueFromResults(): void;
-  onOpenManualSetup(capability: ConnectionCapability): void;
-  onFinishManualSetup(): void;
-  onApplyPlan(): void;
-  onGoBack(): void;
-  onLeave(): void;
-  onReset(): void;
-  onRetry(): void;
+  viewModel: SetupSubflowViewModelInterface;
 };
 
-const {
-  step,
-  entryPath,
-  capabilityToggles,
-  discoveredProviders,
-  hasDiscoveredProviders,
-  resourceWarnings,
-  hasResourceWarnings,
-  isDetecting,
-  isApplying,
-  canApplyPlan,
-  errorMessage,
-  editorViewModel,
-  onSelectEntryPath,
-  onToggleCapability,
-  onContinueFromResults,
-  onOpenManualSetup,
-  onFinishManualSetup,
-  onApplyPlan,
-  onGoBack,
-  onLeave,
-  onReset,
-  onRetry,
-}: Props = $props();
+const { viewModel }: Props = $props();
 </script>
 
-{#if step === 'entry'}
+{#if viewModel.isEntryStep}
+  <!-- The three paths diverge immediately, so each button says what it does. -->
   <div class="flex flex-col gap-3">
-    <button type="button" class="btn btn-primary" onclick={() => onSelectEntryPath('recommended')}>
-      Recommended Setup
+    <button
+      type="button"
+      class="btn btn-primary h-auto flex-col items-start gap-0.5 py-3 text-left normal-case"
+      onclick={() => viewModel.selectRecommended()}
+    >
+      <span class="font-semibold">Find AI for me</span>
+      <span class="text-xs font-normal opacity-80">
+        Looks for AI you can already use, then suggests a setup.
+      </span>
     </button>
-    <button type="button" class="btn btn-outline" onclick={() => onSelectEntryPath('existing')}>
-      Connect Something I Already Use
+    <button
+      type="button"
+      class="btn btn-outline h-auto flex-col items-start gap-0.5 py-3 text-left normal-case"
+      onclick={() => viewModel.selectExisting()}
+    >
+      <span class="font-semibold">I'll enter my own provider</span>
+      <span class="text-xs font-normal opacity-70">
+        Enter a service and API key, or the address of a server you run.
+      </span>
     </button>
-    <button type="button" class="btn btn-ghost" onclick={() => onSelectEntryPath('text-only')}>
-      Text Only (Skip Optional)
+    <button
+      type="button"
+      class="btn btn-ghost h-auto flex-col items-start gap-0.5 py-3 text-left normal-case"
+      onclick={() => viewModel.selectTextOnly()}
+    >
+      <span class="font-semibold">Just the story, nothing else</span>
+      <span class="text-xs font-normal opacity-70">
+        Set up text only and start playing. Artwork and read-aloud can wait.
+      </span>
     </button>
   </div>
-{:else if step === 'results'}
-  <div class="flex flex-col gap-3">
-    <p class="text-sm text-base-content/70">
-      {#if entryPath === 'existing'}
-        Select capabilities to connect:
-      {:else}
-        Select capabilities to set up:
-      {/if}
-    </p>
-    {#each capabilityToggles as toggle (toggle.id)}
-      <label
-        class="flex cursor-pointer items-center gap-3 rounded-lg border border-base-300 p-3 hover:bg-base-200"
-      >
-        <input
-          type="checkbox"
-          class="checkbox checkbox-primary"
-          checked={toggle.enabled}
-          disabled={toggle.required}
-          onchange={() => onToggleCapability(toggle.id)}
-        >
-        <div class="flex-1">
-          <p class="font-medium">
-            {toggle.label}
-            {#if toggle.required}
-              <span class="badge badge-xs badge-primary ml-1">Required</span>
-            {/if}
-          </p>
-          <p class="text-xs text-base-content/50">{toggle.description}</p>
-        </div>
-      </label>
-    {/each}
-
-    <div class="flex gap-2">
-      <button type="button" class="btn btn-outline flex-1" onclick={() => onGoBack()}>Back</button>
-      <button
-        type="button"
-        class="btn btn-primary flex-1"
-        onclick={() => onContinueFromResults()}
-        disabled={isDetecting}
-      >
-        {#if isDetecting}
-          <span class="loading loading-spinner loading-xs"></span>
-          Scanning...
-        {:else if entryPath === 'existing'}
-          Continue
-        {:else}
-          Scan for Providers
-        {/if}
-      </button>
-    </div>
-  </div>
-{:else if step === 'detecting'}
+{:else if viewModel.isDetectingStep}
   <div class="flex flex-col items-center gap-3 py-8">
     <span class="loading loading-spinner loading-lg text-primary"></span>
-    <p class="text-sm text-base-content/60">Scanning for AI providers...</p>
-    <button type="button" class="btn btn-ghost btn-xs" onclick={() => onGoBack()}>Cancel</button>
+    <p class="text-sm text-base-content/60">Looking for AI providers…</p>
+    <button type="button" class="btn btn-ghost btn-xs" onclick={() => viewModel.goBack()}>
+      Cancel
+    </button>
   </div>
-{:else if step === 'plan'}
+{:else if viewModel.isPlanStep}
+  <!-- The review hub: what is set up, what was found, what can still be added.
+       Always reachable, so a wrong connection can be corrected here. -->
   <div class="flex flex-col gap-4">
-    <h2 class="text-lg font-semibold">Review Plan</h2>
-
-    {#if hasDiscoveredProviders}
+    {#if viewModel.requiredRow}
+      {@const row = viewModel.requiredRow}
       <div>
-        <p class="mb-2 text-sm font-medium text-base-content/70">Discovered Providers:</p>
+        <p class="mb-2 text-sm font-medium text-base-content/70">Required</p>
+        <div class="rounded-lg border border-base-300 p-3">
+          <div class="flex items-center gap-3">
+            <span class="text-lg">{row.icon}</span>
+            <div class="flex-1">
+              <p class="text-sm font-medium">{row.label}</p>
+              <p class="text-xs text-base-content/50">{row.statusText}</p>
+            </div>
+            <button
+              type="button"
+              class={row.actionButtonClass}
+              onclick={() => viewModel.openManualSetup(row.id)}
+            >
+              {row.actionLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <div>
+      <p class="mb-2 text-sm font-medium text-base-content/70">Optional</p>
+      <div class="space-y-2">
+        {#each viewModel.optionalRows as row (row.id)}
+          <div class="rounded-lg border border-base-300 p-3">
+            <div class="flex items-center gap-3">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-primary checkbox-sm"
+                checked={row.checked}
+                aria-label={row.label}
+                onchange={() => viewModel.toggleCapability(row.id)}
+              >
+              <div class="flex-1">
+                <p class="text-sm font-medium">{row.label}</p>
+                <p class="text-xs text-base-content/50">{row.statusText}</p>
+              </div>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                onclick={() => viewModel.openManualSetup(row.id)}
+              >
+                {row.actionLabel}
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
+
+    {#if viewModel.showNoProvidersMessage}
+      <div class="rounded-lg border border-dashed border-base-300 p-4 text-center">
+        <p class="text-sm text-base-content/50">{viewModel.noProvidersMessage}</p>
+      </div>
+    {/if}
+
+    {#if viewModel.hasDiscoveredProviders}
+      <div>
+        <p class="mb-2 text-sm font-medium text-base-content/70">Found on your network</p>
         <div class="space-y-2">
-          {#each discoveredProviders as provider (provider.provider + provider.capability)}
+          {#each viewModel.discoveredProviders as provider (provider.key)}
             <div class="rounded-lg border border-base-300 bg-base-200 p-3">
               <div class="flex items-center gap-2">
-                <span class="text-lg">{provider.isLocal ? '🖥️' : '☁️'}</span>
+                <span class="text-lg">{provider.icon}</span>
                 <div>
                   <p class="text-sm font-medium">{provider.label}</p>
-                  <p class="text-xs text-base-content/50">
-                    {provider.capability}
-                    {#if provider.modelName}
-                      · {provider.modelName}
-                    {/if}
-                  </p>
+                  <p class="text-xs text-base-content/50">{provider.detailText}</p>
                 </div>
                 {#if provider.isCompatible}
                   <span class="badge badge-success badge-xs ml-auto">Compatible</span>
@@ -163,17 +140,11 @@ const {
           {/each}
         </div>
       </div>
-    {:else}
-      <div class="rounded-lg border border-dashed border-base-300 p-4 text-center">
-        <p class="text-sm text-base-content/50">
-          No local providers detected. You can enter provider details manually.
-        </p>
-      </div>
     {/if}
 
-    {#if hasResourceWarnings}
+    {#if viewModel.hasResourceWarnings}
       <div class="space-y-1">
-        {#each resourceWarnings as warning}
+        {#each viewModel.resourceWarnings as warning}
           <div class="alert alert-warning py-2 text-sm">
             <span>{warning}</span>
           </div>
@@ -182,76 +153,92 @@ const {
     {/if}
 
     <div class="flex gap-2">
-      <button type="button" class="btn btn-outline flex-1" onclick={() => onGoBack()}>
-        Edit Choices
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        disabled={viewModel.isDetecting}
+        onclick={() => viewModel.rescan()}
+      >
+        {#if viewModel.isDetecting}
+          <span class="loading loading-spinner loading-xs"></span>
+        {/if}
+        Scan again
       </button>
-      {#if canApplyPlan}
-        <button
-          type="button"
-          class="btn btn-primary flex-1"
-          onclick={() => onApplyPlan()}
-          disabled={isApplying}
-        >
-          {#if isApplying}
-            <span class="loading loading-spinner loading-xs"></span>
-            Applying...
-          {:else}
-            Apply & Continue
-          {/if}
-        </button>
-      {:else}
-        <button
-          type="button"
-          class="btn btn-primary flex-1"
-          onclick={() => onOpenManualSetup('text')}
-        >
-          Configure Text
-        </button>
-      {/if}
+      <div class="flex-1"></div>
+      <button type="button" class="btn btn-outline" onclick={() => viewModel.goBack()}>Back</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        onclick={() => viewModel.applyPlan()}
+        disabled={viewModel.isContinueDisabled}
+      >
+        {#if viewModel.isApplying}
+          <span class="loading loading-spinner loading-xs"></span>
+          Applying…
+        {:else}
+          Continue
+        {/if}
+      </button>
     </div>
+    {#if viewModel.hasBlockedHint}
+      <p class="text-center text-xs text-base-content/50">{viewModel.blockedHint}</p>
+    {/if}
   </div>
-{:else if step === 'manual'}
+{:else if viewModel.isManualStep}
   <div class="flex flex-col gap-4">
-    <h2 class="text-lg font-semibold">Configure Provider</h2>
     <p class="text-sm text-base-content/60">
-      Use Set Up below, or connect a provider through the editor. Continue once you're done.
+      Enter your provider's details in the editor. Close it when you're done and your connection
+      will appear in the review below.
     </p>
-    <button type="button" class="btn btn-primary" onclick={() => editorViewModel.openAddProvider()}>
+    <button type="button" class="btn btn-primary" onclick={() => viewModel.reopenManualEditor()}>
       Open Connection Editor
     </button>
-    <AiConnectionModals viewModel={editorViewModel} />
+    <AiConnectionModals viewModel={viewModel.editorViewModel} />
     <div class="flex gap-2">
-      <button type="button" class="btn btn-outline flex-1" onclick={() => onGoBack()}>Back</button>
-      <button type="button" class="btn btn-primary flex-1" onclick={() => onFinishManualSetup()}>
+      <button type="button" class="btn btn-outline flex-1" onclick={() => viewModel.goBack()}>
+        Back
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary flex-1"
+        onclick={() => viewModel.finishManualSetup()}
+      >
         Continue
       </button>
     </div>
   </div>
-{:else if step === 'applying'}
+{:else if viewModel.isApplyingStep}
   <div class="flex flex-col items-center gap-3 py-8">
     <span class="loading loading-spinner loading-lg text-primary"></span>
-    <p class="text-sm text-base-content/60">Applying configuration...</p>
+    <p class="text-sm text-base-content/60">Applying configuration…</p>
   </div>
-{:else if step === 'ready'}
+{:else if viewModel.isReadyStep}
   <div class="flex flex-col items-center gap-4 py-4">
     <div class="text-4xl">✅</div>
     <h2 class="text-lg font-semibold">Ready to Play!</h2>
-    <p class="text-center text-sm text-base-content/60">
-      Your AI setup is complete. You can start playing now or configure more options later.
-    </p>
-    <div class="flex gap-2">
-      <button type="button" class="btn btn-primary" onclick={() => onLeave()}>Continue</button>
-      <button type="button" class="btn btn-outline" onclick={() => onReset()}>Set Up More</button>
+    <p class="text-center text-sm text-base-content/60">{viewModel.readyMessage}</p>
+    <div class="flex flex-wrap justify-center gap-2">
+      <button type="button" class="btn btn-primary" onclick={() => viewModel.leave()}>
+        Continue
+      </button>
+      <button type="button" class="btn btn-outline" onclick={() => viewModel.reviewSetup()}>
+        Review setup
+      </button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick={() => viewModel.reset()}>
+        Start over
+      </button>
     </div>
   </div>
-{:else if step === 'error'}
+{:else if viewModel.isErrorStep}
   <div class="flex flex-col items-center gap-4 py-4">
     <div class="alert alert-error">
-      <span>{errorMessage}</span>
+      <span>{viewModel.displayErrorMessage}</span>
     </div>
     <div class="flex gap-2">
-      <button type="button" class="btn btn-outline" onclick={() => onRetry()}>Retry</button>
-      <button type="button" class="btn btn-ghost" onclick={() => onGoBack()}>Go Back</button>
+      <button type="button" class="btn btn-outline" onclick={() => viewModel.retry()}>Retry</button>
+      <button type="button" class="btn btn-ghost" onclick={() => viewModel.goBack()}>
+        Go Back
+      </button>
     </div>
   </div>
 {/if}

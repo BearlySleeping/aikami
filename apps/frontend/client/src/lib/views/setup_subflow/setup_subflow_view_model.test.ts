@@ -48,6 +48,7 @@ const createDetectedSnapshot = (): CapabilitySnapshot => ({
 const detectMock = mock(async (): Promise<CapabilitySnapshot> => createDetectedSnapshot());
 const startNewCampaignMock = mock(async () => ({ id: 'campaign-1' }));
 const goToRouteMock = mock(async () => {});
+const getVoiceTtsUrlMock = mock((): string | undefined => undefined);
 
 mock.module('$services', () => ({
   ...localServicesMockBase(),
@@ -56,6 +57,7 @@ mock.module('$services', () => ({
   runtimeConfigService: {
     getTextUrl: mock(() => 'http://localhost:11434'),
     getImageUrl: mock(() => 'http://localhost:8188'),
+    getVoiceTtsUrl: getVoiceTtsUrlMock,
   },
   campaignService: { startNewCampaign: startNewCampaignMock },
   routerService: { goToRoute: goToRouteMock },
@@ -79,6 +81,9 @@ describe('SetupSubflowViewModel', () => {
     detectMock.mockImplementation(async () => createDetectedSnapshot());
     startNewCampaignMock.mockClear();
     goToRouteMock.mockClear();
+    configServiceMock.addConnection.mockClear();
+    getVoiceTtsUrlMock.mockReset();
+    getVoiceTtsUrlMock.mockReturnValue(undefined);
     vm = getSetupSubflowViewModel({ className: 'SetupSubflowTest' });
   });
 
@@ -94,18 +99,32 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.capabilityToggles.length).toBe(3);
   });
 
-  test('selectEntryPath sets entry path and shows toggles for recommended', () => {
+  test('selectEntryPath recommended scans immediately instead of asking first', async () => {
     vm.selectEntryPath('recommended');
+    await vm.startDiscovery();
 
     expect(vm.entryPath).toBe('recommended');
-    expect(vm.step).toBe('results');
+    expect(detectMock).toHaveBeenCalled();
+    expect(vm.step).toBe('plan');
   });
 
-  test('selectEntryPath shows toggles for existing', () => {
+  test('selectEntryPath existing opens the editor and never scans', () => {
     vm.selectEntryPath('existing');
 
     expect(vm.entryPath).toBe('existing');
-    expect(vm.step).toBe('results');
+    expect(detectMock).not.toHaveBeenCalled();
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('text');
+  });
+
+  test('selectEntryPath existing lands on review when text is already usable', () => {
+    configServiceMock.state.connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
+    ];
+
+    vm.selectEntryPath('existing');
+
+    expect(vm.step).toBe('plan');
   });
 
   test('selectEntryPath text-only opens manual text setup when nothing is configured', () => {
@@ -154,13 +173,15 @@ describe('SetupSubflowViewModel', () => {
 
   // ── Discovery scoping (Recommended) ─────────────────────────────────────
 
-  test('continueFromResults on recommended only detects enabled capabilities', async () => {
+  test('recommended scans the required capability only, then rescan honours opt-ins', async () => {
     vm.selectEntryPath('recommended');
+    await vm.startDiscovery();
+    expect(detectMock).toHaveBeenCalledWith({ capabilities: ['text'] });
+
     vm.toggleCapability('voice');
+    await vm.rescan();
 
-    await vm.continueFromResults();
-
-    expect(detectMock).toHaveBeenCalledWith({ capabilities: ['text', 'voice'] });
+    expect(detectMock).toHaveBeenLastCalledWith({ capabilities: ['text', 'voice'] });
     expect(vm.step).toBe('plan');
   });
 
@@ -171,7 +192,7 @@ describe('SetupSubflowViewModel', () => {
     });
 
     vm.selectEntryPath('recommended');
-    await vm.continueFromResults();
+    await vm.startDiscovery();
 
     const textProvider = vm.discoveredProviders.find((p) => p.capability === 'text');
     expect(textProvider?.provider).toBe('llamacpp');
@@ -183,7 +204,6 @@ describe('SetupSubflowViewModel', () => {
 
     vm.selectEntryPath('recommended');
     await vm.startDiscovery();
-
     expect(vm.step).toBe('error');
     expect(vm.errorMessage.length).toBeGreaterThan(0);
   });
@@ -191,8 +211,8 @@ describe('SetupSubflowViewModel', () => {
   test('goBack ignores a discovery result that completes after cancellation', async () => {
     const deferredDetection = Promise.withResolvers<CapabilitySnapshot>();
     detectMock.mockImplementationOnce(async () => deferredDetection.promise);
-    vm.selectEntryPath('recommended');
 
+    vm.selectEntryPath('recommended');
     const discoveryPromise = vm.startDiscovery();
     vm.goBack();
     deferredDetection.resolve(createDetectedSnapshot());
@@ -204,34 +224,11 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.discoveredProviders).toHaveLength(0);
   });
 
-  // ── Connect Existing skips discovery entirely ───────────────────────────
-
-  test('continueFromResults on existing never calls detect and opens manual setup', async () => {
-    vm.selectEntryPath('existing');
-
-    await vm.continueFromResults();
-
-    expect(detectMock).not.toHaveBeenCalled();
-    expect(vm.step).toBe('manual');
-    expect(vm.manualCapability).toBe('text');
-  });
-
-  test('continueFromResults on existing goes straight to ready when everything enabled is already usable', async () => {
-    configServiceMock.state.connections = [
-      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
-    ];
-    vm.selectEntryPath('existing');
-
-    await vm.continueFromResults();
-
-    expect(vm.step).toBe('ready');
-  });
-
   // ── Plan application gating ─────────────────────────────────────────────
 
   test('applyPlan seeds connections via configService when text was detected', async () => {
     vm.selectEntryPath('recommended');
-    await vm.continueFromResults();
+    await vm.startDiscovery();
 
     await vm.applyPlan();
 
@@ -249,7 +246,7 @@ describe('SetupSubflowViewModel', () => {
       summary: 'No text AI detected',
     });
     vm.selectEntryPath('recommended');
-    await vm.continueFromResults();
+    await vm.startDiscovery();
 
     await vm.applyPlan();
 
@@ -265,7 +262,7 @@ describe('SetupSubflowViewModel', () => {
       textProviderId: undefined,
     });
     vm.selectEntryPath('recommended');
-    await vm.continueFromResults();
+    await vm.startDiscovery();
     expect(vm.canApplyPlan).toBeFalse();
 
     configServiceMock.state.connections = [
@@ -295,6 +292,46 @@ describe('SetupSubflowViewModel', () => {
     vm.finishManualSetup();
 
     expect(vm.step).toBe('entry');
+  });
+
+  test('finishManualSetup on the existing path lands on review, not a dead end', () => {
+    vm.selectEntryPath('existing');
+    expect(vm.step).toBe('manual');
+
+    configServiceMock.state.connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key', name: 'My OpenRouter' },
+    ];
+    vm.finishManualSetup();
+
+    expect(vm.step).toBe('plan');
+    const textRow = vm.capabilityRows.find((r) => r.id === 'text');
+    expect(textRow?.configured).toBeTrue();
+    expect(textRow?.connectionName).toBe('My OpenRouter');
+  });
+
+  test('a configured text provider can still be reopened for editing from review', () => {
+    configServiceMock.state.connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
+    ];
+    vm.selectEntryPath('existing');
+    expect(vm.step).toBe('plan');
+
+    vm.openManualSetup('text');
+
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('text');
+  });
+
+  test('reviewSetup returns from ready to the review screen', () => {
+    configServiceMock.state.connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
+    ];
+    vm.selectEntryPath('text-only');
+    expect(vm.step).toBe('ready');
+
+    vm.reviewSetup();
+
+    expect(vm.step).toBe('plan');
   });
 
   // ── Navigation / leave() ─────────────────────────────────────────────────
@@ -335,24 +372,30 @@ describe('SetupSubflowViewModel', () => {
     expect(goToRouteMock).toHaveBeenCalledWith('index', expect.anything());
   });
 
-  test('goBack from results returns to entry', () => {
+  test('goBack from plan returns to entry', async () => {
     vm.selectEntryPath('recommended');
+    await vm.startDiscovery();
+    expect(vm.step).toBe('plan');
+
     vm.goBack();
     expect(vm.step).toBe('entry');
     expect(vm.entryPath).toBeNull();
   });
 
-  test('goBack from plan returns to results', async () => {
+  test('goBack from a manual step opened over a scan returns to review', async () => {
     vm.selectEntryPath('recommended');
-    await vm.continueFromResults();
-    expect(vm.step).toBe('plan');
+    await vm.startDiscovery();
+    vm.openManualSetup('text');
 
     vm.goBack();
-    expect(vm.step).toBe('results');
+
+    expect(vm.step).toBe('plan');
+    expect(vm.manualCapability).toBeNull();
   });
 
-  test('reset returns to initial state and invalidates in-flight operations', () => {
+  test('reset returns to initial state and invalidates in-flight operations', async () => {
     vm.selectEntryPath('recommended');
+    await vm.startDiscovery();
     vm.toggleCapability('image');
     vm.reset();
 
@@ -364,7 +407,7 @@ describe('SetupSubflowViewModel', () => {
 
   test('retry after error goes back to plan when snapshot exists', async () => {
     vm.selectEntryPath('recommended');
-    await vm.continueFromResults();
+    await vm.startDiscovery();
 
     detectMock.mockRejectedValueOnce(new Error('test error'));
     await vm.startDiscovery();
@@ -372,6 +415,100 @@ describe('SetupSubflowViewModel', () => {
 
     vm.retry();
     expect(vm.step).toBe('plan');
+  });
+
+  // ── Optional capabilities must be skippable (CodeRabbit: manual-step trap) ──
+
+  test('declining an optional capability leaves the manual step instead of reopening it', () => {
+    configServiceMock.state.connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
+    ];
+    vm.selectEntryPath('existing');
+    vm.toggleCapability('image');
+    vm.openManualSetup('image');
+    expect(vm.step).toBe('manual');
+
+    // Continue without configuring image: the flow used to re-select the same
+    // unconfigured capability and reopen the editor, so only Back escaped.
+    vm.finishManualSetup();
+
+    expect(vm.step).toBe('plan');
+    expect(vm.manualCapability).toBeNull();
+  });
+
+  // ── Seeding an optional capability (CodeRabbit: voice re-seeded forever) ──
+
+  test('a detected local voice provider with no endpoint is not seeded at all', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      voiceStatus: 'detected',
+      voiceProviderId: 'kokoro',
+    });
+    getVoiceTtsUrlMock.mockReturnValue(undefined);
+    vm.selectEntryPath('recommended');
+    await vm.startDiscovery();
+    vm.toggleCapability('voice');
+
+    await vm.applyPlan();
+
+    // A blank local row can never satisfy _isUsable, so it would be written
+    // again on every apply. Better to leave voice unconfigured.
+    const voiceWrites = configServiceMock.addConnection.mock.calls.filter(
+      ([c]: [{ capability?: string }]) => c.capability === 'voice',
+    );
+    expect(voiceWrites).toHaveLength(0);
+  });
+
+  test('a detected local voice provider with an endpoint is seeded once and stays usable', async () => {
+    detectMock.mockResolvedValue({
+      ...createDetectedSnapshot(),
+      voiceStatus: 'detected',
+      voiceProviderId: 'kokoro',
+    });
+    getVoiceTtsUrlMock.mockReturnValue('http://localhost:8880');
+    vm.selectEntryPath('recommended');
+    await vm.startDiscovery();
+    vm.toggleCapability('voice');
+
+    await vm.applyPlan();
+
+    const voiceWrites = configServiceMock.addConnection.mock.calls.filter(
+      ([c]: [{ capability?: string }]) => c.capability === 'voice',
+    );
+    expect(voiceWrites).toHaveLength(1);
+    expect(voiceWrites[0]?.[0].baseUrl).toBe('http://localhost:8880');
+
+    // Re-applying must not add a duplicate: the seeded row is now usable.
+    configServiceMock.state.connections.push({
+      capability: 'voice',
+      provider: 'kokoro',
+      baseUrl: 'http://localhost:8880',
+      apiKey: '',
+    });
+    await vm.applyPlan();
+
+    const afterSecond = configServiceMock.addConnection.mock.calls.filter(
+      ([c]: [{ capability?: string }]) => c.capability === 'voice',
+    );
+    expect(afterSecond).toHaveLength(1);
+  });
+
+  // ── Reopening the editor keeps the capability scope (CodeRabbit) ──
+
+  test('reopenManualEditor reuses the scoped setup path for the active capability', () => {
+    vm.openManualSetup('voice');
+
+    vm.reopenManualEditor();
+
+    expect(vm.manualCapability).toBe('voice');
+    // Voice has its own setup modal; the unscoped editor would be the wrong one.
+    expect(vm.editorViewModel.isVoiceSetupOpen).toBeTrue();
+  });
+
+  test('reopenManualEditor falls back to text when nothing is being configured', () => {
+    vm.reopenManualEditor();
+
+    expect(vm.manualCapability).toBe('text');
   });
 
   test('errorMessage is cleared on new entry selection', () => {

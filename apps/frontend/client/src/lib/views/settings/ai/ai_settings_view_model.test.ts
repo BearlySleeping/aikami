@@ -2,7 +2,7 @@
 //
 // C-465 AC-1/2/3/4/5/6/7/8: AI Settings section tests.
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { BUILT_IN_PRESETS } from '@aikami/constants';
 import { createDeferred } from '@aikami/utils';
 import type { ConnectionTestResult } from '$types';
@@ -31,6 +31,9 @@ const mockFetchModelsFromProvider = mock(
   async (): Promise<Array<{ id: string; name: string }>> => [],
 );
 const mockVerifyConnection = mock(async () => ({ ok: true, latencyMs: 42 }));
+// Defaults to false so the save-verification gate stays out of the way of
+// tests about other behaviour; the gate's own suite flips it on.
+const mockHasVerificationStrategy = mock(() => false);
 
 const mockConfigService = {
   isLoaded: true,
@@ -141,6 +144,7 @@ mock.module('$services', () => ({
   PROVIDER_MODEL_FETCH: { openrouter: {} },
   fetchModelsFromProvider: mockFetchModelsFromProvider,
   verifyConnection: mockVerifyConnection,
+  hasVerificationStrategy: mockHasVerificationStrategy,
   ttsService: mockTtsService,
   campaignService: mockCampaignService,
   imageGenerationService: mockImageGenerationService,
@@ -1652,5 +1656,204 @@ describe('AiSettingsViewModel — P03: truthful status presentation', () => {
     const status = vm.connectionStatusFor(first);
     expect(status.label).toContain('unreachable');
     expect(status.label).toContain('connection refused');
+  });
+});
+
+describe('AiSettingsViewModel — the save gate verifies before it writes', () => {
+  const openNewTextDraft = async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('text');
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('apiKey', 'sk-typo');
+    return vm;
+  };
+
+  beforeEach(() => {
+    mockHasVerificationStrategy.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    mockHasVerificationStrategy.mockReturnValue(false);
+  });
+
+  test('a key that fails verification is refused, not silently accepted', async () => {
+    mockVerifyConnection.mockResolvedValueOnce({
+      ok: false,
+      latencyMs: 30,
+      error: 'HTTP 401',
+    });
+    const vm = await openNewTextDraft();
+
+    await vm.saveDraft();
+
+    expect(mockConfigService.addAiConnection).not.toHaveBeenCalled();
+    expect(vm.isSaveBlocked).toBeTrue();
+    expect(vm.draftTestResult?.error).toBe('HTTP 401');
+    // The editor stays open so the key can be corrected in place.
+    expect(vm.isEditorOpen).toBeTrue();
+  });
+
+  test('a key that verifies is written without a second probe', async () => {
+    const vm = await openNewTextDraft();
+
+    await vm.saveDraft();
+
+    expect(mockVerifyConnection).toHaveBeenCalledTimes(1);
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+    expect(vm.isSaveBlocked).toBeFalse();
+    expect(vm.isEditorOpen).toBeFalse();
+  });
+
+  test('saveDraftAnyway is the escape hatch for an endpoint we cannot reach', async () => {
+    mockVerifyConnection.mockResolvedValueOnce({ ok: false, latencyMs: 5, error: 'offline' });
+    const vm = await openNewTextDraft();
+    await vm.saveDraft();
+    expect(vm.isSaveBlocked).toBeTrue();
+
+    await vm.saveDraftAnyway();
+
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+    expect(vm.isEditorOpen).toBeFalse();
+  });
+
+  test('editing the key after a failure clears the block and the stale result', async () => {
+    mockVerifyConnection.mockResolvedValueOnce({ ok: false, latencyMs: 5, error: 'HTTP 401' });
+    const vm = await openNewTextDraft();
+    await vm.saveDraft();
+    expect(vm.isSaveBlocked).toBeTrue();
+
+    vm.setDraftField('apiKey', 'sk-corrected');
+
+    expect(vm.isSaveBlocked).toBeFalse();
+    expect(vm.draftTestResult).toBeUndefined();
+    vm.cancelEdit();
+  });
+
+  test('a provider with no verification strategy saves without a probe', async () => {
+    mockHasVerificationStrategy.mockReturnValue(false);
+    const vm = await openNewTextDraft();
+
+    await vm.saveDraft();
+
+    expect(mockVerifyConnection).not.toHaveBeenCalled();
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+  });
+
+  test('testDraftConnection probes the unsaved draft, so no save is needed first', async () => {
+    const vm = await openNewTextDraft();
+
+    await vm.testDraftConnection();
+
+    expect(mockConfigService.addAiConnection).not.toHaveBeenCalled();
+    expect(vm.draftTestResult?.ok).toBeTrue();
+    const [options] = mockVerifyConnection.mock.calls[0] ?? [];
+    expect((options as { provider: { credential: string } }).provider.credential).toBe('sk-typo');
+    vm.cancelEdit();
+  });
+});
+
+describe('AiSettingsViewModel — generation parameters on an unsaved connection', () => {
+  test('the Advanced disclosure is editable before the connection is saved', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('text');
+
+    vm.toggleGenParamsDisclosure();
+
+    // Previously undefined, which the View rendered as "save this connection
+    // first" — a display bug, since the create path already merges these.
+    expect(vm.genParamsDisplay).toBeDefined();
+    expect(vm.genParamsDisplay?.temperature).toBe(0.7);
+    vm.cancelEdit();
+  });
+
+  test('a parameter edited before the first save is written with the new connection', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('text');
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('apiKey', 'sk-key');
+    vm.toggleGenParamsDisclosure();
+    vm.setGenParamField('temperature', 0.31);
+
+    await vm.saveDraft();
+
+    const [opts] = mockConfigService.addAiConnection.mock.calls[0] ?? [];
+    expect((opts as { params: { temperature: number } }).params.temperature).toBe(0.31);
+  });
+
+  test('a non-text draft still has no generation parameters to show', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('image');
+
+    expect(vm.genParamsDisplay).toBeUndefined();
+    vm.cancelEdit();
+  });
+});
+
+describe('AiSettingsViewModel — cancelling a voice preview is not a failure', () => {
+  test('stopVoicePreview leaves the preview idle, not in error', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    // speak() rejects the way ttsService.stop() rejects an in-flight request.
+    let rejectSpeak: ((error: Error) => void) | undefined;
+    mockTtsService.speak = mock(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSpeak = reject;
+        }),
+    );
+
+    const preview = vm.testVoice();
+    vm.stopVoicePreview();
+    rejectSpeak?.(new Error('stop() called before synthesis completed'));
+    await preview;
+
+    expect(vm.voicePreviewState.status).toBe('idle');
+  });
+
+  test('a genuine synthesis failure still surfaces as an error', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    mockTtsService.speak = mock(async () => {
+      throw new Error('engine exploded');
+    });
+
+    await vm.testVoice();
+
+    expect(vm.voicePreviewState.status).toBe('error');
+  });
+});
+
+describe('AiSettingsViewModel — a failed persist must not duplicate the connection', () => {
+  beforeEach(() => {
+    mockHasVerificationStrategy.mockReturnValue(false);
+  });
+
+  test('retrying after a failed save updates the row instead of adding a second', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider('text');
+    vm.setDraftProvider('openrouter');
+    vm.setDraftField('apiKey', 'sk-key');
+
+    mockConfigService.save.mockImplementationOnce(async () => {
+      throw new Error('vault write failed');
+    });
+    await vm.saveDraft();
+
+    expect(vm.saveError).toBeDefined();
+    expect(vm.isEditorOpen).toBeTrue();
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+
+    // The retry must land on the row the failed attempt already created.
+    await vm.saveDraft();
+
+    expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
+    expect(mockConfigService.updateAiConnection).toHaveBeenCalledTimes(1);
+    expect(mockAiConnections.length).toBe(1);
   });
 });

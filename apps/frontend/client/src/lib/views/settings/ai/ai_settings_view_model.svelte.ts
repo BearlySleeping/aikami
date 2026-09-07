@@ -30,6 +30,7 @@ import {
   configService,
   type FetchedModel,
   fetchModelsFromProvider,
+  hasVerificationStrategy,
   imageGenerationService,
   PROVIDER_MODEL_FETCH,
   styleProfileService,
@@ -175,6 +176,17 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly isEditorOpen: boolean;
   /** Sanitized error from the last failed saveDraft(), or undefined. */
   readonly saveError: string | undefined;
+  /** Result of the last draft verification, or undefined when the draft has not been probed. */
+  readonly draftTestResult: ConnectionTestResult | undefined;
+  /** Whether a draft verification is in flight. */
+  readonly isTestingDraft: boolean;
+  /**
+   * Whether the last save attempt was refused because the draft failed
+   * verification. The editor stays open offering "Save anyway".
+   */
+  readonly isSaveBlocked: boolean;
+  /** Whether this draft's provider has a verification strategy at all. */
+  readonly canVerifyDraft: boolean;
   /** Text currently displayed in the model search/input field. */
   readonly modelQuery: string;
   readonly modelOptions: readonly FetchedModel[];
@@ -229,8 +241,14 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   selectModel(modelId: string): void;
   /** Closes the model search results dropdown (e.g. on Enter or Escape). */
   closeModelDropdown(): void;
-  /** Persists the draft as a connection/provider. Awaits the save before resolving. */
+  /**
+   * Verifies the draft, then persists it as a connection/provider. A failed
+   * probe refuses the write and sets {@link isSaveBlocked} — the editor stays
+   * open so the user can fix the credential or force the save.
+   */
   saveDraft(): Promise<void>;
+  /** Persists the draft without re-verifying — the escape hatch for offline or unsupported endpoints. */
+  saveDraftAnyway(): Promise<void>;
   deleteConnection(connectionId: ConnectionId): void;
   testConnection(connectionId: ConnectionId | undefined): Promise<void>;
   testDraftConnection(): Promise<void>;
@@ -458,8 +476,17 @@ export class AiSettingsViewModel
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
   /** Sanitized error from the last failed preview/test, or undefined. {@link voicePreviewState} derives from this plus the live ttsService state — never set directly. */
   private _voicePreviewError: string | undefined = $state(undefined);
+  /** Identifies the preview whose outcome may still update state; stopping bumps it. */
+  private _voicePreviewGeneration = 0;
   isGenParamsOpen = $state(false);
   saveError: string | undefined = $state(undefined);
+  draftTestResult: ConnectionTestResult | undefined = $state(undefined);
+  isTestingDraft = $state(false);
+  isSaveBlocked = $state(false);
+  /** Generation counter for draft probes — discards a result the user has already typed past. */
+  private _draftTestGeneration = 0;
+  /** The draft signature {@link draftTestResult} was measured against. */
+  private _testedDraftSignature: string | undefined = $state(undefined);
   readonly showAdvancedSections: boolean;
   private readonly _scopedCapability: ConnectionCapability | undefined;
 
@@ -739,10 +766,18 @@ export class AiSettingsViewModel
   }
 
   private async _speakPreviewLine(options: { voiceId?: string }): Promise<void> {
+    const generation = ++this._voicePreviewGeneration;
     this._voicePreviewError = undefined;
     try {
       await ttsService.speak({ text: this._voicePreviewLine(), voiceId: options.voiceId });
     } catch (error) {
+      // stop() rejects the in-flight speak(). That rejection is the user
+      // cancelling, not a synthesis failure, so only a preview that is still
+      // the current one may report an error.
+      if (generation !== this._voicePreviewGeneration) {
+        this.debug('voicePreview:cancelled');
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       this._voicePreviewError = message;
       this.error('voicePreview:failed', error);
@@ -804,6 +839,9 @@ export class AiSettingsViewModel
   }
 
   stopVoicePreview(): void {
+    // Invalidate before stopping: ttsService.stop() rejects the pending
+    // speak(), and that rejection must not land as an error state.
+    this._voicePreviewGeneration += 1;
     ttsService.stop();
     this._voicePreviewError = undefined;
   }
@@ -951,13 +989,21 @@ export class AiSettingsViewModel
   }
 
   get genParamsDisplay(): TextParams | undefined {
+    if (this.draft.capability !== 'text') {
+      return undefined;
+    }
+    // A new connection has no persisted row to read from, so the disclosure
+    // shows the same defaults saveDraft() would write. Waiting for a save
+    // before the fields become editable was a display bug, not a constraint:
+    // the create path already merges _genParamsDraft over _defaultParams().
     const conn = this.draft.editingConnectionId
       ? configService.getAiConnection(this.draft.editingConnectionId)
       : undefined;
-    if (conn?.capability !== 'text') {
-      return undefined;
-    }
-    return { ...(conn.params as TextParams), ...this._genParamsDraft };
+    const base =
+      conn?.capability === 'text'
+        ? (conn.params as TextParams)
+        : (this._defaultParams('text') as TextParams);
+    return { ...base, ...this._genParamsDraft };
   }
 
   setGenParamField(field: keyof TextParams, value: number): void {
@@ -1077,6 +1123,9 @@ export class AiSettingsViewModel
 
   setDraftField(field: string, value: unknown): void {
     this.draft = { ...this.draft, [field]: value };
+    if (field === 'apiKey' || field === 'baseUrl') {
+      this._invalidateDraftTest();
+    }
   }
 
   setModelQuery(value: string): void {
@@ -1099,6 +1148,7 @@ export class AiSettingsViewModel
 
   setDraftProvider(registryId: string): void {
     this.debug('setDraftProvider', { registryId });
+    this._invalidateDraftTest();
     this._availableModels = [];
     this._modelQuery = '';
     this.isModelDropdownOpen = false;
@@ -1136,14 +1186,41 @@ export class AiSettingsViewModel
 
   async saveDraft(): Promise<void> {
     this.debug('saveDraft');
+
+    // A credential that has never been probed is not evidence of a working
+    // connection. Verify first so a typo'd key is caught here rather than
+    // surfacing as a broken game several screens later.
+    if (this.canVerifyDraft) {
+      if (this._testedDraftSignature !== this._draftSignature()) {
+        await this.testDraftConnection();
+      }
+      if (this.draftTestResult && !this.draftTestResult.ok) {
+        this.isSaveBlocked = true;
+        this.debug('saveDraft:blocked', { error: this.draftTestResult.error });
+        return;
+      }
+    }
+
+    await this._commitDraft();
+  }
+
+  async saveDraftAnyway(): Promise<void> {
+    this.debug('saveDraftAnyway');
+    await this._commitDraft();
+  }
+
+  /** Writes the draft to the configuration. Assumes the verification gate has already run. */
+  private async _commitDraft(): Promise<void> {
     this.saveError = undefined;
 
     const reg = this.draft.registryId;
     const cap = this.draft.capability;
     const label = this.draft.label?.trim() || this._registryLabel(reg) || reg;
     const model = this.draft.model;
+    let savedConnectionId: ConnectionId | undefined;
 
     if (this.draft.isEditing && this.draft.editingConnectionId) {
+      savedConnectionId = this.draft.editingConnectionId;
       // Update existing connection
       const conn = configService.getAiConnection(this.draft.editingConnectionId);
       if (!conn) {
@@ -1222,16 +1299,34 @@ export class AiSettingsViewModel
         if (!configService.state.defaultByCapability?.[cap]) {
           configService.setDefaultConnection(connectionId);
         }
+        savedConnectionId = connectionId;
       }
+    }
+
+    // Carry the probe that cleared the save gate onto the saved row, so the
+    // status board shows what we just measured instead of "not checked".
+    if (savedConnectionId && this.draftTestResult?.ok) {
+      this.testResults = { ...this.testResults, [savedConnectionId]: this.draftTestResult };
     }
 
     try {
       await configService.save();
     } catch (error) {
-      // Draft (and any provider/connection already written into in-memory
-      // config state) is preserved so the user can retry — the editor
-      // stays open with a sanitized error instead of silently closing
-      // over a failed persist.
+      // The connection is already in in-memory config state; only the
+      // persist failed. Re-point the draft at the row that was just created
+      // so a retry updates it — otherwise the retry takes the create branch
+      // again and leaves two connections behind for one save.
+      if (savedConnectionId && !this.draft.isEditing) {
+        this.draft = {
+          ...this.draft,
+          isEditing: true,
+          editingConnectionId: savedConnectionId,
+          providerId: configService.getAiConnection(savedConnectionId)?.providerId,
+        };
+      }
+      // The draft is preserved so the user can retry — the editor stays
+      // open with a sanitized error instead of silently closing over a
+      // failed persist.
       this.saveError = 'Failed to save connection. Please try again.';
       this.error('saveDraft:failed', error);
       return;
@@ -1327,9 +1422,86 @@ export class AiSettingsViewModel
     };
   }
 
+  get canVerifyDraft(): boolean {
+    return hasVerificationStrategy(this.draft.registryId);
+  }
+
+  /**
+   * Probes the draft's endpoint without persisting anything. The draft is
+   * projected onto a throwaway AiProvider, so an unsaved connection can be
+   * verified exactly like a stored one.
+   */
   async testDraftConnection(): Promise<void> {
     this.debug('testDraftConnection');
-    // Stub — uses the same verify machinery as testConnection
+    if (!this.canVerifyDraft) {
+      return;
+    }
+
+    const signature = this._draftSignature();
+    const generation = ++this._draftTestGeneration;
+    this.isTestingDraft = true;
+
+    try {
+      const result = await verifyConnection({
+        provider: this._draftAsProvider(),
+        baseUrl: this.draft.baseUrl?.trim() || undefined,
+      });
+      if (generation !== this._draftTestGeneration) {
+        return;
+      }
+      this.draftTestResult = result;
+      this._testedDraftSignature = signature;
+      if (result.ok) {
+        this.isSaveBlocked = false;
+      }
+    } finally {
+      if (generation === this._draftTestGeneration) {
+        this.isTestingDraft = false;
+      }
+    }
+  }
+
+  /**
+   * Identifies the credential/endpoint the current draft would probe. A
+   * change to any of these invalidates a previous result — a key that
+   * verified before the user edited it is not evidence about the new one.
+   */
+  private _draftSignature(): string {
+    return [
+      this.draft.registryId,
+      this.draft.apiKey ?? '',
+      this.draft.baseUrl?.trim() ?? '',
+      this.draft.providerId ?? '',
+    ].join(' ');
+  }
+
+  /**
+   * Projects the draft onto an AiProvider for verification. The stored
+   * credential stands in when the user left the key field untouched while
+   * editing an existing connection (the editor never prefills the secret).
+   */
+  private _draftAsProvider(): AiProvider {
+    const existing = this.draft.providerId
+      ? configService.getProvider(this.draft.providerId)
+      : this._findProviderByRegistry(this.draft.registryId);
+    const credential = this.draft.apiKey?.trim() || existing?.credential;
+    return {
+      id: existing?.id ?? 'draft',
+      registryId: this.draft.registryId,
+      label: this._registryLabel(this.draft.registryId) ?? this.draft.registryId,
+      credential,
+      baseUrl: this.draft.baseUrl?.trim() || existing?.baseUrl,
+      source: existing?.source ?? 'stored',
+    };
+  }
+
+  /** Drops a verification result the user has typed past, and any block it caused. */
+  private _invalidateDraftTest(): void {
+    this._draftTestGeneration += 1;
+    this.isTestingDraft = false;
+    this.draftTestResult = undefined;
+    this._testedDraftSignature = undefined;
+    this.isSaveBlocked = false;
   }
 
   async fetchModels(): Promise<void> {
@@ -1465,6 +1637,7 @@ export class AiSettingsViewModel
     this.fetchModelsError = undefined;
     this._genParamsDraft = {};
     this.isGenParamsOpen = false;
+    this._invalidateDraftTest();
   }
 
   private _activeVoiceConnection(): AiConnection | undefined {
