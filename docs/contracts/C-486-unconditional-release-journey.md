@@ -3,7 +3,7 @@ id: C-486
 title: "Replace the conditional release gate with one unconditional journey"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-07T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — the gate currently cannot fail for the reasons it exists |
 | **Dependencies** | None. C-495 extends this journey later — leave the spec structured for that. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -240,7 +240,7 @@ N/A — no persistent state changes. Rollback is reverting the spec and POM chan
 ## Edge Cases & Gotchas
 
 - **A start menu with several entry buttons**: "New Adventure" and a continue/load button coexist when a campaign exists. The gate must target the new-adventure affordance specifically, and must behave identically on a machine with existing saves.
-- **First run downloads starter content** (see `CLAUDE.md` § Data Planes): cold launch may be network-dependent on a clean profile. Give that leg a realistic timeout rather than a conditional.
+- **First run downloads starter content** (see `AGENTS.md` § Data Planes): cold launch may be network-dependent on a clean profile. Give that leg a realistic timeout rather than a conditional.
 - **Combat timing**: the current code waits a fixed 2s then probes. Replace with an assertion that auto-waits; a fixed sleep plus an assertion is still flaky, just louder.
 - **Auto-heal or regen on load** would make exact HP comparison fail legitimately. If that mechanic exists, state it as an explicit, commented tolerance — and confirm it is a real mechanic before assuming it, since "HP may differ if auto-heal/regen is active" is currently an unverified comment at `:498`.
 - **C-495 will extend this spec.** Keep describe blocks and AC numbering stable, and keep new helpers on the POM rather than inline, so appending legs later is additive.
