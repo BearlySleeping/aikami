@@ -192,12 +192,39 @@ const { viewModel }: Props = $props();
   </div>
 {:else if viewModel.isManualStep}
   <div class="flex flex-col gap-4">
-    <p class="text-sm text-base-content/60">
-      Enter your provider's details in the editor. Close it when you're done and your connection
-      will appear in the review below.
-    </p>
-    <button type="button" class="btn btn-primary" onclick={() => viewModel.reopenManualEditor()}>
-      Open Connection Editor
+    <p class="text-sm text-base-content/60">{viewModel.manualIntroText}</p>
+
+    {#if viewModel.hasManualConnections}
+      <!-- Saving closes the editor, so the step must show what now exists —
+           and offer a way back into it rather than only a blank Add form. -->
+      <div class="space-y-2">
+        {#each viewModel.manualConnections as connection (connection.id)}
+          <div class="rounded-lg border border-base-300 p-3">
+            <div class="flex items-center gap-3">
+              <span class="text-lg">{connection.icon}</span>
+              <div class="flex-1">
+                <p class="text-sm font-medium">{connection.name}</p>
+                <p class="text-xs text-base-content/50">{connection.detailText}</p>
+              </div>
+              <button
+                type="button"
+                class="btn btn-outline btn-sm"
+                onclick={() => viewModel.editConnection(connection.id)}
+              >
+                Edit
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
+    <button
+      type="button"
+      class={viewModel.manualAddButtonClass}
+      onclick={() => viewModel.reopenManualEditor()}
+    >
+      {viewModel.manualAddButtonLabel}
     </button>
     <AiConnectionModals viewModel={viewModel.editorViewModel} />
     <div class="flex gap-2">

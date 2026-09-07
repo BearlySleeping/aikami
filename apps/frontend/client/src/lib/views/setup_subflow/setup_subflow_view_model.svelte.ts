@@ -115,6 +115,22 @@ export type CapabilityRow = {
   readonly checked: boolean;
 };
 
+/**
+ * One saved connection as listed on the manual step. Saving closes the editor,
+ * so without this the step showed no evidence the connection existed and the
+ * only button reopened a blank Add form.
+ */
+export type ManualConnectionRow = {
+  readonly id: string;
+  readonly name: string;
+  /** Provider, and model when one is set — formatted for display. */
+  readonly detailText: string;
+  /** Whether this connection is complete enough to use. */
+  readonly usable: boolean;
+  /** Status glyph. */
+  readonly icon: string;
+};
+
 /** Summary of a plan step. */
 export type PlanSummary = {
   readonly capabilities: readonly CapabilityToggle[];
@@ -190,8 +206,21 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   readonly isReadyStep: boolean;
   readonly isErrorStep: boolean;
 
+  /** Connections already saved for the capability being configured. */
+  readonly manualConnections: readonly ManualConnectionRow[];
+  /** Whether any connection exists for the capability being configured. */
+  readonly hasManualConnections: boolean;
+  /** Guidance for the manual step, worded for whether anything is saved yet. */
+  readonly manualIntroText: string;
+  /** Label for the manual step's add button. */
+  readonly manualAddButtonLabel: string;
+  /** Classes for the manual step's add button; secondary once Continue is the main action. */
+  readonly manualAddButtonClass: string;
+
   /** Reopens the connection editor for the capability being configured, keeping it scoped. */
   reopenManualEditor(): void;
+  /** Opens the editor on an existing connection so it can be corrected. */
+  editConnection(connectionId: string): void;
   /** Entry path: scan for what is already available. */
   selectRecommended(): void;
   /** Entry path: enter provider details by hand. */
@@ -284,7 +313,10 @@ const STEP_HEADINGS: Record<SetupFlowStep, { title: string; subtitle: string }> 
     title: 'Your setup',
     subtitle: 'Review what will be used, and change anything you like.',
   },
-  manual: { title: 'Add a connection', subtitle: 'Enter the service and credentials to use.' },
+  // The manual step titles itself from what is already saved; the subtitle is
+  // empty because the step renders its own guidance and would otherwise say
+  // the same thing twice.
+  manual: { title: 'Add a connection', subtitle: '' },
   applying: { title: 'Saving your setup', subtitle: '' },
   ready: { title: 'All set', subtitle: '' },
   error: { title: 'Something went wrong', subtitle: '' },
@@ -486,6 +518,9 @@ class SetupSubflowViewModel
   }
 
   get headingTitle(): string {
+    if (this.step === 'manual' && this.hasManualConnections) {
+      return 'Your connections';
+    }
     return STEP_HEADINGS[this.step]?.title ?? STEP_HEADINGS.entry.title;
   }
 
@@ -560,6 +595,52 @@ class SetupSubflowViewModel
 
   selectTextOnly(): void {
     this.selectEntryPath('text-only');
+  }
+
+  get manualConnections(): readonly ManualConnectionRow[] {
+    const capability = this.manualCapability ?? 'text';
+    const connections = (configService.state.connections ?? []) as ConnectionEntry[];
+    return connections
+      .filter((c) => (c.capability ?? 'text') === capability)
+      .map((c) => {
+        const label = _labelForProvider(capability, c.provider);
+        return {
+          id: c.id,
+          name: c.name || label,
+          detailText: c.model ? `${label} · ${c.model}` : label,
+          usable: this._isUsable(c),
+          icon: this._isUsable(c) ? '✅' : '⚠️',
+        };
+      });
+  }
+
+  get hasManualConnections(): boolean {
+    return this.manualConnections.length > 0;
+  }
+
+  get manualIntroText(): string {
+    return this.hasManualConnections
+      ? 'Edit a connection to change its details, or add another. Continue when you are done.'
+      : "Enter your provider's details in the editor. Continue once you're done.";
+  }
+
+  get manualAddButtonLabel(): string {
+    return this.hasManualConnections ? 'Add another connection' : 'Open Connection Editor';
+  }
+
+  get manualAddButtonClass(): string {
+    // Once something is saved, Continue is the primary action and adding
+    // another connection is the secondary one.
+    return this.hasManualConnections ? 'btn btn-outline' : 'btn btn-primary';
+  }
+
+  /**
+   * Opens the editor on an existing connection. The legacy projection keeps
+   * the AiConnection id, so the id listed here is the one the editor wants.
+   */
+  editConnection(connectionId: string): void {
+    this.debug('editConnection', { connectionId });
+    this.editorViewModel.openEditConnection(connectionId);
   }
 
   /**

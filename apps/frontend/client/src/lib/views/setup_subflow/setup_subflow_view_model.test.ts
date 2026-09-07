@@ -32,6 +32,37 @@ const configServiceMock = {
   addConnection: mock(() => 'mock-connection-id'),
   setDefaultConnection: mock(() => {}),
   save: mock(async () => {}),
+  // The editor reads the v3 aiConnections/providers pair while the setup flow
+  // reads the legacy projection of the same rows. config_service derives one
+  // from the other and keeps the ids, so the mock projects them the same way
+  // rather than letting the two views disagree.
+  getAiConnection: mock((id: string) => {
+    const c = configServiceMock.state.connections.find((x) => x.id === id);
+    return c
+      ? {
+          id: c.id as string,
+          providerId: `provider-${c.id}`,
+          capability: (c.capability ?? 'text') as string,
+          label: c.name as string,
+          model: (c.model ?? '') as string,
+          params: {},
+        }
+      : undefined;
+  }),
+  getProvider: mock((providerId: string) => {
+    const id = providerId.replace(/^provider-/, '');
+    const c = configServiceMock.state.connections.find((x) => x.id === id);
+    return c
+      ? {
+          id: providerId,
+          registryId: c.provider as string,
+          label: c.provider as string,
+          credential: c.apiKey as string | undefined,
+          baseUrl: c.baseUrl as string | undefined,
+          source: 'stored',
+        }
+      : undefined;
+  }),
 };
 
 const createDetectedSnapshot = (): CapabilitySnapshot => ({
@@ -531,6 +562,102 @@ describe('SetupSubflowViewModel', () => {
 
     expect(vm.errorMessage).toBe('');
   });
+  // ── The manual step must show what is already saved ──────────────────────
+
+  test('the manual step lists nothing and offers a blank editor when no connection exists', () => {
+    vm.openManualSetup('text');
+
+    expect(vm.hasManualConnections).toBeFalse();
+    expect(vm.manualAddButtonLabel).toBe('Open Connection Editor');
+  });
+
+  test('a saved connection appears on the manual step instead of vanishing', () => {
+    vm.openManualSetup('text');
+
+    configServiceMock.state.connections = [
+      {
+        id: 'conn-1',
+        capability: 'text',
+        provider: 'openrouter',
+        apiKey: 'sk-real-key',
+        name: 'My OpenRouter',
+        model: 'anthropic/claude-sonnet',
+      },
+    ];
+
+    // Saving closes the editor; the step used to show no sign it had worked.
+    expect(vm.hasManualConnections).toBeTrue();
+    const [row] = vm.manualConnections;
+    expect(row?.name).toBe('My OpenRouter');
+    expect(row?.detailText).toContain('anthropic/claude-sonnet');
+    expect(row?.usable).toBeTrue();
+    expect(vm.manualAddButtonLabel).toBe('Add another connection');
+    expect(vm.headingTitle).toBe('Your connections');
+  });
+
+  test('editConnection opens the editor on the saved row, not a blank draft', () => {
+    configServiceMock.state.connections = [
+      {
+        id: 'conn-1',
+        capability: 'text',
+        provider: 'openrouter',
+        apiKey: 'sk-real-key',
+        name: 'My OpenRouter',
+        model: 'anthropic/claude-sonnet',
+      },
+    ];
+    vm.openManualSetup('text');
+
+    vm.editConnection('conn-1');
+
+    expect(vm.editorViewModel.isEditorOpen).toBeTrue();
+    expect(vm.editorViewModel.draft.isEditing).toBeTrue();
+    expect(vm.editorViewModel.draft.editingConnectionId).toBe('conn-1');
+  });
+
+  test('an incomplete connection is listed as unusable rather than hidden', () => {
+    configServiceMock.state.connections = [
+      {
+        id: 'conn-2',
+        capability: 'text',
+        provider: 'ollama',
+        name: 'Local',
+        model: '',
+        baseUrl: '',
+      },
+    ];
+    vm.openManualSetup('text');
+
+    expect(vm.manualConnections[0]?.usable).toBeFalse();
+  });
+
+  test('the manual list is scoped to the capability being configured', () => {
+    configServiceMock.state.connections = [
+      {
+        id: 't1',
+        capability: 'text',
+        provider: 'openrouter',
+        apiKey: 'k',
+        name: 'Text',
+        model: '',
+      },
+      {
+        id: 'v1',
+        capability: 'voice',
+        provider: 'kokoro',
+        baseUrl: 'http://x',
+        name: 'Voice',
+        model: '',
+      },
+    ];
+
+    vm.openManualSetup('voice');
+    expect(vm.manualConnections.map((c) => c.id)).toEqual(['v1']);
+
+    vm.openManualSetup('text');
+    expect(vm.manualConnections.map((c) => c.id)).toEqual(['t1']);
+  });
+
   // ── Web has nothing to scan ──────────────────────────────────────────────
 
   describe('on the web build', () => {
