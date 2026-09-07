@@ -10,11 +10,37 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { c, log, ok, warn } from '../cli_utils';
+import { STAGING_TAG } from '../release/github';
+import { resolveReleaseVersion } from '../release/version';
 import { checkDeployCache, setTauriCache } from './cache';
 import { type AppConfig, liveModes } from './deployment_config';
 import { notifyDiscordRelease } from './discord_notify';
 import { buildPlatformFragment, writeFragmentFile } from './updater_manifest';
 import { isVerbose, run } from './utils';
+
+/** `<owner>/<repo>` the updater downloads manifests from. */
+const RELEASE_REPO = 'BearlySleeping/aikami';
+
+/**
+ * Auto-updater manifest endpoint per deploy mode.
+ *
+ * production → `/releases/latest/download/…`. GitHub's "latest" excludes
+ *   prereleases, so a stable install can never be pulled onto a staging build
+ *   no matter how many staging releases are published after it.
+ * staging    → `/releases/download/staging/…`. The staging tag is rolling
+ *   (see release/index.ts), which is precisely what makes this a stable URL:
+ *   there is exactly one staging release and it always carries the newest
+ *   manifest.
+ *
+ * Applied as a build-time `--config` override rather than being listed in
+ * tauri.conf.json, because listing both endpoints there would have every
+ * stable install poll the staging channel too — Tauri tries endpoints in
+ * order and takes the first that answers.
+ */
+const updaterEndpoint = (mode: string): string =>
+  mode === 'staging'
+    ? `https://github.com/${RELEASE_REPO}/releases/download/${STAGING_TAG}/latest.json`
+    : `https://github.com/${RELEASE_REPO}/releases/latest/download/latest.json`;
 
 // ── Canonical artifact naming ─────────────────────────────────────────────
 //
@@ -240,6 +266,7 @@ export async function buildTauriArtifacts(
     version?: string;
     build?: { beforeBuildCommand: string };
     bundle?: { createUpdaterArtifacts: boolean };
+    plugins?: { updater: { endpoints: string[] } };
   } = {};
   if (opts.disableBeforeBuildCommand) {
     configOverride.build = { beforeBuildCommand: '' };
@@ -250,6 +277,10 @@ export async function buildTauriArtifacts(
   // working for any contributor without desktop-release secrets.
   if ((liveModes as readonly string[]).includes(mode)) {
     configOverride.bundle = { createUpdaterArtifacts: true };
+    // Pin the update channel to the mode being built (see updaterEndpoint).
+    // Only for live modes: a local/emulator build has no release channel to
+    // point at and keeps tauri.conf.json's committed stable endpoint.
+    configOverride.plugins = { updater: { endpoints: [updaterEndpoint(mode)] } };
   }
   if (normalizedVersionOverride !== undefined) {
     configOverride.version = normalizedVersionOverride;
@@ -385,10 +416,10 @@ export async function deployTauriRelease(
 
   // 1-4. Build + collect (shared with ci_run.ts). When this local pipeline is
   // itself publishing to a real GitHub Release (RELEASE_TAG set — see step 5
-  // below), derive the embedded version from the tag the same way ci_run.ts
-  // does, so a manually-run `RELEASE_TAG=v0.1.1 bun run deploy ... client-tauri`
-  // embeds the same version its own uploaded latest.json will claim.
-  const versionOverride = releaseTag ? releaseTag.replace(/^v/, '') : undefined;
+  // below), resolve the embedded version the same way ci_run.ts does, so a
+  // manually-run `RELEASE_TAG=v0.1.1 bun run deploy ... client-tauri` embeds
+  // the same version its own uploaded latest.json will claim.
+  const versionOverride = resolveReleaseVersion(releaseTag, rootDir);
   const {
     artifacts,
     version: ver,

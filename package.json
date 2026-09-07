@@ -89,6 +89,7 @@
     "validate:shaders": "bun run validate:wgsl && bun run validate:gql",
     "update:ai": "bun run scripts/src/lib/ops/update_ai.ts",
     "switch": "bun run scripts/src/lib/ops/switch_mode.ts",
+    "release": "bun run scripts/src/lib/release/index.ts",
     "deploy": "bun run scripts/src/lib/deploy/index.ts",
     "deploy:worker": "bun run scripts/src/lib/worker/deploy.ts",
     "decrypt-secrets": "bun run scripts/src/lib/ops/decrypt_secrets.ts",

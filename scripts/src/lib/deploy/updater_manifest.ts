@@ -27,8 +27,12 @@
 //     artifact (the updater has no single "universal" key).
 
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { c, error, log, ok, parseCliArgs, run, warn } from '../cli_utils';
+import { resolveReleaseVersion } from '../release/version';
+
+const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -354,11 +358,13 @@ async function main(): Promise<void> {
   }
 
   const manifest: UpdaterManifest = {
-    // Derived from the release tag itself (v0.1.1 → 0.1.1) — the same source
-    // ci_run.ts embeds into the built bundles (see buildTauriArtifacts'
-    // versionOverride) — so the manifest and the binaries always agree with
-    // no Cargo.toml/tauri.conf.json version-bump commit required per release.
-    version: releaseTag.replace(/^v/, ''),
+    // Resolved exactly the way ci_run.ts resolves the version it embeds into
+    // the bundles (semver tag wins, else the committed version — see
+    // release/version.ts), so the manifest and the binaries always agree.
+    // Deriving it from the tag alone would publish `version: "staging"` for
+    // the rolling staging release, which every client would then fail to
+    // compare against its own semver.
+    version: resolveReleaseVersion(releaseTag, ROOT_DIR),
     notes: await fetchReleaseNotes(releaseTag),
     pub_date: new Date().toISOString(),
     platforms,

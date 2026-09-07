@@ -69,6 +69,9 @@ const SCRIPT_MAP: Record<string, string> = {
   // Discord server management (channels, roles) — see discord/structure.ts
   discord: 'discord/index.ts',
 
+  // Release cutting: staging rolling prerelease + production promote
+  release: 'release/index.ts',
+
   // Swarm director
 };
 
