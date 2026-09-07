@@ -506,9 +506,7 @@ export class GamePage {
     const hp = await this.getPlayerHp();
 
     await this.toggleInventory();
-    const inventoryItemCount = await this.page
-      .locator('[data-testid^="inventory-item-"]')
-      .count();
+    const inventoryItemCount = await this.page.locator('[data-testid^="inventory-item-"]').count();
     // Close inventory overlay (pressing Escape closes any open overlay)
     await this.page.keyboard.press('Escape');
     await this.page.waitForTimeout(300);

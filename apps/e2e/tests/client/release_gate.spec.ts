@@ -155,7 +155,7 @@ test.describe('Release Gate', () => {
       // HUD is functional after reload
       await expect(game.hpBar).toBeVisible({ timeout: 15_000 });
       await game.waitForPlayingState();
-    })
+    });
   });
 
   // ──────────────────────────────────────────────────────────
@@ -370,9 +370,17 @@ test.describe('Release Gate', () => {
 
       // Check if the AI capability gate is active
       const capabilityMsg = page.getByText(/text ai|ai provider|capability|offline demo/i);
-      if (!(await capabilityMsg.first().isVisible({ timeout: 5000 }).catch(() => false))) {
+      if (
+        !(await capabilityMsg
+          .first()
+          .isVisible({ timeout: 5000 })
+          .catch(() => false))
+      ) {
         // Gate is not active (text AI is available) — skip this environment-dependent leg
-        test.skip(true, 'AI capability gate test requires text AI to be unavailable (not applicable in CI with emulators)');
+        test.skip(
+          true,
+          'AI capability gate test requires text AI to be unavailable (not applicable in CI with emulators)',
+        );
         return;
       }
 
@@ -393,7 +401,7 @@ test.describe('Release Gate', () => {
       const currentUrl = page.url();
       expect(currentUrl).not.toContain('/setup');
       expect(currentUrl).not.toContain('/game');
-    })
+    });
   });
 
   // ──────────────────────────────────────────────────────────
