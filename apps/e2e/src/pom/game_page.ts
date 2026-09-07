@@ -63,11 +63,8 @@ export class GamePage {
     // Start at root
     await this.page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
 
-    // Click "New Game" or equivalent start button
-    const startButton = this.page.getByRole('button', { name: /new game|start|play/i });
-    if (await startButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await startButton.click();
-    }
+    // Click the real "New Adventure" start button via the POM method
+    await this.startNewAdventure();
 
     // Wait for navigation to /setup or /game
     await this.page.waitForURL(/\/(setup|game)/, { timeout: 15_000 });
@@ -475,4 +472,61 @@ export class GamePage {
       await expect(this.page).not.toHaveURL(/\/(setup|game)/, { timeout: 5000 });
     }
   }
+
+  // ── Start Menu ────────────────────────────────────────────
+
+  /**
+   * Click the "New Adventure" button on the start menu.
+   * Asserts the real production label is present and visible before clicking.
+   * Never falls back to a permissive regex across several candidate labels.
+   */
+  async startNewAdventure(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    const newAdventureBtn = this.page.getByRole('button', { name: 'New Adventure' });
+    await expect(newAdventureBtn).toBeVisible({ timeout: 10_000 });
+    await newAdventureBtn.click();
+  }
+
+  /**
+   * Read the current quest objective label from the quest overlay.
+   * Returns the text content of the element with aria-current="step".
+   */
+  async getQuestObjectiveLabel(): Promise<string> {
+    const { expect } = await import('@playwright/test');
+    const current = this.questOverlay.locator('[aria-current="step"]');
+    await expect(current).toBeVisible({ timeout: 5000 });
+    return (await current.textContent()) ?? '';
+  }
+
+  /**
+   * Capture a snapshot of player state for before/after comparison.
+   * Returns HP, inventory item count, and quest objective label.
+   */
+  async captureStateSnapshot(): Promise<JourneyStateSnapshot> {
+    const hp = await this.getPlayerHp();
+
+    await this.toggleInventory();
+    const inventoryItemCount = await this.page
+      .locator('[data-testid^="inventory-item-"]')
+      .count();
+    // Close inventory overlay (pressing Escape closes any open overlay)
+    await this.page.keyboard.press('Escape');
+    await this.page.waitForTimeout(300);
+
+    const questObjectiveLabel = await this.getQuestObjectiveLabel();
+
+    return { hp, inventoryItemCount, questObjectiveLabel };
+  }
 }
+
+// ── JourneyStateSnapshot ──────────────────────────────────
+
+/**
+ * Comparable snapshot of player state across a save/reload cycle.
+ * Local to the E2E lane; not a domain type.
+ */
+export type JourneyStateSnapshot = {
+  hp: number;
+  inventoryItemCount: number;
+  questObjectiveLabel: string;
+};
