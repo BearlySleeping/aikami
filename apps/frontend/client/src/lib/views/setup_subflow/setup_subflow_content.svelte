@@ -75,7 +75,7 @@ const { viewModel }: Props = $props();
             <button
               type="button"
               class={row.actionButtonClass}
-              onclick={() => viewModel.openManualSetup(row.id)}
+              onclick={() => viewModel.reviewCapability(row.id)}
             >
               {row.actionLabel}
             </button>
@@ -104,7 +104,7 @@ const { viewModel }: Props = $props();
               <button
                 type="button"
                 class="btn btn-ghost btn-sm"
-                onclick={() => viewModel.openManualSetup(row.id)}
+                onclick={() => viewModel.reviewCapability(row.id)}
               >
                 {row.actionLabel}
               </button>
@@ -203,12 +203,26 @@ const { viewModel }: Props = $props();
             <div class="flex items-center gap-3">
               <span class="text-lg">{connection.icon}</span>
               <div class="flex-1">
-                <p class="text-sm font-medium">{connection.name}</p>
+                <p class="flex items-center gap-1.5 text-sm font-medium">
+                  {connection.name}
+                  {#if connection.isDefault}
+                    <span class="badge badge-success badge-xs">Default</span>
+                  {/if}
+                </p>
                 <p class="text-xs text-base-content/50">{connection.detailText}</p>
               </div>
+              {#if !connection.isDefault}
+                <button
+                  type="button"
+                  class="btn btn-outline btn-sm"
+                  onclick={() => viewModel.useConnection(connection.id)}
+                >
+                  Use this
+                </button>
+              {/if}
               <button
                 type="button"
-                class="btn btn-outline btn-sm"
+                class="btn btn-ghost btn-sm"
                 onclick={() => viewModel.editConnection(connection.id)}
               >
                 Edit

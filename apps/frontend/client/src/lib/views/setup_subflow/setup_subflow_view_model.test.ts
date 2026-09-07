@@ -33,6 +33,7 @@ const configServiceMock = {
   addConnection: mock(() => 'mock-connection-id'),
   setDefaultConnection: mock(() => {}),
   save: mock(async () => {}),
+  getProviders: mock((): Array<Record<string, unknown>> => []),
   // The editor reads the v3 aiConnections/providers pair while the setup flow
   // reads the legacy projection of the same rows. config_service derives one
   // from the other and keeps the ids, so the mock projects them the same way
@@ -550,8 +551,10 @@ describe('SetupSubflowViewModel', () => {
     vm.reopenManualEditor();
 
     expect(vm.manualCapability).toBe('voice');
-    // Voice has its own setup modal; the unscoped editor would be the wrong one.
-    expect(vm.editorViewModel.isVoiceSetupOpen).toBeTrue();
+    // Voice now opens the connection editor with the local binary default.
+    expect(vm.editorViewModel.isEditorOpen).toBeTrue();
+    expect(vm.editorViewModel.draft.capability).toBe('voice');
+    expect(vm.editorViewModel.draft.registryId).toBe('kokoro');
   });
 
   test('reopenManualEditor falls back to text when nothing is being configured', () => {
@@ -695,6 +698,96 @@ describe('SetupSubflowViewModel', () => {
 
     vm.openManualSetup('text');
     expect(vm.manualConnections.map((c) => c.id)).toEqual(['t1']);
+  });
+
+  test('showManualStep opens the connections list without opening the editor', () => {
+    vm.showManualStep('text');
+
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('text');
+    expect(vm.editorViewModel.isEditorOpen).toBeFalse();
+  });
+
+  test('reviewCapability opens the editor directly when nothing is configured', () => {
+    vm.reviewCapability('text');
+
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('text');
+    expect(vm.editorViewModel.isEditorOpen).toBeTrue();
+  });
+
+  test('reviewCapability shows the connections list when one is already configured', () => {
+    configServiceMock.state.connections = [
+      {
+        id: 't1',
+        capability: 'text',
+        provider: 'openrouter',
+        apiKey: 'k1',
+        name: 'Cloud',
+        model: '',
+      },
+    ];
+
+    vm.reviewCapability('text');
+
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('text');
+    expect(vm.editorViewModel.isEditorOpen).toBeFalse();
+  });
+
+  test('useConnection marks a saved connection as the default for its capability', () => {
+    configServiceMock.state.connections = [
+      {
+        id: 't1',
+        capability: 'text',
+        provider: 'openrouter',
+        apiKey: 'k1',
+        name: 'Cloud',
+        model: '',
+      },
+      {
+        id: 't2',
+        capability: 'text',
+        provider: 'openrouter',
+        apiKey: 'k2',
+        name: 'Backup',
+        model: '',
+      },
+    ];
+    vm.openManualSetup('text');
+
+    vm.useConnection('t2');
+
+    expect(configServiceMock.setDefaultConnection).toHaveBeenCalledWith('t2');
+    // The mock's setDefaultConnection is a no-op, so drive the projection here.
+    configServiceMock.state.defaultByCapability = { text: 't2' };
+    const rows = vm.manualConnections;
+    expect(rows.find((r) => r.id === 't2')?.isDefault).toBeTrue();
+    expect(rows.find((r) => r.id === 't1')?.isDefault).toBeFalse();
+  });
+
+  test('the plan row reports the default connection when several are saved', () => {
+    configServiceMock.state.connections = [
+      {
+        id: 't1',
+        capability: 'text',
+        provider: 'openrouter',
+        apiKey: 'k1',
+        name: 'Cloud',
+        model: '',
+      },
+      {
+        id: 't2',
+        capability: 'text',
+        provider: 'openrouter',
+        apiKey: 'k2',
+        name: 'Backup',
+        model: '',
+      },
+    ];
+    configServiceMock.state.defaultByCapability = { text: 't2' };
+
+    expect(vm.requiredRow?.connectionName).toBe('Backup');
   });
 
   // ── Web has nothing to scan ──────────────────────────────────────────────

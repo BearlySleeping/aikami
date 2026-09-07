@@ -8,11 +8,11 @@
 
 import { expect, type Page, test } from '@playwright/test';
 
-const SETUP_URL = 'http://localhost:5274/setup';
+const SETUP_URL = 'http://localhost:5274/new-campaign';
 
 /**
  * Navigates the onboarding flow from starter_select → identity → play_style → appearance.
- * Assumes the page is already at the /setup route.
+ * Assumes the page is already at the /new-campaign route.
  */
 const navigateToAppearanceStep = async (page: Page): Promise<void> => {
   // Click "Create Custom Hero"

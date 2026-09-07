@@ -30,6 +30,8 @@ import {
   configService,
   type FetchedModel,
   fetchModelsFromProvider,
+  fetchWithCredentialPolicy,
+  getOllamaRuntimeEndpoints,
   hasVerificationStrategy,
   imageGenerationService,
   PROVIDER_MODEL_FETCH,
@@ -168,11 +170,11 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   // ── Provider tree ──
   readonly providerTree: readonly ProviderTreeEntry[];
   readonly isAddProviderOpen: boolean;
-  /** Whether the voice setup modal (local model download vs. a provider connection) is open. */
-  readonly isVoiceSetupOpen: boolean;
 
   // ── Connection editor ──
   readonly draft: EditorDraft;
+  /** Placeholder label for a new connection — the provider's display name. */
+  readonly labelHint: string;
   readonly isEditorOpen: boolean;
   /** Sanitized error from the last failed saveDraft(), or undefined. */
   readonly saveError: string | undefined;
@@ -180,6 +182,12 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly draftTestResult: ConnectionTestResult | undefined;
   /** Whether a draft verification is in flight. */
   readonly isTestingDraft: boolean;
+  /** Result of the last model chat-test against the draft (text only). */
+  readonly draftModelTestResult: ConnectionTestResult | undefined;
+  /** Whether a model chat-test is in flight. */
+  readonly isTestingDraftModel: boolean;
+  /** Whether a model chat-test can be attempted for the current draft (text only). */
+  readonly canTestModel: boolean;
   /**
    * Whether the last save attempt was refused because the draft failed
    * verification. The editor stays open offering "Save anyway".
@@ -200,6 +208,8 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly needsApiKey: boolean;
   readonly needsUrl: boolean;
   readonly isLocalProvider: boolean;
+  /** Whether the selected provider is a bundled local binary (Kokoro) rather than a server endpoint. */
+  readonly isLocalBinaryProvider: boolean;
   readonly providerOptions: ReadonlyArray<{ id: string; label: string; description: string }>;
 
   // ── Key conflict prompt ──
@@ -226,11 +236,6 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   openCapabilitySetup(capability: ConnectionCapability): void;
   openAddProvider(capability?: ConnectionCapability): void;
   closeAddProvider(): void;
-  /** Opens the voice setup modal — leads with the local model download, with an option to connect a provider instead. */
-  openVoiceSetup(): void;
-  closeVoiceSetup(): void;
-  /** Switches from the voice setup modal to the standard connection editor, scoped to voice. */
-  openVoiceProviderSetup(): void;
   openEditConnection(connectionId: ConnectionId): void;
   cancelEdit(): void;
   setDraftField(field: string, value: unknown): void;
@@ -252,6 +257,8 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   deleteConnection(connectionId: ConnectionId): void;
   testConnection(connectionId: ConnectionId | undefined): Promise<void>;
   testDraftConnection(): Promise<void>;
+  /** Sends a short "hi" chat completion to the selected model without saving. */
+  testDraftModel(): Promise<void>;
   fetchModels(): Promise<void>;
   toggleApiKeyVisibility(): void;
   resolveKeyConflict(update: boolean): void;
@@ -284,7 +291,6 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   testVoice(): Promise<void>;
   /** Stops an in-progress voice preview (playback and/or in-flight synthesis). */
   stopVoicePreview(): void;
-  readonly showVoiceLocalDownload: boolean;
   readonly voiceModelState: VoiceModelState;
   readonly voiceModelProgress: number;
   readonly voiceModelSizeLabel: string;
@@ -466,7 +472,6 @@ export class AiSettingsViewModel
   // ── State ──
   isEditorOpen = $state(false);
   isAddProviderOpen = $state(false);
-  isVoiceSetupOpen = $state(false);
   isRolesDrawerOpen = $state(false);
   isFetchingModels = $state(false);
   isModelDropdownOpen = $state(false);
@@ -482,6 +487,8 @@ export class AiSettingsViewModel
   saveError: string | undefined = $state(undefined);
   draftTestResult: ConnectionTestResult | undefined = $state(undefined);
   isTestingDraft = $state(false);
+  draftModelTestResult: ConnectionTestResult | undefined = $state(undefined);
+  isTestingDraftModel = $state(false);
   isSaveBlocked = $state(false);
   /** Generation counter for draft probes — discards a result the user has already typed past. */
   private _draftTestGeneration = 0;
@@ -613,6 +620,10 @@ export class AiSettingsViewModel
     }));
   }
 
+  get labelHint(): string {
+    return this._registryLabel(this.draft.registryId) ?? this.draft.registryId;
+  }
+
   get modelOptions(): readonly FetchedModel[] {
     if (!this.isModelDropdownOpen) {
       return [];
@@ -655,7 +666,7 @@ export class AiSettingsViewModel
       return ['comfyui', 'webui', 'openai-compat'].includes(reg);
     }
     if (cap === 'voice') {
-      return ['kokoro', 'voicevox', 'fish-speech'].includes(reg);
+      return ['voicevox', 'fish-speech'].includes(reg);
     }
     return ['ollama', 'llamacpp', 'ooba', 'custom'].includes(reg);
   }
@@ -665,6 +676,10 @@ export class AiSettingsViewModel
       (p) => p.id === this.draft.registryId,
     );
     return regEntry?.isLocal ?? false;
+  }
+
+  get isLocalBinaryProvider(): boolean {
+    return this.draft.capability === 'voice' && this.draft.registryId === 'kokoro';
   }
 
   // ── Voice section (AC-6) ──
@@ -784,10 +799,6 @@ export class AiSettingsViewModel
     }
   }
 
-  get showVoiceLocalDownload(): boolean {
-    return !this._hasCloudVoiceConnection();
-  }
-
   get voiceModelState(): VoiceModelState {
     return voiceModelService.state;
   }
@@ -848,6 +859,22 @@ export class AiSettingsViewModel
 
   cancelVoiceModelDownload(): void {
     voiceModelService.cancel();
+  }
+
+  /**
+   * Brings the TTS runtime up when the Kokoro model is already downloaded and
+   * the editor opens on it — downloading alone leaves cached bytes the worker
+   * has not loaded yet.
+   */
+  private _ensureVoiceRuntimeIfReady(): void {
+    if (!this.isLocalBinaryProvider) {
+      return;
+    }
+    if (this.voiceModelState.status === 'ready' && ttsService.status === 'uninitialized') {
+      void ttsService.initialize().catch((error: unknown) => {
+        this.warn('_ensureVoiceRuntimeIfReady:failed', error);
+      });
+    }
   }
 
   // ── Image section (AC-7) ──
@@ -1042,10 +1069,6 @@ export class AiSettingsViewModel
   // ── Editor: open / close / save ──
 
   openCapabilitySetup(capability: ConnectionCapability): void {
-    if (capability === 'voice') {
-      this.openVoiceSetup();
-      return;
-    }
     this.openAddProvider(capability);
   }
 
@@ -1054,38 +1077,12 @@ export class AiSettingsViewModel
     this.isAddProviderOpen = true;
     this.isEditorOpen = true;
     this._resetDraft(capability);
+    this._ensureVoiceRuntimeIfReady();
   }
 
   closeAddProvider(): void {
     this.isAddProviderOpen = false;
     this.cancelEdit();
-  }
-
-  openVoiceSetup(): void {
-    this.debug('openVoiceSetup');
-    this.isVoiceSetupOpen = true;
-
-    // Reconcile: a model downloaded in an earlier session is already on
-    // disk (voiceModelService reports it instantly, no network involved),
-    // but the runtime the worker path needs is only brought up on first
-    // use elsewhere (chat/dialogue). Bring it up here too so Test Voice
-    // works without requiring the user to leave Settings and start a
-    // conversation first — no new download, no synthesis, just readiness.
-    if (this.voiceModelState.status === 'ready' && ttsService.status === 'uninitialized') {
-      void ttsService.initialize().catch((error: unknown) => {
-        this.warn('openVoiceSetup:runtime-init-failed', error);
-      });
-    }
-  }
-
-  closeVoiceSetup(): void {
-    this.isVoiceSetupOpen = false;
-  }
-
-  openVoiceProviderSetup(): void {
-    this.debug('openVoiceProviderSetup');
-    this.isVoiceSetupOpen = false;
-    this.openAddProvider('voice');
   }
 
   openEditConnection(connectionId: ConnectionId): void {
@@ -1101,7 +1098,7 @@ export class AiSettingsViewModel
       capability: conn.capability,
       label: conn.label,
       model: conn.model,
-      apiKey: '',
+      apiKey: provider?.credential ?? '',
       baseUrl: provider?.baseUrl ?? '',
       showApiKey: false,
       isEditing: true,
@@ -1110,6 +1107,11 @@ export class AiSettingsViewModel
     this._modelQuery = conn.model;
     this._genParamsDraft = {};
     this.isGenParamsOpen = false;
+    this.draftTestResult = undefined;
+    this.draftModelTestResult = undefined;
+    this.isTestingDraftModel = false;
+    this._testedDraftSignature = undefined;
+    this.isSaveBlocked = false;
     this.isEditorOpen = true;
   }
 
@@ -1126,12 +1128,16 @@ export class AiSettingsViewModel
     if (field === 'apiKey' || field === 'baseUrl') {
       this._invalidateDraftTest();
     }
+    if (field === 'apiKey' || field === 'baseUrl' || field === 'model') {
+      this._invalidateDraftModelTest();
+    }
   }
 
   setModelQuery(value: string): void {
     this._modelQuery = value;
     if (!this.canFetchModels) {
       this.draft = { ...this.draft, model: value };
+      this._invalidateDraftModelTest();
     }
     this.isModelDropdownOpen = true;
   }
@@ -1140,6 +1146,7 @@ export class AiSettingsViewModel
     this.draft = { ...this.draft, model: modelId };
     this._modelQuery = modelId;
     this.isModelDropdownOpen = false;
+    this._invalidateDraftModelTest();
   }
 
   closeModelDropdown(): void {
@@ -1149,6 +1156,7 @@ export class AiSettingsViewModel
   setDraftProvider(registryId: string): void {
     this.debug('setDraftProvider', { registryId });
     this._invalidateDraftTest();
+    this._invalidateDraftModelTest();
     this._availableModels = [];
     this._modelQuery = '';
     this.isModelDropdownOpen = false;
@@ -1169,9 +1177,10 @@ export class AiSettingsViewModel
       providerId: existingProvider?.id,
       model: '',
       apiKey: prefillKey,
-      // Keep label in sync
-      label: this._registryLabel(registryId) ?? registryId,
+      baseUrl: existingProvider?.baseUrl ?? '',
     };
+
+    this._ensureVoiceRuntimeIfReady();
 
     if (conflictProvider) {
       this.keyConflictPrompt = {
@@ -1215,7 +1224,10 @@ export class AiSettingsViewModel
 
     const reg = this.draft.registryId;
     const cap = this.draft.capability;
-    const label = this.draft.label?.trim() || this._registryLabel(reg) || reg;
+    const requestedLabel = this.draft.label?.trim() || this._registryLabel(reg) || reg;
+    const label = this.draft.isEditing
+      ? requestedLabel
+      : this._uniqueConnectionLabel(requestedLabel, cap);
     const model = this.draft.model;
     let savedConnectionId: ConnectionId | undefined;
 
@@ -1367,10 +1379,13 @@ export class AiSettingsViewModel
     this.testingIds = newTestingIds;
 
     try {
-      const result = await verifyConnection({
-        provider,
-        baseUrl: provider.baseUrl,
-      });
+      const result =
+        provider.registryId === 'kokoro'
+          ? await this._probeKokoroConnection()
+          : await verifyConnection({
+              provider,
+              baseUrl: provider.baseUrl,
+            });
 
       // Discard if a newer test has been started
       if (this._testGeneration[connectionId] !== generation) {
@@ -1399,6 +1414,51 @@ export class AiSettingsViewModel
     }
   }
 
+  /**
+   * Kokoro is a bundled local binary, not an HTTP endpoint — "test connection"
+   * means the voice model is downloaded and the TTS runtime can start.
+   */
+  private async _probeKokoroConnection(): Promise<ConnectionTestResult> {
+    const startMs = performance.now();
+    const elapsed = () => Math.round(performance.now() - startMs);
+    const model = this.voiceModelState;
+
+    if (model.status === 'error') {
+      return {
+        ok: false,
+        latencyMs: elapsed(),
+        error: model.message || 'Voice model download failed',
+      };
+    }
+    if (model.status !== 'ready') {
+      return {
+        ok: false,
+        latencyMs: elapsed(),
+        error: 'Voice model not downloaded',
+      };
+    }
+
+    try {
+      if (ttsService.status !== 'ready') {
+        await this.retryVoiceRuntime();
+      }
+      if (ttsService.status === 'ready') {
+        return { ok: true, latencyMs: elapsed() };
+      }
+      return {
+        ok: false,
+        latencyMs: elapsed(),
+        error: this.voiceRuntimeError ?? 'Voice engine failed to start',
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        latencyMs: elapsed(),
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
   /** Resolves the current verification status for one connection. */
   connectionStatusFor(connectionId: ConnectionId): {
     label: string;
@@ -1424,6 +1484,10 @@ export class AiSettingsViewModel
 
   get canVerifyDraft(): boolean {
     return hasVerificationStrategy(this.draft.registryId);
+  }
+
+  get canTestModel(): boolean {
+    return this.draft.capability === 'text';
   }
 
   /**
@@ -1458,6 +1522,135 @@ export class AiSettingsViewModel
       if (generation === this._draftTestGeneration) {
         this.isTestingDraft = false;
       }
+    }
+  }
+
+  /**
+   * Sends a single "hi" chat completion to the draft's selected model without
+   * persisting anything. Unlike {@link testDraftConnection} — which only proves
+   * the endpoint/credential — this proves the model actually answers.
+   */
+  async testDraftModel(): Promise<void> {
+    const reg = this.draft.registryId;
+    const config = PROVIDER_MODEL_FETCH[reg];
+    const draftBaseUrl = this.draft.baseUrl?.trim().replace(/\/+$/, '');
+    // C-389: Ollama's endpoints are runtime-resolved — never probe the empty
+    // static registry entry. The draft's own URL wins when the user typed one.
+    let chatTestUrl: string | undefined;
+    if (reg === 'ollama') {
+      chatTestUrl = draftBaseUrl
+        ? `${draftBaseUrl}/api/chat`
+        : getOllamaRuntimeEndpoints().chatTestUrl;
+    } else {
+      chatTestUrl = config?.chatTestUrl;
+    }
+
+    this.debug('testDraftModel', { reg, hasConfig: !!config, chatTestUrl });
+
+    if (!chatTestUrl) {
+      this.draftModelTestResult = {
+        ok: false,
+        latencyMs: 0,
+        error:
+          reg === 'ollama'
+            ? 'No local text engine configured (text.url missing from config.json)'
+            : 'Model testing not supported for this provider',
+      };
+      return;
+    }
+
+    const model = this.draft.model?.trim();
+    if (!model) {
+      this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No model selected' };
+      return;
+    }
+
+    const provider = this._draftAsProvider();
+    const apiKey = provider.credential;
+    if (config?.auth.location === 'header' && config.auth.name && !apiKey) {
+      this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No API key configured' };
+      return;
+    }
+
+    this.isTestingDraftModel = true;
+    this.draftModelTestResult = undefined;
+
+    const startMs = performance.now();
+    try {
+      const headers: Record<string, string> = { ...(config?.extraHeaders ?? {}) };
+      if (config?.auth.location === 'header' && apiKey && config.auth.name) {
+        const prefix = config.auth.prefix ?? '';
+        headers[config.auth.name] = `${prefix}${apiKey}`;
+      }
+
+      const body = config?.chatTestOpenAiCompat
+        ? JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: 'hi' }],
+            // biome-ignore lint/style/useNamingConvention: API contract field name
+            max_tokens: 5,
+          })
+        : JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: 'hi' }],
+            stream: false,
+            options: {
+              // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
+              num_predict: 5,
+            },
+          });
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+
+      try {
+        const response = await fetchWithCredentialPolicy({
+          url: chatTestUrl,
+          hasCredential: Boolean(apiKey),
+          approvedOrigins: config?.approvedOrigins,
+          init: {
+            body,
+            headers: { 'Content-Type': 'application/json', ...headers },
+            method: 'POST',
+            signal: controller.signal,
+          },
+        });
+        const elapsed = Math.round(performance.now() - startMs);
+
+        if (!response) {
+          this.draftModelTestResult = {
+            ok: false,
+            latencyMs: elapsed,
+            error: 'Request blocked by credential policy (unapproved redirect)',
+          };
+          return;
+        }
+
+        if (!response.ok) {
+          const errorBody = await response.text().catch(() => '');
+          this.draftModelTestResult = {
+            ok: false,
+            latencyMs: elapsed,
+            error: `HTTP ${response.status}${errorBody ? `: ${errorBody.slice(0, 200)}` : ''}`,
+          };
+        } else {
+          this.draftModelTestResult = { ok: true, latencyMs: elapsed };
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - startMs);
+      this.draftModelTestResult = {
+        ok: false,
+        latencyMs: elapsed,
+        error:
+          err instanceof DOMException && err.name === 'AbortError'
+            ? 'Connection timed out'
+            : String(err),
+      };
+    } finally {
+      this.isTestingDraftModel = false;
     }
   }
 
@@ -1502,6 +1695,12 @@ export class AiSettingsViewModel
     this.draftTestResult = undefined;
     this._testedDraftSignature = undefined;
     this.isSaveBlocked = false;
+  }
+
+  /** Drops a model chat-test result the user has edited past. */
+  private _invalidateDraftModelTest(): void {
+    this.isTestingDraftModel = false;
+    this.draftModelTestResult = undefined;
   }
 
   async fetchModels(): Promise<void> {
@@ -1619,14 +1818,16 @@ export class AiSettingsViewModel
   }
 
   private _resetDraft(capability: ConnectionCapability = 'text'): void {
+    const registryId = _registryForCapability(capability)[0]?.id ?? 'openrouter';
+    const existingProvider = this._findProviderByRegistry(registryId);
     this.draft = {
-      providerId: undefined,
-      registryId: _registryForCapability(capability)[0]?.id ?? 'openrouter',
+      providerId: existingProvider?.id,
+      registryId,
       capability,
       label: '',
       model: '',
-      apiKey: '',
-      baseUrl: '',
+      apiKey: existingProvider?.credential ?? '',
+      baseUrl: existingProvider?.baseUrl ?? '',
       showApiKey: false,
       isEditing: false,
       editingConnectionId: undefined,
@@ -1638,6 +1839,7 @@ export class AiSettingsViewModel
     this._genParamsDraft = {};
     this.isGenParamsOpen = false;
     this._invalidateDraftTest();
+    this._invalidateDraftModelTest();
   }
 
   private _activeVoiceConnection(): AiConnection | undefined {
@@ -1652,13 +1854,6 @@ export class AiSettingsViewModel
     }
     configService.updateAiConnection(conn.id, {
       params: { ...(conn.params as VoiceParams), ...patch } as VoiceParams,
-    });
-  }
-
-  private _hasCloudVoiceConnection(): boolean {
-    return this.voiceConnections.some((c) => {
-      const provider = configService.getProvider(c.providerId);
-      return provider ? !LOCAL_PROVIDER_IDS.has(provider.registryId) : false;
     });
   }
 
@@ -1697,6 +1892,26 @@ export class AiSettingsViewModel
 
   private _connectionsForCapability(cap: ConnectionCapability): AiConnection[] {
     return configService.getAiConnections().filter((c) => c.capability === cap);
+  }
+
+  /**
+   * Returns a capability-unique label: the requested name as-is when unused,
+   * otherwise the next "Name 2", "Name 3", … slot.
+   */
+  private _uniqueConnectionLabel(requested: string, cap: ConnectionCapability): string {
+    const used = new Set(
+      this._connectionsForCapability(cap)
+        .map((c) => c.label?.trim())
+        .filter(Boolean),
+    );
+    if (!used.has(requested)) {
+      return requested;
+    }
+    let suffix = 2;
+    while (used.has(`${requested} ${suffix}`)) {
+      suffix += 1;
+    }
+    return `${requested} ${suffix}`;
   }
 
   private _providersForCapability(cap: ConnectionCapability): AiProvider[] {

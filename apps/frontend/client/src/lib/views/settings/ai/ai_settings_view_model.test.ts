@@ -34,6 +34,16 @@ const mockVerifyConnection = mock(async () => ({ ok: true, latencyMs: 42 }));
 // Defaults to false so the save-verification gate stays out of the way of
 // tests about other behaviour; the gate's own suite flips it on.
 const mockHasVerificationStrategy = mock(() => false);
+const mockProviderModelFetch: Record<string, unknown> = {
+  openrouter: {
+    auth: { location: 'header', name: 'Authorization', prefix: 'Bearer ' },
+    chatTestOpenAiCompat: true,
+    chatTestUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    url: 'https://openrouter.ai/api/v1/models',
+    parseResponse: (_json: unknown) => [],
+  },
+};
+const mockFetchWithCredentialPolicy = mock(async () => new Response('{}', { status: 200 }));
 
 const mockConfigService = {
   isLoaded: true,
@@ -108,6 +118,14 @@ const mockTtsService = {
   errorMessage: null as string | null,
 };
 
+// Kokoro model download state — tests drive `state.status` directly.
+const mockVoiceModelService = {
+  state: { status: 'not-downloaded' } as { status: string; message?: string },
+  totalBytes: 0,
+  cancel: mock(() => {}),
+  download: mock(async () => ({ status: 'ready' })),
+};
+
 // AC-6: real-campaign-line fallback (Edge Cases & Gotchas — "no active campaign").
 const mockCampaignService: { activeCampaign: { name: string } | undefined } = {
   activeCampaign: undefined,
@@ -141,11 +159,13 @@ mock.module('$services', () => ({
   ...localServicesMockBase(),
   configService: mockConfigService,
   // biome-ignore lint/style/useNamingConvention: matches actual $services export name
-  PROVIDER_MODEL_FETCH: { openrouter: {} },
+  PROVIDER_MODEL_FETCH: mockProviderModelFetch,
   fetchModelsFromProvider: mockFetchModelsFromProvider,
+  fetchWithCredentialPolicy: mockFetchWithCredentialPolicy,
   verifyConnection: mockVerifyConnection,
   hasVerificationStrategy: mockHasVerificationStrategy,
   ttsService: mockTtsService,
+  voiceModelService: mockVoiceModelService,
   campaignService: mockCampaignService,
   imageGenerationService: mockImageGenerationService,
   styleProfileService: mockStyleProfileService,
@@ -175,6 +195,7 @@ beforeEach(async () => {
   mockConfigService.setDefaultConnection.mockClear();
   mockConfigService.clearRoleAssignment.mockClear();
   mockFetchModelsFromProvider.mockClear();
+  mockFetchWithCredentialPolicy.mockClear();
   mockVerifyConnection.mockClear();
   mockTtsService.speak.mockClear();
   mockTtsService.stop.mockClear();
@@ -184,6 +205,7 @@ beforeEach(async () => {
   mockTtsService.isPlaying = false;
   mockTtsService.status = 'uninitialized';
   mockTtsService.errorMessage = null;
+  mockVoiceModelService.state = { status: 'not-downloaded' };
   mockCampaignService.activeCampaign = undefined;
   mockImageGenerationService.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'SDXL Base' }];
   mockImageGenerationService.loadCheckpoints.mockClear();
@@ -228,6 +250,56 @@ describe('AiSettingsViewModel — AC-1: Second model reuses key', () => {
 
     // Then the key should be prefilled from the existing provider
     expect(vm.draft.apiKey).toBe('sk-or-v1-test-key');
+  });
+
+  test('prefills key from the default provider and exposes its label as a hint', async () => {
+    mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-init-key',
+    });
+
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openAddProvider();
+
+    expect(vm.draft.registryId).toBe('openrouter');
+    expect(vm.draft.apiKey).toBe('sk-or-v1-init-key');
+    expect(vm.draft.label).toBe('');
+    expect(vm.labelHint).toBe('OpenRouter');
+    expect(vm.draft.providerId).toBeDefined();
+  });
+
+  test('auto-generated labels avoid duplicates by appending a number', async () => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-test-key',
+    });
+    mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'OpenRouter',
+      model: '',
+      params: {},
+    });
+    mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'OpenRouter 2',
+      model: '',
+      params: {},
+    });
+
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openAddProvider();
+
+    await vm.saveDraft();
+
+    const created = mockAiConnections[mockAiConnections.length - 1];
+    expect(created?.label).toBe('OpenRouter 3');
   });
 });
 
@@ -848,16 +920,18 @@ describe('AiSettingsViewModel — capability setup', () => {
 
     expect(vm.isEditorOpen).toBe(true);
     expect(vm.draft.capability).toBe('image');
-    expect(vm.isVoiceSetupOpen).toBe(false);
   });
 
-  test('opens the voice-specific setup flow for voice capability', () => {
+  test('opens the connection editor scoped to voice with Kokoro default', () => {
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
 
     vm.openCapabilitySetup('voice');
 
-    expect(vm.isVoiceSetupOpen).toBe(true);
-    expect(vm.isEditorOpen).toBe(false);
+    expect(vm.isEditorOpen).toBe(true);
+    expect(vm.draft.capability).toBe('voice');
+    expect(vm.draft.registryId).toBe('kokoro');
+    expect(vm.isLocalBinaryProvider).toBe(true);
+    expect(vm.needsUrl).toBe(false);
   });
 });
 
@@ -1233,6 +1307,71 @@ describe('AiSettingsViewModel — P02: testConnection delegates to verifyConnect
     await vm.testConnection('nonexistent');
 
     expect(mockVerifyConnection).not.toHaveBeenCalled();
+  });
+});
+
+describe('AiSettingsViewModel — Kokoro connection test uses local readiness', () => {
+  const seedKokoroConnection = () => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'kokoro',
+      label: 'Kokoro (local)',
+      credential: undefined,
+      baseUrl: undefined,
+      source: 'stored',
+    });
+    return mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'voice',
+      label: 'Kokoro',
+      model: '',
+      params: {},
+    });
+  };
+
+  test('does not call verifyConnection for the bundled Kokoro binary', async () => {
+    const cid = seedKokoroConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    mockVoiceModelService.state = { status: 'ready' };
+    mockTtsService.status = 'ready';
+
+    await vm.testConnection(cid);
+
+    expect(mockVerifyConnection).not.toHaveBeenCalled();
+    expect(vm.testResults[cid]?.ok).toBe(true);
+  });
+
+  test('reports the model as not downloaded when the Kokoro model is missing', async () => {
+    const cid = seedKokoroConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    mockVoiceModelService.state = { status: 'not-downloaded' };
+
+    await vm.testConnection(cid);
+
+    expect(mockVerifyConnection).not.toHaveBeenCalled();
+    expect(vm.testResults[cid]?.ok).toBe(false);
+    expect(vm.testResults[cid]?.error).toBe('Voice model not downloaded');
+  });
+
+  test('initializes the TTS runtime when the model is ready but the runtime is not', async () => {
+    const cid = seedKokoroConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    mockVoiceModelService.state = { status: 'ready' };
+    mockTtsService.status = 'uninitialized';
+    mockTtsService.initialize.mockImplementationOnce(async () => {
+      mockTtsService.status = 'ready';
+    });
+
+    await vm.testConnection(cid);
+
+    expect(mockTtsService.reset).toHaveBeenCalled();
+    expect(mockTtsService.initialize).toHaveBeenCalled();
+    expect(vm.testResults[cid]?.ok).toBe(true);
   });
 });
 
@@ -1855,5 +1994,93 @@ describe('AiSettingsViewModel — a failed persist must not duplicate the connec
     expect(mockConfigService.addAiConnection).toHaveBeenCalledTimes(1);
     expect(mockConfigService.updateAiConnection).toHaveBeenCalledTimes(1);
     expect(mockAiConnections.length).toBe(1);
+  });
+});
+
+describe('AiSettingsViewModel — editing an existing connection', () => {
+  const seedTextConnection = () => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-test-key',
+    });
+    const cid = mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet',
+      params: {},
+    });
+    return { pid, cid };
+  };
+
+  test('openEditConnection prefills the stored API key and model', async () => {
+    const { cid } = seedTextConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openEditConnection(cid);
+
+    expect(vm.draft.isEditing).toBe(true);
+    expect(vm.draft.apiKey).toBe('sk-or-v1-test-key');
+    expect(vm.draft.model).toBe('anthropic/claude-sonnet');
+    expect(vm.modelQuery).toBe('anthropic/claude-sonnet');
+  });
+});
+
+describe('AiSettingsViewModel — model chat-test', () => {
+  const seedTextConnection = (model = 'anthropic/claude-sonnet') => {
+    const pid = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-test-key',
+    });
+    return mockConfigService.addAiConnection({
+      providerId: pid,
+      capability: 'text',
+      label: 'Sonnet',
+      model,
+      params: {},
+    });
+  };
+
+  test('sends a "hi" chat completion to the selected model', async () => {
+    const cid = seedTextConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openEditConnection(cid);
+
+    await vm.testDraftModel();
+
+    expect(mockFetchWithCredentialPolicy).toHaveBeenCalledTimes(1);
+    const [options] = mockFetchWithCredentialPolicy.mock.calls[0] as [
+      { url: string; init: RequestInit },
+    ];
+    expect(options.url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    const body = JSON.parse(String(options.init.body)) as {
+      model: string;
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(body.model).toBe('anthropic/claude-sonnet');
+    expect(body.messages[0]).toEqual({ role: 'user', content: 'hi' });
+    expect(vm.draftModelTestResult?.ok).toBe(true);
+    expect(typeof vm.draftModelTestResult?.latencyMs).toBe('number');
+    expect(vm.isTestingDraftModel).toBe(false);
+  });
+
+  test('reports a missing model without making a request', async () => {
+    const cid = seedTextConnection('');
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.openEditConnection(cid);
+
+    await vm.testDraftModel();
+
+    expect(mockFetchWithCredentialPolicy).not.toHaveBeenCalled();
+    expect(vm.draftModelTestResult).toEqual({
+      ok: false,
+      latencyMs: 0,
+      error: 'No model selected',
+    });
   });
 });

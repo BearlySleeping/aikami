@@ -2,7 +2,7 @@
 //
 // E2E tests for the new-campaign entry flow.
 //
-// AC-1: fresh install → "New Game" routes to /capability (the AI-provider
+// AC-1: fresh install → "New Game" routes to /setup (the AI-provider
 //       welcome screen), then "Start Campaign" reaches persona creation
 //       (onboarding) — WITHOUT passing through the world-generation wizard,
 //       and WITHOUT any world-generation AI call (request spy, not timing).
@@ -32,7 +32,7 @@ test.describe('New Campaign Flow — C-405', () => {
     });
   });
 
-  test('AC-1: fresh start routes through /capability to persona creation', async ({ page }) => {
+  test('AC-1: fresh start routes through /setup to persona creation', async ({ page }) => {
     // ── Request spy: any world-gen / AI-provider call during the default
     //    path is a regression (asserted via the spy, never by timing). ──
     const aiRequestUrls: string[] = [];
@@ -53,11 +53,11 @@ test.describe('New Campaign Flow — C-405', () => {
 
     await page.goto('/');
 
-    // New Game — the front door. Routes to /capability, not the pack picker.
+    // New Game — the front door. Routes to /setup, not the pack picker.
     await page.getByRole('button', { name: 'New Game' }).click();
 
     // Lands on the AI-provider welcome screen.
-    await expect(page).toHaveURL(/\/capability/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/setup/, { timeout: 10000 });
     await expect(page.getByRole('heading', { name: 'Welcome to Aikami' })).toBeVisible();
 
     // Start Campaign proceeds to persona creation (onboarding), never the wizard.
@@ -78,7 +78,7 @@ test.describe('New Campaign Flow — C-405', () => {
     await page.goto('/');
 
     await page.getByRole('button', { name: 'New Game' }).click();
-    await expect(page).toHaveURL(/\/capability/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/setup/, { timeout: 10000 });
 
     // Start Campaign proceeds to onboarding.
     await page.getByRole('button', { name: 'Start Campaign' }).click();

@@ -390,13 +390,13 @@ test.describe('Release Gate', () => {
       const offlineButton = page.getByRole('button', { name: /offline demo/i });
       await expect(offlineButton).not.toBeVisible({ timeout: 3000 });
 
-      // AC-4c: Clicking "New Adventure" should not reach /setup or /game
+      // AC-4c: Clicking "New Adventure" should route to the AI setup screen, never /game
       await game.startNewAdventure();
       await page.waitForTimeout(3000);
 
       // Must not have navigated to game-related routes
       const currentUrl = page.url();
-      expect(currentUrl).not.toContain('/setup');
+      expect(currentUrl).toContain('/setup');
       expect(currentUrl).not.toContain('/game');
     });
   });

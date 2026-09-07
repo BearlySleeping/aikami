@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/views/setup_subflow/setup_entry_view_model.svelte.ts
 //
-// ViewModel for the capability route entry point. Presents the three
+// ViewModel for the setup route entry point. Presents the three
 // setup paths (Recommended, Connect existing, Text-only) as a unified
 // flow using the shared SetupSubflowViewModel.
 // Contract: C-483 AC-1
@@ -37,7 +37,7 @@ export type SetupEntryViewModelOptions = BaseViewModelOptions & {
 export type ReadableSearchParams = { get(name: string): string | null };
 
 /**
- * Maps the /capability route's query string onto a {@link SetupOrigin}.
+ * Maps the /setup route's query string onto a {@link SetupOrigin}.
  *
  * `?from=settings` means completion returns to Settings;
  * `?reason=text-provider-required` marks entry from the New Adventure gate,

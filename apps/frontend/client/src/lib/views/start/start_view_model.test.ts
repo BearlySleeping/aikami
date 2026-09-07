@@ -397,7 +397,7 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
       expect(routeCalls[0].options?.queryParameters).toEqual({ onboarding: '1' });
     });
 
-    test('routes to capability screen when text provider is missing', async () => {
+    test('routes to setup screen when text provider is missing', async () => {
       const vm = createViewModel();
       await vm.initialize();
 
@@ -409,7 +409,7 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
       await vm.startNewAdventure();
 
       expect(routeCalls).toHaveLength(1);
-      expect(routeCalls[0].route).toBe('capability');
+      expect(routeCalls[0].route).toBe('setup');
     });
 
     test('routes directly when no campaigns exist', async () => {

@@ -127,6 +127,8 @@ export type ManualConnectionRow = {
   readonly detailText: string;
   /** Whether this connection is complete enough to use. */
   readonly usable: boolean;
+  /** Whether this connection is the default for its capability. */
+  readonly isDefault: boolean;
   /** Status glyph. */
   readonly icon: string;
 };
@@ -221,6 +223,8 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   reopenManualEditor(): void;
   /** Opens the editor on an existing connection so it can be corrected. */
   editConnection(connectionId: string): void;
+  /** Marks a saved connection as the default for its capability. */
+  useConnection(connectionId: string): void;
   /** Entry path: scan for what is already available. */
   selectRecommended(): void;
   /** Entry path: enter provider details by hand. */
@@ -250,6 +254,10 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   startDiscovery(): Promise<void>;
   /** Opens the shared connection editor for manual configuration of one capability. */
   openManualSetup(capability: ConnectionCapability): void;
+  /** Shows the manual step (saved connections list) without opening the editor. */
+  showManualStep(capability: ConnectionCapability): void;
+  /** Plan-step action: show saved connections when configured, otherwise open the editor. */
+  reviewCapability(capability: ConnectionCapability): void;
   /** Called when the user is done with the manual editor — re-checks configured state and advances. */
   finishManualSetup(): void;
   /** Applies the selected plan. */
@@ -592,16 +600,19 @@ class SetupSubflowViewModel
   get manualConnections(): readonly ManualConnectionRow[] {
     const capability = this.manualCapability ?? 'text';
     const connections = (configService.state.connections ?? []) as ConnectionEntry[];
+    const defaultId = configService.state.defaultByCapability?.[capability];
     return connections
       .filter((c) => (c.capability ?? 'text') === capability)
       .map((c) => {
         const label = _labelForProvider(capability, c.provider);
+        const usable = this._isUsable(c);
         return {
           id: c.id,
           name: c.name || label,
           detailText: c.model ? `${label} · ${c.model}` : label,
-          usable: this._isUsable(c),
-          icon: this._isUsable(c) ? '✅' : '⚠️',
+          usable,
+          isDefault: defaultId !== undefined && c.id === defaultId,
+          icon: usable ? '✅' : '⚠️',
         };
       });
   }
@@ -635,14 +646,20 @@ class SetupSubflowViewModel
     this.editorViewModel.openEditConnection(connectionId);
   }
 
+  useConnection(connectionId: string): void {
+    this.debug('useConnection', { connectionId });
+    configService.setDefaultConnection(connectionId);
+    void configService.save();
+  }
+
   /**
-   * Reopens the editor for the capability currently being configured. Going
-   * through openManualSetup keeps voice on its own setup modal — calling
-   * openAddProvider() directly would drop the scope and show the generic
-   * connection editor instead.
+   * Reopens the editor for the capability currently being configured,
+   * keeping it scoped so voice lands on the Kokoro-first connection editor.
    */
   reopenManualEditor(): void {
-    this.openManualSetup(this.manualCapability ?? 'text');
+    const capability = this.manualCapability ?? 'text';
+    this.manualCapability = capability;
+    this.editorViewModel.openCapabilitySetup(capability);
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -853,10 +870,22 @@ class SetupSubflowViewModel
 
   // ── Manual configuration (shared editor) ────────────────────────────────
 
-  openManualSetup(capability: ConnectionCapability): void {
+  showManualStep(capability: ConnectionCapability): void {
     this.manualCapability = capability;
     this.step = 'manual';
+  }
+
+  openManualSetup(capability: ConnectionCapability): void {
+    this.showManualStep(capability);
     this.editorViewModel.openCapabilitySetup(capability);
+  }
+
+  reviewCapability(capability: ConnectionCapability): void {
+    if (this._hasUsableConnection(capability)) {
+      this.showManualStep(capability);
+    } else {
+      this.openManualSetup(capability);
+    }
   }
 
   finishManualSetup(): void {
@@ -1160,14 +1189,21 @@ class SetupSubflowViewModel
 
   private _connectionFor(capability: ConnectionCapability): ConnectionEntry | undefined {
     const connections = (configService.state.connections ?? []) as ConnectionEntry[];
-    return connections.find((c) => (c.capability ?? 'text') === capability && this._isUsable(c));
+    const usable = connections.filter(
+      (c) => (c.capability ?? 'text') === capability && this._isUsable(c),
+    );
+    const defaultId = configService.state.defaultByCapability?.[capability];
+    return usable.find((c) => c.id === defaultId) ?? usable[0];
   }
 
   private _isUsable(connection: ConnectionEntry): boolean {
     if (LOCAL_PROVIDER_IDS.has(connection.provider)) {
-      // A local connection is only usable once discovery/the editor
-      // actually captured a concrete endpoint or model — a bare, blank
-      // record is not evidence that anything was configured.
+      // Kokoro is a bundled binary — once a connection exists it is usable
+      // without a server URL or model id. Other local providers only count
+      // once the editor/discovery captured a concrete endpoint or model.
+      if (connection.provider === 'kokoro') {
+        return true;
+      }
       return Boolean(connection.baseUrl?.trim() || connection.model?.trim());
     }
     return (connection.apiKey?.trim().length ?? 0) > 0;

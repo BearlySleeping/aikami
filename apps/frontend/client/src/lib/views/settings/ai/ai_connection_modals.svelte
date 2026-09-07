@@ -1,9 +1,9 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/settings/ai/ai_connection_modals.svelte
 //
-// The three modals driven by AiSettingsViewModel: Voice setup (local model
-// download vs. a provider connection), the connection editor (add/edit any
-// capability), and the key-conflict prompt. Extracted out of
+// The modals driven by AiSettingsViewModel: the connection editor (add/edit
+// any capability — voice leads with the Kokoro download when the local binary
+// is selected) and the key-conflict prompt. Extracted out of
 // ai_settings_view.svelte so the same modals can be reused by a leaner host
 // (e.g. the onboarding capability screen) without embedding the full
 // Status board + Provider tree.
@@ -16,98 +16,6 @@ type Props = {
 
 const { viewModel }: Props = $props();
 </script>
-
-<!-- ═══════════════════════════════════════════════════════════════════
-     VOICE SETUP MODAL — leads with the local model download since it
-     needs no API key or server, with a way out to a provider connection.
-     ═══════════════════════════════════════════════════════════════════ -->
-{#if viewModel.isVoiceSetupOpen}
-  <div
-    class="modal modal-open backdrop-blur-sm bg-black/60"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Voice setup"
-    tabindex="-1"
-    onclick={(e) => { if (e.target === e.currentTarget) { viewModel.closeVoiceSetup(); } }}
-    onkeydown={(e) => { if (e.key === 'Escape') { viewModel.closeVoiceSetup(); } }}
-  >
-    <div class="modal-box max-w-lg">
-      <h3 class="font-mono text-lg font-bold mb-4">Set up Voice</h3>
-
-      <VoiceModelDownload
-        show={true}
-        state={viewModel.voiceModelState}
-        progress={viewModel.voiceModelProgress}
-        sizeLabel={viewModel.voiceModelSizeLabel}
-        ondownload={() => viewModel.downloadVoiceModel()}
-        oncancel={() => viewModel.cancelVoiceModelDownload()}
-      />
-
-      {#if viewModel.voiceModelState.status === 'ready'}
-        <div class="mt-3 rounded-lg border border-base-300 p-3">
-          {#if viewModel.voiceRuntimeStatus === 'initializing'}
-            <p class="text-xs font-mono text-base-content/60">
-              <span class="loading loading-spinner loading-xs"></span>
-              Preparing voice engine…
-            </p>
-          {:else if viewModel.voiceRuntimeStatus === 'error'}
-            <p class="text-xs text-error mb-2">
-              {viewModel.voiceRuntimeError ?? 'Voice engine failed to start.'}
-            </p>
-            <button
-              type="button"
-              class="btn btn-outline btn-sm w-full font-mono text-xs"
-              onclick={() => viewModel.retryVoiceRuntime()}
-            >
-              Retry
-            </button>
-          {:else if viewModel.voiceRuntimeStatus === 'ready'}
-            {#if viewModel.voicePreviewState.status === 'synthesizing' || viewModel.voicePreviewState.status === 'playing'}
-              <button
-                type="button"
-                class="btn btn-outline btn-sm w-full font-mono text-xs"
-                onclick={() => viewModel.stopVoicePreview()}
-              >
-                Stop
-              </button>
-            {:else}
-              <button
-                type="button"
-                class="btn btn-outline btn-sm w-full font-mono text-xs"
-                onclick={() => viewModel.testVoice()}
-              >
-                Test Voice
-              </button>
-            {/if}
-            {#if viewModel.voicePreviewState.status === 'error'}
-              <p class="text-xs text-error mt-2">{viewModel.voicePreviewState.error}</p>
-            {/if}
-          {/if}
-        </div>
-      {/if}
-
-      <div class="divider text-xs font-mono text-base-content/40">or</div>
-
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm w-full font-mono text-xs"
-        onclick={() => viewModel.openVoiceProviderSetup()}
-      >
-        Connect a cloud or server TTS provider instead →
-      </button>
-
-      <div class="flex justify-end mt-4">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          onclick={() => viewModel.closeVoiceSetup()}
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
 
 <!-- ═══════════════════════════════════════════════════════════════════
      CONNECTION EDITOR MODAL
@@ -191,60 +99,122 @@ const { viewModel }: Props = $props();
           </div>
         {/if}
 
-        <!-- Model -->
-        <div>
-          <label for="model-input" class="label-text font-mono text-xs mb-1 block">Model</label>
-          <div class="join w-full">
-            <input
-              id="model-input"
-              type="text"
-              class="input input-bordered join-item w-full font-mono text-sm"
-              placeholder={viewModel.hasFetchedModels
+        {#if viewModel.isLocalBinaryProvider}
+          <div>
+            <label for="voice-model-section" class="label-text font-mono text-xs mb-1 block"
+              >Voice model</label
+            >
+            <VoiceModelDownload
+              show={true}
+              state={viewModel.voiceModelState}
+              progress={viewModel.voiceModelProgress}
+              sizeLabel={viewModel.voiceModelSizeLabel}
+              ondownload={() => viewModel.downloadVoiceModel()}
+              oncancel={() => viewModel.cancelVoiceModelDownload()}
+            />
+            {#if viewModel.voiceModelState.status === 'ready'}
+              <div class="mt-3 rounded-lg border border-base-300 p-3">
+                {#if viewModel.voiceRuntimeStatus === 'initializing'}
+                  <p class="text-xs font-mono text-base-content/60">
+                    <span class="loading loading-spinner loading-xs"></span>
+                    Preparing voice engine…
+                  </p>
+                {:else if viewModel.voiceRuntimeStatus === 'error'}
+                  <p class="text-xs text-error mb-2">
+                    {viewModel.voiceRuntimeError ?? 'Voice engine failed to start.'}
+                  </p>
+                  <button
+                    type="button"
+                    class="btn btn-outline btn-sm w-full font-mono text-xs"
+                    onclick={() => viewModel.retryVoiceRuntime()}
+                  >
+                    Retry
+                  </button>
+                {:else if viewModel.voiceRuntimeStatus === 'ready'}
+                  {#if viewModel.voicePreviewState.status === 'synthesizing' || viewModel.voicePreviewState.status === 'playing'}
+                    <button
+                      type="button"
+                      class="btn btn-outline btn-sm w-full font-mono text-xs"
+                      onclick={() => viewModel.stopVoicePreview()}
+                    >
+                      Stop
+                    </button>
+                  {:else}
+                    <button
+                      type="button"
+                      class="btn btn-outline btn-sm w-full font-mono text-xs"
+                      onclick={() => viewModel.testVoice()}
+                    >
+                      Test Voice
+                    </button>
+                  {/if}
+                  {#if viewModel.voicePreviewState.status === 'error'}
+                    <p class="text-xs text-error mt-2">{viewModel.voicePreviewState.error}</p>
+                  {/if}
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Model (text only) -->
+        {#if viewModel.draft.capability === 'text'}
+          <div>
+            <label for="model-input" class="label-text font-mono text-xs mb-1 block">Model</label>
+            <div class="join w-full">
+              <input
+                id="model-input"
+                type="text"
+                class="input input-bordered join-item w-full font-mono text-sm"
+                placeholder={viewModel.hasFetchedModels
                 ? 'Search fetched models…'
                 : 'e.g. anthropic/claude-sonnet'}
-              value={viewModel.modelQuery}
-              oninput={(e) => viewModel.setModelQuery((e.target as HTMLInputElement).value)}
-              onkeydown={(e) => {
+                value={viewModel.modelQuery}
+                oninput={(e) => viewModel.setModelQuery((e.target as HTMLInputElement).value)}
+                onkeydown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   viewModel.closeModelDropdown();
                 }
               }}
-            >
-            {#if viewModel.canFetchModels}
-              <button
-                type="button"
-                class="btn btn-ghost join-item font-mono text-xs"
-                disabled={viewModel.isFetchingModels}
-                onclick={() => viewModel.fetchModels()}
               >
-                {#if viewModel.isFetchingModels}
-                  <span class="loading loading-spinner loading-xs"></span>
-                {:else}
-                  Fetch
-                {/if}
-              </button>
-            {/if}
-          </div>
-          {#if viewModel.modelOptions.length > 0}
-            <div class="mt-2 max-h-32 overflow-y-auto space-y-1">
-              {#each viewModel.modelOptions as m}
+              {#if viewModel.canFetchModels}
                 <button
                   type="button"
-                  class="btn btn-xs btn-ghost w-full justify-start font-mono text-xs"
-                  onclick={() => viewModel.selectModel(m.id)}
+                  class="btn btn-ghost join-item font-mono text-xs"
+                  disabled={viewModel.isFetchingModels}
+                  onclick={() => viewModel.fetchModels()}
                 >
-                  {m.id}
+                  {#if viewModel.isFetchingModels}
+                    <span class="loading loading-spinner loading-xs"></span>
+                  {:else}
+                    Fetch
+                  {/if}
                 </button>
-              {/each}
+              {/if}
             </div>
-          {:else if viewModel.isModelDropdownOpen && viewModel.hasFetchedModels}
-            <p class="mt-2 text-xs text-base-content/50">No models match your search.</p>
-          {/if}
-          {#if viewModel.fetchModelsError}
-            <p class="mt-2 text-xs text-error">{viewModel.fetchModelsError}</p>
-          {/if}
-        </div>
+            {#if viewModel.modelOptions.length > 0}
+              <div class="mt-2 max-h-32 overflow-y-auto space-y-1">
+                {#each viewModel.modelOptions as m}
+                  <button
+                    type="button"
+                    class={m.id === viewModel.draft.model
+                    ? 'btn btn-xs btn-primary w-full justify-start font-mono text-xs'
+                    : 'btn btn-xs btn-ghost w-full justify-start font-mono text-xs'}
+                    onclick={() => viewModel.selectModel(m.id)}
+                  >
+                    {m.id === viewModel.draft.model ? '✓ ' : ''}{m.id}
+                  </button>
+                {/each}
+              </div>
+            {:else if viewModel.isModelDropdownOpen && viewModel.hasFetchedModels}
+              <p class="mt-2 text-xs text-base-content/50">No models match your search.</p>
+            {/if}
+            {#if viewModel.fetchModelsError}
+              <p class="mt-2 text-xs text-error">{viewModel.fetchModelsError}</p>
+            {/if}
+          </div>
+        {/if}
 
         <!-- Label -->
         <div>
@@ -255,7 +225,7 @@ const { viewModel }: Props = $props();
             id="label-input"
             type="text"
             class="input input-bordered w-full font-mono text-sm"
-            placeholder="My connection"
+            placeholder={viewModel.labelHint}
             value={viewModel.draft.label}
             oninput={(e) => viewModel.setDraftField('label', (e.target as HTMLInputElement).value)}
           >
@@ -415,6 +385,25 @@ const { viewModel }: Props = $props();
         {/if}
       {/if}
 
+      <!-- Model test result — proves the selected model actually answers -->
+      {#if viewModel.isTestingDraftModel}
+        <p class="mt-4 text-xs font-mono text-base-content/60">
+          <span class="loading loading-spinner loading-xs"></span>
+          Testing model…
+        </p>
+      {:else if viewModel.draftModelTestResult}
+        {@const modelResult = viewModel.draftModelTestResult}
+        {#if modelResult.ok}
+          <p class="mt-4 text-xs font-mono text-success">
+            ● Model responded ({modelResult.latencyMs}ms)
+          </p>
+        {:else}
+          <div class="alert alert-warning text-warning-content mt-4 py-2">
+            <span class="text-xs">{modelResult.error ?? 'Model test failed'}</span>
+          </div>
+        {/if}
+      {/if}
+
       {#if viewModel.saveError}
         <div class="alert alert-error text-error-content mt-4 py-2">
           <span class="text-xs">{viewModel.saveError}</span>
@@ -434,6 +423,16 @@ const { viewModel }: Props = $props();
             onclick={() => viewModel.testDraftConnection()}
           >
             Test
+          </button>
+        {/if}
+        {#if viewModel.canTestModel && viewModel.draft.model}
+          <button
+            type="button"
+            class="btn btn-outline font-mono text-xs"
+            disabled={viewModel.isTestingDraftModel}
+            onclick={() => viewModel.testDraftModel()}
+          >
+            Test model
           </button>
         {/if}
         {#if viewModel.isSaveBlocked}

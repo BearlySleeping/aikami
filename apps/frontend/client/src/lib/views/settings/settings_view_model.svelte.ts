@@ -8,7 +8,7 @@ import {
   type BaseViewModelOptions,
   routerService,
 } from '@aikami/frontend/services';
-import { readSearchParam, syncSearchParams } from '$lib/utils/url_search_params';
+import { readSearchParam } from '$lib/utils/url_search_params';
 import type { CustomAgentDefinition } from '$types';
 import {
   type AgentEditorViewModelInterface,
@@ -365,7 +365,6 @@ export class SettingsViewModel
 
   setActiveSection(id: string): void {
     this.activeSectionId = id;
-    this._syncActiveTabToUrl();
   }
 
   setActiveGroup(id: SettingsGroupId): void {
@@ -373,16 +372,6 @@ export class SettingsViewModel
     const firstSection = this.allSections.find((s) => s.group === id);
     if (firstSection) {
       this.activeSectionId = firstSection.id;
-    }
-    this._syncActiveTabToUrl();
-  }
-
-  /** Mirrors the active section/group onto `?section=`/`?group=` so a refresh restores the tab. */
-  private _syncActiveTabToUrl(): void {
-    try {
-      syncSearchParams({ section: this.activeSectionId, group: this.activeGroupId });
-    } catch {
-      // location unavailable (tests) — safe to skip.
     }
   }
 
