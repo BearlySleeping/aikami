@@ -7,7 +7,6 @@ import { GroupedTablist } from '@aikami/frontend/components';
 import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
 import AgentListView from '../agent/list/agent_list_view.svelte';
 import AccountView from './account/account_view.svelte';
-import AiSettingsView from './ai/ai_settings_view.svelte';
 import CapabilityDetailView from './ai/capability_detail_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
 import AutonomousSettingsView from './autonomous/autonomous_settings_view.svelte';
@@ -72,54 +71,12 @@ const { viewModel }: Props = $props();
       <SettingsDisplayView viewModel={viewModel.displayViewModel} />
     {:else if viewModel.activeSectionId === 'gameplay'}
       <GameplayView viewModel={viewModel.gameplayViewModel} />
-    {:else if viewModel.activeSectionId === 'ai'}
-      <AiSettingsView viewModel={viewModel.aiSettingsViewModel} />
     {:else if viewModel.activeSectionId === 'story-dialogue'}
       <CapabilityDetailView viewModel={viewModel.storyDialogueViewModel} />
     {:else if viewModel.activeSectionId === 'artwork'}
       <CapabilityDetailView viewModel={viewModel.artworkViewModel} />
     {:else if viewModel.activeSectionId === 'read-aloud'}
       <CapabilityDetailView viewModel={viewModel.readAloudViewModel} />
-    {:else if viewModel.activeSectionId === 'connections'}
-      <div class="max-w-2xl mx-auto p-4">
-        <h2 class="text-lg font-bold mb-4">Connections</h2>
-        <p class="text-sm text-base-content/60">
-          Manage your AI provider connections and accounts.
-        </p>
-        <div class="mt-4">
-          <p class="text-sm">
-            Use the
-            <button
-              type="button"
-              class="link link-primary"
-              onclick={() => viewModel.setActiveSection('ai')}
-            >
-              AI Overview
-            </button>
-            to set up and manage your providers.
-          </p>
-        </div>
-      </div>
-    {:else if viewModel.activeSectionId === 'advanced-routing'}
-      <div class="max-w-2xl mx-auto p-4">
-        <h2 class="text-lg font-bold mb-4">Advanced Routing</h2>
-        <p class="text-sm text-base-content/60">
-          Configure routing rules, fallbacks, and per-feature provider assignments.
-        </p>
-        <div class="mt-4">
-          <p class="text-sm">
-            Routing configuration is managed per connection in the
-            <button
-              type="button"
-              class="link link-primary"
-              onclick={() => viewModel.setActiveSection('ai')}
-            >
-              AI Overview
-            </button
-            >.
-          </p>
-        </div>
-      </div>
     {:else if viewModel.activeSectionId === 'local-resources'}
       <div class="max-w-2xl mx-auto p-4">
         <h2 class="text-lg font-bold mb-4">Local Resources</h2>

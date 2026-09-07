@@ -298,11 +298,11 @@ export class SettingsViewModel
   get aiCapabilityBadge(): string {
     const entries = this.aiSettingsViewModel.statusEntries;
     const textEntry = entries.find((e) => e.capability === 'text');
-    if (textEntry?.status === 'connected') {
+    if (textEntry?.status === 'reachable') {
       return 'AI: Connected';
     }
-    const anyConnected = entries.some((e) => e.status === 'connected');
-    if (anyConnected) {
+    const anyReachable = entries.some((e) => e.status === 'reachable');
+    if (anyReachable) {
       return 'AI: Partial';
     }
     return 'AI: Not Set Up';
@@ -311,11 +311,11 @@ export class SettingsViewModel
   get aiCapabilityBadgeColor(): string {
     const entries = this.aiSettingsViewModel.statusEntries;
     const textEntry = entries.find((e) => e.capability === 'text');
-    if (textEntry?.status === 'connected') {
+    if (textEntry?.status === 'reachable') {
       return 'badge-success';
     }
-    const anyConnected = entries.some((e) => e.status === 'connected');
-    if (anyConnected) {
+    const anyReachable = entries.some((e) => e.status === 'reachable');
+    if (anyReachable) {
       return 'badge-warning';
     }
     return 'badge-ghost';

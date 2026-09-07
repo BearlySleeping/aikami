@@ -16,6 +16,11 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+const aiVm = $derived(viewModel.aiSettingsViewModel);
+const capabilityConnections = $derived(aiVm.connectionsForCapability(viewModel.capability));
+const capabilityRoles = $derived(aiVm.rolesForCapability(viewModel.capability));
+let connectionSettingsOpen = $state(false);
+let advancedOpen = $state(false);
 </script>
 
 <div class="max-w-2xl mx-auto space-y-6">
@@ -61,6 +66,97 @@ const { viewModel }: Props = $props();
       </button>
     {/if}
   </div>
+
+  <!-- Connection settings (every capability) -->
+  {#if capabilityConnections.length > 0}
+    <div class="card card-bordered border-base-300 bg-base-100">
+      <div class="card-body p-4 space-y-3">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm justify-start w-full font-normal"
+          onclick={() => (connectionSettingsOpen = !connectionSettingsOpen)}
+        >
+          {connectionSettingsOpen ? '▾' : '▸'}
+          Connection settings
+        </button>
+        {#if connectionSettingsOpen}
+          {#each capabilityConnections as conn (conn.id)}
+            <div class="flex items-center justify-between gap-3 border-t border-base-200 pt-2">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold truncate">{conn.label}</p>
+                {#if conn.model}
+                  <p class="text-xs font-mono text-base-content/50 truncate">{conn.model}</p>
+                {/if}
+              </div>
+              <div class="flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  onclick={() => aiVm.openEditConnection(conn.id)}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs text-error"
+                  onclick={() => aiVm.deleteConnection(conn.id)}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          {/each}
+        {/if}
+      </div>
+    </div>
+
+    <!-- Advanced (per-role connections) -->
+    <div class="card card-bordered border-base-300 bg-base-100">
+      <div class="card-body p-4 space-y-3">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm justify-start w-full font-normal"
+          onclick={() => (advancedOpen = !advancedOpen)}
+        >
+          {advancedOpen ? '▾' : '▸'}
+          Advanced
+        </button>
+        {#if advancedOpen}
+          <p class="text-xs text-base-content/60">
+            {#if viewModel.capability === 'text'}
+              Use different models for narration and dialogue.
+            {:else if viewModel.capability === 'voice'}
+              Use different voices for the narrator and characters.
+            {:else}
+              Use different sources for portraits and scenes.
+            {/if}
+          </p>
+          {#each capabilityRoles as role (role)}
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-sm font-mono text-base-content/70 capitalize">{role}</span>
+              <select
+                class="select select-bordered select-xs font-mono max-w-[60%]"
+                value={aiVm.connectionIdForRole(role) ?? ''}
+                onchange={(e) => {
+                  const value = (e.target as HTMLSelectElement).value;
+                  if (value) {
+                    aiVm.assignRole(role, value);
+                  } else {
+                    aiVm.clearRole(role);
+                  }
+                }}
+              >
+                <option value="">— Default —</option>
+                {#each capabilityConnections as conn (conn.id)}
+                  <option value={conn.id}>{conn.label}</option>
+                {/each}
+              </select>
+            </div>
+          {/each}
+        {/if}
+      </div>
+    </div>
+  {/if}
 
   <!-- Voice-specific controls (Read Aloud) -->
   {#if viewModel.capability === 'voice'}

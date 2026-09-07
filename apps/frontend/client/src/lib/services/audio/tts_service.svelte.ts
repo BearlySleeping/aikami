@@ -417,6 +417,9 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       });
     } catch (error) {
       this.error('speak:worker-failed', error);
+      // Rethrow so an awaiting caller (the voice preview error handler) sees
+      // the failure instead of hanging on a swallowed rejection.
+      throw error;
     } finally {
       // Only clear when this request is still the active one — a newer
       // speak() that superseded it owns the slot now.
@@ -702,8 +705,16 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
                 sampleRate: payload.sampleRate,
               });
             }
-            active.resolve?.();
-            this._activeWorkerRequest = undefined;
+            if (active.resolve) {
+              // Awaitable speak(): resolve, but leave the slot in place for
+              // _speakViaWorker's finally — clearing it here would prevent
+              // that finally from resetting isSynthesizing.
+              active.resolve();
+            } else {
+              // Fire-and-forget synthesize(): nothing awaits, so the slot is
+              // released here.
+              this._activeWorkerRequest = undefined;
+            }
             break;
           }
 
@@ -717,8 +728,13 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
             this.backend = 'unavailable';
             this.errorMessage = payload.message ?? 'Kokoro worker error';
             this.error('kokoro:worker-error', { message: this.errorMessage });
-            active?.reject?.(new Error(this.errorMessage));
-            this._activeWorkerRequest = undefined;
+            if (active?.reject) {
+              // Awaitable speak(): reject so the caller's catch (voice preview
+              // error handler) can surface it. The slot stays for its finally.
+              active.reject(new Error(this.errorMessage));
+            } else {
+              this._activeWorkerRequest = undefined;
+            }
             break;
           }
 

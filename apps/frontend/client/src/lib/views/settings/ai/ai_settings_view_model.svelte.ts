@@ -52,8 +52,17 @@ import type {
 // Types
 // ---------------------------------------------------------------------------
 
-/** Per-capability connection status for the status board. */
-export type CapabilityStatus = 'connected' | 'offline' | 'not_configured' | 'loading';
+/**
+ * Per-capability connection status for the status board. Distinct, honest
+ * states — a configured-but-never-tested connection must not read as
+ * reachable, and an in-flight probe must not read as unconfigured.
+ */
+export type CapabilityStatus =
+  | 'not_configured' // no connection exists for the capability
+  | 'not_tested' // connection exists, but has never been verified
+  | 'testing' // a verification probe is in flight
+  | 'reachable' // last verification succeeded
+  | 'unreachable'; // last verification failed
 
 /** Status board entry for one capability. */
 export type CapabilityStatusEntry = {
@@ -220,6 +229,12 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly connectionsWithRoles: readonly ConnectionWithRoles[];
   readonly availableRoles: readonly AiRole[];
   readonly unassignedConnections: readonly AiConnection[];
+  /** Connections of one capability, for the scoped capability detail pages. */
+  connectionsForCapability(capability: ConnectionCapability): readonly AiConnection[];
+  /** Roles that a given capability can be assigned to. */
+  rolesForCapability(capability: ConnectionCapability): readonly AiRole[];
+  /** The connection currently serving a role, or undefined when unassigned. */
+  connectionIdForRole(role: AiRole): ConnectionId | undefined;
 
   // ── Testing ──
   readonly testResults: Record<string, ConnectionTestResult>;
@@ -380,6 +395,18 @@ const ALL_ROLES: readonly AiRole[] = [
   'npc-voice',
 ] as const;
 
+/** Which capability a role is served by (mirrors the config service mapping). */
+const ROLE_CAPABILITY: Record<AiRole, ConnectionCapability> = {
+  narration: 'text',
+  dialogue: 'text',
+  summarization: 'text',
+  structured: 'text',
+  portrait: 'image',
+  scene: 'image',
+  'narrator-voice': 'voice',
+  'npc-voice': 'voice',
+};
+
 const IMAGE_SIZE_PRESETS: readonly ImageSizePreset[] = [
   { id: 'portrait', label: 'Portrait (768×1024)', role: 'portrait', width: 768, height: 1024 },
   { id: 'scene', label: 'Scene (1024×768)', role: 'scene', width: 1024, height: 768 },
@@ -421,32 +448,42 @@ const _deriveCapabilityStatus = (options: {
   connection: AiConnection | undefined;
   testResults: Record<string, ConnectionTestResult>;
   testingIds: Set<string>;
-}) => {
+}): CapabilityStatus => {
   if (!options.connection) {
     return 'not_configured';
   }
   if (options.testingIds.has(options.connection.id)) {
-    return 'loading';
+    return 'testing';
   }
   const result = options.testResults[options.connection.id];
-  if (result && !result.ok) {
-    return 'offline';
+  if (!result) {
+    return 'not_tested';
   }
-  return 'connected';
+  return result.ok ? 'reachable' : 'unreachable';
 };
 
 const _capabilityColor = (status: CapabilityStatus) => {
-  if (status === 'connected') {
+  if (status === 'reachable') {
     return 'text-success';
   }
-  if (status === 'offline') {
+  if (status === 'unreachable') {
     return 'text-error';
+  }
+  if (status === 'testing') {
+    return 'text-warning';
   }
   return 'text-base-content/40';
 };
 
-const _capabilityDot = (status: CapabilityStatus) =>
-  status === 'connected' || status === 'offline' ? '\u25CF' : '\u25CB';
+const _capabilityDot = (status: CapabilityStatus) => {
+  if (status === 'reachable' || status === 'unreachable') {
+    return '\u25CF';
+  }
+  if (status === 'testing') {
+    return '\u25CC';
+  }
+  return '\u25CB';
+};
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -608,6 +645,18 @@ export class AiSettingsViewModel
     const assignments = configService.getRoleAssignments();
     const assignedIds = new Set(Object.values(assignments));
     return configService.getAiConnections().filter((c) => !assignedIds.has(c.id));
+  }
+
+  connectionsForCapability(capability: ConnectionCapability): readonly AiConnection[] {
+    return this._connectionsForCapability(capability);
+  }
+
+  rolesForCapability(capability: ConnectionCapability): readonly AiRole[] {
+    return ALL_ROLES.filter((role) => ROLE_CAPABILITY[role] === capability);
+  }
+
+  connectionIdForRole(role: AiRole): ConnectionId | undefined {
+    return configService.getRoleAssignments()[role];
   }
 
   // ── Derived: editor state ──
@@ -1135,10 +1184,11 @@ export class AiSettingsViewModel
 
   setModelQuery(value: string): void {
     this._modelQuery = value;
-    if (!this.canFetchModels) {
-      this.draft = { ...this.draft, model: value };
-      this._invalidateDraftModelTest();
-    }
+    // The model field is a real input, not only a search box. A typed model
+    // ID must land in the draft even when model discovery is available —
+    // otherwise the user's edit is silently discarded on save.
+    this.draft = { ...this.draft, model: value };
+    this._invalidateDraftModelTest();
     this.isModelDropdownOpen = true;
   }
 
@@ -1241,7 +1291,56 @@ export class AiSettingsViewModel
       if (!conn) {
         return;
       }
+
+      // Resolve the provider this connection should point at after the edit.
+      // Switching the provider dropdown must actually repoint the connection
+      // (reusing the matching account when one exists) — never leave the saved
+      // row on the old provider while the editor shows the new one.
+      const currentProvider = configService.getProvider(conn.providerId);
+      const registryChanged = this.draft.registryId !== currentProvider?.registryId;
+      let targetProviderId = conn.providerId;
+      let targetProvider = currentProvider;
+
+      if (registryChanged) {
+        targetProvider = this._findProviderByRegistry(this.draft.registryId);
+        if (targetProvider) {
+          targetProviderId = targetProvider.id;
+        } else {
+          targetProviderId = configService.addProvider({
+            registryId: this.draft.registryId,
+            label: this._registryLabel(this.draft.registryId) ?? this.draft.registryId,
+            credential: this.draft.apiKey || undefined,
+            baseUrl: this.draft.baseUrl?.trim() || undefined,
+            source: 'stored',
+          });
+          targetProvider = configService.getProvider(targetProviderId);
+        }
+      }
+
+      // Endpoint and credential live on the provider account, so an edit to
+      // the Server URL must be written there too — and it invalidates results
+      // measured against the previous account.
+      if (targetProvider) {
+        const providerPatch: Partial<Omit<AiProvider, 'id'>> = {};
+        const nextBaseUrl = this.draft.baseUrl?.trim() || undefined;
+        if (nextBaseUrl !== targetProvider.baseUrl) {
+          providerPatch.baseUrl = nextBaseUrl;
+        }
+        if (this.draft.apiKey && this.draft.apiKey !== targetProvider.credential) {
+          providerPatch.credential = this.draft.apiKey;
+        }
+        if (Object.keys(providerPatch).length > 0) {
+          configService.updateProvider(targetProvider.id, providerPatch);
+          // P03 AC-4: the account is shared by every connection on this
+          // provider, so a rotation invalidates the sibling rows' results too.
+          this._clearTestResultsForProvider(targetProvider.id);
+        }
+      }
+
       const patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>> = { label, model };
+      if (targetProviderId !== conn.providerId) {
+        patch.providerId = targetProviderId;
+      }
       // AC-8: params are included in the patch ONLY when the Advanced
       // disclosure was actually edited — opening it alone must never write
       // a default value into a connection that never had one.
@@ -1251,20 +1350,6 @@ export class AiSettingsViewModel
       configService.updateAiConnection(this.draft.editingConnectionId, patch);
       // Invalidate stale test result on edit (endpoint or credential may have changed)
       this._clearTestResult(this.draft.editingConnectionId);
-      // Update provider credential if changed
-      const provider = this.draft.providerId
-        ? configService.getProvider(this.draft.providerId)
-        : undefined;
-      if (provider && this.draft.apiKey && this.draft.apiKey !== provider.credential) {
-        configService.updateProvider(provider.id, {
-          credential: this.draft.apiKey,
-        });
-        // P03 AC-4: the credential is shared by every connection on this
-        // account, so a rotation invalidates the sibling rows' results too —
-        // otherwise they keep displaying a "reachable" that was measured
-        // against the previous key.
-        this._clearTestResultsForProvider(provider.id);
-      }
     } else {
       // Resolve or create provider
       let providerId: string | undefined;

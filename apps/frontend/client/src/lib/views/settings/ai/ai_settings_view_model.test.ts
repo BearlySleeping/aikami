@@ -463,7 +463,7 @@ describe('AiSettingsViewModel — AC-4: Status board', () => {
     }
   });
 
-  test('shows connected for text when a text connection exists', async () => {
+  test('shows not_tested for text when a text connection exists but has not been verified', async () => {
     const pid = mockConfigService.addProvider({
       registryId: 'openrouter',
       label: 'OpenRouter',
@@ -490,7 +490,7 @@ describe('AiSettingsViewModel — AC-4: Status board', () => {
 
     const textEntry = vm.statusEntries.find((e) => e.capability === 'text');
     expect(textEntry).toBeDefined();
-    expect(textEntry?.status).toBe('connected');
+    expect(textEntry?.status).toBe('not_tested');
     expect(textEntry?.modelName).toBe('anthropic/claude-sonnet');
 
     const voiceEntry = vm.statusEntries.find((e) => e.capability === 'voice');
@@ -517,15 +517,17 @@ describe('AiSettingsViewModel — AC-4: Status board', () => {
     await vm.initialize();
 
     vm.testingIds.add(connectionId);
-    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe('loading');
+    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe('testing');
 
     vm.testingIds.delete(connectionId);
     vm.testResults[connectionId] = { ok: false, latencyMs: 10, error: 'Rejected' };
-    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe('offline');
+    expect(vm.statusEntries.find((entry) => entry.capability === 'text')?.status).toBe(
+      'unreachable',
+    );
 
     vm.testResults[connectionId] = { ok: true, latencyMs: 42 };
     const textEntry = vm.statusEntries.find((entry) => entry.capability === 'text');
-    expect(textEntry?.status).toBe('connected');
+    expect(textEntry?.status).toBe('reachable');
     expect(textEntry?.latencyMs).toBe(42);
     expect(textEntry?.connectionId).toBe(connectionId);
   });
@@ -975,7 +977,7 @@ describe('AiSettingsViewModel — capability setup', () => {
 });
 
 describe('AiSettingsViewModel — model query', () => {
-  test('filters fetched models without replacing the selected model', async () => {
+  test('a typed model lands in the draft while fetched results still filter', async () => {
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
     mockFetchModelsFromProvider.mockImplementationOnce(async () => [
       { id: 'openai/gpt-4o', name: 'GPT-4o' },
@@ -986,7 +988,9 @@ describe('AiSettingsViewModel — model query', () => {
     vm.setModelQuery('claude');
 
     expect(vm.modelQuery).toBe('claude');
-    expect(vm.draft.model).toBe('');
+    // The field is a real input, not only a search box — the typed ID must be
+    // saved, not silently discarded.
+    expect(vm.draft.model).toBe('claude');
     expect(vm.modelOptions.map((model) => model.id)).toEqual(['anthropic/claude-sonnet']);
   });
 
@@ -2070,6 +2074,34 @@ describe('AiSettingsViewModel — editing an existing connection', () => {
     expect(vm.draft.apiKey).toBe('sk-or-v1-test-key');
     expect(vm.draft.model).toBe('anthropic/claude-sonnet');
     expect(vm.modelQuery).toBe('anthropic/claude-sonnet');
+  });
+
+  test('persists a Server URL edit to the provider account', async () => {
+    const { pid, cid } = seedTextConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openEditConnection(cid);
+    vm.setDraftField('baseUrl', 'http://localhost:11434');
+    await vm.saveDraft();
+
+    const provider = mockProviders.find((p) => p.id === pid) as { baseUrl?: string } | undefined;
+    expect(provider?.baseUrl).toBe('http://localhost:11434');
+  });
+
+  test('switching the provider dropdown repoints the connection', async () => {
+    const { pid, cid } = seedTextConnection();
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openEditConnection(cid);
+    vm.setDraftProvider('ollama');
+    await vm.saveDraft();
+
+    const conn = mockAiConnections.find((c) => c.id === cid);
+    expect(conn?.providerId).not.toBe(pid);
+    const provider = mockProviders.find((p) => p.id === conn?.providerId);
+    expect(provider?.registryId).toBe('ollama');
   });
 });
 

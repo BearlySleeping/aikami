@@ -114,25 +114,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
 
   // ── AI ───────────────────────────────────────────────────────────────
   {
-    id: 'ai',
-    label: 'AI Overview',
-    group: 'ai',
-    contexts: ['page', 'onboarding'],
-    icon: 'cpu',
-    capabilityKey: 'ai',
-    searchTags: [
-      'text',
-      'image',
-      'voice',
-      'model',
-      'provider',
-      'story',
-      'dialogue',
-      'artwork',
-      'read aloud',
-    ],
-  },
-  {
     id: 'story-dialogue',
     label: 'Story & Dialogue',
     group: 'ai',
@@ -158,22 +139,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     icon: 'volume',
     capabilityKey: 'voice',
     searchTags: ['voice', 'speech', 'tts', 'narrator', 'audio'],
-  },
-  {
-    id: 'connections',
-    label: 'Connections',
-    group: 'ai',
-    contexts: ['page'],
-    icon: 'link',
-    searchTags: ['endpoint', 'account', 'api key', 'credential', 'provider'],
-  },
-  {
-    id: 'advanced-routing',
-    label: 'Advanced Routing',
-    group: 'ai',
-    contexts: ['page'],
-    icon: 'switch',
-    searchTags: ['routing', 'fallback', 'override', 'default'],
   },
 
   // ── Content ──────────────────────────────────────────────────────────

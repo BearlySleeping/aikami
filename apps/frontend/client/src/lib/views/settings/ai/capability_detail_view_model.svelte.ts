@@ -74,12 +74,14 @@ class CapabilityDetailViewModel
 
   get statusLabel(): string {
     switch (this.status) {
-      case 'connected':
-        return 'Connected';
-      case 'offline':
+      case 'reachable':
+        return 'Reachable';
+      case 'unreachable':
         return 'Unreachable';
-      case 'loading':
+      case 'testing':
         return 'Testing…';
+      case 'not_tested':
+        return 'Configured · Not tested';
       default:
         return 'Not configured';
     }
@@ -102,7 +104,7 @@ class CapabilityDetailViewModel
   }
 
   get isConfigured(): boolean {
-    return this.status === 'connected' || this.status === 'offline';
+    return this.status !== 'not_configured';
   }
 
   get isTesting(): boolean {

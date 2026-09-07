@@ -39,6 +39,8 @@ let { viewModel }: Props = $props();
                     </p>
                   {:else if entry.status === 'not_configured'}
                     <p class="text-xs text-[#938ea1]/60 font-sans">Not set up</p>
+                  {:else if entry.status === 'not_tested'}
+                    <p class="text-xs text-[#938ea1]/60 font-sans">Configured · Not tested</p>
                   {:else}
                     <p class="text-xs text-[#938ea1]/60 font-sans">No connection</p>
                   {/if}
