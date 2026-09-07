@@ -409,14 +409,14 @@ const { viewModel }: Props = $props();
         {#if result.ok}
           <p class="mt-4 text-xs font-mono text-success">● Reachable ({result.latencyMs}ms)</p>
         {:else}
-          <div class="alert alert-error mt-4 py-2">
+          <div class="alert alert-error text-error-content mt-4 py-2">
             <span class="text-xs">{result.error ?? 'Connection failed'}</span>
           </div>
         {/if}
       {/if}
 
       {#if viewModel.saveError}
-        <div class="alert alert-error mt-4 py-2">
+        <div class="alert alert-error text-error-content mt-4 py-2">
           <span class="text-xs">{viewModel.saveError}</span>
         </div>
       {/if}

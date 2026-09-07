@@ -145,7 +145,7 @@ const { viewModel }: Props = $props();
     {#if viewModel.hasResourceWarnings}
       <div class="space-y-1">
         {#each viewModel.resourceWarnings as warning}
-          <div class="alert alert-warning py-2 text-sm">
+          <div class="alert alert-warning text-warning-content py-2 text-sm">
             <span>{warning}</span>
           </div>
         {/each}
@@ -153,19 +153,25 @@ const { viewModel }: Props = $props();
     {/if}
 
     <div class="flex gap-2">
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        disabled={viewModel.isDetecting}
-        onclick={() => viewModel.rescan()}
-      >
-        {#if viewModel.isDetecting}
-          <span class="loading loading-spinner loading-xs"></span>
-        {/if}
-        Scan again
-      </button>
+      {#if viewModel.canScan}
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          disabled={viewModel.isDetecting}
+          onclick={() => viewModel.rescan()}
+        >
+          {#if viewModel.isDetecting}
+            <span class="loading loading-spinner loading-xs"></span>
+          {/if}
+          Scan again
+        </button>
+      {/if}
       <div class="flex-1"></div>
-      <button type="button" class="btn btn-outline" onclick={() => viewModel.goBack()}>Back</button>
+      {#if viewModel.canGoBackFromPlan}
+        <button type="button" class="btn btn-outline" onclick={() => viewModel.goBack()}>
+          Back
+        </button>
+      {/if}
       <button
         type="button"
         class="btn btn-primary"

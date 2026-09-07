@@ -204,6 +204,12 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   readonly noProvidersMessage: string;
   /** Whether a discovery scan has actually run — the "nothing found" state is only honest after one. */
   readonly hasScanned: boolean;
+  /** Whether provider discovery is available at all (desktop only). */
+  readonly canScan: boolean;
+  /** Whether the entry-path choice is shown; web goes straight to review. */
+  readonly showsEntryChoice: boolean;
+  /** Whether the review screen offers a Back button. */
+  readonly canGoBackFromPlan: boolean;
 
   /** Returns from the ready screen to the review screen, so a saved choice can still be changed. */
   reviewSetup(): void;
@@ -401,6 +407,29 @@ class SetupSubflowViewModel
     return this.snapshot !== null;
   }
 
+  /**
+   * Discovery only makes sense in the desktop shell, which can see local
+   * runtimes and install one. A browser tab has nothing to scan, so the web
+   * build never offers it and never runs it.
+   */
+  get canScan(): boolean {
+    return this.isDesktop;
+  }
+
+  /**
+   * Web skips the entry choice entirely: with scanning gone, "find AI for me"
+   * has nothing to find, and the remaining two paths both mean "enter your
+   * provider". The review screen is the first and only screen.
+   */
+  get showsEntryChoice(): boolean {
+    return this.isDesktop;
+  }
+
+  /** Back from review returns to the entry choice — which web never shows. */
+  get canGoBackFromPlan(): boolean {
+    return this.isDesktop;
+  }
+
   reviewSetup(): void {
     this.errorMessage = '';
     this.step = 'plan';
@@ -546,7 +575,14 @@ class SetupSubflowViewModel
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    // Detect without auto-scanning — user must explicitly trigger.
+    // Detect without auto-scanning — the user must explicitly trigger it,
+    // and only the desktop build offers it at all.
+    if (!this.showsEntryChoice) {
+      // Web: no entry choice to make, so open on the review screen with the
+      // required capability listed and ready to configure.
+      this.entryPath = 'existing';
+      this.step = 'plan';
+    }
     return super.initialize();
   }
 
@@ -577,7 +613,7 @@ class SetupSubflowViewModel
       enabled: t.required,
     }));
 
-    if (path === 'recommended') {
+    if (path === 'recommended' && this.canScan) {
       // "Recommended" means we go looking — no questions first.
       void this.startDiscovery();
       return;
@@ -611,6 +647,10 @@ class SetupSubflowViewModel
   // ── Discovery ──────────────────────────────────────────────────────────
 
   async startDiscovery(): Promise<void> {
+    if (!this.canScan) {
+      this.debug('startDiscovery:unavailable-on-web');
+      return;
+    }
     if (this._pendingDiscovery) {
       // A scan is already running — join it rather than starting a second
       // one, so "Scan again" during a scan is a no-op the caller can await.
@@ -749,9 +789,13 @@ class SetupSubflowViewModel
         this.step = this.entryPath === 'text-only' ? 'ready' : 'plan';
         return;
       }
-      // Still not configured (user cancelled) — let them choose again
-      // rather than silently pretending setup succeeded.
-      this.step = 'entry';
+      // Still not configured — the user cancelled, or the editor refused a
+      // credential that failed verification. Go to the review screen, which
+      // shows text as "Not set up yet" and keeps Continue disabled with a
+      // reason. Returning to the entry choice here made the flow a loop:
+      // pick a path, fail to configure, land back on the same three buttons
+      // with nothing explaining why.
+      this.step = 'plan';
       return;
     }
 
@@ -823,13 +867,17 @@ class SetupSubflowViewModel
     this.errorMessage = '';
     if (this.step === 'manual') {
       this.manualCapability = null;
-      // Back out to the review screen when there is something to review —
-      // otherwise to the entry choice.
-      this.step = this.snapshot || this._hasUsableConnection('text') ? 'plan' : 'entry';
+      // Back out to the review screen, which is always meaningful and is the
+      // only screen on web.
+      this.step = 'plan';
       return;
     }
 
     this._invalidateDiscovery();
+    if (!this.showsEntryChoice) {
+      this.step = 'plan';
+      return;
+    }
     this.step = 'entry';
     this.entryPath = null;
   }
@@ -837,8 +885,8 @@ class SetupSubflowViewModel
   reset(): void {
     this._invalidateDiscovery();
     this._applyOperationId += 1;
-    this.step = 'entry';
-    this.entryPath = null;
+    this.step = this.showsEntryChoice ? 'entry' : 'plan';
+    this.entryPath = this.showsEntryChoice ? null : 'existing';
     this.errorMessage = '';
     this.isDetecting = false;
     this.isApplying = false;
@@ -903,7 +951,7 @@ class SetupSubflowViewModel
 
   retry(): void {
     this.errorMessage = '';
-    this.step = this.snapshot ? 'plan' : 'entry';
+    this.step = this.snapshot || !this.showsEntryChoice ? 'plan' : 'entry';
   }
 
   // ── Private helpers ────────────────────────────────────────────────────

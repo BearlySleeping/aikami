@@ -49,6 +49,12 @@ const detectMock = mock(async (): Promise<CapabilitySnapshot> => createDetectedS
 const startNewCampaignMock = mock(async () => ({ id: 'campaign-1' }));
 const goToRouteMock = mock(async () => {});
 const getVoiceTtsUrlMock = mock((): string | undefined => undefined);
+// The flow forks hard on platform: only the desktop shell can discover a
+// local runtime, so web skips the entry choice and never scans. Tests default
+// to desktop and opt into web explicitly.
+const isTauriMock = mock((): boolean => true);
+
+mock.module('$lib/views/utils/is_tauri', () => ({ isTauri: isTauriMock }));
 
 mock.module('$services', () => ({
   ...localServicesMockBase(),
@@ -82,6 +88,8 @@ describe('SetupSubflowViewModel', () => {
     startNewCampaignMock.mockClear();
     goToRouteMock.mockClear();
     configServiceMock.addConnection.mockClear();
+    isTauriMock.mockReset();
+    isTauriMock.mockReturnValue(true);
     getVoiceTtsUrlMock.mockReset();
     getVoiceTtsUrlMock.mockReturnValue(undefined);
     vm = getSetupSubflowViewModel({ className: 'SetupSubflowTest' });
@@ -286,12 +294,17 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.manualCapability).toBeNull();
   });
 
-  test('finishManualSetup returns to entry for text-only when still unconfigured', () => {
+  test('finishManualSetup lands on review, never back on the entry choice', () => {
     vm.selectEntryPath('text-only');
 
     vm.finishManualSetup();
 
-    expect(vm.step).toBe('entry');
+    // Returning to 'entry' here was the loop the user hit: pick a path,
+    // fail to configure, land back on the same three buttons with no reason
+    // given. Review shows text as unconfigured and says why Continue is off.
+    expect(vm.step).toBe('plan');
+    expect(vm.canApplyPlan).toBeFalse();
+    expect(vm.blockedHint.length).toBeGreaterThan(0);
   });
 
   test('finishManualSetup on the existing path lands on review, not a dead end', () => {
@@ -517,5 +530,79 @@ describe('SetupSubflowViewModel', () => {
     vm.selectEntryPath('existing');
 
     expect(vm.errorMessage).toBe('');
+  });
+  // ── Web has nothing to scan ──────────────────────────────────────────────
+
+  describe('on the web build', () => {
+    beforeEach(() => {
+      isTauriMock.mockReturnValue(false);
+      vm = getSetupSubflowViewModel({ className: 'SetupSubflowWebTest' });
+    });
+
+    test('opens on the review screen instead of the entry choice', async () => {
+      await vm.initialize();
+
+      // "Find AI for me" has nothing to find in a browser tab, which left the
+      // three entry buttons doing the same thing.
+      expect(vm.showsEntryChoice).toBeFalse();
+      expect(vm.step).toBe('plan');
+    });
+
+    test('never offers or runs discovery', async () => {
+      await vm.initialize();
+
+      expect(vm.canScan).toBeFalse();
+
+      await vm.rescan();
+      await vm.startDiscovery();
+
+      expect(detectMock).not.toHaveBeenCalled();
+      expect(vm.step).toBe('plan');
+    });
+
+    test('selecting the recommended path does not scan', async () => {
+      await vm.initialize();
+
+      vm.selectEntryPath('recommended');
+
+      expect(detectMock).not.toHaveBeenCalled();
+    });
+
+    test('offers no Back button out of the only screen', async () => {
+      await vm.initialize();
+
+      expect(vm.canGoBackFromPlan).toBeFalse();
+    });
+
+    test('reset returns to review, not to a screen the web build never shows', async () => {
+      await vm.initialize();
+
+      vm.reset();
+
+      expect(vm.step).toBe('plan');
+    });
+
+    test('required text is named as the reason Continue is unavailable', async () => {
+      await vm.initialize();
+
+      expect(vm.canApplyPlan).toBeFalse();
+      expect(vm.blockedHint).toContain('Text');
+      // No scan ran, so the empty-discovery message must not appear either.
+      expect(vm.showNoProvidersMessage).toBeFalse();
+    });
+
+    test('configuring text through the editor completes setup', async () => {
+      await vm.initialize();
+      vm.openManualSetup('text');
+      expect(vm.step).toBe('manual');
+
+      configServiceMock.state.connections = [
+        { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key', name: 'OpenRouter' },
+      ];
+      vm.finishManualSetup();
+
+      expect(vm.step).toBe('plan');
+      expect(vm.canApplyPlan).toBeTrue();
+    });
   });
 });
