@@ -67,10 +67,18 @@ describe('guard_orphaned_capability_baseline.json', () => {
 describe('production file detection (isProductionFile equivalent)', () => {
   const isProd = (path: string): boolean => {
     const normalized = path.replace(/\\/g, '/');
-    if (normalized.includes('/__tests__/')) return false;
-    if (/\.(test|spec)\.(ts|svelte)$/.test(normalized)) return false;
-    if (normalized.endsWith('.d.ts')) return false;
-    if (normalized.includes('/apps/e2e/')) return false;
+    if (normalized.includes('/__tests__/')) {
+      return false;
+    }
+    if (/\.(test|spec)\.(ts|svelte)$/.test(normalized)) {
+      return false;
+    }
+    if (normalized.endsWith('.d.ts')) {
+      return false;
+    }
+    if (normalized.includes('/apps/e2e/')) {
+      return false;
+    }
     return true;
   };
 

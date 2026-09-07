@@ -106,14 +106,18 @@ const extractExports = (content: string): string[] => {
   let m: RegExpExecArray | null;
   while (true) {
     m = namedRe.exec(content);
-    if (m === null) break;
+    if (m === null) {
+      break;
+    }
     exports.push(m[1] ?? '');
   }
   // Match: export { symbolName, ... }
   const bracketRe = /export\s+\{\s*([\w\s,]+)\s*\}/g;
   while (true) {
     m = bracketRe.exec(content);
-    if (m === null) break;
+    if (m === null) {
+      break;
+    }
     const names = (m[1] ?? '')
       .split(',')
       .map((s) => s.trim())
@@ -142,11 +146,19 @@ const extractExports = (content: string): string[] => {
  */
 const isProductionFile = (filePath: string): boolean => {
   const normalized = filePath.replace(/\\/g, '/');
-  if (normalized.includes('/__tests__/')) return false;
-  if (/\.(test|spec)\.(ts|svelte)$/.test(normalized)) return false;
-  if (normalized.endsWith('.d.ts')) return false;
+  if (normalized.includes('/__tests__/')) {
+    return false;
+  }
+  if (/\.(test|spec)\.(ts|svelte)$/.test(normalized)) {
+    return false;
+  }
+  if (normalized.endsWith('.d.ts')) {
+    return false;
+  }
   // Exclude e2e test files
-  if (normalized.includes('/apps/e2e/')) return false;
+  if (normalized.includes('/apps/e2e/')) {
+    return false;
+  }
   return true;
 };
 
@@ -168,7 +180,9 @@ const findProductionReferences = (options: { symbol: string; declaringFile: stri
   ];
 
   for (const scanDir of scanDirs) {
-    if (!existsSync(scanDir)) continue;
+    if (!existsSync(scanDir)) {
+      continue;
+    }
     const walk = (dir: string): void => {
       try {
         const entries = readdirSync(dir, { withFileTypes: true });
@@ -181,11 +195,17 @@ const findProductionReferences = (options: { symbol: string; declaringFile: stri
           } else if (entry.isFile()) {
             const normalizedPath = fullPath.replace(/\\/g, '/');
             // Skip the declaring file itself
-            if (normalizedPath === normalizedDeclaring) continue;
+            if (normalizedPath === normalizedDeclaring) {
+              continue;
+            }
             // Only check production files
-            if (!isProductionFile(normalizedPath)) continue;
+            if (!isProductionFile(normalizedPath)) {
+              continue;
+            }
             // Check .ts, .svelte files
-            if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.svelte')) continue;
+            if (!entry.name.endsWith('.ts') && !entry.name.endsWith('.svelte')) {
+              continue;
+            }
             try {
               const content = readFileSync(fullPath, 'utf-8');
               // Simple word-boundary check for the symbol reference
@@ -245,7 +265,9 @@ const main = () => {
   for (const filePath of serviceFiles) {
     const content = readFileSync(filePath, 'utf-8');
     const exports = extractExports(content);
-    if (exports.length === 0) continue;
+    if (exports.length === 0) {
+      continue;
+    }
 
     const fileRelPath = relPath(filePath);
     const orphanedSymbols: string[] = [];
@@ -281,7 +303,7 @@ const main = () => {
         ...(existing?._comment ? { _comment: existing._comment } : {}),
       };
     }
-    writeFileSync(BASELINE_PATH, JSON.stringify(newBaseline, null, 2) + '\n', 'utf-8');
+    writeFileSync(BASELINE_PATH, `${JSON.stringify(newBaseline, null, 2)}\n`, 'utf-8');
     console.log(`✅ Baseline updated: ${Object.keys(newBaseline).length} file(s) with orphans`);
     process.exit(0);
   }

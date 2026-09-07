@@ -98,7 +98,9 @@ export const PRODUCTION_PATH_LEGACY_EXEMPTIONS = new Set([
 const routeExists = (route: string): boolean => {
   // Check for a SvelteKit route file under apps/frontend/client/src/routes
   const clientRouteDir = join(REPO_ROOT, 'apps/frontend/client/src/routes');
-  if (!existsSync(clientRouteDir)) return false;
+  if (!existsSync(clientRouteDir)) {
+    return false;
+  }
   // Walk the route path segments
   const parts = route.replace(/^\//, '').split('/');
   let currentDir = clientRouteDir;
@@ -111,11 +113,17 @@ const routeExists = (route: string): boolean => {
         // Handle route groups (parenthesized)
         f === `(${part})`,
     );
-    if (candidates.length === 0) return false;
+    if (candidates.length === 0) {
+      return false;
+    }
     const next = candidates[0];
-    if (!next) return false;
+    if (!next) {
+      return false;
+    }
     const nextPath = join(currentDir, next);
-    if (!existsSync(nextPath) || !statSync(nextPath).isDirectory()) return false;
+    if (!existsSync(nextPath) || !statSync(nextPath).isDirectory()) {
+      return false;
+    }
     currentDir = nextPath;
   }
   return true;
@@ -124,12 +132,18 @@ const routeExists = (route: string): boolean => {
 /** Check if a file.ts#exportedSymbol reference exists. */
 const symbolExists = (ref: string): boolean => {
   const hashIdx = ref.lastIndexOf('#');
-  if (hashIdx === -1) return false;
+  if (hashIdx === -1) {
+    return false;
+  }
   const filePath = ref.slice(0, hashIdx);
   const symbolName = ref.slice(hashIdx + 1);
-  if (!filePath || !symbolName) return false;
+  if (!filePath || !symbolName) {
+    return false;
+  }
   const fullPath = join(REPO_ROOT, filePath);
-  if (!existsSync(fullPath)) return false;
+  if (!existsSync(fullPath)) {
+    return false;
+  }
   try {
     const content = readFileSync(fullPath, 'utf-8');
     // Check for export of the symbol: `export const symbolName`, `export function symbolName`, `export class symbolName`
@@ -140,7 +154,9 @@ const symbolExists = (ref: string): boolean => {
     const reExportRe = new RegExp(
       `export\\s+\\{\\s*${escapeRegex(symbolName)}\\s*(?:as\\s+\\w+)?\\s*\\}`,
     );
-    if (exportRe.test(content) || reExportRe.test(content)) return true;
+    if (exportRe.test(content) || reExportRe.test(content)) {
+      return true;
+    }
     // Also check named exports at the end: `export { ..., symbolName, ... }`
     const namedExportRe = new RegExp(`export\\s+\\{[^}]*\\b${escapeRegex(symbolName)}\\b[^}]*\\}`);
     return namedExportRe.test(content);
@@ -157,7 +173,9 @@ const toolingCommandExists = (command: string): boolean => {
   try {
     const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
     const scripts = pkg.scripts ?? {};
-    if (scripts[command]) return true;
+    if (scripts[command]) {
+      return true;
+    }
   } catch {
     // continue
   }
@@ -165,14 +183,20 @@ const toolingCommandExists = (command: string): boolean => {
   const moonYmlPath = join(REPO_ROOT, 'scripts', 'moon.yml');
   try {
     const moonYml = readFileSync(moonYmlPath, 'utf-8');
-    if (moonYml.includes(`'${command}'`) || moonYml.includes(`"${command}"`)) return true;
+    if (moonYml.includes(`'${command}'`) || moonYml.includes(`"${command}"`)) {
+      return true;
+    }
   } catch {
     // continue
   }
   // Also check root moon tasks for project-scoped references
   // Accept `moon run scripts:guard` style commands
-  if (/^moon\s+run\s+\w+:\w+/.test(command)) return true;
-  if (/^bun\s+run\s+\S+/.test(command)) return true;
+  if (/^moon\s+run\s+\w+:\w+/.test(command)) {
+    return true;
+  }
+  if (/^bun\s+run\s+\S+/.test(command)) {
+    return true;
+  }
   return false;
 };
 
@@ -182,7 +206,9 @@ const toolingCommandExists = (command: string): boolean => {
 
 export const parseTableRows = (tableText: string): string[][] => {
   const lines = tableText.split('\n').filter((l) => l.trim().startsWith('|'));
-  if (lines.length < 3) return []; // Need header + separator + at least one data row
+  if (lines.length < 3) {
+    return []; // Need header + separator + at least one data row
+  }
   // Skip header (line 0) and separator (line 1)
   const dataRows = lines.slice(2);
   return dataRows
@@ -221,28 +247,45 @@ export const parseTableRows = (tableText: string): string[][] => {
 export const classifyProductionPath = (cell: string): string | null => {
   const trimmed = cell.trim();
   // Empty cell
-  if (!trimmed) return 'Empty Production Path cell';
+  if (!trimmed) {
+    return 'Empty Production Path cell';
+  }
   // Bare N/A
-  if (/^N\/A\s*$/i.test(trimmed)) return 'Bare N/A without reason \u2014 use N/A \u2014 <reason>';
+  if (/^N\/A\s*$/i.test(trimmed)) {
+    return 'Bare N/A without reason \u2014 use N/A \u2014 <reason>';
+  }
   // Template placeholder: {N/A | /game/...}
-  if (/^\{[^}]+\}$/.test(trimmed))
+  if (/^\{[^}]+\}$/.test(trimmed)) {
     return 'Template placeholder \u2014 fill in a real production path';
+  }
   // TBD marker
-  if (/\bTBD\b/i.test(trimmed)) return 'TBD \u2014 fill in a real production path';
+  if (/\bTBD\b/i.test(trimmed)) {
+    return 'TBD \u2014 fill in a real production path';
+  }
   // Whitespace-only or just dashes
-  if (/^[\s\u2014-]+$/.test(trimmed))
+  if (/^[\s\u2014-]+$/.test(trimmed)) {
     return 'Invalid Production Path \u2014 must be a resolvable reference';
+  }
   // N/A \u2014 <reason> \u2014 only valid as whole-contract opt-out in Metadata, not at row level
-  if (/^N\/A\s*[\u2014-]\s*\S+/i.test(trimmed))
+  if (/^N\/A\s*[\u2014-]\s*\S+/i.test(trimmed)) {
     return 'Row-level N/A \u2014 <reason> is not accepted; use Metadata-level opt-out instead';
+  }
   // Valid format: tooling: `<command>`
-  if (/^tooling:\s*`/.test(trimmed)) return null;
+  if (/^tooling:\s*`/.test(trimmed)) {
+    return null;
+  }
   // Valid format: route reference starting with /
-  if (/^\/\w+/.test(trimmed)) return null;
+  if (/^\/\w+/.test(trimmed)) {
+    return null;
+  }
   // Valid format: file.ts#exportedSymbol
-  if (/\.[jt]sx?#\w+/.test(trimmed)) return null;
+  if (/\.[jt]sx?#\w+/.test(trimmed)) {
+    return null;
+  }
   // Valid format: Named component/ViewModel reference
-  if (/^[A-Z]\w+/.test(trimmed)) return null;
+  if (/^[A-Z]\w+/.test(trimmed)) {
+    return null;
+  }
   // Unknown format \u2014 treat as unresolvable
   return `Unresolvable Production Path: ${trimmed}`;
 };
