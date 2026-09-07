@@ -10,11 +10,66 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { c, log, ok, warn } from '../cli_utils';
+import { STAGING_TAG } from '../release/github';
+import { resolveReleaseVersion } from '../release/version';
 import { checkDeployCache, setTauriCache } from './cache';
 import { type AppConfig, liveModes } from './deployment_config';
 import { notifyDiscordRelease } from './discord_notify';
 import { buildPlatformFragment, writeFragmentFile } from './updater_manifest';
 import { isVerbose, run } from './utils';
+
+/** `<owner>/<repo>` the updater downloads manifests from. */
+const RELEASE_REPO = 'BearlySleeping/aikami';
+
+/**
+ * Public half of the staging updater signing key.
+ *
+ * Staging and production are signed by SEPARATE keypairs, so a leaked staging
+ * key cannot sign an update that production installs will accept. That only
+ * holds if each build also embeds the matching PUBLIC key — a staging build
+ * carrying tauri.conf.json's production pubkey would reject every staging
+ * update as unsigned.
+ *
+ * Not a secret (it is the verification half, and ships inside every binary).
+ * The private half lives only in the `staging` GitHub Environment's
+ * TAURI_SIGNING_PRIVATE_KEY secret and in Bitwarden
+ * (`aikami-tauri-signing-private-key-staging`), never in SOPS — see
+ * NEVER_ENCRYPT_KEYS in ops/secrets_backend.ts.
+ */
+const STAGING_UPDATER_PUBKEY =
+  'dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEIxQUYyNzk0OTQ4MzgxNzUKUldSMWdZT1VsQ2V2c1g1MUJ2Y1NXbW5vc0tqR0x0NGxNL1hqbjNLa2tOM3FwMGR0YzlnU1ZGWWIK';
+
+/**
+ * Auto-updater config per deploy mode: which manifest to poll, and which
+ * public key verifies it.
+ *
+ * production → `/releases/latest/download/…`, verified by tauri.conf.json's
+ *   committed pubkey. GitHub's "latest" excludes prereleases, so a stable
+ *   install can never be pulled onto a staging build no matter how many
+ *   staging releases are published after it.
+ * staging    → `/releases/download/staging/…`, verified by
+ *   STAGING_UPDATER_PUBKEY. The staging tag is rolling (see
+ *   release/index.ts), which is precisely what makes this a stable URL:
+ *   there is exactly one staging release and it always carries the newest
+ *   manifest.
+ *
+ * Applied as a build-time `--config` override rather than being listed in
+ * tauri.conf.json, because a config listing both endpoints would have every
+ * stable install poll the staging channel too — Tauri tries endpoints in
+ * order and takes the first that answers — and a config can hold only one
+ * pubkey anyway.
+ */
+export const updaterConfig = (mode: string): { endpoints: string[]; pubkey?: string } =>
+  mode === 'staging'
+    ? {
+        endpoints: [
+          `https://github.com/${RELEASE_REPO}/releases/download/${STAGING_TAG}/latest.json`,
+        ],
+        pubkey: STAGING_UPDATER_PUBKEY,
+      }
+    : {
+        endpoints: [`https://github.com/${RELEASE_REPO}/releases/latest/download/latest.json`],
+      };
 
 // ── Canonical artifact naming ─────────────────────────────────────────────
 //
@@ -240,6 +295,7 @@ export async function buildTauriArtifacts(
     version?: string;
     build?: { beforeBuildCommand: string };
     bundle?: { createUpdaterArtifacts: boolean };
+    plugins?: { updater: { endpoints: string[]; pubkey?: string } };
   } = {};
   if (opts.disableBeforeBuildCommand) {
     configOverride.build = { beforeBuildCommand: '' };
@@ -250,6 +306,11 @@ export async function buildTauriArtifacts(
   // working for any contributor without desktop-release secrets.
   if ((liveModes as readonly string[]).includes(mode)) {
     configOverride.bundle = { createUpdaterArtifacts: true };
+    // Pin the update channel AND its verification key to the mode being built
+    // (see updaterConfig). Only for live modes: a local/emulator build has no
+    // release channel to point at and keeps tauri.conf.json's committed
+    // stable endpoint and pubkey.
+    configOverride.plugins = { updater: updaterConfig(mode) };
   }
   if (normalizedVersionOverride !== undefined) {
     configOverride.version = normalizedVersionOverride;
@@ -385,10 +446,10 @@ export async function deployTauriRelease(
 
   // 1-4. Build + collect (shared with ci_run.ts). When this local pipeline is
   // itself publishing to a real GitHub Release (RELEASE_TAG set — see step 5
-  // below), derive the embedded version from the tag the same way ci_run.ts
-  // does, so a manually-run `RELEASE_TAG=v0.1.1 bun run deploy ... client-tauri`
-  // embeds the same version its own uploaded latest.json will claim.
-  const versionOverride = releaseTag ? releaseTag.replace(/^v/, '') : undefined;
+  // below), resolve the embedded version the same way ci_run.ts does, so a
+  // manually-run `RELEASE_TAG=v0.1.1 bun run deploy ... client-tauri` embeds
+  // the same version its own uploaded latest.json will claim.
+  const versionOverride = resolveReleaseVersion(releaseTag, rootDir);
   const {
     artifacts,
     version: ver,
