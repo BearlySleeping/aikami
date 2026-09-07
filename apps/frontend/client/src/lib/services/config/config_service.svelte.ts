@@ -578,6 +578,17 @@ class ConfigService
   async save(): Promise<void> {
     this.debug('ConfigService.save');
 
+    // Serializing before load() replaces the stored vault with whatever the
+    // in-memory state happens to hold — i.e. it deletes every connection this
+    // session never read. Callers must load() first; loading here instead
+    // would clobber unsaved in-memory changes, so this only reports it.
+    if (!this.isLoaded) {
+      this.warn('ConfigService.save:before-load', {
+        providers: this.state.providers.length,
+        connections: this.state.aiConnections.length,
+      });
+    }
+
     // Legacy voice/image setters still expose standalone config keys. Move
     // them onto their provider records before the encrypted v3 serialization.
     this._syncLegacyConfigCredentials();

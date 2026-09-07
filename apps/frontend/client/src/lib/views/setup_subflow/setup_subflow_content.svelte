@@ -250,15 +250,12 @@ const { viewModel }: Props = $props();
     <div class="text-4xl">✅</div>
     <h2 class="text-lg font-semibold">Ready to Play!</h2>
     <p class="text-center text-sm text-base-content/60">{viewModel.readyMessage}</p>
-    <div class="flex flex-wrap justify-center gap-2">
+    <div class="flex w-full justify-end gap-2">
+      <button type="button" class="btn btn-outline" onclick={() => viewModel.goBack()}>
+        Go back
+      </button>
       <button type="button" class="btn btn-primary" onclick={() => viewModel.leave()}>
         Continue
-      </button>
-      <button type="button" class="btn btn-outline" onclick={() => viewModel.reviewSetup()}>
-        Review setup
-      </button>
-      <button type="button" class="btn btn-ghost btn-sm" onclick={() => viewModel.reset()}>
-        Start over
       </button>
     </div>
   </div>

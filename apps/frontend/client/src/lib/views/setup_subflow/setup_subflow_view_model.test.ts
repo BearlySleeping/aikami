@@ -29,6 +29,7 @@ const configServiceMock = {
     connections: [] as Array<Record<string, unknown>>,
     defaultByCapability: {} as Record<string, string>,
   },
+  load: mock(async () => {}),
   addConnection: mock(() => 'mock-connection-id'),
   setDefaultConnection: mock(() => {}),
   save: mock(async () => {}),
@@ -119,6 +120,8 @@ describe('SetupSubflowViewModel', () => {
     startNewCampaignMock.mockClear();
     goToRouteMock.mockClear();
     configServiceMock.addConnection.mockClear();
+    configServiceMock.load.mockClear();
+    configServiceMock.load.mockImplementation(async () => {});
     isTauriMock.mockReset();
     isTauriMock.mockReturnValue(true);
     getVoiceTtsUrlMock.mockReset();
@@ -366,16 +369,18 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.manualCapability).toBe('text');
   });
 
-  test('reviewSetup returns from ready to the review screen', () => {
+  test('Go back from the ready screen returns to the review, not the entry choice', () => {
     configServiceMock.state.connections = [
       { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
     ];
     vm.selectEntryPath('text-only');
     expect(vm.step).toBe('ready');
 
-    vm.reviewSetup();
+    vm.goBack();
 
     expect(vm.step).toBe('plan');
+    // Going back must not discard what was just configured.
+    expect(vm.canApplyPlan).toBeTrue();
   });
 
   // ── Navigation / leave() ─────────────────────────────────────────────────
@@ -562,6 +567,40 @@ describe('SetupSubflowViewModel', () => {
 
     expect(vm.errorMessage).toBe('');
   });
+  // ── Stored configuration must survive a refresh ──────────────────────────
+
+  test('initialize reads the stored configuration before deciding what is set up', async () => {
+    // A refresh starts from an empty in-memory state; only load() restores it.
+    configServiceMock.load.mockImplementation(async () => {
+      configServiceMock.state.connections = [
+        { id: 'c1', capability: 'text', provider: 'openrouter', apiKey: 'sk-saved', name: 'Saved' },
+      ];
+    });
+    const fresh = getSetupSubflowViewModel({ className: 'SetupSubflowReloadTest' });
+
+    await fresh.initialize();
+
+    expect(configServiceMock.load).toHaveBeenCalled();
+    expect(fresh.capabilityRows.find((r) => r.id === 'text')?.configured).toBeTrue();
+    expect(fresh.canApplyPlan).toBeTrue();
+    await fresh.dispose();
+  });
+
+  test('a text-only entry after reload goes straight to ready instead of asking again', async () => {
+    configServiceMock.load.mockImplementation(async () => {
+      configServiceMock.state.connections = [
+        { id: 'c1', capability: 'text', provider: 'openrouter', apiKey: 'sk-saved', name: 'Saved' },
+      ];
+    });
+    const fresh = getSetupSubflowViewModel({ className: 'SetupSubflowReloadTest' });
+    await fresh.initialize();
+
+    fresh.selectEntryPath('text-only');
+
+    expect(fresh.step).toBe('ready');
+    await fresh.dispose();
+  });
+
   // ── The manual step must show what is already saved ──────────────────────
 
   test('the manual step lists nothing and offers a blank editor when no connection exists', () => {

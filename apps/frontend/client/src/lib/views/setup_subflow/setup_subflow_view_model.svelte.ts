@@ -240,9 +240,6 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   /** Whether the review screen offers a Back button. */
   readonly canGoBackFromPlan: boolean;
 
-  /** Returns from the ready screen to the review screen, so a saved choice can still be changed. */
-  reviewSetup(): void;
-
   /** Selects an entry path. */
   selectEntryPath(path: SetupEntryPath): void;
   /** Toggles a capability on/off. */
@@ -462,11 +459,6 @@ class SetupSubflowViewModel
     return this.isDesktop;
   }
 
-  reviewSetup(): void {
-    this.errorMessage = '';
-    this.step = 'plan';
-  }
-
   get noProvidersMessage(): string {
     return this.isDesktop
       ? 'Nothing found on this computer. Add a provider below — a cloud service, or a server you already run.'
@@ -656,6 +648,18 @@ class SetupSubflowViewModel
   // ── Lifecycle ──────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
+    // Read the stored configuration before anything decides what is already
+    // set up. Without this the route started from an empty in-memory state,
+    // so a refresh "forgot" every saved connection — and worse, the next
+    // save() serialized that empty state over the vault, destroying the
+    // connections it had not read.
+    await configService.load();
+    // The editor ViewModel is deliberately not initialized here: its
+    // initialize() loads image checkpoints and voice archetypes for the full
+    // AI Settings page, and this flow only mounts the connection modals,
+    // which need neither. Loading the configuration above is what the editor
+    // actually shares with this screen.
+
     // Detect without auto-scanning — the user must explicitly trigger it,
     // and only the desktop build offers it at all.
     if (!this.showsEntryChoice) {
@@ -946,6 +950,12 @@ class SetupSubflowViewModel
 
   goBack(): void {
     this.errorMessage = '';
+    if (this.step === 'ready') {
+      // From the completion screen, Back means the review — not the entry
+      // choice, which would discard the context the user just built.
+      this.step = 'plan';
+      return;
+    }
     if (this.step === 'manual') {
       this.manualCapability = null;
       // Back out to the review screen, which is always meaningful and is the
