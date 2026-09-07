@@ -1195,6 +1195,7 @@ export class AiSettingsViewModel
 
   async saveDraft(): Promise<void> {
     this.debug('saveDraft');
+    const conflictPrompt = this.keyConflictPrompt;
 
     // A credential that has never been probed is not evidence of a working
     // connection. Verify first so a typo'd key is caught here rather than
@@ -1210,7 +1211,7 @@ export class AiSettingsViewModel
       }
     }
 
-    await this._commitDraft();
+    await this._commitDraft(conflictPrompt);
   }
 
   async saveDraftAnyway(): Promise<void> {
@@ -1219,7 +1220,9 @@ export class AiSettingsViewModel
   }
 
   /** Writes the draft to the configuration. Assumes the verification gate has already run. */
-  private async _commitDraft(): Promise<void> {
+  private async _commitDraft(
+    conflictPrompt: KeyConflictPrompt | undefined = this.keyConflictPrompt,
+  ): Promise<void> {
     this.saveError = undefined;
 
     const reg = this.draft.registryId;
@@ -1264,7 +1267,6 @@ export class AiSettingsViewModel
       }
     } else {
       // Resolve or create provider
-      const conflictPrompt = this.keyConflictPrompt;
       let providerId: string | undefined;
       if (conflictPrompt?.resolveSeparate) {
         providerId = configService.addProvider({

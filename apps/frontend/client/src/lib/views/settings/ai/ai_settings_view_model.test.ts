@@ -304,6 +304,10 @@ describe('AiSettingsViewModel — AC-1: Second model reuses key', () => {
 });
 
 describe('AiSettingsViewModel — AC-3: Key conflict prompt', () => {
+  afterEach(() => {
+    mockHasVerificationStrategy.mockReturnValue(false);
+  });
+
   test('shows conflict prompt when key differs from existing provider', async () => {
     const pid = mockConfigService.addProvider({
       registryId: 'openrouter',
@@ -409,6 +413,41 @@ describe('AiSettingsViewModel — AC-3: Key conflict prompt', () => {
     );
     expect(mockProviders.find((provider) => provider.id === existingProviderId)?.credential).toBe(
       'sk-or-v1-existing-key',
+    );
+  });
+
+  test('separate-provider resolution survives asynchronous verification', async () => {
+    mockHasVerificationStrategy.mockReturnValue(true);
+    const verification = createDeferred<ConnectionTestResult, Error>();
+    mockVerifyConnection.mockImplementationOnce(async () => verification.promise);
+    const existingProviderId = mockConfigService.addProvider({
+      registryId: 'openrouter',
+      label: 'OpenRouter',
+      credential: 'sk-or-v1-existing-key',
+    });
+    mockConfigService.addAiConnection({
+      providerId: existingProviderId,
+      capability: 'text',
+      label: 'Sonnet',
+      model: 'anthropic/claude-sonnet',
+      params: {},
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    vm.openAddProvider();
+    vm.setDraftField('apiKey', 'sk-or-v1-separate-key');
+    vm.setDraftProvider('openrouter');
+    vm.resolveKeyConflict(false);
+    expect(vm.keyConflictPrompt).toBeUndefined();
+
+    verification.resolve({ ok: true, latencyMs: 42 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const separateProvider = mockProviders.find((provider) => provider.id !== existingProviderId);
+    expect(separateProvider?.credential).toBe('sk-or-v1-separate-key');
+    expect(mockConfigService.addAiConnection).toHaveBeenLastCalledWith(
+      expect.objectContaining({ providerId: separateProvider?.id }),
     );
   });
 });
@@ -1933,6 +1972,12 @@ describe('AiSettingsViewModel — generation parameters on an unsaved connection
 });
 
 describe('AiSettingsViewModel — cancelling a voice preview is not a failure', () => {
+  const originalSpeak = mockTtsService.speak;
+
+  afterEach(() => {
+    mockTtsService.speak = originalSpeak;
+  });
+
   test('stopVoicePreview leaves the preview idle, not in error', async () => {
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
     await vm.initialize();

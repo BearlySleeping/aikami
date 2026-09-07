@@ -581,12 +581,13 @@ class ConfigService
     // Serializing before load() replaces the stored vault with whatever the
     // in-memory state happens to hold — i.e. it deletes every connection this
     // session never read. Callers must load() first; loading here instead
-    // would clobber unsaved in-memory changes, so this only reports it.
+    // would clobber unsaved in-memory changes, so warn and stop instead.
     if (!this.isLoaded) {
       this.warn('ConfigService.save:before-load', {
         providers: this.state.providers.length,
         connections: this.state.aiConnections.length,
       });
+      return;
     }
 
     // Legacy voice/image setters still expose standalone config keys. Move
@@ -812,7 +813,7 @@ class ConfigService
 
     throw new Error(
       'No text generation provider configured. ' +
-        'Create a Connection in Settings or add a provider on the capability screen.',
+        'Create a Connection in Settings or add a provider in AI setup.',
     );
   }
 

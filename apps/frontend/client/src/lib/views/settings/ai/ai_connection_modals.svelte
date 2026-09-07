@@ -5,7 +5,7 @@
 // any capability — voice leads with the Kokoro download when the local binary
 // is selected) and the key-conflict prompt. Extracted out of
 // ai_settings_view.svelte so the same modals can be reused by a leaner host
-// (e.g. the onboarding capability screen) without embedding the full
+// (e.g. the onboarding setup screen) without embedding the full
 // Status board + Provider tree.
 import VoiceModelDownload from '@aikami/frontend/components/voice-model-download/voice_model_download.svelte';
 import type { AiSettingsViewModelInterface } from './ai_settings_view_model.svelte';
@@ -101,9 +101,7 @@ const { viewModel }: Props = $props();
 
         {#if viewModel.isLocalBinaryProvider}
           <div>
-            <label for="voice-model-section" class="label-text font-mono text-xs mb-1 block"
-              >Voice model</label
-            >
+            <h3 class="label-text font-mono text-xs mb-1 block">Voice model</h3>
             <VoiceModelDownload
               show={true}
               state={viewModel.voiceModelState}

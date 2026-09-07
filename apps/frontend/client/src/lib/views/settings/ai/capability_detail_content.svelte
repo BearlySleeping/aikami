@@ -232,6 +232,7 @@ const { viewModel }: Props = $props();
             <div class="flex gap-2">
               <select
                 class="select select-bordered select-xs font-mono"
+                aria-label="Image checkpoint"
                 value={ai.imageParamsFor(conn.id).checkpoint}
                 onchange={(e) =>
                   ai.setImageCheckpoint(conn.id, (e.target as HTMLSelectElement).value)}
@@ -243,6 +244,7 @@ const { viewModel }: Props = $props();
 
               <select
                 class="select select-bordered select-xs font-mono"
+                aria-label="Image style profile"
                 value={ai.activeStyleProfileId}
                 onchange={(e) =>
                   ai.setImageStyleProfile((e.target as HTMLSelectElement).value)}

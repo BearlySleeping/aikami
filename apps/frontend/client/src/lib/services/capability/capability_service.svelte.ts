@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts
 //
 // Singleton service that shapes AI capability snapshots for the pre-game
-// capability screen and in-game boot diagnostics. Every provider
+// setup screen and in-game boot diagnostics. Every provider
 // availability decision is delegated to the AI Provider Gateway (C-320) —
 // this service only maps gateway detection results into the existing
 // CapabilitySnapshot shape.

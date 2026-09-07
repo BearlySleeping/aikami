@@ -214,6 +214,16 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.capabilityToggles.find((t) => t.id === 'text')?.enabled).toBeTrue();
   });
 
+  test('a configured optional capability remains unchecked until enabled', () => {
+    configServiceMock.state.connections = [
+      { capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
+    ];
+
+    expect(vm.capabilityRows.find((row) => row.id === 'voice')?.checked).toBeFalse();
+    vm.toggleCapability('voice');
+    expect(vm.capabilityRows.find((row) => row.id === 'voice')?.checked).toBeTrue();
+  });
+
   // ── Discovery scoping (Recommended) ─────────────────────────────────────
 
   test('recommended scans the required capability only, then rescan honours opt-ins', async () => {
@@ -488,7 +498,7 @@ describe('SetupSubflowViewModel', () => {
 
   // ── Seeding an optional capability (CodeRabbit: voice re-seeded forever) ──
 
-  test('a detected local voice provider with no endpoint is not seeded at all', async () => {
+  test('a detected Kokoro voice provider with no endpoint is seeded and persisted', async () => {
     detectMock.mockResolvedValueOnce({
       ...createDetectedSnapshot(),
       voiceStatus: 'detected',
@@ -501,12 +511,12 @@ describe('SetupSubflowViewModel', () => {
 
     await vm.applyPlan();
 
-    // A blank local row can never satisfy _isUsable, so it would be written
-    // again on every apply. Better to leave voice unconfigured.
     const voiceWrites = configServiceMock.addConnection.mock.calls.filter(
       ([c]: [{ capability?: string }]) => c.capability === 'voice',
     );
-    expect(voiceWrites).toHaveLength(0);
+    expect(voiceWrites).toHaveLength(1);
+    expect(voiceWrites[0]?.[0].baseUrl).toBe('');
+    expect(configServiceMock.save).toHaveBeenCalled();
   });
 
   test('a detected local voice provider with an endpoint is seeded once and stays usable', async () => {

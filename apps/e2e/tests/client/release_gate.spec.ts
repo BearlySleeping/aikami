@@ -392,11 +392,10 @@ test.describe('Release Gate', () => {
 
       // AC-4c: Clicking "New Adventure" should route to the AI setup screen, never /game
       await game.startNewAdventure();
-      await page.waitForTimeout(3000);
+      await page.waitForURL(/^https?:\/\/[^/]+\/setup(?:[?#].*)?$/, { timeout: 10_000 });
 
       // Must not have navigated to game-related routes
       const currentUrl = page.url();
-      expect(currentUrl).toContain('/setup');
       expect(currentUrl).not.toContain('/game');
     });
   });

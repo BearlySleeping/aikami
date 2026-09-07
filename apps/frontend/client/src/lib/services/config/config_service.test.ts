@@ -218,6 +218,7 @@ describe('ConfigService — C-079', () => {
 
     test('save should call encrypt with vault payload', async () => {
       const service = await createService();
+      await service.load();
       service.addConnection({
         name: 'OpenRouter',
         provider: 'openrouter',
@@ -235,6 +236,7 @@ describe('ConfigService — C-079', () => {
 
     test('save should store plain config in localStorage', async () => {
       const service = await createService();
+      await service.load();
 
       await service.save();
 
@@ -250,6 +252,7 @@ describe('ConfigService — C-079', () => {
 
     test('save should NOT include API keys in plain localStorage', async () => {
       const service = await createService();
+      await service.load();
       service.addConnection({
         name: 'OpenRouter',
         provider: 'openrouter',
@@ -270,6 +273,18 @@ describe('ConfigService — C-079', () => {
       const parsed = JSON.parse(plain);
       // Connections (API keys) are only in the encrypted vault.
       expect(parsed.connections).toBeUndefined();
+    });
+
+    test('save before load does not overwrite persisted configuration', async () => {
+      store.set('aikami_config', JSON.stringify({ voice: { engine: 'elevenlabs' } }));
+      vaultStore.set('__vault', JSON.stringify({ schemaVersion: 3, providers: [] }));
+      const service = await createService();
+
+      await service.save();
+
+      expect(encryptCalls).toBe(0);
+      expect(store.get('aikami_config')).toBe(JSON.stringify({ voice: { engine: 'elevenlabs' } }));
+      expect(vaultStore.get('__vault')).toBe(JSON.stringify({ schemaVersion: 3, providers: [] }));
     });
   });
 
@@ -585,6 +600,7 @@ describe('ConfigService — C-079', () => {
 
     test('per-capability defaults survive a save/load round trip', async () => {
       const service = await createService();
+      await service.load();
       service.addConnection(_conn({ capability: 'text', provider: 'openrouter' }));
       const textB = service.addConnection(_conn({ capability: 'text', provider: 'openai' }));
       const voiceId = service.addConnection(_conn({ capability: 'voice', provider: 'kokoro' }));
@@ -754,6 +770,7 @@ describe('ConfigService — C-079', () => {
 
     test('params-only edits replace the legacy projection and persist it', async () => {
       const service = await createService();
+      await service.load();
       const id = service.addConnection(_conn());
       const previous = service.state.connections[0];
       const generationParams = { ..._params, temperature: 0.25 };

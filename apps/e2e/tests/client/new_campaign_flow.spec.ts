@@ -57,7 +57,7 @@ test.describe('New Campaign Flow — C-405', () => {
     await page.getByRole('button', { name: 'New Game' }).click();
 
     // Lands on the AI-provider welcome screen.
-    await expect(page).toHaveURL(/\/setup/, { timeout: 10000 });
+    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/setup(?:[?#].*)?$/, { timeout: 10000 });
     await expect(page.getByRole('heading', { name: 'Welcome to Aikami' })).toBeVisible();
 
     // Start Campaign proceeds to persona creation (onboarding), never the wizard.
@@ -78,7 +78,7 @@ test.describe('New Campaign Flow — C-405', () => {
     await page.goto('/');
 
     await page.getByRole('button', { name: 'New Game' }).click();
-    await expect(page).toHaveURL(/\/setup/, { timeout: 10000 });
+    await expect(page).toHaveURL(/^https?:\/\/[^/]+\/setup(?:[?#].*)?$/, { timeout: 10000 });
 
     // Start Campaign proceeds to onboarding.
     await page.getByRole('button', { name: 'Start Campaign' }).click();

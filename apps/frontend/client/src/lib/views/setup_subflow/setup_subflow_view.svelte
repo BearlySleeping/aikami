@@ -2,7 +2,7 @@
 // apps/frontend/client/src/lib/views/setup_subflow/setup_subflow_view.svelte
 //
 // Shared setup subflow view — renders the guided AI setup flow based on
-// the current step. Used by the capability route and the guided setup route.
+// the current step. Used by the /setup entry point and guided setup flows.
 // Contract: C-483
 
 import { BaseViewModelContainer } from '$components';

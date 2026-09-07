@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/setup_subflow/setup_entry_view.svelte
 //
-// Entry view for the capability route — delegates to the shared
+// Entry view for the /setup route — delegates to the shared
 // setup subflow view with the three entry paths.
 // Contract: C-483 AC-1
 

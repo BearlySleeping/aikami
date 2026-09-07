@@ -504,7 +504,7 @@ class SetupSubflowViewModel
         actionLabel: configured ? 'Change' : 'Set up',
         icon: configured ? '✅' : '⚠️',
         actionButtonClass: configured ? 'btn btn-sm btn-ghost' : 'btn btn-sm btn-primary',
-        checked: toggle.enabled || configured,
+        checked: toggle.enabled,
       };
     });
   }
@@ -1134,11 +1134,9 @@ class SetupSubflowViewModel
         ? (runtimeConfigService.getImageUrl() ?? '')
         : (runtimeConfigService.getVoiceTtsUrl() ?? '');
 
-    // A local provider is only usable once it carries a concrete endpoint or
-    // model (_isUsable). Writing a blank row would leave the capability
-    // unconfigured forever AND make every later applyPlan add another copy,
-    // so seed nothing and let the user configure it explicitly instead.
-    if (LOCAL_PROVIDER_IDS.has(providerId) && !baseUrl.trim()) {
+    // Kokoro is bundled and _isUsable() treats its persisted connection as
+    // usable without an endpoint. Other local providers still need one.
+    if (LOCAL_PROVIDER_IDS.has(providerId) && providerId !== 'kokoro' && !baseUrl.trim()) {
       this.warn('_ensureDetectedProvider:no-endpoint', { capability, providerId });
       return;
     }
