@@ -91,8 +91,19 @@ const mockConfigService = {
   getPresets: mock(() => [...BUILT_IN_PRESETS]),
 };
 
-// AC-6: real TTS preview.
-const mockTtsService = { speak: mock(async (_options: { text: string; voiceId?: string }) => {}) };
+// AC-6: real TTS preview. isSynthesizing/isPlaying/status/errorMessage are
+// plain mutable fields (not $state) — tests set them directly to drive the
+// ViewModel's derived voicePreviewState/voiceRuntimeStatus getters.
+const mockTtsService = {
+  speak: mock(async (_options: { text: string; voiceId?: string }) => {}),
+  stop: mock(() => {}),
+  reset: mock(() => {}),
+  initialize: mock(async () => {}),
+  isSynthesizing: false,
+  isPlaying: false,
+  status: 'uninitialized' as string,
+  errorMessage: null as string | null,
+};
 
 // AC-6: real-campaign-line fallback (Edge Cases & Gotchas — "no active campaign").
 const mockCampaignService: { activeCampaign: { name: string } | undefined } = {
@@ -162,6 +173,13 @@ beforeEach(async () => {
   mockFetchModelsFromProvider.mockClear();
   mockVerifyConnection.mockClear();
   mockTtsService.speak.mockClear();
+  mockTtsService.stop.mockClear();
+  mockTtsService.reset.mockClear();
+  mockTtsService.initialize.mockClear();
+  mockTtsService.isSynthesizing = false;
+  mockTtsService.isPlaying = false;
+  mockTtsService.status = 'uninitialized';
+  mockTtsService.errorMessage = null;
   mockCampaignService.activeCampaign = undefined;
   mockImageGenerationService.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'SDXL Base' }];
   mockImageGenerationService.loadCheckpoints.mockClear();
@@ -540,6 +558,101 @@ describe('AiSettingsViewModel — AC-6: Voice archetypes', () => {
 
     const [call] = mockTtsService.speak.mock.calls;
     expect(call?.[0].text).toContain('The Sunken Citadel');
+  });
+});
+
+describe('AiSettingsViewModel — voice runtime completion (browser Kokoro)', () => {
+  test('voicePreviewState reflects live ttsService signals, not a fire-and-forget flag', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    expect(vm.voicePreviewState).toEqual({ status: 'idle' });
+
+    mockTtsService.isSynthesizing = true;
+    expect(vm.voicePreviewState).toEqual({ status: 'synthesizing' });
+
+    mockTtsService.isSynthesizing = false;
+    mockTtsService.isPlaying = true;
+    expect(vm.voicePreviewState).toEqual({ status: 'playing' });
+
+    // A resolved speak() promise while audio is still playing must not be
+    // reported as idle/success — the "playing" status remains until
+    // ttsService itself reports playback has ended.
+    vm.setVoiceArchetype('female-warm', 'af_heart');
+    mockTtsService.speak.mockImplementationOnce(async () => {});
+    await vm.previewVoiceArchetype('female-warm');
+    expect(mockTtsService.speak).toHaveBeenCalledTimes(1);
+    expect(vm.voicePreviewState).toEqual({ status: 'playing' });
+
+    mockTtsService.isPlaying = false;
+    expect(vm.voicePreviewState).toEqual({ status: 'idle' });
+  });
+
+  test('stopVoicePreview calls ttsService.stop() and clears any error', async () => {
+    mockTtsService.speak.mockImplementationOnce(async () => {
+      throw new Error('worker error');
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+    vm.setVoiceArchetype('female-warm', 'af_heart');
+    await vm.previewVoiceArchetype('female-warm');
+    expect(vm.voicePreviewState).toEqual({ status: 'error', error: 'worker error' });
+
+    vm.stopVoicePreview();
+
+    expect(mockTtsService.stop).toHaveBeenCalledTimes(1);
+    expect(vm.voicePreviewState).toEqual({ status: 'idle' });
+  });
+
+  test('testVoice speaks the preview line with the default voice (no archetype override)', async () => {
+    mockCampaignService.activeCampaign = undefined;
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testVoice();
+
+    expect(mockTtsService.speak).toHaveBeenCalledTimes(1);
+    const [call] = mockTtsService.speak.mock.calls;
+    expect(call?.[0].voiceId).toBeUndefined();
+    expect(call?.[0].text).toBe(voicePreviewFallbackLine);
+  });
+
+  test('testVoice surfaces a failure through voicePreviewState instead of throwing', async () => {
+    mockTtsService.speak.mockImplementationOnce(async () => {
+      throw new Error('not supported by this provider');
+    });
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.testVoice();
+
+    expect(vm.voicePreviewState).toEqual({
+      status: 'error',
+      error: 'not supported by this provider',
+    });
+  });
+
+  test('voiceRuntimeStatus/voiceRuntimeError mirror the live ttsService state, distinct from download state', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    expect(vm.voiceRuntimeStatus).toBe('uninitialized');
+    expect(vm.voiceRuntimeError).toBeNull();
+
+    mockTtsService.status = 'error';
+    mockTtsService.errorMessage = 'Kokoro worker error';
+    expect(vm.voiceRuntimeStatus).toBe('error');
+    expect(vm.voiceRuntimeError).toBe('Kokoro worker error');
+  });
+
+  test('retryVoiceRuntime resets and re-initializes the TTS runtime without re-downloading', async () => {
+    const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
+    await vm.initialize();
+
+    await vm.retryVoiceRuntime();
+
+    expect(mockTtsService.reset).toHaveBeenCalledTimes(1);
+    expect(mockTtsService.initialize).toHaveBeenCalledTimes(1);
   });
 });
 
