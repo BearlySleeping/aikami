@@ -166,3 +166,17 @@ tasks:
     options:
       cache: false
       runInCI: true
+
+  # C-485 AC-2: scripts:guard depends on this inherited task.
+  guard-orphaned-capability:
+    command: "bun run scripts/src/lib/ops/guard_orphaned_capability.ts"
+    env:
+      AIKAMI_GUARD_PROJECT: "$project"
+    inputs:
+      - "/scripts/src/lib/ops/guard_orphaned_capability.ts"
+      - "/scripts/src/lib/ops/guard_orphaned_capability_baseline.json"
+      - "/apps/frontend/client/src/lib/services/**/*"
+    options:
+      cache: false
+      runInCI: true
+      runFromWorkspaceRoot: true
