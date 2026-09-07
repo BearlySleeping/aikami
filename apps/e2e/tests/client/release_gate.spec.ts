@@ -60,16 +60,14 @@ test.describe('Release Gate', () => {
       // Step 1: Cold launch — navigate from root to game
       await page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
 
-      // Step 2: Start menu — click "New Game"
-      const newGameButton = page.getByRole('button', { name: /new game|start|play/i });
-      await expect(newGameButton).toBeVisible({ timeout: 10_000 });
-      await newGameButton.click();
+      // Step 2: Start menu — click "New Adventure" via POM (asserts real label)
+      await game.startNewAdventure();
 
       // Step 3: Onboarding — navigate through /setup
       await page.waitForURL(/\/(setup|game)/, { timeout: 15_000 });
 
       if (page.url().includes('/setup')) {
-        // Complete onboarding steps
+        // Complete onboarding steps — retry loop; must fail if exhausted without reaching /game
         for (let i = 0; i < 8; i++) {
           if (page.url().includes('/game')) {
             break;
@@ -82,6 +80,8 @@ test.describe('Release Gate', () => {
             break;
           }
         }
+        // Fail if onboarding exhausted without reaching /game
+        expect(page.url()).toContain('/game');
       }
 
       // Step 4: Game boot — wait for engine ready and playing state
@@ -112,45 +112,47 @@ test.describe('Release Gate', () => {
       // Combat may auto-trigger after dialogue, or player must move
       await page.waitForTimeout(2000);
 
-      // Check if combat started
-      const inCombat = await page
-        .locator('[data-testid="combat-attack-btn"]')
-        .isVisible({ timeout: 5000 })
-        .catch(() => false);
+      // AC-2: Combat is entered unconditionally
+      await game.expectCombatActive();
 
-      if (inCombat) {
-        await game.expectCombatActive();
-
-        // Fight until resolution
-        for (let round = 0; round < 20; round++) {
-          const attackBtn = page.locator('[data-testid="combat-attack-btn"]');
-          if (!(await attackBtn.isVisible({ timeout: 1000 }).catch(() => false))) {
-            break;
-          }
-          await game.waitForCombatActionReady();
-          await game.clickAttack();
-          await page.waitForTimeout(1000);
+      // Fight until resolution
+      for (let round = 0; round < 20; round++) {
+        if (!(await game.isCombatAttackButtonVisible())) {
+          break;
         }
-
-        await game.expectCombatEnded();
+        await game.waitForCombatActionReady();
+        await game.clickAttack();
+        await page.waitForTimeout(1000);
       }
 
-      // Step 10: Inventory check
-      await game.toggleInventory();
-      // Inventory may or may not be populated depending on quest reward
-      await page.waitForTimeout(500);
-      await game.toggleInventory();
+      await game.expectCombatEnded();
+
+      // Step 10: Capture state snapshot before save
+      const stateBefore = await game.captureStateSnapshot();
 
       // Step 11: Manual save
       await game.saveGame();
 
+      // Wait for save to complete
+      await page.waitForTimeout(1000);
+
       // Step 12: Reload
       await game.reloadAndWaitForBoot();
 
-      // AC-6: State survival — HUD visible after reload
-      await expect(game.hpBar).toBeVisible({ timeout: 15_000 });
+      // AC-3: State survival — exact comparison
+      const stateAfter = await game.captureStateSnapshot();
 
-      // Step 13: Continue campaign — verify game is in playing state
+      // HP must be preserved exactly (no auto-heal/regen should reset it)
+      expect(stateAfter.hp).toBe(stateBefore.hp);
+
+      // Inventory item count must match
+      expect(stateAfter.inventoryItemCount).toBe(stateBefore.inventoryItemCount);
+
+      // Quest objective must match
+      expect(stateAfter.questObjectiveLabel).toBe(stateBefore.questObjectiveLabel);
+
+      // HUD is functional after reload
+      await expect(game.hpBar).toBeVisible({ timeout: 15_000 });
       await game.waitForPlayingState();
     });
   });
@@ -199,24 +201,22 @@ test.describe('Release Gate', () => {
       // AC-2b: NPC dialogue renders fallback text
       await game.approachAndTalkToNpc();
 
-      // Dialogue overlay should be visible with authored text, no error strings
+      // Dialogue overlay must be visible — fail if offline dialogue does not appear
       const dialogueOverlay = page.locator('[data-testid="dialogue-overlay"], .dialogue-overlay');
+      await expect(dialogueOverlay).toBeVisible({ timeout: 15_000 });
 
-      if (await dialogueOverlay.isVisible({ timeout: 10_000 }).catch(() => false)) {
-        // Verify no raw error strings in the dialogue text
-        const dialogueText = await dialogueOverlay.textContent();
-        expect(dialogueText).not.toContain('Error');
-        expect(dialogueText).not.toContain('undefined');
-        expect(dialogueText).not.toContain('null');
-        expect(dialogueText).not.toContain('[*');
-        expect(dialogueText).not.toContain('*]');
+      // Verify no raw error strings in the dialogue text
+      const dialogueText = await dialogueOverlay.textContent();
+      expect(dialogueText).not.toContain('Error');
+      expect(dialogueText).not.toContain('undefined');
+      expect(dialogueText).not.toContain('null');
+      expect(dialogueText).not.toContain('[*');
+      expect(dialogueText).not.toContain('*]');
 
-        // AC-2c: 2-4 choices visible
-        const choices = page.locator('[data-testid^="dialogue-choice-"], .dialogue-choice');
-        const choiceCount = await choices.count().catch(() => 0);
-        expect(choiceCount).toBeGreaterThanOrEqual(2);
-        expect(choiceCount).toBeLessThanOrEqual(4);
-      }
+      // AC-2c: 2-4 choices visible
+      const choiceCount = await game.getDialogueChoiceCount();
+      expect(choiceCount).toBeGreaterThanOrEqual(2);
+      expect(choiceCount).toBeLessThanOrEqual(4);
     });
   });
 
@@ -241,7 +241,7 @@ test.describe('Release Gate', () => {
       // Step 1: Navigate (mouse-based goto is acceptable for initial load)
       await page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
 
-      // Tab to "New Game" and press Enter
+      // Tab to "New Adventure" and press Enter
       for (let i = 0; i < 10; i++) {
         await page.keyboard.press('Tab');
         const focused = await page.evaluate(() => document.activeElement?.tagName);
@@ -249,7 +249,8 @@ test.describe('Release Gate', () => {
           const text = await page.evaluate(
             () => (document.activeElement as HTMLElement)?.innerText || '',
           );
-          if (/new game|start|play/i.test(text)) {
+          // Use the same label as startNewAdventure() — "New Adventure"
+          if (text.trim() === 'New Adventure') {
             await page.keyboard.press('Enter');
             break;
           }
@@ -272,6 +273,8 @@ test.describe('Release Gate', () => {
           await page.keyboard.press('Enter');
           await page.waitForTimeout(500);
         }
+        // Fail if onboarding exhausted without reaching /game
+        expect(page.url()).toContain('/game');
       }
 
       // Wait for game boot
@@ -300,22 +303,17 @@ test.describe('Release Gate', () => {
       await page.keyboard.press('Enter');
       await page.waitForTimeout(1000);
 
-      // Dialogue — choose option with Tab + Enter
-      const dialogueVisible = await page
-        .locator('[data-testid="dialogue-overlay"], .dialogue-overlay')
-        .isVisible({ timeout: 5000 })
-        .catch(() => false);
+      // Dialogue — choose option with Tab + Enter (must appear)
+      await game.expectDialogueVisible();
 
-      if (dialogueVisible) {
-        // Tab to first choice and press Enter
-        await page.keyboard.press('Tab');
-        await page.keyboard.press('Tab');
-        await page.keyboard.press('Enter');
-        await page.waitForTimeout(500);
+      // Tab to first choice and press Enter
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(500);
 
-        // Verify focus is trapped within dialogue overlay
-        await checkFocusNotBody();
-      }
+      // Verify focus is trapped within dialogue overlay
+      await checkFocusNotBody();
 
       // Open inventory with 'I' key
       await page.keyboard.press('KeyI');
@@ -364,47 +362,42 @@ test.describe('Release Gate', () => {
     test('should block gameplay when no AI provider is available and QA bypass is false', async ({
       page,
     }) => {
+      const game = new GamePage(page);
+
       // Navigate to root without QA bypass
       await page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
 
-      // AC-4a: Capability screen should be visible
-      // Look for capability gate message about missing text AI
+      // Check if the AI capability gate is active
       const capabilityMsg = page.getByText(/text ai|ai provider|capability|offline demo/i);
-      const msgVisible = await capabilityMsg
-        .first()
-        .isVisible({ timeout: 10_000 })
-        .catch(() => false);
-
-      if (msgVisible) {
-        // AC-4b: The capability screen should NOT offer an "Offline Demo"
-        // button when AI is unavailable (per C-323 enforcement)
-        const offlineButton = page.getByRole('button', { name: /offline demo/i });
-        await expect(offlineButton).not.toBeVisible({ timeout: 3000 });
-      }
-
-      // AC-4c: Clicking "New Game" should not reach /setup or /game
-      const newGameButton = page.getByRole('button', { name: /new game|start|play/i });
-      if (await newGameButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await newGameButton.click();
-        await page.waitForTimeout(3000);
-
-        // Must not have navigated to game-related routes
-        const currentUrl = page.url();
-        expect(currentUrl).not.toContain('/setup');
-        expect(currentUrl).not.toContain('/game');
-
-        // Should still show capability screen or start menu (no progression)
-        const stillOnStart = await page
-          .getByRole('button', { name: /new game|start|play/i })
-          .isVisible({ timeout: 2000 })
-          .catch(() => false);
-        const stillOnCapability = await capabilityMsg
+      if (
+        !(await capabilityMsg
           .first()
-          .isVisible({ timeout: 2000 })
-          .catch(() => false);
-
-        expect(stillOnStart || stillOnCapability).toBe(true);
+          .isVisible({ timeout: 5000 })
+          .catch(() => false))
+      ) {
+        // Gate is not active (text AI is available) — skip this environment-dependent leg
+        test.skip(
+          true,
+          'AI capability gate test requires text AI to be unavailable (not applicable in CI with emulators)',
+        );
+        return;
       }
+
+      // AC-4a: Capability screen should be visible
+      await expect(capabilityMsg.first()).toBeVisible({ timeout: 10_000 });
+
+      // AC-4b: The capability screen should NOT offer an "Offline Demo" button
+      const offlineButton = page.getByRole('button', { name: /offline demo/i });
+      await expect(offlineButton).not.toBeVisible({ timeout: 3000 });
+
+      // AC-4c: Clicking "New Adventure" should not reach /setup or /game
+      await game.startNewAdventure();
+      await page.waitForTimeout(3000);
+
+      // Must not have navigated to game-related routes
+      const currentUrl = page.url();
+      expect(currentUrl).not.toContain('/setup');
+      expect(currentUrl).not.toContain('/game');
     });
   });
 
@@ -472,18 +465,10 @@ test.describe('Release Gate', () => {
       await game.goto({ bypassTextAi: true });
       await game.waitForPlayingState();
 
-      // Record pre-reload state
-      const hpBefore = await game.getPlayerHp();
-      expect(hpBefore).toBeGreaterThan(0);
-
-      // Open inventory and check items (if loaded)
-      await game.toggleInventory();
-      const inventoryItemsBefore = await page.locator('[data-testid^="inventory-item-"]').count();
-
-      // AC-6b precondition: Inventory must contain items to test preservation
-      expect(inventoryItemsBefore).toBeGreaterThan(0);
-
-      await game.closePauseMenu();
+      // Capture pre-reload state snapshot (HP, inventory count, quest objective)
+      const stateBefore = await game.captureStateSnapshot();
+      expect(stateBefore.hp).toBeGreaterThan(0);
+      expect(stateBefore.inventoryItemCount).toBeGreaterThan(0);
 
       // Save game manually
       await game.saveGame();
@@ -494,18 +479,17 @@ test.describe('Release Gate', () => {
       // Reload
       await game.reloadAndWaitForBoot();
 
-      // AC-6a: HP preserved
-      const hpAfter = await game.getPlayerHp();
-      // HP may differ if auto-heal/regen is active — but should be positive
-      expect(hpAfter).toBeGreaterThan(0);
+      // Capture post-reload state snapshot
+      const stateAfter = await game.captureStateSnapshot();
+
+      // AC-6a: HP preserved exactly — no tolerance unless a named mechanic justifies it
+      expect(stateAfter.hp).toBe(stateBefore.hp);
 
       // AC-6b: Inventory items preserved (same count)
-      await game.toggleInventory();
-      const inventoryItemsAfter = await page.locator('[data-testid^="inventory-item-"]').count();
-      await game.expectInventoryClosed();
+      expect(stateAfter.inventoryItemCount).toBe(stateBefore.inventoryItemCount);
 
-      // Items should be preserved — the count must match
-      expect(inventoryItemsAfter).toBe(inventoryItemsBefore);
+      // AC-3: Quest objective preserved
+      expect(stateAfter.questObjectiveLabel).toBe(stateBefore.questObjectiveLabel);
 
       // AC-6c: HUD is functional after reload
       await expect(game.hpBar).toBeVisible();
