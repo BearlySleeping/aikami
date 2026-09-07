@@ -86,11 +86,9 @@ describe('resolveNextVersion', () => {
     expect(formatSemver(next)).toBe('0.1.2');
   });
 
-  test('a second staging cut of a claimed version does NOT bump again', () => {
-    // Ten staging cuts before one promote must produce ONE release (0.2.0),
-    // not 0.2.0 through 0.2.9.
+  test('a second staging cut advances beyond the installed rolling version', () => {
     const next = resolveNextVersion({ committed: v(0, 2, 0), lastStable: v(0, 1, 1), bump: null });
-    expect(formatSemver(next)).toBe('0.2.0');
+    expect(formatSemver(next)).toBe('0.2.1');
   });
 
   test('an explicit bump on a claimed version starts a new one', () => {
@@ -111,9 +109,9 @@ describe('resolveNextVersion', () => {
     expect(formatSemver(next)).toBe('1.0.0');
   });
 
-  test('with no stable tag yet, the committed version stands', () => {
+  test('with no stable tag yet, the next cut advances from the committed version', () => {
     const next = resolveNextVersion({ committed: v(0, 1, 0), lastStable: null, bump: null });
-    expect(formatSemver(next)).toBe('0.1.0');
+    expect(formatSemver(next)).toBe('0.1.1');
   });
 });
 

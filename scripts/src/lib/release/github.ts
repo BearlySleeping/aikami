@@ -46,11 +46,8 @@ export const isTreeClean = async (): Promise<boolean> => {
  * rendering, and keeping them would make every PR appear twice.
  */
 export const commitsInRange = async (range: string): Promise<Commit[]> => {
-  const res = await run(['git', 'log', '--no-merges', '--format=%H%x00%s', range]);
-  if (res.code !== 0) {
-    return [];
-  }
-  return res.out
+  const output = await checked(['git', 'log', '--no-merges', '--format=%H%x00%s', range]);
+  return output
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
@@ -69,11 +66,8 @@ export const commitsInRange = async (range: string): Promise<Commit[]> => {
  * is exactly the shape where lexical fallbacks pick the wrong one.
  */
 export const latestStableTag = async (): Promise<{ tag: string; version: Semver } | null> => {
-  const res = await run(['git', 'tag', '--list', 'v*']);
-  if (res.code !== 0) {
-    return null;
-  }
-  const parsed = res.out
+  const output = await checked(['git', 'tag', '--list', 'v*']);
+  const parsed = output
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
@@ -82,6 +76,14 @@ export const latestStableTag = async (): Promise<{ tag: string; version: Semver 
     .sort((a, b) => compareSemverDesc(a.version, b.version));
   return parsed[0] ?? null;
 };
+
+/** True when `tag` exists in the local repository. */
+export const localTagExists = async (tag: string): Promise<boolean> =>
+  (await checked(['git', 'tag', '--list', tag])) !== '';
+
+/** True when `tag` exists on origin; transport failures are not mistaken for absence. */
+export const originTagExists = async (tag: string): Promise<boolean> =>
+  (await checked(['git', 'ls-remote', '--tags', 'origin', `refs/tags/${tag}`])) !== '';
 
 // ── git writes ───────────────────────────────────────────────────────────
 
@@ -112,27 +114,31 @@ export const pushBranch = async (options: { branch: string; dryRun: boolean }): 
 };
 
 /**
- * Point `tag` at `sha`, locally and on the remote, creating or moving it.
+ * Point `tag` at `sha`, locally and on the remote.
  *
- * The staging tag is deliberately rolling, so this force-pushes. Stable `v*`
- * tags are created once and never passed through here with an existing tag —
- * `cutStaging`/`promote` check for collisions before calling.
+ * The staging caller explicitly opts into force because that tag is rolling.
+ * Stable tags never opt in, so git rejects collisions even if a caller misses
+ * a preflight check.
  */
 export const setTag = async (options: {
   tag: string;
   sha: string;
   message: string;
+  force: boolean;
   dryRun: boolean;
 }): Promise<void> => {
-  const { tag, sha, message, dryRun } = options;
+  const { tag, sha, message, force, dryRun } = options;
+  const forceFlag = force ? ' -f' : '';
   if (dryRun) {
     log(
-      `  ${c.dim}[dry-run] git tag -f -a ${tag} ${sha.slice(0, 8)} && git push -f origin ${tag}${c.reset}`,
+      `  ${c.dim}[dry-run] git tag${forceFlag} -a ${tag} ${sha.slice(0, 8)} && git push${forceFlag} origin ${tag}${c.reset}`,
     );
     return;
   }
-  await checked(['git', 'tag', '-f', '-a', tag, sha, '-m', message]);
-  await checked(['git', 'push', '--force', 'origin', `refs/tags/${tag}`]);
+  const tagArgs = ['git', 'tag', ...(force ? ['-f'] : []), '-a', tag, sha, '-m', message];
+  const pushArgs = ['git', 'push', ...(force ? ['--force'] : []), 'origin', `refs/tags/${tag}`];
+  await checked(tagArgs);
+  await checked(pushArgs);
 };
 
 // ── gh release ───────────────────────────────────────────────────────────
@@ -140,6 +146,39 @@ export const setTag = async (options: {
 export const releaseExists = async (tag: string): Promise<boolean> => {
   const res = await run(['gh', 'release', 'view', tag, '--json', 'tagName']);
   return res.code === 0;
+};
+
+/** Metadata needed to restore a published release after replacement fails. */
+export type ReleaseMetadata = {
+  title: string;
+  body: string;
+  prerelease: boolean;
+};
+
+/** Published release metadata, or null only when GitHub reports it missing. */
+export const releaseMetadata = async (tag: string): Promise<ReleaseMetadata | null> => {
+  const res = await run(['gh', 'release', 'view', tag, '--json', 'name,body,isPrerelease']);
+  if (res.code !== 0) {
+    if (/release not found/i.test(res.err + res.out)) {
+      return null;
+    }
+    throw new Error(`gh release view ${tag} failed: ${res.err || res.out}`);
+  }
+
+  const value: unknown = JSON.parse(res.out);
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('name' in value) ||
+    typeof value.name !== 'string' ||
+    !('body' in value) ||
+    typeof value.body !== 'string' ||
+    !('isPrerelease' in value) ||
+    typeof value.isPrerelease !== 'boolean'
+  ) {
+    throw new Error(`gh release view ${tag} returned invalid metadata`);
+  }
+  return { title: value.name, body: value.body, prerelease: value.isPrerelease };
 };
 
 /** The release body for `tag`, or null when there is no such release. */
@@ -202,6 +241,59 @@ export const createRelease = async (options: {
     return;
   }
   await checked(flags);
+};
+
+const delay = async (milliseconds: number): Promise<void> =>
+  new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
+
+/** Wait for the release workflow for `sha` to appear and finish successfully. */
+export const waitForReleaseWorkflow = async (sha: string): Promise<void> => {
+  let runId = '';
+  for (let attempt = 0; attempt < 30; attempt++) {
+    runId = await checked([
+      'gh',
+      'run',
+      'list',
+      '--workflow',
+      'release.yml',
+      '--event',
+      'release',
+      '--commit',
+      sha,
+      '--limit',
+      '1',
+      '--json',
+      'databaseId',
+      '--jq',
+      '.[0].databaseId',
+    ]);
+    if (runId !== '') {
+      break;
+    }
+    await delay(2000);
+  }
+  if (runId === '') {
+    throw new Error(`Timed out waiting for release.yml to start for ${sha.slice(0, 8)}`);
+  }
+  await checked(['gh', 'run', 'watch', runId, '--compact', '--exit-status']);
+};
+
+/** True when a published release exposes an asset with the exact name. */
+export const releaseHasAsset = async (options: {
+  tag: string;
+  asset: string;
+}): Promise<boolean> => {
+  const output = await checked([
+    'gh',
+    'release',
+    'view',
+    options.tag,
+    '--json',
+    'assets',
+    '--jq',
+    '.assets[].name',
+  ]);
+  return output.split('\n').includes(options.asset);
 };
 
 /** URL of a release page, for the CLI's closing summary. */

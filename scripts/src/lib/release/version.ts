@@ -127,11 +127,9 @@ export const writeCommittedVersion = (rootDir: string, version: string): string[
 /**
  * The version a staging cut should claim.
  *
- * The rule that matters: once the committed version is already ahead of the
- * newest stable tag, that version has been *claimed* — every further staging
- * push refines it rather than burning a new number. Ten staging cuts before a
- * promote produce one release, 0.2.0, not 0.2.0 through 0.2.9. An explicit
- * bump is the only way to start a new version.
+ * The committed version is the floor: a repeated cut must move beyond the
+ * version already installed from the rolling staging endpoint, or the updater
+ * will treat newly built artifacts as the same release and ignore them.
  */
 export const resolveNextVersion = (options: {
   committed: Semver;
@@ -144,7 +142,7 @@ export const resolveNextVersion = (options: {
     return bumpSemver(claimed ? committed : lastStable, bump);
   }
   if (claimed) {
-    return committed;
+    return bumpSemver(committed, 'patch');
   }
   return bumpSemver(lastStable, 'patch');
 };

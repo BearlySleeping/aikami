@@ -112,7 +112,7 @@ happens only when a GitHub Release is *published*, which is what
 
 ```bash
 # on staging — cut or refresh the rolling staging release
-bun run release                # keeps refining the claimed version
+bun run release                # advances the rolling staging version
 bun run release --minor        # start a new version instead
 bun run release --dry-run      # print every git/gh mutation, perform none
 
@@ -122,7 +122,7 @@ bun run release --promote
 
 ### The model
 
-```
+```text
 main ──spam──┐
              ├─► staging ──push──► web deploys (automatic)
              │            └─────► bun run release
@@ -146,10 +146,10 @@ is the literal string `staging`, so there is no version to derive from it. A
 semver tag still wins when there is one, so every historical `v*` release
 resolves exactly as before. See `scripts/src/lib/release/version.ts`.
 
-**Staging bundles embed the final version** (`0.2.0`, never `0.2.0-rc.7`), so
-the version a tester reports from the app is the version that ships. Repeated
-staging cuts refine the same claimed version; only an explicit
-`--patch`/`--minor`/`--major` starts a new one.
+**Staging bundles embed a plain semver** (`0.2.0`, never `0.2.0-rc.7`), so the
+version a tester reports is exact. Every repeated staging cut advances the
+patch version, ensuring clients polling the rolling endpoint see an upgrade;
+`--minor` and `--major` select a larger release line explicitly.
 
 **Promote rebuilds; it does not copy the staging bundles.** They embed staging
 `PUBLIC_` vars and the staging updater endpoint, so shipping them as production

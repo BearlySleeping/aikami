@@ -58,14 +58,19 @@ import {
   formatVersionTag,
   isTreeClean,
   latestStableTag,
+  localTagExists,
+  originTagExists,
   pushBranch,
   releaseBody,
   releaseExists,
+  releaseHasAsset,
+  releaseMetadata,
   releaseUrl,
   revParse,
   STAGING_RELEASE_TITLE,
   STAGING_TAG,
   setTag,
+  waitForReleaseWorkflow,
 } from './github';
 import { promoteNotes, renderNotes } from './notes';
 import {
@@ -183,20 +188,46 @@ const cutStaging = async (options: {
 
   step('Publishing staging release');
   const sha = dryRun ? 'HEAD' : await revParse('HEAD');
-  await setTag({ tag: STAGING_TAG, sha, message: `Staging ${version}`, dryRun });
+  await setTag({ tag: STAGING_TAG, sha, message: `Staging ${version}`, force: true, dryRun });
   // Delete-then-create rather than edit: only a newly *published* release
   // fires release.yml's `release: published` trigger. See createRelease.
-  if (await releaseExists(STAGING_TAG)) {
+  const previousRelease = await releaseMetadata(STAGING_TAG);
+  if (previousRelease !== null) {
     await deleteRelease({ tag: STAGING_TAG, dryRun });
   }
-  await createRelease({
-    tag: STAGING_TAG,
-    title: `${STAGING_RELEASE_TITLE} — ${version}`,
-    body: `> Rolling staging build of \`${version}\`. Not a production release.\n\n${body}`,
-    prerelease: true,
-    latest: false,
-    dryRun,
-  });
+  try {
+    await createRelease({
+      tag: STAGING_TAG,
+      title: `${STAGING_RELEASE_TITLE} — ${version}`,
+      body: `> Rolling staging build of \`${version}\`. Not a production release.\n\n${body}`,
+      prerelease: true,
+      latest: false,
+      dryRun,
+    });
+  } catch (createError) {
+    if (previousRelease === null || dryRun) {
+      throw createError;
+    }
+    warn('Replacement failed after deleting the staging release; restoring prior metadata.');
+    await createRelease({
+      tag: STAGING_TAG,
+      title: previousRelease.title,
+      body: previousRelease.body,
+      prerelease: previousRelease.prerelease,
+      latest: false,
+      dryRun: false,
+    });
+    await waitForReleaseWorkflow(sha);
+    if (!(await releaseHasAsset({ tag: STAGING_TAG, asset: 'latest.json' }))) {
+      throw new Error(
+        `Restored ${STAGING_TAG} release completed without latest.json; original replacement error: ${createError instanceof Error ? createError.message : String(createError)}`,
+      );
+    }
+    ok(
+      'Previous staging release metadata restored; rebuild completed and latest.json is available.',
+    );
+    throw createError;
+  }
 
   ok(
     `Staging release ${version} published — ${dryRun ? '(dry run)' : await releaseUrl(STAGING_TAG)}`,
@@ -235,9 +266,14 @@ const promote = async (options: { dryRun: boolean; autoYes: boolean }): Promise<
     throw new Error(`Committed version "${versionRaw}" is not semver.`);
   }
   const tag = formatVersionTag(version);
-  if (await releaseExists(tag)) {
+  const [localTagPresent, originTagPresent, publishedReleasePresent] = await Promise.all([
+    localTagExists(tag),
+    originTagExists(tag),
+    releaseExists(tag),
+  ]);
+  if (localTagPresent || originTagPresent || publishedReleasePresent) {
     throw new Error(
-      `Release ${tag} already exists. Cut a new staging version (\`bun run release --patch\`) instead of re-promoting.`,
+      `${tag} already exists locally, on origin, or as a release. Cut a new staging version instead of re-promoting.`,
     );
   }
 
@@ -267,7 +303,13 @@ const promote = async (options: { dryRun: boolean; autoYes: boolean }): Promise<
 
   step('Publishing production release');
   const sha = dryRun ? 'HEAD' : await revParse('HEAD');
-  await setTag({ tag, sha, message: `Release ${formatSemver(version)}`, dryRun });
+  await setTag({
+    tag,
+    sha,
+    message: `Release ${formatSemver(version)}`,
+    force: false,
+    dryRun,
+  });
   await createRelease({
     tag,
     title: `Aikami ${formatSemver(version)}`,
