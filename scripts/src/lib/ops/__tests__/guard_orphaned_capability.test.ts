@@ -26,7 +26,8 @@ describe('guard_orphaned_capability_baseline.json', () => {
     const content = readFileSync(baselinePath, 'utf-8');
     const baseline = JSON.parse(content);
 
-    const entry = baseline['apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts'];
+    const entry =
+      baseline['apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts'];
     expect(entry).toBeDefined();
     expect(entry.orphaned).toBeDefined();
     expect(Array.isArray(entry.orphaned)).toBe(true);
@@ -52,7 +53,8 @@ describe('guard_orphaned_capability_baseline.json', () => {
     const content = readFileSync(baselinePath, 'utf-8');
     const baseline = JSON.parse(content);
 
-    const entry = baseline['apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts'];
+    const entry =
+      baseline['apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts'];
     expect(entry.orphaned).toContain('AutonomousMessageServiceInterface');
     expect(entry.orphaned).toContain('AutonomousMessageServiceOptions');
   });
@@ -101,6 +103,8 @@ describe('production file detection (isProductionFile equivalent)', () => {
   });
 
   test('view model file is production', () => {
-    expect(isProd('apps/frontend/client/src/lib/views/feature/feature_view_model.svelte.ts')).toBe(true);
+    expect(isProd('apps/frontend/client/src/lib/views/feature/feature_view_model.svelte.ts')).toBe(
+      true,
+    );
   });
 });

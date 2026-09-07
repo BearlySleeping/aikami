@@ -6,12 +6,12 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  type ContractInfo,
+  checkProductionPath,
   classifyProductionPath,
   hasWholeContractOptOut,
-  parseTableRows,
-  checkProductionPath,
   PRODUCTION_PATH_LEGACY_EXEMPTIONS,
-  type ContractInfo,
+  parseTableRows,
 } from '../lint_contracts.ts';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -77,7 +77,11 @@ describe('classifyProductionPath', () => {
   });
 
   test('valid file.ts#symbol format returns null', () => {
-    expect(classifyProductionPath('apps/frontend/client/src/lib/services/foo_service.svelte.ts#fooMethod')).toBeNull();
+    expect(
+      classifyProductionPath(
+        'apps/frontend/client/src/lib/services/foo_service.svelte.ts#fooMethod',
+      ),
+    ).toBeNull();
   });
 
   test('valid tooling command format returns null', () => {

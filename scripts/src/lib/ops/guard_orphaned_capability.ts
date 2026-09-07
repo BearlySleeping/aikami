@@ -81,10 +81,11 @@ const collectServiceFiles = (): string[] => {
           if (!EXCLUDED_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
             walk(fullPath);
           }
-        } else if (entry.isFile()) {
-          if (entry.name.endsWith('.ts') || entry.name.endsWith('.svelte')) {
-            results.push(fullPath);
-          }
+        } else if (
+          entry.isFile() &&
+          (entry.name.endsWith('.ts') || entry.name.endsWith('.svelte'))
+        ) {
+          results.push(fullPath);
         }
       }
     } catch {
@@ -113,7 +114,10 @@ const extractExports = (content: string): string[] => {
   while (true) {
     m = bracketRe.exec(content);
     if (m === null) break;
-    const names = (m[1] ?? '').split(',').map((s) => s.trim()).filter((s) => s.length > 0 && !s.includes(':'));
+    const names = (m[1] ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && !s.includes(':'));
     for (const name of names) {
       // Handle `symbolName as alias` — use the original name
       const asMatch = name.match(/^(\w+)\s+as\s+/);
@@ -151,10 +155,7 @@ const isProductionFile = (filePath: string): boolean => {
  * Counts the number of files (not occurrences) that reference the symbol
  * outside of its own declaration file.
  */
-const findProductionReferences = (options: {
-  symbol: string;
-  declaringFile: string;
-}): string[] => {
+const findProductionReferences = (options: { symbol: string; declaringFile: string }): string[] => {
   const { symbol, declaringFile } = options;
   const refFiles: string[] = [];
   const normalizedDeclaring = declaringFile.replace(/\\/g, '/');
@@ -301,12 +302,16 @@ const main = () => {
         // Changed — could be improvement or regression or same-count replacement
         if (report.symbols.length < baselineEntry.orphaned.length) {
           // Improvement — must be locked in
-          console.log(`⚠️  IMPROVEMENT NOT LOCKED: ${report.file} — ${baselineEntry.orphaned.length} → ${report.symbols.length}. Run --update-baseline to lock.`);
+          console.log(
+            `⚠️  IMPROVEMENT NOT LOCKED: ${report.file} — ${baselineEntry.orphaned.length} → ${report.symbols.length}. Run --update-baseline to lock.`,
+          );
           annotations.push(`warning:Improved but not locked: ${report.file}`);
           exitCode = 1;
         } else {
           // Regression or same-count replacement
-          console.log(`❌ REGRESSION: ${report.file} — baseline had ${baselineEntry.orphaned.join(', ')}; found ${report.symbols.join(', ')}`);
+          console.log(
+            `❌ REGRESSION: ${report.file} — baseline had ${baselineEntry.orphaned.join(', ')}; found ${report.symbols.join(', ')}`,
+          );
           annotations.push(`error:Regression in ${report.file}: ${report.symbols.join(', ')}`);
           exitCode = 1;
         }
@@ -319,7 +324,9 @@ const main = () => {
     const report = allReports.find((r) => r.file === filePath);
     if (!report) {
       // File no longer exists or has no orphans — improvement
-      console.log(`⚠️  IMPROVEMENT NOT LOCKED: ${filePath} — all ${entry.orphaned.length} orphan(s) resolved. Run --update-baseline to lock.`);
+      console.log(
+        `⚠️  IMPROVEMENT NOT LOCKED: ${filePath} — all ${entry.orphaned.length} orphan(s) resolved. Run --update-baseline to lock.`,
+      );
       annotations.push(`warning:Resolved but not locked: ${filePath}`);
       exitCode = 1;
     }

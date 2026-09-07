@@ -142,9 +142,7 @@ const symbolExists = (ref: string): boolean => {
     );
     if (exportRe.test(content) || reExportRe.test(content)) return true;
     // Also check named exports at the end: `export { ..., symbolName, ... }`
-    const namedExportRe = new RegExp(
-      `export\\s+\\{[^}]*\\b${escapeRegex(symbolName)}\\b[^}]*\\}`,
-    );
+    const namedExportRe = new RegExp(`export\\s+\\{[^}]*\\b${escapeRegex(symbolName)}\\b[^}]*\\}`);
     return namedExportRe.test(content);
   } catch {
     return false;
@@ -192,7 +190,7 @@ export const parseTableRows = (tableText: string): string[][] => {
       // Split on pipes not preceded by backslash, skip leading/trailing empty cells
       const rawCells: string[] = [];
       let current = '';
-      let escaped = false;
+      const escaped = false;
       for (let i = 0; i < line.length; i++) {
         const ch = line[i];
         if (ch === '\\' && i + 1 < line.length && line[i + 1] === '|') {
@@ -227,13 +225,16 @@ export const classifyProductionPath = (cell: string): string | null => {
   // Bare N/A
   if (/^N\/A\s*$/i.test(trimmed)) return 'Bare N/A without reason \u2014 use N/A \u2014 <reason>';
   // Template placeholder: {N/A | /game/...}
-  if (/^\{[^}]+\}$/.test(trimmed)) return 'Template placeholder \u2014 fill in a real production path';
+  if (/^\{[^}]+\}$/.test(trimmed))
+    return 'Template placeholder \u2014 fill in a real production path';
   // TBD marker
   if (/\bTBD\b/i.test(trimmed)) return 'TBD \u2014 fill in a real production path';
   // Whitespace-only or just dashes
-  if (/^[\s\u2014\-]+$/.test(trimmed)) return 'Invalid Production Path \u2014 must be a resolvable reference';
+  if (/^[\s\u2014-]+$/.test(trimmed))
+    return 'Invalid Production Path \u2014 must be a resolvable reference';
   // N/A \u2014 <reason> \u2014 only valid as whole-contract opt-out in Metadata, not at row level
-  if (/^N\/A\s*[\u2014\-]\s*\S+/i.test(trimmed)) return 'Row-level N/A \u2014 <reason> is not accepted; use Metadata-level opt-out instead';
+  if (/^N\/A\s*[\u2014-]\s*\S+/i.test(trimmed))
+    return 'Row-level N/A \u2014 <reason> is not accepted; use Metadata-level opt-out instead';
   // Valid format: tooling: `<command>`
   if (/^tooling:\s*`/.test(trimmed)) return null;
   // Valid format: route reference starting with /
@@ -250,7 +251,7 @@ export const classifyProductionPath = (cell: string): string | null => {
 export const hasWholeContractOptOut = (info: ContractInfo): boolean => {
   // Match: | **Production Surface** | none — <reason> |
   // Where <reason> is non-empty (at least one non-space, non-pipe char)
-  const optOutRe = /\|\s*\*\*Production Surface\*\*\s*\|\s*none\s*[\u2014\-]\s+[^|\s][^|]*\s*\|/i;
+  const optOutRe = /\|\s*\*\*Production Surface\*\*\s*\|\s*none\s*[\u2014-]\s+[^|\s][^|]*\s*\|/i;
   return optOutRe.test(info.content);
 };
 
@@ -354,30 +355,24 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
       const cmd = toolingMatch[1] ?? '';
       if (toolingCommandExists(cmd)) {
         resolved = true;
-      } else {
-        if (acId) {
-          acErrors.push(`${acId}: Tooling command not found: \`${cmd}\``);
-        }
+      } else if (acId) {
+        acErrors.push(`${acId}: Tooling command not found: \`${cmd}\``);
       }
     }
     // Route reference: /game/...
     else if (/^\/\w+/.test(pathCell)) {
       if (routeExists(pathCell)) {
         resolved = true;
-      } else {
-        if (acId) {
-          acErrors.push(`${acId}: Route not found: ${pathCell}`);
-        }
+      } else if (acId) {
+        acErrors.push(`${acId}: Route not found: ${pathCell}`);
       }
     }
     // file.ts#exportedSymbol
     else if (/\.[jt]sx?#\w+/.test(pathCell)) {
       if (symbolExists(pathCell)) {
         resolved = true;
-      } else {
-        if (acId) {
-          acErrors.push(`${acId}: Symbol not found: ${pathCell}`);
-        }
+      } else if (acId) {
+        acErrors.push(`${acId}: Symbol not found: ${pathCell}`);
       }
     }
     // Named component/ViewModel reference \u2014 accept as resolved
