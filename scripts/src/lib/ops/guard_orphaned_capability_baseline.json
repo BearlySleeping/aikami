@@ -1,0 +1,711 @@
+{
+  "apps/frontend/client/src/lib/services/ai/clients/ai/types.ts": {
+    "orphaned": [
+      "GeminiClientOptions",
+      "OpenAiClientOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/clients/api/types.ts": {
+    "orphaned": [
+      "RetryConfig"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/clients/api/errors.ts": {
+    "orphaned": [
+      "ApiErrorCode"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/ai_gateway_service.svelte.ts": {
+    "orphaned": [
+      "AiGatewayServiceInterface",
+      "AiGatewayServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/ai_config.ts": {
+    "orphaned": [
+      "createConfiguredAiClient",
+      "getConfiguredProvider"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/ai_service.svelte.ts": {
+    "orphaned": [
+      "AIServiceInterface"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/sidecar_service.svelte.ts": {
+    "orphaned": [
+      "SidecarServiceInterface",
+      "SidecarServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/text_generation_service.svelte.ts": {
+    "orphaned": [
+      "TextGenerationServiceInterface",
+      "TextGenerationServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/local_task_pool_service.svelte.ts": {
+    "orphaned": [
+      "LocalTaskPoolServiceInterface"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/connection_verifier.ts": {
+    "orphaned": [
+      "FetchTransport",
+      "VerifyConnectionOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/stream_orchestrator_service.svelte.ts": {
+    "orphaned": [
+      "StreamOrchestratorServiceInterface",
+      "StreamOrchestratorServiceOptions",
+      "getStreamOrchestrator"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/ai/sentence_boundary_chunker.ts": {
+    "orphaned": [
+      "ChunkEvent",
+      "ChunkerOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/backup/backup_service.svelte.ts": {
+    "orphaned": [
+      "BackupServiceInterface",
+      "BackupServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts": {
+    "orphaned": [
+      "CapabilityServiceInterface",
+      "CapabilityServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/storage/emulator_seed_service.svelte.ts": {
+    "orphaned": [
+      "EmulatorSeedServiceInterface",
+      "EmulatorSeedServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/pixi_texture_injector.ts": {
+    "orphaned": [
+      "PixiTextureInjector",
+      "PixiTextureInjectorOptions",
+      "getPixiTextureInjector"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/bridge_listeners.ts": {
+    "orphaned": [
+      "SetupBridgeListenersParams"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/prop_frame_resolver.ts": {
+    "orphaned": [
+      "BuildPropFrameResolverOptions",
+      "PropFrameResolverPackManifest"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/world_state_service.svelte.ts": {
+    "orphaned": [
+      "WorldStateServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/party_follow_service.svelte.ts": {
+    "orphaned": [
+      "PartyFollowServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/time_service.svelte.ts": {
+    "orphaned": [
+      "TimeServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": {
+    "orphaned": [
+      "QuestStateServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/session_service.svelte.ts": {
+    "orphaned": [
+      "SessionServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/quest_overlay_service.svelte.ts": {
+    "orphaned": [
+      "QuestOverlayServiceInterface",
+      "QuestOverlayServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/player_state_service.svelte.ts": {
+    "orphaned": [
+      "PlayerStateServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
+    "orphaned": [
+      "GameBootServiceInterface",
+      "GameBootServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/game_save_envelope.ts": {
+    "orphaned": [
+      "ParsedSavePayloadEnvelope"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/relationship_service.svelte.ts": {
+    "orphaned": [
+      "RelationshipServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/gameplay_settings.ts": {
+    "orphaned": [
+      "DEFAULT_DIFFICULTY"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/input_action_service.svelte.ts": {
+    "orphaned": [
+      "InputActionServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/game_save_service.svelte.ts": {
+    "orphaned": [
+      "GameSaveServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts": {
+    "orphaned": [
+      "GameCompositionRoot",
+      "GameCompositionRootInterface",
+      "GameCompositionRootOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts": {
+    "orphaned": [
+      "OnboardingHintService",
+      "OnboardingHintServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts": {
+    "orphaned": [
+      "DialogueTimeoutError",
+      "NpcDialogueServiceOptions",
+      "buildIntentNarrativeSystemPrompt"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/idle_detection_service.svelte.ts": {
+    "orphaned": [
+      "IdleDetectionServiceInterface"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts": {
+    "orphaned": [
+      "EquipmentServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
+    "orphaned": [
+      "GameEngineServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/player_journal_service.svelte.ts": {
+    "orphaned": [
+      "PlayerJournalService",
+      "PlayerJournalServiceInterface",
+      "PlayerJournalServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts": {
+    "orphaned": [
+      "GameStateServiceInterface",
+      "GameStateServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/quest_service.svelte.ts": {
+    "orphaned": [
+      "QuestServiceInterface",
+      "QuestServiceOptions",
+      "questService"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
+    "orphaned": [
+      "GameOverlayServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/vendor_service.svelte.ts": {
+    "orphaned": [
+      "VendorServiceInterface",
+      "VendorServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts": {
+    "orphaned": [
+      "PartyRosterServiceInterface",
+      "PartyRosterServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts": {
+    "orphaned": [
+      "AssetManagerInterface",
+      "AssetManagerOptions",
+      "AssetReconcileResult"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/assets/asset_prefetch_service.svelte.ts": {
+    "orphaned": [
+      "AssetPrefetchServiceInterface",
+      "AssetPrefetchServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/assets/registry_resolver.ts": {
+    "orphaned": [
+      "createAssetTagResolver"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/assets/blob_url_loader.ts": {
+    "orphaned": [
+      "registerBlobUrlTextureParser"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/image/engine/image_engine_factory.svelte.ts": {
+    "orphaned": [
+      "detectImageEngine",
+      "getEffectiveImageEngineId"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts": {
+    "orphaned": [
+      "ImageGenerationServiceInterface"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/image/style_profile_service.svelte.ts": {
+    "orphaned": [
+      "StyleProfileService",
+      "StyleProfileServiceInterface",
+      "StyleProfileServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/image/gallery_service.svelte.ts": {
+    "orphaned": [
+      "GalleryService",
+      "GalleryServiceInterface",
+      "GalleryServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/image/contextual_trigger_service.svelte.ts": {
+    "orphaned": [
+      "ContextualTriggerService",
+      "ContextualTriggerServiceInterface",
+      "ContextualTriggerServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/chat/chat_storage.svelte.ts": {
+    "orphaned": [
+      "ChatStorageInterface",
+      "ChatStorageOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/chat/context_builder.ts": {
+    "orphaned": [
+      "SlidingWindowContextOptions",
+      "buildSlidingWindowContext"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/chat/message_branch_store.svelte.ts": {
+    "orphaned": [
+      "MessageBranchStoreInterface",
+      "MessageBranchStoreOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/chat/chat_link_storage.svelte.ts": {
+    "orphaned": [
+      "ChatLinkStorageInterface",
+      "ChatLinkStorageOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/chat/choice_history_store.svelte.ts": {
+    "orphaned": [
+      "ChoiceHistoryStore",
+      "ChoiceHistoryStoreInterface",
+      "ChoiceHistoryStoreOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/chat/chat.svelte.ts": {
+    "orphaned": [
+      "ChatServiceInterface",
+      "ChatServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/chat/conversation_storage.svelte.ts": {
+    "orphaned": [
+      "SaveDialogueTurnOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/chat/draft_store.ts": {
+    "orphaned": [
+      "DraftStoreInterface"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/chat/connected_chats_service.svelte.ts": {
+    "orphaned": [
+      "ConnectedChatsServiceInterface",
+      "ConnectedChatsServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/dice/dice_service.svelte.ts": {
+    "orphaned": [
+      "DiceServiceInterface",
+      "DiceServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/persona/persona_creation_text_stream.svelte.ts": {
+    "orphaned": [
+      "PersonaCreationTextStreamInterface"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/persona/persona_creation_service.svelte.ts": {
+    "orphaned": [
+      "PersonaCreationServiceInterface",
+      "PersonaCreationServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/persona/persona_service.svelte.ts": {
+    "orphaned": [
+      "PersonaServiceInterface",
+      "PersonaServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/persona/persona_storage.svelte.ts": {
+    "orphaned": [
+      "PersonaStorageInterface",
+      "PersonaStorageOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/expression/expression_asset_resolver.ts": {
+    "orphaned": [
+      "ExpressionAssetEntry",
+      "ExpressionAssetResolverOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/app/privacy_settings.ts": {
+    "orphaned": [
+      "AI_PRIVACY_SETTINGS_STORAGE_KEY"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/onboarding/onboarding.svelte.ts": {
+    "orphaned": [
+      "OnboardingServiceInterface",
+      "OnboardingServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/gm/session_summary_service.svelte.ts": {
+    "orphaned": [
+      "SessionSummaryService",
+      "SessionSummaryServiceInterface",
+      "SessionSummaryServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/gm/narrative_director_service.svelte.ts": {
+    "orphaned": [
+      "NarrativeDirectorService",
+      "NarrativeDirectorServiceInterface",
+      "NarrativeDirectorServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/gm/gm_types.ts": {
+    "orphaned": [
+      "GmPartyMemberContext",
+      "PromptSectionPriority"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/gm/impersonation_service.svelte.ts": {
+    "orphaned": [
+      "ImpersonationService",
+      "ImpersonationServiceInterface",
+      "ImpersonationServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts": {
+    "orphaned": [
+      "GmPromptServiceInterface",
+      "GmPromptServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/worldgen/world_gen_seeding_service.svelte.ts": {
+    "orphaned": [
+      "WorldGenSeedingService",
+      "WorldGenSeedingServiceInterface",
+      "WorldGenSeedingServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/updater/updater_service.svelte.ts": {
+    "orphaned": [
+      "UpdaterService",
+      "UpdaterServiceInterface",
+      "UpdaterServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/character/character.svelte.ts": {
+    "orphaned": [
+      "CharacterServiceInterface",
+      "CharacterServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/character/character_importer.ts": {
+    "orphaned": [
+      "CharacterImportResult"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/character/ability_score_inference.ts": {
+    "orphaned": [
+      "FLAT_DEFAULT_SCORES",
+      "STANDARD_ARRAY_SCORES"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/character/png_writer.ts": {
+    "orphaned": [
+      "buildTextChunk",
+      "crc32",
+      "embedTextChunk"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/character/card_compiler.ts": {
+    "orphaned": [
+      "CardCompilationResult",
+      "compileCardToNpc"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/character/character_repository.svelte.ts": {
+    "orphaned": [
+      "CharacterRepositoryInterface",
+      "LocalCharacterEntry",
+      "characterRepository"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/character/character_book_mapper.ts": {
+    "orphaned": [
+      "BookImportSummary"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts": {
+    "orphaned": [
+      "AutonomousMessageServiceInterface",
+      "AutonomousMessageServiceOptions"
+    ],
+    "_comment": "C-456 shipped selectGroupParticipants and generateMultiNpcResponses with no production caller (methods on exported class, not top-level exports). C-493 wires them into the party path; remove this entry when it lands."
+  },
+  "apps/frontend/client/src/lib/services/npc/npc_schedule_storage.svelte.ts": {
+    "orphaned": [
+      "NpcScheduleStorageInterface"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/npc/npc_storage.svelte.ts": {
+    "orphaned": [
+      "NpcStorageInterface",
+      "NpcStorageOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/npc/npc_schedule_service.svelte.ts": {
+    "orphaned": [
+      "NpcScheduleServiceInterface"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/npc/npc_awareness_service.svelte.ts": {
+    "orphaned": [
+      "NpcAwarenessServiceInterface",
+      "NpcAwarenessServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/npc/npc_service.svelte.ts": {
+    "orphaned": [
+      "NpcServiceInterface",
+      "NpcServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/lorebook/lorebook_store.svelte.ts": {
+    "orphaned": [
+      "LorebookStoreInterface",
+      "LorebookStoreOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/game_state_sync.svelte.ts": {
+    "orphaned": [
+      "GameStateSyncServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts": {
+    "orphaned": [
+      "FALLBACK_TRACK_ID"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts": {
+    "orphaned": [
+      "AudioServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/audio/track_registry_service.svelte.ts": {
+    "orphaned": [
+      "TrackRegistryServiceInterface",
+      "TrackRegistryServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/audio/voice_model_service.svelte.ts": {
+    "orphaned": [
+      "VoiceModelServiceInterface",
+      "VoiceModelServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/audio/audio_asset_resolver.ts": {
+    "orphaned": [
+      "resolveAmbientUrl",
+      "resolveBgmUrl",
+      "resolveSfxUrl"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/audio/audio_queue_player.ts": {
+    "orphaned": [
+      "AudioQueuePlayerOptions",
+      "getAudioQueuePlayer"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": {
+    "orphaned": [
+      "TtsServiceInterface",
+      "TtsServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/audio/music_player_service.svelte.ts": {
+    "orphaned": [
+      "MusicPlayerServiceInterface",
+      "MusicPlayerServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts": {
+    "orphaned": [
+      "CampaignServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/campaign/pack_registry_service.svelte.ts": {
+    "orphaned": [
+      "PackRegistryServiceInterface",
+      "PackRegistryServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/campaign/campaign_storage.svelte.ts": {
+    "orphaned": [
+      "CampaignStorageInterface"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/campaign/boot_state_machine.ts": {
+    "orphaned": [
+      "CampaignStateEvent"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/agent/agent_schemas.ts": {
+    "orphaned": [
+      "MusicCueSchema",
+      "type MusicCueValidated"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/agent/agent_registry_service.svelte.ts": {
+    "orphaned": [
+      "exportable"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/agent/agents/battle_trigger_agent.ts": {
+    "orphaned": [
+      "BattleTriggerOutput"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/agent/agents/relationship_agent.ts": {
+    "orphaned": [
+      "RelationshipOutput"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/agent/agents/cyoa_agent.ts": {
+    "orphaned": [
+      "sanitizeChoices"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/agent/agent_registry_storage.svelte.ts": {
+    "orphaned": [
+      "AgentRegistryStorageOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/config/provider_endpoints.ts": {
+    "orphaned": [
+      "ModelFetchConfig"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/config/openrouter_models.ts": {
+    "orphaned": [
+      "clearOpenRouterCache"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/config/config_migration.ts": {
+    "orphaned": [
+      "MigrationOptions",
+      "V2ToV3MigrationOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": {
+    "orphaned": [
+      "ConfigServiceInterface",
+      "ConfigServiceOptions",
+      "DEFAULT_VOICE_ARCHETYPES",
+      "EMBEDDING_MODELS",
+      "EMOTION_METHODS",
+      "MEMORY_TYPES"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/config/local_service_detector.svelte.ts": {
+    "orphaned": [
+      "LocalServiceDetectorInterface",
+      "LocalServiceStatus",
+      "ServiceEndpoint",
+      "ServiceStatus"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/config/macro_preset_store.svelte.ts": {
+    "orphaned": [
+      "MacroPresetStore",
+      "createMacroPresetStore"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/config/runtime_config_service.svelte.ts": {
+    "orphaned": [
+      "RuntimeConfigServiceInterface",
+      "RuntimeConfigServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/auth/better_auth_client.ts": {
+    "orphaned": [
+      "DeviceHandoffStart"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/auth/desktop_session_store.ts": {
+    "orphaned": [
+      "resetDesktopSessionForTests"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/export/export_service.svelte.ts": {
+    "orphaned": [
+      "ExportServiceInterface",
+      "ExportServiceOptions"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/export/formatters/jsonl_formatter.ts": {
+    "orphaned": [
+      "ExportChatMetadata"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/export/formatters/epub_formatter.ts": {
+    "orphaned": [
+      "EpubExportInput"
+    ]
+  },
+  "apps/frontend/client/src/lib/services/export/formatters/plaintext_formatter.ts": {
+    "orphaned": [
+      "PlainTextExportOptions"
+    ]
+  }
+}

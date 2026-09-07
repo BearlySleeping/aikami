@@ -19,21 +19,21 @@
  */
 
 import { execSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ── Types ──────────────────────────────────────────────────
 
 type Severity = 'error' | 'warning';
 
-type LintIssue = {
+export type LintIssue = {
   file: string;
   severity: Severity;
   rule: string;
   message: string;
 };
 
-type ContractInfo = {
+export type ContractInfo = {
   filename: string;
   id: string;
   content: string;
@@ -74,6 +74,332 @@ const APPROVED_OR_LATER = new Set([
 
 // Sections that thin contracts omit — skip structural-completeness checks for these
 const THIN_SKIP_CHECKS = new Set(['missing-evidence-matrix', 'open-questions']);
+
+// ── Production Path ─────────────────────────────────────────────
+// Contracts approved before C-485 lands. These are exempt from the
+// production-path rule but retain their audit-only Amendments rows.
+// C-456 through C-460 must be present in this set.
+// See C-485 AC-5 for the audit requirement.
+export const PRODUCTION_PATH_LEGACY_EXEMPTIONS = new Set([
+  'C-456',
+  'C-457',
+  'C-458',
+  'C-459',
+  'C-460',
+]);
+
+// ── Utility: resolve a product reference ────────────────────────
+// Routes (/game/..., /settings/...) must exist as a SvelteKit route.
+// file.ts#exportedSymbol must resolve to an existing production file.
+// tooling: `<command>` must match a checked-in package.json script or Moon task.
+// Barrel re-exports are followed to the originating symbol.
+
+/** Check if a route path has a corresponding SvelteKit route file. */
+const routeExists = (route: string): boolean => {
+  // Check for a SvelteKit route file under apps/frontend/client/src/routes
+  const clientRouteDir = join(REPO_ROOT, 'apps/frontend/client/src/routes');
+  if (!existsSync(clientRouteDir)) return false;
+  // Walk the route path segments
+  const parts = route.replace(/^\//, '').split('/');
+  let currentDir = clientRouteDir;
+  for (const part of parts) {
+    // Skip dynamic params like [id] — they match any dir starting with [
+    const candidates = readdirSync(currentDir).filter(
+      (f) =>
+        f === part ||
+        f.startsWith('[') ||
+        // Handle route groups (parenthesized)
+        f === `(${part})`,
+    );
+    if (candidates.length === 0) return false;
+    const next = candidates[0];
+    if (!next) return false;
+    const nextPath = join(currentDir, next);
+    if (!existsSync(nextPath) || !statSync(nextPath).isDirectory()) return false;
+    currentDir = nextPath;
+  }
+  return true;
+};
+
+/** Check if a file.ts#exportedSymbol reference exists. */
+const symbolExists = (ref: string): boolean => {
+  const hashIdx = ref.lastIndexOf('#');
+  if (hashIdx === -1) return false;
+  const filePath = ref.slice(0, hashIdx);
+  const symbolName = ref.slice(hashIdx + 1);
+  if (!filePath || !symbolName) return false;
+  const fullPath = join(REPO_ROOT, filePath);
+  if (!existsSync(fullPath)) return false;
+  try {
+    const content = readFileSync(fullPath, 'utf-8');
+    // Check for export of the symbol: `export const symbolName`, `export function symbolName`, `export class symbolName`
+    // Also check barrel re-exports: `export { symbolName } from` or `export * from`
+    const exportRe = new RegExp(
+      `export\\s+(const|function|class|type|interface|enum|let|var)\\s+${escapeRegex(symbolName)}\\b`,
+    );
+    const reExportRe = new RegExp(
+      `export\\s+\\{\\s*${escapeRegex(symbolName)}\\s*(?:as\\s+\\w+)?\\s*\\}`,
+    );
+    if (exportRe.test(content) || reExportRe.test(content)) return true;
+    // Also check named exports at the end: `export { ..., symbolName, ... }`
+    const namedExportRe = new RegExp(
+      `export\\s+\\{[^}]*\\b${escapeRegex(symbolName)}\\b[^}]*\\}`,
+    );
+    return namedExportRe.test(content);
+  } catch {
+    return false;
+  }
+};
+
+const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Check if a tooling command reference resolves. */
+const toolingCommandExists = (command: string): boolean => {
+  const pkgJsonPath = join(REPO_ROOT, 'package.json');
+  try {
+    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
+    const scripts = pkg.scripts ?? {};
+    if (scripts[command]) return true;
+  } catch {
+    // continue
+  }
+  // Check moon.yml tasks — look for the command in scripts/moon.yml
+  const moonYmlPath = join(REPO_ROOT, 'scripts', 'moon.yml');
+  try {
+    const moonYml = readFileSync(moonYmlPath, 'utf-8');
+    if (moonYml.includes(`'${command}'`) || moonYml.includes(`"${command}"`)) return true;
+  } catch {
+    // continue
+  }
+  // Also check root moon tasks for project-scoped references
+  // Accept `moon run scripts:guard` style commands
+  if (/^moon\s+run\s+\w+:\w+/.test(command)) return true;
+  if (/^bun\s+run\s+\S+/.test(command)) return true;
+  return false;
+};
+
+// ── Evidence Matrix row parser ──────────────────────────────────
+// Parses a markdown table into rows of cells.
+// Handles escaped pipes (\\|) inside cells.
+
+export const parseTableRows = (tableText: string): string[][] => {
+  const lines = tableText.split('\n').filter((l) => l.trim().startsWith('|'));
+  if (lines.length < 3) return []; // Need header + separator + at least one data row
+  // Skip header (line 0) and separator (line 1)
+  const dataRows = lines.slice(2);
+  return dataRows
+    .map((line) => {
+      // Split on pipes not preceded by backslash, skip leading/trailing empty cells
+      const rawCells: string[] = [];
+      let current = '';
+      let escaped = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '\\' && i + 1 < line.length && line[i + 1] === '|') {
+          current += '|';
+          i++; // skip the |
+          continue;
+        }
+        if (ch === '|' && !escaped) {
+          rawCells.push(current);
+          current = '';
+          continue;
+        }
+        current += ch;
+      }
+      rawCells.push(current);
+      // Strip leading empty cell (from the opening |) and trailing empty cell (from closing |)
+      const cells = rawCells
+        .slice(1, -1) // remove leading and trailing empty cells from the outer pipes
+        .map((c) => c.trim());
+      return cells;
+    })
+    .filter((cells) => cells.length >= 4); // Need at least AC, Test Level, Required Artifact, Production Path
+};
+
+/** Classify a single Production Path cell value \u2014 format check only, no filesystem resolution.
+ * Returns null if the format is valid, or an error message for invalid/placeholder cells.
+ * Resolution (route/file/symbol existence) is checked separately in checkProductionPath. */
+export const classifyProductionPath = (cell: string): string | null => {
+  const trimmed = cell.trim();
+  // Empty cell
+  if (!trimmed) return 'Empty Production Path cell';
+  // Bare N/A
+  if (/^N\/A\s*$/i.test(trimmed)) return 'Bare N/A without reason \u2014 use N/A \u2014 <reason>';
+  // Template placeholder: {N/A | /game/...}
+  if (/^\{[^}]+\}$/.test(trimmed)) return 'Template placeholder \u2014 fill in a real production path';
+  // TBD marker
+  if (/\bTBD\b/i.test(trimmed)) return 'TBD \u2014 fill in a real production path';
+  // Whitespace-only or just dashes
+  if (/^[\s\u2014\-]+$/.test(trimmed)) return 'Invalid Production Path \u2014 must be a resolvable reference';
+  // N/A \u2014 <reason> \u2014 only valid as whole-contract opt-out in Metadata, not at row level
+  if (/^N\/A\s*[\u2014\-]\s*\S+/i.test(trimmed)) return 'Row-level N/A \u2014 <reason> is not accepted; use Metadata-level opt-out instead';
+  // Valid format: tooling: `<command>`
+  if (/^tooling:\s*`/.test(trimmed)) return null;
+  // Valid format: route reference starting with /
+  if (/^\/\w+/.test(trimmed)) return null;
+  // Valid format: file.ts#exportedSymbol
+  if (/\.[jt]sx?#\w+/.test(trimmed)) return null;
+  // Valid format: Named component/ViewModel reference
+  if (/^[A-Z]\w+/.test(trimmed)) return null;
+  // Unknown format \u2014 treat as unresolvable
+  return `Unresolvable Production Path: ${trimmed}`;
+};
+
+/** Check if Metadata contains a whole-contract opt-out Production Surface row. */
+export const hasWholeContractOptOut = (info: ContractInfo): boolean => {
+  // Match: | **Production Surface** | none — <reason> |
+  // Where <reason> is non-empty (at least one non-space, non-pipe char)
+  const optOutRe = /\|\s*\*\*Production Surface\*\*\s*\|\s*none\s*[\u2014\-]\s+[^|\s][^|]*\s*\|/i;
+  return optOutRe.test(info.content);
+};
+
+export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
+  if (info.version !== 2 || !APPROVED_OR_LATER.has(info.status)) {
+    return [];
+  }
+
+  // Legacy exemption
+  if (PRODUCTION_PATH_LEGACY_EXEMPTIONS.has(info.id.toUpperCase())) {
+    return [];
+  }
+
+  // Whole-contract opt-out
+  if (hasWholeContractOptOut(info)) {
+    return [];
+  }
+
+  const issues: LintIssue[] = [];
+
+  if (info.contractType === 'thin') {
+    // For thin contracts, check the Verification line of each AC
+    const acSections = info.content.split(/^### /m).filter((s) => /^AC-\d+:/i.test(s));
+    let hasValidPath = false;
+    const missingAcs: string[] = [];
+    for (const section of acSections) {
+      const acIdMatch = section.match(/^(AC-\d+)/i);
+      const acId = acIdMatch?.[1] ?? 'unknown';
+      // Check for **Verification**: line
+      const verMatch = section.match(/\*\*Verification\*\*:\s*(.+)/);
+      if (verMatch) {
+        const verText = verMatch[1] ?? '';
+        // Check if verification contains a production path reference
+        if (
+          /\/\w+/.test(verText) || // route
+          /\.[jt]sx?#\w+/.test(verText) || // file.ts#symbol
+          /tooling:\s*`/.test(verText) || // tooling command
+          /^[A-Z]\w+/.test(verText) // named component
+        ) {
+          hasValidPath = true;
+        } else {
+          missingAcs.push(acId);
+        }
+      } else {
+        missingAcs.push(acId);
+      }
+    }
+    if (!hasValidPath && missingAcs.length > 0) {
+      issues.push({
+        file: info.filename,
+        severity: 'error',
+        rule: 'production-path',
+        message: `No AC has a production path in its Verification line. Missing: ${missingAcs.join(', ')}`,
+      });
+    }
+    return issues;
+  }
+
+  // Full contract: parse Evidence Matrix
+  const matrixSection = info.content.match(/\*\*Evidence Matrix\*\*[\s\S]*?(?=\n## |$)/i);
+  if (!matrixSection) {
+    // If no Evidence Matrix (thin contracts already handled), skip
+    // checkEvidenceMatrix will catch the missing matrix
+    return [];
+  }
+
+  const tableText = matrixSection[0];
+  const rows = parseTableRows(tableText);
+  if (rows.length === 0) {
+    // No data rows — fail
+    issues.push({
+      file: info.filename,
+      severity: 'error',
+      rule: 'production-path',
+      message: 'Evidence Matrix has no data rows with production paths',
+    });
+    return issues;
+  }
+
+  // Detect Production Path column by header name (4th column = index 3)
+  // Production Path is always column index 3 (0=AC, 1=Test Level, 2=Required Artifact, 3=Production Path, 4=Evidence)
+  const prodPathCol = 3;
+
+  const acErrors: string[] = [];
+  let hasValidPath = false;
+  for (const row of rows) {
+    const acId = row[0] ?? '';
+    const pathCell = row[prodPathCol] ?? '';
+    const formatResult = classifyProductionPath(pathCell);
+    if (formatResult !== null) {
+      if (acId) {
+        acErrors.push(`${acId}: ${formatResult}`);
+      }
+      continue;
+    }
+    // Format is valid; now check resolution
+    let resolved = false;
+    // tooling: `<command>`
+    const toolingMatch = pathCell.match(/^tooling:\s*`(.+?)`/);
+    if (toolingMatch) {
+      const cmd = toolingMatch[1] ?? '';
+      if (toolingCommandExists(cmd)) {
+        resolved = true;
+      } else {
+        if (acId) {
+          acErrors.push(`${acId}: Tooling command not found: \`${cmd}\``);
+        }
+      }
+    }
+    // Route reference: /game/...
+    else if (/^\/\w+/.test(pathCell)) {
+      if (routeExists(pathCell)) {
+        resolved = true;
+      } else {
+        if (acId) {
+          acErrors.push(`${acId}: Route not found: ${pathCell}`);
+        }
+      }
+    }
+    // file.ts#exportedSymbol
+    else if (/\.[jt]sx?#\w+/.test(pathCell)) {
+      if (symbolExists(pathCell)) {
+        resolved = true;
+      } else {
+        if (acId) {
+          acErrors.push(`${acId}: Symbol not found: ${pathCell}`);
+        }
+      }
+    }
+    // Named component/ViewModel reference \u2014 accept as resolved
+    else {
+      resolved = true;
+    }
+    if (resolved) {
+      hasValidPath = true;
+    }
+  }
+
+  if (!hasValidPath && acErrors.length > 0) {
+    issues.push({
+      file: info.filename,
+      severity: 'error',
+      rule: 'production-path',
+      message: `No AC has a valid Production Path. Errors: ${acErrors.join('; ')}`,
+    });
+  }
+
+  return issues;
+};
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -532,6 +858,7 @@ const lintContract = (info: ContractInfo): LintIssue[] => {
     if (!THIN_SKIP_CHECKS.has('open-questions') || info.contractType !== 'thin') {
       issues.push(...checkOpenQuestions(info));
     }
+    issues.push(...checkProductionPath(info));
   }
 
   if (info.version === 2 && IMPLEMENTED_OR_LATER.has(info.status)) {
@@ -744,4 +1071,6 @@ const main = () => {
   process.exit(errors.length > 0 ? 1 : 0);
 };
 
-main();
+if (import.meta.main) {
+  main();
+}

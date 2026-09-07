@@ -38,6 +38,7 @@ tasks:
       - '~:guard-image-component'
       - '~:guard-data-plane'
       - '~:guard-type-safety'
+      - '~:guard-orphaned-capability'
     options:
       cache: false
       runInCI: true
@@ -244,6 +245,18 @@ tasks:
       - '!/packages/**/build/**'
       - '/.pi/**/*'
       - '!/.pi/generated-skills/**'
+    options:
+      cache: false
+      runInCI: true
+
+  # C-485 AC-2: reports exported service methods whose only non-declaration
+  # references live in test files. Ratchet guard with baseline.
+  guard-orphaned-capability:
+    command: 'bun run src/lib/ops/guard_orphaned_capability.ts'
+    inputs:
+      - 'src/lib/ops/guard_orphaned_capability.ts'
+      - 'src/lib/ops/guard_orphaned_capability_baseline.json'
+      - '/apps/frontend/client/src/lib/services/**/*'
     options:
       cache: false
       runInCI: true

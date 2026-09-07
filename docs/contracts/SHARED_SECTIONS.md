@@ -48,6 +48,10 @@ For testing: **Playwright** handles functional E2E (`tests/*.spec.ts`), **Bun Vi
 
 See `.pi/skills/testing/SKILL.md` for full conventions and the compiled-component testing pattern.
 
+### Production Path rule
+
+Every contract needs at least one AC whose **Production Path** (full contract) or **Verification** line (thin contract) references a resolvable production route (`/game/...`), a named production entry point (`file.ts#exportedSymbol`, `ComponentName`), or a declared tooling command (`tooling: \`command\``). A unit test alone cannot satisfy an AC for a player-facing capability. Row-level `N/A` or `N/A — <reason>` alone fails; use `| **Production Surface** | none — <reason> |` in Metadata for a whole-contract opt-out. Enforced by `production-path` lint rule at `approved` status.
+
 ---
 
 ## Thin Contract Mode

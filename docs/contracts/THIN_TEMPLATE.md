@@ -52,6 +52,8 @@ After this contract, a {player|creator|developer} can ...
 **When** {action — what happens}
 **Then** {expected outcome — what should be true}
 
+> 🔴 **Production Path rule**: Every contract needs at least one AC whose **Verification** line references a production route, a named entry point, or a declared tooling command. A unit test alone cannot satisfy an AC for a player-facing capability.
+
 **Verification**: {command or manual check that proves this AC is met}
 
 ### AC-2: {Scenario Name}
