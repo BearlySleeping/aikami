@@ -86,12 +86,18 @@ describe('runCommand', () => {
 
 describe('startCommand', () => {
   test('exposes output incrementally while the process runs', async () => {
-    const handle = startCommand('sh', ['-c', 'echo first; sleep 0.4; echo second'], {
-      timeoutMs: 10_000,
-    });
+    // `node` keeps this cross-platform: Git Bash's `sh` adds ~100–300ms of
+    // startup latency on Windows CI, which the 200ms early-check could not
+    // absorb (the flake that failed windows-latest). A generous gap between
+    // writes keeps the "not yet" assertion honest.
+    const handle = startCommand(
+      'node',
+      ['-e', 'console.log("first"); setTimeout(() => console.log("second"), 1200);'],
+      { timeoutMs: 10_000 },
+    );
 
     // Give the first write time to land, but finish well before the second.
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 400));
     const early = handle.output();
     expect(early).toContain('first');
     expect(early).not.toContain('second');
