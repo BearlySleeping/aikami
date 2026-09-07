@@ -70,9 +70,11 @@ Two enforcement changes and one documentation change. The lint gains a rule that
 
 ## Architecture Directives
 
-The lint rule parses Evidence Matrix rows, not prose. A row's **Production Path** cell is satisfied by a route (`/game/...`, `/settings/...`), a named production entry point (`file.ts#exportedSymbol` or a component/ViewModel name), or an explicit opt-out of the exact form `N/A — <reason>` with a non-empty reason. An empty cell, a bare `N/A`, the to-be-determined marker that the existing `tbd-in-approved` rule already recognises, or a template placeholder is a failure. At least one AC per contract must carry a real path; a contract where every row opts out fails. The rule fires at `approved` or later, matching every other status-aware check in that file.
+The lint rule parses Evidence Matrix rows, not prose, and classifies each **Production Path** cell. Product references must be resolvable: a route such as `/game/...` or `/settings/...` must map to an existing production route, while `file.ts#exportedSymbol` and named component/ViewModel references must resolve to an existing production file and export. Resolution follows barrel re-exports to the originating symbol; a barrel export by itself is not production use. Tooling entry points use the distinct form `tooling: \`<command>\`` and pass only when the command is explicitly declared in a checked-in `package.json` script or Moon task. Arbitrary prose and command-looking strings are not product symbols.
 
-The guard stays deliberately dumb. For each exported symbol in `apps/frontend/client/src/lib/services/**`, count references outside its own declaration, split by whether the referencing file matches `*.test.ts` or lives under `__tests__/`. Symbols with zero non-test references are reported. **Do not attempt call-graph reachability** — a false "this is reachable" is worse than the simple heuristic, because it re-creates exactly the false confidence this contract exists to remove. Interface/type declarations that merely re-declare the method are not references.
+A row may opt out only as `N/A — <reason>` with a non-empty reason. An empty cell, bare `N/A`, the to-be-determined marker recognised by `tbd-in-approved`, or a template placeholder fails. At least one AC per contract must carry a resolvable product reference or declared tooling command unless Metadata contains the exact whole-contract row `| **Production Surface** | none — <reason> |`, where `<reason>` is non-empty. That metadata opt-out takes precedence over row validation; row-level `N/A — <reason>` entries alone never opt out the whole contract. The rule fires at `approved` or later, matching every other status-aware check in that file.
+
+The guard stays deliberately dumb. For each exported symbol named by a product-reference Production Path, and for each exported symbol in `apps/frontend/client/src/lib/services/**`, count references outside its own declaration after resolving any barrel re-export chain. References in interface/type declarations, declaration files, `*.test.ts` files, or `__tests__/` do not count as production use; references from production `.ts` and `.svelte` files do. Symbols with zero production references are reported. **Do not attempt call-graph reachability** — a false "this is reachable" is worse than the simple heuristic, because it re-creates exactly the false confidence this contract exists to remove.
 
 Guard output goes through `annotate()` like its siblings, and the guard is added to both `scripts/moon.yml`'s `guard` task and the root `guard:all` script so it runs everywhere the others do.
 
@@ -104,8 +106,8 @@ Because JSON has no comments, the pointer to C-493 lives either in a sibling `_c
 
 ## Migration & Rollback
 
-- **Old data compatibility**: existing contracts are not rewritten. Contracts already at `implemented` or later keep their status; the new rule applies to their **Amendments** row (AC-4), not their history.
-- **Migration**: bootstrap the baseline from an explicit, reviewed inventory of current offenders — list them in the PR body. Do **not** bootstrap with an unreviewed `--update-baseline` sweep (the C-476 AC-4 lesson).
+- **Old data compatibility**: use one explicit legacy-exemption path. `lint_contracts.ts` carries a reviewed `PRODUCTION_PATH_LEGACY_EXEMPTIONS` set for contracts approved before C-485 lands; exempt contracts keep their status and do not run the new rule. C-456 through C-460 must be named in that set and retain their audit-only Amendments rows. No implicit status, filename, or missing-matrix bypass is allowed.
+- **Migration**: bootstrap the guard baseline from an explicit, reviewed inventory of current offenders — list them in the PR body. Do **not** bootstrap with an unreviewed `--update-baseline` sweep (the C-476 AC-4 lesson). Fixture tests assert that every legacy exemption names an existing contract, that C-456 through C-460 lint successfully only through the named exemption, and that an otherwise identical non-exempt approved contract fails `production-path`.
 - **Rollback**: remove the new guard from `scripts/moon.yml` and `guard:all`, and delete the `production-path` rule from `lint_contracts.ts`. No persisted product state is touched.
 - **Feature flag or kill switch**: the lint rule's severity is data — shipping it as `error` is the intent, but it can be downgraded to `warning` in one place if it blocks an unrelated release.
 - **Failure recovery**: N/A — no partial state is possible.
@@ -124,14 +126,14 @@ Because JSON has no comments, the pointer to C-493 lives either in a sibling `_c
 ## Acceptance Criteria
 
 ### AC-1: Lint rejects a contract with no production path
-**Given** a contract at `approved` or later whose Evidence Matrix rows all have an empty, to-be-determined, placeholder, or bare-`N/A` **Production Path** cell
+**Given** a non-legacy contract at `approved` or later whose Evidence Matrix rows all have an empty, to-be-determined, placeholder, or bare-`N/A` **Production Path** cell and whose Metadata does not contain `| **Production Surface** | none — <reason> |`
 **When** `lint_contracts.ts` runs over it
-**Then** it emits an `error`-severity `production-path` issue that names the offending AC identifiers, and the process exits non-zero. A row may opt out only as `N/A — <reason>` with a non-empty reason, and a contract in which *every* row opts out still fails.
+**Then** it emits an `error`-severity `production-path` issue that names the offending AC identifiers, and the process exits non-zero. The whole-contract metadata syntax requires the exact bold field name, the lowercase value prefix `none — ` (Unicode em dash), and a non-empty reason. A valid whole-contract opt-out skips row-level production-path checks; without it, even reasoned `N/A — <reason>` entries on every row fail.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit | `scripts/src/lib/ops/__tests__/lint_contracts.test.ts` | `bun run scripts/src/lib/ops/lint_contracts.ts` — the CI-invoked entry point in `scripts/moon.yml` | Filled during verification |
+| AC-1 | Unit | `scripts/src/lib/ops/__tests__/lint_contracts.test.ts` | tooling: `bun run scripts/src/lib/ops/lint_contracts.ts` — declared by the CI-invoked Moon task | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run scripts:test` and the contracts lint task
@@ -141,19 +143,19 @@ Because JSON has no comments, the pointer to C-493 lives either in a sibling `_c
     - **Visual**: N/A — no UI.
 
 **Watch Points**:
-- Fixtures must cover: empty cell, the to-be-determined marker, the literal template placeholder `{N/A \| /game/...}`, bare `N/A`, `N/A —` with an empty reason, a real route, and a `file.ts#symbol` entry point.
+- Fixtures must cover: empty cell, the to-be-determined marker, the literal template placeholder `{N/A \| /game/...}`, bare `N/A`, `N/A —` with an empty reason, an existing and missing route, an existing and missing `file.ts#symbol`, a barrel-re-exported symbol, and a declared and undeclared `tooling:` command. A separate pair proves that exact whole-contract metadata is accepted while row-level `N/A — <reason>` entries alone still fail.
 - Do not make the rule pass by matching any non-empty string — `-`, `—` and whitespace-only cells are failures.
 - Markdown table parsing must tolerate escaped pipes inside cells and rows with trailing whitespace.
 
 ### AC-2: Orphaned exported capabilities are reported and ratcheted
-**Given** an exported method in `apps/frontend/client/src/lib/services/**` whose only non-declaration references are in `*.test.ts` files or under `__tests__/`
+**Given** an exported method in `apps/frontend/client/src/lib/services/**`, or a production symbol referenced by an Evidence Matrix, whose only non-declaration references are in `*.test.ts` files or under `__tests__/`
 **When** `guard_orphaned_capability.ts` runs
 **Then** it is reported; existing offenders are read from a baseline JSON so the guard exits zero on the current tree; a new offender fails the guard; and a fixed offender that is not yet locked into the baseline also fails, matching the sibling guards' ratchet semantics.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-2 | Unit | `scripts/src/lib/ops/__tests__/guard_orphaned_capability.test.ts` | `bun run guard:all` / `moon run scripts:guard` — the aggregate guard target CI runs | Filled during verification |
+| AC-2 | Unit | `scripts/src/lib/ops/__tests__/guard_orphaned_capability.test.ts` | tooling: `bun run guard:all` / `moon run scripts:guard` — declared aggregate guard targets CI runs | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: `moon run scripts:guard-orphaned-capability`, then `moon run scripts:guard`
@@ -163,7 +165,7 @@ Because JSON has no comments, the pointer to C-493 lives either in a sibling `_c
     - **Visual**: N/A — no UI.
 
 **Watch Points**:
-- The `*ServiceInterface` declaration of a method is **not** a reference. If it counts, every orphan looks used and the guard is worthless — this is the single most likely way to ship a guard that proves nothing.
+- The `*ServiceInterface` declaration, a `.d.ts` declaration, a test-only reference, and an intermediate barrel re-export are **not** production references. Follow the barrel to the originating symbol, then require a production consumer; otherwise every orphan looks used and the guard is worthless.
 - Renaming an orphan must not silently produce a passing run at the same count; carry over the identity-aware comparison from `guard_type_safety.ts`.
 - Keep the AST/scan work to a single pass. No call-graph reachability, per Architecture Directives.
 
@@ -232,7 +234,7 @@ Because JSON has no comments, the pointer to C-493 lives either in a sibling `_c
 
 ## Implementation Sequence
 
-1. **Phase 1 (Lint rule)**: record the current whole-tree lint output as the baseline; add Evidence Matrix row parsing and the `production-path` rule to `lint_contracts.ts` with fixture-driven unit tests (AC-1).
+1. **Phase 1 (Lint rule)**: record the current whole-tree lint output as the baseline; add Evidence Matrix row parsing, resolvability checks, the explicit reviewed legacy-exemption set, and the `production-path` rule to `lint_contracts.ts` with fixture-driven unit tests (AC-1).
 2. **Phase 2 (Guard)**: write `guard_orphaned_capability.ts` on the `guard_service_conventions.ts` shape, author the baseline from a reviewed inventory including C-456's two methods with their C-493 pointer, add unit tests, and wire the guard into `scripts/moon.yml` and root `guard:all` (AC-2, AC-3).
 3. **Phase 3 (Docs)**: add the one-line rule to the two templates, `SHARED_SECTIONS.md` and the calibration skill; fix the template's example matrix row so it conforms (AC-4).
 4. **Phase 4 (Audit)**: re-read C-456–C-460, add Amendment rows, and run `bun run validate`, `bun run guard:all` and the contracts lint over the whole tree (AC-5).
@@ -240,15 +242,16 @@ Because JSON has no comments, the pointer to C-493 lives either in a sibling `_c
 ## Edge Cases & Gotchas
 
 - **Thin contracts**: `THIN_SKIP_CHECKS` in `lint_contracts.ts` already lets thin contracts skip `missing-evidence-matrix`. Decide explicitly whether `production-path` skips too — a thin contract's single **Verification** line is where the path belongs — and document the decision in the guard/lint header rather than letting it fall out of the existing skip set by accident.
-- **Contracts with genuinely no production surface** (this one, C-476, C-479): every row legitimately opts out. AC-1 says such a contract fails. Resolve by allowing a whole-contract opt-out declared once in Metadata (e.g. a `Production Surface: none — <reason>` row) rather than by weakening the per-row rule. This contract's own matrix uses per-row `N/A — <reason>` plus real tooling entry points on AC-1 and AC-2; confirm that shape passes the rule you ship.
-- **Barrel re-exports**: a symbol re-exported through `$services` will show a non-test reference at the barrel. A barrel re-export alone is not production usage — decide and document whether barrel files are excluded from the reference count.
+- **Contracts with genuinely no production surface** (this one, C-476, C-479): declare `| **Production Surface** | none — <reason> |` once in Metadata. This exact whole-contract opt-out takes precedence over row checks; row-level N/A entries never substitute for it. This contract instead uses declared tooling entry points on AC-1 and AC-2; confirm that shape passes the rule you ship.
+- **Barrel re-exports**: a symbol re-exported through `$services` resolves to its originating export, but the barrel edge does not count as production usage. Only a non-declaration, non-test consumer after that chain satisfies the guard.
 - **Svelte files**: references from `.svelte` components are production references and must be counted; do not restrict the scan to `.ts`.
 - **A red guard on first run** is expected and is the point. The correct response is to enlarge the reviewed baseline with named entries, never to relax the detection.
 
 ## Open Questions
 
 - Resolved: thin contracts — the production path belongs in the thin **Verification** line; the rule applies to both contract types, with the parser reading whichever section exists.
-- Resolved: whole-contract opt-out for tooling contracts — declare it once in Metadata with a reason, per Edge Cases.
+- Resolved: whole-contract opt-out for tooling contracts — declare exactly `| **Production Surface** | none — <reason> |` in Metadata; it overrides row checks.
+- Resolved: existing approved contracts — only entries in the reviewed legacy-exemption set bypass the rule, validated by positive and negative fixtures.
 
 ## Amendments
 

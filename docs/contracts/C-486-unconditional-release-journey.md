@@ -207,15 +207,15 @@ N/A — no persistent state changes. Rollback is reverting the spec and POM chan
 - Distinguish the two kinds of `if`: a bounded retry loop over combat rounds is control flow; `if (uiPresent)` around an assertion is a hidden skip. Only the second kind is in scope.
 - Onboarding step loops that break on reaching `/game` are retry control flow — but the loop exhausting without reaching `/game` must fail, not fall through silently.
 
-### AC-5: The tightened gate runs against `main` and its failures are filed, not softened
+### AC-5: The tightened gate passes against `main`
 **Given** the whole spec
 **When** it runs against `main`
-**Then** it passes; and if it does not, each failure is filed as a separate thin contract naming the product bug, with this contract's Amendments recording what was filed. No assertion is loosened to make the run green.
+**Then** the full suite passes. A failure may be filed as a separate thin contract, but it remains a blocking failure and this contract cannot be accepted or promoted until the suite is green. No assertion is loosened to make the run green.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | E2E | `apps/e2e/tests/client/release_gate.spec.ts` (full-suite run against `main`) | `/game` — the same production journey; this AC is the run itself | Filled during verification |
+| AC-5 | E2E | passing full-suite result from `apps/e2e/tests/client/release_gate.spec.ts` against `main` | `/game` — the same production journey; this AC is the passing run itself | Filled only by a green full-suite run |
 
 **Test Hooks**:
 - Moon Task: full client E2E run on `main`
@@ -227,7 +227,7 @@ N/A — no persistent state changes. Rollback is reverting the spec and POM chan
 **Watch Points**:
 - **This is the AC that will hurt, and it is the point of the contract.** Budget for the gate going red on first tightening.
 - A red gate must not be "fixed" by relaxing an assertion, widening a label match, restoring a conditional, or marking a leg `test.fixme`. File the bug.
-- A filed bug that blocks the gate is a legitimate reason for this contract to land with the gate red and the failure documented — say so explicitly rather than shipping a green lie.
+- Filing a bug documents the failure but does not satisfy AC-5. The full suite must be green before acceptance or promotion.
 
 ## Implementation Sequence
 
@@ -235,7 +235,7 @@ N/A — no persistent state changes. Rollback is reverting the spec and POM chan
 2. **Phase 2 (POM)**: add the start-menu affordance and the quest-objective reader to `game_page.ts`; route both the mouse and keyboard journeys through them (AC-1).
 3. **Phase 3 (Unconditional legs)**: remove the `if (present)` guards, make combat entry unconditional, and preserve the Ollama `test.skip` in its existing form (AC-2, AC-4).
 4. **Phase 4 (Exact assertions)**: compare HP, inventory count and quest objective across the reload (AC-3).
-5. **Phase 5 (Run and file)**: run the full spec against `main`, attribute every delta to the baseline, and file each real product bug as a thin contract (AC-5).
+5. **Phase 5 (Run, file, and clear)**: run the full spec against `main`, attribute every delta to the baseline, file each real product bug as a thin contract, and keep AC-5 blocked until the full suite passes (AC-5).
 
 ## Edge Cases & Gotchas
 

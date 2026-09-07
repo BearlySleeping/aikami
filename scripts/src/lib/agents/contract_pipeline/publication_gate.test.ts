@@ -86,6 +86,35 @@ describe('evaluatePublicationGate', () => {
     expect(codes(result)).toEqual(['unpushed_commits']);
   });
 
+  it('validates the requested publication branch instead of only the checked-out branch', () => {
+    const requestedBranch = 'contract-task-c-484-requested';
+    const seenBranches: string[] = [];
+    const result = evaluatePublicationGate({
+      git: gitReader({
+        remoteHead: (branch) => {
+          seenBranches.push(branch);
+          return branch === requestedBranch ? OLDER : HEAD;
+        },
+      }),
+      manifest: manifestWith({ ok: true, output: '', checkedAt: 'now', revision: HEAD }),
+      branch: requestedBranch,
+    });
+    expect(seenBranches).toEqual([requestedBranch]);
+    expect(result.branch).toBe(requestedBranch);
+    expect(codes(result)).toEqual(['unpushed_commits']);
+  });
+
+  it('allows publication when the requested branch is pushed at validated HEAD', () => {
+    const requestedBranch = 'contract-task-c-484-requested';
+    const result = evaluatePublicationGate({
+      git: gitReader({ remoteHead: (branch) => (branch === requestedBranch ? HEAD : OLDER) }),
+      manifest: manifestWith({ ok: true, output: '', checkedAt: 'now', revision: HEAD }),
+      branch: requestedBranch,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.branch).toBe(requestedBranch);
+  });
+
   it('reports every unmet precondition in one pass', () => {
     const result = evaluatePublicationGate({
       git: gitReader({ status: () => ' M a.ts\n', remoteHead: () => OLDER }),
@@ -99,6 +128,19 @@ describe('evaluatePublicationGate', () => {
       git: gitReader({
         head: () => {
           throw new Error('not a git repository');
+        },
+      }),
+      manifest: undefined,
+    });
+    expect(result.indeterminate).toBe(true);
+    expect(result.ok).toBe(true);
+  });
+
+  it('is indeterminate — and permissive — when the remote cannot be read', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader({
+        remoteHead: () => {
+          throw new Error('origin unavailable');
         },
       }),
       manifest: undefined,

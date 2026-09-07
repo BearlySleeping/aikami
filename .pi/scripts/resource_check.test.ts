@@ -4,7 +4,7 @@
 // Tests verify no mutations occur and meaningful nonzero exits for mismatches.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -119,6 +119,36 @@ describe('resource-check (AC-2: read-only, offline)', () => {
     const result = await runCheck(manifest, { baseDir: fixtureDir });
     expect(result.hasIssues).toBe(true);
     expect(result.missing).toBeGreaterThan(0);
+  });
+
+  test('npm packages are checked independently while the lockfile is unchanged', async () => {
+    const { runCheck } = await import('./resource_check.ts');
+    const { hashDirectory } = await import('./resource_manifest.ts');
+    const packageDir = fixturePath('node_modules', 'test-package');
+    touch(join(packageDir, 'index.js'), 'export const value = 1;');
+    touch(fixturePath('bun.lock'), 'unchanged lockfile');
+    const identity = await hashDirectory(packageDir);
+    const manifest = {
+      manifestVersion: 1 as const,
+      updatedAt: new Date().toISOString(),
+      resources: {
+        'test-package': {
+          name: 'test-package',
+          type: 'npm-package' as const,
+          description: 'Test package',
+          source: { kind: 'npm' as const, package: 'test-package', version: '1.0.0' },
+          installed: identity,
+        },
+      },
+    };
+
+    touch(join(packageDir, 'index.js'), 'export const value = 2;');
+    const modified = await runCheck(manifest, { baseDir: fixtureDir });
+    expect(modified.mismatched).toBe(1);
+
+    rmSync(packageDir, { recursive: true });
+    const removed = await runCheck(manifest, { baseDir: fixtureDir });
+    expect(removed.missing).toBe(1);
   });
 
   test('runCheck returns no side effects — no file writes', async () => {

@@ -463,7 +463,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
 
           return {
             content: [{ type: 'text', text: lines.filter((line) => line !== '').join('\n') }],
-            isError: !gate.ok,
+            isError: !gate.ok || pushError !== undefined,
             details: {
               ok: gate.ok,
               revision: head,

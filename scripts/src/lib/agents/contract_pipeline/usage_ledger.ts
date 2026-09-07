@@ -70,14 +70,17 @@ export const parseUsageFromJsonlText = (text: string): StageUsage => {
       continue;
     }
     const eventUsage = event.message.usage;
+    if (!eventUsage) {
+      continue;
+    }
     usage.turns += 1;
     usage.model = event.message.model ?? usage.model;
-    usage.inputTokens += eventUsage?.input ?? 0;
-    usage.outputTokens += eventUsage?.output ?? 0;
-    usage.cacheReadTokens += eventUsage?.cacheRead ?? 0;
-    usage.cacheWriteTokens += eventUsage?.cacheWrite ?? 0;
-    usage.totalTokens = eventUsage?.totalTokens ?? usage.totalTokens;
-    usage.cost += eventUsage?.cost?.total ?? 0;
+    usage.inputTokens += eventUsage.input ?? 0;
+    usage.outputTokens += eventUsage.output ?? 0;
+    usage.cacheReadTokens += eventUsage.cacheRead ?? 0;
+    usage.cacheWriteTokens += eventUsage.cacheWrite ?? 0;
+    usage.totalTokens = eventUsage.totalTokens ?? usage.totalTokens;
+    usage.cost += eventUsage.cost?.total ?? 0;
   }
   return usage;
 };

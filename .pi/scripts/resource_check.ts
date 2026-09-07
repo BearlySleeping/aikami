@@ -72,7 +72,10 @@ const resolveResourcePath = (
       }
       return join(baseDir, entry.name);
     case 'npm-package':
-      return join(baseDir, 'bun.lock');
+      if (entry.source.kind === 'npm') {
+        return join(baseDir, 'node_modules', entry.source.package);
+      }
+      return undefined;
   }
 };
 

@@ -821,7 +821,7 @@ function formatCheckStatus(raw: string): string {
  * including outside a pipeline worker, and whenever the gate cannot read
  * the workspace (a gate that cannot run must not become a wall).
  */
-const pipelinePublicationRefusal = (): string | undefined => {
+const pipelinePublicationRefusal = (headBranch: string): string | undefined => {
   const role = process.env.CONTRACT_PIPELINE_ROLE;
   const workspacePath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
   const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
@@ -834,6 +834,7 @@ const pipelinePublicationRefusal = (): string | undefined => {
     result = evaluatePublicationGate({
       git: createWorkspaceGitReader(workspacePath),
       manifest: readManifest({ runId, cwd: deriveRunRepoRoot() }),
+      branch: headBranch,
     });
   } catch {
     // Unreadable manifest or git failure — indeterminate, so allow.
@@ -888,7 +889,7 @@ export default function (pi: ExtensionAPI) {
 
           // 🔴 Hard precondition inside a contract-pipeline worker — see
           // pipelinePublicationRefusal above. No-op everywhere else.
-          const refusal = pipelinePublicationRefusal();
+          const refusal = pipelinePublicationRefusal(params.headBranch);
           if (refusal) {
             return {
               content: [{ type: 'text', text: refusal }],

@@ -131,7 +131,8 @@ export const createWorkspaceGitReader = (workspacePath: string): GitReader => ({
   head: () => runGit('rev-parse HEAD', { cwd: workspacePath }),
   branch: () => runGit('rev-parse --abbrev-ref HEAD', { cwd: workspacePath }),
   remoteHead: (branch) => {
-    const output = runGit(`ls-remote --heads origin refs/heads/${branch}`, {
+    const quotedRef = `'refs/heads/${branch.replace(/'/g, "'\\''")}'`;
+    const output = runGit(`ls-remote --heads origin ${quotedRef}`, {
       cwd: workspacePath,
       timeoutMs: 60_000,
     });
@@ -164,14 +165,18 @@ const VALIDATE_REMEDY =
 export const evaluatePublicationGate = (options: {
   git: GitReader;
   manifest: RunManifest | undefined;
+  /** Branch that the publication command will use; defaults to the checked-out branch. */
+  branch?: string;
 }): PublicationGateResult => {
   let head: string;
   let branch: string;
   let status: string;
+  let remote: string | undefined;
   try {
     head = options.git.head().trim();
-    branch = options.git.branch().trim();
+    branch = options.branch?.trim() || options.git.branch().trim();
     status = options.git.status();
+    remote = options.git.remoteHead(branch);
   } catch {
     return { ok: true, blocks: [], indeterminate: true };
   }
@@ -218,7 +223,6 @@ export const evaluatePublicationGate = (options: {
   // Only meaningful once the tree is clean and validated — but reported
   // unconditionally, so the captain sees the whole list in one pass rather
   // than clearing blocks one round-trip at a time.
-  const remote = options.git.remoteHead(branch);
   if (remote === undefined) {
     blocks.push({
       code: 'unpushed_commits',
