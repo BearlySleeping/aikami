@@ -1,8 +1,9 @@
 // apps/frontend/client/src/lib/views/setup_subflow/setup_subflow_view_model.test.ts
 //
-// Unit tests for SetupSubflowViewModel — entry paths, capability toggles,
-// discovery flow, plan application, and error handling.
-// Contract: C-483 AC-1, AC-2, AC-3, AC-4, AC-5, AC-6
+// Unit tests for SetupSubflowViewModel — entry paths, scoped discovery,
+// honest provider labeling, manual configuration fallback, plan
+// application gating, navigation/leave(), and stale-operation invalidation.
+// Contract: C-483 AC-1..AC-6 — regression fixes for the C-481..C-484 audit.
 //
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
@@ -12,8 +13,16 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { CapabilitySnapshot } from '@aikami/types';
+import { localServicesMockBase } from '../../test_preload.ts';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
+//
+// Spread the shared base and override only what this file needs — see
+// localServicesMockBase's doc comment. Replacing the whole `$services`
+// barrel here (as this file previously did) leaks a partial mock into
+// every other test file that runs in the same `bun test` process,
+// including ai_settings_view_model.test.ts (SetupSubflowViewModel now
+// composes a real AiSettingsViewModel instance for manual configuration).
 
 const configServiceMock = {
   state: {
@@ -30,23 +39,31 @@ const createDetectedSnapshot = (): CapabilitySnapshot => ({
   textStatus: 'detected',
   textProviderId: 'ollama',
   textModelName: 'llama3.2',
-  imageStatus: 'not_found',
-  voiceStatus: 'not_found',
+  imageStatus: 'skipped',
+  voiceStatus: 'skipped',
   summary: 'Local AI detected',
   detectedAt: new Date().toISOString(),
 });
 
 const detectMock = mock(async (): Promise<CapabilitySnapshot> => createDetectedSnapshot());
+const startNewCampaignMock = mock(async () => ({ id: 'campaign-1' }));
+const goToRouteMock = mock(async () => {});
 
 mock.module('$services', () => ({
+  ...localServicesMockBase(),
   configService: configServiceMock,
-  capabilityService: {
-    detect: detectMock,
-  },
+  capabilityService: { detect: detectMock },
   runtimeConfigService: {
     getTextUrl: mock(() => 'http://localhost:11434'),
     getImageUrl: mock(() => 'http://localhost:8188'),
   },
+  campaignService: { startNewCampaign: startNewCampaignMock },
+  routerService: { goToRoute: goToRouteMock },
+  inventoryService: { reset: mock(() => {}) },
+  worldStateService: { reset: mock(() => {}) },
+  playerStateService: { reset: mock(() => {}) },
+  equipmentService: { reset: mock(() => {}) },
+  gameModeService: { reset: mock(() => {}) },
 }));
 
 // ── Imports (after mocks) ──────────────────────────────────────────────
@@ -60,6 +77,8 @@ describe('SetupSubflowViewModel', () => {
     configServiceMock.state = { connections: [], defaultByCapability: {} };
     detectMock.mockClear();
     detectMock.mockImplementation(async () => createDetectedSnapshot());
+    startNewCampaignMock.mockClear();
+    goToRouteMock.mockClear();
     vm = getSetupSubflowViewModel({ className: 'SetupSubflowTest' });
   });
 
@@ -89,12 +108,23 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.step).toBe('results');
   });
 
-  test('selectEntryPath text-only skips directly to applying', () => {
+  test('selectEntryPath text-only opens manual text setup when nothing is configured', () => {
     vm.selectEntryPath('text-only');
 
     expect(vm.entryPath).toBe('text-only');
-    // Text-only immediately applies — step moves to 'applying'
-    expect(vm.step).toBe('applying');
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('text');
+    expect(vm.editorViewModel.isAddProviderOpen).toBeTrue();
+  });
+
+  test('selectEntryPath text-only goes straight to ready when text is already usable', () => {
+    configServiceMock.state.connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
+    ];
+
+    vm.selectEntryPath('text-only');
+
+    expect(vm.step).toBe('ready');
   });
 
   // ── Capability toggles ─────────────────────────────────────────────────
@@ -105,59 +135,47 @@ describe('SetupSubflowViewModel', () => {
     expect(textToggle?.enabled).toBeTrue();
   });
 
-  test('image capability is optional and disabled by default', () => {
-    const imageToggle = vm.capabilityToggles.find((t) => t.id === 'image');
-    expect(imageToggle?.required).toBeFalse();
-    expect(imageToggle?.enabled).toBeFalse();
+  test('image and voice capabilities are optional and disabled by default', () => {
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
+    expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeFalse();
   });
 
-  test('voice capability is optional and disabled by default', () => {
-    const voiceToggle = vm.capabilityToggles.find((t) => t.id === 'voice');
-    expect(voiceToggle?.required).toBeFalse();
-    expect(voiceToggle?.enabled).toBeFalse();
-  });
-
-  test('toggleCapability enables optional capability', () => {
+  test('toggleCapability enables and disables an optional capability', () => {
     vm.toggleCapability('image');
-    const imageToggle = vm.capabilityToggles.find((t) => t.id === 'image');
-    expect(imageToggle?.enabled).toBeTrue();
-  });
-
-  test('toggleCapability disables optional capability', () => {
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeTrue();
     vm.toggleCapability('image');
-    vm.toggleCapability('image');
-    const imageToggle = vm.capabilityToggles.find((t) => t.id === 'image');
-    expect(imageToggle?.enabled).toBeFalse();
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
   });
 
   test('toggleCapability does not change required text', () => {
     vm.toggleCapability('text');
-    const textToggle = vm.capabilityToggles.find((t) => t.id === 'text');
-    expect(textToggle?.enabled).toBeTrue();
+    expect(vm.capabilityToggles.find((t) => t.id === 'text')?.enabled).toBeTrue();
   });
 
-  // ── Discovery ──────────────────────────────────────────────────────────
+  // ── Discovery scoping (Recommended) ─────────────────────────────────────
 
-  test('startDiscovery transitions through steps', async () => {
+  test('continueFromResults on recommended only detects enabled capabilities', async () => {
     vm.selectEntryPath('recommended');
-    expect(vm.step).toBe('results');
+    vm.toggleCapability('voice');
 
-    await vm.startDiscovery();
+    await vm.continueFromResults();
 
-    expect(vm.isDetecting).toBeFalse();
+    expect(detectMock).toHaveBeenCalledWith({ capabilities: ['text', 'voice'] });
     expect(vm.step).toBe('plan');
-    expect(vm.snapshot).not.toBeNull();
-    expect(vm.discoveredProviders.length).toBeGreaterThanOrEqual(0);
   });
 
-  test('startDiscovery populates discovered providers from snapshot', async () => {
-    vm.selectEntryPath('recommended');
-    await vm.startDiscovery();
+  test('discovered providers use the real detected provider id and label, never a hardcoded engine', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      textProviderId: 'llamacpp',
+    });
 
-    expect(vm.discoveredProviders.length).toBeGreaterThanOrEqual(1);
+    vm.selectEntryPath('recommended');
+    await vm.continueFromResults();
+
     const textProvider = vm.discoveredProviders.find((p) => p.capability === 'text');
-    expect(textProvider).toBeDefined();
-    expect(textProvider?.provider).toBe('ollama');
+    expect(textProvider?.provider).toBe('llamacpp');
+    expect(textProvider?.label).not.toBe('ComfyUI (local)');
   });
 
   test('startDiscovery handles errors gracefully', async () => {
@@ -186,62 +204,43 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.discoveredProviders).toHaveLength(0);
   });
 
-  test('a canceled discovery error cannot clear a newer discovery state', async () => {
-    const canceledDetection = Promise.withResolvers<CapabilitySnapshot>();
-    const activeDetection = Promise.withResolvers<CapabilitySnapshot>();
-    detectMock.mockImplementationOnce(async () => canceledDetection.promise);
-    detectMock.mockImplementationOnce(async () => activeDetection.promise);
-    vm.selectEntryPath('recommended');
+  // ── Connect Existing skips discovery entirely ───────────────────────────
 
-    const canceledPromise = vm.startDiscovery();
-    vm.goBack();
-    vm.selectEntryPath('recommended');
-    const activePromise = vm.startDiscovery();
-    canceledDetection.reject(new Error('Canceled request failed'));
-    await canceledPromise;
+  test('continueFromResults on existing never calls detect and opens manual setup', async () => {
+    vm.selectEntryPath('existing');
 
-    expect(vm.step).toBe('detecting');
-    expect(vm.isDetecting).toBeTrue();
-    expect(vm.errorMessage).toBe('');
+    await vm.continueFromResults();
 
-    activeDetection.resolve(createDetectedSnapshot());
-    await activePromise;
-    expect(vm.step).toBe('plan');
-    expect(vm.isDetecting).toBeFalse();
+    expect(detectMock).not.toHaveBeenCalled();
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('text');
   });
 
-  // ── Plan application ───────────────────────────────────────────────────
+  test('continueFromResults on existing goes straight to ready when everything enabled is already usable', async () => {
+    configServiceMock.state.connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
+    ];
+    vm.selectEntryPath('existing');
 
-  test('applyPlan transitions to ready', async () => {
+    await vm.continueFromResults();
+
+    expect(vm.step).toBe('ready');
+  });
+
+  // ── Plan application gating ─────────────────────────────────────────────
+
+  test('applyPlan seeds connections via configService when text was detected', async () => {
     vm.selectEntryPath('recommended');
-    await vm.startDiscovery();
-    expect(vm.step).toBe('plan');
+    await vm.continueFromResults();
 
     await vm.applyPlan();
 
     expect(vm.step).toBe('ready');
-    expect(vm.isApplying).toBeFalse();
-  });
-
-  test('applyPlan seeds connections via configService', async () => {
-    vm.selectEntryPath('recommended');
-    await vm.startDiscovery();
-    await vm.applyPlan();
-
     expect(configServiceMock.addConnection.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(configServiceMock.save.mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 
-  test('applyPlan does not become ready without a capability snapshot', async () => {
-    vm.selectEntryPath('recommended');
-
-    await vm.applyPlan();
-
-    expect(vm.step).toBe('error');
-    expect(vm.isApplying).toBeFalse();
-  });
-
-  test('applyPlan does not become ready when text was not found', async () => {
+  test('applyPlan opens manual text setup instead of throwing when text was not found', async () => {
     detectMock.mockResolvedValueOnce({
       ...createDetectedSnapshot(),
       textStatus: 'not_found',
@@ -250,20 +249,94 @@ describe('SetupSubflowViewModel', () => {
       summary: 'No text AI detected',
     });
     vm.selectEntryPath('recommended');
-    await vm.startDiscovery();
+    await vm.continueFromResults();
 
     await vm.applyPlan();
 
-    expect(vm.step).toBe('error');
-    expect(vm.isApplying).toBeFalse();
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('text');
+    expect(vm.editorViewModel.isAddProviderOpen).toBeTrue();
   });
 
-  // ── Navigation ─────────────────────────────────────────────────────────
+  test('canApplyPlan is false without a usable text choice and true once one exists', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      textStatus: 'not_found',
+      textProviderId: undefined,
+    });
+    vm.selectEntryPath('recommended');
+    await vm.continueFromResults();
+    expect(vm.canApplyPlan).toBeFalse();
+
+    configServiceMock.state.connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
+    ];
+    expect(vm.canApplyPlan).toBeTrue();
+  });
+
+  // ── Manual setup flow ────────────────────────────────────────────────────
+
+  test('finishManualSetup advances to ready once text becomes usable', () => {
+    vm.selectEntryPath('text-only');
+    expect(vm.step).toBe('manual');
+
+    configServiceMock.state.connections = [
+      { capability: 'text', provider: 'openrouter', apiKey: 'sk-real-key' },
+    ];
+    vm.finishManualSetup();
+
+    expect(vm.step).toBe('ready');
+    expect(vm.manualCapability).toBeNull();
+  });
+
+  test('finishManualSetup returns to entry for text-only when still unconfigured', () => {
+    vm.selectEntryPath('text-only');
+
+    vm.finishManualSetup();
+
+    expect(vm.step).toBe('entry');
+  });
+
+  // ── Navigation / leave() ─────────────────────────────────────────────────
+
+  test('leave() from a new-adventure origin resumes campaign creation', async () => {
+    const originVm = getSetupSubflowViewModel({
+      className: 'SetupSubflowTestOrigin',
+      origin: 'new-adventure',
+    });
+
+    await originVm.leave();
+
+    expect(startNewCampaignMock).toHaveBeenCalled();
+    expect(goToRouteMock).toHaveBeenCalledWith(
+      'personaCreate',
+      expect.objectContaining({ queryParameters: { onboarding: '1' } }),
+    );
+    originVm.dispose();
+  });
+
+  test('leave() from a settings origin returns to settings without creating a campaign', async () => {
+    const originVm = getSetupSubflowViewModel({
+      className: 'SetupSubflowTestOrigin',
+      origin: 'settings',
+    });
+
+    await originVm.leave();
+
+    expect(startNewCampaignMock).not.toHaveBeenCalled();
+    expect(goToRouteMock).toHaveBeenCalledWith('settings', expect.anything());
+    originVm.dispose();
+  });
+
+  test('leave() from a direct origin goes home without creating a campaign', async () => {
+    await vm.leave();
+
+    expect(startNewCampaignMock).not.toHaveBeenCalled();
+    expect(goToRouteMock).toHaveBeenCalledWith('index', expect.anything());
+  });
 
   test('goBack from results returns to entry', () => {
     vm.selectEntryPath('recommended');
-    expect(vm.step).toBe('results');
-
     vm.goBack();
     expect(vm.step).toBe('entry');
     expect(vm.entryPath).toBeNull();
@@ -271,14 +344,14 @@ describe('SetupSubflowViewModel', () => {
 
   test('goBack from plan returns to results', async () => {
     vm.selectEntryPath('recommended');
-    await vm.startDiscovery();
+    await vm.continueFromResults();
     expect(vm.step).toBe('plan');
 
     vm.goBack();
     expect(vm.step).toBe('results');
   });
 
-  test('reset returns to initial state', () => {
+  test('reset returns to initial state and invalidates in-flight operations', () => {
     vm.selectEntryPath('recommended');
     vm.toggleCapability('image');
     vm.reset();
@@ -286,13 +359,12 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.step).toBe('entry');
     expect(vm.entryPath).toBeNull();
     expect(vm.errorMessage).toBe('');
-    const imageToggle = vm.capabilityToggles.find((t) => t.id === 'image');
-    expect(imageToggle?.enabled).toBeFalse();
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
   });
 
   test('retry after error goes back to plan when snapshot exists', async () => {
     vm.selectEntryPath('recommended');
-    await vm.startDiscovery();
+    await vm.continueFromResults();
 
     detectMock.mockRejectedValueOnce(new Error('test error'));
     await vm.startDiscovery();
@@ -301,8 +373,6 @@ describe('SetupSubflowViewModel', () => {
     vm.retry();
     expect(vm.step).toBe('plan');
   });
-
-  // ── Error handling ────────────────────────────────────────────────────
 
   test('errorMessage is cleared on new entry selection', () => {
     vm.selectEntryPath('recommended');

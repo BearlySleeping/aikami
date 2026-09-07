@@ -25,6 +25,18 @@ const isTauriRuntime = (): boolean =>
  * be silently CSP-blocked in the desktop webview, so they are rejected with
  * a warning instead (C-389 CR). Browser builds are unrestricted.
  */
+/**
+ * Registry IDs whose server speaks the exact Kokoro-shaped
+ * `/v1/audio/speech` + `/v1/voices` surface this runtime implements
+ * end-to-end (request shape AND health-check). Cloud providers advertised
+ * in the registry (ElevenLabs, OpenAI TTS) use different real APIs that
+ * this runtime does not implement yet — sending them the Kokoro request
+ * shape would silently fail or, worse, appear to "work" against the wrong
+ * endpoint. Their stored configuration is preserved; playback is reported
+ * as unsupported instead.
+ */
+const SUPPORTED_SERVER_VOICE_PROVIDERS = new Set(['kokoro', 'voicevox', 'fish-speech']);
+
 const isLocalhostUrl = (url: string): boolean => {
   try {
     const parsed = new URL(url);
@@ -233,9 +245,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   private _worker: Worker | null = null; // kokoro-js worker (browser TTS)
   private _kokoroServerUrl: string | undefined; // server-mode TTS URL (C-389)
   private _voiceSpeed: number | undefined; // from the narrator-voice connection's VoiceParams, when resolved
+  private _voiceApiKey: string | undefined; // credential for a cloud server-mode voice provider (e.g. OpenAI TTS)
   private _abortController: AbortController | undefined;
   private _currentAudio: HTMLAudioElement | null = null;
   private _ttsGain: GainNode | undefined; // volume control for synthesized speech
+  /** Resolves/rejects the in-flight speak() call once the worker path reports completion. */
+  private _pendingWorkerSpeak: { resolve: () => void; reject: (error: Error) => void } | undefined;
 
   // --- Playback state (gapless scheduling, word tracking) ---
   private _streamEnded = false;
@@ -323,42 +338,62 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    // Cancel any in-progress request
-    this.stop();
-
-    const abortController = new AbortController();
-    this._abortController = abortController;
-    const { signal } = abortController;
-
-    this.isSynthesizing = true;
-
-    try {
-      const buffer = await this._requestSpeech({
-        text,
-        voice: voiceId ?? this.selectedVoice,
-        signal,
+    if (this.status === 'not-downloaded') {
+      this.debug('speak:not-downloaded', {
+        hint: 'Download the voice model from Settings → Audio first.',
       });
-      if (signal.aborted) {
-        return;
-      }
-      if (!buffer) {
-        return;
-      }
+      return;
+    }
 
-      // Play the WAV audio through the gapless AudioBufferSourceNode queue.
-      // Pass words so the rAF tracking loop can detect when playback ends.
-      const words = text.split(/\s+/).filter(Boolean);
-      this.startStream({ messageId: `tts_${Date.now()}`, text });
-      await this.enqueueChunk({ buffer, words });
-      this.endStream();
-    } catch (error: unknown) {
-      if ((error as Error).name === 'AbortError') {
-        return;
-      }
-      this.error('speak:failed', error);
+    if (this.status === 'disabled') {
+      this.debug('speak:disabled');
+      return;
+    }
+
+    const voice = voiceId ?? this.selectedVoice;
+
+    // Same backend dispatch as synthesize() — preview and gameplay must
+    // never diverge on which engine actually produces the audio.
+    if (this.backend === 'server' && this.isKokoroServerAvailable && this._kokoroServerUrl) {
+      await this._synthesizeViaServer({ text, voice });
+      return;
+    }
+
+    if (this._worker && this.status === 'ready') {
+      await this._speakViaWorker({ text, voice });
+      return;
+    }
+
+    this.debug('speak:not-ready', {
+      status: this.status,
+      backend: this.backend,
+      hasWorker: !!this._worker,
+    });
+  }
+
+  /**
+   * Worker-backed speak(): posts the synthesize request and awaits the
+   * worker's 'complete'/'error' message so callers (voice previews) can
+   * know when playback has actually been scheduled — the same worker
+   * message protocol {@link synthesize} drives, just made awaitable.
+   */
+  private async _speakViaWorker(options: { text: string; voice: string }): Promise<void> {
+    this.stop();
+    this.isSynthesizing = true;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        this._pendingWorkerSpeak = { resolve, reject };
+        this._worker?.postMessage({
+          action: 'synthesize',
+          text: options.text,
+          voice: options.voice,
+        });
+      });
+    } catch (error) {
+      this.error('speak:worker-failed', error);
     } finally {
       this.isSynthesizing = false;
-      this._abortController = undefined;
+      this._pendingWorkerSpeak = undefined;
     }
   }
 
@@ -368,6 +403,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     if (controller) {
       controller.abort();
       this._abortController = undefined;
+    }
+
+    // Reject a pending worker-backed speak() so it never hangs a caller.
+    if (this._pendingWorkerSpeak) {
+      this._pendingWorkerSpeak.reject(new Error('stop() called before synthesis completed'));
+      this._pendingWorkerSpeak = undefined;
     }
 
     // Stop HTMLAudioElement playback
@@ -512,12 +553,28 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       this.selectedVoice = voiceParams.voiceId;
     }
     this._voiceSpeed = voiceParams?.speed;
+    this._voiceApiKey = roleResolution?.apiKey || undefined;
 
     // AC (voice.tts.mode = disabled): TTS is off; nothing is probed.
     if (mode === 'disabled') {
       this.status = 'disabled';
       this.backend = 'unavailable';
       this.info('initialize:disabled');
+      return;
+    }
+
+    // The Kokoro-shaped OpenAI-compatible speech request this runtime sends
+    // is only implemented for providers that actually speak that shape.
+    // A stored connection for an unsupported provider (e.g. ElevenLabs, a
+    // different request/response format entirely) is preserved as-is, but
+    // reported honestly as unsupported rather than silently POSTed the
+    // wrong request shape and misread as "unreachable".
+    const registryId = roleResolution?.provider;
+    if (mode === 'server' && registryId && !SUPPORTED_SERVER_VOICE_PROVIDERS.has(registryId)) {
+      this.status = 'error';
+      this.backend = 'unavailable';
+      this.errorMessage = `${registryId} is not yet supported by the local speech runtime. The configuration is saved, but voice playback for this provider is unavailable.`;
+      this.warn('initialize:unsupported-voice-provider', { provider: registryId });
       return;
     }
 
@@ -592,6 +649,8 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
                 sampleRate: payload.sampleRate,
               });
             }
+            this._pendingWorkerSpeak?.resolve();
+            this._pendingWorkerSpeak = undefined;
             break;
 
           case 'error':
@@ -599,6 +658,8 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
             this.backend = 'unavailable';
             this.errorMessage = payload.message ?? 'Kokoro worker error';
             this.error('kokoro:worker-error', { message: this.errorMessage });
+            this._pendingWorkerSpeak?.reject(new Error(this.errorMessage));
+            this._pendingWorkerSpeak = undefined;
             break;
 
           default:
@@ -611,6 +672,8 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         this.backend = 'unavailable';
         this.errorMessage = error.message || 'Unknown worker error';
         this.error('kokoro:worker-onerror', { message: this.errorMessage });
+        this._pendingWorkerSpeak?.reject(new Error(this.errorMessage));
+        this._pendingWorkerSpeak = undefined;
       };
 
       // ORT WASM is served from the R2 distribution plane when configured
@@ -813,7 +876,11 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     // request body Kokoro serves and is intentionally left unmapped here.
     const response = await fetch(`${this._kokoroServerUrl}/v1/audio/speech`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // biome-ignore lint/style/useNamingConvention: HTTP header name
+        ...(this._voiceApiKey ? { Authorization: `Bearer ${this._voiceApiKey}` } : {}),
+      },
       body: JSON.stringify({
         model: 'tts-1',
         input: text,
@@ -848,18 +915,15 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     }
 
     try {
-      const response = await fetch(`${url}/v1/audio/speech`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'tts-1',
-          input: 'test',
-          voice: 'af_heart',
-        }),
+      // A GET against the voices listing is a real health check with no
+      // synthesis cost — the previous probe POSTed a full speech request,
+      // paying for audio generation just to learn the server exists.
+      const response = await fetch(`${url}/v1/voices`, {
+        method: 'GET',
         signal: AbortSignal.timeout(5000),
       });
 
-      if (response.ok || response.status === 422) {
+      if (response.ok) {
         this.isKokoroServerAvailable = true;
         this.debug('checkKokoroServer:found', { url });
         return;

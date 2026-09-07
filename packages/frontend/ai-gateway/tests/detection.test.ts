@@ -310,13 +310,32 @@ describe('detectImageAvailability — parity with capability_service.detectImage
 });
 
 describe('detectVoiceAvailability — real engine status, optimistic-convertible', () => {
-  test('uninitialized WebGPU engine remains available (optimistic snapshot)', async () => {
+  test('uninitialized WebGPU engine with no downloaded model is not available', async () => {
     const result = await detectVoiceAvailability({
       getEngineStatus: () => ({ status: 'uninitialized', serverAvailable: false }),
+      hasDownloadedModel: () => false,
+    });
+
+    expect(result.available).toBe(false);
+    expect(toDetectionStatus(result)).toBe('not_found');
+  });
+
+  test('uninitialized WebGPU engine with a downloaded model is available (lazy init)', async () => {
+    const result = await detectVoiceAvailability({
+      getEngineStatus: () => ({ status: 'uninitialized', serverAvailable: false }),
+      hasDownloadedModel: () => true,
     });
 
     expect(result.available).toBe(true);
     expect(toDetectionStatus(result)).toBe('detected');
+  });
+
+  test('disabled engine is not available', async () => {
+    const result = await detectVoiceAvailability({
+      getEngineStatus: () => ({ status: 'disabled', serverAvailable: false }),
+    });
+
+    expect(result.available).toBe(false);
   });
 
   test('Kokoro REST server detected is reflected in detail', async () => {

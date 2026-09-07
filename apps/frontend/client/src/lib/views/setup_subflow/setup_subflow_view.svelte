@@ -28,6 +28,7 @@ const { viewModel }: Props = $props();
 
         <SetupSubflowContent
           step={viewModel.step}
+          entryPath={viewModel.entryPath}
           capabilityToggles={viewModel.capabilityToggles}
           discoveredProviders={viewModel.discoveredProviders}
           hasDiscoveredProviders={viewModel.hasDiscoveredProviders}
@@ -35,10 +36,14 @@ const { viewModel }: Props = $props();
           hasResourceWarnings={viewModel.hasResourceWarnings}
           isDetecting={viewModel.isDetecting}
           isApplying={viewModel.isApplying}
+          canApplyPlan={viewModel.canApplyPlan}
           errorMessage={viewModel.displayErrorMessage}
+          editorViewModel={viewModel.editorViewModel}
           onSelectEntryPath={(path) => viewModel.selectEntryPath(path)}
           onToggleCapability={(capability) => viewModel.toggleCapability(capability)}
-          onStartDiscovery={() => viewModel.startDiscovery()}
+          onContinueFromResults={() => viewModel.continueFromResults()}
+          onOpenManualSetup={(capability) => viewModel.openManualSetup(capability)}
+          onFinishManualSetup={() => viewModel.finishManualSetup()}
           onApplyPlan={() => viewModel.applyPlan()}
           onGoBack={() => viewModel.goBack()}
           onLeave={() => viewModel.leave()}

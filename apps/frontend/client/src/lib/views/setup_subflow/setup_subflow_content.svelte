@@ -5,6 +5,8 @@
 // the View remains a direct ViewModel adapter.
 
 import type { ConnectionCapability } from '$types';
+import AiConnectionModals from '../settings/ai/ai_connection_modals.svelte';
+import type { AiSettingsViewModelInterface } from '../settings/ai/ai_settings_view_model.svelte';
 import type {
   CapabilityToggle,
   DiscoveredProvider,
@@ -14,6 +16,7 @@ import type {
 
 type Props = {
   step: SetupFlowStep;
+  entryPath: SetupEntryPath | null;
   capabilityToggles: readonly CapabilityToggle[];
   discoveredProviders: readonly DiscoveredProvider[];
   hasDiscoveredProviders: boolean;
@@ -21,10 +24,14 @@ type Props = {
   hasResourceWarnings: boolean;
   isDetecting: boolean;
   isApplying: boolean;
+  canApplyPlan: boolean;
   errorMessage: string;
+  editorViewModel: AiSettingsViewModelInterface;
   onSelectEntryPath(path: SetupEntryPath): void;
   onToggleCapability(capability: ConnectionCapability): void;
-  onStartDiscovery(): void;
+  onContinueFromResults(): void;
+  onOpenManualSetup(capability: ConnectionCapability): void;
+  onFinishManualSetup(): void;
   onApplyPlan(): void;
   onGoBack(): void;
   onLeave(): void;
@@ -34,6 +41,7 @@ type Props = {
 
 const {
   step,
+  entryPath,
   capabilityToggles,
   discoveredProviders,
   hasDiscoveredProviders,
@@ -41,10 +49,14 @@ const {
   hasResourceWarnings,
   isDetecting,
   isApplying,
+  canApplyPlan,
   errorMessage,
+  editorViewModel,
   onSelectEntryPath,
   onToggleCapability,
-  onStartDiscovery,
+  onContinueFromResults,
+  onOpenManualSetup,
+  onFinishManualSetup,
   onApplyPlan,
   onGoBack,
   onLeave,
@@ -67,7 +79,13 @@ const {
   </div>
 {:else if step === 'results'}
   <div class="flex flex-col gap-3">
-    <p class="text-sm text-base-content/70">Select capabilities to set up:</p>
+    <p class="text-sm text-base-content/70">
+      {#if entryPath === 'existing'}
+        Select capabilities to connect:
+      {:else}
+        Select capabilities to set up:
+      {/if}
+    </p>
     {#each capabilityToggles as toggle (toggle.id)}
       <label
         class="flex cursor-pointer items-center gap-3 rounded-lg border border-base-300 p-3 hover:bg-base-200"
@@ -96,14 +114,16 @@ const {
       <button
         type="button"
         class="btn btn-primary flex-1"
-        onclick={() => onStartDiscovery()}
+        onclick={() => onContinueFromResults()}
         disabled={isDetecting}
       >
         {#if isDetecting}
           <span class="loading loading-spinner loading-xs"></span>
           Scanning...
-        {:else}
+        {:else if entryPath === 'existing'}
           Continue
+        {:else}
+          Scan for Providers
         {/if}
       </button>
     </div>
@@ -165,18 +185,45 @@ const {
       <button type="button" class="btn btn-outline flex-1" onclick={() => onGoBack()}>
         Edit Choices
       </button>
-      <button
-        type="button"
-        class="btn btn-primary flex-1"
-        onclick={() => onApplyPlan()}
-        disabled={isApplying}
-      >
-        {#if isApplying}
-          <span class="loading loading-spinner loading-xs"></span>
-          Applying...
-        {:else}
-          Apply & Continue
-        {/if}
+      {#if canApplyPlan}
+        <button
+          type="button"
+          class="btn btn-primary flex-1"
+          onclick={() => onApplyPlan()}
+          disabled={isApplying}
+        >
+          {#if isApplying}
+            <span class="loading loading-spinner loading-xs"></span>
+            Applying...
+          {:else}
+            Apply & Continue
+          {/if}
+        </button>
+      {:else}
+        <button
+          type="button"
+          class="btn btn-primary flex-1"
+          onclick={() => onOpenManualSetup('text')}
+        >
+          Configure Text
+        </button>
+      {/if}
+    </div>
+  </div>
+{:else if step === 'manual'}
+  <div class="flex flex-col gap-4">
+    <h2 class="text-lg font-semibold">Configure Provider</h2>
+    <p class="text-sm text-base-content/60">
+      Use Set Up below, or connect a provider through the editor. Continue once you're done.
+    </p>
+    <button type="button" class="btn btn-primary" onclick={() => editorViewModel.openAddProvider()}>
+      Open Connection Editor
+    </button>
+    <AiConnectionModals viewModel={editorViewModel} />
+    <div class="flex gap-2">
+      <button type="button" class="btn btn-outline flex-1" onclick={() => onGoBack()}>Back</button>
+      <button type="button" class="btn btn-primary flex-1" onclick={() => onFinishManualSetup()}>
+        Continue
       </button>
     </div>
   </div>
@@ -193,7 +240,7 @@ const {
       Your AI setup is complete. You can start playing now or configure more options later.
     </p>
     <div class="flex gap-2">
-      <button type="button" class="btn btn-primary" onclick={() => onLeave()}>Start Playing</button>
+      <button type="button" class="btn btn-primary" onclick={() => onLeave()}>Continue</button>
       <button type="button" class="btn btn-outline" onclick={() => onReset()}>Set Up More</button>
     </div>
   </div>

@@ -12,6 +12,7 @@ import {
 } from '@aikami/frontend/services';
 import {
   getSetupSubflowViewModel,
+  type SetupOrigin,
   type SetupSubflowViewModelInterface,
 } from './setup_subflow_view_model.svelte';
 
@@ -22,7 +23,10 @@ export type SetupEntryViewModelInterface = BaseViewModelInterface & {
   readonly isComplete: boolean;
 };
 
-export type SetupEntryViewModelOptions = BaseViewModelOptions;
+export type SetupEntryViewModelOptions = BaseViewModelOptions & {
+  /** Where the flow was entered from — see {@link SetupOrigin}. Defaults to 'direct'. */
+  origin?: SetupOrigin;
+};
 
 class SetupEntryViewModel
   extends BaseViewModel<SetupEntryViewModelOptions>
@@ -35,6 +39,7 @@ class SetupEntryViewModel
 
     this.subflow = getSetupSubflowViewModel({
       className: 'SetupEntrySubflow',
+      origin: options.origin,
     });
   }
 

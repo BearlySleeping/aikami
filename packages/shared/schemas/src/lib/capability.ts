@@ -28,8 +28,12 @@ export const CapabilitySnapshotSchema = Type.Object({
   textModelName: Type.Optional(Type.String()),
   /** Image AI detection status. */
   imageStatus: DetectionStatusSchema,
+  /** Detected image provider ID (e.g. 'comfyui', 'sd-server'), or undefined. */
+  imageProviderId: Type.Optional(Type.String()),
   /** Voice AI detection status. */
   voiceStatus: DetectionStatusSchema,
+  /** Detected voice provider ID (e.g. 'kokoro'), or undefined. */
+  voiceProviderId: Type.Optional(Type.String()),
   /** Timestamp of detection completion. */
   detectedAt: Type.Optional(Type.String({ format: 'date-time' })),
   /** Human-readable summary for the capability screen. */

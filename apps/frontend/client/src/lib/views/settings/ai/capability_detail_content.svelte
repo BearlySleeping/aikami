@@ -1,8 +1,11 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/settings/ai/capability_detail_content.svelte
 //
-// Stateless presentation for capability status and setup actions.
+// Stateless presentation for capability status and setup actions. Mounts
+// the same shared connection editor / voice setup modals used by the full
+// AI Settings page and onboarding — one editor, three hosts.
 
+import AiConnectionModals from './ai_connection_modals.svelte';
 import type { CapabilityDetailViewModelInterface } from './capability_detail_view_model.svelte';
 
 type Props = {
@@ -28,7 +31,7 @@ const { viewModel }: Props = $props();
             {/if}
           </p>
         </div>
-        <span class="badge {viewModel.statusColor}">{viewModel.status}</span>
+        <span class="badge {viewModel.statusColor}">{viewModel.statusLabel}</span>
       </div>
     </div>
   </div>
@@ -54,10 +57,7 @@ const { viewModel }: Props = $props();
     {/if}
   </div>
 
-  <!-- Connection modals from the parent AiSettingsViewModel -->
-  {#if viewModel.aiSettingsViewModel.isEditorOpen || viewModel.aiSettingsViewModel.isVoiceSetupOpen}
-    <div class="text-sm text-base-content/60">
-      <p>Use the connection editor to configure your provider.</p>
-    </div>
-  {/if}
+  <!-- Real connection editor / voice setup — same controller instance that
+       owns Set Up / Change above, so Save and Cancel act on this page. -->
+  <AiConnectionModals viewModel={viewModel.aiSettingsViewModel} />
 </div>

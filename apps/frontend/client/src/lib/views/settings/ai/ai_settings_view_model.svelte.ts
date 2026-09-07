@@ -167,6 +167,8 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   // ── Connection editor ──
   readonly draft: EditorDraft;
   readonly isEditorOpen: boolean;
+  /** Sanitized error from the last failed saveDraft(), or undefined. */
+  readonly saveError: string | undefined;
   /** Text currently displayed in the model search/input field. */
   readonly modelQuery: string;
   readonly modelOptions: readonly FetchedModel[];
@@ -221,7 +223,8 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   selectModel(modelId: string): void;
   /** Closes the model search results dropdown (e.g. on Enter or Escape). */
   closeModelDropdown(): void;
-  saveDraft(): void;
+  /** Persists the draft as a connection/provider. Awaits the save before resolving. */
+  saveDraft(): Promise<void>;
   deleteConnection(connectionId: ConnectionId): void;
   testConnection(connectionId: ConnectionId | undefined): Promise<void>;
   testDraftConnection(): Promise<void>;
@@ -249,6 +252,8 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   commitConfigChanges(): void;
   readonly voicePreviewState: VoicePreviewState;
   previewVoiceArchetype(archetypeId: string): Promise<void>;
+  /** Stops an in-progress voice preview (playback and/or in-flight synthesis). */
+  stopVoicePreview(): void;
   readonly showVoiceLocalDownload: boolean;
   readonly voiceModelState: VoiceModelState;
   readonly voiceModelProgress: number;
@@ -293,6 +298,13 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
 
 export type AiSettingsViewModelOptions = BaseViewModelOptions & {
   showAdvancedSections?: boolean;
+  /**
+   * Scopes initialize()'s side effects to one capability (e.g. a capability
+   * detail page for Story & Dialogue). Undefined means the full AI Settings
+   * page, which needs every section's data. Mounting a text- or
+   * voice-only detail page must not trigger image checkpoint loading.
+   */
+  capability?: ConnectionCapability;
 };
 
 // ---------------------------------------------------------------------------
@@ -424,7 +436,9 @@ export class AiSettingsViewModel
   keyConflictPrompt: KeyConflictPrompt | undefined = $state(undefined);
   voicePreviewState: VoicePreviewState = $state({ status: 'idle' });
   isGenParamsOpen = $state(false);
+  saveError: string | undefined = $state(undefined);
   readonly showAdvancedSections: boolean;
+  private readonly _scopedCapability: ConnectionCapability | undefined;
 
   draft: EditorDraft = $state({
     providerId: undefined,
@@ -442,6 +456,7 @@ export class AiSettingsViewModel
   constructor(options: AiSettingsViewModelOptions) {
     super(options);
     this.showAdvancedSections = options.showAdvancedSections ?? true;
+    this._scopedCapability = options.capability;
   }
 
   // ── Derived: status board ──
@@ -451,24 +466,31 @@ export class AiSettingsViewModel
     return capabilities.map((cap) => {
       const connections = this._connectionsForCapability(cap);
       const providers = this._providersForCapability(cap);
-      const firstConn = connections[0];
+      // The effective connection is the one actually resolved for this
+      // capability's default role — never just the first array entry,
+      // which can be stale or arbitrary once more than one connection
+      // exists for a capability.
+      const effectiveId = configService.state.defaultByCapability?.[cap];
+      const effectiveConn = connections.find((c) => c.id === effectiveId) ?? connections[0];
       const status = _deriveCapabilityStatus({
-        connection: firstConn,
+        connection: effectiveConn,
         testResults: this.testResults,
         testingIds: this.testingIds,
       });
-      const testResult = firstConn ? this.testResults[firstConn.id] : undefined;
-      const provider = firstConn ? providers.find((p) => p.id === firstConn.providerId) : undefined;
+      const testResult = effectiveConn ? this.testResults[effectiveConn.id] : undefined;
+      const provider = effectiveConn
+        ? providers.find((p) => p.id === effectiveConn.providerId)
+        : undefined;
       const registry = _registryForCapability(cap);
       const registryEntry = registry.find((r) => r.id === provider?.registryId);
       return {
         capability: cap,
-        connectionId: firstConn?.id,
+        connectionId: effectiveConn?.id,
         status,
         color: _capabilityColor(status),
         dot: _capabilityDot(status),
         label: cap.charAt(0).toUpperCase() + cap.slice(1),
-        modelName: firstConn?.model,
+        modelName: effectiveConn?.model,
         latencyMs: testResult?.ok ? testResult.latencyMs : undefined,
         providerLabel: registryEntry?.label,
       };
@@ -703,10 +725,23 @@ export class AiSettingsViewModel
   async downloadVoiceModel(): Promise<void> {
     this.debug('downloadVoiceModel');
     try {
-      await voiceModelService.download();
+      const result = await voiceModelService.download();
+      if (result.status !== 'ready') {
+        return;
+      }
+      // Downloaded bytes alone are not "speech ready" — bring the runtime
+      // up so Test Voice actually works right after download, instead of
+      // reporting success on cached bytes the worker hasn't loaded yet.
+      ttsService.reset();
+      await ttsService.initialize();
     } catch (error) {
       this.warn('downloadVoiceModel:failed', error);
     }
+  }
+
+  stopVoicePreview(): void {
+    ttsService.stop();
+    this.voicePreviewState = { status: 'idle' };
   }
 
   cancelVoiceModelDownload(): void {
@@ -882,8 +917,15 @@ export class AiSettingsViewModel
   override async initialize(): Promise<void> {
     this.debug('initialize');
     await configService.load();
-    await imageGenerationService.loadCheckpoints();
-    this._loadVoiceArchetypes();
+    // A text- or voice-only capability detail page has no use for the
+    // image checkpoint list — loading it there is a pointless model
+    // enumeration call on mount for a page that never renders it.
+    if (!this._scopedCapability || this._scopedCapability === 'image') {
+      await imageGenerationService.loadCheckpoints();
+    }
+    if (!this._scopedCapability || this._scopedCapability === 'voice') {
+      this._loadVoiceArchetypes();
+    }
     await super.initialize();
   }
 
@@ -952,6 +994,7 @@ export class AiSettingsViewModel
   cancelEdit(): void {
     this.isEditorOpen = false;
     this.isAddProviderOpen = false;
+    this.saveError = undefined;
     this._resetDraft();
     this._availableModels = [];
   }
@@ -1015,8 +1058,9 @@ export class AiSettingsViewModel
     }
   }
 
-  saveDraft(): void {
+  async saveDraft(): Promise<void> {
     this.debug('saveDraft');
+    this.saveError = undefined;
 
     const reg = this.draft.registryId;
     const cap = this.draft.capability;
@@ -1105,7 +1149,17 @@ export class AiSettingsViewModel
       }
     }
 
-    void configService.save();
+    try {
+      await configService.save();
+    } catch (error) {
+      // Draft (and any provider/connection already written into in-memory
+      // config state) is preserved so the user can retry — the editor
+      // stays open with a sanitized error instead of silently closing
+      // over a failed persist.
+      this.saveError = 'Failed to save connection. Please try again.';
+      this.error('saveDraft:failed', error);
+      return;
+    }
     this.cancelEdit();
   }
 
@@ -1205,10 +1259,24 @@ export class AiSettingsViewModel
   async fetchModels(): Promise<void> {
     this.debug('fetchModels');
     const reg = this.draft.registryId;
-    const config = PROVIDER_MODEL_FETCH[reg];
-    if (!config) {
+    const baseConfig = PROVIDER_MODEL_FETCH[reg];
+    if (!baseConfig) {
       return;
     }
+    // For a local provider (Ollama), the draft's own endpoint field is the
+    // intended account/address — two connections to two different local
+    // instances must not both resolve against a single global runtime URL.
+    // Falls back to the runtime-configured default only when the draft
+    // hasn't specified one, preserving today's zero-config behavior.
+    const draftBaseUrl = this.draft.baseUrl?.trim().replace(/\/+$/, '');
+    const config =
+      reg === 'ollama' && draftBaseUrl
+        ? {
+            ...baseConfig,
+            url: `${draftBaseUrl}/api/tags`,
+            chatTestUrl: `${draftBaseUrl}/api/chat`,
+          }
+        : baseConfig;
     const existing = this._findProviderByRegistry(reg);
     const apiKey = existing?.credential ?? this.draft.apiKey;
     this.isFetchingModels = true;

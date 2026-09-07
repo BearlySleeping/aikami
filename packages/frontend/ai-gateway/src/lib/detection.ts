@@ -301,21 +301,25 @@ export const detectImageAvailability = async (options?: {
 };
 
 /**
- * Detects voice availability. Reports real engine status while remaining
- * convertible to today's optimistic snapshot (Kokoro WebGPU is treated as
- * available unless the engine reports a hard error).
+ * Detects voice availability. Distinguishes real runtime readiness (a
+ * reachable server, or a WebGPU engine that already finished loading) from a
+ * merely *installable* option: a downloaded-but-not-yet-initialized model is
+ * reported available (lazy init will succeed with no network round trip),
+ * but an engine that was never downloaded, is disabled, or errored is not —
+ * "uninitialized" alone is no longer treated as an optimistic proxy for
+ * "working", since it is also the status of a model that was never
+ * installed at all.
  */
 export const detectVoiceAvailability = async (options?: {
   getEngineStatus?: () => { status: string; serverAvailable: boolean };
+  /** Whether the voice model's bytes are already cached on disk (no network required to init). */
+  hasDownloadedModel?: () => Promise<boolean> | boolean;
 }): Promise<AiDetectionResult> => {
   const engine = options?.getEngineStatus?.() ?? {
     status: 'uninitialized',
     serverAvailable: false,
   };
 
-  // Optimistic snapshot (C-320 AC-5): an uninitialized Kokoro WebGPU
-  // engine is still available — it initializes lazily on first use.
-  // Only a hard engine error makes voice unavailable.
   if (engine.status === 'error') {
     return {
       capability: 'voice',
@@ -325,14 +329,48 @@ export const detectVoiceAvailability = async (options?: {
     };
   }
 
+  if (engine.status === 'ready' || engine.serverAvailable) {
+    return {
+      capability: 'voice',
+      available: true,
+      mode: 'offline',
+      provider: 'kokoro',
+      detail: engine.serverAvailable ? 'Kokoro REST server detected' : 'Kokoro WebGPU engine ready',
+      checkedAt: nowIso(),
+    };
+  }
+
+  if (engine.status === 'disabled') {
+    return {
+      capability: 'voice',
+      available: false,
+      detail: 'Voice disabled in configuration',
+      checkedAt: nowIso(),
+    };
+  }
+
+  // 'uninitialized' / 'initializing' / 'not-downloaded': only genuinely
+  // available if the model bytes are already cached — otherwise this is an
+  // installable option, not a working one.
+  try {
+    if (await options?.hasDownloadedModel?.()) {
+      return {
+        capability: 'voice',
+        available: true,
+        mode: 'offline',
+        provider: 'kokoro',
+        detail: 'Kokoro voice model downloaded (initializes on first use)',
+        checkedAt: nowIso(),
+      };
+    }
+  } catch {
+    // Cache probe failure — treat as not downloaded rather than erroring detection.
+  }
+
   return {
     capability: 'voice',
-    available: true,
-    mode: 'offline',
-    provider: 'kokoro',
-    detail: engine.serverAvailable
-      ? 'Kokoro REST server detected'
-      : `Kokoro WebGPU engine (${engine.status})`,
+    available: false,
+    detail: 'Kokoro voice model not downloaded',
     checkedAt: nowIso(),
   };
 };
