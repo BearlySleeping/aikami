@@ -384,6 +384,9 @@ export const localServicesMockBase = () => ({
   DraftStore: class {},
   MessageBranchStore: class {},
   ExpressionAssetResolver: class {},
+  // C-487: dialogue_overlay_view_model.svelte.ts calls `expressionService.detectExpression`
+  // after each NPC turn. Stub it so the dialogue VM unit tests (AC-1..AC-5) can load.
+  expressionService: _createServiceStub(),
   gameSaveService: _createServiceStub(),
   GameSaveService: class {},
   setPendingGameLoad: _createCallableStub(),
@@ -446,6 +449,9 @@ export const localServicesMockBase = () => ({
     reset: _createCallableStub(),
     startListening: _createCallableStub(),
   }),
+  // C-487: isolated player-state factory used by the character-sheet sandbox
+  // and the dev dialogue page (never the shared singleton).
+  createPlayerStateService: _createCallableStub(),
   worldStateService: Object.assign(_createServiceStub(), {
     currentWorld: undefined,
     currentLocation: undefined,

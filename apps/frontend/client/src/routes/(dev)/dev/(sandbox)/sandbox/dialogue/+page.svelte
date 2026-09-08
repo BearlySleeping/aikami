@@ -26,7 +26,7 @@ import {
   type DialogueDevViewModelInterface,
   type DiceOutcome,
 } from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts';
-import { aiGatewayService } from '$services';
+import { aiGatewayService, createPlayerStateService } from '$services';
 
 /** Navigate back to sandbox index on End Chat / combat transition. */
 const goBack = () => {
@@ -41,6 +41,10 @@ const MOCK_NPC_DATA = {
   dialog: 'Ah, a traveler! Welcome to our humble village. How may I be of assistance?',
   personaId: 'sage',
 };
+
+const sandboxPlayerStateService = createPlayerStateService({
+  className: 'DialogueSandboxPlayerStateService',
+});
 
 /** Label for a dice outcome control. */
 const diceOutcomeLabel = (outcome: string): string => {
@@ -136,6 +140,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   className: 'DialogueSandboxVM',
   npcData: MOCK_NPC_DATA,
   onEndChat: goBack,
+  playerStateService: sandboxPlayerStateService,
   npcDialogueService: {
     _className: 'DevMockNpcDialogueService',
     dispose: async () => {},
@@ -589,8 +594,6 @@ let devToolsOpen = $state(true);
               viewModel.forceDiceRoll({
                 checkType: 'Persuasion',
                 difficultyClass: 12,
-                statModifier: 'CHA',
-                statModifierValue: 2,
               })}
             >
               🎲 Force Dice Roll (DC 12, CHA +2)
