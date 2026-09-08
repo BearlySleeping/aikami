@@ -3,7 +3,7 @@ id: C-501
 title: "Dialogue Slash Commands"
 source: "direct"
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-08T14:01:09Z"
 | **Type** | full |
 | **Priority** | P1 — expands dialogue input into three distinct destinations (image, tree, GM) without regressing free-text NPC dialogue |
 | **Dependencies** | none (image generation + `generatedImages` already exist; GM address mode already exists) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` — production route `/game` |
 | **Docs Impact** | none |
 | **Contract version** | 2.0.0 |
@@ -35,8 +35,8 @@ created_at: "2026-09-08T14:01:09Z"
 - **Reproduction**: open a dialogue with any NPC, type `/generate a forest clearing` — it is sent to the NPC as free text and the NPC responds conversationally instead of an image being produced.
 - **Existing implementation to reuse**:
   - `dialogue_overlay_view_model.svelte.ts` `sendMessage` (~L1126) — single choke point where player text enters the dialogue pipeline.
-  - `packages/shared/schemas/src/lib/game/npc_dialogue_command.ts` — the validated command union (`trade`, `offerQuest`, `skillCheck`, `giveItem`, `startCombat`, `recruit`) and `NpcDialogueChoice` (`id`, `label`, optional `command`, optional `nextDialogueKey`) — the "dialogue tree" is these choices.
-  - `apps/frontend/client/src/lib/services/image/engine/comfyui_engine.svelte.ts` — image generation engine; the dialogue overlay already tracks `generatedImages` (`GeneratedImage[]`, anchored per message) and `imageProviderAvailable`, rendered by the `imageBlock` snippet in `dialogue_overlay.svelte` (C-162 devtools).
+  - `packages/shared/schemas/src/lib/game/npc_dialogue_command.ts` — the validated command union (`trade`, `offerQuest`, `skillCheck`, `giveItem`, `startCombat`, `recruit`) and `NpcDialogueChoice` (`id`, `label`, optional `command`, optional `nextDialogueKey`) — the "dialogue tree" is these choices. The production ViewModel tracks only `_activeChoices` (the **current** turn's choices) — there is no snapshot of the *previous* turn's choice set, so `/tree` requires capturing a previous-set snapshot when a new turn begins.
+  - `apps/frontend/client/src/lib/services/image/engine/comfyui_engine.svelte.ts` — image generation engine; the dialogue overlay already tracks `generatedImages` (`GeneratedImage[]`, anchored per message) and `imageProviderAvailable`, rendered by the `imageBlock` snippet in `dialogue_overlay.svelte` (C-162 devtools). 🔴 **The only method that populates `generatedImages` (driving `generating`/`done`/`error` states) is `generateSceneImage()` in the **dev** ViewModel (`dialogue_overlay_view_model.dev.svelte.ts`, `protected override`, uses `imageGenerationService.generateImage`) — the production ViewModel has no image trigger. `/generate` therefore requires promoting a **prompt-taking** variant of that method into the production `dialogue_overlay_view_model.svelte.ts` (the dev version takes no prompt and builds one from recent messages). Do not treat AC-1 as pure reuse — the production trigger must be added.
   - `apps/frontend/client/src/lib/types/gm.ts` `AddressMode = 'scene' | 'party' | 'gm'` and `apps/frontend/client/src/lib/services/gm/gm_prompt_service.svelte.ts` (address-mode prompt sections, `[GM ONLY]` blocks ~L337, ~L549) — the GM-direct routing already exists.
 - **Known gaps**:
   1. No slash-command parser before `sendMessage` forwards text.
@@ -179,9 +179,9 @@ N/A — no persistent state changes.
 
 **Watch Points**:
 - **Parse before the NPC pipeline** — the single highest-risk mistake is letting `/generate …` reach the NPC as free text.
-- **`/tree` vs executed-command guard** — re-presenting choices must respect `markCommandExecuted`/`wasCommandExecuted`, or redoing a `startCombat`/`recruit` choice double-fires.
+- **`/tree` vs executed-command guard** — re-presenting choices must respect `markCommandExecuted`/`wasCommandExecuted`, or redoing a `startCombat`/`recruit` choice double-fires. `/tree` must re-show the **previous** turn's choice set (snapshot it when a new turn begins — `_activeChoices` only holds the current turn's choices); with no prior choices, show inline help.
 - **GM routing must not mutate NPC dialogue state** — a `/action` should not append an NPC turn or spawn suggestion chips.
-- **Do not build a second image renderer** — reuse `generatedImages` + the `imageBlock` snippet.
+- **Do not build a second image renderer** — reuse `generatedImages` + the `imageBlock` snippet. The production `generateSceneImage`-equivalent must accept the player's `/generate` prompt verbatim (dev version hard-codes its own prompt) and must be abortable via the existing `AbortController`/`imageGenerationService` path (see Quality Requirements).
 - **Empty prompt** (`/generate` with nothing after it) → treat as help, not an image request.
 
 ## Implementation Sequence
