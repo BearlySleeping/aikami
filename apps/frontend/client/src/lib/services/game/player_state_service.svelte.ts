@@ -12,8 +12,26 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { GameCharacterSheet, NarrativeTraits } from '@aikami/types';
-import { createDefaultSheet, serializeForAi } from '@aikami/utils';
+import type {
+  AbilityKey,
+  AbilityScores,
+  CharacterSavingThrow,
+  CharacterSkill,
+  CharacterTraits,
+  GameCharacterSheet,
+  NarrativeTraits,
+} from '@aikami/types';
+import { DEFAULT_TRAITS } from '@aikami/types';
+import {
+  computeModifier,
+  computeProficiencyBonus,
+  createDefaultAbilities,
+  createDefaultSavingThrows,
+  createDefaultSkills,
+  recomputeSavingThrows,
+  recomputeSkills,
+  serializeForAi,
+} from '@aikami/utils';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,6 +58,38 @@ export type PlayerStateServiceInterface = BaseFrontendClassInterface & {
   readonly hotbarSlots: readonly string[];
   /** Usage tracking: featureId → uses remaining (C-337) */
   readonly abilityUses: Record<string, number>;
+
+  // ── Character sheet source of truth (C-487) ──
+
+  /** The real authored ability scores (neutral defaults until authored). */
+  readonly abilities: AbilityScores;
+  /** The real authored skill proficiency flags. */
+  readonly skills: CharacterSkill[];
+  /** The real authored saving throw flags. */
+  readonly savingThrows: CharacterSavingThrow[];
+  /** The real authored personality traits. */
+  readonly traits: CharacterTraits;
+  /** The assembled character sheet — the single source the dialogue path reads. */
+  readonly characterSheet: GameCharacterSheet;
+  /** True once the player has authored/edited the sheet; false while neutral. */
+  readonly isCharacterSheetAuthored: boolean;
+
+  /** Sets an ability score, recomputing its modifier (C-487). */
+  setAbilityScore(options: { key: AbilityKey; value: number }): void;
+  /** Toggles proficiency for a skill by name (C-487). */
+  toggleSkillProficiency(options: { name: string }): void;
+  /** Toggles expertise for a skill by name (C-487). */
+  toggleSkillExpertise(options: { name: string }): void;
+  /** Toggles proficiency for a saving throw (C-487). */
+  toggleSaveProficiency(options: { ability: AbilityKey }): void;
+  /** Sets a personality trait field (C-487). */
+  setTrait(options: { field: keyof CharacterTraits; text: string }): void;
+  /** Adds a narrative trait entry (C-487). */
+  addNarrativeTrait(options: { category: keyof NarrativeTraits; value: string }): void;
+  /** Removes a narrative trait entry (C-487). */
+  removeNarrativeTrait(options: { category: keyof NarrativeTraits; value: string }): void;
+  /** Imports a full authored sheet (JSON edit path, C-487). */
+  importCharacterSheet(options: { sheet: GameCharacterSheet }): void;
 
   /**
    * Adds XP to the player. Does not handle level-up logic (ECS owns that).
@@ -99,24 +149,147 @@ class PlayerStateService
   hotbarSlots = $state<string[]>([]);
   abilityUses = $state<Record<string, number>>({});
 
+  // ── Character sheet source of truth (C-487) ──
+  //
+  // The real authored sheet lives here, not in CharacterSheetViewModel. The
+  // dialogue overlay reads this service; a ViewModel is never imported into
+  // the dialogue path. Fields default to a neutral sheet (all 10s → +0).
+
+  abilities = $state<AbilityScores>(createDefaultAbilities());
+  skills = $state<CharacterSkill[]>(createDefaultSkills());
+  savingThrows = $state<CharacterSavingThrow[]>(createDefaultSavingThrows());
+  traits = $state<CharacterTraits>({ ...DEFAULT_TRAITS });
+
+  private _characterSheetAuthored = false;
+
   private _listening = false;
+
+  constructor(options: PlayerStateServiceOptions) {
+    super(options);
+
+    // E2E seeding hook (C-487): lets the Playwright harness author a real
+    // sheet before the production boot reads it. Absent during normal play —
+    // the neutral sheet is the only fallback. Keyed on a window global so the
+    // route/overlay/ViewModel stay the production ones in the /game E2E.
+    const seed = (globalThis as Record<string, unknown>).__AIKAMI_E2E_SHEET__ as
+      | GameCharacterSheet
+      | undefined;
+    if (seed && typeof seed === 'object' && seed.abilities) {
+      this.importCharacterSheet({ sheet: seed });
+    }
+  }
 
   /** Compact AI-ready character sheet summary for prompt injection (C-232). */
   get characterSheetSummary(): string {
-    const sheet: GameCharacterSheet = {
-      ...createDefaultSheet(),
+    return serializeForAi(this.characterSheet);
+  }
+
+  /** The assembled character sheet — the single source the dialogue path reads (C-487). */
+  get characterSheet(): GameCharacterSheet {
+    const proficiencyBonus = computeProficiencyBonus(this.playerLevel);
+    return {
+      abilities: this.abilities,
+      skills: recomputeSkills(this.skills, this.abilities, proficiencyBonus),
+      savingThrows: recomputeSavingThrows(this.savingThrows, this.abilities, proficiencyBonus),
+      traits: this.traits,
+      narrativeTraits: this.narrativeTraits,
+      proficiencyBonus,
       level: this.playerLevel,
       xp: this.playerXp,
       hp: this.playerHp,
       maxHp: this.playerMaxHp,
       attack: this.playerBaseAttack,
       defense: this.playerBaseDefense,
-      narrativeTraits: this.narrativeTraits,
       classId: this.classId,
       classFeatures: this.classFeatures,
       hotbarSlots: this.hotbarSlots,
     };
-    return serializeForAi(sheet);
+  }
+
+  /** True once the player has authored/edited the sheet; false while neutral (C-487). */
+  get isCharacterSheetAuthored(): boolean {
+    return this._characterSheetAuthored;
+  }
+
+  /** Sets an ability score, recomputing its modifier (C-487). */
+  setAbilityScore(options: { key: AbilityKey; value: number }): void {
+    const { key, value } = options;
+    const clamped = Math.max(3, Math.min(20, Math.round(value)));
+    const current = this.abilities[key];
+    if (current.value === clamped) {
+      return;
+    }
+    this.abilities = {
+      ...this.abilities,
+      [key]: { value: clamped, modifier: computeModifier(clamped) },
+    };
+    this._characterSheetAuthored = true;
+  }
+
+  /** Toggles proficiency for a skill by name (C-487). */
+  toggleSkillProficiency(options: { name: string }): void {
+    this.skills = this.skills.map((s) =>
+      s.name === options.name ? { ...s, isProficient: !s.isProficient } : s,
+    );
+    this._characterSheetAuthored = true;
+  }
+
+  /** Toggles expertise for a skill by name (C-487). */
+  toggleSkillExpertise(options: { name: string }): void {
+    this.skills = this.skills.map((s) =>
+      s.name === options.name ? { ...s, isExpertise: !s.isExpertise, isProficient: true } : s,
+    );
+    this._characterSheetAuthored = true;
+  }
+
+  /** Toggles proficiency for a saving throw (C-487). */
+  toggleSaveProficiency(options: { ability: AbilityKey }): void {
+    this.savingThrows = this.savingThrows.map((s) =>
+      s.ability === options.ability ? { ...s, isProficient: !s.isProficient } : s,
+    );
+    this._characterSheetAuthored = true;
+  }
+
+  /** Sets a personality trait field (C-487). */
+  setTrait(options: { field: keyof CharacterTraits; text: string }): void {
+    this.traits = { ...this.traits, [options.field]: options.text };
+    this._characterSheetAuthored = true;
+  }
+
+  /** Adds a narrative trait entry (C-487). */
+  addNarrativeTrait(options: { category: keyof NarrativeTraits; value: string }): void {
+    const trimmed = options.value.trim();
+    if (!trimmed) {
+      return;
+    }
+    const current = this.narrativeTraits[options.category];
+    if (current.includes(trimmed)) {
+      return;
+    }
+    this.narrativeTraits = {
+      ...this.narrativeTraits,
+      [options.category]: [...current, trimmed],
+    };
+    this._characterSheetAuthored = true;
+  }
+
+  /** Removes a narrative trait entry (C-487). */
+  removeNarrativeTrait(options: { category: keyof NarrativeTraits; value: string }): void {
+    this.narrativeTraits = {
+      ...this.narrativeTraits,
+      [options.category]: this.narrativeTraits[options.category].filter((v) => v !== options.value),
+    };
+    this._characterSheetAuthored = true;
+  }
+
+  /** Imports a full authored sheet (JSON edit path, C-487). */
+  importCharacterSheet(options: { sheet: GameCharacterSheet }): void {
+    this.abilities = options.sheet.abilities;
+    this.skills = options.sheet.skills;
+    this.savingThrows = options.sheet.savingThrows;
+    this.traits = options.sheet.traits;
+    this.narrativeTraits = options.sheet.narrativeTraits;
+    this._characterSheetAuthored = true;
   }
 
   /** Sets the class ID and retroactively grants features for the current level. */
@@ -228,6 +401,12 @@ class PlayerStateService
     this.classFeatures = [];
     this.hotbarSlots = [];
     this.abilityUses = {};
+    this.abilities = createDefaultAbilities();
+    this.skills = createDefaultSkills();
+    this.savingThrows = createDefaultSavingThrows();
+    this.traits = { ...DEFAULT_TRAITS };
+    this.narrativeTraits = { likes: [], temptations: [], keys: [] };
+    this._characterSheetAuthored = false;
     this.debug('reset:cleared');
   }
 

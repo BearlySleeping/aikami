@@ -6,13 +6,16 @@
 //
 // Contract: C-232 Character Sheet & Traits System
 
-import type { AbilityKey } from '@aikami/types';
+import type { AbilityKey, GameCharacterSheet } from '@aikami/types';
 import {
   computeModifier,
+  computeProficiencyBonus,
   createDefaultAbilities,
   createDefaultSavingThrows,
+  createDefaultSheet,
   createDefaultSkills,
 } from '@aikami/utils';
+import { playerStateService } from '$services';
 import {
   CharacterSheetViewModel,
   type CharacterSheetViewModelInterface,
@@ -53,7 +56,6 @@ class CharacterSheetSandboxViewModel
     for (const { key, value } of mockScores) {
       abilities[key] = { value, modifier: computeModifier(value) };
     }
-    this._abilities = abilities;
 
     // ── Mock skill proficiencies ──
     const proficientSkills = new Set([
@@ -63,37 +65,40 @@ class CharacterSheetSandboxViewModel
       'Survival',
       'Stealth',
     ]);
-    this._skills = createDefaultSkills().map((s) => ({
-      ...s,
-      isProficient: proficientSkills.has(s.name),
-    }));
-
-    // Mark Athletics as expertise
-    this._skills = this._skills.map((s) =>
-      s.name === 'Athletics' ? { ...s, isProficient: true, isExpertise: true } : s,
-    );
+    const skills = createDefaultSkills()
+      .map((s) => ({
+        ...s,
+        isProficient: proficientSkills.has(s.name),
+      }))
+      .map((s) => (s.name === 'Athletics' ? { ...s, isProficient: true, isExpertise: true } : s));
 
     // ── Mock saving throws ──
     const proficientSaves = new Set<AbilityKey>(['strength', 'constitution']);
-    this._savingThrows = createDefaultSavingThrows().map((s) => ({
+    const savingThrows = createDefaultSavingThrows().map((s) => ({
       ...s,
       isProficient: proficientSaves.has(s.ability),
     }));
 
-    // ── Mock traits ──
-    this._traits = {
-      personalityTraits: 'I always keep my word. I face problems head-on.',
-      ideals: 'Might makes right. The strong protect the weak.',
-      bonds: 'I will find my lost sister, taken by the Shadow Guild.',
-      flaws: 'I am quick to anger and slow to forgive.',
+    const base = createDefaultSheet();
+    const sheet: GameCharacterSheet = {
+      ...base,
+      abilities,
+      skills,
+      savingThrows,
+      traits: {
+        personalityTraits: 'I always keep my word. I face problems head-on.',
+        ideals: 'Might makes right. The strong protect the weak.',
+        bonds: 'I will find my lost sister, taken by the Shadow Guild.',
+        flaws: 'I am quick to anger and slow to forgive.',
+      },
+      narrativeTraits: {
+        likes: ['Gold', 'Strong Drink', 'A Good Fight'],
+        temptations: ['Power', 'Revenge'],
+        keys: ['Lost Sister', 'The Crown of Aldren'],
+      },
+      proficiencyBonus: computeProficiencyBonus(base.level),
     };
-
-    // ── Mock narrative traits ──
-    this._narrativeTraits = {
-      likes: ['Gold', 'Strong Drink', 'A Good Fight'],
-      temptations: ['Power', 'Revenge'],
-      keys: ['Lost Sister', 'The Crown of Aldren'],
-    };
+    playerStateService.importCharacterSheet({ sheet });
   }
 }
 

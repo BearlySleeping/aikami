@@ -1,12 +1,29 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts
 
-import { SKILL_STAT_MAP } from '@aikami/constants';
+import {
+  DEFAULT_SKILL_CHECK_STAKES,
+  SKILL_CHECK_STAKES,
+  SKILL_STAT_MAP,
+  type SkillCheckStakes,
+} from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { NpcQuestActivation, NpcSuggestionChip } from '@aikami/types';
+import {
+  ABILITY_KEYS,
+  ABILITY_LABELS,
+  type AbilityKey,
+  type NpcQuestActivation,
+  type NpcSuggestionChip,
+} from '@aikami/types';
+import {
+  computeModifier,
+  computeProficiencyBonus,
+  computeSkillModifier,
+  serializeForAi,
+} from '@aikami/utils';
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import { mergeInitialSuggestions } from '$lib/data/initial_suggestion_presets';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
@@ -32,6 +49,60 @@ import type {
   ExpressionId,
 } from '$types';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
+
+// ---------------------------------------------------------------------------
+// Skill-check breakdown types (C-487) — UI-state types owned by this ViewModel.
+// Not persisted domain types; do not add to @aikami/types.
+// ---------------------------------------------------------------------------
+
+/**
+ * The named two-component breakdown of a skill check's total modifier.
+ * Computed from the real character sheet, never from the model's `modifierSource`.
+ */
+export type SkillCheckBreakdown = {
+  /** Governing ability key (e.g. "charisma") — undefined when unresolvable. */
+  ability: AbilityKey | undefined;
+  /** Three-letter ability label for display (e.g. "CHA"). */
+  abilityLabel: string;
+  /** The governing ability's modifier (computeModifier(score)). */
+  abilityModifier: number;
+  /** Whether the character is proficient in the checked skill. */
+  isProficient: boolean;
+  /** Whether the character has expertise in the checked skill. */
+  isExpertise: boolean;
+  /** Proficiency bonus added to the roll (0 when not proficient). */
+  proficiencyBonus: number;
+  /** Total modifier: computeSkillModifier(abilityModifier, isProficient, proficiencyBonus, isExpertise). */
+  totalModifier: number;
+};
+
+/** Runtime shape of the declared-DC skill check state rendered by the overlay (C-487). */
+export type DialogueSkillCheckState = {
+  checkType: string;
+  difficultyClass: number;
+  breakdown: SkillCheckBreakdown;
+  stakes: SkillCheckStakes;
+  /** max(1, DC - totalModifier) — the number the player needs on the d20. */
+  targetNumber: number;
+  rollValue: number | null;
+  phase: 'declared' | 'awaiting_click' | 'rolling' | 'revealed';
+  isSuccess: boolean | null;
+};
+
+/** Maps a three-letter ability label ("CHA") to its canonical AbilityKey ("charisma"). */
+const ABILITY_KEY_BY_LABEL: Record<string, AbilityKey> = Object.fromEntries(
+  ABILITY_KEYS.map((key) => [ABILITY_LABELS[key], key]),
+) as Record<string, AbilityKey>;
+
+/**
+ * Normalises a model-authored `checkType` (Title Case, spaces) to the
+ * camelCase `SKILL_STAT_MAP` key: "Sleight Of Hand" → "sleightOfHand",
+ * "Persuasion" → "persuasion". A direct lookup misses otherwise (C-487 AC-1).
+ */
+const normalizeCheckType = (checkType: string): string => {
+  const lowerFirst = checkType.charAt(0).toLowerCase() + checkType.slice(1);
+  return lowerFirst.replace(/\s+/g, '');
+};
 
 // ---------------------------------------------------------------------------
 // DialogueOverlayViewModel — orchestrates AI NPC dialogue via orchestrator
@@ -154,28 +225,10 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    * Skill check UI state for the animated d20 component.
    * `null` when no skill check is in progress or recently completed.
    *
-   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice, C-330 Declared-DC
+   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice, C-330 Declared-DC,
+   * C-487 — breakdown + stakes sourced from the real character sheet.
    */
-  readonly skillCheckState: {
-    readonly checkType: string;
-    readonly difficultyClass: number;
-    /** The stat modifier label (e.g. "CHA"). */
-    readonly statModifier: string;
-    /** The numeric value of the stat modifier (e.g. +2). */
-    readonly statModifierValue: number;
-    /** DC - statModifierValue = the number the player needs on the d20. */
-    readonly targetNumber: number;
-    readonly rollValue: number | null;
-    /**
-     * Interactive dice phase:
-     * - `declared`: DC, modifier, and target shown; dice not yet interactive (C-330).
-     * - `awaiting_click`: Dice visible, waiting for player click (C-162).
-     * - `rolling`: Spin animation playing.
-     * - `revealed`: Result shown.
-     */
-    readonly phase: 'declared' | 'awaiting_click' | 'rolling' | 'revealed';
-    readonly isSuccess: boolean | null;
-  } | null;
+  readonly skillCheckState: DialogueSkillCheckState | null;
 
   /** Unified dice state for the shared GameDice component. */
   readonly diceState: DiceState | null;
@@ -421,18 +474,10 @@ class DialogueOverlayViewModel
 
   /**
    * Skill check dice roll UI state — null when idle.
-   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice, C-330 Declared-DC
+   * Contract: C-157 Dialogue Skill Checks, C-162 Interactive Dice, C-330 Declared-DC,
+   * C-487 — breakdown + stakes sourced from the real character sheet.
    */
-  skillCheckState: {
-    checkType: string;
-    difficultyClass: number;
-    statModifier: string;
-    statModifierValue: number;
-    targetNumber: number;
-    rollValue: number | null;
-    phase: 'declared' | 'awaiting_click' | 'rolling' | 'revealed';
-    isSuccess: boolean | null;
-  } | null = $state(null);
+  skillCheckState: DialogueSkillCheckState | null = $state(null);
 
   /** Whether the AI is resolving a structured skill check. */
   isResolvingSkillCheck = $state(false);
@@ -465,9 +510,18 @@ class DialogueOverlayViewModel
       checkInfo: {
         type: s.checkType,
         dc: s.difficultyClass,
-        modLabel: s.statModifier,
-        modValue: s.statModifierValue,
+        modLabel: s.breakdown.abilityLabel,
+        modValue: s.breakdown.totalModifier,
         target: s.targetNumber,
+        breakdown: {
+          abilityLabel: s.breakdown.abilityLabel,
+          abilityModifier: s.breakdown.abilityModifier,
+          isProficient: s.breakdown.isProficient,
+          isExpertise: s.breakdown.isExpertise,
+          proficiencyBonus: s.breakdown.proficiencyBonus,
+          totalModifier: s.breakdown.totalModifier,
+        },
+        stakes: s.stakes,
       },
       onRoll,
     };
@@ -555,6 +609,104 @@ class DialogueOverlayViewModel
 
   private _handleDiceDeclaration(): void {
     this.acknowledgeDeclaration();
+  }
+
+  /**
+   * Computes the named modifier breakdown from the real character sheet (C-487).
+   *
+   * The model's `modifierSource` is never consulted for the number — the sheet
+   * is the sole authority. `SKILL_STAT_MAP[checkType]` resolves the governing
+   * stat; the sheet skill resolves proficiency/expertise. An unmapped check type
+   * falls back to the raw ability modifier with no invented bonus (and logs).
+   */
+  protected _computeSkillCheckBreakdown(checkType: string): SkillCheckBreakdown {
+    const sheet = playerStateService.characterSheet;
+    const mapKey = normalizeCheckType(checkType);
+    const statEntry = SKILL_STAT_MAP[mapKey];
+
+    const sheetSkill = sheet.skills.find((s) => s.name.toLowerCase() === checkType.toLowerCase());
+
+    const abilityKey: AbilityKey | undefined = statEntry
+      ? ABILITY_KEY_BY_LABEL[statEntry.stat]
+      : sheetSkill?.ability;
+
+    if (!abilityKey) {
+      // No resolvable governing ability — do not invent a bonus.
+      this.warn('skillCheck:unknown-checkType', { checkType, mapKey });
+      return {
+        ability: undefined,
+        abilityLabel: '—',
+        abilityModifier: 0,
+        isProficient: sheetSkill?.isProficient ?? false,
+        isExpertise: sheetSkill?.isExpertise ?? false,
+        proficiencyBonus: 0,
+        totalModifier: 0,
+      };
+    }
+
+    const abilityScore = sheet.abilities[abilityKey];
+    if (!abilityScore) {
+      // Resolved an ability key but the sheet has no score for it.
+      this.warn('skillCheck:missing-ability-score', { checkType, ability: abilityKey });
+      return {
+        ability: abilityKey,
+        abilityLabel: ABILITY_LABELS[abilityKey],
+        abilityModifier: 0,
+        isProficient: sheetSkill?.isProficient ?? false,
+        isExpertise: sheetSkill?.isExpertise ?? false,
+        proficiencyBonus: 0,
+        totalModifier: 0,
+      };
+    }
+
+    const abilityModifier = computeModifier(abilityScore.value);
+    const proficiencyBonus = computeProficiencyBonus(sheet.level);
+    const isProficient = sheetSkill?.isProficient ?? false;
+    const isExpertise = sheetSkill?.isExpertise ?? false;
+    const totalModifier = computeSkillModifier(
+      abilityModifier,
+      isProficient,
+      proficiencyBonus,
+      isExpertise,
+    );
+
+    if (!statEntry) {
+      this.warn('skillCheck:unmapped-stat', { checkType, mapKey, ability: abilityKey });
+    }
+
+    if (!playerStateService.isCharacterSheetAuthored) {
+      this.warn('skillCheck:neutral-sheet-fallback');
+    }
+
+    return {
+      ability: abilityKey,
+      abilityLabel: ABILITY_LABELS[abilityKey],
+      abilityModifier,
+      isProficient,
+      isExpertise,
+      proficiencyBonus: isProficient ? proficiencyBonus : 0,
+      totalModifier,
+    };
+  }
+
+  /** Resolves bounded success/failure stakes for a check type (C-487). */
+  protected _resolveStakes(checkType: string): SkillCheckStakes {
+    const mapKey = normalizeCheckType(checkType);
+    return SKILL_CHECK_STAKES[mapKey] ?? DEFAULT_SKILL_CHECK_STAKES;
+  }
+
+  /** Builds the real player context for the dialogue service (C-487 AC-3). */
+  private _buildPlayerContext(): {
+    characterSheetSummary: string;
+    level: number;
+    classId: string;
+  } {
+    const sheet = playerStateService.characterSheet;
+    return {
+      characterSheetSummary: serializeForAi(sheet),
+      level: sheet.level,
+      classId: sheet.classId ?? 'fighter',
+    };
   }
 
   // ── C-401 Streaming helpers ───────────────────────────────────────────
@@ -878,19 +1030,18 @@ class DialogueOverlayViewModel
 
     this.debug('tryNonCombatResolution', { encounterId: encounterOpts.encounterId });
 
-    // Use a default skill check — persuasion vs DC 12
+    // Use a default skill check — persuasion vs DC 12, sourced from the real sheet (C-487).
     const difficultyClass = 12;
-    const skillEntry = SKILL_STAT_MAP.persuasion;
-    const statModifier = skillEntry?.stat ?? '—';
-    const statModifierValue = skillEntry?.defaultModifier ?? 0;
-    const targetNumber = Math.max(1, difficultyClass - statModifierValue);
+    const breakdown = this._computeSkillCheckBreakdown('Persuasion');
+    const stakes = this._resolveStakes('Persuasion');
+    const targetNumber = Math.max(1, difficultyClass - breakdown.totalModifier);
 
     // Show the declared DC before rolling
     this.skillCheckState = {
-      checkType: 'Negotiate',
+      checkType: 'Persuasion',
       difficultyClass,
-      statModifier,
-      statModifierValue,
+      breakdown,
+      stakes,
       targetNumber,
       rollValue: null,
       phase: 'declared',
@@ -908,7 +1059,7 @@ class DialogueOverlayViewModel
 
     // Roll the d20 — release auto-roll guard now that the roll has been consumed
     this._isAutoRolling = false;
-    const { natural: rollValue, total } = diceService.rollD20(statModifierValue);
+    const { natural: rollValue, total } = diceService.rollD20(breakdown.totalModifier);
     const isSuccess = total >= difficultyClass;
 
     const rollingState = this.skillCheckState;
@@ -998,8 +1149,8 @@ class DialogueOverlayViewModel
       return;
     }
 
-    // Roll the d20 with the player's stat modifier
-    const { natural: rollValue, total } = diceService.rollD20(state.statModifierValue);
+    // Roll the d20 with the player's computed total modifier (C-487)
+    const { natural: rollValue, total } = diceService.rollD20(state.breakdown.totalModifier);
     const isSuccess = total >= state.difficultyClass;
 
     this.debug('rollDice', {
@@ -1205,11 +1356,7 @@ class DialogueOverlayViewModel
           })),
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
-        playerContext: {
-          characterSheetSummary: 'Level 1 Fighter',
-          level: 1,
-          classId: 'fighter',
-        },
+        playerContext: this._buildPlayerContext(),
         onChunk: (text) => this._handleStreamChunk(text),
       });
 
@@ -1277,6 +1424,7 @@ class DialogueOverlayViewModel
         messages,
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
+        playerContext: this._buildPlayerContext(),
         onChunk: (text) => this._handleStreamChunk(text),
       });
 
@@ -1305,15 +1453,18 @@ class DialogueOverlayViewModel
 
       if (analysis.requiresRoll && analysis.checkType && analysis.difficultyClass) {
         // ── Roll needed: enter DECLARED_DC → DICE flow ──────────────
-        const modSource = analysis.modifierSource ?? '—';
-        const modValue = 0; // TODO: read from character sheet when available
-        const targetNumber = Math.max(1, analysis.difficultyClass - modValue);
+        // C-487: the modifier is computed from the real character sheet, not
+        // the model's `modifierSource` (a label hint only). The breakdown and
+        // stakes are assembled before phase leaves 'declared'.
+        const breakdown = this._computeSkillCheckBreakdown(analysis.checkType);
+        const stakes = this._resolveStakes(analysis.checkType);
+        const targetNumber = Math.max(1, analysis.difficultyClass - breakdown.totalModifier);
 
         this.skillCheckState = {
           checkType: analysis.checkType,
           difficultyClass: analysis.difficultyClass,
-          statModifier: modSource,
-          statModifierValue: modValue,
+          breakdown,
+          stakes,
           targetNumber,
           rollValue: null,
           phase: 'declared',

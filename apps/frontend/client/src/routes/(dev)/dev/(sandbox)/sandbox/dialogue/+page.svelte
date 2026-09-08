@@ -589,8 +589,6 @@ let devToolsOpen = $state(true);
               viewModel.forceDiceRoll({
                 checkType: 'Persuasion',
                 difficultyClass: 12,
-                statModifier: 'CHA',
-                statModifierValue: 2,
               })}
             >
               🎲 Force Dice Roll (DC 12, CHA +2)

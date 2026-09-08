@@ -714,6 +714,18 @@ export class NpcDialogueService
   }): Promise<NpcIntentAnalysisOutput> {
     this._assertConfigured();
 
+    // E2E seeding hook (C-487): deterministic intent envelope for the /game
+    // production-path E2E spec. The Playwright harness installs this window
+    // global BEFORE the client bundle loads; absent during normal play, where
+    // the real two-call AI pipeline runs unchanged. The route, overlay and
+    // ViewModel remain the production ones.
+    const e2eSeed = (globalThis as Record<string, unknown>).__AIKAMI_E2E_DIALOGUE_INTENT__ as
+      | Partial<NpcIntentAnalysisOutput>
+      | undefined;
+    if (e2eSeed && typeof e2eSeed.requiresRoll === 'boolean') {
+      return e2eSeed as NpcIntentAnalysisOutput;
+    }
+
     // Concurrency gate
     if (this._activeAbortController) {
       this._activeAbortController.abort();
