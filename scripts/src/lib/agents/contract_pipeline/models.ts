@@ -66,7 +66,7 @@ const resolveTier = (tier: string): string | undefined =>
 export const CONTRACT_ROLE_MODEL_TIER: Record<string, ModelTier> = {
   writer: 'pro',
   critic: 'flash',
-  implementer: 'pro',
+  implementer: 'flash',
   verifier: 'flash',
   review: 'pro',
 } as const;
