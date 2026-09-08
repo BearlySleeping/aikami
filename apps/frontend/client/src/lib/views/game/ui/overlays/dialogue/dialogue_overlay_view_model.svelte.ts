@@ -318,6 +318,21 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Cancels the active AI streaming request. */
   cancelStreaming(): void;
 
+  /**
+   * Player messages submitted while the NPC was streaming, awaiting delivery.
+   * FIFO-ordered. Each entry is already visible in `messages` as a pending
+   * player bubble; entries are delivered in order, one per completed turn,
+   * only while auto-drain is enabled.
+   */
+  readonly pendingMessages: readonly string[];
+
+  /**
+   * Re-enables auto-drain and delivers all pending queued messages in FIFO
+   * order, one per completed turn. Used to explicitly retry messages that were
+   * retained after a failed or cancelled stream.
+   */
+  retryPending(): void;
+
   /** Regenerates the NPC response for the given message (stores current as alternative). */
   regenerateResponse(messageId: string): void;
 
@@ -505,8 +520,14 @@ class DialogueOverlayViewModel
   /** Whether a draft was restored from IndexedDB on open. */
   showDraftRecovery = $state(false);
 
-  /** Whether TTS is actively speaking (for pulse animation). */
-  isTtsSpeaking = $state(false);
+  /**
+   * Whether TTS is actively speaking (for the pulse animation). Derived from
+   * the TTS service's live playback state so the indicator tracks real audio
+   * rather than a best-effort timeout.
+   */
+  get isTtsSpeaking(): boolean {
+    return this.streamingTtsEnabled && ttsService.isPlaying;
+  }
 
   /** Current address mode for dialogue prompt routing. */
   addressMode = $state<DialogueAddressMode>('scene');
@@ -531,6 +552,25 @@ class DialogueOverlayViewModel
 
   /** The active AbortController for the current streaming request. */
   private _activeAbortController: AbortController | null = null;
+
+  /**
+   * Overlay-session-scoped FIFO queue of player messages submitted while the
+   * NPC was still streaming. Each entry is already visible in `messages` as a
+   * pending player bubble; entries are delivered in FIFO order, one per
+   * completed turn, only while auto-drain is enabled.
+   */
+  private _pendingQueue: string[] = [];
+
+  /**
+   * Whether auto-drain of `_pendingQueue` is allowed. Disabled when a turn
+   * fails or is cancelled so queued messages are retained as visible pending
+   * items until an explicit Retry/Send (`retryPending`). Re-enabled by
+   * `retryPending` and reset on `endChat`.
+   */
+  private _drainEnabled = true;
+
+  /** True while a queued-message delivery turn is in flight (prevents double-drain). */
+  private _isDraining = false;
 
   private readonly _npcData: DialogueNpcData;
 
@@ -676,6 +716,95 @@ class DialogueOverlayViewModel
         canSwipeRight: enriched.canSwipeRight,
       };
     });
+
+    // Auto-speak the completed NPC message when streaming TTS is enabled.
+    // Feed through the chunker (and close) so sentences are dispatched to
+    // ttsService.speak() in order, beginning as soon as the first boundary
+    // lands rather than waiting for the whole message (low TTFA). speak()
+    // no-ops when TTS is not yet ready, so a message that completes mid-warmup
+    // is simply skipped rather than failing.
+    if (this.streamingTtsEnabled) {
+      this._chunker.feed(text);
+      this._chunker.close();
+    }
+  }
+
+  /** @inheritdoc */
+  get pendingMessages(): readonly string[] {
+    return [...this._pendingQueue];
+  }
+
+  /** @inheritdoc */
+  retryPending(): void {
+    this.debug('retryPending', { count: this._pendingQueue.length });
+    this._drainEnabled = true;
+    this._maybeDrainQueue();
+  }
+
+  /**
+   * Called when a streaming turn finishes. On success, drains the pending queue
+   * (FIFO, one turn at a time) if auto-drain is enabled. On failure or
+   * cancellation, disables auto-drain so queued messages are retained as
+   * visible pending items until an explicit retry.
+   */
+  private _onTurnCompleted(succeeded: boolean): void {
+    if (!succeeded) {
+      this._drainEnabled = false;
+      this._isDraining = false;
+      this.debug('turnCompleted:failed-drain-disabled', { queued: this._pendingQueue.length });
+      return;
+    }
+    this._maybeDrainQueue();
+  }
+
+  /** Delivers the next queued message if auto-drain is enabled and no turn is active. */
+  private _maybeDrainQueue(): void {
+    if (!this._drainEnabled || this._isDraining) {
+      return;
+    }
+    if (this.isStreaming || this.isResolvingSkillCheck) {
+      return;
+    }
+    if (this.skillCheckState !== null || this.dialoguePhase !== 'FREE_TEXT') {
+      return;
+    }
+    const next = this._pendingQueue.shift();
+    if (!next) {
+      return;
+    }
+    this._isDraining = true;
+    this.debug('drainQueue:delivering', { text: next, remaining: this._pendingQueue.length });
+    void this._deliverQueued(next).finally(() => {
+      this._isDraining = false;
+      this._maybeDrainQueue();
+    });
+  }
+
+  /**
+   * Triggers a full NPC turn for a queued player message. The message is
+   * appended to `messages` now that it is being delivered (it was previously
+   * shown only as a pending item), so the turn context ends at this message.
+   */
+  private async _deliverQueued(text: string): Promise<void> {
+    this.messages = [
+      ...this.messages,
+      {
+        id: crypto.randomUUID(),
+        content: text,
+        role: 'player' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
+    if (this.addressMode === 'gm') {
+      await this._sendToGameMaster(text);
+    } else if (this._npcDialogueService.useFreeTextFirst) {
+      await this._sendWithIntentAnalysis(text);
+    } else {
+      await this._delegateGenerateResponse();
+    }
   }
 
   constructor(options: DialogueOverlayViewModelOptions) {
@@ -800,25 +929,22 @@ class DialogueOverlayViewModel
       });
     });
 
-    // Initialize native Kokoro TTS if not already done
+    // Initialize native Kokoro TTS eagerly when the overlay opens so the first
+    // NPC reply is not delayed by a cold worker/model load (~10s first-speak
+    // latency). Fire-and-forget — speech works once the worker reports 'ready'.
     if (!this._ttsInitialized) {
       this._ttsInitialized = true;
+
+      // Auto-speak each NPC message as it completes: completed messages are fed
+      // through the chunker in _setMessageContent, which emits sentences here.
       this._chunker.onSentence(({ sentence }) => {
         if (this.streamingTtsEnabled) {
-          this.isTtsSpeaking = true;
-          ttsService.synthesize({
-            text: sentence,
-            voice: ttsService.selectedVoice,
-          });
-          // Reset TTS speaking indicator after a brief delay
-          setTimeout(() => {
-            this.isTtsSpeaking = false;
-          }, 2000);
+          // speak() supersedes any prior request (silently, per C-476 fix) so
+          // rapid successive sentences never surface a 'stop()' error.
+          void ttsService.speak({ text: sentence }).catch(() => {});
         }
       });
 
-      // Fire-and-forget — TTS init happens in background, speech works
-      // once the worker reports 'ready'.
       void ttsService.initialize();
     }
 
@@ -1125,7 +1251,7 @@ class DialogueOverlayViewModel
   /** @inheritdoc */
   async sendMessage(text?: string): Promise<void> {
     const content = (text ?? this.inputText).trim();
-    if (!content || this.isStreaming || this.isResolvingSkillCheck) {
+    if (!content || this.isResolvingSkillCheck) {
       return;
     }
 
@@ -1136,6 +1262,17 @@ class DialogueOverlayViewModel
 
     // Clear the per-chat draft since a message is being sent
     void draftStore.clearDraft({ chatId: this._npcData.npcId });
+
+    // If the NPC is currently streaming, queue the message instead of sending
+    // it now. It is surfaced as a visible pending item and is delivered in FIFO
+    // order only after the current turn completes successfully (and only while
+    // auto-drain is enabled — never after a failed/cancelled stream unless the
+    // player explicitly retries).
+    if (this.isStreaming) {
+      this._pendingQueue.push(content);
+      this.debug('sendMessage:queued', { content, queued: this._pendingQueue.length });
+      return;
+    }
 
     // Append the player's message
     const playerMessage: DialogueMessage = {
@@ -1193,6 +1330,7 @@ class DialogueOverlayViewModel
       },
     ];
 
+    let succeeded = false;
     try {
       const gmResponse = await this._npcDialogueService.analyzeIntent({
         npcId: this._npcData.npcId,
@@ -1218,6 +1356,7 @@ class DialogueOverlayViewModel
       this._setMessageContent(npcMessageId, `🎭 *Game Master*\n${narrative}`);
       this._resetStreaming();
       this.suggestedChips = gmResponse.suggestedChips;
+      succeeded = true;
     } catch (error) {
       this._flushStreamNow();
       this._handleTurnFailure({ npcMessageId, error });
@@ -1228,6 +1367,7 @@ class DialogueOverlayViewModel
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
+      this._onTurnCompleted(succeeded);
     }
   }
 
@@ -1263,6 +1403,7 @@ class DialogueOverlayViewModel
       },
     ];
 
+    let succeeded = false;
     try {
       const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
         .filter((m) => m.id !== id)
@@ -1324,6 +1465,7 @@ class DialogueOverlayViewModel
         // ── No roll needed: stay in FREE_TEXT ────────────────────────
         this.dialoguePhase = 'FREE_TEXT';
       }
+      succeeded = true;
     } catch (error) {
       this._flushStreamNow();
       this._handleTurnFailure({ npcMessageId: id, error });
@@ -1334,6 +1476,7 @@ class DialogueOverlayViewModel
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
+      this._onTurnCompleted(succeeded);
     }
   }
 
@@ -1405,6 +1548,11 @@ class DialogueOverlayViewModel
       this._activeAbortController.abort();
       this._activeAbortController = null;
     }
+    // Cancel and clear the pending queue before closing the overlay so no
+    // queued text can leak into a later dialogue session.
+    this._pendingQueue = [];
+    this._drainEnabled = true;
+    this._isDraining = false;
     this._onEndChat();
   }
 
@@ -1470,7 +1618,6 @@ class DialogueOverlayViewModel
     this.streamingTtsEnabled = !this.streamingTtsEnabled;
     if (!this.streamingTtsEnabled) {
       ttsService.stop();
-      this.isTtsSpeaking = false;
     }
   }
 
@@ -1479,6 +1626,12 @@ class DialogueOverlayViewModel
   /** @inheritdoc */
   cancelStreaming(): void {
     this.debug('cancelStreaming');
+    // Stop auto-drain so queued messages are retained as visible pending items
+    // until an explicit Retry/Send. The abort also propagates to the turn's
+    // failure handler, which disables draining too; setting it here keeps it
+    // held even if the underlying request ignores the abort signal.
+    this._drainEnabled = false;
+    this._isDraining = false;
     if (this._activeAbortController) {
       this._activeAbortController.abort();
       this._activeAbortController = null;
@@ -1745,6 +1898,7 @@ class DialogueOverlayViewModel
     const controller = new AbortController();
     this._activeAbortController = controller;
 
+    let succeeded = false;
     try {
       const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
         .filter((m) => m.id !== npcMessageId) // exclude placeholder
@@ -1793,12 +1947,14 @@ class DialogueOverlayViewModel
           await this._dispatchCommand({ command: turn.command, npcMessageId });
         }
       }
+      succeeded = true;
     } catch (err) {
       this._flushStreamNow();
       this._handleTurnFailure({ npcMessageId, error: err });
     } finally {
       this.isStreaming = false;
       this._resetStreaming();
+      this._onTurnCompleted(succeeded);
     }
   }
 

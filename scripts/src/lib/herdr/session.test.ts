@@ -510,6 +510,17 @@ describe('C-471 — service scope (AC-1, AC-3)', () => {
     expect(SERVICE_DEFS['image-comfyui'].scope).toBe('shared');
   });
 
+  // C-471 AC-2: a reusable ServiceDef without an identity probe is invalid
+  // configuration — assessServiceReadiness returns 'unavailable' for it and
+  // herdr:start image/voice/text refuses to consider the engine ready. Every
+  // shared local-stack engine must define a probe.
+  it('every shared engine defines an identity probe', () => {
+    const shared = ['voice', 'image', 'text', 'text-ollama', 'image-comfyui'] as const;
+    for (const key of shared) {
+      expect(typeof SERVICE_DEFS[key].probe, `${key} must define a probe`).toBe('function');
+    }
+  });
+
   it('ownedServices filters to only run-scoped services', () => {
     const all = ['client', 'voice', 'image', 'text', 'hub'] as const;
     const owned = ownedServices(all);

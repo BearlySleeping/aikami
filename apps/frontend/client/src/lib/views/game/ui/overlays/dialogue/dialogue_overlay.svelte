@@ -437,7 +437,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           onSend={() => viewModel.sendMessage()}
           onKeyDown={(e) => viewModel.handleKeyDown(e)}
           placeholder="Reply to {viewModel.npcName}..."
-          disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+          disabled={viewModel.isResolvingSkillCheck}
           sendDisabled={viewModel.isResolvingSkillCheck}
           requireText={false}
           isSending={viewModel.isResolvingSkillCheck}
@@ -450,6 +450,36 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           }}
         >
           {#snippet above()}
+            <!-- Pending queued messages retained after a failed/cancelled stream;
+                 require an explicit Send before any is delivered. -->
+            {#if viewModel.pendingMessages.length > 0}
+              <div
+                class="border-t border-base-content/5 px-4 py-2"
+                data-testid="pending-queue-banner"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-semibold text-base-content/70">
+                    Waiting to send ({viewModel.pendingMessages.length})
+                  </span>
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-primary"
+                    onclick={() => viewModel.retryPending()}
+                    aria-label="Send waiting messages"
+                  >
+                    Send
+                  </button>
+                </div>
+                <!-- Visible pending items retained after a failed/cancelled stream -->
+                <div class="mt-1 space-y-1">
+                  {#each viewModel.pendingMessages as pending, i (i)}
+                    <div class="rounded-lg bg-base-100/70 px-2 py-1 text-xs opacity-70">
+                      {pending}
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
             <!-- Suggestion chips — rendered inside the card, above the input -->
             {#if viewModel.suggestedChips.length > 0}
               {#key viewModel.suggestedChips.map((c) => c.id).join('|')}

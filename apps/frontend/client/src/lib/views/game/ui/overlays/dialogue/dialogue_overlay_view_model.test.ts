@@ -665,4 +665,147 @@ describe('DialogueOverlayViewModel', () => {
     // Either 'Copied!' or 'Copy failed' — both are valid states
     expect(vm.toastMessage.length).toBeGreaterThan(0);
   });
+
+  // ── Pending queue (C-436: type while streaming) ───────────────────────
+
+  test('messages queued during streaming are delivered in FIFO order after the turn succeeds', async () => {
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'Understood.',
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    const first = vm.sendMessage('First'); // starts the streaming turn for 'First'
+
+    // While the NPC is streaming, the player queues two more messages. These
+    // calls run synchronously (isStreaming is already true) so the queue state
+    // below is deterministic.
+    vm.sendMessage('Second');
+    vm.sendMessage('Third');
+
+    expect(vm.pendingMessages).toEqual(['Second', 'Third']);
+    // Pending messages are shown as pending items, not yet part of the history.
+    expect(vm.messages.some((m) => m.content === 'Second')).toBe(false);
+
+    await first; // First's turn completes successfully → drains Second, then Third
+    await new Promise((r) => setTimeout(r, 100));
+
+    // FIFO order preserved: each analyzeIntent call responds to the delivered message.
+    const delivered = analyzeIntentStub.mock.calls.map((c) => c[0].messages.at(-1)?.content);
+    expect(delivered).toEqual(['First', 'Second', 'Third']);
+    expect(vm.pendingMessages).toEqual([]);
+  });
+
+  test('queued messages are retained after a failed stream until an explicit retry', async () => {
+    let failFirst = true;
+    analyzeIntentStub = mock(async () => {
+      if (failFirst) {
+        failFirst = false;
+        throw new Error('Provider unavailable');
+      }
+      return {
+        requiresRoll: false,
+        checkType: undefined,
+        difficultyClass: undefined,
+        modifierSource: undefined,
+        npcResponse: 'Recovered.',
+        suggestedChips: [],
+      };
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    const first = vm.sendMessage('First'); // this turn will fail
+    vm.sendMessage('Queued'); // queued during streaming (synchronous)
+    expect(vm.pendingMessages).toEqual(['Queued']);
+
+    await first; // First's turn fails → auto-drain disabled
+    expect(vm.pendingMessages).toEqual(['Queued']);
+
+    // A later successful request must NOT auto-send the retained message.
+    await vm.sendMessage('Later'); // succeeds
+    await new Promise((r) => setTimeout(r, 50));
+    expect(vm.pendingMessages).toEqual(['Queued']);
+
+    // An explicit retry delivers it.
+    vm.retryPending();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(vm.pendingMessages).toEqual([]);
+    expect(vm.messages.some((m) => m.content === 'Queued')).toBe(true);
+  });
+
+  test('queued messages are retained after cancelStreaming until an explicit retry', async () => {
+    let cancelOnce = true;
+    analyzeIntentStub = mock(async ({ signal }: { signal: AbortSignal }) => {
+      if (cancelOnce) {
+        cancelOnce = false;
+        await new Promise((_, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+        });
+        throw new Error('unreachable');
+      }
+      return {
+        requiresRoll: false,
+        checkType: undefined,
+        difficultyClass: undefined,
+        modifierSource: undefined,
+        npcResponse: 'Recovered.',
+        suggestedChips: [],
+      };
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    const first = vm.sendMessage('First'); // hangs until cancelled
+    vm.sendMessage('Queued'); // queued during streaming (synchronous)
+    expect(vm.pendingMessages).toEqual(['Queued']);
+
+    vm.cancelStreaming(); // aborts → First's turn fails → auto-drain disabled
+    await first;
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(vm.pendingMessages).toEqual(['Queued']);
+    expect(vm.messages.some((m) => m.content === 'Queued')).toBe(false);
+
+    // An explicit retry delivers it.
+    vm.retryPending();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(vm.pendingMessages).toEqual([]);
+    expect(vm.messages.some((m) => m.content === 'Queued')).toBe(true);
+  });
+
+  test('endChat cancels and clears the pending queue so nothing leaks into a new session', async () => {
+    analyzeIntentStub = mock(async ({ signal }: { signal: AbortSignal }) => {
+      await new Promise((_, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      });
+      throw new Error('unreachable');
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    let ended = false;
+    const vm = createViewModel({
+      onEndChat: () => {
+        ended = true;
+      },
+    });
+    const first = vm.sendMessage('First'); // hangs until aborted
+    vm.sendMessage('Queued'); // queued during streaming (synchronous)
+    expect(vm.pendingMessages).toEqual(['Queued']);
+
+    vm.endChat(); // aborts the request and clears the whole queue
+    expect(vm.pendingMessages).toEqual([]);
+    expect(ended).toBe(true);
+    await first;
+
+    // A brand-new session always starts with an empty queue.
+    const fresh = createViewModel();
+    expect(fresh.pendingMessages).toEqual([]);
+    expect(fresh.messages.some((m) => m.content === 'Queued')).toBe(false);
+  });
 });

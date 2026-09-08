@@ -6,7 +6,7 @@
 // resolved from env fallback keys only — nothing is hardcoded.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { resetRootEnvCache } from '../../cli_utils';
+import { setRootEnvOverride } from '../../cli_utils';
 import {
   CONTRACT_ROLE_MODEL_TIER,
   CONTRACT_ROLE_THINKING_LEVEL,
@@ -53,8 +53,9 @@ const ENV_KEYS = [
 
 beforeEach(() => {
   // Clear any repo-root .env values the resolver may have cached, then drop
-  // every fallback key so each test starts from a clean, env-free slate.
-  resetRootEnvCache();
+  // every fallback key so each test starts from a clean, env-free slate
+  // regardless of the developer's local .env.
+  setRootEnvOverride({});
   for (const key of ENV_KEYS) {
     delete process.env[key];
   }
@@ -192,7 +193,7 @@ describe('model resolution is env-driven', () => {
 describe('AC-3: Model resolution records settings', () => {
   test('resolveModelConfiguration returns all fields', () => {
     process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/pro-model';
-    const resolved = resolveModelConfiguration({ role: 'implementer' });
+    const resolved = resolveModelConfiguration({ role: 'writer' });
     expect(resolved.requestedTier).toBe('pro');
     expect(resolved.requestedTierValue).toBe('provider/pro-model');
     expect(resolved.effectiveModel).toBe('provider/pro-model');
@@ -211,9 +212,9 @@ describe('AC-3: Model resolution records settings', () => {
     expect(resolved.requestedTier).toBe('flash');
   });
 
-  test('implementer resolves to pro tier', () => {
+  test('implementer resolves to flash tier', () => {
     const resolved = resolveModelConfiguration({ role: 'implementer' });
-    expect(resolved.requestedTier).toBe('pro');
+    expect(resolved.requestedTier).toBe('flash');
   });
 
   test('verifier resolves to flash tier', () => {
@@ -286,10 +287,36 @@ describe('AC-3: Model override validation', () => {
   test('an empty override falls through to the fallback keys (no error)', () => {
     process.env.CONTRACT_PIPELINE_MODEL_PRO = '';
     process.env.PI_MODEL_PRO = 'provider/pi-pro-model';
-    const resolved = resolveModelConfiguration({ role: 'implementer' });
+    const resolved = resolveModelConfiguration({ role: 'writer' });
     expect(resolved.requestedTierValue).toBe('provider/pi-pro-model');
     expect(resolved.effectiveModel).toBe('provider/pi-pro-model');
     expect(resolved.issues.filter((issue) => issue.severity === 'error')).toHaveLength(0);
+  });
+
+  test('an invalid role-specific model reports the role env key as the field', () => {
+    process.env.WRITER_MODEL = 'bad model with spaces';
+    const resolved = resolveModelConfiguration({ role: 'writer' });
+    expect(resolved.effectiveModel).toBe('bad model with spaces');
+    const errors = resolved.issues.filter((issue) => issue.severity === 'error');
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]?.field).toBe('WRITER_MODEL');
+  });
+
+  test('an invalid role-specific thinking reports the role env key as the field', () => {
+    process.env.WRITER_THINKING_LEVEL = 'turbo';
+    const resolved = resolveModelConfiguration({ role: 'writer' });
+    expect(resolved.requestedThinking).toBe('turbo');
+    expect(resolved.effectiveThinking).toBeUndefined();
+    expect(resolved.issues.some((issue) => issue.field === 'WRITER_THINKING_LEVEL')).toBe(true);
+  });
+
+  test('resolveModelConfiguration honours a role-specific model override', () => {
+    process.env.WRITER_MODEL = 'provider/writer-model';
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/pro-model';
+    const resolved = resolveModelConfiguration({ role: 'writer' });
+    expect(resolved.requestedTier).toBe('pro');
+    expect(resolved.requestedTierValue).toBe('provider/pro-model');
+    expect(resolved.effectiveModel).toBe('provider/writer-model');
   });
 });
 

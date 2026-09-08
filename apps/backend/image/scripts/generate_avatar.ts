@@ -20,7 +20,8 @@
 // Usage:
 //   bun run generate:avatar "an elven ranger, pixel art"
 //   bun run generate:avatar "a knight" --steps 20 --cfg 7 --seed 42 \
-//     --width 512 --height 512 --checkpoint flux1-schnell-q4_k.gguf
+//     --width 512 --height 512
+//   (omit --checkpoint to use the engine's loaded model; pass it to pin one)
 
 // biome-ignore-all lint/style/useNamingConvention: sd-server API uses snake_case fields
 import { mkdirSync, statSync } from 'node:fs';
@@ -67,7 +68,9 @@ const parseOptions = (): GenerationOptions => {
     steps: Number.parseInt(getArg('--steps', '20'), 10),
     cfg: Number.parseFloat(getArg('--cfg', '7')),
     seed: Number.parseInt(getArg('--seed', String(Math.floor(Math.random() * 99999999999))), 10),
-    checkpoint: getArg('--checkpoint', 'flux1-schnell-q4_k.gguf'),
+    // Empty default: sd-server uses whatever model it has loaded (e.g. the
+    // Anima diffusion model). Only an explicit --checkpoint selects a model.
+    checkpoint: getArg('--checkpoint', ''),
   };
 };
 
@@ -95,7 +98,7 @@ type SdCppJob = {
  * Submit a txt2img job to sd-server and return the raw response.
  */
 const submitJob = async (options: GenerationOptions): Promise<SdCppJob> => {
-  const body = {
+  const body: Record<string, unknown> = {
     prompt: options.prompt,
     negative_prompt: options.negativePrompt,
     width: options.width,
@@ -104,8 +107,13 @@ const submitJob = async (options: GenerationOptions): Promise<SdCppJob> => {
     txt_cfg: options.cfg,
     seed: options.seed,
     batch_count: 1,
-    model: options.checkpoint,
   };
+  // Only pin a model when the caller asked for one explicitly; otherwise
+  // sd-server uses its loaded default (an unknown model name queues the job
+  // forever instead of failing fast).
+  if (options.checkpoint) {
+    body.model = options.checkpoint;
+  }
 
   const response = await fetch(`${SD_SERVER}/sdcpp/v1/img_gen`, {
     method: 'POST',
@@ -253,7 +261,9 @@ const main = async (): Promise<void> => {
   console.log(`  Size:     ${options.width}×${options.height}`);
   console.log(`  Steps:    ${options.steps}  CFG: ${options.cfg}`);
   console.log(`  Seed:     ${options.seed}`);
-  console.log(`  Model:    ${options.checkpoint}`);
+  console.log(
+    `  Model:    ${options.checkpoint || '(engine default — omit --checkpoint to use the loaded model)'}`,
+  );
   console.log();
 
   // ── Submit job ───────────────────────────────────

@@ -6,8 +6,8 @@
 // also proves that an absent live `pi` binary fails closed with a reason.
 
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { resetRootEnvCache } from '../../cli_utils';
-import { preflightCatalogue, resolveCatalogueEntry } from './catalogue.ts';
+import { setRootEnvOverride } from '../../cli_utils';
+import { preflightCatalogue, resolveCatalogueEntry, resolveFamilyThinking } from './catalogue.ts';
 
 const ENV_KEYS = [
   'EVAL_MODEL_FLASH',
@@ -23,10 +23,18 @@ const ENV_KEYS = [
   'MODEL_OPUS',
   'MODEL_ASTRA',
   'MODEL',
+  // Family/global thinking keys
+  'FLASH_THINKING_LEVEL',
+  'SONNET_THINKING_LEVEL',
+  'OPUS_THINKING_LEVEL',
+  'ASTRA_THINKING_LEVEL',
+  'EVAL_THINKING',
+  'CONTRACT_PIPELINE_THINKING',
+  'PI_THINKING',
 ] as const;
 
 beforeEach(() => {
-  resetRootEnvCache();
+  setRootEnvOverride({});
   for (const key of ENV_KEYS) {
     delete process.env[key];
   }
@@ -112,5 +120,37 @@ describe('AC-2: catalogue resolution fails closed', () => {
         process.env.EVAL_MODEL_ASTRA = previous;
       }
     }
+  });
+});
+
+describe('resolveFamilyThinking', () => {
+  it('returns undefined when nothing is configured', () => {
+    expect(resolveFamilyThinking({ family: 'flash' })).toBeUndefined();
+    expect(resolveFamilyThinking({ family: 'opus' })).toBeUndefined();
+  });
+
+  it('resolves the family-specific key before the global keys', () => {
+    process.env.CONTRACT_PIPELINE_THINKING = 'medium';
+    process.env.PI_THINKING = 'low';
+    process.env.FLASH_THINKING_LEVEL = 'xhigh';
+    expect(resolveFamilyThinking({ family: 'flash' })).toBe('xhigh');
+    expect(resolveFamilyThinking({ family: 'sonnet' })).toBe('medium');
+  });
+
+  it('resolves EVAL_THINKING before the pipeline/pi globals', () => {
+    process.env.CONTRACT_PIPELINE_THINKING = 'medium';
+    process.env.EVAL_THINKING = 'high';
+    expect(resolveFamilyThinking({ family: 'opus' })).toBe('high');
+  });
+
+  it('returns undefined for an invalid configured level', () => {
+    process.env.ASTRA_THINKING_LEVEL = 'turbo';
+    expect(resolveFamilyThinking({ family: 'astra' })).toBeUndefined();
+  });
+
+  it('honours an injected envResolver for deterministic tests', () => {
+    const envResolver = (keys: readonly string[]) =>
+      keys.includes('SONNET_THINKING_LEVEL') ? 'minimal' : undefined;
+    expect(resolveFamilyThinking({ family: 'sonnet', envResolver })).toBe('minimal');
   });
 });

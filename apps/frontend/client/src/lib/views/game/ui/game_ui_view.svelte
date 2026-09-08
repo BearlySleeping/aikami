@@ -49,16 +49,17 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
     data-combat={viewModel.isCombat ? 'true' : undefined}
     id="game-ui-layer"
   >
-    <!-- ── HUD Bar — Top-Left: HP Bar (C-332 AC-1) ── -->
-    <HpBar hp={viewModel.playerHp} maxHp={viewModel.playerMaxHp} visible={viewModel.showHpBar} />
-
     <!-- ── Party HUD (C-340) ── -->
     <div class="absolute top-16 left-4 z-50 pointer-events-auto">
       <PartyHud visible={viewModel.showHpBar} />
     </div>
 
-    <!-- ── HUD Bar — Top-Right: Clock + Autosave Indicator (C-332 AC-3) ── -->
+    <!-- ── HUD Bar — Top-Right: HP Bar + Clock + Autosave (C-332 AC-1/AC-3) ── -->
+    <!-- HP bar lives in the top-right HUD cluster so the top-left play region stays
+         clear — the player sprite walking to the top-left is not occluded. -->
     <div class="absolute top-3 right-3 z-50 flex items-center gap-2 pointer-events-none">
+      <HpBar hp={viewModel.playerHp} maxHp={viewModel.playerMaxHp} visible={viewModel.showHpBar} />
+
       {#if viewModel.showAutosaveIndicator}
         <AutosaveIndicator
           status={viewModel.autoSaveStatus}
