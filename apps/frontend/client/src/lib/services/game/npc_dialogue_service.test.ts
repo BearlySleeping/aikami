@@ -9,8 +9,6 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { encode } from 'gpt-tokenizer';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
@@ -1334,6 +1332,9 @@ describe('C-488 AC-3: authored identity in the production persona', () => {
 
     expect(projection.persona).toContain('Measured and warm.');
     expect(projection.persona).toContain('Patient and authoritative.');
+    expect(projection.persona).not.toContain(
+      'You are Elder Thalia, a character in a fantasy world.',
+    );
     expect(projection.persona).toContain("Keep the Ward Wand sealed in Emberwatch's shrine.");
     expect(projection.persona).toContain('The Ward Wand is a Vesperine relic.');
     expect(projection.persona).toContain('She fears old enemies have breached the valley.');
@@ -1482,14 +1483,10 @@ describe('C-488 AC-6: prompt budget (cl100k_base)', () => {
   const TOKEN_BUDGET = 4096;
 
   const countTokens = (text: string): number => encode(text, { model: TOKEN_MODEL }).length;
-
-  const manifestPath = join(
-    import.meta.dir,
+  const manifestUrl = new URL(
     '../../../../../../../content/packs/emberwatch/manifest.json',
+    import.meta.url,
   );
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
-    npcs: Record<string, Record<string, unknown>>;
-  };
 
   const stripIdentity = (npc: Record<string, unknown>): Record<string, unknown> => {
     const stripped = { ...npc };
@@ -1569,6 +1566,14 @@ describe('C-488 AC-6: prompt budget (cl100k_base)', () => {
   };
 
   test('every after-count stays <= 4096 cl100k_base tokens for all three NPCs', async () => {
+    const manifest = (await Bun.file(manifestUrl).json()) as {
+      npcs: Record<string, Record<string, unknown>>;
+    };
+
+    for (const expectedNpcId of ['village_elder', 'rollo_grasper', 'merchant']) {
+      expect(manifest.npcs[expectedNpcId], `${expectedNpcId} exists`).toBeDefined();
+    }
+
     for (const [npcId, npc] of Object.entries(manifest.npcs)) {
       const npcName = (npc.name as string) ?? npcId;
       const generic = stripIdentity(npc);

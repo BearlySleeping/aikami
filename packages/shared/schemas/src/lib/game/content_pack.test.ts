@@ -5,10 +5,10 @@
 // Contract: C-316 Build the Authored Emberwatch Demo Adventure
 
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { Value } from 'typebox/value';
+import emberwatchManifest from '../../../../../../content/packs/emberwatch/manifest.json';
 import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
+import { normaliseLegacyStep } from './onboarding_hints.ts';
 
 /** Minimal valid manifest fixture. */
 const validManifest = {
@@ -815,23 +815,13 @@ describe('ContentPackNpcEntrySchema — authored identity (C-488 AC-1)', () => {
 // ---------------------------------------------------------------------------
 
 describe('C-488 AC-5 — Emberwatch manifest content', () => {
-  const manifestPath = join(
-    import.meta.dir,
-    '../../../../../../content/packs/emberwatch/manifest.json',
-  );
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
-    npcs: Record<
-      string,
-      {
-        name: string;
-        personality?: { voice: string; manner: string };
-        agenda?: string[];
-        knowledge?: string[];
-        secrets?: string[];
-        boundaries?: string[];
-      }
-    >;
-  };
+  const manifest = Value.Parse(ContentPackManifestSchema, {
+    ...emberwatchManifest,
+    onboarding: {
+      ...emberwatchManifest.onboarding,
+      steps: emberwatchManifest.onboarding.steps.map((step) => normaliseLegacyStep(step)),
+    },
+  });
 
   test('all three Emberwatch NPCs have a fully authored identity', () => {
     for (const npcId of ['village_elder', 'rollo_grasper', 'merchant']) {

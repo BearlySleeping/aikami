@@ -28,12 +28,9 @@ export const buildNpcPersona = (options: {
   };
 }): string => {
   const { npcName, identity } = options;
-  const lines = [`You are ${npcName}, a character in a fantasy world.`];
-
-  if (identity?.personality) {
-    lines.push(`Voice: ${identity.personality.voice}`);
-    lines.push(`Manner: ${identity.personality.manner}`);
-  }
+  const lines = identity?.personality
+    ? [`Voice: ${identity.personality.voice}`, `Manner: ${identity.personality.manner}`]
+    : [`You are ${npcName}, a character in a fantasy world.`];
 
   if (identity?.agenda && identity.agenda.length > 0) {
     lines.push('', '[AGENDA]', ...identity.agenda.map((entry) => `- ${entry}`));
