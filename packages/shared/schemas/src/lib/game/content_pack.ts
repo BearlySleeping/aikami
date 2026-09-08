@@ -81,6 +81,27 @@ export const ContentPackCombatStatsSchema = Type.Object({
 export type ContentPackCombatStats = Static<typeof ContentPackCombatStatsSchema>;
 
 // ---------------------------------------------------------------------------
+// ContentPackNpcPersonality — authored NPC voice and manner (C-488)
+// ---------------------------------------------------------------------------
+
+/**
+ * Normative shape of an NPC's authored personality. This `{ voice, manner }`
+ * object is the ONLY accepted representation — no string alternative exists.
+ * Contract: C-488 Authored NPC identity in the content pack
+ */
+export const ContentPackNpcPersonalitySchema = Type.Object(
+  {
+    /** How the NPC speaks — cadence, accent, word choice. */
+    voice: Type.String({ minLength: 1, description: 'How the NPC speaks' }),
+    /** How the NPC carries themselves — demeanour, temperament. */
+    manner: Type.String({ minLength: 1, description: 'How the NPC carries themselves' }),
+  },
+  { additionalProperties: false },
+);
+
+export type ContentPackNpcPersonality = Static<typeof ContentPackNpcPersonalitySchema>;
+
+// ---------------------------------------------------------------------------
 // ContentPackNpcEntry — NPC definition in the pack
 // ---------------------------------------------------------------------------
 
@@ -129,7 +150,43 @@ export const ContentPackNpcEntrySchema = Type.Object({
   initialApproval: Type.Optional(Type.Integer({ minimum: -100, maximum: 100, default: 0 })),
   /** Pool of banter dialogue keys for inter-party chatter. */
   banterPool: Type.Optional(Type.Array(Type.String(), { default: [] })),
-});
+  // ── Authored identity fields (C-488) — all optional, per-field fallback ──
+  /**
+   * The NPC's authored personality (voice + manner). Absent → the canonical
+   * generic sentence is used. No string alternative is accepted.
+   */
+  personality: Type.Optional(
+    ContentPackNpcPersonalitySchema,
+  ),
+  /** What the NPC wants — each entry a concrete want; at least one may conflict. */
+  agenda: Type.Optional(
+    Type.Array(Type.String({ minLength: 1 }), {
+      minItems: 1,
+      description: 'What the NPC wants, including conflicts with others',
+    }),
+  ),
+  /** Facts the NPC knows and can share. */
+  knowledge: Type.Optional(
+    Type.Array(Type.String({ minLength: 1 }), {
+      minItems: 1,
+      description: 'Facts the NPC knows and can share',
+    }),
+  ),
+  /** Facts the NPC knows and will not volunteer. */
+  secrets: Type.Optional(
+    Type.Array(Type.String({ minLength: 1 }), {
+      minItems: 1,
+      description: 'Facts the NPC knows and will not volunteer',
+    }),
+  ),
+  /** Lines the NPC will not cross. */
+  boundaries: Type.Optional(
+    Type.Array(Type.String({ minLength: 1 }), {
+      minItems: 1,
+      description: 'Lines the NPC will not cross',
+    }),
+  ),
+}, { additionalProperties: false });
 
 export type ContentPackNpcEntry = Static<typeof ContentPackNpcEntrySchema>;
 

@@ -9,6 +9,9 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { encode } from 'gpt-tokenizer';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -1297,5 +1300,296 @@ describe('C-401: two-call narrative streaming', () => {
     // The system prompt carries the explicit non-contradiction instruction.
     expect(systemPrompt).toContain('MUST NOT contradict');
     expect(systemPrompt).toContain('authoritative');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-3: authored NPC identity in the production persona
+// ---------------------------------------------------------------------------
+
+describe('C-488 AC-3: authored identity in the production persona', () => {
+  const AUTHORED_ELDER = {
+    name: 'Elder Thalia',
+    defaultDialogueKey: 'elder_thalia_greeting',
+    personality: { voice: 'Measured and warm.', manner: 'Patient and authoritative.' },
+    agenda: ["Keep the Ward Wand sealed in Emberwatch's shrine."],
+    knowledge: ['The Ward Wand is a Vesperine relic.'],
+    secrets: ['She fears old enemies have breached the valley.'],
+    boundaries: ["She will not risk Emberwatch on a stranger's promise."],
+  };
+
+  test('buildContext persona includes every authored identity field', () => {
+    const contentProvider = makeContentProvider({ npcs: { authored_elder: AUTHORED_ELDER } });
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'authored_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+    });
+
+    expect(projection.persona).toContain('Measured and warm.');
+    expect(projection.persona).toContain('Patient and authoritative.');
+    expect(projection.persona).toContain("Keep the Ward Wand sealed in Emberwatch's shrine.");
+    expect(projection.persona).toContain('The Ward Wand is a Vesperine relic.');
+    expect(projection.persona).toContain('She fears old enemies have breached the valley.');
+    expect(projection.persona).toContain("She will not risk Emberwatch on a stranger's promise.");
+  });
+
+  test('missing personality yields the exact canonical generic sentence', () => {
+    const contentProvider = makeContentProvider(); // village_elder has no identity
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+    });
+
+    expect(projection.persona).toBe('You are Elder Thalia, a character in a fantasy world.');
+  });
+
+  test('per-field fallback: each missing array field omits only its labelled block', () => {
+    const contentProvider = makeContentProvider({
+      npcs: {
+        partial: { name: 'Partial', agenda: ['Get the wand.'] },
+      },
+    });
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'partial',
+      npcName: 'Partial',
+      messages: [],
+    });
+    const persona = projection.persona;
+
+    expect(persona).toContain('You are Partial, a character in a fantasy world.');
+    expect(persona).toContain('[AGENDA]');
+    expect(persona).toContain('Get the wand.');
+    expect(persona).not.toContain('[KNOWLEDGE]');
+    expect(persona).not.toContain('[SECRETS]');
+    expect(persona).not.toContain('[BOUNDARIES]');
+    expect(persona).not.toContain('Voice:');
+  });
+
+  test('analyzeIntent sends the authored persona in npcContext.persona', async () => {
+    let capturedInput = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        capturedInput = messages.find((m) => m.role === 'user')?.content ?? '';
+        return { text: 'The elder considers.' };
+      }
+      return {
+        text: 'The elder considers.',
+        structured: { requiresRoll: false, npcResponse: 'The elder considers.', suggestedChips: [] },
+      };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider({ npcs: { authored_elder: AUTHORED_ELDER } }),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    await npcDialogueService.analyzeIntent({
+      npcId: 'authored_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player', content: 'Hello' }],
+      signal: new AbortController().signal,
+    });
+
+    const input = JSON.parse(capturedInput) as { npcContext: { persona: string } };
+    expect(input.npcContext.persona).toContain('Measured and warm.');
+    expect(input.npcContext.persona).toContain("Keep the Ward Wand sealed in Emberwatch's shrine.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-4: resolveRoll receives the same facts + history as analyzeIntent
+// ---------------------------------------------------------------------------
+
+describe('C-488 AC-4: resolveRoll receives the same facts', () => {
+  test('resolveRoll prompt contains persona, gameStateFacts, and recent history', async () => {
+    let capturedSystem = '';
+    let capturedUser = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        capturedSystem = messages.find((m) => m.role === 'system')?.content ?? '';
+        capturedUser = messages.find((m) => m.role === 'user')?.content ?? '';
+        return { text: 'Done.' };
+      }
+      return {
+        text: 'Done.',
+        structured: { narrativeResult: 'Done.', stateDeltas: [], suggestedChips: [] },
+      };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    await npcDialogueService.resolveRoll({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [
+        { role: 'player', content: 'Please hand it over.' },
+        { role: 'npc', content: 'No.' },
+      ],
+      signal: new AbortController().signal,
+      gameStateFacts: ['Quest active: The Fading Ward'],
+      checkType: 'persuasion',
+      difficultyClass: 12,
+      rollTotal: 15,
+      outcome: 'pass',
+      playerInput: 'I appeal to your honor.',
+    });
+
+    // Persona (generic fallback for the identity-less village_elder).
+    expect(capturedSystem).toContain('You are Elder Thalia, a character in a fantasy world.');
+    // The same facts the intent prompt receives.
+    expect(capturedUser).toContain('[GAME STATE]');
+    expect(capturedUser).toContain('Quest active: The Fading Ward');
+    expect(capturedUser).toContain('[CONVERSATION HISTORY]');
+    expect(capturedUser).toContain('Player: Please hand it over.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-6: prompt budget within 4,096 cl100k_base tokens
+// ---------------------------------------------------------------------------
+
+describe('C-488 AC-6: prompt budget (cl100k_base)', () => {
+  const TOKEN_MODEL = 'cl100k_base' as const;
+  const TOKEN_BUDGET = 4096;
+
+  const countTokens = (text: string): number => encode(text, { model: TOKEN_MODEL }).length;
+
+  const manifestPath = join(
+    import.meta.dir,
+    '../../../../../../../content/packs/emberwatch/manifest.json',
+  );
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
+    npcs: Record<string, Record<string, unknown>>;
+  };
+
+  const stripIdentity = (npc: Record<string, unknown>): Record<string, unknown> => {
+    const stripped = { ...npc };
+    delete stripped.personality;
+    delete stripped.agenda;
+    delete stripped.knowledge;
+    delete stripped.secrets;
+    delete stripped.boundaries;
+    return stripped;
+  };
+
+  const captureContextPrompt = async (
+    npcId: string,
+    npcName: string,
+    npcEntry: Record<string, unknown>,
+  ): Promise<string> => {
+    let captured = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        captured = messages.find((m) => m.role === 'system')?.content ?? '';
+        return { text: 'Hello.' };
+      }
+      return { text: 'Hello.', structured: { narrative: 'Hello.' } };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider({ npcs: { [npcId]: npcEntry } }),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+    await npcDialogueService.generateTurn({
+      npcId,
+      npcName,
+      messages: [],
+      signal: new AbortController().signal,
+    });
+    return captured;
+  };
+
+  const captureRollPrompt = async (
+    npcId: string,
+    npcName: string,
+    npcEntry: Record<string, unknown>,
+  ): Promise<string> => {
+    let system = '';
+    let user = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        system = messages.find((m) => m.role === 'system')?.content ?? '';
+        user = messages.find((m) => m.role === 'user')?.content ?? '';
+        return { text: 'Done.' };
+      }
+      return {
+        text: 'Done.',
+        structured: { narrativeResult: 'Done.', stateDeltas: [], suggestedChips: [] },
+      };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider({ npcs: { [npcId]: npcEntry } }),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+    await npcDialogueService.resolveRoll({
+      npcId,
+      npcName,
+      messages: [],
+      signal: new AbortController().signal,
+      gameStateFacts: [],
+      checkType: 'persuasion',
+      difficultyClass: 12,
+      rollTotal: 15,
+      outcome: 'pass',
+      playerInput: 'I appeal to your honor.',
+    });
+    return `${system}\n${user}`;
+  };
+
+  test('every after-count stays <= 4096 cl100k_base tokens for all three NPCs', async () => {
+    for (const [npcId, npc] of Object.entries(manifest.npcs)) {
+      const npcName = (npc.name as string) ?? npcId;
+      const generic = stripIdentity(npc);
+
+      const contextBefore = countTokens(await captureContextPrompt(npcId, npcName, generic));
+      const contextAfter = countTokens(await captureContextPrompt(npcId, npcName, npc));
+      const rollBefore = countTokens(await captureRollPrompt(npcId, npcName, generic));
+      const rollAfter = countTokens(await captureRollPrompt(npcId, npcName, npc));
+
+      // AC-6 reporting: per-NPC, per-path before/after cl100k_base counts.
+      console.log(
+        `C-488 budget ${npcId}: context=${contextBefore}->${contextAfter} roll=${rollBefore}->${rollAfter}`,
+      );
+
+      // Budget assertions on the after counts only (identity displaces filler).
+      expect(contextAfter, `${npcId} context-projection after count`).toBeLessThanOrEqual(
+        TOKEN_BUDGET,
+      );
+      expect(rollAfter, `${npcId} resolveRoll after count`).toBeLessThanOrEqual(TOKEN_BUDGET);
+
+      // The after count must not blow the ceiling the before count never reached.
+      expect(contextBefore, `${npcId} context-projection before count`).toBeLessThanOrEqual(
+        TOKEN_BUDGET,
+      );
+      expect(rollBefore, `${npcId} resolveRoll before count`).toBeLessThanOrEqual(TOKEN_BUDGET);
+    }
   });
 });

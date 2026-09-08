@@ -35,6 +35,36 @@ The manifest is validated against `ContentPackManifestSchema`. Key fields:
 }
 ```
 
+## Authored NPC Identity (C-488)
+
+Each NPC entry accepts five optional identity fields that give a character a
+voice, a want, knowledge they share, secrets they keep, and lines they will not
+cross. All five are optional — a pack authored without them still loads, and
+the game falls back to the generic persona only for the fields that are absent.
+
+```json
+{
+  "npcs": {
+    "village_elder": {
+      "name": "Elder Thalia",
+      "personality": {
+        "voice": "Measured and warm.",
+        "manner": "Patient and authoritative."
+      },
+      "agenda": ["Keep the Ward Wand sealed in Emberwatch's shrine."],
+      "knowledge": ["The Ward Wand is a relic of the Vesperine Order."],
+      "secrets": ["She fears old enemies have breached the valley."],
+      "boundaries": ["She will not risk Emberwatch on a stranger's promise."]
+    }
+  }
+}
+```
+
+`personality` is the only accepted representation of an NPC's voice and manner
+— a plain string is rejected. `agenda` entries are concrete wants, and at least
+one may conflict with another NPC's agenda. Unknown identity keys are rejected
+by the schema.
+
 ## Per-Asset Provenance (C-381)
 
 Every asset in a pack should carry provenance information: licence, author, and

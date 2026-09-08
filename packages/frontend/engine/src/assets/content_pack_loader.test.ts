@@ -407,6 +407,37 @@ describe('ContentPackLoader', () => {
     expect(calls2()).toBe(1);
   });
 
+  // ── C-488 AC-2: a previous-version pack still loads ──
+
+  test('a v3.2.0 pack with no identity fields loads unchanged (C-488 AC-2)', async () => {
+    const v320Manifest = {
+      ...validManifest,
+      version: '3.2.0',
+      npcs: {
+        bartender: {
+          name: 'Grizzled Bartender',
+          defaultDialogueKey: 'bartender_greeting',
+          isVendor: true,
+        },
+      },
+    };
+    const { fetcher } = createFetchMock(v320Manifest);
+
+    const loader = await loadContentPack({
+      packId: 'test-pack',
+      fetchFn: fetcher as unknown as typeof fetch,
+    });
+
+    expect(loader.manifest.version).toBe('3.2.0');
+    const npc = loader.getNpc('bartender');
+    expect(npc?.name).toBe('Grizzled Bartender');
+    expect(npc?.personality).toBeUndefined();
+    expect(npc?.agenda).toBeUndefined();
+    expect(npc?.knowledge).toBeUndefined();
+    expect(npc?.secrets).toBeUndefined();
+    expect(npc?.boundaries).toBeUndefined();
+  });
+
   // ── NPC and Item lookup ──
 
   test('getNpc returns NPC entry by ID', async () => {
