@@ -3,7 +3,7 @@ id: C-488
 title: "Authored NPC identity in the content pack"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-07T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — "a name plus 'fantasy NPC' is not a character"; blocks C-493/C-494/C-495 |
 | **Dependencies** | None |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — the pack authoring format gains identity fields |
 | **Contract version** | 2.0.0 |
@@ -291,3 +291,55 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Extended `ContentPackNpcEntrySchema` with five optional TypeBox identity fields (`personality` as a normative `{ voice, manner }` object plus `agenda`/`knowledge`/`secrets`/`boundaries` arrays), mirrored them as derived `@aikami/types` types, and rewired the production `npcDialogueService` persona assembly to read authored identity with deterministic per-field fallback (single canonical generic sentence for a missing `personality`). The roll-resolution prompt now receives the same persona, conversation history, and game-state facts as the intent prompt, and all three Emberwatch NPCs ship a full authored identity with the required Thalia/Rollo agenda conflict. Prompt budget was measured with `gpt-tokenizer@4.0.0` (cl100k_base) — all 12 after/before counts stay far below the 4,096 ceiling.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Schema + derived types added; fixtures with/without identity validate; unknown keys rejected. |
+| AC-2 | ✅ | v3.2.0 fixture loads with no identity; pack version bumped 3.2.0 → 4.0.0 and documented. |
+| AC-3 | ✅ | Production assembler verified via `buildContext` + `analyzeIntent`; exact canonical fallback asserted. |
+| AC-4 | ✅ | `resolveRoll` prompt carries persona + `[GAME STATE]` + `[CONVERSATION HISTORY]`. |
+| AC-5 | ✅ | All three NPCs authored; exact Thalia/Rollo first-agenda conflict asserted from the manifest. |
+| AC-6 | ✅ | 12 cl100k_base counts recorded; max after-count 318 ≪ 4,096. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| — | No new files — all changes were edits to existing files. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/lib/game/content_pack.ts` | Added `ContentPackNpcPersonalitySchema` + five optional identity fields and `additionalProperties: false` on the NPC entry. |
+| `packages/shared/types/src/lib/game/content_pack.ts` | Derived `ContentPackNpcPersonality` from the new schema. |
+| `content/packs/emberwatch/manifest.json` | Bumped version to 4.0.0; authored identity for all three NPCs. |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Authored-identity persona assembly + shared facts/persona into `resolveRoll`. |
+| `packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts` | Fixture version 3.2.0 → 4.0.0. |
+| `packages/shared/schemas/src/lib/game/content_pack.test.ts` | AC-1 + AC-5 schema and manifest-content tests. |
+| `packages/frontend/engine/src/assets/content_pack_loader.test.ts` | AC-2 v3.2.0 no-identity load test. |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | AC-3/AC-4/AC-6 production-seam tests + budget logging. |
+| `apps/frontend/docs/src/content/docs/guides/content-pack-authoring.mdx` | Documented the new identity fields. |
+| `apps/frontend/client/package.json` + `bun.lock` | Pinned `gpt-tokenizer@4.0.0` devDependency for budget measurement. |
+
+### Deviations from Spec
+None. `personality` keeps the single normative `{ voice, manner }` object shape; the generic fallback is the exact canonical sentence; `resolveRoll` now shares persona/facts/history rather than re-deriving them. The identity arrays are tightened with `minItems: 1` (an authored block must be non-empty), which is a hardening, not a scope change. The v3.2.0 fixture is committed inline in the loader test rather than as a standalone JSON file — it still proves a previous-version pack loads unchanged.
+
+### Test Results
+- Unit: 143/143 pass (0 failures) — schemas `content_pack.test.ts` 54, engine `content_pack_loader.test.ts` 43, client `npc_dialogue_service.test.ts` 46.
+- E2E: N/A (all six ACs are schema/unit-level; functional and visual evidence are explicitly N/A per the Evidence Matrix).
+- Visual: N/A.
+- Baseline: pre-existing failures only — client full suite 40 fail + 14 errors (missing static `game-data` assets/catalogs, image/GM/audio/end-session suites) and engine `emberwatch_content_audit.test.ts` 2 fail (missing `atlas.json` + 58 `asset.missing-provenance` errors, a C-381 gap). 0 new failures introduced.
+
+### Prompt Budget (AC-6)
+Tokenizer: `gpt-tokenizer@4.0.0`, `encode(text, { model: 'cl100k_base' })`. Format: `before → after`.
+
+| NPC | `_buildContextProjection` | `resolveRoll` |
+|---|---|---|
+| `village_elder` | 117 → 289 | 146 → 318 |
+| `rollo_grasper` | 124 → 290 | 149 → 315 |
+| `merchant` | 122 → 262 | 146 → 286 |
