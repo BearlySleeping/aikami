@@ -227,26 +227,29 @@ const TOOLS: ToolCheck[] = [
     },
   },
   {
-    name: 'hypa',
-    bins: ['hypa'],
-    why: 'CLI output compression — makes `hypa_find`/`hypa_grep`/`hypa_read` tools work in pi. Optional.',
+    name: 'rtk',
+    bins: ['rtk'],
+    why: 'CLI token compression (60-90%) for grep/read/test/git/diff output. Optional.',
     category: 'dx',
-    verify: (out) => /^\d+\.\d+/.test(out.trim()),
     install: {
       linux: {
-        label: 'Install hypa (npm)',
-        commands: ['npm install -g @hypabolic/hypa'],
+        label: 'Install rtk (curl installer)',
+        commands: [
+          'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
+        ],
       },
       darwin: {
-        label: 'Install hypa (npm)',
-        commands: ['npm install -g @hypabolic/hypa'],
+        label: 'Install rtk (curl installer)',
+        commands: [
+          'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
+        ],
       },
       win32: {
-        label: 'Install hypa (npm)',
-        commands: ['npm install -g @hypabolic/hypa'],
+        label: 'Install rtk (cargo)',
+        commands: ['cargo install --git https://github.com/rtk-ai/rtk'],
       },
     },
-    hint: 'After install, restart your shell. Without hypa, pi falls back to direct bash execution.',
+    hint: 'Installs to ~/.local/bin (add to PATH if missing). Nix users: rtk is in nixpkgs. Optional — pi falls back to raw tools.',
   },
   {
     name: 'herdr',

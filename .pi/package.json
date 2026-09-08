@@ -23,7 +23,6 @@
     "measure-tools": "bun run scripts/measure_tool_surface.ts"
   },
   "dependencies": {
-    "@hypabolic/hypa": "^0.1.14",
     "@modelcontextprotocol/sdk": "^1.30.0"
   }
 }

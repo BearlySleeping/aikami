@@ -169,7 +169,7 @@ to look, never *whether* the thing finished. Its worst failure is polling slight
 | Stream progress via `onUpdate` — **never `console.log`**, which corrupts pi's TUI             | `registration.test.ts` review  |
 | Register a tool family as one namespace, not N tools                                          | `tool_namespace.ts`            |
 | No `promptGuidelines` on any tool                                                             | `registration.test.ts`         |
-| Always use `hypa_shell` / `hypa_read` / `hypa_grep` for shell and file ops                    | pi-hypa extension              |
+| Prefer `rtk`-wrapped commands for noisy shell output (optional, not required)                | dev.md prompt                  |
 | Always use `validate()` instead of raw moon commands                                          | `moon_integration.ts`          |
 | Use `ctx_execute` for analysis; `ctx_fetch_and_index` for web docs                             | context-mode                   |
 | Load `aikami-conventions` first before any code                                               | `dev.md` prompt 🔴             |
