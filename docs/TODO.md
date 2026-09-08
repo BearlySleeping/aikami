@@ -5,6 +5,182 @@ for TODO items
 
 This file is for draft/messy notes and ideas, grouped into contract-sized units of work.
 
+## Prompt backlog (from tmp/TODO.md)
+
+Scratch backlog converted to executable prompts for a fresh pi session. Five
+contract-sized items are already drafted in `docs/contracts/` (do NOT re-derive
+them here): `C-499` — Dialogue intent-envelope extraction resilience,
+`C-500` — Combat overlay rendering + engine stall, `C-501` — Dialogue slash
+commands (`/generate`, `/tree`, `/action`), `C-502` — Minimap HUD, `C-503` —
+Quest marker HUD.
+
+Each prompt below is a **direct prompt** — small, self-contained fix. Execute
+each in isolation; one prompt = one commit-worth of change.
+
+### Prompt 1 — Dialogue: allow typing while the NPC is streaming
+
+**Problem**: the input box is disabled while the NPC response streams, so the
+player cannot type until the suggested-action chips appear.
+
+**Files**:
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` — `disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}` on the textarea (~L440)
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — `sendMessage` (~L1128) early-returns on `isStreaming`
+
+**Task**: remove `isStreaming` from the textarea `disabled` binding so the
+player can type during streaming. When the player presses Enter mid-stream,
+queue the message and send it once the current turn completes (do not silently
+drop it). Keep `isResolvingSkillCheck` gating.
+
+**Check**: during an NPC reply, type a message and press Enter — it sends after
+the NPC finishes; the player can type before the chips appear.
+
+### Prompt 2 — Player sprite is occluded by the HP bar
+
+**Problem**: "Player Kaelen Thistlewalker is behind the ui healthbar" — the
+player sprite renders underneath the HP bar HUD when walking to the top-left.
+
+**Files**:
+- `apps/frontend/client/src/lib/views/game/ui/hud/hp_bar.svelte` — `absolute top-3 left-3 z-50`
+- `apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte`
+
+**Task**: make the HP bar not occlude the player sprite. Reposition it, shrink
+its footprint, or make it non-blocking (pointer-events already pass through HUD
+elements; the issue is visual occlusion).
+
+**Check**: walk the player into the top-left region of the viewport — the HP bar
+does not cover the player sprite.
+
+### Prompt 3 — Ember Watch quest must start with "Talk to the Elder"
+
+**Problem**: the Ember Watch quest does not begin with the "talk to the Elder"
+objective.
+
+**Files**:
+- `content/packs/emberwatch/manifest.json` — quest + objective definitions
+- `content/packs/emberwatch/maps/village.json` — Elder NPC placement
+
+**Task**: locate the Ember Watch quest in the manifest and ensure its first
+active objective targets the Elder NPC (`npcId` completion), with no earlier
+objective preceding it.
+
+**Check**: start a new Ember Watch campaign — the quest tracker shows
+"Talk to the Elder" as the current objective.
+
+### Prompt 4 — TTS in dialogue: toggle, latency, and `stop()` error
+
+**Problem**: TTS does not play in dialogue unless the explicit "speak" button is
+clicked; the toggle does nothing; first speech is ~10s late; console shows
+`stop() called before synthesis completed`.
+
+**Files**:
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — `streamingTtsEnabled`, `toggleStreamingTts` (~L1469), init (~L803–822), `speakMessage`
+- `apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts` — `speak` (~L358) calls `stop` (~L405); `stop` (~L433) rejects the pending request with `'stop() called before synthesis completed'` (~L445)
+
+**Task**:
+1. Wire `toggleStreamingTts` so enabling it auto-speaks each NPC message as it completes (not just on explicit speak-click).
+2. Initialize TTS eagerly when the dialogue overlay opens to remove the ~10s first-speak latency.
+3. Fix the spurious `stop() called before synthesis completed` error — a superseding `speak()` should cancel the prior request silently, not reject it as an error.
+
+**Check**: open a dialogue, toggle TTS on — NPC replies speak automatically,
+without a 10s delay and without the `stop()` error in the console.
+
+### Prompt 5 — `/setup` auto-toggle voice & art; disable without connection
+
+**Problem**: after `/setup` establishes a connection, voice and art should be
+auto-enabled (and re-enabled on load); they must not be toggleable when there is
+no connection.
+
+**Files**:
+- `apps/frontend/client/src/lib/views/setup/setup_view_model.svelte.ts`
+- `apps/frontend/client/src/lib/views/setup/setup_view.svelte`
+- `apps/frontend/client/src/lib/views/setup_subflow/*`
+
+**Task**: on successful connection setup, enable voice and art. Persist the
+state and re-apply on load. When no connection exists, disable the voice/art
+toggles and prevent enabling them.
+
+**Check**: run `/setup` to completion — voice + art toggles are on; reload the
+app — still on; remove the connection — toggles disabled and cannot be flipped on.
+
+### Prompt 6 — LPC renders multiple bodies/arms when looking up or down
+
+**Problem**: the LPC character draws multiple bodies and arms when facing up or
+down.
+
+**Files**:
+- `packages/frontend/engine/src/__tests__/lpc_appearance_resolver.test.ts`
+- LPC appearance resolver + direction/frame mapping in `packages/frontend/engine`
+- `apps/frontend/client/src/lib/components/game/lpc_animation_debug_controller.ts`
+
+**Task**: investigate and fix the up/down direction rendering. Likely a
+direction-frame index mismatch where up/down select the wrong body/arm layers or
+draw every variant instead of one.
+
+**Check**: rotate the LPC character through up/down/left/right — exactly one body
+and one pair of arms render in each direction.
+
+### Prompt 7 — Emoji over LPC based on response mood
+
+**Problem**: NPC mood is detected but not surfaced visually on the sprite.
+
+**Files**:
+- `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` — `_detectExpression` (~L167)
+- Expression service — currently falls back to keyword mood when the agent returns an unrecognized mood
+
+**Task**: when an NPC response carries a mood (happy/sad/angry/…), show a small
+emoji over the NPC's LPC sprite for a short duration. Reuse the existing
+expression detection; map mood → emoji (e.g. angry → 😠).
+
+**Check**: NPC gives an angry response — an 😠 (or equivalent) appears over the
+sprite briefly, then fades.
+
+### Prompt 8 — `zoning.position` log spam
+
+**Problem**: `[spam:zoning.position] (suppressed 601 repeats in 10s)` floods the
+console every frame.
+
+**Files**:
+- `packages/frontend/engine/src/systems/zoning_system.ts` — `logger.spam('zoning.position', …)` (~L58–60)
+
+**Task**: remove the per-frame `zoning.position` debug log, or raise its interval
+to something negligible (it is already deduped but still fires ~2×/sec).
+
+**Check**: run the game — the console no longer floods with `zoning.position`
+lines.
+
+### Prompt 9 — Persona avatars: webp conversion + R2 upload + defaults
+
+**Problem**: default personas (Lyra, Zeph, Thaldrin) have placeholder
+`illustrationAsset` values and no real avatars.
+
+**Files**:
+- `tmp/lyra.jpg`, `tmp/zeph.jpg`, `tmp/thaldrin.jpg` — source images
+- `packages/shared/constants/src/lib/characters.ts` — `STARTER_HEROES` (`illustrationAsset: 'starter_lyra' | 'starter_zeph' | 'starter_thaldrin'`)
+- `apps/frontend/client/src/lib/services/storage/emulator_seed_service.svelte.ts`
+- `apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts` + persona creation service (`avatarUrl`)
+
+**Task**: convert the three tmp jpgs to optimized webp, upload them to the R2
+bucket via the existing storage service, and wire them as the avatar for the
+default personas so they appear in persona creation and starter cards.
+
+**Check**: create/open a starter persona — the correct webp avatar shows for
+Lyra, Zeph, and Thaldrin (no placeholder).
+
+### Prompt 10 — Dialogue memory survives exit → re-enter
+
+**Problem**: talking to an NPC, exiting dialogue, then talking again loses the
+conversation.
+
+**Files**:
+- `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` — `memory`, `startSession` (~L224), `endSession` (~L244), bounded window `.slice(-20)` (~L915)
+
+**Task**: keep the dialogue history/memory alive across `endSession` →
+`startSession` for the same NPC, so re-entering dialogue resumes the
+conversation. At minimum in-session; persist only if it falls out trivially.
+
+**Check**: talk to an NPC → exit dialogue → talk to the same NPC again; the NPC
+remembers the prior exchange.
+
 ## Resolved / already implemented
 
 - ~~Contract pipeline worktree creation should use herdr's built-in worktree extension instead of a custom implementation.~~ Already done: `scripts/src/lib/herdr/worktree.ts` is documented as "THE single source of truth for task/contract worktree provisioning" and is consumed by `herdr_adapter.ts`/`orchestrator.ts` (contract pipeline), `herdr/task.ts` (`bun herdr:task` CLI), and pi extension tools. Low-level git primitives stay separate in `scripts/src/lib/agents/git_worktree.ts` by design. No action needed — verify nothing still calls a non-herdr worktree path before closing out any related issue.
@@ -41,19 +217,6 @@ Largest, most fully-specified item — do as its own PR, not bundled with other 
 - **6e. Cleanup + verification**: delete dead `@aikami/frontend/svelte-kit` + `@aikami/frontend-svelte-kit/*` aliases (point at a nonexistent `packages/frontend/svelte-kit/src`; nothing imports them), delete the `alias: {...}` block (and `toSrcPath`/`toPackagesPath` helpers if unused) from both `vite.config.ts` files, update `.pi/skills/svelte-conventions/SKILL.md` and any other doc referencing the old `$lib`/`@aikami/*` convention, run `moon check` + `bun test` for both apps, build + preview both and confirm the deprecation warning is gone and nothing 404s.
 
 Also related build-noise cleanup that surfaced alongside this (fold into 6e or file separately, low priority): 7 `INEFFECTIVE_DYNAMIC_IMPORT` warnings (real, but pure bundle-splitting hygiene — modules are statically imported elsewhere too), Firebase keys still present in `.env.production` despite the Firebase removal, `tsconfig.json` "paths" being overwritten during validation, and an adapter warning that reading `config.kit` inside adapters is deprecated (should read `config` directly).
-
-### 7. Tauri OPFS sqlite3_vfs persistence
-Persistence rollout task — **not a blank-canvas fix**; see the [Tauri boot handoff distinction](guides/TAURI_BOOT_HANDOFF.md#3-ruled-out--do-not-re-investigate) before touching this. Every boot logs `Ignoring inability to install OPFS sqlite3_vfs: ... Missing SharedArrayBuffer and/or Atomics. The server must emit the COOP/COEP response headers...`, so `WasmStorageAdapter` falls back to an in-memory DB snapshotted to IndexedDB instead of true OPFS persistence. Root cause: `apps/frontend/client/src-tauri/tauri.conf.json`'s `app.security.headers` is `{}` — Tauri v2 supports setting `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` there, which is the missing piece for `SharedArrayBuffer`/`Atomics`. Not flipped yet because COEP `require-corp` requires every cross-origin subresource the app fetches (R2 assets from `assets.bearlysleeping.com`, the hub's `internal_logging` endpoint, any provider API calls) to carry `Cross-Origin-Resource-Policy` or be fetched in CORS mode with `Access-Control-Allow-Origin` — untested, could silently break asset/texture loading. Needs a dedicated pass: flip the headers, rebuild, and exercise every network path before merging.
-
-### 8. Misc small bugs / polish (independent, low-effort — good filler contracts)
-- **8a.** "Download kororo" button in settings does not work.
-- **8b.** Capability dialog is not persistent; needs a different UX for voice vs. image.
-- **8c.** Add build caching for Tauri (and web, hub, site, docs) that reuses the same cache mechanics as the CI/deploy pipeline, so local `build` calls in apps get the same caching as CI.
-- **8d.** Set up Cloudflare, SOPS, and CI onboarding/setup stage.
-- **8e.** Update Discord bot to role-sync third-party tool access based on which channels a user wants to join.
-- **8f.** Device-link sign-in flow bug: if not signed in on browser and clicking "sign in" from Tauri opens the device sign-in page, but signing in redirects to the start page and forgets the device link.
-- **8g.** Hub favicon 404s (`https://hub.bearlysleeping.com/favicon.png` → `HTTP/3 404`). Fix in `apps/frontend/hub/src/app.html`, reusing the setup from `apps/frontend/client/src/app.html`.
-- **8h.** LPC preview (hub) and map preview not working: `WebGL context was lost` + `JSON.parse: unexpected character at line 2 column 1 of the JSON data`.
 
 ---
 

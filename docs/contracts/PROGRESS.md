@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-08)
 
-**244 active (0 without contract file), 119 archived, 0 duplicates**
+**249 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -252,6 +252,11 @@
 | C-488 | Authored Npc Identity In The Content Pack | 📝 draft | — | v2 | full |
 | C-489 | One Authority Path For Consequences | 📝 draft | — | v2 | full |
 | C-490 | Transcript Branching Must Not Imply Rewinding The World | 📝 draft | — | v2 | thin |
+| C-499 | Dialogue Intent Envelope Extraction Resilience | 📝 draft | ❓ `integrated` — production route `/game` | v2 | thin |
+| C-500 | Combat Overlay Rendering And Engine Stall | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
+| C-501 | Dialogue Slash Commands | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
+| C-502 | Minimap Hud | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
+| C-503 | Quest Marker Hud | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
 
 ---
 
