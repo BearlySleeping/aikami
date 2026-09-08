@@ -107,10 +107,13 @@ export const commitFiles = async (options: {
 export const pushBranch = async (options: { branch: string; dryRun: boolean }): Promise<void> => {
   const { branch, dryRun } = options;
   if (dryRun) {
-    log(`  ${c.dim}[dry-run] git push origin ${branch}${c.reset}`);
+    log(`  ${c.dim}[dry-run] git push origin HEAD:refs/heads/${branch}${c.reset}`);
     return;
   }
-  await checked(['git', 'push', 'origin', branch]);
+  // Push the fully-qualified branch ref: a bare `git push origin <branch>`
+  // becomes ambiguous the moment a tag shares the branch name (the rolling
+  // `staging` tag does exactly that on the second cut onward).
+  await checked(['git', 'push', 'origin', `HEAD:refs/heads/${branch}`]);
 };
 
 /**
@@ -145,7 +148,13 @@ export const setTag = async (options: {
 
 export const releaseExists = async (tag: string): Promise<boolean> => {
   const res = await run(['gh', 'release', 'view', tag, '--json', 'tagName']);
-  return res.code === 0;
+  if (res.code === 0) {
+    return true;
+  }
+  if (/release not found/i.test(res.err + res.out)) {
+    return false;
+  }
+  throw new Error(`gh release view ${tag} failed: ${res.err || res.out}`);
 };
 
 /** Metadata needed to restore a published release after replacement fails. */
@@ -184,7 +193,13 @@ export const releaseMetadata = async (tag: string): Promise<ReleaseMetadata | nu
 /** The release body for `tag`, or null when there is no such release. */
 export const releaseBody = async (tag: string): Promise<string | null> => {
   const res = await run(['gh', 'release', 'view', tag, '--json', 'body', '--jq', '.body']);
-  return res.code === 0 ? res.out : null;
+  if (res.code === 0) {
+    return res.out;
+  }
+  if (/release not found/i.test(res.err + res.out)) {
+    return null;
+  }
+  throw new Error(`gh release view ${tag} failed: ${res.err || res.out}`);
 };
 
 export const deleteRelease = async (options: { tag: string; dryRun: boolean }): Promise<void> => {
@@ -217,9 +232,11 @@ export const createRelease = async (options: {
   prerelease: boolean;
   /** false marks the release as NOT the repo's "Latest" (staging). */
   latest: boolean;
+  /** Commit SHA the release should record as its target (defaults to the repo default branch). */
+  target?: string;
   dryRun: boolean;
 }): Promise<void> => {
-  const { tag, title, body, prerelease, latest, dryRun } = options;
+  const { tag, title, body, prerelease, latest, target, dryRun } = options;
   const flags = [
     'gh',
     'release',
@@ -231,12 +248,15 @@ export const createRelease = async (options: {
     body,
     `--latest=${latest}`,
   ];
+  if (target) {
+    flags.push('--target', target);
+  }
   if (prerelease) {
     flags.push('--prerelease');
   }
   if (dryRun) {
     log(
-      `  ${c.dim}[dry-run] gh release create ${tag} --title "${title}" ${prerelease ? '--prerelease ' : ''}--latest=${latest}${c.reset}`,
+      `  ${c.dim}[dry-run] gh release create ${tag} --title "${title}" ${target ? `--target ${target.slice(0, 8)} ` : ''}${prerelease ? '--prerelease ' : ''}--latest=${latest}${c.reset}`,
     );
     return;
   }
@@ -276,6 +296,52 @@ export const waitForReleaseWorkflow = async (sha: string): Promise<void> => {
     throw new Error(`Timed out waiting for release.yml to start for ${sha.slice(0, 8)}`);
   }
   await checked(['gh', 'run', 'watch', runId, '--compact', '--exit-status']);
+};
+
+/**
+ * Wait for any in-flight `push`-triggered release.yml runs on `branch` to
+ * finish. The release cut pushes its version-bump commit to the same branch,
+ * and release.yml's push concurrency group cancels earlier pushes — waiting
+ * here prevents the bump push from cancelling a still-running web deploy of
+ * the commit range being released.
+ */
+export const waitForInFlightPushWorkflows = async (options: {
+  branch: string;
+  dryRun: boolean;
+}): Promise<void> => {
+  const { branch, dryRun } = options;
+  if (dryRun) {
+    log(`  ${c.dim}[dry-run] wait for in-flight push workflows on ${branch}${c.reset}`);
+    return;
+  }
+  const out = await checked([
+    'gh',
+    'run',
+    'list',
+    '--workflow',
+    'release.yml',
+    '--event',
+    'push',
+    '--branch',
+    branch,
+    '--limit',
+    '20',
+    '--json',
+    'databaseId,status',
+    '--jq',
+    '.[] | select(.status == "in_progress" or .status == "queued") | .databaseId',
+  ]);
+  const runIds = out
+    .split(String.fromCharCode(10))
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const runId of runIds) {
+    log(
+      `  ${c.dim}Waiting for in-flight push workflow ${runId} to finish (release.yml cancels superseded pushes).${c.reset}`,
+    );
+    await checked(['gh', 'run', 'watch', runId, '--exit-status']);
+  }
 };
 
 /** True when a published release exposes an asset with the exact name. */

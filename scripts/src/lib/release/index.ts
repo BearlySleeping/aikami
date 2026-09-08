@@ -10,6 +10,7 @@
  *   bun run release --promote        # promote the staging cut (on `production`)
  *   bun run release --dry-run        # print every git/gh mutation, do none of them
  *   bun run release --yes            # skip the confirmation prompt
+ *   bun run release --wait           # …then block until the desktop build publishes latest.json
  *
  * ── The model ────────────────────────────────────────────────────────────
  *
@@ -70,6 +71,7 @@ import {
   STAGING_RELEASE_TITLE,
   STAGING_TAG,
   setTag,
+  waitForInFlightPushWorkflows,
   waitForReleaseWorkflow,
 } from './github';
 import { promoteNotes, renderNotes } from './notes';
@@ -138,9 +140,16 @@ const cutStaging = async (options: {
   bump: BumpKind | null;
   dryRun: boolean;
   autoYes: boolean;
+  wait: boolean;
 }): Promise<void> => {
-  const { bump, dryRun, autoYes } = options;
+  const { bump, dryRun, autoYes, wait } = options;
   await requireBranch(STAGING_BRANCH, dryRun);
+
+  // The promote-to-staging push is what triggers the web deploy. If it is
+  // still running when we push the version bump below, release.yml's push
+  // concurrency group (cancel-in-progress: true) cancels it. Wait first.
+  step('Waiting for in-flight deploys');
+  await waitForInFlightPushWorkflows({ branch: STAGING_BRANCH, dryRun });
 
   step('Resolving version');
   const lastStable = await latestStableTag();
@@ -166,7 +175,9 @@ const cutStaging = async (options: {
   log(`  ${commits.length} commit(s) since ${lastStable?.tag ?? 'the beginning'}`);
   log(`\n${c.dim}${body}${c.reset}\n`);
 
-  if (
+  if (dryRun) {
+    log(`  ${c.dim}[dry-run] Skipping confirmation for a dry run.${c.reset}`);
+  } else if (
     !(await confirm(`Cut staging release ${version} (rolling tag \`${STAGING_TAG}\`)?`, autoYes))
   ) {
     warn('Aborted.');
@@ -202,6 +213,7 @@ const cutStaging = async (options: {
       body: `> Rolling staging build of \`${version}\`. Not a production release.\n\n${body}`,
       prerelease: true,
       latest: false,
+      target: sha,
       dryRun,
     });
   } catch (createError) {
@@ -232,15 +244,29 @@ const cutStaging = async (options: {
   ok(
     `Staging release ${version} published — ${dryRun ? '(dry run)' : await releaseUrl(STAGING_TAG)}`,
   );
-  log(
-    `  ${c.dim}Desktop legs build now; promote with \`bun run release --promote\` on ${PRODUCTION_BRANCH}.${c.reset}`,
-  );
+
+  if (wait && !dryRun) {
+    step('Waiting for desktop build');
+    await waitForReleaseWorkflow(sha);
+    if (!(await releaseHasAsset({ tag: STAGING_TAG, asset: 'latest.json' }))) {
+      throw new Error(`${STAGING_TAG} release completed without latest.json`);
+    }
+    ok(`Desktop build complete — latest.json is available for ${version}.`);
+  } else {
+    log(
+      `  ${c.dim}Desktop legs build now; promote with \`bun run release --promote\` on ${PRODUCTION_BRANCH}.${c.reset}`,
+    );
+  }
 };
 
 // ── Production promote ───────────────────────────────────────────────────
 
-const promote = async (options: { dryRun: boolean; autoYes: boolean }): Promise<void> => {
-  const { dryRun, autoYes } = options;
+const promote = async (options: {
+  dryRun: boolean;
+  autoYes: boolean;
+  wait: boolean;
+}): Promise<void> => {
+  const { dryRun, autoYes, wait } = options;
   await requireBranch(PRODUCTION_BRANCH, dryRun);
 
   step('Verifying the staging cut is in production');
@@ -296,7 +322,9 @@ const promote = async (options: { dryRun: boolean; autoYes: boolean }): Promise<
   log(`  Extra commits since the staging cut: ${sinceStaging.length}`);
   log(`\n${c.dim}${body}${c.reset}\n`);
 
-  if (!(await confirm(`Publish production release ${tag} as Latest?`, autoYes))) {
+  if (dryRun) {
+    log(`  ${c.dim}[dry-run] Skipping confirmation for a dry run.${c.reset}`);
+  } else if (!(await confirm(`Publish production release ${tag} as Latest?`, autoYes))) {
     warn('Aborted.');
     return;
   }
@@ -316,13 +344,24 @@ const promote = async (options: { dryRun: boolean; autoYes: boolean }): Promise<
     body,
     prerelease: false,
     latest: true,
+    target: sha,
     dryRun,
   });
 
   ok(`Production release ${tag} published — ${dryRun ? '(dry run)' : await releaseUrl(tag)}`);
-  log(
-    `  ${c.dim}Desktop legs rebuild against production config (staging bundles embed staging env, so they are never reused here).${c.reset}`,
-  );
+
+  if (wait && !dryRun) {
+    step('Waiting for desktop build');
+    await waitForReleaseWorkflow(sha);
+    if (!(await releaseHasAsset({ tag, asset: 'latest.json' }))) {
+      throw new Error(`${tag} release completed without latest.json`);
+    }
+    ok(`Desktop build complete — latest.json is available for ${tag}.`);
+  } else {
+    log(
+      `  ${c.dim}Desktop legs rebuild against production config (staging bundles embed staging env, so they are never reused here).${c.reset}`,
+    );
+  }
 };
 
 // ── Main ─────────────────────────────────────────────────────────────────
@@ -335,6 +374,7 @@ const main = async (): Promise<void> => {
     major: { type: 'boolean' },
     'dry-run': { type: 'boolean' },
     yes: { type: 'boolean', aliases: ['y'] },
+    wait: { type: 'boolean' },
   });
 
   const bumps: BumpKind[] = [];
@@ -360,13 +400,14 @@ const main = async (): Promise<void> => {
   }
 
   if (opts.promote) {
-    await promote({ dryRun: opts['dry-run'], autoYes: opts.yes });
+    await promote({ dryRun: opts['dry-run'], autoYes: opts.yes, wait: opts.wait });
     return;
   }
   await cutStaging({
     bump: bumps[0] ?? null,
     dryRun: opts['dry-run'],
     autoYes: opts.yes,
+    wait: opts.wait,
   });
 };
 

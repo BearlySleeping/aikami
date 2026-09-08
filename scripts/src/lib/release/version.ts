@@ -73,6 +73,62 @@ export const readCommittedVersion = (rootDir: string): string => {
   return match[1];
 };
 
+type JsonStringRange = { start: number; end: number };
+
+/** Finds the end of a JSON string token, skipping escaped characters. */
+const findJsonStringEnd = (source: string, start: number): number | undefined => {
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (source[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === '"') {
+      return index + 1;
+    }
+  }
+  return undefined;
+};
+
+/** Locates the root `version` string without reformatting the JSON document. */
+const findTopLevelVersionValue = (source: string): JsonStringRange | undefined => {
+  let depth = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '"') {
+      const keyEnd = findJsonStringEnd(source, index);
+      if (keyEnd === undefined) {
+        return undefined;
+      }
+      if (depth === 1) {
+        const key: unknown = JSON.parse(source.slice(index, keyEnd));
+        let valueStart = keyEnd;
+        while (/\s/.test(source[valueStart] ?? '')) {
+          valueStart += 1;
+        }
+        if (key === 'version' && source[valueStart] === ':') {
+          valueStart += 1;
+          while (/\s/.test(source[valueStart] ?? '')) {
+            valueStart += 1;
+          }
+          if (source[valueStart] !== '"') {
+            return undefined;
+          }
+          const valueEnd = findJsonStringEnd(source, valueStart);
+          return valueEnd === undefined ? undefined : { start: valueStart, end: valueEnd };
+        }
+      }
+      index = keyEnd - 1;
+      continue;
+    }
+    if (character === '{') {
+      depth += 1;
+    } else if (character === '}') {
+      depth -= 1;
+    }
+  }
+  return undefined;
+};
+
 /**
  * Write `version` into both Cargo.toml's `[package]` block and
  * tauri.conf.json. Returns the repo-relative paths that actually changed
@@ -112,10 +168,17 @@ export const writeCommittedVersion = (rootDir: string, version: string): string[
   // Textual edit rather than JSON.parse → JSON.stringify: the config is
   // hand-maintained, and round-tripping it reflows every line and drops key
   // order, turning a one-line version bump into an unreviewable diff.
-  const nextConf = conf.replace(/("version"\s*:\s*)"[^"]*"/, `$1"${version}"`);
-  if (nextConf === conf && !conf.includes(`"version": "${version}"`)) {
-    throw new Error(`Could not find a "version" field to rewrite in ${TAURI_CONF}`);
+  //
+  // Only the TOP-LEVEL "version" field is rewritten, so a nested "version"
+  // key elsewhere in the file can never be clobbered. Token scanning keeps
+  // braces inside quoted strings from affecting object depth.
+  JSON.parse(conf);
+  const versionRange = findTopLevelVersionValue(conf);
+  if (!versionRange) {
+    throw new Error(`Could not find a top-level "version" field to rewrite in ${TAURI_CONF}`);
   }
+  const nextConf =
+    conf.slice(0, versionRange.start) + JSON.stringify(version) + conf.slice(versionRange.end);
   if (nextConf !== conf) {
     writeFileSync(confPath, nextConf);
     changed.push(TAURI_CONF);

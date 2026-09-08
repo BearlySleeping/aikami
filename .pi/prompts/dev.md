@@ -81,22 +81,20 @@ Fragments OK. Every word must earn its place.
 
 ## Tool Selection (Mandatory)
 
-**🔴 ALWAYS prefer Hypa-backed tools over raw equivalents.** The `bash`, `read`,
-`grep`, `find`, and `ls` tools are transparently intercepted by the pi-hypa
-extension which rewrites them through `hypa -c`. In the Nix environment, the
-`hypa` binary is not on PATH for rewrapped commands, producing spurious
-`hypa: command not found` errors. Use these instead:
+**Prefer compact output for noisy commands.** When the `rtk` CLI is on PATH,
+wrap noisy commands so their output stays small. rtk is **optional** — if it is
+not installed, use the raw tools directly:
 
-| Instead of | Use |
+| Raw | With rtk (if available) |
 |---|---|
-| `bash` | `hypa_shell` |
-| `read` | `hypa_read` |
-| `grep` / `rg` via bash | `hypa_grep` |
-| `find` via bash | `hypa_find` |
-| `ls` via bash | `hypa_ls` |
+| `grep` / `rg` | `rtk grep` / `rtk rg` |
+| `read` | `rtk read` |
+| `find` / `ls` / `tree` | `rtk find` / `rtk ls` / `rtk tree` |
+| `vitest` / `jest` / test runs | `rtk vitest` / `rtk jest` / `rtk test` |
+| `git diff` | `rtk diff` |
 
-Exception: `bash` is still fine for short commands (`git`, `mkdir`, `rm`,
-`mv`, `cd`, `bun install`) where hypa's compression adds no value.
+`bash` is fine for short commands (`git`, `mkdir`, `rm`, `mv`, `cd`,
+`bun install`) where compaction adds no value.
 
 ---
 

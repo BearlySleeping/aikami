@@ -148,15 +148,14 @@ _aikami_load_mode
 source "${AIKAMI_ROOT}/scripts/direnv/sync-pi.sh"
 _aikami_sync_pi_version
 
-# ── 4. Pi-Hypa binary + configuration (additive mode — keeps custom tools active) ─
-_path_hypa_bin="$AIKAMI_ROOT/.pi/node_modules/.bin"
-if [ -d "$_path_hypa_bin" ]; then
-  export PATH="$_path_hypa_bin:$PATH"
+# ── 4. Project-local pi binary + PATH ──────────────────────────────────
+# Ensures `pi` resolves to the pinned @earendil-works/pi-coding-agent in
+# .pi/node_modules (kept in sync by sync-pi.sh above), not the global binary.
+_path_pi_bin="$AIKAMI_ROOT/.pi/node_modules/.bin"
+if [ -d "$_path_pi_bin" ]; then
+  export PATH="$_path_pi_bin:$PATH"
 fi
-unset _path_hypa_bin
-export HYPA_PI_MODE="additive"
-export HYPA_PI_REWRITE_TIMEOUT_MS="10000"
-export HYPA_PI_ASK_NON_INTERACTIVE="deny"
+unset _path_pi_bin
 
 # ── 4.5. pi-deepseek-optimized harness (cache module disabled) ─────────
 #
