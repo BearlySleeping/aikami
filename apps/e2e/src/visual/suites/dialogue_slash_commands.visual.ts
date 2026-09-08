@@ -69,7 +69,8 @@ const triggerGenerate = async (page: import('playwright').Page): Promise<void> =
   await page.waitForSelector('[data-testid="dialogue-overlay"]', { timeout: 15000 });
   await page.waitForTimeout(500);
 
-  const inputSelector = '[data-testid="dialogue-input"] textarea, [data-testid="dialogue-input"] input';
+  const inputSelector =
+    '[data-testid="dialogue-input"] textarea, [data-testid="dialogue-input"] input';
   const inputElement = page.locator(inputSelector).first();
   if (await inputElement.isVisible()) {
     await inputElement.click();

@@ -43,7 +43,9 @@ test.describe('Dialogue slash commands (C-501)', () => {
     await dialogue.expectNoError();
   });
 
-  test('AC-5: an unknown slash command shows inline help, not an NPC turn', async ({ authUser }) => {
+  test('AC-5: an unknown slash command shows inline help, not an NPC turn', async ({
+    authUser,
+  }) => {
     const dialogue = new DialoguePage(authUser);
     await dialogue.goto();
 
@@ -59,7 +61,9 @@ test.describe('Dialogue slash commands (C-501)', () => {
     await dialogue.expectNoError();
   });
 
-  test('AC-5: plain text with no slash still reaches the NPC (no regression)', async ({ authUser }) => {
+  test('AC-5: plain text with no slash still reaches the NPC (no regression)', async ({
+    authUser,
+  }) => {
     const dialogue = new DialoguePage(authUser);
     await dialogue.goto();
 
