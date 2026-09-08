@@ -37,10 +37,18 @@
  *   bun run setup --doctor               # --json --check combined: one machine-readable pass/fail
  */
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { c, fmt, parseCliArgs, run } from '../cli_utils';
+import { c, fmt, getEnvWithFallback, parseCliArgs, run } from '../cli_utils';
 import { findBash } from '../env/which.ts';
 import { parseHerdrStatus } from '../herdr/session.ts';
 
@@ -557,6 +565,77 @@ async function probeRecommended(): Promise<{ direnv: boolean; nix: boolean }> {
   };
 }
 
+// ─── pi model configuration (interactive only) ───────────────────────────
+
+const MODEL_TIER_PROMPTS = [
+  { key: 'CONTRACT_PIPELINE_MODEL_PRO', label: 'Pro model', note: 'writer / implementer / review' },
+  { key: 'CONTRACT_PIPELINE_MODEL_FLASH', label: 'Flash model', note: 'critic / verifier' },
+  { key: 'CONTRACT_PIPELINE_MODEL_FREE', label: 'Free model', note: 'fallback tier' },
+] as const;
+
+/** Write model keys into the repo-root `.env`, preserving unrelated lines. */
+const writeRootEnvModels = (values: Record<string, string>): void => {
+  const envPath = join(process.cwd(), '.env');
+  const existing = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
+  const keys = new Set(Object.keys(values));
+  const kept = existing.split('\n').filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      return true;
+    }
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) {
+      return true;
+    }
+    return !keys.has(trimmed.slice(0, eq).trim());
+  });
+  const block = [
+    '',
+    '# pi model configuration (bun run setup)',
+    ...Object.entries(values).map(([key, value]) => `${key}=${value}`),
+    '',
+  ];
+  writeFileSync(envPath, [...kept, ...block].join('\n'));
+};
+
+/**
+ * Interactive-only: if pi is installed, prompt for the pro/flash/free model
+ * slugs and persist them into the repo-root `.env` (the same file the
+ * contract pipeline, autofix, scout, and worker resolve models from).
+ */
+const promptForModels = (checkResults: CheckResult[]): void => {
+  const piPresent = checkResults.some((r) => r.tool.name === 'pi' && r.present);
+  if (!piPresent) {
+    return;
+  }
+
+  console.log(fmt.section('pi model configuration'));
+  console.log(
+    fmt.note('Set the models the contract pipeline (writer/critic/implementer/verifier/review)'),
+  );
+  console.log(fmt.note('will use. Leave a tier blank to use your pi default model for that tier.'));
+  console.log();
+
+  const values: Record<string, string> = {};
+  for (const spec of MODEL_TIER_PROMPTS) {
+    const current = getEnvWithFallback([spec.key]) ?? '';
+    const suffix = current ? ` [current: ${current}]` : '';
+    const answer = prompt(`${spec.label} (${spec.note})${suffix}: `);
+    const trimmed = answer?.trim();
+    if (trimmed) {
+      values[spec.key] = trimmed;
+    }
+  }
+
+  if (Object.keys(values).length === 0) {
+    console.log(fmt.note('No model overrides configured — pi will use its own defaults.'));
+    return;
+  }
+
+  writeRootEnvModels(values);
+  console.log(fmt.ok('Wrote model configuration to .env'));
+};
+
 function printRecommendedSection(recommendedTools: { direnv: boolean; nix: boolean }): void {
   console.log(fmt.section('Recommended path — direnv + Nix flake'));
 
@@ -837,6 +916,11 @@ for (const category of Object.keys(CATEGORY_META) as Category[]) {
       missingByCategory.set(category, [...(missingByCategory.get(category) ?? []), r]);
     }
   }
+}
+
+// ── pi model configuration (interactive only) ──
+if (!opts.check) {
+  promptForModels(results);
 }
 
 // ── Install instructions ────────────────────────────────────────────────

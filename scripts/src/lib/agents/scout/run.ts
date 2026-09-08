@@ -7,13 +7,14 @@
  * Scout explores the codebase and outputs a formatted context block
  * for the Guru (Claude) to analyze.
  *
- * Override the provider/model via `.env.local` (gitignored):
- *   SCOUT_PROVIDER=deepseek
- *   SCOUT_MODEL=deepseek-v4-pro
+ * Model comes from the repo-root `.env` (SCOUT_MODEL, then the flash tier
+ * fallbacks). When none is configured, pi runs without --model and uses the
+ * user's default model.
  */
 
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvWithFallback } from '../../cli_utils';
 
 const __dirname = resolve(fileURLToPath(import.meta.url), '..');
 const systemPromptPath = resolve(__dirname, 'SYSTEM.md');
@@ -31,13 +32,15 @@ if (!env.PI_HARD_SPEND) {
 }
 
 // Build argv array — Bun.spawn passes directly to process, no shell escaping issues
-const provider = process.env.SCOUT_PROVIDER ?? 'deepinfra';
-const model = process.env.SCOUT_MODEL ?? 'deepseek-ai/DeepSeek-V4-Flash';
+const model = getEnvWithFallback([
+  'SCOUT_MODEL',
+  'CONTRACT_PIPELINE_MODEL_FLASH',
+  'PI_MODEL_FLASH',
+  'MODEL_FLASH',
+  'MODEL',
+]);
 const piArgs: string[] = [
-  '--provider',
-  provider,
-  '--model',
-  model,
+  ...(model ? ['--model', model] : []),
   '--system-prompt',
   systemPrompt,
   '--no-skills',

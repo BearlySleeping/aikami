@@ -5,11 +5,36 @@
 // Deterministic checks inject unavailable auth results; the consistency case
 // also proves that an absent live `pi` binary fails closed with a reason.
 
-import { describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { resetRootEnvCache } from '../../cli_utils';
 import { preflightCatalogue, resolveCatalogueEntry } from './catalogue.ts';
 
+const ENV_KEYS = [
+  'EVAL_MODEL_FLASH',
+  'EVAL_MODEL_SONNET',
+  'EVAL_MODEL_OPUS',
+  'EVAL_MODEL_ASTRA',
+  'PI_MODEL_FLASH',
+  'PI_MODEL_SONNET',
+  'PI_MODEL_OPUS',
+  'PI_MODEL_ASTRA',
+  'MODEL_FLASH',
+  'MODEL_SONNET',
+  'MODEL_OPUS',
+  'MODEL_ASTRA',
+  'MODEL',
+] as const;
+
+beforeEach(() => {
+  resetRootEnvCache();
+  for (const key of ENV_KEYS) {
+    delete process.env[key];
+  }
+});
+
 describe('AC-2: catalogue resolution fails closed', () => {
-  it('reports a family as unavailable with a reason when no candidate resolves', async () => {
+  it('reports a family as unavailable with a reason when a configured candidate cannot resolve', async () => {
+    process.env.EVAL_MODEL_ASTRA = 'test-provider/test-model';
     const entry = await resolveCatalogueEntry({
       family: 'astra',
       authCheck: async () => ({ result: null, diagnostics: 'forced unavailable' }),
@@ -21,7 +46,15 @@ describe('AC-2: catalogue resolution fails closed', () => {
     expect(entry.model).toBe('unknown');
   });
 
+  it('reports a family as unavailable when nothing is configured', async () => {
+    const entry = await resolveCatalogueEntry({ family: 'astra' });
+    expect(entry.family).toBe('astra');
+    expect(entry.available).toBe(false);
+    expect(entry.reason).toContain('No candidate slugs configured');
+  });
+
   it('preflightCatalogue reports allAvailable false when any requested family is unavailable', async () => {
+    process.env.EVAL_MODEL_ASTRA = 'test-provider/test-model';
     const unavailableAuthCheck = async () => ({
       result: null,
       diagnostics: 'forced unavailable',

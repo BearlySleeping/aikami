@@ -8,24 +8,35 @@
 // different model.
 
 import { spawn } from 'node:child_process';
+import { getEnvWithFallback } from '../../cli_utils';
 import type { CatalogueEntry, FamilyLabel } from './types.ts';
 
 /**
- * Ordered candidate provider/model slugs per family label. The first
- * candidate `pi auth check` reports valid for is the resolved entry.
- * Override via env for installations with different provider packages —
- * see `.pi/settings.json`'s `packages` for what's actually installed here.
+ * Env fallback keys per family label — the first non-empty value wins. When
+ * a family has no configured value, it yields no candidates and preflight
+ * fails closed (see resolveCatalogueEntry), never silently substituting a
+ * different model.
  */
-const familyCandidates = (): Readonly<Record<FamilyLabel, readonly string[]>> => ({
-  flash: [
-    process.env.EVAL_MODEL_FLASH ?? '',
-    'deepinfra/deepseek-ai/DeepSeek-V4-Flash',
-    'deepseek/deepseek-v4-flash',
-  ].filter(Boolean),
-  sonnet: [process.env.EVAL_MODEL_SONNET ?? '', 'claude-bridge/claude-sonnet-5'].filter(Boolean),
-  opus: [process.env.EVAL_MODEL_OPUS ?? '', 'claude-bridge/claude-opus-5'].filter(Boolean),
-  astra: [process.env.EVAL_MODEL_ASTRA ?? '', 'openai/gpt-5.1'].filter(Boolean),
-});
+const FAMILY_FALLBACK_KEYS: Readonly<Record<FamilyLabel, readonly string[]>> = {
+  flash: ['EVAL_MODEL_FLASH', 'PI_MODEL_FLASH', 'MODEL_FLASH', 'MODEL'],
+  sonnet: ['EVAL_MODEL_SONNET', 'PI_MODEL_SONNET', 'MODEL_SONNET'],
+  opus: ['EVAL_MODEL_OPUS', 'PI_MODEL_OPUS', 'MODEL_OPUS'],
+  astra: ['EVAL_MODEL_ASTRA', 'PI_MODEL_ASTRA', 'MODEL_ASTRA'],
+};
+
+/**
+ * Candidate provider/model slugs per family label, resolved from the
+ * repo-root `.env`. Each family has at most one candidate — the configured
+ * value — because we never hardcode model slugs.
+ */
+const familyCandidates = (): Readonly<Record<FamilyLabel, readonly string[]>> => {
+  const resolved = {} as Record<FamilyLabel, readonly string[]>;
+  for (const family of Object.keys(FAMILY_FALLBACK_KEYS) as FamilyLabel[]) {
+    const value = getEnvWithFallback(FAMILY_FALLBACK_KEYS[family]);
+    resolved[family] = value ? [value] : [];
+  }
+  return resolved;
+};
 
 type AuthCheckResult = { status?: string; provider?: string; reason?: string };
 type AuthCheckResponse = { result: AuthCheckResult | null; diagnostics: string };

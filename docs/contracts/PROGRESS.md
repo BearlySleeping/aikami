@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-06)
+## Status Summary (Auto-generated: 2026-09-08)
 
-**240 active (0 without contract file), 119 archived, 0 duplicates**
+**244 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -220,8 +220,8 @@
 | C-456 | Group Chat And Systemic Npc Interactions | 🛠️ implemented | — | v1 | full |
 | C-457 | Gm Prompt Assembly Upgrade | 🛠️ implemented | — | v1 | full |
 | C-458 | In House Memory And Lore Retrieval System | 🛠️ implemented | — | v1 | full |
-| C-459 | Ai Gm Narrative Director Enhancements | 🛠️ implemented | — | v1 | full |
-| C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | — | v1 | full |
+| C-459 | Ai Gm Narrative Director Enhancements | 🛠️ implemented | — | v2 | full |
+| C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | — | v2 | full |
 | C-461 | Generate Typebox Row Schemas From Drizzle | 🛠️ implemented | ❓ `sandbox` | v2 | thin |
 | C-462 | Client Side R2 Save Backup And Restore | 🛠️ implemented | ❓ `sandbox` | v2 | full |
 | C-463 | Provider Connection Role Model | 🛠️ implemented | ❓ `integrated` | v2 | full |
@@ -245,9 +245,13 @@
 | C-481 | Ai Configuration Convergence | 🛠️ implemented | — | v2 | full |
 | C-482 | Managed Ai Runtime Lifecycle | 🛠️ implemented | — | v2 | full |
 | C-483 | Guided Ai Setup | 👍 approved | — | v2 | full |
-| C-484 | Capability First Settings | 👍 approved | — | v2 | full |
-| C-485 | Production Path Evidence Gate | 📝 draft | — | v2 | full |
-| C-486 | Unconditional Release Journey | 📝 draft | — | v2 | full |
+| C-484 | Capability First Settings | 🛠️ implemented | — | v2 | full |
+| C-485 | Production Path Evidence Gate | 🛠️ implemented | — | v2 | full |
+| C-486 | Unconditional Release Journey | 🛠️ implemented | — | v2 | full |
+| C-487 | Free Text Skill Checks Honour The Character Sheet | 📝 draft | — | v2 | full |
+| C-488 | Authored Npc Identity In The Content Pack | 📝 draft | — | v2 | full |
+| C-489 | One Authority Path For Consequences | 📝 draft | — | v2 | full |
+| C-490 | Transcript Branching Must Not Imply Rewinding The World | 📝 draft | — | v2 | thin |
 
 ---
 

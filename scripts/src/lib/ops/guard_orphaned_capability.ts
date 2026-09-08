@@ -319,6 +319,37 @@ const sourceReferenceNames = (sourceFile: ts.SourceFile): Set<string> => {
   return names;
 };
 
+/**
+ * Extract property access expressions (e.g., `MyService.initialize()`) from a source file.
+ * Returns a map of `obj.method` → file paths (populated by the caller).
+ * Only captures patterns where the object is a simple identifier (not a computed or chained expression).
+ */
+const extractPropertyAccessReferences = (sourceFile: ts.SourceFile): Set<string> => {
+  const refs = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      ts.isIdentifier(node.name)
+    ) {
+      const objectName = node.expression.text;
+      const propertyName = node.name.text;
+      // Skip prototype/internal properties and computed access
+      if (
+        propertyName !== 'constructor' &&
+        !propertyName.startsWith('_') &&
+        !isTypeOnlyNode(node) &&
+        !isDeclarationIdentifier(node.name)
+      ) {
+        refs.add(`${objectName}.${propertyName}`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return refs;
+};
+
 type ProductionSource = {
   filePath: string;
   sourceFile: ts.SourceFile;
@@ -326,6 +357,13 @@ type ProductionSource = {
 
 let productionSourcesCache: ProductionSource[] | undefined;
 let productionReferenceIndexCache: Map<string, Set<string>> | undefined;
+
+/**
+ * Index of property access references keyed by `ClassName.methodName`.
+ * Used alongside productionReferenceIndexCache for precise symbol ownership
+ * resolution — see findProductionReferences.
+ */
+let propertyAccessIndexCache: Map<string, Set<string>> | undefined;
 
 /** Extracts executable script and template-expression code from a Svelte component. */
 export const extractSvelteCode = (content: string): string => {
@@ -448,14 +486,25 @@ const productionReferenceIndex = (): Map<string, Set<string>> => {
   }
 
   const index = new Map<string, Set<string>>();
+  const propIndex = new Map<string, Set<string>>();
+
   for (const source of productionSources()) {
+    // Build bare identifier index (existing behavior)
     for (const name of sourceReferenceNames(source.sourceFile)) {
       const files = index.get(name) ?? new Set<string>();
       files.add(source.filePath);
       index.set(name, files);
     }
+    // Build property access index (e.g., `MyService.initialize`)
+    for (const propRef of extractPropertyAccessReferences(source.sourceFile)) {
+      const files = propIndex.get(propRef) ?? new Set<string>();
+      files.add(source.filePath);
+      propIndex.set(propRef, files);
+    }
   }
+
   productionReferenceIndexCache = index;
+  propertyAccessIndexCache = propIndex;
   return index;
 };
 
@@ -464,19 +513,205 @@ const productionReferenceIndex = (): Map<string, Set<string>> => {
  * Counts the number of files (not occurrences) that reference the symbol
  * outside of its own declaration file.
  */
+/**
+ * Resolve production references to a symbol with import-ownership awareness.
+ *
+ * For bare symbols (no dot), uses the existing bare-identifier index.
+ *
+ * For `ClassName.methodName` symbols, first checks the property-access index
+ * for exact `ClassName.methodName` matches (e.g., `MyService.initialize()` in
+ * production code). This prevents `OtherService.initialize()` from counting as
+ * a reference to `MyService.initialize()`.
+ *
+ * As a secondary fallback, also checks the bare method name index to catch
+ * cases where the class instance is stored in a differently-named variable
+ * (e.g., `const svc = new MyService(); svc.initialize()`). Both indices must
+ * be empty before a method is declared orphaned.
+ */
 export const findProductionReferences = (options: {
   symbol: string;
   declaringFile: string;
 }): string[] => {
   const { symbol, declaringFile } = options;
   const normalizedDeclaring = declaringFile.replace(/\\/g, '/');
-  const referenceName = symbol.includes('.') ? symbol.slice(symbol.lastIndexOf('.') + 1) : symbol;
-  return [...(productionReferenceIndex().get(referenceName) ?? [])].filter(
+
+  // Ensure both indices are built
+  productionReferenceIndex();
+
+  if (!symbol.includes('.')) {
+    // Bare symbol — use existing identifier index
+    return [...(productionReferenceIndexCache?.get(symbol) ?? [])].filter(
+      (filePath) => filePath !== normalizedDeclaring,
+    );
+  }
+
+  // `ClassName.methodName` — resolve via ownership
+  const methodName = symbol.slice(symbol.lastIndexOf('.') + 1);
+
+  // Primary: check exact `ClassName.methodName` in property access index
+  const exactRefs = propertyAccessIndexCache?.get(symbol) ?? new Set<string>();
+  const exactFiles = [...exactRefs].filter((fp) => fp !== normalizedDeclaring);
+  if (exactFiles.length > 0) {
+    return exactFiles;
+  }
+
+  // Fallback: check bare method name in identifier index (catches variable-name aliasing)
+  return [...(productionReferenceIndexCache?.get(methodName) ?? [])].filter(
     (filePath) => filePath !== normalizedDeclaring,
   );
 };
 
 /** Compute a simple hash for a list of orphan symbols (for identity-aware comparison). */
+// ── Evidence Matrix Symbol Ingestion ──────────────────────
+
+const CONTRACTS_DIR_PATH = resolve(ROOT, 'docs/contracts');
+
+/**
+ * Parse contract Evidence Matrices and extract symbols from Production Path cells.
+ * Returns a map of `symbol` → `declaringFile` for symbols referenced in contracts.
+ *
+ * Supports:
+ *   - `file.ts#exportedSymbol` — resolves to the file and extracts the symbol
+ *   - `ClassName.methodName` — looks up the file that exports `ClassName`
+ */
+const evidenceMatrixSymbols = (): Map<string, string> => {
+  const result = new Map<string, string>();
+
+  let contractFiles: string[] = [];
+  try {
+    contractFiles = readdirSync(CONTRACTS_DIR_PATH).filter(
+      (f) => /^(C|MIG)-\d+/.test(f) && f.endsWith('.md'),
+    );
+  } catch {
+    return result;
+  }
+
+  for (const filename of contractFiles) {
+    try {
+      const content = readFileSync(resolve(CONTRACTS_DIR_PATH, filename), 'utf-8');
+      // Find Evidence Matrix sections
+      const matrixRegex = /\*\*Evidence Matrix\*\*[\s\S]*?(?=\n## |$)/gi;
+      let matrixMatch: RegExpExecArray | null;
+      while (true) {
+        matrixMatch = matrixRegex.exec(content);
+        if (matrixMatch === null) {
+          break;
+        }
+        const section = matrixMatch[0];
+        // Parse table rows (after header row and separator row)
+        const lines = section.split('\n');
+        let inTable = false;
+        for (const line of lines) {
+          // Detect table header row
+          if (/^\|\s*AC\b/.test(line)) {
+            inTable = true;
+            continue;
+          }
+          // Skip separator row (|---|)
+          if (inTable && /^\|\s*-/.test(line)) {
+            continue;
+          }
+          if (!inTable || !line.trim().startsWith('|')) {
+            // End of table
+            inTable = false;
+            continue;
+          }
+          // Production Path is column index 3 (0=AC, 1=Test Level, 2=Required Artifact, 3=Production Path)
+          const cells = line.split('|').map((c) => c.trim());
+          const prodPathCell = cells[3] ?? '';
+          if (!prodPathCell || prodPathCell === 'N/A') {
+            continue;
+          }
+
+          // Check for file.ts#exportedSymbol pattern
+          const fileSymbolMatch = prodPathCell.match(/([\w./-]+\.[jt]sx?)#(\w+)/);
+          if (fileSymbolMatch) {
+            const fileRef = fileSymbolMatch[1] ?? '';
+            const symbolName = fileSymbolMatch[2] ?? '';
+            // Resolve the file reference to an actual file in the services dir
+            const resolvedFile = resolveFileRef(fileRef);
+            if (resolvedFile) {
+              result.set(symbolName, resolvedFile);
+            }
+            continue;
+          }
+
+          // Check for ClassName.methodName pattern
+          const classMethodMatch = prodPathCell.match(/\b([A-Z]\w+)\.(\w+)\b/);
+          if (classMethodMatch) {
+            const className = classMethodMatch[1] ?? '';
+            const methodName = classMethodMatch[2] ?? '';
+            // Try to find the file that exports this class
+            const resolvedFile = findServiceFileForClass(className);
+            if (resolvedFile) {
+              result.set(`${className}.${methodName}`, resolvedFile);
+            }
+          }
+        }
+      }
+    } catch {
+      // Skip unreadable contract files
+    }
+  }
+
+  return result;
+};
+
+/** Resolve a relative file reference to an absolute path under services dir. */
+const resolveFileRef = (fileRef: string): string | null => {
+  // Try direct match under services dir
+  const candidates = [resolve(SERVICES_DIR, fileRef), resolve(ROOT, fileRef)];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  // Try walking services dir for a filename match
+  try {
+    const walk = (dir: string): string | null => {
+      try {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const fullPath = resolve(dir, entry.name);
+          if (entry.isDirectory()) {
+            if (!EXCLUDED_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
+              const found = walk(fullPath);
+              if (found) {
+                return found;
+              }
+            }
+          } else if (entry.isFile() && fullPath.endsWith(fileRef)) {
+            return fullPath;
+          }
+        }
+      } catch {
+        // skip
+      }
+      return null;
+    };
+    return walk(SERVICES_DIR);
+  } catch {
+    return null;
+  }
+};
+
+/** Find a service file that exports a given class name. */
+const findServiceFileForClass = (className: string): string | null => {
+  const files = collectServiceFiles();
+  for (const filePath of files) {
+    try {
+      const content = readFileSync(filePath, 'utf-8');
+      const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
+      const classNames = exportedServiceClasses(sourceFile);
+      if (classNames.has(className)) {
+        return filePath;
+      }
+    } catch {
+      // skip unreadable
+    }
+  }
+  return null;
+};
+
 const orphanHash = (symbols: string[]): string => {
   const sorted = [...symbols].sort();
   const input = sorted.join(',');
@@ -512,6 +747,10 @@ const main = () => {
   const allReports: OrphanReport[] = [];
   const serviceFiles = collectServiceFiles();
 
+  // Ingest symbols named by Evidence Matrix Production Paths so they are
+  // checked for orphan status alongside the service-file exports.
+  const evidenceSymbols = evidenceMatrixSymbols();
+
   for (const filePath of serviceFiles) {
     const content = readFileSync(filePath, 'utf-8');
     const exports = extractExports(content);
@@ -528,7 +767,10 @@ const main = () => {
       // (the declaration itself doesn't count as production use)
       const externalRefs = refs.filter((r) => r !== fileRelPath);
 
-      if (externalRefs.length === 0) {
+      // A symbol named by an Evidence Matrix Production Path counts as in-use
+      const isEvidenceSymbol = evidenceSymbols.has(symbol);
+
+      if (externalRefs.length === 0 && !isEvidenceSymbol) {
         orphanedSymbols.push(symbol);
       }
     }

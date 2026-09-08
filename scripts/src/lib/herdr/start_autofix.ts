@@ -5,9 +5,12 @@
 // request (`--only commit` or `commit` in `--only`) — the default pipeline
 // stops after validation and never mutates the repository.
 //
-// Model: deepinfra/deepseek-ai/DeepSeek-V4-Flash by default — override with
-// AUTOFIX_MODEL in .env.local (gitignored) or --model.
-// Thinking: high (non-negotiable for reliable fixes)
+// Model: resolved from the repo-root `.env` — AUTOFIX_MODEL, then
+// CONTRACT_PIPELINE_MODEL_PRO, PI_MODEL_PRO, MODEL_PRO, MODEL. When none is
+// set, pi runs without --model and uses the user's default model. Override
+// per-run with --model.
+// Thinking: resolved from env (AUTOFIX_THINKING, CONTRACT_PIPELINE_THINKING,
+// PI_THINKING) — omitted (pi default) when none is set.
 //
 // Usage:
 //   bun autofix                              # fix + typecheck (git-scoped; stops after validation)
@@ -20,7 +23,7 @@
 //   bun autofix --only test,commit           # test:unit then commit (git-scoped; commit explicitly authorized)
 //   bun autofix --only test:e2e              # e2e tests only (starts client + hub)
 //   bun autofix --only test:all              # all tests including e2e
-//   bun autofix --model deepinfra/deepseek-ai/DeepSeek-V4-Flash --thinking high
+//   bun autofix --model provider/model --thinking high
 //   bun autofix --join                       # spawn + attach
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
@@ -29,6 +32,7 @@ import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
+import { getEnvWithFallback } from '../cli_utils';
 import { resolveAikamiMode } from '../env/mode';
 import type { AikamiMode } from './session.ts';
 import {
@@ -77,8 +81,18 @@ const DEFAULT_STEPS: AutofixStep[] = ['fix', 'typecheck'];
 
 const PI_WORKSPACE = 'aikami-pi';
 const AUTOFIX_TAB = 'autofix';
-const DEFAULT_MODEL = process.env.AUTOFIX_MODEL ?? 'deepinfra/deepseek-ai/DeepSeek-V4-Flash';
-const DEFAULT_THINKING = process.env.AUTOFIX_THINKING ?? 'high';
+const ENV_MODEL = getEnvWithFallback([
+  'AUTOFIX_MODEL',
+  'CONTRACT_PIPELINE_MODEL_FLASH',
+  'PI_MODEL_FLASH',
+  'MODEL_FLASH',
+  'MODEL',
+]);
+const ENV_THINKING = getEnvWithFallback([
+  'AUTOFIX_THINKING',
+  'CONTRACT_PIPELINE_THINKING',
+  'PI_THINKING',
+]);
 const CLIENT_PORT = 5274;
 const HUB_PORT = 5276;
 
@@ -88,8 +102,8 @@ const args = process.argv.slice(2);
 
 const doJoin = args.includes('--join') || args.includes('-j');
 const doAll = args.includes('--all');
-const model = parseOpt(['--model', '-m']) ?? DEFAULT_MODEL;
-const thinking = parseOpt(['--thinking']) ?? DEFAULT_THINKING;
+const model = parseOpt(['--model', '-m']) ?? ENV_MODEL;
+const thinking = parseOpt(['--thinking']) ?? ENV_THINKING;
 const scope: ScopeMode = (parseOpt(['--scope', '-s']) as ScopeMode | undefined) ?? 'git';
 const isGitScoped = scope === 'git';
 
@@ -158,6 +172,22 @@ function parseTestMode(values: string[]): TestMode {
 }
 
 const ok = (m: string) => console.log(`  ✓ ${m}`);
+
+/**
+ * Build the `--model`/`--thinking` flags for the pi spawn. When no model is
+ * configured, both flags are omitted so pi falls back to the user's default
+ * model (and its default thinking level) instead of pinning a hardcoded slug.
+ */
+const piModelArgs = (modelOverride?: string, thinkingOverride?: string): string[] => {
+  const flags: string[] = [];
+  if (modelOverride) {
+    flags.push('--model', modelOverride);
+    if (thinkingOverride) {
+      flags.push('--thinking', thinkingOverride);
+    }
+  }
+  return flags;
+};
 
 // ── Baseline snapshot ─────────────────────────────────────
 //
@@ -638,8 +668,8 @@ if (modeLabel) {
   console.log(`│  test mode: ${modeLabel.padEnd(31)} │`);
 }
 console.log(`│  scope:     ${scope.padEnd(24)} │`);
-console.log(`│  model:     ${model.padEnd(24)} │`);
-console.log(`│  thinking:  ${thinking.padEnd(24)} │`);
+console.log(`│  model:     ${(model ?? 'pi default').padEnd(24)} │`);
+console.log(`│  thinking:  ${(thinking ?? 'pi default').padEnd(24)} │`);
 console.log('╰──────────────────────────────────────────╯');
 console.log();
 
@@ -713,10 +743,7 @@ if (existingWsId) {
     const paneId = tabR.result.root_pane.pane_id;
     const command = [
       'pi',
-      '--model',
-      model,
-      '--thinking',
-      thinking,
+      ...piModelArgs(model, thinking),
       '--approve',
       '--append-system-prompt',
       promptPath,
@@ -755,10 +782,7 @@ if (existingWsId) {
   const rootPaneId = createR.result.root_pane.pane_id;
   const command = [
     'pi',
-    '--model',
-    model,
-    '--thinking',
-    thinking,
+    ...piModelArgs(model, thinking),
     '--approve',
     '--append-system-prompt',
     promptPath,
@@ -784,7 +808,9 @@ if (doJoin) {
   await new Promise<number>((resolveJ) => proc.on('exit', resolveJ));
 } else {
   console.log(`\n✓ autofix agent ready in ${PI_WORKSPACE}/${AUTOFIX_TAB}`);
-  console.log(`  model: ${model}  thinking: ${thinking}  scope: ${scope}`);
+  console.log(
+    `  model: ${model ?? 'pi default'}  thinking: ${thinking ?? 'pi default'}  scope: ${scope}`,
+  );
   if (commitOnly) {
     console.log('  mode: commit-only (pre-commit hook skipped)');
   }

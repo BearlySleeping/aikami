@@ -52,30 +52,38 @@ async function rewriteCommand(
     timeout: REWRITE_TIMEOUT_MS,
     signal,
   });
+  // Fail open when the host API returns no result object (e.g. a test
+  // stand-in or an older pi core) — never throw on a missing result.
+  if (!result) {
+    return null;
+  }
   if (result.killed) {
     return null;
   }
   if (result.code !== 0 && result.code !== 3) {
     return null;
   }
-  return result.stdout.trim() || null;
+  return (result.stdout ?? '').trim() || null;
 }
 
 export default async function (pi: ExtensionAPI) {
   // Probe rtk version at load time; disables extension if missing or too old.
   const ver = await pi.exec('rtk', ['--version'], { timeout: REWRITE_TIMEOUT_MS });
-  if (ver.code !== 0) {
+  // Fail open when the host API returns no result object (e.g. a test
+  // stand-in or an older pi core).
+  if (ver?.code !== 0) {
     console.warn('[rtk] rtk binary not found in PATH — extension disabled');
     return;
   }
 
   // Warn and bail if rtk predates 0.23.0 (when `rtk rewrite` was introduced).
-  const parsed = parseSemver(ver.stdout.replace(/^rtk\s+/, ''));
+  const versionOutput = ver.stdout ?? '';
+  const parsed = parseSemver(versionOutput.replace(/^rtk\s+/, ''));
   if (parsed) {
     const [major, minor] = parsed;
     if (major === 0 && minor < MIN_SUPPORTED_RTK_MINOR) {
       console.warn(
-        `[rtk] rtk ${ver.stdout.trim()} is too old (need >= 0.23.0) — extension disabled`,
+        `[rtk] rtk ${versionOutput.trim()} is too old (need >= 0.23.0) — extension disabled`,
       );
       return;
     }

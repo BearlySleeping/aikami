@@ -5,6 +5,10 @@
  * Common patterns: colored output, prompts, command execution.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 // ============================================================================
 // ANSI Colours
 // ============================================================================
@@ -325,6 +329,105 @@ export const runChecked = async (label: string, cmd: string[]): Promise<boolean>
 // ============================================================================
 // Env File Helpers
 // ============================================================================
+
+const _cliUtilsDir = dirname(fileURLToPath(import.meta.url));
+// scripts/src/lib/cli_utils.ts → repo root is three levels up.
+const REPO_ROOT = resolve(_cliUtilsDir, '..', '..', '..');
+
+/** Root env files, read in order — later files override earlier ones. */
+const ROOT_ENV_FILES = ['.env', '.env.local'] as const;
+
+let _rootEnvCache: Record<string, string> | null = null;
+
+/** Parse raw dotenv text into a record (ignores comments and blank lines). */
+export const parseEnvString = (content: string): Record<string, string> => {
+  const vars: Record<string, string> = {};
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) {
+      continue;
+    }
+    const key = trimmed.slice(0, eqIdx).trim();
+    let value = trimmed.slice(eqIdx + 1).trim();
+    if (!key) {
+      continue;
+    }
+    // Strip surrounding quotes
+    if (
+      (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
+      (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
+    ) {
+      value = value.slice(1, -1);
+    }
+    vars[key] = value;
+  }
+  return vars;
+};
+
+/**
+ * Load the repo-root `.env` (then `.env.local`) once. Runs lazily from
+ * `getEnvWithFallback`, so `bun run scripts/src/lib/...` works even when
+ * nothing else has loaded the root dotenv files (Bun does NOT auto-load a
+ * repo `.env`).
+ *
+ * Values are returned as a map and consulted by `getEnvWithFallback` — they
+ * are NOT injected into process.env, so existing process.env values always
+ * win (direnv, CI, explicit exports) and tests stay deterministic.
+ */
+export const loadRootEnv = (): Record<string, string> => {
+  if (_rootEnvCache) {
+    return _rootEnvCache;
+  }
+
+  const merged: Record<string, string> = {};
+  for (const file of ROOT_ENV_FILES) {
+    const path = resolve(REPO_ROOT, file);
+    if (!existsSync(path)) {
+      continue;
+    }
+    Object.assign(merged, parseEnvString(readFileSync(path, 'utf-8')));
+  }
+
+  _rootEnvCache = merged;
+  return merged;
+};
+
+/** Clear the cached root `.env` values. Exposed for tests. */
+export const resetRootEnvCache = (): void => {
+  _rootEnvCache = null;
+};
+
+/**
+ * Resolve an env var from a list of fallback keys, in order. Returns the
+ * first non-empty value from process.env or the repo-root `.env` files, or
+ * undefined when none of the keys have a value.
+ *
+ * @example
+ *   getEnvWithFallback([
+ *     'CONTRACT_PIPELINE_MODEL_PRO',
+ *     'PI_MODEL_PRO',
+ *     'MODEL_PRO',
+ *     'MODEL',
+ *   ]);
+ */
+export const getEnvWithFallback = (keys: readonly string[]): string | undefined => {
+  const rootEnv = loadRootEnv();
+  for (const key of keys) {
+    const envValue = process.env[key];
+    if (envValue !== undefined && envValue.trim() !== '') {
+      return envValue.trim();
+    }
+    const fileValue = rootEnv[key];
+    if (fileValue !== undefined && fileValue.trim() !== '') {
+      return fileValue.trim();
+    }
+  }
+  return undefined;
+};
 
 /**
  * Parse a `.env` file into a record of key-value pairs.

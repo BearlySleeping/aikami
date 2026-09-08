@@ -2,9 +2,11 @@
 //
 // C-474 AC-3: Model and thinking choices are explicit and valid.
 // Verifies that resolution records requested/effective settings, rejects
-// invalid overrides, and reports tier equivalence explicitly.
+// invalid overrides, and reports tier equivalence explicitly. Models are
+// resolved from env fallback keys only — nothing is hardcoded.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { resetRootEnvCache } from '../../cli_utils';
 import {
   CONTRACT_ROLE_MODEL_TIER,
   CONTRACT_ROLE_THINKING_LEVEL,
@@ -23,28 +25,87 @@ const ENV_KEYS = [
   'CONTRACT_PIPELINE_MODEL_FLASH',
   'CONTRACT_PIPELINE_MODEL_FREE',
   'CONTRACT_PIPELINE_THINKING',
+  'PI_MODEL_PRO',
+  'PI_MODEL_FLASH',
+  'PI_MODEL_FREE',
+  'PI_THINKING',
+  'MODEL_PRO',
+  'MODEL_FLASH',
+  'MODEL_FREE',
+  'MODEL',
 ] as const;
 
 beforeEach(() => {
-  // Reset env vars to defaults for each test
+  // Clear any repo-root .env values the resolver may have cached, then drop
+  // every fallback key so each test starts from a clean, env-free slate.
+  resetRootEnvCache();
   for (const key of ENV_KEYS) {
     delete process.env[key];
   }
 });
 
-// ── AC-3: Model resolution records requested and effective settings ──
+// ── Env-driven resolution ────────────────────────────────────
+
+describe('model resolution is env-driven', () => {
+  test('returns undefined for every role when nothing is configured', () => {
+    for (const role of ['writer', 'critic', 'implementer', 'verifier', 'review']) {
+      expect(getContractModelForRole(role)).toBeUndefined();
+    }
+  });
+
+  test('resolves the generic MODEL fallback for every tier', () => {
+    process.env.MODEL = 'provider/default-model';
+    expect(getContractModelForRole('writer')).toBe('provider/default-model');
+    expect(getContractModelForRole('critic')).toBe('provider/default-model');
+    expect(getContractModelForRole('review')).toBe('provider/default-model');
+  });
+
+  test('PI_MODEL_PRO overrides MODEL for the pro tier only', () => {
+    process.env.MODEL = 'provider/default-model';
+    process.env.PI_MODEL_PRO = 'provider/pi-pro-model';
+    expect(getContractModelForRole('writer')).toBe('provider/pi-pro-model');
+    expect(getContractModelForRole('critic')).toBe('provider/default-model');
+  });
+
+  test('CONTRACT_PIPELINE_MODEL_PRO wins over PI_MODEL_PRO and MODEL', () => {
+    process.env.MODEL = 'provider/default-model';
+    process.env.PI_MODEL_PRO = 'provider/pi-pro-model';
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/contract-pro-model';
+    expect(getContractModelForRole('writer')).toBe('provider/contract-pro-model');
+  });
+
+  test('unknown role resolves to the flash tier', () => {
+    process.env.CONTRACT_PIPELINE_MODEL_FLASH = 'provider/flash-model';
+    expect(getContractModelForRole('unknown_role')).toBe('provider/flash-model');
+  });
+
+  test('thinking resolves from CONTRACT_PIPELINE_THINKING, then PI_THINKING', () => {
+    process.env.PI_THINKING = 'low';
+    expect(getContractThinkingForRole('writer')).toBe('low');
+
+    process.env.CONTRACT_PIPELINE_THINKING = 'high';
+    expect(getContractThinkingForRole('writer')).toBe('high');
+  });
+
+  test('thinking returns undefined when unset or invalid', () => {
+    expect(getContractThinkingForRole('writer')).toBeUndefined();
+
+    process.env.CONTRACT_PIPELINE_THINKING = 'turbo';
+    expect(getContractThinkingForRole('writer')).toBeUndefined();
+  });
+});
+
+// ── AC-3: Model resolution records settings ──────────────────
 
 describe('AC-3: Model resolution records settings', () => {
   test('resolveModelConfiguration returns all fields', () => {
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/pro-model';
     const resolved = resolveModelConfiguration({ role: 'implementer' });
     expect(resolved.requestedTier).toBe('pro');
-    expect(resolved.requestedTierValue).toBeDefined();
-    expect(resolved.effectiveModel).toBeDefined();
-    expect(resolved.effectiveModel.length).toBeGreaterThan(0);
-    expect(resolved.defaultModel).toBeDefined();
-    expect(typeof resolved.overridden).toBe('boolean');
-    expect(resolved.requestedThinking).toBeDefined();
-    expect(resolved.effectiveThinking).toBeDefined();
+    expect(resolved.requestedTierValue).toBe('provider/pro-model');
+    expect(resolved.effectiveModel).toBe('provider/pro-model');
+    expect(resolved.requestedThinking).toBeUndefined();
+    expect(resolved.effectiveThinking).toBeUndefined();
     expect(Array.isArray(resolved.issues)).toBe(true);
   });
 
@@ -79,70 +140,36 @@ describe('AC-3: Model resolution records settings', () => {
   });
 });
 
-// ── AC-3: Env override detection ──
-
-describe('AC-3: Env override detection', () => {
-  test('detects no override when env is not set', () => {
-    const resolved = resolveModelConfiguration({ role: 'implementer' });
-    expect(resolved.overridden).toBe(false);
-    expect(resolved.effectiveModel).toBe(resolved.defaultModel);
-  });
-
-  test('detects override when env is set', () => {
-    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'deepseek/deepseek-v4-pro';
-    const resolved = resolveModelConfiguration({ role: 'implementer' });
-    expect(resolved.overridden).toBe(true);
-    expect(resolved.effectiveModel).not.toBe(resolved.defaultModel);
-  });
-
-  test('override affects only the overridden tier', () => {
-    process.env.CONTRACT_PIPELINE_MODEL_FLASH = 'deepseek/deepseek-v4-flash';
-    const pro = resolveModelConfiguration({ role: 'writer' }); // pro tier
-    const flash = resolveModelConfiguration({ role: 'critic' }); // flash tier
-    expect(pro.overridden).toBe(false); // pro not overridden
-    expect(flash.overridden).toBe(true); // flash overridden
-  });
-});
-
-// ── AC-3: Tier equivalence reporting ──
+// ── AC-3: Tier equivalence reporting ─────────────────────────
 
 describe('AC-3: Tier equivalence', () => {
-  test('reports equivalence when pro and flash are the same slug', () => {
-    // Default: both pro and flash point at the same DeepSeek-V4-Flash
+  test('reports equivalence when pro and flash resolve to the same slug', () => {
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/same-model';
+    process.env.CONTRACT_PIPELINE_MODEL_FLASH = 'provider/same-model';
     const pro = resolveModelConfiguration({ role: 'implementer' });
-    const flash = resolveModelConfiguration({ role: 'critic' });
-    expect(pro.effectiveModel).toBe(flash.effectiveModel);
-    expect(pro.tierEquivalence).not.toBeNull();
+    expect(pro.effectiveModel).toBe('provider/same-model');
     expect(pro.tierEquivalence).toContain('equivalent');
   });
 
   test('does NOT report equivalence when tiers are differentiated', () => {
-    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'deepseek/deepseek-v4-pro';
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/pro-model';
+    process.env.CONTRACT_PIPELINE_MODEL_FLASH = 'provider/flash-model';
     const resolved = resolveModelConfiguration({ role: 'implementer' });
-    // pro is now differentiated from flash
-    const flashModel = resolveModelConfiguration({ role: 'critic' });
-    expect(resolved.effectiveModel).not.toBe(flashModel.effectiveModel);
     expect(resolved.tierEquivalence).toBeNull();
   });
 
-  test('does not warn when default tiers are intentionally equivalent', () => {
+  test('does NOT report equivalence when neither tier is configured', () => {
     const resolved = resolveModelConfiguration({ role: 'implementer' });
-    const tierWarnings = resolved.issues.filter(
-      (i) => i.field.startsWith('tier:') && i.severity === 'warning',
-    );
-    expect(resolved.tierEquivalence).not.toBeNull();
-    expect(tierWarnings).toHaveLength(0);
+    expect(resolved.effectiveModel).toBeUndefined();
+    expect(resolved.tierEquivalence).toBeNull();
   });
 });
 
-// ── AC-3: Validation ──
+// ── AC-3: Validation ─────────────────────────────────────────
 
 describe('AC-3: Model override validation', () => {
   test('accepts a valid model slug', () => {
-    const issues = validateModelOverride({
-      tier: 'pro',
-      value: 'deepinfra/deepseek-ai/DeepSeek-V4-Flash',
-    });
+    const issues = validateModelOverride({ tier: 'pro', value: 'provider/model' });
     expect(issues.filter((i) => i.severity === 'error')).toHaveLength(0);
   });
 
@@ -150,7 +177,7 @@ describe('AC-3: Model override validation', () => {
     const issues = validateModelOverride({ tier: 'pro', value: 'ab' });
     const errors = issues.filter((i) => i.severity === 'error');
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].field).toContain('MODEL_PRO');
+    expect(errors[0]?.field).toContain('MODEL_PRO');
   });
 
   test('rejects a model override with whitespace', () => {
@@ -164,14 +191,13 @@ describe('AC-3: Model override validation', () => {
     expect(issues).toHaveLength(0);
   });
 
-  test('rejects an empty model override', () => {
+  test('an empty override falls through to the fallback keys (no error)', () => {
     process.env.CONTRACT_PIPELINE_MODEL_PRO = '';
+    process.env.PI_MODEL_PRO = 'provider/pi-pro-model';
     const resolved = resolveModelConfiguration({ role: 'implementer' });
-    const errors = resolved.issues.filter((issue) => issue.severity === 'error');
-
-    expect(resolved.requestedTierValue).toBe('');
-    expect(errors).toHaveLength(1);
-    expect(errors[0]?.field).toBe('CONTRACT_PIPELINE_MODEL_PRO');
+    expect(resolved.requestedTierValue).toBe('provider/pi-pro-model');
+    expect(resolved.effectiveModel).toBe('provider/pi-pro-model');
+    expect(resolved.issues.filter((issue) => issue.severity === 'error')).toHaveLength(0);
   });
 });
 
@@ -187,7 +213,7 @@ describe('AC-3: Thinking level validation', () => {
     const issues = validateThinkingOverride({ value: 'turbo' });
     const errors = issues.filter((i) => i.severity === 'error');
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0].message).toContain('turbo');
+    expect(errors[0]?.message).toContain('turbo');
   });
 
   test('no issues when thinking is not overridden', () => {
@@ -195,23 +221,11 @@ describe('AC-3: Thinking level validation', () => {
     expect(issues).toHaveLength(0);
   });
 
-  test('rejects an empty thinking override', () => {
-    process.env.CONTRACT_PIPELINE_THINKING = '';
-    const resolved = resolveModelConfiguration({ role: 'implementer' });
-    const errors = resolved.issues.filter((issue) => issue.severity === 'error');
-
-    expect(resolved.requestedThinking).toBe('');
-    expect(resolved.effectiveThinking).toBe('high');
-    expect(errors).toHaveLength(1);
-    expect(errors[0]?.field).toBe('CONTRACT_PIPELINE_THINKING');
-  });
-
   test('keeps invalid requested thinking distinct from the effective fallback', () => {
     process.env.CONTRACT_PIPELINE_THINKING = 'turbo';
     const resolved = resolveModelConfiguration({ role: 'implementer' });
-
     expect(resolved.requestedThinking).toBe('turbo');
-    expect(resolved.effectiveThinking).toBe('high');
+    expect(resolved.effectiveThinking).toBeUndefined();
     expect(resolved.issues.some((issue) => issue.field === 'CONTRACT_PIPELINE_THINKING')).toBe(
       true,
     );
@@ -234,24 +248,9 @@ describe('AC-3: hasBlockingModelErrors', () => {
   });
 });
 
-// ── AC-3: Legacy API preserved ──
+// ── AC-3: Legacy API preserved ───────────────────────────────
 
 describe('AC-3: Legacy API', () => {
-  test('getContractModelForRole returns a string for known roles', () => {
-    for (const role of ['writer', 'critic', 'implementer', 'verifier', 'review']) {
-      const model = getContractModelForRole(role);
-      expect(typeof model).toBe('string');
-      expect(model.length).toBeGreaterThan(0);
-    }
-  });
-
-  test('getContractThinkingForRole returns a valid thinking level', () => {
-    for (const role of ['writer', 'critic', 'implementer', 'verifier', 'review']) {
-      const level = getContractThinkingForRole(role);
-      expect(['off', 'minimal', 'low', 'medium', 'high', 'xhigh']).toContain(level);
-    }
-  });
-
   test('CONTRACT_ROLE_MODEL_TIER has all roles', () => {
     for (const role of ['writer', 'critic', 'implementer', 'verifier', 'review']) {
       expect(CONTRACT_ROLE_MODEL_TIER[role]).toBeDefined();
@@ -260,7 +259,7 @@ describe('AC-3: Legacy API', () => {
 
   test('CONTRACT_ROLE_THINKING_LEVEL has all roles', () => {
     for (const role of ['writer', 'critic', 'implementer', 'verifier', 'review']) {
-      expect(CONTRACT_ROLE_THINKING_LEVEL[role]).toBeDefined();
+      expect(Object.hasOwn(CONTRACT_ROLE_THINKING_LEVEL, role)).toBe(true);
     }
   });
 });

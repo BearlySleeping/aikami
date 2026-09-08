@@ -183,14 +183,17 @@ export class GamePage {
     await this.page.waitForTimeout(300);
   }
 
-  /** Click "Save Game" in pause menu. */
+  /** Click "Save Game" in pause menu and await save-completion signal. */
   async saveGame(): Promise<void> {
     await this.openPauseMenu();
     const saveButton = this.page.getByRole('button', { name: /save/i });
-    if (await saveButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await saveButton.click();
-      await this.page.waitForTimeout(500);
-    }
+    const { expect } = await import('@playwright/test');
+    await expect(saveButton).toBeVisible({ timeout: 5000 });
+    await expect(saveButton).toBeEnabled({ timeout: 5000 });
+    await saveButton.click();
+    // Await the "Game Saved!" confirmation message before closing
+    const saveConfirmation = this.page.getByText('Game Saved!');
+    await expect(saveConfirmation).toBeVisible({ timeout: 10_000 });
     await this.closePauseMenu();
   }
 

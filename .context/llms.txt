@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-06
-> Files: 428 across 18 categories
+> Generated: 2026-09-08
+> Files: 432 across 18 categories
 
 ## Quick Start (Read These First)
 
@@ -395,6 +395,10 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-484: Capability-first settings and production integration](contracts/C-484-capability-first-settings.md)
 - [Contract C-485: Enforce a production path in the Evidence Matrix](contracts/C-485-production-path-evidence-gate.md)
 - [Contract C-486: Replace the conditional release gate with one unconditional journey](contracts/C-486-unconditional-release-journey.md)
+- [Contract C-487: Free-text skill checks honour the real character sheet](contracts/C-487-free-text-skill-checks-honour-the-character-sheet.md)
+- [Contract C-488: Authored NPC identity in the content pack](contracts/C-488-authored-npc-identity-in-the-content-pack.md)
+- [Contract C-489: One authority path for consequences](contracts/C-489-one-authority-path-for-consequences.md)
+- [Contract C-490: Transcript branching must not imply rewinding the world](contracts/C-490-transcript-branching-must-not-imply-rewinding-the-world.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
