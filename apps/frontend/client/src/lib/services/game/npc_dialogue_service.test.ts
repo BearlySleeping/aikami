@@ -162,6 +162,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Reflect.deleteProperty(globalThis, '__AIKAMI_E2E_DIALOGUE_INTENT__');
   // Reconfigure with fresh state to prevent test bleed
   const contentProvider = makeContentProvider();
   const textGenerator = makeTextGenerator();
@@ -169,6 +170,63 @@ afterEach(() => {
     contentProvider,
     textGenerator,
     executors: makeExecutors(),
+  });
+});
+
+describe('E2E intent seed', () => {
+  test('validates the seed and completes a previously failed turn', async () => {
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator({ error: new Error('provider unavailable') }),
+      executors: makeExecutors(),
+    });
+    const controller = new AbortController();
+    const options = {
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player' as const, content: 'Hello.' }],
+      signal: controller.signal,
+    };
+
+    await expect(npcDialogueService.analyzeIntent(options)).rejects.toThrow('provider unavailable');
+    expect(npcDialogueService.turnState.kind).toBe('failed');
+
+    (globalThis as Record<string, unknown>).__AIKAMI_E2E_DIALOGUE_INTENT__ = {
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'A fine day to you, traveler.',
+      suggestedChips: [],
+    };
+
+    const output = await npcDialogueService.analyzeIntent(options);
+
+    expect(output.npcResponse).toBe('A fine day to you, traveler.');
+    expect(npcDialogueService.turnState).toEqual({
+      kind: 'complete',
+      text: 'A fine day to you, traveler.',
+    });
+  });
+
+  test('ignores a seed that does not satisfy the intent schema', async () => {
+    (globalThis as Record<string, unknown>).__AIKAMI_E2E_DIALOGUE_INTENT__ = {
+      requiresRoll: false,
+    };
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator({ error: new Error('real pipeline reached') }),
+      executors: makeExecutors(),
+    });
+
+    await expect(
+      npcDialogueService.analyzeIntent({
+        npcId: 'village_elder',
+        npcName: 'Elder Thalia',
+        messages: [{ role: 'player', content: 'Hello.' }],
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toThrow('real pipeline reached');
   });
 });
 

@@ -110,8 +110,7 @@ test.describe('Dialogue skill check honours the character sheet (C-487)', () => 
 
     await game.sendFreeText('Hello there.');
 
-    // Give the seeded synchronous turn a beat to settle, then assert no dice.
-    await page.waitForTimeout(1000);
+    await expect(game.npcResponse).toContainText('A fine day to you, traveler.');
     await game.expectNoDiceOverlay();
   });
 });

@@ -10,7 +10,7 @@
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig-override=tsconfig.test.json \
 //     src/lib/services/game/player_state_service.test.ts
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { GameCharacterSheet } from '@aikami/types';
 import {
   computeModifier,
@@ -18,7 +18,7 @@ import {
   computeSkillModifier,
   createDefaultSheet,
 } from '@aikami/utils';
-import { playerStateService } from './player_state_service.svelte';
+import { createPlayerStateService, playerStateService } from './player_state_service.svelte';
 
 const sheetWithPersuasiveBard = (options?: { expertise?: boolean }): GameCharacterSheet => {
   const sheet = createDefaultSheet();
@@ -41,6 +41,10 @@ const sheetWithPersuasiveBard = (options?: { expertise?: boolean }): GameCharact
 describe('PlayerStateService — C-487 character sheet source of truth', () => {
   beforeEach(() => {
     playerStateService.reset();
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, '__AIKAMI_E2E_SHEET__');
   });
 
   test('starts as a neutral sheet (all 10s → +0), never a string default', () => {
@@ -100,6 +104,56 @@ describe('PlayerStateService — C-487 character sheet source of truth', () => {
     playerStateService.importCharacterSheet({ sheet: sheetWithPersuasiveBard() });
     expect(playerStateService.characterSheetSummary).toContain('CHA 16(+3)');
     expect(playerStateService.characterSheetSummary).toContain('Proficiency: Persuasion');
+  });
+
+  test('imports gameplay fields and recomputes modifiers from the imported level', () => {
+    const sheet = sheetWithPersuasiveBard();
+    sheet.level = 9;
+    sheet.xp = 12_345;
+    sheet.hp = 42;
+    sheet.maxHp = 50;
+    sheet.attack = 8;
+    sheet.defense = 17;
+    sheet.classId = 'wizard';
+    sheet.classFeatures = ['arcane-recovery'];
+    sheet.hotbarSlots = ['arcane-recovery'];
+
+    playerStateService.importCharacterSheet({ sheet });
+
+    const persuasion = playerStateService.skills.find((skill) => skill.name === 'Persuasion');
+    expect(playerStateService.playerLevel).toBe(9);
+    expect(playerStateService.playerXp).toBe(12_345);
+    expect(playerStateService.playerHp).toBe(42);
+    expect(playerStateService.playerMaxHp).toBe(50);
+    expect(playerStateService.playerBaseAttack).toBe(8);
+    expect(playerStateService.playerBaseDefense).toBe(17);
+    expect(playerStateService.classId).toBe('wizard');
+    expect(playerStateService.classFeatures).toEqual(['arcane-recovery']);
+    expect(playerStateService.hotbarSlots).toEqual(['arcane-recovery']);
+    expect(playerStateService.characterSheet.proficiencyBonus).toBe(4);
+    expect(persuasion?.modifier).toBe(7);
+  });
+
+  test('rejects an incomplete E2E seed and retains safe neutral skills', () => {
+    const incompleteSheet = { ...createDefaultSheet() };
+    Reflect.deleteProperty(incompleteSheet, 'skills');
+    (globalThis as Record<string, unknown>).__AIKAMI_E2E_SHEET__ = incompleteSheet;
+
+    const isolatedService = createPlayerStateService({ className: 'SeedGuardPlayerStateService' });
+
+    expect(isolatedService.isCharacterSheetAuthored).toBe(false);
+    expect(isolatedService.skills.length).toBeGreaterThan(0);
+    expect(isolatedService.characterSheet.skills.length).toBeGreaterThan(0);
+  });
+
+  test('imports a complete E2E seed into an isolated service', () => {
+    (globalThis as Record<string, unknown>).__AIKAMI_E2E_SHEET__ = sheetWithPersuasiveBard();
+
+    const isolatedService = createPlayerStateService({ className: 'SeededPlayerStateService' });
+
+    expect(isolatedService.isCharacterSheetAuthored).toBe(true);
+    expect(isolatedService.abilities.charisma.value).toBe(16);
+    expect(isolatedService.skills.find((skill) => skill.name === 'Persuasion')?.modifier).toBe(5);
   });
 
   test('reset restores the neutral unauthored sheet', () => {

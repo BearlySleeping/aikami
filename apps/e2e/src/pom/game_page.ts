@@ -286,6 +286,11 @@ export class GamePage {
     await this.page.waitForTimeout(500);
   }
 
+  /** The most recent NPC response rendered in the dialogue overlay. */
+  get npcResponse() {
+    return this.page.locator('[data-testid="dialogue-overlay"] .chat-start').last();
+  }
+
   // ── Declared-DC dice overlay (C-487) ──────────────────────────
 
   /** The declared-DC dice overlay panel (GameDice). */

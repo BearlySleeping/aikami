@@ -10,6 +10,7 @@
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { SKILL_CHECK_STAKES } from '@aikami/constants';
 import type { GameCharacterSheet } from '@aikami/types';
 import { computeModifier, createDefaultSheet } from '@aikami/utils';
 
@@ -651,24 +652,26 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.skillCheckState?.breakdown.isExpertise).toBe(true);
   });
 
-  test('AC-1: normalises Title Case checkType to the camelCase map key', async () => {
-    const vm = createViewModel();
-    analyzeIntentStub = mock(async () => ({
-      requiresRoll: true,
-      checkType: 'Sleight Of Hand',
-      difficultyClass: 12,
-      modifierSource: 'DEX',
-      npcResponse: 'The elder watches your hands.',
-      suggestedChips: [],
-    }));
-    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+  test('AC-1: normalises spaced and canonical checkType values to the map key', async () => {
+    for (const checkType of ['Sleight Of Hand', 'sleight of hand', 'sleightOfHand']) {
+      const vm = createViewModel();
+      analyzeIntentStub = mock(async () => ({
+        requiresRoll: true,
+        checkType,
+        difficultyClass: 12,
+        modifierSource: 'DEX',
+        npcResponse: 'The elder watches your hands.',
+        suggestedChips: [],
+      }));
+      mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
 
-    vm.inputText = 'Pickpocket.';
-    await vm.sendMessage();
+      vm.inputText = 'Pickpocket.';
+      await vm.sendMessage();
 
-    // "Sleight Of Hand" → "sleightOfHand" resolves DEX (default 10 → +0).
-    expect(vm.skillCheckState?.breakdown.abilityLabel).toBe('DEX');
-    expect(vm.skillCheckState?.breakdown.ability).toBe('dexterity');
+      expect(vm.skillCheckState?.breakdown.abilityLabel).toBe('DEX');
+      expect(vm.skillCheckState?.breakdown.ability).toBe('dexterity');
+      expect(vm.skillCheckState?.stakes).toEqual(SKILL_CHECK_STAKES.sleightOfHand);
+    }
   });
 
   test('AC-2: breakdown and stakes are assembled before the roll commits', async () => {

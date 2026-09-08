@@ -59,7 +59,7 @@ export type SkillCheckStakes = {
 };
 
 /** Per-skill stakes keyed by the camelCase `SKILL_STAT_MAP` key (C-487). */
-export const SKILL_CHECK_STAKES: Record<string, SkillCheckStakes> = {
+export const SKILL_CHECK_STAKES: Readonly<Partial<Record<string, SkillCheckStakes>>> = {
   persuasion: {
     success: 'The NPC is swayed by your argument.',
     failure: "The NPC's trust in you wavers.",
@@ -120,7 +120,7 @@ export const SKILL_CHECK_STAKES: Record<string, SkillCheckStakes> = {
     success: 'You power through it.',
     failure: 'You strain and come up short.',
   },
-};
+} as const;
 
 /** Fallback stakes for a check type that does not map to a known skill (C-487). */
 export const DEFAULT_SKILL_CHECK_STAKES: SkillCheckStakes = {

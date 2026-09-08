@@ -15,6 +15,7 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 // Contract: C-371 Free-Text-First NPC Interaction — two-call pipeline
 
+import { getPublicMode } from '@aikami/frontend/configs';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -719,11 +720,18 @@ export class NpcDialogueService
     // global BEFORE the client bundle loads; absent during normal play, where
     // the real two-call AI pipeline runs unchanged. The route, overlay and
     // ViewModel remain the production ones.
-    const e2eSeed = (globalThis as Record<string, unknown>).__AIKAMI_E2E_DIALOGUE_INTENT__ as
-      | Partial<NpcIntentAnalysisOutput>
-      | undefined;
-    if (e2eSeed && typeof e2eSeed.requiresRoll === 'boolean') {
-      return e2eSeed as NpcIntentAnalysisOutput;
+    const e2eSeed =
+      getPublicMode() !== 'production'
+        ? (globalThis as Record<string, unknown>).__AIKAMI_E2E_DIALOGUE_INTENT__
+        : undefined;
+    if (Value.Check(NpcIntentAnalysisOutputSchema, e2eSeed)) {
+      if (this._activeAbortController) {
+        this._activeAbortController.abort();
+        this._activeAbortController = null;
+      }
+      this._startTurnStream();
+      this.turnState = { kind: 'complete', text: e2eSeed.npcResponse };
+      return e2eSeed;
     }
 
     // Concurrency gate

@@ -27,7 +27,7 @@ import {
 import type { DiceState } from '$lib/components/game/game_dice.svelte';
 import { mergeInitialSuggestions } from '$lib/data/initial_suggestion_presets';
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
-import type { NpcDialogueServiceInterface } from '$services';
+import type { NpcDialogueServiceInterface, PlayerStateServiceInterface } from '$services';
 import {
   buildGameStateFacts,
   combatService,
@@ -100,8 +100,20 @@ const ABILITY_KEY_BY_LABEL: Record<string, AbilityKey> = Object.fromEntries(
  * "Persuasion" → "persuasion". A direct lookup misses otherwise (C-487 AC-1).
  */
 const normalizeCheckType = (checkType: string): string => {
-  const lowerFirst = checkType.charAt(0).toLowerCase() + checkType.slice(1);
-  return lowerFirst.replace(/\s+/g, '');
+  const words = checkType.trim().split(/\s+/);
+  if (words.length === 1) {
+    const word = words[0] ?? '';
+    return word.charAt(0).toLowerCase() + word.slice(1);
+  }
+  return words
+    .map((word, index) => {
+      const lowercaseWord = word.toLowerCase();
+      if (index === 0) {
+        return lowercaseWord;
+      }
+      return lowercaseWord.charAt(0).toUpperCase() + lowercaseWord.slice(1);
+    })
+    .join('');
 };
 
 // ---------------------------------------------------------------------------
@@ -136,6 +148,8 @@ export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
    * Injected by the composition root for production; mocked in sandbox.
    */
   npcDialogueService: NpcDialogueServiceInterface;
+  /** Player state owner; dev sandboxes inject an isolated instance. */
+  playerStateService?: PlayerStateServiceInterface;
   /**
    * Whether image generation (ComfyUI or Cloud) is available.
    * When false, ComfyUI requests are skipped and fallback NPC
@@ -594,6 +608,8 @@ class DialogueOverlayViewModel
 
   private readonly _npcDialogueService: NpcDialogueServiceInterface;
 
+  private readonly _playerStateService: PlayerStateServiceInterface;
+
   private readonly _imageProviderAvailable: boolean;
 
   private readonly _chunker = new SentenceBoundaryChunker();
@@ -620,7 +636,7 @@ class DialogueOverlayViewModel
    * falls back to the raw ability modifier with no invented bonus (and logs).
    */
   protected _computeSkillCheckBreakdown(checkType: string): SkillCheckBreakdown {
-    const sheet = playerStateService.characterSheet;
+    const sheet = this._playerStateService.characterSheet;
     const mapKey = normalizeCheckType(checkType);
     const statEntry = SKILL_STAT_MAP[mapKey];
 
@@ -674,7 +690,7 @@ class DialogueOverlayViewModel
       this.warn('skillCheck:unmapped-stat', { checkType, mapKey, ability: abilityKey });
     }
 
-    if (!playerStateService.isCharacterSheetAuthored) {
+    if (!this._playerStateService.isCharacterSheetAuthored) {
       this.warn('skillCheck:neutral-sheet-fallback');
     }
 
@@ -701,7 +717,7 @@ class DialogueOverlayViewModel
     level: number;
     classId: string;
   } {
-    const sheet = playerStateService.characterSheet;
+    const sheet = this._playerStateService.characterSheet;
     return {
       characterSheetSummary: serializeForAi(sheet),
       level: sheet.level,
@@ -836,6 +852,7 @@ class DialogueOverlayViewModel
     this._onEndChat = options.onEndChat;
     this._onStartCombat = options.onStartCombat;
     this._npcDialogueService = options.npcDialogueService;
+    this._playerStateService = options.playerStateService ?? playerStateService;
     this._imageProviderAvailable = options.imageProviderAvailable ?? true;
 
     // Restore per-chat input draft from IndexedDB (fire-and-forget)
@@ -874,13 +891,13 @@ class DialogueOverlayViewModel
       // (content pack) merged with the player class's preset hooks.
       this.suggestedChips = mergeInitialSuggestions(
         this._npcData.initialSuggestions,
-        playerStateService.classId,
+        this._playerStateService.classId,
       );
       if (this.suggestedChips.length > 0) {
         this.debug('initialSuggestions', {
           npcId: this._npcData.npcId,
           chipCount: this.suggestedChips.length,
-          classId: playerStateService.classId,
+          classId: this._playerStateService.classId,
         });
       }
     }
@@ -909,7 +926,7 @@ class DialogueOverlayViewModel
 
   /** Player avatar URL — resolved from the active player character's class. */
   get playerAvatarUrl(): string {
-    return resolvePlayerAvatarUrl({ classId: playerStateService.classId });
+    return resolvePlayerAvatarUrl({ classId: this._playerStateService.classId });
   }
 
   /** Which speaker is highlighted — derived from streaming/input state. */
@@ -1757,7 +1774,7 @@ class DialogueOverlayViewModel
       ];
       this.suggestedChips = mergeInitialSuggestions(
         this._npcData.initialSuggestions,
-        playerStateService.classId,
+        this._playerStateService.classId,
       );
     }
 

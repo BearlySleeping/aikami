@@ -15,7 +15,7 @@ import {
   createDefaultSheet,
   createDefaultSkills,
 } from '@aikami/utils';
-import { playerStateService } from '$services';
+import { createPlayerStateService, type PlayerStateServiceInterface } from '$services';
 import {
   CharacterSheetViewModel,
   type CharacterSheetViewModelInterface,
@@ -37,11 +37,14 @@ class CharacterSheetSandboxViewModel
 
   constructor(options: CharacterSheetViewModelOptions) {
     super(options);
-    this._loadMockData();
+    if (!options.playerStateService) {
+      throw new Error('Character sheet sandbox requires isolated player state');
+    }
+    this._loadMockData(options.playerStateService);
   }
 
   /** Populate character sheet with mock data for sandbox testing. */
-  private _loadMockData(): void {
+  private _loadMockData(playerStateService: PlayerStateServiceInterface): void {
     // ── Mock ability scores ──
     const mockScores: Array<{ key: AbilityKey; value: number }> = [
       { key: 'strength', value: 16 },
@@ -104,4 +107,12 @@ class CharacterSheetSandboxViewModel
 
 export const getCharacterSheetSandboxViewModel = (
   options: CharacterSheetViewModelOptions,
-): CharacterSheetSandboxViewModelInterface => CharacterSheetSandboxViewModel.create(options);
+): CharacterSheetSandboxViewModelInterface => {
+  const sandboxOptions: CharacterSheetViewModelOptions = {
+    ...options,
+    playerStateService: createPlayerStateService({
+      className: 'CharacterSheetSandboxPlayerStateService',
+    }),
+  };
+  return CharacterSheetSandboxViewModel.create(sandboxOptions);
+};

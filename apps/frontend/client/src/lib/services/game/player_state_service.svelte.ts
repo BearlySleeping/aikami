@@ -21,7 +21,7 @@ import type {
   GameCharacterSheet,
   NarrativeTraits,
 } from '@aikami/types';
-import { DEFAULT_TRAITS } from '@aikami/types';
+import { ABILITY_KEYS, DEFAULT_TRAITS } from '@aikami/types';
 import {
   computeModifier,
   computeProficiencyBonus,
@@ -38,6 +38,114 @@ import {
 // ---------------------------------------------------------------------------
 
 export type PlayerStateServiceOptions = BaseFrontendClassOptions;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  return true;
+};
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+
+const isAbilityKey = (value: unknown): value is AbilityKey =>
+  typeof value === 'string' && ABILITY_KEYS.some((key) => key === value);
+
+const isValidCharacterSheet = (value: unknown): value is GameCharacterSheet => {
+  if (!isRecord(value) || !isRecord(value.abilities)) {
+    return false;
+  }
+
+  for (const key of ABILITY_KEYS) {
+    const ability = value.abilities[key];
+    if (
+      !isRecord(ability) ||
+      !isFiniteNumber(ability.value) ||
+      ability.value < 3 ||
+      ability.value > 20 ||
+      !isFiniteNumber(ability.modifier)
+    ) {
+      return false;
+    }
+  }
+
+  if (
+    !Array.isArray(value.skills) ||
+    !value.skills.every(
+      (skill) =>
+        isRecord(skill) &&
+        typeof skill.name === 'string' &&
+        skill.name.length > 0 &&
+        isAbilityKey(skill.ability) &&
+        typeof skill.isProficient === 'boolean' &&
+        typeof skill.isExpertise === 'boolean' &&
+        isFiniteNumber(skill.modifier),
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    !Array.isArray(value.savingThrows) ||
+    !value.savingThrows.every(
+      (savingThrow) =>
+        isRecord(savingThrow) &&
+        isAbilityKey(savingThrow.ability) &&
+        typeof savingThrow.isProficient === 'boolean' &&
+        typeof savingThrow.isExpertise === 'boolean' &&
+        isFiniteNumber(savingThrow.modifier),
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    !isRecord(value.traits) ||
+    typeof value.traits.personalityTraits !== 'string' ||
+    typeof value.traits.ideals !== 'string' ||
+    typeof value.traits.bonds !== 'string' ||
+    typeof value.traits.flaws !== 'string' ||
+    !isRecord(value.narrativeTraits) ||
+    !isStringArray(value.narrativeTraits.likes) ||
+    !isStringArray(value.narrativeTraits.temptations) ||
+    !isStringArray(value.narrativeTraits.keys)
+  ) {
+    return false;
+  }
+
+  if (
+    !isFiniteNumber(value.proficiencyBonus) ||
+    !isFiniteNumber(value.level) ||
+    !isFiniteNumber(value.xp) ||
+    !isFiniteNumber(value.hp) ||
+    !isFiniteNumber(value.maxHp) ||
+    !isFiniteNumber(value.attack) ||
+    !isFiniteNumber(value.defense)
+  ) {
+    return false;
+  }
+  if (value.level < 1 || value.maxHp < 1) {
+    return false;
+  }
+  if (value.classId !== undefined && typeof value.classId !== 'string') {
+    return false;
+  }
+  if (value.classFeatures !== undefined && !isStringArray(value.classFeatures)) {
+    return false;
+  }
+  if (
+    value.hotbarSlots !== undefined &&
+    (!isStringArray(value.hotbarSlots) || value.hotbarSlots.length > 6)
+  ) {
+    return false;
+  }
+
+  return true;
+};
 
 export type PlayerStateServiceInterface = BaseFrontendClassInterface & {
   readonly playerLevel: number;
@@ -171,10 +279,8 @@ class PlayerStateService
     // sheet before the production boot reads it. Absent during normal play —
     // the neutral sheet is the only fallback. Keyed on a window global so the
     // route/overlay/ViewModel stay the production ones in the /game E2E.
-    const seed = (globalThis as Record<string, unknown>).__AIKAMI_E2E_SHEET__ as
-      | GameCharacterSheet
-      | undefined;
-    if (seed && typeof seed === 'object' && seed.abilities) {
+    const seed = (globalThis as Record<string, unknown>).__AIKAMI_E2E_SHEET__;
+    if (isValidCharacterSheet(seed)) {
       this.importCharacterSheet({ sheet: seed });
     }
   }
@@ -187,9 +293,10 @@ class PlayerStateService
   /** The assembled character sheet — the single source the dialogue path reads (C-487). */
   get characterSheet(): GameCharacterSheet {
     const proficiencyBonus = computeProficiencyBonus(this.playerLevel);
+    const skills = Array.isArray(this.skills) ? this.skills : createDefaultSkills();
     return {
       abilities: this.abilities,
-      skills: recomputeSkills(this.skills, this.abilities, proficiencyBonus),
+      skills: recomputeSkills(skills, this.abilities, proficiencyBonus),
       savingThrows: recomputeSavingThrows(this.savingThrows, this.abilities, proficiencyBonus),
       traits: this.traits,
       narrativeTraits: this.narrativeTraits,
@@ -284,11 +391,27 @@ class PlayerStateService
 
   /** Imports a full authored sheet (JSON edit path, C-487). */
   importCharacterSheet(options: { sheet: GameCharacterSheet }): void {
-    this.abilities = options.sheet.abilities;
-    this.skills = options.sheet.skills;
-    this.savingThrows = options.sheet.savingThrows;
-    this.traits = options.sheet.traits;
-    this.narrativeTraits = options.sheet.narrativeTraits;
+    const { sheet } = options;
+    const proficiencyBonus = computeProficiencyBonus(sheet.level);
+    const skills = Array.isArray(sheet.skills) ? sheet.skills : createDefaultSkills();
+    this.playerLevel = sheet.level;
+    this.playerXp = sheet.xp;
+    this.playerHp = sheet.hp;
+    this.playerMaxHp = sheet.maxHp;
+    this.playerBaseAttack = sheet.attack;
+    this.playerBaseDefense = sheet.defense;
+    this.classId = sheet.classId ?? 'fighter';
+    this.classFeatures = [...(sheet.classFeatures ?? [])];
+    this.hotbarSlots = [...(sheet.hotbarSlots ?? [])];
+    this.abilities = sheet.abilities;
+    this.skills = recomputeSkills(skills, sheet.abilities, proficiencyBonus);
+    this.savingThrows = recomputeSavingThrows(
+      sheet.savingThrows,
+      sheet.abilities,
+      proficiencyBonus,
+    );
+    this.traits = sheet.traits;
+    this.narrativeTraits = sheet.narrativeTraits;
     this._characterSheetAuthored = true;
   }
 
@@ -459,6 +582,11 @@ class PlayerStateService
   }
 }
 
-export const playerStateService: PlayerStateServiceInterface = PlayerStateService.create({
+/** Creates an isolated player-state owner for dev sandboxes and focused tests. */
+export const createPlayerStateService = (
+  options: PlayerStateServiceOptions,
+): PlayerStateServiceInterface => PlayerStateService.create(options);
+
+export const playerStateService: PlayerStateServiceInterface = createPlayerStateService({
   className: 'PlayerStateService',
 });
