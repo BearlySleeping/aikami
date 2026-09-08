@@ -24,7 +24,7 @@ let generateTurnStub = mock(async () => ({
   source: 'ai' as const,
 }));
 
-let analyzeIntentStub = mock(async () => ({
+const defaultAnalyzeIntent = async () => ({
   requiresRoll: false,
   checkType: undefined,
   difficultyClass: undefined,
@@ -39,7 +39,9 @@ let analyzeIntentStub = mock(async () => ({
     },
     { id: 'leave', label: 'Leave', intentType: 'dialogue' as const, prefillText: 'Goodbye.' },
   ],
-}));
+});
+
+let analyzeIntentStub = mock(defaultAnalyzeIntent);
 
 // ── Quest-activation tool call stubs (C-quest-activation) ──
 let acceptQuestStub = mock(() => true);
@@ -240,6 +242,8 @@ describe('DialogueOverlayViewModel', () => {
       source: 'ai' as const,
     }));
     mockNpcDialogueService.generateTurn = generateTurnStub;
+    analyzeIntentStub = mock(defaultAnalyzeIntent);
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
 
     // Reset quest-activation stubs
     acceptQuestStub = mock(() => true);

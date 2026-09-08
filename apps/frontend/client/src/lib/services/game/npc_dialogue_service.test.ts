@@ -268,8 +268,8 @@ describe('AC-1: Provider failure surfaces an error', () => {
 
     const controller = new AbortController();
     // The streamed narrative "Hi." is < 20 chars, so recoverIntentAnalysisOutput
-    // throws and the turn fails with the original call-2 detail (AC-3: the
-    // failure surfaces an explicit error rather than a silent/endless turn).
+    // throws; analyzeIntent surfaces the original provider error while retaining
+    // the repair error as its cause (AC-3: no silent/endless turn).
     await expect(
       npcDialogueService.analyzeIntent({
         npcId: 'village_elder',
@@ -277,7 +277,7 @@ describe('AC-1: Provider failure surfaces an error', () => {
         messages: [{ role: 'player', content: 'I try to persuade you.' }],
         signal: controller.signal,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow('No JSON object found in response');
 
     expect(npcDialogueService.turnState.kind).toBe('failed');
     if (npcDialogueService.turnState.kind === 'failed') {

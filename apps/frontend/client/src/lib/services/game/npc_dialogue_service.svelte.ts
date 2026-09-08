@@ -1703,10 +1703,12 @@ export class NpcDialogueService
           repairReason = call2Error instanceof Error ? call2Error.message : String(call2Error);
         }
         this.warn('_analyzeIntent:invalid-output', { reason: repairReason });
-        const recovered = recoverIntentAnalysisOutput(
-          narrative.trim(),
-          NpcIntentAnalysisOutputSchema,
-        );
+        let recovered: ReturnType<typeof recoverIntentAnalysisOutput>;
+        try {
+          recovered = recoverIntentAnalysisOutput(narrative.trim(), NpcIntentAnalysisOutputSchema);
+        } catch (repairError) {
+          throw new Error(repairReason, { cause: repairError });
+        }
         output = {
           requiresRoll: false,
           checkType: undefined,

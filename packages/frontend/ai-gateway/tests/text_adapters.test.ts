@@ -4,7 +4,7 @@
 // endpoint resolution, Ollama VRAM eviction params, structured extraction
 // (native response_format + system-prompt fallback), abort propagation.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, jest, test } from 'bun:test';
 import type { AiModeResolution } from '@aikami/types';
 import { createOpenAiCompatibleTextAdapter, isAiGatewayError } from '../src/index.ts';
 import { createJsonFetchMock, createSseFetchMock, SSE_DONE, sseChunk } from './helpers.ts';
@@ -597,5 +597,62 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
     expect(callCount).toBe(2);
     expect(result.structured).toEqual({ name: 'EmptyRetry', level: 3 });
     expect(events).toContain('empty-retry');
+  });
+
+  test('cancels and clears the empty-response retry backoff before a second fetch', async () => {
+    jest.useFakeTimers();
+    try {
+      let callCount = 0;
+      const fetchFn = ((_input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+        callCount++;
+        return Promise.resolve(
+          new Response(JSON.stringify({ message: { content: '' } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }) as typeof fetch;
+      const controller = new AbortController();
+      let notifyBackoffStarted: (() => void) | undefined;
+      const backoffStarted = new Promise<void>((resolve) => {
+        notifyBackoffStarted = resolve;
+      });
+      const adapter = createOpenAiCompatibleTextAdapter({
+        fetchFn,
+        supportsStructuredOutput: () => true,
+        onEvent: (event) => {
+          if (event === 'empty-retry') {
+            notifyBackoffStarted?.();
+          }
+        },
+      });
+
+      const pending = adapter.generateText({
+        resolution: resolution(),
+        signal: controller.signal,
+        messages: [{ role: 'user', content: 'Extract a character' }],
+        schema: characterSchema,
+        schemaName: 'AbortEmptyRetry',
+      });
+
+      await backoffStarted;
+      expect(jest.getTimerCount()).toBe(1);
+      controller.abort();
+
+      let error: unknown;
+      try {
+        await pending;
+      } catch (caughtError) {
+        error = caughtError;
+      }
+      expect(isAiGatewayError(error)).toBe(true);
+      if (isAiGatewayError(error)) {
+        expect(error.code).toBe('cancelled');
+      }
+      expect(callCount).toBe(1);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

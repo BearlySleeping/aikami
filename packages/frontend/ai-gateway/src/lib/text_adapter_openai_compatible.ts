@@ -437,56 +437,29 @@ export const createOpenAiCompatibleTextAdapter = (
             throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
           }
 
-          // When stream: false (structured output), the response is plain JSON,
-          // not SSE. Parse it directly — don't try to read it as an SSE stream.
-          if (!body.stream) {
-            let text = '';
-            try {
-              const data = (await response.json()) as {
-                choices?: Array<{ message?: { content?: string } }>;
-                message?: { content?: string };
-              };
-              text = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
-            } catch (err) {
-              // Rethrow abort/timeout errors so cancellation propagates correctly
-              if (
-                err instanceof Error &&
-                (err.name === 'AbortError' || err.message.includes('aborted'))
-              ) {
-                throw err;
-              }
-              // Provider returned 200 but the body wasn't JSON — it likely
-              // ignored stream:false. Fall back to the system-prompt approach.
-              return { fallback: 'non-json-200' };
-            }
-            deliver(text);
-            onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
-            return {};
-          }
-
-          // Ollama native /api/chat with stream: false also returns plain JSON.
-          if (resolution.provider === 'ollama') {
+          // Structured requests force stream: false, so successful responses
+          // are always handled as plain JSON rather than SSE.
+          let text = '';
+          try {
             const data = (await response.json()) as {
+              choices?: Array<{ message?: { content?: string } }>;
               message?: { content?: string };
             };
-            const text = data.message?.content ?? '';
-            deliver(text);
-            onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
-            return {};
+            text = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+          } catch (err) {
+            // Rethrow abort/timeout errors so cancellation propagates correctly
+            if (
+              err instanceof Error &&
+              (err.name === 'AbortError' || err.message.includes('aborted'))
+            ) {
+              throw err;
+            }
+            // Provider returned 200 but the body wasn't JSON — it likely
+            // ignored stream:false. Fall back to the system-prompt approach.
+            return { fallback: 'non-json-200' };
           }
-
-          if (!response.body) {
-            throw new Error(`No response body from provider "${resolution.provider}"`);
-          }
-
-          await readChatSseStream({
-            body: response.body,
-            signal: requestSignal,
-            onChunk: deliver,
-            firstChunkTimeoutMs,
-            idleTimeoutMs,
-            onEvent,
-          });
+          deliver(text);
+          onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
           return {};
         },
       });
