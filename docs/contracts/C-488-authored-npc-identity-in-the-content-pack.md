@@ -3,7 +3,7 @@ id: C-488
 title: "Authored NPC identity in the content pack"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-07T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — "a name plus 'fantasy NPC' is not a character"; blocks C-493/C-494/C-495 |
 | **Dependencies** | None |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — the pack authoring format gains identity fields |
 | **Contract version** | 2.0.0 |
@@ -63,7 +63,7 @@ The content pack gains five optional NPC identity fields — `personality`, `age
 
 ## Design Reference
 
-- `ContentPackNpcEntrySchema` (`content_pack.ts:87-132`) — the field style to match: optional TypeBox fields with `description`, `additionalProperties: false` at the object level.
+- `ContentPackNpcEntrySchema` (`content_pack.ts:87-132`) — the field style to match: optional TypeBox fields with `description`; add `additionalProperties: false` at the object level (it is **not** currently set on this schema).
 - `gm_prompt_service.svelte.ts` — the established rich-context assembly shape; the new fields are the *content* that fills the same shape.
 - `buildGameStateFacts({ npcId })` in `game_state_facts.ts` — the fact provider already called by the intent path; the roll-resolution prompt must receive the same facts.
 - C-315 pack loader — the version-bump and migration precedent a schema change like this must follow.
@@ -148,7 +148,7 @@ This is the normative leaf shape. Define the personality object in TypeBox in `p
     - **Visual**: N/A.
 
 **Watch Points**:
-- `additionalProperties: false` must remain at the object level; unknown identity keys are rejected, not silently dropped.
+- Add `additionalProperties: false` at the object level of `ContentPackNpcEntrySchema` (not currently set on this schema) so unknown identity keys are rejected, not silently dropped.
 - Do not make the fields required — required fields would break every existing pack and violate AC-2.
 
 ### AC-2: A previous-version pack still loads
@@ -170,6 +170,7 @@ This is the normative leaf shape. Define the personality object in TypeBox in `p
 
 **Watch Points**:
 - Degradation is per-field: an NPC with `agenda` but no `secrets` gets the generic behaviour only for `secrets`, not a wholesale generic fallback.
+- Both persona paths converge on the **single canonical** generic sentence `You are <NPC name>, a character in a fantasy world.` for a missing `personality`. This intentionally replaces the two divergent strings currently at `npc_dialogue_service.svelte.ts:1282` (`You are <name>, a <npc.name> living in a fantasy world.`) and `:1615` (`You are <name>, a character in a fantasy world.`). Do not preserve the older divergent wording — AC-3 asserts the exact canonical sentence in both paths.
 
 ### AC-3: The production dialogue path uses the authored identity
 **Given** an NPC with an authored identity
