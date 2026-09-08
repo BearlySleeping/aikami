@@ -12,7 +12,7 @@
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { CapabilitySnapshot } from '@aikami/types';
+import type { CapabilitySnapshot, ConnectionCapability } from '@aikami/types';
 import { localServicesMockBase } from '../../test_preload.ts';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
@@ -78,7 +78,11 @@ const createDetectedSnapshot = (): CapabilitySnapshot => ({
   detectedAt: new Date().toISOString(),
 });
 
-const detectMock = mock(async (): Promise<CapabilitySnapshot> => createDetectedSnapshot());
+type DetectOptions = { capabilities: readonly ConnectionCapability[] };
+
+const detectMock = mock(
+  async (_options: DetectOptions): Promise<CapabilitySnapshot> => createDetectedSnapshot(),
+);
 const startNewCampaignMock = mock(async () => ({ id: 'campaign-1' }));
 const goToRouteMock = mock(async () => {});
 const getVoiceTtsUrlMock = mock((): string | undefined => undefined);
@@ -233,6 +237,17 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.capabilityToggles.find((t) => t.id === 'text')?.enabled).toBeTrue();
   });
 
+  test('entry selection preserves only optional capabilities with usable connections', () => {
+    configServiceMock.state.connections = [
+      { capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
+    ];
+
+    vm.selectEntryPath('existing');
+
+    expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeTrue();
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
+  });
+
   test('a stored optional connection is auto-enabled on load', async () => {
     configServiceMock.load.mockImplementation(async () => {
       configServiceMock.state.connections = [
@@ -285,17 +300,22 @@ describe('SetupSubflowViewModel', () => {
 
   // ── Discovery scoping (Recommended) ─────────────────────────────────────
 
-  test('recommended scans the required capability only, then rescan honours opt-ins', async () => {
-    // Voice must be detected (or connected) before its toggle is available,
-    // so the scan reports a voice detection that the user can opt into.
-    detectMock.mockResolvedValueOnce({
-      ...createDetectedSnapshot(),
-      voiceStatus: 'detected',
-      voiceProviderId: 'kokoro',
+  test('recommended initially probes optional capabilities, then rescan honours opt-ins', async () => {
+    detectMock.mockImplementation(async ({ capabilities }: DetectOptions) => {
+      if (!capabilities.includes('voice')) {
+        // A text-only request explicitly skips both optional capabilities.
+        return createDetectedSnapshot();
+      }
+      return {
+        ...createDetectedSnapshot(),
+        voiceStatus: 'detected',
+        voiceProviderId: 'kokoro',
+      };
     });
     vm.selectEntryPath('recommended');
     await vm.startDiscovery();
-    expect(detectMock).toHaveBeenCalledWith({ capabilities: ['text'] });
+    expect(detectMock).toHaveBeenCalledWith({ capabilities: ['text', 'image', 'voice'] });
+    expect(vm.discoveredProviders.some((provider) => provider.capability === 'voice')).toBeTrue();
 
     vm.toggleCapability('voice');
     await vm.rescan();

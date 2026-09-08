@@ -224,6 +224,9 @@ const engineProbe =
       : { ready: false, reason: `${serviceKey} engine did not answer on :${port}` };
   };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
   client: {
     name: 'client',
@@ -269,9 +272,10 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     // foreign listener squatting on :8089.
     probe: engineProbe('voice', async (port) => {
       const res = await fetch(`http://127.0.0.1:${port}/health`, {
+        redirect: 'error',
         signal: AbortSignal.timeout(5000),
       });
-      return res.ok;
+      return res.ok && (await res.text()).trim() === 'ok';
     }),
   },
   image: {
@@ -284,6 +288,7 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     // distinguishes it from ComfyUI (which 404s there) squatting on :8188.
     probe: engineProbe('image', async (port) => {
       const res = await fetch(`http://127.0.0.1:${port}/sdapi/v1/sd-models`, {
+        redirect: 'error',
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) {
@@ -303,9 +308,14 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     // Ollama (which 404s /health) squatting on :11434.
     probe: engineProbe('text', async (port) => {
       const res = await fetch(`http://127.0.0.1:${port}/health`, {
+        redirect: 'error',
         signal: AbortSignal.timeout(5000),
       });
-      return res.ok;
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return isRecord(data) && data.status === 'ok';
     }),
   },
   // C-392 advanced, opt-in engines — Ollama and ComfyUI stay one command
@@ -322,9 +332,14 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     // local-stack llama.cpp text engine on the same port.
     probe: engineProbe('text-ollama', async (port) => {
       const res = await fetch(`http://127.0.0.1:${port}/api/version`, {
+        redirect: 'error',
         signal: AbortSignal.timeout(5000),
       });
-      return res.ok;
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return isRecord(data) && typeof data.version === 'string' && data.version.length > 0;
     }),
   },
   'image-comfyui': {
@@ -337,9 +352,14 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     // sd-server image engine on the same port.
     probe: engineProbe('image-comfyui', async (port) => {
       const res = await fetch(`http://127.0.0.1:${port}/system_stats`, {
+        redirect: 'error',
         signal: AbortSignal.timeout(5000),
       });
-      return res.ok;
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return isRecord(data) && isRecord(data.system) && Array.isArray(data.devices);
     }),
   },
 

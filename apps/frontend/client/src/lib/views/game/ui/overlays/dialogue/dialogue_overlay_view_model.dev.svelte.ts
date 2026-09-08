@@ -82,12 +82,7 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   simulatePartyMessage(): void;
 
   /** Force a dice roll with test parameters. */
-  forceDiceRoll(options: {
-    checkType: string;
-    difficultyClass: number;
-    statModifier: string;
-    statModifierValue: number;
-  }): void;
+  forceDiceRoll(options: { checkType: string; difficultyClass: number }): void;
 };
 
 export type DialogueDevViewModelOptions = DialogueOverlayViewModelOptions & {
@@ -371,18 +366,15 @@ export class DialogueDevViewModel
   }
 
   /** @inheritdoc */
-  forceDiceRoll(options: {
-    checkType: string;
-    difficultyClass: number;
-    statModifier: string;
-    statModifierValue: number;
-  }): void {
-    const targetNumber = Math.max(1, options.difficultyClass - options.statModifierValue);
+  forceDiceRoll(options: { checkType: string; difficultyClass: number }): void {
+    const breakdown = this._computeSkillCheckBreakdown(options.checkType);
+    const stakes = this._resolveStakes(options.checkType);
+    const targetNumber = Math.max(1, options.difficultyClass - breakdown.totalModifier);
     this.skillCheckState = {
       checkType: options.checkType,
       difficultyClass: options.difficultyClass,
-      statModifier: options.statModifier,
-      statModifierValue: options.statModifierValue,
+      breakdown,
+      stakes,
       targetNumber,
       rollValue: null,
       phase: 'declared',

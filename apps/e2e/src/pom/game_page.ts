@@ -286,6 +286,47 @@ export class GamePage {
     await this.page.waitForTimeout(500);
   }
 
+  /** The most recent NPC response rendered in the dialogue overlay. */
+  get npcResponse() {
+    return this.page.locator('[data-testid="dialogue-overlay"] .chat-start').last();
+  }
+
+  // ── Declared-DC dice overlay (C-487) ──────────────────────────
+
+  /** The declared-DC dice overlay panel (GameDice). */
+  get diceOverlay() {
+    return this.page.locator('.dice-overlay');
+  }
+
+  /** The d20 interactive roll button (GameDice). */
+  get d20RollButton() {
+    return this.page.getByRole('button', { name: 'Click to roll d20' });
+  }
+
+  /** The named modifier breakdown block (C-487 AC-1/AC-2). */
+  get diceBreakdown() {
+    return this.page.locator('[data-testid="dice-breakdown"]');
+  }
+
+  /** The failure-cost text shown before the roll commits (C-487 AC-2). */
+  get diceStakesFailure() {
+    return this.page.locator('[data-testid="dice-stakes-failure"]');
+  }
+
+  /** Asserts the declared-DC dice overlay (breakdown + stakes) is visible. */
+  async expectDiceOverlayVisible(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.diceOverlay).toBeVisible({ timeout: 15_000 });
+    await expect(this.diceBreakdown).toBeVisible({ timeout: 5_000 });
+    await expect(this.diceStakesFailure).toBeVisible({ timeout: 5_000 });
+  }
+
+  /** Asserts no dice overlay is present (ordinary conversation, C-487 AC-4). */
+  async expectNoDiceOverlay(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.diceOverlay).toHaveCount(0);
+  }
+
   /** Assert suggestion chips are visible (C-371). */
   async expectChipsVisible(): Promise<void> {
     const { expect } = await import('@playwright/test');

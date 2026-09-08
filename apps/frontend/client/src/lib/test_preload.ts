@@ -460,6 +460,9 @@ export const localServicesMockBase = () => ({
     reset: _createCallableStub(),
     startListening: _createCallableStub(),
   }),
+  // C-487: isolated player-state factory used by the character-sheet sandbox
+  // and the dev dialogue page (never the shared singleton).
+  createPlayerStateService: _createCallableStub(),
   worldStateService: Object.assign(_createServiceStub(), {
     currentWorld: undefined,
     currentLocation: undefined,

@@ -16,6 +16,17 @@ export type DiceCheckInfo = {
   modValue?: number;
   /** Target number on d20 (DC - modValue) — C-330 declared-DC. */
   target?: number;
+  /** Named two-component modifier breakdown (C-487). */
+  breakdown?: {
+    abilityLabel: string;
+    abilityModifier: number;
+    isProficient: boolean;
+    isExpertise: boolean;
+    proficiencyBonus: number;
+    totalModifier: number;
+  };
+  /** Bounded success/failure consequence copy shown before the roll (C-487). */
+  stakes?: { success: string; failure: string };
 };
 
 /** Unified dice state used by dialogue and combat ViewModels. */
@@ -42,6 +53,23 @@ const { dice }: Props = $props();
 
 const successLabel = $derived(dice?.labels?.success ?? 'SUCCESS!');
 const failureLabel = $derived(dice?.labels?.failure ?? 'FAILURE');
+const abilityModifierLabel = $derived(
+  dice?.checkInfo?.breakdown
+    ? `${dice.checkInfo.breakdown.abilityModifier >= 0 ? '+' : ''}${dice.checkInfo.breakdown.abilityModifier}`
+    : '',
+);
+const totalModifierLabel = $derived(
+  dice?.checkInfo?.breakdown
+    ? `${dice.checkInfo.breakdown.totalModifier >= 0 ? '+' : ''}${dice.checkInfo.breakdown.totalModifier}`
+    : '',
+);
+const targetNumber = $derived(
+  dice?.checkInfo
+    ? (dice.checkInfo.target ??
+        dice.checkInfo.dc -
+          (dice.checkInfo.breakdown?.totalModifier ?? dice.checkInfo.modValue ?? 0))
+    : 0,
+);
 </script>
 
 {#if dice}
@@ -55,17 +83,53 @@ const failureLabel = $derived(dice?.labels?.failure ?? 'FAILURE');
           {dice.checkInfo.type}
           Check
         </span>
-        {#if dice.checkInfo.modLabel && dice.checkInfo.modValue !== undefined}
+        {#if dice.checkInfo.breakdown}
+          <div
+            class="flex flex-col items-center gap-1 text-sm text-base-content/80"
+            data-testid="dice-breakdown"
+          >
+            <span>
+              Ability:
+              <span class="font-semibold text-info">{dice.checkInfo.breakdown.abilityLabel}</span>
+              ({abilityModifierLabel})
+            </span>
+            <span>
+              Proficiency:
+              {#if dice.checkInfo.breakdown.isProficient}
+                <span class="font-semibold text-info"
+                  >+{dice.checkInfo.breakdown.proficiencyBonus}</span
+                >
+                {#if dice.checkInfo.breakdown.isExpertise}
+                  <span class="text-accent">(expertise)</span>
+                {/if}
+              {:else}
+                —
+              {/if}
+            </span>
+            <span>
+              Total modifier:
+              <span class="font-semibold text-info">{totalModifierLabel}</span>
+            </span>
+            <span> DC {dice.checkInfo.dc} → need {targetNumber} or higher on d20 </span>
+          </div>
+        {:else if dice.checkInfo.modLabel && dice.checkInfo.modValue !== undefined}
           <span class="text-sm text-base-content/70">
             DC {dice.checkInfo.dc} —
             <span class="font-semibold text-info"
               >+{dice.checkInfo.modValue} {dice.checkInfo.modLabel}</span
             >
-            → need {dice.checkInfo.target ?? dice.checkInfo.dc - dice.checkInfo.modValue} or higher
-            on d20
+            → need {targetNumber} or higher on d20
           </span>
         {:else}
           <span class="text-sm text-base-content/70">DC {dice.checkInfo.dc}</span>
+        {/if}
+        {#if dice.checkInfo.stakes}
+          <div class="flex flex-col items-center gap-0.5 text-xs" data-testid="dice-stakes">
+            <span class="text-base-content/60">Success: {dice.checkInfo.stakes.success}</span>
+            <span class="text-base-content/70" data-testid="dice-stakes-failure">
+              On failure: {dice.checkInfo.stakes.failure}
+            </span>
+          </div>
         {/if}
       {/if}
 
@@ -75,6 +139,7 @@ const failureLabel = $derived(dice?.labels?.failure ?? 'FAILURE');
           class="d20-die interactive cursor-pointer border-none bg-transparent p-0"
           type="button"
           aria-label="Click to roll d20"
+          data-testid="d20-roll-button"
           onclick={dice.onRoll}
           onkeydown={(e) => e.key === 'Enter' && dice.onRoll?.()}
         >

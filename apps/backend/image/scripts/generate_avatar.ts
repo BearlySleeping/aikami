@@ -92,13 +92,25 @@ type SdCppJob = {
   error?: string;
 };
 
+type SdCppImgGenRequest = {
+  prompt: string;
+  negative_prompt: string;
+  width: number;
+  height: number;
+  sample_steps: number;
+  txt_cfg: number;
+  seed: number;
+  batch_count: number;
+  model?: string;
+};
+
 // ── API Helpers ──────────────────────────────────────────────────────────
 
 /**
  * Submit a txt2img job to sd-server and return the raw response.
  */
 const submitJob = async (options: GenerationOptions): Promise<SdCppJob> => {
-  const body: Record<string, unknown> = {
+  const body: SdCppImgGenRequest = {
     prompt: options.prompt,
     negative_prompt: options.negativePrompt,
     width: options.width,

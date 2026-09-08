@@ -10,6 +10,46 @@
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { SKILL_CHECK_STAKES } from '@aikami/constants';
+import type { GameCharacterSheet } from '@aikami/types';
+import { computeModifier, createDefaultSheet } from '@aikami/utils';
+import type { NpcDialogueServiceInterface } from '$services';
+
+type AnalyzeIntentOptions = Parameters<NpcDialogueServiceInterface['analyzeIntent']>[0];
+
+// ---------------------------------------------------------------------------
+// Seeded character sheet — the mocked playerStateService returns this so the
+// ViewModel's real breakdown computation is exercised against authored data.
+// ---------------------------------------------------------------------------
+
+const makeSeededSheet = (options?: {
+  charisma?: number;
+  persuasionProficient?: boolean;
+  persuasionExpertise?: boolean;
+}): GameCharacterSheet => {
+  const sheet = createDefaultSheet();
+  const charisma = options?.charisma ?? 10;
+  sheet.abilities = {
+    ...sheet.abilities,
+    charisma: { value: charisma, modifier: computeModifier(charisma) },
+  };
+  sheet.skills = sheet.skills.map((s) =>
+    s.name === 'Persuasion'
+      ? {
+          ...s,
+          isProficient: options?.persuasionProficient ?? false,
+          isExpertise: options?.persuasionExpertise ?? false,
+        }
+      : s,
+  );
+  return sheet;
+};
+
+let seededSheet: GameCharacterSheet = makeSeededSheet({
+  charisma: 16,
+  persuasionProficient: true,
+});
+let isCharacterSheetAuthored = true;
 
 // ---------------------------------------------------------------------------
 // Mock: npcDialogueService (orchestrator) — C-371 two-call pipeline
@@ -86,6 +126,9 @@ const mockNpcDialogueService = {
 // Mock: services barrel (minimal)
 // ---------------------------------------------------------------------------
 
+// In isolated test runs the bare `$services` alias is resolved through the
+// tsconfig paths BEFORE mock.module matching; keep the bare-specifier mock
+// (the same form the other passing ViewModel tests use).
 mock.module('$services', () => ({
   buildGameStateFacts: () => ['Location: Village of Oakvale', 'Time: Midday'],
   combatService: {
@@ -130,6 +173,12 @@ mock.module('$services', () => ({
   playerStateService: {
     characterSheetSummary: undefined,
     classId: 'fighter',
+    get characterSheet() {
+      return seededSheet;
+    },
+    get isCharacterSheetAuthored() {
+      return isCharacterSheetAuthored;
+    },
   },
   ttsService: {
     selectedVoice: 'default',
@@ -154,45 +203,6 @@ mock.module('$services', () => ({
   npcDialogueService: mockNpcDialogueService,
   __esModule: true,
   default: {},
-}));
-
-// ---------------------------------------------------------------------------
-// Mock: game services (to avoid pulling in the full tree)
-// ---------------------------------------------------------------------------
-
-const COMBAT_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
-// The DialogueOverlayViewModel imports expressionService directly from its
-// module (not via the $services barrel), so mock the direct path to match
-// the barrel mock below.
-mock.module('$lib/services/expression/expression_service.svelte.ts', () => ({
-  expressionService: {
-    detectExpression: mock(async () => ({
-      expressionMap: { 'Elder Thrain': 'happy' },
-      detectionTier: 'keyword' as const,
-    })),
-    resolveLpcOverlays: mock(() => ({})),
-    catalogEntries: [],
-    getEntry: mock(() => undefined),
-  },
-  __esModule: true,
-}));
-
-mock.module(COMBAT_PATH, () => ({
-  combatService: { enemyName: 'Unknown Enemy', enemyHp: 0, enemyMaxHp: 0 },
-}));
-
-const GAME_STATE_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts';
-mock.module(GAME_STATE_PATH, () => ({
-  gameStateService: { worldGenOutput: undefined, quests: [], characterSheetSummary: undefined },
-}));
-
-const TIME_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/time_service.svelte.ts';
-mock.module(TIME_PATH, () => ({
-  timeService: { gameHour: 12, gameMinute: 0, rainIntensity: 0 },
-  __esModule: true,
 }));
 
 // ---------------------------------------------------------------------------
@@ -233,6 +243,9 @@ const createViewModel = (options?: {
 
 describe('DialogueOverlayViewModel', () => {
   beforeEach(() => {
+    seededSheet = makeSeededSheet({ charisma: 16, persuasionProficient: true });
+    isCharacterSheetAuthored = true;
+
     generateTurnStub = mock(async () => ({
       narrative: 'The elder nods thoughtfully.',
       choices: [
@@ -577,9 +590,17 @@ describe('DialogueOverlayViewModel', () => {
     vm.skillCheckState = {
       checkType: 'Persuasion',
       difficultyClass: 12,
-      statModifier: 'CHA',
-      statModifierValue: 2,
-      targetNumber: 10,
+      breakdown: {
+        ability: 'charisma',
+        abilityLabel: 'CHA',
+        abilityModifier: 3,
+        isProficient: true,
+        isExpertise: false,
+        proficiencyBonus: 2,
+        totalModifier: 5,
+      },
+      stakes: { success: 'Convinced.', failure: 'Trust drops.' },
+      targetNumber: 7,
       rollValue: null,
       phase: 'declared',
       isSuccess: null,
@@ -602,6 +623,172 @@ describe('DialogueOverlayViewModel', () => {
     // After resolution, dice clears and phase returns to FREE_TEXT
     expect(vm.skillCheckState).toBeNull();
     expect(vm.dialoguePhase).toBe('FREE_TEXT');
+  });
+
+  // ── C-487: real character sheet roll inputs ───────────────────────────
+
+  test('AC-1: proficient Persuasion with CHA 16 totals +5 from the sheet', async () => {
+    const vm = createViewModel();
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: true,
+      checkType: 'Persuasion',
+      difficultyClass: 12,
+      modifierSource: 'CHA',
+      npcResponse: 'The elder considers your words.',
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    vm.inputText = 'I try to persuade you.';
+    await vm.sendMessage();
+
+    const state = vm.skillCheckState;
+    expect(state).not.toBeNull();
+    expect(state?.phase).toBe('declared');
+    expect(state?.breakdown.ability).toBe('charisma');
+    expect(state?.breakdown.abilityLabel).toBe('CHA');
+    expect(state?.breakdown.abilityModifier).toBe(3);
+    expect(state?.breakdown.isProficient).toBe(true);
+    expect(state?.breakdown.isExpertise).toBe(false);
+    expect(state?.breakdown.proficiencyBonus).toBe(2);
+    expect(state?.breakdown.totalModifier).toBe(5);
+    expect(state?.targetNumber).toBe(7);
+    expect(vm.dialoguePhase).toBe('DECLARED_DC');
+  });
+
+  test('AC-1: expertise doubles the proficiency bonus (+7)', async () => {
+    seededSheet = makeSeededSheet({
+      charisma: 16,
+      persuasionProficient: true,
+      persuasionExpertise: true,
+    });
+    const vm = createViewModel();
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: true,
+      checkType: 'Persuasion',
+      difficultyClass: 12,
+      modifierSource: 'CHA',
+      npcResponse: 'The elder considers your words.',
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    vm.inputText = 'Persuade.';
+    await vm.sendMessage();
+
+    expect(vm.skillCheckState?.breakdown.totalModifier).toBe(7);
+    expect(vm.skillCheckState?.breakdown.isExpertise).toBe(true);
+  });
+
+  test('AC-1: normalises spaced and canonical checkType values to the map key', async () => {
+    for (const checkType of ['Sleight Of Hand', 'sleight of hand', 'sleightOfHand']) {
+      const vm = createViewModel();
+      analyzeIntentStub = mock(async () => ({
+        requiresRoll: true,
+        checkType,
+        difficultyClass: 12,
+        modifierSource: 'DEX',
+        npcResponse: 'The elder watches your hands.',
+        suggestedChips: [],
+      }));
+      mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+      vm.inputText = 'Pickpocket.';
+      await vm.sendMessage();
+
+      expect(vm.skillCheckState?.breakdown.abilityLabel).toBe('DEX');
+      expect(vm.skillCheckState?.breakdown.ability).toBe('dexterity');
+      expect(vm.skillCheckState?.stakes).toEqual(SKILL_CHECK_STAKES.sleightOfHand);
+    }
+  });
+
+  test('AC-2: breakdown and stakes are assembled before the roll commits', async () => {
+    const vm = createViewModel();
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: true,
+      checkType: 'Deception',
+      difficultyClass: 12,
+      modifierSource: 'CHA',
+      npcResponse: 'The elder studies you.',
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    vm.inputText = 'I bluff.';
+    await vm.sendMessage();
+
+    const state = vm.skillCheckState;
+    expect(state?.phase).toBe('declared');
+    expect(state?.breakdown.abilityLabel).toBe('CHA');
+    expect(state?.stakes.success.length).toBeGreaterThan(0);
+    expect(state?.stakes.failure.length).toBeGreaterThan(0);
+    expect(state?.stakes.failure.toLowerCase()).toContain('suspicion');
+  });
+
+  test('AC-3: passes the real player context, never the hardcoded default', async () => {
+    const vm = createViewModel();
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'Hello, traveler.',
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    vm.inputText = 'Hello there.';
+    await vm.sendMessage();
+
+    const call = analyzeIntentStub.mock.calls[0][0] as {
+      playerContext?: { characterSheetSummary: string; level: number; classId: string };
+    };
+    expect(call.playerContext).toBeDefined();
+    expect(call.playerContext?.characterSheetSummary).not.toBe('Level 1 Fighter');
+    expect(call.playerContext?.characterSheetSummary).toContain('[CHARACTER SHEET]');
+    expect(call.playerContext?.characterSheetSummary).toContain('CHA 16(+3)');
+    expect(call.playerContext?.level).toBe(1);
+    expect(call.playerContext?.classId).toBe('fighter');
+  });
+
+  test('AC-4: ordinary conversation stays in FREE_TEXT with no dice', async () => {
+    const vm = createViewModel();
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'A fine day to you.',
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    vm.inputText = 'Hello there.';
+    await vm.sendMessage();
+
+    expect(vm.dialoguePhase).toBe('FREE_TEXT');
+    expect(vm.skillCheckState).toBeNull();
+  });
+
+  test('AC-5: a model-authored bonus cannot override the sheet modifier', async () => {
+    const vm = createViewModel();
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: true,
+      checkType: 'Persuasion',
+      difficultyClass: 12,
+      modifierSource: 'CHA +5',
+      npcResponse: 'The elder considers your words.',
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    vm.inputText = 'Persuade.';
+    await vm.sendMessage();
+
+    // Sheet is the sole authority: CHA 16 (+3) + proficiency (+2) = +5.
+    // The model's "+5" and any advantage claim are ignored.
+    expect(vm.skillCheckState?.breakdown.abilityModifier).toBe(3);
+    expect(vm.skillCheckState?.breakdown.totalModifier).toBe(5);
   });
 
   // ── End Dialogue ───────────────────────────────────────────────────────
@@ -669,7 +856,7 @@ describe('DialogueOverlayViewModel', () => {
   // ── Pending queue (C-436: type while streaming) ───────────────────────
 
   test('messages queued during streaming are delivered in FIFO order after the turn succeeds', async () => {
-    analyzeIntentStub = mock(async () => ({
+    analyzeIntentStub = mock(async (_options: AnalyzeIntentOptions) => ({
       requiresRoll: false,
       checkType: undefined,
       difficultyClass: undefined,
