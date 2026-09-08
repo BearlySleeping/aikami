@@ -3,7 +3,7 @@ id: C-489
 title: "One authority path for consequences"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-07T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — the game currently makes promises it silently fails to keep |
 | **Dependencies** | [C-487](C-487-free-text-skill-checks-honour-the-character-sheet.md) — this contract owns what happens to the roll's result; C-487 owns what feeds the roll. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -303,3 +303,45 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Replaced the write-only `_validateAndApplyDeltas` filter with a single consequence authority (`_applyConsequences`) that answers provenance, idempotency, and entitlement before mutating any real store. `trust_change` and `relationship_update` now actually persist through `relationshipService` (character trust/affinity routed through the pure `rules_kernel.resolveCommand` `applyRelationshipDelta` resolver per AC-6), faction deltas through `adjustFactionStanding`. `_resolveRoll` creates a stable `operationId`/`sourceEventId` before the model call and commits state before returning the narration; rejected deltas produce reconciliation text (AC-4). Combat custom actions now recompute advantage/bonus damage from state instead of forwarding the model's proposal verbatim (AC-5). Baseline test-infra breakage in `relationship_service.test.ts` (non-exported `buildFacts`/`computeTier`) and `combat_view_model.test.ts` (partial `$services` mock missing `getTracksByMood`) was fixed so the production seams are testable.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `trust_change`/`relationship_update` (trust, affinity, faction) mutate real relationship/faction stores; new `relationship_service.test.ts` cases prove serialize→deserialize survival. |
+| AC-2 | ✅ | Single authority checks provenance (sourceEventId), idempotency (operation+canonical delta ledger key), entitlement (pack item existence, known NPC). Negative + legit-repeat cases tested. |
+| AC-3 | ✅ | `_resolveRoll` creates operation/event identity before the model call and commits deltas via the authority before the narration is returned; unit test asserts store mutation precedes narration. |
+| AC-4 | ✅ | Rejected deltas return a `ConsequenceResult` with reason, are excluded from `applied`, and trigger reconciliation text appended to the narration. |
+| AC-5 | ✅ | `executeCustomAction` recomputes advantage (enemy-wounded condition) and bonus damage (player attack) from state; model's +10/advantage:true is ignored. |
+| AC-6 | ✅ | Accepted character relationship deltas invoke `resolveCommand({kind:'applyRelationshipDelta'})`; executable caller test proves kernel clamping drives `applyDelta` (out-of-range 200→100) and a rejected delta never touches the kernel/store. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| (none) | All changes are edits to existing files; no new production files required. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Added `ConsequenceRequest`/`ConsequenceResult`/rejection types + sort comparator; added `_applyConsequences` authority (provenance/idempotency/entitlement → apply → report), `_authorizeAndApply`, `_canonicalDeltaKey`, `_npcKnown`, `_resolveRelationshipViaKernel` (AC-6), `_reconcileNarrative`; rewired `_resolveRoll` to create operation/event identity before the model call and commit before returning. |
+| `apps/frontend/client/src/lib/services/game/relationship_service.svelte.ts` | Exported `buildFacts` and `computeTier` (fixes pre-existing broken test imports). |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts` | Added `_computeCombatAdvantage`/`_computeCombatBonusDamage` and used them for the dispatched `COMBAT_ACTION` (AC-5). |
+| `apps/frontend/client/src/lib/test_preload.ts` | Added `relationshipService`, `getTracksByMood`, `resolveAudioTrackUrl`, `playSceneBgm` to the `$services` base mock so the production seams are testable. |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | Added 12 C-489 tests (AC-1..AC-4, AC-6). |
+| `apps/frontend/client/src/lib/services/game/relationship_service.test.ts` | Added 2 serialize/deserialize survival tests (AC-1). |
+| `apps/frontend/client/src/lib/views/combat/combat_view_model.test.ts` | Spread `localServicesMockBase` (fixes load failure) and added 2 AC-5 tests. |
+
+### Deviations from Spec
+- **Entitlement source**: the pack data has no authored per-NPC grant-rights list, so inventory-grant entitlement is enforced as "the item must exist in the pack" (`getItem` returns a definition). This satisfies the security requirement (no arbitrary item injection) without inventing a grant-rights field that the current packs don't carry. No AC change.
+- **AC-5 mechanic derivation**: the contract leaves the exact advantage/bonus-from-state rules open (mirroring C-487). Implemented deterministic rules: advantage when the enemy is at/below 50% HP; bonus damage from `floor(playerAttack/2)`. These are state-derived and unit-tested; if the design intends different game rules, only the two helper bodies change, not the authority shape.
+- **AC-3 production E2E**: the `/game` LLM-driven dialogue journey requires browser tooling + a live text backend that are not available in this environment (no `herdr_session`/`browser screenshot` tools in the toolset). The `/game` route boots (HTTP 200) from the worktree dev server and the AC-3 ordering contract is verified at the production `_resolveRoll` seam by unit test.
+
+### Test Results
+- Unit: 153/153 PASS in the C-489 seam files (`npc_dialogue_service` 61, `relationship_service` 33, `combat_view_model` 24, `rules_kernel` 35) — 0 failures. 16 new C-489 tests added, all passing.
+- E2E: N/A (no runnable LLM dialogue E2E in this environment; AC-3 covered by unit test at the seam).
+- Visual: N/A (no browser screenshot tooling available).
+- Baseline: the 3 baseline files passed (0 pre-existing failures after fixing `buildFacts`/`computeTier`). The broader `src/lib` suite has 37 pre-existing failures / 9 load errors in unrelated areas (ImageViewModel `getConfiguredImageEngineId` mock gap, `audio_tracks.json` asset ENOENT, portrait asset checks, `GmPromptService`, `EndSessionViewModel`, inventory `require()` of a non-exported symbol, `__tests__/combat_view_model` partial `$services` mock) — all present independent of C-489 and none introduced by this change.
