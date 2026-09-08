@@ -32,12 +32,12 @@ const FAMILY_FALLBACK_KEYS = {
  * agents; sonnet/opus/astra have their own `{FAMILY}_THINKING_LEVEL` keys.
  * All fall back to the global eval/pipeline/pi thinking settings.
  */
-const FAMILY_THINKING_FALLBACK_KEYS: Readonly<Record<FamilyLabel, readonly string[]>> = {
+const FAMILY_THINKING_FALLBACK_KEYS = {
   flash: ['FLASH_THINKING_LEVEL'],
   sonnet: ['SONNET_THINKING_LEVEL'],
   opus: ['OPUS_THINKING_LEVEL'],
   astra: ['ASTRA_THINKING_LEVEL'],
-};
+} as const satisfies Readonly<Record<FamilyLabel, readonly string[]>>;
 
 const GLOBAL_THINKING_FALLBACK = [
   'EVAL_THINKING',

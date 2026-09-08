@@ -718,11 +718,11 @@ class SetupSubflowViewModel
     this.entryPath = path;
     this.errorMessage = '';
 
-    // Every path starts from the required capability only. Image and voice
-    // are opt-in from the plan screen.
+    // Every path keeps required capabilities enabled. Optional capabilities
+    // remain selected only when a usable stored connection backs them.
     this._capabilityToggles = this._capabilityToggles.map((t) => ({
       ...t,
-      enabled: t.required,
+      enabled: t.required || this._hasUsableConnection(t.id),
     }));
 
     if (path === 'recommended' && this.canScan) {
@@ -789,6 +789,9 @@ class SetupSubflowViewModel
 
   private async _runDiscovery(): Promise<void> {
     const enabledIds = this._capabilityToggles.filter((t) => t.enabled).map((t) => t.id);
+    const requestedIds = this.hasScanned
+      ? enabledIds
+      : this._capabilityToggles.map((toggle) => toggle.id);
 
     const operationId = ++this._discoveryOperationId;
     this.isDetecting = true;
@@ -796,14 +799,14 @@ class SetupSubflowViewModel
     this.step = 'detecting';
 
     try {
-      // Only the capabilities the user actually enabled are probed — an
-      // un-selected optional capability is never scanned.
-      const snapshot = await capabilityService.detect({ capabilities: enabledIds });
+      // The initial scan probes optional capabilities so they can become
+      // selectable when found. Later rescans remain scoped to enabled choices.
+      const snapshot = await capabilityService.detect({ capabilities: requestedIds });
       if (operationId !== this._discoveryOperationId) {
         return;
       }
       this.snapshot = snapshot;
-      this._discoveredProviders = this._buildDiscoveredProviders(snapshot, enabledIds);
+      this._discoveredProviders = this._buildDiscoveredProviders(snapshot, requestedIds);
       this._buildPlan(snapshot);
       this.step = 'plan';
       this.debug('startDiscovery:complete', { providers: this._discoveredProviders.length });

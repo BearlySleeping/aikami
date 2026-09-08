@@ -14,6 +14,7 @@
 //     --configs flash --repetitions 5 \
 //     --max-cost 5 --max-turns 200 --max-minutes 60
 
+import { isThinkingLevel } from '../contract_pipeline/models.ts';
 import { formatUsageReport } from '../contract_pipeline/usage_report.ts';
 import { RunBudget } from './budget.ts';
 import { preflightCatalogue, resolveFamilyThinking } from './catalogue.ts';
@@ -69,9 +70,13 @@ const paidOptions = (): {
   if (!taskIds || taskIds.length === 0) {
     throw new Error('Paid mode requires explicit --tasks selection.');
   }
+  const thinking = flag('--thinking');
+  if (thinking !== undefined && !isThinkingLevel(thinking)) {
+    throw new Error(`--thinking must be a supported thinking level; received "${thinking}".`);
+  }
   return {
     taskIds,
-    thinking: flag('--thinking') as ThinkingLevel | undefined,
+    thinking,
     repetitions: positiveNumber({
       name: '--repetitions',
       raw: flag('--repetitions') ?? '1',

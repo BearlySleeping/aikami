@@ -627,7 +627,7 @@ class DialogueOverlayViewModel
    * pending player bubble; entries are delivered in FIFO order, one per
    * completed turn, only while auto-drain is enabled.
    */
-  private _pendingQueue: string[] = [];
+  private _pendingQueue = $state<string[]>([]);
 
   /**
    * Whether auto-drain of `_pendingQueue` is allowed. Disabled when a turn

@@ -13,6 +13,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { SKILL_CHECK_STAKES } from '@aikami/constants';
 import type { GameCharacterSheet } from '@aikami/types';
 import { computeModifier, createDefaultSheet } from '@aikami/utils';
+import type { NpcDialogueServiceInterface } from '$services';
+
+type AnalyzeIntentOptions = Parameters<NpcDialogueServiceInterface['analyzeIntent']>[0];
 
 // ---------------------------------------------------------------------------
 // Seeded character sheet — the mocked playerStateService returns this so the
@@ -853,7 +856,7 @@ describe('DialogueOverlayViewModel', () => {
   // ── Pending queue (C-436: type while streaming) ───────────────────────
 
   test('messages queued during streaming are delivered in FIFO order after the turn succeeds', async () => {
-    analyzeIntentStub = mock(async () => ({
+    analyzeIntentStub = mock(async (_options: AnalyzeIntentOptions) => ({
       requiresRoll: false,
       checkType: undefined,
       difficultyClass: undefined,

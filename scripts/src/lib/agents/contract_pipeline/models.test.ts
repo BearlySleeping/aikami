@@ -299,7 +299,8 @@ describe('AC-3: Model override validation', () => {
     expect(resolved.effectiveModel).toBe('bad model with spaces');
     const errors = resolved.issues.filter((issue) => issue.severity === 'error');
     expect(errors.length).toBeGreaterThan(0);
-    expect(errors[0]?.field).toBe('WRITER_MODEL');
+    const writerModelError = errors.find((error) => error.field === 'WRITER_MODEL');
+    expect(writerModelError?.field).toBe('WRITER_MODEL');
   });
 
   test('an invalid role-specific thinking reports the role env key as the field', () => {
