@@ -3,7 +3,7 @@ id: C-489
 title: "One authority path for consequences"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -15,11 +15,11 @@ created_at: "2026-09-07T00:00:00Z"
 | Field | Value |
 |---|---|
 | **Source** | [`BACKLOG_C485_PLUS.md`](BACKLOG_C485_PLUS.md) § C-489, seeded from the 2026-09-06 external review; verified findings V-8 and V-9 |
-| **Target** | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:1881-1965` (`_validateAndApplyDeltas`), `packages/shared/utils/src/lib/rules/rules_kernel.ts:293` (`resolveCommand`), relationship/faction state services (C-341, `relationship_service.svelte.ts`) |
+| **Target** | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts:2002-2091` (`_validateAndApplyDeltas`), `packages/shared/utils/src/lib/rules/rules_kernel.ts:293` (`resolveCommand`), relationship/faction state services (C-341, `relationship_service.svelte.ts`) |
 | **Type** | full |
 | **Priority** | P0 — the game currently makes promises it silently fails to keep |
 | **Dependencies** | [C-487](C-487-free-text-skill-checks-honour-the-character-sheet.md) — this contract owns what happens to the roll's result; C-487 owns what feeds the roll. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -27,9 +27,9 @@ created_at: "2026-09-07T00:00:00Z"
 
 ## Problem & Baseline Evidence
 
-- **V-9 — silently dropped deltas**: `_validateAndApplyDeltas` (`npc_dialogue_service.svelte.ts:1881-1965`) pushes `trust_change` (`:1889-1895`) and `relationship_update` (`:1954-1959`) into the `valid` array after a bounds/label check and **never mutates anything**, while `flag_set`/`flag_clear` call `questStateService` and `inventory_grant`/`inventory_remove` call `inventoryService`. The method's name says it applies; for two of six kinds it does not. The player sees the NPC's narration accepting the consequence and nothing changes in the world.
+- **V-9 — silently dropped deltas**: `_validateAndApplyDeltas` (`npc_dialogue_service.svelte.ts:2002-2091`) pushes `trust_change` (`:2010-2017`) and `relationship_update` (`:2075-2081`) into the `valid` array after a bounds/label check and **never mutates anything**, while `flag_set`/`flag_clear` call `questStateService` and `inventory_grant`/`inventory_remove` call `inventoryService`. The method's name says it applies; for two of six kinds it does not. The player sees the NPC's narration accepting the consequence and nothing changes in the world.
 - **V-8 — the rules kernel is unreachable**: `resolveCommand` (`rules_kernel.ts:293`) has no caller outside its own file. Even `relationshipService.applyDelta` (`relationship_service.svelte.ts:240-285`) re-implements trust/affinity clamping inline rather than calling the kernel, so the kernel's `applyRelationshipDelta` resolver is also unreachable. "AI proposes, rules decide" currently has multiple authorities, and the pure one is not among them.
-- **Ordering**: the roll-resolution path narrates first and validates after — `_resolveRoll` streams the narrative, then calls `_validateAndApplyDeltas` on `output.stateDeltas` (`npc_dialogue_service.svelte.ts:1855-1863`). If the NPC says "Here, take the wand" and the mutation is rejected, the player experiences the game breaking its own promise.
+- **Ordering**: the roll-resolution path narrates first and validates after — `_resolveRoll` streams the narrative, then calls `_validateAndApplyDeltas` on `output.stateDeltas` (`npc_dialogue_service.svelte.ts:1980`). If the NPC says "Here, take the wand" and the mutation is rejected, the player experiences the game breaking its own promise.
 - **Bounds checking is not authority**: `_validateAndApplyDeltas` only checks numeric bounds and label non-emptiness. It does not answer: is this NPC entitled to give this item? has this reward already been granted? does this action deserve advantage? did the referenced event actually occur?
 - **Reproduction**: read `_validateAndApplyDeltas` and `resolveCommand`; then `grep -rn "resolveCommand" --include="*.ts"` outside `rules_kernel.ts` and its tests → no production callers.
 - **Existing implementation to reuse**: `NpcStateDeltaSchema` (`packages/shared/schemas/src/lib/game/npc_dialogue_command.ts:213-234`) defines the six delta kinds; `relationship_service.svelte.ts` (`getRelationship`, `applyDelta`, `adjustFactionStanding`) and `questStateService`/`inventoryService` are the real stores to mutate; `rules_kernel.ts` already has the pure `applyRelationshipDelta` resolver.
@@ -235,11 +235,11 @@ For all rows, `eventDescription` is the deterministic `Dialogue consequence <ope
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Unit | `npc_dialogue_service.test.ts` or the combat-action validation test | the production path that consumes model-proposed combat bonuses | Filled during verification |
+| AC-5 | Unit | `combat_view_model.svelte.ts` test (the C-146 custom-combat-action executor) | `combat_view_model.svelte.ts` — the production `executeCustomAction` path that currently forwards `intent.bonusDamage`/`intent.advantage` verbatim to the ECS bridge (lines 1138-1144) | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: the client unit-test task
-- Integration: a model proposal claiming `advantage: true` and `+10 bonus damage` resolves to the state-derived values, ignoring the `+10`.
+- Integration: drive the production `executeCustomAction` (or its validation seam) with a model proposal claiming `advantage: true` and `+10 bonus damage`; assert the dispatched `COMBAT_ACTION` uses the state-derived values, ignoring the `+10` and the unearned advantage.
 - E2E / Visual:
     - **Functional**: N/A.
     - **Visual**: N/A.
