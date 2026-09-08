@@ -81,17 +81,10 @@ Fragments OK. Every word must earn its place.
 
 ## Tool Selection (Mandatory)
 
-**Prefer compact output for noisy commands.** When the `rtk` CLI is on PATH,
-wrap noisy commands so their output stays small. rtk is **optional** — if it is
-not installed, use the raw tools directly:
-
-| Raw | With rtk (if available) |
-|---|---|
-| `grep` / `rg` | `rtk grep` / `rtk rg` |
-| `read` | `rtk read` |
-| `find` / `ls` / `tree` | `rtk find` / `rtk ls` / `rtk tree` |
-| `vitest` / `jest` / test runs | `rtk vitest` / `rtk jest` / `rtk test` |
-| `git diff` | `rtk diff` |
+**rtk is now automatic.** The `rtk` extension rewrites noisy bash commands
+(`grep`, `read`, `find`, `ls`, `tree`, test runs, `git diff`) transparently at
+runtime. Do not prefix commands with `rtk` manually — the extension handles it.
+If `rtk` is not installed, commands pass through unchanged.
 
 `bash` is fine for short commands (`git`, `mkdir`, `rm`, `mv`, `cd`,
 `bun install`) where compaction adds no value.

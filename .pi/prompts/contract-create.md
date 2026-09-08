@@ -42,7 +42,7 @@ Set `contract_type` in frontmatter to `thin` or `full` matching your choice.
 For every section of the template, find evidence in the repository. Sections marked "skip for thin" are only required for full contracts:
 
 1. **Problem & Baseline Evidence**:
-   - Search for related code: `grep` (or `rtk grep` if available) for keywords from the requirement.
+   - Search for related code: `grep` for keywords from the requirement.
    - Check if the issue is reproducible: read the identified files.
    - Identify existing partial implementations in the Existing System & Reuse Map.
    - List baseline tests that cover related areas.

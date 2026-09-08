@@ -62,7 +62,7 @@ Answer every question honestly. "I don't know" means the contract is underspecif
 
 ## Phase 3: Codebase Inspection
 
-1. **Search for pre-existing implementations**: `grep` (or `rtk grep` if available) for keywords in the contract's target area. Is someone already partially building this?
+1. **Search for pre-existing implementations**: `grep` for keywords in the contract's target area. Is someone already partially building this?
 2. **Check for stale/outdated patterns**: If the contract references a file pattern that no longer exists, flag it.
 3. **Check convention alignment**: Does the contract ask for `interface` declarations (prohibited)? Does it reference `@pixi/*` sub-packages (v8 doesn't use them)?
 4. **Check for forbidden placement**: Does it propose a TypeBox schema in a service file? A logger import in a BaseClass subclass?
