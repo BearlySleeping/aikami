@@ -159,6 +159,27 @@ describe('writeCommittedVersion', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test('only rewrites the top-level version, never a nested one that appears first', () => {
+    const root = fixture({ cargoVersion: '0.1.0', confVersion: '0.1.0' });
+    try {
+      const confPath = join(root, TAURI_CONF);
+      writeFileSync(
+        confPath,
+        `${JSON.stringify(
+          { plugins: { updater: { version: '9.9.9' } }, version: '0.1.0' },
+          null,
+          2,
+        )}\n`,
+      );
+      writeCommittedVersion(root, '0.2.0');
+      const rewritten = JSON.parse(readFileSync(confPath, 'utf8'));
+      expect(rewritten.version).toBe('0.2.0');
+      expect(rewritten.plugins.updater.version).toBe('9.9.9');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('resolveReleaseVersion', () => {

@@ -112,9 +112,26 @@ export const writeCommittedVersion = (rootDir: string, version: string): string[
   // Textual edit rather than JSON.parse → JSON.stringify: the config is
   // hand-maintained, and round-tripping it reflows every line and drops key
   // order, turning a one-line version bump into an unreviewable diff.
-  const nextConf = conf.replace(/("version"\s*:\s*)"[^"]*"/, `$1"${version}"`);
-  if (nextConf === conf && !conf.includes(`"version": "${version}"`)) {
-    throw new Error(`Could not find a "version" field to rewrite in ${TAURI_CONF}`);
+  //
+  // Only the TOP-LEVEL "version" field is rewritten (brace depth 1), so a
+  // nested "version" key elsewhere in the file can never be clobbered.
+  let depth = 0;
+  let confReplaced = false;
+  const nextConf = conf
+    .split('\n')
+    .map((line) => {
+      const opens = (line.match(/\{/g) ?? []).length;
+      const closes = (line.match(/\}/g) ?? []).length;
+      if (!confReplaced && depth === 1 && /^\s*"version"\s*:/.test(line)) {
+        confReplaced = true;
+        return line.replace(/"version"\s*:\s*"[^"]*"/, `"version": "${version}"`);
+      }
+      depth += opens - closes;
+      return line;
+    })
+    .join('\n');
+  if (!confReplaced && !conf.includes(`"version": "${version}"`)) {
+    throw new Error(`Could not find a top-level "version" field to rewrite in ${TAURI_CONF}`);
   }
   if (nextConf !== conf) {
     writeFileSync(confPath, nextConf);
