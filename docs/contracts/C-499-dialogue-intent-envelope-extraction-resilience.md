@@ -3,7 +3,7 @@ id: C-499
 title: "Dialogue Intent Envelope Extraction Resilience"
 source: "direct"
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-08T13:50:28Z"
 | **Type** | thin |
 | **Priority** | P0 — blocks combat initiation and fails whole dialogue turns on a recoverable parse condition |
 | **Dependencies** | none |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | `integrated` — production route `/game` |
 | **Docs Impact** | none |
 | **Contract version** | 2.0.0 |
@@ -49,7 +49,7 @@ created_at: "2026-09-08T13:50:28Z"
   1. Call-2 failure aborts the turn; the authoritative streamed narrative is discarded from the player's perspective.
   2. An empty 200 body (`chunkCount: 0`) is treated the same as a schema-validation failure — no retry for a transient empty completion.
   3. The repair path is dead code for the most common failure mode.
-- **Baseline tests**: `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts`, `packages/frontend/ai-gateway/src/**/*.test.ts`. Run before starting.
+- **Baseline tests**: `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts`, `packages/frontend/ai-gateway/tests/**/*.test.ts` (the ai-gateway suite lives in `tests/`, not `src/`). Run before starting.
 
 ## User Outcome
 
@@ -73,7 +73,7 @@ After this contract, a player can initiate dialogue and combat even when the loc
 ### AC-1: Envelope failure does not fail the turn
 **Given** a dialogue turn where call 1 (narrative) streamed successfully and call 2 (`intent-envelope`) throws `No JSON object found in response`
 **When** retries are exhausted
-**Then** the turn completes using `recoverIntentAnalysisOutput` on the streamed narrative (`requiresRoll: false`, recovered `suggestedChips`), and the player still sees the narrative plus chips — including the combat chip that can start combat.
+**Then** the turn completes using `recoverIntentAnalysisOutput` on the streamed narrative (`requiresRoll: false`), and the player still sees the streamed narrative. `suggestedChips` are whatever `recoverIntentAnalysisOutput` can salvage from the narrative — a pure-prose narrative recovers **zero** chips (see Edge Cases), so the combat-chip affordance is **not guaranteed by the repair path**; the empty-body path that recovers a real envelope (with combat chips) is covered by AC-2's retry.
 **Verification**: production route `/game` — talk to an NPC with a combat chip and confirm the turn resolves; unit test in `npc_dialogue_service.test.ts` for the throw path.
 
 ### AC-2: Empty completion is retried once
@@ -86,11 +86,12 @@ After this contract, a player can initiate dialogue and combat even when the loc
 **Given** call 2 ultimately fails after retry and repair
 **When** the turn ends
 **Then** the UI never leaves the player on an endless "..." state — either the recovered chips render, or an explicit error state with a retry affordance is shown, and `analyzeIntent:failed` carries the real detail.
-**Verification**: production route `/game` degraded-path check.
+**Verification**: production route `/game` degraded-path check, plus a unit test in `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` asserting that a turn failing after retry+repair surfaces an explicit error state rather than an endless placeholder.
 
 ## Edge Cases & Gotchas
 
-- **Empty body is not the same as bad JSON**: an empty 200 from `openrouter/free` is transient; retry it. Non-empty prose with no JSON object should go to the repair path, not retry forever.
+- **Empty body is not the same as bad JSON**: an empty 200 from `openrouter/free` is transient; retry it (AC-2). Non-empty prose with no JSON object should go to the repair path, not retry forever.
+- **Repair does not restore chips from prose**: `recoverIntentAnalysisOutput` only yields `suggestedChips` when the streamed narrative is parseable JSON containing chips; a pure-prose narrative returns an empty chip list. Since rewriting recovery is out of scope, the player may see the narrative but **no combat chip** after repair. The combat-chip affordance is restored by AC-2 (empty-body retry recovering a real envelope), not by AC-1.
 - **Do not double-append narrative**: the repair path already reuses the streamed text — make sure the player does not see the narrative twice.
 - **Abort semantics**: keep `_checkAbort` / cancellation handling intact; a user-cancelled turn must still abort, not be swallowed by repair.
 
