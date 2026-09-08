@@ -568,8 +568,12 @@ async function probeRecommended(): Promise<{ direnv: boolean; nix: boolean }> {
 // ─── pi model configuration (interactive only) ───────────────────────────
 
 const MODEL_TIER_PROMPTS = [
-  { key: 'CONTRACT_PIPELINE_MODEL_PRO', label: 'Pro model', note: 'writer / implementer / review' },
-  { key: 'CONTRACT_PIPELINE_MODEL_FLASH', label: 'Flash model', note: 'critic / verifier' },
+  { key: 'CONTRACT_PIPELINE_MODEL_PRO', label: 'Pro model', note: 'writer / review' },
+  {
+    key: 'CONTRACT_PIPELINE_MODEL_FLASH',
+    label: 'Flash model',
+    note: 'critic / implementer / verifier',
+  },
   { key: 'CONTRACT_PIPELINE_MODEL_FREE', label: 'Free model', note: 'fallback tier' },
 ] as const;
 
