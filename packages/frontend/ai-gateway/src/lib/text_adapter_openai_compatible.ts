@@ -38,6 +38,13 @@ export const OPENROUTER_ATTRIBUTION_HEADERS = {
 export const DEFAULT_LOCAL_TEXT_ENDPOINTS: Record<string, string> = {} as const;
 
 /**
+ * Backoff delay (ms) between the initial structured attempt and its single
+ * empty-body retry (C-499 AC-2). Kept short — this is a transient empty
+ * completion from local/BYOK providers, not a retry storm.
+ */
+export const EMPTY_RETRY_BACKOFF_MS = 200;
+
+/**
  * Ollama VRAM-eviction payload params (C-056 lesson): release the model
  * immediately after generation so image generation can claim VRAM.
  * Formerly mirrored in @aikami/backend/ai (deleted C-324); this is now
@@ -237,6 +244,41 @@ export const createOpenAiCompatibleTextAdapter = (
     }
   };
 
+  /**
+   * Waits `ms` with backoff, but aborts early (rejecting as cancelled) when
+   * the caller's signal fires — a user-cancelled turn must not be swallowed
+   * by the empty-body retry (C-499 AC-2, abort semantics gotcha).
+   */
+  const waitWithBackoff = (options2: {
+    ms: number;
+    signal: AbortSignal;
+    mode: AiModeResolution['mode'];
+    provider: string;
+  }): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        reject(
+          createAiGatewayError({
+            code: 'cancelled',
+            capability: 'text',
+            mode: options2.mode,
+            provider: options2.provider,
+            message: 'Aborted',
+          }),
+        );
+      };
+      const timer = setTimeout(() => {
+        options2.signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, options2.ms);
+      if (options2.signal.aborted) {
+        onAbort();
+        return;
+      }
+      options2.signal.addEventListener('abort', onAbort, { once: true });
+    });
+
   /** Streams a plain chat completion, accumulating text. */
   const generatePlain = async (options2: {
     resolution: AiModeResolution;
@@ -371,79 +413,101 @@ export const createOpenAiCompatibleTextAdapter = (
       onChunk?.(text);
     };
 
-    const outcome = await withRequestScope({
-      signal,
-      run: async (
-        requestSignal,
-      ): Promise<{ fallback: 'http-400' | 'non-json-200' } | { fallback?: undefined }> => {
-        const response = await streamCompletion({ resolution, body, requestSignal });
+    type StructuredOutcome = { fallback: 'http-400' | 'non-json-200' } | { fallback?: undefined };
 
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          onEvent?.('fetch-failed', { status: response.status });
+    // One structured-request attempt. `accumulated` is reset per attempt so a
+    // retry (C-499 AC-2) starts from an empty buffer.
+    const runStructuredAttempt = async (): Promise<StructuredOutcome> => {
+      accumulated = '';
+      return withRequestScope({
+        signal,
+        run: async (requestSignal): Promise<StructuredOutcome> => {
+          const response = await streamCompletion({ resolution, body, requestSignal });
 
-          // Provider rejected structured output — fall back to the
-          // system-prompt approach via a plain streaming completion.
-          if (response.status === 400) {
-            return { fallback: 'http-400' };
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            onEvent?.('fetch-failed', { status: response.status });
+
+            // Provider rejected structured output — fall back to the
+            // system-prompt approach via a plain streaming completion.
+            if (response.status === 400) {
+              return { fallback: 'http-400' };
+            }
+
+            throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
           }
 
-          throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
-        }
+          // When stream: false (structured output), the response is plain JSON,
+          // not SSE. Parse it directly — don't try to read it as an SSE stream.
+          if (!body.stream) {
+            let text = '';
+            try {
+              const data = (await response.json()) as {
+                choices?: Array<{ message?: { content?: string } }>;
+                message?: { content?: string };
+              };
+              text = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+            } catch (err) {
+              // Rethrow abort/timeout errors so cancellation propagates correctly
+              if (
+                err instanceof Error &&
+                (err.name === 'AbortError' || err.message.includes('aborted'))
+              ) {
+                throw err;
+              }
+              // Provider returned 200 but the body wasn't JSON — it likely
+              // ignored stream:false. Fall back to the system-prompt approach.
+              return { fallback: 'non-json-200' };
+            }
+            deliver(text);
+            onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
+            return {};
+          }
 
-        // When stream: false (structured output), the response is plain JSON,
-        // not SSE. Parse it directly — don't try to read it as an SSE stream.
-        if (!body.stream) {
-          let text = '';
-          try {
+          // Ollama native /api/chat with stream: false also returns plain JSON.
+          if (resolution.provider === 'ollama') {
             const data = (await response.json()) as {
-              choices?: Array<{ message?: { content?: string } }>;
               message?: { content?: string };
             };
-            text = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
-          } catch (err) {
-            // Rethrow abort/timeout errors so cancellation propagates correctly
-            if (
-              err instanceof Error &&
-              (err.name === 'AbortError' || err.message.includes('aborted'))
-            ) {
-              throw err;
-            }
-            // Provider returned 200 but the body wasn't JSON — it likely
-            // ignored stream:false. Fall back to the system-prompt approach.
-            return { fallback: 'non-json-200' };
+            const text = data.message?.content ?? '';
+            deliver(text);
+            onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
+            return {};
           }
-          deliver(text);
-          onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
+
+          if (!response.body) {
+            throw new Error(`No response body from provider "${resolution.provider}"`);
+          }
+
+          await readChatSseStream({
+            body: response.body,
+            signal: requestSignal,
+            onChunk: deliver,
+            firstChunkTimeoutMs,
+            idleTimeoutMs,
+            onEvent,
+          });
           return {};
-        }
+        },
+      });
+    };
 
-        // Ollama native /api/chat with stream: false also returns plain JSON.
-        if (resolution.provider === 'ollama') {
-          const data = (await response.json()) as {
-            message?: { content?: string };
-          };
-          const text = data.message?.content ?? '';
-          deliver(text);
-          onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
-          return {};
-        }
-
-        if (!response.body) {
-          throw new Error(`No response body from provider "${resolution.provider}"`);
-        }
-
-        await readChatSseStream({
-          body: response.body,
-          signal: requestSignal,
-          onChunk: deliver,
-          firstChunkTimeoutMs,
-          idleTimeoutMs,
-          onEvent,
-        });
-        return {};
-      },
-    });
+    // C-499 AC-2: an empty 200 body (chunkCount 0) is transient for some
+    // local/BYOK providers (e.g. openrouter/free). Retry the structured
+    // request once with backoff before falling through to the plain-text
+    // fallback. Non-empty non-JSON responses (`fallback: 'non-json-200'`) and
+    // provider 400s skip the retry — they go straight to the fallback/repair.
+    let outcome = await runStructuredAttempt();
+    if (outcome.fallback === undefined && accumulated.trim().length === 0) {
+      onEvent?.('empty-retry', { attempt: 1 });
+      await waitWithBackoff({
+        ms: EMPTY_RETRY_BACKOFF_MS,
+        signal,
+        mode: resolution.mode,
+        provider: resolution.provider,
+      });
+      outcome = await runStructuredAttempt();
+    }
 
     if (outcome.fallback === 'http-400' || outcome.fallback === 'non-json-200') {
       onEvent?.('structured-fallback', { reason: outcome.fallback });

@@ -554,4 +554,48 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
     expect(callCount).toBe(2);
     expect(result.structured).toEqual({ name: 'Sam' });
   });
+
+  test('retries once with backoff when the structured provider returns an empty 200 body (C-499 AC-2)', async () => {
+    let callCount = 0;
+    const payload = JSON.stringify({ name: 'EmptyRetry', level: 3 });
+    const fetchFn = ((_input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+      callCount++;
+      if (callCount === 1) {
+        // Empty 200 body — content is an empty string (chunkCount 0).
+        return Promise.resolve(
+          new Response(JSON.stringify({ message: { content: '' } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      // Second call succeeds with a real envelope.
+      return Promise.resolve(
+        new Response(JSON.stringify({ message: { content: payload } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    }) as typeof fetch;
+
+    const events: string[] = [];
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      supportsStructuredOutput: () => true,
+      onEvent: (event) => events.push(event),
+    });
+
+    const result = await adapter.generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract a character' }],
+      schema: characterSchema,
+      schemaName: 'EmptyRetry',
+    });
+
+    // The empty body was retried once and the retry recovered the envelope.
+    expect(callCount).toBe(2);
+    expect(result.structured).toEqual({ name: 'EmptyRetry', level: 3 });
+    expect(events).toContain('empty-retry');
+  });
 });

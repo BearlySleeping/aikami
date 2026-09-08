@@ -355,6 +355,27 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.npcExpression).toBe('happy');
   });
 
+  test('surfaces an explicit error state rather than an endless placeholder when intent analysis fails after retry+repair (C-499 AC-3)', async () => {
+    analyzeIntentStub = mock(async () => {
+      throw new Error('No JSON object found in response');
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    vm.inputText = 'I attack the goblin';
+    vm.sendMessage();
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    // An explicit error state is surfaced (never an endless "..." placeholder).
+    expect(vm.streamError).toBe('No JSON object found in response');
+    // The empty placeholder NPC message was removed — no stuck typing state.
+    const emptyNpcMessages = vm.messages.filter((m) => m.role === 'npc' && m.content === '');
+    expect(emptyNpcMessages.length).toBe(0);
+    // The player's message remains so they can retry.
+    expect(vm.messages.some((m) => m.role === 'player')).toBe(true);
+  });
+
   // ── Quest-activation tool call (C-quest-activation) ──────────────────
 
   test('quest activation: accepting an offered quest calls acceptQuest', async () => {
