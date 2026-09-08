@@ -24,7 +24,7 @@ created_at: "2026-09-08T13:50:28Z"
 | **Type** | thin |
 | **Priority** | P0 — blocks combat initiation and fails whole dialogue turns on a recoverable parse condition |
 | **Dependencies** | none |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | `integrated` — production route `/game` |
 | **Docs Impact** | none |
 | **Contract version** | 2.0.0 |
