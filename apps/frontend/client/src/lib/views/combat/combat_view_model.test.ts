@@ -18,8 +18,10 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 // barrel, so the barrel mock must expose the REAL singleton (the same
 // instance the tests import and patch).
 import { textGenerationService as realTextGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
+import { localServicesMockBase } from '../../test_preload.ts';
 
 mock.module('$services', () => ({
+  ...localServicesMockBase(),
   diceService: {
     rollWithModifier: () => ({ roll: 17, modifier: 4, total: 21, success: true }),
     async rollDice() {
@@ -593,5 +595,109 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
       expect(viewModel.encounterImages.length).toBe(0);
       expect(viewModel.combatLog.length).toBe(0);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-489 AC-5: model-proposed advantage and bonus damage are recomputed from state
+// ---------------------------------------------------------------------------
+
+describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from state)', () => {
+  let viewModel: CombatViewModelInterface;
+  let bridgeSendCalls: Array<Record<string, unknown>>;
+
+  beforeEach(() => {
+    viewModel = createViewModel();
+    bridgeSendCalls = [];
+    const vm = viewModel as unknown as {
+      _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
+    };
+    vm._bridge = {
+      send: (cmd: Record<string, unknown>) => {
+        bridgeSendCalls.push(cmd);
+      },
+      on: () => () => {},
+    };
+    // Fresh combat — enemy at full HP, default player attack (5).
+    viewModel.currentTurnEntity = 1;
+    viewModel.enemyEntityId = 2;
+    viewModel.enemyName = 'Goblin';
+    viewModel.enemyHp = 80;
+    viewModel.enemyMaxHp = 80;
+    viewModel.activeEntities = [1, 2];
+    viewModel.playerLevel = 1;
+    viewModel.playerAttack = 5;
+  });
+
+  test('ignores a model-proposed +10 bonus and fabricated advantage', async () => {
+    const extractStructureMod = await import(
+      '$lib/services/ai/text_generation_service.svelte.ts'
+    );
+    const origExtract = (
+      extractStructureMod.textGenerationService as {
+        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
+      }
+    ).extractStructure;
+    (
+      extractStructureMod.textGenerationService as {
+        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
+      }
+    ).extractStructure = async () => ({
+      actionType: 'ATTACK',
+      narrative: 'You unleash a devastating blow!',
+      bonusDamage: 10, // model claims +10
+      advantage: true, // model claims advantage
+      generateImage: false,
+      actionValid: true,
+    });
+
+    await viewModel.executeCustomAction('I unleash a devastating blow');
+
+    const action = bridgeSendCalls.find((c) => c.type === 'COMBAT_ACTION');
+    expect(action).toBeDefined();
+    // Enemy at full HP → no advantage from state; player attack 5 → +2 bonus.
+    expect(action!.advantage).toBe(false);
+    expect(action!.bonusDamage).toBe(2);
+
+    (
+      extractStructureMod.textGenerationService as {
+        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
+      }
+    ).extractStructure = origExtract;
+  });
+
+  test('grants advantage from state when the enemy is wounded', async () => {
+    viewModel.enemyHp = 20; // <= 50% of max → advantage justified by state
+    const extractStructureMod = await import(
+      '$lib/services/ai/text_generation_service.svelte.ts'
+    );
+    const origExtract = (
+      extractStructureMod.textGenerationService as {
+        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
+      }
+    ).extractStructure;
+    (
+      extractStructureMod.textGenerationService as {
+        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
+      }
+    ).extractStructure = async () => ({
+      actionType: 'ATTACK',
+      narrative: 'You press the advantage!',
+      bonusDamage: 0,
+      advantage: false,
+      generateImage: false,
+      actionValid: true,
+    });
+
+    await viewModel.executeCustomAction('I press the advantage');
+
+    const action = bridgeSendCalls.find((c) => c.type === 'COMBAT_ACTION');
+    expect(action!.advantage).toBe(true);
+
+    (
+      extractStructureMod.textGenerationService as {
+        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
+      }
+    ).extractStructure = origExtract;
   });
 });

@@ -10,7 +10,13 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { encode } from 'gpt-tokenizer';
-import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
+import { relationshipService } from '$services';
+import {
+  NpcDialogueService,
+  npcDialogueService,
+  type ConsequenceRequest,
+  type ConsequenceResult,
+} from './npc_dialogue_service.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1683,5 +1689,349 @@ describe('C-488 AC-6: prompt budget (cl100k_base)', () => {
       );
       expect(rollBefore, `${npcId} resolveRoll before count`).toBeLessThanOrEqual(TOKEN_BUDGET);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-489: One authority path for consequences
+// ---------------------------------------------------------------------------
+
+/**
+ * Installs fresh mocks on the shared relationshipService double so each test
+ * starts with an empty, writable call history (the `.mock.calls` array itself
+ * is readonly and cannot be reassigned).
+ */
+const resetRelationshipService = () => {
+  relationshipService.applyDelta = mock(() => ({ trustAfter: 0, affinityAfter: 0 }));
+  relationshipService.adjustFactionStanding = mock(() => ({
+    factionId: '',
+    standing: 0,
+    tier: 'neutral',
+    lastChangedAt: '',
+  }));
+};
+
+/** Runs the production consequence authority with the matching active event. */
+const runConsequence = (req: ConsequenceRequest): ConsequenceResult => {
+  (
+    npcDialogueService as unknown as {
+      _activeConsequenceEvent: { operationId: string; sourceEventId: string } | null;
+    }
+  )._activeConsequenceEvent = { operationId: req.operationId, sourceEventId: req.sourceEventId };
+  return (
+    npcDialogueService as unknown as {
+      _applyConsequences(r: ConsequenceRequest): ConsequenceResult;
+    }
+  )._applyConsequences(req);
+};
+
+const appliedDeltas = (result: ConsequenceResult): string[] =>
+  result.applied.map((d) => d.kind);
+
+describe('C-489 AC-1: accepted deltas are actually applied', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+  });
+
+  test('trust_change routes through the kernel and mutates relationship state', () => {
+    const result = runConsequence({
+      operationId: 'op-1',
+      sourceEventId: 'ev-1',
+      npcId: 'village_elder',
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 3 }],
+    });
+
+    expect(appliedDeltas(result)).toEqual(['trust_change']);
+    expect(result.rejected).toHaveLength(0);
+    // The store (not a "valid" array) must have been mutated.
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toMatchObject({
+      characterId: 'npc-001',
+      trustDelta: 3,
+      affinityDelta: 0,
+      eventDescription: 'Dialogue consequence op-1 from ev-1',
+    });
+  });
+
+  test('relationship_update with label affinity maps to affinityDelta', () => {
+    const result = runConsequence({
+      operationId: 'op-2',
+      sourceEventId: 'ev-2',
+      npcId: 'village_elder',
+      deltas: [{ kind: 'relationship_update', target: 'npc-001', value: 5, label: 'affinity' }],
+    });
+
+    expect(appliedDeltas(result)).toEqual(['relationship_update']);
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toMatchObject({ characterId: 'npc-001', trustDelta: 0, affinityDelta: 5 });
+  });
+
+  test('relationship_update with label faction routes to adjustFactionStanding', () => {
+    const result = runConsequence({
+      operationId: 'op-3',
+      sourceEventId: 'ev-3',
+      npcId: 'village_elder',
+      deltas: [{ kind: 'relationship_update', target: 'ember_order', value: -2, label: 'faction' }],
+    });
+
+    expect(appliedDeltas(result)).toEqual(['relationship_update']);
+    const calls = (
+      relationshipService.adjustFactionStanding as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toMatchObject({
+      factionId: 'ember_order',
+      delta: -2,
+      reason: 'Dialogue consequence op-3 from ev-3',
+    });
+  });
+});
+
+describe('C-489 AC-2: one authority checks entitlement, idempotency and provenance', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(), // no getItem — no pack item is grantable
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+  });
+
+  test('an NPC is not entitled to grant an item the pack does not define', () => {
+    const result = runConsequence({
+      operationId: 'op-1',
+      sourceEventId: 'ev-1',
+      npcId: 'village_elder',
+      deltas: [{ kind: 'inventory_grant', target: 'legendary_sword', value: 1 }],
+    });
+
+    expect(appliedDeltas(result)).toEqual([]);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].reason).toBe('not-entitled');
+  });
+
+  test('retrying the same operationId and canonical delta key is already-granted', () => {
+    const delta = { kind: 'trust_change', target: 'npc-001', value: 2 };
+    const first = runConsequence({
+      operationId: 'op-retry',
+      sourceEventId: 'ev-retry',
+      npcId: 'village_elder',
+      deltas: [delta],
+    });
+    expect(appliedDeltas(first)).toEqual(['trust_change']);
+
+    const second = runConsequence({
+      operationId: 'op-retry',
+      sourceEventId: 'ev-retry',
+      npcId: 'village_elder',
+      deltas: [delta],
+    });
+    expect(appliedDeltas(second)).toEqual([]);
+    expect(second.rejected).toHaveLength(1);
+    expect(second.rejected[0].reason).toBe('already-granted');
+  });
+
+  test('an unknown sourceEventId is rejected as no-provenance', () => {
+    (
+      npcDialogueService as unknown as {
+        _activeConsequenceEvent: { operationId: string; sourceEventId: string } | null;
+      }
+    )._activeConsequenceEvent = { operationId: 'op-x', sourceEventId: 'the-loaded-event' };
+
+    const result = (
+      npcDialogueService as unknown as {
+        _applyConsequences(r: ConsequenceRequest): ConsequenceResult;
+      }
+    )._applyConsequences({
+      operationId: 'op-x',
+      sourceEventId: 'a-different-event',
+      npcId: 'village_elder',
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 2 }],
+    });
+
+    expect(appliedDeltas(result)).toEqual([]);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].reason).toBe('no-provenance');
+  });
+
+  test('a legitimate repeat under a new authoritative operation/event pair is a second grant', () => {
+    const delta = { kind: 'trust_change', target: 'npc-001', value: 2 };
+    runConsequence({
+      operationId: 'op-a',
+      sourceEventId: 'ev-a',
+      npcId: 'village_elder',
+      deltas: [delta],
+    });
+    const second = runConsequence({
+      operationId: 'op-b',
+      sourceEventId: 'ev-b',
+      npcId: 'village_elder',
+      deltas: [delta],
+    });
+
+    expect(appliedDeltas(second)).toEqual(['trust_change']);
+    expect(second.rejected).toHaveLength(0);
+  });
+});
+
+describe('C-489 AC-3: state commits before narration is shown', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+  });
+
+  test('resolveRoll mutates the store before the resolved narration is returned', async () => {
+    const chunks: string[] = [];
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (opts.schema) {
+        return {
+          text: 'You have earned my trust.',
+          structured: {
+            narrativeResult: 'You have earned my trust.',
+            stateDeltas: [{ kind: 'trust_change', target: 'npc-001', value: 2 }],
+            suggestedChips: [],
+          },
+        };
+      }
+      (opts.onChunk as ((t: string) => void) | undefined)?.('You have earned my trust.');
+      return { text: 'You have earned my trust.' };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const output = await npcDialogueService.resolveRoll({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+      signal: new AbortController().signal,
+      checkType: 'persuasion',
+      difficultyClass: 12,
+      rollTotal: 18,
+      outcome: 'pass',
+      playerInput: 'I appeal to your honor.',
+      onChunk: (text) => chunks.push(text),
+    });
+
+    // By the time the narration is returned (and would be appended to the
+    // transcript by the caller), the store mutation has already happened.
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    expect(output.stateDeltas).toHaveLength(1);
+  });
+});
+
+describe('C-489 AC-4: rejection is coherent and logged', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+  });
+
+  test('a rejected delta is reported with its reason and excluded from applied', () => {
+    const result = runConsequence({
+      operationId: 'op-1',
+      sourceEventId: 'ev-1',
+      npcId: 'village_elder',
+      // No getItem on the stub content provider → not-entitled.
+      deltas: [{ kind: 'inventory_grant', target: 'nonexistent_item', value: 1 }],
+    });
+
+    expect(appliedDeltas(result)).toEqual([]);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].delta.target).toBe('nonexistent_item');
+    expect(result.rejected[0].reason).toBe('not-entitled');
+  });
+
+  test('resolveRoll surfaces reconciliation text instead of a narrated success', async () => {
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (opts.schema) {
+        return {
+          text: 'Here, take the wand.',
+          structured: {
+            narrativeResult: 'Here, take the wand.',
+            // Item not in the stub pack → rejected.
+            stateDeltas: [{ kind: 'inventory_grant', target: 'ward_wand', value: 1 }],
+            suggestedChips: [],
+          },
+        };
+      }
+      (opts.onChunk as ((t: string) => void) | undefined)?.('Here, take the wand.');
+      return { text: 'Here, take the wand.' };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const output = await npcDialogueService.resolveRoll({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+      signal: new AbortController().signal,
+      checkType: 'persuasion',
+      difficultyClass: 12,
+      rollTotal: 18,
+      outcome: 'pass',
+      playerInput: 'I ask for the wand.',
+    });
+
+    expect(output.stateDeltas).toHaveLength(0);
+    // Reconciliation text acknowledges the world did not change.
+    expect(output.narrativeResult).toContain('did not take effect');
+    expect(output.narrativeResult).toContain('not-entitled');
+  });
+});
+
+describe('C-489 AC-6: the production relationship authority invokes the rules kernel', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+  });
+
+  test('an out-of-range trust delta is clamped by resolveCommand before persistence', () => {
+    // value 200 is finite, so it passes validity; only the kernel's
+    // applyRelationshipDelta resolver clamps to [-100, 100]. If the authority
+    // forwarded the model's value verbatim, applyDelta would receive 200.
+    runConsequence({
+      operationId: 'op-kernel',
+      sourceEventId: 'ev-kernel',
+      npcId: 'village_elder',
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 200 }],
+    });
+
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls).toHaveLength(1);
+    // Kernel computed trustAfter = 100 (clamped from 200); persistence gets the
+    // resolved mechanical delta (100 - current 0).
+    expect(calls[0][0]).toMatchObject({ characterId: 'npc-001', trustDelta: 100 });
+  });
+
+  test('a rejected delta does not invoke the kernel or the store', () => {
+    runConsequence({
+      operationId: 'op-reject',
+      sourceEventId: 'ev-reject',
+      npcId: 'unknown_npc',
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 2 }],
+    });
+
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls).toHaveLength(0);
   });
 });
