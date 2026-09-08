@@ -44,6 +44,7 @@ import type {
 } from '@aikami/types';
 import { Value } from 'typebox/value';
 import { inventoryService, questStateService } from '$services';
+import { buildNpcPersona } from './npc_dialogue_persona';
 
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
 // ---------------------------------------------------------------------------
@@ -2044,54 +2045,6 @@ export class NpcDialogueService
 export const npcDialogueService: NpcDialogueServiceInterface = NpcDialogueService.create({
   className: 'NpcDialogueService',
 });
-
-// ---------------------------------------------------------------------------
-// Exported persona assembly (C-488) — shared with sandbox + tests
-// ---------------------------------------------------------------------------
-
-/**
- * Builds the production NPC persona block from authored identity with
- * deterministic per-field fallback (C-488 AC-3).
- *
- * A missing `personality` yields the single canonical generic sentence
- * `You are <NPC name>, a character in a fantasy world.` in place of the
- * voice/manner block; each missing array field omits only its labelled block
- * and infers no replacement content. A partially authored NPC never falls
- * back wholesale.
- */
-export const buildNpcPersona = (options: {
-  npcName: string;
-  identity?: {
-    personality?: ContentPackNpcPersonality;
-    agenda?: string[];
-    knowledge?: string[];
-    secrets?: string[];
-    boundaries?: string[];
-  };
-}): string => {
-  const { npcName, identity } = options;
-  const lines = [`You are ${npcName}, a character in a fantasy world.`];
-
-  if (identity?.personality) {
-    lines.push(`Voice: ${identity.personality.voice}`);
-    lines.push(`Manner: ${identity.personality.manner}`);
-  }
-
-  if (identity?.agenda && identity.agenda.length > 0) {
-    lines.push('', '[AGENDA]', ...identity.agenda.map((entry) => `- ${entry}`));
-  }
-  if (identity?.knowledge && identity.knowledge.length > 0) {
-    lines.push('', '[KNOWLEDGE]', ...identity.knowledge.map((entry) => `- ${entry}`));
-  }
-  if (identity?.secrets && identity.secrets.length > 0) {
-    lines.push('', '[SECRETS]', ...identity.secrets.map((entry) => `- ${entry}`));
-  }
-  if (identity?.boundaries && identity.boundaries.length > 0) {
-    lines.push('', '[BOUNDARIES]', ...identity.boundaries.map((entry) => `- ${entry}`));
-  }
-
-  return lines.join('\n');
-};
 
 // ---------------------------------------------------------------------------
 // Exported helpers for intent analysis (C-371) — shared with sandbox
