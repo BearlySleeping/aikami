@@ -33,6 +33,22 @@ const ENV_KEYS = [
   'MODEL_FLASH',
   'MODEL_FREE',
   'MODEL',
+  // Role-specific model overrides ({ROLE}_MODEL)
+  'WRITER_MODEL',
+  'CRITIC_MODEL',
+  'IMPLEMENTER_MODEL',
+  'VERIFIER_MODEL',
+  'REVIEW_MODEL',
+  // Role-specific thinking overrides ({ROLE}_THINKING_LEVEL)
+  'WRITER_THINKING_LEVEL',
+  'CRITIC_THINKING_LEVEL',
+  'IMPLEMENTER_THINKING_LEVEL',
+  'VERIFIER_THINKING_LEVEL',
+  'REVIEW_THINKING_LEVEL',
+  // Tier-specific thinking overrides ({TIER}_THINKING_LEVEL)
+  'PRO_THINKING_LEVEL',
+  'FLASH_THINKING_LEVEL',
+  'FREE_THINKING_LEVEL',
 ] as const;
 
 beforeEach(() => {
@@ -85,6 +101,82 @@ describe('model resolution is env-driven', () => {
 
     process.env.CONTRACT_PIPELINE_THINKING = 'high';
     expect(getContractThinkingForRole('writer')).toBe('high');
+  });
+
+  test('thinking resolves from the tier level (FLASH_THINKING_LEVEL) before global keys', () => {
+    process.env.PI_THINKING = 'low';
+    process.env.CONTRACT_PIPELINE_THINKING = 'medium';
+    process.env.FLASH_THINKING_LEVEL = 'xhigh';
+    // critic/implementer/verifier map to the flash tier.
+    expect(getContractThinkingForRole('critic')).toBe('xhigh');
+    expect(getContractThinkingForRole('implementer')).toBe('xhigh');
+    // writer/review map to pro — flash tier level does not apply.
+    expect(getContractThinkingForRole('writer')).toBe('medium');
+  });
+
+  test('thinking resolves from the role level (WRITER_THINKING_LEVEL) before the tier level', () => {
+    process.env.FLASH_THINKING_LEVEL = 'xhigh';
+    process.env.WRITER_THINKING_LEVEL = 'minimal';
+    expect(getContractThinkingForRole('writer')).toBe('minimal');
+    expect(getContractThinkingForRole('critic')).toBe('xhigh');
+  });
+
+  test('PRO_THINKING_LEVEL applies to pro-tier roles', () => {
+    process.env.PRO_THINKING_LEVEL = 'high';
+    process.env.CONTRACT_PIPELINE_THINKING = 'minimal';
+    expect(getContractThinkingForRole('writer')).toBe('high');
+    expect(getContractThinkingForRole('review')).toBe('high');
+    expect(getContractThinkingForRole('critic')).toBe('minimal');
+  });
+
+  test('role-specific thinking overrides each role independently', () => {
+    process.env.CRITIC_THINKING_LEVEL = 'low';
+    process.env.REVIEW_THINKING_LEVEL = 'xhigh';
+    expect(getContractThinkingForRole('critic')).toBe('low');
+    expect(getContractThinkingForRole('review')).toBe('xhigh');
+    expect(getContractThinkingForRole('writer')).toBeUndefined();
+  });
+
+  test('a role-specific thinking override shadows the global keys for that role only', () => {
+    process.env.WRITER_THINKING_LEVEL = 'off';
+    process.env.CONTRACT_PIPELINE_THINKING = 'high';
+    expect(getContractThinkingForRole('writer')).toBe('off');
+    expect(getContractThinkingForRole('critic')).toBe('high');
+  });
+
+  test('WRITER_MODEL overrides the pro tier for the writer role only', () => {
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/pro-model';
+    process.env.CONTRACT_PIPELINE_MODEL_FLASH = 'provider/flash-model';
+    process.env.WRITER_MODEL = 'provider/writer-model';
+    expect(getContractModelForRole('writer')).toBe('provider/writer-model');
+    expect(getContractModelForRole('review')).toBe('provider/pro-model');
+    expect(getContractModelForRole('critic')).toBe('provider/flash-model');
+  });
+
+  test('role-specific model overrides every role independently', () => {
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/pro-model';
+    process.env.CONTRACT_PIPELINE_MODEL_FLASH = 'provider/flash-model';
+    process.env.IMPLEMENTER_MODEL = 'provider/impl-model';
+    process.env.VERIFIER_MODEL = 'provider/verifier-model';
+    expect(getContractModelForRole('writer')).toBe('provider/pro-model');
+    expect(getContractModelForRole('implementer')).toBe('provider/impl-model');
+    expect(getContractModelForRole('verifier')).toBe('provider/verifier-model');
+    expect(getContractModelForRole('critic')).toBe('provider/flash-model');
+  });
+
+  test('WRITER_MODEL wins over every tier key', () => {
+    process.env.MODEL = 'provider/default-model';
+    process.env.MODEL_PRO = 'provider/pro-model';
+    process.env.PI_MODEL_PRO = 'provider/pi-pro-model';
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/contract-pro-model';
+    process.env.WRITER_MODEL = 'provider/writer-model';
+    expect(getContractModelForRole('writer')).toBe('provider/writer-model');
+  });
+
+  test('an empty WRITER_MODEL falls through to the tier chain', () => {
+    process.env.WRITER_MODEL = '';
+    process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/pro-model';
+    expect(getContractModelForRole('writer')).toBe('provider/pro-model');
   });
 
   test('thinking returns undefined when unset or invalid', () => {
