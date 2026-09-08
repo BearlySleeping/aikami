@@ -1371,7 +1371,8 @@ export const assessServiceReadiness = async (
   }
 
   // Shared/external services may be reused across runs, so pane liveness
-  // alone cannot establish that the intended instance answered.
+  // alone cannot establish that the intended instance answered. Run-owned
+  // services do not cross that trust boundary and may fall back to pane health.
   if (!serviceDef.probe) {
     if (serviceDef.scope !== 'run') {
       return {

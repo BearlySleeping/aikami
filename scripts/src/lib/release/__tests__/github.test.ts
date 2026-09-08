@@ -16,7 +16,15 @@ mock.module('../../cli_utils', () => ({
   run,
 }));
 
-const { commitsInRange, latestStableTag, setTag } = await import('../github');
+const {
+  acquireReleaseLock,
+  commitsInRange,
+  inFlightReleaseRun,
+  latestStableTag,
+  pushBranch,
+  releaseReleaseLock,
+  setTag,
+} = await import('../github');
 
 describe('release git helpers', () => {
   beforeEach(() => {
@@ -59,5 +67,80 @@ describe('release git helpers', () => {
     });
     expect(commands[0]).not.toContain('-f');
     expect(commands[1]).not.toContain('--force');
+  });
+
+  test('pushBranch pushes a fully-qualified ref, never a bare branch name', async () => {
+    await pushBranch({ branch: 'staging', dryRun: false });
+    // A bare `git push origin staging` is ambiguous once a `staging` tag
+    // exists — the rolling tag shares the branch name on the second cut on.
+    expect(commands[0]).toEqual(['git', 'push', 'origin', 'HEAD:refs/heads/staging']);
+  });
+
+  test('pushBranch dry-run records no git command', async () => {
+    await pushBranch({ branch: 'staging', dryRun: true });
+    expect(commands).toHaveLength(0);
+  });
+
+  test('release lock atomically creates and deletes a shared remote ref', async () => {
+    responses.push({ out: '1234567890', err: '', code: 0 });
+
+    const lock = await acquireReleaseLock({ branch: 'staging', dryRun: false });
+    expect(commands[0]).toEqual(['git', 'rev-parse', 'HEAD']);
+    expect(commands[1]).toEqual([
+      'gh',
+      'api',
+      '--method',
+      'POST',
+      'repos/{owner}/{repo}/git/refs',
+      '-f',
+      'ref=refs/heads/release-lock/staging',
+      '-f',
+      'sha=1234567890',
+    ]);
+
+    await releaseReleaseLock({ lock, dryRun: false });
+    expect(commands[2]).toEqual([
+      'gh',
+      'api',
+      '--method',
+      'DELETE',
+      'repos/{owner}/{repo}/git/refs/heads/release-lock/staging',
+    ]);
+  });
+
+  test('release lock rejects a concurrent holder', async () => {
+    responses.push(
+      { out: '1234567890', err: '', code: 0 },
+      { out: '', err: 'HTTP 422: Reference already exists', code: 1 },
+    );
+
+    await expect(acquireReleaseLock({ branch: 'staging', dryRun: false })).rejects.toThrow(
+      'Another release cut already holds the staging lock',
+    );
+  });
+
+  test('release lock dry-run performs no git or GitHub commands', async () => {
+    const lock = await acquireReleaseLock({ branch: 'staging', dryRun: true });
+    await releaseReleaseLock({ lock, dryRun: true });
+    expect(commands).toHaveLength(0);
+  });
+
+  test('inFlightReleaseRun returns the first in-progress release run id', async () => {
+    responses.push({ out: '12345\n67890', err: '', code: 0 });
+    expect(await inFlightReleaseRun({ branch: 'staging', dryRun: false })).toBe('12345');
+    expect(commands[0]).toContain('--event');
+    expect(commands[0]).toContain('release');
+    expect(commands[0]).toContain('--branch');
+    expect(commands[0]).toContain('staging');
+  });
+
+  test('inFlightReleaseRun returns null when no run is in progress', async () => {
+    responses.push({ out: '', err: '', code: 0 });
+    expect(await inFlightReleaseRun({ branch: 'staging', dryRun: false })).toBeNull();
+  });
+
+  test('inFlightReleaseRun dry-run performs no gh lookup', async () => {
+    expect(await inFlightReleaseRun({ branch: 'staging', dryRun: true })).toBeNull();
+    expect(commands).toHaveLength(0);
   });
 });

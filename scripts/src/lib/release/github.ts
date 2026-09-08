@@ -116,6 +116,74 @@ export const pushBranch = async (options: { branch: string; dryRun: boolean }): 
   await checked(['git', 'push', 'origin', `HEAD:refs/heads/${branch}`]);
 };
 
+type ReleaseLock = {
+  ref: string;
+};
+
+/**
+ * Atomically claims a repository-wide staging-cut lease.
+ *
+ * GitHub rejects creation when the fixed ref already exists, unlike an
+ * idempotent git push of the same commit. That makes concurrent callers race
+ * on one server-side compare-and-create operation instead of a read check.
+ */
+export const acquireReleaseLock = async (options: {
+  branch: string;
+  dryRun: boolean;
+}): Promise<ReleaseLock> => {
+  const { branch, dryRun } = options;
+  const ref = `refs/heads/release-lock/${branch}`;
+  if (dryRun) {
+    log(`  ${c.dim}[dry-run] acquire release lock ${ref}${c.reset}`);
+    return { ref };
+  }
+
+  const sha = await revParse('HEAD');
+  const result = await run([
+    'gh',
+    'api',
+    '--method',
+    'POST',
+    'repos/{owner}/{repo}/git/refs',
+    '-f',
+    `ref=${ref}`,
+    '-f',
+    `sha=${sha}`,
+  ]);
+  if (result.code !== 0) {
+    if (/reference already exists|already exists/i.test(result.err + result.out)) {
+      throw new Error(
+        `Another release cut already holds the ${branch} lock (${ref}). Wait for it to finish.`,
+      );
+    }
+    throw new Error(`Acquiring release lock ${ref} failed: ${result.err || result.out}`);
+  }
+  return { ref };
+};
+
+/** Releases a repository-wide staging-cut lease acquired by acquireReleaseLock. */
+export const releaseReleaseLock = async (options: {
+  lock: ReleaseLock;
+  dryRun: boolean;
+}): Promise<void> => {
+  const { lock, dryRun } = options;
+  if (dryRun) {
+    log(`  ${c.dim}[dry-run] release staging-cut lock ${lock.ref}${c.reset}`);
+    return;
+  }
+
+  const result = await run([
+    'gh',
+    'api',
+    '--method',
+    'DELETE',
+    `repos/{owner}/{repo}/git/${lock.ref}`,
+  ]);
+  if (result.code !== 0 && !/not found|http 404/i.test(result.err + result.out)) {
+    throw new Error(`Releasing release lock ${lock.ref} failed: ${result.err || result.out}`);
+  }
+};
+
 /**
  * Point `tag` at `sha`, locally and on the remote.
  *
@@ -342,6 +410,46 @@ export const waitForInFlightPushWorkflows = async (options: {
     );
     await checked(['gh', 'run', 'watch', runId, '--exit-status']);
   }
+};
+
+/**
+ * The databaseId of an in-progress `release`-event release.yml run on
+ * `branch`, or null when none is running. Cheap mutual-exclusion guard:
+ * two simultaneous `bun run release` cuts on `staging` would race on the
+ * rolling tag and the delete-then-recreate release, so a second cut aborts
+ * with a clear message instead of corrupting the first.
+ */
+export const inFlightReleaseRun = async (options: {
+  branch: string;
+  dryRun: boolean;
+}): Promise<string | null> => {
+  const { branch, dryRun } = options;
+  if (dryRun) {
+    log(`  ${c.dim}[dry-run] check for an in-flight release workflow on ${branch}${c.reset}`);
+    return null;
+  }
+  const out = await checked([
+    'gh',
+    'run',
+    'list',
+    '--workflow',
+    'release.yml',
+    '--event',
+    'release',
+    '--branch',
+    branch,
+    '--limit',
+    '20',
+    '--json',
+    'databaseId,status',
+    '--jq',
+    '.[] | select(.status == "in_progress" or .status == "queued") | .databaseId',
+  ]);
+  const runIds = out
+    .split(String.fromCharCode(10))
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return runIds[0] ?? null;
 };
 
 /** True when a published release exposes an asset with the exact name. */

@@ -17,8 +17,31 @@
     herdr,
   }:
     flake-utils.lib.eachDefaultSystem (system: let
-      overlay = final: prev: {
-        inherit (playwright-flake.packages.${system}) playwright-test playwright-driver;
+      overlay = final: prev: let
+        pw = playwright-flake.packages.${system};
+        # WebKit's Nix build in playwright-web-flake is broken (its libWPEWebKit
+        # needs libmanette-0.2.so.0, which the flake's webkit.nix omits from
+        # buildInputs). The e2e suite only uses Chromium + Firefox, so drop
+        # WebKit from the browser farm rather than patching upstream.
+        pw-browsers = pw.playwright-driver.selectBrowsers {withWebkit = false;};
+      in {
+        playwright-driver = pw.playwright-driver;
+        playwright-test = pw.playwright-test.overrideAttrs (old: let
+          # The upstream wrapper hard-codes the full `browsers` farm (including
+          # WebKit) as its default PLAYWRIGHT_BROWSERS_PATH, which makes this
+          # derivation depend on the broken WebKit build. Rewrite that one
+          # reference to the WebKit-free farm. `replaceStrings` alone isn't
+          # enough: it preserves the old farm's string context, so the broken
+          # WebKit drv would still be a build input. Strip the context, swap the
+          # path, then re-attach everything except the old farm drv.
+          stripped = builtins.unsafeDiscardStringContext old.installPhase;
+          replaced = builtins.replaceStrings ["${pw.playwright-driver.browsers}"] ["${pw-browsers}"] stripped;
+          oldFarmDrv = builtins.unsafeDiscardStringContext (toString pw.playwright-driver.browsers.drvPath);
+          keepCtx = builtins.removeAttrs (builtins.getContext old.installPhase) [oldFarmDrv];
+          newCtx = builtins.getContext "${pw-browsers}";
+        in {
+          installPhase = builtins.appendContext replaced (keepCtx // newCtx);
+        });
 
         # nixpkgs' bun lags oven-sh's releases. Pin it here to match
         # .bun-version (the source of truth for CI's setup-bun action and
@@ -165,7 +188,12 @@
                     export MOON_TOOLCHAIN_FORCE_GLOBALS=true
 
                     export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-                    export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+                    # The default `browsers` farm includes WebKit, whose Nix build
+                    # currently fails (libWPEWebKit needs libmanette-0.2.so.0, which
+                    # playwright-web-flake's webkit.nix omits from buildInputs). The
+                    # e2e suite only uses Chromium + Firefox, so drop WebKit here
+                    # instead of patching the upstream flake.
+                    export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.selectBrowsers { withWebkit = false; }}"
                     echo "🎭 Playwright browsers from Nix: $PLAYWRIGHT_BROWSERS_PATH"
 
                     # Force Bun/Node to find the Nix-managed C++ standard libraries for native addons
