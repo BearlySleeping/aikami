@@ -384,6 +384,9 @@ export const localServicesMockBase = () => ({
   DraftStore: class {},
   MessageBranchStore: class {},
   ExpressionAssetResolver: class {},
+  // C-487: dialogue_overlay_view_model.svelte.ts calls `expressionService.detectExpression`
+  // after each NPC turn. Stub it so the dialogue VM unit tests (AC-1..AC-5) can load.
+  expressionService: _createServiceStub(),
   gameSaveService: _createServiceStub(),
   GameSaveService: class {},
   setPendingGameLoad: _createCallableStub(),
