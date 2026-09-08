@@ -17,17 +17,51 @@
 // --checkpoint maps to the sd-server `model` field (the GGUF file name
 // under /models/image/, e.g. flux1-schnell-q4_k.gguf).
 //
+// Generation runs on CPU and can be slow (~26s/step for a 512×512 Anima
+// job), so the poll deadline defaults to 15 minutes. Pass --timeout to
+// change it, e.g. --timeout 120 for a quick smoke test.
+//
 // Usage:
 //   bun run generate:avatar "an elven ranger, pixel art"
 //   bun run generate:avatar "a knight" --steps 20 --cfg 7 --seed 42 \
 //     --width 512 --height 512
 //   (omit --checkpoint to use the engine's loaded model; pass it to pin one)
+//   (CPU generation is slow — raise --timeout if the default 900s is too short)
+//
+// LoRA: defaults come from IMAGE_LORA / IMAGE_LORA_STRENGTH in the
+// local-stack .env (applied to every run). Override per-run:
+//   bun run generate:avatar "a knight" --lora anima-pixel.safetensors --lora-strength 0.8
+//   bun run generate:avatar "a knight" --lora ""   # disable the default LoRA
 
 // biome-ignore-all lint/style/useNamingConvention: sd-server API uses snake_case fields
-import { mkdirSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const SD_SERVER = 'http://127.0.0.1:8188';
+
+/**
+ * Read the local-stack `.env` (the single source of truth for engine/model
+ * selection — docker compose already reads it) so IMAGE_LORA defaults apply
+ * to this CLI too. Returns an empty map if the file is missing/unreadable.
+ */
+const readLocalStackEnv = (): Record<string, string> => {
+  const envPath = resolve(import.meta.dir, '../../local-stack/.env');
+  try {
+    const text = readFileSync(envPath, 'utf8');
+    const vars: Record<string, string> = {};
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) {
+        continue;
+      }
+      const eq = trimmed.indexOf('=');
+      vars[trimmed.slice(0, eq)] = trimmed.slice(eq + 1);
+    }
+    return vars;
+  } catch {
+    return {};
+  }
+};
 
 // ── Configuration ────────────────────────────────────────────────────────
 
@@ -40,6 +74,12 @@ type GenerationOptions = {
   cfg: number;
   seed: number;
   checkpoint: string;
+  /** LoRA file name to apply (from local-stack .env IMAGE_LORA or --lora). Empty = none. */
+  lora: string;
+  /** LoRA strength (from IMAGE_LORA_STRENGTH or --lora-strength). */
+  loraStrength: number;
+  /** Poll deadline in seconds. CPU generation is slow, so default is 900. */
+  timeout: number;
 };
 
 /**
@@ -50,11 +90,17 @@ type GenerationOptions = {
 const parseOptions = (): GenerationOptions => {
   const args = process.argv.slice(2);
   const prompt = args.find((a) => !a.startsWith('--')) ?? '';
+  const stackEnv = readLocalStackEnv();
 
   const getArg = (flag: string, fallback: string): string => {
     const idx = args.indexOf(flag);
     return idx !== -1 && args[idx + 1] ? (args[idx + 1] as string) : fallback;
   };
+
+  // LoRA resolution: an explicit --lora flag wins (value 'none' or ''
+  // disables it); otherwise fall back to the local-stack .env IMAGE_LORA.
+  const loraIdx = args.indexOf('--lora');
+  const lora = loraIdx !== -1 ? (args[loraIdx + 1] ?? '') : (stackEnv.IMAGE_LORA ?? '');
 
   return {
     prompt:
@@ -71,6 +117,19 @@ const parseOptions = (): GenerationOptions => {
     // Empty default: sd-server uses whatever model it has loaded (e.g. the
     // Anima diffusion model). Only an explicit --checkpoint selects a model.
     checkpoint: getArg('--checkpoint', ''),
+    // sd-server applies LoRAs at runtime via the img_gen `lora` field
+    // (array of {path, strength}), resolved against --lora-model-dir
+    // (/models/image). See the lora resolution above.
+    lora: lora === 'none' ? '' : lora,
+    loraStrength: Number.parseFloat(
+      getArg(
+        '--lora-strength',
+        stackEnv.IMAGE_LORA_STRENGTH ?? process.env.IMAGE_LORA_STRENGTH ?? '0.8',
+      ),
+    ),
+    // CPU inference is slow (~26s/step at 512×512); 900s covers a 20-step
+    // run with headroom. Use --timeout to tighten it for quick smoke tests.
+    timeout: Number.parseInt(getArg('--timeout', '900'), 10),
   };
 };
 
@@ -102,6 +161,7 @@ type SdCppImgGenRequest = {
   seed: number;
   batch_count: number;
   model?: string;
+  lora?: Array<{ path: string; strength: number }>;
 };
 
 // ── API Helpers ──────────────────────────────────────────────────────────
@@ -125,6 +185,12 @@ const submitJob = async (options: GenerationOptions): Promise<SdCppJob> => {
   // forever instead of failing fast).
   if (options.checkpoint) {
     body.model = options.checkpoint;
+  }
+
+  // LoRA (optional). sd-server expects an array of {path, strength} objects,
+  // resolved against --lora-model-dir (/models/image).
+  if (options.lora) {
+    body.lora = [{ path: options.lora, strength: options.loraStrength }];
   }
 
   const response = await fetch(`${SD_SERVER}/sdcpp/v1/img_gen`, {
@@ -164,9 +230,10 @@ const extractJobId = (job: SdCppJob): string | undefined => {
  * deadline (the poll request itself can take up to 10s per iteration, so a
  * fixed iteration count would not bound wall time).
  */
-const waitForJob = async (jobId: string): Promise<SdCppJob> => {
+const waitForJob = async (jobId: string, timeoutSeconds: number): Promise<SdCppJob> => {
   const url = `${SD_SERVER}/sdcpp/v1/jobs/${jobId}`;
-  const deadline = Date.now() + 180_000;
+  const started = Date.now();
+  const deadline = started + timeoutSeconds * 1000;
   let poll = 0;
 
   while (Date.now() < deadline) {
@@ -195,7 +262,12 @@ const waitForJob = async (jobId: string): Promise<SdCppJob> => {
     await new Promise((r) => setTimeout(r, Math.max(0, Math.min(1000, deadline - Date.now()))));
   }
 
-  throw new Error('Generation timed out after 180s');
+  const elapsed = Math.round((Date.now() - started) / 1000);
+  throw new Error(
+    `Generation timed out after ${elapsed}s (deadline ${timeoutSeconds}s). ` +
+      `CPU inference is slow — raise --timeout (e.g. --timeout 1200) or reduce ` +
+      `--steps/--width/--height for a faster run.`,
+  );
 };
 
 /**
@@ -272,9 +344,13 @@ const main = async (): Promise<void> => {
   console.log(`  Negative: ${options.negativePrompt}`);
   console.log(`  Size:     ${options.width}×${options.height}`);
   console.log(`  Steps:    ${options.steps}  CFG: ${options.cfg}`);
+  console.log(`  Timeout:  ${options.timeout}s`);
   console.log(`  Seed:     ${options.seed}`);
   console.log(
     `  Model:    ${options.checkpoint || '(engine default — omit --checkpoint to use the loaded model)'}`,
+  );
+  console.log(
+    `  LoRA:     ${options.lora ? `${options.lora} @ ${options.loraStrength}` : '(none)'}`,
   );
   console.log();
 
@@ -300,7 +376,7 @@ const main = async (): Promise<void> => {
 
   // ── Wait for completion ──────────────────────────
   console.log('  Generating...');
-  const completed = await waitForJob(jobId);
+  const completed = await waitForJob(jobId, options.timeout);
   process.stdout.write('\n');
 
   // ── Extract + save output ────────────────────────

@@ -395,7 +395,10 @@ class GameUIViewModel
           onEndChat: () => gameOverlayService.endDialogue(),
           npcDialogueService,
           onStartCombat: (combatNpcData) => {
-            gameOverlayService.startCombat({ enemyName: combatNpcData.npcName });
+            gameOverlayService.startCombat({
+              enemyName: combatNpcData.npcName,
+              enemyNpcId: combatNpcData.npcId,
+            });
           },
         });
         this.dialogueViewModel = vm;
@@ -414,7 +417,8 @@ class GameUIViewModel
         const cs = combatService;
         const vm = getCombatViewModel({ className: 'CombatViewModel' }) as CombatViewModel;
         void vm.initialize();
-        vm.enemyName = cs.enemyName;
+        vm.enemyName = cs.enemyName || 'Enemy';
+        vm.enemyNpcId = cs.enemyNpcId;
         vm.enemyHp = cs.enemyHp;
         vm.enemyMaxHp = cs.enemyMaxHp;
         vm.activeEntities = [...cs.participantIds];

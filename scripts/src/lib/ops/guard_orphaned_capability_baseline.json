@@ -400,7 +400,7 @@
     ]
   },
   "apps/frontend/client/src/lib/services/expression/expression_service.svelte.ts": {
-    "orphaned": ["ExpressionService.getEntry", "ExpressionServiceInterface"]
+    "orphaned": ["ExpressionServiceInterface"]
   },
   "apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts": {
     "orphaned": ["EquipmentServiceInterface", "EquipmentServiceOptions"]
@@ -408,6 +408,7 @@
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
     "orphaned": [
       "GameOverlayService.canOpenOverlay",
+      "GameOverlayService.closeCombat",
       "GameOverlayService.closeTalkToParty",
       "GameOverlayService.openInventory",
       "GameOverlayService.pushOverlay",

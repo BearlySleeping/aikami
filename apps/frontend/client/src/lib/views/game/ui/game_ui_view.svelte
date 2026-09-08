@@ -1,6 +1,7 @@
 <script lang="ts">
 import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
+import CombatView from '../../combat/combat_view.svelte';
 import InventoryView from '../../inventory/inventory_view.svelte';
 import QuestView from '../../quest/quest_view.svelte';
 import VendorView from '../../vendor/vendor_view.svelte';
@@ -127,6 +128,11 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
       <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
     {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
       <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
+    {:else if viewModel.activeOverlay === 'COMBAT' && viewModel.combatViewModel}
+      <!-- C-500: mount the combat UI — the complete battle overlay (dice,
+           portrait stage, turn tracker, action controls). It consumes the
+           CombatViewModel owned by GameUIViewModel's $effect lifecycle. -->
+      <CombatView viewModel={viewModel.combatViewModel} />
     {:else if viewModel.activeOverlay === 'GAME_OVER'}
       <GameOverOverlay
         onRespawn={() => viewModel.respawnPlayer()}

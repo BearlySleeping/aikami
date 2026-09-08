@@ -335,6 +335,34 @@ describe('GameOverlayService', () => {
     expect(service.canOpenOverlay('QUEST_LOG')).toBe(false);
   });
 
+  test('C-500: closeCombat clears the COMBAT overlay and resumes the engine', () => {
+    const resumeEngine = mock(() => {});
+    service.setEngineService({
+      pauseEngine: mock(() => {}),
+      resumeEngine,
+      loadMap: mock(async () => {}),
+    } as unknown as import('./game_engine_service.svelte.ts').GameEngineServiceInterface);
+
+    service.pushOverlay('COMBAT');
+    expect(service.activeOverlay).toBe('COMBAT');
+
+    service.closeCombat();
+
+    expect(service.activeOverlay).toBe('NONE');
+    expect(resumeEngine).toHaveBeenCalled();
+  });
+
+  test('C-500: Escape during COMBAT dismisses cleanly (overlay clears)', () => {
+    service.pushOverlay('COMBAT');
+    expect(service.activeOverlay).toBe('COMBAT');
+
+    service.handleKeyDown(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    // Combat is dismissed via closeCombat — the overlay is cleared so the
+    // world is not left paused/input-locked behind a popped-but-frozen UI.
+    expect(service.activeOverlay).toBe('NONE');
+  });
+
   test('should allow pause menu over inventory', () => {
     service.pushOverlay('PAUSE_MENU');
     expect(service.canOpenOverlay('INVENTORY')).toBe(true);

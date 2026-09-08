@@ -305,7 +305,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
 
       {#snippet after()}
         <!-- Typing indicator — shown while waiting for NPC response -->
-        {#if viewModel.isStreaming && viewModel.messages.length > 0 && viewModel.messages[viewModel.messages.length - 1].role === 'player'}
+        {#if viewModel.isStreaming && viewModel.messages.length > 0 && (viewModel.messages[viewModel.messages.length - 1].role === 'player' || viewModel.messages[viewModel.messages.length - 1].content === '')}
           <div class="flex gap-2">
             <div class="rounded-2xl rounded-bl-md bg-base-100 px-4 py-2.5 shadow-sm">
               <span class="inline-flex items-center gap-1">

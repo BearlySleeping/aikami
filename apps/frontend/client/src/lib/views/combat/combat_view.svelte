@@ -16,19 +16,22 @@ const { viewModel }: Props = $props();
 let customActionInput = $state('');
 </script>
 
-<BaseViewModelContainer {viewModel} class="relative flex-1">
+<BaseViewModelContainer
+  {viewModel}
+  class="pointer-events-auto absolute inset-0 z-20 bg-base-300/80 backdrop-blur-sm"
+>
   <div
     style={viewModel.combatBackgroundImageUrl
       ? `background-image: url(${viewModel.combatBackgroundImageUrl}); background-size: cover; background-position: center;`
       : ''}
-    class="h-full"
+    class="relative h-full"
   >
     <!-- Dark semi-transparent overlay so UI remains readable over background image -->
     {#if viewModel.combatBackgroundImageUrl}
       <div class="absolute inset-0 bg-black/60 z-0"></div>
     {/if}
 
-    <div class="relative">
+    <div class="relative z-10 h-full overflow-y-auto">
       <!-- Animated d20 dice overlay (C-148) -->
       <CombatDiceUi activeDiceRoll={viewModel.activeDiceRoll} />
 
