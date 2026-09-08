@@ -3,7 +3,7 @@ id: C-499
 title: "Dialogue Intent Envelope Extraction Resilience"
 source: "direct"
 contract_type: thin
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -108,3 +108,40 @@ After this contract, a player can initiate dialogue and combat even when the loc
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Made the dialogue intent-envelope extraction (call 2 of `_analyzeIntent`) resilient: a call-2 failure (e.g. "No JSON object found in response") no longer fails the whole turn — it falls through to the existing `recoverIntentAnalysisOutput` repair path, which salvages the authoritative streamed narrative (`requiresRoll: false`). Added a single bounded empty-body retry (with backoff) in the ai-gateway structured path so a transient empty 200 (`chunkCount: 0`) is retried once before falling back. Abort semantics, the `analyzeIntent:failed` detail log (post-retry/repair), and the `_resolveRoll` path are all preserved unchanged.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `_analyzeIntent` call-2 throw now falls through to repair; turn completes with recovered narrative, chips only when narrative is parseable JSON. Unit-tested in `npc_dialogue_service.test.ts`. |
+| AC-2 | ✅ | Adapter retries empty structured body once with 200ms backoff. Unit-tested in `text_adapters.test.ts` (empty → retry → success, `empty-retry` event, 2 calls). |
+| AC-3 | ✅ | Repair-failure (too-short narrative) still surfaces `failed` turn state with the real detail; view model surfaces `streamError` and removes the placeholder. Unit test added to `dialogue_overlay_view_model.test.ts`. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| — | No new files — all changes are edits to existing files. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | `_analyzeIntent` call-2 catch no longer rethrows; sets `call2Error`/`rawOutput=undefined` and falls through to `recoverIntentAnalysisOutput` repair (AC-1). Log detail carried via `_analyzeIntent:invalid-output` reason. |
+| `packages/frontend/ai-gateway/src/lib/text_adapter_openai_compatible.ts` | Added `EMPTY_RETRY_BACKOFF_MS` constant, abort-aware `waitWithBackoff` helper, and refactored `generateStructured` into `runStructuredAttempt` with a single empty-body retry (AC-2). |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | Replaced the old "call 2 rejects → fails turn" test with AC-1 (recovers from streamed narrative) and added AC-3 (repair-failure surfaces error). |
+| `packages/frontend/ai-gateway/tests/text_adapters.test.ts` | Added AC-2 empty-body → retry → success test. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` | Added AC-3 test asserting explicit error state (streamError) with no endless placeholder. |
+| `docs/contracts/C-499-dialogue-intent-envelope-extraction-resilience.md` | Status `approved → in_progress → implemented`; this execution report. |
+
+### Deviations from Spec
+None. All in-scope items implemented; out-of-scope items (`_resolveRoll`, schema changes, recovery rewrite, combat UI C-500) left untouched as specified.
+
+### Test Results
+- Unit: adapter `text_adapters.test.ts` 23/23 PASS (incl. AC-2); `npc_dialogue_service.test.ts` 41/41 PASS (incl. AC-1 + AC-3).
+- E2E: not run — thin contract, AC verification is unit-test based.
+- Visual: not run — no browser/ai_validate_image tooling available in this session; production-path screenshot of `/game` could not be captured. Client dev server verified serving HTTP 200 on :6000 from the worktree.
+- Baseline: `dialogue_overlay_view_model.test.ts` cannot load in the isolated worktree (pre-existing: its `mock.module` absolute paths hardcode the main checkout `/home/sonny/Development/Projects/passion/aikami/...`). Confirmed pre-existing by stashing the change — the original file fails identically. Not introduced by this contract; the AC-3 test added there follows the existing pattern and runs on the main repo.
+- `validate({ test: true })`: ✅ both affected projects (client, frontend-ai-gateway) — 4 passed.
