@@ -74,7 +74,7 @@ The free-text dialogue roll currently rolls `d20 + 0` against a model-declared D
 
 Establish **one** service-level source of truth for the character sheet that the dialogue ViewModel reads. The natural home is `playerStateService` (or a thin character-sheet service it delegates to); a ViewModel (`CharacterSheetViewModel`) must not be imported into the dialogue overlay. The accessor returns the real abilities and skill proficiency flags, falling back to `createDefaultSheet()` only when no character has been authored yet — and that fallback is a neutral sheet, never the string `"Level 1 Fighter"`.
 
-The roll's total modifier is **computed**, not received. The model's `modifierSource` is treated as a *label hint* (which stat the model thinks applies); the actual number is `computeModifier(sheet.abilities[stat].value) + (skill.isProficient ? proficiencyBonus : 0)`, using `SKILL_STAT_MAP[checkType]` to resolve the stat. If `checkType` does not map to a known skill/stat, do not invent a bonus — fall back to the governing ability's raw modifier and log it. The model can influence *which check happens*; it cannot manufacture a modifier, an advantage, or a bonus (AC-5).
+The roll's total modifier is **computed**, not received. The model's `modifierSource` is treated as a *label hint* (which stat the model thinks applies); the actual number is `computeSkillModifier(abilityModifier, skill.isProficient, proficiencyBonus, skill.isExpertise)`, where `abilityModifier` comes from `computeModifier(sheet.abilities[stat].value)` and `SKILL_STAT_MAP[checkType]` resolves the stat. This preserves the shared rules implementation's expertise behavior: a proficient skill with expertise adds twice the proficiency bonus, while expertise never adds proficiency to a non-proficient skill. If `checkType` does not map to a known skill/stat, do not invent a bonus — fall back to the governing ability's raw modifier and log it. The model can influence *which check happens*; it cannot manufacture a modifier, an advantage, or a bonus (AC-5).
 
 Stakes are part of the declared state. Before `phase` leaves `'declared'`, the player must see: the ability being tested, the ability modifier, the proficiency bonus (or `—` when not proficient), the total modifier, the DC, the target number, and what failure costs. "What failure costs" comes from the check type and world state (e.g. "the guard's suspicion rises" for a failed persuasion), not from unbounded model prose.
 
@@ -87,8 +87,9 @@ type SkillCheckBreakdown = {
   ability: AbilityKey;            // e.g. "CHA"
   abilityModifier: number;        // computeModifier(score)
   isProficient: boolean;
+  isExpertise: boolean;
   proficiencyBonus: number;       // 0 when not proficient
-  totalModifier: number;          // abilityModifier + (isProficient ? proficiencyBonus : 0)
+  totalModifier: number;          // computeSkillModifier(..., isExpertise)
 };
 
 type SkillCheckStakes = {
@@ -138,9 +139,9 @@ N/A — no persistent state changes. The character sheet is already persisted; t
 ## Acceptance Criteria
 
 ### AC-1: The modifier equals the character sheet's value
-**Given** a character with a non-zero relevant ability modifier and, where applicable, proficiency in the checked skill
+**Given** a character with a non-zero relevant ability modifier and, where applicable, proficiency or expertise in the checked skill
 **When** a free-text action triggers a skill check
-**Then** the applied modifier equals the character sheet's ability modifier plus the proficiency bonus where the skill is proficient, and the breakdown shown to the player names the ability modifier and proficiency bonus as separate components.
+**Then** the applied modifier equals `computeSkillModifier(abilityModifier, isProficient, proficiencyBonus, isExpertise)`, and the breakdown shown to the player exposes the ability modifier, proficiency, expertise, and proficiency bonus as separate components. A proficient expertise character receives exactly the shared helper's doubled-proficiency modifier.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -149,7 +150,7 @@ N/A — no persistent state changes. The character sheet is already persisted; t
 
 **Test Hooks**:
 - Moon Task: the client unit-test task and the client E2E task
-- Integration: seed a character with e.g. CHA 16 (+3) and proficiency in Persuasion, then assert the declared total modifier is `+5`, not `0`.
+- Integration: seed a level-1 character (therefore an explicit `+2` proficiency bonus) with CHA 16 (`+3`), proficiency in Persuasion, and no expertise; assert the declared total modifier is deterministically `+5`, not `0`. Add the expertise variant with the same seed and assert `+7`, matching `computeSkillModifier`.
 - E2E / Visual:
     - **Functional**: `apps/e2e/tests/client/dialogue_skill_check.spec.ts`, `/game` journey, using `game_page.ts` `approachAndTalkToNpc()` / `sendFreeText()`.
     - **Visual**: N/A.
@@ -157,11 +158,12 @@ N/A — no persistent state changes. The character sheet is already persisted; t
 **Watch Points**:
 - Do not read `SKILL_STAT_MAP[...].defaultModifier` for the production path — that is the demo value and is exactly the bug being removed.
 - The modifier is computed with `computeModifier` / `computeSkillModifier`; a locally re-derived formula will drift when the rules helpers change.
+- Do not treat `isExpertise` as presentation-only: pass it to `computeSkillModifier` and expose it in `SkillCheckBreakdown`.
 
 ### AC-2: Stakes and breakdown are shown before the roll commits
 **Given** a free-text action that triggers a skill check
 **When** the check is proposed
-**Then** the player sees, before any roll is committed: the ability being tested, the ability modifier, the proficiency bonus, the total modifier, the DC, and what failure costs. No roll is committed without that preview.
+**Then** the player sees, before any roll is committed: the ability being tested, the ability modifier, whether proficiency and expertise apply, the proficiency bonus, the total modifier, the DC, and what failure costs. No roll is committed without that preview.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -232,7 +234,7 @@ N/A — no persistent state changes. The character sheet is already persisted; t
 
 **Test Hooks**:
 - Moon Task: the client unit-test task
-- Integration: a VM test stubs `analyzeIntent` to return `modifierSource: "CHA +5"` and asserts the computed modifier still equals the sheet's `computeModifier + proficiency`, ignoring the `+5`.
+- Integration: a VM test stubs `analyzeIntent` to return `modifierSource: "CHA +5"` and asserts the computed modifier still equals the sheet's `computeSkillModifier(...)` result, including expertise when present and ignoring the model's `+5`.
 - E2E / Visual:
     - **Functional**: N/A — this is an input-sanitisation property best proven at the ViewModel boundary.
     - **Visual**: N/A.

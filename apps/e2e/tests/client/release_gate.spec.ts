@@ -365,7 +365,7 @@ test.describe('Release Gate', () => {
       // Skip unless the environment explicitly declares text AI is unavailable.
       // Using a controlled fixture/env-var avoids the ambiguity of inferring
       // provider availability from absence of the expected UI.
-      if (!process.env.TEST_TEXT_AI_UNAVAILABLE) {
+      if (process.env.TEST_TEXT_AI_UNAVAILABLE !== 'true') {
         test.skip(
           true,
           'AI capability gate test requires text AI to be unavailable. Set TEST_TEXT_AI_UNAVAILABLE=true in a controlled environment.',

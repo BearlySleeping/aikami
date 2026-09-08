@@ -73,7 +73,7 @@ The content pack gains five optional NPC identity fields — `personality`, `age
 ## Architecture Directives
 
 Extend `ContentPackNpcEntrySchema` with five **optional** fields, all TypeBox, all `additionalProperties: false` at the object level, all mirrored as derived types in `@aikami/types`:
-- `personality` — voice and manner (string or short structured object; state which in the schema).
+- `personality` — a structured `{ voice: string; manner: string }` object. This is the only normative representation; a string alternative is not accepted.
 - `agenda` — what they want, including what they want that conflicts with someone else's want.
 - `knowledge` — facts they know and can share.
 - `secrets` — facts they know and will not volunteer.
@@ -82,6 +82,8 @@ Extend `ContentPackNpcEntrySchema` with five **optional** fields, all TypeBox, a
 Do **not** merge `npcDialogueService` into `gmPromptService`, or vice versa. Reuse the assembler pattern; service ownership stays as it is.
 
 The production persona assembly reads authored identity from the loaded pack NPC and falls back to the current generic behaviour only for fields that are absent. The roll-resolution prompt (`resolveRoll` → `_resolveRoll`) receives the same conversation history and game-state facts the intent prompt receives.
+
+Per-field fallback is deterministic: when `personality` is absent, use the exact generic sentence `You are <NPC name>, a character in a fantasy world.` in place of the voice/manner block. When `agenda`, `knowledge`, `secrets`, or `boundaries` is absent, omit only that labeled block and infer no replacement content; the other authored blocks, conversation history, game-state facts, and global safety/rules instructions remain unchanged. A partially authored NPC never falls back wholesale.
 
 ## State & Data Models
 
@@ -95,13 +97,13 @@ secrets?: string[];      // facts they will not volunteer
 boundaries?: string[];   // lines they will not cross
 ```
 
-The exact leaf shape is the implementer's choice, but it must be TypeBox in `packages/shared/schemas/` with derived types in `packages/shared/types/`, and it must degrade gracefully when absent. Pack version bumps and the loader migration path are documented in Migration & Rollback.
+This is the normative leaf shape. Define the personality object in TypeBox in `packages/shared/schemas/`, derive its TypeScript type in `packages/shared/types/`, and use the same object in fixtures and persona assembly. Do not add a string union or normalize strings at load time. Every field degrades gracefully when absent. Pack version bumps and the loader migration path are documented in Migration & Rollback.
 
 ## Quality Requirements
 
 - **Offline/degraded mode**: a v3.x pack loads unchanged; missing identity degrades to the current generic persona (test-proven).
 - **Accessibility/input**: N/A — no new UI in this contract.
-- **Performance budget**: persona assembly must not increase the prompt token ceiling; measure before/after token counts on all three Emberwatch NPCs and record them in the Execution Report.
+- **Performance budget**: each complete production prompt must remain within 4,096 `cl100k_base` tokens; measure both paths before/after on all three Emberwatch NPCs and record them in the Execution Report.
 - **Security/privacy**: imported prose must **not** automatically confer permission to alter world state — note this in the contract; the character-card importer itself is out of scope.
 - **Persistence/migration**: see Migration & Rollback.
 - **Cancellation/retry/idempotency**: persona assembly is pure; re-running produces identical output.
@@ -172,22 +174,22 @@ The exact leaf shape is the implementer's choice, but it must be TypeBox in `pac
 ### AC-3: The production dialogue path uses the authored identity
 **Given** an NPC with an authored identity
 **When** the player talks to them in the production dialogue path
-**Then** the assembled persona contains that identity — asserted by a test on the **production** dialogue path, not the sandbox.
+**Then** the production prompt assembler deterministically includes every authored field—`personality.voice`, `personality.manner`, `agenda`, `knowledge`, `secrets`, and `boundaries`—and supplies the documented generic fallback independently for every absent field.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-3 | Unit + E2E | `npc_dialogue_service.test.ts`; a `/game` dialogue assertion | `/game` — production `npcDialogueService` persona assembly | Filled during verification |
+| AC-3 | Unit | `npc_dialogue_service.test.ts` | production `npcDialogueService` persona assembly used by `_buildContextProjection`, `_analyzeIntent`, and `resolveRoll` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: the client unit-test and E2E tasks
-- Integration: assert the assembled persona string for an Emberwatch NPC contains its authored `personality` and `agenda` content.
+- Integration: invoke the production prompt-assembly seam with a fully authored fixture and assert the exact output fragments for personality voice and manner, agenda, knowledge, secrets, and boundaries. Repeat with each field omitted in turn: assert the exact generic sentence for missing personality or the absence of only the corresponding labeled block for a missing array field, while every other authored field remains unchanged.
 - E2E / Visual:
-    - **Functional**: `/game` journey via `game_page.ts` — talk to an Emberwatch NPC and observe identity-driven dialogue.
+    - **Functional**: N/A — streamed model narrative is nondeterministic and is not acceptance evidence for prompt content. Any later behavioral guarantee requires a deterministic policy layer and its own contract before becoming E2E acceptance criteria.
     - **Visual**: N/A.
 
 **Watch Points**:
-- Test the production `_buildContextProjection` / `_analyzeIntent` path — not a copied assembler in the test, and not the dev sandbox.
+- Test the production assembler through both `_buildContextProjection` and the intent/roll prompt inputs — not a copied assembler in the test, the dev sandbox, or model-generated narrative.
 
 ### AC-4: The roll-resolution prompt receives the same facts
 **Given** the roll-resolution prompt
@@ -212,7 +214,7 @@ The exact leaf shape is the implementer's choice, but it must be TypeBox in `pac
 ### AC-5: All three Emberwatch NPCs have authored identity
 **Given** the Emberwatch pack
 **When** it ships
-**Then** each of the three NPCs (`village_elder` "Elder Thalia", `rollo_grasper` "Rollo the Grasper", `merchant` "Mara the Merchant") has an authored identity with at least one agenda that conflicts with another NPC's.
+**Then** each of the three NPCs (`village_elder` "Elder Thalia", `rollo_grasper` "Rollo the Grasper", `merchant` "Mara the Merchant") has an authored identity. The required conflict is between Elder Thalia and Rollo: Thalia's first agenda entry is exactly `Keep the Ward Wand sealed in Emberwatch's shrine.` and Rollo's first agenda entry is exactly `Acquire the Ward Wand and sell it beyond Emberwatch.`
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -221,7 +223,7 @@ The exact leaf shape is the implementer's choice, but it must be TypeBox in `pac
 
 **Test Hooks**:
 - Moon Task: `moon run schemas:test`
-- Integration: read the manifest and assert three NPC identities exist and at least one pair of agendas conflicts.
+- Integration: read the manifest, assert all three NPC identities exist, and assert the exact first agenda entries for `village_elder` and `rollo_grasper` above. The test must compare this fixture-encoded relation; two merely non-empty agenda arrays do not prove conflict.
 - E2E / Visual:
     - **Functional**: N/A.
     - **Visual**: N/A.
@@ -231,25 +233,25 @@ The exact leaf shape is the implementer's choice, but it must be TypeBox in `pac
 - Do not make each NPC independently invent contradictory truths — the authored identity is static content, not per-turn generation.
 
 ### AC-6: Identity fits within the existing prompt budget
-**Given** the prompt budget
-**When** identity is added
-**Then** assembly stays within the existing budget — identity displaces filler, it does not extend the ceiling.
+**Given** a single 4,096-token prompt ceiling measured with the `cl100k_base` tokenizer
+**When** identity is added to either production prompt path
+**Then** the complete assembled prompt for both `_buildContextProjection` and `resolveRoll` remains at or below 4,096 tokens — identity displaces filler, it does not extend the ceiling.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-6 | Unit | a budget assertion in `npc_dialogue_service.test.ts` | `_buildContextProjection` — the production assembly whose output feeds the model | Filled during verification |
+| AC-6 | Unit | budget assertions in `npc_dialogue_service.test.ts` | `_buildContextProjection` and `resolveRoll` — both production assemblies changed by AC-4 | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: the client unit-test task
-- Integration: record before/after token counts for the three Emberwatch NPCs' assembled prompts and assert the after count does not exceed the established ceiling; report both numbers in the Execution Report.
+- Integration: use one pinned `cl100k_base` implementation for every measurement. For each of the three Emberwatch NPCs, record and report before/after counts separately for `_buildContextProjection` and `resolveRoll` (12 reported counts total), and assert every after count is `<= 4096`.
 - E2E / Visual:
     - **Functional**: N/A.
     - **Visual**: N/A.
 
 **Watch Points**:
 - **This is the trap.** The obvious implementation stuffs five new fields into every prompt and blows the budget, degrading every NPC to make three better. Identity must displace the generic fallback filler, not be concatenated onto it.
-- The Execution Report must contain a measured before/after token count — an assertion alone is not enough.
+- The Execution Report must name the tokenizer implementation/version and contain every per-NPC, per-path before/after count — an assertion alone is not enough.
 
 ## Implementation Sequence
 
@@ -263,12 +265,12 @@ The exact leaf shape is the implementer's choice, but it must be TypeBox in `pac
 
 - **Partially authored NPC**: identity fields are independent; a missing field degrades alone.
 - **Roll-resolution prompt parity**: `resolveRoll` must receive facts without re-deriving them twice; build the facts once and share them.
-- **Long agendas**: an unbounded `agenda[]` can silently blow the budget. Cap the assembled identity to the same ceiling as today's prompt (AC-6), truncating least-relevant entries first.
+- **Identity truncation**: once present, `personality`, `secrets`, and `boundaries` are required prompt sections and are never dropped or truncated. If the 4,096-token ceiling would be exceeded, remove whole `knowledge` entries from last to first, then whole `agenda` entries from last to first while preserving each NPC's first agenda entry (and therefore the Thalia/Rollo conflict). Never truncate text mid-entry. If the preserved sections plus non-identity prompt already exceed the ceiling, assembly fails the budget assertion instead of silently deleting required identity.
 - **Generic fallback as a signal**: when identity is absent, the current generic persona remains — and a log line records that a generic NPC was served, so missing content is visible in production.
 
 ## Open Questions
 
-- Resolved: the leaf shape of `personality` (`{ voice, manner }` vs. a single string) is left to the implementer but must be TypeBox + derived types and degrade when absent.
+- Resolved: `personality` has one normative `{ voice, manner }` object shape across schema, derived type, fixtures, and persona assembly; no string alternative exists.
 - Resolved: do not merge the two dialogue/GM services — reuse the assembler pattern only.
 
 ## Amendments

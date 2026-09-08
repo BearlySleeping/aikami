@@ -79,14 +79,17 @@ export default async function (pi: ExtensionAPI) {
   // Warn and bail if rtk predates 0.23.0 (when `rtk rewrite` was introduced).
   const versionOutput = ver.stdout ?? '';
   const parsed = parseSemver(versionOutput.replace(/^rtk\s+/, ''));
-  if (parsed) {
-    const [major, minor] = parsed;
-    if (major === 0 && minor < MIN_SUPPORTED_RTK_MINOR) {
-      console.warn(
-        `[rtk] rtk ${versionOutput.trim()} is too old (need >= 0.23.0) — extension disabled`,
-      );
-      return;
-    }
+  if (!parsed) {
+    console.warn('[rtk] unable to determine rtk version — extension disabled');
+    return;
+  }
+
+  const [major, minor] = parsed;
+  if (major === 0 && minor < MIN_SUPPORTED_RTK_MINOR) {
+    console.warn(
+      `[rtk] rtk ${versionOutput.trim()} is too old (need >= 0.23.0) — extension disabled`,
+    );
+    return;
   }
 
   pi.on('tool_call', async (event, ctx) => {

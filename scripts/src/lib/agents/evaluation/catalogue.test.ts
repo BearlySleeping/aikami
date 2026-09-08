@@ -47,7 +47,10 @@ describe('AC-2: catalogue resolution fails closed', () => {
   });
 
   it('reports a family as unavailable when nothing is configured', async () => {
-    const entry = await resolveCatalogueEntry({ family: 'astra' });
+    const entry = await resolveCatalogueEntry({
+      family: 'astra',
+      envResolver: () => undefined,
+    });
     expect(entry.family).toBe('astra');
     expect(entry.available).toBe(false);
     expect(entry.reason).toContain('No candidate slugs configured');

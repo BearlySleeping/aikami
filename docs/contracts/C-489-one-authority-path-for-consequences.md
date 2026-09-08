@@ -53,7 +53,7 @@ After this contract, when an NPC promises or grants something in dialogue, eithe
 | Delta kinds + schema validation | `NpcStateDeltaSchema` (`npc_dialogue_command.ts:213`) | reuse — validate, then apply |
 | Trust/affinity mutation | `relationship_service.svelte.ts` `applyDelta` / `adjustFactionStanding` | modify — make it the single authority (or route through the kernel) |
 | Quest flags, inventory | `questStateService`, `inventoryService` | reuse — existing call-throughs stay |
-| Pure mechanical resolution | `rules_kernel.ts` `resolveCommand` | decide — give it real delta-path callers or delete it (AC-6) |
+| Pure mechanical resolution | `rules_kernel.ts` `resolveCommand` | modify — invoke it from the production relationship-delta authority (AC-6) |
 | Delta application seam | `_validateAndApplyDeltas` | modify — become an apply-and-report authority, not a filter |
 
 ## Overview
@@ -62,8 +62,8 @@ Three defects in one seam — silently dropped relationship deltas, an unreachab
 
 ## Design Reference
 
-- `relationship_service.svelte.ts` — the store that already owns trust/affinity and persists via serialize/deserialize (C-334); `applyDelta` is the natural single authority for the two dropped delta kinds.
-- `rules_kernel.ts` `RESOLVERS` — the pure dispatch the backlog names as the intended authority; AC-6 is the fork over whether it becomes the production path or is deleted.
+- `relationship_service.svelte.ts` — the store that already owns trust/affinity and persists via serialize/deserialize (C-334); `applyDelta` is the persistence boundary for character relationships and `adjustFactionStanding` is the faction boundary.
+- `rules_kernel.ts` `RESOLVERS` — the pure dispatch the backlog names as the intended mechanical authority. This contract chooses the caller outcome: accepted character relationship deltas invoke `resolveCommand` before `relationshipService.applyDelta` persists the resolved values. AC-6 proves that invocation through the production authority rather than by text search.
 - `_validateAndApplyDeltas` — the existing seam to convert from "filter then sometimes apply" to "authorize → apply → report".
 
 > 📋 Testing conventions: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#testing-conventions)
@@ -75,22 +75,43 @@ There is exactly one authority for a consequential delta. That authority answers
 - **Idempotency** — has this exact reward/consequence already been granted (no double-granting)?
 - **Provenance** — did the referenced event actually occur (e.g. the item exists to be removed; the quest flag was actually set)?
 
+The caller supplies an immutable `operationId` for the dialogue turn or roll resolution and a `sourceEventId` for the local event being resolved. Both IDs are created before the model call and reused on retries. The authority validates `sourceEventId` against the loaded campaign event/state record before applying any delta. It records successful applications in a local idempotency ledger under a canonical key composed of `operationId` plus the delta's normalized `kind`, `target`, `label`, `value`, and duplicate occurrence number after canonical sorting. Retrying the same operation therefore returns `already-granted` without reapplying; a legitimate later grant has a new authoritative `operationId`/`sourceEventId` and may apply the same delta again. The ledger is authority state, not a field added to `NpcStateDelta`.
+
 Consequential delta kinds are: `flag_set`, `flag_clear`, `inventory_grant`, `inventory_remove`, `trust_change`, `relationship_update` — all six, because each mutates persistent campaign state. Conversation that proposes **no** deltas (or only rejected ones) streams freely. State commits before the narration that describes it is shown to the player.
 
 A rejected delta is logged with the reason, and the player sees a coherent outcome — the narration must not claim a success whose effect did not happen. Where the model has already streamed a claim that cannot be honoured, the reconciliation text must be shown, not silently dropped.
 
 ## State & Data Models
 
-No schema change. The deltas remain `NpcStateDelta` (`kind | target | value? | label?`); the new shape is the authority's outcome:
+No delta-schema change. The deltas remain `NpcStateDelta` (`kind | target | value? | label?`). Stable operation and provenance identity wrap the batch outside that schema:
 
 ```ts
+type ConsequenceRequest = {
+  operationId: string;
+  sourceEventId: string;
+  npcId: string;
+  deltas: NpcStateDelta[];
+};
+
 type ConsequenceResult = {
+  operationId: string;
   applied: NpcStateDelta[];
   rejected: Array<{ delta: NpcStateDelta; reason: 'not-entitled' | 'already-granted' | 'no-provenance' | 'invalid' }>;
 };
 ```
 
-`_validateAndApplyDeltas` (or its replacement) returns this shape so the caller can decide how to reconcile narration with reality.
+`_validateAndApplyDeltas` (or its replacement) accepts `ConsequenceRequest` and returns `ConsequenceResult` so the caller can reconcile narration with reality and retries can reuse the same identity.
+
+The existing delta fields have one normative mapping:
+
+| Delta | `target` | `value` | `label` | Destination |
+|---|---|---|---|---|
+| `trust_change` | character/NPC ID | trust delta | omitted | `relationshipService.applyDelta({ characterId: target, trustDelta: value, affinityDelta: 0, eventDescription })` |
+| `relationship_update` | character/NPC ID | relationship delta | `trust` | `relationshipService.applyDelta({ characterId: target, trustDelta: value, affinityDelta: 0, eventDescription })` |
+| `relationship_update` | character/NPC ID | relationship delta | `affinity` | `relationshipService.applyDelta({ characterId: target, trustDelta: 0, affinityDelta: value, eventDescription })` |
+| `relationship_update` | faction ID | standing delta | `faction` | `relationshipService.adjustFactionStanding({ factionId: target, delta: value, reason: eventDescription })` |
+
+For all rows, `eventDescription` is the deterministic `Dialogue consequence <operationId> from <sourceEventId>`. Any other `relationship_update.label`, any label on `trust_change`, or a missing/non-finite `value` is `invalid`; `value` never updates both trust and affinity.
 
 ## Quality Requirements
 
@@ -99,20 +120,20 @@ type ConsequenceResult = {
 - **Performance budget**: authority checks are synchronous lookups on already-loaded stores; O(1) per delta.
 - **Security/privacy**: the authority must never accept an NPC granting an item the pack does not entitle it to grant (no arbitrary item injection).
 - **Persistence/migration**: relationship changes must survive save/reload via the existing `serialize`/`deserialize` path; no new save-format change.
-- **Cancellation/retry/idempotency**: applying the same delta twice must not double-apply (idempotency check); a rejected delta is safe to retry after the world changes.
+- **Cancellation/retry/idempotency**: retrying the same `operationId` must not double-apply a successful delta; a rejected delta is safe to retry under the same operation after the world changes because only successful ledger keys are recorded. A later legitimate repeat uses a distinct authoritative operation/event identity.
 - **Observability**: every rejection logs `kind`, `target`, and the reason.
 
 ## Migration & Rollback
 
 - **Old data compatibility**: no save-format change; existing saves load unchanged.
 - **Migration**: N/A.
-- **Rollback**: revert to the pre-contract `_validateAndApplyDeltas` and delete/revert the chosen AC-6 path.
+- **Rollback**: revert to the pre-contract `_validateAndApplyDeltas` and remove the production `resolveCommand` caller introduced by AC-6.
 - **Feature flag or kill switch**: N/A.
-- **Failure recovery**: if a mutation half-applies across multiple deltas, apply them in a defined order and treat the batch as best-effort per delta with individual logging — do not fake atomicity the stores do not provide.
+- **Failure recovery**: normalize and sort a batch by `kind` in this fixed order—`flag_clear`, `flag_set`, `inventory_remove`, `inventory_grant`, `relationship_update`, `trust_change`—then by `target` (code-point order), `label` (missing sorts first, then code-point order), and numeric `value` (missing sorts first, then ascending). Exact duplicates are equivalent; assign their occurrence number after this sort. Apply best-effort per delta in that order with individual logging. Rejecting one delta never stops or rolls back the others.
 
 ## Scope Boundaries
 
-- **In Scope:** making `trust_change` and `relationship_update` mutate real relationship/faction state and survive reload; a single authority with entitlement/idempotency/provenance checks; committing state before narration for consequential deltas; coherent rejection handling with logged reasons; recomputing model-proposed advantage/bonus damage from state (treating proposals as requests); resolving `resolveCommand`'s production-caller-or-delete fork.
+- **In Scope:** making `trust_change` and `relationship_update` mutate real relationship/faction state and survive reload; a single authority with entitlement/idempotency/provenance checks and external operation identity; committing state before narration for consequential deltas; coherent rejection handling with logged reasons; recomputing model-proposed advantage/bonus damage from state (treating proposals as requests); routing accepted character relationship mechanics through `resolveCommand`.
 - **Out of Scope:** migrating combat resolution wholesale into the kernel (AC-6 covers the dialogue/delta path only); event recording (C-491 — this contract decides and applies, C-491 writes down what happened); any new delta kinds.
 
 ## Contract Size & Split Rule
@@ -135,19 +156,19 @@ type ConsequenceResult = {
 
 **Test Hooks**:
 - Moon Task: the client unit-test task
-- Integration: feed a `trust_change` and a `relationship_update`, assert `relationshipService` values changed, serialize → deserialize, assert they survive.
+- Integration: feed `trust_change`, `relationship_update` with `label: 'affinity'`, and `relationship_update` with `label: 'faction'`; assert the first two map to the exact `applyDelta` trust/affinity parameters above, the faction outcome maps to `adjustFactionStanding`, and all resulting values survive serialize → deserialize.
 - E2E / Visual:
     - **Functional**: N/A — store-level survival is proven by unit test; the production journey is AC-3's concern.
     - **Visual**: N/A.
 
 **Watch Points**:
 - The current code pushes both kinds into `valid` and mutates nothing — the test must assert the *store* changed, not that the method returned a "valid" array.
-- `relationship_update` carries a `label` (relationship label); map it to `applyDelta`'s `eventDescription` and `target` correctly rather than dropping the label.
+- `relationship_update.label` is the destination discriminator (`trust`, `affinity`, or `faction`), not free-form history text. Build `eventDescription`/`reason` from the operation and source-event IDs exactly as specified in State & Data Models.
 
 ### AC-2: One authority checks entitlement, idempotency and provenance
 **Given** a consequential delta
 **When** it is processed
-**Then** it passes through a single authority that checks **entitlement** (is this NPC allowed to grant this?), **idempotency** (has this reward already been granted?) and **provenance** (did the referenced event actually occur?), not just numeric bounds.
+**Then** it passes through a single authority that checks **entitlement** (is this NPC allowed to grant this?), **idempotency** (has this operation/delta ledger key already succeeded?) and **provenance** (does `sourceEventId` identify the loaded event being resolved?), not just numeric bounds.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -156,7 +177,7 @@ type ConsequenceResult = {
 
 **Test Hooks**:
 - Moon Task: the client unit-test task
-- Integration: three negative cases — an NPC not entitled to grant an item, a duplicate grant, and a delta referencing an event that never occurred — each rejected with the specific reason.
+- Integration: three negative cases—an NPC not entitled to grant an item, a retry using the same `operationId` and canonical delta key, and an unknown `sourceEventId`—are each rejected with the specific reason. A fourth case repeats the same grant under a new authoritative operation/event pair and asserts that it is a legitimate second application.
 - E2E / Visual:
     - **Functional**: N/A.
     - **Visual**: N/A.
@@ -226,26 +247,25 @@ type ConsequenceResult = {
 **Watch Points**:
 - This mirrors C-487 AC-5 for combat. The line stays: model proposes, rules decide. Do not duplicate the C-487 modifier logic — reuse the same computed-mechanics helpers.
 
-### AC-6: The rules kernel has real callers or is deleted
+### AC-6: The production relationship authority invokes the rules kernel
 **Given** `resolveCommand` in `rules_kernel.ts`
-**When** this contract lands
-**Then** it either has real production callers for the delta path or is explicitly deleted. Do not leave a third unreachable authority behind — the contract's Design Reference states which was chosen and why.
+**When** an accepted `trust_change` or character-targeted `relationship_update` reaches the production consequence authority
+**Then** that path invokes `resolveCommand` with `applyRelationshipDelta`, uses the returned mechanical state to call `relationshipService.applyDelta`, and persists the result. Imports, re-exports, and unreachable calls do not satisfy this criterion.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-6 | Unit | a caller-or-deletion assertion in the repo | whichever production path calls `resolveCommand` — or the deletion diff | Filled during verification |
+| AC-6 | Unit | an executable production-caller test in `npc_dialogue_service.test.ts` | `_validateAndApplyDeltas` → `resolveCommand` → `relationshipService.applyDelta` | Filled during verification |
 
 **Test Hooks**:
 - Moon Task: the client and utils test tasks
-- Integration: if "callers" is chosen, `grep -rn "resolveCommand" --include="*.ts"` shows a production consumer outside `rules_kernel.ts`; if "delete" is chosen, the file and its exports are removed and the guards/tests updated.
+- Integration: inject or spy on the real `resolveCommand` dependency, invoke the production consequence authority with an accepted relationship delta, and assert one `applyRelationshipDelta` call and the resulting store mutation. Add the rejection control proving the kernel is not invoked for a rejected delta.
 - E2E / Visual:
     - **Functional**: N/A.
     - **Visual**: N/A.
 
 **Watch Points**:
-- **This is a genuine fork, resolved during implementation with a stated reason — not a coin flip.** Both answers are acceptable; an unreachable kernel left in place is not.
-- If deletion is chosen, C-485's orphaned-capability guard must not regress to absorbing the kernel's exports silently — update the baseline with a pointer to this contract.
+- A source grep is not evidence: it cannot distinguish a real invocation from an import, re-export, comment, or dead branch. The caller test must execute the production authority seam.
 
 ## Implementation Sequence
 
@@ -253,18 +273,18 @@ type ConsequenceResult = {
 2. **Phase 2 (Ordering)**: reorder `_resolveRoll` so consequential state commits before narration; state the consequential kinds explicitly (AC-3).
 3. **Phase 3 (Rejection)**: add `ConsequenceResult` and coherent rejection handling with logged reasons (AC-4).
 4. **Phase 4 (Combat proposals)**: recompute model-proposed advantage/bonus from state (AC-5).
-5. **Phase 5 (Kernel fork)**: give `resolveCommand` production callers for the delta path or delete it, stating the choice and why (AC-6). Run `validate()`.
+5. **Phase 5 (Kernel reachability)**: route character relationship mechanics through `resolveCommand` and prove the production invocation with an executable caller test (AC-6). Run `validate()`.
 
 ## Edge Cases & Gotchas
 
-- **Double-grant on retry**: a retried `inventory_grant` must not grant twice — the idempotency check is what makes retries safe.
+- **Double-grant on retry**: a retried `inventory_grant` with the same operation/canonical-delta ledger key must not grant twice; the same grant from a distinct authoritative event uses a new `operationId` and is allowed.
 - **Entitlement for NPCs with no authored grant rights**: a generic NPC must not be able to grant arbitrary items; the authority falls back to "not entitled" unless pack data says otherwise.
 - **Trust vs. faction standing**: `trust_change` (character relationship) and faction standing are different stores; map each delta kind to its store explicitly and test both.
-- **Batch ordering**: if a turn proposes several deltas, apply them in a deterministic order and treat each independently — one rejection must not silently drop the others.
+- **Batch ordering**: use the fixed kind/target/label/value ordering in Failure Recovery, never model or collection input order. Tests retry a shuffled multi-delta batch under the same `operationId`, assert already-applied entries are not repeated, and assert an invalid/rejected entry does not prevent later sorted entries from applying.
 
 ## Open Questions
 
-- **AC-6 fork — unresolved by design**: whether `resolveCommand` gains production callers or is deleted is a genuine fork the backlog instructs **not** to resolve by guessing. Both answers are acceptable; the implementer must choose one, state it in the Design Reference, and leave no unreachable kernel behind. This question must be resolved before `approved`.
+- Resolved: retain `resolveCommand` and make it the mechanical authority for production character relationship deltas; `relationshipService` remains the persistence boundary. AC-6's executable caller test prevents the kernel from becoming unreachable again.
 
 ## Amendments
 

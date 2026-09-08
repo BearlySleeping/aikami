@@ -613,7 +613,11 @@ const promptForModels = (checkResults: CheckResult[]): void => {
   console.log(
     fmt.note('Set the models the contract pipeline (writer/critic/implementer/verifier/review)'),
   );
-  console.log(fmt.note('will use. Leave a tier blank to use your pi default model for that tier.'));
+  console.log(
+    fmt.note(
+      'will use. Leave a tier blank to preserve its current configuration, including generic fallbacks such as MODEL.',
+    ),
+  );
   console.log();
 
   const values: Record<string, string> = {};

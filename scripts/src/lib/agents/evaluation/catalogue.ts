@@ -17,22 +17,26 @@ import type { CatalogueEntry, FamilyLabel } from './types.ts';
  * fails closed (see resolveCatalogueEntry), never silently substituting a
  * different model.
  */
-const FAMILY_FALLBACK_KEYS: Readonly<Record<FamilyLabel, readonly string[]>> = {
+const FAMILY_FALLBACK_KEYS = {
   flash: ['EVAL_MODEL_FLASH', 'PI_MODEL_FLASH', 'MODEL_FLASH', 'MODEL'],
   sonnet: ['EVAL_MODEL_SONNET', 'PI_MODEL_SONNET', 'MODEL_SONNET'],
   opus: ['EVAL_MODEL_OPUS', 'PI_MODEL_OPUS', 'MODEL_OPUS'],
   astra: ['EVAL_MODEL_ASTRA', 'PI_MODEL_ASTRA', 'MODEL_ASTRA'],
-};
+} as const satisfies Readonly<Record<FamilyLabel, readonly string[]>>;
+
+type EnvResolver = (keys: readonly string[]) => string | undefined;
 
 /**
  * Candidate provider/model slugs per family label, resolved from the
  * repo-root `.env`. Each family has at most one candidate — the configured
  * value — because we never hardcode model slugs.
  */
-const familyCandidates = (): Readonly<Record<FamilyLabel, readonly string[]>> => {
+const familyCandidates = (
+  envResolver: EnvResolver,
+): Readonly<Record<FamilyLabel, readonly string[]>> => {
   const resolved = {} as Record<FamilyLabel, readonly string[]>;
   for (const family of Object.keys(FAMILY_FALLBACK_KEYS) as FamilyLabel[]) {
-    const value = getEnvWithFallback(FAMILY_FALLBACK_KEYS[family]);
+    const value = envResolver(FAMILY_FALLBACK_KEYS[family]);
     resolved[family] = value ? [value] : [];
   }
   return resolved;
@@ -93,9 +97,10 @@ const splitSlug = (slug: string): { provider: string; model: string } => {
 export const resolveCatalogueEntry = async (options: {
   family: FamilyLabel;
   authCheck?: AuthCheck;
+  envResolver?: EnvResolver;
 }): Promise<CatalogueEntry> => {
-  const { family, authCheck = runAuthCheck } = options;
-  const candidates = familyCandidates()[family];
+  const { family, authCheck = runAuthCheck, envResolver = getEnvWithFallback } = options;
+  const candidates = familyCandidates(envResolver)[family];
   if (candidates.length === 0) {
     return {
       family,
@@ -135,10 +140,11 @@ export const resolveCatalogueEntry = async (options: {
 export const preflightCatalogue = async (options: {
   families: readonly FamilyLabel[];
   authCheck?: AuthCheck;
+  envResolver?: EnvResolver;
 }): Promise<{ entries: readonly CatalogueEntry[]; allAvailable: boolean }> => {
-  const { families, authCheck = runAuthCheck } = options;
+  const { families, authCheck = runAuthCheck, envResolver = getEnvWithFallback } = options;
   const entries = await Promise.all(
-    families.map((family) => resolveCatalogueEntry({ family, authCheck })),
+    families.map((family) => resolveCatalogueEntry({ family, authCheck, envResolver })),
   );
   return { entries, allAvailable: entries.every((entry) => entry.available) };
 };

@@ -568,14 +568,20 @@ const CONTRACTS_DIR_PATH = resolve(ROOT, 'docs/contracts');
 
 /**
  * Parse contract Evidence Matrices and extract symbols from Production Path cells.
- * Returns a map of `symbol` → `declaringFile` for symbols referenced in contracts.
+ * Returns a map of `symbol` → declaring files for symbols referenced in contracts.
  *
  * Supports:
  *   - `file.ts#exportedSymbol` — resolves to the file and extracts the symbol
  *   - `ClassName.methodName` — looks up the file that exports `ClassName`
  */
-const evidenceMatrixSymbols = (): Map<string, string> => {
-  const result = new Map<string, string>();
+const evidenceMatrixSymbols = (): Map<string, Set<string>> => {
+  const result = new Map<string, Set<string>>();
+
+  const recordSymbol = (symbol: string, declaringFile: string): void => {
+    const files = result.get(symbol) ?? new Set<string>();
+    files.add(declaringFile);
+    result.set(symbol, files);
+  };
 
   let contractFiles: string[] = [];
   try {
@@ -616,9 +622,9 @@ const evidenceMatrixSymbols = (): Map<string, string> => {
             inTable = false;
             continue;
           }
-          // Production Path is column index 3 (0=AC, 1=Test Level, 2=Required Artifact, 3=Production Path)
+          // split('|') retains the leading empty cell, so Production Path is index 4.
           const cells = line.split('|').map((c) => c.trim());
-          const prodPathCell = cells[3] ?? '';
+          const prodPathCell = cells[4] ?? '';
           if (!prodPathCell || prodPathCell === 'N/A') {
             continue;
           }
@@ -631,7 +637,7 @@ const evidenceMatrixSymbols = (): Map<string, string> => {
             // Resolve the file reference to an actual file in the services dir
             const resolvedFile = resolveFileRef(fileRef);
             if (resolvedFile) {
-              result.set(symbolName, resolvedFile);
+              recordSymbol(symbolName, resolvedFile);
             }
             continue;
           }
@@ -644,7 +650,7 @@ const evidenceMatrixSymbols = (): Map<string, string> => {
             // Try to find the file that exports this class
             const resolvedFile = findServiceFileForClass(className);
             if (resolvedFile) {
-              result.set(`${className}.${methodName}`, resolvedFile);
+              recordSymbol(`${className}.${methodName}`, resolvedFile);
             }
           }
         }
@@ -768,7 +774,7 @@ const main = () => {
       const externalRefs = refs.filter((r) => r !== fileRelPath);
 
       // A symbol named by an Evidence Matrix Production Path counts as in-use
-      const isEvidenceSymbol = evidenceSymbols.has(symbol);
+      const isEvidenceSymbol = evidenceSymbols.get(symbol)?.has(filePath) ?? false;
 
       if (externalRefs.length === 0 && !isEvidenceSymbol) {
         orphanedSymbols.push(symbol);

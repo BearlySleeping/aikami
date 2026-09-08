@@ -415,12 +415,15 @@ export const resetRootEnvCache = (): void => {
  *   ]);
  */
 export const getEnvWithFallback = (keys: readonly string[]): string | undefined => {
-  const rootEnv = loadRootEnv();
   for (const key of keys) {
     const envValue = process.env[key];
     if (envValue !== undefined && envValue.trim() !== '') {
       return envValue.trim();
     }
+  }
+
+  const rootEnv = loadRootEnv();
+  for (const key of keys) {
     const fileValue = rootEnv[key];
     if (fileValue !== undefined && fileValue.trim() !== '') {
       return fileValue.trim();

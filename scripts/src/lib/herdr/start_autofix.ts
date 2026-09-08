@@ -93,6 +93,15 @@ const ENV_THINKING = getEnvWithFallback([
   'CONTRACT_PIPELINE_THINKING',
   'PI_THINKING',
 ]);
+const SUPPORTED_THINKING_LEVELS: ReadonlySet<string> = new Set([
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]);
 const CLIENT_PORT = 5274;
 const HUB_PORT = 5276;
 
@@ -103,7 +112,9 @@ const args = process.argv.slice(2);
 const doJoin = args.includes('--join') || args.includes('-j');
 const doAll = args.includes('--all');
 const model = parseOpt(['--model', '-m']) ?? ENV_MODEL;
-const thinking = parseOpt(['--thinking']) ?? ENV_THINKING;
+const validEnvThinking =
+  ENV_THINKING && SUPPORTED_THINKING_LEVELS.has(ENV_THINKING) ? ENV_THINKING : undefined;
+const thinking = parseOpt(['--thinking']) ?? validEnvThinking;
 const scope: ScopeMode = (parseOpt(['--scope', '-s']) as ScopeMode | undefined) ?? 'git';
 const isGitScoped = scope === 'git';
 
