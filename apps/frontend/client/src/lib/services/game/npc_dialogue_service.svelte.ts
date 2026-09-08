@@ -30,6 +30,7 @@ import {
 } from '@aikami/schemas';
 import type {
   ContentPackItemEntry,
+  ContentPackNpcPersonality,
   NpcDialogueChoice,
   NpcDialogueCommand,
   NpcDialogueCommandKind,
@@ -42,8 +43,8 @@ import type {
   NpcSuggestionChip,
 } from '@aikami/types';
 import { Value } from 'typebox/value';
-import { FALLBACK_PERSONA_ID, PERSONA_PROMPTS } from '$lib/data/dialogue_personas';
 import { inventoryService, questStateService } from '$services';
+import { buildNpcPersona } from './npc_dialogue_persona';
 
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
 // ---------------------------------------------------------------------------
@@ -62,6 +63,16 @@ type NpcDialogueContentProvider = {
         combatStats?: Record<string, unknown>;
         /** Pre-authored suggestion chips for the initial greeting. */
         initialSuggestions?: NpcSuggestionChip[];
+        /** Authored personality (voice + manner) — C-488. */
+        personality?: ContentPackNpcPersonality;
+        /** What the NPC wants, including conflicts with others — C-488. */
+        agenda?: string[];
+        /** Facts the NPC knows and can share — C-488. */
+        knowledge?: string[];
+        /** Facts the NPC knows and will not volunteer — C-488. */
+        secrets?: string[];
+        /** Lines the NPC will not cross — C-488. */
+        boundaries?: string[];
       }
     | undefined;
   /** Returns a piece of authored dialogue by key, or undefined. */
@@ -522,6 +533,7 @@ export class NpcDialogueService
     const npc = this._contentProvider!.getNpc(options.npcId);
     const allowedCommands = this._deriveAllowedCommands(npc);
     return this._buildContextProjection({
+      npcId: options.npcId,
       npc,
       npcName: options.npcName,
       messages: options.messages,
@@ -571,6 +583,7 @@ export class NpcDialogueService
       };
 
       const contextProjection = this._buildContextProjection({
+        npcId: options.npcId,
         npc,
         npcName: options.npcName,
         messages: options.messages,
@@ -728,6 +741,8 @@ export class NpcDialogueService
 
       try {
         return await this._analyzeIntent({
+          npcId: options.npcId,
+          npc,
           npcName: options.npcName,
           allowedCommands,
           messages: options.messages,
@@ -1268,21 +1283,17 @@ export class NpcDialogueService
 
   /** Builds the full context projection for a dialogue turn. */
   private _buildContextProjection(options: {
+    npcId: string;
     npc: ReturnType<NpcDialogueContentProvider['getNpc']>;
     npcName: string;
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     gameStateFacts: string[];
     allowedCommands: NpcDialogueCommandKind[];
   }): DialogueContextProjection {
-    const { npc, npcName, messages, gameStateFacts, allowedCommands } = options;
+    const { npcId, npc, npcName, messages, gameStateFacts, allowedCommands } = options;
 
-    // Persona: content-pack NPC name + PERSONA_PROMPTS fallback
-    const personaKey = npc?.name?.toLowerCase().replace(/\s+/g, '_') ?? FALLBACK_PERSONA_ID;
-    const persona = npc?.name
-      ? `You are ${npcName}, a ${npc.name} living in a fantasy world. ${
-          PERSONA_PROMPTS[personaKey] ?? PERSONA_PROMPTS[FALLBACK_PERSONA_ID]
-        }`
-      : PERSONA_PROMPTS[FALLBACK_PERSONA_ID];
+    // Persona: assembled from authored identity with per-field fallback (C-488).
+    const persona = this._buildPersona({ npcId, npcName, npc });
 
     // Memory: recent conversation turns (bounded window — last 10 turns)
     const memory = messages
@@ -1297,6 +1308,38 @@ export class NpcDialogueService
       relationshipFacts: [],
       allowedCommands,
     };
+  }
+
+  /**
+   * Assembles the production NPC persona from authored identity and logs
+   * which identity fields fell back to the generic path (C-488 AC-3).
+   */
+  private _buildPersona(options: {
+    npcId: string;
+    npcName: string;
+    npc: ReturnType<NpcDialogueContentProvider['getNpc']>;
+  }): string {
+    const { npcId, npcName, npc } = options;
+    const missing: string[] = [];
+    if (!npc?.personality) {
+      missing.push('personality');
+    }
+    if (!npc?.agenda || npc.agenda.length === 0) {
+      missing.push('agenda');
+    }
+    if (!npc?.knowledge || npc.knowledge.length === 0) {
+      missing.push('knowledge');
+    }
+    if (!npc?.secrets || npc.secrets.length === 0) {
+      missing.push('secrets');
+    }
+    if (!npc?.boundaries || npc.boundaries.length === 0) {
+      missing.push('boundaries');
+    }
+    if (missing.length > 0) {
+      this.info('dialogue:generic-persona', { npcId, npcName, missingFields: missing });
+    }
+    return buildNpcPersona({ npcName, identity: npc });
   }
 
   /**
@@ -1595,6 +1638,8 @@ export class NpcDialogueService
    * visible before the dice prompt).
    */
   private async _analyzeIntent(options: {
+    npcId: string;
+    npc: ReturnType<NpcDialogueContentProvider['getNpc']>;
     npcName: string;
     allowedCommands: NpcDialogueCommandKind[];
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
@@ -1605,14 +1650,25 @@ export class NpcDialogueService
   }): Promise<NpcIntentAnalysisOutput> {
     this.debug('_analyzeIntent:start');
 
-    const { npcName, allowedCommands, messages, gameStateFacts, playerContext, onChunk } = options;
+    const {
+      npcId,
+      npc,
+      npcName,
+      allowedCommands,
+      messages,
+      gameStateFacts,
+      playerContext,
+      onChunk,
+    } = options;
+
+    const persona = this._buildPersona({ npcId, npcName, npc });
 
     // Build the input for the LLM
     const input: NpcIntentAnalysisInput = {
       playerInput: messages.filter((m) => m.role === 'player').pop()?.content ?? '',
       npcContext: {
         name: npcName,
-        persona: `You are ${npcName}, a character in a fantasy world.`,
+        persona,
         allowedCommands,
       },
       playerContext,
@@ -1761,10 +1817,37 @@ export class NpcDialogueService
       outcome: options.outcome,
     });
 
-    const { npcName, checkType, difficultyClass, rollTotal, outcome, playerInput, onChunk } =
-      options;
+    const {
+      npcId,
+      npcName,
+      messages,
+      gameStateFacts,
+      checkType,
+      difficultyClass,
+      rollTotal,
+      outcome,
+      playerInput,
+      onChunk,
+    } = options;
 
-    const userPrompt = `${npcName} resolves a ${checkType} check: DC=${difficultyClass}, Roll=${rollTotal}, ${outcome === 'pass' ? 'SUCCESS' : 'FAILURE'}. Player said: "${playerInput}"`;
+    // C-488 AC-3/AC-4: the roll-resolution prompt carries the same authored
+    // persona, conversation history, and game-state facts the intent prompt
+    // receives — assembled once, shared across both paths.
+    const npc = this._contentProvider!.getNpc(npcId);
+    const persona = this._buildPersona({ npcId, npcName, npc });
+    const historyLines = messages
+      .slice(-10)
+      .map((m) => `${m.role === 'player' ? 'Player' : npcName}: ${m.content.slice(0, 200)}`);
+
+    const factLines = gameStateFacts.length > 0 ? ['', '[GAME STATE]', ...gameStateFacts] : [];
+    const historyBlock =
+      historyLines.length > 0 ? ['', '[CONVERSATION HISTORY]', ...historyLines] : [];
+
+    const userPrompt = [
+      `${npcName} resolves a ${checkType} check: DC=${difficultyClass}, Roll=${rollTotal}, ${outcome === 'pass' ? 'SUCCESS' : 'FAILURE'}. Player said: "${playerInput}"`,
+      ...factLines,
+      ...historyBlock,
+    ].join('\n');
 
     // C-421: log the authoritative mechanical result so prompt fidelity is
     // verifiable from a session log.
@@ -1778,6 +1861,9 @@ export class NpcDialogueService
 
     // Call 1 streams prose; call 2 extracts the roll-resolution envelope.
     const narrativeSystemPrompt = [
+      '[NPC CONTEXT]',
+      persona,
+      '',
       'You are a game master resolving a dice roll outcome in an RPG dialogue.',
       'Given the skill check result, write a narrative NPC response and propose',
       'any state changes (trust, flags, inventory).',

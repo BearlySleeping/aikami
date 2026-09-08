@@ -192,7 +192,7 @@ describe('model resolution is env-driven', () => {
 describe('AC-3: Model resolution records settings', () => {
   test('resolveModelConfiguration returns all fields', () => {
     process.env.CONTRACT_PIPELINE_MODEL_PRO = 'provider/pro-model';
-    const resolved = resolveModelConfiguration({ role: 'implementer' });
+    const resolved = resolveModelConfiguration({ role: 'writer' });
     expect(resolved.requestedTier).toBe('pro');
     expect(resolved.requestedTierValue).toBe('provider/pro-model');
     expect(resolved.effectiveModel).toBe('provider/pro-model');
@@ -211,9 +211,9 @@ describe('AC-3: Model resolution records settings', () => {
     expect(resolved.requestedTier).toBe('flash');
   });
 
-  test('implementer resolves to pro tier', () => {
+  test('implementer resolves to flash tier', () => {
     const resolved = resolveModelConfiguration({ role: 'implementer' });
-    expect(resolved.requestedTier).toBe('pro');
+    expect(resolved.requestedTier).toBe('flash');
   });
 
   test('verifier resolves to flash tier', () => {
@@ -286,7 +286,7 @@ describe('AC-3: Model override validation', () => {
   test('an empty override falls through to the fallback keys (no error)', () => {
     process.env.CONTRACT_PIPELINE_MODEL_PRO = '';
     process.env.PI_MODEL_PRO = 'provider/pi-pro-model';
-    const resolved = resolveModelConfiguration({ role: 'implementer' });
+    const resolved = resolveModelConfiguration({ role: 'writer' });
     expect(resolved.requestedTierValue).toBe('provider/pi-pro-model');
     expect(resolved.effectiveModel).toBe('provider/pi-pro-model');
     expect(resolved.issues.filter((issue) => issue.severity === 'error')).toHaveLength(0);

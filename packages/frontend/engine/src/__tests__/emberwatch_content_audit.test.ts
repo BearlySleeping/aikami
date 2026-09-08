@@ -91,7 +91,7 @@ const EMBERWATCH_FIXTURES = {
   packId: 'emberwatch',
   // C-378: bumped for the new top-level `terrains` block + aikami map
   // channels — consumers that cache/gate on the pack version observe it.
-  version: '3.2.0',
+  version: '4.0.0',
   atlas: {
     path: join(
       import.meta.dir,

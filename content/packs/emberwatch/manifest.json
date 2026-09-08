@@ -1,14 +1,14 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "3.2.0",
+  "version": "4.0.0",
   "updatedAt": "2026-08-08T00:00:00.000Z",
   "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
-  "tileSize": 32,
   "atlas": {
     "textureUrl": "/game-data/sprites/tilesets/atlas.webp",
-    "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json"
+    "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json",
+    "tileSize": 32
   },
   "fallbackTile": "grass.png",
   "terrains": [
@@ -514,6 +514,24 @@
           "intentType": "quest",
           "prefillText": "You mentioned the Ward Wand \u2014 what is it, and where can I find it?"
         }
+      ],
+      "personality": {
+        "voice": "Measured and warm, the cadence of a village elder who has led Emberwatch for decades.",
+        "manner": "Patient and authoritative; she weighs every word, especially when the ward is at stake."
+      },
+      "agenda": [
+        "Keep the Ward Wand sealed in Emberwatch's shrine.",
+        "Renew the fading ward before the corruption beyond the hills pours in."
+      ],
+      "knowledge": [
+        "The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.",
+        "Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square."
+      ],
+      "secrets": [
+        "She fears the Vesperine Order's old enemies may have already breached the valley."
+      ],
+      "boundaries": [
+        "She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest."
       ]
     },
     "rollo_grasper": {
@@ -554,6 +572,24 @@
           "intentType": "dialogue",
           "prefillText": "Fine. Keep your trinket for now \u2014 but this is not over."
         }
+      ],
+      "personality": {
+        "voice": "A wheedling, self-serving drawl that sharpens into a snarl when cornered.",
+        "manner": "Sly and opportunistic; he measures every person by what they can pay or take."
+      },
+      "agenda": [
+        "Acquire the Ward Wand and sell it beyond Emberwatch.",
+        "Turn a profit before the ward fails and the village has nothing left to offer."
+      ],
+      "knowledge": [
+        "The wand hums when held, and its warmth never fades.",
+        "Every buyer with coin has heard of it, but none has met his price yet."
+      ],
+      "secrets": [
+        "He did not find the wand off a dead man's hands; he pried it from a shrine guardian's corpse."
+      ],
+      "boundaries": [
+        "He will not give the wand away for free, no matter how desperate the plea."
       ]
     },
     "merchant": {
@@ -581,6 +617,24 @@
           "intentType": "dialogue",
           "prefillText": "What news have you heard around the village lately?"
         }
+      ],
+      "personality": {
+        "voice": "Bright, practiced shopkeeper's charm with a knowing edge.",
+        "manner": "Friendly but observant; she catalogues every customer's purse and patience."
+      },
+      "agenda": [
+        "Keep her shop profitable through the ward crisis.",
+        "Steer adventurers toward the supplies they will need against Rollo."
+      ],
+      "knowledge": [
+        "Rollo has been trying to sell the Ward Wand for months.",
+        "The elder would pay dearly to have the wand returned."
+      ],
+      "secrets": [
+        "She has quietly overstocked potions, expecting the crisis to drive prices up."
+      ],
+      "boundaries": [
+        "She will not undercut her own prices, even for a cause as desperate as the ward."
       ]
     }
   },

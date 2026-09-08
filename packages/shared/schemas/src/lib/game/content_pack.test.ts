@@ -6,7 +6,9 @@
 
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
+import emberwatchManifest from '../../../../../../content/packs/emberwatch/manifest.json';
 import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
+import { normaliseLegacyStep } from './onboarding_hints.ts';
 
 /** Minimal valid manifest fixture. */
 const validManifest = {
@@ -686,7 +688,6 @@ describe('PackConfigSchema (C-376 AC-2)', () => {
     // fail validation (CodeRabbit review, C-376).
     expect(Value.Check(PackConfigSchema, { tiles: {} })).toBe(false);
   });
-
   test('prop isWalkable undefined is omitted by the projection contract', () => {
     // The client projection omits optional fields that are absent — it never
     // emits `isWalkable: undefined`. structuredClone preserves an explicit
@@ -737,5 +738,110 @@ describe('PackConfigSchema (C-376 AC-2)', () => {
   test('npcs is optional — legacy configs without it still validate (C-400)', () => {
     const legacy = { tiles: {}, props: {} };
     expect(Value.Check(PackConfigSchema, legacy)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-1 — authored NPC identity fields on the pack NPC schema
+// ---------------------------------------------------------------------------
+
+describe('ContentPackNpcEntrySchema — authored identity (C-488 AC-1)', () => {
+  test('accepts an NPC with all five authored identity fields', () => {
+    const manifest = {
+      ...validManifest,
+      npcs: {
+        // biome-ignore lint/style/useNamingConvention: manifest npc IDs use snake_case
+        village_elder: {
+          name: 'Elder Thalia',
+          personality: {
+            voice: 'Measured and warm.',
+            manner: 'Patient and authoritative.',
+          },
+          agenda: ["Keep the Ward Wand sealed in Emberwatch's shrine."],
+          knowledge: ['The Ward Wand is a Vesperine relic.'],
+          secrets: ['She fears old enemies have breached the valley.'],
+          boundaries: ["She will not risk Emberwatch on a stranger's promise."],
+        },
+      },
+    };
+    const result = Value.Parse(ContentPackManifestSchema, manifest);
+    const npc = result.npcs.village_elder;
+    expect(npc.personality?.voice).toBe('Measured and warm.');
+    expect(npc.personality?.manner).toBe('Patient and authoritative.');
+    expect(npc.agenda).toEqual(["Keep the Ward Wand sealed in Emberwatch's shrine."]);
+    expect(npc.knowledge).toEqual(['The Ward Wand is a Vesperine relic.']);
+    expect(npc.secrets).toEqual(['She fears old enemies have breached the valley.']);
+    expect(npc.boundaries).toEqual(["She will not risk Emberwatch on a stranger's promise."]);
+  });
+
+  test('accepts an NPC without identity fields (all optional)', () => {
+    const manifest = {
+      ...validManifest,
+      npcs: {
+        bob: { name: 'Bob' },
+      },
+    };
+    const result = Value.Parse(ContentPackManifestSchema, manifest);
+    expect(result.npcs.bob.personality).toBeUndefined();
+    expect(result.npcs.bob.agenda).toBeUndefined();
+    expect(result.npcs.bob.knowledge).toBeUndefined();
+    expect(result.npcs.bob.secrets).toBeUndefined();
+    expect(result.npcs.bob.boundaries).toBeUndefined();
+  });
+
+  test('rejects unknown keys on the NPC entry (additionalProperties: false)', () => {
+    const manifest = {
+      ...validManifest,
+      npcs: {
+        bob: { name: 'Bob', mood: 'grumpy' },
+      },
+    };
+    expect(Value.Check(ContentPackManifestSchema, manifest)).toBe(false);
+  });
+
+  test('rejects a string personality — the { voice, manner } object is normative', () => {
+    const manifest = {
+      ...validManifest,
+      npcs: {
+        bob: { name: 'Bob', personality: 'grumpy' },
+      },
+    };
+    expect(() => Value.Parse(ContentPackManifestSchema, manifest)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-5 — shipped Emberwatch manifest carries authored identity
+// ---------------------------------------------------------------------------
+
+describe('C-488 AC-5 — Emberwatch manifest content', () => {
+  const manifest = Value.Parse(ContentPackManifestSchema, {
+    ...emberwatchManifest,
+    onboarding: {
+      ...emberwatchManifest.onboarding,
+      steps: emberwatchManifest.onboarding.steps.map((step) => normaliseLegacyStep(step)),
+    },
+  });
+
+  test('all three Emberwatch NPCs have a fully authored identity', () => {
+    for (const npcId of ['village_elder', 'rollo_grasper', 'merchant']) {
+      const npc = manifest.npcs[npcId];
+      expect(npc, `${npcId} exists`).toBeDefined();
+      expect(npc?.personality?.voice, `${npcId} voice`).toBeTruthy();
+      expect(npc?.personality?.manner, `${npcId} manner`).toBeTruthy();
+      expect(npc?.agenda?.length, `${npcId} agenda`).toBeGreaterThanOrEqual(1);
+      expect(npc?.knowledge?.length, `${npcId} knowledge`).toBeGreaterThanOrEqual(1);
+      expect(npc?.secrets?.length, `${npcId} secrets`).toBeGreaterThanOrEqual(1);
+      expect(npc?.boundaries?.length, `${npcId} boundaries`).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  test('Thalia and Rollo carry the exact conflicting first-agenda entries', () => {
+    expect(manifest.npcs.village_elder?.agenda?.[0]).toBe(
+      "Keep the Ward Wand sealed in Emberwatch's shrine.",
+    );
+    expect(manifest.npcs.rollo_grasper?.agenda?.[0]).toBe(
+      'Acquire the Ward Wand and sell it beyond Emberwatch.',
+    );
   });
 });
