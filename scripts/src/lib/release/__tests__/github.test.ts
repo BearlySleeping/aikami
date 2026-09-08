@@ -16,9 +16,15 @@ mock.module('../../cli_utils', () => ({
   run,
 }));
 
-const { commitsInRange, inFlightReleaseRun, latestStableTag, pushBranch, setTag } = await import(
-  '../github'
-);
+const {
+  acquireReleaseLock,
+  commitsInRange,
+  inFlightReleaseRun,
+  latestStableTag,
+  pushBranch,
+  releaseReleaseLock,
+  setTag,
+} = await import('../github');
 
 describe('release git helpers', () => {
   beforeEach(() => {
@@ -72,6 +78,50 @@ describe('release git helpers', () => {
 
   test('pushBranch dry-run records no git command', async () => {
     await pushBranch({ branch: 'staging', dryRun: true });
+    expect(commands).toHaveLength(0);
+  });
+
+  test('release lock atomically creates and deletes a shared remote ref', async () => {
+    responses.push({ out: '1234567890', err: '', code: 0 });
+
+    const lock = await acquireReleaseLock({ branch: 'staging', dryRun: false });
+    expect(commands[0]).toEqual(['git', 'rev-parse', 'HEAD']);
+    expect(commands[1]).toEqual([
+      'gh',
+      'api',
+      '--method',
+      'POST',
+      'repos/{owner}/{repo}/git/refs',
+      '-f',
+      'ref=refs/heads/release-lock/staging',
+      '-f',
+      'sha=1234567890',
+    ]);
+
+    await releaseReleaseLock({ lock, dryRun: false });
+    expect(commands[2]).toEqual([
+      'gh',
+      'api',
+      '--method',
+      'DELETE',
+      'repos/{owner}/{repo}/git/refs/heads/release-lock/staging',
+    ]);
+  });
+
+  test('release lock rejects a concurrent holder', async () => {
+    responses.push(
+      { out: '1234567890', err: '', code: 0 },
+      { out: '', err: 'HTTP 422: Reference already exists', code: 1 },
+    );
+
+    await expect(acquireReleaseLock({ branch: 'staging', dryRun: false })).rejects.toThrow(
+      'Another release cut already holds the staging lock',
+    );
+  });
+
+  test('release lock dry-run performs no git or GitHub commands', async () => {
+    const lock = await acquireReleaseLock({ branch: 'staging', dryRun: true });
+    await releaseReleaseLock({ lock, dryRun: true });
     expect(commands).toHaveLength(0);
   });
 

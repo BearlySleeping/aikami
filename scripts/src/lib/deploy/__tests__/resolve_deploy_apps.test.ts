@@ -53,9 +53,7 @@ describe('resolve_deploy_apps orphaned before SHA (force-push guard)', () => {
       expect(readFileSync(outputPath, 'utf8')).toContain('force=true\n');
 
       const deployApps = readFileSync(envPath, 'utf8');
-      // client-tauri is never an automatic side effect of a web push.
-      expect(deployApps).toContain('DEPLOY_APPS=client');
-      expect(deployApps).not.toContain('client-tauri');
+      expect(deployApps).toBe('DEPLOY_APPS=client site hub docs database storage\n');
     } finally {
       rmSync(repoDir, { recursive: true, force: true });
     }

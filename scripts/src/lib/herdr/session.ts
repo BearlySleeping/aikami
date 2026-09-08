@@ -1371,13 +1371,15 @@ export const assessServiceReadiness = async (
   }
 
   // Shared/external services may be reused across runs, so pane liveness
-  // alone cannot establish that the intended instance answered. However,
-  // when no probe is configured at all, treat pane-level health as sufficient
-  // — the probe contract is an optional hardening layer, not a hard
-  // requirement. Without this fallback, shared services without probes
-  // (image, voice, text) can never pass readiness, even when freshly started
-  // and responding on their port.
+  // alone cannot establish that the intended instance answered. Run-owned
+  // services do not cross that trust boundary and may fall back to pane health.
   if (!serviceDef.probe) {
+    if (serviceDef.scope !== 'run') {
+      return {
+        state: 'unavailable',
+        reason: 'Reusable service has no instance-bound identity probe',
+      };
+    }
     return { state: 'healthy' };
   }
 

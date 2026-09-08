@@ -594,7 +594,7 @@ describe('C-471 — identity probe (AC-2)', () => {
     }
   });
 
-  it('assessServiceReadiness treats a missing probe as healthy even for reusable services', async () => {
+  it('assessServiceReadiness rejects reusable services without identity evidence', async () => {
     const server = net.createServer();
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const port = (server.address() as net.AddressInfo).port;
@@ -607,7 +607,8 @@ describe('C-471 — identity probe (AC-2)', () => {
         identity,
         port,
       );
-      expect(result.state).toBe('healthy');
+      expect(result.state).toBe('unavailable');
+      expect(result.reason).toBe('Reusable service has no instance-bound identity probe');
       expect(result.observedIdentity).toBeUndefined();
     } finally {
       server.close();
