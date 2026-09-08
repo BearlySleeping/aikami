@@ -344,6 +344,46 @@ export const waitForInFlightPushWorkflows = async (options: {
   }
 };
 
+/**
+ * The databaseId of an in-progress `release`-event release.yml run on
+ * `branch`, or null when none is running. Cheap mutual-exclusion guard:
+ * two simultaneous `bun run release` cuts on `staging` would race on the
+ * rolling tag and the delete-then-recreate release, so a second cut aborts
+ * with a clear message instead of corrupting the first.
+ */
+export const inFlightReleaseRun = async (options: {
+  branch: string;
+  dryRun: boolean;
+}): Promise<string | null> => {
+  const { branch, dryRun } = options;
+  if (dryRun) {
+    log(`  ${c.dim}[dry-run] check for an in-flight release workflow on ${branch}${c.reset}`);
+    return null;
+  }
+  const out = await checked([
+    'gh',
+    'run',
+    'list',
+    '--workflow',
+    'release.yml',
+    '--event',
+    'release',
+    '--branch',
+    branch,
+    '--limit',
+    '20',
+    '--json',
+    'databaseId,status',
+    '--jq',
+    '.[] | select(.status == "in_progress" or .status == "queued") | .databaseId',
+  ]);
+  const runIds = out
+    .split(String.fromCharCode(10))
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return runIds[0] ?? null;
+};
+
 /** True when a published release exposes an asset with the exact name. */
 export const releaseHasAsset = async (options: {
   tag: string;

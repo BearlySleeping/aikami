@@ -594,7 +594,27 @@ describe('C-471 — identity probe (AC-2)', () => {
     }
   });
 
-  it('assessServiceReadiness rejects missing or mismatched reusable-service evidence', async () => {
+  it('assessServiceReadiness treats a missing probe as healthy even for reusable services', async () => {
+    const server = net.createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as net.AddressInfo).port;
+    const identity = { service: 'voice', checkout: '/expected', runId: 'C-471' } as const;
+
+    try {
+      const result = await assessServiceReadiness(
+        'fake-pane',
+        { ...SERVICE_DEFS.voice, readyCheck: 'tcp', probe: undefined },
+        identity,
+        port,
+      );
+      expect(result.state).toBe('healthy');
+      expect(result.observedIdentity).toBeUndefined();
+    } finally {
+      server.close();
+    }
+  });
+
+  it('assessServiceReadiness rejects mismatched reusable-service evidence', async () => {
     const server = net.createServer();
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const port = (server.address() as net.AddressInfo).port;
@@ -607,14 +627,6 @@ describe('C-471 — identity probe (AC-2)', () => {
     ];
 
     try {
-      const missingProbeResult = await assessServiceReadiness(
-        'fake-pane',
-        { ...SERVICE_DEFS.voice, readyCheck: 'tcp', probe: undefined },
-        identity,
-        port,
-      );
-      expect(missingProbeResult.state).toBe('unavailable');
-
       for (const observedIdentity of observedIdentities) {
         const def: ServiceDef = {
           ...SERVICE_DEFS.voice,

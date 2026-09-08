@@ -57,6 +57,7 @@ import {
   currentBranch,
   deleteRelease,
   formatVersionTag,
+  inFlightReleaseRun,
   isTreeClean,
   latestStableTag,
   localTagExists,
@@ -144,6 +145,18 @@ const cutStaging = async (options: {
 }): Promise<void> => {
   const { bump, dryRun, autoYes, wait } = options;
   await requireBranch(STAGING_BRANCH, dryRun);
+
+  // A `release: published` event is what rebuilds the desktop legs. Two
+  // concurrent cuts on `staging` would race on the rolling tag and the
+  // delete-then-recreate release, so refuse a second cut while one is
+  // already running rather than corrupting the first.
+  const inFlightRelease = await inFlightReleaseRun({ branch: STAGING_BRANCH, dryRun });
+  if (inFlightRelease !== null) {
+    throw new Error(
+      `A release workflow (run ${inFlightRelease}) is already in progress on ${STAGING_BRANCH}.\n` +
+        `Wait for it to finish before cutting another release.`,
+    );
+  }
 
   // The promote-to-staging push is what triggers the web deploy. If it is
   // still running when we push the version bump below, release.yml's push

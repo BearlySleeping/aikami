@@ -16,7 +16,9 @@ mock.module('../../cli_utils', () => ({
   run,
 }));
 
-const { commitsInRange, latestStableTag, setTag } = await import('../github');
+const { commitsInRange, inFlightReleaseRun, latestStableTag, pushBranch, setTag } = await import(
+  '../github'
+);
 
 describe('release git helpers', () => {
   beforeEach(() => {
@@ -59,5 +61,36 @@ describe('release git helpers', () => {
     });
     expect(commands[0]).not.toContain('-f');
     expect(commands[1]).not.toContain('--force');
+  });
+
+  test('pushBranch pushes a fully-qualified ref, never a bare branch name', async () => {
+    await pushBranch({ branch: 'staging', dryRun: false });
+    // A bare `git push origin staging` is ambiguous once a `staging` tag
+    // exists — the rolling tag shares the branch name on the second cut on.
+    expect(commands[0]).toEqual(['git', 'push', 'origin', 'HEAD:refs/heads/staging']);
+  });
+
+  test('pushBranch dry-run records no git command', async () => {
+    await pushBranch({ branch: 'staging', dryRun: true });
+    expect(commands).toHaveLength(0);
+  });
+
+  test('inFlightReleaseRun returns the first in-progress release run id', async () => {
+    responses.push({ out: '12345\n67890', err: '', code: 0 });
+    expect(await inFlightReleaseRun({ branch: 'staging', dryRun: false })).toBe('12345');
+    expect(commands[0]).toContain('--event');
+    expect(commands[0]).toContain('release');
+    expect(commands[0]).toContain('--branch');
+    expect(commands[0]).toContain('staging');
+  });
+
+  test('inFlightReleaseRun returns null when no run is in progress', async () => {
+    responses.push({ out: '', err: '', code: 0 });
+    expect(await inFlightReleaseRun({ branch: 'staging', dryRun: false })).toBeNull();
+  });
+
+  test('inFlightReleaseRun dry-run performs no gh lookup', async () => {
+    expect(await inFlightReleaseRun({ branch: 'staging', dryRun: true })).toBeNull();
+    expect(commands).toHaveLength(0);
   });
 });
