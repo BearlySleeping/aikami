@@ -3,7 +3,7 @@ id: C-501
 title: "Dialogue Slash Commands"
 source: "direct"
 contract_type: full
-status: approved
+ca2→status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -216,3 +216,62 @@ Must be resolved before status becomes `approved`:
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Added a slash-command layer at the dialogue input boundary. A new pure
+`parseSlashCommand` adapter (over `@aikami/parser` `parseLine`) parses leading
+`/` text into one of `generate`/`tree`/`gm`/`help`/`none`. `sendMessage` now
+intercepts non-`none` parses before any NPC pipeline call: `/generate` produces
+an inline image via the existing `generatedImages` flow (abortable, provider-
+degraded inline error), `/tree` re-presents the previous turn's choice set via a
+new `_previousChoices` snapshot, `/action`/`/look` route to the existing GM
+address-mode path, and unknown/empty/bare-`/` commands show inline help.
+Ordinary text is untouched.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `/generate <prompt>` pushes a `generating` record → `done` with URL; NPC never receives the text. Unit-tested. |
+| AC-2 | ✅ | Provider unavailable → inline `error` image record; no crash, no stuck `generating`. Unit-tested. |
+| AC-3 | ✅ | `_previousChoices` snapshot re-presented by `/tree`; selection routes through the existing choice path. Unit-tested. |
+| AC-4 | ✅ | `/action`/`/look` route to GM via `_sendToGameMaster` (npcName "Game Master"), not attributed to NPC. Unit-tested. |
+| AC-5 | ✅ | Unknown commands + bare `/` show inline help; plain text continues to NPC. Unit-tested. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/slash_command_parser.ts` | Pure `parseSlashCommand` adapter over `parseLine` + `SLASH_COMMAND_HELP` constant + `SlashCommandResult` type. |
+| `apps/frontend/client/src/lib/services/game/slash_command_parser.test.ts` | Unit tests (14) for AC-5 parser: args tokenization, case, bare `/`, unknown, ordinary text. |
+| `apps/e2e/tests/client/dialogue_slash_commands.spec.ts` | E2E functional spec for AC-1/AC-5 (authored; not executed in this environment). |
+| `apps/e2e/src/visual/suites/dialogue_slash_commands.visual.ts` | Visual suite for `/generate` inline image (authored; not executed in this environment). |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` | Added slash-command intercept in `sendMessage`; `_dispatchSlashCommand`, `_handleGenerateCommand`, `_handleTreeCommand`, `_handleGmCommand`, `_handleHelpCommand`, `_appendSystemMessage`; `_previousChoices` snapshot in `_setMessageChoices`. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` | Added `imageGenerationService` to `$services` mock; extended `createViewModel` options; added 6 AC tests. |
+| `apps/frontend/client/src/lib/services/index.ts` | Re-export `./game/slash_command_parser`. |
+| `apps/e2e/src/pom/dialogue_page.ts` | Added locators for system bubbles, generated image, generating skeleton, image error text. |
+| `docs/contracts/C-501-dialogue-slash-commands.md` | Status → `implemented`; this report. |
+
+### Deviations from Spec
+None. GM routing reuses the existing `_sendToGameMaster` (analyzeIntent with
+`npcName: "Game Master"`) rather than calling `gm_prompt_service` directly —
+this is the already-existing GM address-mode path the contract lists as reusable.
+No Amendment required. Docs Impact was declared `none` in Metadata, so no docs
+page was written despite the general user-facing-feature guidance.
+
+### Test Results
+- Unit: 56/56 (42 dialogue VM + 14 parser) — 0 failures
+- E2E: authored (`dialogue_slash_commands.spec.ts`); could not be executed —
+  no browser/dev-server tooling in this environment (blackbox_test reported no
+  runnable client suite).
+- Visual: authored (`dialogue_slash_commands.visual.ts`); not executed — no
+  `browser screenshot` / `ai_validate_image` tools available in this
+  environment.
+- Baseline: 38 pre-existing failures / 12 errors in untouched files
+  (ImageViewModel C-388, GameCanvasViewModel, AudioTrackCatalog,
+  EndSessionViewModel) confirmed present on the clean baseline via stash;
+  0 new failures.
