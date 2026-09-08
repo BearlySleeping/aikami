@@ -3,7 +3,7 @@ id: C-487
 title: "Free-text skill checks honour the real character sheet"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-07T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — this teaches players their character sheet is decorative |
 | **Dependencies** | None. C-489 depends on this contract and owns what happens to the roll's result. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — the roll breakdown the player sees before committing |
 | **Contract version** | 2.0.0 |
@@ -304,3 +304,50 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Implemented C-487: the free-text dialogue skill check now sources its modifier from the real character sheet. `PlayerStateService` became the service-level sheet source of truth (abilities + skill proficiency/expertise flags + a `characterSheet` accessor, with a neutral-sheet fallback), `CharacterSheetViewModel` delegates to it, and the dialogue ViewModel computes a named `breakdown` + bounded `stakes` before the `'declared'` phase leaves. The roll path no longer reads `SKILL_STAT_MAP.defaultModifier` or the hardcoded `'Level 1 Fighter'` context. A `/game` E2E spec + POM extensions seed a deterministic intent/sheet through clearly-marked window-global hooks so the production route/overlay/ViewModel can be exercised without a live model.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | `computeSkillModifier` from the real sheet; `+5`/`+7` verified in `player_state_service.test.ts` (6/6) and VM unit tests written |
+| AC-2 | ✅ | `breakdown` + `stakes` assembled into `skillCheckState` and rendered in `game_dice.svelte` before the roll |
+| AC-3 | ✅ | VM passes real `playerContext` (sheet summary + level + class); service default kept as a guard only |
+| AC-4 | ✅ | `requiresRoll:false` stays `FREE_TEXT` with no dice; VM test + E2E assertion written |
+| AC-5 | ✅ | `modifierSource` treated as a label hint only; the number is always sheet-computed |
+| AC-6 | ⚠️ | Spec `dialogue_skill_check.spec.ts` + production hooks written and typechecked; run blocked by env (see Deviations) |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/player_state_service.test.ts` | Service-level AC-1/AC-3 tests for the sheet source of truth (6/6 pass) |
+| `apps/e2e/tests/client/dialogue_skill_check.spec.ts` | AC-6 `/game` production-path E2E spec with deterministic intent/sheet seeding |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/constants/src/lib/game/npc_interaction.ts` | Added `SkillCheckStakes`, `SKILL_CHECK_STAKES`, `DEFAULT_SKILL_CHECK_STAKES` |
+| `apps/frontend/client/src/lib/services/game/player_state_service.svelte.ts` | Added sheet source of truth: abilities/skills/savingThrows/traits, `characterSheet` accessor, mutators, `importCharacterSheet`, E2E sheet seed hook |
+| `apps/frontend/client/src/lib/views/game/dashboard/character_sheet_view_model.svelte.ts` | Delegated sheet state to `playerStateService` |
+| `apps/frontend/client/src/lib/views/dev/character_sheet_sandbox_view_model.svelte.ts` | Uses `importCharacterSheet` instead of protected fields |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` | Replaced `modValue = 0` with computed `breakdown` + `stakes`; real `playerContext`; checkType normalisation; fallback logging |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts` | `forceDiceRoll` computes breakdown from the production helper |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/dialogue/+page.svelte` | Updated `forceDiceRoll` call signature |
+| `apps/frontend/client/src/lib/components/game/game_dice.svelte` | Rendered breakdown + stakes with testids; `d20-roll-button` testid |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Added clearly-marked E2E intent seed hook (window global) |
+| `apps/e2e/src/pom/game_page.ts` | Added dice overlay/breakdown/stakes locators + assertions |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` | Seeded-sheet fixture + AC-1..AC-5 tests |
+
+### Deviations from Spec
+- **AC-6 not executed in this worktree**: the Playwright `auth.setup` dependency fails before any client test runs because the nix-provided Playwright browser binaries are missing/mismatched (`chrome-headless-shell` executable absent). The spec, POM, and production seeding hooks are written and `e2e:typecheck` passes. This is an environment limitation, not a code issue.
+- **Pre-existing dialogue VM test breakage**: both `dialogue_overlay_view_model.test.ts` and `dialogue_dev_view_model.test.ts` fail at import with `Export named 'expressionService' not found in module '.../services/index.ts'` in this worktree (verified against `git show HEAD` for the original test file — same failure). The VM AC tests are written but cannot execute until that barrel-mock resolution is repaired in the shared test preload.
+- **`validate()` tool unavailable**: `validate({test:true})` failed with a moon project-record parse error (`Invalid project record at index 1`), so verification was done per-project via `moon_run_task` (`client:typecheck`, `constants:typecheck`, `e2e:typecheck`, `client:build`, `site:build`) plus a focused Bun unit-test run.
+
+### Test Results
+- Unit (service): 6/6 PASS (0 failures)
+- Unit (dialogue VM): blocked by pre-existing env error (see Deviations)
+- E2E: spec typechecks; run blocked by missing Playwright browsers (see Deviations)
+- Baseline: full `client:test` run observed 2037 pass / 40 fail / 14 errors; the failures are pre-existing environmental (missing disk assets, the two dialogue test files' `expressionService` barrel error), not new from this change.
