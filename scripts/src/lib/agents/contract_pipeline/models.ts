@@ -7,13 +7,17 @@
 //
 // All model slugs come from the repo-root `.env` (see
 // scripts/src/lib/cli_utils.ts — `getEnvWithFallback`). Nothing is
-// hardcoded. Per tier, the first non-empty key wins:
+// hardcoded. For each role a role-specific override wins first, then per
+// tier the first non-empty key wins:
 //
-//   pro:   CONTRACT_PIPELINE_MODEL_PRO → PI_MODEL_PRO → MODEL_PRO → MODEL
-//   flash: CONTRACT_PIPELINE_MODEL_FLASH → PI_MODEL_FLASH → MODEL_FLASH → MODEL
-//   free:  CONTRACT_PIPELINE_MODEL_FREE → PI_MODEL_FREE → MODEL_FREE → MODEL
+//   model:
+//     {ROLE}_MODEL                          (e.g. WRITER_MODEL, CRITIC_MODEL, …)
+//     CONTRACT_PIPELINE_MODEL_{TIER} → PI_MODEL_{TIER} → MODEL_{TIER} → MODEL
 //
-//   thinking: CONTRACT_PIPELINE_THINKING → PI_THINKING
+//   thinking:
+//     {ROLE}_THINKING_LEVEL                 (e.g. WRITER_THINKING_LEVEL, …)
+//     {TIER}_THINKING_LEVEL                 (e.g. PRO/FLASH/FREE_THINKING_LEVEL)
+//     CONTRACT_PIPELINE_THINKING → PI_THINKING
 //
 // 🔴 AC-3: Model and thinking choices are explicit and valid. The resolution
 // records the requested and effective provider/model/thinking settings,
@@ -26,7 +30,7 @@ export type ModelTier = 'pro' | 'flash' | 'free';
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
-const THINKING_LEVELS: readonly ThinkingLevel[] = [
+export const THINKING_LEVELS: readonly ThinkingLevel[] = [
   'off',
   'minimal',
   'low',
@@ -35,7 +39,7 @@ const THINKING_LEVELS: readonly ThinkingLevel[] = [
   'xhigh',
 ];
 
-const isThinkingLevel = (value: string | undefined): value is ThinkingLevel =>
+export const isThinkingLevel = (value: string | undefined): value is ThinkingLevel =>
   value !== undefined && (THINKING_LEVELS as readonly string[]).includes(value);
 
 /** Env fallback keys per tier — the first non-empty value wins. */
@@ -46,6 +50,15 @@ const MODEL_FALLBACK_KEYS: Record<ModelTier, readonly string[]> = {
 };
 
 const THINKING_FALLBACK_KEYS = ['CONTRACT_PIPELINE_THINKING', 'PI_THINKING'] as const;
+
+/** Env key for a role-specific model override, e.g. `writer` → `WRITER_MODEL`. */
+const roleModelKey = (role: string): string => `${role.toUpperCase()}_MODEL`;
+
+/** Env key for a role-specific thinking override, e.g. `writer` → `WRITER_THINKING_LEVEL`. */
+const roleThinkingKey = (role: string): string => `${role.toUpperCase()}_THINKING_LEVEL`;
+
+/** Env key for a tier-specific thinking override, e.g. `flash` → `FLASH_THINKING_LEVEL`. */
+const tierThinkingKey = (tier: string): string => `${tier.toUpperCase()}_THINKING_LEVEL`;
 
 /**
  * Per-tier model, resolved from the repo-root `.env`. Evaluated lazily so
@@ -62,6 +75,35 @@ const readTiers = (): Record<ModelTier, string | undefined> => ({
 const resolveTier = (tier: string): string | undefined =>
   (readTiers() as Record<string, string | undefined>)[tier] ?? readTiers().flash;
 
+/**
+ * Resolve the effective model for a role. A role-specific `{ROLE}_MODEL`
+ * override wins; otherwise falls back to the role's tier chain
+ * (CONTRACT_PIPELINE_MODEL_{TIER} → PI_MODEL_{TIER} → MODEL_{TIER} → MODEL).
+ */
+const resolveRoleModel = (role: string): string | undefined => {
+  const roleOverride = getEnvWithFallback([roleModelKey(role)]);
+  if (roleOverride !== undefined) {
+    return roleOverride;
+  }
+  return resolveTier(CONTRACT_ROLE_MODEL_TIER[role] ?? 'flash');
+};
+
+/**
+ * Resolve the effective thinking level for a role. Precedence:
+ *   {ROLE}_THINKING_LEVEL → {TIER}_THINKING_LEVEL → CONTRACT_PIPELINE_THINKING → PI_THINKING.
+ * Returns undefined when unset/invalid — callers omit `--thinking` and let pi
+ * pick its own default.
+ */
+const resolveRoleThinking = (role: string): ThinkingLevel | undefined => {
+  const tier = CONTRACT_ROLE_MODEL_TIER[role] ?? 'flash';
+  const raw = getEnvWithFallback([
+    roleThinkingKey(role),
+    tierThinkingKey(tier),
+    ...THINKING_FALLBACK_KEYS,
+  ]);
+  return isThinkingLevel(raw) ? raw : undefined;
+};
+
 /** Per-stage model tiers for the contract pipeline. */
 export const CONTRACT_ROLE_MODEL_TIER: Record<string, ModelTier> = {
   writer: 'pro',
@@ -72,30 +114,26 @@ export const CONTRACT_ROLE_MODEL_TIER: Record<string, ModelTier> = {
 } as const;
 
 /**
- * Read the effective thinking level from env. Evaluated lazily so tests can
- * set env vars between calls. Returns undefined when unset/invalid — callers
- * then omit `--thinking` and let pi pick its own default.
+ * Per-role thinking levels, resolved lazily so tests can set env vars between
+ * calls. Each role falls back through its own role/tier/global env chain — see
+ * `resolveRoleThinking`. Returns undefined when unset/invalid — callers then
+ * omit `--thinking` and let pi pick its own default.
  */
-const readDefaultThinking = (): ThinkingLevel | undefined => {
-  const raw = getEnvWithFallback(THINKING_FALLBACK_KEYS);
-  return isThinkingLevel(raw) ? raw : undefined;
-};
-
 export const CONTRACT_ROLE_THINKING_LEVEL: Record<string, ThinkingLevel | undefined> = {
   get writer() {
-    return readDefaultThinking();
+    return resolveRoleThinking('writer');
   },
   get critic() {
-    return readDefaultThinking();
+    return resolveRoleThinking('critic');
   },
   get implementer() {
-    return readDefaultThinking();
+    return resolveRoleThinking('implementer');
   },
   get verifier() {
-    return readDefaultThinking();
+    return resolveRoleThinking('verifier');
   },
   get review() {
-    return readDefaultThinking();
+    return resolveRoleThinking('review');
   },
 };
 
@@ -129,6 +167,8 @@ export type ModelValidationIssue = {
 export const validateModelOverride = (options: {
   tier: string;
   value: string | undefined;
+  /** Env key to report in issues — defaults to CONTRACT_PIPELINE_MODEL_{TIER}. */
+  field?: string;
 }): ModelValidationIssue[] => {
   const issues: ModelValidationIssue[] = [];
 
@@ -136,9 +176,11 @@ export const validateModelOverride = (options: {
     return issues; // No override — valid
   }
 
+  const field = options.field ?? `CONTRACT_PIPELINE_MODEL_${options.tier.toUpperCase()}`;
+
   if (options.value.length < 3) {
     issues.push({
-      field: `CONTRACT_PIPELINE_MODEL_${options.tier.toUpperCase()}`,
+      field,
       severity: 'error',
       message:
         `Model override "${options.value}" for tier "${options.tier}" is too short. ` +
@@ -148,7 +190,7 @@ export const validateModelOverride = (options: {
 
   if (options.value.includes(' ') || options.value.includes('\t')) {
     issues.push({
-      field: `CONTRACT_PIPELINE_MODEL_${options.tier.toUpperCase()}`,
+      field,
       severity: 'error',
       message:
         `Model override "${options.value}" contains whitespace. ` +
@@ -164,6 +206,8 @@ export const validateModelOverride = (options: {
  */
 export const validateThinkingOverride = (options: {
   value: string | undefined;
+  /** Env key to report in issues — defaults to CONTRACT_PIPELINE_THINKING. */
+  field?: string;
 }): ModelValidationIssue[] => {
   const issues: ModelValidationIssue[] = [];
 
@@ -171,9 +215,11 @@ export const validateThinkingOverride = (options: {
     return issues;
   }
 
+  const field = options.field ?? 'CONTRACT_PIPELINE_THINKING';
+
   if (!isThinkingLevel(options.value)) {
     issues.push({
-      field: 'CONTRACT_PIPELINE_THINKING',
+      field,
       severity: 'error',
       message:
         `Invalid thinking level "${options.value}". ` +
@@ -195,18 +241,34 @@ export const resolveModelConfiguration = (options: {
   role: string;
 }): ModelResolution & { issues: ModelValidationIssue[] } => {
   const issues: ModelValidationIssue[] = [];
+  const role = options.role;
 
   const tiers = readTiers();
-  const requestedTier = CONTRACT_ROLE_MODEL_TIER[options.role] ?? 'flash';
+  const requestedTier = CONTRACT_ROLE_MODEL_TIER[role] ?? 'flash';
   const requestedTierValue = (tiers as Record<string, string | undefined>)[requestedTier];
-  const effectiveModel = resolveTier(requestedTier);
 
-  const requestedThinking = getEnvWithFallback(THINKING_FALLBACK_KEYS);
+  // A role-specific {ROLE}_MODEL override wins over the tier chain.
+  const roleModel = getEnvWithFallback([roleModelKey(role)]);
+  const effectiveModel = roleModel ?? resolveTier(requestedTier);
+
+  // Thinking: {ROLE}_THINKING_LEVEL → {TIER}_THINKING_LEVEL → global.
+  const thinkingCandidates = [
+    roleThinkingKey(role),
+    tierThinkingKey(requestedTier),
+    ...THINKING_FALLBACK_KEYS,
+  ];
+  const requestedThinking = getEnvWithFallback(thinkingCandidates);
   const effectiveThinking = isThinkingLevel(requestedThinking) ? requestedThinking : undefined;
+  const thinkingField =
+    thinkingCandidates.find((key) => getEnvWithFallback([key]) !== undefined) ??
+    'CONTRACT_PIPELINE_THINKING';
 
-  // Validate overrides
+  // Validate overrides — report the specific env key that was set.
+  issues.push(
+    ...validateModelOverride({ tier: requestedTier, value: roleModel, field: roleModelKey(role) }),
+  );
   issues.push(...validateModelOverride({ tier: requestedTier, value: requestedTierValue }));
-  issues.push(...validateThinkingOverride({ value: requestedThinking }));
+  issues.push(...validateThinkingOverride({ value: requestedThinking, field: thinkingField }));
 
   // Check tier equivalence — do pro and flash resolve to the same model?
   const proModel = resolveTier('pro');
@@ -237,11 +299,12 @@ export const hasBlockingModelErrors = (issues: ModelValidationIssue[]): boolean 
 // ── Legacy API (preserved for backward compatibility) ─────────
 
 /** Resolve the model slug for a contract pipeline role. Undefined when no
- *  model is configured — callers then start pi without `--model`. */
-export const getContractModelForRole = (role: string): string | undefined =>
-  resolveTier(CONTRACT_ROLE_MODEL_TIER[role] ?? 'flash');
+ *  model is configured — callers then start pi without `--model`. A
+ *  role-specific `{ROLE}_MODEL` override wins over the tier chain. */
+export const getContractModelForRole = (role: string): string | undefined => resolveRoleModel(role);
 
 /** Resolve the thinking level for a contract pipeline role. Undefined when
- *  unset/invalid — callers then start pi without `--thinking`. */
+ *  unset/invalid — callers then start pi without `--thinking`. Resolves the
+ *  role → tier → global env chain. */
 export const getContractThinkingForRole = (role: string): ThinkingLevel | undefined =>
-  CONTRACT_ROLE_THINKING_LEVEL[role];
+  resolveRoleThinking(role);
