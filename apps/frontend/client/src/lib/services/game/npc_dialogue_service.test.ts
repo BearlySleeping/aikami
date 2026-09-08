@@ -1578,11 +1578,6 @@ describe('C-488 AC-6: prompt budget (cl100k_base)', () => {
       const rollBefore = countTokens(await captureRollPrompt(npcId, npcName, generic));
       const rollAfter = countTokens(await captureRollPrompt(npcId, npcName, npc));
 
-      // AC-6 reporting: per-NPC, per-path before/after cl100k_base counts.
-      console.log(
-        `C-488 budget ${npcId}: context=${contextBefore}->${contextAfter} roll=${rollBefore}->${rollAfter}`,
-      );
-
       // Budget assertions on the after counts only (identity displaces filler).
       expect(contextAfter, `${npcId} context-projection after count`).toBeLessThanOrEqual(
         TOKEN_BUDGET,
