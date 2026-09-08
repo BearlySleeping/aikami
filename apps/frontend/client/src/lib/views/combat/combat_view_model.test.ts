@@ -630,9 +630,7 @@ describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from sta
   });
 
   test('ignores a model-proposed +10 bonus and fabricated advantage', async () => {
-    const extractStructureMod = await import(
-      '$lib/services/ai/text_generation_service.svelte.ts'
-    );
+    const extractStructureMod = await import('$lib/services/ai/text_generation_service.svelte.ts');
     const origExtract = (
       extractStructureMod.textGenerationService as {
         extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -668,9 +666,7 @@ describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from sta
 
   test('grants advantage from state when the enemy is wounded', async () => {
     viewModel.enemyHp = 20; // <= 50% of max → advantage justified by state
-    const extractStructureMod = await import(
-      '$lib/services/ai/text_generation_service.svelte.ts'
-    );
+    const extractStructureMod = await import('$lib/services/ai/text_generation_service.svelte.ts');
     const origExtract = (
       extractStructureMod.textGenerationService as {
         extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;

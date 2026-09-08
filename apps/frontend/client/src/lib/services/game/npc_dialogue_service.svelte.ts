@@ -43,8 +43,8 @@ import type {
   NpcStateDelta,
   NpcSuggestionChip,
 } from '@aikami/types';
-import { Value } from 'typebox/value';
 import { createSeedableRng, resolveCommand } from '@aikami/utils';
+import { Value } from 'typebox/value';
 import { inventoryService, questStateService, relationshipService } from '$services';
 import { buildNpcPersona } from './npc_dialogue_persona';
 
@@ -2084,7 +2084,10 @@ export class NpcDialogueService
       });
       output.stateDeltas = consequenceResult.applied;
       if (consequenceResult.rejected.length > 0) {
-        output.narrativeResult = this._reconcileNarrative(output.narrativeResult, consequenceResult);
+        output.narrativeResult = this._reconcileNarrative(
+          output.narrativeResult,
+          consequenceResult,
+        );
       }
 
       this.turnState = { kind: 'complete', text: output.narrativeResult };

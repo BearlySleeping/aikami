@@ -537,7 +537,11 @@ export const localServicesMockBase = () => ({
     })),
     getStanding: mock(() => undefined),
     getFacts: mock(() => []),
-    serialize: mock(() => ({ characterRelationships: {}, factionStandings: {}, rememberedPromises: [] })),
+    serialize: mock(() => ({
+      characterRelationships: {},
+      factionStandings: {},
+      rememberedPromises: [],
+    })),
     hydrate: _createCallableStub(),
     reset: _createCallableStub(),
     configure: _createCallableStub(),

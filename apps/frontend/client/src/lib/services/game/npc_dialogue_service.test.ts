@@ -12,10 +12,10 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { encode } from 'gpt-tokenizer';
 import { relationshipService } from '$services';
 import {
-  NpcDialogueService,
-  npcDialogueService,
   type ConsequenceRequest,
   type ConsequenceResult,
+  NpcDialogueService,
+  npcDialogueService,
 } from './npc_dialogue_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -1725,8 +1725,7 @@ const runConsequence = (req: ConsequenceRequest): ConsequenceResult => {
   )._applyConsequences(req);
 };
 
-const appliedDeltas = (result: ConsequenceResult): string[] =>
-  result.applied.map((d) => d.kind);
+const appliedDeltas = (result: ConsequenceResult): string[] => result.applied.map((d) => d.kind);
 
 describe('C-489 AC-1: accepted deltas are actually applied', () => {
   beforeEach(() => {
