@@ -750,6 +750,7 @@ describe('ContentPackNpcEntrySchema — authored identity (C-488 AC-1)', () => {
     const manifest = {
       ...validManifest,
       npcs: {
+        // biome-ignore lint/style/useNamingConvention: manifest npc IDs use snake_case
         village_elder: {
           name: 'Elder Thalia',
           personality: {

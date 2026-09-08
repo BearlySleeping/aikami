@@ -1395,7 +1395,11 @@ describe('C-488 AC-3: authored identity in the production persona', () => {
       }
       return {
         text: 'The elder considers.',
-        structured: { requiresRoll: false, npcResponse: 'The elder considers.', suggestedChips: [] },
+        structured: {
+          requiresRoll: false,
+          npcResponse: 'The elder considers.',
+          suggestedChips: [],
+        },
       };
     });
     npcDialogueService.configure({

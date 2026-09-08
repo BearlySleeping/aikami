@@ -1650,8 +1650,16 @@ export class NpcDialogueService
   }): Promise<NpcIntentAnalysisOutput> {
     this.debug('_analyzeIntent:start');
 
-    const { npcId, npc, npcName, allowedCommands, messages, gameStateFacts, playerContext, onChunk } =
-      options;
+    const {
+      npcId,
+      npc,
+      npcName,
+      allowedCommands,
+      messages,
+      gameStateFacts,
+      playerContext,
+      onChunk,
+    } = options;
 
     const persona = this._buildPersona({ npcId, npcName, npc });
 
@@ -1794,8 +1802,18 @@ export class NpcDialogueService
       outcome: options.outcome,
     });
 
-    const { npcId, npcName, messages, gameStateFacts, checkType, difficultyClass, rollTotal, outcome, playerInput, onChunk } =
-      options;
+    const {
+      npcId,
+      npcName,
+      messages,
+      gameStateFacts,
+      checkType,
+      difficultyClass,
+      rollTotal,
+      outcome,
+      playerInput,
+      onChunk,
+    } = options;
 
     // C-488 AC-3/AC-4: the roll-resolution prompt carries the same authored
     // persona, conversation history, and game-state facts the intent prompt
