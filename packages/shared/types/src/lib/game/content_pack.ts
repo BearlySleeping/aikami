@@ -16,6 +16,7 @@ import type {
   ContentPackManifestSchema,
   ContentPackMapEntrySchema,
   ContentPackNpcEntrySchema,
+  ContentPackNpcPersonalitySchema,
   ContentPackPropSchema,
   ContentPackPuzzleSchema,
   ContentPackQuestEndingSchema,
@@ -42,6 +43,9 @@ export type ContentPackCombatStats = Static<typeof ContentPackCombatStatsSchema>
 
 /** An NPC definition in a content pack manifest. */
 export type ContentPackNpcEntry = Static<typeof ContentPackNpcEntrySchema>;
+
+/** An NPC's authored personality (voice + manner) — C-488. */
+export type ContentPackNpcPersonality = Static<typeof ContentPackNpcPersonalitySchema>;
 
 /** Supported item types. */
 export type ItemType = Static<typeof ItemTypeSchema>;

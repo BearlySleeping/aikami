@@ -52,7 +52,6 @@
   "dialogService",
   "emulatorSeedService",
   "exportService",
-  "expressionService",
   "galleryService",
   "gameBootService",
   "gameCompositionRoot",

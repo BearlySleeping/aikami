@@ -22,23 +22,16 @@ import {
   type CharacterSavingThrow,
   type CharacterSkill,
   type CharacterTraits,
-  DEFAULT_NARRATIVE_TRAITS,
-  DEFAULT_TRAITS,
-  type GameCharacterSheet,
   type NarrativeTraits,
 } from '@aikami/types';
 import {
-  computeModifier,
   computeProficiencyBonus,
-  createDefaultAbilities,
-  createDefaultSavingThrows,
-  createDefaultSkills,
   recomputeSavingThrows,
   recomputeSkills,
   serializeForAi,
   validateSheetJson,
 } from '@aikami/utils';
-import { equipmentService, playerStateService } from '$services';
+import { equipmentService, type PlayerStateServiceInterface, playerStateService } from '$services';
 import { getItemDefinition } from '$utils/inventory_utils';
 
 export type { EquipmentSlot, ItemDefinition };
@@ -157,6 +150,8 @@ export type CharacterSheetViewModelInterface = BaseViewModelInterface & {
 export type CharacterSheetViewModelOptions = BaseViewModelOptions & {
   /** Callback when the player closes the sheet. */
   onClose: () => void;
+  /** Player state owner; dev sandboxes inject an isolated instance. */
+  playerStateService?: PlayerStateServiceInterface;
 };
 
 // ── Implementation ────────────────────────────────────────
@@ -166,19 +161,20 @@ class CharacterSheetViewModel
   implements CharacterSheetViewModelInterface
 {
   private readonly _onClose: () => void;
+  private readonly _playerStateService: PlayerStateServiceInterface;
 
   // ── Game stats proxied from GameStateService ──
 
   get level(): number {
-    return playerStateService.playerLevel;
+    return this._playerStateService.playerLevel;
   }
 
   get xp(): number {
-    return playerStateService.playerXp;
+    return this._playerStateService.playerXp;
   }
 
   get xpToNext(): number {
-    return playerStateService.playerXpToNext;
+    return this._playerStateService.playerXpToNext;
   }
 
   get xpPercent(): number {
@@ -190,11 +186,11 @@ class CharacterSheetViewModel
   }
 
   get hp(): number {
-    return playerStateService.playerHp;
+    return this._playerStateService.playerHp;
   }
 
   get maxHp(): number {
-    return playerStateService.playerMaxHp;
+    return this._playerStateService.playerMaxHp;
   }
 
   get hpPercent(): number {
@@ -206,11 +202,11 @@ class CharacterSheetViewModel
   }
 
   get baseAttack(): number {
-    return playerStateService.playerBaseAttack;
+    return this._playerStateService.playerBaseAttack;
   }
 
   get baseDefense(): number {
-    return playerStateService.playerBaseDefense;
+    return this._playerStateService.playerBaseDefense;
   }
 
   get totalAttack(): number {
@@ -241,15 +237,35 @@ class CharacterSheetViewModel
     return EQUIPMENT_SLOT_ICONS[slot];
   }
 
-  // ── Character sheet data ($state) ──
+  // ── Character sheet data (delegated to playerStateService — C-487) ──
 
-  protected _abilities = $state<AbilityScores>(createDefaultAbilities());
-  protected _skills = $state<CharacterSkill[]>(createDefaultSkills());
-  protected _savingThrows = $state<CharacterSavingThrow[]>(createDefaultSavingThrows());
-  protected _traits = $state<CharacterTraits>({ ...DEFAULT_TRAITS });
-  protected _narrativeTraits = $state<NarrativeTraits>({ ...DEFAULT_NARRATIVE_TRAITS });
+  get abilities(): AbilityScores {
+    return this._playerStateService.abilities;
+  }
 
-  // ── UI state ──
+  get skills(): CharacterSkill[] {
+    return recomputeSkills(
+      this._playerStateService.skills,
+      this._playerStateService.abilities,
+      this.proficiencyBonus,
+    );
+  }
+
+  get savingThrows(): CharacterSavingThrow[] {
+    return recomputeSavingThrows(
+      this._playerStateService.savingThrows,
+      this._playerStateService.abilities,
+      this.proficiencyBonus,
+    );
+  }
+
+  get traits(): CharacterTraits {
+    return this._playerStateService.traits;
+  }
+
+  get narrativeTraits(): NarrativeTraits {
+    return this._playerStateService.narrativeTraits;
+  }
 
   activeTab = $state<CharacterSheetTab>('abilities');
   isProMode = $state<boolean>(false);
@@ -261,6 +277,7 @@ class CharacterSheetViewModel
   constructor(options: CharacterSheetViewModelOptions) {
     super(options);
     this._onClose = options.onClose;
+    this._playerStateService = options.playerStateService ?? playerStateService;
 
     // Restore pro mode preference from localStorage
     try {
@@ -274,26 +291,6 @@ class CharacterSheetViewModel
   }
 
   // ── Computed ──
-
-  get abilities(): AbilityScores {
-    return this._abilities;
-  }
-
-  get skills(): CharacterSkill[] {
-    return recomputeSkills(this._skills, this._abilities, this.proficiencyBonus);
-  }
-
-  get savingThrows(): CharacterSavingThrow[] {
-    return recomputeSavingThrows(this._savingThrows, this._abilities, this.proficiencyBonus);
-  }
-
-  get traits(): CharacterTraits {
-    return this._traits;
-  }
-
-  get narrativeTraits(): NarrativeTraits {
-    return this._narrativeTraits;
-  }
 
   get proficiencyBonus(): number {
     return computeProficiencyBonus(this.level);
@@ -333,7 +330,7 @@ class CharacterSheetViewModel
   // ── Class Features (C-337) ──
 
   get classId(): string {
-    return playerStateService.classId;
+    return this._playerStateService.classId;
   }
 
   get className(): string {
@@ -343,7 +340,7 @@ class CharacterSheetViewModel
 
   /** Resolved features for the current class: all known features with earned status. */
   get classFeatures(): ResolvedFeature[] {
-    const earnedIds = new Set(playerStateService.classFeatures);
+    const earnedIds = new Set(this._playerStateService.classFeatures);
     const classDef = (
       CLASS_REGISTRY as Record<
         string,
@@ -447,20 +444,20 @@ class CharacterSheetViewModel
   }
 
   get hotbarSlots(): readonly string[] {
-    return playerStateService.hotbarSlots;
+    return this._playerStateService.hotbarSlots;
   }
 
   setHotbarSlot(slotIndex: number, featureId: string): void {
-    playerStateService.setHotbarSlot({ slotIndex, featureId });
+    this._playerStateService.setHotbarSlot({ slotIndex, featureId });
   }
 
   clearHotbarSlot(slotIndex: number): void {
-    playerStateService.clearHotbarSlot(slotIndex);
+    this._playerStateService.clearHotbarSlot(slotIndex);
   }
 
   activateAbility(featureId: string): void {
     this.debug('activateAbility', { featureId });
-    playerStateService.useAbility(featureId);
+    this._playerStateService.useAbility(featureId);
   }
 
   // ── Mutations ──
@@ -470,59 +467,31 @@ class CharacterSheetViewModel
   }
 
   setAbilityScore(key: AbilityKey, value: number): void {
-    const clamped = Math.max(3, Math.min(20, Math.round(value)));
-    const current = this._abilities[key];
-    if (current.value === clamped) {
-      return;
-    }
-    this._abilities = {
-      ...this._abilities,
-      [key]: { value: clamped, modifier: computeModifier(clamped) },
-    };
+    this._playerStateService.setAbilityScore({ key, value });
   }
 
   toggleSkillProficiency(name: string): void {
-    this._skills = this._skills.map((s) =>
-      s.name === name ? { ...s, isProficient: !s.isProficient } : s,
-    );
+    this._playerStateService.toggleSkillProficiency({ name });
   }
 
   toggleSkillExpertise(name: string): void {
-    this._skills = this._skills.map((s) =>
-      s.name === name ? { ...s, isExpertise: !s.isExpertise, isProficient: true } : s,
-    );
+    this._playerStateService.toggleSkillExpertise({ name });
   }
 
   toggleSaveProficiency(ability: AbilityKey): void {
-    this._savingThrows = this._savingThrows.map((s) =>
-      s.ability === ability ? { ...s, isProficient: !s.isProficient } : s,
-    );
+    this._playerStateService.toggleSaveProficiency({ ability });
   }
 
   setTrait(field: keyof CharacterTraits, text: string): void {
-    this._traits = { ...this._traits, [field]: text };
+    this._playerStateService.setTrait({ field, text });
   }
 
   addNarrativeTrait(category: keyof NarrativeTraits, value: string): void {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return;
-    }
-    const current = this._narrativeTraits[category];
-    if (current.includes(trimmed)) {
-      return;
-    }
-    this._narrativeTraits = {
-      ...this._narrativeTraits,
-      [category]: [...current, trimmed],
-    };
+    this._playerStateService.addNarrativeTrait({ category, value });
   }
 
   removeNarrativeTrait(category: keyof NarrativeTraits, value: string): void {
-    this._narrativeTraits = {
-      ...this._narrativeTraits,
-      [category]: this._narrativeTraits[category].filter((v) => v !== value),
-    };
+    this._playerStateService.removeNarrativeTrait({ category, value });
   }
 
   // ── Pro Mode ──
@@ -563,12 +532,7 @@ class CharacterSheetViewModel
       this.jsonError = result.error;
       return;
     }
-    const data = result.data;
-    this._abilities = data.abilities;
-    this._skills = data.skills;
-    this._savingThrows = data.savingThrows;
-    this._traits = data.traits;
-    this._narrativeTraits = data.narrativeTraits;
+    this._playerStateService.importCharacterSheet({ sheet: result.data });
     this.jsonError = undefined;
     this.isJsonEditing = false;
     this._refreshJsonText();
@@ -576,41 +540,13 @@ class CharacterSheetViewModel
 
   /** Refresh the JSON display from current state. */
   private _refreshJsonText(): void {
-    const sheet: GameCharacterSheet = {
-      abilities: this._abilities,
-      skills: this._skills,
-      savingThrows: this._savingThrows,
-      traits: this._traits,
-      narrativeTraits: this._narrativeTraits,
-      proficiencyBonus: this.proficiencyBonus,
-      level: this.level,
-      xp: this.xp,
-      hp: this.hp,
-      maxHp: this.maxHp,
-      attack: this.baseAttack,
-      defense: this.baseDefense,
-    };
-    this.jsonText = JSON.stringify(sheet, null, 2);
+    this.jsonText = JSON.stringify(this._playerStateService.characterSheet, null, 2);
   }
 
   // ── AI Context ──
 
   getAiContext(): string {
-    const sheet: GameCharacterSheet = {
-      abilities: this._abilities,
-      skills: this._skills,
-      savingThrows: this._savingThrows,
-      traits: this._traits,
-      narrativeTraits: this._narrativeTraits,
-      proficiencyBonus: this.proficiencyBonus,
-      level: this.level,
-      xp: this.xp,
-      hp: this.hp,
-      maxHp: this.maxHp,
-      attack: this.baseAttack,
-      defense: this.baseDefense,
-    };
-    return serializeForAi(sheet);
+    return serializeForAi(this._playerStateService.characterSheet);
   }
 
   toggleAiPreview(): void {
