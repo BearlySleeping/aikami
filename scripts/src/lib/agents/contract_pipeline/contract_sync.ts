@@ -477,17 +477,28 @@ const commitContentToMain = (options: {
         };
       }
 
-      // Push succeeded — origin/main is now definitively `newCommit`. Force
-      // the local ref to match (a plain fast-forward is always safe here;
-      // we just confirmed origin has exactly this commit, and `readMainRef`
-      // fetched it) regardless of whether the speculative pre-push CAS
-      // above landed, then refresh the working copy.
+      // Push succeeded — origin/main is now definitively `newCommit`. Bring
+      // BOTH local refs into line immediately so any later read of `main` in
+      // this same process is correct without depending on a `git fetch`.
+      // `readMainRef` prefers `refs/remotes/origin/main`, so leaving that ref
+      // stale after a push is the C-487/C-488 failure: the critique
+      // auto-approve landed on origin, yet the implement stage — milliseconds
+      // later — seeded its worktree from the pre-approve commit and blocked
+      // Phase 0 on a contract already approved on main.
+      try {
+        runGit(`update-ref refs/heads/main ${newCommit}`, { cwd: repoRoot, timeoutMs: 5000 });
+      } catch {
+        // Best-effort only — never let this fail the sync.
+      }
+      try {
+        runGit(`update-ref refs/remotes/origin/main ${newCommit}`, {
+          cwd: repoRoot,
+          timeoutMs: 5000,
+        });
+      } catch {
+        // Best-effort only — a later fetch reconciles.
+      }
       if (!localRefMovedPrePush) {
-        try {
-          runGit(`update-ref refs/heads/main ${newCommit}`, { cwd: repoRoot, timeoutMs: 5000 });
-        } catch {
-          // Best-effort only — never let this fail the sync.
-        }
         refreshWorkingCopyIfSafe({ repoRoot, relPath });
       }
 

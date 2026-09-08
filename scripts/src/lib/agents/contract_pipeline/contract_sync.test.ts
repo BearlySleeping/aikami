@@ -324,6 +324,28 @@ describe('commitContractContent', () => {
     expect(readFileSync(contractPath, 'utf-8')).toContain('approved');
     expect(hasUncommittedChanges({ cwd: root, path: CONTRACT_REL })).toBe(false);
   });
+
+  it('updates refs/remotes/origin/main so the next stage cannot read a stale contract (C-487/C-488)', () => {
+    // The critique auto-approve pushes to origin and the implement stage runs
+    // milliseconds later. If refs/remotes/origin/main is left stale here, a
+    // failed/stale fetch in readMainRef makes the implement stage seed its
+    // worktree from the pre-approve (draft) commit and block Phase 0 on a
+    // contract already approved on main.
+    git(['checkout', '-b', 'feat/unrelated'], root);
+
+    const result = commitContractContent({
+      repoRoot: root,
+      contractPath,
+      content: `${CONTRACT_BODY}\n| **Status** | approved |\n`,
+      message: 'docs(contracts): approve C-999',
+    });
+
+    expect(result.ok).toBe(true);
+    // No `git fetch` here: both local refs must already point at the pushed
+    // commit so a later read of main cannot observe the pre-approve content.
+    expect(git(['show', `refs/remotes/origin/main:${CONTRACT_REL}`], root)).toContain('approved');
+    expect(git(['show', `refs/heads/main:${CONTRACT_REL}`], root)).toContain('approved');
+  });
 });
 
 describe('pullContractFromWorktree', () => {
