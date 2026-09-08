@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-09-06
+> Auto-generated: 2026-09-08
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 160 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 164 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -200,8 +200,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-456 | Group Chat And Systemic Npc Interactions | 🛠️ implemented | v1 | full |
 | C-457 | Gm Prompt Assembly Upgrade | 🛠️ implemented | v1 | full |
 | C-458 | In House Memory And Lore Retrieval System | 🛠️ implemented | v1 | full |
-| C-459 | Ai Gm Narrative Director Enhancements | 🛠️ implemented | v1 | full |
-| C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | v1 | full |
+| C-459 | Ai Gm Narrative Director Enhancements | 🛠️ implemented | v2 | full |
+| C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | v2 | full |
 | C-466 | Unify Settings Mounts | 🛠️ implemented | v1 | full |
 | C-467 | Tauri Local Ai Install Wizard | 🛠️ implemented | v1 | full |
 | C-468 | Agent Test Foundation | 🛠️ implemented | v2 | thin |
@@ -220,7 +220,11 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-481 | Ai Configuration Convergence | 🛠️ implemented | v2 | full |
 | C-482 | Managed Ai Runtime Lifecycle | 🛠️ implemented | v2 | full |
 | C-483 | Guided Ai Setup | 👍 approved | v2 | full |
-| C-484 | Capability First Settings | 👍 approved | v2 | full |
-| C-485 | Production Path Evidence Gate | 📝 draft | v2 | full |
-| C-486 | Unconditional Release Journey | 📝 draft | v2 | full |
+| C-484 | Capability First Settings | 🛠️ implemented | v2 | full |
+| C-485 | Production Path Evidence Gate | 🛠️ implemented | v2 | full |
+| C-486 | Unconditional Release Journey | 🛠️ implemented | v2 | full |
+| C-487 | Free Text Skill Checks Honour The Character Sheet | 📝 draft | v2 | full |
+| C-488 | Authored Npc Identity In The Content Pack | 📝 draft | v2 | full |
+| C-489 | One Authority Path For Consequences | 📝 draft | v2 | full |
+| C-490 | Transcript Branching Must Not Imply Rewinding The World | 📝 draft | v2 | thin |
 

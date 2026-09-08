@@ -8,13 +8,14 @@
  * the project's default skills via .pi/settings.json. It receives a structured
  * blueprint from the Guru and implements the code changes.
  *
- * Override the provider/model via `.env.local` (gitignored):
- *   WORKER_PROVIDER=deepseek
- *   WORKER_MODEL=deepseek-v4-pro
+ * Model comes from the repo-root `.env` (WORKER_MODEL, then the pro tier
+ * fallbacks). When none is configured, pi runs without --model and uses the
+ * user's default model.
  */
 
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvWithFallback } from '../../cli_utils';
 
 const __dirname = resolve(fileURLToPath(import.meta.url), '..');
 const systemPromptPath = resolve(__dirname, 'SYSTEM.md');
@@ -32,13 +33,15 @@ if (!env.PI_HARD_SPEND) {
 }
 
 // Build argv array
-const provider = process.env.WORKER_PROVIDER ?? 'deepinfra';
-const model = process.env.WORKER_MODEL ?? 'deepseek-ai/DeepSeek-V4-Flash';
+const model = getEnvWithFallback([
+  'WORKER_MODEL',
+  'CONTRACT_PIPELINE_MODEL_PRO',
+  'PI_MODEL_PRO',
+  'MODEL_PRO',
+  'MODEL',
+]);
 const piArgs: string[] = [
-  '--provider',
-  provider,
-  '--model',
-  model,
+  ...(model ? ['--model', model] : []),
   '--system-prompt',
   systemPrompt,
   ...userArgs,

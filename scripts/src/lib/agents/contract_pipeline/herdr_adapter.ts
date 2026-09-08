@@ -1084,12 +1084,17 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     }
     const ta = toolsForRole(request.role) ? ['--tools', toolsForRole(request.role)?.join(',')] : [];
     const sa = sessionId !== undefined ? ['--session-id', shellQuote(sessionId)] : [];
-    const ma = [
-      '--model',
-      shellQuote(getContractModelForRole(request.role)),
-      '--thinking',
-      getContractThinkingForRole(request.role),
-    ];
+    const contractModel = getContractModelForRole(request.role);
+    const contractThinking = getContractThinkingForRole(request.role);
+    // 🔴 No model configured → omit --model/--thinking entirely and let pi
+    // fall back to the user's default model instead of pinning a hardcoded slug.
+    const ma = contractModel
+      ? [
+          '--model',
+          shellQuote(contractModel),
+          ...(contractThinking ? ['--thinking', contractThinking] : []),
+        ]
+      : [];
     // 🔴 Default: use JSON mode for pipeline workers — PTY keystroke injection
     // (send-text + send-keys Enter) is fundamentally unreliable. The prompt
     // is passed via -p and the task message via $(cat ...).
@@ -1407,14 +1412,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // `2>/dev/null`; sending it raw silently drops GH_TOKEN and prints parse
     // errors). 🔴 Herdr PTY drops the first character via `pane run` — keep
     // the leading newline so the dropped char is never load-bearing.
+    const reviewModel = getContractModelForRole('review');
+    const reviewThinking = getContractThinkingForRole('review');
     const command = [
       ghExport,
       'pi',
       '--approve',
-      '--model',
-      shellQuote(getContractModelForRole('review')),
-      '--thinking',
-      getContractThinkingForRole('review'),
+      ...(reviewModel ? ['--model', shellQuote(reviewModel)] : []),
+      ...(reviewModel && reviewThinking ? ['--thinking', reviewThinking] : []),
       '--session-id',
       shellQuote(sessionId),
       '--append-system-prompt',

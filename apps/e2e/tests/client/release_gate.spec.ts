@@ -362,26 +362,24 @@ test.describe('Release Gate', () => {
     test('should block gameplay when no AI provider is available and QA bypass is false', async ({
       page,
     }) => {
+      // Skip unless the environment explicitly declares text AI is unavailable.
+      // Using a controlled fixture/env-var avoids the ambiguity of inferring
+      // provider availability from absence of the expected UI.
+      if (process.env.TEST_TEXT_AI_UNAVAILABLE !== 'true') {
+        test.skip(
+          true,
+          'AI capability gate test requires text AI to be unavailable. Set TEST_TEXT_AI_UNAVAILABLE=true in a controlled environment.',
+        );
+        return;
+      }
+
       const game = new GamePage(page);
 
       // Navigate to root without QA bypass
       await page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
 
-      // Check if the AI capability gate is active
+      // Verify the capability gate is active
       const capabilityMsg = page.getByText(/text ai|ai provider|capability|offline demo/i);
-      if (
-        !(await capabilityMsg
-          .first()
-          .isVisible({ timeout: 5000 })
-          .catch(() => false))
-      ) {
-        // Gate is not active (text AI is available) — skip this environment-dependent leg
-        test.skip(
-          true,
-          'AI capability gate test requires text AI to be unavailable (not applicable in CI with emulators)',
-        );
-        return;
-      }
 
       // AC-4a: Capability screen should be visible
       await expect(capabilityMsg.first()).toBeVisible({ timeout: 10_000 });

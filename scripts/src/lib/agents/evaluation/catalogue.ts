@@ -8,24 +8,39 @@
 // different model.
 
 import { spawn } from 'node:child_process';
+import { getEnvWithFallback } from '../../cli_utils';
 import type { CatalogueEntry, FamilyLabel } from './types.ts';
 
 /**
- * Ordered candidate provider/model slugs per family label. The first
- * candidate `pi auth check` reports valid for is the resolved entry.
- * Override via env for installations with different provider packages —
- * see `.pi/settings.json`'s `packages` for what's actually installed here.
+ * Env fallback keys per family label — the first non-empty value wins. When
+ * a family has no configured value, it yields no candidates and preflight
+ * fails closed (see resolveCatalogueEntry), never silently substituting a
+ * different model.
  */
-const familyCandidates = (): Readonly<Record<FamilyLabel, readonly string[]>> => ({
-  flash: [
-    process.env.EVAL_MODEL_FLASH ?? '',
-    'deepinfra/deepseek-ai/DeepSeek-V4-Flash',
-    'deepseek/deepseek-v4-flash',
-  ].filter(Boolean),
-  sonnet: [process.env.EVAL_MODEL_SONNET ?? '', 'claude-bridge/claude-sonnet-5'].filter(Boolean),
-  opus: [process.env.EVAL_MODEL_OPUS ?? '', 'claude-bridge/claude-opus-5'].filter(Boolean),
-  astra: [process.env.EVAL_MODEL_ASTRA ?? '', 'openai/gpt-5.1'].filter(Boolean),
-});
+const FAMILY_FALLBACK_KEYS = {
+  flash: ['EVAL_MODEL_FLASH', 'PI_MODEL_FLASH', 'MODEL_FLASH', 'MODEL'],
+  sonnet: ['EVAL_MODEL_SONNET', 'PI_MODEL_SONNET', 'MODEL_SONNET'],
+  opus: ['EVAL_MODEL_OPUS', 'PI_MODEL_OPUS', 'MODEL_OPUS'],
+  astra: ['EVAL_MODEL_ASTRA', 'PI_MODEL_ASTRA', 'MODEL_ASTRA'],
+} as const satisfies Readonly<Record<FamilyLabel, readonly string[]>>;
+
+type EnvResolver = (keys: readonly string[]) => string | undefined;
+
+/**
+ * Candidate provider/model slugs per family label, resolved from the
+ * repo-root `.env`. Each family has at most one candidate — the configured
+ * value — because we never hardcode model slugs.
+ */
+const familyCandidates = (
+  envResolver: EnvResolver,
+): Readonly<Record<FamilyLabel, readonly string[]>> => {
+  const resolved = {} as Record<FamilyLabel, readonly string[]>;
+  for (const family of Object.keys(FAMILY_FALLBACK_KEYS) as FamilyLabel[]) {
+    const value = envResolver(FAMILY_FALLBACK_KEYS[family]);
+    resolved[family] = value ? [value] : [];
+  }
+  return resolved;
+};
 
 type AuthCheckResult = { status?: string; provider?: string; reason?: string };
 type AuthCheckResponse = { result: AuthCheckResult | null; diagnostics: string };
@@ -82,9 +97,10 @@ const splitSlug = (slug: string): { provider: string; model: string } => {
 export const resolveCatalogueEntry = async (options: {
   family: FamilyLabel;
   authCheck?: AuthCheck;
+  envResolver?: EnvResolver;
 }): Promise<CatalogueEntry> => {
-  const { family, authCheck = runAuthCheck } = options;
-  const candidates = familyCandidates()[family];
+  const { family, authCheck = runAuthCheck, envResolver = getEnvWithFallback } = options;
+  const candidates = familyCandidates(envResolver)[family];
   if (candidates.length === 0) {
     return {
       family,
@@ -124,10 +140,11 @@ export const resolveCatalogueEntry = async (options: {
 export const preflightCatalogue = async (options: {
   families: readonly FamilyLabel[];
   authCheck?: AuthCheck;
+  envResolver?: EnvResolver;
 }): Promise<{ entries: readonly CatalogueEntry[]; allAvailable: boolean }> => {
-  const { families, authCheck = runAuthCheck } = options;
+  const { families, authCheck = runAuthCheck, envResolver = getEnvWithFallback } = options;
   const entries = await Promise.all(
-    families.map((family) => resolveCatalogueEntry({ family, authCheck })),
+    families.map((family) => resolveCatalogueEntry({ family, authCheck, envResolver })),
   );
   return { entries, allAvailable: entries.every((entry) => entry.available) };
 };
