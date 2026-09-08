@@ -76,7 +76,7 @@ Add a minimap HUD that projects the current map, the player position, and nearby
 
 ## Architecture Directives
 
-- Put the world→minimap projection in one small, unit-tested function (e.g. in a shared client util or the engine event bridge); do not inline it in the Svelte component.
+- Put world→screen and world→minimap projection in one shared, unit-tested `projectSpatialPoint` API (in a shared client util or the engine event bridge); do not inline projection math in Svelte components. C-503 consumes the same API's `screen` mode.
 - The minimap component must be a passive view over a ViewModel (`minimap_view_model.svelte.ts`), consistent with the MVVM convention.
 
 ## State & Data Models
@@ -95,7 +95,41 @@ type MinimapViewState = {
   player: { x: number; y: number };
   blips: MinimapEntityBlip[];
 };
+
+type Point = { x: number; y: number };
+type Bounds = { x: number; y: number; width: number; height: number };
+
+type SpatialProjectionInput =
+  | {
+      mode: 'screen';
+      world: Point;
+      camera: { x: number; y: number; zoom: number; worldScale: number };
+      viewportBounds: Bounds;
+      clampTo: 'none' | 'viewport-edge';
+      edgeInset?: number;
+    }
+  | {
+      mode: 'minimap';
+      world: Point;
+      mapBounds: Bounds | null;
+      widgetBounds: Bounds;
+      clampTo: 'none' | 'widget';
+    };
+
+type SpatialProjectionResult = {
+  point: Point;             // final point after the requested clamp
+  unclampedPoint: Point;
+  insideBounds: boolean;
+  clamped: boolean;
+  direction: Point | null; // normalized center→target vector for edge arrows
+};
+
+declare function projectSpatialPoint(
+  input: SpatialProjectionInput,
+): SpatialProjectionResult | null;
 ```
+
+`screen` mode derives coordinates only from the authoritative camera state and viewport bounds. With `viewport-edge`, it clamps to the viewport minus `edgeInset` and returns the pre-clamp direction; with `none`, it preserves the projected point. `minimap` mode fits `mapBounds` into `widgetBounds` without changing map aspect ratio, maps the world point into that fitted rectangle, and optionally clamps to it. Unknown, empty, or non-finite map bounds return `null` in `minimap` mode so the ViewModel renders the unavailable placeholder; invalid camera state or viewport/widget bounds likewise return `null`. Unknown map bounds do not disable `screen` mode, which does not consume them.
 
 No persisted schema changes beyond a settings boolean for the toggle.
 
@@ -116,7 +150,7 @@ N/A — no persistent state changes beyond an additive settings toggle (default 
 ## Scope Boundaries
 
 - **In Scope:**
-  - World→minimap projection bridge.
+  - Shared world→screen/world→minimap projection bridge.
   - Minimap HUD component + ViewModel.
   - Player blip + nearby NPC/enemy/POI blips.
   - Visibility rules (hide during overlays/combat) and persisted toggle.
@@ -190,7 +224,7 @@ N/A — no persistent state changes beyond an additive settings toggle (default 
 
 ## Implementation Sequence
 
-1. **Phase 1 (Projection)**: add + unit-test the world→minimap projection (and any camera-state bridge to the client).
+1. **Phase 1 (Projection)**: add + unit-test the shared `projectSpatialPoint` screen/minimap modes, clamping, invalid/unknown bounds behavior, and any camera-state bridge to the client.
 2. **Phase 2 (View/ViewModel)**: build `minimap_view_model.svelte.ts` + `minimap.svelte`; wire into `game_ui_view` HUD with visibility + toggle.
 3. **Phase 3 (Validation)**: E2E + visual; run `validate({ test: true })` and the Moon tasks above.
 

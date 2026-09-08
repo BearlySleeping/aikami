@@ -38,7 +38,7 @@ created_at: "2026-09-08T14:01:09Z"
   - `packages/shared/schemas/src/lib/game/quest_state.ts` + `packages/shared/types/src/lib/game/quest_state.ts` — `ActiveQuestState`, `QuestObjectiveProgressV1` (`objectiveIndex`, `status`, `hiddenRevealed`).
   - `apps/frontend/client/src/lib/views/game/ui/quest_tracker_view.svelte` + `quest_tracker_view_model.svelte.ts` — current text-only quest HUD and `currentObjectiveText`.
   - Entity positions from the content-pack entity spawner (C-136) → ECS `Position`.
-  - C-502 projection bridge — world→screen/edge projection to be introduced by that contract.
+  - C-502 `projectSpatialPoint` API — use its world→screen mode with viewport-edge clamping; do not depend on a minimap-only projection.
 - **Known gaps**:
   1. No objective→spatial-target resolution (`npcId`/`mapId`/`itemId`/`encounterId` → world position).
   2. No marker rendering, and no gating on `status`/`hiddenRevealed`.
@@ -79,6 +79,7 @@ Resolve the active quest's current objective into a spatial target (NPC/map/item
 
 - Put objective→target resolution in a unit-tested pure function/service; the Svelte component stays a passive view over a ViewModel.
 - The marker must degrade gracefully when the target entity does not exist (NPC not spawned, item already picked up).
+- Project resolved positions through C-502 `projectSpatialPoint({ mode: 'screen', ... })`; use `clampTo: 'viewport-edge'` for off-screen arrows and its returned `direction`, rather than defining separate world→screen math.
 
 ## State & Data Models
 
@@ -99,6 +100,15 @@ type QuestMarkerState = {
 ```
 
 No persisted schema changes.
+
+Target resolution is deterministic and uses only canonical content identifiers plus currently loaded world data:
+
+- `npcId`: collect live ECS entities whose `NPCDialog.npcId` equals the identifier and that have a `Position`; choose the lowest numeric entity ID. No match returns `null`; multiple matches use that same lowest-ID rule.
+- `mapId`: if it is the current map, return `null` because the map-enter objective should complete rather than point within that map. Otherwise, collect current-map transition zones whose normalized `targetMap` resolves to the manifest map ID and choose the lexicographically lowest zone ID, anchored at the zone rectangle's center. No matching transition, or an unknown map ID, returns `null`; multiple matches use the same lowest-zone-ID rule. Multi-hop route finding remains out of scope.
+- `itemId`: collect live, uncollected world pickup/interactable entities whose canonical item ID equals the identifier and that have a `Position`; choose the lowest numeric entity ID. Inventory items do not count. No match returns `null`; multiple matches use that same lowest-ID rule.
+- `encounterId`: collect live encounter/enemy entities whose canonical encounter ID equals the identifier and that have a `Position`; choose the lowest numeric entity ID. If none is spawned, resolve the encounter's manifest `mapId` through the `mapId` rule above. An unknown encounter, an encounter on the current map with no positioned entity, or an unresolved map fallback returns `null`; multiple live matches use the same lowest-ID rule.
+
+The resolver returns either one `{ target, worldX, worldY }` anchor or `null`; it never guesses from an objective ID or stale/despawned entity. A `null` result sets `active: false`, clears both coordinates, and renders no marker while leaving the text tracker intact.
 
 ## Quality Requirements
 
@@ -185,7 +195,7 @@ N/A — no persistent state changes.
 **Watch Points**:
 - **Reuse the C-502 projection bridge** — this contract must not introduce a second world→screen math implementation.
 - **Only `active` + `hiddenRevealed` objectives get markers** — check `QuestObjectiveProgressV1.status` and `hiddenRevealed` before resolving.
-- **Target resolution handles absence** — a missing NPC/item/encounter must yield `null`, never throw.
+- **Target resolution is deterministic** — apply the per-kind lowest-ID/zone rule and documented map/encounter fallback; zero matches yield `null`, never throw, and multiple matches never depend on iteration order.
 - **Current objective only** — do not render a marker per objective in the list.
 - **Coordinate with C-502 sequencing** — land C-502's projection bridge first; this contract depends on it.
 

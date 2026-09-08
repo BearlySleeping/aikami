@@ -79,7 +79,7 @@ Add a slash-command layer at the dialogue input boundary. Leading `/` text is pa
 ## Architecture Directives
 
 - Intercept at `sendMessage` (the ViewModel layer) — parse before any call into `npcDialogueService`.
-- Keep command parsing pure and unit-testable (a `parseSlashCommand(text)` function returning a discriminated result); do not bury parsing in the view.
+- Keep command parsing pure and unit-testable (a `parseSlashCommand(text)` function returning a discriminated result); do not bury parsing in the view. Implement it as a thin adapter over `parseLine` from `@aikami/parser`, not as a second regex/parser: trim the input, call `parseLine`, lowercase the returned command name for dialogue-command matching, and map the shared `command.args` tokens into the result below (`args.join(' ')` for prompt/text commands). A non-command parse maps to `none`, except a trimmed bare `/`, which explicitly maps to `help` because `parseLine` correctly treats it as text while the dialogue UI uses bare `/` to request command help. Unknown parsed command names also map to `help`.
 
 ## State & Data Models
 
@@ -98,7 +98,7 @@ No persisted schema changes. `/generate` reuses the existing `GeneratedImage` sh
 
 - **Offline/degraded mode**: `/generate` with no provider → inline error block, no crash; `/action`/`/look` work without network only insofar as the GM prompt service works (degrade to a "GM unavailable" message when offline).
 - **Accessibility/input**: slash commands reachable purely by typing; `/tree` result and help text keyboard-navigable.
-- **Performance budget**: no extra ticks; parsing is O(1) string inspection.
+- **Performance budget**: no extra ticks; parsing is O(n) in the input length for trimming, shared grammar matching, and argument tokenization.
 - **Security/privacy**: no new boundary; commands are local, never escape the client except through existing image/GM services.
 - **Persistence/migration**: N/A — no persisted state.
 - **Cancellation/retry/idempotency**: `/generate` must be abortable and must not duplicate images on retry; `/tree` must not re-execute commands.
@@ -186,7 +186,7 @@ N/A — no persistent state changes.
 
 ## Implementation Sequence
 
-1. **Phase 1 (Parser)**: add `parseSlashCommand` with unit tests; wire the parse into `sendMessage` ahead of the NPC call.
+1. **Phase 1 (Parser)**: add the `parseLine`-backed `parseSlashCommand` adapter with unit tests for shared argument tokenization, case normalization, ordinary text, unknown commands, and bare `/`; wire the parse into `sendMessage` ahead of the NPC call.
 2. **Phase 2 (Dispatch)**: route `generate` → existing image flow, `tree` → choice re-presentation, `gm` → GM prompt service; add help.
 3. **Phase 3 (Validation)**: E2E + visual coverage; run `validate({ test: true })` and the Moon tasks above.
 

@@ -174,7 +174,7 @@ N/A — no persistent state changes.
 
 1. **Phase 1 (Mount)**: Add the `COMBAT` branch to `game_ui_view.svelte` and import `CombatView`; verify the overlay renders via the `/game` route.
 2. **Phase 2 (Engine)**: Reproduce the ≥5s delta during COMBAT; locate the tick/delta source; fix and confirm the halt-yield re-loop stops.
-3. **Phase 3 (Validation)**: Add E2E + visual coverage; run `validate({ test: true })` plus the Moon tasks above; capture a production-route screenshot and score it ≥85.
+3. **Phase 3 (Validation)**: Add E2E + visual coverage; run `validate({ test: true })` plus the Moon tasks above; capture a production-route screenshot and score it ≥90.
 
 ## Edge Cases & Gotchas
 

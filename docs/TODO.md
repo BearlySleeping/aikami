@@ -28,11 +28,22 @@ player cannot type until the suggested-action chips appear.
 
 **Task**: remove `isStreaming` from the textarea `disabled` binding so the
 player can type during streaming. When the player presses Enter mid-stream,
-queue the message and send it once the current turn completes (do not silently
-drop it). Keep `isResolvingSkillCheck` gating.
+append the message to an overlay-session-scoped FIFO queue and send queued
+messages in order only after the current turn completes successfully. Keep
+`isResolvingSkillCheck` gating.
 
-**Check**: during an NPC reply, type a message and press Enter — it sends after
-the NPC finishes; the player can type before the chips appear.
+If the active stream fails or the player calls `cancelStreaming()`, stop
+draining and retain all queued messages as visible pending items in the current
+dialogue; require an explicit Retry/Send action before any is delivered. They
+must not auto-send merely because a later request succeeds. If `endChat()`
+aborts the request, cancel and clear the whole queue before closing the overlay;
+a new dialogue session always starts with an empty queue, so no queued text can
+leak into a later session. Cover successful FIFO draining, failure retention,
+stream-cancel retention, and end-chat clearing in ViewModel tests.
+
+**Check**: during an NPC reply, type messages and press Enter — they send in
+order after success; on failure/cancel they remain pending until explicitly
+retried, and ending/reopening chat never sends them.
 
 ### Prompt 2 — Player sprite is occluded by the HP bar
 
