@@ -105,88 +105,89 @@ export type ContentPackNpcPersonality = Static<typeof ContentPackNpcPersonalityS
 // ContentPackNpcEntry — NPC definition in the pack
 // ---------------------------------------------------------------------------
 
-export const ContentPackNpcEntrySchema = Type.Object({
-  /** Display name shown in dialog and hover */
-  name: Type.String({ description: 'NPC display name' }),
-  /** Default dialogue key (references dialogues{} in the manifest) */
-  defaultDialogueKey: Type.Optional(Type.String({ description: 'Default dialogue key' })),
-  /** Optional: appearance layer IDs for LPC sprite composition */
-  appearanceLayers: Type.Optional(
-    Type.Array(Type.Number(), { description: 'LPC appearance layer IDs' }),
-  ),
-  /** Whether this NPC is a vendor */
-  isVendor: Type.Optional(Type.Boolean({ description: 'Whether this NPC is a vendor' })),
-  /** Comma-separated item IDs e.g. "ironSword,healthPotion" */
-  vendorInventory: Type.Optional(
-    Type.String({
-      pattern: VENDOR_ITEM_ID_PATTERN,
-      description: 'Comma-separated item IDs e.g. "ironSword,healthPotion"',
-    }),
-  ),
-  /** Combat stats for enemy NPCs (C-316) */
-  combatStats: Type.Optional(ContentPackCombatStatsSchema),
-  /**
-   * Optional: pre-authored suggestion chips shown with the NPC's initial
-   * greeting when dialogue opens. When present, these are merged with the
-   * player's class-based suggestion presets.
-   */
-  initialSuggestions: Type.Optional(
-    Type.Array(NpcSuggestionChipSchema, {
-      description: 'Initial greeting suggestion chips',
-    }),
-  ),
-  // ── Companion fields (C-340) ──
-  /** Whether this NPC can be recruited as a companion. */
-  isCompanion: Type.Optional(Type.Boolean({ default: false })),
-  /** Dialogue key that triggers the recruit offer. */
-  recruitDialogueKey: Type.Optional(Type.String()),
-  /** Dialogue key for dismiss conversation. */
-  dismissDialogueKey: Type.Optional(Type.String()),
-  /** Class ID from the class registry (C-337). e.g. 'cleric', 'fighter'. */
-  companionClassId: Type.Optional(Type.String()),
-  /** Optional personal quest ID (references a quest in the manifest). */
-  personalQuestId: Type.Optional(Type.String()),
-  /** Initial approval score (-100 to 100). */
-  initialApproval: Type.Optional(Type.Integer({ minimum: -100, maximum: 100, default: 0 })),
-  /** Pool of banter dialogue keys for inter-party chatter. */
-  banterPool: Type.Optional(Type.Array(Type.String(), { default: [] })),
-  // ── Authored identity fields (C-488) — all optional, per-field fallback ──
-  /**
-   * The NPC's authored personality (voice + manner). Absent → the canonical
-   * generic sentence is used. No string alternative is accepted.
-   */
-  personality: Type.Optional(
-    ContentPackNpcPersonalitySchema,
-  ),
-  /** What the NPC wants — each entry a concrete want; at least one may conflict. */
-  agenda: Type.Optional(
-    Type.Array(Type.String({ minLength: 1 }), {
-      minItems: 1,
-      description: 'What the NPC wants, including conflicts with others',
-    }),
-  ),
-  /** Facts the NPC knows and can share. */
-  knowledge: Type.Optional(
-    Type.Array(Type.String({ minLength: 1 }), {
-      minItems: 1,
-      description: 'Facts the NPC knows and can share',
-    }),
-  ),
-  /** Facts the NPC knows and will not volunteer. */
-  secrets: Type.Optional(
-    Type.Array(Type.String({ minLength: 1 }), {
-      minItems: 1,
-      description: 'Facts the NPC knows and will not volunteer',
-    }),
-  ),
-  /** Lines the NPC will not cross. */
-  boundaries: Type.Optional(
-    Type.Array(Type.String({ minLength: 1 }), {
-      minItems: 1,
-      description: 'Lines the NPC will not cross',
-    }),
-  ),
-}, { additionalProperties: false });
+export const ContentPackNpcEntrySchema = Type.Object(
+  {
+    /** Display name shown in dialog and hover */
+    name: Type.String({ description: 'NPC display name' }),
+    /** Default dialogue key (references dialogues{} in the manifest) */
+    defaultDialogueKey: Type.Optional(Type.String({ description: 'Default dialogue key' })),
+    /** Optional: appearance layer IDs for LPC sprite composition */
+    appearanceLayers: Type.Optional(
+      Type.Array(Type.Number(), { description: 'LPC appearance layer IDs' }),
+    ),
+    /** Whether this NPC is a vendor */
+    isVendor: Type.Optional(Type.Boolean({ description: 'Whether this NPC is a vendor' })),
+    /** Comma-separated item IDs e.g. "ironSword,healthPotion" */
+    vendorInventory: Type.Optional(
+      Type.String({
+        pattern: VENDOR_ITEM_ID_PATTERN,
+        description: 'Comma-separated item IDs e.g. "ironSword,healthPotion"',
+      }),
+    ),
+    /** Combat stats for enemy NPCs (C-316) */
+    combatStats: Type.Optional(ContentPackCombatStatsSchema),
+    /**
+     * Optional: pre-authored suggestion chips shown with the NPC's initial
+     * greeting when dialogue opens. When present, these are merged with the
+     * player's class-based suggestion presets.
+     */
+    initialSuggestions: Type.Optional(
+      Type.Array(NpcSuggestionChipSchema, {
+        description: 'Initial greeting suggestion chips',
+      }),
+    ),
+    // ── Companion fields (C-340) ──
+    /** Whether this NPC can be recruited as a companion. */
+    isCompanion: Type.Optional(Type.Boolean({ default: false })),
+    /** Dialogue key that triggers the recruit offer. */
+    recruitDialogueKey: Type.Optional(Type.String()),
+    /** Dialogue key for dismiss conversation. */
+    dismissDialogueKey: Type.Optional(Type.String()),
+    /** Class ID from the class registry (C-337). e.g. 'cleric', 'fighter'. */
+    companionClassId: Type.Optional(Type.String()),
+    /** Optional personal quest ID (references a quest in the manifest). */
+    personalQuestId: Type.Optional(Type.String()),
+    /** Initial approval score (-100 to 100). */
+    initialApproval: Type.Optional(Type.Integer({ minimum: -100, maximum: 100, default: 0 })),
+    /** Pool of banter dialogue keys for inter-party chatter. */
+    banterPool: Type.Optional(Type.Array(Type.String(), { default: [] })),
+    // ── Authored identity fields (C-488) — all optional, per-field fallback ──
+    /**
+     * The NPC's authored personality (voice + manner). Absent → the canonical
+     * generic sentence is used. No string alternative is accepted.
+     */
+    personality: Type.Optional(ContentPackNpcPersonalitySchema),
+    /** What the NPC wants — each entry a concrete want; at least one may conflict. */
+    agenda: Type.Optional(
+      Type.Array(Type.String({ minLength: 1 }), {
+        minItems: 1,
+        description: 'What the NPC wants, including conflicts with others',
+      }),
+    ),
+    /** Facts the NPC knows and can share. */
+    knowledge: Type.Optional(
+      Type.Array(Type.String({ minLength: 1 }), {
+        minItems: 1,
+        description: 'Facts the NPC knows and can share',
+      }),
+    ),
+    /** Facts the NPC knows and will not volunteer. */
+    secrets: Type.Optional(
+      Type.Array(Type.String({ minLength: 1 }), {
+        minItems: 1,
+        description: 'Facts the NPC knows and will not volunteer',
+      }),
+    ),
+    /** Lines the NPC will not cross. */
+    boundaries: Type.Optional(
+      Type.Array(Type.String({ minLength: 1 }), {
+        minItems: 1,
+        description: 'Lines the NPC will not cross',
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
 
 export type ContentPackNpcEntry = Static<typeof ContentPackNpcEntrySchema>;
 
