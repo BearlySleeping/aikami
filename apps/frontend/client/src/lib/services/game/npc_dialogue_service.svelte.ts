@@ -1652,6 +1652,7 @@ export class NpcDialogueService
       // ── Call 2: extract the intent envelope from the narrative ──────
       this.turnState = { kind: 'awaiting_envelope', text: narrative };
       let rawOutput: unknown;
+      let call2Error: unknown;
       try {
         rawOutput = await this._withTimeout(
           this._extractEnvelope({
@@ -1672,8 +1673,13 @@ export class NpcDialogueService
         this.warn('_analyzeIntent:call2-failed', {
           detail: error instanceof Error ? error.message : String(error),
         });
-        // Propagate call-2 failure to public handler so it sets failed turn state
-        throw error;
+        // C-499 AC-1: call-2 failure (e.g. "No JSON object found in response")
+        // is recoverable — fall through to the repair path below, which
+        // salvages the authoritative streamed narrative instead of failing
+        // the whole turn. Abort was already checked above and re-thrown by
+        // `_checkAbort`; only non-cancellation failures reach this fallback.
+        call2Error = error;
+        rawOutput = undefined;
       }
       this._checkAbort(options.signal);
 
@@ -1688,12 +1694,21 @@ export class NpcDialogueService
       }
 
       if (!output) {
-        // Repair attempt: salvage narrative from the streamed text
-        this.warn('_analyzeIntent:invalid-output');
-        const recovered = recoverIntentAnalysisOutput(
-          narrative.trim(),
-          NpcIntentAnalysisOutputSchema,
-        );
+        // Repair attempt: salvage narrative from the streamed text. Reached
+        // both when call 2 returned an invalid envelope and when it threw
+        // (No JSON / provider error) — the streamed narrative is authoritative
+        // and must still surface to the player (C-499 AC-1).
+        let repairReason = 'invalid-envelope';
+        if (call2Error !== undefined) {
+          repairReason = call2Error instanceof Error ? call2Error.message : String(call2Error);
+        }
+        this.warn('_analyzeIntent:invalid-output', { reason: repairReason });
+        let recovered: ReturnType<typeof recoverIntentAnalysisOutput>;
+        try {
+          recovered = recoverIntentAnalysisOutput(narrative.trim(), NpcIntentAnalysisOutputSchema);
+        } catch (repairError) {
+          throw new Error(repairReason, { cause: repairError });
+        }
         output = {
           requiresRoll: false,
           checkType: undefined,

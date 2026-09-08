@@ -24,7 +24,7 @@ let generateTurnStub = mock(async () => ({
   source: 'ai' as const,
 }));
 
-let analyzeIntentStub = mock(async () => ({
+const defaultAnalyzeIntent = async () => ({
   requiresRoll: false,
   checkType: undefined,
   difficultyClass: undefined,
@@ -39,7 +39,9 @@ let analyzeIntentStub = mock(async () => ({
     },
     { id: 'leave', label: 'Leave', intentType: 'dialogue' as const, prefillText: 'Goodbye.' },
   ],
-}));
+});
+
+let analyzeIntentStub = mock(defaultAnalyzeIntent);
 
 // ── Quest-activation tool call stubs (C-quest-activation) ──
 let acceptQuestStub = mock(() => true);
@@ -240,6 +242,8 @@ describe('DialogueOverlayViewModel', () => {
       source: 'ai' as const,
     }));
     mockNpcDialogueService.generateTurn = generateTurnStub;
+    analyzeIntentStub = mock(defaultAnalyzeIntent);
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
 
     // Reset quest-activation stubs
     acceptQuestStub = mock(() => true);
@@ -353,6 +357,27 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.messages[2].content).toBe('The elder strokes his beard. "The ward is failing."');
     // Expression should be set from the mock
     expect(vm.npcExpression).toBe('happy');
+  });
+
+  test('surfaces an explicit error state rather than an endless placeholder when intent analysis fails after retry+repair (C-499 AC-3)', async () => {
+    analyzeIntentStub = mock(async () => {
+      throw new Error('No JSON object found in response');
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    vm.inputText = 'I attack the goblin';
+    vm.sendMessage();
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    // An explicit error state is surfaced (never an endless "..." placeholder).
+    expect(vm.streamError).toBe('No JSON object found in response');
+    // The empty placeholder NPC message was removed — no stuck typing state.
+    const emptyNpcMessages = vm.messages.filter((m) => m.role === 'npc' && m.content === '');
+    expect(emptyNpcMessages.length).toBe(0);
+    // The player's message remains so they can retry.
+    expect(vm.messages.some((m) => m.role === 'player')).toBe(true);
   });
 
   // ── Quest-activation tool call (C-quest-activation) ──────────────────

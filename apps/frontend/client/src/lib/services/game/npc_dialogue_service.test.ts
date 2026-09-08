@@ -226,10 +226,10 @@ describe('AC-1: Provider failure surfaces an error', () => {
     ).rejects.toThrow('no capability');
   });
 
-  test('analyzeIntent: call 1 succeeds, call 2 rejects — propagates error and sets failed turn state', async () => {
+  test('analyzeIntent: call 1 succeeds, call 2 throws — recovers from the streamed narrative (C-499 AC-1)', async () => {
     const textGenerator = makeStreamingTextGenerator({
       chunks: ['The elder considers your words.'],
-      call2Error: new Error('envelope extraction failed'),
+      call2Error: new Error('No JSON object found in response'),
     });
     npcDialogueService.configure({
       contentProvider: makeContentProvider(),
@@ -238,6 +238,38 @@ describe('AC-1: Provider failure surfaces an error', () => {
     });
 
     const controller = new AbortController();
+    const output = await npcDialogueService.analyzeIntent({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player', content: 'I try to persuade you.' }],
+      signal: controller.signal,
+    });
+
+    // The turn completes — it does NOT fail — using the recovered narrative.
+    expect(output.requiresRoll).toBe(false);
+    expect(output.npcResponse).toContain('The elder considers your words.');
+    // A pure-prose narrative recovers zero chips (C-499 edge case: chips are
+    // not guaranteed by the repair path — the empty-body retry in AC-2 is what
+    // restores the combat-chip envelope).
+    expect(output.suggestedChips).toEqual([]);
+    expect(npcDialogueService.turnState.kind).toBe('complete');
+  });
+
+  test('analyzeIntent: repair itself fails when the narrative is too short — surfaces the real error (C-499 AC-3)', async () => {
+    const textGenerator = makeStreamingTextGenerator({
+      chunks: ['Hi.'],
+      call2Error: new Error('No JSON object found in response'),
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const controller = new AbortController();
+    // The streamed narrative "Hi." is < 20 chars, so recoverIntentAnalysisOutput
+    // throws; analyzeIntent surfaces the original provider error while retaining
+    // the repair error as its cause (AC-3: no silent/endless turn).
     await expect(
       npcDialogueService.analyzeIntent({
         npcId: 'village_elder',
@@ -245,13 +277,11 @@ describe('AC-1: Provider failure surfaces an error', () => {
         messages: [{ role: 'player', content: 'I try to persuade you.' }],
         signal: controller.signal,
       }),
-    ).rejects.toThrow('envelope extraction failed');
+    ).rejects.toThrow('No JSON object found in response');
 
-    // Both the rejection AND the failed turn state must be present
     expect(npcDialogueService.turnState.kind).toBe('failed');
     if (npcDialogueService.turnState.kind === 'failed') {
       expect(npcDialogueService.turnState.reason).toBe('provider_error');
-      expect(npcDialogueService.turnState.fallbackOffered).toBe(false);
     }
   });
 
