@@ -102,6 +102,10 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/rtk.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/vision_guard.ts": {
       "class": "pi_extensions",
       "active": true
@@ -211,6 +215,10 @@
       "active": true
     },
     ".pi/extensions/lib/role_profiles.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/rtk.test.ts": {
       "class": "pi_extensions",
       "active": true
     },
