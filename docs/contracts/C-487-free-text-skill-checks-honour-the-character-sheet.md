@@ -3,7 +3,7 @@ id: C-487
 title: "Free-text skill checks honour the real character sheet"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-07T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — this teaches players their character sheet is decorative |
 | **Dependencies** | None. C-489 depends on this contract and owns what happens to the roll's result. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — the roll breakdown the player sees before committing |
 | **Contract version** | 2.0.0 |
@@ -159,6 +159,7 @@ N/A — no persistent state changes. The character sheet is already persisted; t
 - Do not read `SKILL_STAT_MAP[...].defaultModifier` for the production path — that is the demo value and is exactly the bug being removed.
 - The modifier is computed with `computeModifier` / `computeSkillModifier`; a locally re-derived formula will drift when the rules helpers change.
 - Do not treat `isExpertise` as presentation-only: pass it to `computeSkillModifier` and expose it in `SkillCheckBreakdown`.
+- 🔴 **Case mismatch**: the model and the dev sandbox emit `checkType` in Title Case (e.g. `"Persuasion"`, `"Deception"`, `"Sleight Of Hand"`) but `SKILL_STAT_MAP` keys are camelCase (`persuasion`, `deception`, `sleightOfHand`). A direct `SKILL_STAT_MAP[checkType]` lookup misses and silently falls back to the raw ability modifier, breaking the AC-1 `+5`/`+7` assertions. Normalise `checkType` to the map key (lowercase first letter, strip spaces) before lookup, and cover the normalisation in the AC-1 unit test.
 
 ### AC-2: Stakes and breakdown are shown before the roll commits
 **Given** a free-text action that triggers a skill check
@@ -276,7 +277,7 @@ N/A — no persistent state changes. The character sheet is already persisted; t
 ## Edge Cases & Gotchas
 
 - **No authored character yet**: fall back to a neutral sheet (all 10s → `+0`), never to `"Level 1 Fighter"` and never to a `SKILL_STAT_MAP.defaultModifier`.
-- **`checkType` not in `SKILL_STAT_MAP`**: use the governing ability's raw modifier only if `checkType` resolves to an ability; otherwise log and do not invent a bonus. Do not crash the dialogue.
+- **`checkType` not in `SKILL_STAT_MAP`**: normalise `checkType` to a map key first (Title Case → camelCase, strip spaces — `"Sleight Of Hand"` → `sleightOfHand`). Only if it still does not resolve to a known skill/stat use the governing ability's raw modifier; otherwise log and do not invent a bonus. Do not crash the dialogue.
 - **Non-combat resolution path** (`tryNonCombatResolution`) also reads `defaultModifier` at `:885`; route it through the same computed modifier so two paths don't drift.
 - **The dev sandbox dialogue route** is not a production path. Tests for this contract must not use `/dev/sandbox/dialogue` as their production evidence.
 - **Result application**: nothing in this contract may mutate inventory, quest flags, relationships, or trust as part of "applying" the roll — that is C-489. A tempting implementation will add a consequence in the same PR; refuse it.
