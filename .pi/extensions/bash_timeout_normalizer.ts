@@ -50,7 +50,7 @@ export const normalizeTimeout = (timeout: number | null | undefined): number => 
  * Prepend the non-interactive environment guards unless already present.
  */
 export const guardCommand = (command: string): string => {
-  if (command.startsWith('export CI=true')) {
+  if (command.startsWith(ENV_GUARD)) {
     return command;
   }
   return ENV_GUARD + command;

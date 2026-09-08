@@ -235,18 +235,20 @@ const TOOLS: ToolCheck[] = [
       linux: {
         label: 'Install rtk (curl installer)',
         commands: [
-          'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
+          'rtk_installer=$(mktemp) && trap \'rm -f "$rtk_installer"\' EXIT && curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/fde0a8f185945556f51718de0f4c430bb62b3df6/install.sh -o "$rtk_installer" && echo "d6eb73a772903e13ff34ee1be8a8b24e896ba9a978f20d2279a08b4083ea6f77  $rtk_installer" | sha256sum --check --status && RTK_VERSION=v0.48.0 sh "$rtk_installer"',
         ],
       },
       darwin: {
         label: 'Install rtk (curl installer)',
         commands: [
-          'curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh | sh',
+          'rtk_installer=$(mktemp) && trap \'rm -f "$rtk_installer"\' EXIT && curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/fde0a8f185945556f51718de0f4c430bb62b3df6/install.sh -o "$rtk_installer" && test "$(shasum -a 256 "$rtk_installer" | awk \'{print $1}\')" = "d6eb73a772903e13ff34ee1be8a8b24e896ba9a978f20d2279a08b4083ea6f77" && RTK_VERSION=v0.48.0 sh "$rtk_installer"',
         ],
       },
       win32: {
         label: 'Install rtk (cargo)',
-        commands: ['cargo install --git https://github.com/rtk-ai/rtk'],
+        commands: [
+          'cargo install --git https://github.com/rtk-ai/rtk --rev fde0a8f185945556f51718de0f4c430bb62b3df6 --locked rtk',
+        ],
       },
     },
     hint: 'Installs to ~/.local/bin (add to PATH if missing). Nix users: rtk is in nixpkgs. Optional — pi falls back to raw tools.',

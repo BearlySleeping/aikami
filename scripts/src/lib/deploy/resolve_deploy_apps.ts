@@ -97,14 +97,14 @@ function queryMoonAffectedProjects(base: string, head: string): MoonAffectedProj
 }
 
 /** Maps affected moon project ids/sources → DEPLOYABLE_APPS ids. */
-function isResolvableCommit(sha: string): boolean {
+const isResolvableCommit = (sha: string): boolean => {
   try {
     execSync(`git cat-file -e "${sha}^{commit}"`, { stdio: 'ignore' });
     return true;
   } catch {
     return false;
   }
-}
+};
 
 function resolveAffectedDeployApps(affected: MoonAffectedProject[]): string[] {
   const affectedIds = new Set(affected.map((p) => p.id));
@@ -216,15 +216,15 @@ function main(): void {
 
   // A force-push can orphan the `before` SHA (no longer reachable from any
   // ref), and moon would hard-fail with "fatal: bad object" — the same
-  // failure the all-zeros guard above exists to avoid. Nothing meaningful
-  // "changed" for a diff we cannot compute, so fall back to the same safe,
-  // conservative answer: nothing to deploy.
+  // failure the all-zeros guard above exists to avoid. Since we cannot prove
+  // which apps changed, force a full push deployment rather than risk leaving
+  // an affected app stale.
   if (!isResolvableCommit(base)) {
     log(
-      `  ${c.dim}Before SHA ${base} is not resolvable (force-pushed away?) — nothing to deploy.${c.reset}`,
+      `  ${c.dim}Before SHA ${base} is not resolvable (force-pushed away?) — deploying all push-deployable apps.${c.reset}`,
     );
-    emitDeployApps([]);
-    emitForce(false);
+    emitDeployApps(DEPLOYABLE_APPS.filter((appName) => !PUSH_EXCLUDED_APPS.has(appName)));
+    emitForce(true);
     return;
   }
 
