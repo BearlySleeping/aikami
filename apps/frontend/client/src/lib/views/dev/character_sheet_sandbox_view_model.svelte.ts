@@ -113,4 +113,4 @@ export const getCharacterSheetSandboxViewModel = (
     playerStateService: createPlayerStateService({
       className: 'CharacterSheetSandboxPlayerStateService',
     }),
-  });
+  } as CharacterSheetViewModelOptions);
