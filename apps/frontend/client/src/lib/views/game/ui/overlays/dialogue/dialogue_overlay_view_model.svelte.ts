@@ -196,6 +196,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Whether the AI is currently streaming a response. */
   readonly isStreaming: boolean;
 
+  /** Whether the pending NPC response should show a typing indicator. */
+  readonly isTyping: boolean;
+
   /**
    * Streamed narrative text for the in-flight turn (C-401). Grows as tokens
    * arrive, frame-batched to at most one `$state` write per animation frame.
@@ -471,6 +474,15 @@ class DialogueOverlayViewModel
   messages = $state<DialogueMessage[]>([]);
 
   isStreaming = $state<boolean>(false);
+
+  /** @inheritdoc */
+  get isTyping(): boolean {
+    if (!this.isStreaming) {
+      return false;
+    }
+    const latestMessage = this.messages.at(-1);
+    return latestMessage?.role === 'player' || latestMessage?.content === '';
+  }
 
   /** Streamed narrative for the in-flight turn (C-401). */
   streamingText = $state<string>('');

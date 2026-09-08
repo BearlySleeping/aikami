@@ -19,6 +19,11 @@ let customActionInput = $state('');
 <BaseViewModelContainer
   {viewModel}
   class="pointer-events-auto absolute inset-0 z-20 bg-base-300/80 backdrop-blur-sm"
+  role="dialog"
+  aria-modal="true"
+  tabindex={-1}
+  onclick={(event) => viewModel.handleBackdropClick(event)}
+  onkeydown={(event) => viewModel.handleDialogKeyDown(event)}
 >
   <div
     style={viewModel.combatBackgroundImageUrl

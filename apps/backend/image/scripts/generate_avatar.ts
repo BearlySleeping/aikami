@@ -32,6 +32,7 @@
 // local-stack .env (applied to every run). Override per-run:
 //   bun run generate:avatar "a knight" --lora anima-pixel.safetensors --lora-strength 0.8
 //   bun run generate:avatar "a knight" --lora ""   # disable the default LoRA
+// LoRA strength must be between 0 and 2 (inclusive).
 
 // biome-ignore-all lint/style/useNamingConvention: sd-server API uses snake_case fields
 import { mkdirSync, readFileSync, statSync } from 'node:fs';
@@ -94,13 +95,42 @@ const parseOptions = (): GenerationOptions => {
 
   const getArg = (flag: string, fallback: string): string => {
     const idx = args.indexOf(flag);
-    return idx !== -1 && args[idx + 1] ? (args[idx + 1] as string) : fallback;
+    if (idx === -1) {
+      return fallback;
+    }
+    const value = args[idx + 1];
+    if (value === undefined || value.startsWith('--')) {
+      throw new Error(`${flag} requires a value`);
+    }
+    return value;
   };
 
   // LoRA resolution: an explicit --lora flag wins (value 'none' or ''
   // disables it); otherwise fall back to the local-stack .env IMAGE_LORA.
   const loraIdx = args.indexOf('--lora');
-  const lora = loraIdx !== -1 ? (args[loraIdx + 1] ?? '') : (stackEnv.IMAGE_LORA ?? '');
+  const loraArg = loraIdx === -1 ? undefined : args[loraIdx + 1];
+  if (loraIdx !== -1 && (loraArg === undefined || loraArg.startsWith('--'))) {
+    throw new Error('--lora requires a value; pass an empty string to disable LoRA');
+  }
+  const lora = loraIdx !== -1 ? (loraArg ?? '') : (stackEnv.IMAGE_LORA ?? '');
+  const loraStrengthText = getArg(
+    '--lora-strength',
+    stackEnv.IMAGE_LORA_STRENGTH ?? process.env.IMAGE_LORA_STRENGTH ?? '0.8',
+  );
+  const loraStrength = Number.parseFloat(loraStrengthText);
+  if (
+    !Number.isFinite(loraStrength) ||
+    Number(loraStrengthText) !== loraStrength ||
+    loraStrength < 0 ||
+    loraStrength > 2
+  ) {
+    throw new Error('--lora-strength must be a finite number between 0 and 2');
+  }
+  const timeoutText = getArg('--timeout', '900');
+  const timeout = Number.parseInt(timeoutText, 10);
+  if (!/^[+]?[0-9]+$/.test(timeoutText) || !Number.isFinite(timeout) || timeout <= 0) {
+    throw new Error('--timeout must be a finite positive integer');
+  }
 
   return {
     prompt:
@@ -121,15 +151,10 @@ const parseOptions = (): GenerationOptions => {
     // (array of {path, strength}), resolved against --lora-model-dir
     // (/models/image). See the lora resolution above.
     lora: lora === 'none' ? '' : lora,
-    loraStrength: Number.parseFloat(
-      getArg(
-        '--lora-strength',
-        stackEnv.IMAGE_LORA_STRENGTH ?? process.env.IMAGE_LORA_STRENGTH ?? '0.8',
-      ),
-    ),
+    loraStrength,
     // CPU inference is slow (~26s/step at 512×512); 900s covers a 20-step
     // run with headroom. Use --timeout to tighten it for quick smoke tests.
-    timeout: Number.parseInt(getArg('--timeout', '900'), 10),
+    timeout,
   };
 };
 
@@ -236,11 +261,27 @@ const waitForJob = async (jobId: string, timeoutSeconds: number): Promise<SdCppJ
   const deadline = started + timeoutSeconds * 1000;
   let poll = 0;
 
-  while (Date.now() < deadline) {
+  while (true) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      break;
+    }
     poll++;
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(10_000),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: AbortSignal.timeout(Math.min(10_000, remainingMs)),
+      });
+    } catch (error) {
+      if (
+        Date.now() >= deadline &&
+        error instanceof DOMException &&
+        (error.name === 'AbortError' || error.name === 'TimeoutError')
+      ) {
+        break;
+      }
+      throw error;
+    }
 
     if (!response.ok) {
       throw new Error(`Job poll failed: ${response.status}`);

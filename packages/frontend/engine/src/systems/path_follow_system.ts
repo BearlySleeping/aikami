@@ -12,7 +12,16 @@
 // service posts per-entity velocities.
 
 import type { World } from 'bitecs';
-import { addComponent, getComponent, hasComponent, query, removeComponent, set } from 'bitecs';
+import {
+  addComponent,
+  getComponent,
+  hasComponent,
+  observe,
+  onRemove,
+  query,
+  removeComponent,
+  set,
+} from 'bitecs';
 import { logger } from '$logger';
 import { Companion } from '../components/companion.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
@@ -115,6 +124,19 @@ const _clearHaltState = (eid: number): void => {
   _npcHaltReason.delete(eid);
   _haltedForMs.delete(eid);
   _haltYielded.delete(eid);
+};
+
+/**
+ * Registers teardown cleanup for module-level halt state.
+ *
+ * Position is entity-lifetime state for path-following actors, so its removal
+ * is the reliable despawn signal. PathFollow removal cannot be used here: the
+ * corridor-yield deliberately removes PathFollow while retaining its latch.
+ */
+export const registerPathFollowHaltObservers = (world: World): void => {
+  observe(world, onRemove(Position), (eid: number) => {
+    _clearHaltState(eid);
+  });
 };
 
 /**

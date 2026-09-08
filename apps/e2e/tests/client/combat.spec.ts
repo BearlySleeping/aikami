@@ -64,14 +64,7 @@ test.describe('Combat Overlay Rendering & Engine Stall (C-500)', () => {
     // AC-1: the full battle UI is mounted — portrait stage, HP text, and
     // the action controls. (The turn tracker + dice are children of the
     // mounted CombatView; the attack button is the mount's leading edge.)
-    await expect(page.locator('[data-testid="combat-portrait-stage"]')).toBeVisible({
-      timeout: 10_000,
-    });
-    await expect(page.locator('[data-testid="player-hp-text"]')).toBeVisible();
-    await expect(page.locator('[data-testid="enemy-hp-text"]')).toBeVisible();
-    await expect(page.locator('[data-testid="combat-attack-btn"]')).toBeVisible();
-    await expect(page.locator('[data-testid="combat-defend-btn"]')).toBeVisible();
-    await expect(page.locator('[data-testid="combat-flee-btn"]')).toBeVisible();
+    await game.expectCombatUiVisible();
 
     // ── Resolve the fight (attack until the engine emits COMBAT_ENDED) ──
     for (let round = 0; round < 20; round++) {

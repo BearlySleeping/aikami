@@ -19,6 +19,7 @@ import RichMessageList from '$lib/components/messaging/rich_message_list.svelte'
 import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
 import type { MessageAction } from '$types';
 import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
+import PendingMessageBanner from './pending_message_banner.svelte';
 
 type Props = {
   viewModel: DialogueOverlayViewModelInterface;
@@ -305,7 +306,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
 
       {#snippet after()}
         <!-- Typing indicator — shown while waiting for NPC response -->
-        {#if viewModel.isStreaming && viewModel.messages.length > 0 && (viewModel.messages[viewModel.messages.length - 1].role === 'player' || viewModel.messages[viewModel.messages.length - 1].content === '')}
+        {#if viewModel.isTyping}
           <div class="flex gap-2">
             <div class="rounded-2xl rounded-bl-md bg-base-100 px-4 py-2.5 shadow-sm">
               <span class="inline-flex items-center gap-1">
@@ -452,34 +453,10 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           {#snippet above()}
             <!-- Pending queued messages retained after a failed/cancelled stream;
                  require an explicit Send before any is delivered. -->
-            {#if viewModel.pendingMessages.length > 0}
-              <div
-                class="border-t border-base-content/5 px-4 py-2"
-                data-testid="pending-queue-banner"
-              >
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-xs font-semibold text-base-content/70">
-                    Waiting to send ({viewModel.pendingMessages.length})
-                  </span>
-                  <button
-                    type="button"
-                    class="btn btn-xs btn-primary"
-                    onclick={() => viewModel.retryPending()}
-                    aria-label="Send waiting messages"
-                  >
-                    Send
-                  </button>
-                </div>
-                <!-- Visible pending items retained after a failed/cancelled stream -->
-                <div class="mt-1 space-y-1">
-                  {#each viewModel.pendingMessages as pending, i (i)}
-                    <div class="rounded-lg bg-base-100/70 px-2 py-1 text-xs opacity-70">
-                      {pending}
-                    </div>
-                  {/each}
-                </div>
-              </div>
-            {/if}
+            <PendingMessageBanner
+              messages={viewModel.pendingMessages}
+              onRetry={() => viewModel.retryPending()}
+            />
             <!-- Suggestion chips — rendered inside the card, above the input -->
             {#if viewModel.suggestedChips.length > 0}
               {#key viewModel.suggestedChips.map((c) => c.id).join('|')}

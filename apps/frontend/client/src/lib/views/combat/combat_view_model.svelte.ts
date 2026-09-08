@@ -207,6 +207,12 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    */
   dismissResult(): void;
 
+  /** Dismisses the combat overlay when its backdrop is clicked. */
+  handleBackdropClick(event: MouseEvent): void;
+
+  /** Dismisses the combat overlay when Escape is pressed. */
+  handleDialogKeyDown(event: KeyboardEvent): void;
+
   /** Whether the attack button should be disabled (waiting for engine response). */
   readonly isAttacking: boolean;
 
@@ -607,6 +613,23 @@ export class CombatViewModel
       return;
     }
     this.combatResult = null;
+  }
+
+  /** @inheritdoc */
+  handleBackdropClick(event: MouseEvent): void {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+    this.dismissResult();
+  }
+
+  /** @inheritdoc */
+  handleDialogKeyDown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    event.preventDefault();
+    this.dismissResult();
   }
 
   /** Cached bridge instance — created lazily on first use. */

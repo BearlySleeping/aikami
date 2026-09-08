@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
-import { addComponent, addEntity, createWorld, getComponent, set } from 'bitecs';
+import { addComponent, addEntity, createWorld, getComponent, removeEntity, set } from 'bitecs';
 import { Companion, registerCompanionObservers } from '../components/companion.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import { PathFollow, registerPathFollowObservers } from '../components/path_follow.ts';
@@ -23,6 +23,7 @@ import { updateMovement } from './movement_system.ts';
 import {
   getNpcHaltReason,
   hasActivePath,
+  registerPathFollowHaltObservers,
   resetNpcHaltReasons,
   updatePathFollow,
 } from './path_follow_system.ts';
@@ -45,6 +46,7 @@ describe('path_follow_system (C-379 AC-7)', () => {
     registerPositionObservers(world);
     registerVelocityObservers(world);
     registerPathFollowObservers(world);
+    registerPathFollowHaltObservers(world);
     registerNPCDialogObservers(world);
     registerCompanionObservers(world);
   });
@@ -450,6 +452,50 @@ describe('path_follow_system (C-379 AC-7)', () => {
       // Exactly one corridor-yield across 20s — the re-loop is gone.
       expect(yields).toBe(1);
       expect(getNpcHaltReason(npcEid)).toBe('player_proximity');
+    });
+
+    it('clears the yield latch when a despawned entity ID is reused', () => {
+      setCollisionGrid(ALL_WALKABLE);
+
+      const playerEid = addEntity(world);
+      addComponent(world, playerEid, set(Position, { x: 160, y: 160 }));
+
+      const addYieldingNpc = (): number => {
+        const eid = addEntity(world);
+        addComponent(world, eid, set(Position, { x: 160, y: 120 }));
+        addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+        addComponent(
+          world,
+          eid,
+          set(NPCDialog, {
+            npcId: 'reused_yield_npc',
+            npcName: 'Reused Yield NPC',
+            dialog: 'Hi',
+            interactionRadius: 48,
+            playerInRange: false,
+            isVendor: false,
+            vendorInventory: '',
+          }),
+        );
+        attachPath(eid, [160, 120, 160, 160], 60, 6);
+        return eid;
+      };
+
+      const originalEid = addYieldingNpc();
+      for (let frame = 0; frame < 60; frame++) {
+        updatePathFollow(world, 100, playerEid);
+      }
+      expect(hasActivePath(world, originalEid)).toBe(false);
+
+      removeEntity(world, originalEid);
+      const replacementEid = addYieldingNpc();
+      expect(replacementEid).toBe(originalEid);
+
+      for (let frame = 0; frame < 60; frame++) {
+        updatePathFollow(world, 100, playerEid);
+      }
+      expect(hasActivePath(world, replacementEid)).toBe(false);
+      expect(getNpcHaltReason(replacementEid)).toBe('player_proximity');
     });
 
     it('a party follower (Companion) is NOT halted by the player proximity rule', () => {

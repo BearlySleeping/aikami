@@ -1,7 +1,6 @@
 <script lang="ts">
 import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/game/ui/game_ui_view.svelte
-import CombatView from '../../combat/combat_view.svelte';
 import InventoryView from '../../inventory/inventory_view.svelte';
 import QuestView from '../../quest/quest_view.svelte';
 import VendorView from '../../vendor/vendor_view.svelte';
@@ -15,6 +14,7 @@ import MusicPlayerOverlay from './hud/music_player_overlay.svelte';
 import OnboardingHint from './hud/onboarding_hint.svelte';
 import QuestOverlay from './hud/quest_overlay.svelte';
 import ClockHud from './overlays/clock_hud/clock_hud.svelte';
+import CombatOverlay from './overlays/combat_overlay.svelte';
 import DialogueOverlay from './overlays/dialogue/dialogue_overlay.svelte';
 import EndSessionView from './overlays/end_session/end_session_view.svelte';
 import GameOverOverlay from './overlays/game_over_overlay.svelte';
@@ -124,15 +124,12 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
       </div>
     {/if}
 
+    <CombatOverlay viewModel={viewModel.resolvedCombatViewModel} />
+
     {#if viewModel.activeOverlay === 'PAUSE_MENU' && viewModel.pauseMenuViewModel}
       <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
     {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
       <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
-    {:else if viewModel.activeOverlay === 'COMBAT' && viewModel.combatViewModel}
-      <!-- C-500: mount the combat UI — the complete battle overlay (dice,
-           portrait stage, turn tracker, action controls). It consumes the
-           CombatViewModel owned by GameUIViewModel's $effect lifecycle. -->
-      <CombatView viewModel={viewModel.combatViewModel} />
     {:else if viewModel.activeOverlay === 'GAME_OVER'}
       <GameOverOverlay
         onRespawn={() => viewModel.respawnPlayer()}

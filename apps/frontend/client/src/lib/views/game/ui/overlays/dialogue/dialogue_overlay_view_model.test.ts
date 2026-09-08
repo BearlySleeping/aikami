@@ -9,13 +9,16 @@
 //     src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, type Mock, mock, test } from 'bun:test';
 import { SKILL_CHECK_STAKES } from '@aikami/constants';
 import type { GameCharacterSheet } from '@aikami/types';
 import { computeModifier, createDefaultSheet } from '@aikami/utils';
 import type { NpcDialogueServiceInterface } from '$services';
 
 type AnalyzeIntentOptions = Parameters<NpcDialogueServiceInterface['analyzeIntent']>[0];
+type AnalyzeIntentCallback = (
+  options: AnalyzeIntentOptions,
+) => ReturnType<NpcDialogueServiceInterface['analyzeIntent']>;
 
 // ---------------------------------------------------------------------------
 // Seeded character sheet — the mocked playerStateService returns this so the
@@ -64,7 +67,7 @@ let generateTurnStub = mock(async () => ({
   source: 'ai' as const,
 }));
 
-const defaultAnalyzeIntent = async () => ({
+const defaultAnalyzeIntent: AnalyzeIntentCallback = async (_options) => ({
   requiresRoll: false,
   checkType: undefined,
   difficultyClass: undefined,
@@ -81,7 +84,7 @@ const defaultAnalyzeIntent = async () => ({
   ],
 });
 
-let analyzeIntentStub = mock(defaultAnalyzeIntent);
+let analyzeIntentStub: Mock<AnalyzeIntentCallback> = mock(defaultAnalyzeIntent);
 
 // ── Quest-activation tool call stubs (C-quest-activation) ──
 let acceptQuestStub = mock(() => true);
