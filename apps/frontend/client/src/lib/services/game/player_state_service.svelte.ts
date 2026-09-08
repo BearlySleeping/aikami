@@ -587,6 +587,6 @@ export const createPlayerStateService = (
   options: PlayerStateServiceOptions,
 ): PlayerStateServiceInterface => PlayerStateService.create(options);
 
-export const playerStateService: PlayerStateServiceInterface = createPlayerStateService({
+export const playerStateService: PlayerStateServiceInterface = PlayerStateService.create({
   className: 'PlayerStateService',
 });

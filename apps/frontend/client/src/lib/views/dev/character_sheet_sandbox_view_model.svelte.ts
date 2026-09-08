@@ -107,12 +107,10 @@ class CharacterSheetSandboxViewModel
 
 export const getCharacterSheetSandboxViewModel = (
   options: CharacterSheetViewModelOptions,
-): CharacterSheetSandboxViewModelInterface => {
-  const sandboxOptions: CharacterSheetViewModelOptions = {
+): CharacterSheetSandboxViewModelInterface =>
+  CharacterSheetSandboxViewModel.create({
     ...options,
     playerStateService: createPlayerStateService({
       className: 'CharacterSheetSandboxPlayerStateService',
     }),
-  };
-  return CharacterSheetSandboxViewModel.create(sandboxOptions);
-};
+  });
