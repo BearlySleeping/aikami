@@ -489,8 +489,8 @@ describe('C-489 AC-1: relationship deltas persist across serialize/deserialize',
 
     // "Save"
     const saved: RelationshipState = JSON.parse(JSON.stringify(relationshipService.serialize()));
-    expect(saved.characterRelationships['guard_captain'].trust).toBe(7);
-    expect(saved.characterRelationships['guard_captain'].affinity).toBe(4);
+    expect(saved.characterRelationships.guard_captain.trust).toBe(7);
+    expect(saved.characterRelationships.guard_captain.affinity).toBe(4);
 
     // "Reload" into a fresh instance
     resetService();
@@ -512,7 +512,7 @@ describe('C-489 AC-1: relationship deltas persist across serialize/deserialize',
     });
 
     const saved: RelationshipState = JSON.parse(JSON.stringify(relationshipService.serialize()));
-    expect(saved.factionStandings['town_guard'].standing).toBe(10);
+    expect(saved.factionStandings.town_guard.standing).toBe(10);
 
     resetService();
     relationshipService.deserialize(saved);

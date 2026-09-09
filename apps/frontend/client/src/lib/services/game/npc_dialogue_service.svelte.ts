@@ -52,14 +52,14 @@ import { buildNpcPersona } from './npc_dialogue_persona';
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
 
 /** Fixed application order for a batch (Failure Recovery) — never model order. */
-const CONSEQUENCE_KIND_ORDER: Record<NpcStateDelta['kind'], number> = {
-  flag_clear: 0,
-  flag_set: 1,
-  inventory_remove: 2,
-  inventory_grant: 3,
-  relationship_update: 4,
-  trust_change: 5,
-};
+const CONSEQUENCE_KIND_ORDER = [
+  'flag_clear',
+  'flag_set',
+  'inventory_remove',
+  'inventory_grant',
+  'relationship_update',
+  'trust_change',
+] as const satisfies readonly NpcStateDelta['kind'][];
 
 /**
  * Canonical sort for a consequence batch (Failure Recovery): by kind in the
@@ -68,20 +68,38 @@ const CONSEQUENCE_KIND_ORDER: Record<NpcStateDelta['kind'], number> = {
  * equivalent — their occurrence number is assigned after this sort.
  */
 const compareConsequenceDeltas = (a: NpcStateDelta, b: NpcStateDelta): number => {
-  const kindDiff = CONSEQUENCE_KIND_ORDER[a.kind] - CONSEQUENCE_KIND_ORDER[b.kind];
-  if (kindDiff !== 0) return kindDiff;
-  if (a.target < b.target) return -1;
-  if (a.target > b.target) return 1;
+  const kindDiff = CONSEQUENCE_KIND_ORDER.indexOf(a.kind) - CONSEQUENCE_KIND_ORDER.indexOf(b.kind);
+  if (kindDiff !== 0) {
+    return kindDiff;
+  }
+  if (a.target < b.target) {
+    return -1;
+  }
+  if (a.target > b.target) {
+    return 1;
+  }
   const aMissingLabel = a.label === undefined || a.label === null;
   const bMissingLabel = b.label === undefined || b.label === null;
-  if (aMissingLabel !== bMissingLabel) return aMissingLabel ? -1 : 1;
-  if ((a.label ?? '') < (b.label ?? '')) return -1;
-  if ((a.label ?? '') > (b.label ?? '')) return 1;
+  if (aMissingLabel !== bMissingLabel) {
+    return aMissingLabel ? -1 : 1;
+  }
+  if ((a.label ?? '') < (b.label ?? '')) {
+    return -1;
+  }
+  if ((a.label ?? '') > (b.label ?? '')) {
+    return 1;
+  }
   const aMissingValue = !Number.isFinite(a.value);
   const bMissingValue = !Number.isFinite(b.value);
-  if (aMissingValue !== bMissingValue) return aMissingValue ? -1 : 1;
-  if ((a.value ?? 0) < (b.value ?? 0)) return -1;
-  if ((a.value ?? 0) > (b.value ?? 0)) return 1;
+  if (aMissingValue !== bMissingValue) {
+    return aMissingValue ? -1 : 1;
+  }
+  if ((a.value ?? 0) < (b.value ?? 0)) {
+    return -1;
+  }
+  if ((a.value ?? 0) > (b.value ?? 0)) {
+    return 1;
+  }
   return 0;
 };
 
@@ -2191,19 +2209,27 @@ export class NpcDialogueService
         return { applied: delta };
       }
       case 'flag_clear': {
-        if (!delta.label || delta.label.length === 0) return { reason: 'invalid' };
+        if (!delta.label || delta.label.length === 0) {
+          return { reason: 'invalid' };
+        }
         // Provenance: you can only clear a flag that is actually set.
         const flags = questStateService.worldStateFlags as Record<string, unknown> | undefined;
-        if (!flags?.[delta.label]) return { reason: 'no-provenance' };
+        if (!flags?.[delta.label]) {
+          return { reason: 'no-provenance' };
+        }
         questStateService.clearWorldStateFlag(delta.label);
         return { applied: delta };
       }
       case 'inventory_grant': {
-        if (!delta.target || delta.target.length === 0) return { reason: 'invalid' };
+        if (!delta.target || delta.target.length === 0) {
+          return { reason: 'invalid' };
+        }
         // Entitlement: the pack must define the item — a generic NPC can never
         // inject an arbitrary item id (security).
         const itemDef = this._contentProvider?.getItem?.(delta.target);
-        if (!itemDef) return { reason: 'not-entitled' };
+        if (!itemDef) {
+          return { reason: 'not-entitled' };
+        }
         const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
         if (inventoryService.addItem({ itemId: delta.target, quantity })) {
           questStateService.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: delta.target });
@@ -2212,12 +2238,16 @@ export class NpcDialogueService
         return { reason: 'invalid' };
       }
       case 'inventory_remove': {
-        if (!delta.target || delta.target.length === 0) return { reason: 'invalid' };
+        if (!delta.target || delta.target.length === 0) {
+          return { reason: 'invalid' };
+        }
         // Provenance: the item must actually exist in the player's inventory.
         const owned =
           Array.isArray(inventoryService.inventory) &&
           inventoryService.inventory.some((item) => item.itemId === delta.target);
-        if (!owned) return { reason: 'no-provenance' };
+        if (!owned) {
+          return { reason: 'no-provenance' };
+        }
         const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
         if (inventoryService.removeItem({ itemId: delta.target, quantity })) {
           return { applied: { ...delta, value: quantity } };
@@ -2226,12 +2256,16 @@ export class NpcDialogueService
       }
       case 'trust_change': {
         // A label on trust_change, or a missing/non-finite value, is invalid.
-        if (delta.label !== undefined && delta.label !== null) return { reason: 'invalid' };
+        if (delta.label !== undefined && delta.label !== null) {
+          return { reason: 'invalid' };
+        }
         const trustValue = delta.value;
         if (typeof trustValue !== 'number' || !Number.isFinite(trustValue)) {
           return { reason: 'invalid' };
         }
-        if (!this._npcKnown(request.npcId)) return { reason: 'not-entitled' };
+        if (!this._npcKnown(request.npcId)) {
+          return { reason: 'not-entitled' };
+        }
         const eventDescription = `Dialogue consequence ${request.operationId} from ${request.sourceEventId}`;
         const { trustAfter, affinityAfter } = this._resolveRelationshipViaKernel(
           delta.target,
@@ -2249,8 +2283,12 @@ export class NpcDialogueService
         return { applied: { ...delta, value: trustAfter - (current?.trust ?? 0) } };
       }
       case 'relationship_update': {
-        if (!delta.label) return { reason: 'invalid' };
-        if (!this._npcKnown(request.npcId)) return { reason: 'not-entitled' };
+        if (!delta.label) {
+          return { reason: 'invalid' };
+        }
+        if (!this._npcKnown(request.npcId)) {
+          return { reason: 'not-entitled' };
+        }
         const eventDescription = `Dialogue consequence ${request.operationId} from ${request.sourceEventId}`;
         if (delta.label === 'faction') {
           const factionValue = delta.value;

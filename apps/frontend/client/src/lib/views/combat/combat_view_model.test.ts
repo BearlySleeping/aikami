@@ -652,10 +652,12 @@ describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from sta
     await viewModel.executeCustomAction('I unleash a devastating blow');
 
     const action = bridgeSendCalls.find((c) => c.type === 'COMBAT_ACTION');
-    expect(action).toBeDefined();
+    if (!action) {
+      throw new Error('expected a COMBAT_ACTION to be dispatched');
+    }
     // Enemy at full HP → no advantage from state; player attack 5 → +2 bonus.
-    expect(action!.advantage).toBe(false);
-    expect(action!.bonusDamage).toBe(2);
+    expect(action.advantage).toBe(false);
+    expect(action.bonusDamage).toBe(2);
 
     (
       extractStructureMod.textGenerationService as {
@@ -688,7 +690,10 @@ describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from sta
     await viewModel.executeCustomAction('I press the advantage');
 
     const action = bridgeSendCalls.find((c) => c.type === 'COMBAT_ACTION');
-    expect(action!.advantage).toBe(true);
+    if (!action) {
+      throw new Error('expected a COMBAT_ACTION to be dispatched');
+    }
+    expect(action.advantage).toBe(true);
 
     (
       extractStructureMod.textGenerationService as {
