@@ -27,10 +27,10 @@ export type WalkabilityCellStyle = {
 };
 
 /** Style for a blocked (impassable) cell — cost 0. */
-const BLOCKED: WalkabilityCellStyle = { fill: 0xd43f3f, stroke: 0x7a1f1f, alpha: 0.45 };
+const BLOCKED = { fill: 0xd43f3f, stroke: 0x7a1f1f, alpha: 0.45 } as const;
 
 /** Style for a walkable cell — cost > 0. */
-const WALKABLE: WalkabilityCellStyle = { fill: 0x3fd46a, stroke: 0x1f7a3a, alpha: 0.35 };
+const WALKABLE = { fill: 0x3fd46a, stroke: 0x1f7a3a, alpha: 0.35 } as const;
 
 /**
  * Resolves the overlay style for a single cell from its authoritative cost.

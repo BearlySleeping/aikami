@@ -41,10 +41,14 @@ describe('C-506 AC-2 — depth consistency around tall objects', () => {
     for (let i = 1; i < zs.length; i++) {
       if (path[i] === path[i - 1]) {
         expect(zs[i]).toBe(zs[i - 1]);
+      } else if (path[i] > path[i - 1]) {
+        // Moving down-screen must increase depth, so the character draws over
+        // objects with smaller base y-values.
+        expect(zs[i]).toBeGreaterThan(zs[i - 1]);
       } else {
-        // No equality: a strict ordering difference in y must translate to a
-        // strict z difference, so Pixi's stable sort cannot flip the pass.
-        expect(zs[i]).not.toBe(zs[i - 1]);
+        // Moving up-screen must decrease depth, so the character draws under
+        // objects with larger base y-values.
+        expect(zs[i]).toBeLessThan(zs[i - 1]);
       }
     }
 

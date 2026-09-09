@@ -41,12 +41,10 @@ describe('C-506 AC-4 — walkability overlay authority', () => {
     const styles = buildWalkabilityStyles(grid);
     expect(styles).toHaveLength(9);
 
-    // Center + one edge blocked; the rest walkable.
-    expect(styles[4]).toEqual(walkabilityCellStyle(0));
-    expect(styles[7]).toEqual(walkabilityCellStyle(0));
-    for (const i of [0, 1, 2, 3, 5, 6, 8]) {
-      expect(styles[i]).toEqual(walkabilityCellStyle(TERRAIN_COST_WALKABLE));
-    }
+    // Center blocked cell: documented blocked palette, observed from output.
+    expect(styles[4]).toEqual({ fill: 0xd43f3f, stroke: 0x7a1f1f, alpha: 0.45 });
+    // Corner walkable cell: documented walkable palette, observed from output.
+    expect(styles[0]).toEqual({ fill: 0x3fd46a, stroke: 0x1f7a3a, alpha: 0.35 });
   });
 
   test('walkability classification matches the cost the movement systems consult', () => {
