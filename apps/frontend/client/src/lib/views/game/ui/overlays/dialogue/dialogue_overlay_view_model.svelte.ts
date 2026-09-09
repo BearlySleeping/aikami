@@ -429,6 +429,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    */
   rephraseResponse(messageId: string): void;
 
+  /** Whether the given message is the terminal NPC response eligible for rephrasing. */
+  canRephraseMessage(messageId: string): boolean;
+
   /** Replaces a user message's text and re-generates NPC responses from that point. */
   editMessage(options: { messageId: string; newText: string }): void;
 
@@ -461,6 +464,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** Available conversation branches. */
   readonly branches: readonly ConversationBranch[];
+
+  /** Whether the non-campaign branch selector should be rendered. */
+  readonly showBranchSelector: boolean;
 
   /** The currently active branch ID, or null if on the main branch. */
   readonly activeBranchId: string | null;
@@ -654,6 +660,11 @@ class DialogueOverlayViewModel
 
   /** The currently active branch ID, or null if on the main branch. */
   activeBranchId = $state<string | null>(null);
+
+  /** @inheritdoc */
+  get showBranchSelector(): boolean {
+    return this.branches.length > 0 && !this.isCampaignPlay;
+  }
 
   /** Snapshot of the base (main) conversation — preserved for branch restore. */
   private _baseMessages: DialogueMessage[] = [];
@@ -1843,7 +1854,7 @@ class DialogueOverlayViewModel
         this.streamError = this._formatTimeoutError();
       }
 
-      if (analysis.requiresRoll && analysis.checkType && analysis.difficultyClass) {
+      if (applyState && analysis.requiresRoll && analysis.checkType && analysis.difficultyClass) {
         // ── Roll needed: enter DECLARED_DC → DICE flow ──────────────
         // C-487: the modifier is computed from the real character sheet, not
         // the model's `modifierSource` (a label hint only). The breakdown and
@@ -1864,7 +1875,8 @@ class DialogueOverlayViewModel
         };
         this.dialoguePhase = 'DECLARED_DC';
       } else {
-        // ── No roll needed: stay in FREE_TEXT ────────────────────────
+        // ── No roll or presentation-only rephrase: stay in FREE_TEXT ────────
+        this.skillCheckState = null;
         this.dialoguePhase = 'FREE_TEXT';
       }
       succeeded = true;
@@ -2098,9 +2110,13 @@ class DialogueOverlayViewModel
   rephraseResponse(messageId: string): void {
     this.debug('rephraseResponse', { messageId });
 
-    // Find the NPC message in the array
+    if (!this.canRephraseMessage(messageId)) {
+      return;
+    }
+
+    // Find the terminal NPC message in the array
     const messageIndex = this.messages.findIndex((m) => m.id === messageId);
-    if (messageIndex === -1 || this.messages[messageIndex].role !== 'npc') {
+    if (messageIndex === -1) {
       return;
     }
 
@@ -2137,6 +2153,17 @@ class DialogueOverlayViewModel
         applyState: false,
       });
     }
+  }
+
+  /** @inheritdoc */
+  canRephraseMessage(messageId: string): boolean {
+    const terminalMessage = this.messages.at(-1);
+    return (
+      !this.isStreaming &&
+      terminalMessage?.id === messageId &&
+      terminalMessage.role === 'npc' &&
+      terminalMessage.content.length > 0
+    );
   }
 
   /** @inheritdoc */

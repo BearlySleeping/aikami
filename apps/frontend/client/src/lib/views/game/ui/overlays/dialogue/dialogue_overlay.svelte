@@ -266,6 +266,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           onEditCancel={() => viewModel.cancelEdit()}
           isStreaming={viewModel.isStreaming}
           isLast={index === viewModel.messages.length - 1}
+          showRephrase={viewModel.canRephraseMessage(message.id)}
           streamingText={viewModel.streamingText}
           isResolvingSkillCheck={viewModel.isResolvingSkillCheck}
           alternativeLabel={original?.alternativeLabel ?? ''}
@@ -366,7 +367,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
         {/if}
 
         <!-- Branch selector (C-490: hidden in campaign play — rewinding is gated) -->
-        {#if viewModel.branches.length > 0 && !viewModel.isCampaignPlay}
+        {#if viewModel.showBranchSelector}
           <div class="border-t border-base-content/10 px-3 py-1">
             <div class="flex items-center gap-1 text-xs">
               <span class="text-base-content/50">Branch:</span>

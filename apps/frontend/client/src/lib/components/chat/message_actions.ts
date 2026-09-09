@@ -14,6 +14,7 @@
 
 import type { MessageAction } from '$types';
 
+/** Configuration that determines which controls a message action bar offers. */
 export type MessageActionsOptions = {
   /** Message sender — controls which actions are shown. */
   sender: 'user' | 'ai' | 'system';

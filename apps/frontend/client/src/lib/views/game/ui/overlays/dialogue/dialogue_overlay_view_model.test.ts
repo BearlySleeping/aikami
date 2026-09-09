@@ -102,7 +102,7 @@ const mockQuestStateService = {
   evaluateTriggers: mock(() => {}),
 };
 
-const resolveRollStub = mock(async () => ({
+let resolveRollStub = mock(async () => ({
   narrativeResult: 'The attempt succeeds.',
   stateDeltas: [],
   suggestedChips: [],
@@ -275,6 +275,12 @@ describe('DialogueOverlayViewModel', () => {
     mockNpcDialogueService.generateTurn = generateTurnStub;
     analyzeIntentStub = mock(defaultAnalyzeIntent);
     mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+    resolveRollStub = mock(async () => ({
+      narrativeResult: 'The attempt succeeds.',
+      stateDeltas: [],
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.resolveRoll = resolveRollStub;
 
     // Reset quest-activation stubs
     acceptQuestStub = mock(() => true);
@@ -876,11 +882,35 @@ describe('DialogueOverlayViewModel', () => {
   test('C-490: isCampaignPlay defaults to true for the production overlay', () => {
     const vm = createViewModel();
     expect(vm.isCampaignPlay).toBe(true);
+    expect(vm.showBranchSelector).toBe(false);
   });
 
   test('C-490: isCampaignPlay can be disabled (dev sandbox / non-campaign chat)', () => {
     const vm = createViewModel({ isCampaignPlay: false });
     expect(vm.isCampaignPlay).toBe(false);
+    expect(vm.showBranchSelector).toBe(false);
+
+    vm.createBranch({ parentMessageId: vm.messages[0].id });
+    expect(vm.showBranchSelector).toBe(true);
+  });
+
+  test('C-490 AC-2: rephrase rejects NPC messages before the terminal response', async () => {
+    const vm = createViewModel();
+    const greetingId = vm.messages[0].id;
+
+    vm.inputText = 'Tell me about the ward.';
+    await vm.sendMessage();
+    const messageIds = vm.messages.map((message) => message.id);
+    const analyzeCallCount = analyzeIntentStub.mock.calls.length;
+
+    expect(vm.canRephraseMessage(greetingId)).toBe(false);
+    expect(vm.canRephraseMessage(vm.messages.at(-1)?.id ?? '')).toBe(true);
+
+    vm.rephraseResponse(greetingId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(vm.messages.map((message) => message.id)).toEqual(messageIds);
+    expect(analyzeIntentStub).toHaveBeenCalledTimes(analyzeCallCount);
   });
 
   test('C-490 AC-2: rephrase performs no quest-activation state mutation', async () => {
@@ -914,6 +944,31 @@ describe('DialogueOverlayViewModel', () => {
     vm.rephraseResponse(npcMessageId);
     await new Promise((r) => setTimeout(r, 0));
     expect(acceptQuestStub).toHaveBeenCalledTimes(1);
+  });
+
+  test('C-490 AC-2: rephrase ignores roll requests and preserves FREE_TEXT', async () => {
+    const vm = createViewModel();
+    vm.inputText = 'What do you know about the ward?';
+    await vm.sendMessage();
+    const npcMessageId = vm.messages.at(-1)?.id ?? '';
+
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: true,
+      checkType: 'Persuasion',
+      difficultyClass: 12,
+      modifierSource: 'CHA',
+      npcResponse: 'The elder phrases the answer differently.',
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    vm.rephraseResponse(npcMessageId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(vm.dialoguePhase).toBe('FREE_TEXT');
+    expect(vm.skillCheckState).toBeNull();
+    await vm.rollDice();
+    expect(resolveRollStub).not.toHaveBeenCalled();
   });
 
   test('C-490 AC-3: branch data is never persisted to saves; campaign gating retains in-memory branch state read-only', () => {

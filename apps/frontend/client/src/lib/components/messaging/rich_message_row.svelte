@@ -34,6 +34,8 @@ type Props = {
   isStreaming?: boolean;
   /** Whether this is the last message in the list. */
   isLast?: boolean;
+  /** Whether the dialogue variant offers Rephrase for this NPC message. */
+  showRephrase?: boolean;
   /**
    * C-490: when true (consequential campaign play), transcript-rewinding
    * actions (branch/edit/delete) are not offered and retry reads "Rephrase".
@@ -88,6 +90,7 @@ const {
   avatarUrl,
   isStreaming = false,
   isLast = false,
+  showRephrase = true,
   disableTranscriptEditing = false,
   onAction,
   renderFooter,
@@ -281,16 +284,18 @@ const handleSwipeRight = () => {
           >
             📋
           </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Rephrase"
-            aria-label="Rephrase"
-            disabled={isStreaming}
-            onclick={() => onAction?.(message.id, 'retry')}
-          >
-            🔄
-          </button>
+          {#if showRephrase}
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs px-1"
+              title="Rephrase"
+              aria-label="Rephrase"
+              disabled={isStreaming}
+              onclick={() => onAction?.(message.id, 'retry')}
+            >
+              🔄
+            </button>
+          {/if}
           {#if ttsAvailable}
             <button
               type="button"

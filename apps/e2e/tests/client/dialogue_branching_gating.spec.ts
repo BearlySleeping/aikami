@@ -78,8 +78,7 @@ test.describe('C-490 dialogue transcript gating', () => {
     const overlay = page.locator('[data-testid="dialogue-overlay"]');
 
     // Hover an NPC bubble to reveal the hover-visible action buttons.
-    const npcBubble = overlay.locator('.rounded-bl-md.bg-base-100').first();
-    await npcBubble.hover();
+    await game.hoverNpcMessageActions();
 
     // Transcript-rewinding controls are NOT offered in campaign play.
     await expect(overlay.getByRole('button', { name: 'Branch' })).toHaveCount(0);
@@ -88,7 +87,7 @@ test.describe('C-490 dialogue transcript gating', () => {
 
     // Copy stays and retry is honestly relabelled "Rephrase" (AC-2).
     await expect(overlay.getByRole('button', { name: 'Copy' })).not.toHaveCount(0);
-    await expect(overlay.getByRole('button', { name: 'Rephrase' })).not.toHaveCount(0);
+    await expect(overlay.getByRole('button', { name: 'Rephrase' })).toHaveCount(1);
     await expect(overlay.getByRole('button', { name: 'Retry' })).toHaveCount(0);
 
     // No branch selector is offered either.
@@ -96,6 +95,7 @@ test.describe('C-490 dialogue transcript gating', () => {
   });
 
   test('AC-1: the dev sandbox still offers branch/edit/delete (non-campaign)', async ({ page }) => {
+    const game = new GamePage(page);
     await page.goto('/dev/sandbox/dialogue', { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('textarea', { state: 'visible', timeout: 15_000 });
     await page.getByText('Ah, a traveler!').waitFor({ state: 'visible', timeout: 10_000 });
@@ -106,12 +106,12 @@ test.describe('C-490 dialogue transcript gating', () => {
     await page.waitForTimeout(1500);
 
     const overlay = page.locator('[data-testid="dialogue-overlay"]');
-    const npcBubble = overlay.locator('.rounded-bl-md.bg-base-100').first();
-    await npcBubble.hover();
+    await game.hoverNpcMessageActions();
 
     // In the sandbox the transcript-rewinding controls remain available.
     await expect(overlay.getByRole('button', { name: 'Branch' })).not.toHaveCount(0);
     await expect(overlay.getByRole('button', { name: 'Edit' })).not.toHaveCount(0);
     await expect(overlay.getByRole('button', { name: 'Delete' })).not.toHaveCount(0);
+    await expect(overlay.getByRole('button', { name: 'Rephrase' })).toHaveCount(1);
   });
 });
