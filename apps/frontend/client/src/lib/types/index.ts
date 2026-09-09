@@ -16,6 +16,7 @@ export type * from './gm.ts';
 export type * from './hook_data.ts';
 export type * from './impersonation.ts';
 export type * from './lorebook';
+export type * from './npc_dialogue_consequence.ts';
 export type * from './player_journal_entry.ts';
 export type * from './preset.ts';
 export type * from './provider_config.ts';

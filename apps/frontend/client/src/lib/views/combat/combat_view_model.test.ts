@@ -50,7 +50,7 @@ import {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 /** Creates a fresh CombatViewModel instance with test options. */
-const createViewModel = (): CombatViewModelInterface => {
+const createViewModel = (): CombatViewModel => {
   const options: CombatViewModelOptions = {
     className: 'CombatViewModelTest',
   };
@@ -74,7 +74,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('activeDiceRoll', () => {
-    let viewModel: CombatViewModelInterface;
+    let viewModel: CombatViewModel;
 
     beforeEach(() => {
       viewModel = createViewModel();
@@ -171,7 +171,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('combatBackgroundImageUrl', () => {
-    let viewModel: CombatViewModelInterface;
+    let viewModel: CombatViewModel;
 
     beforeEach(() => {
       viewModel = createViewModel();
@@ -195,7 +195,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('executeCustomAction — C-149 Gatekeeping', () => {
-    let viewModel: CombatViewModelInterface;
+    let viewModel: CombatViewModel;
     let bridgeSendCalls: Array<Record<string, unknown>>;
 
     beforeEach(() => {
@@ -323,7 +323,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('executeCustomAction — C-151 AI Dynamic Music', () => {
-    let viewModel: CombatViewModelInterface;
+    let viewModel: CombatViewModel;
     let bridgeSendCalls: Array<Record<string, unknown>>;
 
     beforeEach(() => {
@@ -477,7 +477,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('CombatViewModel — C-165 CombatLogEntry', () => {
-    let viewModel: CombatViewModelInterface;
+    let viewModel: CombatViewModel;
 
     beforeEach(() => {
       viewModel = createViewModel();
@@ -603,7 +603,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 // ---------------------------------------------------------------------------
 
 describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from state)', () => {
-  let viewModel: CombatViewModelInterface;
+  let viewModel: CombatViewModel;
   let bridgeSendCalls: Array<Record<string, unknown>>;
 
   beforeEach(() => {

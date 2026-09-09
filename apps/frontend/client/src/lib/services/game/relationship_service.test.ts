@@ -7,8 +7,8 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { RelationshipState } from '@aikami/types';
-// Import the pure utility functions directly
-import { buildFacts, computeTier, relationshipService } from './relationship_service.svelte';
+import { relationshipService } from './relationship_service.svelte';
+import { buildFacts, computeTier } from './relationship_utils';
 
 // ---------------------------------------------------------------------------
 // Stubs for testing
@@ -488,7 +488,7 @@ describe('C-489 AC-1: relationship deltas persist across serialize/deserialize',
     });
 
     // "Save"
-    const saved = relationshipService.serialize();
+    const saved: RelationshipState = JSON.parse(JSON.stringify(relationshipService.serialize()));
     expect(saved.characterRelationships['guard_captain'].trust).toBe(7);
     expect(saved.characterRelationships['guard_captain'].affinity).toBe(4);
 
@@ -511,7 +511,7 @@ describe('C-489 AC-1: relationship deltas persist across serialize/deserialize',
       reason: 'Dialogue consequence op-2 from ev-2',
     });
 
-    const saved = relationshipService.serialize();
+    const saved: RelationshipState = JSON.parse(JSON.stringify(relationshipService.serialize()));
     expect(saved.factionStandings['town_guard'].standing).toBe(10);
 
     resetService();

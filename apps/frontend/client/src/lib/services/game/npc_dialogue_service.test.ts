@@ -9,14 +9,11 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { NpcRollResolutionOutput, NpcStateDelta } from '@aikami/types';
 import { encode } from 'gpt-tokenizer';
 import { relationshipService } from '$services';
-import {
-  type ConsequenceRequest,
-  type ConsequenceResult,
-  NpcDialogueService,
-  npcDialogueService,
-} from './npc_dialogue_service.svelte';
+import type { ConsequenceRequest, ConsequenceResult } from '$types';
+import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -42,7 +39,16 @@ const STUB_EMBERWATCH = {
     merchant_keth_greeting: '"Welcome! Finest wares this side of the kingdom!"',
     shade_guardian_manifest: '"You shall not pass."',
   },
-  quests: [{ id: 'fading_ward', name: 'The Fading Ward', offerDialogueKey: 'elder_thalia_offer' }],
+  quests: [
+    {
+      id: 'fading_ward',
+      name: 'The Fading Ward',
+      offerDialogueKey: 'elder_thalia_offer',
+      endings: {
+        renewed: { worldStateFlag: 'emberwatch.ending.renewed' },
+      },
+    },
+  ],
   encounters: [{ id: 'ruined_ward_encounter', encounterNpcIds: ['shade_guardian'] }],
 };
 
@@ -1711,6 +1717,39 @@ const resetRelationshipService = () => {
   }));
 };
 
+/** Exercises consequence handling through the public roll-resolution path. */
+const resolveConsequences = async (options: {
+  deltas: NpcStateDelta[];
+  npcId?: string;
+  narrative?: string;
+}): Promise<NpcRollResolutionOutput> => {
+  const narrative = options.narrative ?? 'The outcome is decided.';
+  npcDialogueService.configure({
+    contentProvider: makeContentProvider(),
+    textGenerator: makeStreamingTextGenerator({
+      chunks: [narrative],
+      structured: {
+        narrativeResult: narrative,
+        stateDeltas: options.deltas,
+        suggestedChips: [],
+      },
+    }),
+    executors: makeExecutors(),
+  });
+
+  return npcDialogueService.resolveRoll({
+    npcId: options.npcId ?? 'village_elder',
+    npcName: 'Elder Thalia',
+    messages: [],
+    signal: new AbortController().signal,
+    checkType: 'persuasion',
+    difficultyClass: 12,
+    rollTotal: 18,
+    outcome: 'pass',
+    playerInput: 'I appeal to your honor.',
+  });
+};
+
 /** Runs the production consequence authority with the matching active event. */
 const runConsequence = (req: ConsequenceRequest): ConsequenceResult => {
   (
@@ -1737,16 +1776,12 @@ describe('C-489 AC-1: accepted deltas are actually applied', () => {
     });
   });
 
-  test('trust_change routes through the kernel and mutates relationship state', () => {
-    const result = runConsequence({
-      operationId: 'op-1',
-      sourceEventId: 'ev-1',
-      npcId: 'village_elder',
+  test('trust_change routes through the kernel and mutates relationship state', async () => {
+    const output = await resolveConsequences({
       deltas: [{ kind: 'trust_change', target: 'npc-001', value: 3 }],
     });
 
-    expect(appliedDeltas(result)).toEqual(['trust_change']);
-    expect(result.rejected).toHaveLength(0);
+    expect(output.stateDeltas.map((delta) => delta.kind)).toEqual(['trust_change']);
     // The store (not a "valid" array) must have been mutated.
     const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
       .mock.calls;
@@ -1755,34 +1790,28 @@ describe('C-489 AC-1: accepted deltas are actually applied', () => {
       characterId: 'npc-001',
       trustDelta: 3,
       affinityDelta: 0,
-      eventDescription: 'Dialogue consequence op-1 from ev-1',
+      eventDescription: expect.stringContaining('Dialogue consequence'),
     });
   });
 
-  test('relationship_update with label affinity maps to affinityDelta', () => {
-    const result = runConsequence({
-      operationId: 'op-2',
-      sourceEventId: 'ev-2',
-      npcId: 'village_elder',
+  test('relationship_update with label affinity maps to affinityDelta', async () => {
+    const output = await resolveConsequences({
       deltas: [{ kind: 'relationship_update', target: 'npc-001', value: 5, label: 'affinity' }],
     });
 
-    expect(appliedDeltas(result)).toEqual(['relationship_update']);
+    expect(output.stateDeltas.map((delta) => delta.kind)).toEqual(['relationship_update']);
     const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
       .mock.calls;
     expect(calls).toHaveLength(1);
     expect(calls[0][0]).toMatchObject({ characterId: 'npc-001', trustDelta: 0, affinityDelta: 5 });
   });
 
-  test('relationship_update with label faction routes to adjustFactionStanding', () => {
-    const result = runConsequence({
-      operationId: 'op-3',
-      sourceEventId: 'ev-3',
-      npcId: 'village_elder',
+  test('relationship_update with label faction routes to adjustFactionStanding', async () => {
+    const output = await resolveConsequences({
       deltas: [{ kind: 'relationship_update', target: 'ember_order', value: -2, label: 'faction' }],
     });
 
-    expect(appliedDeltas(result)).toEqual(['relationship_update']);
+    expect(output.stateDeltas.map((delta) => delta.kind)).toEqual(['relationship_update']);
     const calls = (
       relationshipService.adjustFactionStanding as unknown as { mock: { calls: unknown[][] } }
     ).mock.calls;
@@ -1790,7 +1819,7 @@ describe('C-489 AC-1: accepted deltas are actually applied', () => {
     expect(calls[0][0]).toMatchObject({
       factionId: 'ember_order',
       delta: -2,
-      reason: 'Dialogue consequence op-3 from ev-3',
+      reason: expect.stringContaining('Dialogue consequence'),
     });
   });
 });
@@ -1805,21 +1834,36 @@ describe('C-489 AC-2: one authority checks entitlement, idempotency and provenan
     });
   });
 
-  test('an NPC is not entitled to grant an item the pack does not define', () => {
-    const result = runConsequence({
-      operationId: 'op-1',
-      sourceEventId: 'ev-1',
-      npcId: 'village_elder',
+  test('an NPC is not entitled to grant an item the pack does not define', async () => {
+    const output = await resolveConsequences({
       deltas: [{ kind: 'inventory_grant', target: 'legendary_sword', value: 1 }],
     });
 
-    expect(appliedDeltas(result)).toEqual([]);
-    expect(result.rejected).toHaveLength(1);
-    expect(result.rejected[0].reason).toBe('not-entitled');
+    expect(output.stateDeltas).toEqual([]);
+    expect(output.narrativeResult).toContain('beyond what this character could grant');
+  });
+
+  test('flag_set accepts authored quest-ending labels and rejects unknown labels', async () => {
+    const authored = await resolveConsequences({
+      deltas: [
+        {
+          kind: 'flag_set',
+          target: 'fading_ward',
+          label: 'emberwatch.ending.renewed',
+        },
+      ],
+    });
+    const unknown = await resolveConsequences({
+      deltas: [{ kind: 'flag_set', target: 'fading_ward', label: 'invented.flag' }],
+    });
+
+    expect(authored.stateDeltas).toHaveLength(1);
+    expect(unknown.stateDeltas).toEqual([]);
+    expect(unknown.narrativeResult).toContain('beyond what this character could grant');
   });
 
   test('retrying the same operationId and canonical delta key is already-granted', () => {
-    const delta = { kind: 'trust_change', target: 'npc-001', value: 2 };
+    const delta: NpcStateDelta = { kind: 'trust_change', target: 'npc-001', value: 2 };
     const first = runConsequence({
       operationId: 'op-retry',
       sourceEventId: 'ev-retry',
@@ -1862,23 +1906,13 @@ describe('C-489 AC-2: one authority checks entitlement, idempotency and provenan
     expect(result.rejected[0].reason).toBe('no-provenance');
   });
 
-  test('a legitimate repeat under a new authoritative operation/event pair is a second grant', () => {
-    const delta = { kind: 'trust_change', target: 'npc-001', value: 2 };
-    runConsequence({
-      operationId: 'op-a',
-      sourceEventId: 'ev-a',
-      npcId: 'village_elder',
-      deltas: [delta],
-    });
-    const second = runConsequence({
-      operationId: 'op-b',
-      sourceEventId: 'ev-b',
-      npcId: 'village_elder',
-      deltas: [delta],
-    });
+  test('a legitimate repeat under a new authoritative operation/event pair is a second grant', async () => {
+    const delta: NpcStateDelta = { kind: 'trust_change', target: 'npc-001', value: 2 };
+    const first = await resolveConsequences({ deltas: [delta] });
+    const second = await resolveConsequences({ deltas: [delta] });
 
-    expect(appliedDeltas(second)).toEqual(['trust_change']);
-    expect(second.rejected).toHaveLength(0);
+    expect(first.stateDeltas.map((applied) => applied.kind)).toEqual(['trust_change']);
+    expect(second.stateDeltas.map((applied) => applied.kind)).toEqual(['trust_change']);
   });
 });
 
@@ -1936,19 +1970,15 @@ describe('C-489 AC-4: rejection is coherent and logged', () => {
     resetRelationshipService();
   });
 
-  test('a rejected delta is reported with its reason and excluded from applied', () => {
-    const result = runConsequence({
-      operationId: 'op-1',
-      sourceEventId: 'ev-1',
-      npcId: 'village_elder',
+  test('a rejected delta is reported with player-facing prose and excluded from applied', async () => {
+    const output = await resolveConsequences({
       // No getItem on the stub content provider → not-entitled.
       deltas: [{ kind: 'inventory_grant', target: 'nonexistent_item', value: 1 }],
     });
 
-    expect(appliedDeltas(result)).toEqual([]);
-    expect(result.rejected).toHaveLength(1);
-    expect(result.rejected[0].delta.target).toBe('nonexistent_item');
-    expect(result.rejected[0].reason).toBe('not-entitled');
+    expect(output.stateDeltas).toEqual([]);
+    expect(output.narrativeResult).toContain('beyond what this character could grant');
+    expect(output.narrativeResult).not.toContain('not-entitled');
   });
 
   test('resolveRoll surfaces reconciliation text instead of a narrated success', async () => {
@@ -1988,7 +2018,8 @@ describe('C-489 AC-4: rejection is coherent and logged', () => {
     expect(output.stateDeltas).toHaveLength(0);
     // Reconciliation text acknowledges the world did not change.
     expect(output.narrativeResult).toContain('did not take effect');
-    expect(output.narrativeResult).toContain('not-entitled');
+    expect(output.narrativeResult).toContain('beyond what this character could grant');
+    expect(output.narrativeResult).not.toContain('not-entitled');
   });
 });
 
@@ -2002,14 +2033,11 @@ describe('C-489 AC-6: the production relationship authority invokes the rules ke
     });
   });
 
-  test('an out-of-range trust delta is clamped by resolveCommand before persistence', () => {
+  test('an out-of-range trust delta is clamped by resolveCommand before persistence', async () => {
     // value 200 is finite, so it passes validity; only the kernel's
     // applyRelationshipDelta resolver clamps to [-100, 100]. If the authority
     // forwarded the model's value verbatim, applyDelta would receive 200.
-    runConsequence({
-      operationId: 'op-kernel',
-      sourceEventId: 'ev-kernel',
-      npcId: 'village_elder',
+    const output = await resolveConsequences({
       deltas: [{ kind: 'trust_change', target: 'npc-001', value: 200 }],
     });
 
@@ -2019,12 +2047,11 @@ describe('C-489 AC-6: the production relationship authority invokes the rules ke
     // Kernel computed trustAfter = 100 (clamped from 200); persistence gets the
     // resolved mechanical delta (100 - current 0).
     expect(calls[0][0]).toMatchObject({ characterId: 'npc-001', trustDelta: 100 });
+    expect(output.stateDeltas[0]).toMatchObject({ kind: 'trust_change', value: 100 });
   });
 
-  test('a rejected delta does not invoke the kernel or the store', () => {
-    runConsequence({
-      operationId: 'op-reject',
-      sourceEventId: 'ev-reject',
+  test('a rejected delta does not invoke the kernel or the store', async () => {
+    const output = await resolveConsequences({
       npcId: 'unknown_npc',
       deltas: [{ kind: 'trust_change', target: 'npc-001', value: 2 }],
     });
@@ -2032,5 +2059,6 @@ describe('C-489 AC-6: the production relationship authority invokes the rules ke
     const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
       .mock.calls;
     expect(calls).toHaveLength(0);
+    expect(output.stateDeltas).toEqual([]);
   });
 });

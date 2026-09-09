@@ -46,47 +46,10 @@ import type {
 import { createSeedableRng, resolveCommand } from '@aikami/utils';
 import { Value } from 'typebox/value';
 import { inventoryService, questStateService, relationshipService } from '$services';
+import type { ConsequenceRejectionReason, ConsequenceRequest, ConsequenceResult } from '$types';
 import { buildNpcPersona } from './npc_dialogue_persona';
 
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
-
-// ---------------------------------------------------------------------------
-// Consequence authority (C-489) — one authority path for consequences
-// ---------------------------------------------------------------------------
-
-/**
- * A batch of consequential deltas bound to a stable operation and provenance
- * identity. Both IDs are created before the model call and reused on retries,
- * so a retried operation is idempotent and a later legitimate repeat uses a
- * distinct authoritative operation/event pair.
- */
-export type ConsequenceRequest = {
-  operationId: string;
-  sourceEventId: string;
-  npcId: string;
-  deltas: NpcStateDelta[];
-};
-
-/**
- * Why a single consequential delta was rejected. `invalid` covers schema-level
- * failures (bad label, missing/non-finite value, unknown kind).
- */
-export type ConsequenceRejectionReason =
-  | 'not-entitled'
-  | 'already-granted'
-  | 'no-provenance'
-  | 'invalid';
-
-/**
- * The authority's report for a whole operation. `applied` are the deltas that
- * mutated real stores; `rejected` are those refused with a specific reason so
- * the caller can reconcile narration with reality.
- */
-export type ConsequenceResult = {
-  operationId: string;
-  applied: NpcStateDelta[];
-  rejected: Array<{ delta: NpcStateDelta; reason: ConsequenceRejectionReason }>;
-};
 
 /** Fixed application order for a batch (Failure Recovery) — never model order. */
 const CONSEQUENCE_KIND_ORDER: Record<NpcStateDelta['kind'], number> = {
@@ -153,15 +116,22 @@ type NpcDialogueContentProvider = {
   /** Returns a piece of authored dialogue by key, or undefined. */
   getDialogue(dialogueKey: string): string | undefined;
   /** Returns a quest entry by ID, or undefined. */
-  getQuest(
-    questId: string,
-  ): { id: string; name: string; offerDialogueKey: string; offeredByNpcId?: string } | undefined;
+  getQuest(questId: string):
+    | {
+        id: string;
+        name: string;
+        offerDialogueKey: string;
+        offeredByNpcId?: string;
+        endings?: Record<string, { worldStateFlag: string }>;
+      }
+    | undefined;
   /** Returns quest entries keyed by ID. */
   getAllQuests(): Array<{
     id: string;
     name: string;
     offerDialogueKey: string;
     offeredByNpcId?: string;
+    endings?: Record<string, { worldStateFlag: string }>;
   }>;
   /** Returns encounter entries keyed by ID. */
   getAllEncounters(): Array<{ id: string; dialogueKey?: string; encounterNpcIds?: string[] }>;
@@ -2007,6 +1977,7 @@ export class NpcDialogueService
     const operationId = crypto.randomUUID();
     const sourceEventId = `dialogue:${operationId}`;
     this._activeConsequenceEvent = { operationId, sourceEventId };
+    let operationCompleted = false;
 
     this._startTurnStream();
 
@@ -2092,10 +2063,18 @@ export class NpcDialogueService
 
       this.turnState = { kind: 'complete', text: output.narrativeResult };
       this._logTurnTime({ path: 'roll', ms: performance.now() - turnStart });
+      operationCompleted = true;
       return output;
     } catch (error) {
       this._logCallFailure({ path: 'roll', call: this._currentCallIndex, error });
       throw error;
+    } finally {
+      if (operationCompleted) {
+        this._clearIdempotencyEntries(operationId);
+      }
+      if (this._activeConsequenceEvent?.operationId === operationId) {
+        this._activeConsequenceEvent = null;
+      }
     }
   }
 
@@ -2150,7 +2129,7 @@ export class NpcDialogueService
       }
 
       const outcome = this._authorizeAndApply(request, delta);
-      if (outcome.reason) {
+      if ('reason' in outcome) {
         rejected.push({ delta, reason: outcome.reason });
         this.warn(`_applyConsequences:rejected-${outcome.reason}`, {
           kind: delta.kind,
@@ -2158,7 +2137,7 @@ export class NpcDialogueService
           delta,
         });
       } else {
-        applied.push(delta);
+        applied.push(outcome.applied);
         this._idempotencyLedger.add(ledgerKey);
       }
     }
@@ -2174,6 +2153,16 @@ export class NpcDialogueService
     return [operationId, delta.kind, delta.target, delta.label ?? '', delta.value ?? ''].join(':');
   }
 
+  /** Releases successful-delta keys once their operation can no longer retry. */
+  private _clearIdempotencyEntries(operationId: string): void {
+    const operationPrefix = `${operationId}:`;
+    for (const ledgerKey of this._idempotencyLedger) {
+      if (ledgerKey.startsWith(operationPrefix)) {
+        this._idempotencyLedger.delete(ledgerKey);
+      }
+    }
+  }
+
   /**
    * Authorize a single delta (entitlement, per-delta provenance, validity) and,
    * when accepted, apply it to the real store. Returns the rejection reason or
@@ -2182,12 +2171,24 @@ export class NpcDialogueService
   private _authorizeAndApply(
     request: ConsequenceRequest,
     delta: NpcStateDelta,
-  ): { reason?: ConsequenceRejectionReason } {
+  ): { applied: NpcStateDelta } | { reason: ConsequenceRejectionReason } {
     switch (delta.kind) {
       case 'flag_set': {
-        if (!delta.label || delta.label.length === 0) return { reason: 'invalid' };
+        if (!delta.label || delta.label.length === 0) {
+          return { reason: 'invalid' };
+        }
+        const authorizedLabels = new Set(
+          this._contentProvider
+            ?.getAllQuests()
+            .flatMap((quest) =>
+              Object.values(quest.endings ?? {}).map((ending) => ending.worldStateFlag),
+            ) ?? [],
+        );
+        if (!authorizedLabels.has(delta.label)) {
+          return { reason: 'not-entitled' };
+        }
         questStateService.setWorldStateFlag(delta.label);
-        return {};
+        return { applied: delta };
       }
       case 'flag_clear': {
         if (!delta.label || delta.label.length === 0) return { reason: 'invalid' };
@@ -2195,7 +2196,7 @@ export class NpcDialogueService
         const flags = questStateService.worldStateFlags as Record<string, unknown> | undefined;
         if (!flags?.[delta.label]) return { reason: 'no-provenance' };
         questStateService.clearWorldStateFlag(delta.label);
-        return {};
+        return { applied: delta };
       }
       case 'inventory_grant': {
         if (!delta.target || delta.target.length === 0) return { reason: 'invalid' };
@@ -2206,7 +2207,7 @@ export class NpcDialogueService
         const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
         if (inventoryService.addItem({ itemId: delta.target, quantity })) {
           questStateService.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: delta.target });
-          return {};
+          return { applied: { ...delta, value: quantity } };
         }
         return { reason: 'invalid' };
       }
@@ -2218,7 +2219,9 @@ export class NpcDialogueService
           inventoryService.inventory.some((item) => item.itemId === delta.target);
         if (!owned) return { reason: 'no-provenance' };
         const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
-        if (inventoryService.removeItem({ itemId: delta.target, quantity })) return {};
+        if (inventoryService.removeItem({ itemId: delta.target, quantity })) {
+          return { applied: { ...delta, value: quantity } };
+        }
         return { reason: 'invalid' };
       }
       case 'trust_change': {
@@ -2243,7 +2246,7 @@ export class NpcDialogueService
           affinityDelta: affinityAfter - (current?.affinity ?? 0),
           eventDescription,
         });
-        return {};
+        return { applied: { ...delta, value: trustAfter - (current?.trust ?? 0) } };
       }
       case 'relationship_update': {
         if (!delta.label) return { reason: 'invalid' };
@@ -2254,12 +2257,15 @@ export class NpcDialogueService
           if (typeof factionValue !== 'number' || !Number.isFinite(factionValue)) {
             return { reason: 'invalid' };
           }
-          relationshipService.adjustFactionStanding({
+          const standingBefore = relationshipService.getStanding(delta.target)?.standing ?? 0;
+          const updatedStanding = relationshipService.adjustFactionStanding({
             factionId: delta.target,
             delta: factionValue,
             reason: eventDescription,
           });
-          return {};
+          return {
+            applied: { ...delta, value: updatedStanding.standing - standingBefore },
+          };
         }
         if (delta.label === 'trust') {
           const trustValue = delta.value;
@@ -2279,7 +2285,7 @@ export class NpcDialogueService
             affinityDelta: 0,
             eventDescription,
           });
-          return {};
+          return { applied: { ...delta, value: trustAfter - (current?.trust ?? 0) } };
         }
         if (delta.label === 'affinity') {
           const affinityValue = delta.value;
@@ -2299,7 +2305,7 @@ export class NpcDialogueService
             affinityDelta: affinityAfter - (current?.affinity ?? 0),
             eventDescription,
           });
-          return {};
+          return { applied: { ...delta, value: affinityAfter - (current?.affinity ?? 0) } };
         }
         return { reason: 'invalid' };
       }
@@ -2355,8 +2361,24 @@ export class NpcDialogueService
    * the world's non-change is acknowledged instead of silently dropped.
    */
   private _reconcileNarrative(narrative: string, result: ConsequenceResult): string {
-    const reasons = result.rejected.map((r) => r.reason).join(', ');
+    const reasons = result.rejected
+      .map((rejection) => this._rejectionProse(rejection.reason))
+      .join('; ');
     return `${narrative}\n\n*Though some of what was described did not take effect (${reasons}).*`;
+  }
+
+  /** Converts internal rejection codes into authored player-facing prose. */
+  private _rejectionProse(reason: ConsequenceRejectionReason): string {
+    switch (reason) {
+      case 'not-entitled':
+        return 'the offer was beyond what this character could grant';
+      case 'already-granted':
+        return 'the reward had already been received';
+      case 'no-provenance':
+        return 'the required event or possession was not present';
+      case 'invalid':
+        return 'the proposed change could not be carried out';
+    }
   }
 }
 

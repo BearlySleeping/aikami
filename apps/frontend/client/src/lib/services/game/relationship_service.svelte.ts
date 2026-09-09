@@ -15,81 +15,13 @@ import type {
   CharacterRelationship,
   FactionDefinition,
   FactionStanding,
-  FactionStandingTier,
-  FactionStandingTierDefinition,
   RelationshipState,
   RememberedPromise,
 } from '@aikami/types';
+import { buildFacts, computeTier } from './relationship_utils';
 import { registerSerializable } from './serializable_service';
 
 export type RelationshipServiceOptions = BaseFrontendClassOptions;
-// ---------------------------------------------------------------------------
-// Tier computation — exported for test use
-// ---------------------------------------------------------------------------
-
-/**
- * Computes the tier label for a given standing score + tier definitions.
- * Uses >= threshold comparison: the first tier whose threshold is ≤ current
- * standing wins. Returns 'neutral' if no tier matches (should not happen
- * with valid definitions).
- */
-export const computeTier = (options: {
-  standing: number;
-  tiers: FactionStandingTierDefinition[];
-}): FactionStandingTier => {
-  // Tiers are sorted by threshold ascending — find the highest threshold ≤ standing
-  let best: FactionStandingTier = 'neutral';
-  for (const tier of options.tiers) {
-    if (options.standing >= tier.threshold) {
-      best = tier.tier;
-    } else {
-      break; // Remaining tiers have higher thresholds
-    }
-  }
-  return best;
-};
-
-// ---------------------------------------------------------------------------
-// Fact builders — transform state into compact prompt strings
-// ---------------------------------------------------------------------------
-
-const MAX_FACTS = 5;
-
-/** Builds compact fact strings for dialogue context injection. */
-export const buildFacts = (options: {
-  standings: ReadonlyMap<string, FactionStanding>;
-  relationships: ReadonlyMap<string, CharacterRelationship>;
-  npcId: string;
-  npcFactionId?: string;
-}): string[] => {
-  const facts: string[] = [];
-
-  // Character relationship takes priority
-  const rel = options.relationships.get(options.npcId);
-  if (rel) {
-    facts.push(
-      `Your relationship with ${
-        options.npcId
-      }: Trust ${rel.trust}, Affinity ${rel.affinity} (${rel.relationshipType})`,
-    );
-  }
-
-  // Faction standings (only meaningful ones — not neutral-at-0)
-  for (const [factionId, standing] of options.standings) {
-    if (factionId === options.npcFactionId || standing.standing !== 0) {
-      if (facts.length >= MAX_FACTS) {
-        break;
-      }
-      facts.push(`${factionId} standing: ${standing.tier} (${standing.standing})`);
-    }
-  }
-
-  return facts.slice(0, MAX_FACTS);
-};
-
-// ---------------------------------------------------------------------------
-// Type exports
-// ---------------------------------------------------------------------------
 
 export type RelationshipServiceInterface = BaseFrontendClassInterface & {
   /** Get current faction standing, initializing from content pack default if unseen. */
