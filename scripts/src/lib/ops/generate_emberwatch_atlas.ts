@@ -1222,7 +1222,15 @@ const chunk = (type: string, data: Uint8Array): Uint8Array => {
   return out;
 };
 
-const encodePng = (width: number, height: number, rgba: Uint8Array): Uint8Array => {
+/**
+ * Encodes row-major RGBA bytes as PNG data.
+ *
+ * The `rgba` input stores each pixel as `[red, green, blue, alpha]` bytes and
+ * must contain exactly `width × height × 4` bytes.
+ *
+ * @returns PNG-encoded data.
+ */
+export const encodePng = (width: number, height: number, rgba: Uint8Array): Uint8Array => {
   const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
   const ihdr = new Uint8Array(13);
   const ihdrView = new DataView(ihdr.buffer);

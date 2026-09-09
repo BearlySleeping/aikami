@@ -48,6 +48,7 @@ import { snapToDevicePixels } from './rendering/pixel_snap.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import { frustumCullChunks, type TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
+import { buildWalkabilityStyles } from './rendering/walkability_overlay.ts';
 import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
@@ -511,6 +512,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Tile size for the active map; undefined until terrain is loaded. */
   private _activeTileSize: number | undefined;
+
+  /**
+   * Authoritative TerrainGrid for the active map (C-506 AC-4). Kept so the
+   * debug walkability overlay reflects the exact movement authority the
+   * pathfinding systems consult, not a separately inferred grid.
+   */
+  private _activeTerrainGrid: import('./systems/terrain_grid.ts').TerrainGrid | undefined;
 
   /** Global uniform group for animation time (C-177). */
   private _tilemapUniforms: UniformGroup | undefined;
@@ -2785,6 +2793,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._debugNpcAppearance = {};
       this._playerEntityId = 0;
       this._activeTileSize = undefined;
+      this._activeTerrainGrid = undefined;
 
       // 3. Remove old tilemap from the world container.
       //    Destroy with texture:true to free map-specific RenderTextures
@@ -2869,6 +2878,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           : undefined,
       });
       this._activeTileSize = terrainGrid.tileSize;
+      this._activeTerrainGrid = terrainGrid;
       const spawnPoints = extractSpawnPoints(tilemap);
       const transitionZones = extractTransitionZones(tilemap);
       const spawnPointEntities = extractSpawnPointEntities(tilemap);
@@ -2978,6 +2988,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         width: tilemap.width,
         height: tilemap.height,
         tileSize: tilemap.tilewidth,
+        terrainGrid,
       });
 
       // 6. Post LOAD_MAP to worker and wait for completion
@@ -3166,7 +3177,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Called during initialization with default 10×10 tiles, and after
    * each {@link loadMap} with the actual map's tile count.
    */
-  private _drawDebugGrid(opts?: { width: number; height: number; tileSize: number }): void {
+  private _drawDebugGrid(opts?: {
+    width: number;
+    height: number;
+    tileSize: number;
+    terrainGrid?: import('./systems/terrain_grid.ts').TerrainGrid;
+  }): void {
     if (!this._app || !this._worldContainer) {
       return;
     }
@@ -3189,13 +3205,39 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const pixelW = gridW * tileSize;
     const pixelH = gridH * tileSize;
 
-    for (let col = 0; col <= gridW; col++) {
-      const x = col * tileSize;
-      grid.moveTo(x, 0).lineTo(x, pixelH).stroke({ width: 1, color: strokeColor });
-    }
-    for (let row = 0; row <= gridH; row++) {
-      const y = row * tileSize;
-      grid.moveTo(0, y).lineTo(pixelW, y).stroke({ width: 1, color: strokeColor });
+    // C-506 AC-4: when the authoritative TerrainGrid is available, paint each
+    // cell with the walkability style projected from `grid.cost` — the exact
+    // movement authority pathfinding reads — so the overlay and the real game
+    // agree by construction. Falls back to gridlines only when no grid exists.
+    const authority = opts?.terrainGrid ?? this._activeTerrainGrid;
+    if (authority) {
+      const styles = buildWalkabilityStyles(authority);
+      for (let row = 0; row < gridH; row++) {
+        for (let col = 0; col < gridW; col++) {
+          const i = row * gridW + col;
+          const style = styles[i];
+          if (!style) {
+            continue;
+          }
+          grid.rect(col * tileSize, row * tileSize, tileSize, tileSize).fill({
+            color: style.fill,
+            alpha: style.alpha,
+          });
+          grid.rect(col * tileSize, row * tileSize, tileSize, tileSize).stroke({
+            width: 1,
+            color: style.stroke,
+          });
+        }
+      }
+    } else {
+      for (let col = 0; col <= gridW; col++) {
+        const x = col * tileSize;
+        grid.moveTo(x, 0).lineTo(x, pixelH).stroke({ width: 1, color: strokeColor });
+      }
+      for (let row = 0; row <= gridH; row++) {
+        const y = row * tileSize;
+        grid.moveTo(0, y).lineTo(pixelW, y).stroke({ width: 1, color: strokeColor });
+      }
     }
 
     this._worldContainer.addChild(grid); // behind all entities (z-band)
