@@ -206,16 +206,16 @@ See [status lifecycle](SHARED_SECTIONS.md#status-lifecycle). No implementation o
 ## Execution Report
 
 ### Summary
-Implemented the C-505 canonical scene foundation: a strict, versioned native scene schema (`aikami.scene`, TypeBox in `packages/shared/schemas`, constants/limits in `packages/shared/constants`, re-exported types in `packages/shared/types`), and the engine scene module (`packages/frontend/engine/src/assets/scene/`) providing strict validation, deterministic compilation reusing the existing autotiler, a Tiled/JTON compatibility adapter with stable-identity recovery, native import/export with canonical hashing, and explicit future-authoring-format rejection at the loader boundary. The shared map preview was rewired to consume real scene data via the unified loader instead of a `tiles` placeholder. 37 unit/integration tests pass. E2E journeys (AC-3/AC-4/AC-5 visual) and conversion of the actual Emberwatch fixture remain for the verifier/runtime since the `game-data` pack content and browser tooling are not provisioned in this worktree.
+Implemented the C-505 canonical scene foundation: a strict, versioned native scene schema (`aikami.scene`, TypeBox in `packages/shared/schemas`, constants/limits in `packages/shared/constants`, re-exported types in `packages/shared/types`), and the engine scene module (`packages/frontend/engine/src/assets/scene/`) providing strict validation, deterministic compilation reusing the existing autotiler, a Tiled/JTON compatibility adapter with stable-identity recovery, native import/export with canonical hashing, and explicit future-authoring-format rejection at the loader boundary. Following verifier feedback, the production `/game` entry is now routed through the canonical pipeline via `loadMapCanonical` (normalize → validate → compile → canonical `TilemapData`), so `game_world` consumes the single canonical interpretation and no second scene authority remains; and the shared map preview now renders real locked tileset images via the asset resolver (`drawImage` from the loaded spritesheet) with `fillRect` only as an unresolvable-frame diagnostic fallback. 39 unit/integration tests pass. E2E journeys (AC-3 loot/door, AC-4 movement parity) and visual captures of the actual Emberwatch map remain for the verifier/runtime since the `game-data` pack content and browser tooling are not provisioned in this worktree.
 
 ### AC Status
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | Tiled→scene adapter + native round-trip + unified loader tested (37 passing scene tests). |
+| AC-1 | ✅ | `loadMapCanonical` routes `/game`'s production map load through normalize→validate→compile; game_world consumes the canonical scene; unified loader tested. |
 | AC-2 | ✅ | Duplicate layer/placement IDs, ground-role layers, grid length/index bounds rejected; emission report counts logical contributions. |
 | AC-3 | ⚠️ | Identity recovery (Tiled id / identityMap) + recoverable failure implemented and unit-tested; E2E loot/door restoration journey not run (no game-data/runtime here). |
 | AC-4 | ✅ | Compiler reuses autotile corner-16; collision from terrain authority + overrides; unknown terrain/matching mode rejected. E2E movement parity pending. |
-| AC-5 | ⚠️ | Preview rewired to consume compiled scene data (bands, collision, placements); renders band-colored cells not real locked images — visual captures pending provisioned game-data + browser. |
+| AC-5 | ⚠️ | Preview renders real tileset images via resolver + drawImage (fillRect only as unresolvable-frame fallback); consumes compiled scene data. Visual captures pending provisioned game-data + browser. |
 | AC-6 | ✅ | Deterministic canonical hashing (member-order independent), budget rejection before allocation, deterministic recompiles. |
 | AC-7 | ✅ | Future kinds (`aikami.region/biome/house`) rejected via `SceneUnsupportedFormatError` at parse/loader; docs distinguish implemented vs future format. |
 
@@ -226,17 +226,17 @@ Implemented the C-505 canonical scene foundation: a strict, versioned native sce
 | `packages/shared/schemas/src/lib/game/scene.ts` | Strict TypeBox `SceneDocumentSchema` + `Static` types + transition schema. |
 | `packages/shared/types/src/lib/game/scene.ts` | Scene type barrel re-exported from `@aikami/types`. |
 | `packages/frontend/engine/src/assets/scene/scene_validator.ts` | Strict semantic validation (grid lengths, limits, ownership, pack references). |
-| `packages/frontend/engine/src/assets/scene/scene_compiler.ts` | Compile scene → render layers (autotile reuse), collision, emission report. |
+| `packages/frontend/engine/src/assets/scene/scene_compiler.ts` | Compile scene → render layers (autotile reuse), collision, emission report + `compileSceneToTilemap` (canonical → game `TilemapData`). |
 | `packages/frontend/engine/src/assets/scene/tiled_adapter.ts` | Tiled/JTON `TilemapData` → `SceneDocument` with identity recovery + targeted duplication cleanup. |
 | `packages/frontend/engine/src/assets/scene/native_scene.ts` | Native parse/validate, deterministic serialize + canonical sha-256 hash, budget bounds, future-format rejection. |
-| `packages/frontend/engine/src/assets/scene/scene_loader.ts` | Unified loader entry (native + legacy) returning validated doc + compiled scene. |
+| `packages/frontend/engine/src/assets/scene/scene_loader.ts` | Unified loader entry (native + legacy) returning validated doc + compiled scene + `loadMapCanonical` production entry. |
 | `packages/frontend/engine/src/assets/scene/scene_index.ts` | Scene module barrel. |
 | `packages/frontend/engine/src/assets/scene/scene_test_utils.ts` | Shared scene test fixtures. |
 | `packages/frontend/engine/src/assets/scene/scene_validator.test.ts` | 13 validator tests (AC-2/AC-4/AC-6). |
 | `packages/frontend/engine/src/assets/scene/scene_compiler.test.ts` | 6 compiler tests (AC-1/AC-2/AC-4/AC-6). |
 | `packages/frontend/engine/src/assets/scene/native_scene.test.ts` | 8 native import/export/hash/rejection tests (AC-1/AC-6/AC-7). |
 | `packages/frontend/engine/src/assets/scene/tiled_adapter.test.ts` | 5 adapter tests (AC-1/AC-2/AC-3). |
-| `packages/frontend/engine/src/assets/scene/scene_loader.test.ts` | 4 unified loader tests (AC-1/AC-4/AC-7). |
+| `packages/frontend/engine/src/assets/scene/scene_loader.test.ts` | 6 unified loader + `loadMapCanonical` production integration tests (AC-1/AC-4/AC-7). |
 | `apps/frontend/docs/src/content/docs/guides/scene-format.mdx` | User-facing scene format & import docs distinguishing implemented vs future authoring. |
 
 ### Files Modified
@@ -246,7 +246,8 @@ Implemented the C-505 canonical scene foundation: a strict, versioned native sce
 | `packages/shared/schemas/src/index.ts` | Export `lib/game/scene.ts`. |
 | `packages/shared/types/src/index.ts` | Export `lib/game/scene.ts`. |
 | `packages/frontend/engine/src/sim.ts` | Export scene module barrel (no PixiJS). |
-| `packages/frontend/preview/src/lib/map/map_preview_view_model.svelte.ts` | Rewired to load via unified scene loader and render compiled bands/collision/placements. |
+| `packages/frontend/engine/src/game_world.ts` | Map load routed through `loadMapCanonical` so `/game` consumes the canonical scene (AC-1). |
+| `packages/frontend/preview/src/lib/map/map_preview_view_model.svelte.ts` | Loads via unified scene loader + renders real tileset images via resolver/drawImage (AC-5). |
 | `packages/frontend/preview/src/lib/map/map_preview.svelte` | Updated props (sceneId/assetLock/baseTerrain; dropped showZBands). |
 | `docs/contracts/C-505-canonical-scene-data-and-authoring-boundary.md` | Status → implemented + this report. |
 
@@ -254,7 +255,7 @@ Implemented the C-505 canonical scene foundation: a strict, versioned native sce
 None to the approved ACs. Scope reduction is environmental, not a spec change: the actual Emberwatch map conversion fixture and production `/game` E2E/visual journeys require the `apps/frontend/client/static/game-data` pack content (only `offline_core.json` is provisioned in this worktree) and browser screenshot tooling, neither of which is available here. The foundation (schema, validation, compilation, adapters, native format, future-format rejection, preview wiring) is complete and tested at unit/integration level. Proposed Amendment (optional): split the E2E/visual verification (AC-3 journey, AC-5 real-image captures, AC-4 movement parity) into a follow-on runtime-verification contract once the packed game data is provisioned in the verify environment.
 
 ### Test Results
-- Unit/Integration (new scene module): 37/37 pass (0 failures)
+- Unit/Integration (new scene module): 39/39 pass (0 failures)
 - Engine full suite: 1095 pass, 2 fail — both pre-existing/environmental (`emberwatch_content_audit.test.ts` reads `static/game-data/...atlas.json` and `content/packs/emberwatch/` which are not provisioned in this worktree)
 - Schemas: 540/540 pass; Constants: 131/131 pass
 - E2E/Visual: not run (no game-data/browser in this environment)
