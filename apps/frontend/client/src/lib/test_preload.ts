@@ -333,6 +333,10 @@ export const localServicesMockBase = () => ({
   AudioContextManager: class {},
   audioQueuePlayer: _createServiceStub(),
   audioService: _createServiceStub(),
+  // C-489 AC-5: combat ViewModel imports these audio helpers from the barrel.
+  getTracksByMood: mock(async () => []),
+  resolveAudioTrackUrl: mock(async () => 'http://localhost/audio.mp3'),
+  playSceneBgm: mock(() => {}),
   AudioService: class {},
   AudioQueuePlayer: class {},
   ttsService: _createServiceStub(),
@@ -528,6 +532,30 @@ export const localServicesMockBase = () => ({
     currentMode: 'EXPLORE',
     setMode: _createCallableStub(),
     reset: _createCallableStub(),
+  }),
+  // C-489: consequence authority reads/writes relationship + faction state
+  // through this barrel export. A controllable double so tests can assert the
+  // exact applyDelta/adjustFactionStanding calls and simulate the kernel's
+  // clamped after-state.
+  relationshipService: Object.assign(_createServiceStub(), {
+    getRelationship: mock(() => undefined),
+    applyDelta: mock(() => ({ trustAfter: 0, affinityAfter: 0 })),
+    adjustFactionStanding: mock(() => ({
+      factionId: '',
+      standing: 0,
+      tier: 'neutral',
+      lastChangedAt: '',
+    })),
+    getStanding: mock(() => undefined),
+    getFacts: mock(() => []),
+    serialize: mock(() => ({
+      characterRelationships: {},
+      factionStandings: {},
+      rememberedPromises: [],
+    })),
+    hydrate: _createCallableStub(),
+    reset: _createCallableStub(),
+    configure: _createCallableStub(),
   }),
 
   buildGameStateFacts: mock(() => ['Gold: 100', 'Inventory: (empty)', 'Equipped: nothing']),

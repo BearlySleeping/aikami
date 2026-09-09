@@ -340,13 +340,19 @@ export class GameCompositionRoot
           if (!q) {
             return undefined;
           }
-          return { id: q.id, name: q.name, offerDialogueKey: q.offerDialogueKey };
+          return {
+            id: q.id,
+            name: q.name,
+            offerDialogueKey: q.offerDialogueKey,
+            endings: q.endings,
+          };
         },
         getAllQuests: () =>
           contentPack.getAllQuests().map((q) => ({
             id: q.id,
             name: q.name,
             offerDialogueKey: q.offerDialogueKey,
+            endings: q.endings,
           })),
         getAllEncounters: () =>
           contentPack.getAllEncounters().map((e) => ({

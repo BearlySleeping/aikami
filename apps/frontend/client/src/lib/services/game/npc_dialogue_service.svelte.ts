@@ -43,11 +43,66 @@ import type {
   NpcStateDelta,
   NpcSuggestionChip,
 } from '@aikami/types';
+import { createSeedableRng, resolveCommand } from '@aikami/utils';
 import { Value } from 'typebox/value';
-import { inventoryService, questStateService } from '$services';
+import { inventoryService, questStateService, relationshipService } from '$services';
+import type { ConsequenceRejectionReason, ConsequenceRequest, ConsequenceResult } from '$types';
 import { buildNpcPersona } from './npc_dialogue_persona';
 
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
+
+/** Fixed application order for a batch (Failure Recovery) — never model order. */
+const CONSEQUENCE_KIND_ORDER = [
+  'flag_clear',
+  'flag_set',
+  'inventory_remove',
+  'inventory_grant',
+  'relationship_update',
+  'trust_change',
+] as const satisfies readonly NpcStateDelta['kind'][];
+
+/**
+ * Canonical sort for a consequence batch (Failure Recovery): by kind in the
+ * fixed order, then target (code-point), label (missing first, then code-point),
+ * then numeric value (missing first, then ascending). Exact duplicates are
+ * equivalent — their occurrence number is assigned after this sort.
+ */
+const compareConsequenceDeltas = (a: NpcStateDelta, b: NpcStateDelta): number => {
+  const kindDiff = CONSEQUENCE_KIND_ORDER.indexOf(a.kind) - CONSEQUENCE_KIND_ORDER.indexOf(b.kind);
+  if (kindDiff !== 0) {
+    return kindDiff;
+  }
+  if (a.target < b.target) {
+    return -1;
+  }
+  if (a.target > b.target) {
+    return 1;
+  }
+  const aMissingLabel = a.label === undefined || a.label === null;
+  const bMissingLabel = b.label === undefined || b.label === null;
+  if (aMissingLabel !== bMissingLabel) {
+    return aMissingLabel ? -1 : 1;
+  }
+  if ((a.label ?? '') < (b.label ?? '')) {
+    return -1;
+  }
+  if ((a.label ?? '') > (b.label ?? '')) {
+    return 1;
+  }
+  const aMissingValue = !Number.isFinite(a.value);
+  const bMissingValue = !Number.isFinite(b.value);
+  if (aMissingValue !== bMissingValue) {
+    return aMissingValue ? -1 : 1;
+  }
+  if ((a.value ?? 0) < (b.value ?? 0)) {
+    return -1;
+  }
+  if ((a.value ?? 0) > (b.value ?? 0)) {
+    return 1;
+  }
+  return 0;
+};
+
 // ---------------------------------------------------------------------------
 // Injected interfaces — all external dependencies passed through configure()
 // ---------------------------------------------------------------------------
@@ -79,15 +134,22 @@ type NpcDialogueContentProvider = {
   /** Returns a piece of authored dialogue by key, or undefined. */
   getDialogue(dialogueKey: string): string | undefined;
   /** Returns a quest entry by ID, or undefined. */
-  getQuest(
-    questId: string,
-  ): { id: string; name: string; offerDialogueKey: string; offeredByNpcId?: string } | undefined;
+  getQuest(questId: string):
+    | {
+        id: string;
+        name: string;
+        offerDialogueKey: string;
+        offeredByNpcId?: string;
+        endings?: Record<string, { worldStateFlag: string }>;
+      }
+    | undefined;
   /** Returns quest entries keyed by ID. */
   getAllQuests(): Array<{
     id: string;
     name: string;
     offerDialogueKey: string;
     offeredByNpcId?: string;
+    endings?: Record<string, { worldStateFlag: string }>;
   }>;
   /** Returns encounter entries keyed by ID. */
   getAllEncounters(): Array<{ id: string; dialogueKey?: string; encounterNpcIds?: string[] }>;
@@ -421,6 +483,17 @@ export class NpcDialogueService
 
   /** Per-turn executed-command guard (keyed by turn message id). */
   private _executedCommands = new Map<string, NpcDialogueCommandKind>();
+
+  /**
+   * Idempotency ledger for the consequence authority (C-489). Canonical keys
+   * are `${operationId}:${kind}:${target}:${label}:${value}:${occurrence}` and
+   * record only successfully-applied deltas so a rejected delta is safe to
+   * retry after the world changes. Authority state, never persisted.
+   */
+  private _idempotencyLedger = new Set<string>();
+
+  /** The operation/event identity of the dialogue turn currently being resolved. */
+  private _activeConsequenceEvent: { operationId: string; sourceEventId: string } | null = null;
 
   /** Active generation AbortController — only one live at a time. */
   private _activeAbortController: AbortController | null = null;
@@ -1912,6 +1985,18 @@ export class NpcDialogueService
     ];
 
     const turnStart = performance.now();
+
+    // C-489: stable operation + provenance identity created BEFORE the model
+    // call and reused on retries, so the consequence authority can be
+    // idempotent and verify the event being resolved. This also anchors the
+    // AC-3 ordering contract: consequential state commits within
+    // `_applyConsequences` before the resolved narration is returned, so the
+    // caller appends narration to the transcript only after the world changed.
+    const operationId = crypto.randomUUID();
+    const sourceEventId = `dialogue:${operationId}`;
+    this._activeConsequenceEvent = { operationId, sourceEventId };
+    let operationCompleted = false;
+
     this._startTurnStream();
 
     try {
@@ -1976,118 +2061,362 @@ export class NpcDialogueService
       // The streamed narrative is authoritative — the player already read it.
       output.narrativeResult = narrative || output.narrativeResult;
 
-      // Validate and apply state deltas
-      const validatedDeltas = this._validateAndApplyDeltas({
-        deltas: output.stateDeltas,
+      // C-489: route consequential deltas through the single authority. State
+      // commits here (before `output` is returned and the narration appended to
+      // the transcript). Rejections are surfaced as reconciliation text so the
+      // player never sees a narrated success whose effect did not happen.
+      const consequenceResult = this._applyConsequences({
+        operationId,
+        sourceEventId,
         npcId: options.npcId,
+        deltas: output.stateDeltas,
       });
-      output.stateDeltas = validatedDeltas;
+      output.stateDeltas = consequenceResult.applied;
+      if (consequenceResult.rejected.length > 0) {
+        output.narrativeResult = this._reconcileNarrative(
+          output.narrativeResult,
+          consequenceResult,
+        );
+      }
 
       this.turnState = { kind: 'complete', text: output.narrativeResult };
       this._logTurnTime({ path: 'roll', ms: performance.now() - turnStart });
+      operationCompleted = true;
       return output;
     } catch (error) {
       this._logCallFailure({ path: 'roll', call: this._currentCallIndex, error });
       throw error;
+    } finally {
+      if (operationCompleted) {
+        this._clearIdempotencyEntries(operationId);
+      }
+      if (this._activeConsequenceEvent?.operationId === operationId) {
+        this._activeConsequenceEvent = null;
+      }
     }
   }
 
   /**
-   * Validates and applies state deltas proposed by the LLM.
-   * Applied: inventory_grant/inventory_remove mutate the player inventory
-   * (grants also advance completeOnItemPickup quest objectives), and
-   * flag_set/flag_clear mutate the quest world-state flags.
-   * Invalid deltas are silently dropped and logged.
+   * The single consequence authority (C-489). Given a `ConsequenceRequest`
+   * bound to a stable operation/event identity, it answers, in order, before
+   * mutating anything:
+   *  1. Provenance  — does `sourceEventId` identify the loaded event being resolved?
+   *  2. Idempotency — has this operation/canonical-delta ledger key already succeeded?
+   *  3. Entitlement — is the acting NPC allowed to grant/change this?
+   * Then it applies each delta to the real stores (relationship/faction state,
+   * quest flags, inventory), records successful ledger keys, and reports the
+   * applied/rejected split so the caller can reconcile narration (AC-4).
    */
-  private _validateAndApplyDeltas(options: {
-    deltas: NpcStateDelta[];
-    npcId: string;
-  }): NpcStateDelta[] {
-    const valid: NpcStateDelta[] = [];
+  private _applyConsequences(request: ConsequenceRequest): ConsequenceResult {
+    const applied: NpcStateDelta[] = [];
+    const rejected: Array<{ delta: NpcStateDelta; reason: ConsequenceRejectionReason }> = [];
 
-    for (const delta of options.deltas) {
-      switch (delta.kind) {
-        case 'trust_change': {
-          if (delta.value !== undefined && delta.value >= -10 && delta.value <= 10) {
-            valid.push(delta);
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-trust', { delta });
-          }
-          break;
-        }
-        case 'flag_set': {
-          if (delta.label && delta.label.length > 0) {
-            if (questStateService.setWorldStateFlag(delta.label)) {
-              valid.push(delta);
-            } else {
-              this.warn('_validateAndApplyDeltas:invalid-flag-name', { delta });
-            }
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-flag', { delta });
-          }
-          break;
-        }
-        case 'flag_clear': {
-          if (delta.label && delta.label.length > 0) {
-            if (questStateService.clearWorldStateFlag(delta.label)) {
-              valid.push(delta);
-            } else {
-              this.warn('_validateAndApplyDeltas:invalid-flag-name', { delta });
-            }
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-flag', { delta });
-          }
-          break;
-        }
-        case 'inventory_grant': {
-          if (delta.target && delta.target.length > 0) {
-            // Bound the authored quantity to the [1, 99] range.
-            const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
-            if (inventoryService.addItem({ itemId: delta.target, quantity })) {
-              // Advance completeOnItemPickup quest objectives (e.g. the Ward Wand).
-              questStateService.evaluateTriggers({
-                type: 'ITEM_PICKED_UP',
-                itemId: delta.target,
-              });
-              valid.push(delta);
-            } else {
-              this.warn('_validateAndApplyDeltas:inventory-grant-failed', { delta });
-            }
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-inventory', { delta });
-          }
-          break;
-        }
-        case 'inventory_remove': {
-          if (delta.target && delta.target.length > 0) {
-            // Bound the authored quantity to the [1, 99] range.
-            const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
-            if (inventoryService.removeItem({ itemId: delta.target, quantity })) {
-              valid.push(delta);
-            } else {
-              this.warn('_validateAndApplyDeltas:inventory-remove-failed', { delta });
-            }
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-inventory', { delta });
-          }
-          break;
-        }
-        case 'relationship_update': {
-          if (delta.label && delta.label.length > 0) {
-            valid.push(delta);
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-relationship', { delta });
-          }
-          break;
-        }
-        default: {
-          this.warn('_validateAndApplyDeltas:unknown-kind', { delta });
-          break;
-        }
+    // Provenance (operation-level): the request must reference the event being
+    // resolved. If not, nothing in the batch is applied.
+    if (request.sourceEventId !== this._activeConsequenceEvent?.sourceEventId) {
+      for (const delta of request.deltas) {
+        rejected.push({ delta, reason: 'no-provenance' });
+        this.warn('_applyConsequences:no-provenance', {
+          kind: delta.kind,
+          target: delta.target,
+          sourceEventId: request.sourceEventId,
+        });
+      }
+      return { operationId: request.operationId, applied, rejected };
+    }
+
+    // Sort the batch in the fixed Failure-Recovery order, never model order.
+    const sorted = [...request.deltas].sort(compareConsequenceDeltas);
+    const occurrenceMap = new Map<string, number>();
+
+    for (const delta of sorted) {
+      const baseKey = this._canonicalDeltaKey(request.operationId, delta);
+      const occurrence = occurrenceMap.get(baseKey) ?? 0;
+      occurrenceMap.set(baseKey, occurrence + 1);
+      const ledgerKey = `${baseKey}:${occurrence}`;
+
+      // Idempotency: an already-succeeded operation/delta key is never reapplied.
+      if (this._idempotencyLedger.has(ledgerKey)) {
+        rejected.push({ delta, reason: 'already-granted' });
+        this.warn('_applyConsequences:already-granted', {
+          kind: delta.kind,
+          target: delta.target,
+          ledgerKey,
+        });
+        continue;
+      }
+
+      const outcome = this._authorizeAndApply(request, delta);
+      if ('reason' in outcome) {
+        rejected.push({ delta, reason: outcome.reason });
+        this.warn(`_applyConsequences:rejected-${outcome.reason}`, {
+          kind: delta.kind,
+          target: delta.target,
+          delta,
+        });
+      } else {
+        applied.push(outcome.applied);
+        this._idempotencyLedger.add(ledgerKey);
       }
     }
 
-    return valid;
+    return { operationId: request.operationId, applied, rejected };
+  }
+
+  /**
+   * Canonical idempotency key for a delta under an operation: the normalized
+   * kind/target/label/value fields plus its duplicate occurrence number.
+   */
+  private _canonicalDeltaKey(operationId: string, delta: NpcStateDelta): string {
+    return [operationId, delta.kind, delta.target, delta.label ?? '', delta.value ?? ''].join(':');
+  }
+
+  /** Releases successful-delta keys once their operation can no longer retry. */
+  private _clearIdempotencyEntries(operationId: string): void {
+    const operationPrefix = `${operationId}:`;
+    for (const ledgerKey of this._idempotencyLedger) {
+      if (ledgerKey.startsWith(operationPrefix)) {
+        this._idempotencyLedger.delete(ledgerKey);
+      }
+    }
+  }
+
+  /**
+   * Authorize a single delta (entitlement, per-delta provenance, validity) and,
+   * when accepted, apply it to the real store. Returns the rejection reason or
+   * undefined on success.
+   */
+  private _authorizeAndApply(
+    request: ConsequenceRequest,
+    delta: NpcStateDelta,
+  ): { applied: NpcStateDelta } | { reason: ConsequenceRejectionReason } {
+    switch (delta.kind) {
+      case 'flag_set': {
+        if (!delta.label || delta.label.length === 0) {
+          return { reason: 'invalid' };
+        }
+        const authorizedLabels = new Set(
+          this._contentProvider
+            ?.getAllQuests()
+            .flatMap((quest) =>
+              Object.values(quest.endings ?? {}).map((ending) => ending.worldStateFlag),
+            ) ?? [],
+        );
+        if (!authorizedLabels.has(delta.label)) {
+          return { reason: 'not-entitled' };
+        }
+        questStateService.setWorldStateFlag(delta.label);
+        return { applied: delta };
+      }
+      case 'flag_clear': {
+        if (!delta.label || delta.label.length === 0) {
+          return { reason: 'invalid' };
+        }
+        // Provenance: you can only clear a flag that is actually set.
+        const flags = questStateService.worldStateFlags as Record<string, unknown> | undefined;
+        if (!flags?.[delta.label]) {
+          return { reason: 'no-provenance' };
+        }
+        questStateService.clearWorldStateFlag(delta.label);
+        return { applied: delta };
+      }
+      case 'inventory_grant': {
+        if (!delta.target || delta.target.length === 0) {
+          return { reason: 'invalid' };
+        }
+        // Entitlement: the pack must define the item — a generic NPC can never
+        // inject an arbitrary item id (security).
+        const itemDef = this._contentProvider?.getItem?.(delta.target);
+        if (!itemDef) {
+          return { reason: 'not-entitled' };
+        }
+        const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
+        if (inventoryService.addItem({ itemId: delta.target, quantity })) {
+          questStateService.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: delta.target });
+          return { applied: { ...delta, value: quantity } };
+        }
+        return { reason: 'invalid' };
+      }
+      case 'inventory_remove': {
+        if (!delta.target || delta.target.length === 0) {
+          return { reason: 'invalid' };
+        }
+        // Provenance: the item must actually exist in the player's inventory.
+        const owned =
+          Array.isArray(inventoryService.inventory) &&
+          inventoryService.inventory.some((item) => item.itemId === delta.target);
+        if (!owned) {
+          return { reason: 'no-provenance' };
+        }
+        const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
+        if (inventoryService.removeItem({ itemId: delta.target, quantity })) {
+          return { applied: { ...delta, value: quantity } };
+        }
+        return { reason: 'invalid' };
+      }
+      case 'trust_change': {
+        // A label on trust_change, or a missing/non-finite value, is invalid.
+        if (delta.label !== undefined && delta.label !== null) {
+          return { reason: 'invalid' };
+        }
+        const trustValue = delta.value;
+        if (typeof trustValue !== 'number' || !Number.isFinite(trustValue)) {
+          return { reason: 'invalid' };
+        }
+        if (!this._npcKnown(request.npcId)) {
+          return { reason: 'not-entitled' };
+        }
+        const eventDescription = `Dialogue consequence ${request.operationId} from ${request.sourceEventId}`;
+        const { trustAfter, affinityAfter } = this._resolveRelationshipViaKernel(
+          delta.target,
+          trustValue,
+          0,
+          eventDescription,
+        );
+        const current = relationshipService.getRelationship(delta.target);
+        relationshipService.applyDelta({
+          characterId: delta.target,
+          trustDelta: trustAfter - (current?.trust ?? 0),
+          affinityDelta: affinityAfter - (current?.affinity ?? 0),
+          eventDescription,
+        });
+        return { applied: { ...delta, value: trustAfter - (current?.trust ?? 0) } };
+      }
+      case 'relationship_update': {
+        if (!delta.label) {
+          return { reason: 'invalid' };
+        }
+        if (!this._npcKnown(request.npcId)) {
+          return { reason: 'not-entitled' };
+        }
+        const eventDescription = `Dialogue consequence ${request.operationId} from ${request.sourceEventId}`;
+        if (delta.label === 'faction') {
+          const factionValue = delta.value;
+          if (typeof factionValue !== 'number' || !Number.isFinite(factionValue)) {
+            return { reason: 'invalid' };
+          }
+          const standingBefore = relationshipService.getStanding(delta.target)?.standing ?? 0;
+          const updatedStanding = relationshipService.adjustFactionStanding({
+            factionId: delta.target,
+            delta: factionValue,
+            reason: eventDescription,
+          });
+          return {
+            applied: { ...delta, value: updatedStanding.standing - standingBefore },
+          };
+        }
+        if (delta.label === 'trust') {
+          const trustValue = delta.value;
+          if (typeof trustValue !== 'number' || !Number.isFinite(trustValue)) {
+            return { reason: 'invalid' };
+          }
+          const { trustAfter } = this._resolveRelationshipViaKernel(
+            delta.target,
+            trustValue,
+            0,
+            eventDescription,
+          );
+          const current = relationshipService.getRelationship(delta.target);
+          relationshipService.applyDelta({
+            characterId: delta.target,
+            trustDelta: trustAfter - (current?.trust ?? 0),
+            affinityDelta: 0,
+            eventDescription,
+          });
+          return { applied: { ...delta, value: trustAfter - (current?.trust ?? 0) } };
+        }
+        if (delta.label === 'affinity') {
+          const affinityValue = delta.value;
+          if (typeof affinityValue !== 'number' || !Number.isFinite(affinityValue)) {
+            return { reason: 'invalid' };
+          }
+          const { affinityAfter } = this._resolveRelationshipViaKernel(
+            delta.target,
+            0,
+            affinityValue,
+            eventDescription,
+          );
+          const current = relationshipService.getRelationship(delta.target);
+          relationshipService.applyDelta({
+            characterId: delta.target,
+            trustDelta: 0,
+            affinityDelta: affinityAfter - (current?.affinity ?? 0),
+            eventDescription,
+          });
+          return { applied: { ...delta, value: affinityAfter - (current?.affinity ?? 0) } };
+        }
+        return { reason: 'invalid' };
+      }
+      default:
+        return { reason: 'invalid' };
+    }
+  }
+
+  /**
+   * Entitlement helper: an NPC must exist in the content pack to change world
+   * state (relationships, factions). A generic/unknown NPC is never entitled.
+   */
+  private _npcKnown(npcId: string): boolean {
+    return !!this._contentProvider?.getNpc(npcId);
+  }
+
+  /**
+   * AC-6: route accepted character relationship mechanics through the pure
+   * rules kernel. `resolveCommand` with `applyRelationshipDelta` computes the
+   * clamped mechanical after-state; the returned values drive
+   * `relationshipService.applyDelta` (the persistence boundary).
+   */
+  private _resolveRelationshipViaKernel(
+    characterId: string,
+    trustDelta: number,
+    affinityDelta: number,
+    eventDescription: string,
+  ): { trustAfter: number; affinityAfter: number } {
+    const current = relationshipService.getRelationship(characterId);
+    const currentTrust = current?.trust ?? 0;
+    const currentAffinity = current?.affinity ?? 0;
+    const { newSnapshot } = resolveCommand({
+      snapshot: { currentTrust, currentAffinity },
+      command: {
+        kind: 'applyRelationshipDelta',
+        currentTrust,
+        currentAffinity,
+        trustDelta,
+        affinityDelta,
+        eventDescription,
+      },
+      rng: createSeedableRng(0),
+    });
+    return {
+      trustAfter: newSnapshot.trustAfter as number, // guard-ignore lint/type-safety/casting: kernel snapshot is Record<string, unknown>; resolver contractually writes number
+      affinityAfter: newSnapshot.affinityAfter as number, // guard-ignore lint/type-safety/casting: kernel snapshot is Record<string, unknown>; resolver contractually writes number
+    };
+  }
+
+  /**
+   * AC-4: reconciliation text appended when the model streamed a claim that
+   * could not be honoured. A success is never narrated for a rejected delta;
+   * the world's non-change is acknowledged instead of silently dropped.
+   */
+  private _reconcileNarrative(narrative: string, result: ConsequenceResult): string {
+    const reasons = result.rejected
+      .map((rejection) => this._rejectionProse(rejection.reason))
+      .join('; ');
+    return `${narrative}\n\n*Though some of what was described did not take effect (${reasons}).*`;
+  }
+
+  /** Converts internal rejection codes into authored player-facing prose. */
+  private _rejectionProse(reason: ConsequenceRejectionReason): string {
+    switch (reason) {
+      case 'not-entitled':
+        return 'the offer was beyond what this character could grant';
+      case 'already-granted':
+        return 'the reward had already been received';
+      case 'no-provenance':
+        return 'the required event or possession was not present';
+      case 'invalid':
+        return 'the proposed change could not be carried out';
+    }
   }
 }
 

@@ -1162,20 +1162,33 @@ export class CombatViewModel
         void this._transitionBgmByMood(intent.sceneMood.trim());
       }
 
+      // C-489 AC-5: recompute model-proposed advantage/bonus from state. The
+      // model's proposal is a request, not an input — the dispatched values are
+      // derived from combat state, never forwarded verbatim (an unearned +10 or
+      // fabricated advantage is ignored).
+      const resolvedAdvantage = this._computeCombatAdvantage();
+      const resolvedBonusDamage = this._computeCombatBonusDamage();
+      this.debug('executeCustomAction: recomputed combat mechanics', {
+        proposedAdvantage: intent.advantage,
+        resolvedAdvantage,
+        proposedBonusDamage: intent.bonusDamage,
+        resolvedBonusDamage,
+      });
+
       // Dispatch the mapped COMBAT_ACTION to the ECS engine
       this.isAttacking = true;
       this.debug('executeCustomAction: dispatching COMBAT_ACTION', {
         action: intent.actionType,
         targetId: this.enemyEntityId,
-        advantage: intent.advantage,
-        bonusDamage: intent.bonusDamage,
+        advantage: resolvedAdvantage,
+        bonusDamage: resolvedBonusDamage,
       });
       this._bridge.send({
         type: 'COMBAT_ACTION',
         action: intent.actionType,
         targetId: this.enemyEntityId ?? undefined,
-        advantage: intent.advantage,
-        bonusDamage: intent.bonusDamage,
+        advantage: resolvedAdvantage,
+        bonusDamage: resolvedBonusDamage,
       });
     } catch (error) {
       this.warn('executeCustomAction: failed', {
@@ -1437,6 +1450,26 @@ export class CombatViewModel
    *
    * @returns A formatted multi-line string describing the player's current state.
    */
+  /**
+   * C-489 AC-5: derive combat advantage from state, never from the model's
+   * proposal. Advantage applies when the enemy is wounded to half HP or below;
+   * otherwise the world does not grant it, however the model narrates it.
+   */
+  private _computeCombatAdvantage(): boolean {
+    if (this.enemyMaxHp > 0) {
+      return this.enemyHp <= this.enemyMaxHp * 0.5;
+    }
+    return false;
+  }
+
+  /**
+   * C-489 AC-5: derive bonus damage from the player's attack stat, treating the
+   * model's +N as a request never granted verbatim. Deterministic and local.
+   */
+  private _computeCombatBonusDamage(): number {
+    return Math.max(0, Math.floor(this.playerAttack / 2));
+  }
+
   private _buildCharacterSheetContext(): string {
     const inventory = inventoryService.inventory;
     const inventoryLines =
