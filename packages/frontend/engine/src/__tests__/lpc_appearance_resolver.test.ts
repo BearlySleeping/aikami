@@ -18,6 +18,7 @@ import {
   LPC_SLOT_ORDER,
   type LpcSlotCatalog,
   type LpcSlotName,
+  mergeLpcRecipes,
   projectLpcCatalog,
   resetLpcFallbackWarnings,
   resolveLpcAppearance,
@@ -224,5 +225,77 @@ describe('AC-4 — worker and main-thread paths resolve identically', () => {
     // Order is deterministic — matches the engine render order.
     expect(projected[0]?.slot).toBe('body');
     expect(projected[5]?.slot).toBe('head');
+  });
+});
+
+describe('mergeLpcRecipes — C-504 equipment role normalization', () => {
+  test('omitted equipment layerRole replaces the matching base front entry', () => {
+    const base = [
+      {
+        slot: 'torso',
+        assetId: 'torso/chainmail_male',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front' as const,
+      },
+    ];
+    // Equipment recipes built from item definitions omit layerRole.
+    const equipment = [
+      { slot: 'torso', assetId: 'torso/clothes/vest_male', hexPalette: new Uint8Array(1024) },
+    ];
+    const merged = mergeLpcRecipes(base, equipment);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.assetId).toBe('torso/clothes/vest_male');
+    expect(merged[0]?.layerRole).toBe('front');
+  });
+
+  test('explicit front equipment replaces the base front entry (no duplicate)', () => {
+    const base = [
+      {
+        slot: 'torso',
+        assetId: 'torso/chainmail_male',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front' as const,
+      },
+    ];
+    const equipment = [
+      {
+        slot: 'torso',
+        assetId: 'torso/clothes/robe_female',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front' as const,
+      },
+    ];
+    const merged = mergeLpcRecipes(base, equipment);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.assetId).toBe('torso/clothes/robe_female');
+  });
+
+  test('distinct rear/front passes coexist for the same slot', () => {
+    const base = [
+      {
+        slot: 'weapon',
+        assetId: 'weapon/sword/arming_universal',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front' as const,
+      },
+    ];
+    const equipment = [
+      {
+        slot: 'weapon',
+        assetId: 'weapon/sword/bg_universal',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'behind' as const,
+      },
+      {
+        slot: 'weapon',
+        assetId: 'weapon/sword/fg_universal',
+        hexPalette: new Uint8Array(1024),
+        layerRole: 'front' as const,
+      },
+    ];
+    const merged = mergeLpcRecipes(base, equipment);
+    expect(merged).toHaveLength(2);
+    const roles = merged.map((r) => `${r.assetId}:${r.layerRole}`).sort();
+    expect(roles).toEqual(['weapon/sword/bg_universal:behind', 'weapon/sword/fg_universal:front']);
   });
 });

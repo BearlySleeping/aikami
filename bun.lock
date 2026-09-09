@@ -175,6 +175,7 @@
         "@aikami/constants": "workspace:*",
         "@aikami/frontend-preview": "workspace:*",
         "@aikami/frontend-theme": "workspace:*",
+        "@aikami/lpc": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/scripts": "workspace:*",
         "@aikami/types": "workspace:*",

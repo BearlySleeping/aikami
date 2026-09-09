@@ -400,6 +400,10 @@ const checkExamples = (): CheckResult => {
 
     const content = readFileSync(examplePath, 'utf-8');
 
+    // Canonical examples are compiled in isolation with explicit flags, so the
+    // project tsconfig (present at ROOT) must not be consulted. Modern tsgo
+    // errors with TS5112 unless we say so explicitly — without it, every
+    // canonical example fails before any real type check runs.
     const typeScriptResult = spawnSync(
       'tsgo',
       [
@@ -414,6 +418,7 @@ const checkExamples = (): CheckResult => {
         'ESNext',
         '--types',
         'bun',
+        '--ignoreConfig',
         examplePath,
       ],
       { cwd: ROOT, encoding: 'utf-8' },

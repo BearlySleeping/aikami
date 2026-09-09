@@ -7,6 +7,24 @@
 import { Type } from 'typebox';
 
 /**
+ * Schema for NPC identity and prop-transparency assessment in the village scene.
+ */
+export const NpcSceneSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  npcVisible: Type.Boolean({
+    description: 'Whether at least one pixel-art NPC character is visible',
+  }),
+  adultAnatomy: Type.Boolean({
+    description: 'Whether visible NPCs use adult proportions (no child-like heads/bodies)',
+  }),
+  propTransparency: Type.Boolean({
+    description:
+      'Whether props show transparent unpainted regions instead of opaque squares over the ground',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
  * Schema for dialogue slash-command visual assessment.
  * Validates inline image generation without dialogue layout regressions.
  */

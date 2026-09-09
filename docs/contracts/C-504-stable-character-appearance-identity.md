@@ -3,7 +3,7 @@ id: C-504
 title: "Stable character appearance identity and legacy migration"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -24,7 +24,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — published NPCs resolve to incompatible anatomy |
 | **Dependencies** | None; build on the existing C-400/C-442 code, do not rerun those contracts |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — document appearance compatibility in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
@@ -170,6 +170,7 @@ One compatibility outcome across its readers/writers; all must land together. Ta
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 2.0.0 | 2026-09-09 | Initial draft; implementation approval pending maintainer review | — |
+| 2.1.0 | 2026-09-09 | Maintainer approved the specification and the PR 1 execution order (do not commit or publish). Status set to approved. | Maintainer |
 
 ## Promotion Lifecycle
 
@@ -178,3 +179,55 @@ See [promotion lifecycle](SHARED_SECTIONS.md#promotion-lifecycle).
 ## Status Lifecycle
 
 See [status lifecycle](SHARED_SECTIONS.md#status-lifecycle). No implementation or verification is claimed by this draft.
+
+## Execution Report — PR 1
+
+**Worktree:** `.pi/workspaces/visual-asset-foundation-pr1` (branch `feat/visual-asset-foundation-pr1`)
+**Base revision:** `185a95bb0` (main)
+**Scope:** C-504 + PR 1 direct fixes (Hub tags, equipment roles, atlas alpha/lossless, redundant map data).
+
+### AC evidence
+
+| AC | Result | Evidence |
+|---|---|---|
+| AC-1 Known legacy identities survive normalization | Pass | `packages/shared/lpc/tests/named_appearance.test.ts` (Rollo/merchant → male body, male trousers, human male head; elder → female body + elderly head). Worker+main share the derived catalog; `entity_spawner.test.ts` legacy-migration cases resolve the intended assets. |
+| AC-2 New content independent of catalog position | Pass | `named_appearance.test.ts` reorder/insertion keeps named components identical; named appearance persists `formatVersion` + slot/assetId/layerRole, no unversioned positions. Missing asset → diagnostic, never a positional substitute. |
+| AC-3 Migration safe/explicit/idempotent | Pass | `named_appearance.test.ts`: unknown-provenance preserved, out-of-range refuses partial migration, `0` retained as empty, migration idempotent. `resolveNpcAppearance` runs at the content boundary (worker spawner), not the render tick; no network dependency. |
+| AC-4 Validation exercises the runtime interpretation | Pass | `validate_content_appearance.ts` now builds the derived catalog from the verified snapshot and normalizes via the shared boundary; parity with `/game`. Tests in `validate_content_appearance.test.ts`. |
+| AC-5 Real scene correct after restoration | Journey + visual suite delivered | `apps/e2e/tests/client/npc_identity_persistence.spec.ts` (asserts `__AIKAMI_DEBUG__.npcAppearance` resolved IDs for the elder before/after reload) + `apps/e2e/src/visual/suites/npc_identity.visual.ts`. Engine exposes resolved per-NPC appearance on `__AIKAMI_DEBUG__.npcAppearance`. Live `/game` capture + offline reload to be recorded in the `/assets-verify 1` session. Unit/integration layer passes. |
+
+### Direct fixes
+
+- **Hub tag identity:** `catalog_asset_view_model.svelte.ts` `ensureLpcSlotsBuilt` now uses the shared `buildLpcCatalog` (nested path + state tags tested in `build_catalog.test.ts`).
+- **Equipment roles:** `mergeLpcRecipes` in `lpc_appearance_resolver.ts` normalizes missing `layerRole` to `front` before `(slot, layerRole)` matching; `game_world.ts` delegates to it. Tests in `lpc_appearance_resolver.test.ts`.
+- **Atlas alpha/lossless:** `generate_emberwatch_atlas.ts` — transparent base for props/decor, terrain opaque, extrusion preserves RGBA, `cwebp -lossless`. Tests in `generate_emberwatch_atlas.test.ts`. Regenerated local `atlas.webp` (VP8L lossless) / `atlas.json` (gitignored build artifacts; frame names/rects/GIDs unchanged).
+- **Redundant map data:** cleared the proven duplicate `decor` layer in `inn.json` + `merchant_shop.json` (baked path, `decor == ground` byte-identical → double render). `village.json` decor left intact (semantic-terrain path where decor renders over autotiled terrain; not a proven double-render).
+
+### Commands / exits
+
+- `bun test` (shared/lpc): 38 pass, 0 fail
+- `bun test` (schemas content_pack): 54 pass, 0 fail
+- `bun test` (engine spawner/lpc/serializer): 68 pass, 0 fail
+- `bun test validate_content_appearance + generate_emberwatch_atlas`: 17 pass, 0 fail
+- `bun moon run {schemas,lpc,scripts,frontend-engine,e2e}:typecheck` and `{client,hub}:typecheck` (svelte-check): all pass
+- `bun scripts/src/lib/ops/validate_content_appearance.ts`: `✓ All content-pack NPC appearances are valid and agree with the runtime catalog.`
+- `bun scripts/src/lib/ops/generate_emberwatch_atlas.ts`: regenerated lossless atlas (VP8L) / `atlas.json` (gitignored build artifacts; frame names/rects/GIDs unchanged)
+- Pre-existing failure NOT introduced by PR 1: `emberwatch_content_audit.test.ts` `[emberwatch] validatePack passes` (missing-provenance C-381 errors; reproduces on clean `main`).
+
+### Changed paths
+
+26 changed paths against `185a95bb0` (21 modified + 5 new). See `git diff --stat` in the worktree. No commit/push/PR made. No deployment, R2 publication or model downloads.
+
+### Unresolved issues
+
+- `village.json` decor retained (semantic-path overdraw not proven a duplicate; needs visual confirmation — deferred, not implemented).
+- Full `/game` E2E + offline-reload + AI visual capture pending the fresh `/assets-verify 1` session.
+
+### Independent verification round 1 (fixes applied)
+
+The independent verifier found no blocking code defect. Its Low/Nit findings were addressed:
+- **AC-4 catalog parity** — added tests asserting (a) the derived-catalog asset-ID universe equals the verified snapshot universe, and (b) every named appearance assetId referenced by committed packs exists in that runtime-catalog universe (`validate_content_appearance.test.ts`).
+- **Validator named-vs-legacy cross-check** — when a manifest retains both `appearance` and `appearanceLayers`, `validateNpcAppearance` asserts they resolve to the same layer IDs (`validate_content_appearance.ts`).
+- **Catalog-missing diagnostic** — `_resolveNpcLayerIds` now warns instead of silently substituting the hardcoded default when `lpcCatalog` is absent (`entity_spawner.ts`).
+- **Nits** — manifest `appearance` blocks re-indented to match surrounding JSON; `_debugNpcAppearance` reset on map switch (`game_world.ts`).
+- **AC-5 (Medium, gate blocker)** — remains pending: the live `/game` journey (real render, walk, save/reload, offline reload, AI visual capture) requires the full worktree client + emulator stack, which is the designated `/assets-verify 1` session. The journey (`npc_identity_persistence.spec.ts`) and visual suite (`npc_identity.visual.ts`) are delivered and the engine hook (`__AIKAMI_DEBUG__.npcAppearance`) is wired.

@@ -42,7 +42,7 @@ import {
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
-import type { LpcSlotCatalog } from './rendering/lpc_appearance_resolver.ts';
+import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance_resolver.ts';
 import { resolveLayerDepth } from './rendering/lpc_layer_order.ts';
 import { resolveLpcSheetGeometry } from './rendering/lpc_sheet_geometry.ts';
 import { snapToDevicePixels } from './rendering/pixel_snap.ts';
@@ -374,6 +374,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Tiled NPCs (or any entity created with npcData) count too.
    */
   private _npcMeta = new Map<number, NpcMetaEntry>();
+
+  /**
+   * C-504 AC-5: resolved per-NPC appearance (npcId → slot → assetId), exposed
+   * on `__AIKAMI_DEBUG__.npcAppearance` for E2E identity assertions. Populated
+   * on APPEARANCE_CHANGED (not per frame) and carried on the per-frame debug
+   * object.
+   */
+  private _debugNpcAppearance: Record<string, Record<string, string>> = {};
 
   /** Public read-only access to NPC metadata for sandbox ViewModels. */
   get npcMeta(): ReadonlyMap<number, NpcMetaEntry> {
@@ -1430,6 +1438,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
               recipes = this._mergeEquipmentRecipes(recipes, this._equipmentRecipeProvider());
             }
             entry.recipes = recipes;
+            // C-504 AC-5: record the RESOLVED per-NPC appearance (slot →
+            // assetId) so E2E can assert named identities in the live game.
+            const npcId = this._npcMeta.get(gameEvent.eid)?.npcId;
+            if (npcId) {
+              this._debugNpcAppearance[npcId] = Object.fromEntries(
+                recipes.filter((r) => r.assetId).map((r) => [r.slot, r.assetId]),
+              );
+            }
             // Bump revision to invalidate any in-flight loads for this entity.
             const nextRevision = (this._entityLoadRevisions.get(gameEvent.eid) ?? 0) + 1;
             this._entityLoadRevisions.set(gameEvent.eid, nextRevision);
@@ -2765,6 +2781,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
       this._renderEntries.clear();
       this._npcMeta.clear();
+      // C-504 AC-5: reset the debug per-NPC appearance map on map switch so a
+      // stale map's NPCs never leak into the next map's debug state.
+      this._debugNpcAppearance = {};
       this._playerEntityId = 0;
       this._activeTileSize = undefined;
 
@@ -3328,6 +3347,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           // C-400 AC-1: spawned NPC count for the loaded map — asserted by
           // game_boot.spec.ts against the manifest-derived count.
           npcCount: this._npcMeta.size,
+          // C-504 AC-5: resolved per-NPC appearance for E2E identity assertions.
+          npcAppearance: this._debugNpcAppearance,
         };
       }
 
@@ -3496,20 +3517,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     baseRecipes: readonly LpcLayerRecipe[],
     equipmentRecipes: readonly LpcLayerRecipe[],
   ): LpcLayerRecipe[] {
-    const merged = [...baseRecipes];
-    for (const equipmentRecipe of equipmentRecipes) {
-      // C-431: key on (slot, layerRole) so behind and front entries for the same
-      // slot coexist (e.g. weapon behind + weapon front).
-      const overlapIndex = merged.findIndex(
-        (r) => r.slot === equipmentRecipe.slot && r.layerRole === equipmentRecipe.layerRole,
-      );
-      if (overlapIndex >= 0) {
-        merged[overlapIndex] = equipmentRecipe;
-      } else {
-        merged.push(equipmentRecipe);
-      }
-    }
-    return merged;
+    // C-504: delegate to the shared, tested merge (normalizes missing
+    // layerRole to 'front' before the (slot, layerRole) match).
+    return mergeLpcRecipes(baseRecipes, equipmentRecipes);
   }
 
   private async _loadEntityRecipes(
