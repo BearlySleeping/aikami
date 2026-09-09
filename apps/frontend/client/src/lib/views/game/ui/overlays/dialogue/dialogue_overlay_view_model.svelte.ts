@@ -35,6 +35,7 @@ import {
   draftStore,
   expressionService,
   gameModeService,
+  imageGenerationService,
   messageBranchStore,
   playerStateService,
   questStateService,
@@ -48,6 +49,11 @@ import type {
   DialoguePhase,
   ExpressionId,
 } from '$types';
+import {
+  parseSlashCommand,
+  SLASH_COMMAND_HELP,
+  type SlashCommandResult,
+} from '../../../../../services/game/slash_command_parser';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -961,11 +967,18 @@ class DialogueOverlayViewModel
   }
 
   /**
-   * Triggers a full NPC turn for a queued player message. The message is
-   * appended to `messages` now that it is being delivered (it was previously
-   * shown only as a pending item), so the turn context ends at this message.
+   * Delivers queued input once no turn is active. Slash commands return to
+   * their command subsystem; ordinary text is appended and sent to the active
+   * NPC/GM pipeline.
    */
   private async _deliverQueued(text: string): Promise<void> {
+    const slash = parseSlashCommand(text);
+    if (slash.kind !== 'none') {
+      this.debug('slash-command:parse', { kind: slash.kind });
+      await this._dispatchSlashCommand(slash);
+      return;
+    }
+
     this.messages = [
       ...this.messages,
       {
@@ -1443,6 +1456,9 @@ class DialogueOverlayViewModel
     // Clear the per-chat draft since a message is being sent
     void draftStore.clearDraft({ chatId: this._npcData.npcId });
 
+    // ── C-501: Slash command intercept ──────────────────────────────
+    // Parse before any call into the NPC dialogue pipeline so leading `/`
+    // text routes to image/tree/GM/help instead of the NPC.
     // If the NPC is currently streaming, queue the message instead of sending
     // it now. It is surfaced as a visible pending item and is delivered in FIFO
     // order only after the current turn completes successfully (and only while
@@ -1451,6 +1467,13 @@ class DialogueOverlayViewModel
     if (this.isStreaming) {
       this._pendingQueue.push(content);
       this.debug('sendMessage:queued', { content, queued: this._pendingQueue.length });
+      return;
+    }
+
+    const slash = parseSlashCommand(content);
+    if (slash.kind !== 'none') {
+      this.debug('slash-command:parse', { kind: slash.kind });
+      await this._dispatchSlashCommand(slash);
       return;
     }
 
@@ -1481,12 +1504,168 @@ class DialogueOverlayViewModel
     }
   }
 
+  // ── C-501: Slash command dispatch ───────────────────────────────────
+
+  /**
+   * Routes a parsed slash command to its target subsystem. Called from
+   * `sendMessage` after a non-`none` parse, before any NPC pipeline call.
+   */
+  private async _dispatchSlashCommand(result: SlashCommandResult): Promise<void> {
+    this.debug('slash-command:dispatch', { kind: result.kind });
+
+    switch (result.kind) {
+      case 'generate':
+        await this._handleGenerateCommand(result.prompt);
+        return;
+      case 'tree':
+        this._handleTreeCommand();
+        return;
+      case 'gm':
+        await this._handleGmCommand(result);
+        return;
+      case 'help':
+        this._handleHelpCommand();
+        return;
+      case 'none':
+        return;
+    }
+  }
+
+  /**
+   * AC-1/AC-2: `/generate <prompt>` produces an inline image via the existing
+   * `generatedImages` flow. The NPC never receives the text as dialogue.
+   *
+   * - Provider available: a `generating` record is pushed immediately, then
+   *   flipped to `done` with the produced URL (the player's prompt verbatim).
+   * - Provider unavailable: an inline `error` record is shown — no crash, no
+   *   stuck `generating` state.
+   * - Abortable via the existing AbortController path; an aborted request is
+   *   removed cleanly.
+   */
+  private async _handleGenerateCommand(prompt: string): Promise<void> {
+    const afterMessageId = this.messages.at(-1)?.id ?? null;
+    const imageId = crypto.randomUUID();
+
+    if (!this._imageProviderAvailable) {
+      // AC-2: degrade to an inline error block with no crash.
+      this.generatedImages = [
+        ...this.generatedImages,
+        { id: imageId, url: null, status: 'error', afterMessageId },
+      ];
+      return;
+    }
+
+    this.generatedImages = [
+      ...this.generatedImages,
+      { id: imageId, url: null, status: 'generating', afterMessageId },
+    ];
+
+    const controller = new AbortController();
+    this._activeAbortController = controller;
+    try {
+      const result = await imageGenerationService.generateImage({
+        prompt,
+        signal: controller.signal,
+      });
+      this.generatedImages = this.generatedImages.map((img) =>
+        img.id === imageId ? { ...img, url: result.url, status: 'done' as const } : img,
+      );
+    } catch (error) {
+      const aborted = error instanceof Error && /abort/i.test(error.message);
+      if (aborted) {
+        // Cancellation — remove the placeholder entirely.
+        this.generatedImages = this.generatedImages.filter((img) => img.id !== imageId);
+        return;
+      }
+      this.generatedImages = this.generatedImages.map((img) =>
+        img.id === imageId ? { ...img, status: 'error' as const } : img,
+      );
+    } finally {
+      if (this._activeAbortController === controller) {
+        this._activeAbortController = null;
+      }
+    }
+  }
+
+  /**
+   * AC-3: `/tree` re-presents the previous turn's choice set. Selecting a
+   * re-presented choice routes through the existing choice execution path;
+   * command re-execution is guarded because each new turn gets its own
+   * message ID (markCommandExecuted / wasCommandExecuted key by message).
+   * With no prior choices, inline help is shown.
+   */
+  private _handleTreeCommand(): void {
+    if (this._previousChoices.length > 0) {
+      this._activeChoices = this._previousChoices;
+      this._appendSystemMessage('Previous choices restored — select one to continue.');
+      return;
+    }
+    this._handleHelpCommand();
+  }
+
+  /**
+   * AC-4: `/action` / `/look` route the instruction to the Game Master.
+   * The instruction is appended as a player turn (attributed to the player,
+   * never the NPC) and routed through the existing GM address-mode path.
+   */
+  private async _handleGmCommand(result: {
+    command: 'action' | 'look';
+    text: string;
+  }): Promise<void> {
+    const instruction = result.text.trim();
+    if (result.command === 'action' && instruction.length === 0) {
+      this._handleHelpCommand();
+      return;
+    }
+
+    const resolvedInstruction =
+      instruction.length > 0 ? instruction : 'Look around and describe what I see.';
+    const label = `/${result.command} ${resolvedInstruction}`;
+    this.messages = [
+      ...this.messages,
+      {
+        id: crypto.randomUUID(),
+        content: label,
+        role: 'player' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
+    await this._sendToGameMaster(label);
+  }
+
+  /**
+   * AC-5: inline help for unknown/empty commands and bare `/`.
+   */
+  private _handleHelpCommand(): void {
+    this._appendSystemMessage(SLASH_COMMAND_HELP);
+  }
+
+  /** Appends a UI-only system message that prompt-context mappers omit. */
+  private _appendSystemMessage(content: string): void {
+    this.messages = [
+      ...this.messages,
+      {
+        id: crypto.randomUUID(),
+        content,
+        role: 'npc' as const,
+        senderName: 'System',
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
+  }
+
   /**
    * GM Mode: sends the player's message directly to the Game Master.
    * The GM responds as the dungeon master, not as an NPC.
    * Streams the response into a placeholder (C-401).
    */
-  private async _sendToGameMaster(_content: string): Promise<void> {
+  private async _sendToGameMaster(content: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
     this.streamError = null;
@@ -1494,6 +1673,9 @@ class DialogueOverlayViewModel
 
     const controller = new AbortController();
     this._activeAbortController = controller;
+    const latestPlayerMessageId = this.messages.findLast(
+      (message) => message.role === 'player',
+    )?.id;
 
     // Placeholder NPC message — the streamed GM response lands here
     const npcMessageId = crypto.randomUUID();
@@ -1516,10 +1698,10 @@ class DialogueOverlayViewModel
         npcId: this._npcData.npcId,
         npcName: 'Game Master',
         messages: this.messages
-          .filter((m) => m.id !== npcMessageId) // exclude the empty placeholder
+          .filter((message) => message.id !== npcMessageId && message.senderName !== 'System')
           .map((m) => ({
             role: m.role === 'player' ? 'player' : ('npc' as const),
-            content: m.content,
+            content: m.id === latestPlayerMessageId ? content : m.content,
           })),
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
@@ -1582,7 +1764,7 @@ class DialogueOverlayViewModel
     let succeeded = false;
     try {
       const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
-        .filter((m) => m.id !== id)
+        .filter((message) => message.id !== id && message.senderName !== 'System')
         .map((m) => ({
           role: m.role,
           content: m.content,
@@ -2144,11 +2326,23 @@ class DialogueOverlayViewModel
     // For now, the View can access the most recent NPC turn's choices
     // through a dedicated $state field.
     const turn = _turn as { choices: Array<{ id: string; label: string }> };
+    // Snapshot the current active set before it is replaced so `/tree` can
+    // re-present the previous turn's choices (C-501 AC-3).
+    if (this._activeChoices.length > 0) {
+      this._previousChoices = this._activeChoices;
+    }
     this._activeChoices = turn.choices;
   }
 
   /** Active choices from the most recent NPC turn (rendered as buttons). */
   private _activeChoices = $state<Array<{ id: string; label: string }>>([]);
+
+  /**
+   * Snapshot of the previous turn's choice set, captured when a new choice
+   * set replaces the active one (C-501 `/tree`). Empty when there is no
+   * prior choice set to revisit.
+   */
+  private _previousChoices = $state<Array<{ id: string; label: string }>>([]);
 
   /** @inheritdoc */
   get activeChoices(): readonly { id: string; label: string }[] {

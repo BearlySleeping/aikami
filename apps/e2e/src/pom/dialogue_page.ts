@@ -82,6 +82,26 @@ export class DialoguePage {
     return this.page.locator('[data-testid="dialogue-overlay"] .bg-error\\/10');
   }
 
+  /** System-style bubbles (senderName "System" — info tint) rendered for slash-command help (C-501). */
+  get systemBubbles() {
+    return this.page.locator('[data-testid="dialogue-overlay"] .bg-info\\/20');
+  }
+
+  /** The rendered generated-scene image (done state) for `/generate` (C-501). */
+  get generatedImage() {
+    return this.page.locator('img[alt="Generated scene"]');
+  }
+
+  /** The generating skeleton placeholder for `/generate` (C-501). */
+  get imageGeneratingSkeleton() {
+    return this.page.locator('[data-testid="dialogue-overlay"] .skeleton');
+  }
+
+  /** The inline image-generation error text (C-501). */
+  get imageErrorText() {
+    return this.page.getByText('Image generation failed');
+  }
+
   /** The d20 interactive roll button (GameDice). */
   get d20RollButton() {
     return this.page.getByRole('button', { name: 'Click to roll d20' });
@@ -150,6 +170,14 @@ export class DialoguePage {
   /** Waits until at least one streamed token is visible. */
   async waitForStreamingStarted(): Promise<void> {
     await this.streamingRegion.first().waitFor({ state: 'visible', timeout: 5_000 });
+  }
+
+  /** Waits for `/generate` to show either its pending skeleton or completed image. */
+  async waitForGeneratedImageOrSkeleton(): Promise<void> {
+    await this.generatedImage
+      .or(this.imageGeneratingSkeleton)
+      .first()
+      .waitFor({ state: 'visible', timeout: 15_000 });
   }
 
   /** Asserts no error banner is rendered (AC-3: no error surfaced). */

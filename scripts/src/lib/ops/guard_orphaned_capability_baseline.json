@@ -558,6 +558,10 @@
       "SessionServiceOptions"
     ]
   },
+  "apps/frontend/client/src/lib/services/game/slash_command_parser.ts": {
+    "orphaned": ["SlashCommandResult"],
+    "_comment": "C-501: discriminated result type of parseSlashCommand; consumed as a type by the dialogue ViewModel (type-only references do not count as production use)."
+  },
   "apps/frontend/client/src/lib/services/game/time_service.svelte.ts": {
     "orphaned": ["TimeServiceInterface", "TimeServiceOptions"]
   },

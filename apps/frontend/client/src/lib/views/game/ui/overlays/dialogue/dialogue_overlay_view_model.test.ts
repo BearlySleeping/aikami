@@ -204,6 +204,13 @@ mock.module('$services', () => ({
     close = mock(() => {});
   },
   npcDialogueService: mockNpcDialogueService,
+  imageGenerationService: {
+    isGenerating: false,
+    generateImage: mock(async ({ prompt }: { prompt: string }) => ({
+      url: `blob:mock-${prompt}`,
+      isDemo: false,
+    })),
+  },
   __esModule: true,
   default: {},
 }));
@@ -232,13 +239,18 @@ const createNpcData = (overrides?: Partial<DialogueOverlayViewModelOptions['npcD
 const createViewModel = (options?: {
   npcData?: ReturnType<typeof createNpcData>;
   onEndChat?: () => void;
-}): DialogueOverlayViewModelInterface =>
-  getDialogueOverlayViewModel({
+  useFreeTextFirst?: boolean;
+  imageProviderAvailable?: boolean;
+}): DialogueOverlayViewModelInterface => {
+  mockNpcDialogueService.useFreeTextFirst = options?.useFreeTextFirst ?? true;
+  return getDialogueOverlayViewModel({
     className: 'TestDialogueOverlayViewModel',
     npcData: options?.npcData ?? createNpcData(),
     onEndChat: options?.onEndChat ?? (() => {}),
     npcDialogueService: mockNpcDialogueService,
+    imageProviderAvailable: options?.imageProviderAvailable,
   });
+};
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -856,7 +868,166 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.toastMessage.length).toBeGreaterThan(0);
   });
 
+  // ── C-501 Slash Commands ────────────────────────────────────────────
+
+  test('AC-1: /generate produces an inline image and never reaches the NPC', async () => {
+    const vm = createViewModel({ imageProviderAvailable: true });
+    await vm.sendMessage('/generate a forest clearing');
+
+    expect(vm.generatedImages.length).toBe(1);
+    expect(vm.generatedImages[0].status).toBe('done');
+    expect(vm.generatedImages[0].url).toBeTruthy();
+    // The NPC pipeline is never invoked for a slash command.
+    expect(mockNpcDialogueService.analyzeIntent).not.toHaveBeenCalled();
+    expect(mockNpcDialogueService.generateTurn).not.toHaveBeenCalled();
+  });
+
+  test('AC-2: /generate with no provider shows an inline error, no crash', async () => {
+    const vm = createViewModel({ imageProviderAvailable: false });
+    await vm.sendMessage('/generate a forest clearing');
+
+    expect(vm.generatedImages.length).toBe(1);
+    expect(vm.generatedImages[0].status).toBe('error');
+    // No stuck generating state, no NPC turn.
+    expect(vm.generatedImages[0].url).toBeNull();
+    expect(mockNpcDialogueService.analyzeIntent).not.toHaveBeenCalled();
+  });
+
+  test('AC-3: /tree re-presents the previous choice set', async () => {
+    const vm = createViewModel({ useFreeTextFirst: false });
+
+    generateTurnStub = mock(async () => ({
+      narrative: 'Turn one.',
+      choices: [
+        { id: 'a', label: 'Option A' },
+        { id: 'b', label: 'Option B' },
+      ],
+      source: 'ai' as const,
+    }));
+    mockNpcDialogueService.generateTurn = generateTurnStub;
+    await vm.sendMessage('first');
+    expect(vm.activeChoices.map((c) => c.id)).toEqual(['a', 'b']);
+
+    generateTurnStub = mock(async () => ({
+      narrative: 'Turn two.',
+      choices: [{ id: 'c', label: 'Option C' }],
+      source: 'ai' as const,
+    }));
+    mockNpcDialogueService.generateTurn = generateTurnStub;
+    await vm.sendMessage('second');
+    expect(vm.activeChoices.map((c) => c.id)).toEqual(['c']);
+
+    await vm.sendMessage('/tree');
+    expect(vm.activeChoices.map((c) => c.id)).toEqual(['a', 'b']);
+  });
+
+  test('AC-3: /tree with no prior choices shows inline help', async () => {
+    const vm = createViewModel({ useFreeTextFirst: false });
+    await vm.sendMessage('/tree');
+
+    expect(vm.activeChoices.length).toBe(0);
+    expect(vm.messages.some((m) => m.senderName === 'System')).toBe(true);
+  });
+
+  test('AC-4: /action routes the instruction to the Game Master', async () => {
+    const vm = createViewModel();
+    await vm.sendMessage('/action search for tracks');
+
+    expect(mockNpcDialogueService.analyzeIntent).toHaveBeenCalled();
+    const call = mockNpcDialogueService.analyzeIntent.mock.calls[0]?.[0];
+    expect(call.npcName).toBe('Game Master');
+    expect(call.messages.at(-1)?.content).toBe('/action search for tracks');
+    expect(vm.messages.some((message) => message.content === '/action search for tracks')).toBe(
+      true,
+    );
+  });
+
+  test('AC-4: bare /action shows help instead of sending an empty GM instruction', async () => {
+    const vm = createViewModel();
+    await vm.sendMessage('/action');
+
+    expect(vm.messages.at(-1)?.senderName).toBe('System');
+    expect(mockNpcDialogueService.analyzeIntent).not.toHaveBeenCalled();
+  });
+
+  test('AC-4: bare /look sends a descriptive, command-identified GM instruction', async () => {
+    const vm = createViewModel();
+    await vm.sendMessage('/look');
+
+    const expectedInstruction = '/look Look around and describe what I see.';
+    const call = mockNpcDialogueService.analyzeIntent.mock.calls[0]?.[0];
+    expect(vm.messages.some((message) => message.content === expectedInstruction)).toBe(true);
+    expect(call.messages.at(-1)?.content).toBe(expectedInstruction);
+  });
+
+  test('AC-5: an unknown command shows inline help and is not sent to the NPC', async () => {
+    const vm = createViewModel();
+    const before = vm.messages.length;
+    await vm.sendMessage('/foobar');
+
+    expect(vm.messages.length).toBe(before + 1);
+    expect(vm.messages.at(-1)?.senderName).toBe('System');
+    expect(mockNpcDialogueService.analyzeIntent).not.toHaveBeenCalled();
+    expect(mockNpcDialogueService.generateTurn).not.toHaveBeenCalled();
+  });
+
+  test('AC-5: system help messages are omitted from subsequent model context', async () => {
+    const vm = createViewModel();
+    await vm.sendMessage('/foobar');
+    await vm.sendMessage('Tell me about the ward');
+
+    const call = mockNpcDialogueService.analyzeIntent.mock.calls[0]?.[0];
+    expect(call.messages.some((message) => message.content.includes('/generate <prompt>'))).toBe(
+      false,
+    );
+  });
+
+  test('AC-5: system help messages are omitted from Game Master context', async () => {
+    const vm = createViewModel();
+    await vm.sendMessage('/foobar');
+    await vm.sendMessage('/look around');
+
+    const call = mockNpcDialogueService.analyzeIntent.mock.calls[0]?.[0];
+    expect(call.npcName).toBe('Game Master');
+    expect(call.messages.some((message) => message.content.includes('/generate <prompt>'))).toBe(
+      false,
+    );
+  });
+
   // ── Pending queue (C-436: type while streaming) ───────────────────────
+
+  test('slash commands submitted while streaming wait in the pending FIFO', async () => {
+    let releaseFirstTurn = (): void => {};
+    analyzeIntentStub = mock(async () => {
+      await new Promise<void>((resolve) => {
+        releaseFirstTurn = resolve;
+      });
+      return {
+        requiresRoll: false,
+        checkType: undefined,
+        difficultyClass: undefined,
+        modifierSource: undefined,
+        npcResponse: 'Understood.',
+        suggestedChips: [],
+      };
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    const first = vm.sendMessage('First');
+    vm.sendMessage('/generate a moonlit clearing');
+
+    expect(vm.pendingMessages).toEqual(['/generate a moonlit clearing']);
+    expect(vm.generatedImages).toHaveLength(0);
+
+    releaseFirstTurn();
+    await first;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(vm.pendingMessages).toHaveLength(0);
+    expect(vm.generatedImages).toHaveLength(1);
+    expect(mockNpcDialogueService.analyzeIntent).toHaveBeenCalledTimes(1);
+  });
 
   test('messages queued during streaming are delivered in FIFO order after the turn succeeds', async () => {
     analyzeIntentStub = mock(async (_options: AnalyzeIntentOptions) => ({

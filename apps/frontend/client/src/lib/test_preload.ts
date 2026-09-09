@@ -729,6 +729,13 @@ export const localServicesMockBase = () => ({
   trackRegistryService: _createServiceStub(),
   timeService: { gameHour: 12, gameMinute: 0, windVelocity: 0, rainIntensity: 0 },
   SentenceBoundaryChunker: class {},
+  // C-501: slash_command_parser re-exports from the services barrel. The
+  // dialogue ViewModel imports these via a relative path, but the barrel
+  // export must be mocked here so no test that imports them from '$services'
+  // crashes (see guard-service-mock-coverage).
+  parseSlashCommand: _createCallableStub(),
+  SLASH_COMMAND_HELP:
+    'Commands: /generate <prompt> — generate an image · /tree — show previous choices · /action <instruction> or /look — speak to the Game Master · /help — this help',
   __esModule: true,
 });
 
