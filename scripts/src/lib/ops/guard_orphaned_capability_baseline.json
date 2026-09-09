@@ -697,13 +697,8 @@
     "orphaned": ["NpcServiceInterface", "NpcServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts": {
-    "orphaned": [
-      "AutonomousMessageService.generateMultiNpcResponses",
-      "AutonomousMessageService.selectGroupParticipants",
-      "AutonomousMessageServiceInterface",
-      "AutonomousMessageServiceOptions"
-    ],
-    "_comment": "C-456 shipped selectGroupParticipants and generateMultiNpcResponses with no production caller (methods on exported class, not top-level exports). C-493 wires them into the party path; remove this entry when it lands."
+    "orphaned": ["AutonomousMessageServiceInterface", "AutonomousMessageServiceOptions"],
+    "_comment": "C-493 wired selectGroupParticipants and generateMultiNpcResponses into the Talk to Party overlay (group turn) — removed from baseline. Interface/Options remain type-only references."
   },
   "apps/frontend/client/src/lib/services/npc/npc_awareness_service.svelte.ts": {
     "orphaned": ["NpcAwarenessServiceInterface", "NpcAwarenessServiceOptions"],

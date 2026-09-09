@@ -8,6 +8,121 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 // $state, $derived mock is provided by test_preload.ts
 // @aikami/frontend/services mock is provided by test_preload.ts
 
+const autonomousStartMock = mock(() => {});
+const autonomousStopMock = mock(() => {});
+
+const _createServiceStub = () => {
+  const handler: ProxyHandler<Record<string, unknown>> = {
+    get(target, prop) {
+      if (!(prop in target)) {
+        target[prop] = mock(() => {});
+      }
+      return target[prop];
+    },
+  };
+  return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
+};
+
+const _stubService = () =>
+  Object.assign(_createServiceStub(), {
+    initialize: mock(async () => {}),
+    startListening: mock(async () => {}),
+    reset: mock(() => {}),
+    setEngineService: mock(() => {}),
+    setBridge: mock(() => {}),
+  });
+
+/** Minimal valid content-pack manifest served for loadContentPack(). */
+const MOCK_MANIFEST = {
+  id: 'emberwatch',
+  name: 'Emberwatch',
+  version: '1.0.0',
+  updatedAt: '2026-07-13T00:00:00.000Z',
+  startingMapId: 'startingVillage',
+  maps: {
+    startingVillage: {
+      file: 'maps/starting_village.json',
+      name: 'Starting Village',
+    },
+  },
+  npcs: {},
+  items: {},
+  dialogues: {},
+};
+
+// Register every direct service dependency before either suite imports the
+// composition root. Bun caches evaluated modules across describes.
+mock.module('@aikami/frontend/engine', () => ({
+  createEngineBridge: mock(() => ({ on: mock(() => mock(() => {})) })),
+  loadContentPack: mock(async () => ({
+    manifest: MOCK_MANIFEST,
+    getNpc: mock(() => undefined),
+    getDialogue: mock(() => undefined),
+    getQuest: mock(() => undefined),
+    getAllQuests: mock(() => []),
+    getAllEncounters: mock(() => []),
+    getEncounter: mock(() => undefined),
+    getItem: mock(() => undefined),
+    getAllFactions: mock(() => []),
+  })),
+}));
+mock.module('$lib/services/assets/registry_resolver', () => ({
+  assetTagResolver: mock(() => undefined),
+}));
+mock.module('../ai/text_generation_service.svelte', () => ({
+  textGenerationService: _stubService(),
+}));
+mock.module('../audio/music_player_service.svelte', () => ({
+  musicPlayerService: _stubService(),
+}));
+mock.module('../campaign/campaign_service.svelte', () => ({
+  campaignService: Object.assign(_stubService(), {
+    activeCampaign: { contentPackId: 'emberwatch' },
+  }),
+}));
+mock.module('../npc/autonomous_message_service.svelte.ts', () => ({
+  autonomousMessageService: { start: autonomousStartMock, stop: autonomousStopMock },
+}));
+mock.module('./equipment_service.svelte', () => ({
+  equipmentService: _stubService(),
+}));
+mock.module('./game_engine_service.svelte', () => ({
+  gameEngineService: _stubService(),
+}));
+mock.module('./game_mode_service.svelte', () => ({
+  gameModeService: _stubService(),
+}));
+mock.module('./game_overlay_service.svelte', () => ({
+  gameOverlayService: _stubService(),
+}));
+mock.module('./inventory_service.svelte', () => ({
+  inventoryService: _stubService(),
+}));
+mock.module('./npc_dialogue_service.svelte', () => ({
+  npcDialogueService: _stubService(),
+}));
+mock.module('./party_roster_service.svelte.ts', () => ({
+  partyRosterService: _stubService(),
+}));
+mock.module('./player_state_service.svelte', () => ({
+  playerStateService: _stubService(),
+}));
+mock.module('./quest_state_service.svelte', () => ({
+  questStateService: _stubService(),
+}));
+mock.module('./relationship_service.svelte.ts', () => ({
+  relationshipService: _stubService(),
+}));
+mock.module('./session_service.svelte', () => ({
+  sessionService: _stubService(),
+}));
+mock.module('./vendor_service.svelte', () => ({
+  vendorService: _stubService(),
+}));
+mock.module('./world_state_service.svelte', () => ({
+  worldStateService: _stubService(),
+}));
+
 describe('GameCompositionRoot (unit)', () => {
   let GameCompositionRoot: typeof import('./game_composition_root.svelte').GameCompositionRoot;
   let root: import('./game_composition_root.svelte').GameCompositionRootInterface;
@@ -74,114 +189,9 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
   let GameCompositionRoot: typeof import('./game_composition_root.svelte').GameCompositionRoot;
   let root: import('./game_composition_root.svelte').GameCompositionRootInterface;
 
-  const _createServiceStub = () => {
-    const handler: ProxyHandler<Record<string, unknown>> = {
-      get(target, prop) {
-        if (!(prop in target)) {
-          target[prop] = mock(() => {});
-        }
-        return target[prop];
-      },
-    };
-    return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
-  };
-
-  /** Minimal valid content-pack manifest served for loadContentPack(). */
-  const MockManifest = {
-    id: 'emberwatch',
-    name: 'Emberwatch',
-    version: '1.0.0',
-    updatedAt: '2026-07-13T00:00:00.000Z',
-    startingMapId: 'startingVillage',
-    maps: {
-      startingVillage: {
-        file: 'maps/starting_village.json',
-        name: 'Starting Village',
-      },
-    },
-    npcs: {},
-    items: {},
-    dialogues: {},
-  };
-
-  const _originalFetch = globalThis.fetch;
-
   beforeEach(async () => {
-    // Bun rejects relative URLs (ERR_INVALID_URL); serve the content-pack
-    // manifest that GameCompositionRoot.initialize() fetches via loadContentPack.
-    globalThis.fetch = mock((input: string | URL | Request) => {
-      let url: string;
-      if (typeof input === 'string') {
-        url = input;
-      } else if (input instanceof URL) {
-        url = input.href;
-      } else {
-        url = input.url;
-      }
-      if (url.endsWith('/emberwatch/manifest.json')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () => Promise.resolve(MockManifest),
-        } as Response);
-      }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: () => Promise.resolve({}),
-      } as Response);
-    });
-
-    // Mock all dynamic imports that GameCompositionRoot.initialize() performs
-    const stubService = () =>
-      Object.assign(_createServiceStub(), {
-        initialize: mock(async () => {}),
-        startListening: mock(async () => {}),
-        reset: mock(() => {}),
-        setEngineService: mock(() => {}),
-        setBridge: mock(() => {}),
-      });
-
-    mock.module('./game_engine_service.svelte', () => ({
-      gameEngineService: stubService(),
-    }));
-    mock.module('./game_overlay_service.svelte', () => ({
-      gameOverlayService: stubService(),
-    }));
-    mock.module('./game_mode_service.svelte', () => ({
-      gameModeService: stubService(),
-    }));
-    mock.module('./inventory_service.svelte', () => ({
-      inventoryService: stubService(),
-    }));
-    mock.module('./player_state_service.svelte', () => ({
-      playerStateService: stubService(),
-    }));
-    mock.module('./world_state_service.svelte', () => ({
-      worldStateService: stubService(),
-    }));
-    mock.module('./session_service.svelte', () => ({
-      sessionService: stubService(),
-    }));
-    mock.module('./equipment_service.svelte', () => ({
-      equipmentService: stubService(),
-    }));
-    mock.module('./npc_dialogue_service.svelte', () => ({
-      npcDialogueService: stubService(),
-    }));
-    mock.module('./quest_state_service.svelte', () => ({
-      questStateService: stubService(),
-    }));
-    mock.module('./relationship_service.svelte.ts', () => ({
-      relationshipService: stubService(),
-    }));
-    mock.module('../campaign/campaign_service.svelte', () => ({
-      campaignService: Object.assign(stubService(), {
-        activeCampaign: { contentPackId: 'emberwatch' },
-      }),
-    }));
+    autonomousStartMock.mockClear();
+    autonomousStopMock.mockClear();
 
     const mod = await import('./game_composition_root.svelte');
     GameCompositionRoot = mod.GameCompositionRoot;
@@ -194,7 +204,6 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
     if (root.isInitialized) {
       await root.dispose();
     }
-    globalThis.fetch = _originalFetch;
   });
 
   // ── Idempotency ──
@@ -287,5 +296,19 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
 
     expect(() => root.campaignService).toThrow('not initialised');
     expect(() => root.playerStateService).toThrow('not initialised');
+  });
+
+  // ── C-493 AC-2: autonomous-message poller lifecycle ──
+
+  test('starts the autonomous-message poller on campaign entry (initialize)', async () => {
+    await root.initialize();
+    expect(autonomousStartMock).toHaveBeenCalledTimes(1);
+    expect(autonomousStopMock).not.toHaveBeenCalled();
+  });
+
+  test('stops the autonomous-message poller on game teardown (dispose)', async () => {
+    await root.initialize();
+    await root.dispose();
+    expect(autonomousStopMock).toHaveBeenCalledTimes(1);
   });
 });

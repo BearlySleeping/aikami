@@ -4,18 +4,43 @@
 // initiating conversation with an already-recruited party member.
 //
 // Contract: C-340 Build Party and Companion Gameplay (AC-3)
+// Extended: C-493 Wire group scenes into the production party path (AC-1) —
+//   when two or more companions are present, addressing the party routes
+//   through the group-turn path (generateMultiNpcResponses) so multiple
+//   companions respond in one turn, the second aware of the first.
 
+import { MAX_GROUP_PARTICIPANTS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import type { NpcDialogueServiceInterface } from '$services';
-import { gameOverlayService, partyRosterService } from '$services';
+import {
+  type AutonomousMessageServiceInterface,
+  autonomousMessageService as defaultAutonomousMessageService,
+  gameOverlayService,
+  type NpcDialogueServiceInterface,
+  partyRosterService,
+} from '$services';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/** A single chat bubble rendered in the overlay. */
+export type TalkMessage = {
+  id: string;
+  content: string;
+  role: 'player' | 'npc';
+  /** Optional display name — set for group responders so the UI shows which companion spoke. */
+  senderName?: string;
+};
+
+/** Narrow group-turn surface the ViewModel depends on (C-493 AC-1). */
+type GroupTurnService = Pick<
+  AutonomousMessageServiceInterface,
+  'selectGroupParticipants' | 'generateMultiNpcResponses'
+>;
 
 export type TalkToPartyViewModelOptions = BaseViewModelOptions & {
   /** The companion's NPC ID. */
@@ -24,13 +49,18 @@ export type TalkToPartyViewModelOptions = BaseViewModelOptions & {
   npcName: string;
   /** NPC dialogue orchestrator — handles AI streaming and authored fallback. */
   npcDialogueService: NpcDialogueServiceInterface;
+  /**
+   * Group-turn orchestrator (C-493 AC-1). Defaults to the production
+   * autonomousMessageService singleton. Injected for testability.
+   */
+  autonomousMessageService?: GroupTurnService;
 };
 
 export type TalkToPartyViewModelInterface = BaseViewModelInterface & {
   readonly npcName: string;
   readonly npcId: string;
   readonly approval: number;
-  readonly messages: Array<{ id: string; content: string; role: 'player' | 'npc' }>;
+  readonly messages: TalkMessage[];
   readonly isStreaming: boolean;
   inputText: string;
 
@@ -49,19 +79,22 @@ class TalkToPartyViewModel
   extends BaseViewModel<TalkToPartyViewModelOptions>
   implements TalkToPartyViewModelInterface
 {
-  messages = $state<Array<{ id: string; content: string; role: 'player' | 'npc' }>>([]);
+  messages = $state<TalkMessage[]>([]);
   isStreaming = $state<boolean>(false);
   inputText = $state<string>('');
 
   private readonly _npcId: string;
   private readonly _npcName: string;
   private readonly _npcDialogueService: NpcDialogueServiceInterface;
+  private readonly _autonomousMessageService: GroupTurnService;
 
   constructor(options: TalkToPartyViewModelOptions) {
     super(options);
     this._npcId = options.npcId;
     this._npcName = options.npcName;
     this._npcDialogueService = options.npcDialogueService;
+    this._autonomousMessageService =
+      options.autonomousMessageService ?? defaultAutonomousMessageService;
 
     // Initial greeting from companion
     const member = partyRosterService.getMember(this._npcId);
@@ -114,6 +147,63 @@ class TalkToPartyViewModel
     this.isStreaming = true;
 
     try {
+      const recentChat = this.messages
+        .slice(0, -1)
+        .map(
+          (m) =>
+            `[${m.role === 'player' ? 'player' : (m.senderName ?? this._npcName)}]: ${m.content}`,
+        );
+
+      const members = partyRosterService.members;
+
+      // C-493 AC-1: group path when two or more companions are present —
+      // select a bounded group and generate sequential responses so the
+      // second responder is aware of the first.
+      if (members.length >= 2) {
+        const otherNpcIds = members
+          .map((member) => member.npcId)
+          .filter((npcId) => npcId !== this._npcId);
+        const selected = [
+          this._npcId,
+          ...this._autonomousMessageService.selectGroupParticipants({
+            npcIds: otherNpcIds,
+            count: MAX_GROUP_PARTICIPANTS - 1,
+          }),
+        ];
+
+        if (selected.length >= 2) {
+          const responses = await this._autonomousMessageService.generateMultiNpcResponses({
+            npcIds: selected,
+            playerMessage: content,
+            recentChat,
+          });
+
+          const groupReplies: TalkMessage[] = [];
+          for (let i = 0; i < responses.length; i++) {
+            const response = responses[i];
+            const npcId = selected[i];
+            if (!response || !npcId) {
+              continue;
+            }
+            groupReplies.push({
+              id: crypto.randomUUID(),
+              content: response,
+              role: 'npc',
+              senderName: partyRosterService.getMember(npcId)?.name ?? npcId,
+            });
+          }
+
+          if (groupReplies.length > 0) {
+            this.messages = [...this.messages, ...groupReplies];
+            return;
+          }
+          // Fall through to the single-companion path if the group produced
+          // no responses (e.g. all generations failed).
+        }
+      }
+
+      // Single-companion path — fewer than two companions, or group path
+      // produced nothing usable.
       const controller = new AbortController();
 
       const messageList: Array<{ role: 'player' | 'npc'; content: string }> = this.messages.map(
