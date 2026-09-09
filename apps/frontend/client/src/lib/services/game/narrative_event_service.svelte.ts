@@ -27,8 +27,8 @@ import type {
 } from '@aikami/types';
 import { registerSerializable } from './serializable_service';
 
-/** Options for a single committed narrative event. */
-export type RecordEventOptions = {
+/** Options for a single committed narrative event — single-use type for `record()` (S10). */
+type RecordEventOptions = {
   /** Campaign the event belongs to — required, never empty. */
   campaignId: string;
   /** One of the closed event-kind set. */
