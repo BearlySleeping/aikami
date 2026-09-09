@@ -6,9 +6,7 @@
 //
 // Contract: C-314 — Production game composition root
 
-import { onMount } from 'svelte';
 import { BaseViewModelContainer } from '$components';
-import { gameOverlayService, memoryRetrievalService } from '$services';
 import CombatSidebar from '../combat/combat_sidebar.svelte';
 import GameCanvasView from './canvas/game_canvas_view.svelte';
 import type { GameViewModelInterface } from './game_view_model.svelte';
@@ -19,17 +17,6 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-// E2E save hook (C-492 AC-3): a document-level `aikami:quick-save` event
-// drives the real persistence path (gameOverlayService.saveGame) so tests can
-// save+reload the campaign without UI chrome. Inert in normal play.
-onMount(() => {
-  const onQuickSave = (): void => {
-    void gameOverlayService.saveGame();
-  };
-  window.addEventListener('aikami:quick-save', onQuickSave);
-  return () => window.removeEventListener('aikami:quick-save', onQuickSave);
-});
 </script>
 
 <svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
@@ -40,7 +27,7 @@ onMount(() => {
     that appears once the post-hydration boot hook has initialised the memory
     index. Never alters production behaviour; used by the AC-3 E2E.
   -->
-  {#if memoryRetrievalService.isReady}
+  {#if viewModel.memoryReady}
     <div data-testid="game-boot-memory-ready" class="hidden" aria-hidden="true"></div>
   {/if}
 
