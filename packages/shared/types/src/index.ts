@@ -59,6 +59,7 @@ export * from './lib/game/game_state_sync.ts';
 export * from './lib/game/interactable.ts';
 export * from './lib/game/lpc_recipe.ts';
 export * from './lib/game/macro.ts';
+export * from './lib/game/narrative_event.ts';
 export * from './lib/game/npc_dialogue_command.ts';
 export * from './lib/game/npc_schedule.ts';
 export * from './lib/game/pack_index.js';

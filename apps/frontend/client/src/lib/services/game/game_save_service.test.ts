@@ -391,6 +391,28 @@ describe('GameSaveService (C-334)', () => {
     expect(service.availableSaves.length).toBe(0);
   });
 
+  // ── AC-4 (C-491): older saves load with an empty narrative event record ──
+
+  test('AC-4 (C-491): an older save without a narrativeEvents snapshot resets the record', async () => {
+    const { hydrateAllServices } = await import('./serializable_service');
+    const { narrativeEventService } = await import('./narrative_event_service.svelte.ts');
+    narrativeEventService.reset();
+    narrativeEventService.record({
+      campaignId: 'camp-1',
+      kind: 'QuestResolved',
+      informationKind: 'world_fact',
+      summary: 'A quest was resolved.',
+      actorId: 'npcA',
+    });
+    expect(narrativeEventService.events).toHaveLength(1);
+
+    // A save written before this contract has no `narrativeEvents` snapshot.
+    hydrateAllServices([]);
+
+    expect(narrativeEventService.events).toHaveLength(0);
+    expect(narrativeEventService.serialize().nextSequence).toBe(1);
+  });
+
   // ── sha256 utility ─────────────────────────────────────────────────
 
   test('sha256 should produce correct hash', async () => {

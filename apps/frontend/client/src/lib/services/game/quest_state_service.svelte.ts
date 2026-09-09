@@ -21,13 +21,17 @@ import {
 } from '@aikami/frontend/services';
 import type {
   ActiveQuestState,
+  CommittedNarrativeEvent,
   ContentPackQuestEntry,
   ContentPackQuestObjective,
   QuestObjectiveFailureCondition,
   QuestObjectiveProgress,
   QuestProgress,
 } from '@aikami/types';
+import { campaignService } from '$services';
 import { inventoryService } from './inventory_service.svelte';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
+import { partyRosterService } from './party_roster_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
 import { registerSerializable } from './serializable_service';
 
@@ -928,8 +932,11 @@ class QuestStateService
     // Deliver rewards (idempotent)
     this._deliverRewards(progress, definition);
 
-    // Create journal entry (C-339)
-    this._createJournalEntry(progress, definition);
+    // C-491 AC-5: commit exactly one QuestResolved event, then derive the
+    // journal entry from it (not a parallel copy). The event owns the narrative
+    // identity/timing; the definition owns the authored detail.
+    const event = this._recordQuestResolved(progress, definition);
+    this._createJournalEntry(progress, definition, event);
 
     // Track repeatable completion timestamp (C-339)
     if (definition.repeatable) {
@@ -1349,9 +1356,39 @@ class QuestStateService
   // ── Private: journal (C-339) ──
 
   /**
-   * Creates a journal entry for a completed or failed quest.
+   * C-491 AC-5: commits exactly one `QuestResolved` event for a completed quest
+   * and returns it. The actor is the quest-facing NPC (`offeredByNpcId` when
+   * present, else the player's active party NPC, else the player) so the
+   * witness set is never empty for completions that occur away from a scene cast.
    */
-  private _createJournalEntry(progress: QuestProgress, definition: ContentPackQuestEntry): void {
+  private _recordQuestResolved(
+    progress: QuestProgress,
+    definition: ContentPackQuestEntry,
+  ): CommittedNarrativeEvent {
+    const actorId = definition.offeredByNpcId ?? partyRosterService.members[0]?.npcId ?? 'player';
+    const campaignId = campaignService.activeCampaign?.id ?? '';
+    return narrativeEventService.record({
+      campaignId,
+      kind: 'QuestResolved',
+      informationKind: 'world_fact',
+      summary: `Quest completed: ${definition.name}`,
+      subjectId: progress.questId,
+      actorId,
+    });
+  }
+
+  /**
+   * Creates a journal entry for a completed or failed quest. When a `QuestResolved`
+   * event is supplied (completed path), the entry's identity/timing derive from
+   * the event — `questId` from `subjectId`, `timestamp` from `recordedAt` — so the
+   * journal is keyed to the single committed event rather than authored as a
+   * parallel copy (C-491 AC-5).
+   */
+  private _createJournalEntry(
+    progress: QuestProgress,
+    definition: ContentPackQuestEntry,
+    event?: CommittedNarrativeEvent,
+  ): void {
     const ending = progress.chosenEndingId
       ? definition.endings?.[progress.chosenEndingId]
       : undefined;
@@ -1376,10 +1413,10 @@ class QuestStateService
     }
 
     const entry: QuestJournalEntry = {
-      questId: progress.questId,
+      questId: event?.subjectId ?? progress.questId,
       title: definition.name,
       status: progress.status === 'completed' ? 'completed' : 'failed',
-      timestamp: progress.completedAt ?? Date.now(),
+      timestamp: event ? Date.parse(event.recordedAt) : (progress.completedAt ?? Date.now()),
       endingId: progress.chosenEndingId,
       endingTitle: ending?.title,
       narration: ending?.narration ?? definition.description,

@@ -18,6 +18,8 @@ import type {
   RelationshipState,
   RememberedPromise,
 } from '@aikami/types';
+import { campaignService } from '$services';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { buildFacts, computeTier } from './relationship_utils';
 import { registerSerializable } from './serializable_service';
 
@@ -41,8 +43,15 @@ export type RelationshipServiceInterface = BaseFrontendClassInterface & {
     delta: number;
     reason: string;
   }): FactionStanding;
-  /** Record a promise made to an NPC or faction. */
-  recordPromise(options: { targetId: string; description: string }): RememberedPromise;
+  /** Record a promise made to an NPC or faction. Also commits a PromiseMade event (C-491). */
+  recordPromise(options: {
+    targetId: string;
+    description: string;
+    /** Optional explicit campaign id; defaults to the active campaign. */
+    campaignId?: string;
+    /** Optional promise actor (always a witness); defaults to targetId. */
+    actorId?: string;
+  }): RememberedPromise;
   /** Get all promises for a target. */
   getPromises(targetId: string): RememberedPromise[];
   /** Fulfill or break a promise. */
@@ -219,7 +228,12 @@ class RelationshipService
   // ── Public API: promises ────────────────────────────────────────────
 
   /** @inheritdoc */
-  recordPromise(options: { targetId: string; description: string }): RememberedPromise {
+  recordPromise(options: {
+    targetId: string;
+    description: string;
+    campaignId?: string;
+    actorId?: string;
+  }): RememberedPromise {
     const promise: RememberedPromise = {
       id: `promise_${crypto.randomUUID()}`,
       targetId: options.targetId,
@@ -229,6 +243,19 @@ class RelationshipService
     };
     this._promises = [...this._promises, promise];
     this.debug('recordPromise', { targetId: options.targetId });
+
+    // C-491: commit a PromiseMade event — the promise actor is always a witness.
+    const actorId = options.actorId ?? options.targetId;
+    const campaignId = options.campaignId ?? campaignService.activeCampaign?.id ?? '';
+    narrativeEventService.record({
+      campaignId,
+      kind: 'PromiseMade',
+      informationKind: 'world_fact',
+      summary: `Promise made: ${options.description}`,
+      subjectId: options.targetId,
+      actorId,
+    });
+
     return promise;
   }
 

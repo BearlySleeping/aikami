@@ -45,7 +45,14 @@ import type {
 } from '@aikami/types';
 import { createSeedableRng, resolveCommand } from '@aikami/utils';
 import { Value } from 'typebox/value';
-import { inventoryService, questStateService, relationshipService } from '$services';
+import {
+  campaignService,
+  inventoryService,
+  narrativeEventService,
+  npcAwarenessService,
+  questStateService,
+  relationshipService,
+} from '$services';
 import type { ConsequenceRejectionReason, ConsequenceRequest, ConsequenceResult } from '$types';
 import { buildNpcPersona } from './npc_dialogue_persona';
 
@@ -2079,6 +2086,19 @@ export class NpcDialogueService
         );
       }
 
+      // C-491 AC-1: exactly one committed event per consequential resolution.
+      // Append immediately after the authority reports the batch applied (and
+      // before the narration is returned) so a retry cannot double-record. A
+      // recording failure throws and fails the turn — the deltas are already
+      // committed, so dropping the event would let the journal/companions lie.
+      this._recordDialogueEvent({
+        npcId: options.npcId,
+        applied: consequenceResult.applied,
+        checkType,
+        outcome: options.outcome,
+        sourceEventId,
+      });
+
       this.turnState = { kind: 'complete', text: output.narrativeResult };
       this._logTurnTime({ path: 'roll', ms: performance.now() - turnStart });
       operationCompleted = true;
@@ -2161,6 +2181,95 @@ export class NpcDialogueService
     }
 
     return { operationId: request.operationId, applied, rejected };
+  }
+
+  /**
+   * C-491 AC-1: records exactly one committed event for a consequential dialogue
+   * resolution. Invoked after `_applyConsequences` reports a non-empty applied
+   * batch, using the deterministic kind-priority rule. A successful Intimidation
+   * roll with no applied delta records `ThreatWitnessed`. Rejected-only
+   * resolutions record nothing.
+   */
+  private _recordDialogueEvent(options: {
+    npcId: string;
+    applied: NpcStateDelta[];
+    checkType: string;
+    outcome: 'pass' | 'fail';
+    sourceEventId: string;
+  }): void {
+    const { npcId, applied, checkType, outcome, sourceEventId } = options;
+
+    let kind: 'ItemTransferred' | 'RelationshipChanged' | 'WorldFlagChanged' | 'ThreatWitnessed';
+    let informationKind: 'world_fact' | 'character_belief';
+    let subjectId: string | undefined;
+
+    if (applied.length > 0) {
+      const itemDelta = applied.find(
+        (delta) => delta.kind === 'inventory_grant' || delta.kind === 'inventory_remove',
+      );
+      if (itemDelta) {
+        kind = 'ItemTransferred';
+        subjectId = itemDelta.target;
+      } else {
+        const relationshipDelta = applied.find(
+          (delta) => delta.kind === 'trust_change' || delta.kind === 'relationship_update',
+        );
+        if (relationshipDelta) {
+          kind = 'RelationshipChanged';
+          subjectId = relationshipDelta.target;
+        } else {
+          const flagDelta = applied.find(
+            (delta) => delta.kind === 'flag_set' || delta.kind === 'flag_clear',
+          );
+          kind = 'WorldFlagChanged';
+          subjectId = flagDelta?.label;
+        }
+      }
+      informationKind = 'world_fact';
+    } else if (outcome === 'pass' && checkType.toLowerCase() === 'intimidation') {
+      // A successful Intimidation with no applied delta — the acting NPC
+      // witnessed a threat, recorded as a character belief.
+      kind = 'ThreatWitnessed';
+      informationKind = 'character_belief';
+      subjectId = npcId;
+    } else {
+      // Rejected-only (or non-Intimidation with nothing applied) — no committed
+      // consequence, so no event.
+      return;
+    }
+
+    const campaignId = campaignService.activeCampaign?.id ?? '';
+    narrativeEventService.record({
+      campaignId,
+      kind,
+      informationKind,
+      summary: this._dialogueEventSummary(kind, npcId, subjectId),
+      subjectId,
+      // A witnessed threat is a character belief held by the acting NPC.
+      claimantId: kind === 'ThreatWitnessed' ? npcId : undefined,
+      actorId: npcId,
+      witnesses: npcAwarenessService.nearbyNpcIds,
+      sourceEventId,
+      deltasApplied: applied.length > 0 ? applied : undefined,
+    });
+  }
+
+  /** Builds a human-readable summary for a dialogue-sourced event. */
+  private _dialogueEventSummary(
+    kind: 'ItemTransferred' | 'RelationshipChanged' | 'WorldFlagChanged' | 'ThreatWitnessed',
+    npcId: string,
+    subjectId: string | undefined,
+  ): string {
+    switch (kind) {
+      case 'ItemTransferred':
+        return `${npcId} transferred ${subjectId ?? 'an item'}`;
+      case 'RelationshipChanged':
+        return `${npcId} changed a relationship with ${subjectId ?? 'another character'}`;
+      case 'WorldFlagChanged':
+        return `${npcId} changed world flag ${subjectId ?? '(unknown)'}`;
+      case 'ThreatWitnessed':
+        return `${npcId} witnessed a threat`;
+    }
   }
 
   /**
