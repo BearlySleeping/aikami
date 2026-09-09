@@ -1,5 +1,6 @@
 // apps/frontend/client/src/lib/data/npc_avatar_catalog.test.ts
 import { describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
 import {
   NPC_AVATAR_SPRITE_MAP,
   PERSONA_AVATAR_SPRITE_MAP,
@@ -9,6 +10,13 @@ import {
   resolvePlayerAvatarUrl,
 } from './npc_avatar_catalog.ts';
 import { NPC_SPRITE_EXPRESSIONS } from './npc_sprite_expressions.ts';
+
+// Portrait busts are gitignored, tooling-generated game-data (fetched from
+// R2 in production, per .gitignore's game-data note). In a fresh CI checkout
+// they are absent, so the on-disk portrait-existence checks below skip there
+// and run locally once the portraits have been generated.
+const PORTRAITS_DIR = new URL('../../../static/game-data/portraits/npc/', import.meta.url);
+const PORTRAITS_PRESENT = existsSync(PORTRAITS_DIR);
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -37,21 +45,24 @@ describe('npc_avatar_catalog — emberwatch coverage', () => {
     }
   });
 
-  test('every emberwatch NPC portrait file exists on disk (game-data catalog)', async () => {
-    for (const npcId of EMBERWATCH_NPC_IDS) {
-      const _url = resolveNpcAvatarUrl({ npcId });
-      // When the asset store is unavailable, the fallback URL is /game-data/portraits/npc/{sprite}/{expression}.webp
-      // Check the game-data catalog path instead
-      const sprite = NPC_AVATAR_SPRITE_MAP[npcId];
-      const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
-      if (expectedPath) {
-        await expect(
-          Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
-          `portrait file ${expectedPath} should exist for NPC ${npcId} (sprite ${sprite})`,
-        ).resolves.toBe(true);
+  test.skipIf(!PORTRAITS_PRESENT)(
+    'every emberwatch NPC portrait file exists on disk (game-data catalog)',
+    async () => {
+      for (const npcId of EMBERWATCH_NPC_IDS) {
+        const _url = resolveNpcAvatarUrl({ npcId });
+        // When the asset store is unavailable, the fallback URL is /game-data/portraits/npc/{sprite}/{expression}.webp
+        // Check the game-data catalog path instead
+        const sprite = NPC_AVATAR_SPRITE_MAP[npcId];
+        const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
+        if (expectedPath) {
+          await expect(
+            Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
+            `portrait file ${expectedPath} should exist for NPC ${npcId} (sprite ${sprite})`,
+          ).resolves.toBe(true);
+        }
       }
-    }
-  });
+    },
+  );
 
   test('no emberwatch NPC resolves to the LPC body spritesheet fallback', () => {
     for (const npcId of EMBERWATCH_NPC_IDS) {
@@ -73,17 +84,20 @@ describe('npc_avatar_catalog — catalog integrity', () => {
     }
   });
 
-  test('every mapped NPC sprite has a neutral portrait in the game-data catalog', async () => {
-    for (const [npcId, sprite] of Object.entries(NPC_AVATAR_SPRITE_MAP)) {
-      const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
-      if (expectedPath) {
-        await expect(
-          Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
-          `neutral.webp for sprite ${sprite} (NPC ${npcId}) at ${expectedPath}`,
-        ).resolves.toBe(true);
+  test.skipIf(!PORTRAITS_PRESENT)(
+    'every mapped NPC sprite has a neutral portrait in the game-data catalog',
+    async () => {
+      for (const [npcId, sprite] of Object.entries(NPC_AVATAR_SPRITE_MAP)) {
+        const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
+        if (expectedPath) {
+          await expect(
+            Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
+            `neutral.webp for sprite ${sprite} (NPC ${npcId}) at ${expectedPath}`,
+          ).resolves.toBe(true);
+        }
       }
-    }
-  });
+    },
+  );
 
   test('every mapped persona sprite is registered with expressions', () => {
     for (const [personaId, sprite] of Object.entries(PERSONA_AVATAR_SPRITE_MAP)) {
@@ -100,25 +114,31 @@ describe('npc_avatar_catalog — catalog integrity', () => {
     }
   });
 
-  test('every mapped player class sprite has a neutral portrait in the game-data catalog', async () => {
-    for (const [classId, sprite] of Object.entries(PLAYER_CLASS_AVATAR_SPRITE_MAP)) {
-      const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
-      if (expectedPath) {
-        await expect(
-          Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
-          `neutral.webp for sprite ${sprite} (class ${classId}) at ${expectedPath}`,
-        ).resolves.toBe(true);
+  test.skipIf(!PORTRAITS_PRESENT)(
+    'every mapped player class sprite has a neutral portrait in the game-data catalog',
+    async () => {
+      for (const [classId, sprite] of Object.entries(PLAYER_CLASS_AVATAR_SPRITE_MAP)) {
+        const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
+        if (expectedPath) {
+          await expect(
+            Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
+            `neutral.webp for sprite ${sprite} (class ${classId}) at ${expectedPath}`,
+          ).resolves.toBe(true);
+        }
       }
-    }
-  });
+    },
+  );
 
-  test('placeholder avatar file exists in game-data catalog', async () => {
-    await expect(
-      Bun.file(
-        new URL('../../../static/game-data/portraits/npc/placeholder.svg', import.meta.url),
-      ).exists(),
-    ).resolves.toBe(true);
-  });
+  test.skipIf(!PORTRAITS_PRESENT)(
+    'placeholder avatar file exists in game-data catalog',
+    async () => {
+      await expect(
+        Bun.file(
+          new URL('../../../static/game-data/portraits/npc/placeholder.svg', import.meta.url),
+        ).exists(),
+      ).resolves.toBe(true);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------

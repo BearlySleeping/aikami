@@ -11,6 +11,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { LpcSlotDef } from '@aikami/frontend-preview';
+import { buildLpcCatalog } from '@aikami/lpc';
 import type { CatalogAssetEntry } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
 import type { ComponentType } from 'svelte';
@@ -261,7 +262,6 @@ class CatalogAssetViewModel
     }
 
     try {
-      const { buildLpcCatalog } = await import('@aikami/lpc');
       const result = buildLpcCatalog({
         entries: this._dataEntries.filter((e) => e.category === 'lpc'),
       });

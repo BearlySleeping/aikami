@@ -11,7 +11,7 @@
 //     src/lib/views/combat/__tests__/audio_track_catalog.test.ts
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { AudioTrackCatalogSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import {
@@ -22,6 +22,12 @@ import {
 
 /** Path to the shipped catalog relative to this test file. */
 const CATALOG_FILE = new URL('../../../../../static/game-data/audio_tracks.json', import.meta.url);
+
+// The shipped catalog is a gitignored, tooling-generated artifact (fetched
+// from R2 in production, per .gitignore's game-data note). In a fresh CI
+// checkout it is absent, so tests that read the on-disk catalog skip there
+// and run locally once the catalog has been generated.
+const CATALOG_PRESENT = existsSync(CATALOG_FILE);
 
 const R2_BASE = 'https://assets.bearlysleeping.com';
 
@@ -73,7 +79,7 @@ describe('AudioTrackCatalog — C-385 AC-3', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('shipped catalog validates against AudioTrackCatalogSchema', () => {
+  test.skipIf(!CATALOG_PRESENT)('shipped catalog validates against AudioTrackCatalogSchema', () => {
     const catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf-8')) as unknown;
     expect(Value.Check(AudioTrackCatalogSchema, catalog)).toBe(true);
   });
@@ -102,12 +108,15 @@ describe('AudioTrackCatalog — C-385 AC-3', () => {
     expect(url).not.toContain('/game-data/');
   });
 
-  test('repeated mood lookups reuse the cached catalog — a single network fetch', async () => {
-    await getTracksByMood('epic');
-    await getTracksByMood('tense');
+  test.skipIf(!CATALOG_PRESENT)(
+    'repeated mood lookups reuse the cached catalog — a single network fetch',
+    async () => {
+      await getTracksByMood('epic');
+      await getTracksByMood('tense');
 
-    // The catalog is fetched once and cached; subsequent lookups are
-    // synchronous Map reads (AC-3: no per-combat network request).
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
+      // The catalog is fetched once and cached; subsequent lookups are
+      // synchronous Map reads (AC-3: no per-combat network request).
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 });
