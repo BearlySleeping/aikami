@@ -74,6 +74,7 @@ mock.module('$lib/services/index.ts', () => ({
     isDemoMode: mock((): boolean => true),
   },
   // Other services the ViewModel imports
+  getConfiguredImageEngineId: mock(() => 'comfyui'),
   compileImagePrompt: mock(() => ({ positive: '', negative: '' })),
   styleProfileService: {
     get profiles() {

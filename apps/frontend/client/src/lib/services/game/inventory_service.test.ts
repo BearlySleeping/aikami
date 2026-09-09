@@ -6,6 +6,7 @@
 // Contract C-331 AC-1 / AC-2.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { getItemDefinition } from '$utils/inventory_utils';
 import { inventoryService } from './inventory_service.svelte';
 
 // Import the real implementation directly (not through the mocked $services
@@ -19,7 +20,6 @@ describe('InventoryService', () => {
   // ── Catalog (AC-1) ─────────────────────────────────────────────────
 
   test('getItemDefinition returns hardcoded fallback for known items', () => {
-    const { getItemDefinition } = require('./inventory_service.svelte');
     // C-375 renamed the Emberwatch quest item wardPendant → wardWand.
     const wardWand = getItemDefinition('wardWand');
     expect(wardWand.label).toBe('Ward Wand');
@@ -27,7 +27,6 @@ describe('InventoryService', () => {
   });
 
   test('configureCatalog replaces the active catalog', () => {
-    const { getItemDefinition } = require('./inventory_service.svelte');
     inventoryService.configureCatalog({
       items: {
         customSword: {

@@ -796,6 +796,10 @@ reading a green check.
 
 ## C-496 — Sprite atlas and animation manifest import path
 
+> Formalized by [C-496 — Shared visual assets, atlas import and playback](C-496-shared-visual-assets-and-playback.md).
+> The text below is the historical seed, not a second executable specification.
+> See the [visual asset execution guide](../plans/visual_asset_foundation.md) for the foundation-only proposal, PR ordering and the separately deferred biome compiler.
+
 | Field           | Value                                                                                                                                                  |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Priority**    | P2 — needed whether the art is AI-generated, commissioned, or hand-made                                                                                |

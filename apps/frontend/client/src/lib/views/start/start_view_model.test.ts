@@ -186,12 +186,6 @@ const _setupServiceOverrides = (): void => {
     configurable: true,
   });
 
-  // ── aiSettingsService.textProvider — ensure it returns a configured key ──
-  Object.defineProperty(_svcStubs.aiSettingsService, 'textProvider', {
-    get: () => ({ apiKey: 'test-key', endpoint: '', model: '' }),
-    configurable: true,
-  });
-
   // ── packRegistryService (C-345 / C-405) ────────────────────────────────
   (_svcStubs.packRegistryService as Record<string, unknown>).refresh = mock(async () => {});
   Object.defineProperty(_svcStubs.packRegistryService, 'availablePacks', {

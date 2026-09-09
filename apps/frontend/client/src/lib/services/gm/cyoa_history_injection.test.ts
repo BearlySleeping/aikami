@@ -40,31 +40,36 @@ mock.module(TIME_SVC_PATH, () => ({
 }));
 
 import { CYOA_HISTORY_HEADING } from '@aikami/constants';
-import { choiceHistoryStore } from '$lib/services/chat/choice_history_store.svelte.ts';
+// The preload stubs the whole $services barrel. gmPromptService reads
+// choiceHistoryStore from that same barrel, so import it here and drive
+// its formatHistorySection/getHistory doubles — the same pattern used by
+// gm_prompt_service.test.ts. (Overriding the whole barrel here would leak
+// into sibling test files in the same process.)
+import { choiceHistoryStore } from '$services';
 import { gmPromptService } from './gm_prompt_service.svelte.ts';
+
+const RECENT_SECTION = [
+  CYOA_HISTORY_HEADING,
+  '- Investigate the ruins',
+  '- Open the sarcophagus',
+].join('\n');
 
 describe('GmPromptService — CYOA history injection (C-245 AC-4)', () => {
   test('includes Recent Choices section when chat has history', () => {
     const chatId = 'cyoa-test-chat';
-    choiceHistoryStore.recordChoice({
-      chatId,
-      entry: { choiceId: 'c1', label: 'Investigate the ruins', selectedAt: 1000 },
-    });
-    choiceHistoryStore.recordChoice({
-      chatId,
-      entry: { choiceId: 'c2', label: 'Open the sarcophagus', selectedAt: 2000 },
-    });
+    choiceHistoryStore.formatHistorySection = mock((cid: string) =>
+      cid === chatId ? RECENT_SECTION : '',
+    );
 
     const prompt = gmPromptService.assemblePrompt({ mode: 'scene', chatId });
 
     expect(prompt).toContain(CYOA_HISTORY_HEADING);
     expect(prompt).toContain('- Investigate the ruins');
     expect(prompt).toContain('- Open the sarcophagus');
-
-    choiceHistoryStore.clearHistory(chatId);
   });
 
   test('omits Recent Choices section when chat has no history', () => {
+    choiceHistoryStore.formatHistorySection = mock(() => '');
     const prompt = gmPromptService.assemblePrompt({
       mode: 'scene',
       chatId: 'empty-history-chat',
@@ -74,6 +79,7 @@ describe('GmPromptService — CYOA history injection (C-245 AC-4)', () => {
   });
 
   test('omits Recent Choices section when no chatId provided', () => {
+    choiceHistoryStore.formatHistorySection = mock(() => RECENT_SECTION);
     const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
 
     expect(prompt).not.toContain(CYOA_HISTORY_HEADING);

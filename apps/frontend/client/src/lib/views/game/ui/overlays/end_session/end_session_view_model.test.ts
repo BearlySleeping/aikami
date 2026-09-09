@@ -41,9 +41,15 @@ describe('EndSessionViewModel', () => {
   });
 
   test('should save recap and return to preview with active session', async () => {
-    // Set up an active session first
-    const { sessionService } = await import('$services/game/session_service.svelte');
-    await sessionService.startSession({ gameId: 'edit-test' });
+    // The ViewModel reads sessionService from the (preload-mocked) $services
+    // barrel, so seed an active session on that same instance.
+    const { sessionService } = await import('$services');
+    sessionService.activeSession = {
+      id: 'edit-test',
+      sessionNumber: 1,
+      messageCount: 5,
+      editedSynopsis: '',
+    };
 
     // Get a fresh ViewModel for this test
     const freshMod = await import('./end_session_view_model.svelte');

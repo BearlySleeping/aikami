@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-08
-> Files: 437 across 18 categories
+> Generated: 2026-09-09
+> Files: 443 across 18 categories
 
 ## Quick Start (Read These First)
 
@@ -23,6 +23,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Known Limitations & TODOs](architecture/limitations.md)
 - [Object Storage Layout — Buckets, Keys, and Enforcement](architecture/object-storage-layout.md)
 - [Architecture](architecture/README.md)
+- [Semantic map authoring — foundation and deferred compiler design](architecture/semantic_map_authoring.md)
 ## archive/
 
 - [Tickets](archive/tickets/README.md)
@@ -399,11 +400,15 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-488: Authored NPC identity in the content pack](contracts/C-488-authored-npc-identity-in-the-content-pack.md)
 - [Contract C-489: One authority path for consequences](contracts/C-489-one-authority-path-for-consequences.md)
 - [Contract C-490: Transcript branching must not imply rewinding the world](contracts/C-490-transcript-branching-must-not-imply-rewinding-the-world.md)
+- [Contract C-496: Shared visual assets, atlas import and playback](contracts/C-496-shared-visual-assets-and-playback.md)
 - [Contract C-499: Dialogue Intent Envelope Extraction Resilience](contracts/C-499-dialogue-intent-envelope-extraction-resilience.md)
 - [Contract C-500: Combat Overlay Rendering and Engine Stall](contracts/C-500-combat-overlay-rendering-and-engine-stall.md)
 - [Contract C-501: Dialogue Slash Commands](contracts/C-501-dialogue-slash-commands.md)
 - [Contract C-502: Minimap HUD](contracts/C-502-minimap-hud.md)
 - [Contract C-503: Quest Marker HUD](contracts/C-503-quest-marker-hud.md)
+- [Contract C-504: Stable character appearance identity and legacy migration](contracts/C-504-stable-character-appearance-identity.md)
+- [Contract C-505: Canonical scene data and future semantic authoring boundary](contracts/C-505-canonical-scene-data-and-authoring-boundary.md)
+- [Contract C-506: Emberwatch grounding, depth and navigation readability](contracts/C-506-emberwatch-visual-readability.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
@@ -459,6 +464,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Execution rules](plans/ai-setup/dispatch.md)
 - [Execution order](plans/ai-setup/queue.md)
 - [AI setup and settings — execution plan](plans/ai-setup/README.md)
+- [Visual asset foundation — execution guide](plans/visual_asset_foundation.md)
 ## README.md/
 
 - [Aikami Documentation](README.md)

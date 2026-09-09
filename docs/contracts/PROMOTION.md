@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-09-08
+> Auto-generated: 2026-09-09
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 164 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 168 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -223,8 +223,12 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-484 | Capability First Settings | 🛠️ implemented | v2 | full |
 | C-485 | Production Path Evidence Gate | 🛠️ implemented | v2 | full |
 | C-486 | Unconditional Release Journey | 🛠️ implemented | v2 | full |
-| C-487 | Free Text Skill Checks Honour The Character Sheet | 📝 draft | v2 | full |
-| C-488 | Authored Npc Identity In The Content Pack | 📝 draft | v2 | full |
-| C-489 | One Authority Path For Consequences | 📝 draft | v2 | full |
-| C-490 | Transcript Branching Must Not Imply Rewinding The World | 📝 draft | v2 | thin |
+| C-487 | Free Text Skill Checks Honour The Character Sheet | 🛠️ implemented | v2 | full |
+| C-488 | Authored Npc Identity In The Content Pack | 🛠️ implemented | v2 | full |
+| C-489 | One Authority Path For Consequences | 🛠️ implemented | v2 | full |
+| C-490 | Transcript Branching Must Not Imply Rewinding The World | 👍 approved | v2 | thin |
+| C-496 | Shared Visual Assets And Playback | 📝 draft | v2 | full |
+| C-504 | Stable Character Appearance Identity | 📝 draft | v2 | full |
+| C-505 | Canonical Scene Data And Authoring Boundary | 📝 draft | v2 | full |
+| C-506 | Emberwatch Visual Readability | 📝 draft | v2 | thin |
 

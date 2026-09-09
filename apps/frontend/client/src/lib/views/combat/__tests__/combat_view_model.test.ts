@@ -29,6 +29,22 @@ const transitionToBgmMock = mock(async () => {});
 
 mock.module('$services', () => ({
   audioService: { transitionToBgm: transitionToBgmMock },
+  // The CombatViewModel resolves BGM through the barrel re-exports of the
+  // static audio catalog (C-385 AC-3). Provide deterministic doubles.
+  getTracksByMood: mock(async (mood: string) => [
+    {
+      id: `bgm-combat-${mood}`,
+      title: 'Combat BGM',
+      mood,
+      assetPath: 'music/combat/bgm_combat.webm',
+    },
+  ]),
+  resolveAudioTrackUrl: mock(
+    async (entry: { assetPath: string }) => `/game-data/${entry.assetPath}`,
+  ),
+  playSceneBgm: mock(async () => {}),
+  getExpressionAssetResolver: mock(() => ({})),
+  playerStateService: {},
   diceService: {},
   gameStateService: {},
   imageGenerationService: {},

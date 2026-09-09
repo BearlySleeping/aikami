@@ -9,12 +9,17 @@
 // scores, without requiring a network call.
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import {
+  compileCardToPersona,
+  hasDeclaredAbilityScores,
+} from '$lib/services/character/card_compiler.ts';
+import { importFromJson, importFromPng } from '$lib/services/character/character_importer.ts';
 import { createPlaceholderPngCard } from '$lib/services/character/png_writer.ts';
 
 // $state/$derived/$effect and the $services barrel are polyfilled by
 // test_preload.ts. Re-mock the barrel with focused stubs so the VM and
 // tests share the same instances.
-mock.module('$services', () => ({
+mock.module('$lib/services/index.ts', () => ({
   personaService: {
     updatePersona: mock(async () => {}),
     getPersonas: mock(async () => []),
@@ -34,9 +39,19 @@ mock.module('$services', () => ({
     goToRoute: mock(async () => {}),
     navigateToApp: mock(async () => {}),
   },
+  // Real card-parsing helpers so handleFileImport exercises the actual
+  // V2/V3/RisuAI/Aikami pipeline (C-419) rather than a stub.
+  compileCardToPersona,
+  hasDeclaredAbilityScores,
+  importFromJson,
+  importFromPng,
+  lorebookStore: {},
 }));
 
-import { getPersonaListViewModel } from './persona_list_view_model.svelte';
+// Type-only so this file's top-level imports never force the real $services
+// barrel to load before the mock.module(...) above is registered (the VM is
+// loaded dynamically in beforeEach, after the mock takes effect).
+import type { getPersonaListViewModel } from './persona_list_view_model.svelte';
 
 // ── Fixture ──────────────────────────────────────────────────────────────
 
@@ -75,7 +90,8 @@ describe('PersonaListViewModel — card import (C-419 AC-1)', () => {
     const { personaService } = await import('$services');
     updatePersonaMock = personaService.updatePersona;
     updatePersonaMock.mockClear();
-    viewModel = getPersonaListViewModel({ className: 'PersonaListViewModelTest' });
+    const mod = await import('./persona_list_view_model.svelte');
+    viewModel = mod.getPersonaListViewModel({ className: 'PersonaListViewModelTest' });
     await viewModel.initialize();
   });
 

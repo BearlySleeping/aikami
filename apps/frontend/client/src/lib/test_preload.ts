@@ -272,6 +272,23 @@ const _createServiceStub = () => {
       }
       return (_target as Record<string, unknown>)[prop];
     },
+    // Tests mutate these stubs with Object.defineProperty(...) to override
+    // getters (e.g. campaignService.campaigns). Without these traps the
+    // Proxy throws "Properties can only be defined on Objects".
+    set(_target, prop, value) {
+      Reflect.set(_target, prop, value);
+      return true;
+    },
+    defineProperty(_target, prop, descriptor) {
+      Reflect.defineProperty(_target, prop, descriptor);
+      return true;
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      return Reflect.getOwnPropertyDescriptor(_target, prop);
+    },
+    ownKeys(_target) {
+      return Reflect.ownKeys(_target);
+    },
   };
   return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
 };
@@ -324,11 +341,13 @@ const _createCallableStub = () => {
 export const localServicesMockBase = () => ({
   aiService: _createServiceStub(),
   AIService: class {},
+  localTaskPoolService: _createServiceStub(),
   streamOrchestratorService: _createServiceStub(),
   textGenerationService: _createServiceStub(),
   TextGenerationService: class {},
   appService: _createServiceStub(),
   AppService: class {},
+  assetPrefetchService: _createServiceStub(),
   audioContextManager: _createServiceStub(),
   AudioContextManager: class {},
   audioQueuePlayer: _createServiceStub(),
@@ -636,6 +655,7 @@ export const localServicesMockBase = () => ({
   }),
   gameEngineService: _createServiceStub(),
   GameEngineService: class {},
+  gameBootService: _createServiceStub(),
   sessionService: Object.assign(_createServiceStub(), {
     activeSession: null,
     chatLocked: false,
@@ -791,7 +811,11 @@ mock.module('$app/state', () => ({
 // ── Mock $lib paths (SvelteKit alias not resolvable in Bun without .svelte-kit) ──
 // ConfigService imports $lib/views/utils/crypto_vault and $types which can't be
 // resolved. We mock the lorebook_store module so it never loads config_service.
-mock.module('$lib/views/utils/crypto_vault', () => ({}));
+mock.module('$lib/views/utils/crypto_vault', () => ({
+  encrypt: mock(async () => {}),
+  decrypt: mock(async () => undefined),
+  clearVault: mock(() => {}),
+}));
 // 🔴 Resolved from this file's own location, never a literal absolute path:
 // an absolute path bakes in one machine's checkout (or one throwaway contract
 // worktree) and silently stops matching everywhere else, leaving the real
