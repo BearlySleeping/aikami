@@ -11,7 +11,7 @@
 //     src/lib/views/combat/__tests__/audio_track_catalog.test.ts
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { AudioTrackCatalogSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import {
@@ -22,6 +22,15 @@ import {
 
 /** Path to the shipped catalog relative to this test file. */
 const CATALOG_FILE = new URL('../../../../../static/game-data/audio_tracks.json', import.meta.url);
+
+/**
+ * The shipped catalog is gitignored and fetched on demand from R2 (C-435
+ * debundle), so a fresh checkout / CI has no audio_tracks.json. These two
+ * tests verify the real shipped artifact (schema validity + single-fetch
+ * caching) where it is present locally, and skip cleanly when it is absent
+ * rather than failing a PR that never had it.
+ */
+const hasShippedCatalog = existsSync(CATALOG_FILE);
 
 const R2_BASE = 'https://assets.bearlysleeping.com';
 
@@ -73,10 +82,13 @@ describe('AudioTrackCatalog — C-385 AC-3', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('shipped catalog validates against AudioTrackCatalogSchema', () => {
-    const catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf-8')) as unknown;
-    expect(Value.Check(AudioTrackCatalogSchema, catalog)).toBe(true);
-  });
+  test.skipIf(!hasShippedCatalog)(
+    'shipped catalog validates against AudioTrackCatalogSchema',
+    () => {
+      const catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf-8')) as unknown;
+      expect(Value.Check(AudioTrackCatalogSchema, catalog)).toBe(true);
+    },
+  );
 
   test('every mood from the legacy trackMappings returns at least one track', async () => {
     for (const mood of EXPECTED_MOODS) {
@@ -102,12 +114,15 @@ describe('AudioTrackCatalog — C-385 AC-3', () => {
     expect(url).not.toContain('/game-data/');
   });
 
-  test('repeated mood lookups reuse the cached catalog — a single network fetch', async () => {
-    await getTracksByMood('epic');
-    await getTracksByMood('tense');
+  test.skipIf(!hasShippedCatalog)(
+    'repeated mood lookups reuse the cached catalog — a single network fetch',
+    async () => {
+      await getTracksByMood('epic');
+      await getTracksByMood('tense');
 
-    // The catalog is fetched once and cached; subsequent lookups are
-    // synchronous Map reads (AC-3: no per-combat network request).
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
+      // The catalog is fetched once and cached; subsequent lookups are
+      // synchronous Map reads (AC-3: no per-combat network request).
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 });

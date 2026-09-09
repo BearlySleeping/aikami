@@ -5,10 +5,11 @@
 //
 // Contract: C-329 Integrate the Demo Quest from Offer Through Reward
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine/sim';
 import type { ContentPackQuestEntry } from '@aikami/types';
 import { inventoryService } from './inventory_service.svelte';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
 
 // ── Mock content pack quest data ──
@@ -1288,7 +1289,12 @@ describe('QuestStateService', () => {
       const mod = await import('./quest_state_service.svelte');
       service = mod.questStateService;
       service.reset();
+      narrativeEventService.reset();
       service.configure({ contentPackLoader: createExtendedMockLoader() });
+    });
+
+    afterEach(() => {
+      narrativeEventService.reset();
     });
 
     test('creates journal entry on quest completion', () => {
@@ -1308,6 +1314,35 @@ describe('QuestStateService', () => {
       expect(entry?.title).toBe('The Fading Ward');
       expect(entry?.objectiveResults.length).toBe(3);
       expect(entry?.rewards.length).toBe(3);
+    });
+
+    test('C-491 AC-5: journal derives from a single QuestResolved event', () => {
+      service.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
+      service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/old_road.json' });
+      service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/ruined_ward_shrine.json' });
+      service.evaluateTriggers({
+        type: 'ENCOUNTER_COMPLETED',
+        encounterId: 'ruined_ward_encounter',
+        victory: true,
+      });
+
+      // Exactly one QuestResolved event is committed.
+      const events = narrativeEventService.events.filter((e) => e.kind === 'QuestResolved');
+      expect(events).toHaveLength(1);
+      const event = events[0];
+      expect(event?.subjectId).toBe('fading_ward');
+      // With no quest-facing or party NPC, the player fallback is the resolved actor.
+      expect(event?.witnesses[0]).toBe('player');
+
+      // The journal entry is keyed to the committed event, not a parallel copy.
+      const entry = service.journalEntries.find((e) => e.questId === 'fading_ward');
+      expect(entry).toBeDefined();
+      expect(entry?.questId).toBe(event?.subjectId);
+      expect(entry?.timestamp).toBe(Date.parse(event?.recordedAt ?? ''));
+      // Authored narrative fields still resolve from the quest definition.
+      expect(entry?.title).toBe('The Fading Ward');
+      expect(entry?.status).toBe('completed');
+      expect(entry?.objectiveResults.length).toBe(3);
     });
 
     test('creates journal entry on quest failure', () => {

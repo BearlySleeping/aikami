@@ -92,6 +92,7 @@ export * from './game/gameplay_settings.ts';
 export * from './game/idle_detection_service.svelte.ts';
 export * from './game/input_action_service.svelte.ts';
 export * from './game/inventory_service.svelte.ts';
+export * from './game/narrative_event_service.svelte.ts';
 export * from './game/npc_dialogue_service.svelte';
 export * from './game/onboarding_hint_service.svelte.ts';
 export * from './game/party_follow_service.svelte.ts';

@@ -11,7 +11,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { NpcRollResolutionOutput, NpcStateDelta } from '@aikami/types';
 import { encode } from 'gpt-tokenizer';
-import { relationshipService } from '$services';
+import { campaignService, narrativeEventService, relationshipService } from '$services';
 import type { ConsequenceRequest, ConsequenceResult } from '$types';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
@@ -2060,5 +2060,133 @@ describe('C-489 AC-6: the production relationship authority invokes the rules ke
       .mock.calls;
     expect(calls).toHaveLength(0);
     expect(output.stateDeltas).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-491 AC-1: exactly one committed event per consequential resolution
+// ---------------------------------------------------------------------------
+
+/** Captures `narrativeEventService.record` options for assertion. */
+const recordedEvents = (): Array<Record<string, unknown>> =>
+  (
+    narrativeEventService.record.fn as unknown as {
+      mock: { calls: unknown[][] };
+    }
+  ).mock.calls.map((c) => c[0] as Record<string, unknown>);
+
+/** Resets the record stub and pins a non-empty active campaign. */
+const resetRecordStub = (): void => {
+  narrativeEventService.record.fn = mock((opts: Record<string, unknown>) => ({
+    id: crypto.randomUUID(),
+    ...opts,
+  }));
+  Object.defineProperty(campaignService, 'activeCampaign', {
+    value: { id: 'camp-1' },
+    configurable: true,
+  });
+};
+
+/** Drives the production `_resolveRoll` seam with a delta batch. */
+const driveRoll = async (options: {
+  deltas: NpcStateDelta[];
+  checkType?: string;
+  outcome?: 'pass' | 'fail';
+  contentProvider?: ReturnType<typeof makeContentProvider>;
+  npcId?: string;
+}): Promise<NpcRollResolutionOutput> => {
+  const narrative = 'The outcome is decided.';
+  npcDialogueService.configure({
+    contentProvider: options.contentProvider ?? makeContentProvider(),
+    textGenerator: makeStreamingTextGenerator({
+      chunks: [narrative],
+      structured: {
+        narrativeResult: narrative,
+        stateDeltas: options.deltas,
+        suggestedChips: [],
+      },
+    }),
+    executors: makeExecutors(),
+  });
+  return npcDialogueService.resolveRoll({
+    npcId: options.npcId ?? 'village_elder',
+    npcName: 'Elder Thalia',
+    messages: [],
+    signal: new AbortController().signal,
+    checkType: options.checkType ?? 'persuasion',
+    difficultyClass: 12,
+    rollTotal: 18,
+    outcome: options.outcome ?? 'pass',
+    playerInput: 'I appeal to your honor.',
+  });
+};
+
+/** Content provider that additionally defines a grantable item. */
+const providerWithItem = (): ReturnType<typeof makeContentProvider> => ({
+  ...makeContentProvider(),
+  getItem: mock((itemId: string) =>
+    itemId === 'ward_wand' ? { id: 'ward_wand', name: 'Ward Wand' } : undefined,
+  ),
+});
+
+describe('C-491 AC-1: exactly one committed event per consequential resolution', () => {
+  beforeEach(() => {
+    resetRecordStub();
+  });
+
+  test('records exactly one ItemTransferred event with both applied deltas', async () => {
+    await driveRoll({
+      deltas: [
+        { kind: 'inventory_grant', target: 'ward_wand', value: 1 },
+        { kind: 'trust_change', target: 'npc-001', value: 2 },
+      ],
+      contentProvider: providerWithItem(),
+    });
+
+    const events = recordedEvents();
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    expect(event?.kind).toBe('ItemTransferred');
+    expect(event?.informationKind).toBe('world_fact');
+    expect(event?.campaignId).toBe('camp-1');
+    expect(event?.actorId).toBe('village_elder');
+    const appliedKinds = (event?.deltasApplied as NpcStateDelta[] | undefined)?.map((d) => d.kind);
+    expect(appliedKinds).toContain('inventory_grant');
+    expect(appliedKinds).toContain('trust_change');
+  });
+
+  test('records WorldFlagChanged for a flag-only batch', async () => {
+    await driveRoll({
+      deltas: [{ kind: 'flag_set', target: 'emberwatch', label: 'emberwatch.ending.renewed' }],
+    });
+
+    const events = recordedEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.kind).toBe('WorldFlagChanged');
+    expect(events[0]?.informationKind).toBe('world_fact');
+  });
+
+  test('records nothing for a rejected-only resolution', async () => {
+    await driveRoll({
+      npcId: 'unknown_npc',
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 2 }],
+    });
+
+    expect(recordedEvents()).toHaveLength(0);
+  });
+
+  test('records ThreatWitnessed (character belief) on an Intimidation success with no deltas', async () => {
+    await driveRoll({ deltas: [], checkType: 'Intimidation', outcome: 'pass' });
+
+    const events = recordedEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.kind).toBe('ThreatWitnessed');
+    expect(events[0]?.informationKind).toBe('character_belief');
+    expect(events[0]?.claimantId).toBe('village_elder');
+  });
+
+  test('a failed roll with no applied deltas records nothing', async () => {
+    await driveRoll({ deltas: [], outcome: 'fail' });
+    expect(recordedEvents()).toHaveLength(0);
   });
 });

@@ -452,6 +452,10 @@
       "buildIntentNarrativeSystemPrompt"
     ]
   },
+  "apps/frontend/client/src/lib/services/game/narrative_event_service.svelte.ts": {
+    "orphaned": ["NarrativeEventServiceInterface", "NarrativeEventServiceOptions"],
+    "_comment": "C-491 shipped the committed narrative event record; the singleton instance has three production callers (dialogue _resolveRoll, quest _completeQuest, recordPromise) but its Interface/Options type exports are single-file type contracts, matching the baselined pattern of quest_state/game_save/relationship services."
+  },
   "apps/frontend/client/src/lib/services/game/party_follow_service.svelte.ts": {
     "orphaned": ["PartyFollowServiceInterface", "PartyFollowServiceOptions"]
   },
@@ -702,14 +706,8 @@
     "_comment": "C-456 shipped selectGroupParticipants and generateMultiNpcResponses with no production caller (methods on exported class, not top-level exports). C-493 wires them into the party path; remove this entry when it lands."
   },
   "apps/frontend/client/src/lib/services/npc/npc_awareness_service.svelte.ts": {
-    "orphaned": [
-      "NpcAwarenessService.getNearbyNpcContext",
-      "NpcAwarenessService.getNpcName",
-      "NpcAwarenessService.getNpcPersonality",
-      "NpcAwarenessServiceInterface",
-      "NpcAwarenessServiceOptions",
-      "npcAwarenessService"
-    ]
+    "orphaned": ["NpcAwarenessServiceInterface", "NpcAwarenessServiceOptions"],
+    "_comment": "C-491 wired npcAwarenessService.nearbyNpcIds into the dialogue consequence path, resolving 4 of the 6 prior orphans (methods + singleton); Interface/Options remain single-file type contracts."
   },
   "apps/frontend/client/src/lib/services/npc/npc_schedule_service.svelte.ts": {
     "orphaned": ["NpcScheduleService.getCurrentStatus", "NpcScheduleServiceInterface"]

@@ -7,6 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { RelationshipState } from '@aikami/types';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { relationshipService } from './relationship_service.svelte';
 import { buildFacts, computeTier } from './relationship_utils';
 
@@ -341,6 +342,24 @@ describe('RelationshipService', () => {
     const promises = relationshipService.getPromises('guard_captain');
     expect(promises).toHaveLength(1);
     expect(promises[0].id).toBe(promise.id);
+  });
+
+  test('C-491: recording a promise commits a PromiseMade event (actor is a witness)', () => {
+    narrativeEventService.reset();
+    const promise = relationshipService.recordPromise({
+      targetId: 'guard_captain',
+      description: 'Retrieve the lost ward pendant',
+    });
+
+    const events = narrativeEventService.events.filter((e) => e.kind === 'PromiseMade');
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    expect(event?.subjectId).toBe('guard_captain');
+    // The promise actor (defaults to the target) is always a witness.
+    expect(event?.witnesses).toContain('guard_captain');
+    expect(event?.informationKind).toBe('world_fact');
+    expect(promise.broken).toBe(false);
+    narrativeEventService.reset();
   });
 
   test('resolves promise as fulfilled', () => {
