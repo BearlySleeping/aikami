@@ -1,5 +1,5 @@
 // scripts/src/lib/herdr/session.test.ts
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { resetDirenvCache } from '../env/direnv_detect.ts';
@@ -510,6 +510,17 @@ describe('C-471 — service scope (AC-1, AC-3)', () => {
     expect(SERVICE_DEFS['image-comfyui'].scope).toBe('shared');
   });
 
+  // C-471 AC-2: a reusable ServiceDef without an identity probe is invalid
+  // configuration — assessServiceReadiness returns 'unavailable' for it and
+  // herdr:start image/voice/text refuses to consider the engine ready. Every
+  // shared local-stack engine must define a probe.
+  it('every shared engine defines an identity probe', () => {
+    const shared = ['voice', 'image', 'text', 'text-ollama', 'image-comfyui'] as const;
+    for (const key of shared) {
+      expect(typeof SERVICE_DEFS[key].probe, `${key} must define a probe`).toBe('function');
+    }
+  });
+
   it('ownedServices filters to only run-scoped services', () => {
     const all = ['client', 'voice', 'image', 'text', 'hub'] as const;
     const owned = ownedServices(all);
@@ -534,6 +545,52 @@ describe('C-471 — service scope (AC-1, AC-3)', () => {
 });
 
 describe('C-471 — identity probe (AC-2)', () => {
+  const engineResponses = [
+    {
+      service: 'voice',
+      valid: () => new Response('ok'),
+      invalid: () => Response.json({ status: 'ok' }),
+    },
+    {
+      service: 'image',
+      valid: () => Response.json([]),
+      invalid: () => Response.json({ models: [] }),
+    },
+    {
+      service: 'text',
+      valid: () => Response.json({ status: 'ok' }),
+      invalid: () => new Response('ok'),
+    },
+    {
+      service: 'text-ollama',
+      valid: () => Response.json({ version: '0.11.0' }),
+      invalid: () => Response.json({ status: 'ok' }),
+    },
+    {
+      service: 'image-comfyui',
+      valid: () => Response.json({ system: {}, devices: [] }),
+      invalid: () => Response.json({ system: {} }),
+    },
+  ] as const;
+
+  it('shared-engine probes reject redirects and require their engine-specific signature', async () => {
+    for (const engine of engineResponses) {
+      const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(engine.valid());
+      const identity = buildServiceIdentity(engine.service);
+      try {
+        const validResult = await SERVICE_DEFS[engine.service].probe?.(identity);
+        expect(validResult?.ready).toBeTrue();
+        expect(fetchSpy.mock.calls[0]?.[1]?.redirect).toBe('error');
+
+        fetchSpy.mockResolvedValue(engine.invalid());
+        const invalidResult = await SERVICE_DEFS[engine.service].probe?.(identity);
+        expect(invalidResult?.ready).toBeFalse();
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    }
+  });
+
   it('buildServiceIdentity includes checkout, runId and service', () => {
     const identity = buildServiceIdentity('client');
     expect(identity.service).toBe('client');

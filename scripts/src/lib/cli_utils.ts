@@ -339,6 +339,19 @@ const ROOT_ENV_FILES = ['.env', '.env.local'] as const;
 
 let _rootEnvCache: Record<string, string> | null = null;
 
+/**
+ * Test-only override for the root `.env` values. When set, `loadRootEnv`
+ * returns this instead of reading the repo-root `.env`/`.env.local` files —
+ * so env-resolution tests stay deterministic even when a developer's local
+ * `.env` is populated. Pass `null` to restore normal file loading.
+ */
+export const setRootEnvOverride = (values: Record<string, string> | null): void => {
+  _rootEnvOverride = values;
+  _rootEnvCache = null;
+};
+
+let _rootEnvOverride: Record<string, string> | null = null;
+
 /** Parse raw dotenv text into a record (ignores comments and blank lines). */
 export const parseEnvString = (content: string): Record<string, string> => {
   const vars: Record<string, string> = {};
@@ -379,6 +392,9 @@ export const parseEnvString = (content: string): Record<string, string> => {
  * win (direnv, CI, explicit exports) and tests stay deterministic.
  */
 export const loadRootEnv = (): Record<string, string> => {
+  if (_rootEnvOverride) {
+    return _rootEnvOverride;
+  }
   if (_rootEnvCache) {
     return _rootEnvCache;
   }

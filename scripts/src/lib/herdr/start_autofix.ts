@@ -9,8 +9,9 @@
 // CONTRACT_PIPELINE_MODEL_PRO, PI_MODEL_PRO, MODEL_PRO, MODEL. When none is
 // set, pi runs without --model and uses the user's default model. Override
 // per-run with --model.
-// Thinking: resolved from env (AUTOFIX_THINKING, CONTRACT_PIPELINE_THINKING,
-// PI_THINKING) — omitted (pi default) when none is set.
+// Thinking: resolved from env (AUTOFIX_THINKING_LEVEL, AUTOFIX_THINKING,
+// FLASH_THINKING_LEVEL, CONTRACT_PIPELINE_THINKING, PI_THINKING) — omitted
+// (pi default) when none is set. Override per-run with --thinking.
 //
 // Usage:
 //   bun autofix                              # fix + typecheck (git-scoped; stops after validation)
@@ -89,7 +90,9 @@ const ENV_MODEL = getEnvWithFallback([
   'MODEL',
 ]);
 const ENV_THINKING = getEnvWithFallback([
+  'AUTOFIX_THINKING_LEVEL',
   'AUTOFIX_THINKING',
+  'FLASH_THINKING_LEVEL',
   'CONTRACT_PIPELINE_THINKING',
   'PI_THINKING',
 ]);

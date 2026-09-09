@@ -14,9 +14,10 @@
 //     --configs flash --repetitions 5 \
 //     --max-cost 5 --max-turns 200 --max-minutes 60
 
+import { isThinkingLevel } from '../contract_pipeline/models.ts';
 import { formatUsageReport } from '../contract_pipeline/usage_report.ts';
 import { RunBudget } from './budget.ts';
-import { preflightCatalogue } from './catalogue.ts';
+import { preflightCatalogue, resolveFamilyThinking } from './catalogue.ts';
 import { RealEvalProvider } from './real_provider.ts';
 import { formatRecommendation } from './recommendation.ts';
 import { runEvaluation } from './runner.ts';
@@ -51,7 +52,7 @@ const positiveNumber = (options: { name: string; raw: string; integer?: boolean 
 
 const paidOptions = (): {
   taskIds: string[];
-  thinking: ThinkingLevel;
+  thinking: ThinkingLevel | undefined;
   repetitions: number;
   maxCostUsd: number;
   maxTurns: number;
@@ -69,9 +70,13 @@ const paidOptions = (): {
   if (!taskIds || taskIds.length === 0) {
     throw new Error('Paid mode requires explicit --tasks selection.');
   }
+  const thinking = flag('--thinking');
+  if (thinking !== undefined && !isThinkingLevel(thinking)) {
+    throw new Error(`--thinking must be a supported thinking level; received "${thinking}".`);
+  }
   return {
     taskIds,
-    thinking: (flag('--thinking') as ThinkingLevel | undefined) ?? 'high',
+    thinking,
     repetitions: positiveNumber({
       name: '--repetitions',
       raw: flag('--repetitions') ?? '1',
@@ -129,13 +134,18 @@ const main = async (): Promise<void> => {
   const { taskIds, thinking, repetitions, maxCostUsd, maxTurns, maxElapsedMinutes } =
     parsedPaidOptions;
 
-  const configs: EvalConfig[] = entries.map((entry) => ({
-    id: `${entry.family}-${thinking}`,
-    family: entry.family,
-    catalogue: entry,
-    thinking,
-    cacheCondition: 'cold',
-  }));
+  const configs: EvalConfig[] = entries.map((entry) => {
+    // Explicit `--thinking` wins; otherwise resolve per-family from env
+    // ({FAMILY}_THINKING_LEVEL → EVAL_THINKING → …), defaulting to `high`.
+    const effectiveThinking = thinking ?? resolveFamilyThinking({ family: entry.family }) ?? 'high';
+    return {
+      id: `${entry.family}-${effectiveThinking}`,
+      family: entry.family,
+      catalogue: entry,
+      thinking: effectiveThinking,
+      cacheCondition: 'cold',
+    };
+  });
 
   const budget = new RunBudget({
     maxCostUsd,

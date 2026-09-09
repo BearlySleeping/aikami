@@ -3,9 +3,10 @@
 import type { BaseViewModelInterface } from '@aikami/frontend/services';
 import type { Snippet } from 'svelte';
 import { onMount } from 'svelte';
+import type { HTMLAttributes } from 'svelte/elements';
 import AppLoading from '../loading/app_loading.svelte';
 
-type Props = {
+type Props = HTMLAttributes<HTMLElement> & {
   viewModel: BaseViewModelInterface;
   /**
    * Element id for testing
@@ -15,7 +16,6 @@ type Props = {
   id?: string;
   fillHeight?: boolean;
   children: Snippet;
-  class?: string;
   /**
    * The HTML element to render.
    * @default 'div'
@@ -30,6 +30,7 @@ let {
   children,
   class: classStyle,
   element = 'div',
+  ...attributes
 }: Props = $props();
 
 onMount(() => {
@@ -48,6 +49,7 @@ onMount(() => {
 
 <svelte:element
   this={element}
+  {...attributes}
   data-testid={id || viewModel._className}
   class:h-screen={fillHeight}
   class={classStyle}

@@ -372,6 +372,7 @@ export {
   getNpcHaltReason,
   hasActivePath,
   type NpcHaltReason,
+  registerPathFollowHaltObservers,
   resetNpcHaltReasons,
   updatePathFollow,
 } from './systems/path_follow_system.ts';

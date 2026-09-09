@@ -55,9 +55,10 @@ import { join, resolve } from 'node:path';
 // need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
 import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
 import { hasDirenv } from '../env/direnv_detect';
+import type { AikamiMode } from '../env/mode';
 // Re-exported for back-compat — the canonical definition now lives in
 // ../env/mode (single source of truth for mode resolution).
-import type { AikamiMode } from '../env/mode';
+import { resolveAikamiMode } from '../env/mode';
 import { reportInfraIssue } from '../ops/infra_report.ts';
 
 export type { AikamiMode } from '../env/mode';
@@ -191,6 +192,41 @@ export type SessionInfo = {
 
 // ── Service definitions ────────────────────────────────────
 
+/**
+ * Build an identity probe for a shared local-stack engine (C-471 AC-2).
+ *
+ * voice/image/text are heavy singletons — there is exactly one container per
+ * machine regardless of checkout/run, so the "which instance" question
+ * reduces to "is the CORRECT application answering on the ready port" (e.g.
+ * sd-server and not ComfyUI, llama.cpp and not Ollama). When the right app
+ * answers we adopt it as this run's instance and report the expected
+ * identity — the only identity a shared engine can carry.
+ *
+ * `verify` returns true when the correct application answers on the port.
+ * Resolving the port from the ambient mode keeps the probe correct under
+ * staging/production without threading `mode` through the probe signature.
+ */
+const engineProbe =
+  (serviceKey: DevService, verify: (port: number) => Promise<boolean> | boolean) =>
+  async (expectedIdentity: ServiceIdentity): Promise<ProbeResult> => {
+    const port = resolveReadyPort(serviceKey, resolveAikamiMode(), 0);
+    if (port === undefined) {
+      return { ready: false, reason: `${serviceKey} has no ready port defined` };
+    }
+    let ok = false;
+    try {
+      ok = await verify(port);
+    } catch {
+      ok = false;
+    }
+    return ok
+      ? { ready: true, observedIdentity: expectedIdentity }
+      : { ready: false, reason: `${serviceKey} engine did not answer on :${port}` };
+  };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
   client: {
     name: 'client',
@@ -232,6 +268,15 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/voice'),
     readyPort: (mode) => PORTS[mode].voice,
     scope: 'shared',
+    // sherpa-onnx answers /health with 200 — distinguishes it from a
+    // foreign listener squatting on :8089.
+    probe: engineProbe('voice', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/health`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      return res.ok && (await res.text()).trim() === 'ok';
+    }),
   },
   image: {
     name: 'image',
@@ -239,6 +284,19 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/image'),
     readyPort: (mode) => PORTS[mode].image,
     scope: 'shared',
+    // sd-server answers /sdapi/v1/sd-models with 200 + a model array —
+    // distinguishes it from ComfyUI (which 404s there) squatting on :8188.
+    probe: engineProbe('image', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/sdapi/v1/sd-models`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return Array.isArray(data);
+    }),
   },
   text: {
     name: 'text',
@@ -246,6 +304,19 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/text'),
     readyPort: (mode) => PORTS[mode].text,
     scope: 'shared',
+    // llama.cpp answers /health with 200 + "ok" — distinguishes it from
+    // Ollama (which 404s /health) squatting on :11434.
+    probe: engineProbe('text', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/health`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return isRecord(data) && data.status === 'ok';
+    }),
   },
   // C-392 advanced, opt-in engines — Ollama and ComfyUI stay one command
   // away via the local-stack compose profiles. Both share a port with the
@@ -257,6 +328,19 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/text'),
     readyPort: (mode) => PORTS[mode].text,
     scope: 'shared',
+    // Ollama answers /api/version with 200 — distinguishes it from the
+    // local-stack llama.cpp text engine on the same port.
+    probe: engineProbe('text-ollama', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/api/version`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return isRecord(data) && typeof data.version === 'string' && data.version.length > 0;
+    }),
   },
   'image-comfyui': {
     name: 'image-comfyui',
@@ -264,6 +348,19 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/image'),
     readyPort: (mode) => PORTS[mode].image,
     scope: 'shared',
+    // ComfyUI answers /system_stats with 200 — distinguishes it from the
+    // sd-server image engine on the same port.
+    probe: engineProbe('image-comfyui', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/system_stats`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return isRecord(data) && isRecord(data.system) && Array.isArray(data.devices);
+    }),
   },
 
   'preview-client': {

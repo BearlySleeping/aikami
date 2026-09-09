@@ -384,9 +384,20 @@ export const localServicesMockBase = () => ({
   DraftStore: class {},
   MessageBranchStore: class {},
   ExpressionAssetResolver: class {},
-  // C-487: dialogue_overlay_view_model.svelte.ts calls `expressionService.detectExpression`
-  // after each NPC turn. Stub it so the dialogue VM unit tests (AC-1..AC-5) can load.
-  expressionService: _createServiceStub(),
+  // dialogue_overlay_view_model.svelte.ts imports `expressionService` from
+  // '$services'. Without it in the base barrel mock, the view model's
+  // `import { expressionService } from '$services'` binds to the real
+  // services barrel and fails module evaluation with "Export named
+  // 'expressionService' not found". Provide a minimal functional double.
+  expressionService: {
+    detectExpression: mock(async () => ({
+      expressionMap: {},
+      detectionTier: 'keyword' as const,
+    })),
+    resolveLpcOverlays: mock(() => ({})),
+    catalogEntries: [],
+    getEntry: mock(() => undefined),
+  },
   gameSaveService: _createServiceStub(),
   GameSaveService: class {},
   setPendingGameLoad: _createCallableStub(),

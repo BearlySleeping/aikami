@@ -19,6 +19,7 @@ import RichMessageList from '$lib/components/messaging/rich_message_list.svelte'
 import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
 import type { MessageAction } from '$types';
 import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
+import PendingMessageBanner from './pending_message_banner.svelte';
 
 type Props = {
   viewModel: DialogueOverlayViewModelInterface;
@@ -305,7 +306,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
 
       {#snippet after()}
         <!-- Typing indicator — shown while waiting for NPC response -->
-        {#if viewModel.isStreaming && viewModel.messages.length > 0 && viewModel.messages[viewModel.messages.length - 1].role === 'player'}
+        {#if viewModel.isTyping}
           <div class="flex gap-2">
             <div class="rounded-2xl rounded-bl-md bg-base-100 px-4 py-2.5 shadow-sm">
               <span class="inline-flex items-center gap-1">
@@ -437,7 +438,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           onSend={() => viewModel.sendMessage()}
           onKeyDown={(e) => viewModel.handleKeyDown(e)}
           placeholder="Reply to {viewModel.npcName}..."
-          disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+          disabled={viewModel.isResolvingSkillCheck}
           sendDisabled={viewModel.isResolvingSkillCheck}
           requireText={false}
           isSending={viewModel.isResolvingSkillCheck}
@@ -450,6 +451,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           }}
         >
           {#snippet above()}
+            <!-- Pending queued messages retained after a failed/cancelled stream;
+                 require an explicit Send before any is delivered. -->
+            <PendingMessageBanner
+              messages={viewModel.pendingMessages}
+              onRetry={() => viewModel.retryPending()}
+            />
             <!-- Suggestion chips — rendered inside the card, above the input -->
             {#if viewModel.suggestedChips.length > 0}
               {#key viewModel.suggestedChips.map((c) => c.id).join('|')}
