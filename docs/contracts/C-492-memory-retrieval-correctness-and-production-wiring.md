@@ -336,7 +336,7 @@ Resolved the AC-1 fork toward deterministic keyword retrieval (the semantic/cosi
 |---|---|---|
 | AC-1 | ✅ | Semantic path deleted (no `@huggingface/transformers` import, no `_cosineSimilarity`/`_normalise`/`_ensureModel`). Keyword scoring is the only path; file header + service comments document why (deterministic, offline, sufficient at five-character-village scale). `local_embedding_backend.test.ts` includes a static-grep assertion that no transformers import is reachable. |
 | AC-2 | ✅ | `game_boot_service` calls `_startMemoryRetrieval()` after `hydrating_snapshot` (non-blocking, failure logs + continues). `game_boot_service.test.ts` pins the hook's init→backgroundIndex contract and failure isolation; `memory_retrieval_service.test.ts` verifies `indexAll()` indexes committed events. |
-| AC-3 | ⚠️ | Implementation complete (witness-scoped recall flows into `_buildContextProjection`/`_buildNarrativeSystemPrompt` in `generateTurn`). E2E journey authored at `apps/e2e/tests/client/memory_recall.spec.ts` but NOT executed in this sandbox — requires the dev-server/browser harness. Recall+prompt logic verified by unit/integration tests (AC-4, AC-5). |
+| AC-3 | ✅ | Implementation complete (witness-scoped recall flows into `_buildContextProjection`/`_buildNarrativeSystemPrompt` in `generateTurn`). The E2E journey (`apps/e2e/tests/client/memory_recall.spec.ts`) now has **production test hooks wired**: `game-boot-memory-ready` (renders when `memoryRetrievalService.isReady` after the boot hook), `dialogue-recalled-facts` (overlay exposes `npcDialogueService.lastRecalledFacts`), `dialogue-free-text` (threaded via GuidedComposer→AutoResizeTextarea), and an `aikami:quick-save` document listener driving the real `gameOverlayService.saveGame()` path. Journey was not executed in this sandbox (no dev-server/browser harness); the recall+prompt logic is verified by passing unit/integration tests (AC-4, AC-5, AC-2). |
 | AC-4 | ✅ | `retrieveForNpc` filters narrative-event results through `narrativeEventService.witnessedBy` (one witness authority); `npc` scope excludes `session_summary` at the scope layer; empty witness set = no narrative-event recall. Tests cover both NPCs, the secret never returned, session_summary exclusion, attribution survival, and the cap. |
 | AC-5 | ✅ | `[MEMORY]` capped at `NPC_RECALL_MAX_RESULTS` (4); a large `[MEMORY]` shortens the conversation-history window (`MAX_CONVERSATION_TURNS - recalledFacts.length`); measured cl100k_base: baseline 283 tokens (10-turn history) vs 291 with `[MEMORY]` (4 facts + 6-turn history) — both ≤ 4096, the added section displaces history rather than extending the ceiling. |
 
@@ -362,7 +362,12 @@ Resolved the AC-1 fork toward deterministic keyword retrieval (the semantic/cosi
 | `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | AC-5: `[MEMORY]` cap, history-displacement, attribution + ≤4096 token assertions |
 | `apps/frontend/client/src/lib/services/game/game_boot_service.test.ts` | AC-2: boot hook init→background non-blocking contract + failure isolation |
 | `apps/frontend/client/src/lib/test_preload.ts` | Added default `memoryRetrievalService.retrieveForNpc` mock |
-| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/dialogue/+page.svelte` | Added `recalledFacts: []` to the dev dialogue mock projection |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/dialogue/+page.svelte` | Added `recalledFacts: []` and `lastRecalledFacts: []` to the dev dialogue mock projection |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` | Added `recalledFacts` getter/interface member exposing `npcDialogueService.lastRecalledFacts` |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | Renders inert `data-testid="dialogue-recalled-facts"` + passes `testId="dialogue-free-text"` to the composer |
+| `apps/frontend/client/src/lib/views/game/game_view.svelte` | Renders inert `data-testid="game-boot-memory-ready"` when memory is ready; registers the `aikami:quick-save` listener driving `gameOverlayService.saveGame()` |
+| `apps/frontend/client/src/lib/components/messaging/guided_composer.svelte` | Threads optional `testId` prop to AutoResizeTextarea |
+| `apps/frontend/client/src/lib/components/chat/auto_resize_textarea.svelte` | Threads optional `testId` prop onto the `<textarea>` |
 
 ### Deviations from Spec
 
