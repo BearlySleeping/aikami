@@ -5,54 +5,28 @@
 // Context-appropriate buttons: AI messages show copy/retry/speak/branch;
 // user messages show copy/edit/delete/branch.
 //
-// Contract: C-231 AC-3 Inline Message Action Bar
+// Contract: C-231 AC-3 Inline Message Action Bar, C-490 (gating + "Rephrase")
 
 import type { MessageAction } from '$types';
+import { availableMessageActions, messageActionIcon, messageActionLabel } from './message_actions';
 
 type Props = {
   /** Message sender — controls which actions are shown. */
   sender: 'user' | 'ai' | 'system';
   /** Whether TTS is available (controls speak button visibility). */
   ttsAvailable?: boolean;
+  /**
+   * C-490: when true (campaign play), transcript-rewinding members
+   * (branch/edit/delete) are dropped; retry reads "Rephrase".
+   */
+  disableRewind?: boolean;
   /** Called when an action is clicked. */
   onAction: (action: MessageAction) => void;
 };
 
-const { sender, ttsAvailable = false, onAction }: Props = $props();
+const { sender, ttsAvailable = false, disableRewind = false, onAction }: Props = $props();
 
-/** Actions available for AI messages. */
-const AI_ACTIONS: MessageAction[] = ['copy', 'retry', 'branch'];
-/** Actions available for user messages. */
-const USER_ACTIONS: MessageAction[] = ['copy', 'edit', 'delete', 'branch'];
-/** Actions when TTS is available (added to both). */
-const TTS_ACTION: MessageAction = 'speak';
-
-const actions = $derived.by(() => {
-  if (sender === 'ai') {
-    return ttsAvailable ? [...AI_ACTIONS, TTS_ACTION] : AI_ACTIONS;
-  }
-  return USER_ACTIONS;
-});
-
-/** Labels for action buttons. */
-const LABELS: Record<MessageAction, string> = {
-  copy: 'Copy',
-  retry: 'Retry',
-  edit: 'Edit',
-  delete: 'Delete',
-  branch: 'Branch',
-  speak: 'Speak',
-};
-
-/** Icons for action buttons. */
-const ICONS: Record<MessageAction, string> = {
-  copy: '📋',
-  retry: '🔄',
-  edit: '✏️',
-  delete: '🗑️',
-  branch: '🌿',
-  speak: '🔊',
-};
+const actions = $derived(availableMessageActions({ sender, ttsAvailable, disableRewind }));
 </script>
 
 <div
@@ -62,14 +36,14 @@ const ICONS: Record<MessageAction, string> = {
     <button
       type="button"
       class="btn btn-ghost btn-xs tooltip tooltip-top px-1"
-      data-tip={LABELS[action]}
+      data-tip={messageActionLabel(action)}
       onclick={(e) => {
         e.stopPropagation();
         onAction(action);
       }}
-      aria-label={LABELS[action]}
+      aria-label={messageActionLabel(action)}
     >
-      <span class="text-xs">{ICONS[action]}</span>
+      <span class="text-xs">{messageActionIcon(action)}</span>
     </button>
   {/each}
 </div>

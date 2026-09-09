@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { SKILL_CHECK_STAKES } from '@aikami/constants';
 import type { GameCharacterSheet } from '@aikami/types';
 import { computeModifier, createDefaultSheet } from '@aikami/utils';
+import { availableMessageActions } from '../../../../../components/chat/message_actions';
 
 // ---------------------------------------------------------------------------
 // Seeded character sheet — the mocked playerStateService returns this so the
@@ -226,12 +227,14 @@ const createNpcData = (overrides?: Partial<DialogueOverlayViewModelOptions['npcD
 const createViewModel = (options?: {
   npcData?: ReturnType<typeof createNpcData>;
   onEndChat?: () => void;
+  isCampaignPlay?: boolean;
 }): DialogueOverlayViewModelInterface =>
   getDialogueOverlayViewModel({
     className: 'TestDialogueOverlayViewModel',
     npcData: options?.npcData ?? createNpcData(),
     onEndChat: options?.onEndChat ?? (() => {}),
     npcDialogueService: mockNpcDialogueService,
+    isCampaignPlay: options?.isCampaignPlay,
   });
 
 // ---------------------------------------------------------------------------
@@ -848,5 +851,66 @@ describe('DialogueOverlayViewModel', () => {
     await vm.copyMessage('test text');
     // Either 'Copied!' or 'Copy failed' — both are valid states
     expect(vm.toastMessage.length).toBeGreaterThan(0);
+  });
+
+  // ── C-490 Transcript branching must not imply rewinding the world ───────
+
+  test('C-490: isCampaignPlay defaults to true for the production overlay', () => {
+    const vm = createViewModel();
+    expect(vm.isCampaignPlay).toBe(true);
+  });
+
+  test('C-490: isCampaignPlay can be disabled (dev sandbox / non-campaign chat)', () => {
+    const vm = createViewModel({ isCampaignPlay: false });
+    expect(vm.isCampaignPlay).toBe(false);
+  });
+
+  test('C-490 AC-2: rephrase performs no quest-activation state mutation', async () => {
+    // The intent would normally accept a quest — but the rephrase path must
+    // never apply NpcStateDelta / quest mutations.
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'A rephrased reply.',
+      suggestedChips: [],
+      questActivation: { action: 'accept', questId: 'fading_ward' },
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+    acceptQuestStub = mock(() => true);
+    mockQuestStateService.acceptQuest = acceptQuestStub;
+    getOfferableQuestsStub = mock(() => [{ id: 'fading_ward', name: 'The Fading Ward' }]);
+    mockQuestStateService.getOfferableQuests = getOfferableQuestsStub;
+
+    const vm = createViewModel();
+    // Build a player → NPC exchange so rephrase has an NPC message to target.
+    vm.inputText = 'I accept the quest, elder.';
+    await vm.sendMessage();
+    const npcMessageId = vm.messages[vm.messages.length - 1].id;
+
+    // Sanity: the initial send DID accept the quest.
+    expect(acceptQuestStub).toHaveBeenCalledTimes(1);
+
+    // Rephrase must not re-run the quest activation.
+    vm.rephraseResponse(npcMessageId);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(acceptQuestStub).toHaveBeenCalledTimes(1);
+  });
+
+  test('C-490 AC-3: campaign VM retains branch data (not silently discarded)', () => {
+    const vm = createViewModel();
+    expect(vm.isCampaignPlay).toBe(true);
+
+    // Create branch data on the VM (the in-memory capability still exists).
+    vm.createBranch({ parentMessageId: vm.messages[0].id });
+
+    // The branch is retained — never silently discarded.
+    expect(vm.branches.length).toBe(1);
+    expect(vm.branches[0].parentMessageId).toBe(vm.messages[0].id);
+
+    // In campaign play the rewinding UI is gated: no branch action is offered.
+    expect(availableMessageActions({ sender: 'ai', disableRewind: true })).not.toContain('branch');
+    expect(availableMessageActions({ sender: 'user', disableRewind: true })).toEqual(['copy']);
   });
 });
