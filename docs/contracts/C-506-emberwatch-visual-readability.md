@@ -3,7 +3,7 @@ id: C-506
 title: "Emberwatch grounding, depth and navigation readability"
 source: direct
 contract_type: thin
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -97,4 +97,44 @@ See [status lifecycle](SHARED_SECTIONS.md#status-lifecycle).
 
 ## Execution Report
 
-Not implemented. Append actual AC evidence, changed paths, deviations and test outcomes after implementation. Do not prefill passing results.
+### Summary
+
+Implemented C-506's deterministically-verifiable core. AC-1's explicit missing test — the lossless output-encoding assertion that decodes the emitted atlas through a lossless WebP round-trip and proves visible art is byte-identical with transparency preserved — was added and passes. AC-2 depth consistency around tall objects (base-origin y-depth, overhead band, floors-below-feet, and the stop/reverse case) is pinned with new unit tests over the existing C-376/C-378 mechanisms. AC-4's diagnostic overlay now renders a walkability projection of the authoritative TerrainGrid cost (the same grid pathfinding reads), wired into the production `/game` debug grid, with a pure, unit-tested helper. AC-3 and AC-5 are governed by the existing C-378/C-417 visual suites (terrain/props/overhead/night/noon readability) and require `/game` captures at gameplay scale by the independent verifier.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Added the missing lossless output-encoding assertion (lossless WebP round-trip, visible art byte-identical, transparency preserved). Atlas alpha/extrusion already covered by C-504 tests; no baked substrate (transparent base fill). |
+| AC-2 | ✅ | New depth-consistency tests: base-origin y-depth sort, overhead-above-actor, floors/rugs below feet, stop/reverse monotonic z-order (no pop-through). Reuses C-376/C-378 mechanisms. |
+| AC-3 | ⚠️ | Movement-boundary readability is carried by the existing C-378 terrain/overhead visual suite; `/game` walk journey + walkability-overlay capture required by verifier. |
+| AC-4 | ✅ | Walkability overlay now projects the authoritative TerrainGrid cost (same source pathfinding consults) into the production debug grid; pure helper + unit tests. |
+| AC-5 | ⚠️ | Presentation coherence covered by C-417 noon/midnight readability visual suite; before/after captures + frame-time/resource observations remain for the verifier's `/game` smoke. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `packages/frontend/engine/src/rendering/walkability_overlay.ts` | Pure TerrainGrid→walkability-style projection for the AC-4 diagnostic overlay (no Pixi/ticker imports). |
+| `packages/frontend/engine/src/rendering/walkability_overlay.test.ts` | Unit tests proving the overlay reflects the authoritative cost grid. |
+| `packages/frontend/engine/src/rendering/depth_consistency.test.ts` | AC-2 depth/sort invariant tests (base-origin, overhead band, floors, stop/reverse). |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `scripts/src/lib/ops/generate_emberwatch_atlas.ts` | Export `encodePng` so the lossless round-trip can be tested end-to-end. |
+| `scripts/src/lib/ops/generate_emberwatch_atlas.test.ts` | Added C-506 AC-1 lossless output-encoding assertion (lossless WebP round-trip via sharp). |
+| `packages/frontend/engine/src/game_world.ts` | Store the active TerrainGrid; render the AC-4 walkability overlay in `_drawDebugGrid` when the grid is available (falls back to gridlines). |
+
+### Deviations from Spec
+
+None. All changes reuse existing presentation fields and render primitives; no new persisted fields or public schemas were introduced. No generated atlas assets were published (requires separate authorization). Contact shadows, wall faces and silhouettes remain visual art-direction work verified via the existing visual suites and the verifier's `/game` captures — not rebuilt in this pass.
+
+### Test Results
+
+- Unit: 8/8 atlas tests pass (incl. new C-506 AC-1 lossless); 4/4 walkability overlay; 4/4 depth consistency. Engine suite 1114 pass.
+- E2E: not run in this pass (no browser/VLM tooling available in environment).
+- Visual: Score — deferred to independent verifier `/game` captures.
+- Baseline: 2 pre-existing failures in `emberwatch_content_audit.test.ts` (atlas.json is a generated, uncommitted asset — identical on base commit); 0 new failures.
+
