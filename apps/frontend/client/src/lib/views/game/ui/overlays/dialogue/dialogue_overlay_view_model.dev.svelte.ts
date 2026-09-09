@@ -245,7 +245,9 @@ export class DialogueDevViewModel
   }
 
   constructor(options: DialogueDevViewModelOptions) {
-    super(options);
+    // C-490: the dev sandbox is NOT campaign play — keep transcript
+    // rewinding (branch/edit/delete) and the branch selector available.
+    super({ ...options, isCampaignPlay: false });
     this.diceOutcome = options.initialDiceOutcome ?? 'random';
     this.useMockAi = options.initialUseMockAi ?? true;
     this.mockNpcPreset = options.initialNpcPreset ?? 'sage';

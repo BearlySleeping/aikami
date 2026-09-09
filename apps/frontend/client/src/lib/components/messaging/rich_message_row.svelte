@@ -34,6 +34,13 @@ type Props = {
   isStreaming?: boolean;
   /** Whether this is the last message in the list. */
   isLast?: boolean;
+  /** Whether the dialogue variant offers Rephrase for this NPC message. */
+  showRephrase?: boolean;
+  /**
+   * C-490: when true (consequential campaign play), transcript-rewinding
+   * actions (branch/edit/delete) are not offered and retry reads "Rephrase".
+   */
+  disableTranscriptEditing?: boolean;
   /** Called when a message action is invoked (chat variant). */
   onAction?: (messageId: string, action: MessageAction) => void;
   /** Surface-specific extras rendered under this message. */
@@ -83,6 +90,8 @@ const {
   avatarUrl,
   isStreaming = false,
   isLast = false,
+  showRephrase = true,
+  disableTranscriptEditing = false,
   onAction,
   renderFooter,
   variant = 'chat',
@@ -275,16 +284,18 @@ const handleSwipeRight = () => {
           >
             📋
           </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Retry"
-            aria-label="Retry"
-            disabled={isStreaming}
-            onclick={() => onAction?.(message.id, 'retry')}
-          >
-            🔄
-          </button>
+          {#if showRephrase}
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs px-1"
+              title="Rephrase"
+              aria-label="Rephrase"
+              disabled={isStreaming}
+              onclick={() => onAction?.(message.id, 'retry')}
+            >
+              🔄
+            </button>
+          {/if}
           {#if ttsAvailable}
             <button
               type="button"
@@ -296,15 +307,17 @@ const handleSwipeRight = () => {
               🔊
             </button>
           {/if}
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Branch"
-            aria-label="Branch"
-            onclick={() => onAction?.(message.id, 'branch')}
-          >
-            🌿
-          </button>
+          {#if !disableTranscriptEditing}
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs px-1"
+              title="Branch"
+              aria-label="Branch"
+              onclick={() => onAction?.(message.id, 'branch')}
+            >
+              🌿
+            </button>
+          {/if}
         {:else}
           <button
             type="button"
@@ -315,35 +328,37 @@ const handleSwipeRight = () => {
           >
             📋
           </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Edit"
-            aria-label="Edit"
-            disabled={isStreaming}
-            onclick={() => onAction?.(message.id, 'edit')}
-          >
-            ✏️
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Delete"
-            aria-label="Delete"
-            disabled={isStreaming}
-            onclick={() => onAction?.(message.id, 'delete')}
-          >
-            🗑️
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Branch"
-            aria-label="Branch"
-            onclick={() => onAction?.(message.id, 'branch')}
-          >
-            🌿
-          </button>
+          {#if !disableTranscriptEditing}
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs px-1"
+              title="Edit"
+              aria-label="Edit"
+              disabled={isStreaming}
+              onclick={() => onAction?.(message.id, 'edit')}
+            >
+              ✏️
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs px-1"
+              title="Delete"
+              aria-label="Delete"
+              disabled={isStreaming}
+              onclick={() => onAction?.(message.id, 'delete')}
+            >
+              🗑️
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs px-1"
+              title="Branch"
+              aria-label="Branch"
+              onclick={() => onAction?.(message.id, 'branch')}
+            >
+              🌿
+            </button>
+          {/if}
         {/if}
       </div>
 

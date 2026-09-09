@@ -291,6 +291,14 @@ export class GamePage {
     return this.page.locator('[data-testid="dialogue-overlay"] .chat-start').last();
   }
 
+  /** Hover the first NPC message bubble to reveal its action controls. */
+  async hoverNpcMessageActions(): Promise<void> {
+    const npcBubble = this.page
+      .locator('[data-testid="dialogue-overlay"] .rounded-bl-md.bg-base-100')
+      .first();
+    await npcBubble.hover();
+  }
+
   // ── Declared-DC dice overlay (C-487) ──────────────────────────
 
   /** The declared-DC dice overlay panel (GameDice). */

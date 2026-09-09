@@ -72,19 +72,28 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       void viewModel.copyMessage(msg.content);
       break;
     case 'retry':
-      viewModel.regenerateResponse(messageId);
+      // C-490: campaign retry is presentation-only "Rephrase" — never
+      // re-runs NpcStateDelta / quest / command mutations.
+      viewModel.rephraseResponse(messageId);
       break;
     case 'speak':
       viewModel.speakMessage(msg.content);
       break;
     case 'branch':
-      viewModel.createBranch({ parentMessageId: messageId });
-      break;
     case 'edit':
-      viewModel.startEdit(messageId);
-      break;
     case 'delete':
-      viewModel.deleteMessage(messageId);
+      // C-490: transcript-rewinding is gated out in campaign play — the
+      // controls are hidden, and this guard is defense-in-depth.
+      if (viewModel.isCampaignPlay) {
+        return;
+      }
+      if (action === 'branch') {
+        viewModel.createBranch({ parentMessageId: messageId });
+      } else if (action === 'edit') {
+        viewModel.startEdit(messageId);
+      } else {
+        viewModel.deleteMessage(messageId);
+      }
       break;
   }
 };
@@ -251,11 +260,13 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           isPartyMate={original?.senderName != null && original?.senderName !== viewModel.npcName}
           editing={viewModel.editingMessageId === message.id}
           editText={viewModel.editText}
+          disableTranscriptEditing={viewModel.isCampaignPlay}
           onEditChange={(t) => viewModel.setEditText(t)}
           onEditSave={(id) => viewModel.editMessage({ messageId: id, newText: viewModel.editText })}
           onEditCancel={() => viewModel.cancelEdit()}
           isStreaming={viewModel.isStreaming}
           isLast={index === viewModel.messages.length - 1}
+          showRephrase={viewModel.canRephraseMessage(message.id)}
           streamingText={viewModel.streamingText}
           isResolvingSkillCheck={viewModel.isResolvingSkillCheck}
           alternativeLabel={original?.alternativeLabel ?? ''}
@@ -355,8 +366,8 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </div>
         {/if}
 
-        <!-- Branch selector -->
-        {#if viewModel.branches.length > 0}
+        <!-- Branch selector (C-490: hidden in campaign play — rewinding is gated) -->
+        {#if viewModel.showBranchSelector}
           <div class="border-t border-base-content/10 px-3 py-1">
             <div class="flex items-center gap-1 text-xs">
               <span class="text-base-content/50">Branch:</span>

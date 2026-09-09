@@ -172,6 +172,14 @@ export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
    * Contract: C-157 Dialogue Skill Checks
    */
   onStartCombat?: (npcData: DialogueNpcData) => void;
+  /**
+   * Whether this dialogue is part of consequential campaign play (the
+   * production `/game` overlay). When true, transcript-rewinding controls
+   * (branch/edit/delete) are gated out and retry is presented honestly as
+   * "Rephrase" (C-490). The dev sandbox and non-campaign chat modes keep
+   * them. Defaults to `true` (the production overlay is always campaign).
+   */
+  isCampaignPlay?: boolean;
 };
 
 export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
@@ -412,6 +420,18 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Regenerates the NPC response for the given message (stores current as alternative). */
   regenerateResponse(messageId: string): void;
 
+  /**
+   * C-490: Regenerates an NPC reply as a presentation-only "Rephrase". Unlike
+   * `regenerateResponse`, this path never re-applies state mutations
+   * (NpcStateDelta / quest activation / dialogue commands) — the world is not
+   * rewound along with the transcript. The previous text is stored as an
+   * alternative for swipe recovery.
+   */
+  rephraseResponse(messageId: string): void;
+
+  /** Whether the given message is the terminal NPC response eligible for rephrasing. */
+  canRephraseMessage(messageId: string): boolean;
+
   /** Replaces a user message's text and re-generates NPC responses from that point. */
   editMessage(options: { messageId: string; newText: string }): void;
 
@@ -445,8 +465,18 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Available conversation branches. */
   readonly branches: readonly ConversationBranch[];
 
+  /** Whether the non-campaign branch selector should be rendered. */
+  readonly showBranchSelector: boolean;
+
   /** The currently active branch ID, or null if on the main branch. */
   readonly activeBranchId: string | null;
+
+  /**
+   * Whether this dialogue is consequential campaign play. Gates the
+   * transcript-rewinding controls (branch/edit/delete) and relabels retry as
+   * "Rephrase" (C-490). False in the dev sandbox and non-campaign chat modes.
+   */
+  readonly isCampaignPlay: boolean;
 
   /** The ID of the message currently being edited, or null. */
   readonly editingMessageId: string | null;
@@ -618,11 +648,23 @@ class DialogueOverlayViewModel
   /** Current address mode for dialogue prompt routing. */
   addressMode = $state<DialogueAddressMode>('scene');
 
+  /**
+   * Whether this dialogue is consequential campaign play. Gates transcript
+   * rewinding (branch/edit/delete) and relabels retry as "Rephrase" (C-490).
+   * Defaults to true for the production overlay; the dev sandbox sets false.
+   */
+  readonly isCampaignPlay: boolean;
+
   /** Available conversation branches (in-memory). */
   branches = $state<ConversationBranch[]>([]);
 
   /** The currently active branch ID, or null if on the main branch. */
   activeBranchId = $state<string | null>(null);
+
+  /** @inheritdoc */
+  get showBranchSelector(): boolean {
+    return this.branches.length > 0 && !this.isCampaignPlay;
+  }
 
   /** Snapshot of the base (main) conversation — preserved for branch restore. */
   private _baseMessages: DialogueMessage[] = [];
@@ -1008,6 +1050,7 @@ class DialogueOverlayViewModel
     this._npcDialogueService = options.npcDialogueService;
     this._playerStateService = options.playerStateService ?? playerStateService;
     this._imageProviderAvailable = options.imageProviderAvailable ?? true;
+    this.isCampaignPlay = options.isCampaignPlay ?? true;
 
     // Restore per-chat input draft from IndexedDB (fire-and-forget)
     const draftPromise = draftStore.loadDraft({ chatId: this._npcData.npcId });
@@ -1737,7 +1780,12 @@ class DialogueOverlayViewModel
    * C-401: the pre-roll narrative streams into a placeholder before the dice
    * prompt appears (AC-2); abort removes the placeholder (AC-3).
    */
-  private async _sendWithIntentAnalysis(_content: string, npcMessageId?: string): Promise<void> {
+  private async _sendWithIntentAnalysis(
+    _content: string,
+    npcMessageId?: string,
+    options?: { applyState?: boolean },
+  ): Promise<void> {
+    const applyState = options?.applyState ?? true;
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
     this.streamError = null;
@@ -1789,7 +1837,10 @@ class DialogueOverlayViewModel
       void this._detectExpression(narrative);
 
       // Execute the GM's quest-activation tool call (accept/decline), if any.
-      this._applyQuestActivation(analysis.questActivation);
+      // C-490: the rephrase path (applyState=false) skips quest/state mutation.
+      if (applyState) {
+        this._applyQuestActivation(analysis.questActivation);
+      }
 
       // Show suggestion chips
       this.suggestedChips = analysis.suggestedChips;
@@ -1803,7 +1854,7 @@ class DialogueOverlayViewModel
         this.streamError = this._formatTimeoutError();
       }
 
-      if (analysis.requiresRoll && analysis.checkType && analysis.difficultyClass) {
+      if (applyState && analysis.requiresRoll && analysis.checkType && analysis.difficultyClass) {
         // ── Roll needed: enter DECLARED_DC → DICE flow ──────────────
         // C-487: the modifier is computed from the real character sheet, not
         // the model's `modifierSource` (a label hint only). The breakdown and
@@ -1824,7 +1875,8 @@ class DialogueOverlayViewModel
         };
         this.dialoguePhase = 'DECLARED_DC';
       } else {
-        // ── No roll needed: stay in FREE_TEXT ────────────────────────
+        // ── No roll or presentation-only rephrase: stay in FREE_TEXT ────────
+        this.skillCheckState = null;
         this.dialoguePhase = 'FREE_TEXT';
       }
       succeeded = true;
@@ -2055,6 +2107,66 @@ class DialogueOverlayViewModel
   }
 
   /** @inheritdoc */
+  rephraseResponse(messageId: string): void {
+    this.debug('rephraseResponse', { messageId });
+
+    if (!this.canRephraseMessage(messageId)) {
+      return;
+    }
+
+    // Find the terminal NPC message in the array
+    const messageIndex = this.messages.findIndex((m) => m.id === messageId);
+    if (messageIndex === -1) {
+      return;
+    }
+
+    const currentText = this.messages[messageIndex].content;
+
+    // Find the last player message before this NPC message (what triggered it)
+    const lastPlayerMsg = this.messages
+      .slice(0, messageIndex)
+      .reverse()
+      .find((m) => m.role === 'player');
+
+    // Generate replacement message ID before removing the old message
+    const replacementMessageId = crypto.randomUUID();
+
+    // Remove this NPC message and everything after it, then regenerate
+    this.messages = this.messages.slice(0, messageIndex);
+
+    // Store the current text as an alternative under the replacement ID
+    messageBranchStore.addAlternative({
+      messageId: replacementMessageId,
+      currentText,
+      newText: '',
+    });
+
+    // C-490: rephrase is presentation-only — never re-apply NpcStateDelta,
+    // quest activation, or dialogue commands (the world is not rewound).
+    if (this._npcDialogueService.useFreeTextFirst && lastPlayerMsg) {
+      void this._sendWithIntentAnalysis(lastPlayerMsg.content, replacementMessageId, {
+        applyState: false,
+      });
+    } else {
+      void this._delegateGenerateResponse({
+        npcMessageId: replacementMessageId,
+        applyState: false,
+      });
+    }
+  }
+
+  /** @inheritdoc */
+  canRephraseMessage(messageId: string): boolean {
+    const terminalMessage = this.messages.at(-1);
+    return (
+      !this.isStreaming &&
+      terminalMessage?.id === messageId &&
+      terminalMessage.role === 'npc' &&
+      terminalMessage.content.length > 0
+    );
+  }
+
+  /** @inheritdoc */
   editMessage(options: { messageId: string; newText: string }): void {
     const { messageId, newText } = options;
     this.debug('editMessage', { messageId });
@@ -2237,7 +2349,12 @@ class DialogueOverlayViewModel
    * placeholder entirely (no partial turn persists, AC-3); a timeout
    * surfaces an actionable error while the authored fallback is offered (AC-4).
    */
-  private async _delegateGenerateResponse(options?: { npcMessageId?: string }): Promise<void> {
+  private async _delegateGenerateResponse(options?: {
+    npcMessageId?: string;
+    /** C-490: when false (rephrase), skip dialogue-command state mutations. */
+    applyState?: boolean;
+  }): Promise<void> {
+    const applyState = options?.applyState ?? true;
     this.isStreaming = true;
     this.streamError = null;
     this._resetStreaming();
@@ -2299,8 +2416,14 @@ class DialogueOverlayViewModel
         this.streamError = this._formatTimeoutError();
       }
 
-      // Execute any command from the turn, guarding against re-execution
-      if (turn.command && !this._npcDialogueService.wasCommandExecuted(npcMessageId)) {
+      // Execute any command from the turn, guarding against re-execution.
+      // C-490: the rephrase path (applyState=false) never re-runs a dialogue
+      // command / NpcStateDelta — presentation only.
+      if (
+        applyState &&
+        turn.command &&
+        !this._npcDialogueService.wasCommandExecuted(npcMessageId)
+      ) {
         // C-340: Show recruit button instead of auto-executing
         if (turn.command.kind === 'recruit') {
           this.recruitAvailable = true;

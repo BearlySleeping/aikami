@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, type Mock, mock, test } from '
 import { SKILL_CHECK_STAKES } from '@aikami/constants';
 import type { GameCharacterSheet } from '@aikami/types';
 import { computeModifier, createDefaultSheet } from '@aikami/utils';
+import { availableMessageActions } from '../../../../../components/chat/message_actions';
 import type { NpcDialogueServiceInterface } from '$services';
 
 type AnalyzeIntentOptions = Parameters<NpcDialogueServiceInterface['analyzeIntent']>[0];
@@ -101,7 +102,7 @@ const mockQuestStateService = {
   evaluateTriggers: mock(() => {}),
 };
 
-const resolveRollStub = mock(async () => ({
+let resolveRollStub = mock(async () => ({
   narrativeResult: 'The attempt succeeds.',
   stateDeltas: [],
   suggestedChips: [],
@@ -239,6 +240,7 @@ const createNpcData = (overrides?: Partial<DialogueOverlayViewModelOptions['npcD
 const createViewModel = (options?: {
   npcData?: ReturnType<typeof createNpcData>;
   onEndChat?: () => void;
+  isCampaignPlay?: boolean;
   useFreeTextFirst?: boolean;
   imageProviderAvailable?: boolean;
 }): DialogueOverlayViewModelInterface => {
@@ -248,6 +250,7 @@ const createViewModel = (options?: {
     npcData: options?.npcData ?? createNpcData(),
     onEndChat: options?.onEndChat ?? (() => {}),
     npcDialogueService: mockNpcDialogueService,
+    isCampaignPlay: options?.isCampaignPlay,
     imageProviderAvailable: options?.imageProviderAvailable,
   });
 };
@@ -272,6 +275,12 @@ describe('DialogueOverlayViewModel', () => {
     mockNpcDialogueService.generateTurn = generateTurnStub;
     analyzeIntentStub = mock(defaultAnalyzeIntent);
     mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+    resolveRollStub = mock(async () => ({
+      narrativeResult: 'The attempt succeeds.',
+      stateDeltas: [],
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.resolveRoll = resolveRollStub;
 
     // Reset quest-activation stubs
     acceptQuestStub = mock(() => true);
@@ -868,6 +877,126 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.toastMessage.length).toBeGreaterThan(0);
   });
 
+  // ── C-490 Transcript branching must not imply rewinding the world ───────
+
+  test('C-490: isCampaignPlay defaults to true for the production overlay', () => {
+    const vm = createViewModel();
+    expect(vm.isCampaignPlay).toBe(true);
+    expect(vm.showBranchSelector).toBe(false);
+  });
+
+  test('C-490: isCampaignPlay can be disabled (dev sandbox / non-campaign chat)', () => {
+    const vm = createViewModel({ isCampaignPlay: false });
+    expect(vm.isCampaignPlay).toBe(false);
+    expect(vm.showBranchSelector).toBe(false);
+
+    vm.createBranch({ parentMessageId: vm.messages[0].id });
+    expect(vm.showBranchSelector).toBe(true);
+  });
+
+  test('C-490 AC-2: rephrase rejects NPC messages before the terminal response', async () => {
+    const vm = createViewModel();
+    const greetingId = vm.messages[0].id;
+
+    vm.inputText = 'Tell me about the ward.';
+    await vm.sendMessage();
+    const messageIds = vm.messages.map((message) => message.id);
+    const analyzeCallCount = analyzeIntentStub.mock.calls.length;
+
+    expect(vm.canRephraseMessage(greetingId)).toBe(false);
+    expect(vm.canRephraseMessage(vm.messages.at(-1)?.id ?? '')).toBe(true);
+
+    vm.rephraseResponse(greetingId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(vm.messages.map((message) => message.id)).toEqual(messageIds);
+    expect(analyzeIntentStub).toHaveBeenCalledTimes(analyzeCallCount);
+  });
+
+  test('C-490 AC-2: rephrase performs no quest-activation state mutation', async () => {
+    // The intent would normally accept a quest — but the rephrase path must
+    // never apply NpcStateDelta / quest mutations.
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'A rephrased reply.',
+      suggestedChips: [],
+      questActivation: { action: 'accept', questId: 'fading_ward' },
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+    acceptQuestStub = mock(() => true);
+    mockQuestStateService.acceptQuest = acceptQuestStub;
+    getOfferableQuestsStub = mock(() => [{ id: 'fading_ward', name: 'The Fading Ward' }]);
+    mockQuestStateService.getOfferableQuests = getOfferableQuestsStub;
+
+    const vm = createViewModel();
+    // Build a player → NPC exchange so rephrase has an NPC message to target.
+    vm.inputText = 'I accept the quest, elder.';
+    await vm.sendMessage();
+    const npcMessageId = vm.messages[vm.messages.length - 1].id;
+
+    // Sanity: the initial send DID accept the quest.
+    expect(acceptQuestStub).toHaveBeenCalledTimes(1);
+
+    // Rephrase must not re-run the quest activation.
+    vm.rephraseResponse(npcMessageId);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(acceptQuestStub).toHaveBeenCalledTimes(1);
+  });
+
+  test('C-490 AC-2: rephrase ignores roll requests and preserves FREE_TEXT', async () => {
+    const vm = createViewModel();
+    vm.inputText = 'What do you know about the ward?';
+    await vm.sendMessage();
+    const npcMessageId = vm.messages.at(-1)?.id ?? '';
+
+    analyzeIntentStub = mock(async () => ({
+      requiresRoll: true,
+      checkType: 'Persuasion',
+      difficultyClass: 12,
+      modifierSource: 'CHA',
+      npcResponse: 'The elder phrases the answer differently.',
+      suggestedChips: [],
+    }));
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    vm.rephraseResponse(npcMessageId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(vm.dialoguePhase).toBe('FREE_TEXT');
+    expect(vm.skillCheckState).toBeNull();
+    await vm.rollDice();
+    expect(resolveRollStub).not.toHaveBeenCalled();
+  });
+
+  test('C-490 AC-3: branch data is never persisted to saves; campaign gating retains in-memory branch state read-only', () => {
+    // AC-3 Verification asks how already-persisted branch data loads without
+    // crash or silent loss. Verified fact: dialogue transcript and branch data
+    // are NOT persisted to saves — `branches`/`activeBranchId` are in-memory,
+    // session-scoped state (cleared on overlay close per C-343); only input
+    // drafts persist to IndexedDB. So a "fixture save containing branch data"
+    // cannot occur in the current save format — this scenario is N/A.
+    const vm = createViewModel();
+    expect(vm.isCampaignPlay).toBe(true);
+
+    // A freshly created VM (as after any save load — no branch fields exist)
+    // must start with no branch data: nothing is silently dropped or recovered.
+    expect(vm.branches).toEqual([]);
+    expect(vm.activeBranchId).toBeNull();
+
+    // Defense-in-depth: if in-memory branch state ever exists in a campaign
+    // overlay, it is RETAINED (never silently discarded) but rendered read-only
+    // behind the gated UI (branch selector + branch/edit/delete actions hidden).
+    vm.createBranch({ parentMessageId: vm.messages[0].id });
+    expect(vm.branches.length).toBe(1);
+    expect(vm.branches[0].parentMessageId).toBe(vm.messages[0].id);
+
+    // In campaign play the rewinding UI is gated: no branch action is offered.
+    expect(availableMessageActions({ sender: 'ai', disableRewind: true })).not.toContain('branch');
+    expect(availableMessageActions({ sender: 'user', disableRewind: true })).toEqual(['copy']);
+  });
   // ── C-501 Slash Commands ────────────────────────────────────────────
 
   test('AC-1: /generate produces an inline image and never reaches the NPC', async () => {
