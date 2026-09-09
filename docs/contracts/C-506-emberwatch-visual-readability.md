@@ -3,7 +3,7 @@ id: C-506
 title: "Emberwatch grounding, depth and navigation readability"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | thin |
 | **Priority** | P2 — make the playable space readable without debug overlays |
 | **Dependencies** | C-505 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal — visual baseline and art-direction notes |
 | **Contract version** | 2.0.0 |
@@ -51,7 +51,7 @@ A player can recognize solid obstacles, passages and interactable props, and can
 ### AC-1: Objects are grounded without baked substrate
 **Given** the well, board, barrels, crates and indoor furniture, **when** viewed over grass, dirt and indoor flooring in the real scene, **then** no grass/floor-colored rectangles surround them. Contact shadows use a consistent light direction/softness appropriate to the pixel style, follow base origins, and do not darken unrelated UI or alter collision.
 
-**Verification**: `/game` captures of the village/inn/shop plus controlled background comparisons through the production renderer; inspect real alpha and silhouette, not only a VLM score. Add generator tests for `scripts/src/lib/ops/generate_emberwatch_atlas.ts`: unpainted prop/decor pixels are transparent, terrain stays opaque, padding/extrusion preserves RGBA and output encoding is lossless. Preserve frame names, rectangles, spacing/margins and GIDs; never globally erase green/brown pixels. Do not publish generated assets without separate authorization.
+**Verification**: `/game` captures of the village/inn/shop plus controlled background comparisons through the production renderer; inspect real alpha and silhouette, not only a VLM score. Extend the existing C-504 generator tests in `scripts/src/lib/ops/generate_emberwatch_atlas.test.ts` (terrain opaque / prop-decor transparent / 1px extrusion preserves RGBA already covered there) with the missing lossless output-encoding assertion (decode the emitted `atlas.webp` and compare RGBA, or otherwise prove losslessness); do not duplicate the already-covered alpha/extrusion cases. Preserve frame names, rectangles, spacing/margins and GIDs; never globally erase green/brown pixels. Do not publish generated assets without separate authorization.
 
 ### AC-2: Depth behaves consistently around tall objects
 **Given** a character passing in front of and behind supported props/upper passes, **when** walking through those positions, **then** base-origin depth and explicit overhead behavior are correct, without pop-through or duplicate passes. Floors/rugs stay below feet; roofs/canopies do not accidentally become solid just because they draw above an actor.
