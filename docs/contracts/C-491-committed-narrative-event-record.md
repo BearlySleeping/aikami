@@ -3,7 +3,7 @@ id: C-491
 title: "Committed narrative event record"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-08T00:00:00Z"
 ---
@@ -354,3 +354,51 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Introduced the append-only committed narrative event record: a TypeBox schema + derived types in `packages/shared`, a `narrative_event_service` singleton registered with the serializable-service registry, and three recording seams (dialogue `_resolveRoll`, quest `_completeQuest`, promise `recordPromise`). The quest journal now derives its identity/timing from the committed `QuestResolved` event instead of authoring a parallel copy. Events carry witnesses, an information category (world_fact / character_belief / dialogue_claim), and round-trip through save/load with old-save `reset()` fallback. Deferred to C-492/C-494: retrieval/ranking, knowledge propagation, companion reactions.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Exactly one event per dialogue resolution via `_recordDialogueEvent`; kind-priority (ItemTransferred→RelationshipChanged→WorldFlagChanged), ThreatWitnessed on Intimidation success, rejected-only records nothing; deltas ride `deltasApplied` |
+| AC-2 | ✅ | `record()` dedupes `[actorId, ...witnesses]`, always non-empty, throws when empty; `witnessedBy()` added |
+| AC-3 | ✅ | Three information kinds distinguishable; `record()` throws when character_belief/dialogue_claim lack claimantId; schema round-trips |
+| AC-4 | ✅ | `serialize`/`hydrate` preserve order/sequence/witnesses/nextSequence; `reset()` gives old saves an empty record |
+| AC-5 | ✅ | `_completeQuest` records one `QuestResolved`; journal `questId`/`timestamp` derive from the event, authored fields from the definition |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/game/narrative_event.ts` | CommittedNarrativeEvent / NarrativeEventKind / NarrativeEventRecord TypeBox schemas |
+| `packages/shared/types/src/lib/game/narrative_event.ts` | Derived type re-exports from @aikami/schemas |
+| `packages/shared/schemas/src/lib/game/narrative_event.test.ts` | Schema tests: closed kind set, three info kinds, witness/campaignId requirements (AC-3) |
+| `apps/frontend/client/src/lib/services/game/narrative_event_service.svelte.ts` | Event record service: `record`/`witnessedBy`/`serialize`/`hydrate`/`reset`, registered as `narrativeEvents` |
+| `apps/frontend/client/src/lib/services/game/narrative_event_service.test.ts` | Service tests: witnesses (AC-2), info categories (AC-3), round-trip + reset (AC-4) |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | Export `narrative_event.ts` |
+| `packages/shared/types/src/index.ts` | Export `narrative_event.ts` |
+| `apps/frontend/client/src/lib/services/index.ts` | Export `narrative_event_service.svelte.ts` |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | `_resolveRoll` records exactly one event via new `_recordDialogueEvent` (AC-1); imports `$services` campaign/narrative/awareness |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | Added AC-1 tests (ItemTransferred, WorldFlagChanged, rejected-only, ThreatWitnessed) |
+| `apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts` | `_completeQuest` records `QuestResolved`; `_createJournalEntry` derives identity/timing from the event (AC-5) |
+| `apps/frontend/client/src/lib/services/game/quest_state_service.test.ts` | Added AC-5 test; import `afterEach` |
+| `apps/frontend/client/src/lib/services/game/relationship_service.svelte.ts` | `recordPromise` commits a `PromiseMade` event (actor always a witness) |
+| `apps/frontend/client/src/lib/services/game/relationship_service.test.ts` | Added PromiseMade event test |
+| `apps/frontend/client/src/lib/services/game/game_save_service.test.ts` | Added AC-4 old-save reset test |
+| `apps/frontend/client/src/lib/test_preload.ts` | Added `narrativeEventService`/`npcAwarenessService` barrel stubs; `campaignService.activeCampaign` default |
+| `apps/frontend/client/src/lib/services/npc/autonomous_message_group.test.ts` | Added `campaignService` to partial `$services` mock (satisfies relationship_service dependency) |
+
+### Deviations from Spec
+None. ACs implemented as specified. The `recordPromise` signature gained optional `campaignId`/`actorId` (defaulting to the active campaign and the target NPC respectively) since it had no production callers and needed a campaign source — compatible with the existing tests.
+
+### Test Results
+- Unit: schemas 13/13, narrative_event_service 12/12, quest_state 68/68, npc_dialogue 67/67, game_save+relationship 60/60, game-services dir 522/523 (1 skip), npc/campaign 94/94, full client suite 2389/2395 (6 pre-existing environment failures in npc_avatar_catalog + AudioTrackCatalog, confirmed identical on base via git stash)
+- E2E: N/A (all AC E2E/Visual marked N/A — internal, unit-tested contract)
+- Visual: N/A
+- Baseline: 0 new failures introduced
