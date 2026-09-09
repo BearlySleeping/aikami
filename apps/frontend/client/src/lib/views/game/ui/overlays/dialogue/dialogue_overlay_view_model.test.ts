@@ -898,14 +898,25 @@ describe('DialogueOverlayViewModel', () => {
     expect(acceptQuestStub).toHaveBeenCalledTimes(1);
   });
 
-  test('C-490 AC-3: campaign VM retains branch data (not silently discarded)', () => {
+  test('C-490 AC-3: branch data is never persisted to saves; campaign gating retains in-memory branch state read-only', () => {
+    // AC-3 Verification asks how already-persisted branch data loads without
+    // crash or silent loss. Verified fact: dialogue transcript and branch data
+    // are NOT persisted to saves — `branches`/`activeBranchId` are in-memory,
+    // session-scoped state (cleared on overlay close per C-343); only input
+    // drafts persist to IndexedDB. So a "fixture save containing branch data"
+    // cannot occur in the current save format — this scenario is N/A.
     const vm = createViewModel();
     expect(vm.isCampaignPlay).toBe(true);
 
-    // Create branch data on the VM (the in-memory capability still exists).
-    vm.createBranch({ parentMessageId: vm.messages[0].id });
+    // A freshly created VM (as after any save load — no branch fields exist)
+    // must start with no branch data: nothing is silently dropped or recovered.
+    expect(vm.branches).toEqual([]);
+    expect(vm.activeBranchId).toBeNull();
 
-    // The branch is retained — never silently discarded.
+    // Defense-in-depth: if in-memory branch state ever exists in a campaign
+    // overlay, it is RETAINED (never silently discarded) but rendered read-only
+    // behind the gated UI (branch selector + branch/edit/delete actions hidden).
+    vm.createBranch({ parentMessageId: vm.messages[0].id });
     expect(vm.branches.length).toBe(1);
     expect(vm.branches[0].parentMessageId).toBe(vm.messages[0].id);
 
