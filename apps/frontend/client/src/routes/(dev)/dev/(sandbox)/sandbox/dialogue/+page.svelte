@@ -145,6 +145,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
     _className: 'DevMockNpcDialogueService',
     dispose: async () => {},
     activeNpc: undefined,
+    lastRecalledFacts: [] as string[],
     startDialogue: () => {},
     endDialogue: () => {},
     generateTurn: async (opts: { onChunk?: (text: string) => void; signal?: AbortSignal }) => {

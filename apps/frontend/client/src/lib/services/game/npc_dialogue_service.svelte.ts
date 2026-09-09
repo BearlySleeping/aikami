@@ -274,6 +274,13 @@ type TurnContext = {
 // ---------------------------------------------------------------------------
 
 export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
+  /**
+   * Witness-scoped facts recalled for the most recent turn (C-492). Exposed
+   * so the dialogue overlay can surface them to tests/E2E without altering
+   * production behaviour.
+   */
+  readonly lastRecalledFacts: string[];
+
   /** The currently active NPC being conversed with, if any. */
   readonly activeNpc:
     | {
@@ -517,6 +524,18 @@ export class NpcDialogueService
 
   /** Active generation AbortController — only one live at a time. */
   private _activeAbortController: AbortController | null = null;
+
+  /**
+   * The witness-scoped facts recalled for the most recent turn (C-492).
+   * Exposed so the dialogue overlay can surface them to tests/E2E without
+   * altering production behaviour.
+   */
+  private _lastRecalledFacts = $state<string[]>([]);
+
+  /** @inheritdoc */
+  get lastRecalledFacts(): string[] {
+    return this._lastRecalledFacts;
+  }
 
   /** The currently active NPC, if any. */
   private _activeNpc:
@@ -1457,6 +1476,7 @@ export class NpcDialogueService
       const lastPlayer = [...messages].reverse().find((m) => m.role === 'player');
       const queryText = lastPlayer?.content ?? '';
       if (queryText.length === 0) {
+        this._lastRecalledFacts = [];
         return [];
       }
       const results = await memoryRetrievalService.retrieveForNpc({
@@ -1464,9 +1484,12 @@ export class NpcDialogueService
         text: queryText,
         limit: NPC_RECALL_MAX_RESULTS,
       });
-      return results.map((r) => r.content);
+      const facts = results.map((r) => r.content);
+      this._lastRecalledFacts = facts;
+      return facts;
     } catch (err) {
       this.warn('dialogue:recall-failed', { npcId, error: String(err) });
+      this._lastRecalledFacts = [];
       return [];
     }
   }

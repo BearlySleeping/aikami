@@ -1,15 +1,19 @@
 // apps/frontend/client/src/lib/services/memory/memory_retrieval_service.svelte.ts
 //
 // Memory & lore retrieval service. Provides a unified query interface
-// across lorebook entries and session summaries using local embeddings for
-// semantic matching.
+// across lorebook entries, session summaries, and C-491 committed narrative
+// events using deterministic keyword-overlap retrieval (C-492 resolves the
+// retrieval fork toward keyword retrieval — see local_embedding_backend.ts).
 //
 // This service:
 //   1. Indexes lorebook entries (supplementing keyword_scanner.ts exact-match)
 //   2. Indexes session summaries (making them queryable by topic)
-//   3. Runs background indexing on campaign load without blocking boot
+//   3. Indexes committed narrative events with attribution-aware content
+//   4. Exposes witness-scoped NPC recall (`retrieveForNpc`)
+//   5. Runs background indexing on campaign load without blocking boot
 //
-// Contract: C-458 In-House Memory & Lore Retrieval System
+// Contract: C-458 In-House Memory & Lore Retrieval System; C-492 memory
+// retrieval correctness and production wiring
 
 import {
   DEFAULT_MAX_RESULTS,
@@ -49,15 +53,15 @@ export type MemoryRetrievalServiceInterface = BaseFrontendClassInterface & {
   /** Whether a background indexing pass is in progress. */
   readonly isIndexing: boolean;
 
-  /** Whether semantic retrieval is enabled (settings toggle). */
+  /** Whether keyword retrieval is enabled (settings toggle). */
   readonly enabled: boolean;
 
-  /** Enable or disable semantic retrieval. */
+  /** Enable or disable keyword retrieval. */
   setEnabled(value: boolean): void;
 
   /**
-   * Initialise the service. Must be called before query().
-   * Loads the embedding model lazily on first use.
+   * Initialise the service. Must be called before query(). With keyword
+   * retrieval there is no model to load — init marks the index ready.
    */
   init(): Promise<void>;
 
