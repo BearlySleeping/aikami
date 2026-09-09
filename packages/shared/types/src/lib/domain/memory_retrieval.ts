@@ -88,3 +88,21 @@ export type MemorySourceType = MemoryIndexable['sourceType'];
 
 /** Public source groupings available to memory retrieval queries. */
 export type MemoryQueryScope = NonNullable<MemoryQuery['scope']>;
+
+// ---------------------------------------------------------------------------
+// NPC recall — the witness-scoped retrieval surface
+// ---------------------------------------------------------------------------
+
+/**
+ * Query shape for `retrieveForNpc` — witness-scoped recall for a single NPC.
+ * Draws only from narrative events the NPC witnessed plus shared lore; the
+ * player's private session summary is never reachable through this surface.
+ */
+export type NpcMemoryRecallQuery = {
+  /** The NPC whose knowledge scope we query. */
+  npcId: string;
+  /** Free-text query (player message or current scene context). */
+  text: string;
+  /** Maximum results to return — defaults to NPC_RECALL_MAX_RESULTS. */
+  limit?: number;
+};

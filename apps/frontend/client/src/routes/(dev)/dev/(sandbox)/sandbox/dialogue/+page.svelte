@@ -145,6 +145,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
     _className: 'DevMockNpcDialogueService',
     dispose: async () => {},
     activeNpc: undefined,
+    lastRecalledFacts: [] as string[],
     startDialogue: () => {},
     endDialogue: () => {},
     generateTurn: async (opts: { onChunk?: (text: string) => void; signal?: AbortSignal }) => {
@@ -169,6 +170,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       persona: 'You are a dev sandbox NPC.',
       npcName: 'Elder Thrain',
       memory: [],
+      recalledFacts: [],
       gameStateFacts: [],
       relationshipFacts: [],
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],

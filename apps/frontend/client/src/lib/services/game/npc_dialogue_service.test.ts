@@ -9,9 +9,15 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { NPC_RECALL_MAX_RESULTS } from '@aikami/constants';
 import type { NpcRollResolutionOutput, NpcStateDelta } from '@aikami/types';
 import { encode } from 'gpt-tokenizer';
-import { campaignService, narrativeEventService, relationshipService } from '$services';
+import {
+  campaignService,
+  memoryRetrievalService,
+  narrativeEventService,
+  relationshipService,
+} from '$services';
 import type { ConsequenceRequest, ConsequenceResult } from '$types';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
@@ -1695,6 +1701,118 @@ describe('C-488 AC-6: prompt budget (cl100k_base)', () => {
       );
       expect(rollBefore, `${npcId} resolveRoll before count`).toBeLessThanOrEqual(TOKEN_BUDGET);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-492 AC-5: the [MEMORY] recall section respects C-488's budget ceiling
+// ---------------------------------------------------------------------------
+
+describe('C-492 AC-5: recall section respects C-488 budget ceiling', () => {
+  const TOKEN_MODEL = 'cl100k_base' as const;
+  const TOKEN_BUDGET = 4096;
+  const countTokens = (text: string): number => encode(text, { model: TOKEN_MODEL }).length;
+
+  const makeFact = (index: number, content: string) => ({
+    sourceType: 'narrative_event' as const,
+    sourceId: `evt-${index}`,
+    content,
+    relevanceScore: 0.9 - index * 0.05,
+  });
+
+  /**
+   * Captures the assembled system prompt while stubbing the witness-scoped
+   * recall source. Deterministic — no LLM, no model.
+   */
+  const capturePrompt = async (options: {
+    recalled: string[];
+    messages: Array<{ role: 'player' | 'npc'; content: string }>;
+  }): Promise<string> => {
+    const original = memoryRetrievalService.retrieveForNpc;
+    memoryRetrievalService.retrieveForNpc = mock(async () =>
+      options.recalled.map((content, i) => makeFact(i, content)),
+    );
+
+    let system = '';
+    const textGenerator = mock(async (o: Record<string, unknown>) => {
+      if (!o.schema) {
+        const msgs = (o.messages as Array<{ role: string; content: string }>) ?? [];
+        system = msgs.find((m) => m.role === 'system')?.content ?? '';
+        return { text: 'Hello.' };
+      }
+      return { text: 'Hello.', structured: { narrative: 'Hello.' } };
+    });
+
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    await npcDialogueService.generateTurn({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: options.messages,
+      signal: new AbortController().signal,
+    });
+
+    memoryRetrievalService.retrieveForNpc = original;
+    return system;
+  };
+
+  test('[MEMORY] section is capped at NPC_RECALL_MAX_RESULTS', async () => {
+    // Stub recall to return MORE than the cap — the projection must slice it.
+    const facts = Array.from({ length: 8 }, (_, i) => `Fact number ${i}.`);
+    const prompt = await capturePrompt({
+      recalled: facts,
+      messages: [{ role: 'player', content: 'What do you remember?' }],
+    });
+
+    expect(prompt).toContain('[MEMORY]');
+    const memorySection = prompt.split('[MEMORY]')[1]?.split('[CONVERSATION HISTORY]')[0] ?? '';
+    const factLines = memorySection.split('\n').filter((l) => l.trim().length > 0);
+    expect(factLines).toHaveLength(NPC_RECALL_MAX_RESULTS);
+  });
+
+  test('a large [MEMORY] shortens the conversation-history window rather than growing the prompt', async () => {
+    const messages = Array.from({ length: 15 }, (_, index) => ({
+      role: (index % 2 === 0 ? 'player' : 'npc') as 'player' | 'npc',
+      content: `Turn ${index}`,
+    }));
+
+    const withoutRecall = await capturePrompt({ recalled: [], messages });
+    const withRecall = await capturePrompt({
+      recalled: ['[Thalia believes] Rollo has the wand.', 'Rollo denies it.'],
+      messages,
+    });
+
+    const countHistoryLines = (p: string): number => {
+      const section = p.split('[CONVERSATION HISTORY]')[1]?.split('[ALLOWED ACTIONS]')[0] ?? '';
+      return section.split('\n').filter((l) => l.trim().length > 0).length;
+    };
+
+    expect(countHistoryLines(withoutRecall)).toBeGreaterThan(countHistoryLines(withRecall));
+  });
+
+  test('[MEMORY] facts render with attribution intact and total stays <= 4096 tokens', async () => {
+    const recalled = [
+      '[Thalia believes] Rollo intends to sell the wand.',
+      '[Rollo claims] He never touched the wand.',
+      'The wand rests in the inn cellar.',
+      'Rollo greeted the party at dawn.',
+    ];
+    const messages = Array.from({ length: 10 }, (_, index) => ({
+      role: (index % 2 === 0 ? 'player' : 'npc') as 'player' | 'npc',
+      content: `Turn ${index} dialogue line.`,
+    }));
+
+    const prompt = await capturePrompt({ recalled, messages });
+
+    expect(prompt).toContain('[MEMORY]');
+    for (const fact of recalled) {
+      expect(prompt).toContain(fact);
+    }
+    expect(countTokens(prompt)).toBeLessThanOrEqual(TOKEN_BUDGET);
   });
 });
 

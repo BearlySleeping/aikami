@@ -168,6 +168,29 @@ export class GamePage {
     return this.page.getByRole('progressbar', { name: 'Player HP' });
   }
 
+  /** Stable post-hydration memory readiness hook. */
+  get memoryReadyHook() {
+    return this.page.locator('[data-testid="game-boot-memory-ready"]');
+  }
+
+  /** Recalled facts exposed by the active dialogue overlay. */
+  get recalledFacts() {
+    return this.page.locator('[data-testid="dialogue-recalled-facts"]');
+  }
+
+  /** Free-text input in the active dialogue overlay. */
+  get dialogueFreeText() {
+    return this.page.locator('[data-testid="dialogue-free-text"]');
+  }
+
+  /** Wait until the post-hydration memory index has finished rebuilding. */
+  async expectMemoryReady(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.memoryReadyHook).toHaveAttribute('data-memory-ready', 'true', {
+      timeout: 15_000,
+    });
+  }
+
   // ── Pause Menu ────────────────────────────────────────────
 
   /** Open the pause menu via Escape key. */
@@ -275,6 +298,28 @@ export class GamePage {
     await input.fill(text);
     await input.press('Enter');
     await this.page.waitForTimeout(500);
+  }
+
+  /** Submit dialogue and wait until its committed narrative event is recorded. */
+  async sendFreeTextAndWaitForTurnCommit(text: string): Promise<void> {
+    await this.dialogueFreeText.fill(text);
+    const committed = this.page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          window.addEventListener('aikami:dialogue-turn-committed', () => resolve(), {
+            once: true,
+          });
+        }),
+    );
+    await this.dialogueFreeText.press('Enter');
+    await committed;
+  }
+
+  /** Assert recalled dialogue context is attached and contains the expected fact. */
+  async expectRecalledFact(text: string): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.recalledFacts).toBeAttached({ timeout: 15_000 });
+    await expect(this.recalledFacts).toContainText(text, { timeout: 15_000 });
   }
 
   /** Click a suggestion chip by label text (C-371). */
@@ -495,6 +540,26 @@ export class GamePage {
     await this.page.reload({ waitUntil: 'domcontentloaded' });
     await this.waitForEngineReady();
     await this.waitForPlayingState();
+  }
+
+  /** Dispatch the production quick-save hook and wait for persistence to finish. */
+  async quickSave(): Promise<void> {
+    await this.page.evaluate(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const onComplete = (): void => {
+            window.removeEventListener('aikami:quick-save-failed', onFailure);
+            resolve();
+          };
+          const onFailure = (): void => {
+            window.removeEventListener('aikami:quick-save-complete', onComplete);
+            reject(new Error('Quick save failed'));
+          };
+          window.addEventListener('aikami:quick-save-complete', onComplete, { once: true });
+          window.addEventListener('aikami:quick-save-failed', onFailure, { once: true });
+          window.dispatchEvent(new Event('aikami:quick-save'));
+        }),
+    );
   }
 
   // ── State Inspection ──────────────────────────────────────
