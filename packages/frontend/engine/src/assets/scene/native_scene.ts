@@ -106,12 +106,11 @@ export const parseNativeScene = (
  * Serializes a scene document to canonical JSON.
  *
  * Object member ordering can never change the revision (object keys are
- * sorted); ordered animation/layer/placement lists retain their meaningful
- * order. Reordering independent placements is canonicalized by stable id
- * (the array order is preserved, but identity is by id — AC-6).
+ * sorted); ordered animation/layer lists retain their meaningful order.
+ * Independent placements are sorted by stable id (AC-6).
  */
 export const serializeScene = (doc: SceneDocument): string =>
-  `${JSON.stringify(_canonicalize(doc), null, 2)}\n`;
+  `${JSON.stringify(_canonicalizeScene(doc), null, 2)}\n`;
 
 /**
  * Computes the canonical sha-256 hex hash of a scene document.
@@ -121,11 +120,23 @@ export const serializeScene = (doc: SceneDocument): string =>
  * change the revision (AC-6).
  */
 export const canonicalSceneHash = async (doc: SceneDocument): Promise<string> => {
-  const canonical = JSON.stringify(_canonicalize(doc));
+  const canonical = JSON.stringify(_canonicalizeScene(doc));
   const bytes = new TextEncoder().encode(canonical);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 };
+
+/** Canonicalizes the one independent declaration list before deep key sorting. */
+const _canonicalizeScene = (doc: SceneDocument): unknown =>
+  _canonicalize({
+    ...doc,
+    placements: [...doc.placements].sort((a, b) => {
+      if (a.id < b.id) {
+        return -1;
+      }
+      return a.id > b.id ? 1 : 0;
+    }),
+  });
 
 /** Deep-canonicalizes a value: object keys sorted, arrays/order preserved. */
 const _canonicalize = (value: unknown): unknown => {
@@ -141,6 +152,47 @@ const _canonicalize = (value: unknown): unknown => {
     return out;
   }
   return value;
+};
+
+/** Reads a response body without ever buffering more than the scene byte budget. */
+const _readBoundedResponse = async (response: Response): Promise<string> => {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return '';
+  }
+
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      byteLength += value.byteLength;
+      if (byteLength > SCENE_MAX_DECODED_BYTES) {
+        try {
+          await reader.cancel('scene response exceeded decoded byte budget');
+        } catch {
+          // Preserve the budget error when stream cancellation itself fails.
+        }
+        throw new SceneBudgetError(
+          `scene document exceeds SCENE_MAX_DECODED_BYTES (${byteLength} > ${SCENE_MAX_DECODED_BYTES})`,
+        );
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 };
 
 /**
@@ -170,12 +222,12 @@ export const loadNativeScene = async (options: {
           'native scene',
         );
       }
-      return parseNativeScene(await fallback.text(), { pack });
+      return parseNativeScene(await _readBoundedResponse(fallback), { pack });
     }
     throw new SceneValidationError(
       `failed to fetch native scene "${url}" (HTTP ${response.status})`,
       'native scene',
     );
   }
-  return parseNativeScene(await response.text(), { pack });
+  return parseNativeScene(await _readBoundedResponse(response), { pack });
 };

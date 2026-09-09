@@ -20,6 +20,7 @@ export {
   type SceneEmissionReport,
 } from './scene_compiler.ts';
 export {
+  buildGidFrameResolver,
   type CanonicalMapLoad,
   loadMapCanonical,
   loadScene,

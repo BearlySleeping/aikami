@@ -155,6 +155,83 @@ describe('tiled_adapter', () => {
     expect(doc.placements.find((p) => p.id === 'mayor-door-npc')).toBeDefined();
   });
 
+  test('rejects an empty persisted identity before building the placement', () => {
+    expect(() =>
+      tilemapToScene(makeTilemap(), {
+        sceneId: 'emberwatch/inn',
+        assetLock: 'pack:emberwatch@1.0.0',
+        baseTerrain: 'grass',
+        identityMap: { 1002: '' },
+      }),
+    ).toThrow(/identityMap maps legacy id "1002" to an empty id/);
+  });
+
+  test('rejects non-square tilemaps', () => {
+    const tilemap = makeTilemap();
+    tilemap.tileheight = 16;
+    expect(() =>
+      tilemapToScene(tilemap, {
+        sceneId: 'emberwatch/inn',
+        assetLock: 'pack:emberwatch@1.0.0',
+        baseTerrain: 'grass',
+      }),
+    ).toThrow(/non-square tiles/);
+  });
+
+  test('never selects collision as an un-banded ground layer', () => {
+    const tilemap = makeTilemap();
+    tilemap.terrain = undefined;
+    tilemap.layers = [tilemap.layers[2], tilemap.layers[0]];
+    const doc = tilemapToScene(tilemap, {
+      sceneId: 'emberwatch/inn',
+      assetLock: 'pack:emberwatch@1.0.0',
+    });
+    expect(doc.surface.mode).toBe('baked');
+    if (doc.surface.mode === 'baked') {
+      expect(doc.surface.palette).toContain('grass_0.png');
+    }
+  });
+
+  test('rejects malformed transitions instead of silently skipping them', () => {
+    const tilemap = makeTilemap();
+    const transition = tilemap.objectLayers?.[0].objects[2];
+    if (transition) {
+      delete transition.id;
+    }
+    expect(() =>
+      tilemapToScene(tilemap, {
+        sceneId: 'emberwatch/inn',
+        assetLock: 'pack:emberwatch@1.0.0',
+        baseTerrain: 'grass',
+      }),
+    ).toThrow(/transition.*has no stable id/);
+  });
+
+  test('passes layer names to frame resolution and keeps resolver misses non-comparable', () => {
+    const tilemap = makeTilemap();
+    tilemap.layers[0].frames = undefined;
+    tilemap.layers[1].frames = undefined;
+    const seenLayers: string[] = [];
+    let missedDecorFrame = false;
+    const doc = tilemapToScene(tilemap, {
+      sceneId: 'emberwatch/inn',
+      assetLock: 'pack:emberwatch@1.0.0',
+      baseTerrain: 'grass',
+      dropGroundDuplicateDecor: true,
+      frameResolver: (gid, layerName) => {
+        seenLayers.push(layerName);
+        if (layerName === 'decor' && !missedDecorFrame) {
+          missedDecorFrame = true;
+          return undefined;
+        }
+        return `${layerName}_${gid}.png`;
+      },
+    });
+    expect(seenLayers).toContain('ground');
+    expect(seenLayers).toContain('decor');
+    expect(doc.layers).toHaveLength(1);
+  });
+
   test('recoverable failure when a baked layer cannot resolve frames', () => {
     const tilemap = makeTilemap();
     // Remove the terrain channel → baked path; strip frames so no GID→frame

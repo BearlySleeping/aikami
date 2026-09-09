@@ -7,7 +7,12 @@
 import { describe, expect, test } from 'bun:test';
 import { SCENE_FUTURE_DOCUMENT_KINDS } from '@aikami/constants';
 import { SceneUnsupportedFormatError } from './native_scene.ts';
-import { sceneFromNative, sceneFromTilemap } from './scene_loader.ts';
+import {
+  buildGidFrameResolver,
+  loadScene,
+  sceneFromNative,
+  sceneFromTilemap,
+} from './scene_loader.ts';
 import { makeTerrainScene, makeTerrains } from './scene_test_utils.ts';
 
 const OPTS = {
@@ -76,6 +81,56 @@ describe('scene_loader', () => {
         pack: { terrainIds: ['grass', 'water'], frameNames: new Set() },
       }),
     ).toThrow(/unknown terrain id\(s\): lava/);
+  });
+
+  test('loadScene routes JTON through its parser and canonical adapter', async () => {
+    const jton = `:map: 2 2 32 32
+:tileset: atlas 1 atlas.png 64 64 32 32 2 4
+:tiles: ground 1
+0,0,1
+1,0,2
+0,1,3
+1,1,4
+]
+`;
+    const result = await loadScene({
+      ...OPTS,
+      terrains: undefined,
+      url: 'test://canonical-scene-loader.jton',
+      fetch: (async () => new Response(jton, { status: 200 })) as unknown as typeof fetch,
+    });
+    expect(result.source).toBe('jton');
+    expect(result.doc.surface.mode).toBe('baked');
+    expect(result.compiled.layers.length).toBeGreaterThan(0);
+  });
+
+  test('loadScene rejects future document kinds before legacy conversion', async () => {
+    const future = JSON.stringify({ ...makeTerrainScene(), kind: 'aikami.region' });
+    await expect(
+      loadScene({
+        ...OPTS,
+        url: 'test://future-region.json',
+        fetch: (async () => new Response(future, { status: 200 })) as unknown as typeof fetch,
+      }),
+    ).rejects.toBeInstanceOf(SceneUnsupportedFormatError);
+  });
+
+  test('buildGidFrameResolver emits zero-based local frame suffixes', () => {
+    const resolveFrame = buildGidFrameResolver([
+      {
+        firstgid: 10,
+        name: 'atlas',
+        image: 'atlas.png',
+        imagewidth: 64,
+        imageheight: 64,
+        tilewidth: 32,
+        tileheight: 32,
+        columns: 2,
+        tilecount: 4,
+      },
+    ]);
+    expect(resolveFrame(10, 'ground')).toBe('atlas_0.png');
+    expect(resolveFrame(13, 'ground')).toBe('atlas_3.png');
   });
 });
 
@@ -254,8 +309,8 @@ describe('loadMapCanonical (AC-1 production integration)', () => {
     // grid-derived frame palettes (`${tileset}_<localId>.png`).
     const decor = doc.layers.find((l) => l.role === 'decor');
     const overhead = doc.layers.find((l) => l.role === 'overhead');
-    expect(decor?.palette).toEqual(['', 'atlas_3.png', 'atlas_4.png', 'atlas_5.png']);
-    expect(overhead?.palette).toEqual(['', 'atlas_6.png', 'atlas_7.png']);
+    expect(decor?.palette).toEqual(['', 'atlas_2.png', 'atlas_3.png', 'atlas_4.png']);
+    expect(overhead?.palette).toEqual(['', 'atlas_5.png', 'atlas_6.png']);
     // The canonical tilemap still preserves the source GID render layers.
     expect(tilemap.layers.some((l) => l.name === 'decor')).toBe(true);
   });

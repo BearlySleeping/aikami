@@ -5,6 +5,8 @@
 // (invalid budgets fail before allocation).
 
 import { describe, expect, test } from 'bun:test';
+import { SCENE_MAX_TRANSITIONS } from '@aikami/constants';
+import type { SceneDocument, SceneTerrainMatchingMode } from '@aikami/types';
 import { makeBakedScene, makeTerrainScene } from './scene_test_utils.ts';
 import { collectSceneErrors, SceneValidationError, validateScene } from './scene_validator.ts';
 
@@ -91,6 +93,14 @@ describe('scene_validator', () => {
     expect(() => validateScene(doc)).toThrow(/SCENE_MAX_CELLS/);
   });
 
+  test('rejects a scene exceeding the transition budget', () => {
+    const doc = makeTerrainScene();
+    const transitions: NonNullable<SceneDocument['transitions']> = [];
+    transitions.length = SCENE_MAX_TRANSITIONS + 1;
+    doc.transitions = transitions;
+    expect(() => validateScene(doc)).toThrow(/too many transitions/);
+  });
+
   test('rejects unknown terrain ids when a pack is supplied (AC-4)', () => {
     const doc = makeTerrainScene({
       surface: {
@@ -109,8 +119,8 @@ describe('scene_validator', () => {
         mode: 'terrain',
         defaultTerrain: 'grass',
         cells: ['grass', 'grass', 'grass', 'grass'],
-        // biome-ignore lint/suspicious/noExplicitAny: intentional malformed input
-        matchingMode: 'smooth' as any,
+        // guard-ignore lint/type-safety/casting: intentional malformed fixture exercises runtime validation
+        matchingMode: 'smooth' as unknown as SceneTerrainMatchingMode,
       },
     });
     expect(() => validateScene(doc, { pack: PACK })).toThrow(
@@ -131,9 +141,15 @@ describe('scene_validator', () => {
         { id: 'p1', component: 'npc', frame: 'a.png', x: 0, y: 0 },
         { id: 'p1', component: 'npc', frame: 'b.png', x: 32, y: 32 },
       ],
+      navigation: { blockingOverrides: [{ index: 99, blocked: true }] },
+      elevation: [0],
     });
     const errors = collectSceneErrors(doc);
-    expect(errors.length).toBe(1);
-    expect(errors[0]).toMatch(/duplicate placement id/);
+    expect(errors).toHaveLength(3);
+    expect(errors.some((error) => /duplicate placement id/.test(error))).toBe(true);
+    expect(errors.some((error) => /blocking override index 99 out of range/.test(error))).toBe(
+      true,
+    );
+    expect(errors.some((error) => /elevation length/.test(error))).toBe(true);
   });
 });

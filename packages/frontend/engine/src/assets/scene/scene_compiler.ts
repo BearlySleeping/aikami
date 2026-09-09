@@ -110,22 +110,22 @@ export const compileScene = (doc: SceneDocument, context?: SceneCompileContext):
     });
     const sorted = [...emissions].sort((a, b) => a.precedence - b.precedence);
     for (const emission of sorted) {
+      const frames = emission.frames.map((frame) => (frame === 0 ? '' : frame));
       layers.push({
         id: `${sceneId}:ground:${emission.name}`,
         name: emission.name,
         band: 'ground',
         order: emission.precedence,
-        frames: emission.frames as Array<string | ''>,
+        frames,
       });
-      for (const f of emission.frames) {
-        if (f) {
+      for (const frame of frames) {
+        if (frame) {
           ground++;
         }
       }
     }
     if (ground === 0) {
-      // Base fill always covers every cell; guard defensively.
-      ground = cellCount;
+      throw new Error(`scene:compile terrain surface "${sceneId}" emitted no ground frames`);
     }
   } else {
     // Baked ground: one ground layer from the palette grid.
@@ -262,44 +262,50 @@ export const compileSceneToTilemap = (
   const { width, height } = compiled;
   const tileSize = compiled.tileSize;
 
-  // Render layers: the compiled scene's frame layers. When a source legacy
-  // map is provided (production /game path), the source GID/baked render
-  // layers + tilesets are PRESERVED so the existing GID-based renderer draws
-  // identically — the canonical scene remains the semantic authority (ground
-  // source, terrain channel, collision overrides, placement identity) while
-  // the GID layers are the derived render artifact (architecture directive 1).
-  const renderLayers: TilemapLayer[] = source?.layers?.length
-    ? source.layers
-    : compiled.layers.map((layer) => ({
-        name: layer.name,
-        width,
-        height,
-        data: new Array<number>(width * height).fill(0),
-        // `0` in frames is already reserved for empty; convert '' → 0.
-        frames: layer.frames.map((f) => (f ? f : 0)),
-        visible: true,
-        band: layer.band,
-      }));
+  // Render layers always come from the canonical compiler. The source map
+  // contributes tileset metadata only; passing its raw layers through would
+  // discard canonical role/order and frame transformations.
+  const renderLayers: TilemapLayer[] = compiled.layers.map((layer) => ({
+    name: layer.name,
+    width,
+    height,
+    data: new Array<number>(width * height).fill(0),
+    // `0` in frames is already reserved for empty; convert '' → 0.
+    frames: layer.frames.map((frame) => (frame ? frame : 0)),
+    visible: true,
+    band: layer.band,
+  }));
 
   // Spawn/prop/transition objects. On the production /game path a source
-  // legacy map is present: its object layers are PRESERVED verbatim so the
-  // proven spawner/transition consumers see the exact objects they expect —
-  // spawnId/npcId/frame/dialogueKey and every custom property intact. The
-  // previous placement-rebuild dropped those properties, which removed NPCs
-  // (npcId lost), broke named-spawn positioning (spawnId lost) and prop frame
-  // art (frame lost) — a C-505 AC-1/AC-3 parity regression caught by manual
-  // /game testing. This mirrors how source.layers are preserved for rendering
-  // above: the canonical scene stays the semantic authority for placement
-  // identity, while the source objects are the derived spawn artifact. Native
-  // scenes (no source) rebuild objects from the canonical placements.
+  // legacy map is present: its object layers preserve every custom property
+  // while `id` is normalized to the canonical string identity. The proven
+  // spawner/transition consumers still see spawnId/npcId/frame/dialogueKey.
+  // The canonical scene stays the semantic identity authority while source
+  // objects remain the derived spawn artifact. Native scenes (no source)
+  // rebuild objects directly from canonical placements and transitions.
   const objectLayers: TilemapData['objectLayers'] = source?.objectLayers?.length
-    ? source.objectLayers
+    ? source.objectLayers.map((layer) => ({
+        ...layer,
+        objects: layer.objects.map((object) => {
+          if (object.id === undefined) {
+            return object;
+          }
+          const legacyId = String(object.id);
+          return {
+            ...object,
+            id:
+              object.type === 'transition'
+                ? legacyId
+                : (doc.provenance?.identityMap?.[legacyId] ?? legacyId),
+          };
+        }),
+      }))
     : (() => {
         // Recover spawn/prop objects from placements (stable ids + transforms).
         const objects: Record<string, unknown>[] = [];
         for (const placement of compiled.placements) {
           objects.push({
-            id: Number(placement.id) || 0,
+            id: placement.id,
             name: placement.id,
             type: placement.component,
             x: placement.x,
@@ -310,7 +316,7 @@ export const compileSceneToTilemap = (
         // Recover transitions with their trigger rects + targets.
         for (const transition of doc.transitions ?? []) {
           objects.push({
-            id: Number(transition.id) || 0,
+            id: transition.id,
             name: transition.id,
             type: 'transition',
             x: transition.x,

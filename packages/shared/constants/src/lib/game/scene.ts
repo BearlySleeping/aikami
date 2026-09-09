@@ -41,6 +41,7 @@ export const SCENE_FUTURE_DOCUMENT_KINDS = [
  */
 export const SCENE_TERRAIN_MATCHING_MODES = ['fill', 'corner16'] as const;
 
+/** Supported terrain matching mode for canonical scene compilation. */
 export type SceneTerrainMatchingMode = (typeof SCENE_TERRAIN_MATCHING_MODES)[number];
 
 /**
@@ -50,6 +51,7 @@ export type SceneTerrainMatchingMode = (typeof SCENE_TERRAIN_MATCHING_MODES)[num
  */
 export const SCENE_LAYER_ROLES = ['ground', 'decor', 'overhead'] as const;
 
+/** Canonical render role assigned to a visual layer or placement. */
 export type SceneLayerRole = (typeof SCENE_LAYER_ROLES)[number];
 
 // ── Import / allocation safety limits (C-505 State & Data Models) ──────────
@@ -67,6 +69,9 @@ export const SCENE_MAX_VISUAL_LAYERS = 32;
 
 /** Maximum placements: 65,536. */
 export const SCENE_MAX_PLACEMENTS = 65_536;
+
+/** Maximum map-to-map transition zones: 65,536. */
+export const SCENE_MAX_TRANSITIONS = 65_536;
 
 /** Maximum decoded map buffer size: 64 MiB. */
 export const SCENE_MAX_DECODED_BYTES = 64 * 1024 * 1024;

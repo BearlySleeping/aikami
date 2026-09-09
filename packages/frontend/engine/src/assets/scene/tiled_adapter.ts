@@ -19,6 +19,7 @@
 import type {
   SceneBakedSurface,
   SceneDocument,
+  SceneLayerRole,
   ScenePlacement,
   SceneTerrainSurface,
   SceneTransition,
@@ -34,6 +35,7 @@ export class SceneConversionError extends Error {
   }
 }
 
+/** Options controlling legacy Tiled/JTON normalization into a canonical scene. */
 export type TiledAdapterOptions = {
   /** Stable canonical scene id (source-derived, not positional). */
   sceneId: string;
@@ -86,6 +88,11 @@ export const tilemapToScene = (
     frameResolver,
     identityMap,
   } = options;
+  if (tilemap.tilewidth !== tilemap.tileheight) {
+    throw new SceneConversionError(
+      `scene "${sceneId}" uses non-square tiles (${tilemap.tilewidth}×${tilemap.tileheight})`,
+    );
+  }
   const cellCount = tilemap.width * tilemap.height;
 
   // ── Surface (single authoritative ground source) ──────────────────────
@@ -121,8 +128,8 @@ export const tilemapToScene = (
   const seenRoleOrder = { decor: 0, overhead: 0 };
   for (const layer of tilemap.layers) {
     const role = _layerRole(layer);
-    if (role === 'ground') {
-      continue; // ground is owned by the surface
+    if (role === 'ground' || role === 'collision') {
+      continue; // ground is owned by the surface; collision is non-visual
     }
     // Targeted Emberwatch cleanup: a decor layer identical to ground is a
     // duplicate source contribution, not an intentional decal.
@@ -156,10 +163,7 @@ export const tilemapToScene = (
       const type = typeof object.type === 'string' ? object.type : '';
       const rawId = object.id;
       if (type === 'transition') {
-        const transition = _toTransition(object);
-        if (transition) {
-          transitions.push(transition);
-        }
+        transitions.push(_toTransition(object));
         continue;
       }
       if (!type || type === 'collision') {
@@ -172,7 +176,13 @@ export const tilemapToScene = (
         );
       }
       const legacyId = String(rawId);
-      const placementId = identityMap?.[legacyId] ?? legacyId;
+      const mappedId = identityMap?.[legacyId];
+      if (mappedId !== undefined && mappedId.length === 0) {
+        throw new SceneConversionError(
+          `scene "${sceneId}" identityMap maps legacy id "${legacyId}" to an empty id`,
+        );
+      }
+      const placementId = mappedId ?? legacyId;
       const placement: ScenePlacement = {
         id: placementId,
         component: type,
@@ -223,14 +233,36 @@ export const tilemapToScene = (
 };
 
 const _groundLayer = (tilemap: TilemapData) =>
-  tilemap.layers.find((l) => _layerRole(l) === 'ground') ??
-  tilemap.layers.find((l) => l.name === 'ground');
+  tilemap.layers.find((layer) => _layerRole(layer) === 'ground');
 
-const _layerRole = (layer: { band?: string; name: string }): 'ground' | 'decor' | 'overhead' => {
-  if (layer.band === 'decor' || layer.band === 'overhead') {
+type LegacyLayerRole = SceneLayerRole | 'collision';
+
+const _layerRole = (layer: { band?: string; name: string }): LegacyLayerRole => {
+  const tokens = layer.name.toLowerCase().split(/[^a-z0-9]+/);
+  if (tokens.includes('collision')) {
+    return 'collision';
+  }
+  if (layer.band === 'ground' || layer.band === 'decor' || layer.band === 'overhead') {
     return layer.band;
   }
-  return 'ground';
+  if (tokens.some((token) => ['ground', 'base', 'terrain', 'floor'].includes(token))) {
+    return 'ground';
+  }
+  if (
+    tokens.some((token) =>
+      ['decor', 'decal', 'detail', 'details', 'wall', 'walls', 'props'].includes(token),
+    )
+  ) {
+    return 'decor';
+  }
+  if (
+    tokens.some((token) => ['overhead', 'canopy', 'foreground', 'roof', 'roofs'].includes(token))
+  ) {
+    return 'overhead';
+  }
+  throw new SceneConversionError(
+    `layer "${layer.name}" has no band and its name does not identify ground, decor, or overhead`,
+  );
 };
 
 /** Converts a layer to a frame palette + index grid. */
@@ -289,7 +321,7 @@ const _framesToPalette = (
 };
 
 const _layerFramesFromGids = (
-  layer: { data?: readonly number[] },
+  layer: { name: string; data?: readonly number[] },
   frameResolver: ((gid: number, layerName: string) => string | undefined) | undefined,
 ): Array<string | 0> | undefined => {
   if (!frameResolver || !layer.data) {
@@ -299,20 +331,25 @@ const _layerFramesFromGids = (
   for (let i = 0; i < layer.data.length; i++) {
     const gid = layer.data[i];
     if (gid !== 0) {
-      const frame = frameResolver(gid, '');
-      frames[i] = frame ?? 0;
+      const frame = frameResolver(gid, layer.name);
+      if (!frame) {
+        return undefined;
+      }
+      frames[i] = frame;
     }
   }
   return frames;
 };
 
-const _toTransition = (object: Record<string, unknown>): SceneTransition | undefined => {
-  if (object.id === undefined) {
-    return undefined;
+const _toTransition = (object: Record<string, unknown>): SceneTransition => {
+  if (object.id === undefined || String(object.id).length === 0) {
+    throw new SceneConversionError(
+      `transition "${String(object.name ?? '(unnamed)')}" has no stable id`,
+    );
   }
   const props = _props(object);
   if (typeof props.targetMap !== 'string' || props.targetMap.length === 0) {
-    return undefined;
+    throw new SceneConversionError(`transition "${String(object.id)}" has no targetMap`);
   }
   return {
     id: String(object.id),

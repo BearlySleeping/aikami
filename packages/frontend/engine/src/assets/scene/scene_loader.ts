@@ -9,6 +9,7 @@
 // validated {@link SceneDocument} plus its {@link CompiledScene}, so preview
 // and game share one interpretation (architecture directive 1).
 
+import { SCENE_FUTURE_DOCUMENT_KINDS } from '@aikami/constants';
 import type { SceneDocument } from '@aikami/types';
 import { logger } from '$logger';
 import {
@@ -111,6 +112,19 @@ export const loadScene = async (
   } & SceneLoadOptions,
 ): Promise<SceneLoadResult> => {
   const { url, fetch: fetcher, resolveTag, ...loadOptions } = options;
+  if (/\.jton(?:[?#]|$)/i.test(url)) {
+    const tilemap = await loadJtonMap({ url, fetch: fetcher, resolveTag });
+    const result = sceneFromTilemap(tilemap, {
+      ...loadOptions,
+      adapter: {
+        ...loadOptions.adapter,
+        baseTerrain: loadOptions.adapter?.baseTerrain,
+        frameResolver:
+          loadOptions.adapter?.frameResolver ?? buildGidFrameResolver(tilemap.tilesets),
+      },
+    });
+    return { ...result, source: 'jton' };
+  }
   const resolvedUrl = resolveTag ? (resolveTag(url) ?? url) : url;
   const f = fetcher ?? globalThis.fetch;
   const response = await f(resolvedUrl);
@@ -120,14 +134,32 @@ export const loadScene = async (
   const text = await response.text();
   const trimmed = text.trimStart();
   if (trimmed.startsWith('{')) {
-    const parsed = JSON.parse(trimmed);
-    const kind = parsed?.kind;
+    const parsed: unknown = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new SceneUnsupportedFormatError('unknown');
+    }
+    const kind = (parsed as { kind?: unknown }).kind;
+    if (
+      typeof kind === 'string' &&
+      (SCENE_FUTURE_DOCUMENT_KINDS as readonly string[]).includes(kind)
+    ) {
+      throw new SceneUnsupportedFormatError(kind);
+    }
     if (kind === 'aikami.scene') {
       logger.debug('sceneLoader:native', { url, sceneId: loadOptions.sceneId });
       return sceneFromNative(parsed, loadOptions);
     }
     // Tiled JSON map (has layers/tilesets, not an aikami scene).
-    return sceneFromTilemap(parsed as TilemapData, loadOptions);
+    const tilemap = parsed as TilemapData;
+    return sceneFromTilemap(tilemap, {
+      ...loadOptions,
+      adapter: {
+        ...loadOptions.adapter,
+        baseTerrain: loadOptions.adapter?.baseTerrain,
+        frameResolver:
+          loadOptions.adapter?.frameResolver ?? buildGidFrameResolver(tilemap.tilesets),
+      },
+    });
   }
   throw new SceneUnsupportedFormatError('unknown');
 };
@@ -193,7 +225,7 @@ export const loadMapCanonical = async (options: {
       // normalize ground/decor/overhead and the game fails to boot (C-505 AC-1
       // regression caught by manual /game testing). Map each GID to its grid
       // frame name so normalization succeeds and stays lossless.
-      frameResolver: _buildGidFrameResolver(legacy.tilesets),
+      frameResolver: buildGidFrameResolver(legacy.tilesets),
     },
   });
 
@@ -213,7 +245,7 @@ export const loadMapCanonical = async (options: {
  * frame name `${tileset}_<localId>.png` using the containing tileset's
  * `firstgid`/`tilecount`:
  *
- *   localTileId = gid - firstgid + 1
+ *   localTileId = gid - firstgid
  *
  * `_<n>` is the C-378 frame convention the preview's frame sampler parses, so
  * the canonical doc stays lossless and previewable while /game keeps rendering
@@ -221,7 +253,7 @@ export const loadMapCanonical = async (options: {
  * tileset — the adapter then throws a recoverable {@link SceneConversionError}
  * rather than silently blanking a malformed map.
  */
-const _buildGidFrameResolver =
+export const buildGidFrameResolver =
   (tilesets: readonly TilemapTileset[]): ((gid: number, layerName: string) => string | undefined) =>
   (gid: number): string | undefined => {
     if (!gid) {
@@ -231,7 +263,7 @@ const _buildGidFrameResolver =
     if (!tileset) {
       return undefined;
     }
-    const localTileId = gid - tileset.firstgid + 1;
+    const localTileId = gid - tileset.firstgid;
     const stem =
       tileset.name ?? (tileset.image ? tileset.image.replace(/\.[a-z0-9]+$/i, '') : 'tile');
     return `${stem}_${localTileId}.png`;

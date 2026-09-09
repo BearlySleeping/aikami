@@ -5,7 +5,8 @@
 // existing autotiler), AC-6 (deterministic, bounded).
 
 import { describe, expect, test } from 'bun:test';
-import { compileScene } from './scene_compiler.ts';
+import { extractSpawnPoints, extractTransitionZones } from '../map_loader.ts';
+import { compileScene, compileSceneToTilemap } from './scene_compiler.ts';
 import { makeBakedScene, makeTerrainScene, makeTerrains } from './scene_test_utils.ts';
 
 describe('scene_compiler', () => {
@@ -15,6 +16,9 @@ describe('scene_compiler', () => {
     // grass base fill + water corner16 overlay
     const groundLayers = compiled.layers.filter((l) => l.band === 'ground');
     expect(groundLayers.length).toBe(2);
+    expect(
+      groundLayers.every((layer) => layer.frames.every((frame) => typeof frame === 'string')),
+    ).toBe(true);
     // base fill covers every cell (4) + water overlay covers its cells (1)
     expect(compiled.emission.ground).toBe(5);
     expect(compiled.emission.placements).toBe(0);
@@ -42,6 +46,7 @@ describe('scene_compiler', () => {
     expect(compiled.emission.ground).toBe(3); // [1,1,0,1]
     expect(compiled.terrain).toBeUndefined();
     // baked has no inherent collision
+    expect(compiled.collision.length).toBe(doc.extent.width * doc.extent.height);
     expect(compiled.collision.every((c) => !c)).toBe(true);
   });
 
@@ -76,5 +81,41 @@ describe('scene_compiler', () => {
   test('throws when a terrain surface has no pack terrain definitions', () => {
     const doc = makeTerrainScene();
     expect(() => compileScene(doc)).toThrow(/requires pack terrain definitions/);
+  });
+
+  test('tilemap bridge emits canonical layers and preserves string object ids', () => {
+    const doc = makeBakedScene({
+      layers: [
+        { id: 'canopy', role: 'overhead', order: 0, palette: ['', 'tree.png'], grid: [1, 0, 0, 0] },
+      ],
+      placements: [{ id: 'npc-alpha', component: 'npc', frame: 'npc.png', x: 32, y: 64 }],
+      transitions: [
+        {
+          id: 'exit-west',
+          x: 0,
+          y: 32,
+          width: 32,
+          height: 32,
+          targetMap: 'forest',
+          targetX: 64,
+          targetY: 32,
+        },
+      ],
+    });
+    const compiled = compileScene(doc);
+    const tilemap = compileSceneToTilemap(compiled, doc, {
+      width: 2,
+      height: 2,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [],
+      layers: [{ name: 'raw-source', width: 2, height: 2, data: [1, 1, 1, 1], visible: true }],
+    });
+
+    expect(tilemap.layers.map((layer) => layer.name)).toEqual(
+      compiled.layers.map((layer) => layer.name),
+    );
+    expect(extractSpawnPoints(tilemap).find((point) => point.id === 'npc-alpha')).toBeDefined();
+    expect(extractTransitionZones(tilemap).find((zone) => zone.id === 'exit-west')).toBeDefined();
   });
 });

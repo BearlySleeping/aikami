@@ -10,6 +10,7 @@
 
 import type { TilemapData } from '@aikami/frontend/engine';
 import {
+  buildGidFrameResolver,
   type SceneLoadResult,
   SceneUnsupportedFormatError,
   sceneFromNative,
@@ -144,12 +145,17 @@ class MapPreviewViewModel
         return;
       }
 
-      const response = await fetch(url);
-      if (!response.ok) {
-        this.errorMessage = `Failed to fetch map: ${response.status}`;
-        return;
+      let text: string;
+      try {
+        const response = await fetch(url);
+        if (!response.ok) {
+          this.errorMessage = `Failed to fetch map: ${response.status}`;
+          return;
+        }
+        text = await response.text();
+      } finally {
+        this._resolver.release(url);
       }
-      const text = await response.text();
 
       // Load through the unified scene loader — the same interpretation the
       // game uses (AC-5). Native scenes are parsed directly; legacy Tiled/JTON
@@ -288,7 +294,9 @@ const loadSceneSync = (
 ): { result: SceneLoadResult; tilesets: TilemapTilesetLike[] } => {
   const trimmed = text.trimStart();
   const parsed = JSON.parse(trimmed);
-  const tilesets = Array.isArray(parsed?.tilesets) ? (parsed.tilesets as TilemapTilesetLike[]) : [];
+  const tilesets = Array.isArray(parsed?.tilesets)
+    ? (parsed.tilesets as TilemapData['tilesets'])
+    : [];
   if (parsed?.kind === 'aikami.scene') {
     return {
       result: sceneFromNative(parsed, {
@@ -303,20 +311,17 @@ const loadSceneSync = (
     result: sceneFromTilemap(parsed as TilemapData, {
       sceneId: options.sceneId,
       assetLock: options.assetLock,
-      adapter: options.adapter,
+      adapter: {
+        ...options.adapter,
+        frameResolver: buildGidFrameResolver(tilesets),
+      },
     }),
     tilesets,
   };
 };
 
 /** Minimal tileset fields the preview needs to sample a spritesheet. */
-type TilemapTilesetLike = {
-  image?: string;
-  columns?: number;
-  tilecount?: number;
-  tilewidth?: number;
-  tileheight?: number;
-};
+type TilemapTilesetLike = TilemapData['tilesets'][number];
 
 /** A loaded spritesheet plus a frame → source-rect resolver. */
 type TilesetSheet = {
@@ -343,18 +348,25 @@ const _loadTilesetSheet = async (
   if (!imagePath) {
     return undefined;
   }
-  const url = resolver.resolve(imagePath) ?? imagePath;
+  const registryUrl = resolver.resolve(imagePath);
+  const url = registryUrl ?? imagePath;
   const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error(`Failed to load tileset image: ${imagePath}`));
-    img.src = url;
-  }).catch(() => undefined);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error(`Failed to load tileset image: ${imagePath}`));
+      img.src = url;
+    }).catch(() => undefined);
+  } finally {
+    if (registryUrl) {
+      resolver.release(registryUrl);
+    }
+  }
   if (!img.width || !img.height) {
     return undefined;
   }
-  const columns = tileset.columns ?? Math.floor(img.width / tileSize);
   const size = tileset.tilewidth ?? tileSize;
+  const columns = tileset.columns ?? Math.floor(img.width / size);
   return {
     image: img,
     columns,

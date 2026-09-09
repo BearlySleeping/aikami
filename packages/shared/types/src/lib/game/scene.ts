@@ -7,6 +7,7 @@
 // compiler and the renderer. Re-exported from `@aikami/types` so the client,
 // preview and tests never depend on the wire document shape directly.
 
+/** Public type-only canonical scene API, inferred from the TypeBox schemas. */
 export type {
   SceneBakedSurface,
   SceneDocument,

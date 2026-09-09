@@ -12,6 +12,7 @@
 import {
   SCENE_MAX_CELLS,
   SCENE_MAX_PLACEMENTS,
+  SCENE_MAX_TRANSITIONS,
   SCENE_MAX_VISUAL_LAYERS,
   SCENE_TERRAIN_MATCHING_MODES,
 } from '@aikami/constants';
@@ -59,29 +60,64 @@ export const validateScene = (
   doc: SceneDocument,
   options?: SceneValidationOptions,
 ): SceneDocument => {
+  _traverseScene(doc, options, (error) => {
+    throw error;
+  });
+  return doc;
+};
+
+type SceneErrorReporter = (error: SceneValidationError) => void;
+
+/** Shared semantic traversal used by fail-fast and error-collection modes. */
+const _traverseScene = (
+  doc: SceneDocument,
+  options: SceneValidationOptions | undefined,
+  report: SceneErrorReporter,
+): void => {
   const pack = options?.pack;
   const { width, height } = doc.extent;
 
   // ── Bounded dimensions / overflow-safe cell count (AC-6) ──────────────
-  const cellCount = _checkedCellCount(width, height, doc.id);
-  if (cellCount > SCENE_MAX_CELLS) {
-    throw new SceneValidationError(
-      `scene exceeds SCENE_MAX_CELLS (${cellCount} > ${SCENE_MAX_CELLS})`,
-      `scene ${doc.id}`,
+  let cellCount: number | undefined;
+  if (width <= 0 || height <= 0) {
+    report(new SceneValidationError(`invalid dimensions (${width}×${height})`, `scene ${doc.id}`));
+  } else {
+    const product = width * height;
+    if (!Number.isSafeInteger(product) || product <= 0) {
+      report(
+        new SceneValidationError(
+          `dimension multiplication overflow (${width}×${height})`,
+          `scene ${doc.id}`,
+        ),
+      );
+    } else {
+      cellCount = product;
+    }
+  }
+  if (cellCount !== undefined && cellCount > SCENE_MAX_CELLS) {
+    report(
+      new SceneValidationError(
+        `scene exceeds SCENE_MAX_CELLS (${cellCount} > ${SCENE_MAX_CELLS})`,
+        `scene ${doc.id}`,
+      ),
     );
   }
 
   // ── Surface: exactly one authoritative ground source ──────────────────
   const surface = doc.surface;
   if (surface.mode === 'terrain') {
-    _checkLength(surface.cells, cellCount, 'surface.terrain.cells', doc.id);
+    if (cellCount !== undefined) {
+      _checkLength(surface.cells, cellCount, 'surface.terrain.cells', doc.id, report);
+    }
     if (
       surface.matchingMode !== undefined &&
       !SCENE_TERRAIN_MATCHING_MODES.includes(surface.matchingMode)
     ) {
-      throw new SceneValidationError(
-        `unsupported terrain matching mode "${surface.matchingMode}"`,
-        `scene ${doc.id} surface`,
+      report(
+        new SceneValidationError(
+          `unsupported terrain matching mode "${surface.matchingMode}"`,
+          `scene ${doc.id} surface`,
+        ),
       );
     }
     // Strict reference validation: every cell's terrain must be declared or
@@ -90,9 +126,11 @@ export const validateScene = (
       const known = new Set(pack.terrainIds);
       const defaultId = surface.defaultTerrain;
       if (!known.has(defaultId)) {
-        throw new SceneValidationError(
-          `default terrain "${defaultId}" is not declared in the pack`,
-          `scene ${doc.id} surface`,
+        report(
+          new SceneValidationError(
+            `default terrain "${defaultId}" is not declared in the pack`,
+            `scene ${doc.id} surface`,
+          ),
         );
       }
       const unknown = new Set<string>();
@@ -102,85 +140,120 @@ export const validateScene = (
         }
       }
       if (unknown.size > 0) {
-        throw new SceneValidationError(
-          `unknown terrain id(s): ${[...unknown].sort().join(', ')}`,
-          `scene ${doc.id} surface`,
+        report(
+          new SceneValidationError(
+            `unknown terrain id(s): ${[...unknown].sort().join(', ')}`,
+            `scene ${doc.id} surface`,
+          ),
         );
       }
     }
   } else {
-    _checkLength(surface.grid, cellCount, 'surface.baked.grid', doc.id);
-    _checkPaletteIndices(surface.grid, surface.palette.length, 'surface.baked.grid', doc.id);
+    if (cellCount !== undefined) {
+      _checkLength(surface.grid, cellCount, 'surface.baked.grid', doc.id, report);
+    }
+    _checkPaletteIndices(
+      surface.grid,
+      surface.palette.length,
+      'surface.baked.grid',
+      doc.id,
+      report,
+    );
     if (pack) {
-      _checkFrameNames(surface.palette, pack, 'surface.baked.palette', doc.id);
+      _checkFrameNames(surface.palette, pack, 'surface.baked.palette', doc.id, report);
     }
   }
 
   // ── Visual layers: unique ids, exact grids, in-range indices (AC-2) ───
   if (doc.layers.length > SCENE_MAX_VISUAL_LAYERS) {
-    throw new SceneValidationError(
-      `too many visual layers (${doc.layers.length} > ${SCENE_MAX_VISUAL_LAYERS})`,
-      `scene ${doc.id}`,
+    report(
+      new SceneValidationError(
+        `too many visual layers (${doc.layers.length} > ${SCENE_MAX_VISUAL_LAYERS})`,
+        `scene ${doc.id}`,
+      ),
     );
   }
   const layerIds = new Set<string>();
   for (const layer of doc.layers) {
     if (layerIds.has(layer.id)) {
-      throw new SceneValidationError(`duplicate visual layer id`, `layer ${layer.id}`);
+      report(new SceneValidationError(`duplicate visual layer id`, `layer ${layer.id}`));
     }
     layerIds.add(layer.id);
     if (layer.role === 'ground') {
       // Ground is owned by the surface — a ground visual layer would be a
       // second authoritative ground source (architecture directive 3).
-      throw new SceneValidationError(
-        `visual layer declares role "ground" — ground is owned by the surface`,
-        `layer ${layer.id}`,
+      report(
+        new SceneValidationError(
+          `visual layer declares role "ground" — ground is owned by the surface`,
+          `layer ${layer.id}`,
+        ),
       );
     }
-    _checkLength(layer.grid, cellCount, `layers[${layer.id}].grid`, doc.id);
-    _checkPaletteIndices(layer.grid, layer.palette.length, `layers[${layer.id}].grid`, doc.id);
+    if (cellCount !== undefined) {
+      _checkLength(layer.grid, cellCount, `layers[${layer.id}].grid`, doc.id, report);
+    }
+    _checkPaletteIndices(
+      layer.grid,
+      layer.palette.length,
+      `layers[${layer.id}].grid`,
+      doc.id,
+      report,
+    );
     if (pack) {
-      _checkFrameNames(layer.palette, pack, `layers[${layer.id}].palette`, doc.id);
+      _checkFrameNames(layer.palette, pack, `layers[${layer.id}].palette`, doc.id, report);
     }
   }
 
   // ── Placements: unique stable ids (AC-2 / AC-3) ───────────────────────
   if (doc.placements.length > SCENE_MAX_PLACEMENTS) {
-    throw new SceneValidationError(
-      `too many placements (${doc.placements.length} > ${SCENE_MAX_PLACEMENTS})`,
-      `scene ${doc.id}`,
+    report(
+      new SceneValidationError(
+        `too many placements (${doc.placements.length} > ${SCENE_MAX_PLACEMENTS})`,
+        `scene ${doc.id}`,
+      ),
     );
   }
   const placementIds = new Set<string>();
   for (const placement of doc.placements) {
     if (placementIds.has(placement.id)) {
-      throw new SceneValidationError(`duplicate placement id`, `placement ${placement.id}`);
+      report(new SceneValidationError(`duplicate placement id`, `placement ${placement.id}`));
     }
     placementIds.add(placement.id);
     if (pack && !pack.frameNames.has(placement.frame)) {
-      throw new SceneValidationError(
-        `placement references unknown frame "${placement.frame}"`,
-        `placement ${placement.id}`,
+      report(
+        new SceneValidationError(
+          `placement references unknown frame "${placement.frame}"`,
+          `placement ${placement.id}`,
+        ),
       );
     }
   }
 
+  if ((doc.transitions?.length ?? 0) > SCENE_MAX_TRANSITIONS) {
+    report(
+      new SceneValidationError(
+        `too many transitions (${doc.transitions?.length ?? 0} > ${SCENE_MAX_TRANSITIONS})`,
+        `scene ${doc.id}`,
+      ),
+    );
+  }
+
   // ── Navigation: overrides in range, no second collision grid ──────────
   for (const override of doc.navigation.blockingOverrides ?? []) {
-    if (override.index < 0 || override.index >= cellCount) {
-      throw new SceneValidationError(
-        `blocking override index ${override.index} out of range (cells ${cellCount})`,
-        `scene ${doc.id} navigation`,
+    if (cellCount !== undefined && (override.index < 0 || override.index >= cellCount)) {
+      report(
+        new SceneValidationError(
+          `blocking override index ${override.index} out of range (cells ${cellCount})`,
+          `scene ${doc.id} navigation`,
+        ),
       );
     }
   }
 
   // ── Elevation: exact length (preserved, traversal unimplemented) ──────
-  if (doc.elevation !== undefined) {
-    _checkLength(doc.elevation, cellCount, 'elevation', doc.id);
+  if (doc.elevation !== undefined && cellCount !== undefined) {
+    _checkLength(doc.elevation, cellCount, 'elevation', doc.id, report);
   }
-
-  return doc;
 };
 
 /**
@@ -193,7 +266,9 @@ export const collectSceneErrors = (
 ): string[] => {
   const errors: string[] = [];
   try {
-    validateScene(doc, options);
+    _traverseScene(doc, options, (error) => {
+      errors.push(`${error.context}: ${error.message}`);
+    });
   } catch (err) {
     if (err instanceof SceneValidationError) {
       errors.push(`${err.context}: ${err.message}`);
@@ -206,32 +281,19 @@ export const collectSceneErrors = (
   return errors;
 };
 
-/** Overflow-safe width×height with a descriptive failure. */
-const _checkedCellCount = (width: number, height: number, sceneId: string): number => {
-  if (width <= 0 || height <= 0) {
-    throw new SceneValidationError(`invalid dimensions (${width}×${height})`, `scene ${sceneId}`);
-  }
-  // The schema bounds each to int32, but guard multiplication anyway.
-  const product = width * height;
-  if (!Number.isSafeInteger(product) || product <= 0) {
-    throw new SceneValidationError(
-      `dimension multiplication overflow (${width}×${height})`,
-      `scene ${sceneId}`,
-    );
-  }
-  return product;
-};
-
 const _checkLength = (
   arr: readonly unknown[],
   expected: number,
   field: string,
   sceneId: string,
+  report: SceneErrorReporter,
 ): void => {
   if (arr.length !== expected) {
-    throw new SceneValidationError(
-      `${field} length (${arr.length}) does not equal width×height (${expected})`,
-      `scene ${sceneId}`,
+    report(
+      new SceneValidationError(
+        `${field} length (${arr.length}) does not equal width×height (${expected})`,
+        `scene ${sceneId}`,
+      ),
     );
   }
 };
@@ -241,13 +303,16 @@ const _checkPaletteIndices = (
   paletteLength: number,
   field: string,
   sceneId: string,
+  report: SceneErrorReporter,
 ): void => {
   for (let i = 0; i < grid.length; i++) {
     const v = grid[i];
     if (v < 0 || v >= paletteLength) {
-      throw new SceneValidationError(
-        `${field}[${i}] palette index ${v} out of range (palette ${paletteLength})`,
-        `scene ${sceneId}`,
+      report(
+        new SceneValidationError(
+          `${field}[${i}] palette index ${v} out of range (palette ${paletteLength})`,
+          `scene ${sceneId}`,
+        ),
       );
     }
   }
@@ -258,12 +323,15 @@ const _checkFrameNames = (
   pack: ScenePackReference,
   field: string,
   sceneId: string,
+  report: SceneErrorReporter,
 ): void => {
   for (const frame of palette) {
     if (frame !== '' && !pack.frameNames.has(frame)) {
-      throw new SceneValidationError(
-        `${field} references unknown frame "${frame}"`,
-        `scene ${sceneId}`,
+      report(
+        new SceneValidationError(
+          `${field} references unknown frame "${frame}"`,
+          `scene ${sceneId}`,
+        ),
       );
     }
   }

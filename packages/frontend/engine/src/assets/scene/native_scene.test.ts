@@ -5,9 +5,10 @@
 // authoring formats are rejected, not executed as maps).
 
 import { describe, expect, test } from 'bun:test';
-import { SCENE_FUTURE_DOCUMENT_KINDS } from '@aikami/constants';
+import { SCENE_FUTURE_DOCUMENT_KINDS, SCENE_MAX_DECODED_BYTES } from '@aikami/constants';
 import {
   canonicalSceneHash,
+  loadNativeScene,
   parseNativeScene,
   SceneBudgetError,
   SceneUnsupportedFormatError,
@@ -38,6 +39,25 @@ describe('native_scene', () => {
   test('rejects an oversized document before allocation (AC-6)', () => {
     const big = ' '.repeat(64 * 1024 * 1024 + 1);
     expect(() => parseNativeScene(big)).toThrow(SceneBudgetError);
+  });
+
+  test('cancels an oversized fetched response before decoding it (AC-6)', async () => {
+    let canceled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(SCENE_MAX_DECODED_BYTES + 1));
+      },
+      cancel() {
+        canceled = true;
+      },
+    });
+    await expect(
+      loadNativeScene({
+        url: 'test://oversized.scene.json',
+        fetch: (async () => new Response(body, { status: 200 })) as unknown as typeof fetch,
+      }),
+    ).rejects.toBeInstanceOf(SceneBudgetError);
+    expect(canceled).toBe(true);
   });
 
   test('rejects malformed JSON with a recoverable error', () => {
@@ -89,13 +109,23 @@ describe('native_scene', () => {
         { id: 'p1', component: 'npc', frame: 'a.png', x: 0, y: 0 },
       ],
     });
-    // Each placement keeps its own stable id regardless of array order.
-    const idsA = a.placements.map((p) => p.id).sort();
-    const idsB = b.placements.map((p) => p.id).sort();
-    expect(idsB).toEqual(idsA);
-    // Serialize + re-parse: identity survives a round trip.
+    expect(await canonicalSceneHash(b)).toBe(await canonicalSceneHash(a));
+    // Serialize + re-parse: each identity keeps its associated authored data.
     const parsed = parseNativeScene(serializeScene(b));
-    expect(parsed.placements.map((p) => p.id).sort()).toEqual(['p1', 'p2']);
+    expect(parsed.placements.find((placement) => placement.id === 'p1')).toMatchObject({
+      id: 'p1',
+      component: 'npc',
+      frame: 'a.png',
+      x: 0,
+      y: 0,
+    });
+    expect(parsed.placements.find((placement) => placement.id === 'p2')).toMatchObject({
+      id: 'p2',
+      component: 'npc',
+      frame: 'b.png',
+      x: 32,
+      y: 0,
+    });
   });
 
   test('rejects an unknown document kind as unsupported', () => {

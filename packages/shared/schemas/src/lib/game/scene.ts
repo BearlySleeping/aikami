@@ -19,17 +19,22 @@ import {
   SCENE_ELEVATION_MAX,
   SCENE_ELEVATION_MIN,
   SCENE_FRAME_EMPTY_INDEX,
+  SCENE_LAYER_ROLES,
   SCENE_MAX_CELLS,
   SCENE_MAX_PALETTE_FRAMES,
   SCENE_MAX_PLACEMENTS,
+  SCENE_MAX_TRANSITIONS,
   SCENE_MAX_VISUAL_LAYERS,
   SCENE_SCHEMA_VERSION,
+  SCENE_TERRAIN_MATCHING_MODES,
   type SceneLayerRole,
   type SceneTerrainMatchingMode,
 } from '@aikami/constants';
 import { type Static, Type } from 'typebox';
 
 const NON_EMPTY_ID = { minLength: 1 } as const;
+const TERRAIN_MATCHING_MODE_SCHEMA = Type.Enum(SCENE_TERRAIN_MATCHING_MODES);
+const LAYER_ROLE_SCHEMA = Type.Enum(SCENE_LAYER_ROLES);
 
 /** Positive integer cell dimension. */
 const CellDimension = Type.Integer({ minimum: 1 });
@@ -73,7 +78,7 @@ export const SceneTerrainSurfaceSchema = Type.Object(
      * Terrain matching mode for underlay/transition emission. Omission means
      * `fill`. Unknown modes are rejected by strict validation (AC-4).
      */
-    matchingMode: Type.Optional(Type.Union([Type.Literal('fill'), Type.Literal('corner16')])),
+    matchingMode: Type.Optional(TERRAIN_MATCHING_MODE_SCHEMA),
   },
   { additionalProperties: false },
 );
@@ -87,7 +92,7 @@ export const SceneVisualLayerSchema = Type.Object(
     /** Stable layer id — must be unique across the scene (AC-2). */
     id: Type.String(NON_EMPTY_ID),
     /** Explicit role; the engine never sniffs it from the id/name. */
-    role: Type.Union([Type.Literal('ground'), Type.Literal('decor'), Type.Literal('overhead')]),
+    role: LAYER_ROLE_SCHEMA,
     /** Render order within the role (stable, order-bearing). */
     order: Type.Integer({ minimum: 0 }),
     /** Ordered frame palette; index 0 reserved for empty. */
@@ -135,9 +140,7 @@ export const ScenePlacementSchema = Type.Object(
     transform: Type.Optional(SceneTransformSchema),
     origin: Type.Optional(SceneOriginSchema),
     /** Render role for band/depth; ground placements render below entities. */
-    role: Type.Optional(
-      Type.Union([Type.Literal('ground'), Type.Literal('decor'), Type.Literal('overhead')]),
-    ),
+    role: Type.Optional(LAYER_ROLE_SCHEMA),
     /**
      * Explicit solidity override. Never derived from alpha or image colour.
      * A tree canopy is not its collision footprint.
@@ -186,7 +189,7 @@ export const SceneProvenanceSchema = Type.Object(
      * placement ids. Required for imported objects without a stable id;
      * never derived from array order or mutable position (AC-3).
      */
-    identityMap: Type.Optional(Type.Record(Type.String(), Type.String())),
+    identityMap: Type.Optional(Type.Record(Type.String(), Type.String(NON_EMPTY_ID))),
   },
   { additionalProperties: false },
 );
@@ -235,21 +238,32 @@ export const SceneDocumentSchema = Type.Object(
       maxItems: SCENE_MAX_PLACEMENTS,
     }),
     navigation: SceneNavigationSchema,
-    transitions: Type.Optional(Type.Array(SceneTransitionSchema)),
+    transitions: Type.Optional(
+      Type.Array(SceneTransitionSchema, { maxItems: SCENE_MAX_TRANSITIONS }),
+    ),
     elevation: Type.Optional(SceneElevationSchema),
     provenance: Type.Optional(SceneProvenanceSchema),
   },
   { additionalProperties: false },
 );
 
+/** Canonical native scene document accepted by current loaders. */
 export type SceneDocument = Static<typeof SceneDocumentSchema>;
+/** Positive scene dimensions and square tile size in pixels. */
 export type SceneExtent = Static<typeof SceneExtentSchema>;
+/** Semantic terrain channel used to compile canonical ground layers. */
 export type SceneTerrainSurface = Static<typeof SceneTerrainSurfaceSchema>;
+/** Authored frame-palette grid used as a baked ground surface. */
 export type SceneBakedSurface = Static<typeof SceneBakedSurfaceSchema>;
+/** Ordered canonical visual grid with an explicit render role. */
 export type SceneVisualLayer = Static<typeof SceneVisualLayerSchema>;
+/** Stable scene object identity, visual reference, and transform. */
 export type ScenePlacement = Static<typeof ScenePlacementSchema>;
+/** Navigation overrides layered over authoritative terrain rules. */
 export type SceneNavigation = Static<typeof SceneNavigationSchema>;
+/** Explicit blocked state for one row-major scene cell. */
 export type SceneNavigationOverride = Static<typeof SceneNavigationOverrideSchema>;
+/** Stable map-to-map transition zone and destination. */
 export type SceneTransition = Static<typeof SceneTransitionSchema>;
 
 export type { SceneLayerRole, SceneTerrainMatchingMode };
