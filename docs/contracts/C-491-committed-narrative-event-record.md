@@ -3,7 +3,7 @@ id: C-491
 title: "Committed narrative event record"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-08T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-08T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — the backbone for memory, companions and consequence; nothing in Phase 2 works without it |
 | **Dependencies** | [C-489](C-489-one-authority-path-for-consequences.md) — C-489 decides and applies; C-491 writes down what happened and who saw it. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -80,7 +80,7 @@ There is exactly **one append API**: `narrativeEventService.record(...)`. Every 
 
 The consequence commit points are:
 - **Dialogue path** — `_resolveRoll` records exactly one event after `_applyConsequences` returns, using the priority rule in State & Data Models, passing `actorId: npcId` and `witnesses: npcAwarenessService.nearbyNpcIds` (the service dedupes into the final non-empty witness set).
-- **Quest path** — `_completeQuest` records one `QuestResolved` event before the journal entry is projected.
+- **Quest path** — `_completeQuest` records one `QuestResolved` event before the journal entry is projected; it passes `actorId` as the quest-facing NPC (`definition.offeredByNpcId` when present, else the player's active party NPC) so the `witnesses` set is never empty, honoring the "never `[]`" rule for completions that occur away from a scene cast.
 - **Promise path** — `relationshipService.recordPromise` records one `PromiseMade` event (the promise actor is always a witness).
 
 `campaignId` is required on every event. Recording callers must supply the active campaign ID at commit time (sourced from the session/campaign context); an event with an empty `campaignId` is a bug and `record()` must throw. `witnesses` must not be empty — the acting NPC is always included; absence of scene data degrades to `[actingNpcId]`, never to `[]`.
@@ -182,7 +182,7 @@ type NarrativeEventServiceInterface = {
 
 `record()` derives the next `sequence` from an internal `nextSequence` counter, computes the final witness set as `unique([actorId, ...witnesses].filter(Boolean))`, and throws when it is empty. It also validates that `claimantId` is present for `character_belief` / `dialogue_claim`. The dialogue path passes `actorId: npcId` and `witnesses: npcAwarenessService.nearbyNpcIds`; `record()` performs the dedupe, so the acting NPC is always present even when the scene cast is empty.
 
-**Dialogue event-kind priority** (deterministic; applied after `_applyConsequences` returns a non-empty `applied` list): `ItemTransferred` (any `inventory_grant`/`inventory_remove`) → else `RelationshipChanged` (any `trust_change`/`relationship_update`) → else `WorldFlagChanged` (any `flag_set`/`flag_clear`). If the roll was an Intimidation success and no applied delta matched, record `ThreatWitnessed`. Exactly one event per resolution, never one per delta — the full applied batch goes in `deltasApplied`.
+**Dialogue event-kind priority** (deterministic; applied after `_applyConsequences` returns a non-empty `applied` list): `ItemTransferred` (any `inventory_grant`/`inventory_remove`) → else `RelationshipChanged` (any `trust_change`/`relationship_update`) → else `WorldFlagChanged` (any `flag_set`/`flag_clear`). If the roll was an Intimidation success and no applied delta matched, record `ThreatWitnessed`. Exactly one event per resolution, never one per delta — the full applied batch goes in `deltasApplied`. Each dialogue event also assigns a deterministic `informationKind`: `ItemTransferred`, `RelationshipChanged`, and `WorldFlagChanged` are `world_fact`; `ThreatWitnessed` is `character_belief` (the acting NPC witnessed a threat). `dialogue_claim` is not produced by this contract's mechanical consequence path — it is reserved for C-495-authored evidence claims, but `record()` accepts it.
 
 ## Quality Requirements
 
@@ -299,7 +299,7 @@ type NarrativeEventServiceInterface = {
 ### AC-5: The journal derives from the committed event
 **Given** a quest that completes
 **When** `_completeQuest` commits a `QuestResolved` event
-**Then** the corresponding `QuestJournalEntry` derives from that event (`questId`, `title`, `status`, `timestamp`, `endingId`, `endingTitle`, and `narration` come from the event), rather than being authored as a parallel copy.
+**Then** the corresponding `QuestJournalEntry` derives from that event — its identity and timing (`questId` from the event's `subjectId`, `timestamp` from `recordedAt`) come from the event, and its authored narrative fields (`title`, `endingTitle`, `narration`) plus `status`/`endingId` resolve from the quest definition/ending the event references — so the journal is keyed to the single committed event rather than authored as a parallel copy.
 
 **Evidence Matrix**:
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -308,7 +308,7 @@ type NarrativeEventServiceInterface = {
 
 **Test Hooks**:
 - Moon Task: the client unit-test task
-- Integration: complete a quest and assert exactly one `QuestResolved` event exists and the resulting `questStateService.journalEntries` entry's identity fields equal the event's (`questId`, `title`, `status`, `timestamp`, `endingId`, `narration`); assert that removing the event also removes/derives the journal entry consistently.
+- Integration: complete a quest and assert exactly one `QuestResolved` event exists and the resulting `questStateService.journalEntries` entry's identity/timing fields equal the event's (`questId` === `subjectId`, `timestamp` === `recordedAt`), while `title`/`narration` match the quest definition — proving the entry is keyed to the committed event rather than a parallel copy; assert that removing the event also removes/derives the journal entry consistently.
 - E2E / Visual:
     - **Functional**: N/A.
     - **Visual**: N/A.
