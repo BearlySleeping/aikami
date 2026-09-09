@@ -12,9 +12,8 @@ import {
   extractSpawnPointEntities,
   extractSpawnPoints,
   extractTransitionZones,
-  loadJtonMap,
-  loadTilemap,
 } from './assets/map_loader.ts';
+import { loadMapCanonical } from './assets/scene/scene_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
 import type { LpcLayerRecipe } from './components/appearance.ts';
 import type { InteractableStateMap } from './components/interactable_state.ts';
@@ -2816,19 +2815,22 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         this._lastCulledChunkCounts = undefined;
       }
 
-      // 4. Load and parse the new tilemap
-      const isJton = mapUrl.endsWith('.jton');
-      const tilemap = isJton
-        ? await loadJtonMap({
-            url: mapUrl,
-            resolveTag: this._resolveTag,
-            releaseUrl: this._releaseUrl,
-          })
-        : await loadTilemap({
-            url: mapUrl,
-            resolveTag: this._resolveTag,
-            releaseUrl: this._releaseUrl,
-          });
+      // 4. Load and parse the new tilemap through the CANONICAL scene
+      //    pipeline (C-505 AC-1): the legacy map is normalized, validated and
+      //    compiled into a canonical TilemapData so /game and the preview
+      //    share one interpretation. Packless dev maps fall back to the
+      //    legacy parse so the game still boots.
+      const baseTerrain = packConfig?.terrains?.length
+        ? [...packConfig.terrains].sort((a, b) => a.precedence - b.precedence)[0]?.name
+        : undefined;
+      const { tilemap } = await loadMapCanonical({
+        url: mapUrl,
+        resolveTag: this._resolveTag,
+        releaseUrl: this._releaseUrl,
+        assetLock: 'pack:emberwatch',
+        baseTerrain,
+        terrains: packConfig?.terrains,
+      });
       // C-376 AC-1: derive the boolean grid from manifest walkability when a
       // pack config is available; fall back to the explicit collision layer
       // for packless maps (dev sandbox) or when manifest resolution failed.

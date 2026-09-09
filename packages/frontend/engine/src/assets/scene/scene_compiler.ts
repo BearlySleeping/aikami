@@ -14,6 +14,7 @@ import { SCENE_FRAME_EMPTY_INDEX } from '@aikami/constants';
 import type { ContentPackTerrain } from '@aikami/schemas';
 import type { SceneDocument, ScenePlacement } from '@aikami/types';
 import { autotileLayers } from '../autotile.ts';
+import type { TilemapData, TilemapLayer } from '../map_loader.ts';
 
 /** A compiled render layer carrying frame names per cell (0 = empty). */
 export type CompiledSceneLayer = {
@@ -236,4 +237,92 @@ const _buildCollision = (
   }
 
   return collision;
+};
+
+/**
+ * Compiles a canonical scene back into the {@link TilemapData} shape the
+ * existing render/collision/terrain pipeline consumes.
+ *
+ * This is the single production bridge that lets `/game` keep its proven
+ * downstream consumers (chunk renderer, `buildCollisionGrid`,
+ * `buildTerrainGridForMap`, spawn/transition extraction) while the canonical
+ * scene remains the ONE authoritative source — the loader boundary, not an
+ * additional render path (architecture directive 1, AC-1).
+ *
+ * Layers are emitted in the C-378 `frames` convention (frame name per cell,
+ * 0 = empty), resolved by name through the atlas — never GIDs. Spawns,
+ * transitions and props are recovered from the scene's placements with their
+ * stable ids and transforms so persisted world state stays attached (AC-3).
+ */
+export const compileSceneToTilemap = (
+  compiled: CompiledScene,
+  doc: SceneDocument,
+  source?: TilemapData,
+): TilemapData => {
+  const { width, height } = compiled;
+  const tileSize = compiled.tileSize;
+
+  // Render layers: the compiled scene's frame layers. When a source legacy
+  // map is provided (production /game path), the source GID/baked render
+  // layers + tilesets are PRESERVED so the existing GID-based renderer draws
+  // identically — the canonical scene remains the semantic authority (ground
+  // source, terrain channel, collision overrides, placement identity) while
+  // the GID layers are the derived render artifact (architecture directive 1).
+  const renderLayers: TilemapLayer[] = source?.layers?.length
+    ? source.layers
+    : compiled.layers.map((layer) => ({
+        name: layer.name,
+        width,
+        height,
+        data: new Array<number>(width * height).fill(0),
+        // `0` in frames is already reserved for empty; convert '' → 0.
+        frames: layer.frames.map((f) => (f ? f : 0)),
+        visible: true,
+        band: layer.band,
+      }));
+
+  // Recover spawn/prop objects from placements (stable ids + transforms).
+  const objects: Record<string, unknown>[] = [];
+  for (const placement of compiled.placements) {
+    objects.push({
+      id: Number(placement.id) || 0,
+      name: placement.id,
+      type: placement.component,
+      x: placement.x,
+      y: placement.y,
+      properties: [{ name: 'frame', type: 'string', value: placement.frame }],
+    });
+  }
+  // Recover transitions with their trigger rects + targets.
+  for (const transition of doc.transitions ?? []) {
+    objects.push({
+      id: Number(transition.id) || 0,
+      name: transition.id,
+      type: 'transition',
+      x: transition.x,
+      y: transition.y,
+      width: transition.width,
+      height: transition.height,
+      properties: [
+        { name: 'targetMap', type: 'string', value: transition.targetMap },
+        { name: 'targetX', type: 'number', value: transition.targetX },
+        { name: 'targetY', type: 'number', value: transition.targetY },
+        ...(transition.targetSpawnId
+          ? [{ name: 'targetSpawnId', type: 'string', value: transition.targetSpawnId }]
+          : []),
+      ],
+    });
+  }
+
+  return {
+    width,
+    height,
+    tilewidth: tileSize,
+    tileheight: tileSize,
+    tilesets: source?.tilesets ?? [],
+    layers: renderLayers,
+    objectLayers: objects.length > 0 ? [{ name: 'entities', objects }] : undefined,
+    terrain: compiled.terrain,
+    elevation: compiled.elevation,
+  };
 };

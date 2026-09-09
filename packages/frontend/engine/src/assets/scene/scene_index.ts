@@ -15,10 +15,13 @@ export {
   type CompiledScene,
   type CompiledSceneLayer,
   compileScene,
+  compileSceneToTilemap,
   type SceneCompileContext,
   type SceneEmissionReport,
 } from './scene_compiler.ts';
 export {
+  type CanonicalMapLoad,
+  loadMapCanonical,
   loadScene,
   type SceneLoadOptions,
   type SceneLoadResult,

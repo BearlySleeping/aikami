@@ -38,8 +38,6 @@ const _groundFill = (): string => _cssVar('--tile-fill', '#4a5568');
 const _decorFill = (): string => _cssVar('--decor-fill', '#7c5cff');
 /** Semantic overhead fill colour. */
 const _overheadFill = (): string => _cssVar('--overhead-fill', '#2bb673');
-/** Semantic tile stroke colour. */
-const _tileStroke = (): string => _cssVar('--tile-stroke', '#2d3748');
 /** Semantic collision overlay colour. */
 const _collisionFill = (): string => _cssVar('--collision-fill', 'rgba(255, 0, 0, 0.3)');
 
@@ -156,9 +154,9 @@ class MapPreviewViewModel
       // Load through the unified scene loader — the same interpretation the
       // game uses (AC-5). Native scenes are parsed directly; legacy Tiled/JTON
       // are normalized through the compatibility adapter.
-      let result: SceneLoadResult;
+      let loaded: { result: SceneLoadResult; tilesets: TilemapTilesetLike[] };
       try {
-        result = loadSceneSync(text, {
+        loaded = loadSceneSync(text, {
           sceneId: this._sceneId,
           assetLock: this._assetLock,
           adapter: { baseTerrain: this._baseTerrain },
@@ -174,7 +172,7 @@ class MapPreviewViewModel
         return;
       }
 
-      const compiled = result.compiled;
+      const compiled = loaded.result.compiled;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         return;
@@ -188,34 +186,62 @@ class MapPreviewViewModel
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, this._width, this._height);
 
-      const groundFill = _groundFill();
+      // ── Real locked tile/prop images (AC-5) ───────────────────────────
+      // Resolve the map's tileset spritesheet through the asset resolver and
+      // draw each compiled cell's frame region from it. fillRect is used ONLY
+      // as a last-resort diagnostic fallback for a frame that cannot be
+      // resolved to a texture region — never the primary rendering path.
+      const sheet = await _loadTilesetSheet(this._resolver, loaded.tilesets, tileSize);
+
       const decorFill = _decorFill();
       const overheadFill = _overheadFill();
-      const tileStroke = _tileStroke();
       const collisionFill = _collisionFill();
 
       // Draw compiled layers bottom-to-top (ground → decor → overhead).
-      const drawBand = (band: 'ground' | 'decor' | 'overhead', fill: string) => {
+      const drawBand = (band: 'ground' | 'decor' | 'overhead') => {
         for (const layer of compiled.layers) {
           if (layer.band !== band) {
             continue;
           }
           for (let i = 0; i < layer.frames.length; i++) {
-            if (!layer.frames[i]) {
+            const frame = layer.frames[i];
+            if (!frame) {
               continue;
             }
             const x = (i % mapW) * scaledTile;
             const y = Math.floor(i / mapW) * scaledTile;
-            ctx.fillStyle = fill;
-            ctx.fillRect(x, y, scaledTile, scaledTile);
-            ctx.strokeStyle = tileStroke;
-            ctx.strokeRect(x, y, scaledTile, scaledTile);
+            const src = sheet ? sheet.sourceRectFor(frame) : undefined;
+            if (sheet && src) {
+              ctx.drawImage(
+                sheet.image,
+                src.sx,
+                src.sy,
+                src.size,
+                src.size,
+                x,
+                y,
+                scaledTile,
+                scaledTile,
+              );
+            } else {
+              // Unresolvable frame — diagnostic fallback so the map is never
+              // silently blank. Ground falls back to the semantic tile fill;
+              // decor/overhead to their band colours.
+              let fallback = _groundFill();
+              if (band === 'decor') {
+                fallback = decorFill;
+              } else if (band === 'overhead') {
+                fallback = overheadFill;
+              }
+              ctx.fillStyle = fallback;
+              ctx.fillRect(x, y, scaledTile, scaledTile);
+            }
           }
         }
       };
-      drawBand('ground', groundFill);
-      drawBand('decor', decorFill);
-      drawBand('overhead', overheadFill);
+      drawBand('ground');
+      drawBand('decor');
+      drawBand('overhead');
 
       // Collision overlay from the authoritative collision grid.
       if (this._showCollision) {
@@ -229,7 +255,7 @@ class MapPreviewViewModel
         }
       }
 
-      // Placement markers (stable ids + roles).
+      // Placement markers (stable ids + roles) — small, above the tiles.
       for (const placement of compiled.placements) {
         const x = Math.round(placement.x * zoom);
         const y = Math.round(placement.y * zoom);
@@ -249,7 +275,8 @@ class MapPreviewViewModel
 /**
  * Synchronous scene load for the preview (it already has the raw text).
  * Native scenes parse/compile directly; Tiled/JTON normalize through the
- * adapter. Mirrors `loadScene` without the network fetch.
+ * adapter. Mirrors `loadScene` without the network fetch. Also returns the
+ * raw tilesets so the preview can resolve the spritesheet for real images.
  */
 const loadSceneSync = (
   text: string,
@@ -258,21 +285,106 @@ const loadSceneSync = (
     assetLock: string;
     adapter: { baseTerrain?: string };
   },
-): SceneLoadResult => {
+): { result: SceneLoadResult; tilesets: TilemapTilesetLike[] } => {
   const trimmed = text.trimStart();
   const parsed = JSON.parse(trimmed);
+  const tilesets = Array.isArray(parsed?.tilesets) ? (parsed.tilesets as TilemapTilesetLike[]) : [];
   if (parsed?.kind === 'aikami.scene') {
-    return sceneFromNative(parsed, {
+    return {
+      result: sceneFromNative(parsed, {
+        sceneId: options.sceneId,
+        assetLock: options.assetLock,
+        adapter: options.adapter,
+      }),
+      tilesets,
+    };
+  }
+  return {
+    result: sceneFromTilemap(parsed as TilemapData, {
       sceneId: options.sceneId,
       assetLock: options.assetLock,
       adapter: options.adapter,
-    });
+    }),
+    tilesets,
+  };
+};
+
+/** Minimal tileset fields the preview needs to sample a spritesheet. */
+type TilemapTilesetLike = {
+  image?: string;
+  columns?: number;
+  tilecount?: number;
+  tilewidth?: number;
+  tileheight?: number;
+};
+
+/** A loaded spritesheet plus a frame → source-rect resolver. */
+type TilesetSheet = {
+  image: HTMLImageElement;
+  columns: number;
+  tileSize: number;
+  /** Resolves a frame name to a square source rect, or undefined. */
+  sourceRectFor: (frame: string) => { sx: number; sy: number; size: number } | undefined;
+};
+
+/**
+ * Loads the map's tileset spritesheet through the asset resolver and builds
+ * a frame → source-rect resolver for grid tilesets. Returns undefined when no
+ * tileset image can be resolved (native scenes resolve frames via the pack
+ * lock, which the preview does not hold — those fall back to diagnostics).
+ */
+const _loadTilesetSheet = async (
+  resolver: AssetResolver,
+  tilesets: TilemapTilesetLike[],
+  tileSize: number,
+): Promise<TilesetSheet | undefined> => {
+  const tileset = tilesets.find((t) => t.image);
+  const imagePath = tileset?.image;
+  if (!imagePath) {
+    return undefined;
   }
-  return sceneFromTilemap(parsed as TilemapData, {
-    sceneId: options.sceneId,
-    assetLock: options.assetLock,
-    adapter: options.adapter,
-  });
+  const url = resolver.resolve(imagePath) ?? imagePath;
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error(`Failed to load tileset image: ${imagePath}`));
+    img.src = url;
+  }).catch(() => undefined);
+  if (!img.width || !img.height) {
+    return undefined;
+  }
+  const columns = tileset.columns ?? Math.floor(img.width / tileSize);
+  const size = tileset.tilewidth ?? tileSize;
+  return {
+    image: img,
+    columns,
+    tileSize: size,
+    sourceRectFor: (frame) => {
+      const index = _frameToIndex(frame);
+      if (index === undefined) {
+        return undefined;
+      }
+      const col = index % columns;
+      const row = Math.floor(index / columns);
+      return { sx: col * size, sy: row * size, size };
+    },
+  };
+};
+
+/**
+ * Maps a compiled frame name to a tile index within the spritesheet.
+ * Handles the C-378 corner-16 convention (`grass_5.png` → index 5) and plain
+ * numeric frames (`12.png` → 12). Returns undefined when the name carries no
+ * index (falls back to a diagnostic cell, never a blank map).
+ */
+const _frameToIndex = (frame: string): number | undefined => {
+  const stem = frame.replace(/\.[a-z0-9]+$/i, '');
+  const m = /_?(\d+)$/.exec(stem);
+  if (!m) {
+    return undefined;
+  }
+  const index = Number(m[1]);
+  return Number.isInteger(index) ? index : undefined;
 };
 
 // ── Factory ────────────────────────────────────────────────────────────────

@@ -11,9 +11,19 @@
 
 import type { SceneDocument } from '@aikami/types';
 import { logger } from '$logger';
-import type { TilemapData } from '../map_loader.ts';
+import {
+  loadJtonMap,
+  loadTilemap,
+  type RegistryBackedLoadOptions,
+  type TilemapData,
+} from '../map_loader.ts';
 import { parseNativeScene, SceneUnsupportedFormatError } from './native_scene.ts';
-import { type CompiledScene, compileScene, type SceneCompileContext } from './scene_compiler.ts';
+import {
+  type CompiledScene,
+  compileScene,
+  compileSceneToTilemap,
+  type SceneCompileContext,
+} from './scene_compiler.ts';
 import { type ScenePackReference, validateScene } from './scene_validator.ts';
 import { type TiledAdapterOptions, tilemapToScene } from './tiled_adapter.ts';
 
@@ -24,6 +34,21 @@ export type SceneLoadResult = {
   compiled: CompiledScene;
   /** Source format: native, tiled, or jton. */
   source: 'native' | 'tiled' | 'jton';
+};
+
+/**
+ * Result of {@link loadMapCanonical}: always a render-ready TilemapData, plus
+ * the canonical scene when normalization ran (packless fallback omits it).
+ */
+export type CanonicalMapLoad = {
+  /** The canonical {@link TilemapData} the render/collision/terrain consumes. */
+  tilemap: TilemapData;
+  /** Validated canonical scene document (omitted on packless fallback). */
+  doc?: SceneDocument;
+  /** Compiled runtime scene (omitted on packless fallback). */
+  compiled?: CompiledScene;
+  /** Source format: tiled or jton. */
+  source: 'tiled' | 'jton';
 };
 
 export type SceneLoadOptions = {
@@ -104,4 +129,73 @@ export const loadScene = async (
     return sceneFromTilemap(parsed as TilemapData, loadOptions);
   }
   throw new SceneUnsupportedFormatError('unknown');
+};
+
+/**
+ * Production map-load entry that routes a legacy map through the canonical
+ * scene pipeline and returns the canonical {@link TilemapData} the existing
+ * render/collision/terrain code consumes.
+ *
+ * This is the AC-1 integration: `/game` keeps its proven downstream consumers
+ * but the active runtime data is now compiled FROM a validated canonical
+ * scene document — the loader boundary, not a second render path. Returns
+ * both the canonical tilemap and the scene (doc + compiled) so callers can
+ * observe the single interpretation.
+ */
+export const loadMapCanonical = async (options: {
+  url: string;
+  fetch?: typeof fetch;
+  resolveTag?: (tag: string) => string | null;
+  releaseUrl?: (url: string) => void;
+  /** Canonical scene id (defaults to the URL basename). */
+  sceneId?: string;
+  /** Installed asset-lock reference. */
+  assetLock?: string;
+  /** Base terrain id for terrain-channel maps (the pack's lowest fill). */
+  baseTerrain?: string;
+  /** Pack terrain definitions for compiling terrain surfaces. */
+  terrains?: SceneCompileContext['terrains'];
+  /** Persisted legacy → canonical placement-id mapping (AC-3). */
+  identityMap?: Record<string, string>;
+}): Promise<CanonicalMapLoad> => {
+  const { url, resolveTag, releaseUrl, sceneId, assetLock, baseTerrain, terrains, identityMap } =
+    options;
+  const registry: RegistryBackedLoadOptions = { resolveTag, releaseUrl };
+  const isJton = url.endsWith('.jton');
+  const legacy = isJton
+    ? await loadJtonMap({ url, ...registry, fetch: options.fetch })
+    : await loadTilemap({ url, ...registry, fetch: options.fetch });
+
+  const id = sceneId ?? (url.split('/').pop() ?? url).replace(/\.(json|jton)$/i, '');
+
+  // A terrain-channel map needs a base terrain to normalize. Packless dev
+  // sandbox maps without one fall back to the legacy parse so the game still
+  // boots; canonical normalization is the authority whenever it can run.
+  if (legacy.terrain && !baseTerrain) {
+    logger.debug('loadMapCanonical:legacy-fallback', {
+      url,
+      hint: 'terrain channel without baseTerrain',
+    });
+    return { tilemap: legacy, source: isJton ? 'jton' : 'tiled' };
+  }
+
+  const result = sceneFromTilemap(legacy, {
+    sceneId: id,
+    assetLock: assetLock ?? 'pack:emberwatch',
+    terrains,
+    adapter: {
+      baseTerrain,
+      identityMap,
+      dropGroundDuplicateDecor: false,
+    },
+  });
+
+  const tilemap = compileSceneToTilemap(result.compiled, result.doc, legacy);
+  logger.debug('loadMapCanonical:canonical', {
+    url,
+    sceneId: id,
+    layers: tilemap.layers.length,
+    placements: result.doc.placements.length,
+  });
+  return { ...result, tilemap, source: isJton ? 'jton' : 'tiled' };
 };

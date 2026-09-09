@@ -78,3 +78,111 @@ describe('scene_loader', () => {
     ).toThrow(/unknown terrain id\(s\): lava/);
   });
 });
+
+// ── AC-1 production integration: loadMapCanonical + compileSceneToTilemap ──
+
+const tiledJson = JSON.stringify({
+  width: 2,
+  height: 2,
+  tilewidth: 32,
+  tileheight: 32,
+  tilesets: [
+    {
+      firstgid: 1,
+      name: 'atlas',
+      image: 'atlas.png',
+      imagewidth: 128,
+      imageheight: 128,
+      tilewidth: 32,
+      tileheight: 32,
+      columns: 4,
+      tilecount: 16,
+    },
+  ],
+  aikami: { terrain: ['grass', 'grass', 'grass', 'water'] },
+  layers: [
+    { type: 'tilelayer', name: 'ground', width: 2, height: 2, data: [1, 1, 1, 2] },
+    { type: 'tilelayer', name: 'decor', width: 2, height: 2, data: [1, 1, 1, 2] },
+    { type: 'tilelayer', name: 'collision', width: 2, height: 2, data: [0, 0, 0, 1] },
+    {
+      type: 'objectgroup',
+      name: 'entities',
+      objects: [
+        {
+          id: 7,
+          type: 'spawn',
+          x: 32,
+          y: 64,
+          properties: [{ name: 'spawnId', type: 'string', value: 'town_spawn' }],
+        },
+        {
+          id: 9,
+          type: 'transition',
+          x: 0,
+          y: 0,
+          width: 32,
+          height: 32,
+          properties: [
+            { name: 'targetMap', type: 'string', value: 'forest' },
+            { name: 'targetX', type: 'number', value: 64 },
+            { name: 'targetY', type: 'number', value: 32 },
+          ],
+        },
+      ],
+    },
+  ],
+});
+
+describe('loadMapCanonical (AC-1 production integration)', () => {
+  test('routes a Tiled map through the canonical scene and returns a canonical tilemap', async () => {
+    const { loadMapCanonical } = await import('./scene_loader.ts');
+    const { compileSceneToTilemap } = await import('./scene_compiler.ts');
+    const { doc, compiled, tilemap, source } = await loadMapCanonical({
+      url: 'maps:emberwatch/inn.json',
+      sceneId: 'emberwatch/inn',
+      assetLock: 'pack:emberwatch@1.0.0',
+      baseTerrain: 'grass',
+      terrains: makeTerrains(),
+      fetch: (async () =>
+        new Response(tiledJson, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })) as unknown as typeof fetch,
+    });
+    // Single canonical interpretation: validated doc + compiled scene + canonical tilemap.
+    expect(doc).toBeDefined();
+    expect(compiled).toBeDefined();
+    if (!doc || !compiled) {
+      throw new Error('expected a canonical doc and compiled scene');
+    }
+    expect(source).toBe('tiled');
+    // The canonical tilemap preserves the source render layers (GIDs + tilesets)
+    // so the existing GID-based renderer keeps working while the scene stays
+    // the single authority.
+    expect(tilemap.terrain).toEqual(['grass', 'grass', 'grass', 'water']);
+    expect(tilemap.tilesets[0].image).toBe('atlas.png');
+    // Spawns + transitions are recovered from the canonical scene placements.
+    const objects = tilemap.objectLayers?.[0].objects ?? [];
+    expect(objects.some((o) => o.type === 'spawn')).toBe(true);
+    expect(objects.some((o) => o.type === 'transition')).toBe(true);
+
+    // compileSceneToTilemap output is round-trippable and stable.
+    const round = compileSceneToTilemap(compiled, doc);
+    expect(round.width).toBe(2);
+    expect(round.terrain).toEqual(tilemap.terrain);
+  });
+
+  test('packless terrain-channel map falls back to the legacy parse (game still boots)', async () => {
+    const { loadMapCanonical } = await import('./scene_loader.ts');
+    const { tilemap, doc } = await loadMapCanonical({
+      url: 'maps:dev.json',
+      fetch: (async () =>
+        new Response(tiledJson, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })) as unknown as typeof fetch,
+    });
+    expect(tilemap).toBeDefined();
+    expect(doc).toBeUndefined(); // no baseTerrain → legacy fallback
+  });
+});
