@@ -1,16 +1,31 @@
 // apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts
 //
-// Concrete MemoryRetrievalBackend using @huggingface/transformers with
-// Xenova/all-MiniLM-L6-v2 for local, offline embedding generation and
-// in-memory cosine-similarity search. The index is serializable for
-// save/load via the campaign save system.
+// Concrete MemoryRetrievalBackend using deterministic keyword-overlap scoring.
 //
-// Contract: C-458 In-House Memory & Lore Retrieval System
-
+// Retrieval here is KEYWORD-BASED, not semantic: entries are scored by the
+// fraction of query words that appear (case-insensitive, word-boundary
+// tokenisation), and results are ranked by that overlap ratio. There is no
+// embedding model, no @huggingface/transformers import, no cosine similarity,
+// and no ONNX runtime — the index is a rebuildable projection over bounded
+// content that is cheap to rebuild on every boot.
+//
+// Why keyword retrieval (C-492 AC-1)? The semantic/cosine path that preceded
+// this was inverted (the indexed case took the keyword branch, the model load
+// happened only when embeddings were absent), never ran in a production boot,
+// and dragged in a 2MB+ ONNX dependency the boot never loaded. Keyword
+// retrieval is deterministic, fully offline, and testable in Bun's runtime —
+// sufficient at the content scale of a five-character village (C-458 AC-1's
+// semantic ambition is superseded for that scale).
+//
+// The index is ephemeral. It is NOT registered with serializable_service and
+// is never persisted into a save; it is rebuilt on load from its authoritative
+// sources (lore, session summaries, C-491 committed narrative events).
+//
+// Contract: C-458 In-House Memory & Lore Retrieval System (C-492 resolves the
+// retrieval fork toward keyword retrieval)
 import {
   DEFAULT_MAX_RESULTS,
   DEFAULT_MIN_SCORE,
-  EMBEDDING_DIMENSION,
   MEMORY_QUERY_SCOPE_SOURCE_TYPES,
 } from '@aikami/constants';
 import type {
@@ -23,101 +38,42 @@ import type {
 } from '@aikami/types';
 import { logger } from '$logger';
 
-const LOCAL_EMBEDDING_MODEL = 'Xenova/all-MiniLM-L6-v2';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-type EmbeddingModel = {
-  embed: (texts: string[]) => Promise<number[][]>;
-};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Compute cosine similarity between two vectors.
- */
-const _cosineSimilarity = (a: number[], b: number[]): number => {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? 0 : dot / denom;
-};
-
-/**
- * Normalise a float32 array to unit length.
- */
-const _normalise = (vec: number[]): number[] => {
-  let sumSq = 0;
-  for (const v of vec) {
-    sumSq += v * v;
-  }
-  const mag = Math.sqrt(sumSq);
-  return mag === 0 ? vec : vec.map((v) => v / mag);
-};
-
 // ---------------------------------------------------------------------------
 // LocalEmbeddingBackend
 // ---------------------------------------------------------------------------
 
 /**
- * In-memory retrieval backend using local embeddings.
+ * In-memory retrieval backend using deterministic keyword-overlap scoring.
  *
- * - Embeds indexable content via @huggingface/transformers (all-MiniLM-L6-v2)
- * - Performs cosine-similarity search over in-memory vectors
- * - Index is serializable to/from a plain snapshot for save/load
- * - Fully offline — no network calls
- * - Degrades gracefully to empty results when index is empty
+ * - Indexes content verbatim (no embeddings are computed or stored)
+ * - Scores by the fraction of query words found in each entry's content
+ * - Index is a rebuildable projection — never persisted into a save
+ * - Fully offline and model-free — no network calls, no ONNX startup
+ * - `isReady` means "index initialised", not "model loaded"
  */
 export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
   private _entries: InMemoryIndexEntry[] = [];
-  private _model: EmbeddingModel | null = null;
-  private _modelLoadPromise: Promise<EmbeddingModel> | null = null;
   private _initialised = false;
 
   /**
-   * Create a new LocalEmbeddingBackend.
-   * Model is loaded lazily on first embed call.
+   * Create a new LocalEmbeddingBackend. No model is loaded.
    */
   static create(): LocalEmbeddingBackend {
     return new LocalEmbeddingBackend();
   }
 
-  /** Whether the backend is ready to index/query. */
+  /** Whether the backend is ready to index/query (index initialised). */
   get isReady(): boolean {
     return this._initialised;
   }
 
   /**
-   * Initialise the backend. Loads the embedding model.
-   * Safe to call multiple times — returns the same promise.
+   * Initialise the backend. With keyword retrieval this is a no-op that marks
+   * the index ready — there is no model to load. Safe to call multiple times.
    */
   async init(): Promise<void> {
-    if (this._modelLoadPromise) {
-      this._model = await this._modelLoadPromise;
-      this._initialised = true;
-      return;
-    }
-
-    this._modelLoadPromise = this._loadModel();
-    try {
-      this._model = await this._modelLoadPromise;
-      this._initialised = true;
-      logger.debug('LocalEmbeddingBackend:initialised', { dimension: EMBEDDING_DIMENSION });
-    } catch (err) {
-      this._modelLoadPromise = null; // Allow retry on failure
-      logger.error('LocalEmbeddingBackend:init-failed', { error: String(err) });
-      throw err;
-    }
+    this._initialised = true;
+    logger.debug('LocalEmbeddingBackend:initialised', { mode: 'keyword' });
   }
 
   /** @inheritdoc */
@@ -126,36 +82,22 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
       return;
     }
 
-    const model = await this._ensureModel();
-
-    // Extract texts to embed
-    const texts = entries.map((e) => e.content);
-    const embeddings = await model.embed(texts);
-
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      const embedding = _normalise(embeddings[i]);
+    for (const entry of entries) {
+      const indexed: InMemoryIndexEntry = {
+        sourceType: entry.sourceType,
+        sourceId: entry.sourceId,
+        content: entry.content,
+        metadata: entry.metadata,
+      };
 
       // Remove existing entry with same sourceType + sourceId (idempotent)
       const existingIdx = this._entries.findIndex(
         (e) => e.sourceType === entry.sourceType && e.sourceId === entry.sourceId,
       );
       if (existingIdx >= 0) {
-        this._entries[existingIdx] = {
-          sourceType: entry.sourceType,
-          sourceId: entry.sourceId,
-          content: entry.content,
-          embedding,
-          metadata: entry.metadata,
-        };
+        this._entries[existingIdx] = indexed;
       } else {
-        this._entries.push({
-          sourceType: entry.sourceType,
-          sourceId: entry.sourceId,
-          content: entry.content,
-          embedding,
-          metadata: entry.metadata,
-        });
+        this._entries.push(indexed);
       }
     }
 
@@ -171,82 +113,33 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
       return [];
     }
 
-    const hasPrecomputedEmbeddings =
-      this._entries.length > 0 && this._entries[0].embedding.length > 0;
-
-    if (!hasPrecomputedEmbeddings) {
-      await this._ensureModel();
-    }
-
-    if (hasPrecomputedEmbeddings) {
-      // With pre-computed embeddings, use keyword overlap scoring
-      const queryWords = q.text.toLowerCase().split(/\W+/).filter(Boolean);
-      const results: MemoryResult[] = [];
-      const scope = q.scope ?? 'all';
-      const sourceTypes = MEMORY_QUERY_SCOPE_SOURCE_TYPES[scope];
-      const candidates = this._entries.filter((entry) =>
-        sourceTypes.some((sourceType) => sourceType === entry.sourceType),
-      );
-
-      for (const entry of candidates) {
-        const entryWords = entry.content.toLowerCase().split(/\W+/).filter(Boolean);
-        const matched = queryWords.filter((w) => entryWords.includes(w)).length;
-        const score = queryWords.length > 0 ? matched / queryWords.length : 0;
-        if (score >= DEFAULT_MIN_SCORE) {
-          results.push({
-            sourceType: entry.sourceType,
-            sourceId: entry.sourceId,
-            content: entry.content,
-            relevanceScore: score,
-            metadata: entry.metadata,
-          });
-        }
-      }
-
-      results.sort((a, b) => b.relevanceScore - a.relevanceScore);
-      const limit = q.limit ?? DEFAULT_MAX_RESULTS;
-      return results.slice(0, limit);
-    }
-
-    const model = await this._ensureModel();
-    const rawQueryVec = (await model.embed([q.text]))[0];
-    const normalisedQuery = _normalise(rawQueryVec);
-
-    // Filter by scope
+    // Keyword-overlap scoring is the ONLY path (C-492 AC-1). No model load.
+    const queryWords = q.text.toLowerCase().split(/\W+/).filter(Boolean);
+    const results: MemoryResult[] = [];
     const scope = q.scope ?? 'all';
     const sourceTypes = MEMORY_QUERY_SCOPE_SOURCE_TYPES[scope];
     const candidates = this._entries.filter((entry) =>
       sourceTypes.some((sourceType) => sourceType === entry.sourceType),
     );
 
-    // Score and rank
-    const scored: Array<{ entry: InMemoryIndexEntry; score: number }> = [];
     for (const entry of candidates) {
-      const score = _cosineSimilarity(normalisedQuery, entry.embedding);
+      const entryWords = entry.content.toLowerCase().split(/\W+/).filter(Boolean);
+      const matched = queryWords.filter((w) => entryWords.includes(w)).length;
+      const score = queryWords.length > 0 ? matched / queryWords.length : 0;
       if (score >= DEFAULT_MIN_SCORE) {
-        scored.push({ entry, score });
+        results.push({
+          sourceType: entry.sourceType,
+          sourceId: entry.sourceId,
+          content: entry.content,
+          relevanceScore: score,
+          metadata: entry.metadata,
+        });
       }
     }
 
-    scored.sort((a, b) => b.score - a.score);
-
-    // Apply limit
+    results.sort((a, b) => b.relevanceScore - a.relevanceScore);
     const limit = q.limit ?? DEFAULT_MAX_RESULTS;
-    const top = scored.slice(0, limit);
-
-    logger.debug('LocalEmbeddingBackend:query', {
-      queryLength: q.text.length,
-      candidates: candidates.length,
-      results: top.length,
-    });
-
-    return top.map((r) => ({
-      sourceType: r.entry.sourceType,
-      sourceId: r.entry.sourceId,
-      content: r.entry.content,
-      relevanceScore: r.score,
-      metadata: r.entry.metadata,
-    }));
+    return results.slice(0, limit);
   }
 
   /** @inheritdoc */
@@ -275,70 +168,21 @@ export class LocalEmbeddingBackend implements MemoryRetrievalBackend {
   // ── Serialisation ────────────────────────────────────────────────────
 
   /**
-   * Export the current index as a plain snapshot for save/load.
+   * Export the current index as a plain snapshot. NOTE: the index is a
+   * rebuildable projection and is NOT persisted into saves — this exists for
+   * tests and in-memory inspection only.
    */
   toSnapshot(): { entries: InMemoryIndexEntry[] } {
     return { entries: this._entries };
   }
 
   /**
-   * Restore the index from a previously exported snapshot.
-   * Does NOT require the model — queries still need it.
+   * Restore the index from a previously exported snapshot. No model is needed
+   * — queries are keyword-based.
    */
   loadSnapshot(snapshot: { entries: InMemoryIndexEntry[] }): void {
     this._entries = snapshot.entries;
     this._initialised = true;
     logger.debug('LocalEmbeddingBackend:snapshot-loaded', { count: this._entries.length });
-  }
-
-  // ── Private helpers ──────────────────────────────────────────────────
-
-  private async _loadModel(): Promise<EmbeddingModel> {
-    // Dynamic import: @huggingface/transformers is ~2MB+ and should not
-    // block boot — it is loaded lazily on first indexing/query.
-    const { env, pipeline } = await import('@huggingface/transformers');
-
-    env.allowLocalModels = true;
-    env.allowRemoteModels = false;
-    env.localModelPath = '/models/';
-    if (env.backends.onnx.wasm) {
-      env.backends.onnx.wasm.wasmPaths = '/ort/';
-    }
-
-    const pipe = await pipeline('feature-extraction', LOCAL_EMBEDDING_MODEL, {
-      dtype: 'q8',
-    });
-
-    logger.debug('LocalEmbeddingBackend:model-loaded', { model: LOCAL_EMBEDDING_MODEL });
-
-    return {
-      embed: async (texts: string[]): Promise<number[][]> => {
-        const results: number[][] = [];
-        for (const text of texts) {
-          const output = await pipe(text, {
-            pooling: 'mean',
-            normalize: true,
-          });
-          // Extract the embedding vector from the output tensor
-          const data = output.data as Float32Array;
-          // Only take the first EMBEDDING_DIMENSION values
-          const vec = Array.from(data.slice(0, EMBEDDING_DIMENSION));
-          results.push(vec);
-        }
-        return results;
-      },
-    };
-  }
-
-  private async _ensureModel(): Promise<EmbeddingModel> {
-    if (this._model) {
-      return this._model;
-    }
-
-    await this.init();
-    if (!this._model) {
-      throw new Error('LocalEmbeddingBackend: model unavailable after initialization');
-    }
-    return this._model;
   }
 }

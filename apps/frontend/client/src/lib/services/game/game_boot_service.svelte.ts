@@ -23,6 +23,7 @@ import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
+import { memoryRetrievalService } from '../memory/memory_retrieval_service.svelte';
 import { personaService } from '../persona/persona_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
@@ -1133,8 +1134,29 @@ class GameBootService
     // Re-lock input after hydration completes
     this._gameWorld.setInputLocked(true);
 
+    // Post-hydration, non-blocking memory initialisation (C-492 AC-2). Hooked
+    // here — AFTER hydrateAllServices — so the index reads the hydrated
+    // narrativeEventService.events rather than an empty pre-hydration list.
+    // Fire-and-forget: boot does not await it, and a failure logs + continues.
+    this._startMemoryRetrieval();
+
     const elapsed = performance.now() - t0;
     this.debug('stage:hydrating_snapshot:complete', { elapsedMs: elapsed });
+  }
+
+  /**
+   * Initialises the memory retrieval service and kicks off a background
+   * indexing pass. Non-blocking — never fails boot (C-492 AC-2).
+   */
+  private _startMemoryRetrieval(): void {
+    memoryRetrievalService
+      .init()
+      .then(() => {
+        memoryRetrievalService.backgroundIndexOnLoad();
+      })
+      .catch((err) => {
+        this.warn('stage:hydrating_snapshot:memory-init-failed', { error: String(err) });
+      });
   }
 
   /**

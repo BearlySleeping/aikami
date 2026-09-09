@@ -15,6 +15,7 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 // Contract: C-371 Free-Text-First NPC Interaction — two-call pipeline
 
+import { NPC_RECALL_MAX_RESULTS } from '@aikami/constants';
 import { getPublicMode } from '@aikami/frontend/configs';
 import {
   BaseFrontendClass,
@@ -48,6 +49,7 @@ import { Value } from 'typebox/value';
 import {
   campaignService,
   inventoryService,
+  memoryRetrievalService,
   narrativeEventService,
   npcAwarenessService,
   questStateService,
@@ -57,6 +59,14 @@ import type { ConsequenceRejectionReason, ConsequenceRequest, ConsequenceResult 
 import { buildNpcPersona } from './npc_dialogue_persona';
 
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
+
+/**
+ * Maximum conversation turns retained for the `[CONVERSATION HISTORY]`
+ * section. When witness-scoped recalled facts are present they displace this
+ * window (history shrinks by the number of recalled facts) so the prompt stays
+ * within C-488's budget (C-492 AC-5).
+ */
+const MAX_CONVERSATION_TURNS = 10;
 
 /** Fixed application order for a batch (Failure Recovery) — never model order. */
 const CONSEQUENCE_KIND_ORDER = [
@@ -236,7 +246,10 @@ type NpcDialogueExecutors = {
 type DialogueContextProjection = {
   persona: string;
   npcName: string;
+  /** Last N conversation turns (bounded window — see MAX_CONVERSATION_TURNS). */
   memory: string[];
+  /** Witness-scoped recalled facts (C-492) — rendered under `[MEMORY]`. */
+  recalledFacts: string[];
   gameStateFacts: string[];
   relationshipFacts: string[];
   allowedCommands: NpcDialogueCommandKind[];
@@ -663,6 +676,11 @@ export class NpcDialogueService
         contextualDialogueKey: contextualKey,
       };
 
+      // Witness-scoped recall (C-492): query memory for what THIS NPC could
+      // know, seeded by the most recent player message. Degrades to an empty
+      // `[MEMORY]` section if retrieval is disabled/not ready — never throws.
+      const recalledFacts = await this._recallForTurn(options.npcId, options.messages);
+
       const contextProjection = this._buildContextProjection({
         npcId: options.npcId,
         npc,
@@ -670,10 +688,18 @@ export class NpcDialogueService
         messages: options.messages,
         gameStateFacts: options.gameStateFacts ?? [],
         allowedCommands,
+        recalledFacts,
       });
 
       // ── Attempt AI generation ──────────────────────────────────────
       try {
+        // The recall fetch yielded the microtask queue; if the caller aborted
+        // while we were fetching, honour the abort now (inside the try so it
+        // routes through the abort turn-state path) rather than invoking the
+        // generator on an already-aborted signal, which would hang its
+        // listener.
+        this._checkAbort(linkedSignal);
+
         const aiTurn = await this._generateAiTurn({
           contextProjection,
           messages: options.messages,
@@ -1389,25 +1415,60 @@ export class NpcDialogueService
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     gameStateFacts: string[];
     allowedCommands: NpcDialogueCommandKind[];
+    /** Witness-scoped recalled facts (C-492), already capped by the caller. */
+    recalledFacts?: string[];
   }): DialogueContextProjection {
     const { npcId, npc, npcName, messages, gameStateFacts, allowedCommands } = options;
+    const recalledFacts = options.recalledFacts ?? [];
 
     // Persona: assembled from authored identity with per-field fallback (C-488).
     const persona = this._buildPersona({ npcId, npcName, npc });
 
-    // Memory: recent conversation turns (bounded window — last 10 turns)
+    // Memory: recent conversation turns. The window shrinks as recalled facts
+    // grow so the `[MEMORY]` section displaces history rather than extending
+    // C-488's prompt budget (C-492 AC-5).
+    const historyWindow = Math.max(0, MAX_CONVERSATION_TURNS - recalledFacts.length);
     const memory = messages
-      .slice(-10)
+      .slice(-historyWindow)
       .map((m) => `${m.role === 'player' ? 'Player' : npcName}: ${m.content}`);
 
     return {
       persona,
       npcName,
       memory,
+      recalledFacts: recalledFacts.slice(0, NPC_RECALL_MAX_RESULTS),
       gameStateFacts,
       relationshipFacts: [],
       allowedCommands,
     };
+  }
+
+  /**
+   * Witness-scoped memory recall for the current turn (C-492). Queries
+   * `memoryRetrievalService.retrieveForNpc` seeded by the latest player
+   * message, and degrades to an empty list (never throws) when retrieval is
+   * disabled, not ready, or the NPC witnessed nothing relevant.
+   */
+  private async _recallForTurn(
+    npcId: string,
+    messages: Array<{ role: 'player' | 'npc'; content: string }>,
+  ): Promise<string[]> {
+    try {
+      const lastPlayer = [...messages].reverse().find((m) => m.role === 'player');
+      const queryText = lastPlayer?.content ?? '';
+      if (queryText.length === 0) {
+        return [];
+      }
+      const results = await memoryRetrievalService.retrieveForNpc({
+        npcId,
+        text: queryText,
+        limit: NPC_RECALL_MAX_RESULTS,
+      });
+      return results.map((r) => r.content);
+    } catch (err) {
+      this.warn('dialogue:recall-failed', { npcId, error: String(err) });
+      return [];
+    }
   }
 
   /**
@@ -1465,6 +1526,13 @@ export class NpcDialogueService
 
     if (projection.relationshipFacts && projection.relationshipFacts.length > 0) {
       lines.push('', '[RELATIONSHIPS]', ...projection.relationshipFacts);
+    }
+
+    // Witness-scoped recalled facts (C-492) — rendered as a bounded section.
+    // Deliberately placed ahead of recent chatter so recall carries context
+    // that short-lived conversation history would otherwise lose.
+    if (projection.recalledFacts && projection.recalledFacts.length > 0) {
+      lines.push('', '[MEMORY]', ...projection.recalledFacts);
     }
 
     if (projection.memory.length > 0) {

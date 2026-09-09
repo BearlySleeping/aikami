@@ -16,15 +16,20 @@ export const MAX_INDEX_ENTRIES = 500;
 /** Soft warning threshold for index size (entries). */
 export const INDEX_SIZE_WARN = 250;
 
-/** Embedding dimension for all-MiniLM-L6-v2. */
-export const EMBEDDING_DIMENSION = 384;
+/** Default cap on facts recalled into the NPC dialogue `[MEMORY]` section (C-492). */
+export const NPC_RECALL_MAX_RESULTS = 4;
 
-/** Indexed source types searched for each public retrieval scope. */
+/**
+ * Indexed source types searched for each public retrieval scope.
+ *
+ * `all`/`history`/`lore` are the GM/narrative-director surfaces (may include
+ * the player's private `session_summary`). `npc` is the player-facing NPC
+ * recall scope — witnessed narrative events + shared lore ONLY, never
+ * `session_summary` (C-492 trust boundary).
+ */
 export const MEMORY_QUERY_SCOPE_SOURCE_TYPES = {
-  all: ['lore', 'session_summary'],
+  all: ['lore', 'session_summary', 'narrative_event'],
   history: ['session_summary'],
   lore: ['lore'],
+  npc: ['narrative_event', 'lore'],
 } as const;
-
-/** HuggingFace model ID for local embedding generation. */
-export const LOCAL_EMBEDDING_MODEL = 'Xenova/all-MiniLM-L6-v2';

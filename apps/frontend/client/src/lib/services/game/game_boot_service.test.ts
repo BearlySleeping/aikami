@@ -4,7 +4,8 @@
 // progress emission, campaign state machine integration.
 // Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
+import { memoryRetrievalService } from '../memory/memory_retrieval_service.svelte';
 import { gameBootService } from './game_boot_service.svelte';
 
 // ---------------------------------------------------------------------------
@@ -222,5 +223,73 @@ describe('GameBootService — AC-5 Save Hydration', () => {
 
     // Fresh spawn path should have been chosen
     expect(result).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-492 AC-2: memory init + background index run from the production boot hook
+// ---------------------------------------------------------------------------
+
+describe('GameBootService — C-492 AC-2 memory boot hook', () => {
+  test('the post-hydration hook initialises memory and fires non-blocking background index', async () => {
+    resetService();
+
+    // Spy on the production memory retrieval service by swapping its methods
+    // (the boot hook holds the same singleton reference).
+    const originalInit = memoryRetrievalService.init;
+    const originalBackground = memoryRetrievalService.backgroundIndexOnLoad;
+    const initSpy = mock(async () => {});
+    const backgroundSpy = mock(() => {});
+    memoryRetrievalService.init = initSpy;
+    memoryRetrievalService.backgroundIndexOnLoad = backgroundSpy;
+
+    try {
+      // Invoke the same hook the hydrating_snapshot stage calls (C-492 AC-2).
+      // Full boot-through-hydration is exercised by the E2E memory_recall
+      // journey; this unit test pins the hook's non-blocking contract.
+      const hook = (
+        gameBootService as unknown as {
+          _startMemoryRetrieval: () => void;
+        }
+      )._startMemoryRetrieval;
+      hook.call(gameBootService);
+
+      expect(initSpy).toHaveBeenCalledTimes(1);
+      // The hook returns synchronously (void) — it does not await init, so it
+      // cannot block boot (timing/order assertion, not a sleep-based one).
+      expect(backgroundSpy).toHaveBeenCalledTimes(0);
+
+      await initSpy.mock.results[0]?.value;
+      // After init resolves, the background index is kicked off.
+      expect(backgroundSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      memoryRetrievalService.init = originalInit;
+      memoryRetrievalService.backgroundIndexOnLoad = originalBackground;
+    }
+  });
+
+  test('a memory init failure logs and does not propagate (boot continues)', async () => {
+    resetService();
+    const originalInit = memoryRetrievalService.init;
+    const originalBackground = memoryRetrievalService.backgroundIndexOnLoad;
+    memoryRetrievalService.init = mock(async () => {
+      throw new Error('index failed');
+    });
+    const backgroundSpy = mock(() => {});
+    memoryRetrievalService.backgroundIndexOnLoad = backgroundSpy;
+
+    try {
+      const hook = (
+        gameBootService as unknown as {
+          _startMemoryRetrieval: () => void;
+        }
+      )._startMemoryRetrieval;
+      // Must not throw synchronously — a failed init logs and continues.
+      expect(() => hook.call(gameBootService)).not.toThrow();
+      expect(backgroundSpy).toHaveBeenCalledTimes(0);
+    } finally {
+      memoryRetrievalService.init = originalInit;
+      memoryRetrievalService.backgroundIndexOnLoad = originalBackground;
+    }
   });
 });

@@ -169,6 +169,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       persona: 'You are a dev sandbox NPC.',
       npcName: 'Elder Thrain',
       memory: [],
+      recalledFacts: [],
       gameStateFacts: [],
       relationshipFacts: [],
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
