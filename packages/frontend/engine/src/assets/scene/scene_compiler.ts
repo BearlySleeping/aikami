@@ -262,19 +262,29 @@ export const compileSceneToTilemap = (
   const { width, height } = compiled;
   const tileSize = compiled.tileSize;
 
-  // Render layers always come from the canonical compiler. The source map
-  // contributes tileset metadata only; passing its raw layers through would
-  // discard canonical role/order and frame transformations.
-  const renderLayers: TilemapLayer[] = compiled.layers.map((layer) => ({
-    name: layer.name,
-    width,
-    height,
-    data: new Array<number>(width * height).fill(0),
-    // `0` in frames is already reserved for empty; convert '' → 0.
-    frames: layer.frames.map((frame) => (frame ? frame : 0)),
-    visible: true,
-    band: layer.band,
-  }));
+  // Render layers. On the production /game path a source legacy map is
+  // present: its GID/baked render layers + tilesets are PRESERVED so the
+  // existing GID-based renderer draws identically (architecture directive 1 —
+  // the canonical scene stays the semantic authority for ground source,
+  // terrain channel, collision overrides and placement identity while the GID
+  // layers are the derived render artifact, exactly as source.objectLayers are
+  // preserved for the spawner below). Building layers from the canonical
+  // compiler alone breaks baked-GID maps (inn, merchant_shop): their canonical
+  // frame names (`atlas_<n>.png`) do not resolve in the emberwatch named-frame
+  // atlas, so tiles render blank — a regression caught by manual /game
+  // testing. Native scenes (no source) render from the canonical frame layers.
+  const renderLayers: TilemapLayer[] = source?.layers?.length
+    ? source.layers
+    : compiled.layers.map((layer) => ({
+        name: layer.name,
+        width,
+        height,
+        data: new Array<number>(width * height).fill(0),
+        // `0` in frames is already reserved for empty; convert '' → 0.
+        frames: layer.frames.map((frame) => (frame ? frame : 0)),
+        visible: true,
+        band: layer.band,
+      }));
 
   // Spawn/prop/transition objects. On the production /game path a source
   // legacy map is present: its object layers preserve every custom property

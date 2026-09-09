@@ -112,7 +112,15 @@ describe('scene_compiler', () => {
       layers: [{ name: 'raw-source', width: 2, height: 2, data: [1, 1, 1, 1], visible: true }],
     });
 
-    expect(tilemap.layers.map((layer) => layer.name)).toEqual(
+    // Production /game parity: when a source legacy map is present its GID
+    // render layers are preserved so the existing GID-based renderer draws
+    // identically (baked-GID maps like inn/merchant_shop render blank if the
+    // canonical `atlas_<n>.png` frame layers are used instead — regression
+    // caught by manual /game testing). Native scenes (no source) render from
+    // the canonical compiled layers.
+    expect(tilemap.layers.map((layer) => layer.name)).toEqual(['raw-source']);
+    const noSource = compileSceneToTilemap(compiled, doc);
+    expect(noSource.layers.map((layer) => layer.name)).toEqual(
       compiled.layers.map((layer) => layer.name),
     );
     expect(extractSpawnPoints(tilemap).find((point) => point.id === 'npc-alpha')).toBeDefined();
