@@ -111,7 +111,7 @@ Gated transcript-rewinding in campaign play by mode (C-490). Added an `isCampaig
 |---|---|---|
 | AC-1 | ✅ | Branch/edit/delete dropped in campaign play via `disableTranscriptEditing`; unit tests + dev-sandbox E2E pass. `/game` E2E written but unreachable in this ad-hoc env (baseline `dialogue_skill_check` fails identically — see Deviations). |
 | AC-2 | ✅ | Retry relabelled "Rephrase" (helper `messageActionLabel`); new `rephraseResponse` performs no NpcStateDelta/quest/command mutation (unit test asserts quest not re-accepted). |
-| AC-3 | ✅ | Branches are in-memory, session-scoped, never written to the save format; branch UI gated read-only behind `isCampaignPlay`. Unit test asserts branch data is retained (not silently discarded). No save-schema change → stays thin. |
+| AC-3 | ✅ (N/A — documented) | **Handling: N/A by design.** Branch/transcript data is **not persisted to saves** — `branches`/`activeBranchId` are in-memory, session-scoped state (cleared on overlay close per C-343); only input drafts persist (IndexedDB). So no "persisted branch data in a save" exists to load. The chosen handling: the campaign gating keeps any in-memory branch state **read-only** (branch selector + branch/edit/delete actions hidden) and **never silently discards** it; no save-schema change → contract stays thin. Unit test asserts this retention + gating. |
 | AC-4 | ✅ | `cyoa_choices.spec.ts` (C-245) — all 10 tests pass. Message-action gating does not touch the CYOA branch path. |
 
 ### Files Created
