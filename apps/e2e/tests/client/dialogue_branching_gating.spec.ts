@@ -16,7 +16,7 @@ import { expect, test } from '@playwright/test';
 import { GamePage } from '$pom/game_page';
 
 /** Seeds a deterministic (non-roll) intent + a minimal sheet before boot. */
-const seedNeutralIntent = (page: import('playwright').Page): Promise<void> =>
+const seedNeutralIntent = (page: import('playwright').Page) =>
   page.addInitScript(() => {
     const win = window as unknown as Record<string, unknown>;
     win.__AIKAMI_E2E_SHEET__ = {

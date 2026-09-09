@@ -7,6 +7,33 @@
 import { Type } from 'typebox';
 
 /**
+ * Schema for dialogue slash-command visual assessment.
+ * Validates inline image generation without dialogue layout regressions.
+ */
+export const DialogueSlashCommandsSchema = Type.Object({
+  score: Type.Number({
+    description: '0-100 score of visual correctness',
+  }),
+  dialogueVisible: Type.Boolean({
+    description: 'Whether the dialogue overlay is visible with NPC name and greeting text',
+  }),
+  imageBlockVisible: Type.Boolean({
+    description: 'Whether an inline image block appears in the dialogue thread after /generate',
+  }),
+  generatedImageVisible: Type.Boolean({
+    description:
+      'Whether the generated scene image (or its generating skeleton) is visible inline in the thread',
+  }),
+  noLayoutFlashes: Type.Boolean({
+    description:
+      'Whether the UI is free of layout flashes, blank bounding frames, or visual glitches',
+  }),
+  issues: Type.Array(Type.String(), {
+    description: 'List of visual issues detected',
+  }),
+});
+
+/**
  * Schema for sandbox loaded visual test assessment.
  * Validates that a tilemap with a character is correctly rendered.
  */

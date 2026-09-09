@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
-import { addComponent, addEntity, createWorld, getComponent, set } from 'bitecs';
+import { addComponent, addEntity, createWorld, getComponent, removeEntity, set } from 'bitecs';
 import { Companion, registerCompanionObservers } from '../components/companion.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import { PathFollow, registerPathFollowObservers } from '../components/path_follow.ts';
@@ -23,6 +23,7 @@ import { updateMovement } from './movement_system.ts';
 import {
   getNpcHaltReason,
   hasActivePath,
+  registerPathFollowHaltObservers,
   resetNpcHaltReasons,
   updatePathFollow,
 } from './path_follow_system.ts';
@@ -45,6 +46,7 @@ describe('path_follow_system (C-379 AC-7)', () => {
     registerPositionObservers(world);
     registerVelocityObservers(world);
     registerPathFollowObservers(world);
+    registerPathFollowHaltObservers(world);
     registerNPCDialogObservers(world);
     registerCompanionObservers(world);
   });
@@ -373,6 +375,127 @@ describe('path_follow_system (C-379 AC-7)', () => {
       // the player; the halt reason is preserved for observability.
       expect(hasActivePath(world, npcEid)).toBe(false);
       expect(getNpcHaltReason(npcEid)).toBe('player_proximity');
+    });
+
+    it('C-500 AC-4: a re-requested pursue path does not re-yield every tick (yields once)', () => {
+      // Regression for the C-500 engine-stall investigation. The GOAP
+      // executor's within-radius gate can miss the halt rule's tiny
+      // `radius + step` look-ahead band, so after the corridor-yield it may
+      // re-request the same pursue goal, re-attaching PathFollow and
+      // re-halting the NPC next frame. Without a per-episode yield latch the
+      // NPC re-accumulates halt time and re-yields every ~5s while the player
+      // stands still (a repeating halt-yield cycle). AC-4 requires the path
+      // to be yielded exactly ONCE per halt episode.
+      setCollisionGrid(ALL_WALKABLE);
+
+      const playerEid = addEntity(world);
+      addComponent(world, playerEid, Position);
+      addComponent(world, playerEid, set(Position, { x: 160, y: 160 }));
+
+      const npcEid = nextEid();
+      addComponent(world, npcEid, Position);
+      addComponent(world, npcEid, set(Position, { x: 160, y: 120 })); // 40px < radius 48
+      addComponent(world, npcEid, Velocity);
+      addComponent(world, npcEid, set(Velocity, { x: 0, y: 0 }));
+      addComponent(world, npcEid, NPCDialog);
+      addComponent(
+        world,
+        npcEid,
+        set(NPCDialog, {
+          npcId: 'reloop_npc',
+          npcName: 'Re-loop NPC',
+          dialog: 'Hi',
+          interactionRadius: 48,
+          playerInRange: false,
+          isVendor: false,
+          vendorInventory: '',
+        }),
+      );
+
+      const attachPursue = (): void => {
+        addComponent(
+          world,
+          npcEid,
+          set(PathFollow, {
+            waypoints: new Float32Array([160, 120, 160, 160]),
+            index: 1,
+            length: 2,
+            speed: 60,
+            repathAtMs: 0,
+            arriveRadius: 6,
+          }),
+        );
+      };
+      attachPursue();
+
+      // Fixed 60 Hz step — the worker's real delta (C-380).
+      const FixedStepMs = 1000 / 60;
+      const frames = 20 * 60; // 20 simulated seconds
+      let yields = 0;
+      let prevHadPath = hasActivePath(world, npcEid);
+
+      for (let f = 0; f < frames; f++) {
+        // Simulate the GOAP executor re-requesting the pursue goal whenever
+        // the path is absent (the within-radius band-gap case).
+        if (!hasActivePath(world, npcEid)) {
+          attachPursue();
+        }
+        updatePathFollow(world, FixedStepMs, playerEid);
+        updateMovement(world, FixedStepMs);
+        const nowHas = hasActivePath(world, npcEid);
+        if (prevHadPath && !nowHas) {
+          yields++; // the system detached the path = a corridor-yield
+        }
+        prevHadPath = nowHas;
+      }
+
+      // Exactly one corridor-yield across 20s — the re-loop is gone.
+      expect(yields).toBe(1);
+      expect(getNpcHaltReason(npcEid)).toBe('player_proximity');
+    });
+
+    it('clears the yield latch when a despawned entity ID is reused', () => {
+      setCollisionGrid(ALL_WALKABLE);
+
+      const playerEid = addEntity(world);
+      addComponent(world, playerEid, set(Position, { x: 160, y: 160 }));
+
+      const addYieldingNpc = (): number => {
+        const eid = addEntity(world);
+        addComponent(world, eid, set(Position, { x: 160, y: 120 }));
+        addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+        addComponent(
+          world,
+          eid,
+          set(NPCDialog, {
+            npcId: 'reused_yield_npc',
+            npcName: 'Reused Yield NPC',
+            dialog: 'Hi',
+            interactionRadius: 48,
+            playerInRange: false,
+            isVendor: false,
+            vendorInventory: '',
+          }),
+        );
+        attachPath(eid, [160, 120, 160, 160], 60, 6);
+        return eid;
+      };
+
+      const originalEid = addYieldingNpc();
+      for (let frame = 0; frame < 60; frame++) {
+        updatePathFollow(world, 100, playerEid);
+      }
+      expect(hasActivePath(world, originalEid)).toBe(false);
+
+      removeEntity(world, originalEid);
+      const replacementEid = addYieldingNpc();
+      expect(replacementEid).toBe(originalEid);
+
+      for (let frame = 0; frame < 60; frame++) {
+        updatePathFollow(world, 100, playerEid);
+      }
+      expect(hasActivePath(world, replacementEid)).toBe(false);
+      expect(getNpcHaltReason(replacementEid)).toBe('player_proximity');
     });
 
     it('a party follower (Companion) is NOT halted by the player proximity rule', () => {

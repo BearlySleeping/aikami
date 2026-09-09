@@ -35,6 +35,7 @@ import {
   draftStore,
   expressionService,
   gameModeService,
+  imageGenerationService,
   messageBranchStore,
   playerStateService,
   questStateService,
@@ -48,6 +49,11 @@ import type {
   DialoguePhase,
   ExpressionId,
 } from '$types';
+import {
+  parseSlashCommand,
+  SLASH_COMMAND_HELP,
+  type SlashCommandResult,
+} from '../../../../../services/game/slash_command_parser';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -203,6 +209,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** Whether the AI is currently streaming a response. */
   readonly isStreaming: boolean;
+
+  /** Whether the pending NPC response should show a typing indicator. */
+  readonly isTyping: boolean;
 
   /**
    * Streamed narrative text for the in-flight turn (C-401). Grows as tokens
@@ -393,6 +402,21 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Cancels the active AI streaming request. */
   cancelStreaming(): void;
 
+  /**
+   * Player messages submitted while the NPC was streaming, awaiting delivery.
+   * FIFO-ordered. Each entry is already visible in `messages` as a pending
+   * player bubble; entries are delivered in order, one per completed turn,
+   * only while auto-drain is enabled.
+   */
+  readonly pendingMessages: readonly string[];
+
+  /**
+   * Re-enables auto-drain and delivers all pending queued messages in FIFO
+   * order, one per completed turn. Used to explicitly retry messages that were
+   * retained after a failed or cancelled stream.
+   */
+  retryPending(): void;
+
   /** Regenerates the NPC response for the given message (stores current as alternative). */
   regenerateResponse(messageId: string): void;
 
@@ -480,6 +504,15 @@ class DialogueOverlayViewModel
   messages = $state<DialogueMessage[]>([]);
 
   isStreaming = $state<boolean>(false);
+
+  /** @inheritdoc */
+  get isTyping(): boolean {
+    if (!this.isStreaming) {
+      return false;
+    }
+    const latestMessage = this.messages.at(-1);
+    return latestMessage?.role === 'player' || latestMessage?.content === '';
+  }
 
   /** Streamed narrative for the in-flight turn (C-401). */
   streamingText = $state<string>('');
@@ -597,8 +630,14 @@ class DialogueOverlayViewModel
   /** Whether a draft was restored from IndexedDB on open. */
   showDraftRecovery = $state(false);
 
-  /** Whether TTS is actively speaking (for pulse animation). */
-  isTtsSpeaking = $state(false);
+  /**
+   * Whether TTS is actively speaking (for the pulse animation). Derived from
+   * the TTS service's live playback state so the indicator tracks real audio
+   * rather than a best-effort timeout.
+   */
+  get isTtsSpeaking(): boolean {
+    return this.streamingTtsEnabled && ttsService.isPlaying;
+  }
 
   /** Current address mode for dialogue prompt routing. */
   addressMode = $state<DialogueAddressMode>('scene');
@@ -630,6 +669,25 @@ class DialogueOverlayViewModel
 
   /** The active AbortController for the current streaming request. */
   private _activeAbortController: AbortController | null = null;
+
+  /**
+   * Overlay-session-scoped FIFO queue of player messages submitted while the
+   * NPC was still streaming. Each entry is already visible in `messages` as a
+   * pending player bubble; entries are delivered in FIFO order, one per
+   * completed turn, only while auto-drain is enabled.
+   */
+  private _pendingQueue = $state<string[]>([]);
+
+  /**
+   * Whether auto-drain of `_pendingQueue` is allowed. Disabled when a turn
+   * fails or is cancelled so queued messages are retained as visible pending
+   * items until an explicit Retry/Send (`retryPending`). Re-enabled by
+   * `retryPending` and reset on `endChat`.
+   */
+  private _drainEnabled = true;
+
+  /** True while a queued-message delivery turn is in flight (prevents double-drain). */
+  private _isDraining = false;
 
   private readonly _npcData: DialogueNpcData;
 
@@ -875,6 +933,102 @@ class DialogueOverlayViewModel
         canSwipeRight: enriched.canSwipeRight,
       };
     });
+
+    // Auto-speak the completed NPC message when streaming TTS is enabled.
+    // Feed through the chunker (and close) so sentences are dispatched to
+    // ttsService.speak() in order, beginning as soon as the first boundary
+    // lands rather than waiting for the whole message (low TTFA). speak()
+    // no-ops when TTS is not yet ready, so a message that completes mid-warmup
+    // is simply skipped rather than failing.
+    if (this.streamingTtsEnabled) {
+      this._chunker.feed(text);
+      this._chunker.close();
+    }
+  }
+
+  /** @inheritdoc */
+  get pendingMessages(): readonly string[] {
+    return [...this._pendingQueue];
+  }
+
+  /** @inheritdoc */
+  retryPending(): void {
+    this.debug('retryPending', { count: this._pendingQueue.length });
+    this._drainEnabled = true;
+    this._maybeDrainQueue();
+  }
+
+  /**
+   * Called when a streaming turn finishes. On success, drains the pending queue
+   * (FIFO, one turn at a time) if auto-drain is enabled. On failure or
+   * cancellation, disables auto-drain so queued messages are retained as
+   * visible pending items until an explicit retry.
+   */
+  private _onTurnCompleted(succeeded: boolean): void {
+    if (!succeeded) {
+      this._drainEnabled = false;
+      this._isDraining = false;
+      this.debug('turnCompleted:failed-drain-disabled', { queued: this._pendingQueue.length });
+      return;
+    }
+    this._maybeDrainQueue();
+  }
+
+  /** Delivers the next queued message if auto-drain is enabled and no turn is active. */
+  private _maybeDrainQueue(): void {
+    if (!this._drainEnabled || this._isDraining) {
+      return;
+    }
+    if (this.isStreaming || this.isResolvingSkillCheck) {
+      return;
+    }
+    if (this.skillCheckState !== null || this.dialoguePhase !== 'FREE_TEXT') {
+      return;
+    }
+    const next = this._pendingQueue.shift();
+    if (!next) {
+      return;
+    }
+    this._isDraining = true;
+    this.debug('drainQueue:delivering', { text: next, remaining: this._pendingQueue.length });
+    void this._deliverQueued(next).finally(() => {
+      this._isDraining = false;
+      this._maybeDrainQueue();
+    });
+  }
+
+  /**
+   * Delivers queued input once no turn is active. Slash commands return to
+   * their command subsystem; ordinary text is appended and sent to the active
+   * NPC/GM pipeline.
+   */
+  private async _deliverQueued(text: string): Promise<void> {
+    const slash = parseSlashCommand(text);
+    if (slash.kind !== 'none') {
+      this.debug('slash-command:parse', { kind: slash.kind });
+      await this._dispatchSlashCommand(slash);
+      return;
+    }
+
+    this.messages = [
+      ...this.messages,
+      {
+        id: crypto.randomUUID(),
+        content: text,
+        role: 'player' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
+    if (this.addressMode === 'gm') {
+      await this._sendToGameMaster(text);
+    } else if (this._npcDialogueService.useFreeTextFirst) {
+      await this._sendWithIntentAnalysis(text);
+    } else {
+      await this._delegateGenerateResponse();
+    }
   }
 
   constructor(options: DialogueOverlayViewModelOptions) {
@@ -1001,25 +1155,22 @@ class DialogueOverlayViewModel
       });
     });
 
-    // Initialize native Kokoro TTS if not already done
+    // Initialize native Kokoro TTS eagerly when the overlay opens so the first
+    // NPC reply is not delayed by a cold worker/model load (~10s first-speak
+    // latency). Fire-and-forget — speech works once the worker reports 'ready'.
     if (!this._ttsInitialized) {
       this._ttsInitialized = true;
+
+      // Auto-speak each NPC message as it completes: completed messages are fed
+      // through the chunker in _setMessageContent, which emits sentences here.
       this._chunker.onSentence(({ sentence }) => {
         if (this.streamingTtsEnabled) {
-          this.isTtsSpeaking = true;
-          ttsService.synthesize({
-            text: sentence,
-            voice: ttsService.selectedVoice,
-          });
-          // Reset TTS speaking indicator after a brief delay
-          setTimeout(() => {
-            this.isTtsSpeaking = false;
-          }, 2000);
+          // speak() supersedes any prior request (silently, per C-476 fix) so
+          // rapid successive sentences never surface a 'stop()' error.
+          void ttsService.speak({ text: sentence }).catch(() => {});
         }
       });
 
-      // Fire-and-forget — TTS init happens in background, speech works
-      // once the worker reports 'ready'.
       void ttsService.initialize();
     }
 
@@ -1325,7 +1476,7 @@ class DialogueOverlayViewModel
   /** @inheritdoc */
   async sendMessage(text?: string): Promise<void> {
     const content = (text ?? this.inputText).trim();
-    if (!content || this.isStreaming || this.isResolvingSkillCheck) {
+    if (!content || this.isResolvingSkillCheck) {
       return;
     }
 
@@ -1336,6 +1487,27 @@ class DialogueOverlayViewModel
 
     // Clear the per-chat draft since a message is being sent
     void draftStore.clearDraft({ chatId: this._npcData.npcId });
+
+    // ── C-501: Slash command intercept ──────────────────────────────
+    // Parse before any call into the NPC dialogue pipeline so leading `/`
+    // text routes to image/tree/GM/help instead of the NPC.
+    // If the NPC is currently streaming, queue the message instead of sending
+    // it now. It is surfaced as a visible pending item and is delivered in FIFO
+    // order only after the current turn completes successfully (and only while
+    // auto-drain is enabled — never after a failed/cancelled stream unless the
+    // player explicitly retries).
+    if (this.isStreaming) {
+      this._pendingQueue.push(content);
+      this.debug('sendMessage:queued', { content, queued: this._pendingQueue.length });
+      return;
+    }
+
+    const slash = parseSlashCommand(content);
+    if (slash.kind !== 'none') {
+      this.debug('slash-command:parse', { kind: slash.kind });
+      await this._dispatchSlashCommand(slash);
+      return;
+    }
 
     // Append the player's message
     const playerMessage: DialogueMessage = {
@@ -1364,12 +1536,168 @@ class DialogueOverlayViewModel
     }
   }
 
+  // ── C-501: Slash command dispatch ───────────────────────────────────
+
+  /**
+   * Routes a parsed slash command to its target subsystem. Called from
+   * `sendMessage` after a non-`none` parse, before any NPC pipeline call.
+   */
+  private async _dispatchSlashCommand(result: SlashCommandResult): Promise<void> {
+    this.debug('slash-command:dispatch', { kind: result.kind });
+
+    switch (result.kind) {
+      case 'generate':
+        await this._handleGenerateCommand(result.prompt);
+        return;
+      case 'tree':
+        this._handleTreeCommand();
+        return;
+      case 'gm':
+        await this._handleGmCommand(result);
+        return;
+      case 'help':
+        this._handleHelpCommand();
+        return;
+      case 'none':
+        return;
+    }
+  }
+
+  /**
+   * AC-1/AC-2: `/generate <prompt>` produces an inline image via the existing
+   * `generatedImages` flow. The NPC never receives the text as dialogue.
+   *
+   * - Provider available: a `generating` record is pushed immediately, then
+   *   flipped to `done` with the produced URL (the player's prompt verbatim).
+   * - Provider unavailable: an inline `error` record is shown — no crash, no
+   *   stuck `generating` state.
+   * - Abortable via the existing AbortController path; an aborted request is
+   *   removed cleanly.
+   */
+  private async _handleGenerateCommand(prompt: string): Promise<void> {
+    const afterMessageId = this.messages.at(-1)?.id ?? null;
+    const imageId = crypto.randomUUID();
+
+    if (!this._imageProviderAvailable) {
+      // AC-2: degrade to an inline error block with no crash.
+      this.generatedImages = [
+        ...this.generatedImages,
+        { id: imageId, url: null, status: 'error', afterMessageId },
+      ];
+      return;
+    }
+
+    this.generatedImages = [
+      ...this.generatedImages,
+      { id: imageId, url: null, status: 'generating', afterMessageId },
+    ];
+
+    const controller = new AbortController();
+    this._activeAbortController = controller;
+    try {
+      const result = await imageGenerationService.generateImage({
+        prompt,
+        signal: controller.signal,
+      });
+      this.generatedImages = this.generatedImages.map((img) =>
+        img.id === imageId ? { ...img, url: result.url, status: 'done' as const } : img,
+      );
+    } catch (error) {
+      const aborted = error instanceof Error && /abort/i.test(error.message);
+      if (aborted) {
+        // Cancellation — remove the placeholder entirely.
+        this.generatedImages = this.generatedImages.filter((img) => img.id !== imageId);
+        return;
+      }
+      this.generatedImages = this.generatedImages.map((img) =>
+        img.id === imageId ? { ...img, status: 'error' as const } : img,
+      );
+    } finally {
+      if (this._activeAbortController === controller) {
+        this._activeAbortController = null;
+      }
+    }
+  }
+
+  /**
+   * AC-3: `/tree` re-presents the previous turn's choice set. Selecting a
+   * re-presented choice routes through the existing choice execution path;
+   * command re-execution is guarded because each new turn gets its own
+   * message ID (markCommandExecuted / wasCommandExecuted key by message).
+   * With no prior choices, inline help is shown.
+   */
+  private _handleTreeCommand(): void {
+    if (this._previousChoices.length > 0) {
+      this._activeChoices = this._previousChoices;
+      this._appendSystemMessage('Previous choices restored — select one to continue.');
+      return;
+    }
+    this._handleHelpCommand();
+  }
+
+  /**
+   * AC-4: `/action` / `/look` route the instruction to the Game Master.
+   * The instruction is appended as a player turn (attributed to the player,
+   * never the NPC) and routed through the existing GM address-mode path.
+   */
+  private async _handleGmCommand(result: {
+    command: 'action' | 'look';
+    text: string;
+  }): Promise<void> {
+    const instruction = result.text.trim();
+    if (result.command === 'action' && instruction.length === 0) {
+      this._handleHelpCommand();
+      return;
+    }
+
+    const resolvedInstruction =
+      instruction.length > 0 ? instruction : 'Look around and describe what I see.';
+    const label = `/${result.command} ${resolvedInstruction}`;
+    this.messages = [
+      ...this.messages,
+      {
+        id: crypto.randomUUID(),
+        content: label,
+        role: 'player' as const,
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
+    await this._sendToGameMaster(label);
+  }
+
+  /**
+   * AC-5: inline help for unknown/empty commands and bare `/`.
+   */
+  private _handleHelpCommand(): void {
+    this._appendSystemMessage(SLASH_COMMAND_HELP);
+  }
+
+  /** Appends a UI-only system message that prompt-context mappers omit. */
+  private _appendSystemMessage(content: string): void {
+    this.messages = [
+      ...this.messages,
+      {
+        id: crypto.randomUUID(),
+        content,
+        role: 'npc' as const,
+        senderName: 'System',
+        alternativeCount: 0,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+      },
+    ];
+  }
+
   /**
    * GM Mode: sends the player's message directly to the Game Master.
    * The GM responds as the dungeon master, not as an NPC.
    * Streams the response into a placeholder (C-401).
    */
-  private async _sendToGameMaster(_content: string): Promise<void> {
+  private async _sendToGameMaster(content: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
     this.streamError = null;
@@ -1377,6 +1705,9 @@ class DialogueOverlayViewModel
 
     const controller = new AbortController();
     this._activeAbortController = controller;
+    const latestPlayerMessageId = this.messages.findLast(
+      (message) => message.role === 'player',
+    )?.id;
 
     // Placeholder NPC message — the streamed GM response lands here
     const npcMessageId = crypto.randomUUID();
@@ -1393,15 +1724,16 @@ class DialogueOverlayViewModel
       },
     ];
 
+    let succeeded = false;
     try {
       const gmResponse = await this._npcDialogueService.analyzeIntent({
         npcId: this._npcData.npcId,
         npcName: 'Game Master',
         messages: this.messages
-          .filter((m) => m.id !== npcMessageId) // exclude the empty placeholder
+          .filter((message) => message.id !== npcMessageId && message.senderName !== 'System')
           .map((m) => ({
             role: m.role === 'player' ? 'player' : ('npc' as const),
-            content: m.content,
+            content: m.id === latestPlayerMessageId ? content : m.content,
           })),
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
@@ -1414,6 +1746,7 @@ class DialogueOverlayViewModel
       this._setMessageContent(npcMessageId, `🎭 *Game Master*\n${narrative}`);
       this._resetStreaming();
       this.suggestedChips = gmResponse.suggestedChips;
+      succeeded = true;
     } catch (error) {
       this._flushStreamNow();
       this._handleTurnFailure({ npcMessageId, error });
@@ -1424,6 +1757,7 @@ class DialogueOverlayViewModel
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
+      this._onTurnCompleted(succeeded);
     }
   }
 
@@ -1464,9 +1798,10 @@ class DialogueOverlayViewModel
       },
     ];
 
+    let succeeded = false;
     try {
       const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
-        .filter((m) => m.id !== id)
+        .filter((message) => message.id !== id && message.senderName !== 'System')
         .map((m) => ({
           role: m.role,
           content: m.content,
@@ -1532,6 +1867,7 @@ class DialogueOverlayViewModel
         // ── No roll needed: stay in FREE_TEXT ────────────────────────
         this.dialoguePhase = 'FREE_TEXT';
       }
+      succeeded = true;
     } catch (error) {
       this._flushStreamNow();
       this._handleTurnFailure({ npcMessageId: id, error });
@@ -1542,6 +1878,7 @@ class DialogueOverlayViewModel
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
       }
+      this._onTurnCompleted(succeeded);
     }
   }
 
@@ -1613,6 +1950,11 @@ class DialogueOverlayViewModel
       this._activeAbortController.abort();
       this._activeAbortController = null;
     }
+    // Cancel and clear the pending queue before closing the overlay so no
+    // queued text can leak into a later dialogue session.
+    this._pendingQueue = [];
+    this._drainEnabled = true;
+    this._isDraining = false;
     this._onEndChat();
   }
 
@@ -1678,7 +2020,6 @@ class DialogueOverlayViewModel
     this.streamingTtsEnabled = !this.streamingTtsEnabled;
     if (!this.streamingTtsEnabled) {
       ttsService.stop();
-      this.isTtsSpeaking = false;
     }
   }
 
@@ -1687,6 +2028,12 @@ class DialogueOverlayViewModel
   /** @inheritdoc */
   cancelStreaming(): void {
     this.debug('cancelStreaming');
+    // Stop auto-drain so queued messages are retained as visible pending items
+    // until an explicit Retry/Send. The abort also propagates to the turn's
+    // failure handler, which disables draining too; setting it here keeps it
+    // held even if the underlying request ignores the abort signal.
+    this._drainEnabled = false;
+    this._isDraining = false;
     if (this._activeAbortController) {
       this._activeAbortController.abort();
       this._activeAbortController = null;
@@ -2003,6 +2350,7 @@ class DialogueOverlayViewModel
     const controller = new AbortController();
     this._activeAbortController = controller;
 
+    let succeeded = false;
     try {
       const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
         .filter((m) => m.id !== npcMessageId) // exclude placeholder
@@ -2057,12 +2405,14 @@ class DialogueOverlayViewModel
           await this._dispatchCommand({ command: turn.command, npcMessageId });
         }
       }
+      succeeded = true;
     } catch (err) {
       this._flushStreamNow();
       this._handleTurnFailure({ npcMessageId, error: err });
     } finally {
       this.isStreaming = false;
       this._resetStreaming();
+      this._onTurnCompleted(succeeded);
     }
   }
 
@@ -2072,11 +2422,23 @@ class DialogueOverlayViewModel
     // For now, the View can access the most recent NPC turn's choices
     // through a dedicated $state field.
     const turn = _turn as { choices: Array<{ id: string; label: string }> };
+    // Snapshot the current active set before it is replaced so `/tree` can
+    // re-present the previous turn's choices (C-501 AC-3).
+    if (this._activeChoices.length > 0) {
+      this._previousChoices = this._activeChoices;
+    }
     this._activeChoices = turn.choices;
   }
 
   /** Active choices from the most recent NPC turn (rendered as buttons). */
   private _activeChoices = $state<Array<{ id: string; label: string }>>([]);
+
+  /**
+   * Snapshot of the previous turn's choice set, captured when a new choice
+   * set replaces the active one (C-501 `/tree`). Empty when there is no
+   * prior choice set to revisit.
+   */
+  private _previousChoices = $state<Array<{ id: string; label: string }>>([]);
 
   /** @inheritdoc */
   get activeChoices(): readonly { id: string; label: string }[] {

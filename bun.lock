@@ -78,6 +78,7 @@
       "name": "@aikami/e2e",
       "dependencies": {
         "@aikami/constants": "workspace:*",
+        "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
         "@axe-core/playwright": "4.13.0",
         "sharp": "0.35.4",

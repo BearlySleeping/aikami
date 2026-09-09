@@ -143,7 +143,10 @@ import {
   updateMovement,
 } from '../systems/movement_system.ts';
 import { updatePartyFollow } from '../systems/party_follow_system.ts';
-import { updatePathFollow } from '../systems/path_follow_system.ts';
+import {
+  registerPathFollowHaltObservers,
+  updatePathFollow,
+} from '../systems/path_follow_system.ts';
 import { updatePressurePlates } from '../systems/pressure_plate_system.ts';
 import {
   animateEntitySystem,
@@ -797,6 +800,7 @@ const initializeEngine = (
   registerVisionObserverObservers(world);
   registerVisionVisibleObservers(world);
   registerPathFollowObservers(world);
+  registerPathFollowHaltObservers(world);
   registerMapLocationObservers(world);
   registerZoneStatusObservers(world);
 

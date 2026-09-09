@@ -12,7 +12,16 @@
 // service posts per-entity velocities.
 
 import type { World } from 'bitecs';
-import { addComponent, getComponent, hasComponent, query, removeComponent, set } from 'bitecs';
+import {
+  addComponent,
+  getComponent,
+  hasComponent,
+  observe,
+  onRemove,
+  query,
+  removeComponent,
+  set,
+} from 'bitecs';
 import { logger } from '$logger';
 import { Companion } from '../components/companion.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
@@ -90,6 +99,21 @@ const _haltedForMs = new Map<number, number>();
 const HALT_YIELD_THRESHOLD_MS = 5000;
 
 /**
+ * Per-entity latch set once the corridor-yield has fired for a halt episode.
+ *
+ * After the path is released (C-402 corridor-yield) the GOAP executor may
+ * re-request the same pursue goal (its within-radius gate can miss the tiny
+ * `radius + step` look-ahead band the halt rule uses), re-attaching
+ * PathFollow and re-halting the NPC next frame. Without a latch the NPC
+ * re-accumulates `_haltedForMs` from zero and re-yields every
+ * HALT_YIELD_THRESHOLD_MS — a repeating halt-yield cycle while the player
+ * stands still. The latch makes the yield fire exactly once per halt episode:
+ * once released, the NPC does not re-yield (or re-accumulate) until it leaves
+ * the interaction radius (C-500 AC-4).
+ */
+const _haltYielded = new Map<number, boolean>();
+
+/**
  * Clears per-entity halt tracking when the PathFollow component detaches —
  * a recycled eid must not inherit another entity's halt reason or
  * halt-duration state (CodeRabbit review, C-402).
@@ -99,6 +123,20 @@ const HALT_YIELD_THRESHOLD_MS = 5000;
 const _clearHaltState = (eid: number): void => {
   _npcHaltReason.delete(eid);
   _haltedForMs.delete(eid);
+  _haltYielded.delete(eid);
+};
+
+/**
+ * Registers teardown cleanup for module-level halt state.
+ *
+ * Position is entity-lifetime state for path-following actors, so its removal
+ * is the reliable despawn signal. PathFollow removal cannot be used here: the
+ * corridor-yield deliberately removes PathFollow while retaining its latch.
+ */
+export const registerPathFollowHaltObservers = (world: World): void => {
+  observe(world, onRemove(Position), (eid: number) => {
+    _clearHaltState(eid);
+  });
 };
 
 /**
@@ -109,6 +147,7 @@ const _clearHaltState = (eid: number): void => {
 export const resetNpcHaltReasons = (): void => {
   _npcHaltReason.clear();
   _haltedForMs.clear();
+  _haltYielded.clear();
 };
 
 /**
@@ -210,10 +249,19 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
             // longer occupies the corridor with a live path; GOAP stays
             // free to re-task it (e.g. wander aside), and pursuit resumes
             // when the player moves beyond the radius.
+            // C-500 AC-4: yield exactly once per halt episode. If the path was
+            // already released for this halt (and the player has not yet moved
+            // beyond the radius), do not re-accumulate or re-yield — GOAP may
+            // have re-attached PathFollow, but a re-yield cycle would spin
+            // every HALT_YIELD_THRESHOLD_MS while the player stands still.
+            if (_haltYielded.get(eid)) {
+              continue;
+            }
             const haltedForMs = _haltedForMs.get(eid) ?? 0;
             const nextHaltedForMs = haltedForMs + deltaMs;
             if (nextHaltedForMs >= HALT_YIELD_THRESHOLD_MS) {
               _haltedForMs.delete(eid);
+              _haltYielded.set(eid, true);
               logger.debug('path-follow:halt-yield', { eid, haltedForMs: nextHaltedForMs });
               removeComponent(world, eid, PathFollow);
               PathFollow.repathAtMs[eid] = 0;
@@ -229,8 +277,10 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
     }
 
     // Beyond the interaction radius this tick — a halted NPC resumes;
-    // clear the halt-duration accumulator so a future halt starts fresh.
+    // clear the halt-duration accumulator AND the yield latch so a future
+    // halt episode starts fresh (C-500 AC-4).
     _haltedForMs.delete(eid);
+    _haltYielded.delete(eid);
 
     // Path finished — stop and detach the component.
     if (length <= 0 || index >= length) {

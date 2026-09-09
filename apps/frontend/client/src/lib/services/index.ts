@@ -105,6 +105,7 @@ export * from './game/quest_state_service.svelte';
 export * from './game/relationship_service.svelte.ts';
 export * from './game/serializable_service';
 export * from './game/session_service.svelte';
+export * from './game/slash_command_parser';
 export * from './game/time_service.svelte';
 export * from './game/vendor_service.svelte.ts';
 export * from './game/world_state_service.svelte.ts';

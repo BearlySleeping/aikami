@@ -3,7 +3,7 @@ id: C-490
 title: "Transcript branching must not imply rewinding the world"
 source: direct
 contract_type: thin
-status: draft
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -15,11 +15,11 @@ created_at: "2026-09-07T00:00:00Z"
 | Field | Value |
 |---|---|
 | **Source** | [`BACKLOG_C485_PLUS.md`](BACKLOG_C485_PLUS.md) § C-490, seeded from the 2026-09-06 external review; verified finding V-10 |
-| **Target** | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:1624-1685` (`createBranch` / `switchBranch`), the dialogue overlay's message-action UI (`apps/frontend/client/src/lib/components/chat/message_action_bar.svelte`) |
+| **Target** | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:1792-1849` (`createBranch` at :1792 / `switchBranch` at :1822), the dialogue overlay's message-action UI (`apps/frontend/client/src/lib/components/chat/message_action_bar.svelte`, rendered via `rich_message_row.svelte`) |
 | **Type** | thin |
 | **Priority** | P1 — a reference-tool feature that does not transfer cleanly to a consequential RPG |
 | **Dependencies** | None |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — which message actions are offered in campaign play |
 | **Contract version** | 2.0.0 |
@@ -27,10 +27,10 @@ created_at: "2026-09-07T00:00:00Z"
 
 ## Problem & Baseline Evidence
 
-- **Current behavior**: `createBranch` (`dialogue_overlay_view_model.svelte.ts:1624`) snapshots `[...this.messages]`; `switchBranch` (`:1654`) restores `[...branch.messages]`. Inventory, quest state, relationships, world flags and RNG are untouched.
+- **Current behavior**: `createBranch` (`dialogue_overlay_view_model.svelte.ts:1792`) snapshots `[...this.messages]` (line 1806); `switchBranch` (`:1822`) restores `[...branch.messages]` (line 1847). Inventory, quest state, relationships, world flags and RNG are untouched.
 - **The concrete corruption**: threaten Rollo, obtain the Ward Wand, switch back to the polite branch — the player keeps the wand while the conversation says they never asked for it. In a chat app that is a feature; here it silently corrupts campaign state.
 - **The affordances**: `message_action_bar.svelte` offers `copy/retry/branch` on AI messages and `copy/edit/delete/branch` on user messages — a transcript-editing vocabulary that implies the world rewound along with the text.
-- **Reproduction**: read `createBranch`/`switchBranch` at `:1624-1685`; then open a campaign dialogue, branch, change state, and switch back — the messages revert, the state does not.
+- **Reproduction**: read `createBranch`/`switchBranch` at `:1792-1849`; then open a campaign dialogue, branch, change state, and switch back — the messages revert, the state does not.
 - **Existing implementation to reuse**: the branch code stays; the fix is gating the UI in campaign play, relabelling retry, and handling any already-persisted branch data without crashing. C-245's CYOA branching is a separate feature and must keep working.
 - **Baseline tests**: `dialogue_overlay_view_model.test.ts` (branch unit tests), `apps/e2e/tests/client/cyoa_choices.spec.ts` (CYOA branching), and any dev-sandbox dialogue specs that exercise branch/delete.
 
@@ -103,35 +103,44 @@ Changes to ACs or scope require a version bump and user approval.
 
 ### Summary
 
-To be filled during implementation — what was built, what was deferred.
+Gated transcript-rewinding in campaign play by mode (C-490). Added an `isCampaignPlay` flag to the dialogue ViewModel (production overlay defaults `true`; the dev sandbox VM sets `false`). The dialogue overlay now passes it through to the message-action UI, which drops branch/edit/delete in campaign play while keeping them in the dev sandbox and non-campaign chat; retry is relabelled "Rephrase" everywhere. A new presentation-only `rephraseResponse` path never re-applies NpcStateDelta / quest activation / dialogue commands. The branch code (createBranch/switchBranch) is retained but its UI (branch selector + actions) is gated. CYOA branching (C-245) is untouched and its suite passes.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | — | fill during implementation — be honest |
-| AC-2 | — | fill during implementation — be honest |
-| AC-3 | — | fill during implementation — be honest |
-| AC-4 | — | fill during implementation — be honest |
+| AC-1 | ✅ | Branch/edit/delete dropped in campaign play via `disableTranscriptEditing`; unit tests + dev-sandbox E2E pass. `/game` E2E written but unreachable in this ad-hoc env (baseline `dialogue_skill_check` fails identically — see Deviations). |
+| AC-2 | ✅ | Retry relabelled "Rephrase" (helper `messageActionLabel`); new `rephraseResponse` performs no NpcStateDelta/quest/command mutation (unit test asserts quest not re-accepted). |
+| AC-3 | ✅ (N/A — documented) | **Handling: N/A by design.** Branch/transcript data is **not persisted to saves** — `branches`/`activeBranchId` are in-memory, session-scoped state (cleared on overlay close per C-343); only input drafts persist (IndexedDB). So no "persisted branch data in a save" exists to load. The chosen handling: the campaign gating keeps any in-memory branch state **read-only** (branch selector + branch/edit/delete actions hidden) and **never silently discards** it; no save-schema change → contract stays thin. Unit test asserts this retention + gating. |
+| AC-4 | ✅ | `cyoa_choices.spec.ts` (C-245) — all 10 tests pass. Message-action gating does not touch the CYOA branch path. |
 
 ### Files Created
 
 | File | Purpose |
 |---|---|
-| — | fill during implementation |
+| `apps/frontend/client/src/lib/components/chat/message_actions.ts` | Pure, unit-testable source of truth for which message actions are offered (by sender + `disableRewind` mode) and how they are labelled (retry → "Rephrase"). |
+| `apps/frontend/client/src/lib/components/chat/message_actions.test.ts` | Unit tests for AC-1 gating and AC-2 relabel (10 tests). |
+| `apps/e2e/tests/client/dialogue_branching_gating.spec.ts` | E2E: campaign `/game` dialogue offers no branch/edit/delete and reads "Rephrase"; dev sandbox keeps the controls. |
 
 ### Files Modified
 
 | File | Change |
 |---|---|
-| — | fill during implementation |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` | Added `isCampaignPlay` option/field (default true) + interface member; added `rephraseResponse`; `_sendWithIntentAnalysis`/`_delegateGenerateResponse` accept `applyState` and skip quest-activation/command mutation on the rephrase path. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts` | Dev VM sets `isCampaignPlay=false` (sandbox keeps rewinding controls). |
+| `apps/frontend/client/src/lib/components/chat/message_action_bar.svelte` | Uses shared `message_actions` helper; added `disableRewind`; relabel retry → "Rephrase". |
+| `apps/frontend/client/src/lib/components/messaging/rich_message_row.svelte` | Added `disableTranscriptEditing`; dialogue-variant inline actions gate branch/edit/delete and relabel retry → "Rephrase". |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | Passes `disableTranscriptEditing`; routes retry→`rephraseResponse`; guards branch/edit/delete when campaign; hides the branch selector in campaign play. |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.test.ts` | Added C-490 tests: isCampaignPlay default/override, rephrase-no-quest-mutation, branch-data retention. |
 
 ### Deviations from Spec
 
-Fill during implementation — any AC change, scope expansion/reduction, or unplanned work. If the contract's AC was wrong, note it here and propose an Amendment.
+- **AC-1 `/game` E2E could not execute in this environment.** The production campaign dialogue overlay is unreachable from the dev server in this ad-hoc worktree: the untouched baseline `dialogue_skill_check.spec.ts` fails identically (`approachAndTalkToNpc` never surfaces the dialogue overlay — the fresh profile boots to the movement tutorial and Elder Thalia is not reachable). This is an environment limitation, not a regression. The `/game` E2E spec is written to the same pattern as the baseline and will run in the proper harness. The dev-sandbox E2E (which mounts the production `DialogueOverlay`) passes and demonstrates the gating, alongside 50 unit tests.
+- No AC change or scope change was required. The branch capability and CYOA branching are preserved per the contract's "gate the UI, keep the capability" scope.
 
 ### Test Results
 
-- Unit: fill during implementation (pass/total, failures)
-- E2E: fill during implementation (pass/total, failures)
-- Baseline: fill during implementation (pre-existing failures, new failures)
+- Unit: 50/50 pass (0 failures) — 40 dialogue ViewModel + 10 message_actions; plus 19/19 dev-VM tests.
+- E2E: client — 12/12 pass (cyoa_choices 10/10 [AC-4] + dialogue_branching_gating sandbox 2/2). The campaign `/game` case is unreachable in this ad-hoc env (see Deviations).
+- Visual: n/a — no sandbox created; production `/game` dialogue unreachable in this env.
+- Baseline: 0 pre-existing failures in the unit baseline (`dialogue_overlay_view_model.test.ts`, `cyoa_choices.spec.ts`); 0 new failures introduced. The `dialogue_skill_check.spec.ts` `/game` spec fails in this ad-hoc env for both baseline and post-change runs (pre-existing environmental failure).
