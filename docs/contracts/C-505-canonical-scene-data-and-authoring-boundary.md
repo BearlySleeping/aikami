@@ -24,7 +24,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — one scene interpretation for rendering, authoring and future generation |
 | **Dependencies** | C-496 |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — versioned map format/import documentation in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
