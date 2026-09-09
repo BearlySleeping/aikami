@@ -3,7 +3,7 @@ id: C-504
 title: "Stable character appearance identity and legacy migration"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -24,7 +24,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — published NPCs resolve to incompatible anatomy |
 | **Dependencies** | None; build on the existing C-400/C-442 code, do not rerun those contracts |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — document appearance compatibility in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
