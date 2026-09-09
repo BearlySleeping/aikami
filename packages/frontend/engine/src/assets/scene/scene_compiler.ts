@@ -281,38 +281,54 @@ export const compileSceneToTilemap = (
         band: layer.band,
       }));
 
-  // Recover spawn/prop objects from placements (stable ids + transforms).
-  const objects: Record<string, unknown>[] = [];
-  for (const placement of compiled.placements) {
-    objects.push({
-      id: Number(placement.id) || 0,
-      name: placement.id,
-      type: placement.component,
-      x: placement.x,
-      y: placement.y,
-      properties: [{ name: 'frame', type: 'string', value: placement.frame }],
-    });
-  }
-  // Recover transitions with their trigger rects + targets.
-  for (const transition of doc.transitions ?? []) {
-    objects.push({
-      id: Number(transition.id) || 0,
-      name: transition.id,
-      type: 'transition',
-      x: transition.x,
-      y: transition.y,
-      width: transition.width,
-      height: transition.height,
-      properties: [
-        { name: 'targetMap', type: 'string', value: transition.targetMap },
-        { name: 'targetX', type: 'number', value: transition.targetX },
-        { name: 'targetY', type: 'number', value: transition.targetY },
-        ...(transition.targetSpawnId
-          ? [{ name: 'targetSpawnId', type: 'string', value: transition.targetSpawnId }]
-          : []),
-      ],
-    });
-  }
+  // Spawn/prop/transition objects. On the production /game path a source
+  // legacy map is present: its object layers are PRESERVED verbatim so the
+  // proven spawner/transition consumers see the exact objects they expect —
+  // spawnId/npcId/frame/dialogueKey and every custom property intact. The
+  // previous placement-rebuild dropped those properties, which removed NPCs
+  // (npcId lost), broke named-spawn positioning (spawnId lost) and prop frame
+  // art (frame lost) — a C-505 AC-1/AC-3 parity regression caught by manual
+  // /game testing. This mirrors how source.layers are preserved for rendering
+  // above: the canonical scene stays the semantic authority for placement
+  // identity, while the source objects are the derived spawn artifact. Native
+  // scenes (no source) rebuild objects from the canonical placements.
+  const objectLayers: TilemapData['objectLayers'] = source?.objectLayers?.length
+    ? source.objectLayers
+    : (() => {
+        // Recover spawn/prop objects from placements (stable ids + transforms).
+        const objects: Record<string, unknown>[] = [];
+        for (const placement of compiled.placements) {
+          objects.push({
+            id: Number(placement.id) || 0,
+            name: placement.id,
+            type: placement.component,
+            x: placement.x,
+            y: placement.y,
+            properties: [{ name: 'frame', type: 'string', value: placement.frame }],
+          });
+        }
+        // Recover transitions with their trigger rects + targets.
+        for (const transition of doc.transitions ?? []) {
+          objects.push({
+            id: Number(transition.id) || 0,
+            name: transition.id,
+            type: 'transition',
+            x: transition.x,
+            y: transition.y,
+            width: transition.width,
+            height: transition.height,
+            properties: [
+              { name: 'targetMap', type: 'string', value: transition.targetMap },
+              { name: 'targetX', type: 'number', value: transition.targetX },
+              { name: 'targetY', type: 'number', value: transition.targetY },
+              ...(transition.targetSpawnId
+                ? [{ name: 'targetSpawnId', type: 'string', value: transition.targetSpawnId }]
+                : []),
+            ],
+          });
+        }
+        return objects.length > 0 ? [{ name: 'entities', objects }] : undefined;
+      })();
 
   return {
     width,
@@ -321,7 +337,7 @@ export const compileSceneToTilemap = (
     tileheight: tileSize,
     tilesets: source?.tilesets ?? [],
     layers: renderLayers,
-    objectLayers: objects.length > 0 ? [{ name: 'entities', objects }] : undefined,
+    objectLayers,
     terrain: compiled.terrain,
     elevation: compiled.elevation,
   };

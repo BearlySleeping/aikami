@@ -260,6 +260,129 @@ describe('loadMapCanonical (AC-1 production integration)', () => {
     expect(tilemap.layers.some((l) => l.name === 'decor')).toBe(true);
   });
 
+  test('preserves source spawn/npc/prop custom properties through the canonical round-trip', async () => {
+    // Mirrors the shipped Emberwatch object layers: spawn/npc/prop objects
+    // carry spawnId/npcId/frame/... custom properties that the entity spawner
+    // and spawn-point extraction depend on. The canonical round-trip must not
+    // drop them (AC-1/AC-3 parity regression that removed NPCs, broke named
+    // spawns and prop frame art).
+    const objectJson = JSON.stringify({
+      width: 2,
+      height: 2,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'atlas',
+          image: 'atlas.png',
+          imagewidth: 128,
+          imageheight: 128,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 4,
+          tilecount: 16,
+        },
+      ],
+      aikami: { terrain: ['grass', 'grass', 'grass', 'water'] },
+      layers: [
+        {
+          type: 'tilelayer',
+          name: 'ground',
+          width: 2,
+          height: 2,
+          properties: [{ name: 'band', type: 'string', value: 'ground' }],
+          data: [1, 1, 1, 2],
+        },
+        {
+          type: 'objectgroup',
+          name: 'entities',
+          objects: [
+            {
+              id: 1,
+              type: 'npc',
+              x: 32,
+              y: 32,
+              properties: [
+                { name: 'npcId', type: 'string', value: 'village_elder' },
+                { name: 'dialogueKey', type: 'string', value: 'elder_thalia_greeting' },
+              ],
+            },
+            {
+              id: 2,
+              type: 'spawn',
+              x: 64,
+              y: 32,
+              properties: [{ name: 'spawnId', type: 'string', value: 'from_merchant' }],
+            },
+            {
+              id: 3,
+              type: 'prop',
+              x: 96,
+              y: 32,
+              properties: [
+                { name: 'propId', type: 'string', value: 'village_well' },
+                { name: 'frame', type: 'string', value: 'well.png' },
+              ],
+            },
+            {
+              id: 4,
+              type: 'transition',
+              x: 0,
+              y: 0,
+              width: 32,
+              height: 32,
+              properties: [
+                { name: 'targetMap', type: 'string', value: 'merchant_shop' },
+                { name: 'targetX', type: 'number', value: 448 },
+                { name: 'targetY', type: 'number', value: 192 },
+                { name: 'targetSpawnId', type: 'string', value: 'shop_entrance' },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const { loadMapCanonical } = await import('./scene_loader.ts');
+    const { tilemap } = await loadMapCanonical({
+      url: 'maps:emberwatch/village_objects.json',
+      sceneId: 'emberwatch/village',
+      assetLock: 'pack:emberwatch@1.0.0',
+      baseTerrain: 'grass',
+      terrains: makeTerrains(),
+      fetch: (async () =>
+        new Response(objectJson, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })) as unknown as typeof fetch,
+    });
+    const objects = tilemap.objectLayers?.[0]?.objects ?? [];
+    const propsOf = (o: Record<string, unknown>): Record<string, unknown> => {
+      const out: Record<string, unknown> = {};
+      for (const p of (o.properties as Array<{ name: string; value: unknown }>) ?? []) {
+        out[p.name] = p.value;
+      }
+      return out;
+    };
+    // The proven consumers must see the full custom properties, not a
+    // stripped-down { frame } — that is what keeps NPCs, named spawns and
+    // prop frame art intact at runtime.
+    const npc = objects.find((o) => o.type === 'npc');
+    expect(propsOf(npc ?? {})).toMatchObject({
+      npcId: 'village_elder',
+      dialogueKey: 'elder_thalia_greeting',
+    });
+    const spawn = objects.find((o) => o.type === 'spawn');
+    expect(propsOf(spawn ?? {})).toMatchObject({ spawnId: 'from_merchant' });
+    const prop = objects.find((o) => o.type === 'prop');
+    expect(propsOf(prop ?? {})).toMatchObject({ propId: 'village_well', frame: 'well.png' });
+    const transition = objects.find((o) => o.type === 'transition');
+    expect(propsOf(transition ?? {})).toMatchObject({
+      targetMap: 'merchant_shop',
+      targetSpawnId: 'shop_entrance',
+    });
+  });
+
   test('packless terrain-channel map falls back to the legacy parse (game still boots)', async () => {
     const { loadMapCanonical } = await import('./scene_loader.ts');
     const { tilemap, doc } = await loadMapCanonical({
