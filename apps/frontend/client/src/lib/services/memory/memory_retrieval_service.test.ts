@@ -1,27 +1,25 @@
 // apps/frontend/client/src/lib/services/memory/memory_retrieval_service.test.ts
 //
-// Unit & integration tests for the memory retrieval service and backend.
+// Unit & integration tests for the memory retrieval service and its
+// witness-scoped NPC recall surface.
 //
-// Contract: C-458 In-House Memory & Lore Retrieval System
+// Contract: C-458 In-House Memory & Lore Retrieval System; C-492 memory
+// retrieval correctness and production wiring.
 //
 // These tests verify:
-//  - AC-1: Semantic retrieval (paraphrase matching)
-//  - AC-2: Cross-source query results
-//  - AC-3: Fully offline operation (no network calls)
-//  - AC-4: Background indexing without blocking boot
-//
-// Note: The actual embedding model (@huggingface/transformers) is NOT
-// available in Bun's test environment (depends on ONNX runtime).
-// We test the retrieval logic via a mock backend that simulates
-// embedding-based similarity, and test the backend interface contract.
-
+//  - AC-2: indexAll() indexes committed narrative events + lore + summaries
+//  - AC-4: retrieveForNpc() is witness-scoped — an NPC recalls only events it
+//    witnessed plus shared lore, and never a session_summary
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
-import { EMBEDDING_DIMENSION, MEMORY_QUERY_SCOPE_SOURCE_TYPES } from '@aikami/constants';
+import { MEMORY_QUERY_SCOPE_SOURCE_TYPES, NPC_RECALL_MAX_RESULTS } from '@aikami/constants';
 import type {
+  CommittedNarrativeEvent,
   MemoryIndexable,
   MemoryQuery,
   MemoryResult,
   MemoryRetrievalBackend,
+  NarrativeEventKind,
+  NarrativeInformationKind,
 } from '@aikami/types';
 import type { SessionSummary } from '$types';
 import type { LocalEmbeddingBackend as LocalEmbeddingBackendInstance } from './local_embedding_backend';
@@ -40,17 +38,7 @@ const mockLorebooks: Array<{
   entries: Array<{ id: string; content: string; keywords?: string[]; name?: string }>;
 }> = [];
 let mockSessionSummary: SessionSummary | null = null;
-
-const mockFeatureExtraction = mock(async () => ({
-  data: new Float32Array(EMBEDDING_DIMENSION).fill(0.5),
-}));
-const mockTransformerPipeline = mock(async () => mockFeatureExtraction);
-const mockTransformersEnvironment = {
-  allowLocalModels: false,
-  allowRemoteModels: true,
-  backends: { onnx: { wasm: { wasmPaths: '' } } },
-  localModelPath: '',
-};
+let mockEvents: CommittedNarrativeEvent[] = [];
 
 mock.module('../lorebook/lorebook_store.svelte', () => ({
   lorebookStore: {
@@ -68,9 +56,13 @@ mock.module('../gm/session_summary_service.svelte', () => ({
   },
 }));
 
-mock.module('@huggingface/transformers', () => ({
-  env: mockTransformersEnvironment,
-  pipeline: mockTransformerPipeline,
+mock.module('../game/narrative_event_service.svelte', () => ({
+  narrativeEventService: {
+    get events() {
+      return mockEvents;
+    },
+    witnessedBy: (npcId: string) => mockEvents.filter((e) => e.witnesses.includes(npcId)),
+  },
 }));
 
 // Mock $logger to avoid Bun resolution issues
@@ -92,19 +84,14 @@ let MemoryRetrievalService: {
 beforeEach(async () => {
   mockLorebooks.length = 0;
   mockSessionSummary = null;
-  mockFeatureExtraction.mockClear();
-  mockTransformerPipeline.mockClear();
-  mockTransformersEnvironment.allowLocalModels = false;
-  mockTransformersEnvironment.allowRemoteModels = true;
-  mockTransformersEnvironment.localModelPath = '';
-  mockTransformersEnvironment.backends.onnx.wasm.wasmPaths = '';
+  mockEvents = [];
 
   ({ LocalEmbeddingBackend } = await import('./local_embedding_backend'));
   ({ MemoryRetrievalService } = await import('./memory_retrieval_service.svelte'));
 });
 
 // ---------------------------------------------------------------------------
-// Mock backend for testing retrieval logic without the real embedding model
+// Mock backend for testing retrieval logic without any model
 // ---------------------------------------------------------------------------
 
 type MockEntry = {
@@ -115,19 +102,22 @@ type MockEntry = {
 };
 
 /**
- * A simple keyword-overlap-based mock that simulates semantic retrieval.
- * Returns results where the query text overlaps with entry keywords or content.
- * Scores are computed as a simple overlap ratio (0..1).
+ * A keyword-overlap mock backend mirroring LocalEmbeddingBackend's only path.
  */
 const createMockBackend = (): MemoryRetrievalBackend & {
   seed: (entries: MockEntry[]) => void;
+  entries: () => MockEntry[];
 } => {
   let entries: MockEntry[] = [];
 
-  const backend: MemoryRetrievalBackend & { seed: (entries: MockEntry[]) => void } = {
+  const backend: MemoryRetrievalBackend & {
+    seed: (entries: MockEntry[]) => void;
+    entries: () => MockEntry[];
+  } = {
     seed: (e: MockEntry[]) => {
       entries = e;
     },
+    entries: () => entries,
     index: mock(async (indexables: MemoryIndexable[]) => {
       for (const ix of indexables) {
         const existing = entries.findIndex(
@@ -157,7 +147,6 @@ const createMockBackend = (): MemoryRetrievalBackend & {
 
       const scored = candidates
         .map((e) => {
-          // Compute overlap score: fraction of query words found in entry
           const matched = queryWords.filter((w) => e.keywords.includes(w)).length;
           const score = queryWords.length > 0 ? matched / queryWords.length : 0;
           return { entry: e, score };
@@ -197,111 +186,28 @@ const createLoreEntry = (id: string, content: string): MemoryIndexable => ({
   content,
 });
 
-const createSessionSummary = (id: string, content: string): MemoryIndexable => ({
-  sourceType: 'session_summary',
-  sourceId: id,
-  content,
+let seq = 1;
+const createEvent = (options: {
+  id: string;
+  summary: string;
+  witnesses: string[];
+  informationKind?: NarrativeInformationKind;
+  claimantId?: string;
+  kind?: NarrativeEventKind;
+}): CommittedNarrativeEvent => ({
+  id: options.id,
+  campaignId: 'camp-1',
+  sequence: seq++,
+  kind: options.kind ?? 'WorldFlagChanged',
+  summary: options.summary,
+  informationKind: options.informationKind ?? 'world_fact',
+  witnesses: options.witnesses,
+  recordedAt: new Date().toISOString(),
+  ...(options.claimantId ? { claimantId: options.claimantId } : {}),
 });
 
 // ---------------------------------------------------------------------------
-// Tests: LocalEmbeddingBackend (interface contract)
-// ---------------------------------------------------------------------------
-
-describe('LocalEmbeddingBackend', () => {
-  it('returns empty results when index is empty (graceful degradation)', async () => {
-    const backend = LocalEmbeddingBackend.create();
-    const results = await backend.query({ text: 'anything' });
-    expect(results).toEqual([]);
-  });
-
-  it('returns empty results after clear()', async () => {
-    const backend = LocalEmbeddingBackend.create();
-    // @ts-expect-error: accessing private _entries for test setup
-    backend._entries = [
-      {
-        sourceType: 'lore' as const,
-        sourceId: 'e1',
-        content: 'test',
-        embedding: [1, 0, 0],
-      },
-    ];
-    await backend.clear();
-    const results = await backend.query({ text: 'test' });
-    expect(results).toEqual([]);
-  });
-
-  it('reports size() correctly', async () => {
-    const backend = LocalEmbeddingBackend.create();
-    expect(await backend.size()).toBe(0);
-    // @ts-expect-error: accessing private _entries for test setup
-    backend._entries = [
-      { sourceType: 'lore' as const, sourceId: 'e1', content: 'a', embedding: [1, 0] },
-      { sourceType: 'lore' as const, sourceId: 'e2', content: 'b', embedding: [0, 1] },
-    ];
-    expect(await backend.size()).toBe(2);
-  });
-
-  it('remove() removes by sourceType + sourceId', async () => {
-    const backend = LocalEmbeddingBackend.create();
-    // @ts-expect-error: accessing private _entries for test setup
-    backend._entries = [
-      { sourceType: 'lore' as const, sourceId: 'e1', content: 'a', embedding: [1, 0] },
-      {
-        sourceType: 'session_summary' as const,
-        sourceId: 's1',
-        content: 'b',
-        embedding: [0, 1],
-      },
-    ];
-    await backend.remove({ sourceType: 'lore', sourceId: 'e1' });
-    expect(await backend.size()).toBe(1);
-  });
-
-  it('toSnapshot() and loadSnapshot() round-trip', async () => {
-    const backend = LocalEmbeddingBackend.create();
-    // @ts-expect-error: accessing private _entries for test setup
-    backend._entries = [
-      {
-        sourceType: 'lore' as const,
-        sourceId: 'e1',
-        content: 'test content',
-        embedding: [0.1, 0.2, 0.3],
-      },
-    ];
-
-    const snapshot = backend.toSnapshot();
-    expect(snapshot.entries).toHaveLength(1);
-
-    const backend2 = LocalEmbeddingBackend.create();
-    backend2.loadSnapshot(snapshot);
-    await expect(backend2.size()).resolves.toBe(1);
-  });
-
-  it('is idempotent — re-indexing same sourceId replaces entry', async () => {
-    const backend = LocalEmbeddingBackend.create();
-    await backend.index([createLoreEntry('e1', 'old content')]);
-    await backend.index([createLoreEntry('e1', 'new content')]);
-
-    expect(await backend.size()).toBe(1);
-    expect(backend.toSnapshot().entries[0].content).toBe('new content');
-  });
-
-  it('reuses the model loaded by init() when indexing', async () => {
-    const backend = LocalEmbeddingBackend.create();
-
-    await backend.init();
-    await backend.index([createLoreEntry('e1', 'indexed content')]);
-
-    expect(mockTransformerPipeline).toHaveBeenCalledTimes(1);
-    expect(mockTransformersEnvironment.allowLocalModels).toBe(true);
-    expect(mockTransformersEnvironment.allowRemoteModels).toBe(false);
-    expect(mockTransformersEnvironment.localModelPath).toBe('/models/');
-    expect(mockTransformersEnvironment.backends.onnx.wasm.wasmPaths).toBe('/ort/');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Tests: MemoryRetrievalService (retrieval logic with mock backend)
+// Tests: MemoryRetrievalService
 // ---------------------------------------------------------------------------
 
 describe('MemoryRetrievalService', () => {
@@ -309,178 +215,233 @@ describe('MemoryRetrievalService', () => {
   let mockBackend: ReturnType<typeof createMockBackend>;
 
   beforeEach(() => {
+    seq = 1;
     mockBackend = createMockBackend();
 
-    // Create service instance
     service = MemoryRetrievalService.create({
       className: 'MemoryRetrievalService',
     }) as MemoryRetrievalServiceInterface;
 
     // Inject the mock backend
-    // @ts-expect-error: accessing private _backend for test injection
     (service as Record<string, unknown>)._backend = mockBackend;
-    // @ts-expect-error: accessing private _isReady for test setup
     (service as Record<string, unknown>)._isReady = true;
-    // @ts-expect-error: accessing private _initialised for test setup
     (service as Record<string, unknown>)._initialised = true;
   });
 
-  it('allows initialization to retry after a backend failure', async () => {
-    let attempts = 0;
-    const init = mock(async () => {
-      attempts += 1;
-      if (attempts === 1) {
-        throw new Error('model unavailable');
-      }
+  it('AC-2: indexAll() indexes committed narrative events alongside lore and summaries', async () => {
+    mockEvents = [
+      createEvent({
+        id: 'evt-1',
+        summary: 'Rollo possesses the Ward Wand.',
+        witnesses: ['npc-rollo'],
+      }),
+    ];
+    mockLorebooks.push({
+      id: 'lorebook-1',
+      entries: [{ id: 'e1', content: 'The inn sits at the village square.' }],
     });
-    const retryBackend = Object.assign(createMockBackend(), { init });
-    (service as Record<string, unknown>)._backend = retryBackend;
-    (service as Record<string, unknown>)._isReady = false;
-    (service as Record<string, unknown>)._initialised = false;
 
-    await service.init();
-    expect(service.isReady).toBe(false);
+    await service.indexAll();
 
-    await service.init();
-    expect(service.isReady).toBe(true);
-    expect(init).toHaveBeenCalledTimes(2);
+    const indexed = mockBackend.entries();
+    const eventEntry = indexed.find(
+      (e) => e.sourceType === 'narrative_event' && e.sourceId === 'evt-1',
+    );
+    expect(eventEntry).toBeDefined();
+    expect(eventEntry?.content).toBe('Rollo possesses the Ward Wand.');
+    expect(indexed.some((e) => e.sourceType === 'lore' && e.sourceId === 'e1')).toBe(true);
   });
 
-  // AC-1: Semantic retrieval (simulated via keyword overlap)
-  describe('AC-1: Semantic retrieval', () => {
-    it('returns results by content meaning, not exact keyword', async () => {
-      await mockBackend.index([
-        createLoreEntry(
-          'e1',
-          'The old mill by the river has been abandoned for years. The miller was known as a kind soul who helped travelers.',
-        ),
-      ]);
+  it('AC-2: belief/claim events carry attribution in their recall content', async () => {
+    mockEvents = [
+      createEvent({
+        id: 'evt-belief',
+        summary: 'Rollo intends to sell the wand.',
+        witnesses: ['npc-thalia'],
+        informationKind: 'character_belief',
+        claimantId: 'npc-thalia',
+      }),
+      createEvent({
+        id: 'evt-claim',
+        summary: 'He never touched the wand.',
+        witnesses: ['npc-rollo'],
+        informationKind: 'dialogue_claim',
+        claimantId: 'npc-rollo',
+      }),
+      createEvent({
+        id: 'evt-fact',
+        summary: 'The wand is hidden in the cellar.',
+        witnesses: ['npc-rollo'],
+        informationKind: 'world_fact',
+      }),
+    ];
 
-      const results = await service.query({
-        text: 'abandoned watermill where the nice miller used to work',
-        scope: 'lore',
-      });
+    await service.indexAll();
 
-      expect(results.length).toBeGreaterThan(0);
-      expect(results[0].sourceId).toBe('e1');
-      expect(results[0].relevanceScore).toBeGreaterThan(0);
-    });
+    const belief = mockBackend.entries().find((e) => e.sourceId === 'evt-belief');
+    const claim = mockBackend.entries().find((e) => e.sourceId === 'evt-claim');
+    const fact = mockBackend.entries().find((e) => e.sourceId === 'evt-fact');
 
-    it('returns empty results when nothing is relevant', async () => {
-      await mockBackend.index([
-        createLoreEntry('e1', 'Dragons are ancient creatures of immense power.'),
-      ]);
-
-      const results = await service.query({
-        text: 'the price of bread in the village',
-      });
-      expect(results).toHaveLength(0);
-    });
+    expect(belief?.content).toBe('[npc-thalia believes] Rollo intends to sell the wand.');
+    expect(claim?.content).toBe('[npc-rollo claims] He never touched the wand.');
+    expect(fact?.content).toBe('The wand is hidden in the cellar.');
   });
 
-  // AC-2: Cross-source query
-  describe('AC-2: Cross-source query', () => {
-    it('returns results from multiple source types for the same NPC', async () => {
-      const npcName = 'Elara';
+  describe('AC-4: witness-scoped NPC recall', () => {
+    it('returns only events the NPC witnessed and never the unwitnessed secret', async () => {
+      mockEvents = [
+        createEvent({
+          id: 'evt-a',
+          summary: 'A witnessed the hidden key.',
+          witnesses: ['npc-a'],
+          informationKind: 'world_fact',
+        }),
+        createEvent({
+          id: 'evt-secret',
+          summary: 'A secret B never learned.',
+          witnesses: ['npc-b'],
+          informationKind: 'world_fact',
+        }),
+      ];
+      await service.indexAll();
 
-      await mockBackend.index([
-        createLoreEntry(
-          'lore-elara',
-          `${npcName} is a elven ranger who guards the Whispering Woods. She has a hawk companion named Sol.`,
-        ),
-      ]);
-
-      await mockBackend.index([
-        createSessionSummary(
-          'session-1',
-          `The party met ${npcName} in the forest. She agreed to guide them to the ancient ruins in exchange for help finding her lost hawk.`,
-        ),
-      ]);
-
-      const results = await service.query({ text: npcName, scope: 'all' });
-
-      const sourceTypes = new Set(results.map((r) => r.sourceType));
-      expect(sourceTypes.size).toBeGreaterThan(1);
+      const resultsA = await service.retrieveForNpc({ npcId: 'npc-a', text: 'key secret learned' });
+      const idsA = resultsA.map((r) => r.sourceId);
+      expect(idsA).toContain('evt-a');
+      expect(idsA).not.toContain('evt-secret');
     });
 
-    it('respects scope filter — "lore" only returns lore entries', async () => {
-      await mockBackend.index([
-        createLoreEntry('lore-1', 'The blacksmith in town forges magical weapons.'),
-        createSessionSummary('session-1', 'The party visited the blacksmith and bought a sword.'),
-      ]);
+    it("is symmetric — NPC B does not receive NPC A's witnessed fact", async () => {
+      mockEvents = [
+        createEvent({
+          id: 'evt-a',
+          summary: 'A learned a private truth.',
+          witnesses: ['npc-a'],
+        }),
+        createEvent({
+          id: 'evt-b',
+          summary: 'B witnessed a different truth.',
+          witnesses: ['npc-b'],
+        }),
+      ];
+      await service.indexAll();
 
-      const loreResults = await service.query({ text: 'blacksmith', scope: 'lore' });
-      expect(loreResults.every((r) => r.sourceType === 'lore')).toBe(true);
+      const resultsB = await service.retrieveForNpc({ npcId: 'npc-b', text: 'truth' });
+      const idsB = resultsB.map((r) => r.sourceId);
+      expect(idsB).toContain('evt-b');
+      expect(idsB).not.toContain('evt-a');
     });
-  });
 
-  // AC-3: Fully offline (no network calls)
-  describe('AC-3: Offline operation', () => {
-    it('works with no network calls (uses local backend)', async () => {
-      await mockBackend.index([createLoreEntry('e1', 'The forest is home to many creatures.')]);
-
-      const results = await service.query({ text: 'forest creatures' });
-      expect(results.length).toBeGreaterThan(0);
-    });
-
-    it('returns empty results when disabled via toggle', async () => {
-      service.setEnabled(false);
-
-      await mockBackend.index([createLoreEntry('e1', 'Something indexed')]);
-
-      const results = await service.query({ text: 'indexed' });
-      expect(results).toHaveLength(0);
-    });
-  });
-
-  // AC-4: Background indexing
-  describe('AC-4: Background indexing', () => {
-    it('indexAll() collects lore entries and session summaries', async () => {
-      mockLorebooks.push({
-        id: 'lorebook-1',
-        entries: [{ id: 'e1', content: 'The crystal cave glows with an inner light.' }],
-      });
+    it('never returns a session_summary even when it matches the query', async () => {
+      // A session summary matches the query, and the NPC witnessed an event.
       mockSessionSummary = {
         id: 's1',
         createdAt: 1,
-        keyEvents: ['The party discovered ancient writings.'],
+        keyEvents: [],
         npcInteractions: [],
         playtimeMinutes: 30,
-        resumePoint: 'Inside the crystal cave',
-        synopsis: 'The party explored the crystal cave.',
+        resumePoint: 'The inn',
+        synopsis: 'The player privately plans to betray Rollo.',
       };
-
+      mockEvents = [
+        createEvent({ id: 'evt-a', summary: 'Rollo greets the player.', witnesses: ['npc-rollo'] }),
+      ];
       await service.indexAll();
 
-      expect(mockBackend.index).toHaveBeenCalledTimes(1);
-      expect(mockBackend.index).toHaveBeenCalledWith([
-        {
-          content: 'The crystal cave glows with an inner light.',
-          metadata: { lorebookId: 'lorebook-1' },
-          sourceId: 'e1',
-          sourceType: 'lore',
-        },
-        {
-          content: 'The party explored the crystal cave. The party discovered ancient writings.',
-          metadata: { createdAt: '1' },
-          sourceId: 's1',
-          sourceType: 'session_summary',
-        },
-      ]);
+      const results = await service.retrieveForNpc({
+        npcId: 'npc-rollo',
+        text: 'player privately plans betray',
+      });
+
+      expect(results.every((r) => r.sourceType !== 'session_summary')).toBe(true);
     });
 
-    it('clearIndex() removes all entries', async () => {
-      await mockBackend.index([createLoreEntry('e1', 'Some indexed content.')]);
+    it('treats an empty witness set as "no narrative-event recall", not "all events"', async () => {
+      mockEvents = [
+        createEvent({ id: 'evt-a', summary: 'A secret fact.', witnesses: ['npc-other'] }),
+      ];
+      await service.indexAll();
+      await mockBackend.index([createLoreEntry('lore-control', 'A public secret fact.')]);
 
-      await service.clearIndex();
-      const results = await service.query({ text: 'indexed' });
-      expect(results).toHaveLength(0);
+      const results = await service.retrieveForNpc({ npcId: 'npc-unknown', text: 'secret fact' });
+      expect(results.length).toBeGreaterThan(0);
+      // No narrative_event results for an unwitnessed NPC.
+      expect(results.every((r) => r.sourceType !== 'narrative_event')).toBe(true);
     });
+
+    it('caps results at NPC_RECALL_MAX_RESULTS (default limit)', async () => {
+      mockEvents = Array.from({ length: 8 }, (_, i) =>
+        createEvent({
+          id: `evt-${i}`,
+          summary: `The player spoke about topic ${i}.`,
+          witnesses: ['npc-a'],
+        }),
+      );
+      expect(mockEvents).toHaveLength(8);
+      await service.indexAll();
+
+      const results = await service.retrieveForNpc({ npcId: 'npc-a', text: 'topic' });
+      expect(results.length).toBeGreaterThan(0);
+      expect(results).toHaveLength(NPC_RECALL_MAX_RESULTS);
+    });
+
+    it('waits for an in-flight full index before background indexing completes', async () => {
+      mockEvents = [
+        createEvent({ id: 'evt-a', summary: 'A witnessed fact.', witnesses: ['npc-a'] }),
+      ];
+      let finishIndex: (() => void) | undefined;
+      const indexFinished = new Promise<void>((resolve) => {
+        finishIndex = resolve;
+      });
+      mockBackend.index = mock(() => indexFinished);
+
+      const initialIndex = service.indexAll();
+      let backgroundFinished = false;
+      const backgroundIndex = service.backgroundIndexOnLoad().then(() => {
+        backgroundFinished = true;
+      });
+      await Promise.resolve();
+
+      expect(backgroundFinished).toBe(false);
+      finishIndex?.();
+      await Promise.all([initialIndex, backgroundIndex]);
+      expect(backgroundFinished).toBe(true);
+    });
+  });
+
+  describe('AC-3/AC-4: lore passes through NPC recall (shared world knowledge)', () => {
+    it('returns lore entries the NPC never "witnessed" as shared knowledge', async () => {
+      await mockBackend.index([createLoreEntry('lore-1', 'The Ward Wand is legendary.')]);
+      const results = await service.retrieveForNpc({ npcId: 'npc-any', text: 'Ward Wand' });
+      expect(results.some((r) => r.sourceType === 'lore' && r.sourceId === 'lore-1')).toBe(true);
+    });
+  });
+
+  it('returns empty results when disabled via toggle', async () => {
+    await mockBackend.index([createLoreEntry('e1', 'Something indexed')]);
+    service.setEnabled(false);
+    const results = await service.query({ text: 'indexed' });
+    expect(results).toHaveLength(0);
+  });
+
+  it('returns empty NPC recall when disabled', async () => {
+    mockEvents = [createEvent({ id: 'evt-a', summary: 'fact', witnesses: ['npc-a'] })];
+    await service.indexAll();
+    service.setEnabled(false);
+    const results = await service.retrieveForNpc({ npcId: 'npc-a', text: 'fact' });
+    expect(results).toHaveLength(0);
+  });
+
+  it('clearIndex() removes all entries', async () => {
+    await mockBackend.index([createLoreEntry('e1', 'Some indexed content.')]);
+    await service.clearIndex();
+    const results = await service.query({ text: 'indexed' });
+    expect(results).toHaveLength(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Tests: Backend scope filtering
+// Tests: scope filtering + graceful degradation
 // ---------------------------------------------------------------------------
 
 describe('Backend scope filtering', () => {
@@ -492,31 +453,27 @@ describe('Backend scope filtering', () => {
           sourceType: 'session_summary',
           sourceId: 's1',
           content: 'The party discovered ancient writings.',
-          embedding: [1, 0],
         },
       ],
     });
-
     const results = await backend.query({ text: 'ancient writings', scope: 'history' });
-
     expect(results).toHaveLength(1);
     expect(results[0].sourceType).toBe('session_summary');
   });
 
-  it('returns empty gracefully when no entries match the scope', async () => {
+  it('npc scope excludes session_summary at the scope layer', async () => {
     const backend = LocalEmbeddingBackend.create();
-    // @ts-expect-error: accessing private _entries for test
-    backend._entries = [
-      {
-        sourceType: 'lore' as const,
-        sourceId: 'e1',
-        content: 'test',
-        embedding: [1, 0],
-      },
-    ];
-
-    const results = await backend.query({ text: 'anything', scope: 'history' });
-    expect(results).toEqual([]);
+    backend.loadSnapshot({
+      entries: [
+        {
+          sourceType: 'session_summary',
+          sourceId: 's1',
+          content: 'The party discovered ancient writings.',
+        },
+      ],
+    });
+    const results = await backend.query({ text: 'ancient writings', scope: 'npc' });
+    expect(results).toHaveLength(0);
   });
 
   it('returns empty for all scopes when index is empty', async () => {

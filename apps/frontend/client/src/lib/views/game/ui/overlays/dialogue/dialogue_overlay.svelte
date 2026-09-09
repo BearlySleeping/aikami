@@ -106,6 +106,15 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
   aria-label="Dialogue with {viewModel.npcName}"
   data-testid="dialogue-overlay"
 >
+  <!--
+    Witness-scoped recall (C-492) — inert, visually-hidden test hook exposing
+    the assembled [MEMORY] facts for the current turn. Never alters production
+    behaviour; used by the AC-3 E2E to assert the recalled context.
+  -->
+  <div data-testid="dialogue-recalled-facts" class="hidden" aria-hidden="true">
+    {viewModel.renderedRecallValue}
+  </div>
+
   <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161) -->
   {#if viewModel.hasNpcScreenPosition && !isFullscreen}
     {@const clampedX = Math.max(16, Math.min(viewModel.npcScreenX, typeof window !== 'undefined' ? window.innerWidth - 16 : 400))}
@@ -457,6 +466,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           onCancel={() => viewModel.cancelStreaming()}
           sendIcon="↑"
           square={true}
+          testId="dialogue-free-text"
           textareaRef={(el) => {
             viewModel.inputElement = el ?? undefined;
           }}

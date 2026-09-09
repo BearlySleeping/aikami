@@ -3,7 +3,7 @@ id: C-492
 title: "Memory retrieval correctness and production wiring"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-09T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — the current implementation does the opposite of what its own docs say |
 | **Dependencies** | [C-491](C-491-committed-narrative-event-record.md) — the committed narrative event record is the authoritative fact source this contract retrieves from. [C-488](C-488-authored-npc-identity-in-the-content-pack.md) — AC-5's budget ceiling. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -321,5 +321,67 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+---
+
+## Execution Report
+
+### Summary
+
+Resolved the AC-1 fork toward deterministic keyword retrieval (the semantic/cosine path is **deleted**, not inverted): `local_embedding_backend.ts` no longer imports `@huggingface/transformers`, no longer loads a model, and `query()` runs keyword-overlap scoring as its only path. Added a `narrative_event` source type and a dedicated `npc` retrieval scope (`['narrative_event', 'lore']`, session summaries excluded at the scope layer). Wired memory init + non-blocking background indexing into the production `/game` boot hook (post-`hydrating_snapshot`), added witness-scoped `retrieveForNpc` over `narrativeEventService.witnessedBy` with attribution-aware event content, and injected a bounded `[MEMORY]` section into the NPC dialogue prompt that displaces conversation-history filler within C-488's budget. All 2405 client unit tests pass (0 new failures); the AC-3 full E2E journey is authored (`memory_recall.spec.ts`) but was not executed in this sandbox (no dev-server/browser harness) — the recall path is covered by passing unit/integration tests (AC-2, AC-4, AC-5).
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Semantic path deleted (no `@huggingface/transformers` import, no `_cosineSimilarity`/`_normalise`/`_ensureModel`). Keyword scoring is the only path; file header + service comments document why (deterministic, offline, sufficient at five-character-village scale). `local_embedding_backend.test.ts` includes a static-grep assertion that no transformers import is reachable. |
+| AC-2 | ✅ | `game_boot_service` calls `_startMemoryRetrieval()` after `hydrating_snapshot` (non-blocking, failure logs + continues). `game_boot_service.test.ts` pins the hook's init→backgroundIndex contract and failure isolation; `memory_retrieval_service.test.ts` verifies `indexAll()` indexes committed events. |
+| AC-3 | ✅ | Implementation complete (witness-scoped recall flows into `_buildContextProjection`/`_buildNarrativeSystemPrompt` in `generateTurn`). The E2E journey (`apps/e2e/tests/client/memory_recall.spec.ts`) now has **production test hooks wired**: `game-boot-memory-ready` (renders when `memoryRetrievalService.isReady` after the boot hook), `dialogue-recalled-facts` (overlay exposes `npcDialogueService.lastRecalledFacts`), `dialogue-free-text` (threaded via GuidedComposer→AutoResizeTextarea), and an `aikami:quick-save` document listener driving the real `gameOverlayService.saveGame()` path. Journey was not executed in this sandbox (no dev-server/browser harness); the recall+prompt logic is verified by passing unit/integration tests (AC-4, AC-5, AC-2). |
+| AC-4 | ✅ | `retrieveForNpc` filters narrative-event results through `narrativeEventService.witnessedBy` (one witness authority); `npc` scope excludes `session_summary` at the scope layer; empty witness set = no narrative-event recall. Tests cover both NPCs, the secret never returned, session_summary exclusion, attribution survival, and the cap. |
+| AC-5 | ✅ | `[MEMORY]` capped at `NPC_RECALL_MAX_RESULTS` (4); a large `[MEMORY]` shortens the conversation-history window (`MAX_CONVERSATION_TURNS - recalledFacts.length`); measured cl100k_base: baseline 283 tokens (10-turn history) vs 291 with `[MEMORY]` (4 facts + 6-turn history) — both ≤ 4096, the added section displaces history rather than extending the ceiling. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/memory/local_embedding_backend.test.ts` | AC-1: keyword-only ranking, no model init, static no-transformers-import grep assertion |
+| `apps/e2e/tests/client/memory_recall.spec.ts` | AC-3: authored save/reload witness-recall journey (not executed here — needs dev harness) |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/lib/domain/memory_retrieval.ts` | Added `narrative_event` to all three `sourceType` unions; added `npc` query scope; `embedding` now optional (legacy, no longer produced/read — schema-only, no save migration) |
+| `packages/shared/types/src/lib/domain/memory_retrieval.ts` | Added `NpcMemoryRecallQuery` type |
+| `packages/shared/constants/src/lib/memory.ts` | Added `NPC_RECALL_MAX_RESULTS`; `MEMORY_QUERY_SCOPE_SOURCE_TYPES.all` includes `narrative_event`; added `npc: ['narrative_event','lore']`; removed `EMBEDDING_DIMENSION`/`LOCAL_EMBEDDING_MODEL` (semantic path deleted) |
+| `apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts` | Deleted semantic/cosine/model-loading path; keyword scoring is the only path; `isReady` = index initialised; index stays an ephemeral rebuildable projection |
+| `apps/frontend/client/src/lib/services/memory/memory_retrieval_service.svelte.ts` | Added `retrieveForNpc` (witness-scoped); `indexAll` indexes C-491 events with attribution-aware content (`[claimant believes/claims]`); init no longer loads a model |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Post-`hydrating_snapshot` non-blocking `_startMemoryRetrieval()` hook (init → backgroundIndexOnLoad, failure logs + continues) |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Added `recalledFacts` to `DialogueContextProjection`; `_recallForTurn` (witness-scoped, seeded by last player message, abort-checked); `[MEMORY]` prompt section; history window shrinks by recalled-fact count |
+| `apps/frontend/client/src/lib/services/memory/memory_retrieval_service.test.ts` | Rewritten: removed transformer mock; AC-2 event indexing, AC-4 witness scoping/session_summary exclusion/cap tests, scope filtering |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | AC-5: `[MEMORY]` cap, history-displacement, attribution + ≤4096 token assertions |
+| `apps/frontend/client/src/lib/services/game/game_boot_service.test.ts` | AC-2: boot hook init→background non-blocking contract + failure isolation |
+| `apps/frontend/client/src/lib/test_preload.ts` | Added default `memoryRetrievalService.retrieveForNpc` mock |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/dialogue/+page.svelte` | Added `recalledFacts: []` and `lastRecalledFacts: []` to the dev dialogue mock projection |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts` | Added `recalledFacts` getter/interface member exposing `npcDialogueService.lastRecalledFacts` |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte` | Renders inert `data-testid="dialogue-recalled-facts"` + passes `testId="dialogue-free-text"` to the composer |
+| `apps/frontend/client/src/lib/views/game/game_view.svelte` | Renders inert `data-testid="game-boot-memory-ready"` when memory is ready; registers the `aikami:quick-save` listener driving `gameOverlayService.saveGame()` |
+| `apps/frontend/client/src/lib/components/messaging/guided_composer.svelte` | Threads optional `testId` prop to AutoResizeTextarea |
+| `apps/frontend/client/src/lib/components/chat/auto_resize_textarea.svelte` | Threads optional `testId` prop onto the `<textarea>` |
+
+### Deviations from Spec
+
+None. The contract's AC-1 fork resolution (commit to keyword, delete the semantic path) was implemented as directed — **not** by swapping the inverted-branch polarity. The keyword-overlap branch that previously ran only when the index had no embeddings is now the single documented path, matching the service's own stated contract (C-458 AC-1). No Amendment needed. AC-3's E2E is authored but was not executable in this agent sandbox (no `herdr_session`/browser harness); the production-path logic it asserts is covered by passing unit/integration tests.
+
+### Test Results
+
+- Unit (client): **2405 pass / 0 fail** (7 skip, 2 todo — pre-existing) across 162 files.
+  - `local_embedding_backend.test.ts`: 6/6 PASS (new)
+  - `memory_retrieval_service.test.ts`: 13/13 PASS (rewritten)
+  - `npc_dialogue_service.test.ts`: 70/70 PASS (incl. 3 new C-492 AC-5 tests)
+  - `game_boot_service.test.ts`: 16/16 PASS (incl. 2 new C-492 AC-2 tests)
+- Baseline: the one flaky `AC-5 cancellation` timeout surfaced during iteration was resolved (recall fetch now abort-checks inside the try, routing through the abort turn-state path); final run is fully green. No new failures.
+- E2E: `memory_recall.spec.ts` authored; **not executed** in this sandbox (needs dev server + browser harness).
+- Visual: N/A (no new UI).
 
 ---
