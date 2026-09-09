@@ -361,8 +361,10 @@ describe('MemoryRetrievalService', () => {
         createEvent({ id: 'evt-a', summary: 'A secret fact.', witnesses: ['npc-other'] }),
       ];
       await service.indexAll();
+      await mockBackend.index([createLoreEntry('lore-control', 'A public secret fact.')]);
 
       const results = await service.retrieveForNpc({ npcId: 'npc-unknown', text: 'secret fact' });
+      expect(results.length).toBeGreaterThan(0);
       // No narrative_event results for an unwitnessed NPC.
       expect(results.every((r) => r.sourceType !== 'narrative_event')).toBe(true);
     });
@@ -375,10 +377,35 @@ describe('MemoryRetrievalService', () => {
           witnesses: ['npc-a'],
         }),
       );
+      expect(mockEvents).toHaveLength(8);
       await service.indexAll();
 
       const results = await service.retrieveForNpc({ npcId: 'npc-a', text: 'topic' });
-      expect(results.length).toBeLessThanOrEqual(NPC_RECALL_MAX_RESULTS);
+      expect(results.length).toBeGreaterThan(0);
+      expect(results).toHaveLength(NPC_RECALL_MAX_RESULTS);
+    });
+
+    it('waits for an in-flight full index before background indexing completes', async () => {
+      mockEvents = [
+        createEvent({ id: 'evt-a', summary: 'A witnessed fact.', witnesses: ['npc-a'] }),
+      ];
+      let finishIndex: (() => void) | undefined;
+      const indexFinished = new Promise<void>((resolve) => {
+        finishIndex = resolve;
+      });
+      mockBackend.index = mock(() => indexFinished);
+
+      const initialIndex = service.indexAll();
+      let backgroundFinished = false;
+      const backgroundIndex = service.backgroundIndexOnLoad().then(() => {
+        backgroundFinished = true;
+      });
+      await Promise.resolve();
+
+      expect(backgroundFinished).toBe(false);
+      finishIndex?.();
+      await Promise.all([initialIndex, backgroundIndex]);
+      expect(backgroundFinished).toBe(true);
     });
   });
 

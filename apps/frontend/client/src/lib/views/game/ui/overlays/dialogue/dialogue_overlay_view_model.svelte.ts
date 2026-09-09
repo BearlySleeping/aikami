@@ -189,6 +189,9 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Witness-scoped facts recalled for the most recent turn (C-492). */
   readonly recalledFacts: string[];
 
+  /** Recall facts rendered by the overlay's inert E2E hook. */
+  readonly renderedRecallValue: string;
+
   /** URL for the NPC's avatar image (LPC spritesheet or generated portrait). */
   readonly npcAvatarUrl: string;
 
@@ -1114,6 +1117,11 @@ class DialogueOverlayViewModel
    */
   get recalledFacts(): string[] {
     return this._npcDialogueService?.lastRecalledFacts ?? [];
+  }
+
+  /** Recall hook text with the same concatenation produced by the former span list. */
+  get renderedRecallValue(): string {
+    return this.recalledFacts.join('');
   }
 
   /**

@@ -18,6 +18,7 @@
 import {
   DEFAULT_MAX_RESULTS,
   MEMORY_QUERY_SCOPE_SOURCE_TYPES,
+  NPC_RECALL_CANDIDATE_LIMIT,
   NPC_RECALL_MAX_RESULTS,
 } from '@aikami/constants';
 import {
@@ -104,7 +105,7 @@ export type MemoryRetrievalServiceInterface = BaseFrontendClassInterface & {
    * Run background indexing on campaign load.
    * Must not block — returns immediately, indexing happens in background.
    */
-  backgroundIndexOnLoad(): void;
+  backgroundIndexOnLoad(): Promise<void>;
 
   /**
    * Clear the entire retrieval index.
@@ -126,6 +127,8 @@ class MemoryRetrievalService
   private _isReady = $state(false);
   private _enabled = $state(true);
   private _initialised = false;
+  private _indexingCompletion: Promise<void> | undefined;
+  private _finishIndexing: (() => void) | undefined;
 
   get isReady(): boolean {
     return this._isReady;
@@ -206,7 +209,7 @@ class MemoryRetrievalService
     const indexResults = await this._backend.query({
       text: query.text,
       scope: 'npc',
-      limit: 50,
+      limit: NPC_RECALL_CANDIDATE_LIMIT,
     });
 
     const results: MemoryResult[] = [];
@@ -249,11 +252,18 @@ class MemoryRetrievalService
 
   /** @inheritdoc */
   async indexAll(): Promise<void> {
-    if (!this._enabled || !this._isReady || this._isIndexing) {
+    if (!this._enabled || !this._isReady) {
+      return;
+    }
+    if (this._isIndexing) {
+      await this._indexingCompletion;
       return;
     }
 
     this._isIndexing = true;
+    this._indexingCompletion = new Promise<void>((resolve) => {
+      this._finishIndexing = resolve;
+    });
     this.debug('indexAll:start');
 
     try {
@@ -334,13 +344,16 @@ class MemoryRetrievalService
       this.error('indexAll:failed', { error: String(err) });
     } finally {
       this._isIndexing = false;
+      this._finishIndexing?.();
+      this._finishIndexing = undefined;
+      this._indexingCompletion = undefined;
     }
   }
 
   /** @inheritdoc */
-  backgroundIndexOnLoad(): void {
+  backgroundIndexOnLoad(): Promise<void> {
     // Fire-and-forget — does not block boot
-    this.indexAll().catch((err) => {
+    return this.indexAll().catch((err) => {
       this.warn('backgroundIndexOnLoad:failed', { error: String(err) });
     });
   }

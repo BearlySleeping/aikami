@@ -2348,6 +2348,9 @@ export class NpcDialogueService
       sourceEventId,
       deltasApplied: applied.length > 0 ? applied : undefined,
     });
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new Event('aikami:dialogue-turn-committed'));
+    }
   }
 
   /** Builds a human-readable summary for a dialogue-sourced event. */

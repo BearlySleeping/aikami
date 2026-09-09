@@ -24,12 +24,15 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel} fillHeight={true}>
   <!--
     Memory-retrieval readiness (C-492 AC-2) — inert, visually-hidden test hook
-    that appears once the post-hydration boot hook has initialised the memory
-    index. Never alters production behaviour; used by the AC-3 E2E.
+    whose attribute reflects whether the post-hydration memory index is ready.
+    Never alters production behaviour; used by the AC-3 E2E.
   -->
-  {#if viewModel.memoryReady}
-    <div data-testid="game-boot-memory-ready" class="hidden" aria-hidden="true"></div>
-  {/if}
+  <div
+    data-testid="game-boot-memory-ready"
+    data-memory-ready={viewModel.memoryReady}
+    class="hidden"
+    aria-hidden="true"
+  ></div>
 
   <div
     class="w-screen h-screen overflow-hidden"

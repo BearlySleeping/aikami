@@ -5,8 +5,103 @@
 // Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven
 
 import { describe, expect, mock, test } from 'bun:test';
-import { memoryRetrievalService } from '../memory/memory_retrieval_service.svelte';
-import { gameBootService } from './game_boot_service.svelte';
+import type { GameBootInput } from '$types';
+
+let allowEngineBoot = false;
+
+const memoryRetrievalService = {
+  isReady: true,
+  init: mock(async () => {}),
+  backgroundIndexOnLoad: mock(async () => {}),
+};
+
+const gameWorld = {
+  renderer: 'webgl' as const,
+  initialize: mock(async () => {
+    if (!allowEngineBoot) {
+      throw new Error('mock canvas cannot initialize');
+    }
+  }),
+  setInputLocked: mock(() => {}),
+  destroy: mock(() => {}),
+  resize: mock(() => {}),
+};
+
+const contentPack = {
+  manifest: {
+    startingMapId: 'start',
+    version: '1',
+    maps: { start: {} },
+  },
+  getStartingMap: () => ({ defaultX: 0, defaultY: 0 }),
+  resolveMapUrl: () => 'data:application/json,{}',
+};
+
+mock.module('@aikami/frontend/engine/content', () => ({
+  createLpcPipeline: () => ({ recipeResolver: () => [], assetUrlResolver: () => '', catalog: [] }),
+  projectLpcCatalog: () => [],
+}));
+
+mock.module('@aikami/frontend/engine', () => ({
+  createEngineBridge: () => ({}),
+  clearContentPackCache: () => {},
+  loadContentPack: async () => contentPack,
+  // biome-ignore lint/style/useNamingConvention: mocked class export keeps production name
+  GameWorld: { create: () => gameWorld },
+  // biome-ignore lint/style/useNamingConvention: mocked class export keeps production name
+  TextureManager: class {},
+}));
+
+mock.module('$lib/views/utils/is_tauri', () => ({ isTauri: () => false }));
+mock.module('../memory/memory_retrieval_service.svelte', () => ({ memoryRetrievalService }));
+mock.module('../campaign/campaign_service.svelte', () => ({
+  campaignService: {
+    getLatestCampaign: () => ({
+      id: 'campaign-1',
+      state: 'playing',
+      contentPackId: 'emberwatch',
+    }),
+    ensureDefaultCampaign: async () => ({
+      id: 'campaign-1',
+      state: 'playing',
+      contentPackId: 'emberwatch',
+    }),
+  },
+}));
+mock.module('../persona/persona_service.svelte', () => ({
+  personaService: { getActivePersona: async () => undefined, getPersonas: async () => [] },
+}));
+mock.module('./game_engine_service.svelte', () => ({
+  gameEngineService: {
+    applyOnboardingForPack: async () => {},
+    destroyEngine: () => {},
+    loadMap: async () => {},
+    registerWorld: () => {},
+    restorePlayer: async () => {},
+  },
+}));
+mock.module('$lib/services/assets/asset_prefetch_service.svelte', () => ({
+  assetPrefetchService: {
+    ensureRegistryReady: async () => ({ seed: true }),
+    ensureStarted: () => {},
+  },
+}));
+mock.module('$lib/services/assets/registry_resolver', () => ({
+  assetTagResolver: (tag: string) => tag,
+}));
+mock.module('$lib/services/assets/asset_manager.svelte', () => ({
+  assetManager: { releaseUrl: () => {} },
+}));
+mock.module('$lib/data/lpc_asset_catalog', () => ({
+  getLpcAssetPath: () => undefined,
+  getLpcCatalog: () => ({ slots: [] }),
+  wireLpcUrlResolver: async () => {},
+}));
+mock.module('./prop_frame_resolver', () => ({
+  buildPropFrameResolver: async () => ({ resolver: () => undefined, clearCache: () => {} }),
+}));
+
+const { gameBootService } = await import('./game_boot_service.svelte');
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -231,65 +326,51 @@ describe('GameBootService — AC-5 Save Hydration', () => {
 // ---------------------------------------------------------------------------
 
 describe('GameBootService — C-492 AC-2 memory boot hook', () => {
-  test('the post-hydration hook initialises memory and fires non-blocking background index', async () => {
+  test('public boot exposes memory readiness only after post-hydration indexing finishes', async () => {
     resetService();
-
-    // Spy on the production memory retrieval service by swapping its methods
-    // (the boot hook holds the same singleton reference).
-    const originalInit = memoryRetrievalService.init;
-    const originalBackground = memoryRetrievalService.backgroundIndexOnLoad;
-    const initSpy = mock(async () => {});
-    const backgroundSpy = mock(() => {});
-    memoryRetrievalService.init = initSpy;
-    memoryRetrievalService.backgroundIndexOnLoad = backgroundSpy;
+    allowEngineBoot = true;
+    let finishIndexing: (() => void) | undefined;
+    const indexingFinished = new Promise<void>((resolve) => {
+      finishIndexing = resolve;
+    });
+    memoryRetrievalService.init = mock(async () => {});
+    memoryRetrievalService.backgroundIndexOnLoad = mock(() => indexingFinished);
 
     try {
-      // Invoke the same hook the hydrating_snapshot stage calls (C-492 AC-2).
-      // Full boot-through-hydration is exercised by the E2E memory_recall
-      // journey; this unit test pins the hook's non-blocking contract.
-      const hook = (
-        gameBootService as unknown as {
-          _startMemoryRetrieval: () => void;
-        }
-      )._startMemoryRetrieval;
-      hook.call(gameBootService);
+      const bootResult = await gameBootService.boot(createMockInput());
 
-      expect(initSpy).toHaveBeenCalledTimes(1);
-      // The hook returns synchronously (void) — it does not await init, so it
-      // cannot block boot (timing/order assertion, not a sleep-based one).
-      expect(backgroundSpy).toHaveBeenCalledTimes(0);
+      expect(bootResult.outcome).toBe('ready');
+      expect(memoryRetrievalService.init).toHaveBeenCalledTimes(1);
+      expect(memoryRetrievalService.backgroundIndexOnLoad).toHaveBeenCalledTimes(1);
+      expect(gameBootService.memoryReady).toBe(false);
 
-      await initSpy.mock.results[0]?.value;
-      // After init resolves, the background index is kicked off.
-      expect(backgroundSpy).toHaveBeenCalledTimes(1);
+      finishIndexing?.();
+      await indexingFinished;
+      await Promise.resolve();
+
+      expect(gameBootService.memoryReady).toBe(true);
     } finally {
-      memoryRetrievalService.init = originalInit;
-      memoryRetrievalService.backgroundIndexOnLoad = originalBackground;
+      allowEngineBoot = false;
     }
   });
 
   test('a memory init failure logs and does not propagate (boot continues)', async () => {
     resetService();
-    const originalInit = memoryRetrievalService.init;
-    const originalBackground = memoryRetrievalService.backgroundIndexOnLoad;
+    allowEngineBoot = true;
     memoryRetrievalService.init = mock(async () => {
       throw new Error('index failed');
     });
-    const backgroundSpy = mock(() => {});
-    memoryRetrievalService.backgroundIndexOnLoad = backgroundSpy;
+    memoryRetrievalService.backgroundIndexOnLoad = mock(async () => {});
 
     try {
-      const hook = (
-        gameBootService as unknown as {
-          _startMemoryRetrieval: () => void;
-        }
-      )._startMemoryRetrieval;
-      // Must not throw synchronously — a failed init logs and continues.
-      expect(() => hook.call(gameBootService)).not.toThrow();
-      expect(backgroundSpy).toHaveBeenCalledTimes(0);
+      const result = await gameBootService.boot(createMockInput());
+      await Promise.resolve();
+
+      expect(result.outcome).toBe('ready');
+      expect(memoryRetrievalService.backgroundIndexOnLoad).toHaveBeenCalledTimes(0);
+      expect(gameBootService.memoryReady).toBe(false);
     } finally {
-      memoryRetrievalService.init = originalInit;
-      memoryRetrievalService.backgroundIndexOnLoad = originalBackground;
+      allowEngineBoot = false;
     }
   });
 });

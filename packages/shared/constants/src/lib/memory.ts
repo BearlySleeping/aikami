@@ -19,6 +19,9 @@ export const INDEX_SIZE_WARN = 250;
 /** Default cap on facts recalled into the NPC dialogue `[MEMORY]` section (C-492). */
 export const NPC_RECALL_MAX_RESULTS = 4;
 
+/** Maximum NPC-scope candidates inspected before witness filtering (C-492). */
+export const NPC_RECALL_CANDIDATE_LIMIT = 50;
+
 /**
  * Indexed source types searched for each public retrieval scope.
  *

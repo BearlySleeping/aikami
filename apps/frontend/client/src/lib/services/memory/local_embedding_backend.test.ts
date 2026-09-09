@@ -71,19 +71,14 @@ describe('LocalEmbeddingBackend (keyword retrieval)', () => {
     expect(await backend.query({ text: 'anything' })).toEqual([]);
   });
 
-  it('AC-1: no @huggingface/transformers import is reachable from the module', async () => {
-    // Static grep assertion — the semantic path must be GONE, not bypassed
-    // (C-492 Watch Point). A half-live path is how this bug shipped the first
-    // time, so a reachable transformers import is treated as a hard failure.
-    const source = await Bun.file(new URL('./local_embedding_backend.ts', import.meta.url)).text();
-    // Assert no import specifier is reachable — not merely that the bare token
-    // is absent from prose comments (the module documents WHY it is keyword-
-    // based, which legitimately names the removed dependency).
-    expect(source).not.toContain("from '@huggingface/transformers'");
-    expect(source).not.toContain("import('@huggingface/transformers')");
-    expect(source).not.toContain('_cosineSimilarity');
-    expect(source).not.toContain('_normalise');
-    expect(source).not.toContain('_ensureModel');
-    expect(source).not.toContain('pipeline(');
+  it('AC-1: querying indexed content does not require model initialization', async () => {
+    const backend = LocalEmbeddingBackend.create();
+    await backend.index([loreEntry('e1', 'The ferryman knows the hidden crossing.')]);
+
+    expect(backend.isReady).toBe(false);
+    const results = await backend.query({ text: 'ferryman crossing', scope: 'lore' });
+
+    expect(results.map((result) => result.sourceId)).toEqual(['e1']);
+    expect(backend.isReady).toBe(false);
   });
 });

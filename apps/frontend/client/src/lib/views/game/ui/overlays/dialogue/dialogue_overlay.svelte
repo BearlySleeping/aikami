@@ -112,9 +112,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
     behaviour; used by the AC-3 E2E to assert the recalled context.
   -->
   <div data-testid="dialogue-recalled-facts" class="hidden" aria-hidden="true">
-    {#each viewModel.recalledFacts as fact}
-      <span>{fact}</span>
-    {/each}
+    {viewModel.renderedRecallValue}
   </div>
 
   <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161) -->

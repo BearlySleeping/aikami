@@ -9,6 +9,7 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { NPC_RECALL_MAX_RESULTS } from '@aikami/constants';
 import type { NpcRollResolutionOutput, NpcStateDelta } from '@aikami/types';
 import { encode } from 'gpt-tokenizer';
 import {
@@ -1764,12 +1765,13 @@ describe('C-492 AC-5: recall section respects C-488 budget ceiling', () => {
     const facts = Array.from({ length: 8 }, (_, i) => `Fact number ${i}.`);
     const prompt = await capturePrompt({
       recalled: facts,
-      messages: [],
+      messages: [{ role: 'player', content: 'What do you remember?' }],
     });
 
+    expect(prompt).toContain('[MEMORY]');
     const memorySection = prompt.split('[MEMORY]')[1]?.split('[CONVERSATION HISTORY]')[0] ?? '';
     const factLines = memorySection.split('\n').filter((l) => l.trim().length > 0);
-    expect(factLines.length).toBeLessThanOrEqual(4);
+    expect(factLines).toHaveLength(NPC_RECALL_MAX_RESULTS);
   });
 
   test('a large [MEMORY] shortens the conversation-history window rather than growing the prompt', async () => {
