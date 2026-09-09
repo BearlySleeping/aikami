@@ -172,6 +172,94 @@ describe('loadMapCanonical (AC-1 production integration)', () => {
     expect(round.terrain).toEqual(tilemap.terrain);
   });
 
+  test('normalizes real GID-only banded layers (no C-378 frames) so the game boots', async () => {
+    // Mirrors the shipped Emberwatch village map: a terrain channel plus
+    // ground/decor/overhead layers stored as raw Tiled GIDs with explicit
+    // `band` custom properties — exactly the case that previously threw
+    // `SceneConversionError: layer "decor" needs a frames array or a
+    // frameResolver` and aborted /game boot (AC-1 regression).
+    const gidOnlyJson = JSON.stringify({
+      width: 2,
+      height: 2,
+      tilewidth: 32,
+      tileheight: 32,
+      tilesets: [
+        {
+          firstgid: 1,
+          name: 'atlas',
+          image: 'atlas.png',
+          imagewidth: 128,
+          imageheight: 128,
+          tilewidth: 32,
+          tileheight: 32,
+          columns: 4,
+          tilecount: 16,
+        },
+      ],
+      aikami: { terrain: ['grass', 'grass', 'grass', 'water'] },
+      layers: [
+        {
+          type: 'tilelayer',
+          name: 'ground',
+          width: 2,
+          height: 2,
+          properties: [{ name: 'band', type: 'string', value: 'ground' }],
+          data: [1, 1, 1, 2],
+        },
+        {
+          type: 'tilelayer',
+          name: 'decor',
+          width: 2,
+          height: 2,
+          properties: [{ name: 'band', type: 'string', value: 'decor' }],
+          data: [3, 4, 0, 5],
+        },
+        {
+          type: 'tilelayer',
+          name: 'overhead',
+          width: 2,
+          height: 2,
+          properties: [{ name: 'band', type: 'string', value: 'overhead' }],
+          data: [6, 0, 0, 7],
+        },
+        {
+          type: 'tilelayer',
+          name: 'collision',
+          width: 2,
+          height: 2,
+          data: [0, 0, 0, 1],
+        },
+      ],
+    });
+    const { loadMapCanonical } = await import('./scene_loader.ts');
+    const { doc, compiled, tilemap } = await loadMapCanonical({
+      url: 'maps:emberwatch/village.json',
+      sceneId: 'emberwatch/village',
+      assetLock: 'pack:emberwatch@1.0.0',
+      baseTerrain: 'grass',
+      terrains: makeTerrains(),
+      fetch: (async () =>
+        new Response(gidOnlyJson, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })) as unknown as typeof fetch,
+    });
+    // No SceneConversionError: decor/overhead normalized via the GID frameResolver.
+    expect(doc).toBeDefined();
+    expect(compiled).toBeDefined();
+    if (!doc || !compiled) {
+      throw new Error('expected canonical doc and compiled scene');
+    }
+    // Decor + overhead survive as canonical visual layers with lossless,
+    // grid-derived frame palettes (`${tileset}_<localId>.png`).
+    const decor = doc.layers.find((l) => l.role === 'decor');
+    const overhead = doc.layers.find((l) => l.role === 'overhead');
+    expect(decor?.palette).toEqual(['', 'atlas_3.png', 'atlas_4.png', 'atlas_5.png']);
+    expect(overhead?.palette).toEqual(['', 'atlas_6.png', 'atlas_7.png']);
+    // The canonical tilemap still preserves the source GID render layers.
+    expect(tilemap.layers.some((l) => l.name === 'decor')).toBe(true);
+  });
+
   test('packless terrain-channel map falls back to the legacy parse (game still boots)', async () => {
     const { loadMapCanonical } = await import('./scene_loader.ts');
     const { tilemap, doc } = await loadMapCanonical({

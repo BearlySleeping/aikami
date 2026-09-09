@@ -16,6 +16,7 @@ import {
   loadTilemap,
   type RegistryBackedLoadOptions,
   type TilemapData,
+  type TilemapTileset,
 } from '../map_loader.ts';
 import { parseNativeScene, SceneUnsupportedFormatError } from './native_scene.ts';
 import {
@@ -187,6 +188,12 @@ export const loadMapCanonical = async (options: {
       baseTerrain,
       identityMap,
       dropGroundDuplicateDecor: false,
+      // Shipped Emberwatch maps store every layer as raw Tiled GIDs (no C-378
+      // `frames` array). Without a resolver the canonical adapter cannot
+      // normalize ground/decor/overhead and the game fails to boot (C-505 AC-1
+      // regression caught by manual /game testing). Map each GID to its grid
+      // frame name so normalization succeeds and stays lossless.
+      frameResolver: _buildGidFrameResolver(legacy.tilesets),
     },
   });
 
@@ -199,3 +206,33 @@ export const loadMapCanonical = async (options: {
   });
   return { ...result, tilemap, source: isJton ? 'jton' : 'tiled' };
 };
+
+/**
+ * Builds a GID → logical frame-name resolver for legacy maps whose layers
+ * store raw Tiled GIDs (no C-378 `frames` array). Maps each GID to its grid
+ * frame name `${tileset}_<localId>.png` using the containing tileset's
+ * `firstgid`/`tilecount`:
+ *
+ *   localTileId = gid - firstgid + 1
+ *
+ * `_<n>` is the C-378 frame convention the preview's frame sampler parses, so
+ * the canonical doc stays lossless and previewable while /game keeps rendering
+ * the preserved GID layers. Returns undefined for GIDs outside every declared
+ * tileset — the adapter then throws a recoverable {@link SceneConversionError}
+ * rather than silently blanking a malformed map.
+ */
+const _buildGidFrameResolver =
+  (tilesets: readonly TilemapTileset[]): ((gid: number, layerName: string) => string | undefined) =>
+  (gid: number): string | undefined => {
+    if (!gid) {
+      return undefined;
+    }
+    const tileset = tilesets.find((t) => gid >= t.firstgid && gid < t.firstgid + t.tilecount);
+    if (!tileset) {
+      return undefined;
+    }
+    const localTileId = gid - tileset.firstgid + 1;
+    const stem =
+      tileset.name ?? (tileset.image ? tileset.image.replace(/\.[a-z0-9]+$/i, '') : 'tile');
+    return `${stem}_${localTileId}.png`;
+  };
