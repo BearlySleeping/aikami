@@ -77,6 +77,8 @@ export {
   TILED_FLIP_MASK,
   TILED_FLIP_V,
 } from './assets/map_loader.ts';
+// C-505 canonical scene module (no PixiJS)
+export * from './assets/scene/scene_index.ts';
 // Base engine class
 export {
   BaseEngineClass,

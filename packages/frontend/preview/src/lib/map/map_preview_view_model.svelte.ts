@@ -1,8 +1,20 @@
 // packages/frontend/preview/src/lib/map/map_preview_view_model.svelte.ts
 //
-// ViewModel for the map preview component — handles loading, asset resolution,
-// Canvas rendering, and reactive state. The Svelte view becomes a pure wrapper.
+// C-505 — Map preview ViewModel.
+//
+// Consumes the canonical scene data via the engine's unified loader instead
+// of reading a `tiles` placeholder / assuming a collision layer position
+// (AC-5). It renders the compiled ground/decor/overhead layers, the
+// authoritative collision grid and placement markers from the shared scene
+// pipeline — the same interpretation the game uses.
 
+import type { TilemapData } from '@aikami/frontend/engine';
+import {
+  type SceneLoadResult,
+  SceneUnsupportedFormatError,
+  sceneFromNative,
+  sceneFromTilemap,
+} from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -20,17 +32,16 @@ const _cssVar = (name: string, fallback: string): string => {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 };
 
-/** Semantic tile fill colour (slate-600 equivalent). */
-const _tileFill = (): string => _cssVar('--tile-fill', '#4a5568');
-/** Semantic tile stroke colour (slate-700 equivalent). */
+/** Semantic ground fill colour. */
+const _groundFill = (): string => _cssVar('--tile-fill', '#4a5568');
+/** Semantic decal fill colour (decor above ground). */
+const _decorFill = (): string => _cssVar('--decor-fill', '#7c5cff');
+/** Semantic overhead fill colour. */
+const _overheadFill = (): string => _cssVar('--overhead-fill', '#2bb673');
+/** Semantic tile stroke colour. */
 const _tileStroke = (): string => _cssVar('--tile-stroke', '#2d3748');
 /** Semantic collision overlay colour. */
 const _collisionFill = (): string => _cssVar('--collision-fill', 'rgba(255, 0, 0, 0.3)');
-/** Semantic Z-band colours (cycling). */
-const _zBandColors = (): string[] => {
-  const raw = _cssVar('--zband-colors', '#ff0000,#00ff00,#0000ff,#ffff00,#ff00ff');
-  return raw.split(',').map((c) => c.trim());
-};
 
 // ── Interface ──────────────────────────────────────────────────────────────
 
@@ -44,10 +55,15 @@ export type MapPreviewViewModelInterface = BaseViewModelInterface & {
 export type MapPreviewViewModelOptions = BaseViewModelOptions & {
   resolver: AssetResolver;
   mapTag: string;
+  /** Canonical scene id (defaults to the map tag). */
+  sceneId?: string;
+  /** Installed asset-lock reference. */
+  assetLock?: string;
+  /** Base terrain id for terrain-channel Tiled maps. */
+  baseTerrain?: string;
   width?: number;
   height?: number;
   showCollision?: boolean;
-  showZBands?: boolean;
   zoom?: number;
 };
 
@@ -67,20 +83,24 @@ class MapPreviewViewModel
 
   private readonly _resolver: AssetResolver;
   private readonly _mapTag: string;
+  private readonly _sceneId: string;
+  private readonly _assetLock: string;
+  private readonly _baseTerrain: string | undefined;
   private readonly _width: number;
   private readonly _height: number;
   private readonly _showCollision: boolean;
-  private readonly _showZBands: boolean;
   private readonly _zoom: number;
 
   constructor(options: MapPreviewViewModelOptions) {
     super(options);
     this._resolver = options.resolver;
     this._mapTag = options.mapTag;
+    this._sceneId = options.sceneId ?? options.mapTag;
+    this._assetLock = options.assetLock ?? 'pack:emberwatch';
+    this._baseTerrain = options.baseTerrain;
     this._width = options.width ?? 640;
     this._height = options.height ?? 480;
     this._showCollision = options.showCollision ?? false;
-    this._showZBands = options.showZBands ?? false;
     this._zoom = options.zoom ?? 1;
   }
 
@@ -131,73 +151,92 @@ class MapPreviewViewModel
         this.errorMessage = `Failed to fetch map: ${response.status}`;
         return;
       }
+      const text = await response.text();
 
-      const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
-      if (!contentType.includes('json')) {
-        const text = await response.text().catch(() => '');
-        this.errorMessage = `Expected JSON but got ${contentType || 'unknown'} — server returned: ${text.slice(0, 200)}`;
+      // Load through the unified scene loader — the same interpretation the
+      // game uses (AC-5). Native scenes are parsed directly; legacy Tiled/JTON
+      // are normalized through the compatibility adapter.
+      let result: SceneLoadResult;
+      try {
+        result = loadSceneSync(text, {
+          sceneId: this._sceneId,
+          assetLock: this._assetLock,
+          adapter: { baseTerrain: this._baseTerrain },
+        });
+      } catch (err) {
+        if (err instanceof SceneUnsupportedFormatError) {
+          this.errorMessage = err.message;
+        } else if (err instanceof Error) {
+          this.errorMessage = `Scene load failed: ${err.message}`;
+        } else {
+          this.errorMessage = String(err);
+        }
         return;
       }
 
-      const mapData = await response.json();
+      const compiled = result.compiled;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         return;
       }
 
       const zoom = this._zoom;
-      const tileSize = 32;
+      const tileSize = compiled.tileSize || 32;
       const scaledTile = Math.round(tileSize * zoom);
-      const tiles = mapData.tiles ?? mapData.layers?.[0]?.tiles ?? [];
-      const mapW = mapData.width ?? Math.floor(this._width / scaledTile);
-      const mapH = mapData.height ?? Math.floor(this._height / scaledTile);
+      const mapW = compiled.width;
 
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, this._width, this._height);
 
-      const tileFill = _tileFill();
+      const groundFill = _groundFill();
+      const decorFill = _decorFill();
+      const overheadFill = _overheadFill();
       const tileStroke = _tileStroke();
+      const collisionFill = _collisionFill();
 
-      // Draw placeholder tiles
-      for (let y = 0; y < mapH; y++) {
-        for (let x = 0; x < mapW; x++) {
-          const tileIdx = y * mapW + x;
-          const tile = tiles[tileIdx];
-          if (tile && tile !== 0) {
-            ctx.fillStyle = tileFill;
-            ctx.fillRect(x * scaledTile, y * scaledTile, scaledTile, scaledTile);
-            ctx.strokeStyle = tileStroke;
-            ctx.strokeRect(x * scaledTile, y * scaledTile, scaledTile, scaledTile);
+      // Draw compiled layers bottom-to-top (ground → decor → overhead).
+      const drawBand = (band: 'ground' | 'decor' | 'overhead', fill: string) => {
+        for (const layer of compiled.layers) {
+          if (layer.band !== band) {
+            continue;
           }
-        }
-      }
-
-      // Collision overlay
-      if (this._showCollision) {
-        const collision = mapData.collision ?? mapData.layers?.[1]?.tiles ?? [];
-        const collisionFill = _collisionFill();
-        for (let y = 0; y < mapH; y++) {
-          for (let x = 0; x < mapW; x++) {
-            const idx = y * mapW + x;
-            if (collision[idx]) {
-              ctx.fillStyle = collisionFill;
-              ctx.fillRect(x * scaledTile, y * scaledTile, scaledTile, scaledTile);
+          for (let i = 0; i < layer.frames.length; i++) {
+            if (!layer.frames[i]) {
+              continue;
             }
+            const x = (i % mapW) * scaledTile;
+            const y = Math.floor(i / mapW) * scaledTile;
+            ctx.fillStyle = fill;
+            ctx.fillRect(x, y, scaledTile, scaledTile);
+            ctx.strokeStyle = tileStroke;
+            ctx.strokeRect(x, y, scaledTile, scaledTile);
+          }
+        }
+      };
+      drawBand('ground', groundFill);
+      drawBand('decor', decorFill);
+      drawBand('overhead', overheadFill);
+
+      // Collision overlay from the authoritative collision grid.
+      if (this._showCollision) {
+        for (let i = 0; i < compiled.collision.length; i++) {
+          if (compiled.collision[i]) {
+            const x = (i % mapW) * scaledTile;
+            const y = Math.floor(i / mapW) * scaledTile;
+            ctx.fillStyle = collisionFill;
+            ctx.fillRect(x, y, scaledTile, scaledTile);
           }
         }
       }
 
-      // Z-band overlay
-      if (this._showZBands) {
-        const entities = mapData.entities ?? [];
-        const zColors = _zBandColors();
-        for (const entity of entities) {
-          const ex = (entity.x ?? 0) * scaledTile;
-          const ey = (entity.y ?? 0) * scaledTile;
-          const band = entity.zBand ?? 0;
-          ctx.fillStyle = `${zColors[band % zColors.length]}60`;
-          ctx.fillRect(ex, ey, scaledTile, scaledTile);
-        }
+      // Placement markers (stable ids + roles).
+      for (const placement of compiled.placements) {
+        const x = Math.round(placement.x * zoom);
+        const y = Math.round(placement.y * zoom);
+        ctx.fillStyle = placement.solid ? '#ff0000' : '#ffd000';
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
       }
 
       this.loaded = true;
@@ -206,6 +245,35 @@ class MapPreviewViewModel
     }
   }
 }
+
+/**
+ * Synchronous scene load for the preview (it already has the raw text).
+ * Native scenes parse/compile directly; Tiled/JTON normalize through the
+ * adapter. Mirrors `loadScene` without the network fetch.
+ */
+const loadSceneSync = (
+  text: string,
+  options: {
+    sceneId: string;
+    assetLock: string;
+    adapter: { baseTerrain?: string };
+  },
+): SceneLoadResult => {
+  const trimmed = text.trimStart();
+  const parsed = JSON.parse(trimmed);
+  if (parsed?.kind === 'aikami.scene') {
+    return sceneFromNative(parsed, {
+      sceneId: options.sceneId,
+      assetLock: options.assetLock,
+      adapter: options.adapter,
+    });
+  }
+  return sceneFromTilemap(parsed as TilemapData, {
+    sceneId: options.sceneId,
+    assetLock: options.assetLock,
+    adapter: options.adapter,
+  });
+};
 
 // ── Factory ────────────────────────────────────────────────────────────────
 

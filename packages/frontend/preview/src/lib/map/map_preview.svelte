@@ -13,20 +13,24 @@ import {
 type Props = {
   resolver: AssetResolver;
   mapTag: string;
+  sceneId?: string;
+  assetLock?: string;
+  baseTerrain?: string;
   width?: number;
   height?: number;
   showCollision?: boolean;
-  showZBands?: boolean;
   zoom?: number;
 };
 
 let {
   resolver,
   mapTag,
+  sceneId,
+  assetLock,
+  baseTerrain,
   width = 640,
   height = 480,
   showCollision = false,
-  showZBands = false,
   zoom = 1,
 }: Props = $props();
 
@@ -38,10 +42,12 @@ $effect(() => {
     className: 'MapPreview',
     resolver,
     mapTag,
+    sceneId,
+    assetLock,
+    baseTerrain,
     width,
     height,
     showCollision,
-    showZBands,
     zoom,
   });
   viewModel = vm;
