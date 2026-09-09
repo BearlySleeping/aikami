@@ -13,8 +13,8 @@ import { afterEach, beforeEach, describe, expect, type Mock, mock, test } from '
 import { SKILL_CHECK_STAKES } from '@aikami/constants';
 import type { GameCharacterSheet } from '@aikami/types';
 import { computeModifier, createDefaultSheet } from '@aikami/utils';
-import { availableMessageActions } from '../../../../../components/chat/message_actions';
 import type { NpcDialogueServiceInterface } from '$services';
+import { availableMessageActions } from '../../../../../components/chat/message_actions';
 
 type AnalyzeIntentOptions = Parameters<NpcDialogueServiceInterface['analyzeIntent']>[0];
 type AnalyzeIntentCallback = (
