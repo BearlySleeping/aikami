@@ -19,7 +19,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — the current implementation does the opposite of what its own docs say |
 | **Dependencies** | [C-491](C-491-committed-narrative-event-record.md) — the committed narrative event record is the authoritative fact source this contract retrieves from. [C-488](C-488-authored-npc-identity-in-the-content-pack.md) — AC-5's budget ceiling. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
