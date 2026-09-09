@@ -2024,6 +2024,7 @@ self.onmessage = (event: MessageEvent): void => {
             world,
             spawnPoints,
             packConfig: _packConfig,
+            lpcCatalog: _workerLpcCatalog,
             defeatedEnemies: defeatedEnemies as string[] | undefined,
             collectedPickups: collectedPickups as string[] | undefined,
             interactableStates: interactableStates as InteractableStateMap | undefined,

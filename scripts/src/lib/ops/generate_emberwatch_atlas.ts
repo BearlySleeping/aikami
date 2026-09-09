@@ -143,9 +143,31 @@ const fillRect = (
   }
 };
 
-/** Fills the whole cell with a color. */
+/** Fills the whole cell with a color (opaque). */
 const fillCell = (col: number, row: number, r: number, g: number, b: number): void => {
   fillRect(col, row, 0, 0, TILE, TILE, r, g, b);
+};
+
+/**
+ * Clears the whole cell to fully transparent (C-504).
+ *
+ * Prop/decor painters call this instead of an opaque grass/floor background
+ * so their unpainted regions stay transparent and never show an opaque
+ * substrate when placed over grass/dirt/indoor flooring. Terrain painters
+ * keep painting their full cell opaque.
+ */
+const clearCell = (col: number, row: number): void => {
+  const ox = col * TILE;
+  const oy = row * TILE;
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      const i = ((oy + y) * W + (ox + x)) * 4;
+      buf[i] = 0;
+      buf[i + 1] = 0;
+      buf[i + 2] = 0;
+      buf[i + 3] = 0;
+    }
+  }
 };
 
 /** Draws horizontal/vertical 1px lines within a cell. */
@@ -472,7 +494,7 @@ const paintWater = (col: number, row: number): void => {
 };
 
 const paintFence = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60); // grass behind
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 29 + row * 71 + 23, 0.3, 20, 22, 14);
   // vertical slats at x=6..9 and x=22..25
   for (const sx of [6, 22]) {
@@ -497,7 +519,7 @@ const paintFencePost = (col: number, row: number): void => {
 // ---- Props ----------------------------------------------------------------
 
 const paintWell = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60); // grass base
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 19 + row * 41 + 31, 0.3, 18, 20, 12);
   // stone ring
   fillRect(col, row, 4, 12, 24, 16, 130, 130, 134);
@@ -517,7 +539,7 @@ const paintWell = (col: number, row: number): void => {
 };
 
 const paintNoticeBoard = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 23 + row * 67 + 19, 0.3, 18, 20, 12);
   // posts
   fillRect(col, row, 3, 10, 4, 20, 110, 68, 38);
@@ -534,7 +556,7 @@ const paintNoticeBoard = (col: number, row: number): void => {
 };
 
 const paintVillageGate = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 43 + row * 53 + 41, 0.3, 18, 20, 12);
   // stone base posts
   fillRect(col, row, 1, 8, 6, 22, 130, 130, 134);
@@ -557,7 +579,7 @@ const paintChest = (
   row: number,
   band: readonly [number, number, number] = [192, 192, 196],
 ): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 11 + row * 79 + 27, 0.3, 18, 20, 12);
   // body
   fillRect(col, row, 4, 14, 24, 14, 181, 132, 90);
@@ -574,7 +596,7 @@ const paintChest = (
 };
 
 const paintBarrel = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 7 + row * 91 + 37, 0.3, 18, 20, 12);
   // barrel body (tapered)
   fillRect(col, row, 6, 6, 20, 24, 160, 106, 63);
@@ -593,7 +615,7 @@ const paintBarrel = (col: number, row: number): void => {
 };
 
 const paintCrate = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 17 + row * 13 + 45, 0.3, 18, 20, 12);
   // body
   fillRect(col, row, 5, 8, 22, 22, 160, 106, 63);
@@ -610,7 +632,7 @@ const paintCrate = (col: number, row: number): void => {
 };
 
 const paintCounter = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // dark floor behind
+  clearCell(col, row); // C-504: transparent unpainted region
   // top
   fillRect(col, row, 2, 8, 28, 6, 185, 132, 84);
   hline(col, row, 2, 29, 8, 205, 152, 100);
@@ -623,7 +645,7 @@ const paintCounter = (col: number, row: number): void => {
 };
 
 const paintTable = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // legs
   fillRect(col, row, 3, 16, 5, 12, 96, 56, 32);
   fillRect(col, row, 24, 16, 5, 12, 96, 56, 32);
@@ -634,7 +656,7 @@ const paintTable = (col: number, row: number): void => {
 };
 
 const paintBed = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // frame
   fillRect(col, row, 1, 6, 30, 22, 96, 56, 32);
   // mattress
@@ -649,7 +671,7 @@ const paintBed = (col: number, row: number): void => {
 };
 
 const paintRug = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // rug body
   fillRect(col, row, 4, 6, 24, 20, 160, 48, 64);
   // border
@@ -669,7 +691,7 @@ const paintRug = (col: number, row: number): void => {
 };
 
 const paintBookshelf = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // frame
   fillRect(col, row, 4, 2, 24, 28, 110, 68, 38);
   hline(col, row, 4, 27, 2, 140, 92, 56);
@@ -699,7 +721,7 @@ const paintBookshelf = (col: number, row: number): void => {
 };
 
 const paintFireplace = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // stone hearth
   fillRect(col, row, 3, 8, 26, 22, 125, 125, 128);
   hline(col, row, 3, 28, 8, 152, 152, 156);
@@ -717,7 +739,7 @@ const paintFireplace = (col: number, row: number): void => {
 };
 
 const paintCandle = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // stand
   fillRect(col, row, 13, 20, 6, 10, 96, 56, 32);
   fillRect(col, row, 11, 26, 10, 4, 122, 74, 42);
@@ -730,7 +752,7 @@ const paintCandle = (col: number, row: number): void => {
 };
 
 const paintPlant = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // pot
   fillRect(col, row, 9, 20, 14, 10, 170, 84, 58);
   hline(col, row, 8, 21, 20, 190, 104, 72);
@@ -744,7 +766,7 @@ const paintPlant = (col: number, row: number): void => {
 };
 
 const paintAnvil = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // base
   fillRect(col, row, 8, 22, 16, 8, 58, 58, 62);
   // body
@@ -840,7 +862,7 @@ const paintFlagstone = (col: number, row: number): void => {
 };
 
 const paintRugRound = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38);
+  clearCell(col, row); // C-504: transparent unpainted region
   // round rug
   for (let y = 8; y < 26; y++) {
     for (let x = 8; x < 24; x++) {
@@ -1148,10 +1170,16 @@ const paintFrame = (key: string, col: number, row: number): void => {
 };
 
 const drawAll = (frames: Record<string, [number, number]>): void => {
-  // Base fill: dark neutral for unused cells
+  // Base fill: TRANSPARENT (C-504). Terrain painters paint their full cell
+  // opaque; prop/decor painters leave unpainted regions transparent instead
+  // of showing an opaque grass/floor substrate. No global chroma deletion.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      setPx(x, y, 47, 95, 42);
+      const i = (y * W + x) * 4;
+      buf[i] = 0;
+      buf[i + 1] = 0;
+      buf[i + 2] = 0;
+      buf[i + 3] = 0;
     }
   }
   for (const [key, [col, row]] of Object.entries(frames)) {
@@ -1308,10 +1336,13 @@ export const packAtlas = (): PackedAtlas => {
       const srcY = cellY * TILE + srcLocalY;
       const si = (srcY * W + srcX) * 4;
       const di = (y * CW + x) * 4;
+      // C-504: the 1px edge extrusion copies the full RGBA pixel — a
+      // transparent prop edge stays transparent (the old code forced alpha
+      // 255, painting an opaque border around transparent props).
       extruded[di] = buf[si];
       extruded[di + 1] = buf[si + 1];
       extruded[di + 2] = buf[si + 2];
-      extruded[di + 3] = 255;
+      extruded[di + 3] = buf[si + 3];
     }
   }
 
@@ -1346,9 +1377,11 @@ const main = (): void => {
   writeFileSync(pngPath, png);
 
   // Convert PNG → WebP via cwebp (available in the Nix devShell).
-  // (vips `copy` with the [Q=90] suffix misbehaves under Bun's execFileSync.)
+  // C-504: LOSS LESS — pixel-art output must round-trip without color shift
+  // (the old `-q 90` lossy mode blurred alpha edges and shifted palette
+  // colours).
   try {
-    execFileSync('cwebp', ['-q', '90', pngPath, '-o', webpPath], { stdio: 'inherit' });
+    execFileSync('cwebp', ['-lossless', pngPath, '-o', webpPath], { stdio: 'inherit' });
   } catch (error) {
     const code = (error as { code?: string } | null)?.code;
     const hint =
