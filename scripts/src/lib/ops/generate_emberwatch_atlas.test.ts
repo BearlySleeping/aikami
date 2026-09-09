@@ -9,7 +9,13 @@
 // dir) — the contract's Evidence Matrix path is updated to match.
 
 import { describe, expect, test } from 'bun:test';
-import { CORNER_WEDGE_TESTS, packAtlas, terrainOwnsPixel } from './generate_emberwatch_atlas.ts';
+import sharp from 'sharp';
+import {
+  CORNER_WEDGE_TESTS,
+  encodePng,
+  packAtlas,
+  terrainOwnsPixel,
+} from './generate_emberwatch_atlas.ts';
 import {
   ATLAS_CELL,
   ATLAS_HEIGHT,
@@ -235,5 +241,67 @@ describe('C-504 — atlas alpha', () => {
     // border duplicate must be transparent too (RGBA, not forced 255).
     expect(rgba[idx(x0, y0) + 3]).toBe(0);
     expect(rgba[idx(x0 - 1, y0 - 1) + 3]).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-506 AC-1 — lossless output encoding
+// ---------------------------------------------------------------------------
+// The atlas is emitted as a lossless WebP (`cwebp -lossless` in main). This
+// test proves the output encoding round-trips without color shift or alpha
+// damage: every pixel with visible art (alpha > 0) must come back byte-
+// identical through the PNG → lossless-WebP → RGBA pipeline, and fully
+// transparent pixels (alpha == 0) must stay fully transparent.
+//
+// WebP lossless legitimately discards the RGB components of fully transparent
+// pixels (their colour is invisible), so we compare the visible art exactly
+// and assert transparency is preserved rather than demanding byte-equality on
+// invisible RGB noise.
+describe('C-506 AC-1 — lossless output encoding', () => {
+  test('PNG → lossless WebP → RGBA round-trips visible art byte-identically', async () => {
+    const { rgba, width, height } = packAtlas();
+
+    // Encode the pure RGBA buffer to the same PNG the generator writes.
+    const png = encodePng(width, height, rgba);
+
+    // Encode that PNG to a lossless WebP (mirrors `cwebp -lossless`) and
+    // decode it back to raw RGBA for comparison.
+    const webp = await sharp(png).webp({ lossless: true }).toBuffer();
+    const decoded = await sharp(webp)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    expect(decoded.info.width).toBe(width);
+    expect(decoded.info.height).toBe(height);
+    expect(decoded.info.channels).toBe(4);
+    expect(decoded.data.length).toBe(rgba.length);
+
+    let opaqueDiff = 0;
+    let visibleDiff = 0;
+    let transparentToOpaque = 0;
+    for (let i = 0; i < rgba.length; i += 4) {
+      const srcAlpha = rgba[i + 3];
+      const dstAlpha = decoded.data[i + 3];
+      // A fully transparent source pixel must remain fully transparent.
+      if (srcAlpha === 0) {
+        if (dstAlpha !== 0) transparentToOpaque += 1;
+        continue;
+      }
+      // Visible pixels must round-trip byte-identically (RGBA).
+      const same =
+        rgba[i] === decoded.data[i] &&
+        rgba[i + 1] === decoded.data[i + 1] &&
+        rgba[i + 2] === decoded.data[i + 2] &&
+        dstAlpha === srcAlpha;
+      if (!same) visibleDiff += 1;
+      if (srcAlpha === 255 && dstAlpha !== 255) opaqueDiff += 1;
+    }
+
+    // Lossless: no visible pixel may shift a single byte.
+    expect(visibleDiff, 'visible (alpha>0) pixels shifted').toBe(0);
+    // Fully opaque art must stay fully opaque (no alpha degradation).
+    expect(opaqueDiff, 'opaque pixels lost alpha').toBe(0);
+    // Transparency must be preserved — no baked opaque substrate on props.
+    expect(transparentToOpaque, 'transparent pixels became opaque').toBe(0);
   });
 });
