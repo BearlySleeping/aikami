@@ -408,7 +408,6 @@
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
     "orphaned": [
       "GameOverlayService.canOpenOverlay",
-      "GameOverlayService.closeCombat",
       "GameOverlayService.closeTalkToParty",
       "GameOverlayService.openInventory",
       "GameOverlayService.pushOverlay",
