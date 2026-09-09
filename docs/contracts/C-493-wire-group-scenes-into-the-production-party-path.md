@@ -19,7 +19,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | thin |
 | **Priority** | P1 — the capability already exists and is tested; it has no production caller |
 | **Dependencies** | [C-488](C-488-authored-npc-identity-in-the-content-pack.md) — the authored scene cast this contract's NPC discovery must read. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
 | **Contract version** | 2.0.0 |
