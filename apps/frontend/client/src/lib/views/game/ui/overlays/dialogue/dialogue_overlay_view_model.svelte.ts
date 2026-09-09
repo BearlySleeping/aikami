@@ -967,11 +967,18 @@ class DialogueOverlayViewModel
   }
 
   /**
-   * Triggers a full NPC turn for a queued player message. The message is
-   * appended to `messages` now that it is being delivered (it was previously
-   * shown only as a pending item), so the turn context ends at this message.
+   * Delivers queued input once no turn is active. Slash commands return to
+   * their command subsystem; ordinary text is appended and sent to the active
+   * NPC/GM pipeline.
    */
   private async _deliverQueued(text: string): Promise<void> {
+    const slash = parseSlashCommand(text);
+    if (slash.kind !== 'none') {
+      this.debug('slash-command:parse', { kind: slash.kind });
+      await this._dispatchSlashCommand(slash);
+      return;
+    }
+
     this.messages = [
       ...this.messages,
       {
@@ -1452,13 +1459,6 @@ class DialogueOverlayViewModel
     // ── C-501: Slash command intercept ──────────────────────────────
     // Parse before any call into the NPC dialogue pipeline so leading `/`
     // text routes to image/tree/GM/help instead of the NPC.
-    const slash = parseSlashCommand(content);
-    if (slash.kind !== 'none') {
-      this.debug('slash-command:parse', { kind: slash.kind });
-      await this._dispatchSlashCommand(slash);
-      return;
-    }
-
     // If the NPC is currently streaming, queue the message instead of sending
     // it now. It is surfaced as a visible pending item and is delivered in FIFO
     // order only after the current turn completes successfully (and only while
@@ -1467,6 +1467,13 @@ class DialogueOverlayViewModel
     if (this.isStreaming) {
       this._pendingQueue.push(content);
       this.debug('sendMessage:queued', { content, queued: this._pendingQueue.length });
+      return;
+    }
+
+    const slash = parseSlashCommand(content);
+    if (slash.kind !== 'none') {
+      this.debug('slash-command:parse', { kind: slash.kind });
+      await this._dispatchSlashCommand(slash);
       return;
     }
 
@@ -1514,7 +1521,7 @@ class DialogueOverlayViewModel
         this._handleTreeCommand();
         return;
       case 'gm':
-        await this._handleGmCommand(result.text);
+        await this._handleGmCommand(result);
         return;
       case 'help':
         this._handleHelpCommand();
@@ -1601,9 +1608,19 @@ class DialogueOverlayViewModel
    * The instruction is appended as a player turn (attributed to the player,
    * never the NPC) and routed through the existing GM address-mode path.
    */
-  private async _handleGmCommand(text: string): Promise<void> {
-    const instruction = text.trim();
-    const label = instruction.length > 0 ? instruction : '/look';
+  private async _handleGmCommand(result: {
+    command: 'action' | 'look';
+    text: string;
+  }): Promise<void> {
+    const instruction = result.text.trim();
+    if (result.command === 'action' && instruction.length === 0) {
+      this._handleHelpCommand();
+      return;
+    }
+
+    const resolvedInstruction =
+      instruction.length > 0 ? instruction : 'Look around and describe what I see.';
+    const label = `/${result.command} ${resolvedInstruction}`;
     this.messages = [
       ...this.messages,
       {
@@ -1626,7 +1643,7 @@ class DialogueOverlayViewModel
     this._appendSystemMessage(SLASH_COMMAND_HELP);
   }
 
-  /** Appends a system-style message (senderName "System") to the history. */
+  /** Appends a UI-only system message that prompt-context mappers omit. */
   private _appendSystemMessage(content: string): void {
     this.messages = [
       ...this.messages,
@@ -1648,7 +1665,7 @@ class DialogueOverlayViewModel
    * The GM responds as the dungeon master, not as an NPC.
    * Streams the response into a placeholder (C-401).
    */
-  private async _sendToGameMaster(_content: string): Promise<void> {
+  private async _sendToGameMaster(content: string): Promise<void> {
     this.isStreaming = true;
     this.highlightSpeaker = 'npc';
     this.streamError = null;
@@ -1656,6 +1673,9 @@ class DialogueOverlayViewModel
 
     const controller = new AbortController();
     this._activeAbortController = controller;
+    const latestPlayerMessageId = this.messages.findLast(
+      (message) => message.role === 'player',
+    )?.id;
 
     // Placeholder NPC message — the streamed GM response lands here
     const npcMessageId = crypto.randomUUID();
@@ -1678,10 +1698,10 @@ class DialogueOverlayViewModel
         npcId: this._npcData.npcId,
         npcName: 'Game Master',
         messages: this.messages
-          .filter((m) => m.id !== npcMessageId) // exclude the empty placeholder
+          .filter((message) => message.id !== npcMessageId && message.senderName !== 'System')
           .map((m) => ({
             role: m.role === 'player' ? 'player' : ('npc' as const),
-            content: m.content,
+            content: m.id === latestPlayerMessageId ? content : m.content,
           })),
         signal: controller.signal,
         gameStateFacts: buildGameStateFacts({ npcId: this._npcData.npcId }),
@@ -1744,7 +1764,7 @@ class DialogueOverlayViewModel
     let succeeded = false;
     try {
       const messages: Array<{ role: 'player' | 'npc'; content: string }> = this.messages
-        .filter((m) => m.id !== id)
+        .filter((message) => message.id !== id && message.senderName !== 'System')
         .map((m) => ({
           role: m.role,
           content: m.content,

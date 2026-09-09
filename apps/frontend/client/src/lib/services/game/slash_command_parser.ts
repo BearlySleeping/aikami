@@ -17,14 +17,14 @@ import { parseLine } from '@aikami/parser';
  *
  * - `generate` → produce an inline image from the given prompt.
  * - `tree` → re-present the previous turn's choice set.
- * - `gm` → route the instruction to the Game Master address mode.
+ * - `gm` → route the identified command and instruction to the Game Master address mode.
  * - `help` → inline command help (unknown/empty commands, bare `/`).
  * - `none` → not a slash command; forward as normal dialogue.
  */
 export type SlashCommandResult =
   | { kind: 'generate'; prompt: string }
   | { kind: 'tree' }
-  | { kind: 'gm'; text: string }
+  | { kind: 'gm'; command: 'action' | 'look'; text: string }
   | { kind: 'help' }
   | { kind: 'none' };
 
@@ -37,7 +37,8 @@ export const SLASH_COMMAND_HELP =
  *
  * Trims the input, delegates to `parseLine`, lowercases the returned command
  * name for dialogue-command matching, and maps the shared `command.args`
- * tokens into the result (`args.join(' ')` for prompt/text commands).
+ * tokens into the result (`args.join(' ')` for prompt/text commands) while
+ * retaining whether a GM command was `/action` or `/look`.
  *
  * Edge cases:
  * - A trimmed bare `/` maps to `help` — `parseLine` treats it as text, but
@@ -67,8 +68,9 @@ export const parseSlashCommand = (input: string): SlashCommandResult => {
     case 'tree':
       return { kind: 'tree' };
     case 'action':
+      return { kind: 'gm', command: 'action', text: args };
     case 'look':
-      return { kind: 'gm', text: args };
+      return { kind: 'gm', command: 'look', text: args };
     default:
       return { kind: 'help' };
   }

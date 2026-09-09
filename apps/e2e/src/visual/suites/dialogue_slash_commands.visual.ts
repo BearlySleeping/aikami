@@ -8,33 +8,8 @@
 //
 // Contract: C-501 Dialogue Slash Commands
 
-import { Type } from 'typebox';
+import { DialogueSlashCommandsSchema } from '@aikami/schemas';
 import { defineConfig } from '$visual/core/config';
-
-// ── Schema ───────────────────────────────────────────────────
-
-const DialogueSlashCommandsSchema = Type.Object({
-  score: Type.Number({
-    description: '0-100 score of visual correctness',
-  }),
-  dialogueVisible: Type.Boolean({
-    description: 'Whether the dialogue overlay is visible with NPC name and greeting text',
-  }),
-  imageBlockVisible: Type.Boolean({
-    description: 'Whether an inline image block appears in the dialogue thread after /generate',
-  }),
-  generatedImageVisible: Type.Boolean({
-    description:
-      'Whether the generated scene image (or its generating skeleton) is visible inline in the thread',
-  }),
-  noLayoutFlashes: Type.Boolean({
-    description:
-      'Whether the UI is free of layout flashes, blank bounding frames, or visual glitches',
-  }),
-  issues: Type.Array(Type.String(), {
-    description: 'List of visual issues detected',
-  }),
-});
 
 // ── Prompt ───────────────────────────────────────────────────
 
@@ -72,16 +47,16 @@ const triggerGenerate = async (page: import('playwright').Page): Promise<void> =
   const inputSelector =
     '[data-testid="dialogue-input"] textarea, [data-testid="dialogue-input"] input';
   const inputElement = page.locator(inputSelector).first();
-  if (await inputElement.isVisible()) {
-    await inputElement.click();
-    await inputElement.fill('/generate a forest clearing at dusk');
-  }
-
   const sendSelector = '[data-testid="dialogue-send"], button:has-text("Send")';
   const sendButton = page.locator(sendSelector).first();
-  if (await sendButton.isVisible()) {
-    await sendButton.click();
-  }
+
+  await Promise.all([
+    inputElement.waitFor({ state: 'visible', timeout: 15_000 }),
+    sendButton.waitFor({ state: 'visible', timeout: 15_000 }),
+  ]);
+  await inputElement.click();
+  await inputElement.fill('/generate a forest clearing at dusk');
+  await sendButton.click();
 
   // Wait for the image block to render (generating or done).
   await page.waitForTimeout(4000);

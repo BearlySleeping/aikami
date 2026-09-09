@@ -172,6 +172,14 @@ export class DialoguePage {
     await this.streamingRegion.first().waitFor({ state: 'visible', timeout: 5_000 });
   }
 
+  /** Waits for `/generate` to show either its pending skeleton or completed image. */
+  async waitForGeneratedImageOrSkeleton(): Promise<void> {
+    await this.generatedImage
+      .or(this.imageGeneratingSkeleton)
+      .first()
+      .waitFor({ state: 'visible', timeout: 15_000 });
+  }
+
   /** Asserts no error banner is rendered (AC-3: no error surfaced). */
   async expectNoError(): Promise<void> {
     await expect(this.errorBanner).toHaveCount(0);

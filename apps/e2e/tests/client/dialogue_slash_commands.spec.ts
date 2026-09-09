@@ -15,8 +15,8 @@
 // Contract: C-501 Dialogue Slash Commands
 
 import { expect } from '@playwright/test';
+import { DialoguePage } from '$pom';
 import { test } from '../../src/fixtures';
-import { DialoguePage } from '../../src/pom/dialogue_page';
 
 test.describe('Dialogue slash commands (C-501)', () => {
   test('AC-1: /generate produces an inline image and not an NPC turn', async ({ authUser }) => {
@@ -29,12 +29,7 @@ test.describe('Dialogue slash commands (C-501)', () => {
 
     // An image block appears (generating skeleton and/or the done image).
     // Allow either state since the provider may resolve to a demo image.
-    await dialogue.page
-      .locator(
-        '[data-testid="dialogue-overlay"] img[alt="Generated scene"], [data-testid="dialogue-overlay"] .skeleton',
-      )
-      .first()
-      .waitFor({ state: 'visible', timeout: 15_000 });
+    await dialogue.waitForGeneratedImageOrSkeleton();
 
     // The NPC must not have produced a new narrative turn for the command.
     const npcCountAfter = await dialogue.countNpcBubbles();

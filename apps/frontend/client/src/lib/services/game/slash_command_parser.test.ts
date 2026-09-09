@@ -71,16 +71,25 @@ describe('parseSlashCommand', () => {
     test('/action routes to gm with the instruction text', () => {
       expect(parseSlashCommand('/action search for tracks')).toEqual({
         kind: 'gm',
+        command: 'action',
         text: 'search for tracks',
       });
     });
 
-    test('/look routes to gm', () => {
-      expect(parseSlashCommand('/look')).toEqual({ kind: 'gm', text: '' });
+    test('bare /action retains its command identity for help routing', () => {
+      expect(parseSlashCommand('/action')).toEqual({ kind: 'gm', command: 'action', text: '' });
+    });
+
+    test('/look retains its command identity for descriptive default routing', () => {
+      expect(parseSlashCommand('/look')).toEqual({ kind: 'gm', command: 'look', text: '' });
     });
 
     test('/Look is case-insensitive', () => {
-      expect(parseSlashCommand('/Look around')).toEqual({ kind: 'gm', text: 'around' });
+      expect(parseSlashCommand('/Look around')).toEqual({
+        kind: 'gm',
+        command: 'look',
+        text: 'around',
+      });
     });
   });
 
