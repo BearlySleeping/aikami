@@ -69,5 +69,9 @@ export type DialoguePhase =
   | 'CUSTOM_INPUT'
   | 'CHAT';
 
-/** Address modes available in the dialogue overlay (Scene and GM only; Party deferred to C-340). */
-export type DialogueAddressMode = 'scene' | 'gm';
+/**
+ * Address modes available in the dialogue overlay. `party` was deferred
+ * from C-340 and enabled by C-493 — it routes a dialogue turn to the
+ * party-group path (multiple companions respond in one turn).
+ */
+export type DialogueAddressMode = 'scene' | 'party' | 'gm';

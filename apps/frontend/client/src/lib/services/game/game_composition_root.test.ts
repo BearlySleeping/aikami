@@ -74,6 +74,9 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
   let GameCompositionRoot: typeof import('./game_composition_root.svelte').GameCompositionRoot;
   let root: import('./game_composition_root.svelte').GameCompositionRootInterface;
 
+  const autonomousStartMock = mock(() => {});
+  const autonomousStopMock = mock(() => {});
+
   const _createServiceStub = () => {
     const handler: ProxyHandler<Record<string, unknown>> = {
       get(target, prop) {
@@ -182,6 +185,12 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
         activeCampaign: { contentPackId: 'emberwatch' },
       }),
     }));
+    mock.module('../npc/autonomous_message_service.svelte.ts', () => ({
+      autonomousMessageService: { start: autonomousStartMock, stop: autonomousStopMock },
+    }));
+
+    autonomousStartMock.mockClear();
+    autonomousStopMock.mockClear();
 
     const mod = await import('./game_composition_root.svelte');
     GameCompositionRoot = mod.GameCompositionRoot;
@@ -287,5 +296,19 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
 
     expect(() => root.campaignService).toThrow('not initialised');
     expect(() => root.playerStateService).toThrow('not initialised');
+  });
+
+  // ── C-493 AC-2: autonomous-message poller lifecycle ──
+
+  test('starts the autonomous-message poller on campaign entry (initialize)', async () => {
+    await root.initialize();
+    expect(autonomousStartMock).toHaveBeenCalledTimes(1);
+    expect(autonomousStopMock).not.toHaveBeenCalled();
+  });
+
+  test('stops the autonomous-message poller on game teardown (dispose)', async () => {
+    await root.initialize();
+    await root.dispose();
+    expect(autonomousStopMock).toHaveBeenCalledTimes(1);
   });
 });

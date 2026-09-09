@@ -16,6 +16,7 @@ import {
 import type { ContentPackLootEntry } from '@aikami/types';
 import { textGenerationService } from '../ai/text_generation_service.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
+import { autonomousMessageService } from '../npc/autonomous_message_service.svelte.ts';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { buildItemCatalogFromPack } from './content_pack_catalog';
@@ -509,6 +510,12 @@ export class GameCompositionRoot
     await inventoryService.startListening();
     await questStateService.startListening();
 
+    // C-493 AC-2: start the autonomous-message poller on campaign entry so
+    // idle NPC messages arrive during production play (not just the dev
+    // sandbox). Its discovery reads the authored scene cast. Stopped in
+    // dispose() to avoid leaking an interval across campaigns.
+    autonomousMessageService.start();
+
     this._initialized = true;
 
     const elapsed = performance.now() - t0;
@@ -591,6 +598,10 @@ export class GameCompositionRoot
     // Stop BGM — the composition root owns the music player's lifecycle
     // alongside every other game runtime service (mirrors initialize()).
     musicPlayerService.stop();
+
+    // C-493 AC-2: stop the autonomous-message poller on game teardown so a
+    // stale interval never leaks across campaigns (route leave / dispose).
+    autonomousMessageService.stop();
 
     // Remove composition-root-owned bridge listeners (C-331 loot)
     for (const unsubscribe of this._bridgeUnsubscribers) {

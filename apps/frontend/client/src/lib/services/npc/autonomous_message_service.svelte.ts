@@ -257,10 +257,8 @@ class AutonomousMessageService
    * available, autonomous enabled, talkativeness > 0, not on cooldown.
    */
   private async _getEligibleNpcIds(): Promise<string[]> {
-    // For MVP, scan all NPCs in the current game session.
-    // The full implementation would discover NPCs from the active game state.
-    // We delegate to npcScheduleService — it has a cache.
-    // For now, return an empty list. Real integration comes in Phase 5.
+    // Discover NPCs from the active scene cast (C-493), then filter by
+    // schedule (autonomous enabled, talkativeness, cooldown, availability).
     const activeNpcIds = this._getKnownNpcIds();
     const eligible: string[] = [];
     const now = Date.now();
@@ -308,25 +306,12 @@ class AutonomousMessageService
    * Uses npcService to get user NPCs, plus world gen NPCs.
    */
   private _getKnownNpcIds(): string[] {
-    const ids = new Set<string>();
-
-    // Collect from world gen output NPCs (use names as IDs since WorldGenNpc has no id field)
-    const worldGen = worldStateService.worldGenOutput;
-    if (worldGen?.npcs && Array.isArray(worldGen.npcs)) {
-      for (const npc of worldGen.npcs) {
-        ids.add(npc.name);
-      }
-    }
-
-    // Also try to get user NPCs from the npc service (local SQLite NPCs)
-    try {
-      // This is async but called from _tick — we handle inline
-      // Since we can't await here, we use cached data from schedules
-    } catch {
-      // Silently ignore
-    }
-
-    return Array.from(ids);
+    // Authorized scene cast (C-493 AC-2) — the NPCs present in the current
+    // scene, sourced from worldStateService.currentLocation.npcIds (the
+    // scene-cast data the location tracker maintains) rather than
+    // world-generation output. Reuses the existing scene-cast source; no new
+    // discovery API. Empty when no scene is active (graceful degradation).
+    return [...(worldStateService.currentLocation?.npcIds ?? [])];
   }
 
   // ── Private: Weighted random selection ──────────────────────────────
