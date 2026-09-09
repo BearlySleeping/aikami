@@ -1,4 +1,5 @@
 // apps/frontend/client/src/lib/data/npc_avatar_catalog.test.ts
+
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import {
@@ -10,13 +11,6 @@ import {
   resolvePlayerAvatarUrl,
 } from './npc_avatar_catalog.ts';
 import { NPC_SPRITE_EXPRESSIONS } from './npc_sprite_expressions.ts';
-
-// Portrait busts are gitignored, tooling-generated game-data (fetched from
-// R2 in production, per .gitignore's game-data note). In a fresh CI checkout
-// they are absent, so the on-disk portrait-existence checks below skip there
-// and run locally once the portraits have been generated.
-const PORTRAITS_DIR = new URL('../../../static/game-data/portraits/npc/', import.meta.url);
-const PORTRAITS_PRESENT = existsSync(PORTRAITS_DIR);
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -33,6 +27,17 @@ const SPRITE_PORTRAIT_PATHS: Record<string, string> = {
   troll: 'game-data/portraits/npc/troll/neutral.webp',
 };
 
+/**
+ * The on-disk game-data catalog (portraits, audio_tracks.json) is gitignored
+ * and fetched on demand from R2 (C-435 debundle), so a fresh checkout / CI
+ * has no portrait files. These catalog-integrity tests verify real shipped
+ * assets where game-data is present (local tooling checkouts) and skip
+ * cleanly when it is absent rather than failing a PR that never had it.
+ */
+const hasGameDataCatalog = existsSync(
+  new URL('../../../static/game-data/portraits/npc/', import.meta.url),
+);
+
 // ---------------------------------------------------------------------------
 // Emberwatch coverage — every character must resolve to a real portrait
 // ---------------------------------------------------------------------------
@@ -45,7 +50,7 @@ describe('npc_avatar_catalog — emberwatch coverage', () => {
     }
   });
 
-  test.skipIf(!PORTRAITS_PRESENT)(
+  test.skipIf(!hasGameDataCatalog)(
     'every emberwatch NPC portrait file exists on disk (game-data catalog)',
     async () => {
       for (const npcId of EMBERWATCH_NPC_IDS) {
@@ -84,7 +89,7 @@ describe('npc_avatar_catalog — catalog integrity', () => {
     }
   });
 
-  test.skipIf(!PORTRAITS_PRESENT)(
+  test.skipIf(!hasGameDataCatalog)(
     'every mapped NPC sprite has a neutral portrait in the game-data catalog',
     async () => {
       for (const [npcId, sprite] of Object.entries(NPC_AVATAR_SPRITE_MAP)) {
@@ -114,7 +119,7 @@ describe('npc_avatar_catalog — catalog integrity', () => {
     }
   });
 
-  test.skipIf(!PORTRAITS_PRESENT)(
+  test.skipIf(!hasGameDataCatalog)(
     'every mapped player class sprite has a neutral portrait in the game-data catalog',
     async () => {
       for (const [classId, sprite] of Object.entries(PLAYER_CLASS_AVATAR_SPRITE_MAP)) {
@@ -129,7 +134,7 @@ describe('npc_avatar_catalog — catalog integrity', () => {
     },
   );
 
-  test.skipIf(!PORTRAITS_PRESENT)(
+  test.skipIf(!hasGameDataCatalog)(
     'placeholder avatar file exists in game-data catalog',
     async () => {
       await expect(

@@ -68,7 +68,6 @@
   "isOfflineModeEnabled",
   "macroPresetStore",
   "musicPlayerService",
-  "npcAwarenessService",
   "npcDialogueService",
   "npcScheduleService",
   "npcStorage",

@@ -299,6 +299,30 @@
       "active": true
     },
 
+    ".pi/prompts/assets-01-correctness.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-02-format.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-03-scenes.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-04-playback.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-05-readability.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/assets-verify.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
     ".pi/prompts/cleanup.md": {
       "class": "agent_prompts",
       "active": true

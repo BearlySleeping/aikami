@@ -26,6 +26,9 @@ mock.module('$services', () => ({
   idleDetectionService: idleDetectionServiceMock,
   gameOverlayService: gameOverlayServiceMock,
   worldStateService: worldStateServiceMock,
+  // relationship_service (imported via autonomous_message_service) reads the
+  // active campaign to record PromiseMade events — satisfy that dependency.
+  campaignService: { activeCampaign: { id: 'test-campaign' } },
 }));
 
 const chatServiceMock = {

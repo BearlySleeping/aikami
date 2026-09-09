@@ -436,6 +436,16 @@ export const localServicesMockBase = () => ({
   }),
   GameStateService: class {},
   // C-314: Split services
+  // C-491: committed narrative event record service — controllable double so
+  // tests can assert the exact `record()` calls from the dialogue/quest seams.
+  narrativeEventService: Object.assign(_createServiceStub(), {
+    events: [],
+    record: _createCallableStub(),
+    witnessedBy: _createCallableStub(),
+    serialize: _createCallableStub(),
+    hydrate: _createCallableStub(),
+    reset: _createCallableStub(),
+  }),
   questStateService: Object.assign(_createServiceStub(), {
     quests: [],
     worldStateFlags: {},
@@ -621,6 +631,12 @@ export const localServicesMockBase = () => ({
   },
   npcService: _createServiceStub(),
   NpcService: class {},
+  npcAwarenessService: Object.assign(_createServiceStub(), {
+    nearbyNpcIds: [],
+    getNearbyNpcContext: mock(async () => []),
+    getNpcPersonality: mock(async () => 'Unknown'),
+    getNpcName: mock(async () => 'Unknown'),
+  }),
   onboardingService: _createServiceStub(),
   onboardingHintService: _createServiceStub(),
   personaService: _createServiceStub(),
@@ -673,7 +689,9 @@ export const localServicesMockBase = () => ({
     getPack: mock(() => undefined),
   }),
   PackRegistryService: class {},
-  campaignService: _createServiceStub(),
+  campaignService: Object.assign(_createServiceStub(), {
+    activeCampaign: { id: 'default-emberwatch' },
+  }),
   aiGatewayService: Object.assign(_createServiceStub(), {
     detect: mock(async (capability: string) => {
       let provider: string;

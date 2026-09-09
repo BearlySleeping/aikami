@@ -60,6 +60,7 @@ export * from './lib/game/game_assets.ts';
 export * from './lib/game/interactable_state.ts';
 export * from './lib/game/lpc_recipe.ts';
 export * from './lib/game/macro.ts';
+export * from './lib/game/narrative_event.ts';
 export * from './lib/game/npc_dialogue_command.ts';
 export * from './lib/game/npc_schedule.ts';
 export * from './lib/game/onboarding_hints.ts';

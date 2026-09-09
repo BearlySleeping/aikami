@@ -23,11 +23,14 @@ import {
 /** Path to the shipped catalog relative to this test file. */
 const CATALOG_FILE = new URL('../../../../../static/game-data/audio_tracks.json', import.meta.url);
 
-// The shipped catalog is a gitignored, tooling-generated artifact (fetched
-// from R2 in production, per .gitignore's game-data note). In a fresh CI
-// checkout it is absent, so tests that read the on-disk catalog skip there
-// and run locally once the catalog has been generated.
-const CATALOG_PRESENT = existsSync(CATALOG_FILE);
+/**
+ * The shipped catalog is gitignored and fetched on demand from R2 (C-435
+ * debundle), so a fresh checkout / CI has no audio_tracks.json. These two
+ * tests verify the real shipped artifact (schema validity + single-fetch
+ * caching) where it is present locally, and skip cleanly when it is absent
+ * rather than failing a PR that never had it.
+ */
+const hasShippedCatalog = existsSync(CATALOG_FILE);
 
 const R2_BASE = 'https://assets.bearlysleeping.com';
 
@@ -79,10 +82,13 @@ describe('AudioTrackCatalog — C-385 AC-3', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test.skipIf(!CATALOG_PRESENT)('shipped catalog validates against AudioTrackCatalogSchema', () => {
-    const catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf-8')) as unknown;
-    expect(Value.Check(AudioTrackCatalogSchema, catalog)).toBe(true);
-  });
+  test.skipIf(!hasShippedCatalog)(
+    'shipped catalog validates against AudioTrackCatalogSchema',
+    () => {
+      const catalog = JSON.parse(readFileSync(CATALOG_FILE, 'utf-8')) as unknown;
+      expect(Value.Check(AudioTrackCatalogSchema, catalog)).toBe(true);
+    },
+  );
 
   test('every mood from the legacy trackMappings returns at least one track', async () => {
     for (const mood of EXPECTED_MOODS) {
@@ -108,7 +114,7 @@ describe('AudioTrackCatalog — C-385 AC-3', () => {
     expect(url).not.toContain('/game-data/');
   });
 
-  test.skipIf(!CATALOG_PRESENT)(
+  test.skipIf(!hasShippedCatalog)(
     'repeated mood lookups reuse the cached catalog — a single network fetch',
     async () => {
       await getTracksByMood('epic');
