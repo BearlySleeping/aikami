@@ -24,7 +24,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | thin |
 | **Priority** | P2 — make the playable space readable without debug overlays |
 | **Dependencies** | C-505 |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal — visual baseline and art-direction notes |
 | **Contract version** | 2.0.0 |
