@@ -19,7 +19,7 @@ created_at: "2026-09-08T00:00:00Z"
 | **Type** | full |
 | **Priority** | P0 — the backbone for memory, companions and consequence; nothing in Phase 2 works without it |
 | **Dependencies** | [C-489](C-489-one-authority-path-for-consequences.md) — C-489 decides and applies; C-491 writes down what happened and who saw it. |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
