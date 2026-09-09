@@ -113,6 +113,8 @@ export type CapabilityRow = {
   readonly actionButtonClass: string;
   /** Whether the row's checkbox reads as on. */
   readonly checked: boolean;
+  /** Whether the row's checkbox is locked (no backing connection or detection). */
+  readonly disabled: boolean;
 };
 
 /**
@@ -504,7 +506,11 @@ class SetupSubflowViewModel
         actionLabel: configured ? 'Change' : 'Set up',
         icon: configured ? '✅' : '⚠️',
         actionButtonClass: configured ? 'btn btn-sm btn-ghost' : 'btn btn-sm btn-primary',
-        checked: toggle.enabled,
+        // An optional capability only reads as on while something backs it, so
+        // removing its connection drops the checkbox to off (and disabled)
+        // even if the stale toggle was left enabled internally.
+        checked: toggle.required ? toggle.enabled : toggle.enabled && this._hasBacking(toggle.id),
+        disabled: !toggle.required && !this._hasBacking(toggle.id),
       };
     });
   }
@@ -671,6 +677,10 @@ class SetupSubflowViewModel
     // save() serialized that empty state over the vault, destroying the
     // connections it had not read.
     await configService.load();
+    // Auto-enable optional capabilities (image/voice) already backed by a
+    // stored connection, so a reload keeps them on and a removed connection
+    // drops them back to off + disabled.
+    this._autoEnableOptional();
     // The editor ViewModel is deliberately not initialized here: its
     // initialize() loads image checkpoints and voice archetypes for the full
     // AI Settings page, and this flow only mounts the connection modals,
@@ -708,11 +718,11 @@ class SetupSubflowViewModel
     this.entryPath = path;
     this.errorMessage = '';
 
-    // Every path starts from the required capability only. Image and voice
-    // are opt-in from the plan screen.
+    // Every path keeps required capabilities enabled. Optional capabilities
+    // remain selected only when a usable stored connection backs them.
     this._capabilityToggles = this._capabilityToggles.map((t) => ({
       ...t,
-      enabled: t.required,
+      enabled: t.required || this._hasUsableConnection(t.id),
     }));
 
     if (path === 'recommended' && this.canScan) {
@@ -737,9 +747,17 @@ class SetupSubflowViewModel
 
   toggleCapability(capability: ConnectionCapability): void {
     const toggle = this._capabilityToggles.find((t) => t.id === capability);
-    if (toggle && !toggle.required) {
-      toggle.enabled = !toggle.enabled;
+    if (!toggle || toggle.required) {
+      return;
     }
+    // An optional capability can only be turned on when something backs it —
+    // a usable connection, or a provider the last scan detected. With nothing
+    // behind it the checkbox is disabled and this guard keeps state in step.
+    if (!toggle.enabled && !this._hasBacking(capability)) {
+      this.debug('toggleCapability:blocked-no-backing', { capability });
+      return;
+    }
+    toggle.enabled = !toggle.enabled;
   }
 
   async rescan(): Promise<void> {
@@ -771,6 +789,9 @@ class SetupSubflowViewModel
 
   private async _runDiscovery(): Promise<void> {
     const enabledIds = this._capabilityToggles.filter((t) => t.enabled).map((t) => t.id);
+    const requestedIds = this.hasScanned
+      ? enabledIds
+      : this._capabilityToggles.map((toggle) => toggle.id);
 
     const operationId = ++this._discoveryOperationId;
     this.isDetecting = true;
@@ -778,14 +799,14 @@ class SetupSubflowViewModel
     this.step = 'detecting';
 
     try {
-      // Only the capabilities the user actually enabled are probed — an
-      // un-selected optional capability is never scanned.
-      const snapshot = await capabilityService.detect({ capabilities: enabledIds });
+      // The initial scan probes optional capabilities so they can become
+      // selectable when found. Later rescans remain scoped to enabled choices.
+      const snapshot = await capabilityService.detect({ capabilities: requestedIds });
       if (operationId !== this._discoveryOperationId) {
         return;
       }
       this.snapshot = snapshot;
-      this._discoveredProviders = this._buildDiscoveredProviders(snapshot, enabledIds);
+      this._discoveredProviders = this._buildDiscoveredProviders(snapshot, requestedIds);
       this._buildPlan(snapshot);
       this.step = 'plan';
       this.debug('startDiscovery:complete', { providers: this._discoveredProviders.length });
@@ -894,6 +915,9 @@ class SetupSubflowViewModel
     // to go next.
     const capability = this.manualCapability;
     this.manualCapability = null;
+    // Saving a connection for an optional capability (image/voice) auto-enables
+    // its toggle; the plan screen reflects it immediately.
+    this._autoEnableOptional();
 
     if (capability === 'text' || (capability === null && this.entryPath === 'text-only')) {
       if (this._hasUsableConnection('text')) {
@@ -959,6 +983,8 @@ class SetupSubflowViewModel
         return;
       }
 
+      // Seeding a connection for an optional capability auto-enables it.
+      this._autoEnableOptional();
       this.step = 'ready';
       this.debug('applyPlan:complete', { capabilities: enabledCaps });
     } catch (error) {
@@ -1015,6 +1041,9 @@ class SetupSubflowViewModel
     this._capabilityToggles = CAPABILITY_DEFINITIONS.map((d) => ({ ...d }));
     this._discoveredProviders = [];
     this._planSummary = null;
+    // Re-apply auto-enable for optional capabilities still backed by a stored
+    // connection after the reset.
+    this._autoEnableOptional();
   }
 
   async leave(): Promise<void> {
@@ -1179,6 +1208,41 @@ class SetupSubflowViewModel
     }
 
     await configService.save();
+  }
+
+  /** Whether the capability was detected as available by the last scan. */
+  private _isDetected(capability: ConnectionCapability): boolean {
+    if (capability === 'image') {
+      return this.snapshot?.imageStatus === 'detected';
+    }
+    if (capability === 'voice') {
+      return this.snapshot?.voiceStatus === 'detected';
+    }
+    return this.snapshot?.textStatus === 'detected';
+  }
+
+  /**
+   * Whether an optional capability has anything to back it — a usable
+   * connection, or a provider the last scan detected. With nothing behind it
+   * the toggle is disabled in the view and {@link toggleCapability} refuses to
+   * enable it.
+   */
+  private _hasBacking(capability: ConnectionCapability): boolean {
+    return this._hasUsableConnection(capability) || this._isDetected(capability);
+  }
+
+  /**
+   * Auto-enables optional capabilities (image/voice) already backed by a
+   * usable connection. Called after stored config loads (so a reload keeps
+   * them on), after a manual connection is saved, and after Apply seeds one.
+   * Never disables — detection-driven opt-ins are the user's to keep.
+   */
+  private _autoEnableOptional(): void {
+    this._capabilityToggles = this._capabilityToggles.map((toggle) =>
+      toggle.required || !this._hasUsableConnection(toggle.id)
+        ? toggle
+        : { ...toggle, enabled: true },
+    );
   }
 
   private _hasUsableConnection(capability: ConnectionCapability): boolean {

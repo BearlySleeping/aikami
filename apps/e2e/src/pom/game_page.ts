@@ -374,6 +374,19 @@ export class GamePage {
     });
   }
 
+  /** Assert the complete combat surface is mounted and visible. */
+  async expectCombatUiVisible(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.page.locator('[data-testid="combat-portrait-stage"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(this.page.locator('[data-testid="player-hp-text"]')).toBeVisible();
+    await expect(this.page.locator('[data-testid="enemy-hp-text"]')).toBeVisible();
+    await expect(this.page.locator('[data-testid="combat-attack-btn"]')).toBeVisible();
+    await expect(this.page.locator('[data-testid="combat-defend-btn"]')).toBeVisible();
+    await expect(this.page.locator('[data-testid="combat-flee-btn"]')).toBeVisible();
+  }
+
   /** Return whether the combat Attack button is currently visible. */
   async isCombatAttackButtonVisible(): Promise<boolean> {
     return this.page

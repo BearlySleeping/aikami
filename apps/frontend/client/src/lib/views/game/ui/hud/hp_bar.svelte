@@ -27,7 +27,7 @@ const barColor = $derived.by(() => {
 
 {#if visible}
   <div
-    class="hp-bar-hud absolute top-3 left-3 z-50 flex items-center gap-2"
+    class="hp-bar-hud flex items-center"
     role="progressbar"
     aria-valuenow={hp}
     aria-valuemin={0}

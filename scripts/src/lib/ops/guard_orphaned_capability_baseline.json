@@ -175,7 +175,7 @@
     "orphaned": ["AudioServiceInterface", "AudioServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts": {
-    "orphaned": ["FALLBACK_TRACK_ID", "getTracksByMood"]
+    "orphaned": ["FALLBACK_TRACK_ID"]
   },
   "apps/frontend/client/src/lib/services/audio/track_registry_service.svelte.ts": {
     "orphaned": [
@@ -400,7 +400,7 @@
     ]
   },
   "apps/frontend/client/src/lib/services/expression/expression_service.svelte.ts": {
-    "orphaned": ["ExpressionService.getEntry", "ExpressionServiceInterface"]
+    "orphaned": ["ExpressionServiceInterface"]
   },
   "apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts": {
     "orphaned": ["EquipmentServiceInterface", "EquipmentServiceOptions"]
@@ -540,10 +540,7 @@
   },
   "apps/frontend/client/src/lib/services/game/relationship_service.svelte.ts": {
     "orphaned": [
-      "RelationshipService.adjustFactionStanding",
-      "RelationshipService.applyDelta",
       "RelationshipService.getPromises",
-      "RelationshipService.getStanding",
       "RelationshipService.recordPromise",
       "RelationshipServiceInterface",
       "RelationshipServiceOptions"

@@ -12,7 +12,7 @@
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { CapabilitySnapshot } from '@aikami/types';
+import type { CapabilitySnapshot, ConnectionCapability } from '@aikami/types';
 import { localServicesMockBase } from '../../test_preload.ts';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
@@ -78,7 +78,11 @@ const createDetectedSnapshot = (): CapabilitySnapshot => ({
   detectedAt: new Date().toISOString(),
 });
 
-const detectMock = mock(async (): Promise<CapabilitySnapshot> => createDetectedSnapshot());
+type DetectOptions = { capabilities: readonly ConnectionCapability[] };
+
+const detectMock = mock(
+  async (_options: DetectOptions): Promise<CapabilitySnapshot> => createDetectedSnapshot(),
+);
 const startNewCampaignMock = mock(async () => ({ id: 'campaign-1' }));
 const goToRouteMock = mock(async () => {});
 const getVoiceTtsUrlMock = mock((): string | undefined => undefined);
@@ -202,7 +206,26 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeFalse();
   });
 
-  test('toggleCapability enables and disables an optional capability', () => {
+  test('toggleCapability cannot enable an optional capability without backing', () => {
+    // No connection and nothing detected → the toggle is disabled and the
+    // enable is refused, so the state stays off.
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
+    expect(vm.capabilityRows.find((r) => r.id === 'image')?.disabled).toBeTrue();
+    vm.toggleCapability('image');
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
+  });
+
+  test('toggleCapability enables and disables an optional capability that has backing', () => {
+    configServiceMock.state.connections = [
+      {
+        capability: 'image',
+        provider: 'comfyui',
+        apiKey: '',
+        baseUrl: 'http://x',
+        name: 'ComfyUI',
+      },
+    ];
+    expect(vm.capabilityRows.find((r) => r.id === 'image')?.disabled).toBeFalse();
     vm.toggleCapability('image');
     expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeTrue();
     vm.toggleCapability('image');
@@ -214,22 +237,85 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.capabilityToggles.find((t) => t.id === 'text')?.enabled).toBeTrue();
   });
 
-  test('a configured optional capability remains unchecked until enabled', () => {
+  test('entry selection preserves only optional capabilities with usable connections', () => {
     configServiceMock.state.connections = [
       { capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
     ];
 
-    expect(vm.capabilityRows.find((row) => row.id === 'voice')?.checked).toBeFalse();
-    vm.toggleCapability('voice');
-    expect(vm.capabilityRows.find((row) => row.id === 'voice')?.checked).toBeTrue();
+    vm.selectEntryPath('existing');
+
+    expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeTrue();
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
+  });
+
+  test('a stored optional connection is auto-enabled on load', async () => {
+    configServiceMock.load.mockImplementation(async () => {
+      configServiceMock.state.connections = [
+        { id: 'v1', capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
+      ];
+    });
+    const fresh = getSetupSubflowViewModel({ className: 'SetupSubflowReloadTest' });
+    await fresh.initialize();
+
+    expect(fresh.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeTrue();
+    expect(fresh.capabilityRows.find((r) => r.id === 'voice')?.checked).toBeTrue();
+    expect(fresh.capabilityRows.find((r) => r.id === 'voice')?.disabled).toBeFalse();
+    await fresh.dispose();
+  });
+
+  test('finishManualSetup auto-enables an optional capability once its connection is saved', () => {
+    vm.selectEntryPath('existing');
+    vm.openManualSetup('voice');
+    expect(vm.step).toBe('manual');
+    expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeFalse();
+
+    configServiceMock.state.connections = [
+      { capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
+    ];
+    vm.finishManualSetup();
+
+    expect(vm.step).toBe('plan');
+    expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeTrue();
+  });
+
+  test('removing a connection disables the toggle and prevents re-enabling', async () => {
+    configServiceMock.load.mockImplementation(async () => {
+      configServiceMock.state.connections = [
+        { id: 'v1', capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
+      ];
+    });
+    const fresh = getSetupSubflowViewModel({ className: 'SetupSubflowReloadTest' });
+    await fresh.initialize();
+    expect(fresh.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeTrue();
+
+    // Remove the connection — the checkbox drops to off and is locked.
+    configServiceMock.state.connections = [];
+    const voiceRow = fresh.capabilityRows.find((r) => r.id === 'voice');
+    expect(voiceRow?.checked).toBeFalse();
+    expect(voiceRow?.disabled).toBeTrue();
+    fresh.toggleCapability('voice');
+    expect(fresh.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeFalse();
+    await fresh.dispose();
   });
 
   // ── Discovery scoping (Recommended) ─────────────────────────────────────
 
-  test('recommended scans the required capability only, then rescan honours opt-ins', async () => {
+  test('recommended initially probes optional capabilities, then rescan honours opt-ins', async () => {
+    detectMock.mockImplementation(async ({ capabilities }: DetectOptions) => {
+      if (!capabilities.includes('voice')) {
+        // A text-only request explicitly skips both optional capabilities.
+        return createDetectedSnapshot();
+      }
+      return {
+        ...createDetectedSnapshot(),
+        voiceStatus: 'detected',
+        voiceProviderId: 'kokoro',
+      };
+    });
     vm.selectEntryPath('recommended');
     await vm.startDiscovery();
-    expect(detectMock).toHaveBeenCalledWith({ capabilities: ['text'] });
+    expect(detectMock).toHaveBeenCalledWith({ capabilities: ['text', 'image', 'voice'] });
+    expect(vm.discoveredProviders.some((provider) => provider.capability === 'voice')).toBeTrue();
 
     vm.toggleCapability('voice');
     await vm.rescan();

@@ -438,11 +438,15 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       this._abortController = undefined;
     }
 
-    // Reject a pending worker-backed speak() so it never hangs a caller.
+    // Settle a pending worker-backed speak() so it never hangs a caller.
     // Clearing the slot also makes the in-flight worker response stale, so a
-    // completion that arrives after stop() plays nothing.
+    // completion that arrives after stop() plays nothing. The request is
+    // RESOLVED, not rejected: stop() is always a cancellation or supersede
+    // (a newer speak() calls stop() first), and surfacing it as an error made
+    // rapid back-to-back speak() calls log a spurious
+    // 'stop() called before synthesis completed'.
     if (this._activeWorkerRequest) {
-      this._activeWorkerRequest.reject?.(new Error('stop() called before synthesis completed'));
+      this._activeWorkerRequest.resolve?.();
       this._activeWorkerRequest = undefined;
     }
 
