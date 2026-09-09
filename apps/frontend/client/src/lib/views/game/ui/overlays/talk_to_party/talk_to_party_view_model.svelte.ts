@@ -9,6 +9,7 @@
 //   through the group-turn path (generateMultiNpcResponses) so multiple
 //   companions respond in one turn, the second aware of the first.
 
+import { MAX_GROUP_PARTICIPANTS } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -159,9 +160,16 @@ class TalkToPartyViewModel
       // select a bounded group and generate sequential responses so the
       // second responder is aware of the first.
       if (members.length >= 2) {
-        const selected = this._autonomousMessageService.selectGroupParticipants({
-          npcIds: members.map((m) => m.npcId),
-        });
+        const otherNpcIds = members
+          .map((member) => member.npcId)
+          .filter((npcId) => npcId !== this._npcId);
+        const selected = [
+          this._npcId,
+          ...this._autonomousMessageService.selectGroupParticipants({
+            npcIds: otherNpcIds,
+            count: MAX_GROUP_PARTICIPANTS - 1,
+          }),
+        ];
 
         if (selected.length >= 2) {
           const responses = await this._autonomousMessageService.generateMultiNpcResponses({
@@ -181,7 +189,7 @@ class TalkToPartyViewModel
               id: crypto.randomUUID(),
               content: response,
               role: 'npc',
-              senderName: partyRosterService.getMember(npcId)?.name ?? this._npcName,
+              senderName: partyRosterService.getMember(npcId)?.name ?? npcId,
             });
           }
 

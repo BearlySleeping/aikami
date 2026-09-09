@@ -6,6 +6,7 @@
 // falls back to the single-companion generateTurn path.
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { MAX_GROUP_PARTICIPANTS } from '@aikami/constants';
 import type { TalkToPartyViewModelInterface } from './talk_to_party_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -18,8 +19,8 @@ const membersArr: MockMember[] = [];
 
 const clearStackMock = mock(() => {});
 const openPartyRosterMock = mock(() => {});
-const selectGroupParticipantsMock = mock(() => []);
-const generateMultiNpcResponsesMock = mock(async () => []);
+const selectGroupParticipantsMock = mock((): string[] => []);
+const generateMultiNpcResponsesMock = mock(async (): Promise<string[]> => []);
 const generateTurnMock = mock(async () => ({ narrative: 'single response' }));
 
 const getMemberMock = mock((npcId: string) => membersArr.find((m) => m.npcId === npcId));
@@ -81,7 +82,7 @@ beforeEach(async () => {
 describe('TalkToPartyViewModel — C-493 AC-1 (group turn)', () => {
   it('routes through generateMultiNpcResponses when two companions are present', async () => {
     setRoster(['Alpha', 'Beta']);
-    selectGroupParticipantsMock.mockReturnValue(['npc_0', 'npc_1']);
+    selectGroupParticipantsMock.mockReturnValue(['npc_1']);
     generateMultiNpcResponsesMock.mockResolvedValue(['Alpha responds', 'Beta responds']);
 
     const viewModel = createViewModel('npc_0', 'Alpha');
@@ -89,7 +90,8 @@ describe('TalkToPartyViewModel — C-493 AC-1 (group turn)', () => {
     await viewModel.sendMessage();
 
     expect(selectGroupParticipantsMock).toHaveBeenCalledWith({
-      npcIds: ['npc_0', 'npc_1'],
+      npcIds: ['npc_1'],
+      count: MAX_GROUP_PARTICIPANTS - 1,
     });
     expect(generateMultiNpcResponsesMock).toHaveBeenCalledWith({
       npcIds: ['npc_0', 'npc_1'],
@@ -106,6 +108,19 @@ describe('TalkToPartyViewModel — C-493 AC-1 (group turn)', () => {
     expect(npcMessages[1]?.senderName).toBe('Alpha');
     expect(npcMessages[2]?.content).toBe('Beta responds');
     expect(npcMessages[2]?.senderName).toBe('Beta');
+  });
+
+  it('uses the raw NPC ID when a selected responder is missing from the roster', async () => {
+    setRoster(['Alpha', 'Beta']);
+    selectGroupParticipantsMock.mockReturnValue(['npc_missing']);
+    generateMultiNpcResponsesMock.mockResolvedValue(['Alpha responds', 'Unknown responds']);
+
+    const viewModel = createViewModel('npc_0', 'Alpha');
+    viewModel.setInput('Hello party!');
+    await viewModel.sendMessage();
+
+    const npcMessages = viewModel.messages.filter((message) => message.role === 'npc');
+    expect(npcMessages[2]?.senderName).toBe('npc_missing');
   });
 
   it('falls back to generateTurn when only one companion is present', async () => {
