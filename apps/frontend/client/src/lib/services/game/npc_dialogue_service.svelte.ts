@@ -1929,6 +1929,10 @@ export class NpcDialogueService
       playerInput,
       onChunk,
     } = options;
+    const campaignId = campaignService.activeCampaign?.id;
+    if (!campaignId) {
+      throw new Error('NpcDialogueService: dialogue resolution requires an active campaign');
+    }
 
     // C-488 AC-3/AC-4: the roll-resolution prompt carries the same authored
     // persona, conversation history, and game-state facts the intent prompt
@@ -2097,6 +2101,7 @@ export class NpcDialogueService
         checkType,
         outcome: options.outcome,
         sourceEventId,
+        campaignId,
       });
 
       this.turnState = { kind: 'complete', text: output.narrativeResult };
@@ -2196,8 +2201,9 @@ export class NpcDialogueService
     checkType: string;
     outcome: 'pass' | 'fail';
     sourceEventId: string;
+    campaignId: string;
   }): void {
-    const { npcId, applied, checkType, outcome, sourceEventId } = options;
+    const { npcId, applied, checkType, outcome, sourceEventId, campaignId } = options;
 
     let kind: 'ItemTransferred' | 'RelationshipChanged' | 'WorldFlagChanged' | 'ThreatWitnessed';
     let informationKind: 'world_fact' | 'character_belief';
@@ -2238,7 +2244,6 @@ export class NpcDialogueService
       return;
     }
 
-    const campaignId = campaignService.activeCampaign?.id ?? '';
     narrativeEventService.record({
       campaignId,
       kind,

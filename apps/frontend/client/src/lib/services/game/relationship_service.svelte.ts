@@ -234,6 +234,10 @@ class RelationshipService
     campaignId?: string;
     actorId?: string;
   }): RememberedPromise {
+    const campaignId = options.campaignId ?? campaignService.activeCampaign?.id;
+    if (!campaignId) {
+      throw new Error('RelationshipService: recordPromise requires a campaignId');
+    }
     const promise: RememberedPromise = {
       id: `promise_${crypto.randomUUID()}`,
       targetId: options.targetId,
@@ -246,7 +250,6 @@ class RelationshipService
 
     // C-491: commit a PromiseMade event — the promise actor is always a witness.
     const actorId = options.actorId ?? options.targetId;
-    const campaignId = options.campaignId ?? campaignService.activeCampaign?.id ?? '';
     narrativeEventService.record({
       campaignId,
       kind: 'PromiseMade',

@@ -1331,8 +1331,8 @@ describe('QuestStateService', () => {
       expect(events).toHaveLength(1);
       const event = events[0];
       expect(event?.subjectId).toBe('fading_ward');
-      // The quest-facing NPC is always a witness (never []).
-      expect(event?.witnesses?.length ?? 0).toBeGreaterThan(0);
+      // With no quest-facing or party NPC, the player fallback is the resolved actor.
+      expect(event?.witnesses[0]).toBe('player');
 
       // The journal entry is keyed to the committed event, not a parallel copy.
       const entry = service.journalEntries.find((e) => e.questId === 'fading_ward');

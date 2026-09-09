@@ -12,6 +12,8 @@ import type { EngineBridge } from '@aikami/frontend/engine';
 // are reset on every module reload. We import the reset helper directly.
 
 import { resetLocalDatabase } from '@aikami/frontend/storage';
+import type { NarrativeEventServiceInterface } from './narrative_event_service.svelte.ts';
+import type { ServiceSnapshot } from './serializable_service';
 
 // ---------------------------------------------------------------------------
 // Mock EngineBridge
@@ -74,11 +76,15 @@ const getService = async (bridge?: EngineBridge) => {
 
 describe('GameSaveService (C-334)', () => {
   let bridge: EngineBridge;
+  let hydrateAllServices: (snapshots: ServiceSnapshot[]) => void;
+  let narrativeEventService: NarrativeEventServiceInterface;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     bridge = createMockBridge();
     resetMockBridge();
     resetLocalDatabase();
+    ({ hydrateAllServices } = await import('./serializable_service'));
+    ({ narrativeEventService } = await import('./narrative_event_service.svelte.ts'));
   });
 
   afterEach(() => {
@@ -394,8 +400,6 @@ describe('GameSaveService (C-334)', () => {
   // ── AC-4 (C-491): older saves load with an empty narrative event record ──
 
   test('AC-4 (C-491): an older save without a narrativeEvents snapshot resets the record', async () => {
-    const { hydrateAllServices } = await import('./serializable_service');
-    const { narrativeEventService } = await import('./narrative_event_service.svelte.ts');
     narrativeEventService.reset();
     narrativeEventService.record({
       campaignId: 'camp-1',

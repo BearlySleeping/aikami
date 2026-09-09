@@ -7,7 +7,6 @@
 // Contract: C-491 Committed narrative event record
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import type { NarrativeEventRecord } from '@aikami/types';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
 
 const recordBase = {
@@ -205,7 +204,7 @@ describe('NarrativeEventService (C-491)', () => {
       // Simulate a fresh service hydrating from the snapshot.
       const fresh = narrativeEventService;
       fresh.reset();
-      fresh.hydrate(JSON.parse(JSON.stringify(snapshot)) as NarrativeEventRecord);
+      fresh.hydrate(JSON.parse(JSON.stringify(snapshot)));
 
       expect(fresh.events).toHaveLength(2);
       expect(fresh.events[0]?.kind).toBe('QuestResolved');
@@ -220,6 +219,55 @@ describe('NarrativeEventService (C-491)', () => {
         actorId: 'npcC',
       });
       expect(next.sequence).toBe(3);
+    });
+
+    test('legacy payload derives the next sequence from the highest stored event', () => {
+      const first = narrativeEventService.record({
+        ...recordBase,
+        kind: 'QuestResolved',
+        informationKind: 'world_fact',
+        actorId: 'npcA',
+      });
+      const second = narrativeEventService.record({
+        ...recordBase,
+        kind: 'WorldFlagChanged',
+        informationKind: 'world_fact',
+        actorId: 'npcB',
+      });
+      const legacyPayload = {
+        schemaVersion: 1,
+        events: [
+          { ...first, sequence: 3 },
+          { ...second, sequence: 8 },
+        ],
+      };
+
+      narrativeEventService.reset();
+      narrativeEventService.hydrate(legacyPayload);
+      const next = narrativeEventService.record({
+        ...recordBase,
+        kind: 'RelationshipChanged',
+        informationKind: 'world_fact',
+        actorId: 'npcC',
+      });
+
+      expect(next.sequence).toBe(
+        Math.max(...legacyPayload.events.map((event) => event.sequence)) + 1,
+      );
+    });
+
+    test('malformed hydration payload resets the record safely', () => {
+      narrativeEventService.record({
+        ...recordBase,
+        kind: 'ItemTransferred',
+        informationKind: 'world_fact',
+        actorId: 'npcA',
+      });
+
+      narrativeEventService.hydrate({ events: [{ sequence: 99 }] });
+
+      expect(narrativeEventService.events).toHaveLength(0);
+      expect(narrativeEventService.serialize().nextSequence).toBe(1);
     });
 
     test('reset() yields an empty record (old-save fallback)', () => {

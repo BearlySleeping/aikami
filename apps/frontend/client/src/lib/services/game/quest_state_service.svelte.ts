@@ -422,6 +422,12 @@ class QuestStateService
 
   /** @inheritdoc */
   evaluateTriggers(trigger: QuestTriggerEvent): void {
+    if (
+      this._progress.some((progress) => progress.status === 'active') &&
+      !campaignService.activeCampaign?.id
+    ) {
+      throw new Error('QuestStateService: quest progression requires an active campaign');
+    }
     let changed = false;
 
     // Remember the last entered map so acceptQuest can retro-complete
@@ -920,6 +926,10 @@ class QuestStateService
     if (progress.status !== 'active') {
       return; // Already completed or failed — idempotent guard
     }
+    const campaignId = campaignService.activeCampaign?.id;
+    if (!campaignId) {
+      throw new Error('QuestStateService: quest completion requires an active campaign');
+    }
     progress.status = 'completed';
     progress.completedAt = Date.now();
 
@@ -935,7 +945,7 @@ class QuestStateService
     // C-491 AC-5: commit exactly one QuestResolved event, then derive the
     // journal entry from it (not a parallel copy). The event owns the narrative
     // identity/timing; the definition owns the authored detail.
-    const event = this._recordQuestResolved(progress, definition);
+    const event = this._recordQuestResolved({ progress, definition, campaignId });
     this._createJournalEntry(progress, definition, event);
 
     // Track repeatable completion timestamp (C-339)
@@ -1361,12 +1371,13 @@ class QuestStateService
    * present, else the player's active party NPC, else the player) so the
    * witness set is never empty for completions that occur away from a scene cast.
    */
-  private _recordQuestResolved(
-    progress: QuestProgress,
-    definition: ContentPackQuestEntry,
-  ): CommittedNarrativeEvent {
+  private _recordQuestResolved(options: {
+    progress: QuestProgress;
+    definition: ContentPackQuestEntry;
+    campaignId: string;
+  }): CommittedNarrativeEvent {
+    const { progress, definition, campaignId } = options;
     const actorId = definition.offeredByNpcId ?? partyRosterService.members[0]?.npcId ?? 'player';
-    const campaignId = campaignService.activeCampaign?.id ?? '';
     return narrativeEventService.record({
       campaignId,
       kind: 'QuestResolved',

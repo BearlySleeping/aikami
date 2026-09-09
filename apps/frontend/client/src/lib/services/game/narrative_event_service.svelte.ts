@@ -18,6 +18,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { CommittedNarrativeEventSchema } from '@aikami/schemas';
 import type {
   CommittedNarrativeEvent,
   NarrativeEventKind,
@@ -25,6 +26,7 @@ import type {
   NarrativeInformationKind,
   NpcStateDelta,
 } from '@aikami/types';
+import { Value } from 'typebox/value';
 import { registerSerializable } from './serializable_service';
 
 /** Options for a single committed narrative event — single-use type for `record()` (S10). */
@@ -51,6 +53,11 @@ type RecordEventOptions = {
   deltasApplied?: readonly NpcStateDelta[];
 };
 
+type NarrativeEventHydrationPayload = {
+  events: CommittedNarrativeEvent[];
+  nextSequence?: number;
+};
+
 /** Construction options for the narrative event record singleton. */
 export type NarrativeEventServiceOptions = BaseFrontendClassOptions;
 
@@ -68,7 +75,7 @@ export type NarrativeEventServiceInterface = BaseFrontendClassInterface & {
   /** Serializes the record for the save envelope. */
   serialize(): NarrativeEventRecord;
   /** Restores the record from a serialized payload. */
-  hydrate(data: NarrativeEventRecord): void;
+  hydrate(data: unknown): void;
   /** Restores defaults when an older save has no `narrativeEvents` snapshot. */
   reset(): void;
 };
@@ -97,28 +104,19 @@ class NarrativeEventService
       throw new Error('NarrativeEventService: record requires a non-empty campaignId');
     }
 
-    if (
-      (options.informationKind === 'character_belief' ||
-        options.informationKind === 'dialogue_claim') &&
-      !options.claimantId
-    ) {
-      throw new Error(`NarrativeEventService: ${options.informationKind} requires a claimantId`);
-    }
-
+    const claimantId = options.claimantId;
     const witnesses = this._dedupeWitnesses(options.actorId, options.witnesses);
     if (witnesses.length === 0) {
       throw new Error('NarrativeEventService: record requires at least one witness');
     }
 
-    const event: CommittedNarrativeEvent = {
+    const eventBase = {
       id: crypto.randomUUID(),
       campaignId: options.campaignId,
       sequence: this._nextSequence,
       kind: options.kind,
-      informationKind: options.informationKind,
       summary: options.summary,
       ...(options.subjectId ? { subjectId: options.subjectId } : {}),
-      ...(options.claimantId ? { claimantId: options.claimantId } : {}),
       witnesses,
       ...(options.sourceEventId ? { sourceEventId: options.sourceEventId } : {}),
       ...(options.deltasApplied && options.deltasApplied.length > 0
@@ -126,6 +124,23 @@ class NarrativeEventService
         : {}),
       recordedAt: new Date().toISOString(),
     };
+    let event: CommittedNarrativeEvent;
+    if (options.informationKind === 'world_fact') {
+      event = {
+        ...eventBase,
+        informationKind: options.informationKind,
+        ...(claimantId ? { claimantId } : {}),
+      };
+    } else {
+      if (!claimantId) {
+        throw new Error(`NarrativeEventService: ${options.informationKind} requires a claimantId`);
+      }
+      event = {
+        ...eventBase,
+        informationKind: options.informationKind,
+        claimantId,
+      };
+    }
 
     this._events = [...this._events, event];
     this._nextSequence += 1;
@@ -151,13 +166,15 @@ class NarrativeEventService
   }
 
   /** @inheritdoc */
-  hydrate(data: NarrativeEventRecord): void {
-    if (!data) {
+  hydrate(data: unknown): void {
+    if (!this._isValidHydrationPayload(data)) {
       this.reset();
       return;
     }
-    this._events = data.events ?? [];
-    this._nextSequence = data.nextSequence ?? this._events.length + 1;
+    this._events = [...data.events];
+    const minimumNextSequence =
+      this._events.reduce((highest, event) => Math.max(highest, event.sequence), 0) + 1;
+    this._nextSequence = Math.max(data.nextSequence ?? minimumNextSequence, minimumNextSequence);
     this.debug('hydrate', { eventCount: this._events.length });
   }
 
@@ -165,6 +182,23 @@ class NarrativeEventService
   reset(): void {
     this._events = [];
     this._nextSequence = 1;
+  }
+
+  /** Validates unknown save data before it can replace the append-only record. */
+  private _isValidHydrationPayload(data: unknown): data is NarrativeEventHydrationPayload {
+    if (!data || typeof data !== 'object' || !('events' in data) || !Array.isArray(data.events)) {
+      return false;
+    }
+    if (!data.events.every((event) => Value.Check(CommittedNarrativeEventSchema, event))) {
+      return false;
+    }
+    if ('nextSequence' in data && data.nextSequence !== undefined) {
+      const { nextSequence } = data;
+      if (typeof nextSequence !== 'number' || !Number.isInteger(nextSequence) || nextSequence < 1) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -200,7 +234,4 @@ export const narrativeEventService: NarrativeEventServiceInterface = NarrativeEv
 // Register for save/load persistence. Older saves without a `narrativeEvents`
 // snapshot fall back to `reset()` via `hydrateAllServices`, so the record loads
 // empty and fills as new consequences commit (C-491 AC-4).
-registerSerializable(
-  'narrativeEvents',
-  narrativeEventService as unknown as import('./serializable_service').SerializableService<unknown>, // guard-ignore lint/type-safety/casting: registerSerializable call - service typed as SerializableService at runtime
-);
+registerSerializable('narrativeEvents', narrativeEventService);

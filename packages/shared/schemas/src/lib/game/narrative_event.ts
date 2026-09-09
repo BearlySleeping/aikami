@@ -38,35 +38,52 @@ export const NarrativeInformationKindSchema = Type.Union([
 
 export type NarrativeInformationKind = Static<typeof NarrativeInformationKindSchema>;
 
-export const CommittedNarrativeEventSchema = Type.Object(
-  {
-    /** Unique event identifier (UUID v4). */
-    id: Type.String({ minLength: 1 }),
-    /** Campaign this event belongs to. */
-    campaignId: Type.String({ minLength: 1 }),
-    /** Monotonic per-campaign sequence number — stable ordering for journal + retrieval. */
-    sequence: Type.Integer({ minimum: 1 }),
-    /** One of the closed event-kind set. */
-    kind: NarrativeEventKindSchema,
-    /** world_fact | character_belief | dialogue_claim. */
-    informationKind: NarrativeInformationKindSchema,
-    /** Human-readable summary of what happened. */
-    summary: Type.String({ minLength: 1 }),
-    /** Entity the event is about (NPC id, faction id, item id, quest id). Optional for claims with no subject. */
-    subjectId: Type.Optional(Type.String({ minLength: 1 })),
-    /** For character_belief / dialogue_claim: who holds or asserts the information. */
-    claimantId: Type.Optional(Type.String({ minLength: 1 })),
-    /** NPC ids that perceived the event at commit time. The acting NPC is always present. */
-    witnesses: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
-    /** Link to the C-489 operation/source-event identity when sourced from dialogue. */
-    sourceEventId: Type.Optional(Type.String()),
-    /** The applied deltas that this event summarises (audit trail; may be empty for quest/promise events). */
-    deltasApplied: Type.Optional(Type.Array(NpcStateDeltaSchema)),
-    /** ISO-8601 timestamp of the commit. */
-    recordedAt: Type.String({ minLength: 1 }),
-  },
-  { additionalProperties: false },
-);
+const CommittedNarrativeEventBaseProperties = {
+  /** Unique event identifier (UUID v4). */
+  id: Type.String({ minLength: 1 }),
+  /** Campaign this event belongs to. */
+  campaignId: Type.String({ minLength: 1 }),
+  /** Monotonic per-campaign sequence number — stable ordering for journal + retrieval. */
+  sequence: Type.Integer({ minimum: 1 }),
+  /** One of the closed event-kind set. */
+  kind: NarrativeEventKindSchema,
+  /** Human-readable summary of what happened. */
+  summary: Type.String({ minLength: 1 }),
+  /** Entity the event is about (NPC id, faction id, item id, quest id). Optional for claims with no subject. */
+  subjectId: Type.Optional(Type.String({ minLength: 1 })),
+  /** NPC ids that perceived the event at commit time. The acting NPC is always present. */
+  witnesses: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+  /** Link to the C-489 operation/source-event identity when sourced from dialogue. */
+  sourceEventId: Type.Optional(Type.String()),
+  /** The applied deltas that this event summarises (audit trail; may be empty for quest/promise events). */
+  deltasApplied: Type.Optional(Type.Array(NpcStateDeltaSchema)),
+  /** ISO-8601 timestamp of the commit. */
+  recordedAt: Type.String({ minLength: 1 }),
+};
+
+export const CommittedNarrativeEventSchema = Type.Union([
+  Type.Object(
+    {
+      ...CommittedNarrativeEventBaseProperties,
+      informationKind: Type.Literal('world_fact'),
+      /** World facts may retain an attribution, but do not require one. */
+      claimantId: Type.Optional(Type.String({ minLength: 1 })),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      ...CommittedNarrativeEventBaseProperties,
+      informationKind: Type.Union([
+        Type.Literal('character_belief'),
+        Type.Literal('dialogue_claim'),
+      ]),
+      /** Beliefs and dialogue claims must identify who holds or asserted them. */
+      claimantId: Type.String({ minLength: 1 }),
+    },
+    { additionalProperties: false },
+  ),
+]);
 
 export type CommittedNarrativeEvent = Static<typeof CommittedNarrativeEventSchema>;
 

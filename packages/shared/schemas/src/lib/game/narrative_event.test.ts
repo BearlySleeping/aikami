@@ -83,6 +83,24 @@ describe('CommittedNarrativeEventSchema (AC-3)', () => {
     expect(Value.Check(CommittedNarrativeEventSchema, event)).toBe(true);
   });
 
+  test('rejects a character_belief event without a claimant', () => {
+    const event = {
+      ...baseEvent,
+      kind: 'ThreatWitnessed',
+      informationKind: 'character_belief',
+    };
+    expect(Value.Check(CommittedNarrativeEventSchema, event)).toBe(false);
+  });
+
+  test('rejects a dialogue_claim event without a claimant', () => {
+    const event = {
+      ...baseEvent,
+      kind: 'EvidencePresented',
+      informationKind: 'dialogue_claim',
+    };
+    expect(Value.Check(CommittedNarrativeEventSchema, event)).toBe(false);
+  });
+
   test('rejects an empty witnesses array', () => {
     expect(Value.Check(CommittedNarrativeEventSchema, { ...baseEvent, witnesses: [] })).toBe(false);
   });
