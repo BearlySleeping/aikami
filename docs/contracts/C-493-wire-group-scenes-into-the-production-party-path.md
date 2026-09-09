@@ -3,7 +3,7 @@ id: C-493
 title: "Wire group scenes into the production party path"
 source: direct
 contract_type: thin
-status: approved
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-09T00:00:00Z"
 ---
@@ -100,36 +100,43 @@ Changes to ACs or scope require a version bump and user approval.
 ## Execution Report
 
 ### Summary
-
-{2-4 sentences — what was built, what was deferred}
+Wired the orphaned C-456 group-turn machinery into the production party path. The Talk to Party overlay now routes through `generateMultiNpcResponses()` when two or more companions are present (single-companion falls back to `generateTurn`); the autonomous-message poller now starts on campaign entry (composition-root `initialize`) and stops on teardown (`dispose`), discovering the authored scene cast (`worldStateService.currentLocation.npcIds`) instead of world-generation output; and `DialogueAddressMode` gained the `party` member so the existing party toggle is genuinely functional. The orphaned-capability baseline was updated to drop the two now-wired methods.
 
 ### AC Status
-
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅/⚠️/❌ | {one-line note — be honest} |
-| AC-2 | ✅/⚠️/❌ | {one-line note — be honest} |
-| AC-3 | ✅/⚠️/❌ | {one-line note — be honest} |
-| AC-4 | ✅/⚠️/❌ | {one-line note — be honest} |
+| AC-1 | ✅ | TalkToPartyViewModel routes through `generateMultiNpcResponses` when ≥2 party members; unit-tested; single-companion falls back to `generateTurn` |
+| AC-2 | ✅ | Poller starts on `gameCompositionRoot.initialize` / stops on `dispose`; discovery reads `currentLocation.npcIds` (scene cast) not `worldGenOutput`; lifecycle + discovery unit tests added |
+| AC-3 | ✅ | `selectGroupParticipants` + `generateMultiNpcResponses` removed from orphaned-capability baseline; guard passes (144 files match) |
+| AC-4 | ✅ | Idle-tick still single-NPC via `_generateAutonomousMessage`; added assertion idle ticks never route through `generateMultiNpcResponses`; all existing group tests pass |
 
 ### Files Created
-
 | File | Purpose |
 |---|---|
-| `{path}` | {description} |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/talk_to_party/talk_to_party_view_model.test.ts` | AC-1 group-turn routing tests (group path, single-companion fallback, empty roster) |
+| `apps/frontend/client/src/lib/views/gm/address_mode_toggle_view_model.test.ts` | Party-mode enablement tests (party not disabled, setMode('party') functional) |
 
 ### Files Modified
-
 | File | Change |
 |---|---|
-| `{path}` | {description} |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/talk_to_party/talk_to_party_view_model.svelte.ts` | AC-1: branch to `selectGroupParticipants`+`generateMultiNpcResponses` when ≥2 members; added `senderName` to messages; `autonomousMessageService` injected with default singleton |
+| `apps/frontend/client/src/lib/views/game/ui/overlays/talk_to_party/talk_to_party_view.svelte` | Render per-message `senderName` (group responders) |
+| `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts` | Pass real companion context from `gameOverlayService.talkToPartyOptions` |
+| `apps/frontend/client/src/lib/services/npc/autonomous_message_service.svelte.ts` | AC-2: `_getKnownNpcIds()` reads authored scene cast (`currentLocation.npcIds`) instead of `worldGenOutput` |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | AC-2: start poller on `initialize`, stop on `dispose` |
+| `apps/frontend/client/src/lib/types/dialogue.ts` | Add `'party'` to `DialogueAddressMode` |
+| `apps/frontend/client/src/lib/services/npc/autonomous_message_group.test.ts` | AC-2 discovery tests + AC-4 idle regression assertion; scene-cast mock updates |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.test.ts` | AC-2 poller start/stop lifecycle tests |
+| `scripts/src/lib/ops/guard_orphaned_capability_baseline.json` | AC-3: remove the two now-wired methods from baseline |
+| `apps/frontend/docs/src/content/docs/features/autonomous-npcs.md` | Document campaign-play poller + party group turn |
 
 ### Deviations from Spec
-
-{Any AC change, scope expansion/reduction, or unplanned work.}
+None. All four ACs and the party-mode enablement were delivered within scope. No amendments required. Note: the GM `address_mode_toggle_view_model` already had `_isPartyModeDisabled = false`, so the toggle was already un-disabled; the remaining work (and what this contract delivers) was adding `party` to `DialogueAddressMode` and verifying the routing/toggle are functional via tests.
 
 ### Test Results
-
-- Unit: {PASS}/{total} ({FAIL} failures)
-- E2E: {PASS}/{total} ({FAIL} failures)
-- Baseline: {N} pre-existing failures, {N} new failures
+- Unit (client): 2409 PASS / 0 FAIL (incl. 5 new tests across AC-1/AC-2/party-mode)
+- E2E: N/A (no e2e suite added; covered by unit/integration per thin-contract verification lines)
+- Visual: N/A — `browser screenshot` / `ai_validate_image` tools were not available in this session; production `/game` route verified booting (HTTP 200, SPA shell) via dev server from the worktree
+- Baseline: 0 pre-existing failures, 0 new failures
+- Orphaned-capability guard: ✅ 144 files match baseline (methods no longer orphaned)
+- `validate({ test: true })`: ✅ client + scripts pass (fix+typecheck+build+test)
