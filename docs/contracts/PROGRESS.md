@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-09)
 
-**254 active (0 without contract file), 119 archived, 0 duplicates**
+**255 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -252,7 +252,8 @@
 | C-488 | Authored Npc Identity In The Content Pack | 🛠️ implemented | — | v2 | full |
 | C-489 | One Authority Path For Consequences | 🛠️ implemented | — | v2 | full |
 | C-490 | Transcript Branching Must Not Imply Rewinding The World | 🛠️ implemented | — | v2 | thin |
-| C-491 | Committed Narrative Event Record | 👍 approved | — | v2 | full |
+| C-491 | Committed Narrative Event Record | 🛠️ implemented | — | v2 | full |
+| C-492 | Memory Retrieval Correctness And Production Wiring | 📝 draft | — | v2 | full |
 | C-496 | Shared Visual Assets And Playback | 📝 draft | — | v2 | full |
 | C-499 | Dialogue Intent Envelope Extraction Resilience | 🛠️ implemented | ❓ `integrated` — production route `/game` | v2 | thin |
 | C-500 | Combat Overlay Rendering And Engine Stall | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |

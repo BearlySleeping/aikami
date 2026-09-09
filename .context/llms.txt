@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-09
-> Files: 444 across 18 categories
+> Files: 445 across 18 categories
 
 ## Quick Start (Read These First)
 
@@ -401,6 +401,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-489: One authority path for consequences](contracts/C-489-one-authority-path-for-consequences.md)
 - [Contract C-490: Transcript branching must not imply rewinding the world](contracts/C-490-transcript-branching-must-not-imply-rewinding-the-world.md)
 - [Contract C-491: Committed narrative event record](contracts/C-491-committed-narrative-event-record.md)
+- [Contract C-492: Memory retrieval correctness and production wiring](contracts/C-492-memory-retrieval-correctness-and-production-wiring.md)
 - [Contract C-496: Shared visual assets, atlas import and playback](contracts/C-496-shared-visual-assets-and-playback.md)
 - [Contract C-499: Dialogue Intent Envelope Extraction Resilience](contracts/C-499-dialogue-intent-envelope-extraction-resilience.md)
 - [Contract C-500: Combat Overlay Rendering and Engine Stall](contracts/C-500-combat-overlay-rendering-and-engine-stall.md)
