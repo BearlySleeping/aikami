@@ -282,7 +282,9 @@ describe('C-506 AC-1 — lossless output encoding', () => {
       const dstAlpha = decoded.data[i + 3];
       // A fully transparent source pixel must remain fully transparent.
       if (srcAlpha === 0) {
-        if (dstAlpha !== 0) transparentToOpaque += 1;
+        if (dstAlpha !== 0) {
+          transparentToOpaque += 1;
+        }
         continue;
       }
       // Visible pixels must round-trip byte-identically (RGBA).
@@ -291,8 +293,12 @@ describe('C-506 AC-1 — lossless output encoding', () => {
         rgba[i + 1] === decoded.data[i + 1] &&
         rgba[i + 2] === decoded.data[i + 2] &&
         dstAlpha === srcAlpha;
-      if (!same) visibleDiff += 1;
-      if (srcAlpha === 255 && dstAlpha !== 255) opaqueDiff += 1;
+      if (!same) {
+        visibleDiff += 1;
+      }
+      if (srcAlpha === 255 && dstAlpha !== 255) {
+        opaqueDiff += 1;
+      }
     }
 
     // Lossless: no visible pixel may shift a single byte.
