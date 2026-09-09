@@ -434,6 +434,8 @@ class ConfigService
                       c.provider === 'llamacpp' ||
                       c.provider === 'ooba' ||
                       c.provider === 'comfyui' ||
+                      c.provider === 'webui' ||
+                      c.provider === 'sdcpp' ||
                       c.provider === 'kokoro')),
               );
               vault.connections = cleaned;

@@ -22,7 +22,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Target** | `packages/shared/schemas/`, `packages/shared/lpc/`, `packages/frontend/engine/`, `packages/frontend/preview/`, client/Hub consumers and `scripts/src/lib/catalog/` |
 | **Type** | full |
 | **Priority** | P1 — replace inferred geometry and divergent asset interpretations |
-| **Dependencies** | C-504; increment B also consumes the normalized scene adapter from C-505 |
+| **Dependencies** | C-504 |
 | **Status** | draft |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — visual asset authoring reference in `apps/frontend/docs/src/content/docs/` |
@@ -60,7 +60,8 @@ An authored or generated sprite can render identically in the game and preview w
 | Frames/textures | Engine `rendering/texture_manager.ts`, `prop_texture_resolver.ts` | reuse cached Pixi frame textures |
 | Hosts | `packages/frontend/preview/`, `game_world.ts` | thin UI/camera hosts over shared render logic |
 | Publishing | `scripts/src/lib/catalog/` | retain content-addressed R2 objects and credits |
-| Scene normalization | C-505 | consume in increment B; do not duplicate map parsing |
+| Scene normalization/map preview | C-505 (subsequent contract) | leave map parsing and map-preview integration to C-505; no reverse dependency |
+| Hub tag identity | Shared LPC tag builder | reuse for nested IDs and state tags; remove divergent Hub reconstruction |
 
 ## Overview
 
@@ -118,16 +119,13 @@ Read legacy LPC and atlas inputs through adapters, then use the same validated d
 ## Scope Boundaries
 
 - **In Scope:** shared visual schema/adapters, metadata fidelity, validated publication, deterministic playback/layer composition, frame/color inspection, faithful preview integration and lifecycle cleanup.
-- **Out of Scope:** biome scattering, generative houses, generation-provider integration, arbitrary custom-node execution, new gameplay equipment slots, skeletal animation, advanced lighting, indexed/material dye shaders, wholesale replacement of LPC art, a global renderer rewrite.
+- **Out of Scope:** canonical scene normalization and map-preview replacement (C-505), biome scattering, generative houses, generation-provider integration, arbitrary custom-node execution, new gameplay equipment slots, skeletal animation, advanced lighting, indexed/material dye shaders, wholesale replacement of LPC art, a global renderer rewrite.
 
 ## Contract Size & Split Rule
 
-One cross-host interpretation invariant, delivered in two compatible increments:
+Run once through `bun run contract C-496`; all mandatory ACs belong to this run. C-505 follows after this contract lands and owns map normalization/preview integration. No partial-completion dependency or manual resume between contracts is required.
 
-- **A / PR 2:** AC-1–AC-4. Publishable definition/import boundary and a real `/game` consumer for both legacy and generic assets. Keep other hosts on compatible adapters. Target 40–65 files.
-- **B / PR 4:** AC-5–AC-7 after C-505. Shared steady-state playback and all preview consumers; remove superseded interpretations. Target 45–70 files.
-
-C-505 may use increment A's merged, tested schema/API without claiming all C-496 criteria have passed. C-496 remains `in_progress` after A; only all mandatory ACs permit `implemented`, then independent verification. At 75 changed paths reassess; at 85 stop for a split plan. No PR reaches 100 files.
+Target 40–65 changed paths through reuse of existing adapters and preview hosts; this is a planning budget, not a measured estimate. Inventory the full scope before implementation, especially host/lifecycle changes. At 75 paths reassess; at 85 stop for an explicit split decision rather than silently dropping ACs or inventing a manual inter-contract handoff. No PR reaches 100 files.
 
 ## Acceptance Criteria
 
@@ -135,7 +133,7 @@ C-505 may use increment A's merged, tested schema/API without claiming all C-496
 **Given** legacy LPC, a generic atlas with unequal trimmed frames, and a static prop, **when** imported, **then** definitions preserve origins, timing, alpha and logical identities. Invalid bounds, duplicate IDs, unresolved references, cyclic fallbacks and unsupported modes fail before publication/allocation.
 
 ### AC-2: Modular metadata survives the entire path
-**Given** a component with rear/front parts and declared rig/pose compatibility, **when** selected and normalized, **then** all required parts render once in deterministic order. Invalid combinations are rejected with actionable diagnostics. Tests cover `/behind`, prefix/suffix legacy conventions and equal-depth ties independent of async load order.
+**Given** a component with rear/front parts and declared rig/pose compatibility, **when** selected and normalized, **then** all required parts render once in deterministic order. Invalid combinations are rejected with actionable diagnostics. Tests cover `/behind`, prefix/suffix legacy conventions and equal-depth ties independent of async load order. Hub asset lookup uses the shared tag builder, preserving complete nested IDs and state tags without duplicated path segments.
 
 ### AC-3: Mixed assets render in the real game
 **Given** one LPC actor, one generic animated actor and a prop, **when** the scene requests available and missing clips, **then** they render together with stable origins and declared fallbacks. Visual bounds do not change authoritative collision or hit timing.
@@ -147,7 +145,7 @@ C-505 may use increment A's merged, tested schema/API without claiming all C-496
 **Given** variable frame rates, rapid equipment changes, delayed loads and disposal, **when** playing, **then** elapsed-time animation, roles and fallback policy agree across hosts. Stale loads cannot clear newer sprites, recolor/tint has consistent semantics, and steady frames allocate no new render objects.
 
 ### AC-6: Previews show actual production assets
-**Given** actor/prop/tileset assets and a C-505 scene, **when** opened in Hub/client previews and `/game`, **then** frame selection, alpha, origin, ordering and supported color operations agree. Map preview uses the normalized scene and real tiles, not placeholder rectangles. Isolation does not secretly add fallback body layers.
+**Given** actor/prop/tileset assets, **when** inspected in supported Hub/client asset previews and rendered through the actual game asset path, **then** frame selection, alpha, origin, ordering and supported color operations agree. Isolation does not secretly add fallback body layers. Whole-map preview normalization and real-tile composition are owned and verified by C-505, not prerequisites for this AC.
 
 ### AC-7: Resource usage and regressions are demonstrated
 **Given** repeated preview mount/unmount, scene transitions, cache reuse and offline reload, **when** measured, **then** owned resources return to the established baseline, shared textures survive while referenced, and missing/retried loads remain diagnosable. Record the normal game and preview screenshots plus allocation/memory observations.
@@ -156,23 +154,23 @@ C-505 may use increment A's merged, tested schema/API without claiming all C-496
 
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-1 | Unit + import integration | real small atlas/LPC fixtures and invalid inputs | `scripts/src/lib/catalog/pipeline.ts#runCatalogPublish` | Required for A |
-| AC-2 | Integration + visual | compatibility and multi-pass matrix | `/game` | Required for A |
-| AC-3 | E2E + visual | mixed-asset scene at gameplay scale | `/game` | Required for A |
-| AC-4 | Integration | failure-injection release tests and offline install | `scripts/src/lib/catalog/pipeline.ts#runCatalogPublish` | Required for A |
-| AC-5 | Unit + compiled lifecycle | timing, race and ownership regressions | `/game` | Required for B |
-| AC-6 | E2E + visual | matching host captures with resolved IDs | `packages/frontend/preview/src/lib/map/map_preview.svelte` | Required for B |
-| AC-7 | E2E + performance | repeated lifecycle/resource report | `/game` | Required for B |
+| AC-1 | Unit + import integration | real small atlas/LPC fixtures and invalid inputs | `scripts/src/lib/catalog/pipeline.ts#runCatalogPublish` | Required before handoff |
+| AC-2 | Integration + visual | compatibility, multi-pass and Hub tag matrix | `/game` | Required before handoff |
+| AC-3 | E2E + visual | mixed-asset scene at gameplay scale | `/game` | Required before handoff |
+| AC-4 | Integration | failure-injection release tests and offline install | `scripts/src/lib/catalog/pipeline.ts#runCatalogPublish` | Required before handoff |
+| AC-5 | Unit + compiled lifecycle | timing, race and ownership regressions | `/game` | Required before handoff |
+| AC-6 | E2E + visual | matching asset-preview/game captures with resolved IDs | `packages/frontend/preview/src/lib/lpc/lpc_preview.svelte` | Required before handoff |
+| AC-7 | E2E + performance | repeated lifecycle/resource report | `/game` | Required before handoff |
 
-**Test Hooks**: existing engine/preview/LPC/catalog test lanes; production Playwright journeys under `apps/e2e/tests/client/` and `apps/e2e/tests/hub/`; visual suites under `apps/e2e/src/visual/suites/`. Use compiled Svelte testing for reactive behavior. Run affected-project validation at each increment boundary.
+**Test Hooks**: existing engine/preview/LPC/catalog test lanes; production Playwright journeys under `apps/e2e/tests/client/` and `apps/e2e/tests/hub/`; visual suites under `apps/e2e/src/visual/suites/`. Use compiled Svelte testing for reactive behavior. Run affected-project validation before the standard pipeline verification handoff.
 
 **Watch Points**: source alpha versus decoder premultiplication; atlas padding; origin versus anchor; per-layer fallback desynchronization; shared texture destruction; failure cached as permanent absence; lossy images cannot be reliable palette masks; stage mutations before stale-revision checks.
 
 ## Implementation Sequence
 
-1. Approve the format and compatibility fixtures; implement increment A with the actual game consumer and publication failure tests.
-2. Let C-505 normalize scenes against that merged boundary.
-3. Implement increment B, verify all consumers, then remove redundant frame/timing parsers and record evidence.
+1. Freeze the format and compatibility fixtures; implement adapters with an actual game consumer and publication failure tests.
+2. Unify playback, lifecycle ownership and actor/prop/tileset asset previews; reuse shared Hub tag construction.
+3. Verify all mandatory ACs, remove superseded interpretations and hand off through the standard contract pipeline. C-505 can then consume the completed visual boundary.
 
 ## Edge Cases & Gotchas
 

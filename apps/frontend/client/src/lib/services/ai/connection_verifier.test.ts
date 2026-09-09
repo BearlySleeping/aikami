@@ -13,7 +13,11 @@
 //   - Keys excluded from diagnostic output
 
 import { describe, expect, mock, test } from 'bun:test';
-import { type FetchTransport, verifyConnection } from './connection_verifier';
+import {
+  type FetchTransport,
+  hasVerificationStrategy,
+  verifyConnection,
+} from './connection_verifier';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,6 +116,26 @@ const imageProvider = (overrides?: Record<string, unknown>) => ({
   id: 'prov-7',
   registryId: 'openai-compat',
   label: 'OpenAI Compatible',
+  credential: undefined,
+  baseUrl: 'http://localhost:7860',
+  source: 'stored' as const,
+  ...overrides,
+});
+
+const comfyuiProvider = (overrides?: Record<string, unknown>) => ({
+  id: 'prov-8',
+  registryId: 'comfyui',
+  label: 'ComfyUI (local)',
+  credential: undefined,
+  baseUrl: 'http://localhost:8188',
+  source: 'stored' as const,
+  ...overrides,
+});
+
+const webuiProvider = (overrides?: Record<string, unknown>) => ({
+  id: 'prov-9',
+  registryId: 'webui',
+  label: 'AUTOMATIC1111 WebUI',
   credential: undefined,
   baseUrl: 'http://localhost:7860',
   source: 'stored' as const,
@@ -323,6 +347,78 @@ describe('verifyConnection — OpenAI-compatible (keyless)', () => {
 
     const [url] = (fetchFn as ReturnType<typeof mock>).mock.calls[0] ?? [];
     expect(url).toBe('http://localhost:7860/v1/models');
+  });
+});
+
+describe('verifyConnection — ComfyUI (keyless)', () => {
+  test('probes at configured base URL with /object_info and returns ok', async () => {
+    const fetchFn = mockFetch(jsonResponse({ objectInfo: {} }));
+    const result = await verifyConnection({ provider: comfyuiProvider() }, fetchFn);
+
+    expect(result.ok).toBe(true);
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+
+    const [url] = (fetchFn as ReturnType<typeof mock>).mock.calls[0] ?? [];
+    expect(url).toBe('http://localhost:8188/object_info');
+  });
+
+  test('returns error when no base URL is configured', async () => {
+    const result = await verifyConnection({ provider: comfyuiProvider({ baseUrl: undefined }) });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('No endpoint configured');
+  });
+
+  test('returns error on SPA HTML response', async () => {
+    const fetchFn = mockFetch(htmlResponse());
+    const result = await verifyConnection({ provider: comfyuiProvider() }, fetchFn);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('HTML instead of JSON');
+  });
+});
+
+describe('verifyConnection — AUTOMATIC1111 WebUI (keyless)', () => {
+  test('probes /sdapi/v1/sd-models and validates an array response', async () => {
+    const fetchFn = mockFetch(jsonResponse([{ title: 'sd_xl_base_1.0' }, { title: 'sd15' }]));
+    const result = await verifyConnection({ provider: webuiProvider() }, fetchFn);
+
+    expect(result.ok).toBe(true);
+    expect(result.modelCount).toBe(2);
+
+    const [url] = (fetchFn as ReturnType<typeof mock>).mock.calls[0] ?? [];
+    expect(url).toBe('http://localhost:7860/sdapi/v1/sd-models');
+  });
+
+  test('routes the sd-server provider to the same sd-models probe', async () => {
+    const fetchFn = mockFetch(jsonResponse([{ title: 'flux1-schnell-q4_k' }]));
+    const result = await verifyConnection(
+      { provider: webuiProvider({ registryId: 'sdcpp' }) },
+      fetchFn,
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.modelCount).toBe(1);
+
+    const [url] = (fetchFn as ReturnType<typeof mock>).mock.calls[0] ?? [];
+    expect(url).toBe('http://localhost:7860/sdapi/v1/sd-models');
+  });
+
+  test('returns error on a non-array JSON response', async () => {
+    const fetchFn = mockFetch(jsonResponse({ models: [] }));
+    const result = await verifyConnection({ provider: webuiProvider() }, fetchFn);
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('expected a JSON array');
+  });
+});
+
+describe('hasVerificationStrategy', () => {
+  test('recognizes ComfyUI, AUTOMATIC1111 WebUI, and sd-server', () => {
+    expect(hasVerificationStrategy('comfyui')).toBe(true);
+    expect(hasVerificationStrategy('webui')).toBe(true);
+    expect(hasVerificationStrategy('sdcpp')).toBe(true);
+  });
+
+  test('still reports false for unknown providers', () => {
+    expect(hasVerificationStrategy('nonexistent')).toBe(false);
   });
 });
 

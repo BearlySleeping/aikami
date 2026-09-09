@@ -264,7 +264,7 @@ describe('resolveSpecifier', () => {
   });
 
   it('prefers the longest matching alias', () => {
-    // `$lib` and `$lib/*` point at different roots in svelte.config.js; a
+    // `$lib` and `$lib/*` point at different roots in vite.config.ts; a
     // shortest-match resolver would send `$lib/server/...` to the wrong tree.
     const importer = join(hubRoot, 'src/hooks.server.ts');
     const resolved = resolveSpecifier('$lib/server/api', importer);

@@ -465,7 +465,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Execution rules](plans/ai-setup/dispatch.md)
 - [Execution order](plans/ai-setup/queue.md)
 - [AI setup and settings — execution plan](plans/ai-setup/README.md)
-- [Visual asset foundation — execution guide](plans/visual_asset_foundation.md)
+- [Visual asset foundation — execution order](plans/visual_asset_foundation.md)
 ## README.md/
 
 - [Aikami Documentation](README.md)

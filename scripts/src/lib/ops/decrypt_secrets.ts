@@ -76,6 +76,7 @@ const EMULATOR_ENV_OVERRIDES: Readonly<Record<string, Record<string, string>>> =
   client: {
     PUBLIC_DISABLE_APP_CHECK: 'true',
     PUBLIC_MODE: 'emulator',
+    PUBLIC_IMAGE_URL: '/api/image',
   },
   hub: {
     PUBLIC_DISABLE_APP_CHECK: '1',

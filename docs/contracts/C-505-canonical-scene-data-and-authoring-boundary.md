@@ -22,7 +22,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Target** | `packages/shared/schemas/`, `packages/frontend/engine/src/assets/`, `packages/frontend/preview/`, map import tooling and `content/packs/emberwatch/` |
 | **Type** | full |
 | **Priority** | P1 — one scene interpretation for rendering, authoring and future generation |
-| **Dependencies** | C-496 increment A's merged visual format; do not wait for its increment B |
+| **Dependencies** | C-496 |
 | **Status** | draft |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — versioned map format/import documentation in `apps/frontend/docs/src/content/docs/` |
@@ -58,7 +58,7 @@ Authored maps have one validated interpretation, cannot accidentally duplicate t
 | Terrain matching | `packages/frontend/engine/src/assets/autotile.ts` | reuse `fill`/`corner16`; no new matching engine |
 | Movement/sight | `packages/frontend/engine/src/systems/terrain_grid.ts` | retain authoritative terrain + dynamic occupancy separation |
 | Drawing | `rendering/tilemap_chunk_renderer.ts`, `layer_bands.ts` | consume normalized scene/compiled layers |
-| Asset frames | C-496 increment A | reference logical frames, not global GIDs |
+| Asset frames | C-496 | reference logical frames, not global GIDs |
 | Future authoring | `docs/architecture/semantic_map_authoring.md` | design boundary only; unsupported document kind is rejected |
 
 ## Overview
@@ -134,7 +134,7 @@ Preserve existing spawn/pickup/interactable keys. Recover their actual source ma
 
 ## Contract Size & Split Rule
 
-PR 3 owns one scene-normalization boundary end to end, targeting 40–65 files. It consumes C-496 increment A and supplies the adapter used by C-496 increment B; this is not a circular implementation dependency. If scope exceeds 85 paths, split along a working supported-import/native-export boundary, never leave two production scene authorities active. No PR reaches 100 files.
+Run once through `bun run contract C-505` after C-496 lands. This contract owns the scene-normalization boundary and real map preview end to end, targeting 40–65 files. It consumes the completed visual format/playback API; C-496 does not wait for this contract. Reassess at 75 paths and stop at 85 for an explicit split decision; never leave two production scene authorities active. No PR reaches 100 files.
 
 ## Acceptance Criteria
 

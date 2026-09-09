@@ -831,6 +831,63 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.editorViewModel.isEditorOpen).toBeFalse();
   });
 
+  test('reviewCapability opens the editor prefilled with the detected image engine', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      textStatus: 'skipped',
+      textProviderId: undefined,
+      textModelName: undefined,
+      imageStatus: 'detected',
+      imageProviderId: 'comfyui',
+      summary: 'ComfyUI reachable',
+    });
+
+    await vm.reviewCapability('image');
+
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('image');
+    expect(vm.editorViewModel.isEditorOpen).toBeTrue();
+    expect(vm.editorViewModel.draft.capability).toBe('image');
+    expect(vm.editorViewModel.draft.registryId).toBe('comfyui');
+    expect(vm.editorViewModel.draft.baseUrl).toBe('http://localhost:8188');
+    expect(vm.editorViewModel.draft.isEditing).toBeFalse();
+  });
+
+  test('reviewCapability prefills the editor with a detected sd-server', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      textStatus: 'skipped',
+      textProviderId: undefined,
+      textModelName: undefined,
+      imageStatus: 'detected',
+      imageProviderId: 'sdcpp',
+      summary: 'Local image engine reachable (sdcpp)',
+    });
+
+    await vm.reviewCapability('image');
+
+    expect(vm.editorViewModel.draft.registryId).toBe('sdcpp');
+    expect(vm.editorViewModel.draft.baseUrl).toBe('http://localhost:8188');
+    expect(vm.editorViewModel.providerOptions.some((option) => option.id === 'sdcpp')).toBeTrue();
+  });
+
+  test('reviewCapability falls back to the editor when no image engine is found', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      textStatus: 'skipped',
+      textProviderId: undefined,
+      textModelName: undefined,
+      imageStatus: 'not_found',
+      summary: 'No image engine reachable',
+    });
+
+    await vm.reviewCapability('image');
+
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('image');
+    expect(vm.editorViewModel.isEditorOpen).toBeTrue();
+  });
+
   test('useConnection marks a saved connection as the default for its capability', () => {
     configServiceMock.state.connections = [
       {

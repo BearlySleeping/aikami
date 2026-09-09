@@ -67,11 +67,11 @@ const run = (label: string, cmd: string, args: string[], opts: SpawnSyncOptions 
 
 const modeArgs = mode ? ['--mode', mode] : [];
 
-// 1. Dev-route gate — must see the same mode svelte.config.js will.
+// 1. Dev-route gate — must see the same mode vite.config.ts will.
 run('gate dev routes', 'bun', ['scripts/gate_dev_routes.ts', ...modeArgs]);
 
 // 2. Web bundle. Extra args are forwarded here, where they were aimed.
-//    AIKAMI_BUILD_MODE is exported so svelte.config.js sees the real mode:
+//    AIKAMI_BUILD_MODE is exported so vite.config.ts sees the real mode:
 //    SvelteKit loads it during a config probe that runs before vite resolves
 //    `--mode`, and without this it falls back to production and demands the
 //    filtered routes copy a non-production build never creates.

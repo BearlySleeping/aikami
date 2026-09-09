@@ -227,7 +227,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-488 | Authored Npc Identity In The Content Pack | 🛠️ implemented | v2 | full |
 | C-489 | One Authority Path For Consequences | 🛠️ implemented | v2 | full |
 | C-490 | Transcript Branching Must Not Imply Rewinding The World | 🛠️ implemented | v2 | thin |
-| C-491 | Committed Narrative Event Record | 📝 draft | v2 | full |
+| C-491 | Committed Narrative Event Record | 👍 approved | v2 | full |
 | C-496 | Shared Visual Assets And Playback | 📝 draft | v2 | full |
 | C-504 | Stable Character Appearance Identity | 📝 draft | v2 | full |
 | C-505 | Canonical Scene Data And Authoring Boundary | 📝 draft | v2 | full |
