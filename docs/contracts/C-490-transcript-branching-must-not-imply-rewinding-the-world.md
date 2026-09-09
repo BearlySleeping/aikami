@@ -3,7 +3,7 @@ id: C-490
 title: "Transcript branching must not imply rewinding the world"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-07T00:00:00Z"
 ---
@@ -15,11 +15,11 @@ created_at: "2026-09-07T00:00:00Z"
 | Field | Value |
 |---|---|
 | **Source** | [`BACKLOG_C485_PLUS.md`](BACKLOG_C485_PLUS.md) § C-490, seeded from the 2026-09-06 external review; verified finding V-10 |
-| **Target** | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:1624-1685` (`createBranch` / `switchBranch`), the dialogue overlay's message-action UI (`apps/frontend/client/src/lib/components/chat/message_action_bar.svelte`) |
+| **Target** | `apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts:1792-1849` (`createBranch` at :1792 / `switchBranch` at :1822), the dialogue overlay's message-action UI (`apps/frontend/client/src/lib/components/chat/message_action_bar.svelte`, rendered via `rich_message_row.svelte`) |
 | **Type** | thin |
 | **Priority** | P1 — a reference-tool feature that does not transfer cleanly to a consequential RPG |
 | **Dependencies** | None |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — which message actions are offered in campaign play |
 | **Contract version** | 2.0.0 |
@@ -27,10 +27,10 @@ created_at: "2026-09-07T00:00:00Z"
 
 ## Problem & Baseline Evidence
 
-- **Current behavior**: `createBranch` (`dialogue_overlay_view_model.svelte.ts:1624`) snapshots `[...this.messages]`; `switchBranch` (`:1654`) restores `[...branch.messages]`. Inventory, quest state, relationships, world flags and RNG are untouched.
+- **Current behavior**: `createBranch` (`dialogue_overlay_view_model.svelte.ts:1792`) snapshots `[...this.messages]` (line 1806); `switchBranch` (`:1822`) restores `[...branch.messages]` (line 1847). Inventory, quest state, relationships, world flags and RNG are untouched.
 - **The concrete corruption**: threaten Rollo, obtain the Ward Wand, switch back to the polite branch — the player keeps the wand while the conversation says they never asked for it. In a chat app that is a feature; here it silently corrupts campaign state.
 - **The affordances**: `message_action_bar.svelte` offers `copy/retry/branch` on AI messages and `copy/edit/delete/branch` on user messages — a transcript-editing vocabulary that implies the world rewound along with the text.
-- **Reproduction**: read `createBranch`/`switchBranch` at `:1624-1685`; then open a campaign dialogue, branch, change state, and switch back — the messages revert, the state does not.
+- **Reproduction**: read `createBranch`/`switchBranch` at `:1792-1849`; then open a campaign dialogue, branch, change state, and switch back — the messages revert, the state does not.
 - **Existing implementation to reuse**: the branch code stays; the fix is gating the UI in campaign play, relabelling retry, and handling any already-persisted branch data without crashing. C-245's CYOA branching is a separate feature and must keep working.
 - **Baseline tests**: `dialogue_overlay_view_model.test.ts` (branch unit tests), `apps/e2e/tests/client/cyoa_choices.spec.ts` (CYOA branching), and any dev-sandbox dialogue specs that exercise branch/delete.
 

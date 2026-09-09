@@ -43,7 +43,7 @@ import {
  * "Command failed: git push" error. Give every test here a generous ceiling.
  */
 const it = (name: string, fn: () => undefined | Promise<unknown>): void =>
-  baseIt(name, fn, { timeout: 30_000 });
+  baseIt(name, fn, { timeout: 60_000 });
 
 const git = (args: string[], cwd: string): string =>
   execFileSync('git', args, {
@@ -80,6 +80,13 @@ beforeEach(() => {
   git(['config', 'user.email', 'test@test.invalid'], root);
   git(['config', 'user.name', 'Test'], root);
   git(['config', 'commit.gpgsign', 'false'], root);
+  // Windows CI slowness guard: without the repo .gitattributes present, git's
+  // global core.autocrlf=true makes every add/commit/push here run LF→CRLF
+  // conversion and emit "LF will be replaced by CRLF" warnings. On a fresh
+  // Windows runner (plus Defender scans of the temp repos) that has blown the
+  // beforeEach past its timeout intermittently. These are throwaway LF repos,
+  // so pin autocrlf off — removes the conversion overhead and the noise.
+  git(['config', 'core.autocrlf', 'false'], root);
 
   contractPath = join(root, CONTRACT_REL);
   mkdirSync(join(root, 'docs/contracts'), { recursive: true });
@@ -455,6 +462,7 @@ describe('concurrent writers racing the same push', () => {
     git(['config', 'user.email', 'other@test.invalid'], otherClone);
     git(['config', 'user.name', 'Other'], otherClone);
     git(['config', 'commit.gpgsign', 'false'], otherClone);
+    git(['config', 'core.autocrlf', 'false'], otherClone);
     writeFileSync(join(otherClone, 'code.ts'), 'export const a = 999;\n');
     git(['add', '-A'], otherClone);
     git(['commit', '-m', 'other pipeline commit'], otherClone);

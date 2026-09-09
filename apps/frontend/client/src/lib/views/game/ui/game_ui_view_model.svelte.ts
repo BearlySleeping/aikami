@@ -127,6 +127,8 @@ export type GameUIViewModelInterface = BaseViewModelInterface & {
   readonly questViewModel: QuestViewModelInterface | undefined;
   readonly dashboardViewModel: CharacterSheetViewModelInterface | undefined;
   readonly combatViewModel: CombatViewModelInterface | undefined;
+  /** Combat ViewModel resolved only while the combat overlay is active. */
+  readonly resolvedCombatViewModel: CombatViewModelInterface | undefined;
   readonly vendorViewModel: VendorViewModelInterface | undefined;
   readonly endSessionViewModel: EndSessionViewModelInterface | undefined;
   readonly gameOverViewModel: GameOverViewModelInterface | undefined;
@@ -280,6 +282,14 @@ class GameUIViewModel
     return gameOverlayService.activeOverlay;
   }
 
+  /** @inheritdoc */
+  get resolvedCombatViewModel(): CombatViewModelInterface | undefined {
+    if (gameOverlayService.activeOverlay !== 'COMBAT') {
+      return undefined;
+    }
+    return this.combatViewModel;
+  }
+
   get overlayStack(): readonly OverlayStackEntry[] {
     return gameOverlayService.overlayStack;
   }
@@ -395,7 +405,10 @@ class GameUIViewModel
           onEndChat: () => gameOverlayService.endDialogue(),
           npcDialogueService,
           onStartCombat: (combatNpcData) => {
-            gameOverlayService.startCombat({ enemyName: combatNpcData.npcName });
+            gameOverlayService.startCombat({
+              enemyName: combatNpcData.npcName,
+              enemyNpcId: combatNpcData.npcId,
+            });
           },
         });
         this.dialogueViewModel = vm;
@@ -412,9 +425,13 @@ class GameUIViewModel
           return;
         }
         const cs = combatService;
-        const vm = getCombatViewModel({ className: 'CombatViewModel' }) as CombatViewModel;
+        const vm = getCombatViewModel({
+          className: 'CombatViewModel',
+          onDismissOverlay: () => gameOverlayService.closeCombat(),
+        }) as CombatViewModel;
         void vm.initialize();
-        vm.enemyName = cs.enemyName;
+        vm.enemyName = cs.enemyName || 'Enemy';
+        vm.enemyNpcId = cs.enemyNpcId;
         vm.enemyHp = cs.enemyHp;
         vm.enemyMaxHp = cs.enemyMaxHp;
         vm.activeEntities = [...cs.participantIds];

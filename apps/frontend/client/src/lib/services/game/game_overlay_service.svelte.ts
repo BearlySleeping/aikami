@@ -181,9 +181,17 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
 
   startCombat(options: {
     enemyName: string;
+    /** NPC id of the enemy, when combat was triggered from an NPC (C-500 portrait). */
+    enemyNpcId?: string;
     /** Encounter ID so victory loot/quest triggers resolve (C-316). */
     encounterId?: string | null;
   }): void;
+  /**
+   * Dismisses an active combat overlay and restores engine input (C-500).
+   * Combat pauses the engine on entry, so leaving combat must resume it —
+   * otherwise Escape would pop the overlay but leave the world paused.
+   */
+  closeCombat(): void;
 
   // ── Auto-Save Scheduling (C-334) ──
 
@@ -871,6 +879,13 @@ export class GameOverlayService
         return;
       }
 
+      // Combat dismisses cleanly (C-500): resume the engine so a rapid
+      // Escape right after combat starts cannot leave the world paused.
+      if (this.activeOverlay === 'COMBAT') {
+        this.closeCombat();
+        return;
+      }
+
       // Fallback: pop overlay directly for any other types
       this.popOverlay();
       return;
@@ -1317,9 +1332,14 @@ export class GameOverlayService
     }
   }
 
-  startCombat(options: { enemyName: string; encounterId?: string | null }): void {
+  startCombat(options: {
+    enemyName: string;
+    enemyNpcId?: string;
+    encounterId?: string | null;
+  }): void {
     combatService.startCombat({
       enemyName: options.enemyName,
+      enemyNpcId: options.enemyNpcId,
       enemyHp: 60,
       enemyMaxHp: 60,
       participantIds: [1, 2],
@@ -1329,6 +1349,24 @@ export class GameOverlayService
         this.setActive(overlay);
       },
     });
+  }
+
+  /**
+   * Dismisses the combat overlay and restores engine input (C-500).
+   *
+   * combatService.startCombat pauses the engine on entry; Escape during
+   * combat must therefore dismiss cleanly — popping the overlay alone would
+   * leave the world paused and input locked, indistinguishable from the
+   * missing-UI freeze this contract fixes. Mirrors the closeVendor/
+   * closeInventory resume pattern: clear the (combat-only) stack, return to
+   * EXPLORE, and resume the engine exactly once.
+   */
+  closeCombat(): void {
+    this.clearStack();
+    if (this.activeOverlay === 'NONE') {
+      gameModeService.setMode('EXPLORE');
+      this._engineService?.resumeEngine();
+    }
   }
 
   // ── Session Management (C-240) ─────────────────────────────────────

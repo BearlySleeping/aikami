@@ -15,6 +15,7 @@ import { registerSerializable, type SerializableService } from './serializable_s
 /** Serialized shape for save/load. */
 type CombatState = {
   enemyName: string;
+  enemyNpcId?: string;
   enemyHp: number;
   enemyMaxHp: number;
   participantIds: number[];
@@ -26,6 +27,8 @@ type CombatState = {
 
 export type CombatServiceInterface = BaseFrontendClassInterface & {
   readonly enemyName: string;
+  /** NPC id of the enemy combatant, when combat was triggered from an NPC (C-500 portrait). */
+  readonly enemyNpcId: string;
   readonly enemyHp: number;
   readonly enemyMaxHp: number;
   readonly participantIds: readonly number[];
@@ -35,6 +38,7 @@ export type CombatServiceInterface = BaseFrontendClassInterface & {
   /** Last combat initialization options for retry (C-330 AC-5). */
   readonly lastCombatOptions: {
     enemyName: string;
+    enemyNpcId?: string;
     enemyHp: number;
     enemyMaxHp: number;
     participantIds: number[];
@@ -46,6 +50,7 @@ export type CombatServiceInterface = BaseFrontendClassInterface & {
 
   startCombat(options: {
     enemyName: string;
+    enemyNpcId?: string;
     enemyHp: number;
     enemyMaxHp: number;
     participantIds: number[];
@@ -65,6 +70,7 @@ class CombatService
   implements CombatServiceInterface, SerializableService<CombatState>
 {
   private _enemyName = $state('Unknown Enemy');
+  private _enemyNpcId = $state('');
   private _enemyHp = $state(80);
   private _enemyMaxHp = $state(80);
   private _participantIds: number[] = $state([]);
@@ -75,6 +81,10 @@ class CombatService
 
   get enemyName(): string {
     return this._enemyName;
+  }
+
+  get enemyNpcId(): string {
+    return this._enemyNpcId;
   }
 
   get enemyHp(): number {
@@ -112,6 +122,7 @@ class CombatService
 
   startCombat(options: {
     enemyName: string;
+    enemyNpcId?: string;
     enemyHp: number;
     enemyMaxHp: number;
     participantIds: number[];
@@ -122,6 +133,7 @@ class CombatService
     allowNonCombatResolution?: boolean;
   }): void {
     this._enemyName = options.enemyName;
+    this._enemyNpcId = options.enemyNpcId ?? '';
     this._enemyHp = options.enemyHp;
     this._enemyMaxHp = options.enemyMaxHp;
     this._participantIds = options.participantIds;
@@ -131,6 +143,7 @@ class CombatService
     // Store options for retry (C-330 AC-5)
     this._lastCombatOptions = {
       enemyName: options.enemyName,
+      enemyNpcId: options.enemyNpcId,
       enemyHp: options.enemyHp,
       enemyMaxHp: options.enemyMaxHp,
       participantIds: options.participantIds,
@@ -172,6 +185,7 @@ class CombatService
   serialize(): CombatState {
     return {
       enemyName: this._enemyName,
+      enemyNpcId: this._enemyNpcId,
       enemyHp: this._enemyHp,
       enemyMaxHp: this._enemyMaxHp,
       participantIds: [...this._participantIds],
@@ -184,6 +198,7 @@ class CombatService
 
   hydrate(data: CombatState): void {
     this._enemyName = data.enemyName;
+    this._enemyNpcId = data.enemyNpcId ?? '';
     this._enemyHp = data.enemyHp;
     this._enemyMaxHp = data.enemyMaxHp;
     this._participantIds = [...data.participantIds];

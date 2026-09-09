@@ -14,6 +14,14 @@
 services:
   text:
     image: ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:0d23372c0fc7733bb8a937ab46faeb0ba7c64c00889626098b8ab75e68f8ae7c
+    # Podman's external `docker compose` provider silently drops the
+    # `deploy.resources.reservations.devices` GPU block below (verified
+    # 2026-09-08), so sd/llama containers fell back to the CPU backend even
+    # though this is the CUDA override. The explicit CDI `devices` line is
+    # what Podman honours; real Docker still uses the `deploy` block. Keep
+    # both — each engine ignores the form it does not support.
+    devices:
+      - nvidia.com/gpu=all
     deploy:
       resources:
         reservations:
@@ -24,6 +32,11 @@ services:
 
   image:
     image: ghcr.io/leejet/stable-diffusion.cpp:master-cuda@sha256:13a2b7c94d800492661ff4885d85396f0a53ced267e3cbb1c7847be6ae4656be
+    # CDI device line: Podman's external compose provider ignores the
+    # `deploy` GPU block below (see `text`), so without this sd-server ran
+    # on the CPU backend despite the CUDA image. Keep both for Podman/Docker.
+    devices:
+      - nvidia.com/gpu=all
     deploy:
       resources:
         reservations:

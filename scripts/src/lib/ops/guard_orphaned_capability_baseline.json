@@ -400,7 +400,7 @@
     ]
   },
   "apps/frontend/client/src/lib/services/expression/expression_service.svelte.ts": {
-    "orphaned": ["ExpressionService.getEntry", "ExpressionServiceInterface"]
+    "orphaned": ["ExpressionServiceInterface"]
   },
   "apps/frontend/client/src/lib/services/game/equipment_service.svelte.ts": {
     "orphaned": ["EquipmentServiceInterface", "EquipmentServiceOptions"]

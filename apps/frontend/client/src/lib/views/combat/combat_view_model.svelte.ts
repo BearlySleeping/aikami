@@ -11,6 +11,7 @@ import {
   type CombatActionIntent,
   CombatActionSchema,
 } from '$lib/data/ai_prompts/combat_action_schema';
+import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import {
   audioService,
   diceService,
@@ -18,6 +19,7 @@ import {
   getExpressionAssetResolver,
   imageGenerationService,
   inventoryService,
+  playerStateService,
   playSceneBgm,
   resolveAudioTrackUrl,
   textGenerationService,
@@ -205,6 +207,12 @@ export type CombatViewModelInterface = BaseViewModelInterface & {
    */
   dismissResult(): void;
 
+  /** Dismisses the combat overlay when its backdrop is clicked. */
+  handleBackdropClick(event: MouseEvent): void;
+
+  /** Dismisses the combat overlay when Escape is pressed. */
+  handleDialogKeyDown(event: KeyboardEvent): void;
+
   /** Whether the attack button should be disabled (waiting for engine response). */
   readonly isAttacking: boolean;
 
@@ -382,6 +390,9 @@ export class CombatViewModel
 
   enemyName = $state('');
 
+  /** NPC id of the enemy combatant — used to resolve the enemy portrait (C-500). */
+  enemyNpcId = $state('');
+
   /** Display name for the player character. */
   playerName = $state('Player');
 
@@ -390,11 +401,19 @@ export class CombatViewModel
 
   isPlayerTurn = $state(true);
 
-  /** Portrait image URL for the player character. */
-  playerPortraitUrl = $state('/assets/images/combat/player_portrait.webp');
+  /** Portrait image URL for the player character — resolved via the asset manager (C-500). */
+  get playerPortraitUrl(): string {
+    return resolvePlayerAvatarUrl({ classId: playerStateService.classId });
+  }
 
-  /** Portrait image URL for the enemy character. */
-  enemyPortraitUrl = $state('/assets/images/combat/enemy_portrait.webp');
+  /** Portrait image URL for the enemy character — resolved via the asset manager (C-500). */
+  get enemyPortraitUrl(): string {
+    return resolveNpcAvatarUrl({
+      npcId: this.enemyNpcId,
+      npcName: this.enemyName,
+      expression: this.enemyExpression,
+    });
+  }
 
   /** Current expression for the player character. */
   playerExpression: ExpressionId = $state('neutral');
@@ -596,6 +615,23 @@ export class CombatViewModel
     this.combatResult = null;
   }
 
+  /** @inheritdoc */
+  handleBackdropClick(event: MouseEvent): void {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+    this.dismissResult();
+  }
+
+  /** @inheritdoc */
+  handleDialogKeyDown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    event.preventDefault();
+    this.dismissResult();
+  }
+
   /** Cached bridge instance — created lazily on first use. */
   private _bridge: EngineBridge | undefined;
 
@@ -664,7 +700,7 @@ export class CombatViewModel
       this.activeEntities = event.participantIds;
       this.currentTurnEntity = event.firstTurnEntityId;
       this.totalParticipants = event.participantIds.length;
-      this.enemyName = event.enemyName ?? 'Unknown Enemy';
+      this.enemyName = event.enemyName || 'Unknown Enemy';
       this.enemyHp = event.enemyHp ?? 80;
       this.enemyMaxHp = event.enemyMaxHp ?? 80;
       this.enemyEntityId = event.enemyId ?? null;
@@ -929,6 +965,7 @@ export class CombatViewModel
     this.enemyHp = 80;
     this.enemyMaxHp = 80;
     this.enemyName = '';
+    this.enemyNpcId = '';
     this.enemyEntityId = null;
     this.isPlayerTurn = true;
     this.isAttacking = false;
@@ -937,8 +974,6 @@ export class CombatViewModel
     this.combatBackgroundImageUrl = null;
     this.isPlayerTakingDamage = false;
     this.isEnemyTakingDamage = false;
-    this.playerPortraitUrl = '/assets/images/combat/player_portrait.webp';
-    this.enemyPortraitUrl = '/assets/images/combat/enemy_portrait.webp';
     this.playerExpression = 'neutral';
     this.enemyExpression = 'neutral';
     this.combatLog = [];
