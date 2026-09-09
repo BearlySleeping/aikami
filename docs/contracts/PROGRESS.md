@@ -2,7 +2,7 @@
 
 ## Status Summary (Auto-generated: 2026-09-09)
 
-**253 active (0 without contract file), 119 archived, 0 duplicates**
+**254 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -251,7 +251,8 @@
 | C-487 | Free Text Skill Checks Honour The Character Sheet | 🛠️ implemented | — | v2 | full |
 | C-488 | Authored Npc Identity In The Content Pack | 🛠️ implemented | — | v2 | full |
 | C-489 | One Authority Path For Consequences | 🛠️ implemented | — | v2 | full |
-| C-490 | Transcript Branching Must Not Imply Rewinding The World | 👍 approved | — | v2 | thin |
+| C-490 | Transcript Branching Must Not Imply Rewinding The World | 🛠️ implemented | — | v2 | thin |
+| C-491 | Committed Narrative Event Record | 📝 draft | — | v2 | full |
 | C-496 | Shared Visual Assets And Playback | 📝 draft | — | v2 | full |
 | C-499 | Dialogue Intent Envelope Extraction Resilience | 🛠️ implemented | ❓ `integrated` — production route `/game` | v2 | thin |
 | C-500 | Combat Overlay Rendering And Engine Stall | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
