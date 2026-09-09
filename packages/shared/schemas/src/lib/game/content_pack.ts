@@ -102,6 +102,49 @@ export const ContentPackNpcPersonalitySchema = Type.Object(
 export type ContentPackNpcPersonality = Static<typeof ContentPackNpcPersonalitySchema>;
 
 // ---------------------------------------------------------------------------
+// Named appearance representation (C-504)
+// ---------------------------------------------------------------------------
+
+const AppearanceLayerRoleSchema = Type.Union([Type.Literal('front'), Type.Literal('behind')]);
+
+const NamedAppearanceComponentSchema = Type.Object({
+  /** Body/clothing slot name (e.g. "body", "hair", "torso"). */
+  slot: Type.String({ minLength: 1, description: 'LPC slot name' }),
+  /** Stable namespaced asset ID (e.g. "head/heads/human_male"). '' = intentionally empty. */
+  assetId: Type.String({ description: 'Stable namespaced asset ID' }),
+  /** Which side of the body this layer draws on. Defaults to 'front'. */
+  layerRole: Type.Optional(AppearanceLayerRoleSchema),
+});
+
+/**
+ * Versioned named appearance representation (C-504). Catalog position is never
+ * a durable identity; this carries slot + stable assetId + explicit layerRole.
+ */
+export const NamedAppearanceSchema = Type.Object(
+  {
+    formatVersion: Type.Literal(1, { description: 'Named appearance representation version' }),
+    components: Type.Array(NamedAppearanceComponentSchema, {
+      description: 'Base appearance layers',
+    }),
+    legacyProvenance: Type.Optional(
+      Type.Object({
+        source: Type.String({ description: 'Where the legacy record came from' }),
+        snapshot: Type.String({
+          description: 'Catalog-order snapshot the legacy indices were tied to',
+        }),
+        packId: Type.Optional(Type.String()),
+        npcId: Type.Optional(Type.String()),
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type NamedAppearance = Static<typeof NamedAppearanceSchema>;
+
+export type NamedAppearanceComponent = Static<typeof NamedAppearanceComponentSchema>;
+
+// ---------------------------------------------------------------------------
 // ContentPackNpcEntry — NPC definition in the pack
 // ---------------------------------------------------------------------------
 
@@ -115,6 +158,8 @@ export const ContentPackNpcEntrySchema = Type.Object(
     appearanceLayers: Type.Optional(
       Type.Array(Type.Number(), { description: 'LPC appearance layer IDs' }),
     ),
+    /** C-504: optional named appearance (slot + stable assetId + layerRole). */
+    appearance: Type.Optional(NamedAppearanceSchema),
     /** Whether this NPC is a vendor */
     isVendor: Type.Optional(Type.Boolean({ description: 'Whether this NPC is a vendor' })),
     /** Comma-separated item IDs e.g. "ironSword,healthPotion" */
@@ -881,6 +926,8 @@ export const PackConfigSchema = Type.Object({
       Type.Object({
         /** LPC appearance layer IDs (1-indexed variant numbers). */
         appearanceLayers: Type.Optional(Type.Array(Type.Number())),
+        /** C-504: named appearance projected for the worker boundary. */
+        appearance: Type.Optional(NamedAppearanceSchema),
       }),
       { description: 'NPC appearance definitions keyed by npcId' },
     ),

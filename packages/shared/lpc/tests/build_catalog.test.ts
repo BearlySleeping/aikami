@@ -122,3 +122,38 @@ describe('buildLpcCatalog', () => {
     expect(JSON.stringify(result1.slots)).toBe(JSON.stringify(result2.slots));
   });
 });
+
+describe('buildLpcCatalog — C-504 nested path + state reconstruction', () => {
+  test('full nested path segments resolve without duplication', () => {
+    const entries = [
+      // head/heads/human/female_elderly — nested tag must NOT become
+      // head/heads/human/human (the old Hub reconstruction duplicated it).
+      { tag: 'lpc:head:heads:human:female_elderly:walk', category: 'lpc', ext: 'webp' },
+      { tag: 'lpc:head:heads:human:female_elderly:spellcast', category: 'lpc', ext: 'webp' },
+      { tag: 'lpc:head:ears:avyon:skin_adult:walk', category: 'lpc', ext: 'webp' },
+      { tag: 'lpc:body:bodies_male:walk', category: 'lpc', ext: 'webp' },
+    ];
+
+    const result = buildLpcCatalog({ entries });
+    const headSlot = result.slots.find((s) => s.slot === 'head');
+    expect(headSlot).toBeDefined();
+    const variants = headSlot?.variants.map((v) => v.assetId) ?? [];
+
+    // No duplicated path segment.
+    expect(variants).toContain('head/heads/human/female_elderly');
+    expect(variants).toContain('head/ears/avyon/skin_adult');
+    expect(variants).not.toContain('head/heads/human/human');
+
+    // States are aggregated for the nested variant.
+    const nested = headSlot?.variants.find((v) => v.assetId === 'head/heads/human/female_elderly');
+    expect(nested?.states).toEqual(['spellcast', 'walk']);
+  });
+
+  test('state tag never bleeds into the assetId', () => {
+    const result = buildLpcCatalog({
+      entries: [{ tag: 'lpc:torso:clothes:robe_female:walk', category: 'lpc', ext: 'webp' }],
+    });
+    const torso = result.slots.find((s) => s.slot === 'torso');
+    expect(torso?.variants[0].assetId).toBe('torso/clothes/robe_female');
+  });
+});

@@ -602,6 +602,10 @@ class GameEngineService
                   ...(def.appearanceLayers === undefined
                     ? {}
                     : { appearanceLayers: def.appearanceLayers }),
+                  // C-504: named appearance carried for the worker boundary. The
+                  // worker normalizes it (slot + assetId + layerRole) to derived
+                  // layer IDs with the SAME catalog the main thread resolves.
+                  ...(def.appearance === undefined ? {} : { appearance: def.appearance }),
                 },
               ]),
             ),

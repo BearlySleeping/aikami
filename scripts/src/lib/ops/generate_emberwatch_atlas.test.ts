@@ -150,3 +150,90 @@ describe('C-378 AC-5 — atlas packer', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-504 — atlas alpha: terrain opaque, props/decor transparent outside art
+// ---------------------------------------------------------------------------
+
+describe('C-504 — atlas alpha', () => {
+  /** Content-local (lx, ly) alpha for a frame in the extruded atlas. */
+  const cellAlpha = (
+    rgba: Uint8Array,
+    width: number,
+    frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }>,
+    key: string,
+    lx: number,
+    ly: number,
+  ): number => {
+    const { x, y } = frames[key].frame;
+    const col = (x - ATLAS_PADDING) / ATLAS_CELL;
+    const row = (y - ATLAS_PADDING) / ATLAS_CELL;
+    const px = col * ATLAS_CELL + ATLAS_PADDING + lx;
+    const py = row * ATLAS_CELL + ATLAS_PADDING + ly;
+    return rgba[(py * width + px) * 4 + 3] ?? 0;
+  };
+
+  test('terrain frames are fully opaque', () => {
+    const { rgba, width, frames } = packAtlas();
+    for (const key of [
+      'grass.png',
+      'dirt.png',
+      'water.png',
+      'brick_wall.png',
+      'roof.png',
+      'dirt_0.png',
+    ]) {
+      expect(frames[key], key).toBeDefined();
+      for (let ly = 0; ly < ATLAS_TILE_SIZE; ly++) {
+        for (let lx = 0; lx < ATLAS_TILE_SIZE; lx++) {
+          const a = cellAlpha(rgba, width, frames, key, lx, ly);
+          expect(a, `${key} pixel (${lx},${ly}) alpha`).toBe(255);
+        }
+      }
+    }
+  });
+
+  test('prop/decor frames leave unpainted regions transparent', () => {
+    const { rgba, width, frames } = packAtlas();
+    // Standalone props sit on a transparent base now (no opaque substrate).
+    for (const key of [
+      'well.png',
+      'chest.png',
+      'barrel.png',
+      'crate.png',
+      'table.png',
+      'bed.png',
+      'candle.png',
+      'plant.png',
+      'anvil.png',
+    ]) {
+      expect(frames[key], key).toBeDefined();
+      // A corner away from the art is unpainted → transparent.
+      expect(cellAlpha(rgba, width, frames, key, 0, 0), `${key} unpainted corner`).toBe(0);
+      // The art itself is opaque (at least one painted pixel).
+      let painted = false;
+      for (let ly = 0; ly < ATLAS_TILE_SIZE && !painted; ly++) {
+        for (let lx = 0; lx < ATLAS_TILE_SIZE && !painted; lx++) {
+          if (cellAlpha(rgba, width, frames, key, lx, ly) === 255) {
+            painted = true;
+          }
+        }
+      }
+      expect(painted, `${key} has opaque art`).toBe(true);
+    }
+  });
+
+  test('the 1px border preserves alpha (transparent prop edges stay transparent)', () => {
+    const { rgba, width, frames } = packAtlas();
+    const well = frames['well.png'].frame;
+    const col = (well.x - ATLAS_PADDING) / ATLAS_CELL;
+    const row = (well.y - ATLAS_PADDING) / ATLAS_CELL;
+    const x0 = col * ATLAS_CELL + ATLAS_PADDING;
+    const y0 = row * ATLAS_CELL + ATLAS_PADDING;
+    const idx = (px: number, py: number): number => (py * width + px) * 4;
+    // The (0,0) content corner of the well is transparent; its top-left
+    // border duplicate must be transparent too (RGBA, not forced 255).
+    expect(rgba[idx(x0, y0) + 3]).toBe(0);
+    expect(rgba[idx(x0 - 1, y0 - 1) + 3]).toBe(0);
+  });
+});

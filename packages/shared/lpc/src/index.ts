@@ -33,7 +33,29 @@ export {
   resolveLayerDepth,
   sortLayersByDepth,
 } from './lib/layer_order.ts';
+export {
+  LEGACY_CATALOG_SNAPSHOT,
+  LEGACY_CATALOG_SNAPSHOT_ID,
+} from './lib/legacy_catalog_snapshot.ts';
 export { LEGACY_INDEX_REMAP } from './lib/legacy_remap.ts';
+export {
+  type AppearanceCatalog,
+  type AppearanceCatalogSlot,
+  type AppearanceDiagnostic,
+  type AppearanceNormalizationStatus,
+  isNamedAppearance,
+  legacyToNamed,
+  type NamedAppearance,
+  type NamedAppearanceComponent,
+  type NamedAppearanceProvenance,
+  namedToLayerIds,
+  normalizeLayerRole,
+  normalizeNamed,
+  normalizePersonaRecipe,
+  type ResolveNpcAppearanceOptions,
+  type ResolveNpcAppearanceResult,
+  resolveNpcAppearance,
+} from './lib/named_appearance.ts';
 export {
   type LpcCellFamily,
   type LpcSheetGeometry,
