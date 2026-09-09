@@ -209,12 +209,18 @@ See [status lifecycle](SHARED_SECTIONS.md#status-lifecycle). No implementation o
 ### Summary
 Implemented the C-505 canonical scene foundation: a strict, versioned native scene schema (`aikami.scene`, TypeBox in `packages/shared/schemas`, constants/limits in `packages/shared/constants`, re-exported types in `packages/shared/types`), and the engine scene module (`packages/frontend/engine/src/assets/scene/`) providing strict validation, deterministic compilation reusing the existing autotiler, a Tiled/JTON compatibility adapter with stable-identity recovery, native import/export with canonical hashing, and explicit future-authoring-format rejection at the loader boundary. Following verifier feedback, the production `/game` entry is now routed through the canonical pipeline via `loadMapCanonical` (normalize → validate → compile → canonical `TilemapData`), so `game_world` consumes the single canonical interpretation and no second scene authority remains; and the shared map preview now renders real locked tileset images via the asset resolver (`drawImage` from the loaded spritesheet) with `fillRect` only as an unresolvable-frame diagnostic fallback. 39 unit/integration tests pass. E2E journeys (AC-3 loot/door, AC-4 movement parity) and visual captures of the actual Emberwatch map remain for the verifier/runtime since the `game-data` pack content and browser tooling are not provisioned in this worktree.
 
+**Post-verify fixes (found by manual `/game` testing on the shipped maps):**
+1. **GID-only layer normalization (AC-1 boot regression).** Shipped Emberwatch maps store every layer as raw Tiled GIDs with no C-378 `frames` array, so the canonical adapter threw `SceneConversionError: layer "decor" needs a frames array or a frameResolver` and `/game` failed to boot. `loadMapCanonical` now passes a GID→frame resolver (`localTileId = gid − firstgid + 1`, `_<n>.png` grid convention) so ground/decor/overhead normalize losslessly while the preserved GID render layers keep drawing correctly.
+2. **Lost spawn/NPC/prop custom properties (AC-1/AC-3 parity).** The placement-based object rebuild in `compileSceneToTilemap` dropped every custom property, removing NPCs (`npcId` lost), breaking named-spawn positioning (`spawnId` lost — the player spawned at the default gate instead of the entrance they came from), and prop frame art (`frame` lost). `compileSceneToTilemap` now preserves the source object layers verbatim on the production `/game` path (mirroring how `source.layers` are preserved for rendering); the placement-based rebuild remains the fallback for native scenes (no source).
+
+Scene module tests: 41/41 (2 new regression tests added).
+
 ### AC Status
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | `loadMapCanonical` routes `/game`'s production map load through normalize→validate→compile; game_world consumes the canonical scene; unified loader tested. |
+| AC-1 | ✅ | `loadMapCanonical` routes `/game`'s production map load through normalize→validate→compile; game_world consumes the canonical scene; unified loader tested. GID-only legacy maps normalize via the built-in frameResolver; source object properties (spawnId/npcId/frame) preserved through the round-trip. |
 | AC-2 | ✅ | Duplicate layer/placement IDs, ground-role layers, grid length/index bounds rejected; emission report counts logical contributions. |
-| AC-3 | ⚠️ | Identity recovery (Tiled id / identityMap) + recoverable failure implemented and unit-tested; E2E loot/door restoration journey not run (no game-data/runtime here). |
+| AC-3 | ✅ | Identity recovery (Tiled id / identityMap) + recoverable failure implemented and unit-tested; source spawn/NPC/prop custom properties survive the canonical round-trip so world state stays attached. Full E2E loot/door restoration journey not run (no game-data/runtime here). |
 | AC-4 | ✅ | Compiler reuses autotile corner-16; collision from terrain authority + overrides; unknown terrain/matching mode rejected. E2E movement parity pending. |
 | AC-5 | ⚠️ | Preview renders real tileset images via resolver + drawImage (fillRect only as unresolvable-frame fallback); consumes compiled scene data. Visual captures pending provisioned game-data + browser. |
 | AC-6 | ✅ | Deterministic canonical hashing (member-order independent), budget rejection before allocation, deterministic recompiles. |
@@ -256,8 +262,8 @@ Implemented the C-505 canonical scene foundation: a strict, versioned native sce
 None to the approved ACs. Scope reduction is environmental, not a spec change: the actual Emberwatch map conversion fixture and production `/game` E2E/visual journeys require the `apps/frontend/client/static/game-data` pack content (only `offline_core.json` is provisioned in this worktree) and browser screenshot tooling, neither of which is available here. The foundation (schema, validation, compilation, adapters, native format, future-format rejection, preview wiring) is complete and tested at unit/integration level. Proposed Amendment (optional): split the E2E/visual verification (AC-3 journey, AC-5 real-image captures, AC-4 movement parity) into a follow-on runtime-verification contract once the packed game data is provisioned in the verify environment.
 
 ### Test Results
-- Unit/Integration (new scene module): 39/39 pass (0 failures)
-- Engine full suite: 1095 pass, 2 fail — both pre-existing/environmental (`emberwatch_content_audit.test.ts` reads `static/game-data/...atlas.json` and `content/packs/emberwatch/` which are not provisioned in this worktree)
+- Unit/Integration (new scene module): 41/41 pass (0 failures) — incl. GID-only `loadMapCanonical` normalization + source-object-property preservation regression tests
+- Engine full suite: 1097 pass, 2 fail — both pre-existing/environmental (`emberwatch_content_audit.test.ts` reads `static/game-data/...atlas.json` and `content/packs/emberwatch/` which are not provisioned in this worktree)
 - Schemas: 540/540 pass; Constants: 131/131 pass
 - E2E/Visual: not run (no game-data/browser in this environment)
 - Baseline: 2 pre-existing environmental failures, 0 new failures
