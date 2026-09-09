@@ -254,7 +254,7 @@
 | C-490 | Transcript Branching Must Not Imply Rewinding The World | 🛠️ implemented | — | v2 | thin |
 | C-491 | Committed Narrative Event Record | 🛠️ implemented | — | v2 | full |
 | C-492 | Memory Retrieval Correctness And Production Wiring | 👍 approved | — | v2 | full |
-| C-493 | Wire Group Scenes Into The Production Party Path | 📝 draft | — | v2 | thin |
+| C-493 | Wire Group Scenes Into The Production Party Path | 👍 approved | — | v2 | thin |
 | C-494 | One Companion Who Reacts | 📝 draft | — | v2 | full |
 | C-495 | Emberwatch Dramatic Structure | 📝 draft | — | v2 | full |
 | C-496 | Shared Visual Assets And Playback | 📝 draft | — | v2 | full |
@@ -263,9 +263,9 @@
 | C-501 | Dialogue Slash Commands | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
 | C-502 | Minimap Hud | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
 | C-503 | Quest Marker Hud | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
-| C-504 | Stable Character Appearance Identity | 📝 draft | — | v2 | full |
-| C-505 | Canonical Scene Data And Authoring Boundary | 📝 draft | — | v2 | full |
-| C-506 | Emberwatch Visual Readability | 📝 draft | — | v2 | thin |
+| C-504 | Stable Character Appearance Identity | 🛠️ implemented | — | v2 | full |
+| C-505 | Canonical Scene Data And Authoring Boundary | 🛠️ implemented | — | v2 | full |
+| C-506 | Emberwatch Visual Readability | 🛠️ implemented | — | v2 | thin |
 
 ---
 

@@ -762,7 +762,6 @@ export const localServicesMockBase = () => ({
   gmPromptService: _createServiceStub(),
   memoryRetrievalService: Object.assign(_createServiceStub(), {
     query: mock(async () => []),
-    retrieveForNpc: mock(async () => []),
   }),
   messageBranchStore: _createServiceStub(),
   trackRegistryService: _createServiceStub(),

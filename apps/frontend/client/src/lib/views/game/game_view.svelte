@@ -22,18 +22,6 @@ const { viewModel }: Props = $props();
 <svelte:window onkeydown={(e) => viewModel.handleKeyDown(e)} />
 
 <BaseViewModelContainer {viewModel} fillHeight={true}>
-  <!--
-    Memory-retrieval readiness (C-492 AC-2) — inert, visually-hidden test hook
-    whose attribute reflects whether the post-hydration memory index is ready.
-    Never alters production behaviour; used by the AC-3 E2E.
-  -->
-  <div
-    data-testid="game-boot-memory-ready"
-    data-memory-ready={viewModel.memoryReady}
-    class="hidden"
-    aria-hidden="true"
-  ></div>
-
   <div
     class="w-screen h-screen overflow-hidden"
     class:grid={viewModel.isCombat}

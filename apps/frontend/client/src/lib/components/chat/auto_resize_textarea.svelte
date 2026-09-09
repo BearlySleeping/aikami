@@ -20,8 +20,6 @@ type Props = {
   disabled?: boolean;
   /** CSS class string for additional styling. */
   class?: string;
-  /** Optional data-testid attribute (test hook — inert). */
-  testId?: string;
   /** Ref callback when the textarea DOM element is mounted. */
   textareaRef?: (el: HTMLTextAreaElement | null) => void;
 };
@@ -33,7 +31,6 @@ const {
   placeholder = 'Type your message...',
   disabled = false,
   class: classProp = '',
-  testId,
   textareaRef,
 }: Props = $props();
 
@@ -67,7 +64,6 @@ const handleKeyDown = (e: KeyboardEvent) => {
   bind:this={textareaElement}
   {value}
   oninput={handleInput}
-  data-testid={testId}
   class="textarea textarea-bordered resize-y text-sm field-sizing-content {classProp}"
   style:max-height="calc(1.5em * {MAX_ROWS} + 1rem)"
   style:min-height="2.5rem"

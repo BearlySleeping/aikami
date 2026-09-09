@@ -20,8 +20,7 @@ const idleDetectionServiceMock = {
 const gameOverlayServiceMock = { activeOverlay: 'NONE' };
 const worldStateServiceMock: {
   worldGenOutput: { npcs: Array<{ name: string }> };
-  currentLocation: { npcIds: string[] } | undefined;
-} = { worldGenOutput: { npcs: [] }, currentLocation: { npcIds: [] } };
+} = { worldGenOutput: { npcs: [] } };
 
 mock.module('$services', () => ({
   idleDetectionService: idleDetectionServiceMock,
@@ -85,7 +84,6 @@ beforeEach(async () => {
   setSystemTime(new Date('2026-09-02T12:00:00Z'));
   scheduleTalkativeness.clear();
   worldStateServiceMock.worldGenOutput.npcs = [];
-  worldStateServiceMock.currentLocation = { npcIds: [] };
   gameOverlayServiceMock.activeOverlay = 'NONE';
   idleDetectionServiceMock.isDnd = false;
   chatServiceMock.isTyping = false;
@@ -259,21 +257,11 @@ describe('AutonomousMessageService — AC-3 (Multi-NPC Response)', () => {
 describe('AutonomousMessageService — AC-4 (Idle-Chart Regression Guard)', () => {
   it('should still use single-NPC selection for idle ticks', async () => {
     const messageAdded = createDeferred();
-    // C-493 AC-2: idle discovery reads the authored scene cast
-    // (currentLocation.npcIds), not worldGenOutput.
-    worldStateServiceMock.currentLocation = { npcIds: ['npc_idle'] };
-    const generateMultiNpcResponsesSpy = vi.spyOn(
-      autonomousMessageService,
-      'generateMultiNpcResponses',
-    );
+    worldStateServiceMock.worldGenOutput.npcs = [{ name: 'npc_idle' }];
     chatServiceMock.addMessage.mockImplementation(() => {
       messageAdded.resolve();
     });
 
-    // Advance the clock past any stale _lastTickTime from prior tests so the
-    // first interval tick fires exactly once (MIN_TICK_INTERVAL guard won't
-    // skip it and no async race double-fires).
-    setSystemTime(new Date('2026-09-10T00:00:00Z'));
     autonomousMessageService.start();
     expect(autonomousMessageService.isRunning).toBe(true);
     vi.advanceTimersByTime(DEFAULT_POLLER_INTERVAL_MS);
@@ -284,8 +272,6 @@ describe('AutonomousMessageService — AC-4 (Idle-Chart Regression Guard)', () =
     expect(chatServiceMock.addMessage).toHaveBeenCalledWith(
       expect.objectContaining({ text: 'NPC response' }),
     );
-    // AC-4: idle ticks must NOT route through the group-turn path.
-    expect(generateMultiNpcResponsesSpy).not.toHaveBeenCalled();
     autonomousMessageService.stop();
     expect(autonomousMessageService.isRunning).toBe(false);
   });
@@ -299,43 +285,6 @@ describe('AutonomousMessageService — AC-4 (Idle-Chart Regression Guard)', () =
     expect(autonomousMessageService.isRunning).toBe(false);
     autonomousMessageService.start();
     expect(autonomousMessageService.isRunning).toBe(true);
-    autonomousMessageService.stop();
-  });
-});
-
-describe('AutonomousMessageService — AC-2 (production scene-cast discovery)', () => {
-  it('does NOT discover NPCs from worldGenOutput when the scene cast is empty', async () => {
-    // worldGenOutput carries an NPC, but the authored scene cast is empty —
-    // the poller must not fire because discovery reads the scene cast.
-    worldStateServiceMock.worldGenOutput.npcs = [{ name: 'npc_worldgen' }];
-    worldStateServiceMock.currentLocation = { npcIds: [] };
-
-    autonomousMessageService.start();
-    vi.advanceTimersByTime(DEFAULT_POLLER_INTERVAL_MS);
-    await Promise.resolve();
-
-    expect(chatServiceMock.addMessage).not.toHaveBeenCalled();
-    autonomousMessageService.stop();
-  });
-
-  it('discovers NPCs from the authored scene cast (currentLocation.npcIds)', async () => {
-    const messageAdded = createDeferred();
-    // worldGenOutput is empty — the scene cast is the sole source.
-    worldStateServiceMock.worldGenOutput.npcs = [];
-    worldStateServiceMock.currentLocation = { npcIds: ['npc_scene'] };
-    chatServiceMock.addMessage.mockImplementation(() => {
-      messageAdded.resolve();
-    });
-
-    // Same clock-forward trick as the AC-4 idle test — guarantees the first
-    // interval tick fires exactly once. Uses a DISTINCT date from the AC-4
-    // test so the accumulated _lastTickTime never equals this test's clock.
-    setSystemTime(new Date('2026-09-11T00:00:00Z'));
-    autonomousMessageService.start();
-    vi.advanceTimersByTime(DEFAULT_POLLER_INTERVAL_MS);
-    await messageAdded.promise;
-
-    expect(chatServiceMock.addMessage).toHaveBeenCalledTimes(1);
     autonomousMessageService.stop();
   });
 });

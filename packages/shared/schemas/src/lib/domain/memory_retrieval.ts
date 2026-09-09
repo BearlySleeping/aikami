@@ -17,12 +17,7 @@ export const MemoryQuerySchema = Type.Object({
   text: Type.String({ minLength: 1, description: 'Query text' }),
   /** Scope filter — which source types to search. Defaults to "all". */
   scope: Type.Optional(
-    Type.Union([
-      Type.Literal('lore'),
-      Type.Literal('history'),
-      Type.Literal('all'),
-      Type.Literal('npc'),
-    ]),
+    Type.Union([Type.Literal('lore'), Type.Literal('history'), Type.Literal('all')]),
   ),
   /** Maximum number of results to return. Defaults to 10. */
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
@@ -39,7 +34,6 @@ export const MemoryResultSchema = Type.Object({
     Type.Literal('session_summary'),
     Type.Literal('relationship'),
     Type.Literal('faction'),
-    Type.Literal('narrative_event'),
   ]),
   /** ID of the source entry (entry ID, session ID, character ID, faction ID). */
   sourceId: Type.String({ description: 'Source entry identifier' }),
@@ -62,7 +56,6 @@ export const MemoryIndexableSchema = Type.Object({
     Type.Literal('session_summary'),
     Type.Literal('relationship'),
     Type.Literal('faction'),
-    Type.Literal('narrative_event'),
   ]),
   /** Unique identifier within the source type. */
   sourceId: Type.String({ minLength: 1 }),
@@ -82,16 +75,11 @@ export const InMemoryIndexEntrySchema = Type.Object({
     Type.Literal('session_summary'),
     Type.Literal('relationship'),
     Type.Literal('faction'),
-    Type.Literal('narrative_event'),
   ]),
   sourceId: Type.String(),
   content: Type.String(),
-  /**
-   * Legacy embedding vector — no longer produced or read (C-492 keyword
-   * retrieval). Retained as optional for schema back-compat; the index is
-   * ephemeral and rebuilt, so this is never persisted into a save.
-   */
-  embedding: Type.Optional(Type.Array(Type.Number())),
+  /** Float32Array serialized as number[] for JSON persistence. */
+  embedding: Type.Array(Type.Number()),
   metadata: Type.Optional(Type.Record(Type.String(), Type.String())),
 });
 

@@ -46,8 +46,6 @@ type Props = {
   extras?: Snippet;
   /** Content rendered above the input (choices, chips). */
   above?: Snippet;
-  /** Optional data-testid forwarded to the textarea (test hook — inert). */
-  testId?: string;
   /** Ref callback when the textarea mounts. */
   textareaRef?: (el: HTMLTextAreaElement | null) => void;
 };
@@ -69,7 +67,6 @@ const {
   onKeyDown,
   extras,
   above,
-  testId,
   textareaRef,
 }: Props = $props();
 
@@ -103,7 +100,6 @@ const handleActivate = () => {
       {placeholder}
       {disabled}
       class="w-full"
-      {testId}
       {textareaRef}
     />
   </div>

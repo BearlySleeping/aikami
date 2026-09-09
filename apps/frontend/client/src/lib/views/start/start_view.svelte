@@ -57,7 +57,7 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
         <!-- Title -->
         <header class="animate-rise motion-reduce:animate-none mb-8 text-center">
           <h1
-            class="bg-gradient-to-b from-base-content via-base-content to-primary bg-clip-text pl-[0.12em] text-6xl font-bold tracking-[0.12em] text-transparent sm:text-7xl"
+            class="bg-gradient-to-b from-base-content via-base-content to-primary bg-clip-text pl-[0.12em] text-6xl font-bold tracking-[0.12em] sm:text-7xl"
           >
             Aikami
           </h1>

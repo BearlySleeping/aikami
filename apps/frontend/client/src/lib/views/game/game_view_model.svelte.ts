@@ -10,7 +10,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { gameBootService, gameCompositionRoot, gameOverlayService } from '$services';
+import { gameCompositionRoot } from '$services';
 import type { CombatViewModelInterface } from '../combat/combat_view_model.svelte';
 import type { GameCanvasViewModelInterface } from './canvas/game_canvas_view_model.svelte';
 import { getGameCanvasViewModel } from './canvas/game_canvas_view_model.svelte';
@@ -28,8 +28,6 @@ export type GameViewModelInterface = BaseViewModelInterface & {
   readonly combatViewModel: CombatViewModelInterface | undefined;
   readonly canvasViewModel: GameCanvasViewModelInterface;
   readonly uiViewModel: GameUIViewModelInterface;
-  /** True once the post-hydration boot hook has initialised the memory index (C-492 AC-2). */
-  readonly memoryReady: boolean;
 
   handleKeyDown(event: KeyboardEvent): void;
 };
@@ -49,12 +47,6 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     getGameUIViewModel({ className: 'GameUIViewModel' }),
   );
 
-  /**
-   * Bound handler for the `aikami:quick-save` E2E hook (C-492 AC-3). Assigned
-   * in initialize(), cleared in dispose(); null while no listener is registered.
-   */
-  private _quickSaveHandler: (() => void) | null = null;
-
   get isCombat(): boolean {
     return this.canvasViewModel.isCombat;
   }
@@ -63,22 +55,9 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
     return this.uiViewModel.combatViewModel;
   }
 
-  /** True once the post-hydration boot hook has initialised the memory index (C-492 AC-2). */
-  get memoryReady(): boolean {
-    return gameBootService.memoryReady;
-  }
-
   // ── Lifecycle ──
 
   async initialize(): Promise<void> {
-    // E2E save hook (C-492 AC-3): a document-level `aikami:quick-save` event
-    // drives the real persistence path so tests can save+reload the campaign
-    // without UI chrome. Inert in normal play.
-    this._quickSaveHandler = () => {
-      void this._saveForE2e();
-    };
-    window.addEventListener('aikami:quick-save', this._quickSaveHandler);
-
     // Boot the composition root — idempotent, safe to call across remounts.
     await gameCompositionRoot.initialize();
 
@@ -97,25 +76,10 @@ class GameViewModel extends BaseViewModel<GameViewModelOptions> implements GameV
   }
 
   override async dispose(): Promise<void> {
-    if (this._quickSaveHandler) {
-      window.removeEventListener('aikami:quick-save', this._quickSaveHandler);
-      this._quickSaveHandler = null;
-    }
     await this.canvasViewModel.dispose();
     await this.uiViewModel.dispose();
     await gameCompositionRoot.dispose();
     await super.dispose();
-  }
-
-  /** Completes the E2E quick-save hook before publishing its completion signal. */
-  private async _saveForE2e(): Promise<void> {
-    try {
-      await gameOverlayService.saveGame();
-      window.dispatchEvent(new Event('aikami:quick-save-complete'));
-    } catch (error) {
-      this.error('_saveForE2e:failed', { error: String(error) });
-      window.dispatchEvent(new Event('aikami:quick-save-failed'));
-    }
   }
 }
 

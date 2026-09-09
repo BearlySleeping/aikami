@@ -57,7 +57,7 @@ const approvalBadgeClass = $derived.by(() => {
         {#each viewModel.messages as message (message.id)}
           <div class="chat {message.role === 'player' ? 'chat-end' : 'chat-start'}">
             <div class="chat-header mb-0.5 text-xs text-base-content/50">
-              {message.role === 'player' ? 'You' : (message.senderName ?? viewModel.npcName)}
+              {message.role === 'player' ? 'You' : viewModel.npcName}
             </div>
             <div
               class="chat-bubble text-sm {message.role === 'player'

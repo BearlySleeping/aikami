@@ -23,7 +23,6 @@ import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
-import { memoryRetrievalService } from '../memory/memory_retrieval_service.svelte';
 import { personaService } from '../persona/persona_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
@@ -78,9 +77,6 @@ export type GameBootServiceInterface = BaseFrontendClassInterface & {
   /** Whether a boot attempt is currently in flight. */
   readonly isBooting: boolean;
 
-  /** Whether the post-hydration memory index has finished rebuilding. */
-  readonly memoryReady: boolean;
-
   /** Starts a new boot attempt. No-op if already booting. */
   boot(input: GameBootInput): Promise<GameBootResult>;
 
@@ -115,17 +111,11 @@ class GameBootService
   /** Whether a boot attempt is in flight. */
   isBooting = $state(false);
 
-  /** Becomes true only after the post-hydration memory index finishes rebuilding. */
-  memoryReady = $state(false);
-
   /** Cancellation token — set to true to abort the current boot. */
   private _cancelled = false;
 
   /** Generation token for the current boot attempt — incremented on each new boot. */
   private _bootGeneration = 0;
-
-  /** Invalidates a pending memory-index completion when boot state is reset. */
-  private _memoryGeneration = 0;
 
   /** The current boot input — valid only during a boot attempt. */
   private _input: GameBootInput | undefined;
@@ -186,10 +176,8 @@ class GameBootService
     this.isBooting = true;
     this._cancelled = false;
     this._bootGeneration++;
-    this._memoryGeneration++;
     this._input = input;
     this._resetProgress();
-    this.memoryReady = false;
     // Clear the previous boot's recipe so _seedBaseOutfit can never reuse it
     // (C-374/C-417): each boot attempt must derive its own base outfit.
     this._effectiveRecipe = undefined;
@@ -341,8 +329,6 @@ class GameBootService
     this.isBooting = false;
     this._teardownEngineResources();
     this._setStage('idle', 0);
-    this._memoryGeneration++;
-    this.memoryReady = false;
 
     // Clear content pack cache so a fixed manifest is re-fetched
     if (this._clearContentPackCache) {
@@ -357,12 +343,10 @@ class GameBootService
     this.cancelBoot();
     this._teardownEngineResources();
     this._setStage('idle', 0);
-    this._memoryGeneration++;
     this.lastResult = undefined;
     this._campaign = undefined;
     this._persona = undefined;
     this._effectiveRecipe = undefined;
-    this.memoryReady = false;
   }
 
   // ── Stage runners ──
@@ -1149,36 +1133,8 @@ class GameBootService
     // Re-lock input after hydration completes
     this._gameWorld.setInputLocked(true);
 
-    // Post-hydration, non-blocking memory initialisation (C-492 AC-2). Hooked
-    // here — AFTER hydrateAllServices — so the index reads the hydrated
-    // narrativeEventService.events rather than an empty pre-hydration list.
-    // Fire-and-forget: boot does not await it, and a failure logs + continues.
-    this._startMemoryRetrieval(generation);
-
     const elapsed = performance.now() - t0;
     this.debug('stage:hydrating_snapshot:complete', { elapsedMs: elapsed });
-  }
-
-  /**
-   * Initialises the memory retrieval service and kicks off a background
-   * indexing pass. Non-blocking — never fails boot (C-492 AC-2).
-   */
-  private _startMemoryRetrieval(generation: number): void {
-    const memoryGeneration = this._memoryGeneration;
-    memoryRetrievalService
-      .init()
-      .then(async () => {
-        if (!memoryRetrievalService.isReady) {
-          return;
-        }
-        await memoryRetrievalService.backgroundIndexOnLoad();
-        if (generation === this._bootGeneration && memoryGeneration === this._memoryGeneration) {
-          this.memoryReady = true;
-        }
-      })
-      .catch((err) => {
-        this.warn('stage:hydrating_snapshot:memory-init-failed', { error: String(err) });
-      });
   }
 
   /**

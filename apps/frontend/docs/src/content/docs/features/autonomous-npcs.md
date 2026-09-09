@@ -20,19 +20,6 @@ not in combat or a dialogue, the autonomous message poller checks all available
 NPCs, picks one based on talkativeness weighting, and generates a short
 contextual message.
 
-The poller runs during **campaign play** — not just in development sandboxes —
-so idle NPC messages arrive while you play. It discovers candidates from the
-NPCs present in your current scene (the authored scene cast), and stops cleanly
-when you leave the game.
-
-## Talking to Your Party
-
-When you talk to a companion from the party roster and have **two or more
-companions in your party**, addressing them produces a **group turn**: multiple
-companions respond to the same message in one exchange, and each responder sees
-what the others just said, so the conversation stays coherent. With a single
-companion, the exchange falls back to a normal one-on-one conversation.
-
 ## Settings
 
 Configure autonomous behavior under **Settings → Game → Autonomous NPCs**:
