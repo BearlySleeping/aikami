@@ -8,17 +8,17 @@
 // preview and tests never depend on the wire document shape directly.
 
 export type {
+  SceneBakedSurface,
   SceneDocument,
   SceneExtent,
-  SceneTerrainSurface,
-  SceneBakedSurface,
-  SceneVisualLayer,
-  ScenePlacement,
+  SceneLayerRole,
   SceneNavigation,
   SceneNavigationOverride,
-  SceneTransition,
-  SceneLayerRole,
+  ScenePlacement,
   SceneTerrainMatchingMode,
+  SceneTerrainSurface,
+  SceneTransition,
+  SceneVisualLayer,
 } from '@aikami/schemas';
 
 export { SCENE_EMPTY_FRAME_INDEX } from '@aikami/schemas';
