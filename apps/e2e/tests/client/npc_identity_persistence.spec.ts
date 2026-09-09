@@ -15,6 +15,7 @@
 // `/assets-verify 1` session (which boots the worktree client + map routing).
 
 import { expect, type Page, test } from '@playwright/test';
+import { GamePage } from '$pom';
 
 type NpcAppearance = Record<string, string>;
 
@@ -46,11 +47,9 @@ test.describe('NPC appearance identity (C-504 AC-5)', () => {
   test('elder resolves to adult female body + elderly head on the starting map', async ({
     page,
   }) => {
+    const game = new GamePage(page);
     await page.goto('/game');
-    await page.waitForSelector('#game-canvas-container canvas', {
-      state: 'attached',
-      timeout: 30000,
-    });
+    await game.waitForEngineReady();
 
     const appearance = await waitForElder(page);
     // AC-1: the elder must NOT degrade to a child body/head (the legacy
@@ -63,18 +62,13 @@ test.describe('NPC appearance identity (C-504 AC-5)', () => {
   });
 
   test('elder identity is identical before and after reload', async ({ page }) => {
+    const game = new GamePage(page);
     await page.goto('/game');
-    await page.waitForSelector('#game-canvas-container canvas', {
-      state: 'attached',
-      timeout: 30000,
-    });
+    await game.waitForEngineReady();
     const before = await waitForElder(page);
 
     await page.reload();
-    await page.waitForSelector('#game-canvas-container canvas', {
-      state: 'attached',
-      timeout: 30000,
-    });
+    await game.waitForEngineReady();
     const after = await waitForElder(page);
 
     // Idempotent: reload must not change the resolved named identity.

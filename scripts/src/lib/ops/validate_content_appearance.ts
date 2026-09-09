@@ -33,8 +33,9 @@ import {
   buildLpcCatalog,
   LEGACY_CATALOG_SNAPSHOT,
   LEGACY_CATALOG_SNAPSHOT_ID,
+  LPC_SLOT_ORDER,
   type NamedAppearance,
-  namedToLayerIds,
+  type ResolveNpcAppearanceResult,
   resolveNpcAppearance,
 } from '@aikami/lpc';
 
@@ -74,6 +75,23 @@ export type AppearanceValidationError = {
   detail: string;
 };
 
+const diagnosticsToErrors = (options: {
+  result: ResolveNpcAppearanceResult;
+  packId: string;
+  npcId: string;
+  source: string;
+  snapshot?: string;
+}): AppearanceValidationError[] =>
+  options.result.diagnostics.map((diagnostic) => ({
+    packId: options.packId,
+    npcId: options.npcId,
+    slot: diagnostic.slot,
+    assetId: diagnostic.assetId,
+    source: options.source,
+    snapshot: options.snapshot,
+    detail: diagnostic.detail,
+  }));
+
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf-8')) as T;
 
 /**
@@ -91,77 +109,70 @@ export const validateNpcAppearance = (options: {
   const { packId, npcId, appearance, appearanceLayers, catalog } = options;
   const named = appearance;
   const legacy = appearanceLayers;
+  const errors: AppearanceValidationError[] = [];
 
-  // C-504: when the manifest retains BOTH the named appearance and the legacy
-  // array, assert they describe the SAME identity — they cannot drift.
-  const crossCheckErrors: AppearanceValidationError[] = [];
-  if (named && legacy && legacy.length > 0) {
-    const namedIds = namedToLayerIds(named, catalog).layerIds;
-    const legacyMigrated = resolveNpcAppearance({
-      input: legacy,
-      catalog,
-      snapshot: LEGACY_CATALOG_SNAPSHOT_ID,
-      source: 'manifest:appearanceLayers',
-      packId,
-      npcId,
-    });
-    if (legacyMigrated.layerIds) {
-      for (let i = 0; i < namedIds.length; i++) {
-        if ((namedIds[i] ?? 0) !== (legacyMigrated.layerIds[i] ?? 0)) {
-          crossCheckErrors.push({
-            packId,
-            npcId,
-            slot: ['body', 'hair', 'torso', 'legs', 'feet', 'head'][i],
-            source: 'manifest:appearance-vs-appearanceLayers',
-            snapshot: LEGACY_CATALOG_SNAPSHOT_ID,
-            detail:
-              'Named `appearance` and legacy `appearanceLayers` resolve to different layer IDs — the two representations have drifted.',
-          });
-        }
+  const namedResult = named
+    ? resolveNpcAppearance({
+        input: named,
+        catalog,
+        source: 'manifest:appearance',
+        packId,
+        npcId,
+      })
+    : undefined;
+  if (namedResult) {
+    errors.push(
+      ...diagnosticsToErrors({
+        result: namedResult,
+        packId,
+        npcId,
+        source: 'manifest:appearance',
+      }),
+    );
+  }
+
+  const legacyMigrated =
+    legacy !== undefined
+      ? resolveNpcAppearance({
+          input: legacy,
+          catalog,
+          snapshot: LEGACY_CATALOG_SNAPSHOT_ID,
+          source: 'manifest:appearanceLayers',
+          packId,
+          npcId,
+        })
+      : undefined;
+  if (legacyMigrated) {
+    errors.push(
+      ...diagnosticsToErrors({
+        result: legacyMigrated,
+        packId,
+        npcId,
+        source: 'manifest:appearanceLayers',
+        snapshot: LEGACY_CATALOG_SNAPSHOT_ID,
+      }),
+    );
+  }
+
+  // C-504: when the manifest retains BOTH representations, compare them only
+  // after each one independently passes normalization and catalog resolution.
+  if (namedResult?.layerIds && legacyMigrated?.layerIds) {
+    for (let index = 0; index < LPC_SLOT_ORDER.length; index++) {
+      if ((namedResult.layerIds[index] ?? 0) !== (legacyMigrated.layerIds[index] ?? 0)) {
+        errors.push({
+          packId,
+          npcId,
+          slot: LPC_SLOT_ORDER[index],
+          source: 'manifest:appearance-vs-appearanceLayers',
+          snapshot: LEGACY_CATALOG_SNAPSHOT_ID,
+          detail:
+            'Named `appearance` and legacy `appearanceLayers` resolve to different layer IDs — the two representations have drifted.',
+        });
       }
     }
   }
 
-  const result = resolveNpcAppearance({
-    input: named ?? legacy,
-    catalog,
-    snapshot: named ? undefined : LEGACY_CATALOG_SNAPSHOT_ID,
-    source: named ? 'manifest:appearance' : 'manifest:appearanceLayers',
-    packId,
-    npcId,
-  });
-
-  if (result.status === 'empty') {
-    return crossCheckErrors;
-  }
-  if (result.status === 'migrated' || result.status === 'named') {
-    // Migrated/named with zero diagnostics = runtime-valid.
-    return [
-      ...crossCheckErrors,
-      ...result.diagnostics.map((d) => ({
-        packId,
-        npcId,
-        slot: d.slot,
-        assetId: d.assetId,
-        source: named ? 'manifest:appearance' : 'manifest:appearanceLayers',
-        snapshot: named ? undefined : LEGACY_CATALOG_SNAPSHOT_ID,
-        detail: d.detail,
-      })),
-    ];
-  }
-  // unknown-provenance / invalid — every diagnostic is a hard error.
-  return [
-    ...crossCheckErrors,
-    ...result.diagnostics.map((d) => ({
-      packId,
-      npcId,
-      slot: d.slot,
-      assetId: d.assetId,
-      source: named ? 'manifest:appearance' : 'manifest:appearanceLayers',
-      snapshot: named ? undefined : LEGACY_CATALOG_SNAPSHOT_ID,
-      detail: d.detail,
-    })),
-  ];
+  return errors;
 };
 
 /**
@@ -196,7 +207,7 @@ export const validateContentAppearance = (): AppearanceValidationError[] => {
     for (const [npcId, entry] of Object.entries(manifest.npcs ?? {})) {
       const appearance = entry?.appearance;
       const appearanceLayers = entry?.appearanceLayers;
-      if (!appearance && (!appearanceLayers || appearanceLayers.length === 0)) {
+      if (!appearance && appearanceLayers === undefined) {
         continue; // No declared appearance — nothing to validate.
       }
       errors.push(

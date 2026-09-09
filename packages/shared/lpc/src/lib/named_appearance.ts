@@ -269,6 +269,27 @@ export const normalizeNamed = (
     layerRole: normalizeLayerRole(c.layerRole),
   }));
 
+  const seenSlots = new Set<string>();
+  for (const component of components) {
+    if (!LPC_SLOT_ORDER.some((slot) => slot === component.slot)) {
+      diagnostics.push({
+        entityId: options.entityId,
+        slot: component.slot,
+        assetId: component.assetId,
+        detail: `Named appearance uses unsupported slot "${component.slot}".`,
+      });
+    }
+    if (seenSlots.has(component.slot)) {
+      diagnostics.push({
+        entityId: options.entityId,
+        slot: component.slot,
+        assetId: component.assetId,
+        detail: `Named appearance contains duplicate slot "${component.slot}".`,
+      });
+    }
+    seenSlots.add(component.slot);
+  }
+
   if (options.catalog) {
     for (const c of components) {
       if (c.assetId === '') {

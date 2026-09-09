@@ -3,7 +3,6 @@
 // Contract C-136 Task 4: Unit tests for entity_spawner system
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { buildLpcCatalog, LEGACY_CATALOG_SNAPSHOT } from '@aikami/lpc';
 import type { World } from 'bitecs';
 import { createWorld, getAllEntities } from 'bitecs';
 import type { SpawnPoint } from '../assets/map_loader.ts';
@@ -11,6 +10,7 @@ import { Appearance, registerAppearanceObservers } from '../components/appearanc
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { AssetAlias, registerVisualObservers, Visual } from '../components/visual.ts';
+import { assetAt, buildLegacyDerivedCatalog } from '../test_support/lpc_catalog.ts';
 import { spawnEntities } from './entity_spawner.ts';
 
 // ---------------------------------------------------------------------------
@@ -204,15 +204,7 @@ describe('spawnEntities', () => {
     };
     // C-504: legacy appearanceLayers migrate to DERIVED engine layer IDs via
     // the shared normalizer + the runtime catalog (worker/main parity).
-    const derived = buildLpcCatalog({
-      entries: Object.entries(LEGACY_CATALOG_SNAPSHOT).flatMap(([, assetIds]) =>
-        assetIds.map((assetId) => ({
-          tag: `lpc:${assetId.replace(/\//g, ':')}:walk`,
-          category: 'lpc',
-          ext: 'webp',
-        })),
-      ),
-    }).slots;
+    const derived = buildLegacyDerivedCatalog();
 
     const results = spawnEntities({
       world,
@@ -222,13 +214,17 @@ describe('spawnEntities', () => {
     });
     const eid = results[0].eid;
 
-    const assetAt = (slot: string, idx: number): string | undefined =>
-      derived.find((s) => s.slot === slot)?.variants[idx - 1]?.assetId;
     // Elder: female body, female pants, elderly head — resolved from the
     // verified legacy snapshot, not raw positional reads.
-    expect(assetAt('body', Appearance.layer0[eid] ?? 0)).toBe('body/bodies_female');
-    expect(assetAt('legs', Appearance.layer3[eid] ?? 0)).toBe('legs/pants_female');
-    expect(assetAt('head', Appearance.layer5[eid] ?? 0)).toBe('head/heads/human/female_elderly');
+    expect(assetAt({ catalog: derived, slot: 'body', layerId: Appearance.layer0[eid] ?? 0 })).toBe(
+      'body/bodies_female',
+    );
+    expect(assetAt({ catalog: derived, slot: 'legs', layerId: Appearance.layer3[eid] ?? 0 })).toBe(
+      'legs/pants_female',
+    );
+    expect(assetAt({ catalog: derived, slot: 'head', layerId: Appearance.layer5[eid] ?? 0 })).toBe(
+      'head/heads/human/female_elderly',
+    );
   });
 
   it('ignores the Tiled appearanceLayers property when the manifest declares appearance', () => {
@@ -248,15 +244,7 @@ describe('spawnEntities', () => {
       props: {},
       npcs: packNpcs,
     };
-    const derived = buildLpcCatalog({
-      entries: Object.entries(LEGACY_CATALOG_SNAPSHOT).flatMap(([, assetIds]) =>
-        assetIds.map((assetId) => ({
-          tag: `lpc:${assetId.replace(/\//g, ':')}:walk`,
-          category: 'lpc',
-          ext: 'webp',
-        })),
-      ),
-    }).slots;
+    const derived = buildLegacyDerivedCatalog();
 
     const results = spawnEntities({
       world,
@@ -268,11 +256,15 @@ describe('spawnEntities', () => {
 
     // Manifest wins over the Tiled property; the legacy values migrate to
     // Rollo's intended male body / male trousers / human male head.
-    const assetAt = (slot: string, idx: number): string | undefined =>
-      derived.find((s) => s.slot === slot)?.variants[idx - 1]?.assetId;
-    expect(assetAt('body', Appearance.layer0[eid] ?? 0)).toBe('body/bodies_male');
-    expect(assetAt('legs', Appearance.layer3[eid] ?? 0)).toBe('legs/pants_male');
-    expect(assetAt('head', Appearance.layer5[eid] ?? 0)).toBe('head/heads/human_male');
+    expect(assetAt({ catalog: derived, slot: 'body', layerId: Appearance.layer0[eid] ?? 0 })).toBe(
+      'body/bodies_male',
+    );
+    expect(assetAt({ catalog: derived, slot: 'legs', layerId: Appearance.layer3[eid] ?? 0 })).toBe(
+      'legs/pants_male',
+    );
+    expect(assetAt({ catalog: derived, slot: 'head', layerId: Appearance.layer5[eid] ?? 0 })).toBe(
+      'head/heads/human_male',
+    );
   });
 
   it('falls back to the legacy default stack when the manifest entry has no appearanceLayers', () => {

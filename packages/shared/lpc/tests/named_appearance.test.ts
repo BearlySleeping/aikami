@@ -220,6 +220,39 @@ describe('C-504 named appearance', () => {
     expect(named.appearance.components[0]?.layerRole).toBe('front');
   });
 
+  test('rejects unsupported component slots', () => {
+    const result = resolveNpcAppearance({
+      input: {
+        formatVersion: 1,
+        components: [{ slot: 'cape', assetId: 'torso/chainmail_male' }],
+      },
+      catalog,
+    });
+
+    expect(result.status).toBe('invalid');
+    expect(result.diagnostics.some((diagnostic) => diagnostic.detail.includes('unsupported'))).toBe(
+      true,
+    );
+  });
+
+  test('rejects duplicate component slots', () => {
+    const result = resolveNpcAppearance({
+      input: {
+        formatVersion: 1,
+        components: [
+          { slot: 'body', assetId: 'body/bodies_male' },
+          { slot: 'body', assetId: 'body/bodies_female' },
+        ],
+      },
+      catalog,
+    });
+
+    expect(result.status).toBe('invalid');
+    expect(result.diagnostics.some((diagnostic) => diagnostic.detail.includes('duplicate'))).toBe(
+      true,
+    );
+  });
+
   test('namedToLayerIds derives deterministic engine indices (0 = empty)', () => {
     const named: NamedAppearance = {
       formatVersion: 1,

@@ -11,7 +11,7 @@
 //   - the committed emberwatch pack passes the validator
 
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildLpcCatalog, LEGACY_CATALOG_SNAPSHOT } from '@aikami/lpc';
 import {
@@ -72,12 +72,10 @@ describe('loadCatalog', () => {
     // runtime catalog (and therefore the seed) is generated from — otherwise
     // `/game` would resolve to a fallback the validator accepted.
     const catalogIds = new Set(CATALOG.flatMap((s) => s.variants.map((v) => v.assetId)));
-    const packsRoot = join(REPO_ROOT, 'content/packs');
-    if (!existsSync(packsRoot)) {
-      return;
-    }
-    for (const packName of ['emberwatch']) {
-      const manifestPath = join(packsRoot, packName, 'manifest.json');
+    expect(existsSync(CONTENT_PACKS_ROOT)).toBe(true);
+    let checkedAssetCount = 0;
+    for (const packName of readdirSync(CONTENT_PACKS_ROOT)) {
+      const manifestPath = join(CONTENT_PACKS_ROOT, packName, 'manifest.json');
       if (!existsSync(manifestPath)) {
         continue;
       }
@@ -90,6 +88,7 @@ describe('loadCatalog', () => {
       for (const [npcId, npc] of Object.entries(manifest.npcs ?? {})) {
         for (const component of npc?.appearance?.components ?? []) {
           if (component.assetId && component.assetId !== '') {
+            checkedAssetCount++;
             expect(
               catalogIds.has(component.assetId),
               `${npcId} references ${component.assetId}`,
@@ -98,6 +97,7 @@ describe('loadCatalog', () => {
         }
       }
     }
+    expect(checkedAssetCount).toBeGreaterThan(0);
   });
 });
 
@@ -177,6 +177,39 @@ describe('validateNpcAppearance', () => {
     expect(errors[0]?.slot).toBe('head');
     expect(errors[0]?.assetId).toBe('head/heads/does_not_exist');
     expect(errors[0]?.source).toBe('manifest:appearance');
+  });
+
+  it('rejects unsupported and duplicate named appearance slots', () => {
+    const named = {
+      formatVersion: 1,
+      components: [
+        { slot: 'body', assetId: 'body/bodies_male' },
+        { slot: 'body', assetId: 'body/bodies_female' },
+        { slot: 'cape', assetId: 'torso/chainmail_male' },
+      ],
+    } as const;
+    const errors = validateNpcAppearance({ ...base, appearance: named, catalog: CATALOG });
+
+    expect(errors.some((error) => error.detail.includes('duplicate'))).toBe(true);
+    expect(errors.some((error) => error.detail.includes('unsupported'))).toBe(true);
+  });
+
+  it('reports invalid legacy diagnostics when a named appearance is also present', () => {
+    const named = {
+      formatVersion: 1,
+      components: [{ slot: 'body', assetId: 'body/bodies_male' }],
+    } as const;
+    const errors = validateNpcAppearance({
+      ...base,
+      appearance: named,
+      appearanceLayers: [3, 3, 99999, 22, 7, 95],
+      catalog: CATALOG,
+    });
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.slot).toBe('torso');
+    expect(errors[0]?.source).toBe('manifest:appearanceLayers');
+    expect(errors[0]?.detail).toContain('outside the verified snapshot range');
   });
 
   it('rejects a negative index as out of range', () => {
