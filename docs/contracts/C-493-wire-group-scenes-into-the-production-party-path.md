@@ -3,7 +3,7 @@ id: C-493
 title: "Wire group scenes into the production party path"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-09T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | thin |
 | **Priority** | P1 — the capability already exists and is tested; it has no production caller |
 | **Dependencies** | [C-488](C-488-authored-npc-identity-in-the-content-pack.md) — the authored scene cast this contract's NPC discovery must read. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
 | **Contract version** | 2.0.0 |
