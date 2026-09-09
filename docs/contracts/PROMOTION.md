@@ -4,7 +4,7 @@
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 170 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 173 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -228,7 +228,10 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-489 | One Authority Path For Consequences | 🛠️ implemented | v2 | full |
 | C-490 | Transcript Branching Must Not Imply Rewinding The World | 🛠️ implemented | v2 | thin |
 | C-491 | Committed Narrative Event Record | 🛠️ implemented | v2 | full |
-| C-492 | Memory Retrieval Correctness And Production Wiring | 📝 draft | v2 | full |
+| C-492 | Memory Retrieval Correctness And Production Wiring | 👍 approved | v2 | full |
+| C-493 | Wire Group Scenes Into The Production Party Path | 📝 draft | v2 | thin |
+| C-494 | One Companion Who Reacts | 📝 draft | v2 | full |
+| C-495 | Emberwatch Dramatic Structure | 📝 draft | v2 | full |
 | C-496 | Shared Visual Assets And Playback | 📝 draft | v2 | full |
 | C-504 | Stable Character Appearance Identity | 📝 draft | v2 | full |
 | C-505 | Canonical Scene Data And Authoring Boundary | 📝 draft | v2 | full |
