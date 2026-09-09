@@ -1,6 +1,7 @@
 {
   "name": "@aikami/utils",
   "license": "MIT",
+  "main": "src/index.ts",
   "scripts": {
     "test": "bun test",
     "lint": "biome lint .",

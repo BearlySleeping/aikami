@@ -191,7 +191,7 @@ class ConnectionManagerViewModel
     const capability = this.draft.capability ?? 'text';
     const provider = this.draft.provider ?? 'openrouter';
     if (capability === 'image') {
-      return ['comfyui', 'webui', 'openai-compat'].includes(provider);
+      return ['comfyui', 'webui', 'sdcpp', 'openai-compat'].includes(provider);
     }
     if (capability === 'voice') {
       return ['kokoro', 'voicevox', 'fish-speech'].includes(provider);
@@ -282,9 +282,10 @@ class ConnectionManagerViewModel
     if (capability === 'image') {
       return IMAGE_PROVIDERS.map((p) => ({
         ...p,
-        needsKey: p.id !== 'comfyui' && p.id !== 'webui',
-        needsUrl: p.id === 'comfyui' || p.id === 'webui' || p.id === 'openai-compat',
-        isLocal: p.id === 'comfyui' || p.id === 'webui',
+        needsKey: p.id !== 'comfyui' && p.id !== 'webui' && p.id !== 'sdcpp',
+        needsUrl:
+          p.id === 'comfyui' || p.id === 'webui' || p.id === 'sdcpp' || p.id === 'openai-compat',
+        isLocal: p.id === 'comfyui' || p.id === 'webui' || p.id === 'sdcpp',
       }));
     }
     if (capability === 'voice') {

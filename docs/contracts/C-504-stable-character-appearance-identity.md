@@ -8,7 +8,8 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/285"
+  pr_number: 285
 created_at: "2026-09-09T00:00:00Z"
 ---
 
@@ -65,7 +66,7 @@ Make named component IDs the durable appearance representation. Keep numeric han
 
 ## Design Reference
 
-Use the pure shared resolver pattern from C-400 and the offline device-store ownership in `AGENTS.md`. Follow [shared testing conventions](SHARED_SECTIONS.md#testing-conventions). This is PR 1 in [the execution plan](../plans/visual_asset_foundation.md); localized rendering/atlas fixes in that PR are separately bounded by its prompt.
+Use the pure shared resolver pattern from C-400 and the offline device-store ownership in `AGENTS.md`. Follow [shared testing conventions](SHARED_SECTIONS.md#testing-conventions). Run first using `bun run contract C-504`; see [execution order](../plans/visual_asset_foundation.md). This contract also owns omitted-role equipment merge correctness. Hub tags belong to C-496, duplicate map data to C-505 and atlas source alpha to C-506.
 
 ## Architecture Directives
 
@@ -74,7 +75,7 @@ Use the pure shared resolver pattern from C-400 and the offline device-store own
 3. Tie legacy numeric arrays to a declared catalog-order snapshot. For the shipped Emberwatch revision, use the verified original fixture. Recognize an unversioned legacy save only through an authoritative save/pack version or recovered catalog fingerprint, never by its array length or whether the indices happen to be in range.
 4. If provenance is ambiguous, do not guess, overwrite or silently migrate. Preserve the original record, expose a structured diagnostic and offer the existing recovery path or a clearly identified whole-character safe preset. Never manufacture a mixed-body recipe with unrelated per-slot defaults.
 5. Existing string IDs remain valid aliases. C-496 later adds immutable visual revision locking; C-504 must not wait for or reimplement that format.
-6. Normalize missing `layerRole` to `front` once at the boundary. Catalog ordering and array iteration order must not determine draw order.
+6. Normalize missing `layerRole` to `front` before `(slot, layerRole)` equipment merge matching, not only after composition. Catalog ordering and array iteration order must not determine draw order. Preserve distinct rear/front passes.
 
 ## State & Data Models
 
@@ -114,7 +115,7 @@ The legacy array and persona string-map are accepted input variants, not extra s
 
 ## Contract Size & Split Rule
 
-One compatibility outcome across its readers/writers; all must land together. Target PR 1 at 30–55 changed paths including its small fixes/tests. Reassess at 75, stop for a split plan at 85, and never publish a PR with 100 or more changed paths. Do not split migration from its production wiring.
+One compatibility outcome across its readers/writers; all must land together. Target 30–55 changed paths including role-merge regression tests. Reassess at 75, stop for a split plan at 85, and never publish a PR with 100 or more changed paths. Do not split migration from its production wiring.
 
 ## Acceptance Criteria
 
@@ -122,7 +123,7 @@ One compatibility outcome across its readers/writers; all must land together. Ta
 **Given** the original snapshot and shipped Emberwatch appearances, **when** normalized through the production content entry point, **then** Rollo/merchant use the intended male body, male trousers and human male head, and the elder's identity is restored too. Worker and main thread resolve the same recipe.
 
 ### AC-2: New content is independent of catalog position
-**Given** a named appearance, **when** entries are shuffled, inserted before existing entries or unrelated assets are removed, **then** the same component IDs resolve. New persisted appearances contain no unversioned global numeric positions. Missing referenced assets produce a diagnostic rather than substituting whichever entry occupies that index.
+**Given** a named appearance, **when** entries are shuffled, inserted before existing entries or unrelated assets are removed, **then** the same component IDs resolve. New persisted appearances contain no unversioned global numeric positions. Missing referenced assets produce a diagnostic rather than substituting whichever entry occupies that index. Production-shaped equipment inputs with omitted roles merge exactly like explicit `front`; distinct rear/front passes remain distinct without duplicate outfits.
 
 ### AC-3: Migration is safe, explicit and idempotent
 **Given** known legacy, already migrated, malformed and unknown-provenance saves, **when** loading, retrying or interrupting persistence, **then** known input migrates once, new input is unchanged, invalid/ambiguous input remains recoverable, and `0` retains its intentionally-empty meaning.

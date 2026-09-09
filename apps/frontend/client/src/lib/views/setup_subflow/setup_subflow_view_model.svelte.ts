@@ -32,6 +32,7 @@ import {
 import type { ConnectionCapability } from '$types';
 import {
   type AiSettingsViewModelInterface,
+  type CapabilitySetupPrefill,
   getAiSettingsViewModel,
 } from '../settings/ai/ai_settings_view_model.svelte';
 
@@ -255,11 +256,11 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   /** Starts provider discovery for the enabled capabilities only. */
   startDiscovery(): Promise<void>;
   /** Opens the shared connection editor for manual configuration of one capability. */
-  openManualSetup(capability: ConnectionCapability): void;
+  openManualSetup(capability: ConnectionCapability, prefill?: CapabilitySetupPrefill): void;
   /** Shows the manual step (saved connections list) without opening the editor. */
   showManualStep(capability: ConnectionCapability): void;
-  /** Plan-step action: show saved connections when configured, otherwise open the editor. */
-  reviewCapability(capability: ConnectionCapability): void;
+  /** Plan-step action: show saved connections when configured, otherwise detect local servers or open the editor. */
+  reviewCapability(capability: ConnectionCapability): Promise<void>;
   /** Called when the user is done with the manual editor — re-checks configured state and advances. */
   finishManualSetup(): void;
   /** Applies the selected plan. */
@@ -335,6 +336,7 @@ const LOCAL_PROVIDER_IDS = new Set([
   'ooba',
   'comfyui',
   'webui',
+  'sdcpp',
   'kokoro',
   'voicevox',
   'fish-speech',
@@ -896,17 +898,43 @@ class SetupSubflowViewModel
     this.step = 'manual';
   }
 
-  openManualSetup(capability: ConnectionCapability): void {
+  openManualSetup(capability: ConnectionCapability, prefill?: CapabilitySetupPrefill): void {
     this.showManualStep(capability);
-    this.editorViewModel.openCapabilitySetup(capability);
+    this.editorViewModel.openCapabilitySetup(capability, prefill);
   }
 
-  reviewCapability(capability: ConnectionCapability): void {
+  async reviewCapability(capability: ConnectionCapability): Promise<void> {
     if (this._hasUsableConnection(capability)) {
       this.showManualStep(capability);
-    } else {
-      this.openManualSetup(capability);
+      return;
     }
+
+    // "Artwork (Scenes & Characters)" is backed by a server the player runs
+    // on localhost. Clicking "Set up" should look for a running image engine
+    // first, then open the connection editor pre-filled with the found server
+    // instead of a blank form defaulting to ComfyUI. The browser build can
+    // still see the same-origin /api/image proxy, so this is deliberately not
+    // gated by canScan.
+    if (capability === 'image') {
+      const snapshot = await this._detectSingleCapability(capability);
+      if (snapshot?.imageStatus === 'detected' && snapshot.imageProviderId) {
+        const baseUrl = runtimeConfigService.getImageUrl();
+        if (baseUrl?.trim()) {
+          this.debug('reviewCapability:detected', {
+            capability,
+            providerId: snapshot.imageProviderId,
+            baseUrl,
+          });
+          this.openManualSetup(capability, {
+            registryId: snapshot.imageProviderId,
+            baseUrl: baseUrl.trim(),
+          });
+          return;
+        }
+      }
+    }
+
+    this.openManualSetup(capability);
   }
 
   finishManualSetup(): void {
@@ -1104,6 +1132,39 @@ class SetupSubflowViewModel
   }
 
   // ── Private helpers ────────────────────────────────────────────────────
+
+  /**
+   * Runs detection scoped to one capability and reports the snapshot, or null
+   * on error/cancellation. Unlike {@link startDiscovery}, this is intentionally
+   * not gated by {@link canScan}: the browser build can still reach the
+   * same-origin /api/image proxy for a local image engine.
+   */
+  private async _detectSingleCapability(
+    capability: ConnectionCapability,
+  ): Promise<CapabilitySnapshot | null> {
+    const operationId = ++this._discoveryOperationId;
+    this.isDetecting = true;
+    this.errorMessage = '';
+    this.step = 'detecting';
+
+    try {
+      const snapshot = await capabilityService.detect({ capabilities: [capability] });
+      if (operationId !== this._discoveryOperationId) {
+        return null;
+      }
+      return snapshot;
+    } catch (error) {
+      if (operationId !== this._discoveryOperationId) {
+        return null;
+      }
+      this.warn('reviewCapability:detect-failed', error);
+      return null;
+    } finally {
+      if (operationId === this._discoveryOperationId) {
+        this.isDetecting = false;
+      }
+    }
+  }
 
   private async _ensureTextProvider(): Promise<void> {
     if (this._hasUsableConnection('text')) {

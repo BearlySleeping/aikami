@@ -3,7 +3,7 @@
 // C-418 Feature B: builds the filtered routes directory used by production
 // builds. Copies `src/routes` → `.svelte-kit/routes-prod`, excluding the
 // `(dev)` route group, so SvelteKit never sees a `(dev)` route when
-// svelte.config.js points `files.routes` at the filtered copy (guarded: a
+// vite.config.ts points `files.routes` at the filtered copy (guarded: a
 // bare `vite build` without this script fails fast with a clear error — M3).
 //
 // After materializing, the sveltekit plugin regenerates `.svelte-kit/generated`
@@ -14,7 +14,7 @@
 //
 // Usage: `bun scripts/gate_dev_routes.ts [--mode <mode>]` (run before
 // `vite build`). `--mode` mirrors the vite build mode so the exclusion
-// decision here matches svelte.config.js exactly.
+// decision here matches vite.config.ts exactly.
 
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,7 +24,7 @@ import { logger } from '@aikami/logger';
 
 // `new URL(...).pathname` keeps the URL form of the path, which on Windows is
 // a leading-slash drive path (`/C:/...`) that fs rejects. fileURLToPath is the
-// only correct file-URL → path conversion (matches svelte.config.js).
+// only correct file-URL → path conversion (matches vite.config.ts).
 const projectDirectory = fileURLToPath(new URL('..', import.meta.url));
 const sourceRoutes = join(projectDirectory, 'src', 'routes');
 const outputRoutes = join(projectDirectory, '.svelte-kit', 'routes-prod');
@@ -50,7 +50,7 @@ if (devGateOverride === 'true') {
   includeDevRoutes = !isProductionBuild;
 }
 
-// Keep svelte.config.js and this script on the same decision.
+// Keep vite.config.ts and this script on the same decision.
 process.env.AIKAMI_BUILD_MODE = buildMode;
 
 // Remove any previous filtered copy so the build can never read stale files.

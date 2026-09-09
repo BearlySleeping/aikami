@@ -22,7 +22,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Target** | Emberwatch assets/maps, engine presentation and existing preview diagnostics |
 | **Type** | thin |
 | **Priority** | P2 — make the playable space readable without debug overlays |
-| **Dependencies** | C-504, C-496 and C-505 implementation increments through PR 4 |
+| **Dependencies** | C-505 |
 | **Status** | draft |
 | **Promotion** | — |
 | **Docs Impact** | internal — visual baseline and art-direction notes |
@@ -31,7 +31,7 @@ created_at: "2026-09-09T00:00:00Z"
 
 ## Problem & Baseline Evidence
 
-The atlas generator bakes grass/floor backgrounds into props and forces alpha to 255; PR 1 corrects that source defect. Existing ground/decor/overhead bands and prop anchors are useful, but do not establish convincing contact, height or readable passages. All current Emberwatch elevation values are zero. C-376/C-378/C-417 already describe solidity and depth behavior: extend their working mechanisms, do not rebuild them.
+The atlas generator bakes grass/floor backgrounds into props and forces alpha to 255; this contract corrects that source defect if still present. Existing ground/decor/overhead bands and prop anchors are useful, but do not establish convincing contact, height or readable passages. All current Emberwatch elevation values are zero. C-376/C-378/C-417 already describe solidity and depth behavior: extend their working mechanisms, do not rebuild them.
 
 Record the three actual scenes at normal game scale before this pass. Use the shared C-505 scene interpretation and the C-496 preview, not a separate artist-only rendering path.
 
@@ -41,17 +41,17 @@ A player can recognize solid obstacles, passages and interactable props, and can
 
 ## Scope Boundaries
 
-- **In Scope:** transparent prop placement on continuous ground; contact shadows; consistent art scale/origins; wall faces/edges, shores and thresholds; existing depth/upper-pass composition; diagnostic walkability presentation; real-scene visual evidence.
+- **In Scope:** atlas source alpha/extrusion and lossless pixel-art output; transparent prop placement on continuous ground; contact shadows; consistent art scale/origins; wall faces/edges, shores and thresholds; existing depth/upper-pass composition; diagnostic walkability presentation; real-scene visual evidence.
 - **Out of Scope:** new save/map schemas, new collision/navigation rules, elevation traversal, procedural map generation, advanced lighting or normal maps, generation-provider integration, complete replacement of the art library, changing gameplay or persistent placement IDs.
 - Use existing presentation fields and render primitives. If a new persisted field or public schema is required, stop and amend the appropriate full contract rather than hiding it in this thin task.
-- Target PR 5 at 30–55 changed paths; review scope at 75 and stop at 85. No PR reaches 100 files. Art quality is not measured by maximizing changed files.
+- Run once through `bun run contract C-506` after C-505 lands. Target 30–55 changed paths; review scope at 75 and stop at 85. No PR reaches 100 files. Art quality is not measured by maximizing changed files.
 
 ## Acceptance Criteria
 
 ### AC-1: Objects are grounded without baked substrate
 **Given** the well, board, barrels, crates and indoor furniture, **when** viewed over grass, dirt and indoor flooring in the real scene, **then** no grass/floor-colored rectangles surround them. Contact shadows use a consistent light direction/softness appropriate to the pixel style, follow base origins, and do not darken unrelated UI or alter collision.
 
-**Verification**: `/game` captures of the village/inn/shop plus controlled background comparisons through the production renderer; inspect real alpha and silhouette, not only a VLM score.
+**Verification**: `/game` captures of the village/inn/shop plus controlled background comparisons through the production renderer; inspect real alpha and silhouette, not only a VLM score. Add generator tests for `scripts/src/lib/ops/generate_emberwatch_atlas.ts`: unpainted prop/decor pixels are transparent, terrain stays opaque, padding/extrusion preserves RGBA and output encoding is lossless. Preserve frame names, rectangles, spacing/margins and GIDs; never globally erase green/brown pixels. Do not publish generated assets without separate authorization.
 
 ### AC-2: Depth behaves consistently around tall objects
 **Given** a character passing in front of and behind supported props/upper passes, **when** walking through those positions, **then** base-origin depth and explicit overhead behavior are correct, without pop-through or duplicate passes. Floors/rugs stay below feet; roofs/canopies do not accidentally become solid just because they draw above an actor.

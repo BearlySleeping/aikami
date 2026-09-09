@@ -115,8 +115,7 @@ class UploadService extends BaseClass {   import { logger } from "$logger";
 }
 ```
 
-**Why**: each environment maps `$logger` in its own `tsconfig.json` `paths`
-(or `svelte.config.js`) to a different implementation — browser, SSR, or
+**Why**: each environment maps `$logger` in its own `tsconfig.json` `paths` to a different implementation — browser, SSR, or
 basic. `@aikami/logger` is a package alias and can't know which you're in.
 
 ### 2. Import from Package ROOT, Never `lib/` Sub-Paths
@@ -144,7 +143,7 @@ import { ChatService } from "@aikami/backend-chat";   // ❌
 ```
 
 Same for `@aikami/frontend/<name>`. This applies to `import` statements and to
-the alias maps in `svelte.config.js` and each `tsconfig.json`.
+the alias maps in `vite.config.ts` and each `tsconfig.json`.
 
 ### 2b. Import Types at the Top, Never Inline `import()`
 

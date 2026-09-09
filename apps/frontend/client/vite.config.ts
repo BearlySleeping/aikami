@@ -114,7 +114,7 @@ if (!includeDevRoutes) {
 }
 
 export default defineConfig(({ mode }) => {
-  // Expose the Vite mode to svelte.config.js (loaded later by the SvelteKit
+  // Expose the Vite mode to vite.config.ts (loaded later by the SvelteKit
   // plugin) so the dev-route build gate (C-418 Feature B) can exclude the
   // `(dev)` route group from production builds without a runtime check.
   //
@@ -134,7 +134,7 @@ export default defineConfig(({ mode }) => {
   const plugins: PluginOption[] = [
     tailwindcss(),
     sveltekit({
-      // SvelteKit 3: configuration moved from svelte.config.js to here
+      // SvelteKit 3: configuration moved from vite.config.ts to here
       preprocess: [vitePreprocess()],
       files: {
         routes: routesDir,

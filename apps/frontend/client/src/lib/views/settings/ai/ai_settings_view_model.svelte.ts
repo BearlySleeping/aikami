@@ -115,6 +115,13 @@ export type EditorDraft = {
   editingConnectionId: ConnectionId | undefined;
 };
 
+/** Optional values to prefill when opening the connection editor for a capability. */
+export type CapabilitySetupPrefill = {
+  registryId: string;
+  baseUrl?: string;
+  model?: string;
+};
+
 /**
  * State of a voice preview (AC-6). `synthesizing` covers the request/worker
  * round trip; `playing` only holds while {@link TtsServiceInterface.isPlaying}
@@ -248,8 +255,8 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
 
   // ── Actions ──
   /** Opens the setup flow appropriate for a capability. */
-  openCapabilitySetup(capability: ConnectionCapability): void;
-  openAddProvider(capability?: ConnectionCapability): void;
+  openCapabilitySetup(capability: ConnectionCapability, prefill?: CapabilitySetupPrefill): void;
+  openAddProvider(capability?: ConnectionCapability, prefill?: CapabilitySetupPrefill): void;
   closeAddProvider(): void;
   openEditConnection(connectionId: ConnectionId): void;
   cancelEdit(): void;
@@ -379,6 +386,7 @@ const LOCAL_PROVIDER_IDS = new Set([
   'ooba',
   'comfyui',
   'webui',
+  'sdcpp',
   'kokoro',
   'voicevox',
   'fish-speech',
@@ -712,7 +720,7 @@ export class AiSettingsViewModel
     const cap = this.draft.capability;
     const reg = this.draft.registryId;
     if (cap === 'image') {
-      return ['comfyui', 'webui', 'openai-compat'].includes(reg);
+      return ['comfyui', 'webui', 'sdcpp', 'openai-compat'].includes(reg);
     }
     if (cap === 'voice') {
       return ['voicevox', 'fish-speech'].includes(reg);
@@ -913,10 +921,17 @@ export class AiSettingsViewModel
   /**
    * Brings the TTS runtime up when the Kokoro model is already downloaded and
    * the editor opens on it — downloading alone leaves cached bytes the worker
-   * has not loaded yet.
+   * has not loaded yet. Re-checks the cache first so a refresh doesn't show
+   * a cached model as not-downloaded.
    */
-  private _ensureVoiceRuntimeIfReady(): void {
+  private async _ensureVoiceRuntimeIfReady(): Promise<void> {
     if (!this.isLocalBinaryProvider) {
+      return;
+    }
+    try {
+      await voiceModelService.checkStatus();
+    } catch (error) {
+      this.warn('_ensureVoiceRuntimeIfReady:check-failed', error);
       return;
     }
     if (this.voiceModelState.status === 'ready' && ttsService.status === 'uninitialized') {
@@ -1117,16 +1132,16 @@ export class AiSettingsViewModel
 
   // ── Editor: open / close / save ──
 
-  openCapabilitySetup(capability: ConnectionCapability): void {
-    this.openAddProvider(capability);
+  openCapabilitySetup(capability: ConnectionCapability, prefill?: CapabilitySetupPrefill): void {
+    this.openAddProvider(capability, prefill);
   }
 
-  openAddProvider(capability?: ConnectionCapability): void {
-    this.debug('openAddProvider', { capability });
+  openAddProvider(capability?: ConnectionCapability, prefill?: CapabilitySetupPrefill): void {
+    this.debug('openAddProvider', { capability, prefill });
     this.isAddProviderOpen = true;
     this.isEditorOpen = true;
-    this._resetDraft(capability);
-    this._ensureVoiceRuntimeIfReady();
+    this._resetDraft(capability, prefill);
+    void this._ensureVoiceRuntimeIfReady();
   }
 
   closeAddProvider(): void {
@@ -1230,7 +1245,7 @@ export class AiSettingsViewModel
       baseUrl: existingProvider?.baseUrl ?? '',
     };
 
-    this._ensureVoiceRuntimeIfReady();
+    void this._ensureVoiceRuntimeIfReady();
 
     if (conflictProvider) {
       this.keyConflictPrompt = {
@@ -1904,17 +1919,21 @@ export class AiSettingsViewModel
     }
   }
 
-  private _resetDraft(capability: ConnectionCapability = 'text'): void {
-    const registryId = _registryForCapability(capability)[0]?.id ?? 'openrouter';
+  private _resetDraft(
+    capability: ConnectionCapability = 'text',
+    prefill?: CapabilitySetupPrefill,
+  ): void {
+    const registryId =
+      prefill?.registryId ?? _registryForCapability(capability)[0]?.id ?? 'openrouter';
     const existingProvider = this._findProviderByRegistry(registryId);
     this.draft = {
       providerId: existingProvider?.id,
       registryId,
       capability,
       label: '',
-      model: '',
+      model: prefill?.model ?? '',
       apiKey: existingProvider?.credential ?? '',
-      baseUrl: existingProvider?.baseUrl ?? '',
+      baseUrl: prefill?.baseUrl ?? existingProvider?.baseUrl ?? '',
       showApiKey: false,
       isEditing: false,
       editingConnectionId: undefined,

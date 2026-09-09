@@ -39,8 +39,7 @@ fileGroups:
     - 'src/**/*'
     - 'static/**/*'
   configs:
-    - 'svelte.config.*'
-    - 'vite.config.*'
+    - 'vite.config.ts'
     - '.env.*'
     - '.env'
   deployment:
@@ -128,7 +127,7 @@ tasks:
       - '/packages/shared/*/src/**/*'
       - '/packages/frontend/*/src/**/*'
       - '/packages/backend/*/src/**/*'
-      - 'svelte.config.js'
+      - 'vite.config.ts'
 
   test-unit:
     command: 'bun run test:unit'
@@ -137,4 +136,4 @@ tasks:
       - '/packages/shared/*/src/**/*'
       - '/packages/frontend/*/src/**/*'
       - '/packages/backend/*/src/**/*'
-      - 'svelte.config.js'
+      - 'vite.config.ts'
