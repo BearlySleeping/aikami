@@ -16,7 +16,9 @@ mock.module('$services', () => ({
 }));
 
 let getAddressModeTogggleViewModel: (
-  options: Parameters<typeof import('./address_mode_toggle_view_model.svelte').getAddressModeTogggleViewModel>[0],
+  options: Parameters<
+    typeof import('./address_mode_toggle_view_model.svelte').getAddressModeTogggleViewModel
+  >[0],
 ) => AddressModeTogggleViewModelInterface;
 
 beforeEach(async () => {

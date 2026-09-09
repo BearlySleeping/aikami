@@ -15,11 +15,11 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import {
+  type AutonomousMessageServiceInterface,
   autonomousMessageService as defaultAutonomousMessageService,
   gameOverlayService,
-  partyRosterService,
-  type AutonomousMessageServiceInterface,
   type NpcDialogueServiceInterface,
+  partyRosterService,
 } from '$services';
 
 // ---------------------------------------------------------------------------
@@ -148,7 +148,10 @@ class TalkToPartyViewModel
     try {
       const recentChat = this.messages
         .slice(0, -1)
-        .map((m) => `[${m.role === 'player' ? 'player' : (m.senderName ?? this._npcName)}]: ${m.content}`);
+        .map(
+          (m) =>
+            `[${m.role === 'player' ? 'player' : (m.senderName ?? this._npcName)}]: ${m.content}`,
+        );
 
       const members = partyRosterService.members;
 

@@ -51,7 +51,9 @@ const setRoster = (names: string[]): void => {
 };
 
 let getTalkToPartyViewModel: (
-  options: Parameters<typeof import('./talk_to_party_view_model.svelte').getTalkToPartyViewModel>[0],
+  options: Parameters<
+    typeof import('./talk_to_party_view_model.svelte').getTalkToPartyViewModel
+  >[0],
 ) => TalkToPartyViewModelInterface;
 
 const createViewModel = (npcId = 'npc_0', npcName = 'Alpha'): TalkToPartyViewModelInterface =>

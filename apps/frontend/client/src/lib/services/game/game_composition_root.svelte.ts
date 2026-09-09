@@ -16,9 +16,9 @@ import {
 import type { ContentPackLootEntry } from '@aikami/types';
 import { textGenerationService } from '../ai/text_generation_service.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
-import { autonomousMessageService } from '../npc/autonomous_message_service.svelte.ts';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
+import { autonomousMessageService } from '../npc/autonomous_message_service.svelte.ts';
 import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
 import { equipmentService } from './equipment_service.svelte';
