@@ -45,10 +45,10 @@ import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance
 import { resolveLayerDepth } from './rendering/lpc_layer_order.ts';
 import { resolveLpcSheetGeometry } from './rendering/lpc_sheet_geometry.ts';
 import { snapToDevicePixels } from './rendering/pixel_snap.ts';
-import { buildWalkabilityStyles } from './rendering/walkability_overlay.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import { frustumCullChunks, type TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
+import { buildWalkabilityStyles } from './rendering/walkability_overlay.ts';
 import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';

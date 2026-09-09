@@ -267,9 +267,7 @@ describe('C-506 AC-1 — lossless output encoding', () => {
     // Encode that PNG to a lossless WebP (mirrors `cwebp -lossless`) and
     // decode it back to raw RGBA for comparison.
     const webp = await sharp(png).webp({ lossless: true }).toBuffer();
-    const decoded = await sharp(webp)
-      .raw()
-      .toBuffer({ resolveWithObject: true });
+    const decoded = await sharp(webp).raw().toBuffer({ resolveWithObject: true });
 
     expect(decoded.info.width).toBe(width);
     expect(decoded.info.height).toBe(height);

@@ -70,9 +70,7 @@ export const buildWalkabilityStyles = (grid: TerrainGrid): WalkabilityCellStyle[
  * @param grid - The authoritative TerrainGrid.
  * @returns Counts of walkable and blocked cells.
  */
-export const countWalkability = (
-  grid: TerrainGrid,
-): { walkable: number; blocked: number } => {
+export const countWalkability = (grid: TerrainGrid): { walkable: number; blocked: number } => {
   let walkable = 0;
   let blocked = 0;
   for (let i = 0; i < grid.cost.length; i++) {
