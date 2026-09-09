@@ -3,7 +3,7 @@ id: C-505
 title: "Canonical scene data and future semantic authoring boundary"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — one scene interpretation for rendering, authoring and future generation |
 | **Dependencies** | C-496 |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — versioned map format/import documentation in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
