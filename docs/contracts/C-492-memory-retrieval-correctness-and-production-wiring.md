@@ -3,7 +3,7 @@ id: C-492
 title: "Memory retrieval correctness and production wiring"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-09T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — the current implementation does the opposite of what its own docs say |
 | **Dependencies** | [C-491](C-491-committed-narrative-event-record.md) — the committed narrative event record is the authoritative fact source this contract retrieves from. [C-488](C-488-authored-npc-identity-in-the-content-pack.md) — AC-5's budget ceiling. |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -47,14 +47,14 @@ created_at: "2026-09-09T00:00:00Z"
 
 - **The index is not persisted and not rebuilt.** `local_embedding_backend.toSnapshot()` / `loadSnapshot()` (`:280`, `:288`) exist but have no save/load callers — the backend is not registered with `serializable_service.ts`. The index is purely ephemeral, which is a *symptom* of the deeper problem: the only thing that would populate it (`backgroundIndexOnLoad`) is never called. (This is load-bearing for the resolution in AC-1 — see Architecture Directives.)
 
-- **The NPC dialogue path does not consume retrieval at all.** `npc_dialogue_service._buildContextProjection` (`:1390`) builds `memory` from the last 10 conversation turns, and `gameStateFacts` comes from `buildGameStateFacts` (`game_state_facts.ts`). C-491's `narrativeEventService.witnessedBy(npcId)` — the witness model that makes "this NPC could know this" answerable — exists and is not queried by any retrieval path.
+- **The NPC dialogue path does not consume retrieval at all.** `npc_dialogue_service._buildContextProjection` (`:1385`) builds `memory` from the last 10 conversation turns, and `gameStateFacts` comes from `buildGameStateFacts` (`game_state_facts.ts`). C-491's `narrativeEventService.witnessedBy(npcId)` — the witness model that makes "this NPC could know this" answerable — exists and is not queried by any retrieval path.
 
 - **Retrieval has no witness/belief scoping.** The indexable source types are `lore`, `session_summary`, `relationship`, `faction` (`memory_retrieval.ts` schema). There is no `narrative_event` source type, and nothing distinguishes "Rollo possesses the wand" (world fact, witnessed) from "Thalia believes Rollo intends to sell it" (belief) from "Rollo says he never touched it" (claim). Any retrieval that does not route through C-491's witnesses/belief model will leak secrets to NPCs that never learned them.
 
 - **Reproduction**: `grep -rn "memoryRetrievalService\.\(init\|backgroundIndexOnLoad\|indexAll\)" apps/frontend/client/src --include='*.ts' --include='*.svelte' --include='*.svelte.ts'` outside the service and its tests → no hits; `grep -rn "memoryRetrievalService.query"` → only `narrative_director_service` (sandbox-startup); read `local_embedding_backend.ts:174-183` and observe the branch polarity.
 - **Existing implementation to reuse**: C-491's `narrativeEventService` (`events`, `witnessedBy(npcId)`, `record()`); `memory_retrieval_service.svelte.ts` (`indexAll`, `indexLorebookEntries`, `indexSessionSummary`, `setEnabled`); `local_embedding_backend.ts` keyword-overlap scoring (already deterministic and offline); `buildGameStateFacts` + `_buildContextProjection` as the dialogue injection seams; `game_boot_service.svelte.ts` boot stages (`loading_campaign` → `hydrating_snapshot` → `spawning_entities`) as the production init seam; `session_summary_service` (summaries) and `lorebook_store` (lore) as non-witness sources.
 - **Known gaps**: inverted branch; no production init/index; no `narrative_event` source type; no witness-scoped retrieval; dialogue path never receives retrieved memory; no budget accounting for the added prompt section.
-- **Baseline tests**: `memory_retrieval_service.test.ts` (16 tests, mock-backend keyword overlap; note its comment that the real embedding model is unavailable in Bun's test environment), `narrative_event_service.test.ts`, `npc_dialogue_service.test.ts`, `game_boot_service.test.ts`. Record their pass state before starting.
+- **Baseline tests**: `memory_retrieval_service.test.ts` (19 tests, mock-backend keyword overlap; note its comment that the real embedding model is unavailable in Bun's test environment), `narrative_event_service.test.ts`, `npc_dialogue_service.test.ts`, `game_boot_service.test.ts`. Record their pass state before starting.
 
 ## User Outcome
 
@@ -104,7 +104,7 @@ Resolve the inverted-branch fork by committing to **deterministic keyword retrie
 
 ## State & Data Models
 
-Add a `narrative_event` source type. In `packages/shared/schemas/src/lib/domain/memory_retrieval.ts`, extend the `sourceType` unions (`MemoryIndexableSchema`, `InMemoryIndexEntrySchema`, `MemoryResultSchema`) with `Type.Literal('narrative_event')`; mirror in `packages/shared/types/src/lib/domain/memory_retrieval.ts`. In `packages/shared/constants/src/lib/memory.ts`, extend `MEMORY_QUERY_SCOPE_SOURCE_TYPES.all` to include `'narrative_event'` (the `history` and `lore` scopes stay as-is).
+Add a `narrative_event` source type. In `packages/shared/schemas/src/lib/domain/memory_retrieval.ts`, extend the `sourceType` unions (`MemoryIndexableSchema`, `InMemoryIndexEntrySchema`, `MemoryResultSchema`) with `Type.Literal('narrative_event')`; mirror in `packages/shared/types/src/lib/domain/memory_retrieval.ts`. In `packages/shared/constants/src/lib/memory.ts`, extend `MEMORY_QUERY_SCOPE_SOURCE_TYPES.all` to include `'narrative_event'` (the `history` and `lore` scopes stay as-is). For the NPC path, `retrieveForNpc` must not reuse the `all` scope — it currently resolves to `['lore', 'session_summary']` and would leak the player's private `session_summary` into NPC recall. Either add a dedicated `npc: ['narrative_event', 'lore']` scope to `MEMORY_QUERY_SCOPE_SOURCE_TYPES` (preferred — keeps the exclusion at the scope layer) or filter `session_summary` results out before the witness filter. The observable requirement is fixed regardless of mechanism: a `session_summary` entry is never returned by the NPC path even when it matches the query (AC-4).
 
 The backend entry `embedding` field becomes optional in the schema (`Type.Optional(Type.Array(Type.Number()))`) and is no longer produced or read. Since the index is not serialised into saves, this is a schema-only change with **no save-format migration** — state that in the contract's Migration & Rollback.
 
