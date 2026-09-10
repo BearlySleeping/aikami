@@ -1,10 +1,8 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/ui/quest_tracker_view.svelte
 import { BaseViewModelContainer } from '$components';
-import {
-  getQuestTrackerViewModel,
-  type QuestTrackerViewModelInterface,
-} from './quest_tracker_view_model.svelte';
+import { getQuestTrackerViewModel } from './quest_tracker_composition.ts';
+import type { QuestTrackerViewModelInterface } from './quest_tracker_view_model.svelte';
 
 type Props = {
   viewModel?: QuestTrackerViewModelInterface;

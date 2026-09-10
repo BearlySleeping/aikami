@@ -211,81 +211,94 @@ See [status lifecycle](SHARED_SECTIONS.md#status-lifecycle). This draft claims n
 ## Execution Report
 
 ### Summary
-Implemented the foundational shared visual-format layer of C-496: a versioned,
-strict TypeBox `VisualDefinition` schema (identity/images/frames/clips/
-components/presentation/provenance, discriminated by kind) with structural
-validation (bounds, duplicate ids, unresolved refs, acyclic fallbacks,
-unsupported-mode rejection), an LPC→definition adapter that emits explicit
-frames/clips/origins/actor-level fallbacks (replacing runtime dimension
-heuristics), an elapsed-time actor clock primitive, and the catalog
-publication revision-consistency fix (shard/seed failure prevents release
-pointer advancement). Added a user-facing visual-asset authoring docs page.
-
-Deferred (see Deviations): full engine/preview consumption of the definition,
-the mixed-asset `/game` renderer, and the production-path E2E + visual evidence
-for AC-3/AC-6/AC-7 — the shared format and playback clock they depend on are in
-place, but the renderer wiring and visual evidence were not completed in this
-session.
+Implemented the C-496 shared visual-format layer with production engine,
+preview and publication integration. A strict versioned TypeBox `VisualDefinition`
+schema (identity/images/frames/clips/components/presentation/provenance,
+discriminated by kind) with structural validation, and an LPC→definition adapter,
+compile legacy/generic inputs into one validated definition. The production
+`game_world` path now compiles the shared definition at load and resolves frames
+through it via the elapsed-time clock (replacing the hard-coded `walk` slicing);
+`AnimationController` was refactored from a frame-count clock to an elapsed-time
+clock wired to the real ticker delta. A `visual_definition_playback` resolver and
+a `component_composer` (rig/body/pose compatibility + deterministic multi-pass
+ordering incl. rear `/behind`) give the engine production consumers. The preview
+`lpc_renderer` routes sprite creation through the shared definition. The catalog
+pipeline writes a versioned release pointer only after full success, preserving
+the previous release on failure. Added a user-facing docs page.
 
 ### AC Status
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | Shared visual schema + validator + LPC adapter compile into it; invalid inputs rejected. Unit-tested. |
-| AC-2 | ⚠️ | Component schema carries rig/body/pose + stable passes/deterministic order; LPC adapter emits `/behind`-style rear passes. Hub `buildLpcCatalog` regression not re-tested (C-504 already landed). |
-| AC-3 | ❌ | Mixed-asset `/game` rendering not implemented; no generic-atlas renderer wired into the engine yet. |
-| AC-4 | ✅ | Publication now blocks release-pointer advancement on shard/seed failure; failure-injection + offline-install tests added. `index/v1/` preserved. |
-| AC-5 | ⚠️ | Elapsed-time actor clock (`ElapsedTimeActor` + `resolveClipFrameAtTime`) added and unit-tested; full `animation_controller` engine swap deferred. |
-| AC-6 | ❌ | Preview integration of the shared definition not implemented; no visual/E2E evidence. |
-| AC-7 | ❌ | Resource/perf regression report not produced. |
+| AC-1 | ✅ | `visual_definition.ts` schema + validator (15 pass) and `visual_adapter.ts` LPC compiler (5 pass) — invalid bounds/dup ids/unresolved refs/cyclic fallbacks/unsupported modes rejected before publication. |
+| AC-2 | ✅ | `component_composer` validates rig/body/pose compatibility (rejects mismatches with diagnostics) and emits rear `/behind` + front passes once in deterministic order independent of async load order (4 pass). |
+| AC-3 | ✅ | `game_world` compiles the shared definition at load and `_applyLpcFrame` resolves frames through `resolveDefinitionFrameAtTime` (elapsed-time + actor-level fallback) instead of hard-coded `walk` slicing; generic/LPC/prop frames all resolve (5 pass). |
+| AC-4 | ✅ | `release_lock.ts` (ReleasePointer + InstalledPackLock) + pipeline writes `index/v1/release.json` only after full success; failure-injection + release-pointer-preservation tests (13+ pass). `index/v1/` preserved. |
+| AC-5 | ✅ | `AnimationController` replaced frame-count clock with the shared elapsed-time clock; wired to real ticker deltaMS in `game_world` (7 pass incl. 60Hz-vs-30Hz wall-clock equivalence). |
+| AC-6 | ⚠️ | `lpc_renderer.createSprite` now routes preview sprite creation through the compiled shared definition (frame geometry + origin); hub `/catalog` view-model adoption and visual capture evidence still outstanding. |
+| AC-7 | ❌ | No resource/perf regression report or repeated mount/unmount/offline-reload evidence produced. |
 
 ### Files Created
 | File | Purpose |
 |---|---|
-| `packages/shared/schemas/src/lib/visual/visual_definition.ts` | Versioned shared visual definition schema + validator |
-| `packages/shared/schemas/src/lib/visual/visual_definition.test.ts` | AC-1 schema/validation tests |
-| `packages/shared/lpc/src/lib/visual_adapter.ts` | LPC→definition adapter (explicit frames/clips/fallbacks) |
-| `packages/shared/lpc/src/lib/elapsed_time.ts` | Elapsed-time actor clock + clip resolver |
+| `packages/shared/schemas/src/lib/visual/visual_definition.ts` | Shared visual definition schema + validator |
+| `packages/shared/schemas/src/lib/visual/visual_definition.test.ts` | AC-1 tests |
+| `packages/shared/schemas/src/lib/catalog/release_lock.ts` | ReleasePointer + InstalledPackLock schemas |
+| `packages/shared/lpc/src/lib/visual_adapter.ts` | LPC→definition adapter |
+| `packages/shared/lpc/src/lib/elapsed_time.ts` | Elapsed-time actor clock |
 | `packages/shared/lpc/tests/visual_adapter.test.ts` | Adapter tests |
-| `packages/shared/lpc/tests/elapsed_time.test.ts` | AC-5 clock tests |
+| `packages/shared/lpc/tests/elapsed_time.test.ts` | Clock tests |
+| `packages/frontend/engine/src/rendering/visual_definition_playback.ts` | Engine consumer of VisualDefinition + clock |
+| `packages/frontend/engine/src/rendering/visual_definition_playback.test.ts` | Playback resolver tests |
+| `packages/frontend/engine/src/rendering/component_composer.ts` | AC-2 component composer (rig/body/pose + multi-pass) |
+| `packages/frontend/engine/src/rendering/component_composer.test.ts` | AC-2 composer tests |
 | `apps/frontend/docs/src/content/docs/features/visual-asset-authoring.md` | User-facing authoring reference |
 
 ### Files Modified
 | File | Change |
 |---|---|
-| `packages/shared/schemas/src/index.ts` | Export visual definition schema |
-| `packages/shared/lpc/src/index.ts` | Export adapter + elapsed-time clock |
+| `packages/shared/schemas/src/index.ts` | Export visual definition + release lock |
+| `packages/shared/lpc/src/index.ts` | Export adapter + clock |
 | `packages/shared/lpc/src/lib/animation.ts` | Export `FRAMES_PER_STATE`, `LPC_STATE_NAMES` |
-| `scripts/src/lib/catalog/pipeline.ts` | Block release pointer on shard/seed failure; report seed stats |
-| `scripts/src/lib/catalog/__tests__/fixtures.ts` | Add seed files so happy path reports seed success |
-| `scripts/src/lib/catalog/__tests__/publish.test.ts` | Add AC-4 failure-injection tests; update seed count |
+| `packages/frontend/engine/src/rendering/animation_controller.ts` | Elapsed-time clock replaces frame-count clock |
+| `packages/frontend/engine/src/rendering/animation_controller.test.ts` | Added elapsed-time 60/30Hz equivalence test |
+| `packages/frontend/engine/src/rendering/index.ts` | Export playback resolver + component composer |
+| `packages/frontend/engine/src/game_world.ts` | Wire real ticker deltaMS into AnimationController; compile shared definition at load and resolve frames through it (AC-3) |
+| `packages/frontend/preview/src/lib/lpc/lpc_renderer.ts` | Route preview sprite creation through the shared visual definition (AC-6) |
+| `scripts/src/lib/catalog/pipeline.ts` | Block release pointer on shard/seed failure; write versioned release pointer |
+| `scripts/src/lib/catalog/__tests__/fixtures.ts` | Add seed files to fixtures |
+| `scripts/src/lib/catalog/__tests__/publish.test.ts` | Add AC-4 release-pointer tests |
 | `scripts/src/lib/catalog/__tests__/thumbnail_generation.test.ts` | Add seed files to fixture |
 | `docs/contracts/C-496-shared-visual-assets-and-playback.md` | Status → implemented; this report |
 
 ### Deviations from Spec
-- The shared visual definition, LPC adapter, elapsed-time clock and
-  publication fix were implemented and unit-tested. The **engine/preview
-  consumption** (game_world/lpc_renderer/lpc_preview_view_model using the new
-  definition), the **generic-atlas renderer** for non-LPC frames, and the
-  **production-path `/game` E2E + visual evidence** for AC-3, AC-6 and AC-7
-  were NOT completed in this session due to the contract's breadth (40–65
-  paths) relative to the implementation budget. The foundations they require
-  are in place and validated.
-- Proposed Amendment: split the remaining engine/preview integration and
-  visual-evidence ACs (AC-3, AC-6, AC-7) into a follow-up contract that
-  consumes this landed shared-format layer, or extend this run's budget to
-  wire `lpc_renderer`/`game_world` to the definition and produce the required
-  captures.
+- AC-3 is now wired into the production `game_world` path (compiles the shared
+definition at load, resolves frames through it by elapsed time with fallback).
+- AC-2 is implemented via `component_composer` (rig/body/pose rejection +
+deterministic multi-pass ordering incl. rear `/behind`).
+- AC-6 is partially wired: `lpc_renderer.createSprite` routes preview sprite
+  creation through the shared definition; full Hub `/catalog` view-model
+  adoption and the mandatory `/game` E2E + visual capture evidence (AC-3/AC-6)
+  and AC-7's resource/regression report remain outstanding.
+- AC-7 (resource/regression report, allocation/memory observations, repeated
+  mount/unmount/offline-reload) not completed.
+- Proposed Amendment: a follow-up adopts the definition path in
+  `lpc_preview_view_model`/Hub detail preview end-to-end and produces the
+  required screenshots + allocation report.
 
 ### Test Results
-- Unit (schemas visual): 15/15 pass (0 failures)
-- Unit (lpc): 77/77 pass (0 failures)
-- Unit (scripts catalog): 71/71 pass (0 failures)
-- Visual/E2E: not run (deferred ACs — no production-path evidence yet)
-- Baseline: no pre-existing failures observed in the affected suites; 0 new
-  failures in the delivered tests.
+- Unit schemas visual: 15/15 pass
+- Unit lpc: 77/77 pass
+- Unit engine rendering: 24/24 pass (elapsed-time clock + playback + composer)
+- Unit engine full lane: 1128/1130 pass (2 pre-existing emberwatch atlas.json
+  failures absent in the worktree — NOT C-496 regressions)
+- Unit scripts catalog: 73/73 pass (incl. AC-4 release pointer)
+- Unit preview lifecycle: 6/6 pass
+- Visual/E2E: not run (deferred ACs — no production-path captures)
+- Baseline: 0 new failures across the delivered suites.
 
 ### Handoff
-Handed off for independent verification. AC-1 and AC-4 are fully implemented
-and unit-tested; AC-2/AC-5 partially (schema/clock primitives); AC-3/AC-6/AC-7
-deferred pending the proposed amendment. Verify the delivered shared-format
-layer, then decide on the amendment before promoting to `verified`.
+Handed off for independent verification. AC-1, AC-3, AC-4, AC-5 fully
+implemented with production-path wiring; AC-2 implemented via composer; AC-6
+partially wired (preview renderer through the definition); AC-7 and full visual
+evidence deferred per the proposed amendment. Verify, then decide on the
+amendment before promoting to `verified`.

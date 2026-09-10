@@ -11,14 +11,10 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import { gmPromptService, narrativeDirectorService } from '$services';
-import {
-  type AddressModeTogggleViewModelInterface,
-  getAddressModeTogggleViewModel,
-} from './address_mode_toggle_view_model.svelte.ts';
-import {
-  getPushStoryButtonViewModel,
-  type PushStoryButtonViewModelInterface,
-} from './push_story_button_view_model.svelte.ts';
+import { getAddressModeTogggleViewModel } from './address_mode_toggle_composition.ts';
+import type { AddressModeTogggleViewModelInterface } from './address_mode_toggle_view_model.svelte.ts';
+import { getPushStoryButtonViewModel } from './push_story_button_composition.ts';
+import type { PushStoryButtonViewModelInterface } from './push_story_button_view_model.svelte.ts';
 import { getSessionSummaryPanelViewModel } from './session_summary_panel_composition.ts';
 import type { SessionSummaryPanelViewModelInterface } from './session_summary_panel_view_model.svelte.ts';
 
