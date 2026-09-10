@@ -313,6 +313,17 @@ export const getFeatureViewModel = (
   createFeatureViewModel({ ...options, featureService: myService });
 ```
 
+The boundary is **enforced**: `guard-view-model-composition` (`bun run guard`)
+fails if a `*_view_model.svelte.ts` imports the `$services` barrel or the
+aggregate `@aikami/frontend/services` root at runtime. Type-only imports are
+allowed (erased), and base classes come from the narrow
+`@aikami/frontend/services/base`. Not-yet-migrated ViewModels are captured in a
+ratchet baseline; each migration must remove its entry via `--update-baseline`.
+
+Naming: the testable factory (no production imports) is `createFeatureViewModel`
+in the ViewModel module; `getFeatureViewModel` in the `*_composition.ts` file is
+the production-wired factory.
+
 ### ViewModel Rules
 
 - Export `type ...Interface` with **all data properties `readonly`** and
