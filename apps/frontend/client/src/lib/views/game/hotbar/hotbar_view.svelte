@@ -7,7 +7,8 @@
 // Contract: C-337 Complete Character Progression, Classes, Abilities, Skills, and Spells
 
 import { BaseViewModelContainer } from '$components';
-import { getHotbarViewModel, type HotbarViewModelInterface } from './hotbar_view_model.svelte';
+import { getHotbarViewModel } from './hotbar_composition.ts';
+import type { HotbarViewModelInterface } from './hotbar_view_model.svelte';
 
 type Props = {
   viewModel?: HotbarViewModelInterface;
