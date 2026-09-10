@@ -3,7 +3,7 @@ id: C-494
 title: "One companion who reacts"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-09T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — "I disapprove: −5" is bookkeeping; a companion is a character |
 | **Dependencies** | [C-488](C-488-authored-npc-identity-in-the-content-pack.md) (authored identity), [C-491](C-491-committed-narrative-event-record.md) (the events the companion witnesses), [C-492](C-492-memory-retrieval-correctness-and-production-wiring.md) (witness-scoped recall feeding the companion's references). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
 | **Contract version** | 2.0.0 |
@@ -27,7 +27,7 @@ created_at: "2026-09-09T00:00:00Z"
 
 ## Problem & Baseline Evidence
 
-- **No Emberwatch NPC is recruitable.** All three pack NPCs (`village_elder`, `rollo_grasper`, `merchant`) carry C-488 identity fields (`personality`, `agenda`, `knowledge`, `secrets`, `boundaries`) but **none** sets `isCompanion: true` — the companion fields (`isCompanion`, `recruitDialogueKey`, `companionClassId`, `initialApproval`, `banterPool`) exist in `ContentPackNpcEntrySchema` (`content_pack.ts:141-158`, C-340) and are unused by the pack.
+- **No Emberwatch NPC is recruitable.** All three pack NPCs (`village_elder`, `rollo_grasper`, `merchant`) carry C-488 identity fields (`personality`, `agenda`, `knowledge`, `secrets`, `boundaries`) but **none** sets `isCompanion: true` — the companion fields (`isCompanion`, `recruitDialogueKey`, `dismissDialogueKey`, `companionClassId`, `initialApproval`, `banterPool`) exist in `ContentPackNpcEntrySchema` (`content_pack.ts:186-198`, C-340) and are unused by the pack.
 - **All the scaffolding exists and is untested end-to-end.** `party_roster_service.svelte.ts` has `recruit`, `dismiss`, `adjustApproval`, `getApproval`, `activatePersonalQuest`, and save/load serialization. C-491 records witnessed events (`PromiseMade`, `ThreatWitnessed`, …). C-488 assembles authored identity. C-492 (draft) wires witness-scoped recall into dialogue. No authored companion uses any of it.
 - **Approval is the only reaction surface.** `adjustApproval({ npcId, delta })` is the entire "companion reacts" vocabulary. There is no path from a witnessed event to a companion utterance, no boundary-crossing behaviour, and no unprompted action.
 - **Reproduction**: `python3 -c "import json; d=json.load(open('content/packs/emberwatch/manifest.json')); print([(k, v.get('isCompanion')) for k,v in d['npcs'].items()])"` → all `None`/`false`; `grep -rn "isCompanion" content/packs/emberwatch/manifest.json` → no hits.
@@ -194,6 +194,7 @@ The `reaction|trigger` convention inside a boundary/agenda entry is the contract
 
 **Watch Points**:
 - The reference comes through C-492's witness-scoped recall, never by querying `narrativeEventService.events` directly — one witness authority.
+- ⚠️ **C-492 reverted on `main`** (commit `3f2568db4` rolled back the C-492/C-506 memory-retrieval surface): `retrieveForNpc`, the `narrative_event` source type, and the `[MEMORY]` injection are **not currently present**. If they are not re-landed before this contract lands, the implementer must either re-land the minimal witness-scoped recall (filter `narrativeEventService.witnessedBy(npcId)` → inject a bounded `[COMPANION WITNESSED]` section) or — as a documented deviation mirroring the C-493 fallback — route through `narrativeEventService.witnessedBy` directly, and record the deviation as an Amendment. Do not silently depend on code that is absent.
 - "Unprompted" means the player did not ask about it; the prompt injects it as background, and the companion's own voice surfaces it. A test that only checks the string is in the prompt is necessary but not sufficient — quote the generated line.
 
 ### AC-4: Crossing the boundary is a state change
@@ -278,6 +279,7 @@ The `reaction|trigger` convention inside a boundary/agenda entry is the contract
 - **Resolved during drafting:** the companion is a single authored NPC (not a framework); which NPC is the maintainer's content call, and the contract specifies structure/behaviour, not the prose.
 - **Resolved during drafting:** the five identity characteristics map onto C-488's existing fields (no new schema); see Architecture Directives.
 - **Resolved during drafting:** AC-5's unprompted turn reuses C-493's production poller; if C-493 is not yet landed, the implementer hooks the event-commit path and records the deviation as an Amendment.
+- **Resolved during drafting:** C-492's `retrieveForNpc` was reverted on `main` (commit `3f2568db4`). AC-3 prefers the witness-scoped recall once re-landed; otherwise the implementer re-lands the minimal recall or routes through `narrativeEventService.witnessedBy` directly and records the deviation as an Amendment (see AC-3 Watch Points).
 
 ## Amendments
 
