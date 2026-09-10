@@ -148,7 +148,7 @@ class ConnectionManagerViewModel
     | { checking: boolean; ok: boolean; error?: string; latencyMs?: number; modelCount?: number }
     | undefined = $state(undefined);
   private _availableModels: FetchedModel[] = $state([]);
-  private _providerCache: Record<string, { apiKey: string; model: string }> = {};
+  private _providerCache: Record<string, { apiKey: string; baseUrl: string; model: string }> = {};
 
   // ── Proxied state ─────────────────────────────────────────────────────
 
@@ -381,7 +381,11 @@ class ConnectionManagerViewModel
       return;
     }
     this._providerCache = {
-      [connection.provider]: { apiKey: connection.apiKey, model: connection.model },
+      [connection.provider]: {
+        apiKey: connection.apiKey,
+        baseUrl: connection.baseUrl,
+        model: connection.model,
+      },
     };
     this._availableModels = [];
     this.draftTestResult = undefined;
@@ -415,12 +419,17 @@ class ConnectionManagerViewModel
   setProvider(provider: string): void {
     const oldProvider = this.draft.provider;
     const oldApiKey = this.draft.apiKey;
+    const oldBaseUrl = this.draft.baseUrl;
     const oldModel = this.draft.model;
     const oldName = this.draft.name;
 
     // Save current values to cache
-    if (oldProvider && (oldApiKey || oldModel)) {
-      this._providerCache[oldProvider] = { apiKey: oldApiKey ?? '', model: oldModel ?? '' };
+    if (oldProvider) {
+      this._providerCache[oldProvider] = {
+        apiKey: oldApiKey ?? '',
+        baseUrl: oldBaseUrl ?? '',
+        model: oldModel ?? '',
+      };
     }
 
     // Load cached values for new provider
@@ -437,6 +446,7 @@ class ConnectionManagerViewModel
     this.draft = {
       ...this.draft,
       apiKey: cached?.apiKey ?? this._getDefaultApiKey(provider) ?? '',
+      baseUrl: cached?.baseUrl ?? '',
       model: '',
       name: nameWasAuto ? this._providerLabel(provider) : oldName,
       provider,

@@ -300,11 +300,15 @@ class AiGatewayService
 
   /**
    * Well-known chat base endpoint for cloud providers, read from the provider
-   * registry. Only OpenAI-compatible providers declare one — Google and
-   * Anthropic speak their own request shapes and have no base here.
+   * registry. A custom provider without its own URL falls back to the runtime
+   * text engine's OpenAI-compatible base.
    */
   private _getDefaultTextEndpoint(provider: string): string | undefined {
-    return PROVIDER_MODEL_FETCH[provider]?.chatBaseUrl;
+    const configuredEndpoint = PROVIDER_MODEL_FETCH[provider]?.chatBaseUrl;
+    if (configuredEndpoint || provider !== 'custom') {
+      return configuredEndpoint;
+    }
+    return getOllamaRuntimeEndpoints().chatTestUrl?.replace(/\/api\/chat$/, '/v1');
   }
 
   /**

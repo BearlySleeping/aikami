@@ -362,7 +362,13 @@
     "orphaned": ["clearOpenRouterCache"]
   },
   "apps/frontend/client/src/lib/services/config/provider_endpoints.ts": {
-    "orphaned": ["FetchedModel", "ModelFetchConfig"]
+    "orphaned": [
+      "FetchedModel",
+      "ModelFetchConfig",
+      "ProviderHttpRequest",
+      "ProviderRequestContext"
+    ],
+    "_comment": "ProviderHttpRequest and ProviderRequestContext are the public return/context contracts of resolveChatTestRequest and the registry's chatTest builders; other files consume them only as types, which the guard does not count as production use."
   },
   "apps/frontend/client/src/lib/services/config/runtime_config_service.svelte.ts": {
     "orphaned": [

@@ -179,6 +179,24 @@ describe('resolveChatTestRequest', () => {
     expect(body.stream).toBe(false);
   });
 
+  test('ollama strips /v1 from a draft chat URL before using its native API', () => {
+    const request = resolveChatTestRequest({
+      registryId: 'ollama',
+      model: 'llama3',
+      baseUrl: 'http://localhost:11434/v1/',
+    });
+
+    expect(request?.url).toBe('http://localhost:11434/api/chat');
+  });
+
+  test('ollama strips /v1 from a draft models URL before using its native API', () => {
+    const url = PROVIDER_MODEL_FETCH.ollama.resolveModelsUrl?.({
+      baseUrl: 'http://localhost:11434/v1/',
+    });
+
+    expect(url).toBe('http://localhost:11434/api/tags');
+  });
+
   test('an unknown provider yields no request', () => {
     expect(resolveChatTestRequest({ registryId: 'does-not-exist', model: 'x' })).toBeUndefined();
   });

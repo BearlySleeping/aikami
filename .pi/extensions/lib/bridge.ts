@@ -35,6 +35,67 @@ type BridgeEnvelope<T> =
   | { ok: true; data: T }
   | { ok: false; error: { message: string; name?: string; stack?: string; details?: unknown } };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** Parse and validate one dispatcher response before consumers access branch fields. */
+export const parseBridgeEnvelope = <T>(options: {
+  command: string;
+  stdout: string;
+  stderr?: string;
+}): BridgeEnvelope<T> => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(options.stdout);
+  } catch {
+    throw new BridgeError({
+      message:
+        `Bridged command '${options.command}' returned non-JSON output: ${options.stdout.slice(0, 500)}` +
+        (options.stderr ? `\nstderr: ${options.stderr.slice(0, 500)}` : ''),
+      name: 'BridgeProtocolError',
+    });
+  }
+
+  if (!isRecord(parsed) || typeof parsed.ok !== 'boolean') {
+    throw new BridgeError({
+      message: `Bridged command '${options.command}' returned an invalid response envelope.`,
+      name: 'BridgeProtocolError',
+    });
+  }
+
+  if (parsed.ok) {
+    if (!Object.hasOwn(parsed, 'data')) {
+      throw new BridgeError({
+        message: `Bridged command '${options.command}' returned a success envelope without data.`,
+        name: 'BridgeProtocolError',
+      });
+    }
+    return { ok: true, data: parsed.data as T };
+  }
+
+  if (
+    !isRecord(parsed.error) ||
+    typeof parsed.error.message !== 'string' ||
+    (parsed.error.name !== undefined && typeof parsed.error.name !== 'string') ||
+    (parsed.error.stack !== undefined && typeof parsed.error.stack !== 'string')
+  ) {
+    throw new BridgeError({
+      message: `Bridged command '${options.command}' returned an invalid error envelope.`,
+      name: 'BridgeProtocolError',
+    });
+  }
+
+  return {
+    ok: false,
+    error: {
+      message: parsed.error.message,
+      name: parsed.error.name,
+      stack: parsed.error.stack,
+      details: parsed.error.details,
+    },
+  };
+};
+
 /** Raised when a bridged script reports failure (or cannot be run at all). */
 export class BridgeError extends Error {
   readonly details: unknown;
@@ -85,17 +146,7 @@ export const runPiScript = async <T>(
     });
   }
 
-  let envelope: BridgeEnvelope<T>;
-  try {
-    envelope = JSON.parse(stdout) as BridgeEnvelope<T>;
-  } catch {
-    throw new BridgeError({
-      message:
-        `Bridged command '${command}' returned non-JSON output: ${stdout.slice(0, 500)}` +
-        (result.stderr ? `\nstderr: ${result.stderr.slice(0, 500)}` : ''),
-      name: 'BridgeProtocolError',
-    });
-  }
+  const envelope = parseBridgeEnvelope<T>({ command, stdout, stderr: result.stderr });
 
   if (!envelope.ok) {
     throw new BridgeError({
