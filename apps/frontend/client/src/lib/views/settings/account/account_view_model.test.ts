@@ -1,72 +1,59 @@
 // apps/frontend/client/src/lib/views/settings/account/account_view_model.test.ts
 //
 // C-464 AC-1/2/7: Account settings section tests.
+//
+// This suite exercises the ViewModel through feature-owned fixtures — no
+// global `$services` barrel mock and no dependency on the test_preload mock
+// inventory. Each test constructs exactly the capabilities it needs.
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { localServicesMockBase } from '../../../test_preload.ts';
+import { describe, expect, mock, test } from 'bun:test';
+import { BaseViewModel } from '@aikami/frontend/services/base';
+import type { SaveSlotEntry } from '@aikami/types';
+import {
+  type AccountCapabilities,
+  type AccountSyncCapabilities,
+  createAccountViewModel,
+} from './account_view_model.svelte';
+import {
+  createSignedInAccount,
+  createSignedOutAccount,
+  createSyncCapabilities,
+} from './testing/account_fixtures.ts';
 
-// Mock authService
-const mockSignOut = mock(async () => true);
-const mockDeleteAccount = mock(async () => true);
-const mockListSlots = mock(async () => []);
-const mockAuthService = {
-  isLoggedIn: false,
-  currentUser: undefined as { id: string; displayName: string; email: string } | undefined,
-  uid: undefined as string | undefined,
-  signOut: mockSignOut,
-  deleteAccount: mockDeleteAccount,
-  setCurrentUser: mock(() => {}),
-};
-
-// Spread the shared base and override only what this suite needs — replacing
-// the whole '$services' barrel here (as an earlier version of this file did)
-// strips every other export the shared preload provides, which corrupts
-// whichever other test file runs next in the same worker (it did: settings_
-// view_model.test.ts, which pulls in this ViewModel transitively, started
-// failing on a MISSING 'hubApiBase' export — the exact anti-pattern
-// localServicesMockBase's own doc comment warns about).
-mock.module('$services', () => ({
-  ...localServicesMockBase(),
-  authService: mockAuthService,
-  gameStateSyncService: {
-    listSlots: mockListSlots,
-  },
-  hubApiBase: () => '/api/hub',
-  hubAuthHeaders: () => ({}),
-}));
-
-let getAccountViewModel: typeof import('./account_view_model.svelte').getAccountViewModel;
-
-beforeEach(async () => {
-  mockAuthService.isLoggedIn = false;
-  mockAuthService.currentUser = undefined;
-  mockAuthService.uid = undefined;
-  mockSignOut.mockClear();
-  mockDeleteAccount.mockClear();
-  mockListSlots.mockClear();
-  ({ getAccountViewModel } = await import('./account_view_model.svelte'));
-});
-
-describe('AccountViewModel — AC-1: Signed-out state', () => {
-  test('shows signed-out state when not logged in', async () => {
-    const vm = getAccountViewModel({ className: 'AccountViewModel' });
-
-    expect(vm.isLoggedIn).toBe(false);
-    expect(vm.displayName).toBeUndefined();
-    expect(vm.email).toBeUndefined();
-    expect(vm.showDeleteAccount).toBe(false);
+const createViewModel = (
+  options: {
+    account?: AccountCapabilities;
+    sync?: AccountSyncCapabilities;
+    isOnline?: () => boolean;
+  } = {},
+) =>
+  createAccountViewModel({
+    className: 'AccountViewModel',
+    account: options.account ?? createSignedOutAccount(),
+    sync: options.sync ?? createSyncCapabilities(),
+    isOnline: options.isOnline,
   });
 
-  test('does not offer sync controls when signed out', async () => {
-    const vm = getAccountViewModel({ className: 'AccountViewModel' });
+describe('AccountViewModel — AC-1: Signed-out state', () => {
+  test('shows signed-out state when not logged in', () => {
+    const viewModel = createViewModel();
 
-    expect(vm.syncSlots).toEqual([]);
+    expect(viewModel.isLoggedIn).toBe(false);
+    expect(viewModel.displayName).toBeUndefined();
+    expect(viewModel.email).toBeUndefined();
+    expect(viewModel.showDeleteAccount).toBe(false);
+  });
+
+  test('does not offer sync controls when signed out', () => {
+    const viewModel = createViewModel();
+
+    expect(viewModel.syncSlots).toEqual([]);
   });
 });
 
 describe('AccountViewModel — AC-2: Sync status', () => {
-  beforeEach(() => {
-    mockListSlots.mockImplementation(async () => [
+  test('lists sync slots when signed in', async () => {
+    const slots: SaveSlotEntry[] = [
       {
         slotNumber: 1,
         lastLocationName: 'Test Location',
@@ -74,54 +61,107 @@ describe('AccountViewModel — AC-2: Sync status', () => {
         storageRef: 'saves/test-uid/slot_1.json',
         updatedAt: '2026-09-04T00:00:00.000Z',
       },
-    ]);
+    ];
+    const listSlots = mock(async () => slots);
+    const viewModel = createViewModel({
+      account: createSignedInAccount(),
+      sync: createSyncCapabilities({ listSlots }),
+    });
+
+    await viewModel.initialize();
+
+    expect(viewModel.isLoggedIn).toBe(true);
+    expect(viewModel.displayName).toBe('Test User');
+    expect(viewModel.email).toBe('test@example.com');
+    expect(viewModel.showDeleteAccount).toBe(true);
+    expect(listSlots).toHaveBeenCalledWith({ uid: 'test-uid' });
+    expect(viewModel.syncSlots).toEqual(slots);
   });
 
-  test('lists sync slots when signed in', async () => {
-    mockAuthService.isLoggedIn = true;
-    mockAuthService.currentUser = {
-      id: 'test-uid',
-      displayName: 'Test User',
-      email: 'test@example.com',
-    };
-    mockAuthService.uid = 'test-uid';
-    const vm = getAccountViewModel({ className: 'AccountViewModel' });
-    await vm.initialize();
-
-    expect(vm.isLoggedIn).toBe(true);
-    expect(vm.displayName).toBe('Test User');
-    expect(vm.email).toBe('test@example.com');
-    expect(vm.showDeleteAccount).toBe(true);
-    expect(mockListSlots).toHaveBeenCalled();
-    expect(vm.syncSlots).toContainEqual({
-      slotNumber: 1,
-      lastLocationName: 'Test Location',
-      playedTimeSeconds: null,
-      storageRef: 'saves/test-uid/slot_1.json',
-      updatedAt: '2026-09-04T00:00:00.000Z',
+  test('does not query sync slots while signed out', async () => {
+    const listSlots = mock(async () => []);
+    const viewModel = createViewModel({
+      account: createSignedOutAccount(),
+      sync: createSyncCapabilities({ listSlots }),
     });
+
+    await viewModel.initialize();
+
+    expect(listSlots).not.toHaveBeenCalled();
+  });
+});
+
+describe('AccountViewModel — session actions', () => {
+  test('signOut delegates to the account capability', async () => {
+    const signOut = mock(async () => true);
+    const viewModel = createViewModel({
+      account: createSignedInAccount({ signOut }),
+    });
+
+    await viewModel.signOut();
+
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(viewModel.isSigningOut).toBe(false);
+  });
+
+  test('revokeAllSessions delegates to the account capability', async () => {
+    const revokeAllSessions = mock(async () => true);
+    const viewModel = createViewModel({
+      account: createSignedInAccount({ revokeAllSessions }),
+    });
+
+    await viewModel.revokeAllSessions();
+
+    expect(revokeAllSessions).toHaveBeenCalledTimes(1);
+    expect(viewModel.isRevokingAllSessions).toBe(false);
+  });
+});
+
+describe('AccountViewModel — platform capabilities', () => {
+  test('isOnline reflects the injected probe', () => {
+    const viewModel = createViewModel({ isOnline: () => false });
+
+    expect(viewModel.isOnline).toBe(false);
+  });
+});
+
+describe('AccountViewModel — real base class', () => {
+  test('extends the production BaseViewModel, not a shared fake', async () => {
+    const viewModel = createViewModel();
+
+    expect(viewModel).toBeInstanceOf(BaseViewModel);
+    // The preload's old MockBaseViewModel lacked registerEffectRoot; its
+    // dispose() also left __mounted untouched. Both assertions pin the real base.
+    expect('registerEffectRoot' in viewModel).toBe(true);
+
+    viewModel.__mounted = true;
+    await viewModel.dispose();
+    expect(viewModel.__mounted).toBe(false);
   });
 });
 
 describe('AccountViewModel — AC-7: Delete account type-to-confirm', () => {
   test('confirm requires DELETE text', async () => {
-    const vm = getAccountViewModel({ className: 'AccountViewModel' });
+    const deleteAccount = mock(async () => true);
+    const viewModel = createViewModel({
+      account: createSignedInAccount({ deleteAccount }),
+    });
 
-    vm.openDeleteDialog();
-    expect(vm.isDeleteDialogOpen).toBe(true);
-    expect(vm.deleteConfirmText).toBe('');
+    viewModel.openDeleteDialog();
+    expect(viewModel.isDeleteDialogOpen).toBe(true);
+    expect(viewModel.deleteConfirmText).toBe('');
 
     // With wrong text, confirm should not call deleteAccount
-    vm.updateDeleteConfirmText('wrong');
-    await vm.confirmDeleteAccount();
-    expect(mockDeleteAccount).not.toHaveBeenCalled();
+    viewModel.updateDeleteConfirmText('wrong');
+    await viewModel.confirmDeleteAccount();
+    expect(deleteAccount).not.toHaveBeenCalled();
 
     // With correct text, confirm should call deleteAccount
-    vm.updateDeleteConfirmText('DELETE');
-    await vm.confirmDeleteAccount();
-    expect(mockDeleteAccount).toHaveBeenCalled();
+    viewModel.updateDeleteConfirmText('DELETE');
+    await viewModel.confirmDeleteAccount();
+    expect(deleteAccount).toHaveBeenCalledTimes(1);
 
-    vm.closeDeleteDialog();
-    expect(vm.isDeleteDialogOpen).toBe(false);
+    viewModel.closeDeleteDialog();
+    expect(viewModel.isDeleteDialogOpen).toBe(false);
   });
 });

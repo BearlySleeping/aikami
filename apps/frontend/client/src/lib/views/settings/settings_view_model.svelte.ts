@@ -18,10 +18,8 @@ import {
   type AgentListViewModelInterface,
   getAgentListViewModel,
 } from '../agent/list/agent_list_view_model.svelte.ts';
-import {
-  type AccountViewModelInterface,
-  getAccountViewModel,
-} from './account/account_view_model.svelte';
+import { getAccountViewModel } from './account/account_composition.ts';
+import type { AccountViewModelInterface } from './account/account_view_model.svelte';
 import {
   type AiSettingsViewModelInterface,
   getAiSettingsViewModel,

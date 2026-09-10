@@ -183,6 +183,7 @@ export default defineConfig(({ mode }) => {
         '@aikami/lpc': toPackagesPath('shared/lpc/src'),
         '@aikami/lpc/*': toPackagesPath('shared/lpc/src/lib/*'),
         '@aikami/constants': toPackagesPath('shared/constants/src'),
+        '@aikami/frontend/services/base': toPackagesPath('frontend/services/src/base'),
         '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
         '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib/*'),
         '@aikami/frontend/components': toPackagesPath('frontend/components/src'),

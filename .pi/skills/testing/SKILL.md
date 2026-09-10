@@ -59,7 +59,43 @@ bun test src/lib/services/game/game_composition_root.test.ts
 
 The `client:test` moon task already includes `--preload` — prefer it for running all tests.
 
-### Mock Patterns for Service Tests
+### 🔴 Preferred Pattern (New / Migrated Features): Feature-Owned Fixtures
+
+New ViewModels receive **only the capabilities they need** through typed options.
+Production singletons are wired in a sibling `*_composition.ts` file, and the
+ViewModel module never imports `$services`. Tests construct the ViewModel with
+fresh, typed doubles from a feature-local `testing/` directory — no global
+barrel mock, no `test_preload` inventory coupling.
+
+This is the migration target. `views/settings/account/` is the reference slice:
+
+```
+views/settings/account/
+  account_view.svelte
+  account_view_model.svelte.ts        # class + createAccountViewModel(capabilities)
+  account_composition.ts             # wires authService/gameStateSyncService from $services
+  account_view_model.test.ts         # builds VM from fixtures directly
+  testing/account_fixtures.ts        # fresh typed doubles, explicit defaults
+```
+
+```typescript
+// account_view_model.svelte.ts — no '$services' import
+const viewModel = createAccountViewModel({
+  className: 'AccountViewModel',
+  account: createSignedInAccount({ signOut }),
+  sync: createSyncCapabilities({ listSlots }),
+});
+```
+
+Prefer one narrow capability type per collaborator over a full service
+interface, and move credentialed HTTP calls behind a service operation rather
+than injecting `fetch` into the ViewModel.
+
+The legacy `mock.module()` / `localServicesMockBase()` pattern below remains for
+unmigrated tests until the preload lane is deleted. **Do not adopt it for new
+ViewModels.**
+
+### Mock Patterns for Service Tests (legacy preload lane)
 
 When testing a service that extends `BaseFrontendClass`, use `mock.module()` in
 `beforeEach` to stub its dependencies. The global mocks from `test_preload.ts`

@@ -3,7 +3,8 @@
   "license": "MIT",
   "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./base": "./src/base.ts"
   },
   "scripts": {
     "lint": "biome lint .",

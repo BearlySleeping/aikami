@@ -235,13 +235,19 @@ utils) that has no `BaseClass` to inherit from.
 
 ### ViewModel Template
 
+Import base classes from the **narrow** `@aikami/frontend/services/base`
+entrypoint — it loads no router/dialog/application graph. For new or migrated
+ViewModels, also inject only the service capabilities the ViewModel needs
+instead of importing singletons from `$services`; production wiring goes in a
+sibling `*_composition.ts` (reference: `views/settings/account/`).
+
 ```typescript
 // apps/frontend/client/src/lib/views/feature/feature_view_model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from "@aikami/frontend/services";
+} from "@aikami/frontend/services/base";
 import { myService } from "$services";
 
 export type FeatureViewModelInterface = BaseViewModelInterface & {
