@@ -20,10 +20,8 @@ import {
 } from '../agent/list/agent_list_view_model.svelte.ts';
 import { getAccountViewModel } from './account/account_composition.ts';
 import type { AccountViewModelInterface } from './account/account_view_model.svelte';
-import {
-  type AiSettingsViewModelInterface,
-  getAiSettingsViewModel,
-} from './ai/ai_settings_view_model.svelte';
+import { getAiCapabilityBadgeViewModel } from './ai/ai_capability_badge_composition.ts';
+import type { AiCapabilityBadgeViewModelInterface } from './ai/ai_capability_badge_view_model.svelte';
 import {
   type CapabilityDetailViewModelInterface,
   getCapabilityDetailViewModel,
@@ -101,7 +99,6 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly displayViewModel: SettingsDisplayViewModelInterface;
   readonly controlsViewModel: SettingsControlsViewModelInterface;
   readonly exportViewModel: ExportViewModelInterface;
-  readonly aiSettingsViewModel: AiSettingsViewModelInterface;
   readonly storyDialogueViewModel: CapabilityDetailViewModelInterface;
   readonly artworkViewModel: CapabilityDetailViewModelInterface;
   readonly readAloudViewModel: CapabilityDetailViewModelInterface;
@@ -133,7 +130,7 @@ export class SettingsViewModel
   private _musicViewModel: SettingsMusicViewModelInterface | undefined;
   private _autonomousViewModel: AutonomousSettingsViewModelInterface | undefined;
   private _exportViewModel: ExportViewModelInterface | undefined;
-  private _aiSettingsViewModel: AiSettingsViewModelInterface | undefined;
+  private _aiCapabilityBadgeViewModel: AiCapabilityBadgeViewModelInterface | undefined;
   private _storyDialogueViewModel: CapabilityDetailViewModelInterface | undefined;
   private _artworkViewModel: CapabilityDetailViewModelInterface | undefined;
   private _readAloudViewModel: CapabilityDetailViewModelInterface | undefined;
@@ -232,13 +229,18 @@ export class SettingsViewModel
     return this._exportViewModel;
   }
 
-  get aiSettingsViewModel(): AiSettingsViewModelInterface {
-    if (!this._aiSettingsViewModel) {
-      this._aiSettingsViewModel = getAiSettingsViewModel({
-        className: 'AiSettingsViewModel',
+  /**
+   * Lightweight badge ViewModel. Critically, rendering the header does NOT
+   * construct the full AI settings editor — it reads the shared connection
+   * status store through this capability instead.
+   */
+  private _getAiCapabilityBadgeViewModel(): AiCapabilityBadgeViewModelInterface {
+    if (!this._aiCapabilityBadgeViewModel) {
+      this._aiCapabilityBadgeViewModel = getAiCapabilityBadgeViewModel({
+        className: 'AiCapabilityBadgeViewModel',
       });
     }
-    return this._aiSettingsViewModel;
+    return this._aiCapabilityBadgeViewModel;
   }
 
   get storyDialogueViewModel(): CapabilityDetailViewModelInterface {
@@ -292,29 +294,11 @@ export class SettingsViewModel
   }
 
   get aiCapabilityBadge(): string {
-    const entries = this.aiSettingsViewModel.statusEntries;
-    const textEntry = entries.find((e) => e.capability === 'text');
-    if (textEntry?.status === 'reachable') {
-      return 'AI: Connected';
-    }
-    const anyReachable = entries.some((e) => e.status === 'reachable');
-    if (anyReachable) {
-      return 'AI: Partial';
-    }
-    return 'AI: Not Set Up';
+    return this._getAiCapabilityBadgeViewModel().label;
   }
 
   get aiCapabilityBadgeColor(): string {
-    const entries = this.aiSettingsViewModel.statusEntries;
-    const textEntry = entries.find((e) => e.capability === 'text');
-    if (textEntry?.status === 'reachable') {
-      return 'badge-success';
-    }
-    const anyReachable = entries.some((e) => e.status === 'reachable');
-    if (anyReachable) {
-      return 'badge-warning';
-    }
-    return 'badge-ghost';
+    return this._getAiCapabilityBadgeViewModel().color;
   }
 
   // ── Constructor ──
