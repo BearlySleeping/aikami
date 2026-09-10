@@ -16,7 +16,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { LpcAnimationState } from '@aikami/lpc';
+import { type LpcAnimationState, resolveBaseAppearanceRecipe } from '@aikami/lpc';
 import type { Campaign, PersonaData } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import { authService, equipmentService } from '$services';
@@ -149,15 +149,6 @@ class GameBootService
   private _persona: PersonaData | undefined;
 
   /**
-   * The effective LPC recipe (base + persona overrides) computed by
-   * {@link _buildPlayerData}. Persisted so the base outfit can be re-seeded
-   * AFTER save hydration — otherwise an empty equipment snapshot in the
-   * restored save clobbers the freshly-seeded chainmail/boots base outfit
-   * (C-417 / C-374 regression).
-   */
-  private _effectiveRecipe: Record<string, string> | undefined;
-
-  /**
    * Background handle for the asset registry stage.
    * Set during loading_campaign, awaited during initializing_asset_registry.
    * C-381 AC-8: registry is non-fatal and runs in the background.
@@ -178,9 +169,6 @@ class GameBootService
     this._bootGeneration++;
     this._input = input;
     this._resetProgress();
-    // Clear the previous boot's recipe so _seedBaseOutfit can never reuse it
-    // (C-374/C-417): each boot attempt must derive its own base outfit.
-    this._effectiveRecipe = undefined;
 
     const t0 = performance.now();
 
@@ -346,7 +334,6 @@ class GameBootService
     this.lastResult = undefined;
     this._campaign = undefined;
     this._persona = undefined;
-    this._effectiveRecipe = undefined;
   }
 
   // ── Stage runners ──
@@ -1003,11 +990,10 @@ class GameBootService
         });
       }
 
-      // Re-seed the base outfit AFTER hydration so an empty equipment
-      // snapshot in the restored save cannot clobber the character's default
-      // chainmail/boots (C-374/C-417). seedBaseOutfit only fills empty
-      // body/feet slots, so real saved gear is preserved.
-      this._seedBaseOutfit();
+      // Base appearance now carries the character's torso/feet clothing, so
+      // there is no base-outfit seeding after hydration: an empty equipment
+      // snapshot simply means no equipped gear, and the persona's own outfit
+      // renders underneath (C-504 follow-up — wearer-compatible equipment).
 
       if (map?.mapId && map.packId) {
         // ── Map-authoritative restore (v3+ envelope) ──
@@ -1301,8 +1287,6 @@ class GameBootService
     const { generatedLpcSlots } = this._getLpcCatalogSync();
     if (!generatedLpcSlots) {
       this.warn('lpc.boot.noCatalog', { personaId: this._persona.id });
-      // No catalog — no recipe to persist; drop any stale one from a prior boot.
-      this._effectiveRecipe = undefined;
       return playerData;
     }
 
@@ -1343,77 +1327,73 @@ class GameBootService
       effectiveRecipe: JSON.stringify(effectiveRecipe),
     });
 
+    // ── Wearer-aware clothing resolution (C-504 follow-up) ──
+    // Resolve the rig-dependent clothing slots (torso/legs/feet) against the
+    // recipe's own body profile so a female body never renders the catalog's
+    // male-default chainmail/boots. The same catalog is handed to the
+    // equipment service so equipped gear resolves compatibly too.
+    const catalogAssetIdsBySlot: Record<string, readonly string[]> = {};
+    for (const slotDef of generatedLpcSlots) {
+      catalogAssetIdsBySlot[slotDef.slot] = slotDef.variants.map((v) => v.assetId);
+    }
+    const resolvedBase = resolveBaseAppearanceRecipe({
+      recipe: effectiveRecipe,
+      catalogAssetIdsBySlot,
+    });
+    for (const diagnostic of resolvedBase.diagnostics) {
+      this.warn('lpc.boot.incompatibleBase', {
+        slot: diagnostic.slot,
+        assetId: diagnostic.assetId,
+        rig: diagnostic.rig,
+        detail: diagnostic.detail,
+      });
+    }
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: resolvedBase.recipe.body,
+      catalogAssetIdsBySlot,
+    });
+    const resolvedRecipe = resolvedBase.recipe;
+
     const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
 
-    // Map effective recipe to engine variant indices.
-    // Fallback per-slot values produce a good-looking male character
-    // (bodies_male=3, bangs=3, pants=22, head=95). Torso (chainmail) and
-    // feet (boots) are equipment-owned (C-374) — they are excluded from the
-    // base appearance so unequipping reveals the bare body, and the base
-    // outfit is seeded into the equipment service instead.
+    // Map the resolved recipe to engine variant indices.
+    // The torso/feet layers are part of the BASE appearance again — unequip
+    // reveals the persona's own clothing (tunic/sandals), never a bare body.
     const SLOT_FALLBACKS: Record<string, number> = {
       body: 3,
       hair: 3,
-      torso: 0,
       legs: 22,
-      feet: 0,
       head: 95,
     };
 
     const appearanceLayers: number[] = [];
     for (const slotName of EngineSlots) {
-      const assetId = effectiveRecipe[slotName];
+      const assetId = resolvedRecipe[slotName];
       if (!assetId) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 0);
         continue;
       }
       const catalogIdx = slotIndexMap.get(slotName);
       if (catalogIdx === undefined) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 0);
         continue;
       }
       const slotDef = generatedLpcSlots[catalogIdx];
       if (!slotDef) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 0);
         continue;
       }
       const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
-      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 1));
+      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 0));
     }
 
     // C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
     // replace the fixed six-slot ceiling. Equipment adds its own layers.
     playerData.appearanceLayers = appearanceLayers;
 
-    // Persist the effective recipe so the base outfit can be re-seeded after
-    // save hydration (see {@link _seedBaseOutfit}).
-    this._effectiveRecipe = effectiveRecipe;
-
-    // C-374: seed the base outfit (chainmail + boots by default) into the
-    // equipment service so the paperdoll reflects what the character wears.
-    // Only fills empty body/feet slots — saved gear is never clobbered.
-    this._seedBaseOutfit();
-
     this.debug('lpc.boot.appearanceLayers', { appearanceLayers: JSON.stringify(appearanceLayers) });
 
     return playerData;
-  }
-
-  /**
-   * Seeds the base outfit (chainmail + boots by default) into the equipment
-   * service so the paperdoll reflects the character's base LPC clothing.
-   *
-   * Only fills empty body/feet slots — saved gear is never clobbered. Called
-   * once during {@link _buildPlayerData} (engine creation) and again AFTER
-   * save hydration, because restoring a save with an empty equipment snapshot
-   * would otherwise wipe the freshly-seeded base outfit, leaving the
-   * character rendering chainmail while the Body slot sits empty (C-374/C-417).
-   */
-  private _seedBaseOutfit(): void {
-    if (!this._effectiveRecipe) {
-      return;
-    }
-    equipmentService.seedBaseOutfit(this._effectiveRecipe);
   }
 
   private _getLpcCatalogSync(): {

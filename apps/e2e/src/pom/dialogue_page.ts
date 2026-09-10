@@ -82,9 +82,9 @@ export class DialoguePage {
     return this.page.locator('[data-testid="dialogue-overlay"] .bg-error\\/10');
   }
 
-  /** System-style bubbles (senderName "System" — info tint) rendered for slash-command help (C-501). */
+  /** System-style banner (senderName "System") rendered for slash-command help (C-501). */
   get systemBubbles() {
-    return this.page.locator('[data-testid="dialogue-overlay"] .bg-info\\/20');
+    return this.page.locator('[data-testid="dialogue-system-message"]');
   }
 
   /** The rendered generated-scene image (done state) for `/generate` (C-501). */

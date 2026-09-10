@@ -551,7 +551,7 @@ export const localServicesMockBase = () => ({
     unequipItem: mock(() => true),
     getEquippedItemId: mock(() => undefined),
     buildLpcRecipes: mock(() => []),
-    seedBaseOutfit: _createCallableStub(),
+    configureAppearanceContext: _createCallableStub(),
     configureCommandSender: _createCallableStub(),
     serialize: mock(() => ({ slots: {} })),
     hydrate: _createCallableStub(),
@@ -772,6 +772,7 @@ export const localServicesMockBase = () => ({
   // export must be mocked here so no test that imports them from '$services'
   // crashes (see guard-service-mock-coverage).
   parseSlashCommand: _createCallableStub(),
+  getDialogueSlashCompletions: _createCallableStub(),
   SLASH_COMMAND_HELP:
     'Commands: /generate <prompt> — generate an image · /tree — show previous choices · /action <instruction> or /look — speak to the Game Master · /help — this help',
   __esModule: true,

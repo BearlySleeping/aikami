@@ -17,8 +17,9 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
+import { type LpcRig, resolveBodyRig, resolveRigCompatibleAsset } from '@aikami/lpc';
 import type { EquipmentSlot, EquipmentSnapshot } from '@aikami/types';
-import { findItemIdByLpcAsset, getItemDefinition } from '$utils/inventory_utils';
+import { getItemDefinition } from '$utils/inventory_utils';
 import type { InventoryServiceInterface } from './inventory_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
@@ -63,24 +64,26 @@ export type EquipmentServiceInterface = BaseFrontendClassInterface & {
   getEquippedItemId(slot: EquipmentSlot): string | undefined;
 
   /**
-   * Seeds the character's base outfit into empty body/feet slots (C-374).
+   * Configures the wearer context used to resolve rig-compatible equipment
+   * visuals (C-504 follow-up). Called by the boot/engine pipelines once the
+   * player's body asset + LPC catalog are known.
    *
-   * The engine's base appearance no longer carries a torso/feet layer —
-   * those come from equipment so the paperdoll reflects what the character
-   * wears. Given the persona's base LPC recipe (slot → assetId), this maps
-   * each body/feet asset to a catalog item and equips it, but only when the
-   * slot is empty (never clobbers saved gear).
-   *
-   * @param baseRecipe - Base appearance recipe (LPC slot → assetId)
+   * @param options - Wearer body asset + slot → asset IDs catalog.
    */
-  seedBaseOutfit(baseRecipe: Readonly<Record<string, string>>): void;
+  configureAppearanceContext(options: {
+    bodyAssetId: string | undefined;
+    catalogAssetIdsBySlot: Readonly<Record<string, readonly string[]>>;
+  }): void;
 
   /**
    * Builds LPC layer recipes for every equipped item (C-374).
    *
    * Consumed by the engine's `equipmentRecipeProvider` to merge gear onto
    * the player's base character render. Items without a resolvable
-   * `lpcAssetId`/`lpcSlot` are skipped.
+   * `lpcAssetId`/`lpcSlot` are skipped. Body-profile-dependent assets are
+   * resolved against the wearer rig configured via
+   * {@link configureAppearanceContext} so a female body never renders the
+   * catalog's male-default variant.
    */
   buildLpcRecipes(): readonly LpcLayerRecipe[];
 
@@ -107,6 +110,10 @@ class EquipmentService
   private readonly _inventoryService: InventoryServiceInterface;
   private _sendCommand: ((command: GameCommand) => void) | undefined;
 
+  /** Wearer rig + catalog for rig-compatible equipment resolution. */
+  private _bodyRig: LpcRig = 'male';
+  private _catalogAssetIdsBySlot: Readonly<Record<string, readonly string[]>> = {};
+
   constructor(options: EquipmentServiceOptions) {
     super(options);
     this._playerStateService = options.playerStateService;
@@ -130,36 +137,13 @@ class EquipmentService
   }
 
   /** @inheritdoc */
-  seedBaseOutfit(baseRecipe: Readonly<Record<string, string>>): void {
-    // Base outfit only covers the equipment-owned base layers (body → LPC
-    // torso layer, feet → LPC feet layer). Custom appearance assets without
-    // a catalog item fall back to the default outfit so the character never
-    // renders without clothing.
-    const slotToLpc: ReadonlyArray<{ slot: EquipmentSlot; lpcSlot: string; fallback: string }> = [
-      { slot: 'body', lpcSlot: 'torso', fallback: 'chainmailArmor' },
-      { slot: 'feet', lpcSlot: 'feet', fallback: 'leatherBoots' },
-    ];
-
-    for (const { slot, lpcSlot, fallback } of slotToLpc) {
-      if (this.slots[slot]) {
-        continue; // already equipped — never clobber saved gear
-      }
-      const assetId = baseRecipe[lpcSlot];
-      const itemId = assetId ? findItemIdByLpcAsset(assetId) : undefined;
-      const resolvedItemId = itemId ?? fallback;
-      // Reuse an owned matching item when the slot is empty rather than
-      // granting a duplicate (C-374/C-417): hydration may have restored the
-      // item into the bag while leaving the slot empty, and re-seeding must
-      // not inflate the quantity.
-      const owned = this._inventoryService.inventory.some(
-        (entry) => entry.itemId === resolvedItemId,
-      );
-      if (!owned) {
-        this._inventoryService.addItem({ itemId: resolvedItemId, quantity: 1 });
-      }
-      this.equipItem({ itemId: resolvedItemId });
-      this.debug('seedBaseOutfit', { slot, assetId: assetId ?? '(none)', itemId: resolvedItemId });
-    }
+  configureAppearanceContext(options: {
+    bodyAssetId: string | undefined;
+    catalogAssetIdsBySlot: Readonly<Record<string, readonly string[]>>;
+  }): void {
+    this._bodyRig = resolveBodyRig(options.bodyAssetId);
+    this._catalogAssetIdsBySlot = options.catalogAssetIdsBySlot;
+    this.debug('configureAppearanceContext', { rig: this._bodyRig });
   }
 
   /** @inheritdoc */
@@ -170,9 +154,24 @@ class EquipmentService
       if (!definition.lpcSlot || !definition.lpcAssetId) {
         continue;
       }
-      recipes.push({
+      const resolved = resolveRigCompatibleAsset({
         slot: definition.lpcSlot,
         assetId: definition.lpcAssetId,
+        rig: this._bodyRig,
+        catalogAssetIdsBySlot: this._catalogAssetIdsBySlot,
+      });
+      if (resolved.status !== 'compatible') {
+        this.warn('buildLpcRecipes:incompatible', {
+          itemId,
+          slot: definition.lpcSlot,
+          assetId: resolved.assetId,
+          rig: this._bodyRig,
+          diagnostics: resolved.diagnostics,
+        });
+      }
+      recipes.push({
+        slot: definition.lpcSlot,
+        assetId: resolved.assetId,
         hexPalette: new Uint8Array(1024),
       });
     }

@@ -1,6 +1,8 @@
 export { default as BaseViewModelContainer } from './lib/base/base_view_model_container.svelte';
+export { default as CapabilityErrorBanner } from './lib/capability_error_banner/capability_error_banner.svelte';
 export { default as GroupedTablist } from './lib/grouped_tablist/grouped_tablist.svelte';
 export { default as Image } from './lib/image/image.svelte';
 export { default as AppLoading } from './lib/loading/app_loading.svelte';
 export { default as Modal } from './lib/modal/modal.svelte';
 export { default as Select } from './lib/select/select.svelte';
+export { default as SlashAutocomplete } from './lib/slash_autocomplete/slash_autocomplete.svelte';

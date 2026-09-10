@@ -23,8 +23,8 @@
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
-    "@playwright/test": "1.62.1",
-    "playwright": "1.62.1"
+    "@playwright/test": "1.63.0",
+    "playwright": "1.63.0"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
@@ -32,6 +32,6 @@
     "@aikami/types": "workspace:*",
     "@axe-core/playwright": "4.13.0",
     "sharp": "0.35.4",
-    "typebox": "1.3.26"
+    "typebox": "1.3.30"
   }
 }

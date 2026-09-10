@@ -14,7 +14,7 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
-import type { LpcAnimationState } from '@aikami/lpc';
+import { type LpcAnimationState, resolveBaseAppearanceRecipe } from '@aikami/lpc';
 import type {
   ContentPackManifest,
   OnboardingSection,
@@ -921,45 +921,62 @@ class GameEngineService
       effectiveRecipe,
     });
 
+    // ── Wearer-aware clothing resolution (C-504 follow-up) ──
+    const catalogAssetIdsBySlot: Record<string, readonly string[]> = {};
+    for (const slotDef of generatedLpcSlots) {
+      catalogAssetIdsBySlot[slotDef.slot] = slotDef.variants.map((v) => v.assetId);
+    }
+    const resolvedBase = resolveBaseAppearanceRecipe({
+      recipe: effectiveRecipe,
+      catalogAssetIdsBySlot,
+    });
+    for (const diagnostic of resolvedBase.diagnostics) {
+      this.warn('lpc.engine.incompatibleBase', {
+        slot: diagnostic.slot,
+        assetId: diagnostic.assetId,
+        rig: diagnostic.rig,
+        detail: diagnostic.detail,
+      });
+    }
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: resolvedBase.recipe.body,
+      catalogAssetIdsBySlot,
+    });
+    const resolvedRecipe = resolvedBase.recipe;
+
     const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
 
     const SlotFallbacks: Record<string, number> = {
       body: 3,
       hair: 3,
-      torso: 0,
       legs: 22,
-      feet: 0,
       head: 95,
     };
 
     const appearanceLayers: number[] = [];
     for (const slotName of EngineSlots) {
-      const assetId = effectiveRecipe[slotName];
+      const assetId = resolvedRecipe[slotName];
       if (!assetId) {
-        appearanceLayers.push(SlotFallbacks[slotName] ?? 1);
+        appearanceLayers.push(SlotFallbacks[slotName] ?? 0);
         continue;
       }
       const catalogIdx = slotIndexMap.get(slotName);
       if (catalogIdx === undefined) {
-        appearanceLayers.push(SlotFallbacks[slotName] ?? 1);
+        appearanceLayers.push(SlotFallbacks[slotName] ?? 0);
         continue;
       }
       const slotDef = generatedLpcSlots[catalogIdx];
       if (!slotDef) {
-        appearanceLayers.push(SlotFallbacks[slotName] ?? 1);
+        appearanceLayers.push(SlotFallbacks[slotName] ?? 0);
         continue;
       }
       const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
-      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SlotFallbacks[slotName] ?? 1));
+      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SlotFallbacks[slotName] ?? 0));
     }
 
     // C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
     // replace the fixed six-slot ceiling. Equipment adds its own layers.
     playerData.appearanceLayers = appearanceLayers;
-
-    // C-374: seed the base outfit (chainmail + boots by default) into the
-    // equipment service so the paperdoll reflects what the character wears.
-    equipmentService.seedBaseOutfit(effectiveRecipe);
 
     this.debug('lpc.engine.appearanceLayers', { appearanceLayers });
 

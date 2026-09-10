@@ -68,12 +68,9 @@ test.describe('Equipment → LPC sprite sync (C-417 AC-1)', () => {
     await expect(page.getByRole('button', { name: 'Unequip Iron Armor' })).toHaveCount(0);
     // The Equip button is available again.
     await expect(page.getByRole('button', { name: 'Equip Iron Armor' })).toBeVisible();
-    // The preview output reverts — the Iron Armor plate torso is gone. In
-    // the engine's merge semantics torso/feet are equipment-owned (base
-    // torso is zeroed behind C-374), so with no body armor equipped the
-    // layer is removed entirely rather than falling back to chainmail —
-    // assert the plate recipe is no longer rendered.
-    await expect.poll(() => getPreviewTorso(page)).not.toBe('torso/armour/plate_male');
+    // The preview output reverts to the base chainmail torso — unequipping
+    // reveals the persona's base outfit, not a bare body (C-504 follow-up).
+    await expect.poll(() => getPreviewTorso(page)).toBe('torso/chainmail_male');
   });
 
   test('equipped stats update when Iron Armor is equipped (defense bonus reflects gear)', async ({
@@ -94,15 +91,10 @@ test.describe('Equipment → LPC sprite sync (C-417 AC-1)', () => {
 
     await equipIronArmor.click();
 
-    // Iron Armor grants +5 DEF (manifest: ironArmor defenseBonus 5), but the
-    // sandbox pre-equips chainmail (+4 DEF) in the same body slot — equipping
-    // Iron Armor replaces it, so the badge moves by the net delta (+1), not
-    // the full +5. Wait until the badge reflects exactly that value, proving
-    // the equip mutated service state.
+    // Iron Armor grants +5 DEF (manifest: ironArmor defenseBonus 5). The
+    // sandbox starts with no pre-equipped body armour, so equipping it adds
+    // the full bonus.
     const IRON_ARMOR_DEFENSE_BONUS = 5;
-    const CHAINMAIL_DEFENSE_BONUS = 4;
-    await expect
-      .poll(readDefense)
-      .toBe(before + (IRON_ARMOR_DEFENSE_BONUS - CHAINMAIL_DEFENSE_BONUS));
+    await expect.poll(readDefense).toBe(before + IRON_ARMOR_DEFENSE_BONUS);
   });
 });

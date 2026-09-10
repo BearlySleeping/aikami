@@ -57,6 +57,16 @@ export {
   resolveNpcAppearance,
 } from './lib/named_appearance.ts';
 export {
+  type LpcBodySuffix,
+  type LpcRig,
+  RIG_SUFFIXES,
+  type RigCompatDiagnostic,
+  type RigCompatibleAssetResult,
+  resolveBaseAppearanceRecipe,
+  resolveBodyRig,
+  resolveRigCompatibleAsset,
+} from './lib/rig_compat.ts';
+export {
   type LpcCellFamily,
   type LpcSheetGeometry,
   resolveLpcSheetGeometry,

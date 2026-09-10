@@ -5,6 +5,7 @@ import {
   SKILL_CHECK_STAKES,
   SKILL_STAT_MAP,
   type SkillCheckStakes,
+  type SlashCommandEntry,
 } from '@aikami/constants';
 import {
   BaseViewModel,
@@ -39,6 +40,7 @@ import {
   messageBranchStore,
   playerStateService,
   questStateService,
+  routerService,
   SentenceBoundaryChunker,
   ttsService,
 } from '$services';
@@ -50,10 +52,15 @@ import type {
   ExpressionId,
 } from '$types';
 import {
+  getDialogueSlashCompletions,
   parseSlashCommand,
   SLASH_COMMAND_HELP,
   type SlashCommandResult,
 } from '../../../../../services/game/slash_command_parser';
+import {
+  getSlashCommandAutocomplete,
+  type SlashCommandAutocompleteInterface,
+} from '../../../../chat/slash_command_autocomplete.svelte';
 import type { DialogueNpcData } from '../../game_ui_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -142,6 +149,23 @@ export type GeneratedImage = {
   status: 'generating' | 'done' | 'error';
   /** Message this image was created after; null = created before any message. */
   afterMessageId: string | null;
+};
+
+/**
+ * An actionable "capability not set up" error surfaced in the dialogue overlay.
+ * Unlike the transient {@link streamError}, this represents a configuration gap
+ * (no text provider, no voice/TTS, no image provider) that the player can fix in
+ * Settings — so the overlay renders it with a deep-link button.
+ */
+export type CapabilitySetupError = {
+  /** Short headline shown in the error banner. */
+  title: string;
+  /** Actionable explanation for the player. */
+  message: string;
+  /** Settings group to deep-link to — always the AI group. */
+  group: 'ai';
+  /** Settings section to deep-link to: 'story-dialogue' | 'artwork' | 'read-aloud'. */
+  section: string;
 };
 
 export type DialogueOverlayViewModelOptions = BaseViewModelOptions & {
@@ -341,6 +365,29 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Sets the player's input text (bound to text input field). */
   setInput(text: string): void;
 
+  // ── Slash command autocomplete (C-501) ─────────────────────────────
+
+  /** Slash command completions for the current input. */
+  readonly slashCompletions: readonly SlashCommandEntry[];
+
+  /** Selected index in the completions list (-1 = nothing selected). */
+  readonly selectedSlashCompletion: number;
+
+  /** Whether the autocomplete popup should be shown. */
+  readonly showSlashCompletions: boolean;
+
+  /** Navigates the slash command selection up (-1) or down (+1). */
+  navigateSlashCompletion(delta: number): void;
+
+  /** Applies the selected slash completion to the input field. */
+  applySlashCompletion(): void;
+
+  /** Selects a completion by index and immediately applies it. */
+  selectAndApplySlashCompletion(index: number): void;
+
+  /** Dismisses the autocomplete popup. */
+  dismissSlashCompletions(): void;
+
   /** Closes the dialogue overlay and resumes the game. */
   endChat(): void;
 
@@ -447,6 +494,13 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
   /** Speaks the given NPC message text via TTS. */
   speakMessage(text: string): void;
 
+  /** Active capability setup error (text/image/voice), with a Settings deep-link target. */
+  readonly capabilityError: CapabilitySetupError | null;
+  /** Dismisses the active capability setup error banner. */
+  dismissCapabilityError(): void;
+  /** Navigates to the Settings section that can resolve the active setup error. */
+  goToSettingsCapability(): Promise<void>;
+
   /** Whether a draft was restored from IndexedDB on open. */
   readonly showDraftRecovery: boolean;
 
@@ -536,6 +590,9 @@ class DialogueOverlayViewModel
   inputText = $state<string>('');
 
   streamError = $state<string | null>(null);
+
+  /** Active actionable setup error (text/image/voice not configured) — overlay banner. */
+  capabilityError = $state<CapabilitySetupError | null>(null);
 
   /**
    * Current phase of the dialogue interaction loop.
@@ -714,6 +771,9 @@ class DialogueOverlayViewModel
 
   private readonly _chunker = new SentenceBoundaryChunker();
 
+  /** Slash-command autocomplete sub-service — owns completion state + navigation. */
+  private readonly _slashAutocomplete: SlashCommandAutocompleteInterface;
+
   private readonly _boundDiceRoll: () => void = this._handleDiceRoll.bind(this);
   private readonly _boundDiceDeclaration: () => void = this._handleDiceDeclaration.bind(this);
 
@@ -880,6 +940,64 @@ class DialogueOverlayViewModel
     return /abort/i.test(message);
   }
 
+  /** True when the TTS engine is in a "needs setup" state (not merely warming up). */
+  private _ttsSetupFailure(): boolean {
+    const status = ttsService.status;
+    return status === 'not-downloaded' || status === 'disabled' || status === 'error';
+  }
+
+  /** Human-readable reason for the current TTS setup failure. */
+  private _ttsSetupMessage(): string {
+    switch (ttsService.status) {
+      case 'not-downloaded':
+        return 'Download or connect a voice provider in Settings before using read-aloud.';
+      case 'disabled':
+        return 'Voice is currently disabled. Enable a voice provider in Settings to use read-aloud.';
+      case 'error':
+        return 'The voice provider failed to start. Check its setup in Settings.';
+      default:
+        return 'Set up a voice provider in Settings before using read-aloud.';
+    }
+  }
+
+  /** Classifies a text-generation failure message as a "text not set up" error, or null. */
+  private _classifySetupError(message: string): CapabilitySetupError | null {
+    if (!/(not configured|no provider|is not set up|not set up)/i.test(message)) {
+      return null;
+    }
+    return {
+      title: 'Text AI isn’t set up yet',
+      message: 'Connect a text provider in Settings before chatting with NPCs.',
+      group: 'ai',
+      section: 'story-dialogue',
+    };
+  }
+
+  /** Whether an image-generation failure message indicates a missing provider. */
+  private _isImageSetupError(message: string): boolean {
+    return /(not configured|no provider|is not set up|not set up)/i.test(message);
+  }
+
+  /** Records an actionable setup error with a Settings deep-link target. */
+  private _setCapabilityError(options: { title: string; message: string; section: string }): void {
+    this.capabilityError = { group: 'ai', ...options };
+  }
+
+  /** @inheritdoc */
+  dismissCapabilityError(): void {
+    this.capabilityError = null;
+  }
+
+  /** @inheritdoc */
+  async goToSettingsCapability(): Promise<void> {
+    const err = this.capabilityError;
+    if (!err) {
+      return;
+    }
+    this.debug('goToSettingsCapability', { group: err.group, section: err.section });
+    await routerService.goToHref(`/settings?group=${err.group}&section=${err.section}`);
+  }
+
   /**
    * Formats the AC-4 actionable error, naming the provider when the gateway
    * routing diagnostic is available.
@@ -917,6 +1035,14 @@ class DialogueOverlayViewModel
       | undefined;
     const timedOut = turnState?.kind === 'failed' && turnState.reason === 'timeout';
     this.streamError = timedOut ? this._formatTimeoutError() : message;
+    // A non-timeout failure whose message points at a missing text provider is a
+    // configuration gap — surface an actionable error with a Settings deep-link.
+    if (!timedOut) {
+      const setupError = this._classifySetupError(message);
+      if (setupError) {
+        this.capabilityError = setupError;
+      }
+    }
     this.messages = this.messages.filter((m) => m.id !== npcMessageId);
   }
 
@@ -1051,6 +1177,15 @@ class DialogueOverlayViewModel
     this._playerStateService = options.playerStateService ?? playerStateService;
     this._imageProviderAvailable = options.imageProviderAvailable ?? true;
     this.isCampaignPlay = options.isCampaignPlay ?? true;
+
+    // Slash-command autocomplete — the dialogue command set drives the popup.
+    this._slashAutocomplete = getSlashCommandAutocomplete({
+      className: 'DialogueSlashCommandAutocomplete',
+      getCompletions: getDialogueSlashCompletions,
+      onApply: (commandName) => {
+        this.inputText = `/${commandName} `;
+      },
+    });
 
     // Restore per-chat input draft from IndexedDB (fire-and-forget)
     const draftPromise = draftStore.loadDraft({ chatId: this._npcData.npcId });
@@ -1191,8 +1326,54 @@ class DialogueOverlayViewModel
   /** @inheritdoc */
   setInput(text: string): void {
     this.inputText = text;
+    // Recompute slash-command autocomplete from the latest keystroke.
+    this._slashAutocomplete.update(text);
     // Fire-and-forget draft save
     void draftStore.saveDraft({ chatId: this._npcData.npcId, text });
+  }
+
+  /** @inheritdoc */
+  get slashCompletions(): readonly SlashCommandEntry[] {
+    return this._slashAutocomplete.completions;
+  }
+
+  /** @inheritdoc */
+  get selectedSlashCompletion(): number {
+    return this._slashAutocomplete.selectedIndex;
+  }
+
+  /** @inheritdoc */
+  get showSlashCompletions(): boolean {
+    return this._slashAutocomplete.visible;
+  }
+
+  /** @inheritdoc */
+  navigateSlashCompletion(delta: number): void {
+    this._slashAutocomplete.navigate(delta);
+  }
+
+  /** @inheritdoc */
+  applySlashCompletion(): void {
+    this._slashAutocomplete.apply();
+  }
+
+  /** @inheritdoc */
+  selectAndApplySlashCompletion(index: number): void {
+    this._slashAutocomplete.selectAndApply(index);
+  }
+
+  /** @inheritdoc */
+  dismissSlashCompletions(): void {
+    this._slashAutocomplete.dismiss();
+  }
+
+  /**
+   * Tears down the composed autocomplete sub-service so its reactive roots
+   * are disposed with the parent (C-425 lifecycle gotcha).
+   */
+  override async dispose(): Promise<void> {
+    await this._slashAutocomplete.dispose();
+    return super.dispose();
   }
 
   // ── Suggestion Chips (C-371) ────────────────────────────────────────
@@ -1493,6 +1674,7 @@ class DialogueOverlayViewModel
 
     // Clear input immediately so the player sees feedback
     this.inputText = '';
+    this._slashAutocomplete.dismiss();
     this.streamError = null;
     this.suggestedChips = [];
 
@@ -1590,11 +1772,17 @@ class DialogueOverlayViewModel
     const imageId = crypto.randomUUID();
 
     if (!this._imageProviderAvailable) {
-      // AC-2: degrade to an inline error block with no crash.
+      // AC-2: degrade to an inline error block with no crash, and surface an
+      // actionable error with a Settings deep-link.
       this.generatedImages = [
         ...this.generatedImages,
         { id: imageId, url: null, status: 'error', afterMessageId },
       ];
+      this._setCapabilityError({
+        title: 'Image generation isn’t set up yet',
+        message: 'Connect an image provider in Settings before using /generate.',
+        section: 'artwork',
+      });
       return;
     }
 
@@ -1623,6 +1811,15 @@ class DialogueOverlayViewModel
       this.generatedImages = this.generatedImages.map((img) =>
         img.id === imageId ? { ...img, status: 'error' as const } : img,
       );
+      // A provider-missing failure is a config gap — surface a Settings deep-link.
+      const message = error instanceof Error ? error.message : String(error);
+      if (this._isImageSetupError(message)) {
+        this._setCapabilityError({
+          title: 'Image generation isn’t set up yet',
+          message: 'Connect an image provider in Settings before using /generate.',
+          section: 'artwork',
+        });
+      }
     } finally {
       if (this._activeAbortController === controller) {
         this._activeAbortController = null;
@@ -1972,9 +2169,34 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   handleKeyDown(event: KeyboardEvent): void {
+    // ── Slash command autocomplete keyboard navigation ──
+    if (this.showSlashCompletions) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.navigateSlashCompletion(1);
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.navigateSlashCompletion(-1);
+        return;
+      }
+      if (event.key === 'Tab' || event.key === 'Enter') {
+        event.preventDefault();
+        this.applySlashCompletion();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.dismissSlashCompletions();
+        return;
+      }
+    }
+
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       void this.sendMessage();
+      return;
     }
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -2029,6 +2251,16 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   toggleStreamingTts(): void {
+    if (!this.streamingTtsEnabled && this._ttsSetupFailure()) {
+      // TTS is not set up — surface an actionable error with a Settings deep-link
+      // instead of silently enabling a toggle that cannot produce audio.
+      this._setCapabilityError({
+        title: 'Voice isn’t set up yet',
+        message: this._ttsSetupMessage(),
+        section: 'read-aloud',
+      });
+      return;
+    }
     this.streamingTtsEnabled = !this.streamingTtsEnabled;
     if (!this.streamingTtsEnabled) {
       ttsService.stop();
@@ -2060,6 +2292,16 @@ class DialogueOverlayViewModel
     }
     if (ttsService.status !== 'ready') {
       this.warn('speakMessage:skipped-not-ready', { status: ttsService.status });
+      // A setup-failure status (not-downloaded / disabled / error) is a config gap —
+      // surface an actionable error with a Settings deep-link. A transient warm-up
+      // (uninitialized / initializing) is not, so it is still silently skipped.
+      if (this._ttsSetupFailure()) {
+        this._setCapabilityError({
+          title: 'Voice isn’t set up yet',
+          message: this._ttsSetupMessage(),
+          section: 'read-aloud',
+        });
+      }
       return;
     }
     this.debug('speakMessage:speaking', { length: text.length });

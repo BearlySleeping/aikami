@@ -21,6 +21,11 @@ import {
 export type SlashCommandAutocompleteOptions = BaseViewModelOptions & {
   /** Called when a completion is applied — the parent mutates its input. */
   onApply(commandName: string): void;
+  /**
+   * Completion source. Defaults to the chat `getSlashCompletions` registry;
+   * surfaces with their own command set (e.g. dialogue C-501) inject one.
+   */
+  getCompletions?(partial: string): readonly SlashCommandEntry[];
 };
 
 export type SlashCommandAutocompleteInterface = BaseViewModelInterface & {
@@ -54,16 +59,19 @@ export class SlashCommandAutocomplete
 
   private readonly _onApply: (commandName: string) => void;
 
+  private readonly _getCompletions: (partial: string) => readonly SlashCommandEntry[];
+
   constructor(options: SlashCommandAutocompleteOptions) {
     super(options);
     this._onApply = options.onApply;
+    this._getCompletions = options.getCompletions ?? getSlashCompletions;
   }
 
   /** @inheritdoc */
   update(input: string): void {
     const trimmed = input.trim();
     if (trimmed.startsWith('/') && !trimmed.includes(' ')) {
-      const matches = getSlashCompletions(trimmed);
+      const matches = this._getCompletions(trimmed);
       this.completions = matches;
       this.visible = matches.length > 0;
       this.selectedIndex = matches.length > 0 ? 0 : -1;

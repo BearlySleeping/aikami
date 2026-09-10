@@ -45,6 +45,13 @@ fileGroups:
   deployment:
     - 'scripts/deploy.ts'
     - 'wrangler.jsonc'
+  # 🔴 Load-bearing. Every src/lib/server/api/tests/*.test.ts builds its D1
+  # database by applying packages/backend/database/drizzle-d1/*.sql to an
+  # in-memory libsql instance, so a migration change alters these suites'
+  # results without touching anything under this project. Without this input
+  # moon serves a cached pass and a broken migration ships green.
+  migrations:
+    - '/packages/backend/database/drizzle-d1/**/*'
 
 tasks:
   dev:
@@ -127,6 +134,7 @@ tasks:
       - '/packages/shared/*/src/**/*'
       - '/packages/frontend/*/src/**/*'
       - '/packages/backend/*/src/**/*'
+      - '@group(migrations)'
       - 'vite.config.ts'
 
   test-unit:
@@ -136,4 +144,5 @@ tasks:
       - '/packages/shared/*/src/**/*'
       - '/packages/frontend/*/src/**/*'
       - '/packages/backend/*/src/**/*'
+      - '@group(migrations)'
       - 'vite.config.ts'

@@ -12,7 +12,7 @@
 // GuidedComposer components. Surface-specific concerns (skill-check dice,
 // portrait row, spatial speech bubble, suggestion chips, combat escalation)
 // are preserved here via snippets.
-import { Image } from '$components';
+import { CapabilityErrorBanner, Image, SlashAutocomplete } from '@aikami/frontend/components';
 import GameDice from '$lib/components/game/game_dice.svelte';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
@@ -344,6 +344,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </div>
         {/if}
 
+        <CapabilityErrorBanner
+          error={viewModel.capabilityError}
+          ondismiss={() => viewModel.dismissCapabilityError()}
+          onsettings={() => viewModel.goToSettingsCapability()}
+        />
+
         <!-- CYOA choice buttons -->
         {#if viewModel.activeChoices.length > 0}
           <div class="space-y-1 px-2" data-testid="cyoa-choices">
@@ -443,6 +449,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </button>
         </div>
       {:else}
+        <SlashAutocomplete
+          show={viewModel.showSlashCompletions}
+          completions={viewModel.slashCompletions}
+          selectedIndex={viewModel.selectedSlashCompletion}
+          onselect={(index) => viewModel.selectAndApplySlashCompletion(index)}
+        />
         <GuidedComposer
           value={viewModel.inputText}
           onInput={(t) => viewModel.setInput(t)}

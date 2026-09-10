@@ -338,8 +338,15 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
 
   // ── AC-1: BGM transitionToBgm creates correct gain chain ──
 
-  test('should create gain nodes on construction', () => {
-    // At least 5 gain nodes: master, bgm, sfx, active, next
+  test('should create gain nodes lazily on first use, not at construction', () => {
+    // Autoplay policy: constructing AudioService must NOT build the Web Audio
+    // graph (and thus touch the AudioContext) — doing so at module load makes
+    // browsers log "An AudioContext was prevented from starting automatically"
+    // on every boot. The graph is deferred to first actual use.
+    expect(createdGainNodes.length).toBe(0);
+
+    // First use builds the full gain chain: master, bgm, sfx, active, next.
+    void audioService.masterGainNode;
     expect(createdGainNodes.length).toBeGreaterThanOrEqual(5);
   });
 
@@ -455,6 +462,8 @@ describe('AudioService — C-150: Reactive Audio Manager', () => {
   });
 
   test('playTestSfx synthesizes, schedules, and routes a tone', () => {
+    // First use builds the (lazy) gain graph so the tone node below is additive.
+    void audioService.masterGainNode;
     const gainNodesBefore = createdGainNodes.length;
     const sourcesBefore = createdSources.length;
 

@@ -205,6 +205,9 @@ mock.module('$services', () => ({
     close = mock(() => {});
   },
   npcDialogueService: mockNpcDialogueService,
+  routerService: {
+    goToHref: mock(async () => {}),
+  },
   imageGenerationService: {
     isGenerating: false,
     generateImage: mock(async ({ prompt }: { prompt: string }) => ({
@@ -326,6 +329,88 @@ describe('DialogueOverlayViewModel', () => {
     const vm = createViewModel();
     vm.setInput('Hello!');
     expect(vm.inputText).toBe('Hello!');
+  });
+
+  // ── Slash command autocomplete (C-501) ───────────────────────────────
+
+  test('slash completions appear for a bare slash and filter by prefix', () => {
+    const vm = createViewModel();
+    vm.setInput('/');
+    expect(vm.showSlashCompletions).toBe(true);
+    expect(vm.slashCompletions.map((c) => c.name)).toEqual([
+      'generate',
+      'tree',
+      'action',
+      'look',
+      'help',
+    ]);
+    expect(vm.selectedSlashCompletion).toBe(0);
+
+    vm.setInput('/gen');
+    expect(vm.showSlashCompletions).toBe(true);
+    expect(vm.slashCompletions.map((c) => c.name)).toEqual(['generate']);
+  });
+
+  test('slash completions hide for non-slash or multi-word input', () => {
+    const vm = createViewModel();
+    vm.setInput('hello');
+    expect(vm.showSlashCompletions).toBe(false);
+    expect(vm.slashCompletions).toHaveLength(0);
+
+    vm.setInput('/generate a forest');
+    expect(vm.showSlashCompletions).toBe(false);
+  });
+
+  test('navigateSlashCompletion wraps the selection', () => {
+    const vm = createViewModel();
+    vm.setInput('/');
+    vm.navigateSlashCompletion(-1);
+    expect(vm.selectedSlashCompletion).toBe(vm.slashCompletions.length - 1);
+    vm.navigateSlashCompletion(1);
+    expect(vm.selectedSlashCompletion).toBe(0);
+  });
+
+  test('applySlashCompletion fills the input with the selected command', () => {
+    const vm = createViewModel();
+    vm.setInput('/gen');
+    vm.applySlashCompletion();
+    expect(vm.inputText).toBe('/generate ');
+    expect(vm.showSlashCompletions).toBe(false);
+  });
+
+  test('selectAndApplySlashCompletion applies the chosen index', () => {
+    const vm = createViewModel();
+    vm.setInput('/');
+    vm.selectAndApplySlashCompletion(1); // 'tree'
+    expect(vm.inputText).toBe('/tree ');
+  });
+
+  test('dismissSlashCompletions clears the popup', () => {
+    const vm = createViewModel();
+    vm.setInput('/');
+    expect(vm.showSlashCompletions).toBe(true);
+    vm.dismissSlashCompletions();
+    expect(vm.showSlashCompletions).toBe(false);
+  });
+
+  test('handleKeyDown applies a completion on Enter while the popup is open', () => {
+    const vm = createViewModel();
+    vm.setInput('/gen');
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+    event.preventDefault = () => {};
+    vm.handleKeyDown(event);
+    expect(vm.inputText).toBe('/generate ');
+  });
+
+  test('handleKeyDown dismisses the popup on Escape rather than ending the chat', () => {
+    let ended = false;
+    const vm = createViewModel({ onEndChat: () => (ended = true) });
+    vm.setInput('/');
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    event.preventDefault = () => {};
+    vm.handleKeyDown(event);
+    expect(ended).toBe(false);
+    expect(vm.showSlashCompletions).toBe(false);
   });
 
   test('sendMessage does nothing when input is empty', () => {
@@ -1020,6 +1105,81 @@ describe('DialogueOverlayViewModel', () => {
     // No stuck generating state, no NPC turn.
     expect(vm.generatedImages[0].url).toBeNull();
     expect(mockNpcDialogueService.analyzeIntent).not.toHaveBeenCalled();
+  });
+
+  test('capability: /generate with no image provider surfaces a Settings deep-link error', async () => {
+    const vm = createViewModel({ imageProviderAvailable: false });
+    await vm.sendMessage('/generate a forest clearing');
+
+    expect(vm.capabilityError).not.toBeNull();
+    expect(vm.capabilityError?.title).toContain('Image');
+    expect(vm.capabilityError?.section).toBe('artwork');
+    expect(vm.capabilityError?.group).toBe('ai');
+  });
+
+  test('capability: a missing text provider surfaces a Settings deep-link error (story-dialogue)', async () => {
+    analyzeIntentStub = mock(async () => {
+      throw new Error('Ollama is not configured (text.url missing from config.json)');
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    vm.inputText = 'Tell me about the ward.';
+    await vm.sendMessage();
+
+    // streamError still carries the raw failure for the inline banner…
+    expect(vm.streamError).toBe('Ollama is not configured (text.url missing from config.json)');
+    // …and capabilityError adds the actionable Settings deep-link.
+    expect(vm.capabilityError?.title).toContain('Text');
+    expect(vm.capabilityError?.section).toBe('story-dialogue');
+    expect(vm.capabilityError?.group).toBe('ai');
+  });
+
+  test('capability: a generic not-defined error does not redirect to provider settings', async () => {
+    analyzeIntentStub = mock(async () => {
+      throw new Error('Encounter script variable is not defined');
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    await vm.sendMessage('Tell me about the ward.');
+
+    expect(vm.streamError).toBe('Encounter script variable is not defined');
+    expect(vm.capabilityError).toBeNull();
+  });
+
+  test('capability: goToSettingsCapability navigates to the AI settings section', async () => {
+    const { routerService } = await import('$services');
+    const goToHrefMock = routerService.goToHref as ReturnType<typeof mock>;
+
+    const vm = createViewModel({ imageProviderAvailable: false });
+    await vm.sendMessage('/generate a forest clearing');
+    expect(vm.capabilityError?.section).toBe('artwork');
+
+    await vm.goToSettingsCapability();
+    expect(goToHrefMock).toHaveBeenCalledWith('/settings?group=ai&section=artwork');
+
+    // Dismissing clears the banner and makes navigation a no-op.
+    vm.dismissCapabilityError();
+    expect(vm.capabilityError).toBeNull();
+  });
+
+  test('capability: toggling TTS when voice is not set up surfaces a read-aloud Settings link and does not enable it', async () => {
+    const { ttsService } = await import('$services');
+    const originalStatus = ttsService.status;
+    // Simulate "voice not downloaded / disabled" — a setup gap, not a warm-up.
+    ttsService.status = 'not-downloaded';
+    try {
+      const vm = createViewModel();
+      vm.toggleStreamingTts();
+      expect(vm.streamingTtsEnabled).toBe(false);
+      expect(vm.capabilityError).not.toBeNull();
+      expect(vm.capabilityError?.title).toContain('Voice');
+      expect(vm.capabilityError?.section).toBe('read-aloud');
+      expect(vm.capabilityError?.group).toBe('ai');
+    } finally {
+      ttsService.status = originalStatus;
+    }
   });
 
   test('AC-3: /tree re-presents the previous choice set', async () => {

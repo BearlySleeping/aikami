@@ -317,7 +317,6 @@ describe('D1 schema (AC-1)', () => {
         id: 'acct-1',
         accountId: 'google-123',
         providerId: 'google',
-        issuer: 'https://accounts.google.com',
         userId: 'user-5',
         createdAt: new Date(),
         updatedAt: new Date(),
