@@ -845,3 +845,56 @@ describe('C-488 AC-5 — Emberwatch manifest content', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-494 AC-2 — the companion entry carries all five identity characteristics
+// ---------------------------------------------------------------------------
+
+describe('C-494 AC-2 — Emberwatch companion identity', () => {
+  const manifest = Value.Parse(ContentPackManifestSchema, {
+    ...emberwatchManifest,
+    onboarding: {
+      ...emberwatchManifest.onboarding,
+      steps: emberwatchManifest.onboarding.steps.map((step) => normaliseLegacyStep(step)),
+    },
+  });
+
+  const companion = manifest.npcs.village_guard;
+
+  test('exactly one Emberwatch NPC is a recruitable companion', () => {
+    const companions = Object.entries(manifest.npcs).filter(([, npc]) => npc?.isCompanion);
+    expect(companions).toHaveLength(1);
+    expect(companions[0][0]).toBe('village_guard');
+  });
+
+  test('the companion carries the full companion field set', () => {
+    expect(companion?.isCompanion).toBe(true);
+    expect(companion?.recruitDialogueKey).toBeTruthy();
+    expect(companion?.dismissDialogueKey).toBeTruthy();
+    expect(companion?.companionClassId).toBe('fighter');
+    expect(companion?.initialApproval).toBe(10);
+    expect(companion?.banterPool?.length).toBeGreaterThan(0);
+  });
+
+  test('desire (agenda) is present', () => {
+    expect(companion?.agenda?.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('fear/manner (personality) is present', () => {
+    expect(companion?.personality?.voice).toBeTruthy();
+    expect(companion?.personality?.manner).toBeTruthy();
+  });
+
+  test('a revisable belief (knowledge) is present', () => {
+    expect(companion?.knowledge?.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('a relationship conflicting with another NPC (agenda entry naming a want) is present', () => {
+    const relationshipEntry = companion?.agenda?.find((entry) => /Elder Thalia/i.test(entry));
+    expect(relationshipEntry).toBeTruthy();
+  });
+
+  test('one boundary the companion will not casually cross is present', () => {
+    expect(companion?.boundaries?.length).toBeGreaterThanOrEqual(1);
+  });
+});

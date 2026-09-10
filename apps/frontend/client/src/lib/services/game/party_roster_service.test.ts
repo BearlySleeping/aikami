@@ -135,3 +135,30 @@ describe('PartyRosterService', () => {
     expect(partyRosterService.formation).toBe('line');
   });
 });
+
+// ---------------------------------------------------------------------------
+// C-494 AC-6: companion state survives save/reload
+// ---------------------------------------------------------------------------
+
+describe('C-494 AC-6: companion state survives save/reload', () => {
+  test('roster membership + approval round-trip through the save envelope', () => {
+    partyRosterService.recruit({
+      npcId: 'village_guard',
+      name: 'Bram the Guard',
+      classId: 'fighter',
+      initialApproval: 10,
+    });
+    partyRosterService.adjustApproval({ npcId: 'village_guard', delta: -20 });
+
+    const snapshot = partyRosterService.serialize();
+    partyRosterService.reset();
+    expect(partyRosterService.isEmpty()).toBe(true);
+
+    partyRosterService.hydrate(snapshot);
+
+    expect(partyRosterService.hasMember('village_guard')).toBe(true);
+    expect(partyRosterService.getMember('village_guard')?.name).toBe('Bram the Guard');
+    expect(partyRosterService.getMember('village_guard')?.classId).toBe('fighter');
+    expect(partyRosterService.getApproval('village_guard')).toBe(-10);
+  });
+});

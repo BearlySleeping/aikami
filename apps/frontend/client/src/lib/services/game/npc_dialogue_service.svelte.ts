@@ -31,6 +31,7 @@ import {
 } from '@aikami/schemas';
 import type {
   ContentPackItemEntry,
+  ContentPackNpcEntry,
   ContentPackNpcPersonality,
   NpcDialogueChoice,
   NpcDialogueCommand,
@@ -47,9 +48,11 @@ import { createSeedableRng, resolveCommand } from '@aikami/utils';
 import { Value } from 'typebox/value';
 import {
   campaignService,
+  companionReactionService,
   inventoryService,
   narrativeEventService,
   npcAwarenessService,
+  partyRosterService,
   questStateService,
   relationshipService,
 } from '$services';
@@ -240,6 +243,11 @@ type DialogueContextProjection = {
   gameStateFacts: string[];
   relationshipFacts: string[];
   allowedCommands: NpcDialogueCommandKind[];
+  /**
+   * Companion witness recall (C-494 AC-3). Events this NPC witnessed
+   * (C-491) surfaced in their own voice. Empty for non-companions.
+   */
+  companionWitnessed: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -1395,6 +1403,12 @@ export class NpcDialogueService
     // Persona: assembled from authored identity with per-field fallback (C-488).
     const persona = this._buildPersona({ npcId, npcName, npc });
 
+    // Companion witness recall (C-494 AC-3). Only for a recruited companion:
+    // surface the C-491 events they actually witnessed, in their own voice.
+    // Routed through narrativeEventService.witnessedBy (C-492's retrieveForNpc
+    // was reverted on main — see Amendment A-1).
+    const companionWitnessed = this._buildCompanionWitnessRecall({ npcId, npc });
+
     // Memory: recent conversation turns (bounded window — last 10 turns)
     const memory = messages
       .slice(-10)
@@ -1407,7 +1421,36 @@ export class NpcDialogueService
       gameStateFacts,
       relationshipFacts: [],
       allowedCommands,
+      companionWitnessed,
     };
+  }
+
+  /**
+   * C-494 AC-3: gathers the witness-scoped recall for a recruited companion.
+   * Returns a bounded list of `[COMPANION WITNESSED]` lines (event summaries)
+   * for the C-491 events this NPC witnessed. Empty for non-companions and for
+   * companions that have witnessed nothing. Never references events the NPC
+   * did not witness (security/privacy).
+   */
+  private _buildCompanionWitnessRecall(options: {
+    npcId: string;
+    npc: ReturnType<NpcDialogueContentProvider['getNpc']>;
+  }): string[] {
+    const { npcId, npc } = options;
+    const isCompanion = Boolean((npc as Record<string, unknown> | undefined)?.isCompanion);
+    if (!isCompanion || !partyRosterService.hasMember(npcId)) {
+      return [];
+    }
+
+    const witnessed = narrativeEventService
+      .witnessedBy(npcId)
+      .filter((event) => event.kind === 'PromiseMade' || event.kind === 'ThreatWitnessed')
+      .slice(-3);
+
+    if (witnessed.length === 0) {
+      return [];
+    }
+    return witnessed.map((event) => `- ${event.summary}`);
   }
 
   /**
@@ -1469,6 +1512,18 @@ export class NpcDialogueService
 
     if (projection.memory.length > 0) {
       lines.push('', '[CONVERSATION HISTORY]', ...projection.memory);
+    }
+
+    // C-494 AC-3: witness recall surfaces an event this companion actually
+    // witnessed, in their own voice. Injected as background — the companion
+    // raises it unprompted rather than as a numeric readout.
+    if (projection.companionWitnessed.length > 0) {
+      lines.push(
+        '',
+        '[COMPANION WITNESSED]',
+        ...projection.companionWitnessed,
+        'Bring one of these up naturally, in your own voice, without being asked.',
+      );
     }
 
     lines.push(
@@ -2244,7 +2299,7 @@ export class NpcDialogueService
       return;
     }
 
-    narrativeEventService.record({
+    const event = narrativeEventService.record({
       campaignId,
       kind,
       informationKind,
@@ -2257,6 +2312,16 @@ export class NpcDialogueService
       sourceEventId,
       deltasApplied: applied.length > 0 ? applied : undefined,
     });
+
+    // C-494 AC-4/AC-5: the committed event crosses the dialogue consequence/event
+    // seam. If it crosses a companion's authored boundary (or keys the single
+    // unprompted action), the companion reaction authority applies the state
+    // change — an approval drop to a floor, or dismissal. Idempotent per event.
+    const npc = this._contentProvider?.getNpc(npcId) as ContentPackNpcEntry | undefined;
+    if (npc?.isCompanion) {
+      companionReactionService.evaluateEvent({ npcId, npc, event });
+      companionReactionService.fireUnpromptedTurn({ npcId, npc, event });
+    }
   }
 
   /** Builds a human-readable summary for a dialogue-sourced event. */

@@ -587,6 +587,35 @@ export const localServicesMockBase = () => ({
     configure: _createCallableStub(),
   }),
 
+  // C-494: party roster + companion reaction services — real singletons are
+  // imported directly by the dialogue service; these controllable doubles let
+  // tests seed membership/approval and assert reaction state changes.
+  partyRosterService: Object.assign(_createServiceStub(), {
+    members: [],
+    activeCount: 0,
+    maxSize: 4,
+    formation: 'line',
+    isFull: false,
+    recruit: _createCallableStub(),
+    dismiss: mock(() => false),
+    hasMember: mock(() => false),
+    getMember: mock(() => undefined),
+    adjustApproval: _createCallableStub(),
+    getApproval: mock(() => 0),
+    activatePersonalQuest: _createCallableStub(),
+    deactivatePersonalQuest: _createCallableStub(),
+    isEmpty: mock(() => true),
+    serialize: mock(() => ({ members: [], maxSize: 4, formation: 'line' })),
+    hydrate: _createCallableStub(),
+    reset: _createCallableStub(),
+  }),
+  companionReactionService: Object.assign(_createServiceStub(), {
+    evaluateEvent: _createCallableStub(),
+    fireUnpromptedTurn: mock(() => false),
+    hasFired: mock(() => false),
+    reset: _createCallableStub(),
+  }),
+
   buildGameStateFacts: mock(() => ['Gold: 100', 'Inventory: (empty)', 'Equipped: nothing']),
   imageGenerationService: _createServiceStub(),
   ImageGenerationService: class {},
