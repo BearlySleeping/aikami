@@ -227,12 +227,27 @@ export function startCommand(
     windowsHide: true,
   });
 
-  // Write any caller-supplied stdin payload, then close stdin immediately —
-  // prevents CLI tools from hanging on prompts.
-  if (options.input !== undefined) {
-    child.stdin?.write(options.input);
-  }
-  child.stdin?.end();
+  // Listen before writing: a child that exits early can reject a buffered
+  // payload with EPIPE, which must be captured instead of becoming an
+  // unhandled stream exception.
+  const stdinPromise = new Promise<void>((resolve) => {
+    if (!child.stdin) {
+      resolve();
+      return;
+    }
+    child.stdin.on('error', (error) => {
+      appendStderr(`\n[stdin: ${error.message}]`);
+      resolve();
+    });
+    child.stdin.once('close', resolve);
+
+    // Write any caller-supplied stdin payload, then close stdin immediately —
+    // prevents CLI tools from hanging on prompts.
+    if (options.input !== undefined) {
+      child.stdin.write(options.input);
+    }
+    child.stdin.end();
+  });
 
   const readPromise = Promise.all([
     readStream(child.stdout, appendStdout),
@@ -289,7 +304,7 @@ export function startCommand(
     options.signal?.removeEventListener('abort', onAbort);
 
     // Let the pipes finish draining so no trailing output is lost.
-    await readPromise;
+    await Promise.all([readPromise, stdinPromise]);
 
     return {
       stdout: stdout.trim(),

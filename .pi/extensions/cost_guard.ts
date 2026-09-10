@@ -37,6 +37,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { ContractWorkerRole } from '../../scripts/src/lib/agents/contract_pipeline/types';
+import { runPiScript } from './lib/bridge.ts';
 import {
   createCycleTracker,
   createLoopTracker,
@@ -276,9 +277,6 @@ export default function (pi: ExtensionAPI) {
     const resultPath = process.env.CONTRACT_PIPELINE_RESULT_PATH;
     if (role && resultPath) {
       try {
-        const { writeStageResult } = await import(
-          '../../scripts/src/lib/agents/contract_pipeline/stage_result.ts'
-        );
         const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
         const attempt = Number(process.env.CONTRACT_PIPELINE_ATTEMPT);
         const generationValue = Number(process.env.CONTRACT_PIPELINE_GENERATION);
@@ -287,7 +285,7 @@ export default function (pi: ExtensionAPI) {
             ? generationValue
             : undefined;
         if (runId && attempt >= 1) {
-          writeStageResult({
+          await runPiScript('contract.stage.writeResult', {
             resultPath,
             result: {
               runId,

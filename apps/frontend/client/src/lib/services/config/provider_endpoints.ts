@@ -323,9 +323,15 @@ const resolveOpenAiCompatModelsUrl = (baseUrl?: string): string | undefined => {
 const resolveOpenAiCompatChatUrl = (baseUrl?: string): string | undefined =>
   resolveOpenAiCompatModelsUrl(baseUrl)?.replace(/\/models$/, '/chat/completions');
 
+/** Native Ollama base, accepting either host roots or OpenAI-style `/v1` URLs. */
+const normalizeOllamaBaseUrl = (baseUrl?: string): string | undefined => {
+  const base = baseUrl?.trim().replace(/\/+$/, '').replace(/\/v1$/, '');
+  return base || undefined;
+};
+
 /** Ollama-native `POST /api/chat` — a different body shape from OpenAI's. */
 const ollamaChatTest: NonNullable<ModelFetchConfig['chatTest']> = (context) => {
-  const base = context.baseUrl?.trim().replace(/\/+$/, '');
+  const base = normalizeOllamaBaseUrl(context.baseUrl);
   const url = base ? `${base}/api/chat` : getOllamaRuntimeEndpoints().chatTestUrl;
   if (!url) {
     return undefined;
@@ -469,7 +475,7 @@ export const PROVIDER_MODEL_FETCH: Record<string, ModelFetchConfig> = {
     chatTest: ollamaChatTest,
     // URL is runtime-resolved (C-389) — no baked-in endpoint.
     resolveModelsUrl: ({ baseUrl }) => {
-      const base = baseUrl?.trim().replace(/\/+$/, '');
+      const base = normalizeOllamaBaseUrl(baseUrl);
       return base ? `${base}/api/tags` : getOllamaRuntimeEndpoints().url;
     },
     url: '',

@@ -711,7 +711,7 @@ export default function (pi: ExtensionAPI) {
       body: Type.Optional(Type.String()),
       draft: Type.Optional(Type.Boolean({ default: false })),
     }),
-    async execute(_id, params, _signal, _onUpdate, ctx) {
+    async execute(_id, params, signal, _onUpdate, ctx) {
       const checkoutPath = (params.checkoutPath as string | undefined) ?? ctx.cwd;
       const base = (params.baseBranch as string | undefined) ?? 'main';
 
@@ -750,14 +750,18 @@ export default function (pi: ExtensionAPI) {
         ({ headBranch, headCommit } = await runPiScript<{
           headBranch: string;
           headCommit: string;
-        }>('herdr.worktree.publish', {
-          checkoutPath,
-          repoRoot,
-          base,
-          message: `Feat: ${slug}`,
-          authorName: 'Pi Agent',
-          authorEmail: 'agent@pi.internal',
-        }));
+        }>(
+          'herdr.worktree.publish',
+          {
+            checkoutPath,
+            repoRoot,
+            base,
+            message: `Feat: ${slug}`,
+            authorName: 'Pi Agent',
+            authorEmail: 'agent@pi.internal',
+          },
+          { signal },
+        ));
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
@@ -781,6 +785,7 @@ export default function (pi: ExtensionAPI) {
             body: params.body as string | undefined,
             draft: (params.draft as boolean | undefined) ?? false,
           },
+          { signal },
         ));
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
@@ -956,12 +961,16 @@ export default function (pi: ExtensionAPI) {
           });
 
           try {
-            await runPiScript<string>('herdr.session.start', {
-              mode,
-              services: [service],
-              projectRoot: process.cwd(),
-              forcePorts: params.force,
-            });
+            await runPiScript<string>(
+              'herdr.session.start',
+              {
+                mode,
+                services: [service],
+                projectRoot: process.cwd(),
+                forcePorts: params.force,
+              },
+              { signal },
+            );
             const port = info.readyPort;
             return {
               content: [
@@ -1000,11 +1009,15 @@ export default function (pi: ExtensionAPI) {
           });
 
           try {
-            await runPiScript<string>('herdr.session.restart', {
-              mode,
-              services: [service],
-              projectRoot: process.cwd(),
-            });
+            await runPiScript<string>(
+              'herdr.session.restart',
+              {
+                mode,
+                services: [service],
+                projectRoot: process.cwd(),
+              },
+              { signal },
+            );
             const port = info.readyPort;
             return {
               content: [
@@ -1053,7 +1066,11 @@ export default function (pi: ExtensionAPI) {
           }
 
           try {
-            await runPiScript<string>('herdr.session.stop', { mode, services: [service] });
+            await runPiScript<string>(
+              'herdr.session.stop',
+              { mode, services: [service] },
+              { signal },
+            );
             return { content: [{ type: 'text', text: `🛑 Stopped ${service}` }], details: {} };
           } catch (e) {
             return {
@@ -1098,7 +1115,7 @@ export default function (pi: ExtensionAPI) {
             };
           }
 
-          const info = await bridgeServiceInfo(service, mode, 0);
+          const info = await bridgeServiceInfo(service, mode, await offset());
           const port = info.readyPort;
           const ready = port
             ? await runPiScript<boolean>('herdr.port.ready', { port, check: info.readyCheck })

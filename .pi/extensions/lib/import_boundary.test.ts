@@ -125,6 +125,7 @@ const stripComments = (source: string): string => {
 
 const FROM_PATTERN = /^[ \t]*(?:import|export)\b[\w\s{},*]*?\bfrom[ \t]*['"]([^'"]+)['"]/gm;
 const SIDE_EFFECT_PATTERN = /^[ \t]*import\s+['"]([^'"]+)['"]/gm;
+const CALL_FORM_PATTERN = /\b(import|require)\s*\(\s*([\x22\x27])([^\x22\x27]+)\2\s*\)/g;
 
 /** Type-only when the statement head is `import type` / `export type`. */
 const isTypeOnly = (statement: string): boolean => /\b(?:import|export)\s+type\b/.test(statement);
@@ -139,7 +140,18 @@ const lineOf = (source: string, index: number): number => {
   return line;
 };
 
-/** Parse `import`/`export ... from '<x>'` and bare `import '<x>'` statements. */
+/** True for `import()` used as a TypeScript type rather than a runtime load. */
+const isTypePositionImport = (source: string, index: number): boolean => {
+  const lineStart = source.lastIndexOf('\n', index - 1) + 1;
+  const head = source.slice(lineStart, index);
+  return (
+    /^\s*(?:export\s+)?type\b.*=\s*$/.test(head) ||
+    /(?:^|[,(])\s*[\w$]+\??:\s*$/.test(head) ||
+    /\b(?:as|extends|implements|keyof|satisfies|typeof)\s+(?:unknown\s+as\s+)?$/.test(head)
+  );
+};
+
+/** Parse static imports plus runtime `import('<x>')` and `require('<x>')` calls. */
 const parseImports = (source: string): ImportStatement[] => {
   const stripped = stripComments(source);
   const found: ImportStatement[] = [];
@@ -159,6 +171,14 @@ const parseImports = (source: string): ImportStatement[] => {
       found.push({ statement: 'import', specifier, line: lineOf(stripped, match.index ?? 0) });
     }
   }
+  for (const match of stripped.matchAll(CALL_FORM_PATTERN)) {
+    const index = match.index ?? 0;
+    const call = match[1];
+    const specifier = match[3];
+    if (specifier && (call === 'require' || !isTypePositionImport(stripped, index))) {
+      found.push({ statement: 'runtime import', specifier, line: lineOf(stripped, index) });
+    }
+  }
   return found;
 };
 
@@ -170,6 +190,17 @@ const isLocalPiImport = (file: string, specifier: string): boolean => {
   const resolved = resolve(dirname(file), specifier).split(sep).join('/');
   const piRoot = PI_ROOT.split(sep).join('/');
   return resolved === piRoot || resolved.startsWith(`${piRoot}/`);
+};
+
+/** Apply the production extension import-boundary policy to one parsed entry. */
+const isViolation = (file: string, entry: ImportStatement): boolean => {
+  if (isTypeOnly(entry.statement)) {
+    return false;
+  }
+  if (isAllowedDependency(entry.specifier) || isAllowedConstants(entry.specifier)) {
+    return false;
+  }
+  return !isLocalPiImport(file, entry.specifier);
 };
 
 /** Lines using the `Bun` global, ignoring comments. */
@@ -215,15 +246,7 @@ describe('pi extensions import only types and pure constants from outside .pi', 
     it(relative(REPO_ROOT, file), () => {
       const source = readFileSync(file, 'utf8');
       const violations = parseImports(source)
-        .filter((entry) => {
-          if (isTypeOnly(entry.statement)) {
-            return false;
-          }
-          if (isAllowedDependency(entry.specifier) || isAllowedConstants(entry.specifier)) {
-            return false;
-          }
-          return !isLocalPiImport(file, entry.specifier);
-        })
+        .filter((entry) => isViolation(file, entry))
         .map((entry) => `${relative(REPO_ROOT, file)}:${entry.line}  ${entry.specifier}`);
       expect(violations, 'value imports outside .pi must be deps or constants').toEqual([]);
     });
@@ -240,23 +263,23 @@ describe('pi extensions never reference the Bun global', () => {
 
 describe('import boundary detector', () => {
   it('flags a value import of a script module but allows its type form', () => {
+    const fixtureFile = join(EXTENSIONS_DIR, 'boundary_fixture.ts');
     const source = [
       "import { startServices } from '../../scripts/src/lib/herdr/session';",
       "import type { DevService } from '../../scripts/src/lib/herdr/session';",
+      "const dynamic = await import('../../scripts/src/lib/herdr/session');",
+      "const required = require('../../scripts/src/lib/herdr/session');",
+      "type Session = import('../../scripts/src/lib/herdr/session').Session;",
       "import { PORTS } from '../../packages/shared/constants/src/lib/development_ports';",
       "import { join } from 'node:path';",
       "import { Type } from 'typebox';",
       "import { runPiScript } from './lib/bridge.ts';",
     ].join('\n');
 
-    const violations = parseImports(source).filter(
-      (entry) =>
-        !isTypeOnly(entry.statement) &&
-        !isAllowedDependency(entry.specifier) &&
-        !isAllowedConstants(entry.specifier) &&
-        !entry.specifier.startsWith('./'),
-    );
+    const violations = parseImports(source).filter((entry) => isViolation(fixtureFile, entry));
     expect(violations.map((entry) => entry.specifier)).toEqual([
+      '../../scripts/src/lib/herdr/session',
+      '../../scripts/src/lib/herdr/session',
       '../../scripts/src/lib/herdr/session',
     ]);
   });
