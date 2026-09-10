@@ -196,6 +196,33 @@ bun moon run client:test-browser
 client job installs Playwright browsers. The compiled E2E lane above remains
 the integration-level coverage (mount/unmount, DOM, full navigation).
 
+### Repository Contract Tests (real adapter)
+
+Do **not** assert persistence behavior against the regex SQL fake in
+`test_preload.ts` — it replaces duplicate inserts where SQLite would reject
+them and its `transaction()` never rolls back. For a repository under migration,
+override the preload's `@aikami/frontend/storage` mock and run the real
+repository against a real in-memory adapter with the production schema:
+
+```typescript
+import { applyMigrations } from '@aikami/frontend/storage/migrations';
+import { WasmStorageAdapter } from '@aikami/frontend/storage/wasm_storage_adapter';
+
+const db = new WasmStorageAdapter({ databasePath: ':memory:' });
+await db.open();
+await applyMigrations(db);
+
+mock.module('@aikami/frontend/storage', () => ({
+  getLocalDatabase: mock(async () => db),
+}));
+const { chatStorage } = await import('./chat_storage.svelte.ts');
+```
+
+Import the adapter/migrations from their **subpaths** so the preload's barrel
+mock does not intercept them. Reference:
+`src/lib/services/chat/chat_storage.test.ts`, which also fault-injects a failed
+transaction to prove rollback.
+
 ---
 
 ## AI Visual Testing Framework

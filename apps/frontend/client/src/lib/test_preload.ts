@@ -907,8 +907,15 @@ delete process.env.PUBLIC_OLLAMA_MODEL;
 
 // ── Mock @aikami/frontend/storage (C-321: Turso persistence) ──────────
 //
-// Provides an in-memory LocalDatabaseInterface fake so that repository
-// tests don't require a real SQLite connection.
+// QUARANTINED LEGACY LANE. This regex "SQL" fake does NOT reproduce SQLite
+// semantics: it replaces duplicate inserts where SQLite would reject them and
+// its transaction() has no rollback. Do not trust it for persistence
+// assertions and do not extend it.
+//
+// Migrated repositories test against a real in-memory adapter instead — see
+// apps/frontend/client/src/lib/services/chat/chat_storage.test.ts
+// (WasmStorageAdapter + applyMigrations, with fault-injected rollback). Delete
+// this fake with the rest of the preload once no unmigrated test depends on it.
 
 /** In-memory row store for the fake database. */
 const _fakeDbTables = new Map<string, Record<string, unknown>[]>();
