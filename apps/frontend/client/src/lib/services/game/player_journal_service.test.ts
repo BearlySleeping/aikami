@@ -4,15 +4,27 @@
 //
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
+
+const fixture = await createRealLocalDatabase();
+
+mock.module('@aikami/frontend/storage', () => ({
+  getLocalDatabase: mock(async () => fixture.db),
+}));
 
 describe('PlayerJournalService', () => {
   let service: import('./player_journal_service.svelte').PlayerJournalServiceInterface;
 
   beforeEach(async () => {
+    await fixture.reset();
     const mod = await import('./player_journal_service.svelte');
     service = mod.playerJournalService;
     service.reset();
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   test('should export a singleton instance', () => {

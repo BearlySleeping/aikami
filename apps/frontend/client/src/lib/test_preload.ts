@@ -905,11 +905,12 @@ delete process.env.PUBLIC_OLLAMA_MODEL;
 
 // ── Real in-memory local database (C-321 / C-384) ────────────────────────
 //
-// Migrated repository tests install their own storage fixture
-// (src/lib/services/__tests__/local_database_fixture.ts) and override this
-// mock. Unmigrated tests share one real in-memory libSQL database per test
-// file. This replaces the retired regex SQL fake, which replaced duplicate
-// inserts where SQLite rejects them and never rolled back a transaction.
+// Repository/ViewModel tests that need the database install their own storage
+// fixture (src/lib/services/__tests__/local_database_fixture.ts) and override
+// this mock. Everything else shares one real in-memory libSQL database per
+// test file. This replaces the retired regex SQL fake, which replaced
+// duplicate inserts where SQLite rejects them and never rolled back a
+// transaction. It stays until every storage-touching test owns its fixture.
 //
 // The database opens lazily, and only when a test actually reaches it, so
 // pure tests pay nothing. `--isolate` gives every test file a fresh database.
