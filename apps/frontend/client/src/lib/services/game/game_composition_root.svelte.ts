@@ -539,15 +539,17 @@ export class GameCompositionRoot
     // evidence through the production game (no-op in normal play).
     if (typeof window !== 'undefined') {
       try {
-        (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ = {
-          presentEvidence: (evidenceId: string): boolean => {
-            const campaignId = campaignService.activeCampaign?.id;
-            if (!campaignId) {
-              return false;
-            }
-            return Boolean(questStateService.presentEvidence({ evidenceId, campaignId }));
+        Object.assign(window, {
+          __AIKAMI_TEST__: {
+            presentEvidence: (evidenceId: string): boolean => {
+              const campaignId = campaignService.activeCampaign?.id;
+              if (!campaignId) {
+                return false;
+              }
+              return Boolean(questStateService.presentEvidence({ evidenceId, campaignId }));
+            },
           },
-        };
+        });
       } catch (error) {
         this.warn('initialize:test-hook-failed', { error: String(error) });
       }
