@@ -3,7 +3,7 @@ id: C-497
 title: "Camera framing and default-asset review"
 source: direct
 contract_type: thin
-status: draft
+status: approved
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-10T00:00:00Z"
 | **Type** | thin |
 | **Priority** | P2 — scale and composition strongly affect perceived sprite quality; cheap to fix, highly visible |
 | **Dependencies** | None (preserve C-505 and C-506, both implemented; do not regress their scene semantics or readability work) |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
@@ -51,7 +51,7 @@ After this contract, a player booting into any map sees it at a deliberate, stat
 ### AC-1: Normal boot renders within a stated framing range
 **Given** a normally-configured campaign boot,
 **When** the map renders at common viewport sizes (desktop window and small window),
-**Then** tile scale and camera zoom are within a stated target range recorded in the contract execution report (base scale is a named, configurable policy — not a bare `4` literal), and the map fills the viewport without large empty margins.
+**Then** tile scale and camera zoom are within a stated target range recorded in the contract execution report (base scale is a named, configurable policy — not a bare `4` literal — and the policy constant lives in `packages/shared/constants/` per the Allocation Truth Matrix so it is shared, not defined inside `apps/**`), and the map fills the viewport without large empty margins.
 
 **Verification**: visual suite capture of a campaign boot on `/game` at two viewport sizes, plus an engine test asserting base scale derives from the named policy for a given tile size and viewport.
 
@@ -79,7 +79,7 @@ After this contract, a player booting into any map sees it at a deliberate, stat
 ## Edge Cases & Gotchas
 
 - **Viewport smaller than the map at minimum zoom:** the framing policy must state which constraint wins (fill vs. whole-map visibility) instead of letting clamping center on empty space.
-- **C-161 dialogue zoom composes multiplicatively** with the base scale (`4 * cameraZoom` at `game_world.ts:3802`); changing the base scale silently changes dialogue framing — re-verify the 1.5× close-up visually after the change.
+- **C-161 dialogue zoom composes multiplicatively** with the base scale (`4 * cameraZoom` at `game_world.ts:3802`); changing the base scale silently changes dialogue framing — re-verify the 1.5× close-up visually after the change and record that capture in the execution report, since no AC below guards the C-161 regression.
 - **`disableClamping` exists for visual-testing sandboxes** (`camera_system.ts:124-132`); the production boot must not rely on it, and sandbox captures must not be mistaken for the production baseline.
 - **Do not "fix" perceived art quality by zooming.** This contract fixes presentation only; if sprites still read poorly at correct framing, that is input to the art-direction decision, not a reason to ship a non-standard zoom.
 
