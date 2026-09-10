@@ -7,8 +7,9 @@
 // input order, and rear `/behind` + front passes emitted exactly once.
 
 import { describe, expect, test } from 'bun:test';
+import type { LpcLayerRecipe } from '@aikami/lpc';
 import type { ComponentDefinition } from '@aikami/schemas';
-import { composeComponentPasses } from './component_composer.ts';
+import { composeComponentPasses, composeLpcRecipePasses } from './component_composer.ts';
 
 const baseProps = {
   identity: { schemaVersion: 'visual.definition.1' as const, id: 'x', revision: 'r' },
@@ -142,5 +143,30 @@ describe('composeComponentPasses (AC-2)', () => {
     // Equal order → tie-break by depth (a:5, b:3 → b first).
     expect(forward.passes.map((p) => p.componentId)).toEqual(['b', 'a', 'c']);
     expect(reverse.passes.map((p) => p.componentId)).toEqual(['b', 'a', 'c']);
+  });
+
+  test('composeLpcRecipePasses produces a deterministic back-to-front render order (production consumer)', () => {
+    const recipe = (slot: string, layerRole: 'behind' | 'front'): LpcLayerRecipe => ({
+      slot,
+      assetId: `${slot}.1`,
+      hexPalette: new Uint8Array(1024),
+      layerRole,
+    });
+    const recipes = [
+      recipe('body', 'front'),
+      recipe('hair', 'front'),
+      recipe('cape', 'behind'), // rear pass must render behind body/hair
+    ];
+    const composition = composeLpcRecipePasses({ recipes });
+    // All recipes render; rear `/behind` cape is ordered before front layers.
+    expect(composition.order).toHaveLength(3);
+    const capeIndex = recipes.findIndex((r) => r.slot === 'cape');
+    const bodyIndex = recipes.findIndex((r) => r.slot === 'body');
+    expect(composition.order.indexOf(capeIndex)).toBeLessThan(composition.order.indexOf(bodyIndex));
+    // Deterministic regardless of input order.
+    const reversedRecipes = [...recipes].reverse();
+    const reversed = composeLpcRecipePasses({ recipes: reversedRecipes });
+    const capes = reversed.order.map((i) => reversedRecipes[i].slot);
+    expect(capes[0]).toBe('cape');
   });
 });

@@ -15,7 +15,9 @@
 //
 // Contract: C-496 (AC-2)
 
+import type { LpcLayerRecipe } from '@aikami/lpc';
 import type { ComponentDefinition, VisualComponentPass } from '@aikami/schemas';
+import { resolveLayerDepth } from './lpc_layer_order.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -134,3 +136,108 @@ export const composeComponentPasses = (options: {
  * Re-exported pass type for consumers.
  */
 export type { VisualComponentPass };
+
+// ---------------------------------------------------------------------------
+// LPC recipe composition (production consumer in game_world)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ordered result for composing LPC layer recipes into render passes.
+ */
+export type LpcRecipeComposition = {
+  /** Passes ordered deterministically (rear `behind` → front). */
+  passes: ComposedPass[];
+  /** Recipe indices in the order they should render (back-to-front). */
+  order: number[];
+};
+
+/**
+ * Composes LPC layer recipes into deterministic render passes (AC-2).
+ *
+ * This is the production consumer of {@link composeComponentPasses} used by
+ * `game_world` when it sorts a modular actor's layer sprites: each recipe is
+ * treated as one component pass (component = slot, pass = layerRole) and the
+ * composer's rig/body/pose + depth + order rules produce a single total
+ * ordering, so a rear `/behind` pass always renders behind its front pass
+ * regardless of async load order. When no recipes are supplied it returns an
+ * empty ordering (callers fall back to the canonical depth table).
+ *
+ * @param options - Compose options.
+ * @param options.recipes - The entity's LPC layer recipes.
+ * @param options.hostRig - Host rig profile (default `universal`).
+ * @param options.hostBody - Host body profile (default `adult`).
+ * @param options.hostPose - Host pose profile (default `lpc.v1`).
+ * @returns Ordered passes and the recipe render order.
+ */
+export const composeLpcRecipePasses = (options: {
+  recipes: readonly LpcLayerRecipe[];
+  hostRig?: string;
+  hostBody?: string;
+  hostPose?: string;
+}): LpcRecipeComposition => {
+  const { recipes, hostRig = 'universal', hostBody = 'adult', hostPose = 'lpc.v1' } = options;
+
+  // Build one synthetic component per recipe; the component `order` and the
+  // pass `depth` reproduce the canonical slot depth so the composer output
+  // stays compatible with the existing depth table.
+  const components: ComponentDefinition[] = recipes.map((recipe, index) => ({
+    kind: 'component',
+    identity: {
+      schemaVersion: 'visual.definition.1',
+      id: recipe.slot ?? `layer-${index}`,
+      revision: 'engine',
+    },
+    images: [],
+    frames: [],
+    clips: [],
+    presentation: { pixelDensity: 1, sampling: 'nearest', colorOperation: 'none' },
+    provenance: { source: 'engine', licenses: [] },
+    component: {
+      id: recipe.slot ?? `layer-${index}`,
+      rigProfile: hostRig,
+      bodyProfile: hostBody,
+      poseProfile: hostPose,
+      // Uniform order so the canonical pass `depth` (from resolveLayerDepth)
+      // governs the render order — rear `/behind` before front.
+      order: 0,
+      passes: [
+        {
+          passId: recipe.layerRole ?? 'front',
+          clipName: 'walk.down',
+          depth: resolveLayerDepth({
+            slot: recipe.slot,
+            layerRole: recipe.layerRole ?? 'front',
+            direction: 2,
+          }),
+          visible: true,
+        },
+      ],
+    },
+  }));
+
+  const { passes } = composeComponentPasses({
+    hostRig,
+    hostBody,
+    hostPose,
+    components,
+  });
+
+  // Map composed passes back to recipe indices by componentId (slot). Ties
+  // keep stable order; rejected components (shouldn't happen for synthetic
+  // profiles) are appended last in original order.
+  const order: number[] = [];
+  const bySlot = new Map(recipes.map((recipe, index) => [recipe.slot ?? `layer-${index}`, index]));
+  for (const pass of passes) {
+    const index = bySlot.get(pass.componentId);
+    if (index !== undefined && !order.includes(index)) {
+      order.push(index);
+    }
+  }
+  for (let i = 0; i < recipes.length; i++) {
+    if (!order.includes(i)) {
+      order.push(i);
+    }
+  }
+
+  return { passes, order };
+};

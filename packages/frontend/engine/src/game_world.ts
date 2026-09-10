@@ -42,6 +42,7 @@ import {
 } from './pixi_app.ts';
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
+import { composeLpcRecipePasses } from './rendering/component_composer.ts';
 import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance_resolver.ts';
 import { resolveLayerDepth } from './rendering/lpc_layer_order.ts';
@@ -3712,7 +3713,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Sort by depth from the canonical LPC_LAYER_ORDER table (C-430).
     // This replaces the local SlotZ definition — the canonical table is
     // the ONLY slot→depth mapping in the repo.
-    // Preserve original recipe order when depths are equal (stable sort tie-breaker).
+    // C-496 AC-2: the shared component composer is the production consumer
+    // for modular multi-pass composition — it orders rear `/behind` and
+    // front passes deterministically (rig/body/pose + depth + order). Its
+    // recipe order is the primary sort key; equal depths preserve original
+    // recipe order (stable sort tie-breaker).
+    const composition = composeLpcRecipePasses({
+      recipes: layerSprites.map((layer) => layer.recipe),
+    });
+    const compositionOrder = new Map(
+      composition.order.map((recipeIndex, position) => [recipeIndex, position]),
+    );
+
     const spritesWithIndex = layerSprites.map((layer, index) => ({ layer, index }));
     spritesWithIndex.sort((a, b) => {
       const zA = resolveLayerDepth({
@@ -3728,7 +3740,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       if (zA !== zB) {
         return zA - zB;
       }
-      // Equal depth: preserve original recipe order
+      // Equal depth: prefer the composer's deterministic pass order, then
+      // original recipe order.
+      const posA = compositionOrder.get(a.index) ?? a.index;
+      const posB = compositionOrder.get(b.index) ?? b.index;
+      if (posA !== posB) {
+        return posA - posB;
+      }
       return a.index - b.index;
     });
     layerSprites = spritesWithIndex.map((item) => item.layer);

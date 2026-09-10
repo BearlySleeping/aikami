@@ -11,6 +11,8 @@ export {
   type ComponentCompositionResult,
   type ComposedPass,
   composeComponentPasses,
+  composeLpcRecipePasses,
+  type LpcRecipeComposition,
   type RejectedComponent,
 } from './component_composer.ts';
 // C-430: composeMultiLayerSprite and multi-layer shaders removed — dead code.
