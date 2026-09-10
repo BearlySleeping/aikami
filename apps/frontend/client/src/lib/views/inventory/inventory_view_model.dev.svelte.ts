@@ -3,9 +3,9 @@
 // Dev sandbox override — injects mock inventory state for sandbox testing.
 // NEVER import this file from production code or non-(dev) routes.
 
-import type { BaseViewModelOptions } from '@aikami/frontend/services';
-import { inventoryService } from '$services';
-import { InventoryViewModel } from './inventory_view_model.svelte';
+import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
+import { equipmentService, gameOverlayService, inventoryService, playSfxByName } from '$services';
+import { InventoryViewModel, type InventoryViewModelOptions } from './inventory_view_model.svelte';
 
 const MOCK_ITEM_IDS = [
   'rusty-sword',
@@ -59,5 +59,13 @@ class InventoryDevViewModel extends InventoryViewModel {
   }
 }
 
-export const getInventoryDevViewModel = (options: BaseViewModelOptions): InventoryDevViewModel =>
-  InventoryDevViewModel.create(options) as InventoryDevViewModel;
+export const getInventoryDevViewModel = (options: BaseViewModelOptions): InventoryDevViewModel => {
+  const devOptions: InventoryViewModelOptions = {
+    ...options,
+    inventory: inventoryService,
+    equipment: equipmentService,
+    overlays: gameOverlayService,
+    sfx: { playSfxByName },
+  };
+  return InventoryDevViewModel.create(devOptions) as InventoryDevViewModel;
+};

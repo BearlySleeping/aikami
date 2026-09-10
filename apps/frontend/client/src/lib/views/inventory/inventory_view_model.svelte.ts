@@ -1,8 +1,13 @@
 // apps/frontend/client/src/lib/views/inventory/inventory_view_model.svelte.ts
 //
-// Inventory ViewModel. Reads inventory + equipment state from the domain
-// services and exposes equip/unequip/use actions for the 6-slot paperdoll
-// (leftHand, rightHand, head, torso, arms, feet).
+// Inventory ViewModel. Reads inventory + equipment state from injected
+// domain capabilities and exposes equip/unequip/use actions for the 6-slot
+// paperdoll (leftHand, rightHand, head, torso, arms, feet).
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures. Production wiring lives in
+// ./inventory_composition.ts.
 //
 // Contract: C-153 Character Dashboard & Equipment
 // Contract: C-163 Visceral Feedback Juice (equip SFX + appearance sync)
@@ -19,10 +24,39 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
-import { equipmentService, gameOverlayService, inventoryService, playSfxByName } from '$services';
 import { getItemDefinition } from '$utils/inventory_utils';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The inventory data and operations the paperdoll consumes. */
+export type InventoryCapabilities = {
+  inventory: Array<{ itemId: string; quantity: number }>;
+  readonly feedbackMessage: string | undefined;
+  useConsumable(options: { itemId: string }): 'ok' | 'not-owned' | 'not-consumable' | 'full-hp';
+};
+
+/** The equipment state and operations the paperdoll consumes. */
+export type EquipmentCapabilities = {
+  getEquippedItemId(slot: EquipmentSlot): string | undefined;
+  readonly totalAttack: number;
+  readonly totalDefense: number;
+  equipItem(options: { itemId: string }): boolean;
+  unequipItem(options: { slot: EquipmentSlot }): boolean;
+};
+
+/** The overlay-navigation capability the inventory overlay invokes on close. */
+export type InventoryOverlayCapabilities = {
+  closeInventory(): void;
+};
+
+/** The sound-effect capability for equip/use feedback. */
+export type InventorySfxCapabilities = {
+  playSfxByName(name: string): void;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
 
 export type EquippedItemView = {
   slot: EquipmentSlot;
@@ -31,7 +65,16 @@ export type EquippedItemView = {
 };
 
 /** Base configuration used to create the inventory ViewModel. */
-export type InventoryViewModelOptions = BaseViewModelOptions;
+export type InventoryViewModelOptions = BaseViewModelOptions & {
+  /** Inventory data and operations. */
+  inventory: InventoryCapabilities;
+  /** Equipment state and operations. */
+  equipment: EquipmentCapabilities;
+  /** Overlay navigation. */
+  overlays: InventoryOverlayCapabilities;
+  /** Sound-effect playback. */
+  sfx: InventorySfxCapabilities;
+};
 
 export type InventoryViewModelInterface = BaseViewModelInterface & {
   readonly items: Array<{ itemId: string; quantity: number }>;
@@ -62,17 +105,32 @@ export type InventoryViewModelInterface = BaseViewModelInterface & {
   closeInventory(): void;
 };
 
+// ── Implementation ──────────────────────────────────────────────────────
+
 export class InventoryViewModel
-  extends BaseViewModel<BaseViewModelOptions>
+  extends BaseViewModel<InventoryViewModelOptions>
   implements InventoryViewModelInterface
 {
+  private readonly _inventory: InventoryCapabilities;
+  private readonly _equipment: EquipmentCapabilities;
+  private readonly _overlays: InventoryOverlayCapabilities;
+  private readonly _sfx: InventorySfxCapabilities;
+
   /** Local action feedback (use/equip results). */
   actionMessage = $state<string | undefined>(undefined);
 
   private _actionMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
+  constructor(options: InventoryViewModelOptions) {
+    super(options);
+    this._inventory = options.inventory;
+    this._equipment = options.equipment;
+    this._overlays = options.overlays;
+    this._sfx = options.sfx;
+  }
+
   get items(): Array<{ itemId: string; quantity: number }> {
-    return inventoryService.inventory;
+    return this._inventory.inventory;
   }
 
   get slotOrder(): readonly EquipmentSlot[] {
@@ -83,7 +141,7 @@ export class InventoryViewModel
   get equippedItems(): ReadonlyArray<EquippedItemView> {
     const views: EquippedItemView[] = [];
     for (const slot of EQUIPMENT_SLOT_ORDER) {
-      const itemId = equipmentService.getEquippedItemId(slot);
+      const itemId = this._equipment.getEquippedItemId(slot);
       if (!itemId) {
         continue;
       }
@@ -93,15 +151,15 @@ export class InventoryViewModel
   }
 
   get totalAttack(): number {
-    return equipmentService.totalAttack;
+    return this._equipment.totalAttack;
   }
 
   get totalDefense(): number {
-    return equipmentService.totalDefense;
+    return this._equipment.totalDefense;
   }
 
   get feedbackMessage(): string | undefined {
-    return this.actionMessage ?? inventoryService.feedbackMessage;
+    return this.actionMessage ?? this._inventory.feedbackMessage;
   }
 
   getItemLabel(itemId: string): string {
@@ -117,7 +175,7 @@ export class InventoryViewModel
   }
 
   getEquippedItem(slot: EquipmentSlot): EquippedItemView | undefined {
-    const itemId = equipmentService.getEquippedItemId(slot);
+    const itemId = this._equipment.getEquippedItemId(slot);
     if (!itemId) {
       return undefined;
     }
@@ -155,21 +213,21 @@ export class InventoryViewModel
   }
 
   equipItem(itemId: string): void {
-    const equipped = equipmentService.equipItem({ itemId });
+    const equipped = this._equipment.equipItem({ itemId });
     if (equipped) {
-      void playSfxByName('sfx_equip');
+      void this._sfx.playSfxByName('sfx_equip');
     }
   }
 
   unequipItem(slot: EquipmentSlot): void {
-    equipmentService.unequipItem({ slot });
+    this._equipment.unequipItem({ slot });
   }
 
   /** @inheritdoc */
   useItem(itemId: string): void {
-    const result = inventoryService.useConsumable({ itemId });
+    const result = this._inventory.useConsumable({ itemId });
     if (result === 'ok') {
-      void playSfxByName('sfx_pickup');
+      void this._sfx.playSfxByName('sfx_pickup');
       this._showActionMessage(`Used ${getItemDefinition(itemId).label}`);
       return;
     }
@@ -179,7 +237,7 @@ export class InventoryViewModel
   }
 
   closeInventory(): void {
-    gameOverlayService.closeInventory();
+    this._overlays.closeInventory();
   }
 
   /** Shows a transient action message (auto-clears after 2.5s). */
@@ -194,5 +252,12 @@ export class InventoryViewModel
   }
 }
 
-export const getInventoryViewModel = (options: BaseViewModelOptions): InventoryViewModelInterface =>
-  InventoryViewModel.create(options);
+/**
+ * Builds an inventory ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getInventoryViewModel` in ./inventory_composition.ts.
+ */
+export const createInventoryViewModel = (
+  options: InventoryViewModelOptions,
+): InventoryViewModelInterface => InventoryViewModel.create(options);

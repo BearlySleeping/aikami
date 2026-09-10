@@ -2,59 +2,52 @@
 //
 // Unit tests for VendorViewModel — C-154 AI Vendors Economy
 //
+// The ViewModel receives its vendor, game-mode, and overlay capabilities as
+// explicit typed options; this suite injects the real vendor service as a
+// plain fixture (no `$services` barrel mock / `mock.module`), so it exercises
+// the same delegation path production uses.
+//
 // Run with:
 //   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/vendor/vendor_view_model.test.ts
 
-import { describe, expect, mock, test } from 'bun:test';
-
-// $state, $derived, $effect are polyfilled globally via test_preload.ts
-// $services barrel is mocked globally via test_preload.ts
-
-import { vendorService as realVendorService } from '$lib/services/game/vendor_service.svelte.ts';
-
-// The ViewModel consumes vendorService through the $services barrel, which
-// test_preload mocks with a stub. Re-mock the barrel so the ViewModel and
-// this test share the REAL vendor service instance (otherwise state
-// mutations below never reach the ViewModel).
-mock.module('$services', () => ({
-  vendorService: realVendorService,
-  gameOverlayService: {
-    openVendor: () => {},
-    closeVendor: () => {},
-  },
-}));
-
+import { describe, expect, test } from 'bun:test';
 import { assetStore } from '$lib/services/assets/asset_store.svelte.ts';
 import { vendorService } from '$lib/services/game/vendor_service.svelte.ts';
-import { getVendorViewModel, type VendorViewModelOptions } from './vendor_view_model.svelte';
+import {
+  createVendorViewModel,
+  type VendorModeCapabilities,
+  type VendorOverlayCapabilities,
+  type VendorViewModelInterface,
+  type VendorViewModelOptions,
+} from './vendor_view_model.svelte';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-let onCloseCalled = false;
+let closeVendorCalls = 0;
 
-const createViewModel = (options?: {
-  vendorInventory?: string;
-}): ReturnType<typeof getVendorViewModel> => {
-  onCloseCalled = false;
-  // Reset vendor service state between tests
+const createMode = (): VendorModeCapabilities => ({ currentMode: 'EXPLORE' });
+
+const createOverlays = (): VendorOverlayCapabilities => ({
+  closeVendor: () => {
+    closeVendorCalls += 1;
+  },
+});
+
+const createViewModel = (options?: { vendorInventory?: string }): VendorViewModelInterface => {
+  closeVendorCalls = 0;
+  // Reset the shared vendor service state between tests.
   vendorService.priceMultiplier = 1.0;
   vendorService.refusesToSell = false;
-  const vmOptions: VendorViewModelOptions = {
+  return createVendorViewModel({
     className: 'VendorViewModelTest',
     vendorId: 'test-vendor-1',
     vendorName: 'Test Vendor',
     vendorInventory: options?.vendorInventory ?? 'rustySword,healthPotion,ironSword',
-  };
-  const vm = getVendorViewModel(vmOptions);
-  // Monkey-patch closeVendor to track calls (vendorService.close also calls onClose)
-  // Override vendorService.close so we can track calls
-  const originalServiceClose = vendorService.close.bind(vendorService);
-  vendorService.close = () => {
-    onCloseCalled = true;
-    originalServiceClose();
-  };
-  return vm;
+    vendor: vendorService,
+    mode: createMode(),
+    overlays: createOverlays(),
+  } satisfies VendorViewModelOptions);
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -138,13 +131,13 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
   });
 
   describe('closeVendor', () => {
-    test('resets multiplier to 1.0 and calls onClose', () => {
+    test('resets multiplier to 1.0 and closes the overlay', () => {
       const viewModel = createViewModel();
       vendorService.priceMultiplier = 0.7;
 
       viewModel.closeVendor();
       expect(viewModel.priceMultiplier).toBe(1.0);
-      expect(onCloseCalled).toBe(true);
+      expect(closeVendorCalls).toBe(1);
     });
 
     test('resets refusesToSell on close', () => {
@@ -155,7 +148,7 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
       viewModel.closeVendor();
       expect(viewModel.priceMultiplier).toBe(1.0);
       expect(viewModel.refusesToSell).toBe(false);
-      expect(onCloseCalled).toBe(true);
+      expect(closeVendorCalls).toBe(1);
     });
   });
 
@@ -193,10 +186,10 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
   });
 
   describe('playerGold delegation', () => {
-    test('playerGold reads from gameStateService', () => {
+    test('playerGold reads from the vendor capability', () => {
       const viewModel = createViewModel();
-      // With mocked gameStateService, gold will be 0 (mock default)
-      // The getter itself works — just verify it doesn't throw
+      // The vendor fixture delegates gold to the mocked inventory service; the
+      // getter itself works — just verify it does not throw.
       expect(() => viewModel.playerGold).not.toThrow();
     });
   });
@@ -234,7 +227,7 @@ describe('VendorViewModel — C-154 AI Vendors Economy', () => {
       expect(viewModel.isHagglePanelCollapsed).toBe(false);
     });
 
-    test('auto-expands once a conversation starts', async () => {
+    test('auto-expands once a conversation starts', () => {
       const viewModel = createViewModel();
       vendorService.messages = [
         { id: 'm1', role: 'player', content: 'hello' },
