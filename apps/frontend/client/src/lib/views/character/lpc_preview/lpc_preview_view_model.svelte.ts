@@ -63,6 +63,8 @@ const FRAME_COUNTS: Record<number, number> = {
 
 export type LpcPreviewViewModelInterface = BaseViewModelInterface & {
   readonly isPlaying: boolean;
+  /** True once the PixiJS canvas context is initialized and rendering. */
+  readonly isReady: boolean;
   readonly animationFrame: number;
   /** Last frame index for the current animation state (inclusive). */
   readonly maxFrame: number;
@@ -178,6 +180,10 @@ class LpcPreviewViewModel
 
   get maxFrame(): number {
     return this._maxFrame;
+  }
+
+  get isReady(): boolean {
+    return this._isInitialized;
   }
 
   get playbackFps(): number {

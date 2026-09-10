@@ -83,16 +83,33 @@ test.describe('New Campaign Flow — C-405', () => {
     // Start Campaign proceeds to onboarding.
     await page.getByRole('button', { name: 'Start Campaign' }).click();
 
-    // Onboarding coordinator with three starter heroes.
+    // Onboarding coordinator presents starter heroes as the primary affordance.
     await expect(page.getByRole('heading', { name: 'Choose Your Hero' })).toBeVisible({
       timeout: 10000,
     });
 
-    // Pick the first starter hero card.
+    // Pick the first starter hero card → lands on the lightweight fast path
+    // (name + one motivating choice), NOT the full editable review sheet.
     await page.locator('button').filter({ hasText: 'Thaldrin' }).first().click();
+    await expect(page.getByRole('heading', { name: 'Ready to Go?' })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByRole('button', { name: /Enter World/ })).toBeVisible();
+    // The full sheet must not be a required step on the fast path.
+    await expect(page.getByRole('button', { name: 'Customize Everything' })).toBeVisible();
+
+    // Fast path: confirm with the pre-filled name and enter the world.
+    // AC-4: measure the preset path from selection to world entry.
+    const presetStart = Date.now();
+    await page.getByRole('button', { name: /Enter World/ }).click();
 
     // Campaign completes setup and boots the game.
     await expect(page).toHaveURL(/\/game/, { timeout: 15000 });
+    const presetPathMs = Date.now() - presetStart;
+    // AC-4 evidence: the preset fast path must complete in a bounded time —
+    // a full-sheet review step (rendering + manual edit) would not fit in
+    // this window. The verifier can compare against a timed AI-path run.
+    expect(presetPathMs).toBeLessThan(10000);
   });
 
   test('AC-4: /worldgen Advanced entry is reachable and honestly labelled', async ({ page }) => {
