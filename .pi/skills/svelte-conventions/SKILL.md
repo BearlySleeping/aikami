@@ -329,7 +329,7 @@ the production-wired factory.
 - Export `type ...Interface` with **all data properties `readonly`** and
   **methods as method signatures** (`method(): void`, not `method: () => void`)
 - Export `type ...Options` alongside the class
-- Export a `getFeatureViewModel` factory function using `ClassName.create()` — **never `new ClassName()`**
+- Export a testable `createFeatureViewModel` factory in the ViewModel module using `ClassName.create()` — **never `new ClassName()`**; keep the production-wired `getFeatureViewModel` factory in the corresponding `*_composition.ts` file
 - Always extend `BaseViewModel` and `implements *Interface`
 - ViewModel files: `{name}_view_model.svelte.ts` (NOT `vm` shorthand)
 - Call `super.initialize()` **at the end** of `initialize()`
