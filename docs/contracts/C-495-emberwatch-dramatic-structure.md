@@ -19,7 +19,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — three maps, three NPCs, one fetch quest, one ending; AI can paraphrase a fetch quest indefinitely without making it dynamic |
 | **Dependencies** | [C-488](C-488-authored-npc-identity-in-the-content-pack.md) (authored identity), [C-491](C-491-committed-narrative-event-record.md) (`EvidencePresented` events), [C-494](C-494-one-companion-who-reacts.md) (the companion who acknowledges the milestone). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
 | **Contract version** | 2.0.0 |
