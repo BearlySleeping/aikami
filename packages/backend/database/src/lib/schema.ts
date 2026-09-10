@@ -70,8 +70,14 @@ export const accounts = sqliteTable(
     id: text('id').primaryKey(),
     accountId: text('account_id').notNull(),
     providerId: text('provider_id').notNull(),
-    /** OAuth issuer — Better Auth requires this field on the account table. */
-    issuer: text('issuer').notNull(),
+    // 🔴 No `issuer` column. Better Auth 1.7.0–1.7.2 required one (NOT NULL,
+    // unique with `account_id`); 1.7.3 removed that requirement and went back
+    // to recognising an account by (providerId, accountId), as in 1.6. It
+    // therefore never writes `issuer`, and a NOT NULL column here rejects
+    // every sign-up and account link — Better Auth's own schema check detects
+    // exactly that and refuses to serve (SCHEMA_MISMATCH). See
+    // drizzle-d1/0006_drop_account_issuer.sql and
+    // https://www.better-auth.com/docs/guides/1-7-upgrade-guide
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -85,11 +91,11 @@ export const accounts = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
-  (table) => [
-    index('account_user_id_idx').on(table.userId),
-    // One identity per (issuer, accountId) — Better Auth's account model.
-    uniqueIndex('account_issuer_account_id_unique').on(table.issuer, table.accountId),
-  ],
+  // No unique index on (providerId, accountId): Better Auth 1.7.3 does not
+  // declare one, and enforcing it in the database would fail the migration
+  // on any 1.7.0–1.7.2 rows that share a provider key across issuers — which
+  // the upgrade guide asks you to resolve by hand before upgrading.
+  (table) => [index('account_user_id_idx').on(table.userId)],
 );
 
 /** A Better Auth verification token (email verification, password reset, …). */
