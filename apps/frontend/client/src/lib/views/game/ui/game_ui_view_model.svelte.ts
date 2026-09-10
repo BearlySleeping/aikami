@@ -39,8 +39,8 @@ import {
   type DialogueOverlayViewModelInterface,
   getDialogueOverlayViewModel,
 } from './overlays/dialogue/dialogue_overlay_view_model.svelte';
+import { getEndSessionViewModel } from './overlays/end_session/end_session_composition.ts';
 import type { EndSessionViewModelInterface } from './overlays/end_session/end_session_view_model.svelte';
-import { getEndSessionViewModel } from './overlays/end_session/end_session_view_model.svelte';
 import { getGameOverViewModel } from './overlays/game_over/game_over_composition.ts';
 import type { GameOverViewModelInterface } from './overlays/game_over/game_over_view_model.svelte';
 import { getPartyRosterViewModel } from './overlays/party_roster/party_roster_composition.ts';
@@ -508,7 +508,7 @@ class GameUIViewModel
         if (gameOverlayService.activeOverlay !== 'END_SESSION') {
           return;
         }
-        const vm = getEndSessionViewModel();
+        const vm = getEndSessionViewModel({ className: 'EndSessionViewModel' });
         this.endSessionViewModel = vm;
 
         return () => {

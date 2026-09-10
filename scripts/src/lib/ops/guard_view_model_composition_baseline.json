@@ -14,11 +14,6 @@
     "c2": 1,
     "c3": 0
   },
-  "apps/frontend/client/src/lib/views/agent/list/agent_list_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
   "apps/frontend/client/src/lib/views/ai/local_ai_wizard_view_model.svelte.ts": {
     "c1": 1,
     "c2": 1,
@@ -144,11 +139,6 @@
     "c2": 1,
     "c3": 0
   },
-  "apps/frontend/client/src/lib/views/dev/session_sandbox_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
   "apps/frontend/client/src/lib/views/dev/text/text_view_model.svelte.ts": {
     "c1": 1,
     "c2": 1,
@@ -160,11 +150,6 @@
     "c3": 0
   },
   "apps/frontend/client/src/lib/views/game/canvas/game_canvas_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
-  "apps/frontend/client/src/lib/views/game/dashboard/character_dashboard_view_model.svelte.ts": {
     "c1": 1,
     "c2": 1,
     "c3": 0
@@ -190,11 +175,6 @@
     "c3": 0
   },
   "apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
-  "apps/frontend/client/src/lib/views/game/ui/overlays/end_session/end_session_view_model.svelte.ts": {
     "c1": 1,
     "c2": 1,
     "c3": 0

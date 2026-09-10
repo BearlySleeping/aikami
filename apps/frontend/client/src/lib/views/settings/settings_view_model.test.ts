@@ -18,7 +18,7 @@ const _stubViewModel = (extra: Record<string, unknown> = {}) => ({
 mock.module('../agent/editor/agent_editor_view_model.svelte.ts', () => ({
   getAgentEditorViewModel: () => _stubViewModel(),
 }));
-mock.module('../agent/list/agent_list_view_model.svelte.ts', () => ({
+mock.module('../agent/list/agent_list_composition.ts', () => ({
   getAgentListViewModel: () => _stubViewModel(),
 }));
 mock.module('./audio/settings_audio_view_model.svelte', () => ({
