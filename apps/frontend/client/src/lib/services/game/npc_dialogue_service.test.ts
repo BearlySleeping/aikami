@@ -9,11 +9,17 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { NpcRollResolutionOutput, NpcStateDelta } from '@aikami/types';
+import type {
+  CommittedNarrativeEvent,
+  NpcRollResolutionOutput,
+  NpcStateDelta,
+} from '@aikami/types';
 import { encode } from 'gpt-tokenizer';
 import {
   campaignService,
+  companionReactionService,
   narrativeEventService,
+  npcAwarenessService,
   partyRosterService,
   relationshipService,
 } from '$services';
@@ -2215,6 +2221,54 @@ describe('C-491 AC-1: exactly one committed event per consequential resolution',
     await driveRoll({ deltas: [], outcome: 'fail' });
     expect(recordedEvents()).toHaveLength(0);
   });
+
+  test('evaluates every recruited companion in the committed witness set', async () => {
+    const contentProvider = makeContentProvider({
+      npcs: {
+        village_elder: STUB_EMBERWATCH.npcs.village_elder,
+        village_guard: STUB_EMBERWATCH.npcs.village_guard,
+        traveling_merchant: STUB_EMBERWATCH.npcs.traveling_merchant,
+      },
+    });
+    Object.defineProperty(npcAwarenessService, 'nearbyNpcIds', {
+      value: ['village_guard', 'traveling_merchant'],
+      configurable: true,
+    });
+    (partyRosterService as unknown as { hasMember: (npcId: string) => boolean }).hasMember = mock(
+      (npcId: string) => npcId === 'village_guard',
+    );
+    const evaluateEvent = mock(() => undefined);
+    (
+      companionReactionService.evaluateEvent as unknown as {
+        fn: typeof evaluateEvent;
+      }
+    ).fn = evaluateEvent;
+    const fireUnpromptedTurn = mock(() => true);
+    (
+      companionReactionService as unknown as {
+        fireUnpromptedTurn: typeof fireUnpromptedTurn;
+      }
+    ).fireUnpromptedTurn = fireUnpromptedTurn;
+
+    try {
+      await driveRoll({
+        deltas: [],
+        checkType: 'Intimidation',
+        outcome: 'pass',
+        contentProvider,
+      });
+    } finally {
+      Object.defineProperty(npcAwarenessService, 'nearbyNpcIds', {
+        value: [],
+        configurable: true,
+      });
+    }
+
+    expect(evaluateEvent).toHaveBeenCalledTimes(1);
+    expect(evaluateEvent.mock.calls[0]?.[0]).toMatchObject({ npcId: 'village_guard' });
+    expect(fireUnpromptedTurn).toHaveBeenCalledTimes(1);
+    expect(fireUnpromptedTurn.mock.calls[0]?.[0]).toMatchObject({ npcId: 'village_guard' });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2250,6 +2304,23 @@ describe('C-494 AC-3: companion witness recall', () => {
     (narrativeEventService as unknown as { witnessedBy: (id: string) => unknown[] }).witnessedBy =
       mock((id: string) => events.filter((e) => (e.witnesses as string[]).includes(id)));
   };
+
+  beforeEach(() => {
+    (
+      companionReactionService as unknown as {
+        hasFired: (options: { npcId: string; eventId: string }) => boolean;
+      }
+    ).hasFired = mock(() => false);
+    (
+      companionReactionService as unknown as {
+        fireUnpromptedTurn: (options: {
+          npcId: string;
+          npc: Record<string, unknown>;
+          event: CommittedNarrativeEvent;
+        }) => boolean;
+      }
+    ).fireUnpromptedTurn = mock(() => true);
+  });
 
   test('buildContext injects [COMPANION WITNESSED] lines for a recruited companion', () => {
     seedWitness([
@@ -2324,6 +2395,66 @@ describe('C-494 AC-3: companion witness recall', () => {
 
     // A threat the companion did NOT witness must never be injected.
     expect(projection.companionWitnessed).toHaveLength(0);
+  });
+
+  test('consumes a pending witnessed event only after its generated turn', async () => {
+    const event = {
+      id: 'evt-pending',
+      campaignId: 'camp-1',
+      sequence: 1,
+      kind: 'PromiseMade',
+      informationKind: 'world_fact',
+      summary: 'Bram witnessed the player promise to defend the village',
+      witnesses: ['village_guard'],
+      recordedAt: new Date().toISOString(),
+    } satisfies CommittedNarrativeEvent;
+    const consumed = new Set<string>();
+    seedWitness([event]);
+    (
+      companionReactionService as unknown as {
+        hasFired: (options: { npcId: string; eventId: string }) => boolean;
+      }
+    ).hasFired = mock((options) => consumed.has(`${options.npcId}:${options.eventId}`));
+    const fireUnpromptedTurn = mock(
+      (options: { npcId: string; event: CommittedNarrativeEvent }) => {
+        consumed.add(`${options.npcId}:${options.event.id}`);
+        return true;
+      },
+    );
+    (
+      companionReactionService as unknown as {
+        fireUnpromptedTurn: typeof fireUnpromptedTurn;
+      }
+    ).fireUnpromptedTurn = fireUnpromptedTurn;
+    const textGenerator = makeTextGenerator({ text: 'I remember what you promised.' });
+    npcDialogueService.configure({
+      contentProvider: companionProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const generate = () =>
+      npcDialogueService.generateTurn({
+        npcId: 'village_guard',
+        npcName: 'Bram',
+        messages: [],
+        signal: new AbortController().signal,
+      });
+    await generate();
+    await generate();
+
+    const firstCall = textGenerator.mock.calls[0]?.[0] as
+      | { messages?: Array<{ role: string; content: string }> }
+      | undefined;
+    const secondCall = textGenerator.mock.calls[2]?.[0] as
+      | { messages?: Array<{ role: string; content: string }> }
+      | undefined;
+    const firstPrompt = firstCall?.messages?.[0]?.content;
+    const secondPrompt = secondCall?.messages?.[0]?.content;
+    expect(firstPrompt).toContain('[COMPANION WITNESSED]');
+    expect(firstPrompt).toContain(event.summary);
+    expect(secondPrompt).not.toContain('[COMPANION WITNESSED]');
+    expect(fireUnpromptedTurn).toHaveBeenCalledTimes(1);
   });
 });
 

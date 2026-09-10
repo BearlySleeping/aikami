@@ -58,8 +58,8 @@ export type CompanionReactionServiceInterface = BaseFrontendClassInterface & {
     event: CommittedNarrativeEvent;
   }): boolean;
 
-  /** Whether a reaction/unprompted action has already fired for this event. */
-  hasFired(eventId: string): boolean;
+  /** Whether this companion's unprompted turn has already fired for the event. */
+  hasFired(options: { npcId: string; eventId: string }): boolean;
 
   /** Clears the idempotency ledger (used by tests / session reset). */
   reset(): void;
@@ -73,8 +73,11 @@ class CompanionReactionService
   extends BaseFrontendClass<CompanionReactionServiceOptions>
   implements CompanionReactionServiceInterface
 {
-  /** Idempotency ledger: eventId → fired reactions (C-489/C-494 discipline). */
-  private _fired = new Set<string>();
+  /** Boundary-reaction idempotency, scoped independently per companion/event. */
+  private _firedReactions = new Set<string>();
+
+  /** Unprompted-turn idempotency, scoped independently per companion/event. */
+  private _firedUnpromptedTurns = new Set<string>();
 
   /** @inheritdoc */
   evaluateEvent(options: {
@@ -88,7 +91,8 @@ class CompanionReactionService
     if (!npc?.isCompanion || !partyRosterService.hasMember(npcId)) {
       return undefined;
     }
-    if (this._fired.has(event.id)) {
+    const eventKey = this._eventKey({ npcId, eventId: event.id });
+    if (this._firedReactions.has(eventKey)) {
       this.debug('evaluateEvent:already-fired', { eventId: event.id });
       return undefined;
     }
@@ -106,7 +110,7 @@ class CompanionReactionService
       reaction: crossing.reaction,
       roster: partyRosterService,
     });
-    this._fired.add(event.id);
+    this._firedReactions.add(eventKey);
 
     this.info('companion:reaction', {
       npcId,
@@ -134,12 +138,13 @@ class CompanionReactionService
       return false;
     }
     // Fires exactly once per event (idempotency — no double action).
-    if (this._fired.has(event.id)) {
+    const eventKey = this._eventKey({ npcId, eventId: event.id });
+    if (this._firedUnpromptedTurns.has(eventKey)) {
       this.debug('fireUnpromptedTurn:already-fired', { eventId: event.id });
       return false;
     }
 
-    this._fired.add(event.id);
+    this._firedUnpromptedTurns.add(eventKey);
     this.info('companion:unprompted', {
       npcId,
       eventId: event.id,
@@ -150,13 +155,19 @@ class CompanionReactionService
   }
 
   /** @inheritdoc */
-  hasFired(eventId: string): boolean {
-    return this._fired.has(eventId);
+  hasFired(options: { npcId: string; eventId: string }): boolean {
+    return this._firedUnpromptedTurns.has(this._eventKey(options));
   }
 
   /** @inheritdoc */
   reset(): void {
-    this._fired.clear();
+    this._firedReactions.clear();
+    this._firedUnpromptedTurns.clear();
+  }
+
+  /** Produces an unambiguous ledger key for one companion's event effect. */
+  private _eventKey(options: { npcId: string; eventId: string }): string {
+    return JSON.stringify([options.npcId, options.eventId]);
   }
 }
 

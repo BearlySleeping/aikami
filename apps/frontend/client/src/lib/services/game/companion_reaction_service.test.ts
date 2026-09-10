@@ -211,6 +211,14 @@ describe('CompanionReactionService', () => {
     });
     expect(second).toBeUndefined();
     expect(partyRosterService.getApproval('village_guard')).toBe(-10);
+
+    // Boundary-reaction idempotency must not consume the distinct unprompted effect.
+    expect(
+      companionReactionService.fireUnpromptedTurn({ npcId: 'village_guard', npc: GUARD, event }),
+    ).toBe(true);
+    expect(
+      companionReactionService.fireUnpromptedTurn({ npcId: 'village_guard', npc: GUARD, event }),
+    ).toBe(false);
   });
 
   test('AC-4: a leave crossing dismisses the companion', () => {
@@ -235,7 +243,9 @@ describe('CompanionReactionService', () => {
     expect(
       companionReactionService.fireUnpromptedTurn({ npcId: 'village_guard', npc: GUARD, event }),
     ).toBe(false);
-    expect(companionReactionService.hasFired(event.id)).toBe(true);
+    expect(companionReactionService.hasFired({ npcId: 'village_guard', eventId: event.id })).toBe(
+      true,
+    );
   });
 
   test('AC-5: does not fire for a non-recruited or non-companion NPC', () => {
