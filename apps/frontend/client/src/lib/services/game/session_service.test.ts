@@ -18,6 +18,9 @@ describe('SessionService', () => {
   let service: import('./session_service.svelte').SessionServiceInterface;
 
   beforeEach(async () => {
+    // service.reset() only clears `sessions`; the compaction test also writes
+    // `compacted_summaries`, so wipe the whole fixture to avoid cross-test bleed.
+    await fixture.reset();
     const mod = await import('./session_service.svelte');
     service = mod.sessionService;
     await service.reset();

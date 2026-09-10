@@ -919,13 +919,10 @@ type _PreloadLocalDatabase =
   import('../../../../../packages/frontend/storage/src/lib/storage_adapter.ts').LocalDatabaseInterface;
 
 let _preloadDb: _PreloadLocalDatabase | null = null;
+let _preloadDbPromise: Promise<_PreloadLocalDatabase> | null = null;
 let _preloadDbTables: string[] = [];
 
-const _openPreloadDb = async (): Promise<_PreloadLocalDatabase> => {
-  if (_preloadDb) {
-    return _preloadDb;
-  }
-
+const _createPreloadDb = async (): Promise<_PreloadLocalDatabase> => {
   const { WasmStorageAdapter } = await import(
     '../../../../../packages/frontend/storage/src/lib/wasm_storage_adapter.ts'
   );
@@ -949,6 +946,16 @@ const _openPreloadDb = async (): Promise<_PreloadLocalDatabase> => {
   return db;
 };
 
+const _openPreloadDb = (): Promise<_PreloadLocalDatabase> => {
+  // Concurrent callers while the first open is still awaiting imports/DDL must
+  // share one adapter — otherwise they race and end up on separate :memory: DBs.
+  if (_preloadDb) {
+    return Promise.resolve(_preloadDb);
+  }
+  _preloadDbPromise ??= _createPreloadDb();
+  return _preloadDbPromise;
+};
+
 mock.module('@aikami/frontend/storage', () => ({
   getLocalDatabase: async () => _openPreloadDb(),
   closeLocalDatabase: async () => {
@@ -956,14 +963,18 @@ mock.module('@aikami/frontend/storage', () => ({
       await _preloadDb.close();
       _preloadDb = null;
     }
+    _preloadDbPromise = null;
   },
   resetLocalDatabase: async () => {
     const db = await _openPreloadDb();
     await db.execute({ sql: 'PRAGMA foreign_keys = OFF', args: [] });
-    for (const table of _preloadDbTables) {
-      await db.execute({ sql: `DELETE FROM "${table}"`, args: [] });
+    try {
+      for (const table of _preloadDbTables) {
+        await db.execute({ sql: `DELETE FROM "${table}"`, args: [] });
+      }
+    } finally {
+      await db.execute({ sql: 'PRAGMA foreign_keys = ON', args: [] });
     }
-    await db.execute({ sql: 'PRAGMA foreign_keys = ON', args: [] });
   },
   __esModule: true,
 }));

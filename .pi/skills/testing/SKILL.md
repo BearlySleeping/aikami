@@ -225,10 +225,10 @@ afterAll(async () => {
 });
 ```
 
-`createRealLocalDatabase()` opens `WasmStorageAdapter(':memory:')`, applies the
-production migrations, and exposes `reset()` / `close()`. Import the adapter and
-migrations from their **subpaths** (the fixture does) so the barrel mock cannot
-intercept them.
+`createRealLocalDatabase()` opens `new WasmStorageAdapter({ databasePath: ':memory:' })`,
+applies the production migrations, and exposes `reset()` / `close()`. Import the
+adapter and migrations from their **subpaths** (the fixture does) so the barrel
+mock cannot intercept them.
 
 - Keep arrangements explicit (`countTableRows`, direct `query`).
 - Fault-inject by wrapping `fixture.db` in a `Proxy`, as
