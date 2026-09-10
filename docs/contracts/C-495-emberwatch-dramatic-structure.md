@@ -3,7 +3,7 @@ id: C-495
 title: "Emberwatch dramatic structure"
 source: direct
 contract_type: full
-status: draft
+status: approved
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-09T00:00:00Z"
 ---
@@ -19,7 +19,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — three maps, three NPCs, one fetch quest, one ending; AI can paraphrase a fetch quest indefinitely without making it dynamic |
 | **Dependencies** | [C-488](C-488-authored-npc-identity-in-the-content-pack.md) (authored identity), [C-491](C-491-committed-narrative-event-record.md) (`EvidencePresented` events), [C-494](C-494-one-companion-who-reacts.md) (the companion who acknowledges the milestone). |
-| **Status** | draft |
+| **Status** | approved |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
 | **Contract version** | 2.0.0 |
@@ -27,11 +27,11 @@ created_at: "2026-09-09T00:00:00Z"
 
 ## Problem & Baseline Evidence
 
-- **The dramatic possibility space is one fetch quest.** The Emberwatch pack (now `version: "4.0.0"`, bumped by C-488) ships 3 maps, 3 NPCs (`village_elder`, `rollo_grasper`, `merchant`), 1 quest (`fading_ward`), 1 encounter, 7 items, 18 dialogues, 3 factions — and **one** quest ending (`ward_renewed`). The quest is a linear 4-objective fetch: ask Thalia → find the keeper → obtain the wand → return it. AI can paraphrase that indefinitely without making it dynamic.
+- **The dramatic possibility space is one fetch quest.** The Emberwatch pack (now `version: "4.0.0"`, bumped by C-488; 4 NPCs incl. `village_guard` added by C-494, 23 dialogues) ships 3 maps, 4 NPCs (`village_elder`, `rollo_grasper`, `merchant`, `village_guard`), 1 quest (`fading_ward`), 1 encounter, 7 items, 23 dialogues, 3 factions — and **one** quest ending (`ward_renewed`). The quest is a linear 4-objective fetch: ask Thalia → find the keeper → obtain the wand → return it. AI can paraphrase that indefinitely without making it dynamic.
 - **The schema supports more than the content uses.** `ContentPackQuestEndingSchema` (`content_pack.ts:371-386`) already has `worldStateFlag` + `reactionDialogueKey` per ending, and `ContentPackQuestEntrySchema` already has `prerequisiteQuestIds` (C-339) and objective prerequisites — yet the pack declares exactly one ending and no conflicting accounts, no discoverable evidence, and no starting-condition variance.
 - **There is no evidence concept.** No `evidence` key exists in the manifest, and nothing produces an `EvidencePresented` event — C-491 made the event *recordable* but no content ever triggers it.
 - **There is no hidden-truth/variance mechanism.** Campaign creation is deterministic: every new campaign starts with the same ward, the same Rollo, the same evidence. AC-5's replayability — "a small bounded set of starting conditions varies" — has no home in the data model, and nothing prevents each NPC generation from independently inventing a contradictory truth.
-- **Reproduction**: `python3 -c "import json; d=json.load(open('content/packs/emberwatch/manifest.json')); print(len(d['maps']), len(d['npcs']), len(d['quests']), len(d['encounters']), len(d['items']), len(d['dialogues']), len(d['factions']), len(d['quests']['fading_ward']['endings']))"` → `3 3 1 1 7 18 3 1`; `grep -rn "evidence\|dilemma\|startingConditions\|hiddenTruth" content/packs/emberwatch/manifest.json` → no hits.
+- **Reproduction**: `python3 -c "import json; d=json.load(open('content/packs/emberwatch/manifest.json')); print(len(d['maps']), len(d['npcs']), len(d['quests']), len(d['encounters']), len(d['items']), len(d['dialogues']), len(d['factions']), len(d['quests']['fading_ward']['endings']))"` → `3 4 1 1 7 23 3 1`; `grep -rn "evidence\|dilemma\|startingConditions\|hiddenTruth" content/packs/emberwatch/manifest.json` → no hits.
 - **Existing implementation to reuse**: the `endings` schema (`worldStateFlag` + `reactionDialogueKey`) and quest-completion path (`quest_state_service._completeQuest` derives journal entries from `QuestResolved` events per C-491); the `worldStateFlag` → world-state mechanism (C-316); C-339's objective prerequisites / `prerequisiteQuestIds`; C-491's `EvidencePresented` kind; C-494's companion (draft) for the acknowledgement leg; C-486's now-unconditional `release_gate.spec.ts` journey.
 - **Known gaps**: one ending; no conflicting accounts; no evidence; no hidden-truth sampling; no per-ending village change; no variance at campaign creation; the release journey stops short of the full milestone.
 - **Baseline tests**: `content_pack.test.ts` (ending schema coverage), `quest_state_service.test.ts`, `release_gate.spec.ts`. Record pass state before starting.
@@ -217,6 +217,7 @@ Endings remain the existing `ContentPackQuestEndingSchema` shape; AC-3 just requ
 
 **Watch Points**:
 - Three endings in the `endings` record is necessary but not sufficient — the *world-state difference* is what makes them endings rather than three paragraphs. Test the flags, not just the count.
+- **Ending selection must exist and be exercised.** `quest_state_service._completeQuest` currently defaults `chosenEndingId = endingIds[0]` and nothing in the codebase ever sets it to a non-default value — so as written today only the first ending is reachable. This contract must add a player-facing mechanism to reach each ending (e.g. a skill-check-gated dialogue choice that sets `chosenEndingId`, or a world-state-conditioned selection in `_completeQuest`). The implementer chooses the mechanism, but AC-3 is not met until a non-default ending can actually be reached and AC-6 must exercise it. Test that `chosenEndingId` can resolve to ≥2 distinct endings, not just that the pack declares ≥3.
 
 ### AC-4: The village visibly changes per ending
 **Given** any ending
@@ -278,6 +279,7 @@ Endings remain the existing `ContentPackQuestEndingSchema` shape; AC-3 just requ
 
 **Watch Points**:
 - This is the last AC verified, and it must be verified by **watching the journey run**, not by reading a green check — the seed's explicit instruction. If a leg fails, the failure is a real product bug to file as a separate thin contract, not a reason to re-soften an assertion into a conditional.
+- **Reach a non-default ending.** Because `_completeQuest` defaults to `endingIds[0]`, a journey that merely completes the quest will silently exercise only the first ending. The extended journey must drive the player to a second (and ideally third) ending through the new selection mechanism (see AC-3 Watch Points) and assert the corresponding distinct world-state flag and village change — otherwise AC-3's "reachable" claim is unproven.
 
 ### AC-7: v4.0.0 packs still load
 **Given** a pack authored against v4.0.0 (the current version)
@@ -303,7 +305,7 @@ Endings remain the existing `ContentPackQuestEndingSchema` shape; AC-3 just requ
 
 1. **Phase 1 (Schema)**: add the optional `truthVariants`/`accounts`/`evidence` structures to `content_pack.ts` and mirror types; add pack-validation coverage for absence (v4.0.0) and presence (new) (AC-7, AC-1 groundwork).
 2. **Phase 2 (Truth sampling)**: persist one sampled truth at campaign creation; route account/evidence/clue resolution through it (AC-5).
-3. **Phase 3 (Endings + evidence + village)**: author placeholder evidence and ≥3 endings (marked for replacement), wire `EvidencePresented` recording, and project per-ending village change from `worldStateFlag` (AC-1, AC-2, AC-3, AC-4).
+3. **Phase 3 (Endings + evidence + village)**: author placeholder evidence and ≥3 endings (marked for replacement), add the ending-selection mechanism so each ending is reachable (see AC-3 Watch Points — `_completeQuest` defaults to `endingIds[0]` today), wire `EvidencePresented` recording, and project per-ending village change from `worldStateFlag` (AC-1, AC-2, AC-3, AC-4).
 4. **Phase 4 (Release journey)**: extend `release_gate.spec.ts` to the full milestone and watch it run (AC-6).
 
 ## Edge Cases & Gotchas
