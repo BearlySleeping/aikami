@@ -49,10 +49,8 @@ import { getPauseMenuViewModel } from './overlays/pause_menu/pause_menu_composit
 import type { PauseMenuViewModelInterface } from './overlays/pause_menu/pause_menu_view_model.svelte';
 import { getReputationViewModel } from './overlays/reputation/reputation_composition.ts';
 import type { ReputationViewModelInterface } from './overlays/reputation/reputation_view_model.svelte';
-import {
-  getSettingsOverlayViewModel,
-  type SettingsOverlayViewModelInterface,
-} from './overlays/settings/settings_overlay_view_model.svelte';
+import { getSettingsOverlayViewModel } from './overlays/settings/settings_overlay_composition.ts';
+import type { SettingsOverlayViewModelInterface } from './overlays/settings/settings_overlay_view_model.svelte';
 import {
   getTalkToPartyViewModel,
   type TalkToPartyViewModelInterface,
