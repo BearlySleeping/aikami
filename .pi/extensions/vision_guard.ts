@@ -16,7 +16,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-import { describeImage, toBase64DataUri } from '../../scripts/src/lib/ai';
+import { runPiScript } from './lib/bridge.ts';
 
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|gif|webp|bmp)$/i;
 
@@ -90,12 +90,15 @@ export default function (pi: ExtensionAPI) {
 
     // Non-vision model → append an inline VLM description.
     try {
-      const dataUri = toBase64DataUri(filepath);
-      const result = await describeImage({
-        imageDataUri: dataUri,
-        prompt:
-          'Describe this app screenshot concisely: layout, visible text, UI elements, colors, and any errors or empty states.',
-      });
+      const dataUri = await runPiScript<string>('ai.toDataUri', { filepath });
+      const result = await runPiScript<{ description: string; error?: string }>(
+        'ai.describeImage',
+        {
+          imageDataUri: dataUri,
+          prompt:
+            'Describe this app screenshot concisely: layout, visible text, UI elements, colors, and any errors or empty states.',
+        },
+      );
 
       if (result.error || !result.description) {
         return undefined;

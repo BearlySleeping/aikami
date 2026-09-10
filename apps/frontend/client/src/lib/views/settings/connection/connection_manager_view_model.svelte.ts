@@ -8,6 +8,7 @@ import {
   buildVerifyUrl,
   IMAGE_PROVIDERS,
   PROVIDER_ENDPOINTS,
+  providerNeedsKey,
   TEXT_PROVIDERS,
   VOICE_PROVIDERS,
 } from '@aikami/constants';
@@ -20,8 +21,10 @@ import {
   configService,
   type FetchedModel,
   fetchModelsFromProvider,
+  fetchWithCredentialPolicy,
   getOllamaRuntimeEndpoints,
   PROVIDER_MODEL_FETCH,
+  resolveChatTestRequest,
 } from '$services';
 import type { Connection, ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
 
@@ -648,34 +651,34 @@ class ConnectionManagerViewModel
   /** Tests the selected model by sending a simple "hi" chat completion. */
   async testDraftModel(): Promise<void> {
     const provider = this.draft.provider ?? 'openrouter';
-    const config = PROVIDER_MODEL_FETCH[provider];
-    // C-389 CR: Ollama's endpoints are runtime-resolved — never use the
-    // empty static registry entry (fetch('') would hit the app origin).
-    const chatTestUrl =
-      provider === 'ollama' ? getOllamaRuntimeEndpoints().chatTestUrl : config?.chatTestUrl;
-    this.debug('testDraftModel', { provider, hasConfig: !!config, chatTestUrl });
-    if (!chatTestUrl) {
-      this.draftModelTestResult = {
-        ok: false,
-        latencyMs: 0,
-        error:
-          provider === 'ollama'
-            ? 'No local text engine configured (text.url missing from config.json)'
-            : 'Model testing not supported for this provider',
-      };
-      return;
-    }
-
-    const model = this.isModelCustom ? undefined : this.draft.model;
-    if (!model && !this.isModelCustom) {
+    const model = this.draft.model?.trim();
+    if (!model || model === '__custom__') {
       this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No model selected' };
       return;
     }
 
     const capability = this.draft.capability ?? 'text';
     const apiKey = this.draft.apiKey || configService.getApiKey(provider, capability);
-    if (config.auth.location === 'header' && config.auth.name && !apiKey) {
+    if (providerNeedsKey(provider) && !apiKey) {
       this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No API key configured' };
+      return;
+    }
+
+    const request = resolveChatTestRequest({
+      apiKey,
+      baseUrl: this.draft.baseUrl,
+      model,
+      registryId: provider,
+    });
+
+    this.debug('testDraftModel', { provider, hasRequest: !!request, url: request?.url });
+
+    if (!request) {
+      this.draftModelTestResult = {
+        ok: false,
+        latencyMs: 0,
+        error: this._modelTestUnavailableError(provider),
+      };
       return;
     }
 
@@ -685,52 +688,32 @@ class ConnectionManagerViewModel
     const startMs = performance.now();
 
     try {
-      const headers: Record<string, string> = { ...config.extraHeaders };
-
-      if (config.auth.location === 'header' && apiKey) {
-        const prefix = config.auth.prefix ?? '';
-        headers[config.auth.name] = `${prefix}${apiKey}`;
-      }
-
-      let body: string;
-      if (config.chatTestOpenAiCompat) {
-        body = JSON.stringify({
-          model,
-          messages: [{ role: 'user', content: 'hi' }],
-          // biome-ignore lint/style/useNamingConvention: API contract field name
-          max_tokens: 5,
-        });
-      } else {
-        // Ollama native /api/chat format
-        body = JSON.stringify({
-          model,
-          messages: [{ role: 'user', content: 'hi' }],
-          stream: false,
-          options: {
-            // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-            num_predict: 5,
-          },
-        });
-      }
-
-      this.debug('testDraftModel:fetch', {
-        url: chatTestUrl,
-        model,
-        bodyLength: body.length,
-      });
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
       try {
-        const response = await fetch(chatTestUrl, {
-          body,
-          headers: { 'Content-Type': 'application/json', ...headers },
-          method: 'POST',
-          signal: controller.signal,
+        const response = await fetchWithCredentialPolicy({
+          url: request.url,
+          hasCredential: Boolean(apiKey),
+          approvedOrigins: PROVIDER_MODEL_FETCH[provider]?.approvedOrigins,
+          init: {
+            body: request.body,
+            headers: { 'Content-Type': 'application/json', ...request.headers },
+            method: 'POST',
+            signal: controller.signal,
+          },
         });
         const elapsed = Math.round(performance.now() - startMs);
-        this.debug('testDraftModel:response', { status: response.status, elapsed });
+        this.debug('testDraftModel:response', { status: response?.status, elapsed });
+
+        if (!response) {
+          this.draftModelTestResult = {
+            ok: false,
+            latencyMs: elapsed,
+            error: 'Request blocked by credential policy (unapproved redirect)',
+          };
+          return;
+        }
 
         if (!response.ok) {
           const errorBody = await response.text().catch(() => '');
@@ -753,18 +736,31 @@ class ConnectionManagerViewModel
     } catch (err) {
       const elapsed = Math.round(performance.now() - startMs);
       this.debug('testDraftModel:exception', { elapsed, error: String(err) });
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        this.draftModelTestResult = {
-          ok: false,
-          latencyMs: elapsed,
-          error: 'Connection timed out',
-        };
-      } else {
-        this.draftModelTestResult = { ok: false, latencyMs: elapsed, error: String(err) };
-      }
+      this.draftModelTestResult = {
+        ok: false,
+        latencyMs: elapsed,
+        error:
+          err instanceof DOMException && err.name === 'AbortError'
+            ? 'Connection timed out'
+            : String(err),
+      };
     } finally {
       this.isTestingDraftModel = false;
     }
+  }
+
+  /**
+   * Explains why a model test has no request to send — a missing endpoint,
+   * not an unsupported provider (only ids absent from the registry are).
+   */
+  private _modelTestUnavailableError(provider: string): string {
+    if (!PROVIDER_MODEL_FETCH[provider]) {
+      return 'Model testing not supported for this provider';
+    }
+    if (provider === 'ollama') {
+      return 'No local text engine configured (text.url missing from config.json)';
+    }
+    return 'No endpoint configured — set a base URL';
   }
 
   /** Fetches available models for the current provider via the generic registry. */
@@ -785,6 +781,7 @@ class ConnectionManagerViewModel
       this._availableModels = await fetchModelsFromProvider({
         config,
         apiKey,
+        baseUrl: this.draft.baseUrl,
         timeoutMs: TEST_TIMEOUT_MS,
       });
     } finally {

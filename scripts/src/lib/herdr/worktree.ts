@@ -37,7 +37,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index.ts';
+import { contractPortOffset, PORTS } from '@aikami/constants';
 import {
   commitAll,
   pushBranch,

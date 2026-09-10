@@ -50,10 +50,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 // 🔴 No import from cli_utils.ts (or anything else that touches `Bun.*`):
-// this module is reachable from .pi/extensions/* via worktree.ts and
-// orchestrator.ts, which pi loads under Node — see
-// scripts/src/lib/env/runtime_boundary.test.ts, the mechanical guard for
-// exactly this boundary.
+// this module once sat in the `.pi/extensions/*` import graph, which pi loads
+// under Node. Extensions now reach it only through the Bun bridge
+// (scripts/src/lib/pi/), so the constraint is historical — the module stays
+// dependency-light and is exercised by the bridge.
 //
 // 🔴 No `import.meta.main` / CLI block in this file either: a module that
 // uses `import.meta` and is large gets loaded by jiti through a base64

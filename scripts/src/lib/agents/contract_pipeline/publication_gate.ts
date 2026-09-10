@@ -31,9 +31,10 @@
 // remedy that clears it. Prompt guidance can be forgotten or half-followed;
 // this cannot.
 //
-// 🔴 Node-only. No `Bun.*` and no `cli_utils.ts` — this module is reachable
-// from `.pi/extensions/*`, which pi loads under Node.
-// See scripts/src/lib/env/runtime_boundary.test.ts.
+// 🔴 `node:`-only. No `Bun.*` and no `cli_utils.ts` — this module is
+// exercised from the contract pipeline, which pi reaches through the Bun
+// bridge (scripts/src/lib/pi/); keeping it dependency-light keeps the bridge
+// invocation cheap.
 import { runGit } from '../git_worktree.ts';
 import type { RunManifest } from './types.ts';
 

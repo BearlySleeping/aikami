@@ -15,18 +15,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { basename, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import {
-  getGitHeadCommit,
-  runGit,
-  sanitizeBranchName,
-} from '../../scripts/src/lib/agents/git_worktree';
-import {
-  bootstrapWorktree,
-  createWorktree,
-  listWorktrees,
-  removeWorktree,
-} from '../../scripts/src/lib/herdr/worktree';
+import { runPiScript } from './lib/bridge.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
+
+/** Plain-data shapes returned by the worktree bridge commands. */
+type WorktreeEntry = { branch: string; path: string; openWorkspaceId?: string };
+type TaskWorktree = { branch: string; checkoutPath: string; workspaceId: string };
 
 // ── Inline parser ───────────────────────────────────────────────
 //
@@ -498,29 +492,28 @@ export default function (pi: ExtensionAPI) {
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
           const cwd = ctx.cwd;
-          const sanitized = sanitizeBranchName(params.taskId);
+          const sanitized = await runPiScript<string>('git.sanitizeBranch', { raw: params.taskId });
 
           // Check for an existing herdr-native worktree for this task.
-          const existing = (await listWorktrees(cwd)).find(
-            (wtree) => wtree.branch === `task/${sanitized}`,
-          );
+          const existing = (
+            await runPiScript<WorktreeEntry[]>('worktree.list', { repoRoot: cwd })
+          ).find((wtree) => wtree.branch === `task/${sanitized}`);
           if (existing) {
             // Existing (possibly incomplete) worktree — retry bootstrap so a
             // previous failure is not silently reported as ready.
             let installed = false;
             try {
-              const r = await bootstrapWorktree({ checkoutPath: existing.path, repoRoot: cwd });
+              const r = await runPiScript<{ installed: boolean }>('worktree.bootstrap', {
+                checkoutPath: existing.path,
+                repoRoot: cwd,
+              });
               installed = r.installed;
             } catch {
               installed = false;
             }
-            const existingId = (() => {
-              try {
-                return getGitHeadCommit(existing.path);
-              } catch {
-                return 'unknown';
-              }
-            })();
+            const existingId = await runPiScript<string>('git.headCommit', {
+              cwd: existing.path,
+            }).catch(() => 'unknown');
             return {
               content: [
                 {
@@ -546,7 +539,7 @@ export default function (pi: ExtensionAPI) {
           }
 
           // Create the herdr-native worktree (checkout + workspace in one call).
-          const w = await createWorktree({
+          const w = await runPiScript<TaskWorktree>('worktree.create', {
             slug: params.taskId,
             repoRoot: cwd,
           });
@@ -554,11 +547,14 @@ export default function (pi: ExtensionAPI) {
           // starts clean instead of finding a half-provisioned checkout.
           let installed = false;
           try {
-            const r = await bootstrapWorktree({ checkoutPath: w.checkoutPath, repoRoot: cwd });
+            const r = await runPiScript<{ installed: boolean }>('worktree.bootstrap', {
+              checkoutPath: w.checkoutPath,
+              repoRoot: cwd,
+            });
             installed = r.installed;
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
-            await removeWorktree({
+            await runPiScript('worktree.remove', {
               workspaceId: w.workspaceId,
               checkoutPath: w.checkoutPath,
               branch: w.branch,
@@ -566,7 +562,9 @@ export default function (pi: ExtensionAPI) {
             }).catch(() => {});
             throw new Error(`Worktree bootstrap failed (${message}) — created worktree removed.`);
           }
-          const headCommit = getGitHeadCommit(w.checkoutPath);
+          const headCommit = await runPiScript<string>('git.headCommit', {
+            cwd: w.checkoutPath,
+          });
 
           return {
             content: [
@@ -614,16 +612,18 @@ export default function (pi: ExtensionAPI) {
           }),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-          const headCommit = (() => {
-            try {
-              return runGit(`commit -a -m "${params.message.replace(/"/g, '\\"')}"`, {
-                cwd: params.workspacePath,
-              });
-            } catch {
-              // No changes to commit — return current HEAD.
-              return getGitHeadCommit(params.workspacePath);
-            }
-          })();
+          let headCommit: string;
+          try {
+            headCommit = await runPiScript<string>('git.run', {
+              command: `commit -a -m "${params.message.replace(/"/g, '\\"')}"`,
+              cwd: params.workspacePath,
+            });
+          } catch {
+            // No changes to commit — return current HEAD.
+            headCommit = await runPiScript<string>('git.headCommit', {
+              cwd: params.workspacePath,
+            });
+          }
 
           return {
             content: [
@@ -656,17 +656,21 @@ export default function (pi: ExtensionAPI) {
         async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
           let headCommit: string;
           try {
-            headCommit = runGit(`commit -a -m "${params.message.replace(/"/g, '\\"')}"`, {
+            headCommit = await runPiScript<string>('git.run', {
+              command: `commit -a -m "${params.message.replace(/"/g, '\\"')}"`,
               cwd: params.workspacePath,
             });
           } catch {
             // No changes to commit — use current HEAD.
-            headCommit = getGitHeadCommit(params.workspacePath);
+            headCommit = await runPiScript<string>('git.headCommit', {
+              cwd: params.workspacePath,
+            });
           }
 
           let branchName = 'unknown';
           try {
-            branchName = runGit('rev-parse --abbrev-ref HEAD', {
+            branchName = await runPiScript<string>('git.run', {
+              command: 'rev-parse --abbrev-ref HEAD',
               cwd: params.workspacePath,
             });
           } catch {
@@ -708,7 +712,10 @@ export default function (pi: ExtensionAPI) {
         parameters: Type.Object({}),
         async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
           const cwd = ctx.cwd;
-          const out = runGit('worktree list --porcelain', { cwd });
+          const out = await runPiScript<string>('git.run', {
+            command: 'worktree list --porcelain',
+            cwd,
+          });
           const entries = out
             .split('\n')
             .filter((l) => l.startsWith('worktree '))
@@ -723,9 +730,15 @@ export default function (pi: ExtensionAPI) {
 
           for (const wsPath of entries) {
             try {
-              const headCommit = getGitHeadCommit(wsPath);
-              const branchName = runGit('rev-parse --abbrev-ref HEAD', { cwd: wsPath });
-              const desc = runGit('log -1 --format=%s', { cwd: wsPath });
+              const headCommit = await runPiScript<string>('git.headCommit', { cwd: wsPath });
+              const branchName = await runPiScript<string>('git.run', {
+                command: 'rev-parse --abbrev-ref HEAD',
+                cwd: wsPath,
+              });
+              const desc = await runPiScript<string>('git.run', {
+                command: 'log -1 --format=%s',
+                cwd: wsPath,
+              });
               items.push({ path: wsPath, headCommit, branchName, description: desc.trim() });
             } catch {
               // Skip non-worktree directories

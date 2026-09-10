@@ -27,6 +27,8 @@ export type RunCommandOptions = {
   maxBufferBytes?: number;
   /** AbortSignal from Pi cancellation context. */
   signal?: AbortSignal;
+  /** Text to write to the child's stdin before closing it. */
+  input?: string;
 };
 
 export type RunCommandResult = {
@@ -225,7 +227,11 @@ export function startCommand(
     windowsHide: true,
   });
 
-  // Close stdin immediately — prevents CLI tools from hanging on prompts.
+  // Write any caller-supplied stdin payload, then close stdin immediately —
+  // prevents CLI tools from hanging on prompts.
+  if (options.input !== undefined) {
+    child.stdin?.write(options.input);
+  }
   child.stdin?.end();
 
   const readPromise = Promise.all([

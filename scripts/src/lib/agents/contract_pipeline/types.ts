@@ -4,9 +4,10 @@
 /**
  * 🔴 SINGLE SOURCE OF TRUTH: the PR target for every contract pipeline run.
  *
- * Currently `main` — early development, and CodeRabbit only reviews PRs
- * targeting main. Change this one constant (or set CONTRACT_PIPELINE_BASE_BRANCH)
- * to retarget the whole pipeline (e.g. back to `dev` later).
+ * Re-exported from `@aikami/constants` so Node-side pi extensions can read the
+ * same value at registration time without importing Bun-side script modules.
+ * Change it there (or set CONTRACT_PIPELINE_BASE_BRANCH) to retarget the whole
+ * pipeline (e.g. back to `dev` later).
  *
  * This is NOT the source a worktree is checked out from — that is the
  * operator's current branch by default (see `_worktreeSourceBranch` in
@@ -14,7 +15,7 @@
  * worker that branch's code. Only the eventual PR always targets this
  * constant.
  */
-export const PIPELINE_BASE_BRANCH = process.env.CONTRACT_PIPELINE_BASE_BRANCH ?? 'main';
+export { PIPELINE_BASE_BRANCH } from '@aikami/constants';
 
 /** Maximum autofix cycles before YOLO degrades to manual review. */
 export const MAX_AUTOFIX_CYCLES = 2;

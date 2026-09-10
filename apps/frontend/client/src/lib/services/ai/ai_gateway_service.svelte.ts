@@ -299,15 +299,12 @@ class AiGatewayService
   }
 
   /**
-   * Well-known chat base endpoint for cloud providers, derived from the
-   * provider registry's chatTestUrl (strips the /chat/completions suffix).
+   * Well-known chat base endpoint for cloud providers, read from the provider
+   * registry. Only OpenAI-compatible providers declare one — Google and
+   * Anthropic speak their own request shapes and have no base here.
    */
   private _getDefaultTextEndpoint(provider: string): string | undefined {
-    const config = PROVIDER_MODEL_FETCH[provider];
-    if (!config?.chatTestOpenAiCompat || !config.chatTestUrl) {
-      return undefined;
-    }
-    return config.chatTestUrl.replace(/\/chat\/completions$/, '');
+    return PROVIDER_MODEL_FETCH[provider]?.chatBaseUrl;
   }
 
   /**

@@ -14,12 +14,7 @@
 import { existsSync } from 'node:fs';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import {
-  describeImage,
-  evaluateImage,
-  optimizeImage,
-  toBase64DataUri,
-} from '../../scripts/src/lib/ai';
+import { runPiScript } from './lib/bridge.ts';
 
 // ── Shared helpers ────────────────────────────────────────────
 
@@ -29,8 +24,8 @@ const _resolveImagePath = (imagePath: string): string =>
 
 /** Optimises and base64-encodes an image at the given path. */
 const _prepareImage = async (filepath: string): Promise<string> => {
-  await optimizeImage({ filepath });
-  return toBase64DataUri(filepath);
+  await runPiScript('ai.optimizeImage', { filepath });
+  return runPiScript<string>('ai.toDataUri', { filepath });
 };
 
 // ── Validate schema ───────────────────────────────────────────
@@ -107,11 +102,14 @@ export default function (pi: ExtensionAPI) {
           prompt ??
           'Describe this image in detail. Include layout, colors, visible text, UI elements, and any notable visual features. Be specific and thorough.';
 
-        const result = await describeImage({
-          imageDataUri: dataUri,
-          prompt: descriptionPrompt,
-          model,
-        });
+        const result = await runPiScript<{ description: string; error?: string }>(
+          'ai.describeImage',
+          {
+            imageDataUri: dataUri,
+            prompt: descriptionPrompt,
+            model,
+          },
+        );
 
         if (result.error) {
           return {
@@ -198,12 +196,16 @@ export default function (pi: ExtensionAPI) {
           'by their visual appearance, position, or text content.',
         ].join('\n');
 
-        const result = await evaluateImage<{
-          score: number;
-          review: string;
-          issues: string[];
-          expectationMet: boolean;
-        }>({
+        const result = await runPiScript<{
+          result?: {
+            score: number;
+            review: string;
+            issues: string[];
+            expectationMet: boolean;
+          };
+          error?: string;
+          fromCache?: boolean;
+        }>('ai.evaluateImage', {
           imageDataUri: dataUri,
           prompt,
           schema: VALIDATE_SCHEMA,

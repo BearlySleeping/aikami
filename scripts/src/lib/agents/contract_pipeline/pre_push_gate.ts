@@ -21,9 +21,10 @@
 // So the check moves to the one place it belongs: once, in the worktree,
 // after the verifier passes and before the branch is pushed.
 //
-// 🔴 Node-only. No `Bun.*`, no import of cli_utils.ts — this module is
-// reachable from orchestrator.ts, which .pi/extensions/* loads under Node.
-// See scripts/src/lib/env/runtime_boundary.test.ts.
+// 🔴 `node:`-only. No `Bun.*`, no import of cli_utils.ts — this module is
+// exercised from the contract pipeline, which pi reaches through the Bun
+// bridge (scripts/src/lib/pi/); keeping it dependency-light keeps the bridge
+// invocation cheap.
 import { spawnSync } from 'node:child_process';
 import { reportInfraIssue } from '../../ops/infra_report.ts';
 import { getRequiredChecks } from './validation_policy.ts';

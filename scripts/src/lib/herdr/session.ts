@@ -52,8 +52,13 @@ import { writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-// need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
-import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
+import {
+  ALL_SERVICES,
+  contractPortOffset,
+  type DevService,
+  KNOWN_SERVICES,
+  PORTS,
+} from '@aikami/constants';
 import { hasDirenv } from '../env/direnv_detect';
 import type { AikamiMode } from '../env/mode';
 // Re-exported for back-compat — the canonical definition now lives in
@@ -68,21 +73,12 @@ import { findBash, posixQuote } from '../env/which';
 
 // ── Types ──────────────────────────────────────────────────
 
-/** Canonical service names (used internally). */
-export type DevService =
-  | 'client'
-  | 'hub'
-  | 'hub-worker'
-  | 'voice'
-  | 'image'
-  | 'text'
-  | 'text-ollama'
-  | 'image-comfyui'
-  | 'preview-client'
-  | 'site'
-  | 'preview-site'
-  | 'preview-hub'
-  | 'tauri';
+// `DevService` / `ALL_SERVICES` / `KNOWN_SERVICES` are the canonical service
+// identities, declared in @aikami/constants so Node-side pi extensions can read
+// them at registration time. Re-exported here so existing script imports keep
+// working and the behavioral definitions below stay the single source for
+// commands/ports/probes.
+export { ALL_SERVICES, type DevService, KNOWN_SERVICES } from '@aikami/constants';
 
 /** Accepted CLI values (includes 'all'). */
 export type ServiceInput = DevService | 'all';
@@ -399,32 +395,6 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     // No HTTP port — the desktop window has nothing to poll.
   },
 };
-
-export const ALL_SERVICES: DevService[] = [
-  'client',
-  'hub',
-  'voice',
-  'image',
-  'text',
-  'preview-client',
-  'site',
-  'preview-site',
-  'preview-hub',
-  'tauri',
-];
-
-/**
- * All valid service names — superset of ALL_SERVICES. Used for CLI validation
- * and `herdr:list`. The C-392 advanced engines
- * (text-ollama, image-comfyui) are fully manageable even though they are NOT
- * in the `all` group.
- */
-export const KNOWN_SERVICES: DevService[] = [
-  ...ALL_SERVICES,
-  'text-ollama',
-  'image-comfyui',
-  'hub-worker',
-];
 
 /** Map a workspace tab label back to a known service key, or undefined. */
 const serviceFromTabLabel = (label: string): DevService | undefined => {
