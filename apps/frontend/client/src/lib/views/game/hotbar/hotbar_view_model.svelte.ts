@@ -1,7 +1,13 @@
 // apps/frontend/client/src/lib/views/game/hotbar/hotbar_view_model.svelte.ts
 //
 // Hotbar ViewModel — manages the 6-slot ability bar at the bottom of the HUD.
-// Reads class features from playerStateService and resolves display data.
+// Derives display data from the injected player-state capability and the class
+// registry.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/hotbar_fixtures.ts). Production
+// wiring lives in ./hotbar_composition.ts.
 //
 // Contract: C-337 Complete Character Progression, Classes, Abilities, Skills, and Spells
 
@@ -10,9 +16,17 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ClassFeature } from '@aikami/types';
-import { playerStateService } from '$services';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The player-state fields and operations the hotbar reads. */
+export type HotbarPlayerStateCapabilities = {
+  readonly hotbarSlots: readonly string[];
+  readonly abilityUses: Record<string, number | undefined>;
+  useAbility(featureId: string): void;
+};
 
 // ── Hotbar Slot ──
 
@@ -49,7 +63,10 @@ export type HotbarViewModelInterface = BaseViewModelInterface & {
   setVisible(visible: boolean): void;
 };
 
-export type HotbarViewModelOptions = BaseViewModelOptions;
+export type HotbarViewModelOptions = BaseViewModelOptions & {
+  /** Player-state capability. */
+  playerState: HotbarPlayerStateCapabilities;
+};
 
 // ── Implementation ──
 
@@ -57,7 +74,14 @@ class HotbarViewModel
   extends BaseViewModel<HotbarViewModelOptions>
   implements HotbarViewModelInterface
 {
+  private readonly _playerState: HotbarPlayerStateCapabilities;
+
   visible = $state<boolean>(true);
+
+  constructor(options: HotbarViewModelOptions) {
+    super(options);
+    this._playerState = options.playerState;
+  }
 
   /**
    * Resolves a feature ID to its display name from the class registry.
@@ -80,8 +104,8 @@ class HotbarViewModel
   }
 
   get slots(): HotbarSlot[] {
-    const hotbarSlots = playerStateService.hotbarSlots;
-    const abilityUses = playerStateService.abilityUses;
+    const hotbarSlots = this._playerState.hotbarSlots;
+    const abilityUses = this._playerState.abilityUses;
     const result: HotbarSlot[] = [];
 
     for (let i = 0; i < 6; i++) {
@@ -114,11 +138,11 @@ class HotbarViewModel
   }
 
   activateSlot(slotIndex: number): void {
-    const featureId = playerStateService.hotbarSlots[slotIndex];
+    const featureId = this._playerState.hotbarSlots[slotIndex];
     if (!featureId) {
       return;
     }
-    playerStateService.useAbility(featureId);
+    this._playerState.useAbility(featureId);
     this.debug('activateSlot', { slotIndex, featureId });
   }
 
@@ -128,5 +152,11 @@ class HotbarViewModel
   }
 }
 
-export const getHotbarViewModel = (options: HotbarViewModelOptions): HotbarViewModelInterface =>
+/**
+ * Builds a hotbar ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getHotbarViewModel` in ./hotbar_composition.ts.
+ */
+export const createHotbarViewModel = (options: HotbarViewModelOptions): HotbarViewModelInterface =>
   HotbarViewModel.create(options);
