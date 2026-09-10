@@ -48,10 +48,8 @@ import {
 } from './export/export_view_model.svelte';
 import { getGameplayViewModel } from './gameplay/gameplay_composition.ts';
 import type { GameplayViewModelInterface } from './gameplay/gameplay_view_model.svelte';
-import {
-  getSettingsMusicViewModel,
-  type SettingsMusicViewModelInterface,
-} from './music/settings_music_view_model.svelte';
+import { getSettingsMusicViewModel } from './music/settings_music_composition.ts';
+import type { SettingsMusicViewModelInterface } from './music/settings_music_view_model.svelte';
 
 import {
   SETTINGS_GROUPS,

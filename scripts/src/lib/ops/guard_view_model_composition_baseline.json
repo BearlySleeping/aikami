@@ -74,11 +74,6 @@
     "c2": 1,
     "c3": 0
   },
-  "apps/frontend/client/src/lib/views/chat/connected_chats_panel_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
   "apps/frontend/client/src/lib/views/chat/connected_chats_sandbox_view_model.svelte.ts": {
     "c1": 1,
     "c2": 0,
@@ -264,11 +259,6 @@
     "c2": 1,
     "c3": 0
   },
-  "apps/frontend/client/src/lib/views/settings/attribution/attribution_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
   "apps/frontend/client/src/lib/views/settings/audio/settings_audio_view_model.svelte.ts": {
     "c1": 1,
     "c2": 1,
@@ -285,11 +275,6 @@
     "c3": 0
   },
   "apps/frontend/client/src/lib/views/settings/export/export_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
-  "apps/frontend/client/src/lib/views/settings/music/settings_music_view_model.svelte.ts": {
     "c1": 1,
     "c2": 1,
     "c3": 0

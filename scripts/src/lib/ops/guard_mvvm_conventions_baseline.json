@@ -221,12 +221,6 @@
     "m8": 1,
     "m9": 0
   },
-  "apps/frontend/client/src/lib/views/settings/attribution/attribution_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 0,
-    "m9": 3
-  },
   "apps/frontend/client/src/lib/views/settings/autonomous/autonomous_settings_view_model.svelte.ts": {
     "v6": 0,
     "v7": 0,

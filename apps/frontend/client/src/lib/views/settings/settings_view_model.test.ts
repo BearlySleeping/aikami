@@ -42,7 +42,7 @@ mock.module('./export/export_view_model.svelte', () => ({
 mock.module('./gameplay/gameplay_composition.ts', () => ({
   getGameplayViewModel: () => _stubViewModel(),
 }));
-mock.module('./music/settings_music_view_model.svelte', () => ({
+mock.module('./music/settings_music_composition.ts', () => ({
   getSettingsMusicViewModel: () => _stubViewModel(),
 }));
 
