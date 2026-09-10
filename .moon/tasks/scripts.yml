@@ -49,6 +49,8 @@ tasks:
       - 'src/lib/agents/evaluation/**/*'
       - 'src/lib/herdr/**/*'
       - 'src/lib/env/**/*'
+      - 'src/lib/ops/guard_service_mock_coverage.test.ts'
+      - 'src/lib/ops/legacy_service_scope.ts'
       - '@group(configs)'
     options:
       mergeArgs: 'replace'
@@ -168,15 +170,20 @@ tasks:
 
   # Every '$services' barrel export must have a matching key in
   # test_preload.ts's localServicesMockBase() — the regression class behind
-  # PRs #241, #243, and the C-466/C-467 test-infra fix (2026-09-05). Ratchet
-  # guard; see guard_service_mock_coverage_baseline.json.
+  # PRs #241, #243, and the C-466/C-467 test-infra fix (2026-09-05).
+  #
+  # Scoped to guard_service_mock_coverage_legacy.json: the explicit, shrinking
+  # inventory of $services exports the legacy preload still requires. Migrated
+  # features inject capabilities instead and never appear here. The dependency
+  # scan over apps/frontend/client/src seeds/drifts the inventory; it walks the
+  # client graph, so the client source is an input.
   guard-service-mock-coverage:
     command: 'bun run src/lib/ops/guard_service_mock_coverage.ts'
     inputs:
       - 'src/lib/ops/guard_service_mock_coverage.ts'
-      - 'src/lib/ops/guard_service_mock_coverage_baseline.json'
-      - '/apps/frontend/client/src/lib/services/**/*'
-      - '/apps/frontend/client/src/lib/test_preload.ts'
+      - 'src/lib/ops/guard_service_mock_coverage_legacy.json'
+      - 'src/lib/ops/legacy_service_scope.ts'
+      - '/apps/frontend/client/src/**/*'
     options:
       cache: false
       runInCI: true

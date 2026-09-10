@@ -98,7 +98,7 @@ describe('AccountViewModel — session actions', () => {
       account: createSignedInAccount({ signOut }),
     });
 
-    await viewModel.signOut();
+    await expect(viewModel.signOut()).resolves.toBe(true);
 
     expect(signOut).toHaveBeenCalledTimes(1);
     expect(viewModel.isSigningOut).toBe(false);

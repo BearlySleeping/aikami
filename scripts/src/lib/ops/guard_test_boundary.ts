@@ -71,58 +71,40 @@ const walk = (directory: string): string[] => {
   return files;
 };
 
-// ── Comment stripping (keeps string contents) ───────────────────────────
+// ── Syntax-aware import extraction ──────────────────────────────────────
+//
+// Uses Bun's parser so comments, strings, template literals and regex
+// literals can never hide or smuggle an import specifier. Svelte files are
+// scanned via their <script> block(s). If the parser rejects a file, fall
+// back to a comment/string-aware regex — never silently skip.
 
-const stripComments = (source: string): string => {
-  let result = '';
-  let index = 0;
-  const length = source.length;
-  while (index < length) {
-    const char = source[index];
-    const next = source[index + 1];
-    if (char === '/' && next === '/') {
-      while (index < length && source[index] !== '\n') {
-        result += ' ';
-        index++;
-      }
-      continue;
+const transpiler = new Bun.Transpiler({ loader: 'ts' });
+
+const SCRIPT_BLOCK_RE = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+
+const extractScriptSource = (content: string): string =>
+  [...content.matchAll(SCRIPT_BLOCK_RE)].map((match) => match[1] ?? '').join('\n');
+
+const IMPORT_SPECIFIER_RE = /(?:from\s+|import\s+|require\s*\(\s*)['"]([^'"]+)['"]/g;
+
+/** Last-resort scanner if Bun's parser rejects a file. */
+const fallbackImportPaths = (source: string): string[] => {
+  const paths: string[] = [];
+  for (const match of source.matchAll(IMPORT_SPECIFIER_RE)) {
+    if (match[1]) {
+      paths.push(match[1]);
     }
-    if (char === '/' && next === '*') {
-      result += '  ';
-      index += 2;
-      while (index < length && !(source[index] === '*' && source[index + 1] === '/')) {
-        result += source[index] === '\n' ? '\n' : ' ';
-        index++;
-      }
-      if (index < length) {
-        result += '  ';
-        index += 2;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      const quote = char;
-      result += char;
-      index++;
-      while (index < length && source[index] !== quote) {
-        if (source[index] === '\\') {
-          result += source[index] + (source[index + 1] ?? '');
-          index += 2;
-          continue;
-        }
-        result += source[index];
-        index++;
-      }
-      if (index < length) {
-        result += source[index];
-        index++;
-      }
-      continue;
-    }
-    result += char;
-    index++;
   }
-  return result;
+  return paths;
+};
+
+const scanImportPaths = (file: string, content: string): string[] => {
+  const source = file.endsWith('.svelte') ? extractScriptSource(content) : content;
+  try {
+    return transpiler.scanImports(source).map((entry) => entry.path);
+  } catch {
+    return fallbackImportPaths(source);
+  }
 };
 
 // ── Classification ──────────────────────────────────────────────────────
@@ -170,13 +152,6 @@ const testHelperRule = (specifier: string): string | undefined => {
   return undefined;
 };
 
-const IMPORT_PATTERNS = [
-  /\bfrom\s+['"]([^'"]+)['"]/g,
-  /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-  /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-  /\bimport\s+['"]([^'"]+)['"]/g,
-] as const;
-
 // ── Main ────────────────────────────────────────────────────────────────
 
 const violations: Violation[] = [];
@@ -186,14 +161,10 @@ for (const scanRoot of SCAN_ROOTS) {
     if (!isProductionSource(file)) {
       continue;
     }
-    const content = stripComments(readFileSync(file, 'utf8'));
-    for (const pattern of IMPORT_PATTERNS) {
-      for (const match of content.matchAll(pattern)) {
-        const specifier = match[1] ?? '';
-        const rule = testHelperRule(specifier);
-        if (rule) {
-          violations.push({ file: relPath(file), specifier, rule });
-        }
+    for (const specifier of scanImportPaths(file, readFileSync(file, 'utf8'))) {
+      const rule = testHelperRule(specifier);
+      if (rule) {
+        violations.push({ file: relPath(file), specifier, rule });
       }
     }
   }

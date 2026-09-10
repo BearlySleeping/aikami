@@ -8,13 +8,22 @@
 // These doubles carry no dependencies on the test runner; callers pass spies
 // (e.g. `mock(...)`) through the `overrides` argument when they need to assert
 // calls.
+//
+// Destructive/session operations are intentionally NOT defaulted to success:
+// an unconfigured call throws, so a test cannot pass by accident on a silent
+// no-op. Configure the operation explicitly when the behavior under test needs
+// it.
 
 import type { SaveSlotEntry } from '@aikami/types';
 import type { AccountCapabilities, AccountSyncCapabilities } from '../account_view_model.svelte';
 
+const unconfigured = (operation: keyof AccountCapabilities): never => {
+  throw new Error(`Unexpected ${operation} call; configure this fixture explicitly.`);
+};
+
 /**
- * A signed-out account. Operations resolve to inert success values until a
- * caller overrides them.
+ * A signed-out account. Identity is inert; destructive/session operations
+ * throw until a caller overrides them.
  */
 export const createSignedOutAccount = (
   overrides: Partial<AccountCapabilities> = {},
@@ -22,9 +31,9 @@ export const createSignedOutAccount = (
   isLoggedIn: false,
   currentUser: undefined,
   uid: undefined,
-  signOut: async () => true,
-  deleteAccount: async () => true,
-  revokeAllSessions: async () => true,
+  signOut: () => unconfigured('signOut'),
+  deleteAccount: () => unconfigured('deleteAccount'),
+  revokeAllSessions: () => unconfigured('revokeAllSessions'),
   ...overrides,
 });
 

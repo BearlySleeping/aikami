@@ -29,7 +29,7 @@ export type AccountCapabilities = {
   readonly isLoggedIn: boolean;
   readonly currentUser: AccountUser | undefined;
   readonly uid: string | undefined;
-  signOut(): Promise<unknown>;
+  signOut(): Promise<boolean>;
   deleteAccount(): Promise<boolean>;
   revokeAllSessions(): Promise<boolean>;
 };
@@ -76,8 +76,8 @@ export type AccountViewModelInterface = BaseViewModelInterface & {
   /** Whether delete account should be shown (only on signed-out states). */
   readonly showDeleteAccount: boolean;
 
-  /** Signs out the current user. */
-  signOut(): Promise<void>;
+  /** Signs out the current user. Resolves true when the sign-out succeeded. */
+  signOut(): Promise<boolean>;
   /** Revokes all sessions for the current account. */
   revokeAllSessions(): Promise<void>;
   /** Opens the delete account confirmation dialog. */
@@ -145,13 +145,19 @@ class AccountViewModel
     await super.initialize();
   }
 
-  async signOut(): Promise<void> {
+  async signOut(): Promise<boolean> {
     this.isSigningOut = true;
     try {
-      await this._account.signOut();
+      const succeeded = await this._account.signOut();
+      if (!succeeded) {
+        this.error('signOut:failed');
+        return false;
+      }
       this.debug('signOut:success');
+      return true;
     } catch (error) {
       this.error('signOut', error);
+      return false;
     } finally {
       this.isSigningOut = false;
     }
