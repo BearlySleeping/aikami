@@ -95,55 +95,52 @@ class SettingsAudioViewModel
   extends BaseViewModel<SettingsAudioViewModelOptions>
   implements SettingsAudioViewModelInterface
 {
-  masterVolume = $state<number>(audioService.masterVolume);
-  bgmVolume = $state<number>(audioService.bgmVolume);
-  sfxVolume = $state<number>(audioService.sfxVolume);
-  ttsVolume = $state<number>(ttsService.ttsVolume);
-  isCrossfading = $state<boolean>(false);
+  // Reactive reads — audioService/ttsService hold these as `$state`, so reading
+  // them in the view tracks updates directly. No polling loop, no divergent
+  // copy. `feedback` is genuine UI-local state.
+  get masterVolume(): number {
+    return audioService.masterVolume;
+  }
+
+  get bgmVolume(): number {
+    return audioService.bgmVolume;
+  }
+
+  get sfxVolume(): number {
+    return audioService.sfxVolume;
+  }
+
+  get ttsVolume(): number {
+    return ttsService.ttsVolume;
+  }
+
+  get isCrossfading(): boolean {
+    return audioService.isCrossfading;
+  }
+
   feedback = $state<string>('');
-  private _pollInterval: ReturnType<typeof setInterval> | undefined;
 
   override async initialize(): Promise<void> {
     // Refresh the voice-model download state on open (C-389 AC-4c).
     void voiceModelService.checkStatus();
     void ttsService.initialize().catch(() => {});
-    // Poll audioService every ~200ms to keep the display in sync
-    this._pollInterval = setInterval(() => {
-      this.masterVolume = audioService.masterVolume;
-      this.bgmVolume = audioService.bgmVolume;
-      this.sfxVolume = audioService.sfxVolume;
-      this.ttsVolume = ttsService.ttsVolume;
-      this.isCrossfading = audioService.isCrossfading;
-    }, 200);
     await super.initialize();
-  }
-
-  override async dispose(): Promise<void> {
-    if (this._pollInterval) {
-      clearInterval(this._pollInterval);
-      this._pollInterval = undefined;
-    }
-    await super.dispose();
   }
 
   setMasterVolume(volume: number): void {
     audioService.setMasterVolume(volume);
-    this.masterVolume = audioService.masterVolume;
   }
 
   setBgmVolume(volume: number): void {
     audioService.setBgmVolume(volume);
-    this.bgmVolume = audioService.bgmVolume;
   }
 
   setSfxVolume(volume: number): void {
     audioService.setSfxVolume(volume);
-    this.sfxVolume = audioService.sfxVolume;
   }
 
   setTtsVolume(volume: number): void {
     ttsService.setTtsVolume(volume);
-    this.ttsVolume = ttsService.ttsVolume;
   }
 
   get musicPlayerVisible(): boolean {
