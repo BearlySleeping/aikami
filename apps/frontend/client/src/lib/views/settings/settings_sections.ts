@@ -17,10 +17,8 @@ import {
   getSettingsDisplayViewModel,
   type SettingsDisplayViewModelInterface,
 } from './display/settings_display_view_model.svelte';
-import {
-  type GameplayViewModelInterface,
-  getGameplayViewModel,
-} from './gameplay/gameplay_view_model.svelte';
+import { getGameplayViewModel } from './gameplay/gameplay_composition.ts';
+import type { GameplayViewModelInterface } from './gameplay/gameplay_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // Types

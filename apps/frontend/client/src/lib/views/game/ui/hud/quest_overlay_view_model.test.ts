@@ -1,16 +1,22 @@
 // apps/frontend/client/src/lib/views/game/ui/hud/quest_overlay_view_model.test.ts
 //
 // Unit tests for QuestOverlayViewModel — the active-quest mini overlay.
-// Uses the $services mock from test_preload: questStateService.quests is a
-// mutable array the tests drive directly.
+//
+// Exercises the ViewModel through feature-owned fixtures — no global
+// `$services` barrel mock and no `test_preload` inventory coupling.
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import type { QuestData } from '@aikami/frontend/engine/sim';
-import { questOverlayService, questStateService } from '$services';
+import { BaseViewModel } from '@aikami/frontend/services/base';
 import {
-  getQuestOverlayViewModel,
-  type QuestOverlayViewModelInterface,
+  createQuestOverlayViewModel,
+  type QuestOverlayViewModelOptions,
 } from './quest_overlay_view_model.svelte';
+import {
+  createQuestCampaignCapabilities,
+  createQuestOverlayVisibility,
+  createQuestStateCapabilities,
+} from './testing/quest_overlay_fixtures.ts';
 
 const ACTIVE_QUEST: QuestData = {
   id: 'fading_ward',
@@ -25,16 +31,20 @@ const ACTIVE_QUEST: QuestData = {
   ],
 };
 
-describe('QuestOverlayViewModel', () => {
-  let viewModel: QuestOverlayViewModelInterface;
-
-  beforeEach(() => {
-    (questStateService.quests as QuestData[]).length = 0;
-    questOverlayService.setVisible(true);
-    viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVMTest' });
+const createViewModel = (
+  options: Partial<Pick<QuestOverlayViewModelOptions, 'overlay' | 'questState' | 'campaign'>> = {},
+) =>
+  createQuestOverlayViewModel({
+    className: 'QuestOverlayVMTest',
+    overlay: options.overlay ?? createQuestOverlayVisibility(),
+    questState: options.questState ?? createQuestStateCapabilities(),
+    campaign: options.campaign ?? createQuestCampaignCapabilities(),
   });
 
+describe('QuestOverlayViewModel', () => {
   test('reports no active quest when none are running', () => {
+    const viewModel = createViewModel();
+
     expect(viewModel.hasActiveQuest).toBe(false);
     expect(viewModel.questTitle).toBe('No active quest');
     expect(viewModel.currentObjectiveIndex).toBe(-1);
@@ -42,15 +52,18 @@ describe('QuestOverlayViewModel', () => {
   });
 
   test('ignores completed quests', () => {
-    (questStateService.quests as QuestData[]).push({
-      ...ACTIVE_QUEST,
-      status: 'completed',
+    const viewModel = createViewModel({
+      questState: createQuestStateCapabilities([{ ...ACTIVE_QUEST, status: 'completed' }]),
     });
+
     expect(viewModel.hasActiveQuest).toBe(false);
   });
 
   test('exposes the first active quest and its objectives', () => {
-    (questStateService.quests as QuestData[]).push(ACTIVE_QUEST);
+    const viewModel = createViewModel({
+      questState: createQuestStateCapabilities([ACTIVE_QUEST]),
+    });
+
     expect(viewModel.hasActiveQuest).toBe(true);
     expect(viewModel.questTitle).toBe('The Fading Ward');
     expect(viewModel.questDescription).toContain('Ward Wand');
@@ -68,19 +81,44 @@ describe('QuestOverlayViewModel', () => {
         { label: 'Report back', current: 0, max: 1 },
       ],
     };
-    (questStateService.quests as QuestData[]).push(counterQuest);
+    const viewModel = createViewModel({
+      questState: createQuestStateCapabilities([counterQuest]),
+    });
+
     expect(viewModel.currentObjectiveIndex).toBe(0);
     expect(viewModel.currentObjectivePercent).toBe(60);
   });
 
-  test('hide() delegates to the overlay service', () => {
-    (questStateService.quests as QuestData[]).push(ACTIVE_QUEST);
-    expect(viewModel.visible).toBe(true);
+  test('hide() delegates to the overlay capability', () => {
+    const setVisible = mock(() => {});
+    const viewModel = createViewModel({
+      overlay: createQuestOverlayVisibility({ setVisible }),
+    });
+
     viewModel.hide();
+
+    expect(setVisible).toHaveBeenCalledWith(false);
+  });
+
+  test('visibility comes from the overlay capability', () => {
+    const viewModel = createViewModel({
+      overlay: createQuestOverlayVisibility({ visible: false }),
+    });
+
     expect(viewModel.visible).toBe(false);
   });
 
-  test('visibility comes from the overlay service', () => {
-    expect(viewModel.visible).toBe(true);
+  test('sampledTruthId comes from the active campaign', () => {
+    const viewModel = createViewModel({
+      campaign: createQuestCampaignCapabilities({
+        activeCampaign: { sampledTruthId: 'truth-42' },
+      }),
+    });
+
+    expect(viewModel.sampledTruthId).toBe('truth-42');
+  });
+
+  test('extends the production BaseViewModel', () => {
+    expect(createViewModel()).toBeInstanceOf(BaseViewModel);
   });
 });

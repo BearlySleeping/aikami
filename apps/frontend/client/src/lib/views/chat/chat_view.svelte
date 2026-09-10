@@ -6,10 +6,10 @@ import TypingIndicator from '$lib/components/chat/typing_indicator.svelte';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
 import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
+import { getAddressModeTogggleViewModel } from '$views/gm/address_mode_toggle_composition.ts';
 import AddressModeToggleView from '$views/gm/address_mode_toggle_view.svelte';
-import { getAddressModeTogggleViewModel } from '$views/gm/address_mode_toggle_view_model.svelte.ts';
+import { getPushStoryButtonViewModel } from '$views/gm/push_story_button_composition.ts';
 import PushStoryButtonView from '$views/gm/push_story_button_view.svelte';
-import { getPushStoryButtonViewModel } from '$views/gm/push_story_button_view_model.svelte.ts';
 import type { ChatViewModelInterface } from './chat_view_model.svelte.ts';
 import ChoiceButtonsView from './choice_buttons_view.svelte';
 

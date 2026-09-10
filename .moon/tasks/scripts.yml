@@ -20,6 +20,7 @@ tasks:
       - '~:guard-type-safety'
       - '~:guard-orphaned-capability'
       - '~:guard-test-boundary'
+      - '~:guard-view-model-composition'
     options:
       cache: false
       runInCI: true
@@ -233,6 +234,19 @@ tasks:
       - '!/packages/**/build/**'
       - '/.pi/**/*'
       - '!/.pi/generated-skills/**'
+    options:
+      cache: false
+      runInCI: true
+
+  # ViewModel composition-boundary ratchet: a *_view_model.svelte.ts must not
+  # import the `$services` barrel or the aggregate `@aikami/frontend/services`
+  # root at runtime. See guard_view_model_composition_baseline.json.
+  guard-view-model-composition:
+    command: 'bun run src/lib/ops/guard_view_model_composition.ts'
+    inputs:
+      - 'src/lib/ops/guard_view_model_composition.ts'
+      - 'src/lib/ops/guard_view_model_composition_baseline.json'
+      - '/apps/frontend/client/src/lib/views/**/*'
     options:
       cache: false
       runInCI: true
