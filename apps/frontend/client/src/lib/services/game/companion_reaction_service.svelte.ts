@@ -24,13 +24,13 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services';
 import type { CommittedNarrativeEvent, ContentPackNpcEntry } from '@aikami/types';
-import { partyRosterService } from './party_roster_service.svelte';
 import {
   applyCompanionReaction,
-  detectBoundaryCrossing,
   type CompanionReactionKind,
+  detectBoundaryCrossing,
   type ParsedCompanionReaction,
 } from './companion_reaction';
+import { partyRosterService } from './party_roster_service.svelte';
 
 export type CompanionReactionServiceOptions = BaseFrontendClassOptions;
 

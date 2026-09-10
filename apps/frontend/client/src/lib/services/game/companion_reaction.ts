@@ -58,7 +58,9 @@ export const parseCompanionReaction = (boundary: string): ParsedCompanionReactio
 /**
  * Returns every parsed reaction binding among the NPC's authored boundaries.
  */
-export const parseBoundaryReactions = (boundaries: readonly string[] | undefined): ParsedCompanionReaction[] => {
+export const parseBoundaryReactions = (
+  boundaries: readonly string[] | undefined,
+): ParsedCompanionReaction[] => {
   if (!boundaries) {
     return [];
   }

@@ -11,7 +11,12 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { NpcRollResolutionOutput, NpcStateDelta } from '@aikami/types';
 import { encode } from 'gpt-tokenizer';
-import { campaignService, narrativeEventService, partyRosterService, relationshipService } from '$services';
+import {
+  campaignService,
+  narrativeEventService,
+  partyRosterService,
+  relationshipService,
+} from '$services';
 import type { ConsequenceRequest, ConsequenceResult } from '$types';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
@@ -2242,9 +2247,8 @@ describe('C-494 AC-3: companion witness recall', () => {
     (partyRosterService as unknown as { hasMember: (id: string) => boolean }).hasMember = mock(
       (id: string) => id === 'village_guard',
     );
-    (narrativeEventService as unknown as { witnessedBy: (id: string) => unknown[] }).witnessedBy = mock(
-      (id: string) => events.filter((e) => (e.witnesses as string[]).includes(id)),
-    );
+    (narrativeEventService as unknown as { witnessedBy: (id: string) => unknown[] }).witnessedBy =
+      mock((id: string) => events.filter((e) => (e.witnesses as string[]).includes(id)));
   };
 
   test('buildContext injects [COMPANION WITNESSED] lines for a recruited companion', () => {

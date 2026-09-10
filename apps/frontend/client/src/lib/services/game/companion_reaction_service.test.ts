@@ -195,12 +195,20 @@ describe('CompanionReactionService', () => {
       initialApproval: 10,
     });
     const event = makeEvent({ summary: 'Bram witnessed the player threaten an innocent villager' });
-    const first = companionReactionService.evaluateEvent({ npcId: 'village_guard', npc: GUARD, event });
+    const first = companionReactionService.evaluateEvent({
+      npcId: 'village_guard',
+      npc: GUARD,
+      event,
+    });
     expect(first?.reaction).toBe('refuse');
     expect(partyRosterService.getApproval('village_guard')).toBe(-10);
 
     // Idempotency — re-evaluating the same event must not double-drop.
-    const second = companionReactionService.evaluateEvent({ npcId: 'village_guard', npc: GUARD, event });
+    const second = companionReactionService.evaluateEvent({
+      npcId: 'village_guard',
+      npc: GUARD,
+      event,
+    });
     expect(second).toBeUndefined();
     expect(partyRosterService.getApproval('village_guard')).toBe(-10);
   });
@@ -221,20 +229,24 @@ describe('CompanionReactionService', () => {
   test('AC-5: fireUnpromptedTurn fires exactly once per event', () => {
     partyRosterService.recruit({ npcId: 'village_guard', name: 'Bram', classId: 'fighter' });
     const event = makeEvent();
-    expect(companionReactionService.fireUnpromptedTurn({ npcId: 'village_guard', npc: GUARD, event })).toBe(
-      true,
-    );
-    expect(companionReactionService.fireUnpromptedTurn({ npcId: 'village_guard', npc: GUARD, event })).toBe(
-      false,
-    );
+    expect(
+      companionReactionService.fireUnpromptedTurn({ npcId: 'village_guard', npc: GUARD, event }),
+    ).toBe(true);
+    expect(
+      companionReactionService.fireUnpromptedTurn({ npcId: 'village_guard', npc: GUARD, event }),
+    ).toBe(false);
     expect(companionReactionService.hasFired(event.id)).toBe(true);
   });
 
   test('AC-5: does not fire for a non-recruited or non-companion NPC', () => {
     const event = makeEvent();
-    expect(companionReactionService.fireUnpromptedTurn({ npcId: 'village_elder', npc: { name: 'X' }, event })).toBe(
-      false,
-    );
+    expect(
+      companionReactionService.fireUnpromptedTurn({
+        npcId: 'village_elder',
+        npc: { name: 'X' },
+        event,
+      }),
+    ).toBe(false);
     expect(
       companionReactionService.fireUnpromptedTurn({ npcId: 'village_guard', npc: GUARD, event }),
     ).toBe(false);
