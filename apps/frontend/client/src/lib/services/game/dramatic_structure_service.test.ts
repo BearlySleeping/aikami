@@ -112,7 +112,7 @@ describe('truth resolution — one sampled truth drives all accounts (AC-5 forbi
 
   test('exactly one account resolves as true under one sampled truth (material conflict)', () => {
     const sampled = 'rollo_owns_the_ledger';
-    const accounts = manifest.accounts?.['the_ledger'] ?? [];
+    const accounts = manifest.accounts?.the_ledger ?? [];
     const trueCount = accounts.filter((a) => a.supportsTruthId === sampled).length;
     expect(trueCount).toBe(1);
   });

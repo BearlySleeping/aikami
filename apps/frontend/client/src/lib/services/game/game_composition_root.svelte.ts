@@ -540,6 +540,7 @@ export class GameCompositionRoot
     if (typeof window !== 'undefined') {
       try {
         Object.assign(window, {
+          // biome-ignore lint/style/useNamingConvention: __AIKAMI_TEST__ is the fixed key the release-gate E2E reads back
           __AIKAMI_TEST__: {
             presentEvidence: (evidenceId: string): boolean => {
               const campaignId = campaignService.activeCampaign?.id;

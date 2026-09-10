@@ -23,7 +23,7 @@ import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
-import { campaignStorage } from '../campaign/campaign_storage.svelte';
+import { campaignStorage as campaignStorageRepo } from '../campaign/campaign_storage.svelte';
 import { personaService } from '../persona/persona_service.svelte';
 import { sampleTruthVariant } from './dramatic_structure_service';
 import { gameEngineService } from './game_engine_service.svelte';
@@ -823,7 +823,7 @@ class GameBootService
       if (sampled) {
         this._campaign = { ...this._campaign, sampledTruthId: sampled };
         try {
-          await campaignStorage.update(this._campaign);
+          await campaignStorageRepo.update(this._campaign);
         } catch (error) {
           this.warn('stage:preloading_content:truth-persist-failed', {
             error: String(error),
