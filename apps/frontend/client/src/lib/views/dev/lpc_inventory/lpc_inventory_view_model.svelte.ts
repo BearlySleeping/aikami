@@ -12,6 +12,7 @@ import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import type { BaseViewModelOptions } from '@aikami/frontend/services';
+import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 import { equipmentService, inventoryService } from '$services';
 import {
   getLpcPreviewViewModel,
@@ -24,9 +25,6 @@ import {
 
 /** Empty palette — equipment sprites render with their authored colours. */
 const EMPTY_PALETTE = new Uint8Array(1024);
-
-/** Base appearance slots owned by equipment (rendered via gear, not base). */
-const EQUIPMENT_OWNED_BASE_SLOTS = new Set(['torso', 'feet']);
 
 /** Sample gear granted to the sandbox bag for live equip testing. */
 const SANDBOX_BAG: ReadonlyArray<{ itemId: string; quantity: number }> = [
@@ -69,10 +67,15 @@ export class LpcInventoryViewModel
   }
 
   override async initialize(): Promise<void> {
-    // Seed a fresh bag + the character's base outfit (chainmail + boots).
+    // Fresh bag + wearer context. The base appearance renders the full
+    // DEFAULT_LPC_RECIPE (including torso/feet); equipped gear overlays it,
+    // so unequip reveals the base outfit instead of a bare body.
     inventoryService.reset();
     equipmentService.reset();
-    equipmentService.seedBaseOutfit({ ...DEFAULT_LPC_RECIPE });
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: DEFAULT_LPC_RECIPE.body,
+      catalogAssetIdsBySlot: getLpcCatalog().assetIdsBySlot,
+    });
     inventoryService.inventory = SANDBOX_BAG.map((entry) => ({ ...entry }));
 
     // Rebuild the preview recipes whenever equipment slots change.
@@ -89,17 +92,14 @@ export class LpcInventoryViewModel
   /**
    * Rebuilds the preview character from the base appearance + equipped gear.
    *
-   * Mirrors the in-game merge: base layers (body, hair, legs, head) plus
-   * equipment layers; body/feet equipment replace the base torso/feet
-   * layers, and hat/weapon/shield are appended on top.
+   * Mirrors the in-game merge: the full base recipe renders first, then
+   * equipment layers replace overlapping base slots (torso/feet) and append
+   * the non-base layers (hat/weapon/shield).
    */
   private _refreshPreview(): void {
     const recipes: LpcLayerRecipe[] = [];
 
     for (const [slot, assetId] of Object.entries(DEFAULT_LPC_RECIPE)) {
-      if (EQUIPMENT_OWNED_BASE_SLOTS.has(slot)) {
-        continue; // provided by equipment
-      }
       if (assetId) {
         recipes.push({ slot, assetId, hexPalette: EMPTY_PALETTE });
       }

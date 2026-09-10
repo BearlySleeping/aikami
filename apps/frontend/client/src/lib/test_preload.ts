@@ -551,7 +551,7 @@ export const localServicesMockBase = () => ({
     unequipItem: mock(() => true),
     getEquippedItemId: mock(() => undefined),
     buildLpcRecipes: mock(() => []),
-    seedBaseOutfit: _createCallableStub(),
+    configureAppearanceContext: _createCallableStub(),
     configureCommandSender: _createCallableStub(),
     serialize: mock(() => ({ slots: {} })),
     hydrate: _createCallableStub(),
