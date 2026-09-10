@@ -344,6 +344,38 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </div>
         {/if}
 
+        {#if viewModel.capabilityError}
+          <div
+            class="rounded-xl border border-error/30 bg-error/10 p-3"
+            role="alert"
+            data-testid="capability-error"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-error">{viewModel.capabilityError.title}</p>
+                <p class="mt-0.5 text-xs text-base-content/80">
+                  {viewModel.capabilityError.message}
+                </p>
+              </div>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs shrink-0 text-base-content/50"
+                onclick={() => viewModel.dismissCapabilityError()}
+                aria-label="Dismiss error"
+              >
+                ✕
+              </button>
+            </div>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm mt-2 w-full"
+              onclick={() => viewModel.goToSettingsCapability()}
+            >
+              Fix in Settings
+            </button>
+          </div>
+        {/if}
+
         <!-- CYOA choice buttons -->
         {#if viewModel.activeChoices.length > 0}
           <div class="space-y-1 px-2" data-testid="cyoa-choices">
@@ -443,6 +475,30 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </button>
         </div>
       {:else}
+        {#if viewModel.showSlashCompletions}
+          <div class="relative">
+            <ul
+              class="menu menu-sm bg-base-200 rounded-lg shadow-lg border border-base-300 absolute bottom-full left-0 right-0 mb-1 max-h-48 overflow-y-auto z-40"
+              data-testid="dialogue-slash-autocomplete-menu"
+            >
+              {#each viewModel.slashCompletions as cmd, i}
+                <li>
+                  <button
+                    type="button"
+                    class:menu-active={i === viewModel.selectedSlashCompletion}
+                    onmousedown={(e) => {
+                      e.preventDefault();
+                      viewModel.selectAndApplySlashCompletion(i);
+                    }}
+                  >
+                    <span class="font-mono font-bold">/{cmd.name}</span>
+                    <span class="text-xs text-base-content/50">{cmd.description}</span>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
         <GuidedComposer
           value={viewModel.inputText}
           onInput={(t) => viewModel.setInput(t)}

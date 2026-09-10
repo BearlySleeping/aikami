@@ -178,15 +178,15 @@ export class AudioService
 
   // ── Initialization ──
 
-  constructor(options: AudioServiceOptions) {
-    super(options);
-    this._ensureGraph();
-  }
-
   /**
    * Lazily builds the Web Audio gain chain on first use.
-   * Called from the constructor — safe because the AudioContext
-   * starts in a suspended state under autoplay policy.
+   *
+   * Intentionally NOT called from the constructor: constructing the
+   * AudioContext at module load (outside a user gesture) makes browsers log
+   * "An AudioContext was prevented from starting automatically" on every boot.
+   * Deferring to first use (playback, or access to `masterGainNode` /
+   * `masterCompressorNode`) means the shared context has usually been created
+   * inside the first gesture by the time audio actually plays.
    */
   private _ensureGraph(): void {
     if (this._masterGain) {

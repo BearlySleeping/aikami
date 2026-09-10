@@ -5,7 +5,7 @@
 // bare `/`.
 
 import { describe, expect, test } from 'bun:test';
-import { parseSlashCommand } from './slash_command_parser.ts';
+import { getDialogueSlashCompletions, parseSlashCommand } from './slash_command_parser.ts';
 
 describe('parseSlashCommand', () => {
   describe('ordinary text', () => {
@@ -97,5 +97,37 @@ describe('parseSlashCommand', () => {
     test('an unknown command maps to help', () => {
       expect(parseSlashCommand('/foobar x y')).toEqual({ kind: 'help' });
     });
+  });
+});
+
+describe('getDialogueSlashCompletions', () => {
+  test('returns every dialogue command for a bare slash', () => {
+    const result = getDialogueSlashCompletions('/');
+    expect(result.map((c) => c.name)).toEqual(['generate', 'tree', 'action', 'look', 'help']);
+  });
+
+  test('filters by prefix, matching the command name', () => {
+    expect(getDialogueSlashCompletions('/gen').map((c) => c.name)).toEqual(['generate']);
+    expect(getDialogueSlashCompletions('/a').map((c) => c.name)).toEqual(['action']);
+  });
+
+  test('matches aliases (help via ?)', () => {
+    expect(getDialogueSlashCompletions('/?').map((c) => c.name)).toEqual(['help']);
+  });
+
+  test('is case-insensitive', () => {
+    expect(getDialogueSlashCompletions('/TREE').map((c) => c.name)).toEqual(['tree']);
+  });
+
+  test('returns an empty list for non-slash input', () => {
+    expect(getDialogueSlashCompletions('hello')).toEqual([]);
+  });
+
+  test('returns an empty list once a space is typed (full command)', () => {
+    expect(getDialogueSlashCompletions('/generate a forest')).toEqual([]);
+  });
+
+  test('returns an empty list for an unmatched prefix', () => {
+    expect(getDialogueSlashCompletions('/zzz')).toEqual([]);
   });
 });

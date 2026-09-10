@@ -116,6 +116,8 @@ const {
 
 const isPlayer = $derived(message.sender === 'user');
 const alignRight = $derived(isPlayer || isPartyMate);
+/** System messages (e.g. slash-command help) render as a muted centered banner. */
+const isSystem = $derived(senderName === 'System');
 
 /** Chat variant: enrich alternatives from the branch store (C-231). */
 const enriched = $derived(
@@ -188,7 +190,18 @@ const handleSwipeRight = () => {
 
 {#if variant === 'dialogue'}
   <!-- ── Dialogue variant ─────────────────────────────────────────────── -->
-  <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
+  {#if isSystem}
+    <!-- System banner (slash-command help, C-501) — muted & centered so it is
+         readable in both light and dark themes (replaces the unreadable
+         info-tint party bubble where text and background were both dark). -->
+    <div class="flex justify-center py-1.5" data-testid="dialogue-system-message">
+      <span
+        class="max-w-[85%] rounded-lg border border-base-content/10 bg-base-100/70 px-3 py-1.5 text-center text-xs leading-relaxed text-base-content/70"
+        >{message.text}</span
+      >
+    </div>
+  {:else}
+    <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
     <div class="flex max-w-[75%] flex-col gap-0.5">
       {#if editing}
         <div class="flex flex-col gap-1">
@@ -388,6 +401,7 @@ const handleSwipeRight = () => {
       {/if}
     </div>
   </div>
+  {/if}
 
   {#if renderFooter}
     {@render renderFooter(message.id)}
