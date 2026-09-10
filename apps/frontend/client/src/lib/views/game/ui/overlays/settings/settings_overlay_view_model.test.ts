@@ -90,7 +90,7 @@ mock.module('../../../../settings/display/settings_display_view_model.svelte', (
   getSettingsDisplayViewModel: _baseSectionViewModel,
 }));
 
-mock.module('../../../../settings/gameplay/gameplay_view_model.svelte', () => ({
+mock.module('../../../../settings/gameplay/gameplay_composition.ts', () => ({
   getGameplayViewModel: _baseSectionViewModel,
 }));
 
