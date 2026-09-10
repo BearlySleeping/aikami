@@ -1,7 +1,7 @@
 // packages/frontend/engine/src/game_world.ts
 
 import type { PackConfig } from '@aikami/types';
-import type { Application, Spritesheet } from 'pixi.js';
+import type { Application, Spritesheet, Ticker } from 'pixi.js';
 import { Container, Graphics, Sprite, Texture, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import {
@@ -449,7 +449,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _recycledBufferCount = 0;
 
   /** PixiJS ticker callback reference for teardown. */
-  private _tickerCallback: (() => void) | undefined;
+  private _tickerCallback: ((ticker: Ticker) => void) | undefined;
+
+  /** Real wall-clock delta (ms) captured from the ticker on the last frame. */
+  private _lastFrameDeltaMs = 16.7;
 
   // -- Render debug throttle ---------------------------------------------
 
@@ -791,10 +794,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // ---- 5. Start the render loop (main thread) -----------------------
     const stage = this._app.stage;
 
-    this._tickerCallback = (): void => {
+    this._tickerCallback = (ticker: Ticker): void => {
       if (!this._running || !this._app || !this._activeRenderView) {
         return;
       }
+      // C-496 AC-5: capture the real wall-clock delta for the elapsed-time
+      // actor clock; the per-entity AnimationController advances by this
+      // value (never by display refresh count).
+      this._lastFrameDeltaMs = ticker.deltaMS;
 
       // ── C-177: Update uTime for GPU tile animation ──
       // ── C-378 AC-9: update the day/night tint from the worker's UBO ──
@@ -3433,10 +3440,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // spawn coordinates (CodeRabbit review, C-376).
       entry.displayObject.zIndex = computeEntityZIndex(y);
 
-      // Drive per-entity animation controller from positional deltas.
-      // The controller computes dx/dy across frames to derive facing
-      // direction and walk/idle transitions.
-      entry.animationController?.update({ x, y });
+      // Drive per-entity animation controller from positional deltas and the
+      // real elapsed wall-clock delta (C-496 AC-5).
+      entry.animationController?.update({ x, y, deltaMs: this._lastFrameDeltaMs });
 
       // Apply LPC frame slicing when layer sprites are loaded.
       if (entry.animationController) {

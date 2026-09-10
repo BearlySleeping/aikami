@@ -119,4 +119,27 @@ describe('AnimationController — walk cycle vs stale render reads (C-378)', () 
     // Down row = Walk(8) + Down(2) = 10; 13 columns; frame = 10*13 + (1000003 % 9).
     expect(index).toBe(10 * 13 + (1_000_003 % 9));
   });
+
+  it('uses elapsed wall-clock time, not refresh count (C-496 AC-5)', () => {
+    // A 60Hz host fires ~17ms per frame; a 30Hz host ~33ms. After the same
+    // wall-clock time (~408ms of movement) both must resolve to the same
+    // walk column — playback speed must not depend on the display refresh rate.
+    const frameRate60 = new AnimationController();
+    const frameRate30 = new AnimationController();
+    frameRate60.update({ x: 0, y: 0 });
+    frameRate30.update({ x: 0, y: 0 });
+
+    // 24 frames at 17ms (60Hz) = 408ms.
+    for (let i = 1; i <= 24; i++) {
+      frameRate60.update({ x: i * 2, y: 0, deltaMs: 17 });
+    }
+    // 12 frames at 34ms (30Hz) = 408ms.
+    for (let i = 1; i <= 12; i++) {
+      frameRate30.update({ x: i * 2, y: 0, deltaMs: 34 });
+    }
+
+    expect(frameRate60.getFrameColumn(9)).toBe(frameRate30.getFrameColumn(9));
+    // 408ms / 136ms-per-frame = 3 → column 3 of 9.
+    expect(frameRate60.getFrameColumn(9)).toBe(3);
+  });
 });

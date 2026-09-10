@@ -39,3 +39,10 @@ export type {
   TilemapChunkRenderResult,
 } from './tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './tilemap_chunk_renderer.ts';
+export {
+  type ResolveDefinitionFrameOptions,
+  type ResolvedPlaybackFrame,
+  resolveClipFrameId,
+  resolveDefinitionFrameAtTime,
+  totalClipDuration,
+} from './visual_definition_playback.ts';

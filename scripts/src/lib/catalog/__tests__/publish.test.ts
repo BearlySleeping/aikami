@@ -123,10 +123,12 @@ describe('catalog publish pipeline (AC-1)', () => {
     expect(second.uploaded).toBe(0);
     expect(second.skipped).toBe(7);
     // Only the index objects + seed files were re-written on the second run:
-    // every shard plus the root, plus any existing seed files.
+    // every shard plus the root plus the release pointer, plus any seed files.
     // Seed files are mutable and uploaded on every run.
     const seedFileCount = 6; // all six seed files exist in the fixture
-    expect(client.putCount - putCountAfterFirst).toBe(second.shardKeys.length + 1 + seedFileCount);
+    expect(client.putCount - putCountAfterFirst).toBe(
+      second.shardKeys.length + 1 + seedFileCount + 1, // +1 = release pointer
+    );
   });
 
   test('resumes after a partial run without corrupting the index', async () => {
@@ -285,5 +287,86 @@ describe('catalog publish release consistency (C-496 AC-4)', () => {
     expect(report.seed.uploaded).toBe(6);
     // Root written because every shard succeeded.
     expect(client.objects.has('index/v1/catalog.json')).toBe(true);
+  });
+});
+
+describe('catalog release pointer (C-496 AC-4)', () => {
+  let gameDataDir: string;
+  let contentPacksDir: string;
+  let client: FakeR2Client;
+
+  beforeEach(() => {
+    gameDataDir = makeFixtureGameData();
+    contentPacksDir = mkdtempSync(join(tmpdir(), 'catalog-release-packs-'));
+    client = new FakeR2Client();
+  });
+
+  afterEach(() => {
+    client.failOnKey = undefined;
+  });
+
+  const config = () => ({
+    accessKeyId: 'test',
+    secretAccessKey: 'test',
+    endpoint: 'https://test.r2.cloudflarestorage.com',
+    bucket: 'aikami-catalog',
+    originUrl: ORIGIN_URL,
+  });
+
+  test('a successful publish writes a valid versioned release pointer', async () => {
+    const report = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.releaseWritten).toBe(true);
+
+    const raw = client.objects.get('index/v1/release.json');
+    expect(raw).toBeDefined();
+    const parsed = JSON.parse(Buffer.from(raw?.body ?? new Uint8Array()).toString('utf8'));
+    expect(parsed.schemaVersion).toBe('catalog.release.v1');
+    // Pins the exact shard revisions of this release.
+    expect(parsed.shards.length).toBeGreaterThanOrEqual(1);
+    for (const shard of parsed.shards) {
+      expect(shard.key).toMatch(/^index\/v1\/.+\.json$/);
+      expect(shard.hash).toMatch(/^[a-f0-9]{64}$/);
+    }
+    // Pins the required seed dependencies for offline install.
+    expect(parsed.dependencies.length).toBe(6);
+    // The pointer is an immutable, resolvable document.
+    expect(parsed.rootKey).toBe('index/v1/catalog.json');
+  });
+
+  test('a shard failure never advances or clobbers an existing release pointer', async () => {
+    // First, publish a complete release (pointer written).
+    const first = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
+    expect(first.releaseWritten).toBe(true);
+    const pointerBefore = client.objects.get('index/v1/release.json');
+    const pointerBodyBefore = pointerBefore ? Buffer.from(pointerBefore.body).toString('utf8') : '';
+
+    // Now inject a shard failure on a fresh run against the same bucket.
+    client.failOnKey = 'index/v1/lpc';
+    const failed = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
+    expect(failed.ok).toBe(false);
+    expect(failed.releaseWritten).toBe(false);
+    // The release pointer was NOT advanced — the previous complete release
+    // stays readable (never mixed revisions).
+    const pointerAfter = client.objects.get('index/v1/release.json');
+    expect(pointerAfter).toBeDefined();
+    const pointerBodyAfter = pointerAfter ? Buffer.from(pointerAfter.body).toString('utf8') : '';
+    expect(pointerBodyAfter).toBe(pointerBodyBefore);
   });
 });

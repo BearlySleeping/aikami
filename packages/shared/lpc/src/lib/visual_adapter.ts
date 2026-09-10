@@ -15,6 +15,7 @@
 //
 // Contract: C-496
 
+import type { CompleteSpriteDefinition } from '@aikami/schemas';
 import {
   FRAMES_PER_STATE,
   getLpcStateRow,
@@ -108,7 +109,7 @@ export type CompileLpcSpriteOptions = {
  */
 export const compileLpcSpriteToVisualDefinition = (
   options: CompileLpcSpriteOptions,
-): CompleteSpriteDefinitionShape => {
+): CompleteSpriteDefinition => {
   const {
     assetId,
     geometry,
@@ -259,38 +260,6 @@ const makeFrame = (
 // internals; the returned value conforms to VisualDefinitionSchema).
 // ---------------------------------------------------------------------------
 
-type CompleteSpriteDefinitionShape = {
-  kind: 'complete_sprite';
-  identity: {
-    schemaVersion: 'visual.definition.1';
-    id: string;
-    revision: string;
-  };
-  images: readonly VisualImageShape[];
-  frames: readonly VisualFrameShape[];
-  clips: readonly VisualClipShape[];
-  presentation: {
-    pixelDensity: number;
-    sampling: 'nearest' | 'linear';
-    colorOperation: 'none' | 'multiply_tint';
-  };
-  provenance: {
-    source: string;
-    licenses: readonly string[];
-    generator?: string;
-  };
-  defaultClip: string;
-};
-
-type VisualImageShape = {
-  id: string;
-  artifactRef: string;
-  width: number;
-  height: number;
-  colorEncoding: 'rgba' | 'palette_indexed';
-  alpha: boolean;
-};
-
 type VisualFrameShape = {
   id: string;
   imageId: string;
@@ -313,7 +282,7 @@ type VisualClipFrameShape = {
 
 type VisualClipShape = {
   name: string;
-  frames: readonly VisualClipFrameShape[];
+  frames: VisualClipFrameShape[];
   loop: boolean;
   fallback?: string;
 };

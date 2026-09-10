@@ -11,6 +11,7 @@ export * from './lib/catalog/catalog_index.ts';
 export * from './lib/catalog/catalog_stats.ts';
 export * from './lib/catalog/pack.ts';
 export * from './lib/catalog/pack_version.ts';
+export * from './lib/catalog/release_lock.ts';
 export * from './lib/common/fields.ts';
 export * from './lib/common/position.ts';
 export * from './lib/common/preference.ts';

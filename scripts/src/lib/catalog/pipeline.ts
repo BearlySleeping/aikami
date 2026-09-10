@@ -16,9 +16,10 @@
 // A non-zero failure count exits non-zero (AC-1). The run reports
 // uploaded/skipped/failed counts, bytes transferred, and elapsed time.
 
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CatalogIndexRootSchema } from '@aikami/schemas';
+import { CatalogIndexRootSchema, ReleasePointerSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { type CatalogEntry, loadCatalogEntries } from './catalog_entries.ts';
 import {
@@ -73,6 +74,8 @@ export type CatalogPublishReport = {
   shardKeys: readonly string[];
   /** Seed/metadata publish stats (C-496 AC-4: seed failures block the release). */
   seed: { uploaded: number; failed: number };
+  /** Whether the versioned release pointer was written this run (AC-4). */
+  releaseWritten: boolean;
   elapsedMs: number;
 };
 
@@ -90,6 +93,21 @@ export type SeedPublishReport = {
   uploaded: number;
   failed: number;
 };
+
+/**
+ * Key of the versioned release pointer document (C-496 AC-4).
+ *
+ * Written atomically only after every required object, shard, seed file and
+ * the root index are confirmed uploaded; the previous complete release stays
+ * readable at this key until then.
+ */
+const RELEASE_POINTER_KEY = 'index/v1/release.json';
+
+/**
+ * SHA-256 hex digest of a UTF-8 string.
+ */
+const sha256Hex = (value: string): string =>
+  createHash('sha256').update(value, 'utf8').digest('hex');
 
 /**
  * Publish the seed/metadata files (mutable, not content-addressed) so the
@@ -208,6 +226,7 @@ export const runCatalogPublish = async (
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       seed: { uploaded: 0, failed: 0 },
+      releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -247,6 +266,7 @@ export const runCatalogPublish = async (
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       seed: { uploaded: 0, failed: 0 },
+      releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -300,6 +320,7 @@ export const runCatalogPublish = async (
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       seed: { uploaded: 0, failed: 0 },
+      releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -334,16 +355,54 @@ export const runCatalogPublish = async (
   // Only advance the release pointer (root) when every shard it references
   // is confirmed uploaded — never a root pointing at missing shards. A shard
   // failure leaves the previous complete release readable (C-496 AC-4).
+  let releaseWritten = false;
   if (failedIndexKeys.length === 0) {
     await putIndexObject(ROOT_INDEX_KEY, rootJson);
+
+    // Seed failures block the release too: a missing seed file means offline
+    // boot/credits data is incomplete, so the publish must not report ok.
+    const seedOk = seedReport.failed === 0;
+    const okSoFar = uploadReport.failed === 0 && failedIndexKeys.length === 0 && seedOk;
+
+    if (okSoFar && failedIndexKeys.length === 0) {
+      // Write the versioned release pointer LAST, pinning the exact root,
+      // shard and dependency revisions of this complete release. Writing it
+      // here (after every required object is confirmed) means readers fetch
+      // either the old complete release or the new complete release, never a
+      // mixture. On any failure the pointer is left untouched (AC-4).
+      const dependencies = SEED_FILES.map((filename) => {
+        const body = readFileSync(join(gameDataDir, filename));
+        return {
+          key: `${SEED_KEY_PREFIX}${filename}`,
+          hash: createHash('sha256').update(body).digest('hex'),
+        };
+      });
+      const releasePointer = {
+        schemaVersion: 'catalog.release.v1',
+        releaseId: new Date().toISOString(),
+        rootKey: ROOT_INDEX_KEY,
+        rootHash: sha256Hex(rootJson),
+        shards: shards.map((shard) => ({
+          category: shard.id,
+          key: shard.key,
+          hash: sha256Hex(shard.json),
+        })),
+        dependencies,
+        publishedAt: new Date().toISOString(),
+      };
+      if (Value.Check(ReleasePointerSchema, releasePointer)) {
+        await putIndexObject(RELEASE_POINTER_KEY, JSON.stringify(releasePointer, null, 2));
+        releaseWritten = failedIndexKeys.length === 0;
+      } else {
+        console.error('  ⛔ Generated release pointer failed validation — release NOT advanced.');
+      }
+    }
   } else {
     console.error(
       `  ⛔ ${failedIndexKeys.length} shard(s) failed — release pointer NOT advanced (previous release preserved).`,
     );
   }
 
-  // Seed failures block the release too: a missing seed file means offline
-  // boot/credits data is incomplete, so the publish must not report ok.
   const ok = uploadReport.failed === 0 && failedIndexKeys.length === 0 && seedReport.failed === 0;
 
   const elapsedMs = Date.now() - startedAt;
@@ -383,6 +442,7 @@ export const runCatalogPublish = async (
     rootKey: ROOT_INDEX_KEY,
     shardKeys: shards.map((shard) => shard.key),
     seed: seedReport,
+    releaseWritten,
     elapsedMs,
   };
 };
