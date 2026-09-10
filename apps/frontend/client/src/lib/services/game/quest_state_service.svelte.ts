@@ -29,7 +29,12 @@ import type {
   QuestProgress,
 } from '@aikami/types';
 import { campaignService } from '$services';
-import { getTruthVariant, resolveEvidenceById } from './dramatic_structure_service';
+import {
+  getTruthVariant,
+  getTruthVariants,
+  resolveEvidence,
+  resolveEvidenceById,
+} from './dramatic_structure_service';
 import { inventoryService } from './inventory_service.svelte';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { partyRosterService } from './party_roster_service.svelte.ts';
@@ -369,7 +374,7 @@ class QuestStateService
     if (campaignId && campaignService.activeCampaign?.id !== campaignId) {
       sampledTruthId = undefined;
     }
-    const variants = this._contentPackLoader.manifest.truthVariants ?? [];
+    const variants = getTruthVariants(this._contentPackLoader.manifest);
     if (variants.length === 0) {
       return [];
     }
@@ -377,9 +382,10 @@ class QuestStateService
     if (!truth) {
       return [];
     }
-    return (this._contentPackLoader.manifest.evidence ?? [])
-      .filter((e) => e.supportsTruthId === truth.id)
-      .map((e) => ({ id: e.id, label: e.label }));
+    return resolveEvidence(this._contentPackLoader.manifest, sampledTruthId).map((e) => ({
+      id: e.id,
+      label: e.label,
+    }));
   }
 
   /** @inheritdoc */

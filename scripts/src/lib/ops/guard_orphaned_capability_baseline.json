@@ -780,5 +780,9 @@
       "MemoryRetrievalServiceInterface",
       "MemoryRetrievalServiceOptions"
     ]
+  },
+  "apps/frontend/client/src/lib/services/game/dramatic_structure_service.ts": {
+    "orphaned": ["resolveAccounts"],
+    "_comment": "C-495 AC-1 account-resolution helper. Shipped with test coverage only: the dialogue prose that surfaces conflicting accounts to the player is placeholder (maintainer-authored per Architecture Directives), so there is no production caller yet. getTruthVariants/resolveEvidence/resolveEvidenceById/sampleTruthVariant/getTruthVariant are consumed by quest_state_service and game_boot_service."
   }
 }
