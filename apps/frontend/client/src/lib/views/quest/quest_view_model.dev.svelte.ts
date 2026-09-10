@@ -5,10 +5,10 @@
 // Updated C-339: Added branching, hidden, optional, timed objective mocks
 
 import type { QuestData, QuestJournalEntry } from '@aikami/frontend/engine/sim';
-import { BaseViewModel, type BaseViewModelOptions } from '@aikami/frontend/services';
+import { BaseViewModel } from '@aikami/frontend/services';
 import { questStateService, worldStateService } from '$services';
 import {
-  getQuestViewModel,
+  createQuestViewModel,
   type QuestViewModelInterface,
   type QuestViewModelOptions,
 } from './quest_view_model.svelte.ts';
@@ -127,10 +127,13 @@ const MOCK_JOURNAL_ENTRIES: QuestJournalEntry[] = [
 ];
 
 class QuestDevViewModel
-  extends BaseViewModel<BaseViewModelOptions>
+  extends BaseViewModel<QuestViewModelOptions>
   implements QuestViewModelInterface
 {
-  private _inner = getQuestViewModel({ className: 'QuestDevInner' });
+  private _inner = createQuestViewModel({
+    className: 'QuestDevInner',
+    questState: questStateService,
+  });
 
   async initialize(): Promise<void> {
     this.injectMockQuests();
@@ -204,5 +207,9 @@ class QuestDevViewModel
   }
 }
 
-export const getQuestDevViewModel = (options: QuestViewModelOptions): QuestViewModelInterface =>
-  QuestDevViewModel.create(options) as unknown as QuestViewModelInterface; // guard-ignore lint/type-safety/casting: dev VM create() override pattern for QuestViewModel
+export const getQuestDevViewModel = (
+  options: Omit<QuestViewModelOptions, 'questState'>,
+): QuestViewModelInterface => {
+  const devOptions: QuestViewModelOptions = { ...options, questState: questStateService };
+  return QuestDevViewModel.create(devOptions) as unknown as QuestViewModelInterface; // guard-ignore lint/type-safety/casting: dev VM create() override pattern for QuestViewModel
+};

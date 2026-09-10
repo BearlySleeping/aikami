@@ -11,7 +11,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { CyoaChoice } from '@aikami/types';
 
 // ── Types ────────────────────────────────────────────────────────────────
