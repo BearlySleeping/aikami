@@ -21,7 +21,12 @@ const EXCLUDED_DIR_NAMES = new Set([
 export const isExcludedDir = (options: { name: string; relPath: string }): boolean =>
   EXCLUDED_DIR_NAMES.has(options.name) ||
   options.name.includes('.cache') ||
-  options.relPath === '.pi/git';
+  options.relPath === '.pi/git' ||
+  // `.pi/workspaces/` holds local nested git worktrees — full repo copies used
+  // by agents. They are gitignored, absent on CI, and must never be scanned as
+  // project source.
+  options.relPath === '.pi/workspaces' ||
+  options.relPath.startsWith('.pi/workspaces/');
 
 /** Computes the stable non-cryptographic hash used in violation identities. */
 export const simpleHash = (input: string): string => {

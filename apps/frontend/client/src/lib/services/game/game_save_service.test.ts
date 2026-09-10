@@ -4,14 +4,20 @@
 // Contract: C-334 Make Local Save, Continue, Autosave, and Recovery Reliable
 // Tests AC-1 (v2 envelope), AC-2 (manual save with metadata), AC-4 (corruption detection)
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 import type { EngineBridge } from '@aikami/frontend/engine';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
-// test_preload.ts provides a fake getLocalDatabase() — the in-memory tables
-// are reset on every module reload. We import the reset helper directly.
+// Real in-memory libSQL database with the production migrations applied, so
+// the save envelope is exercised against actual SQLite semantics.
 
-import { resetLocalDatabase } from '@aikami/frontend/storage';
+const fixture = await createRealLocalDatabase();
+
+mock.module('@aikami/frontend/storage', () => ({
+  getLocalDatabase: mock(async () => fixture.db),
+}));
+
 import type { NarrativeEventServiceInterface } from './narrative_event_service.svelte.ts';
 import type { ServiceSnapshot } from './serializable_service';
 
@@ -82,13 +88,17 @@ describe('GameSaveService (C-334)', () => {
   beforeEach(async () => {
     bridge = createMockBridge();
     resetMockBridge();
-    resetLocalDatabase();
+    await fixture.reset();
     ({ hydrateAllServices } = await import('./serializable_service'));
     ({ narrativeEventService } = await import('./narrative_event_service.svelte.ts'));
   });
 
   afterEach(() => {
-    // No cleanup needed — fake DB is reset on each test
+    // No cleanup needed — the real database is reset on each test
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   // ── Initialization ─────────────────────────────────────────────────

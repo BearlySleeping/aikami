@@ -45,6 +45,7 @@ export default defineConfig({
       { find: /^@aikami\/schemas$/, replacement: shared('schemas/src/index.ts') },
       { find: /^@aikami\/constants$/, replacement: shared('constants/src/index.ts') },
       { find: /^\$logger$/, replacement: shared('logger/src/lib/logger_browser.ts') },
+      { find: /^\$types$/, replacement: clientSource('lib/types/index.ts') },
       { find: /^\$lib\/(.*)$/, replacement: clientSource('lib/$1') },
     ],
   },

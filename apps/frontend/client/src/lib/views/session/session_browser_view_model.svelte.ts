@@ -3,6 +3,12 @@
 // ViewModel for the Session Browser — lists past sessions with checkpoints,
 // allows read-only viewing, continuing, and forking from checkpoints.
 //
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/session_browser_fixtures.ts)
+// instead of mocking the global service registry. Production wiring lives in
+// ./session_browser_composition.ts.
+//
 // Contract: C-240 Session Management
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
@@ -10,10 +16,34 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-  routerService,
-} from '@aikami/frontend/services';
-import { sessionService } from '$services/game/session_service.svelte';
+} from '@aikami/frontend/services/base';
 import type { GameSession, SessionCheckpoint } from '$types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/**
+ * The session/checkpoint operations and observable state the browser reads.
+ * `sessions` / `checkpoints` are read reactively, so an injected capability may
+ * expose them as Svelte `$state`.
+ */
+export type SessionBrowserCapabilities = {
+  readonly sessions: GameSession[];
+  readonly checkpoints: SessionCheckpoint[];
+  loadSessions(options: { gameId: string }): Promise<void>;
+  listCheckpoints(options: { campaignId: string }): Promise<void>;
+  forkFromCheckpoint(options: {
+    checkpointId: string;
+    gameId: string;
+    campaignId: string;
+  }): Promise<void>;
+};
+
+/** The navigation capability the browser uses to continue play. */
+export type SessionBrowserRouterCapability = {
+  navigateToApp(): Promise<void>;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
 
 export type SessionBrowserViewModelInterface = BaseViewModelInterface & {
   /** All sessions for the current game, sorted by sessionNumber descending. */
@@ -58,12 +88,21 @@ export type SessionBrowserViewModelOptions = BaseViewModelOptions & {
   gameId?: string;
   /** Current campaign ID for checkpoint operations. */
   campaignId?: string;
+  /** Session/checkpoint operations and observable state. */
+  session: SessionBrowserCapabilities;
+  /** Navigation capability for continuing play. */
+  router: SessionBrowserRouterCapability;
 };
+
+// ── Implementation ──────────────────────────────────────────────────────
 
 class SessionBrowserViewModel
   extends BaseViewModel<SessionBrowserViewModelOptions>
   implements SessionBrowserViewModelInterface
 {
+  private readonly _session: SessionBrowserCapabilities;
+  private readonly _router: SessionBrowserRouterCapability;
+
   selectedSession = $state<GameSession | null>(null);
   showReadOnly = $state(false);
   isLoadingSessions = $state(false);
@@ -72,12 +111,18 @@ class SessionBrowserViewModel
   forkCheckpoint = $state<SessionCheckpoint | null>(null);
   forkError = $state<string | null>(null);
 
+  constructor(options: SessionBrowserViewModelOptions) {
+    super(options);
+    this._session = options.session;
+    this._router = options.router;
+  }
+
   get sessions(): GameSession[] {
-    return sessionService.sessions;
+    return this._session.sessions;
   }
 
   get checkpoints(): SessionCheckpoint[] {
-    return sessionService.checkpoints;
+    return this._session.checkpoints;
   }
 
   get isLoading(): boolean {
@@ -88,7 +133,7 @@ class SessionBrowserViewModel
   async loadSessions(options: { gameId: string }): Promise<void> {
     this.isLoadingSessions = true;
     try {
-      await sessionService.loadSessions({ gameId: options.gameId });
+      await this._session.loadSessions({ gameId: options.gameId });
     } finally {
       this.isLoadingSessions = false;
     }
@@ -96,7 +141,7 @@ class SessionBrowserViewModel
 
   /** @inheritdoc */
   async loadCheckpoints(options: { campaignId: string }): Promise<void> {
-    await sessionService.listCheckpoints({ campaignId: options.campaignId });
+    await this._session.listCheckpoints({ campaignId: options.campaignId });
   }
 
   /** @inheritdoc */
@@ -113,9 +158,8 @@ class SessionBrowserViewModel
 
   /** @inheritdoc */
   async continueFromSession(_session: GameSession): Promise<void> {
-    // Navigate to the game — the boot pipeline will load
-    // the last save state
-    await routerService.navigateToApp();
+    // Navigate to the game — the boot pipeline will load the last save state.
+    await this._router.navigateToApp();
   }
 
   // ── C-344: Fork from checkpoint ─────────────────────────────────────
@@ -152,7 +196,7 @@ class SessionBrowserViewModel
     this.isForking = true;
 
     try {
-      await sessionService.forkFromCheckpoint({
+      await this._session.forkFromCheckpoint({
         checkpointId: checkpoint.id,
         gameId,
         campaignId,
@@ -169,6 +213,13 @@ class SessionBrowserViewModel
   }
 }
 
-export const getSessionBrowserViewModel = (
+/**
+ * Builds a session-browser ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getSessionBrowserViewModel` in
+ * ./session_browser_composition.ts.
+ */
+export const createSessionBrowserViewModel = (
   options: SessionBrowserViewModelOptions,
 ): SessionBrowserViewModelInterface => SessionBrowserViewModel.create(options);

@@ -1,9 +1,16 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { GameOverlayType, OverlayStackEntry } from '$types';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
 // $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
+
+const fixture = await createRealLocalDatabase();
+
+mock.module('@aikami/frontend/storage', () => ({
+  getLocalDatabase: mock(async () => fixture.db),
+}));
 
 // The overlay service reads document.activeElement / getElementById when
 // pushing overlays — provide a minimal DOM mock (bun has no jsdom).
@@ -21,6 +28,7 @@ describe('GameOverlayService', () => {
   let service: import('./game_overlay_service.svelte.ts').GameOverlayServiceInterface;
 
   beforeEach(async () => {
+    await fixture.reset();
     const mod = await import('./game_overlay_service.svelte.ts');
     service = mod.gameOverlayService;
 
@@ -51,6 +59,10 @@ describe('GameOverlayService', () => {
       onVendorClose: mock(() => {}),
       onCameraZoomUpdate: mock(() => {}),
     });
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   test('should export singleton instance', () => {
