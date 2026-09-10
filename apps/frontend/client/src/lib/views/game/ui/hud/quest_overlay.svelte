@@ -7,10 +7,8 @@
 // Settings > Gameplay or hidden via the ✕ button.
 
 import { BaseViewModelContainer } from '$components';
-import {
-  getQuestOverlayViewModel,
-  type QuestOverlayViewModelInterface,
-} from './quest_overlay_view_model.svelte';
+import { getQuestOverlayViewModel } from './quest_overlay_composition.ts';
+import type { QuestOverlayViewModelInterface } from './quest_overlay_view_model.svelte';
 
 type Props = {
   viewModel?: QuestOverlayViewModelInterface;
