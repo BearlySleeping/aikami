@@ -61,10 +61,8 @@ import {
   getTalkToPartyViewModel,
   type TalkToPartyViewModelInterface,
 } from './overlays/talk_to_party/talk_to_party_view_model.svelte';
-import {
-  getQuestTrackerViewModel,
-  type QuestTrackerViewModelInterface,
-} from './quest_tracker_view_model.svelte';
+import { getQuestTrackerViewModel } from './quest_tracker_composition.ts';
+import type { QuestTrackerViewModelInterface } from './quest_tracker_view_model.svelte';
 
 const LOCAL_TEXT_PROVIDERS = new Set(['ollama', 'llamacpp', 'ooba']);
 
