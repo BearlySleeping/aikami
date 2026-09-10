@@ -1,7 +1,12 @@
 // apps/frontend/client/src/lib/views/gm/session_summary_panel_view_model.svelte.ts
 //
-// End Session flow ViewModel. Triggers session summarization, shows a
-// preview panel, and exposes resume point for game save service.
+// End Session flow ViewModel. Triggers session summarization, shows a preview
+// panel, and exposes the resume point for the game save service.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/session_summary_fixtures.ts).
+// Production wiring lives in ./session_summary_panel_composition.ts.
 //
 // Contract: C-235 GM Narrative Director
 
@@ -9,17 +14,24 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { sessionSummaryService } from '$services';
+} from '@aikami/frontend/services/base';
 import type { SessionSummary } from '$types';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The summarization operations the panel performs. */
+export type SessionSummaryCapabilities = {
+  generateSummary(playtimeMinutes: number): Promise<SessionSummary>;
+  clearSummary(): void;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
 
 export type SessionSummaryPanelViewModelOptions = BaseViewModelOptions & {
   /** Total playtime in minutes for this session. */
   playtimeMinutes?: number;
+  /** Summarization capability. */
+  summary: SessionSummaryCapabilities;
 };
 
 export type SessionSummaryPanelViewModelInterface = BaseViewModelInterface & {
@@ -45,26 +57,27 @@ export type SessionSummaryPanelViewModelInterface = BaseViewModelInterface & {
   dismissSummary(): void;
 };
 
-// ---------------------------------------------------------------------------
-// Implementation
-// ---------------------------------------------------------------------------
+// ── Implementation ──────────────────────────────────────────────────────
 
 class SessionSummaryPanelViewModel
   extends BaseViewModel<SessionSummaryPanelViewModelOptions>
   implements SessionSummaryPanelViewModelInterface
 {
-  private _summary = $state<SessionSummary | null>(null);
+  private readonly _summary: SessionSummaryCapabilities;
+  private readonly _playtimeMinutes: number;
+
+  private _summaryValue = $state<SessionSummary | null>(null);
   private _isGenerating = $state(false);
   private _summaryError = $state<string | null>(null);
-  private readonly _playtimeMinutes: number;
 
   constructor(options: SessionSummaryPanelViewModelOptions) {
     super(options);
+    this._summary = options.summary;
     this._playtimeMinutes = options.playtimeMinutes ?? 0;
   }
 
   get summary(): SessionSummary | null {
-    return this._summary;
+    return this._summaryValue;
   }
 
   get isGenerating(): boolean {
@@ -72,7 +85,7 @@ class SessionSummaryPanelViewModel
   }
 
   get isReady(): boolean {
-    return this._summary !== null && !this._isGenerating;
+    return this._summaryValue !== null && !this._isGenerating;
   }
 
   get summaryError(): string | null {
@@ -89,8 +102,8 @@ class SessionSummaryPanelViewModel
     this._summaryError = null;
 
     try {
-      this._summary = await sessionSummaryService.generateSummary(this._playtimeMinutes);
-      this.debug('endSession', { summaryId: this._summary.id });
+      this._summaryValue = await this._summary.generateSummary(this._playtimeMinutes);
+      this.debug('endSession', { summaryId: this._summaryValue.id });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this._summaryError = message;
@@ -102,22 +115,19 @@ class SessionSummaryPanelViewModel
 
   /** @inheritdoc */
   dismissSummary(): void {
-    this._summary = null;
+    this._summaryValue = null;
     this._summaryError = null;
-    sessionSummaryService.clearSummary();
-  }
-
-  /** @inheritdoc */
-  async initialize(): Promise<void> {
-    await super.initialize();
+    this._summary.clearSummary();
   }
 }
 
-export { SessionSummaryPanelViewModel };
-
 /**
- * Factory function returning an interface, never the class directly.
+ * Builds a session-summary panel ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getSessionSummaryPanelViewModel` in
+ * ./session_summary_panel_composition.ts.
  */
-export const getSessionSummaryPanelViewModel = (
+export const createSessionSummaryPanelViewModel = (
   options: SessionSummaryPanelViewModelOptions,
 ): SessionSummaryPanelViewModelInterface => SessionSummaryPanelViewModel.create(options);

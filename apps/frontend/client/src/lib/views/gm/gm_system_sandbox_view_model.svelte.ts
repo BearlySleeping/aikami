@@ -19,10 +19,8 @@ import {
   getPushStoryButtonViewModel,
   type PushStoryButtonViewModelInterface,
 } from './push_story_button_view_model.svelte.ts';
-import {
-  getSessionSummaryPanelViewModel,
-  type SessionSummaryPanelViewModelInterface,
-} from './session_summary_panel_view_model.svelte.ts';
+import { getSessionSummaryPanelViewModel } from './session_summary_panel_composition.ts';
+import type { SessionSummaryPanelViewModelInterface } from './session_summary_panel_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types
