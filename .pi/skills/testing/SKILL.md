@@ -135,7 +135,7 @@ before the real module is evaluated.
 | Issue | Details |
 |-------|---------|
 | `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. The global barrel mocks in `test_preload.ts` mitigate most cases. |
-| `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Pure Bun tests must treat `$state` fields as plain values. For real reactivity tests, use the compiled Playwright lane (see below). |
+| `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Pure Bun tests must treat `$state` fields as plain values. For real reactivity, use the Vitest Browser Mode lane (preferred for ViewModels/components) or the compiled Playwright lane. |
 | PixiJS / WebGPU | Not available in Bun. Tests that touch the game engine are skipped in CI (handled by E2E). |
 
 ### Compiled Component / Lifecycle Testing (C-477)
@@ -170,6 +170,31 @@ components through the dev sandbox.
 2. Create a View that renders the ViewModel's state
 3. Host the View in a dev sandbox route `(dev)/dev/<feature>/`
 4. Write Playwright E2E tests that navigate to the sandbox and verify DOM updates
+
+### Vitest Browser Mode (real-Svelte unit lane)
+
+The preferred lane for ViewModel/component reactivity: instead of the Bun
+preload's identity runes, Vitest compiles the `.svelte.ts`/`.svelte` with the
+real Svelte plugin and runs it in Chromium via Playwright. No preload, no
+global module mocks, no application boot or dev route.
+
+```bash
+# from apps/frontend/client
+bun run test:browser          # vitest run --config vitest.config.ts
+bun moon run client:test-browser
+```
+
+- Config: `apps/frontend/client/vitest.config.ts` (standalone; only the aliases
+  a component/ViewModel test needs).
+- Tests: `apps/frontend/client/src/browser_tests/**/*.browser.test.ts` —
+  deliberately outside `src/lib` so `bun test src/lib` never collects them.
+- Reference pilot: `reactive_lifecycle.browser.test.ts` asserts real
+  `$state`/`$derived` updates and `registerEffectRoot` cleanup on `dispose()`.
+- Use `flushSync()` from `svelte` after mutating state to force effects.
+
+**Status**: pilot. `client:test-browser` is `runInCI: false` until the CI
+client job installs Playwright browsers. The compiled E2E lane above remains
+the integration-level coverage (mount/unmount, DOM, full navigation).
 
 ---
 

@@ -149,6 +149,20 @@ tasks:
       runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
+  # Real-Svelte pilot lane (Vitest Browser Mode + Playwright chromium). Not in
+  # the default CI graph yet: it needs a Playwright browser install step, which
+  # the CI client job does not perform. Run locally with `bun run test:browser`.
+  test-browser:
+    command: 'bun run test:browser'
+    inputs:
+      - 'src/browser_tests/**/*'
+      - 'vitest.config.ts'
+      - 'src/lib/views/reactive_lifecycle/**/*'
+      - '@group(configs)'
+    options:
+      cache: true
+      timeout: 180
+      runInCI: false
   tauri-dev:
     command: 'bun run tauri:dev'
     preset: 'server'
