@@ -3,13 +3,13 @@
 
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
+import { contractPortOffset } from '@aikami/constants';
 // C-474: role_profiles.ts lives under .pi/extensions/lib because Pi loads
 // extensions there directly (no path aliases under Pi's Node runtime — see
 // the relative-import note on session.ts). It has no Pi-specific imports, so
 // it loads fine under Bun too; this is the one place the live pipeline
 // resolves a role's actual tool surface instead of loading everything.
 import { resolveEnabledExtensions } from '../../../../../.pi/extensions/lib/role_profiles.ts';
-import { contractPortOffset } from '../../../../../packages/shared/constants/src/index.ts';
 import { resolveAikamiMode } from '../../env/mode';
 import { getScriptsEnv } from '../../env/scripts_env';
 import { findBash, posixQuote } from '../../env/which';

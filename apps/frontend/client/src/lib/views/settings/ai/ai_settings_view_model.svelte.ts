@@ -7,6 +7,7 @@
 import {
   type GenParamPreset,
   IMAGE_PROVIDERS,
+  providerNeedsKey,
   TEXT_PROVIDERS,
   VOICE_PROVIDERS,
 } from '@aikami/constants';
@@ -31,10 +32,10 @@ import {
   type FetchedModel,
   fetchModelsFromProvider,
   fetchWithCredentialPolicy,
-  getOllamaRuntimeEndpoints,
   hasVerificationStrategy,
   imageGenerationService,
   PROVIDER_MODEL_FETCH,
+  resolveChatTestRequest,
   styleProfileService,
   ttsService,
   verifyConnection,
@@ -1634,33 +1635,6 @@ export class AiSettingsViewModel
    */
   async testDraftModel(): Promise<void> {
     const reg = this.draft.registryId;
-    const config = PROVIDER_MODEL_FETCH[reg];
-    const draftBaseUrl = this.draft.baseUrl?.trim().replace(/\/+$/, '');
-    // C-389: Ollama's endpoints are runtime-resolved — never probe the empty
-    // static registry entry. The draft's own URL wins when the user typed one.
-    let chatTestUrl: string | undefined;
-    if (reg === 'ollama') {
-      chatTestUrl = draftBaseUrl
-        ? `${draftBaseUrl}/api/chat`
-        : getOllamaRuntimeEndpoints().chatTestUrl;
-    } else {
-      chatTestUrl = config?.chatTestUrl;
-    }
-
-    this.debug('testDraftModel', { reg, hasConfig: !!config, chatTestUrl });
-
-    if (!chatTestUrl) {
-      this.draftModelTestResult = {
-        ok: false,
-        latencyMs: 0,
-        error:
-          reg === 'ollama'
-            ? 'No local text engine configured (text.url missing from config.json)'
-            : 'Model testing not supported for this provider',
-      };
-      return;
-    }
-
     const model = this.draft.model?.trim();
     if (!model) {
       this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No model selected' };
@@ -1669,8 +1643,26 @@ export class AiSettingsViewModel
 
     const provider = this._draftAsProvider();
     const apiKey = provider.credential;
-    if (config?.auth.location === 'header' && config.auth.name && !apiKey) {
+    if (providerNeedsKey(reg) && !apiKey) {
       this.draftModelTestResult = { ok: false, latencyMs: 0, error: 'No API key configured' };
+      return;
+    }
+
+    const request = resolveChatTestRequest({
+      apiKey,
+      baseUrl: this.draft.baseUrl,
+      model,
+      registryId: reg,
+    });
+
+    this.debug('testDraftModel', { reg, hasRequest: !!request, url: request?.url });
+
+    if (!request) {
+      this.draftModelTestResult = {
+        ok: false,
+        latencyMs: 0,
+        error: this._modelTestUnavailableError(reg),
+      };
       return;
     }
 
@@ -1679,40 +1671,17 @@ export class AiSettingsViewModel
 
     const startMs = performance.now();
     try {
-      const headers: Record<string, string> = { ...(config?.extraHeaders ?? {}) };
-      if (config?.auth.location === 'header' && apiKey && config.auth.name) {
-        const prefix = config.auth.prefix ?? '';
-        headers[config.auth.name] = `${prefix}${apiKey}`;
-      }
-
-      const body = config?.chatTestOpenAiCompat
-        ? JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: 'hi' }],
-            // biome-ignore lint/style/useNamingConvention: API contract field name
-            max_tokens: 5,
-          })
-        : JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: 'hi' }],
-            stream: false,
-            options: {
-              // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-              num_predict: 5,
-            },
-          });
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
 
       try {
         const response = await fetchWithCredentialPolicy({
-          url: chatTestUrl,
+          url: request.url,
           hasCredential: Boolean(apiKey),
-          approvedOrigins: config?.approvedOrigins,
+          approvedOrigins: PROVIDER_MODEL_FETCH[reg]?.approvedOrigins,
           init: {
-            body,
-            headers: { 'Content-Type': 'application/json', ...headers },
+            body: request.body,
+            headers: { 'Content-Type': 'application/json', ...request.headers },
             method: 'POST',
             signal: controller.signal,
           },
@@ -1754,6 +1723,21 @@ export class AiSettingsViewModel
     } finally {
       this.isTestingDraftModel = false;
     }
+  }
+
+  /**
+   * Explains why a model test has no request to send. The message names the
+   * actual gap — a missing endpoint — rather than implying the provider is
+   * unsupported, which is only true for ids absent from the registry.
+   */
+  private _modelTestUnavailableError(registryId: string): string {
+    if (!PROVIDER_MODEL_FETCH[registryId]) {
+      return 'Model testing not supported for this provider';
+    }
+    if (registryId === 'ollama') {
+      return 'No local text engine configured (text.url missing from config.json)';
+    }
+    return 'No endpoint configured — set a base URL';
   }
 
   /**
@@ -1808,24 +1792,11 @@ export class AiSettingsViewModel
   async fetchModels(): Promise<void> {
     this.debug('fetchModels');
     const reg = this.draft.registryId;
-    const baseConfig = PROVIDER_MODEL_FETCH[reg];
-    if (!baseConfig) {
+    const config = PROVIDER_MODEL_FETCH[reg];
+    if (!config) {
       return;
     }
-    // For a local provider (Ollama), the draft's own endpoint field is the
-    // intended account/address — two connections to two different local
-    // instances must not both resolve against a single global runtime URL.
-    // Falls back to the runtime-configured default only when the draft
-    // hasn't specified one, preserving today's zero-config behavior.
-    const draftBaseUrl = this.draft.baseUrl?.trim().replace(/\/+$/, '');
-    const config =
-      reg === 'ollama' && draftBaseUrl
-        ? {
-            ...baseConfig,
-            url: `${draftBaseUrl}/api/tags`,
-            chatTestUrl: `${draftBaseUrl}/api/chat`,
-          }
-        : baseConfig;
+
     const existing = this._findProviderByRegistry(reg);
     const apiKey = existing?.credential ?? this.draft.apiKey;
     this.isFetchingModels = true;
@@ -1834,6 +1805,7 @@ export class AiSettingsViewModel
       this._availableModels = await fetchModelsFromProvider({
         config,
         apiKey,
+        baseUrl: this.draft.baseUrl,
         timeoutMs: TEST_TIMEOUT_MS,
       });
       this.isModelDropdownOpen = true;

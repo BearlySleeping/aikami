@@ -53,20 +53,20 @@ import { Type } from 'typebox';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-import { commitContractContent } from '../../scripts/src/lib/agents/contract_pipeline/contract_sync';
-import { readManifest } from '../../scripts/src/lib/agents/contract_pipeline/manifest_store';
-import {
-  createWorkspaceGitReader,
-  deriveRunRepoRoot,
-  evaluatePublicationGate,
-  formatPublicationBlocks,
-  formatPublicationWarning,
-} from '../../scripts/src/lib/agents/contract_pipeline/publication_gate';
-import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
+import { PIPELINE_BASE_BRANCH } from '../../packages/shared/constants/src/index.ts';
+import { runPiScript } from './lib/bridge.ts';
 import { currentBranch, ensureGitHubRepo, resolvePrSelector, runGh } from './lib/gh.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 const DEFAULT_BASE = PIPELINE_BASE_BRANCH;
+
+/** Verdict shape returned by the `contract.publication.evaluate` bridge command. */
+type PublicationSummary = {
+  ok: boolean;
+  indeterminate: boolean;
+  refusal: string;
+  warning?: string;
+};
 
 type OrganizationProjectV2Response = {
   data: {
@@ -826,9 +826,9 @@ function formatCheckStatus(raw: string): string {
  * Returns empty outside a pipeline worker and whenever the gate cannot read
  * the workspace (a gate that cannot run must not become a wall).
  */
-const pipelinePublicationAssessment = (
+const pipelinePublicationAssessment = async (
   headBranch: string,
-): { refusal?: string; warning?: string } => {
+): Promise<{ refusal?: string; warning?: string }> => {
   const role = process.env.CONTRACT_PIPELINE_ROLE;
   const workspacePath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
   const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
@@ -836,11 +836,11 @@ const pipelinePublicationAssessment = (
     return {};
   }
 
-  let result: ReturnType<typeof evaluatePublicationGate>;
+  let result: PublicationSummary;
   try {
-    result = evaluatePublicationGate({
-      git: createWorkspaceGitReader(workspacePath),
-      manifest: readManifest({ runId, cwd: deriveRunRepoRoot() }),
+    result = await runPiScript<PublicationSummary>('contract.publication.evaluate', {
+      workspacePath,
+      runId,
       branch: headBranch,
     });
   } catch {
@@ -849,9 +849,9 @@ const pipelinePublicationAssessment = (
   }
 
   if (result.indeterminate || result.ok) {
-    return { warning: formatPublicationWarning(result) };
+    return { warning: result.warning };
   }
-  return { refusal: formatPublicationBlocks(result) };
+  return { refusal: result.refusal };
 };
 
 // ── Extension ───────────────────────────────────────────────────────────────
@@ -896,7 +896,7 @@ export default function (pi: ExtensionAPI) {
 
           // 🔴 Hard precondition inside a contract-pipeline worker — see
           // pipelinePublicationAssessment above. No-op everywhere else.
-          const assessment = pipelinePublicationAssessment(params.headBranch);
+          const assessment = await pipelinePublicationAssessment(params.headBranch);
           if (assessment.refusal) {
             return {
               content: [{ type: 'text', text: assessment.refusal }],
@@ -1042,7 +1042,11 @@ export default function (pi: ExtensionAPI) {
                         // so it is safe no matter what branch is checked out
                         // here (root checkout mid-refactor, a linked contract
                         // worktree, anything).
-                        const sync = commitContractContent({
+                        const sync = await runPiScript<{
+                          ok: boolean;
+                          committed: boolean;
+                          message: string;
+                        }>('contract.content.commit', {
                           repoRoot: cwd,
                           contractPath,
                           content: updated,

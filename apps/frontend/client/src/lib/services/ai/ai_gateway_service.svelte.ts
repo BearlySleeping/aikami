@@ -299,15 +299,16 @@ class AiGatewayService
   }
 
   /**
-   * Well-known chat base endpoint for cloud providers, derived from the
-   * provider registry's chatTestUrl (strips the /chat/completions suffix).
+   * Well-known chat base endpoint for cloud providers, read from the provider
+   * registry. A custom provider without its own URL falls back to the runtime
+   * text engine's OpenAI-compatible base.
    */
   private _getDefaultTextEndpoint(provider: string): string | undefined {
-    const config = PROVIDER_MODEL_FETCH[provider];
-    if (!config?.chatTestOpenAiCompat || !config.chatTestUrl) {
-      return undefined;
+    const configuredEndpoint = PROVIDER_MODEL_FETCH[provider]?.chatBaseUrl;
+    if (configuredEndpoint || provider !== 'custom') {
+      return configuredEndpoint;
     }
-    return config.chatTestUrl.replace(/\/chat\/completions$/, '');
+    return getOllamaRuntimeEndpoints().chatTestUrl?.replace(/\/api\/chat$/, '/v1');
   }
 
   /**

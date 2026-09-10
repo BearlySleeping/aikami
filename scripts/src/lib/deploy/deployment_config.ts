@@ -16,9 +16,8 @@
  *   infra               → Apply server-plane migrations against Cloudflare D1 (was database-migration)
  */
 
-import { D1_DATABASES, R2_BUCKETS } from '@aikami/constants';
-import { MODE_PROJECT_MAP, modes } from '../../../../packages/shared/constants/src/lib/project.ts';
-import type { AppId } from '../../../../packages/shared/types/src/index.ts';
+import { D1_DATABASES, MODE_PROJECT_MAP, modes, R2_BUCKETS } from '@aikami/constants';
+import type { AppId } from '@aikami/types';
 
 export const ALL_SERVICE_TYPES = [
   'cloudflare-worker',

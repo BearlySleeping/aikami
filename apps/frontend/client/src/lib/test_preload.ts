@@ -631,6 +631,8 @@ export const localServicesMockBase = () => ({
   fetchModelsFromProvider: _createCallableStub(),
   // C-466: credential-policy wrapper for model-fetch requests.
   fetchWithCredentialPolicy: _createCallableStub(),
+  // Model chat-test request resolution (provider_endpoints.ts).
+  resolveChatTestRequest: _createCallableStub(),
   choiceHistoryStore: _createServiceStub(),
   getExpressionAssetResolver: _createCallableStub(),
   sceneToMusicTags: _createCallableStub(),

@@ -37,12 +37,41 @@ const mockHasVerificationStrategy = mock(() => false);
 const mockProviderModelFetch: Record<string, unknown> = {
   openrouter: {
     auth: { location: 'header', name: 'Authorization', prefix: 'Bearer ' },
-    chatTestOpenAiCompat: true,
-    chatTestUrl: 'https://openrouter.ai/api/v1/chat/completions',
+    chatBaseUrl: 'https://openrouter.ai/api/v1',
     url: 'https://openrouter.ai/api/v1/models',
     parseResponse: (_json: unknown) => [],
   },
 };
+// Mirrors the real resolveChatTestRequest for the mocked registry, so
+// testDraftModel exercises the same URL/body shape without importing real
+// provider modules (which need build aliases unavailable under bun test).
+const mockResolveChatTestRequest = mock(
+  ({
+    model,
+    registryId,
+    apiKey,
+  }: {
+    model: string;
+    registryId: string;
+    apiKey?: string;
+  }): { url: string; headers: Record<string, string>; body: string } | undefined => {
+    const config = mockProviderModelFetch[registryId] as { chatBaseUrl?: string } | undefined;
+    if (!config?.chatBaseUrl) {
+      return undefined;
+    }
+    return {
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'hi' }],
+        // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+        max_tokens: 5,
+      }),
+      // biome-ignore lint/style/useNamingConvention: HTTP Authorization header name
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      url: `${config.chatBaseUrl}/chat/completions`,
+    };
+  },
+);
 const mockFetchWithCredentialPolicy = mock(async () => new Response('{}', { status: 200 }));
 
 const mockConfigService = {
@@ -162,6 +191,7 @@ mock.module('$services', () => ({
   PROVIDER_MODEL_FETCH: mockProviderModelFetch,
   fetchModelsFromProvider: mockFetchModelsFromProvider,
   fetchWithCredentialPolicy: mockFetchWithCredentialPolicy,
+  resolveChatTestRequest: mockResolveChatTestRequest,
   verifyConnection: mockVerifyConnection,
   hasVerificationStrategy: mockHasVerificationStrategy,
   ttsService: mockTtsService,

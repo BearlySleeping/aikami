@@ -27,9 +27,7 @@ import {
   OFFSETTABLE_PORTS,
   PORTS,
 } from '../../packages/shared/constants/src/lib/development_ports';
-import { optimizeImage } from '../../scripts/src/lib/ai/image_optimizer';
-import { resolveAikamiMode } from '../../scripts/src/lib/env/mode';
-import { which } from '../../scripts/src/lib/env/which';
+import { runPiScript } from './lib/bridge.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -45,10 +43,6 @@ type BrowserLock = typeof BROWSER_LOCK;
 let browserLockTail = Promise.resolve();
 
 // ── Helpers ───────────────────────────────────────────────────────────
-
-function getMode(): string {
-  return resolveAikamiMode();
-}
 
 function getRoot(): string {
   return process.env.AIKAMI_ROOT || process.cwd();
@@ -149,8 +143,8 @@ function getEmulatorPortOffset(): number {
   return Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
 }
 
-function getAppUrl(app: string): string {
-  const mode = getMode();
+async function getAppUrl(app: string): Promise<string> {
+  const mode = await runPiScript<string>('env.resolveMode', {});
   const offset = getEmulatorPortOffset();
   const modePorts = PORTS[mode as keyof typeof PORTS];
   if (modePorts && app in modePorts) {
@@ -182,9 +176,9 @@ async function isCdpAlive(): Promise<boolean> {
 }
 
 /** Find the chromium binary — prefer Nix-provided, fall back to PATH. */
-function findChromium(): string | null {
+async function findChromium(): Promise<string | null> {
   for (const bin of ['chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome']) {
-    const p = which(bin);
+    const p = await runPiScript<string | null>('env.which', { bin });
     if (p) {
       return p;
     }
@@ -203,7 +197,7 @@ async function ensureBrowser(options: {
     return { ok: true, message: 'Chromium already running with CDP.' };
   }
 
-  const chromiumPath = findChromium();
+  const chromiumPath = await findChromium();
   if (!chromiumPath) {
     return {
       ok: false,
@@ -479,7 +473,7 @@ export default function (pi: ExtensionAPI) {
             }
 
             // Navigate if URL provided
-            const targetUrl = params.url ?? getAppUrl(app);
+            const targetUrl = params.url ?? (await getAppUrl(app));
             await navigateAndWait(targetUrl);
 
             // Get DOM snapshot
@@ -557,7 +551,7 @@ export default function (pi: ExtensionAPI) {
             if (params.url) {
               await navigateAndWait(params.url);
             } else {
-              await navigateAndWait(getAppUrl(app));
+              await navigateAndWait(await getAppUrl(app));
             }
 
             // Capture screenshot
@@ -597,7 +591,7 @@ export default function (pi: ExtensionAPI) {
             fs.writeFileSync(filepath, Buffer.from(screenshot.data, 'base64'));
 
             // Optimise the screenshot for AI consumption (shared pipeline)
-            await optimizeImage({ filepath });
+            await runPiScript('ai.optimizeImage', { filepath });
 
             return {
               content: [
@@ -644,7 +638,7 @@ export default function (pi: ExtensionAPI) {
 
             // Navigate (waits for load + network idle) first, then capture
             // console events via CDP.
-            const targetUrl = getAppUrl(app);
+            const targetUrl = await getAppUrl(app);
             await navigateAndWait(targetUrl);
 
             const target = await _getPageTarget();
@@ -845,7 +839,7 @@ export default function (pi: ExtensionAPI) {
               };
             }
 
-            await navigateAndWait(getAppUrl(app));
+            await navigateAndWait(await getAppUrl(app));
 
             // Use Performance API to get resource timing
             const duration = params.durationMs ?? 5000;
@@ -917,7 +911,7 @@ export default function (pi: ExtensionAPI) {
               };
             }
 
-            const targetUrl = params.url ?? getAppUrl(app);
+            const targetUrl = params.url ?? (await getAppUrl(app));
             await navigateAndWait(targetUrl, { settleMs: 1500 });
 
             // Collect performance metrics via CDP and Performance API
