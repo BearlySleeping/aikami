@@ -5,7 +5,14 @@
 //
 // Contract: C-240 Session Management
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
+
+const fixture = await createRealLocalDatabase();
+
+mock.module('@aikami/frontend/storage', () => ({
+  getLocalDatabase: mock(async () => fixture.db),
+}));
 
 describe('SessionService', () => {
   let service: import('./session_service.svelte').SessionServiceInterface;
@@ -14,6 +21,10 @@ describe('SessionService', () => {
     const mod = await import('./session_service.svelte');
     service = mod.sessionService;
     await service.reset();
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   test('should export a singleton instance', () => {

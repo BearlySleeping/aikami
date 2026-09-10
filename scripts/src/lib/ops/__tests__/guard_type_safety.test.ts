@@ -32,6 +32,22 @@ describe('isExcludedDir', () => {
   test('includes unrelated directories named git', () => {
     expect(isExcludedDir({ name: 'git', relPath: 'packages/example/git' })).toBe(false);
   });
+
+  test('excludes local agent worktrees under .pi/workspaces', () => {
+    expect(isExcludedDir({ name: 'workspaces', relPath: '.pi/workspaces' })).toBe(true);
+    expect(
+      isExcludedDir({
+        name: 'visual-asset-foundation-pr1',
+        relPath: '.pi/workspaces/visual-asset-foundation-pr1',
+      }),
+    ).toBe(true);
+  });
+
+  test('includes an unrelated workspaces directory', () => {
+    expect(isExcludedDir({ name: 'workspaces', relPath: 'packages/example/workspaces' })).toBe(
+      false,
+    );
+  });
 });
 
 describe('simpleHash', () => {

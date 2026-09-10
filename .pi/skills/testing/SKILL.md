@@ -198,30 +198,45 @@ the integration-level coverage (mount/unmount, DOM, full navigation).
 
 ### Repository Contract Tests (real adapter)
 
-Do **not** assert persistence behavior against the regex SQL fake in
-`test_preload.ts` — it replaces duplicate inserts where SQLite would reject
-them and its `transaction()` never rolls back. For a repository under migration,
-override the preload's `@aikami/frontend/storage` mock and run the real
-repository against a real in-memory adapter with the production schema:
+Assert persistence behavior against a **real in-memory libSQL database**, never
+a handwritten SQL fake — a fake silently replaces duplicate inserts that SQLite
+rejects and may omit transaction rollback. Use the shared fixture
+(`src/lib/services/__tests__/local_database_fixture.ts`):
 
 ```typescript
-import { applyMigrations } from '@aikami/frontend/storage/migrations';
-import { WasmStorageAdapter } from '@aikami/frontend/storage/wasm_storage_adapter';
+import {
+  countTableRows,
+  createRealLocalDatabase,
+} from '../__tests__/local_database_fixture.ts';
 
-const db = new WasmStorageAdapter({ databasePath: ':memory:' });
-await db.open();
-await applyMigrations(db);
+const fixture = await createRealLocalDatabase();
 
 mock.module('@aikami/frontend/storage', () => ({
-  getLocalDatabase: mock(async () => db),
+  getLocalDatabase: mock(async () => fixture.db),
 }));
-const { chatStorage } = await import('./chat_storage.svelte.ts');
+
+const { myStorage } = await import('./my_storage.svelte.ts');
+
+beforeEach(async () => {
+  await fixture.reset();
+});
+afterAll(async () => {
+  await fixture.close();
+});
 ```
 
-Import the adapter/migrations from their **subpaths** so the preload's barrel
-mock does not intercept them. Reference:
-`src/lib/services/chat/chat_storage.test.ts`, which also fault-injects a failed
-transaction to prove rollback.
+`createRealLocalDatabase()` opens `WasmStorageAdapter(':memory:')`, applies the
+production migrations, and exposes `reset()` / `close()`. Import the adapter and
+migrations from their **subpaths** (the fixture does) so the barrel mock cannot
+intercept them.
+
+- Keep arrangements explicit (`countTableRows`, direct `query`).
+- Fault-inject by wrapping `fixture.db` in a `Proxy`, as
+  `chat_storage.test.ts` does to prove transaction rollback.
+- Reference repos: `persona_storage.test.ts`, `game_state_sync.test.ts`.
+- `test_preload.ts` still registers `@aikami/frontend/storage`, but now returns
+  that same real in-memory adapter (lazy, one per test file) — not a regex fake
+  — so unmigrated tests see real SQLite semantics until they migrate.
 
 ### Import boundary (enforced)
 

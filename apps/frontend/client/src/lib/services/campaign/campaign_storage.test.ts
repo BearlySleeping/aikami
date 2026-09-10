@@ -1,8 +1,17 @@
 // apps/frontend/client/src/lib/services/campaign/campaign_storage.test.ts
 //
-// Runtime-boundary tests for persisted campaign validation.
+// Runtime-boundary tests for persisted campaign validation against a real
+// in-memory libSQL database with the production migrations applied.
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
+
+const fixture = await createRealLocalDatabase();
+
+mock.module('@aikami/frontend/storage', () => ({
+  getLocalDatabase: mock(async () => fixture.db),
+}));
+
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import { campaignStorage } from './campaign_storage.svelte.ts';
 
@@ -39,11 +48,11 @@ const insertPersistedCampaign = async (options: {
 
 describe('CampaignStorage persisted-data validation', () => {
   beforeEach(async () => {
-    const database = await getLocalDatabase();
-    await database.execute({
-      sql: 'DELETE FROM campaigns WHERE id = ?',
-      args: ['legacy-campaign'],
-    });
+    await fixture.reset();
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   test('getById rejects a legacy campaign missing capabilityProfile', async () => {
