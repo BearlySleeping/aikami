@@ -43,16 +43,12 @@ import type { EndSessionViewModelInterface } from './overlays/end_session/end_se
 import { getEndSessionViewModel } from './overlays/end_session/end_session_view_model.svelte';
 import type { GameOverViewModelInterface } from './overlays/game_over/game_over_view_model.svelte';
 import { getGameOverViewModel } from './overlays/game_over/game_over_view_model.svelte';
-import {
-  getPartyRosterViewModel,
-  type PartyRosterViewModelInterface,
-} from './overlays/party_roster/party_roster_view_model.svelte';
+import { getPartyRosterViewModel } from './overlays/party_roster/party_roster_composition.ts';
+import type { PartyRosterViewModelInterface } from './overlays/party_roster/party_roster_view_model.svelte';
 import { getPauseMenuViewModel } from './overlays/pause_menu/pause_menu_composition.ts';
 import type { PauseMenuViewModelInterface } from './overlays/pause_menu/pause_menu_view_model.svelte';
-import {
-  getReputationViewModel,
-  type ReputationViewModelInterface,
-} from './overlays/reputation/reputation_view_model.svelte';
+import { getReputationViewModel } from './overlays/reputation/reputation_composition.ts';
+import type { ReputationViewModelInterface } from './overlays/reputation/reputation_view_model.svelte';
 import {
   getSettingsOverlayViewModel,
   type SettingsOverlayViewModelInterface,
