@@ -125,7 +125,7 @@ describe('catalog publish pipeline (AC-1)', () => {
     // Only the index objects + seed files were re-written on the second run:
     // every shard plus the root, plus any existing seed files.
     // Seed files are mutable and uploaded on every run.
-    const seedFileCount = 1; // asset_credits.json exists in the fixture
+    const seedFileCount = 6; // all six seed files exist in the fixture
     expect(client.putCount - putCountAfterFirst).toBe(second.shardKeys.length + 1 + seedFileCount);
   });
 
@@ -213,5 +213,77 @@ describe('catalog publish pipeline (AC-1)', () => {
     expect(report.uploaded).toBe(0);
     expect(client.putCount).toBe(0);
     expect(client.objects.size).toBe(0);
+  });
+});
+
+describe('catalog publish release consistency (C-496 AC-4)', () => {
+  let gameDataDir: string;
+  let contentPacksDir: string;
+  let client: FakeR2Client;
+
+  beforeEach(() => {
+    gameDataDir = makeFixtureGameData();
+    contentPacksDir = mkdtempSync(join(tmpdir(), 'catalog-ac4-packs-'));
+    client = new FakeR2Client();
+  });
+
+  afterEach(() => {
+    client.failOnKey = undefined;
+  });
+
+  const config = () => ({
+    accessKeyId: 'test',
+    secretAccessKey: 'test',
+    endpoint: 'https://test.r2.cloudflarestorage.com',
+    bucket: 'aikami-catalog',
+    originUrl: ORIGIN_URL,
+  });
+
+  test('a shard upload failure prevents release pointer advancement', async () => {
+    // Inject failure on every index shard object (index/v1/<id>.json).
+    client.failOnKey = 'index/v1/lpc';
+    const report = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
+
+    expect(report.ok).toBe(false);
+    // The root (release pointer) must NOT be written when a shard failed.
+    expect(client.objects.has('index/v1/catalog.json')).toBe(false);
+    // The failed shard key is reported.
+    expect(report.failedKeys.some((key) => key.startsWith('index/'))).toBe(true);
+  });
+
+  test('a seed publish failure blocks the release (ok=false)', async () => {
+    // Remove one seed file so runSeedPublish reports a failure.
+    const { unlinkSync } = require('node:fs') as typeof import('node:fs');
+    unlinkSync(join(gameDataDir, 'audio_tracks.json'));
+
+    const report = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.seed.failed).toBeGreaterThanOrEqual(1);
+  });
+
+  test('a clean publish reports seed success and advances the release pointer', async () => {
+    const report = await runCatalogPublish({
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.seed.failed).toBe(0);
+    expect(report.seed.uploaded).toBe(6);
+    // Root written because every shard succeeded.
+    expect(client.objects.has('index/v1/catalog.json')).toBe(true);
   });
 });

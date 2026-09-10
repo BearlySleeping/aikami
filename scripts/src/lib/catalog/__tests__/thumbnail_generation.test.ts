@@ -387,6 +387,13 @@ describe('pipeline integration — thumbnailHash lands in the republished index 
       }),
     );
 
+    // Seed/metadata files so the seed publish phase reports zero failures.
+    writeFileSync(join(dir, 'asset_seed.json'), JSON.stringify({ seed: true }));
+    writeFileSync(join(dir, 'offline_core.json'), JSON.stringify({ core: ['lpc'] }));
+    writeFileSync(join(dir, 'lpc_credits.json'), JSON.stringify({ credits: [] }));
+    writeFileSync(join(dir, 'lpc_credits_supplement.json'), JSON.stringify({ credits: [] }));
+    writeFileSync(join(dir, 'audio_tracks.json'), JSON.stringify({ tracks: [] }));
+
     const { FakeR2Client } = await import('./fixtures.ts');
     const { runCatalogPublish } = await import('../pipeline.ts');
     const client = new FakeR2Client();

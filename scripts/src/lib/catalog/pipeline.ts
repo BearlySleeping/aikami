@@ -34,7 +34,7 @@ import {
   SEED_KEY_PREFIX,
 } from './config.ts';
 import { assetKey } from './content_address.ts';
-import { type GeneratedShard, generateCatalogIndex } from './index_generation.ts';
+import { generateCatalogIndex } from './index_generation.ts';
 import { runAttributionPreflight } from './preflight.ts';
 import { runThumbnailPhase } from './thumbnail_generation.ts';
 import { type R2ClientLike, uploadAssets } from './upload.ts';
@@ -71,6 +71,8 @@ export type CatalogPublishReport = {
   };
   rootKey: string;
   shardKeys: readonly string[];
+  /** Seed/metadata publish stats (C-496 AC-4: seed failures block the release). */
+  seed: { uploaded: number; failed: number };
   elapsedMs: number;
 };
 
@@ -205,6 +207,7 @@ export const runCatalogPublish = async (
       },
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
+      seed: { uploaded: 0, failed: 0 },
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -243,6 +246,7 @@ export const runCatalogPublish = async (
       },
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
+      seed: { uploaded: 0, failed: 0 },
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -267,7 +271,7 @@ export const runCatalogPublish = async (
   // These are published alongside the assets so the client can fetch the
   // compact boot seed, offline-core declaration, credits, and audio metadata
   // from the same R2 origin (C-435 follow-up: de-bundle everything from git).
-  await runSeedPublish({ client, gameDataDir });
+  const seedReport = await runSeedPublish({ client, gameDataDir });
 
   // 4. Generate index.
   const { root, shards } = generateCatalogIndex({
@@ -295,6 +299,7 @@ export const runCatalogPublish = async (
       thumbnails: thumbnailPhase.report,
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
+      seed: { uploaded: 0, failed: 0 },
       elapsedMs: Date.now() - startedAt,
     };
   }
@@ -304,12 +309,9 @@ export const runCatalogPublish = async (
   // written. A partial publish therefore never leaves a root pointing at
   // missing shards.
   const rootJson = JSON.stringify(root, null, 2);
-  const indexObjects: { key: string; json: string }[] = [
-    ...shards.map((shard: GeneratedShard) => ({ key: shard.key, json: shard.json })),
-    { key: ROOT_INDEX_KEY, json: rootJson },
-  ];
+
   const failedIndexKeys: string[] = [];
-  for (const { key, json } of indexObjects) {
+  const putIndexObject = async (key: string, json: string): Promise<void> => {
     try {
       await client.putObject({
         key,
@@ -322,9 +324,27 @@ export const runCatalogPublish = async (
       console.error(`  ❌ Index upload failed: ${key} — ${message}`);
       failedIndexKeys.push(key);
     }
+  };
+
+  // Upload every shard first.
+  for (const shard of shards) {
+    await putIndexObject(shard.key, shard.json);
   }
 
-  const ok = uploadReport.failed === 0 && failedIndexKeys.length === 0;
+  // Only advance the release pointer (root) when every shard it references
+  // is confirmed uploaded — never a root pointing at missing shards. A shard
+  // failure leaves the previous complete release readable (C-496 AC-4).
+  if (failedIndexKeys.length === 0) {
+    await putIndexObject(ROOT_INDEX_KEY, rootJson);
+  } else {
+    console.error(
+      `  ⛔ ${failedIndexKeys.length} shard(s) failed — release pointer NOT advanced (previous release preserved).`,
+    );
+  }
+
+  // Seed failures block the release too: a missing seed file means offline
+  // boot/credits data is incomplete, so the publish must not report ok.
+  const ok = uploadReport.failed === 0 && failedIndexKeys.length === 0 && seedReport.failed === 0;
 
   const elapsedMs = Date.now() - startedAt;
   console.log('');
@@ -352,12 +372,17 @@ export const runCatalogPublish = async (
     incompleteAttributionTags: preflight.incompleteAttributionTags,
     uploaded: uploadReport.uploaded,
     skipped: uploadReport.skipped,
-    failed: uploadReport.failed + failedIndexKeys.length,
+    failed: uploadReport.failed + failedIndexKeys.length + seedReport.failed,
     bytesTransferred: uploadReport.bytesTransferred,
-    failedKeys: [...uploadReport.failedKeys, ...failedIndexKeys],
+    failedKeys: [
+      ...uploadReport.failedKeys,
+      ...failedIndexKeys,
+      ...Array.from({ length: seedReport.failed }, (_, i) => `seed:${i}`),
+    ],
     thumbnails: thumbnailPhase.report,
     rootKey: ROOT_INDEX_KEY,
     shardKeys: shards.map((shard) => shard.key),
+    seed: seedReport,
     elapsedMs,
   };
 };
