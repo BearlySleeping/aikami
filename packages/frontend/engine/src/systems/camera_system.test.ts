@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
+import { BASE_WORLD_SCALE, computeWorldScale } from '@aikami/constants';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import {
@@ -144,6 +145,32 @@ describe('camera_system', () => {
     });
   });
 
+  describe('framing policy (C-497 AC-1)', () => {
+    it('camera default scale is the named base-scale policy constant', () => {
+      // setScreenSize with no scale should keep the base policy scale.
+      setScreenSize({ width: 1920, height: 1080 });
+      setMapBounds({ width: 3200, height: 2400 });
+      _createTarget(world, { x: 9999, y: 500 });
+      updateCameraSystem(world, 16);
+
+      const camera = getCameraPosition();
+      // At the named BASE_WORLD_SCALE (4): halfScreenWorld x = 1920/8 = 240.
+      // If the scale were not the policy value, the clamp bound would differ.
+      expect(camera.x).toBeLessThanOrEqual(3200 - 240);
+    });
+
+    it('base scale derives from the named policy for a given tile size and viewport', () => {
+      const scale = computeWorldScale({
+        tileSize: 32,
+        viewport: { width: 1920, height: 1080 },
+        mapSize: { width: 960, height: 540 },
+      });
+      // fit = min(1920/960, 1080/540) = 2 → map fits at 2×, below base 4.
+      expect(scale).toBeCloseTo(2, 4);
+      expect(scale).toBeLessThanOrEqual(BASE_WORLD_SCALE);
+    });
+  });
+
   // ---------------------------------------------------------------------
   // Clamping
   // ---------------------------------------------------------------------
@@ -225,6 +252,28 @@ describe('camera_system', () => {
       const camera = getCameraPosition();
       expect(camera.x).toBe(500);
       expect(camera.y).toBe(500);
+    });
+
+    // C-497 AC-2: a missing/zero map dimension must not leave the camera
+    // unbounded over empty space. Zero bounds substitute the shared default
+    // map extent so clamping still engages (only explicit disableClamping
+    // bypasses viewport boundary enforcement).
+    it('clamps against the default map extent when bounds are zero (AC-2)', () => {
+      setScreenSize({ width: 1920, height: 1080 });
+      setMapBounds({ width: 0, height: 0 });
+
+      // Target far off-map in empty space — must NOT stay unbounded.
+      _createTarget(world, { x: -10000, y: -10000 });
+
+      updateCameraSystem(world, 16); // snap + clamp on first tick
+
+      const camera = getCameraPosition();
+      // Default map is 100×100 tiles × 32 = 3200 world px. At scale 4,
+      // halfScreenWorld x = 1920/8 = 240, y = 1080/8 = 135.
+      expect(camera.x).toBeGreaterThanOrEqual(240);
+      expect(camera.y).toBeGreaterThanOrEqual(135);
+      expect(camera.x).not.toBe(-10000);
+      expect(camera.y).not.toBe(-10000);
     });
   });
 

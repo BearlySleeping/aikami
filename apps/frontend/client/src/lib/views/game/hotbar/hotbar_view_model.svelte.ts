@@ -55,6 +55,8 @@ export type HotbarSlot = {
 
 export type HotbarViewModelInterface = BaseViewModelInterface & {
   readonly slots: readonly HotbarSlot[];
+  /** Only the assigned (filled) slots — empty slots are hidden from the HUD. */
+  readonly assignedSlots: readonly HotbarSlot[];
   readonly visible: boolean;
 
   /** Activate the ability in a slot by its index. */
@@ -135,6 +137,19 @@ class HotbarViewModel
     }
 
     return result;
+  }
+
+  /**
+   * Projects only the assigned (filled) slots.
+   *
+   * C-497 AC-3: the HUD renders only assigned slots — empty slots produce no
+   * button, no `+` glyph and no keybind label. The projected slots retain
+   * their true keybind/index so activating a non-first ability still maps to
+   * the correct slot. Reactive: assigning or clearing an ability re-derives
+   * the projection without a reload.
+   */
+  get assignedSlots(): HotbarSlot[] {
+    return this.slots.filter((slot) => slot.filled);
   }
 
   activateSlot(slotIndex: number): void {

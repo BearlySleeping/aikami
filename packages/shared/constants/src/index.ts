@@ -23,6 +23,7 @@ export * from './lib/game/damage_types.ts';
 export * from './lib/game/npc_interaction.ts';
 export * from './lib/game/scene.ts';
 export * from './lib/game/status_effects.ts';
+export * from './lib/game/world_scale.ts';
 export * from './lib/game_assets.ts';
 export * from './lib/game_economy.ts';
 export * from './lib/image_style_profiles.ts';

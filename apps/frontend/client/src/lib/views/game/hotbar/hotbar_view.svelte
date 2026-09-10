@@ -22,7 +22,7 @@ const { viewModel = getHotbarViewModel({ className: 'HotbarViewModel' }) }: Prop
     <div
       class="fixed bottom-0 left-1/2 -translate-x-1/2 flex gap-2 p-3 bg-black/70 rounded-t-xl z-[60]"
     >
-      {#each viewModel.slots as slot}
+      {#each viewModel.assignedSlots as slot}
         <button
           type="button"
           class={slot.className}
@@ -32,18 +32,14 @@ const { viewModel = getHotbarViewModel({ className: 'HotbarViewModel' }) }: Prop
           <span class="absolute top-0.5 left-1 text-[0.65rem] text-white/50 font-bold"
             >{slot.keybind}</span
           >
-          {#if slot.filled}
-            <span
-              class="text-[0.6rem] text-white text-center leading-tight px-0.5 overflow-hidden text-ellipsis max-h-[2.4rem]"
-              >{slot.label}</span
+          <span
+            class="text-[0.6rem] text-white text-center leading-tight px-0.5 overflow-hidden text-ellipsis max-h-[2.4rem]"
+            >{slot.label}</span
+          >
+          {#if slot.usesRemaining !== null}
+            <span class="absolute bottom-0.5 right-1 text-[0.6rem] text-white/70 font-semibold"
+              >{slot.usesRemaining}</span
             >
-            {#if slot.usesRemaining !== null}
-              <span class="absolute bottom-0.5 right-1 text-[0.6rem] text-white/70 font-semibold"
-                >{slot.usesRemaining}</span
-              >
-            {/if}
-          {:else}
-            <span class="text-[1.2rem] text-white/20">+</span>
           {/if}
         </button>
       {/each}
