@@ -3,7 +3,7 @@ id: C-498
 title: "A preset means the character is ready"
 source: direct
 contract_type: thin
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-10T00:00:00Z"
 | **Type** | thin |
 | **Priority** | P2 — the fastest-looking route to play currently takes the longest |
 | **Dependencies** | None (coordinate with [C-483](C-483-guided-ai-setup.md) / [C-484](C-484-capability-first-settings.md), which own the AI-setup half of onboarding; build on C-504's stable appearance identity, already implemented) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — character creation flow in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.0 |
@@ -100,3 +100,57 @@ Changes to ACs or scope require a version bump and user approval.
 ## Status Lifecycle
 
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
+
+## Execution Report
+
+### Summary
+Restructured character creation so illustrated starter heroes are the primary
+affordance (default `presets` mode), with AI chat and the manual wizard as
+clearly secondary paths. Selecting a preset now opens a lightweight fast path
+(name + one motivating choice → Enter World) that skips the full editable
+review sheet; full customization is one explicit "Customize Everything" click
+away. Starter hero cards render real LPC portraits from each hero's C-504
+appearance identity instead of placeholder emoji, resolving the previously
+dead `illustrationAsset`/card portrait path. Added unit + data tests, an E2E
+journey + timing assertion, a visual suite, and a user-facing docs page.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Default mode is `presets`; "Choose Your Hero" heading, 3 illustrated hero cards primary, chat/manual secondary. Verified by unit test + headless production-route render. |
+| AC-2 | ✅ | Preset → `preset_confirm` fast path (exactly 1 form field: name) + motivation; Enter World / Customize Everything; no full sheet on fast path. Unit + headless verified. |
+| AC-3 | ✅ | All 3 hero cards render real non-blank LPC portraits (pixel check) + data test asserting every `StarterHero` resolves a non-empty recipe set. |
+| AC-4 | ⚠️ | Structurally faster (fast path skips review step; unit test confirms world entry). E2E timing assertion added (<10s preset→/game). Full timed preset-vs-AI comparison deferred to verifier env where AI/hub services run. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/data/starter_hero_recipes.ts` | Builds LpcLayerRecipe[] from a StarterHero's lpcRecipe/paletteOverrides (single portrait resolution path, AC-3). |
+| `apps/frontend/client/src/lib/data/starter_hero_recipes.test.ts` | Data test: every shipped hero resolves a real non-empty portrait (AC-3). |
+| `apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view_model.test.ts` | Coordinator VM unit tests for AC-1/AC-2 fast path + appearance-identity preservation. |
+| `apps/e2e/src/visual/suites/onboarding_presets.visual.ts` | Visual suite capturing `/personas/create?onboarding=1` (AC-1/AC-3). |
+| `apps/frontend/docs/src/content/docs/start/creating-your-hero.md` | User-facing docs page for the creation flow. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view_model.svelte.ts` | Added `presets`/`preset_confirm` modes, preset fast-path state + `confirmPresetAndEnter`/`customizeEverything`/`startChat`, motivating-choice → background hook. |
+| `apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view.svelte` | Presets-first layout; removed inline emoji block; added fast-path confirm view; secondary AI/manual paths. |
+| `apps/frontend/client/src/lib/views/onboarding/starter_hero_card.svelte` | Now renders a real LPC portrait (LpcPreviewViewModel) instead of a placeholder emoji; consolidated single card component. |
+| `apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view_model.svelte.ts` | Added public `isReady` getter (used by the card to init Pixi once canvas is present). |
+| `apps/e2e/tests/client/new_campaign_flow.spec.ts` | Updated starter-hero journey for the new fast path + added AC-4 timing assertion. |
+
+### Deviations from Spec
+None against the approved ACs. AC-4's full timed preset-vs-AI comparison was
+not runnable in this environment (the AI/hub microservices are down and
+Playwright's `reuseExistingServer` is disabled under `CI=true`, so the E2E
+harness cannot reuse the dev server here). The structural fast-path advantage
+is implemented and unit-tested, the E2E timing assertion is in place, and the
+full comparison is left to the verifier's full-stack run. No Amendment
+proposed.
+
+### Test Results
+- Unit: 11/11 pass (0 failures) — coordinator VM (7) + starter hero recipes (4).
+- E2E: `new_campaign_flow.spec.ts` updated for the new fast path; not executed here (full-stack E2E harness conflicts with dev-server under CI=true). Visual suite `onboarding_presets.visual.ts` added for the verifier.
+- Visual: Not executed here (no AI image-validation tooling in this environment); suite provided.
+- Baseline: validated via `validate({ test: true })` — client, docs, e2e all pass with no new failures.
