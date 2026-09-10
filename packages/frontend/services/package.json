@@ -11,7 +11,7 @@
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
     "fix": "biome check --write . --error-on-warnings",
-    "test": "bun test --pass-with-no-tests"
+    "test": "bun test --isolate --pass-with-no-tests"
   },
   "imports": {
     "$router": "./src/lib/router/router-utils.ts",

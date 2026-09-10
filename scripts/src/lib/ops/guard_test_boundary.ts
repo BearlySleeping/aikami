@@ -111,22 +111,24 @@ const scanImportPaths = (file: string, content: string): string[] => {
 
 /** A file the guard inspects: production source, never a test or fixture. */
 const isProductionSource = (file: string): boolean => {
-  if (!file.includes('/src/')) {
+  // Normalize Windows separators so the same path checks work on every OS.
+  const normalized = file.split('\\').join('/');
+  if (!normalized.includes('/src/')) {
     return false;
   }
-  if (!(file.endsWith('.ts') || file.endsWith('.svelte'))) {
+  if (!(normalized.endsWith('.ts') || normalized.endsWith('.svelte'))) {
     return false;
   }
-  if (file.endsWith('.d.ts')) {
+  if (normalized.endsWith('.d.ts')) {
     return false;
   }
-  if (/\.(test|spec)\.(svelte\.)?ts$/.test(file)) {
+  if (/\.(test|spec)\.(svelte\.)?ts$/.test(normalized)) {
     return false;
   }
-  if (file.includes('/__tests__/') || file.includes('/testing/')) {
+  if (normalized.includes('/__tests__/') || normalized.includes('/testing/')) {
     return false;
   }
-  if (file.endsWith('test_preload.ts')) {
+  if (normalized.endsWith('test_preload.ts')) {
     return false;
   }
   return true;

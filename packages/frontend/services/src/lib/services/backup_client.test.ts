@@ -1,8 +1,14 @@
 // packages/frontend/services/src/lib/services/backup_client.test.ts
 
 import { afterEach, describe, expect, mock, test } from 'bun:test';
+import * as realUtils from '@aikami/utils';
 
+// Spread the real module so this scoped mock cannot erase unrelated exports
+// (e.g. `setSearchParameters`) for tests that share the module registry. The
+// `--isolate` flag on this package's test script is the primary guard; this
+// keeps the mock non-destructive either way.
 mock.module('@aikami/utils', () => ({
+  ...realUtils,
   toAppError: (options: { errorMessage: string }): Error => new Error(options.errorMessage),
 }));
 

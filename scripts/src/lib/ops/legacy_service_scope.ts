@@ -13,7 +13,7 @@
 // guard stops forcing designers of new features to extend the legacy mock.
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 
 /** Comment stripper that preserves string contents (import specifiers survive). */
 export const stripComments = (source: string): string => {
@@ -209,7 +209,7 @@ export const collectReachableClientFiles = (options: {
   const { entryFiles, clientSrcRoot, readFile, fileExists } = options;
   const visited = new Set<string>();
   const queue = [...entryFiles];
-  const rootPrefix = clientSrcRoot.endsWith('/') ? clientSrcRoot : `${clientSrcRoot}/`;
+  const rootPrefix = clientSrcRoot.endsWith(sep) ? clientSrcRoot : `${clientSrcRoot}${sep}`;
   while (queue.length > 0) {
     const file = queue.pop();
     if (!file || visited.has(file) || !file.startsWith(rootPrefix)) {

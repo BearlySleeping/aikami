@@ -789,45 +789,6 @@
         7,
         95
       ],
-      "appearance": {
-        "formatVersion": 1,
-        "components": [
-          {
-            "slot": "body",
-            "assetId": "body/bodies_male",
-            "layerRole": "front"
-          },
-          {
-            "slot": "hair",
-            "assetId": "hair/swoop_male",
-            "layerRole": "front"
-          },
-          {
-            "slot": "torso",
-            "assetId": "torso/armor/leather_armor_male",
-            "layerRole": "front"
-          },
-          {
-            "slot": "legs",
-            "assetId": "legs/pants_male",
-            "layerRole": "front"
-          },
-          {
-            "slot": "feet",
-            "assetId": "feet/shoes/boots_male",
-            "layerRole": "front"
-          },
-          {
-            "slot": "head",
-            "assetId": "head/heads/human/male",
-            "layerRole": "front"
-          }
-        ],
-        "legacyProvenance": {
-          "source": "manifest:appearanceLayers",
-          "snapshot": "legacy-catalog-order-v1"
-        }
-      },
       "isCompanion": true,
       "recruitDialogueKey": "bram_recruit_offer",
       "dismissDialogueKey": "bram_dismiss",

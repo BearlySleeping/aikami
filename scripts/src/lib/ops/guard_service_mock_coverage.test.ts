@@ -8,6 +8,7 @@
 // silently widen the guard back to "every barrel export".
 
 import { describe, expect, it } from 'bun:test';
+import { resolve } from 'node:path';
 import {
   collectRequiredServiceExports,
   computeInventoryViolations,
@@ -33,26 +34,36 @@ describe('extractServicesExportNames', () => {
 
 describe('collectRequiredServiceExports', () => {
   it('walks static imports and ignores dynamic-import-only branches', () => {
-    const files: Record<string, string> = {
-      '/root/src/lib/feature/feature.test.ts': "import { helper } from './helper.ts';",
-      '/root/src/lib/feature/helper.ts':
+    // Build platform-correct paths so the resolver and the fake file system
+    // agree on Windows (backslashes) as well as POSIX.
+    const clientSrcRoot = resolve('/root/src');
+    const files = new Map<string, string>([
+      [resolve('/root/src/lib/feature/feature.test.ts'), "import { helper } from './helper.ts';"],
+      [
+        resolve('/root/src/lib/feature/helper.ts'),
         "import { legacyDep, newMigrated } from '$services';\nexport const x = [legacyDep, newMigrated];",
-      '/root/src/lib/feature/lazy.ts':
+      ],
+      [
+        resolve('/root/src/lib/feature/lazy.ts'),
         "import { migratedOnly } from '$services';\nexport const y = migratedOnly;",
-      '/root/src/lib/feature/lazy_user.ts': "export const load = () => import('./lazy.ts');",
-    };
+      ],
+      [
+        resolve('/root/src/lib/feature/lazy_user.ts'),
+        "export const load = () => import('./lazy.ts');",
+      ],
+    ]);
 
     const required = collectRequiredServiceExports({
-      entryFiles: ['/root/src/lib/feature/feature.test.ts'],
-      clientSrcRoot: '/root/src',
+      entryFiles: [resolve('/root/src/lib/feature/feature.test.ts')],
+      clientSrcRoot,
       readFile: (file) => {
-        const content = files[file];
+        const content = files.get(file);
         if (content === undefined) {
           throw new Error(`unexpected read: ${file}`);
         }
         return content;
       },
-      fileExists: (file) => file in files || `${file}.ts` in files || `${file}/index.ts` in files,
+      fileExists: (file) => files.has(file),
     });
 
     expect(required).toEqual(['legacyDep', 'newMigrated']);
