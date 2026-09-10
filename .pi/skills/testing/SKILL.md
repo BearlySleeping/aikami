@@ -223,6 +223,14 @@ mock does not intercept them. Reference:
 `src/lib/services/chat/chat_storage.test.ts`, which also fault-injects a failed
 transaction to prove rollback.
 
+### Import boundary (enforced)
+
+`guard-test-boundary` (`bun run guard`, `scripts/src/lib/ops/guard_test_boundary.ts`)
+fails CI if production source imports a test helper: `test_preload.ts`,
+`testing/` fixture directories, `__tests__/`, `__fixtures__/`, or `*.test.ts`.
+Inject a production dependency instead. Feature fixtures are only importable
+from test files.
+
 ---
 
 ## AI Visual Testing Framework

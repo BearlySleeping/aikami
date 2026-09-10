@@ -19,6 +19,7 @@ tasks:
       - '~:guard-data-plane'
       - '~:guard-type-safety'
       - '~:guard-orphaned-capability'
+      - '~:guard-test-boundary'
     options:
       cache: false
       runInCI: true
@@ -225,6 +226,19 @@ tasks:
       - '!/packages/**/build/**'
       - '/.pi/**/*'
       - '!/.pi/generated-skills/**'
+    options:
+      cache: false
+      runInCI: true
+
+  # Production source must not import test helpers (test_preload.ts,
+  # feature testing/ fixtures, *.test.ts). Shipping code cannot depend on
+  # test scaffolding; see guard_test_boundary.ts.
+  guard-test-boundary:
+    command: 'bun run src/lib/ops/guard_test_boundary.ts'
+    inputs:
+      - 'src/lib/ops/guard_test_boundary.ts'
+      - '/apps/**/src/**/*'
+      - '/packages/**/src/**/*'
     options:
       cache: false
       runInCI: true

@@ -6,6 +6,13 @@
 // test file is expected to spread when it mocks '$services' (see the doc
 // comment above that function).
 //
+// SCOPED TO THE LEGACY LANE. This guard exists only because the preload
+// globally replaces `$services`. Migrated features no longer mock the barrel —
+// they inject narrow capabilities through a feature composition file (see
+// views/settings/account/), and the preload is scheduled for deletion once no
+// test imports it. Do not "fix" a failure here by extending the preload for a
+// feature that has already migrated; fix the import boundary instead.
+//
 // Without this, a new `$services` export compiles and works in the app but
 // silently breaks every test file that transitively imports the module that
 // added it — the test doesn't reference the new export directly, so nothing
@@ -350,15 +357,18 @@ if (newGaps.length > 0) {
     annotate({
       file: relPath(TEST_PRELOAD_PATH),
       line: 1,
-      message: `'${name}' is exported from $services but has no key in localServicesMockBase() — add \`${name}: _createServiceStub(),\` (or _createCallableStub()/a literal, matching its real shape).`,
+      message: `'${name}' is exported from $services but has no key in localServicesMockBase(). If only migrated (DI) features consume it, do NOT add it to the legacy preload — inject a narrow capability instead. Otherwise add \`${name}: _createServiceStub(),\` for the remaining legacy tests.`,
       title: 'service-mock-coverage guard',
     });
   }
   console.error(
-    `\n🔴 service-mock-coverage guard failed — add each name above to localServicesMockBase() in test_preload.ts.\n` +
-      `   This is the exact regression class behind PRs #241, #243, and the C-466/C-467 test-infra fix (2026-09-05):\n` +
-      `   a new $services export works in the app but crashes every test that transitively imports it, in a file\n` +
-      `   that never touches the new export directly.`,
+    `\n🔴 service-mock-coverage guard failed — this guard protects the LEGACY preload lane only.\n` +
+      `   The $services barrel is still globally mocked by test_preload.ts, so a new export any legacy test\n` +
+      `   transitively imports crashes with "not found in module" (the regression class behind PRs #241, #243,\n` +
+      `   and the C-466/C-467 fix). Two ways out:\n` +
+      `     • Migrated features: inject only the capabilities you need via a feature composition file\n` +
+      `       (reference: views/settings/account/). Do not extend the preload.\n` +
+      `     • Remaining legacy tests: add the key, as a stopgap until the preload is deleted.`,
   );
   process.exit(1);
 }
