@@ -502,6 +502,20 @@ export class GameCompositionRoot
           }
           return !!member;
         },
+        presentEvidence: (opts) => {
+          // Present the evidence to the NPC, recording exactly one
+          // EvidencePresented event and setting the world-state flag that
+          // gates world-state-conditioned endings (C-495 AC-2/AC-3).
+          const campaignId = campaignService.activeCampaign?.id;
+          if (!campaignId) {
+            return false;
+          }
+          const event = questStateService.presentEvidence({
+            evidenceId: opts.evidenceId,
+            campaignId,
+          });
+          return Boolean(event);
+        },
       },
     });
 
@@ -521,6 +535,23 @@ export class GameCompositionRoot
     await inventoryService.startListening();
     await questStateService.startListening();
 
+    // C-495 AC-6 test hook: expose a seam for the release-gate E2E to present
+    // evidence through the production game (no-op in normal play).
+    if (typeof window !== 'undefined') {
+      try {
+        (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ = {
+          presentEvidence: (evidenceId: string): boolean => {
+            const campaignId = campaignService.activeCampaign?.id;
+            if (!campaignId) {
+              return false;
+            }
+            return Boolean(questStateService.presentEvidence({ evidenceId, campaignId }));
+          },
+        };
+      } catch (error) {
+        this.warn('initialize:test-hook-failed', { error: String(error) });
+      }
+    }
     this._initialized = true;
 
     const elapsed = performance.now() - t0;

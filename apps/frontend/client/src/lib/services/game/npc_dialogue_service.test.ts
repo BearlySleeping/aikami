@@ -127,6 +127,10 @@ const makeExecutors = () => {
       execLog.push('recruit');
       return true;
     }),
+    presentEvidence: mock((_opts: { npcId: string; evidenceId: string }) => {
+      execLog.push('presentEvidence');
+      return true;
+    }),
   };
 };
 
@@ -2514,5 +2518,24 @@ describe('C-494 AC-1: recruit through the existing dialogue seam', () => {
     });
     expect(ok).toBe(true);
     expect(execLog).toContain('recruit');
+    expect(ok).toBe(true);
+    expect(execLog).toContain('recruit');
+  });
+
+  test('executeCommand dispatches the presentEvidence command to the executor', () => {
+    const executors = makeExecutors();
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors,
+    });
+    const ok = npcDialogueService.executeCommand({
+      kind: 'presentEvidence',
+      npcId: 'village_guard',
+      npcName: 'Bram the Guard',
+      command: { kind: 'presentEvidence', evidenceId: 'the_ledger' },
+    });
+    expect(ok).toBe(true);
+    expect(execLog).toContain('presentEvidence');
   });
 });

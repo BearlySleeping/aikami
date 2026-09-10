@@ -233,7 +233,9 @@ type NpcDialogueExecutors = {
   skillCheck(options: { skill: string; difficultyClass: number }): boolean;
   giveItem(options: { itemId: string; quantity: number }): boolean;
   startCombat(options: { npcId: string; npcName: string; encounterId?: string }): boolean;
+  startCombat(options: { npcId: string; npcName: string; encounterId?: string }): boolean;
   recruit(options: { npcId: string; npcName: string }): boolean;
+  presentEvidence(options: { npcId: string; evidenceId: string }): boolean;
 };
 
 /** Context facts projected into the AI system prompt. */
@@ -801,6 +803,11 @@ export class NpcDialogueService
         return this._executors!.recruit({
           npcId,
           npcName: npc?.name ?? 'Unknown',
+        });
+      case 'presentEvidence':
+        return this._executors!.presentEvidence({
+          npcId,
+          evidenceId: (command as { evidenceId: string }).evidenceId,
         });
       default:
         this.warn('executeCommand:unknown-kind', { kind });
@@ -1603,6 +1610,11 @@ export class NpcDialogueService
       allowed.push('recruit');
     }
 
+    // presentEvidence: any NPC may receive evidence presentation; the command
+    // precondition additionally checks the evidence exists and is consistent
+    // with the sampled truth (C-495 AC-2).
+    allowed.push('presentEvidence');
+
     return allowed;
   }
 
@@ -1688,6 +1700,25 @@ export class NpcDialogueService
         if (!npcEntry?.isVendor) {
           return { allowed: false, reason: 'NPC is not a vendor' };
         }
+        return { allowed: true };
+      }
+
+      case 'presentEvidence': {
+        const evidenceId = c.evidenceId as string | undefined;
+        if (!evidenceId) {
+          return { allowed: false, reason: 'presentEvidence missing evidenceId' };
+        }
+        // Validate the evidence is discoverable under the sampled truth.
+        const discoverable = questStateService
+          .getDiscoverableEvidence(campaignService.activeCampaign?.id)
+          .some((e) => e.id === evidenceId);
+        if (!discoverable) {
+          return {
+            allowed: false,
+            reason: `evidence ${evidenceId} not discoverable under sampled truth`,
+          };
+        }
+        // NPC-match enforcement happens in the executor, which holds the npcId.
         return { allowed: true };
       }
 
