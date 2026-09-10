@@ -9,9 +9,20 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { NpcRollResolutionOutput, NpcStateDelta } from '@aikami/types';
+import type {
+  CommittedNarrativeEvent,
+  NpcRollResolutionOutput,
+  NpcStateDelta,
+} from '@aikami/types';
 import { encode } from 'gpt-tokenizer';
-import { campaignService, narrativeEventService, relationshipService } from '$services';
+import {
+  campaignService,
+  companionReactionService,
+  narrativeEventService,
+  npcAwarenessService,
+  partyRosterService,
+  relationshipService,
+} from '$services';
 import type { ConsequenceRequest, ConsequenceResult } from '$types';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
 
@@ -32,6 +43,23 @@ const STUB_EMBERWATCH = {
       name: 'Shade Guardian',
       defaultDialogueKey: 'shade_guardian_manifest',
       combatStats: { hitPoints: 30 },
+    },
+    village_guard: {
+      name: 'Bram the Guard',
+      defaultDialogueKey: 'bram_greeting',
+      isCompanion: true,
+      companionClassId: 'fighter',
+      initialApproval: 10,
+      personality: {
+        voice: 'Steady and plain-spoken.',
+        manner: 'Alert and loyal.',
+      },
+      agenda: [
+        'Keep the gates of Emberwatch shut against the Crimson Covenant',
+        'Prove to Elder Thalia that a guard oath can hold where a relic cannot',
+      ],
+      knowledge: ['The ward is renewed by the people who keep watch over it'],
+      boundaries: ['refuse|Threaten an innocent villager'],
     },
   },
   dialogues: {
@@ -93,6 +121,10 @@ const makeExecutors = () => {
     }),
     startCombat: mock((_opts: { npcId: string; npcName: string; encounterId?: string }) => {
       execLog.push('startCombat');
+      return true;
+    }),
+    recruit: mock((_opts: { npcId: string; npcName: string }) => {
+      execLog.push('recruit');
       return true;
     }),
   };
@@ -2188,5 +2220,299 @@ describe('C-491 AC-1: exactly one committed event per consequential resolution',
   test('a failed roll with no applied deltas records nothing', async () => {
     await driveRoll({ deltas: [], outcome: 'fail' });
     expect(recordedEvents()).toHaveLength(0);
+  });
+
+  test('evaluates every recruited companion in the committed witness set', async () => {
+    const contentProvider = makeContentProvider({
+      npcs: {
+        village_elder: STUB_EMBERWATCH.npcs.village_elder,
+        village_guard: STUB_EMBERWATCH.npcs.village_guard,
+        traveling_merchant: STUB_EMBERWATCH.npcs.traveling_merchant,
+      },
+    });
+    Object.defineProperty(npcAwarenessService, 'nearbyNpcIds', {
+      value: ['village_guard', 'traveling_merchant'],
+      configurable: true,
+    });
+    (partyRosterService as unknown as { hasMember: (npcId: string) => boolean }).hasMember = mock(
+      (npcId: string) => npcId === 'village_guard',
+    );
+    const evaluateEvent = mock(() => undefined);
+    (
+      companionReactionService.evaluateEvent as unknown as {
+        fn: typeof evaluateEvent;
+      }
+    ).fn = evaluateEvent;
+    const fireUnpromptedTurn = mock(() => true);
+    (
+      companionReactionService as unknown as {
+        fireUnpromptedTurn: typeof fireUnpromptedTurn;
+      }
+    ).fireUnpromptedTurn = fireUnpromptedTurn;
+
+    try {
+      await driveRoll({
+        deltas: [],
+        checkType: 'Intimidation',
+        outcome: 'pass',
+        contentProvider,
+      });
+    } finally {
+      Object.defineProperty(npcAwarenessService, 'nearbyNpcIds', {
+        value: [],
+        configurable: true,
+      });
+    }
+
+    expect(evaluateEvent).toHaveBeenCalledTimes(1);
+    expect(evaluateEvent.mock.calls[0]?.[0]).toMatchObject({ npcId: 'village_guard' });
+    expect(fireUnpromptedTurn).toHaveBeenCalledTimes(1);
+    expect(fireUnpromptedTurn.mock.calls[0]?.[0]).toMatchObject({ npcId: 'village_guard' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-494 AC-3: companion references a witnessed event unprompted
+// ---------------------------------------------------------------------------
+
+describe('C-494 AC-3: companion witness recall', () => {
+  const companionProvider = () =>
+    makeContentProvider({
+      npcs: {
+        village_guard: {
+          name: 'Bram the Guard',
+          isCompanion: true,
+          companionClassId: 'fighter',
+          initialApproval: 10,
+          personality: { voice: 'Steady.', manner: 'Loyal.' },
+          agenda: ['Keep the gates shut'],
+          knowledge: ['The ward is renewed by the people who watch'],
+          boundaries: ['refuse|Threaten an innocent villager'],
+        },
+      },
+    });
+
+  const seedWitness = (events: Array<Record<string, unknown>>) => {
+    // The dialogue service reads witness recall through narrativeEventService
+    // and gates on partyRosterService.hasMember — both are controllable doubles
+    // from the $services barrel mocked in test_preload. witnessedBy mirrors the
+    // real service's witness filtering so only events whose witnesses include
+    // the queried npc are returned.
+    (partyRosterService as unknown as { hasMember: (id: string) => boolean }).hasMember = mock(
+      (id: string) => id === 'village_guard',
+    );
+    (narrativeEventService as unknown as { witnessedBy: (id: string) => unknown[] }).witnessedBy =
+      mock((id: string) => events.filter((e) => (e.witnesses as string[]).includes(id)));
+  };
+
+  beforeEach(() => {
+    (
+      companionReactionService as unknown as {
+        hasFired: (options: { npcId: string; eventId: string }) => boolean;
+      }
+    ).hasFired = mock(() => false);
+    (
+      companionReactionService as unknown as {
+        fireUnpromptedTurn: (options: {
+          npcId: string;
+          npc: Record<string, unknown>;
+          event: CommittedNarrativeEvent;
+        }) => boolean;
+      }
+    ).fireUnpromptedTurn = mock(() => true);
+  });
+
+  test('buildContext injects [COMPANION WITNESSED] lines for a recruited companion', () => {
+    seedWitness([
+      {
+        id: 'evt-1',
+        kind: 'PromiseMade',
+        summary: 'Bram witnessed the player promise to defend the village',
+        witnesses: ['village_guard'],
+      },
+    ]);
+    npcDialogueService.configure({
+      contentProvider: companionProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_guard',
+      npcName: 'Bram',
+      messages: [],
+    });
+
+    expect(projection.companionWitnessed).toContain(
+      '- Bram witnessed the player promise to defend the village',
+    );
+  });
+
+  test('does not inject witness recall for a non-companion NPC', () => {
+    seedWitness([
+      {
+        id: 'evt-2',
+        kind: 'ThreatWitnessed',
+        summary: 'Bram witnessed a threat',
+        witnesses: ['village_guard'],
+      },
+    ]);
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+    });
+
+    expect(projection.companionWitnessed).toHaveLength(0);
+  });
+
+  test('omits events the companion did not witness', () => {
+    seedWitness([
+      {
+        id: 'evt-3',
+        kind: 'ThreatWitnessed',
+        summary: 'Keth witnessed a threat',
+        witnesses: ['traveling_merchant'],
+      },
+    ]);
+    npcDialogueService.configure({
+      contentProvider: companionProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_guard',
+      npcName: 'Bram',
+      messages: [],
+    });
+
+    // A threat the companion did NOT witness must never be injected.
+    expect(projection.companionWitnessed).toHaveLength(0);
+  });
+
+  test('consumes a pending witnessed event only after its generated turn', async () => {
+    const event = {
+      id: 'evt-pending',
+      campaignId: 'camp-1',
+      sequence: 1,
+      kind: 'PromiseMade',
+      informationKind: 'world_fact',
+      summary: 'Bram witnessed the player promise to defend the village',
+      witnesses: ['village_guard'],
+      recordedAt: new Date().toISOString(),
+    } satisfies CommittedNarrativeEvent;
+    const consumed = new Set<string>();
+    seedWitness([event]);
+    (
+      companionReactionService as unknown as {
+        hasFired: (options: { npcId: string; eventId: string }) => boolean;
+      }
+    ).hasFired = mock((options) => consumed.has(`${options.npcId}:${options.eventId}`));
+    const fireUnpromptedTurn = mock(
+      (options: { npcId: string; event: CommittedNarrativeEvent }) => {
+        consumed.add(`${options.npcId}:${options.event.id}`);
+        return true;
+      },
+    );
+    (
+      companionReactionService as unknown as {
+        fireUnpromptedTurn: typeof fireUnpromptedTurn;
+      }
+    ).fireUnpromptedTurn = fireUnpromptedTurn;
+    const textGenerator = makeTextGenerator({ text: 'I remember what you promised.' });
+    npcDialogueService.configure({
+      contentProvider: companionProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const generate = () =>
+      npcDialogueService.generateTurn({
+        npcId: 'village_guard',
+        npcName: 'Bram',
+        messages: [],
+        signal: new AbortController().signal,
+      });
+    await generate();
+    await generate();
+
+    const firstCall = textGenerator.mock.calls[0]?.[0] as
+      | { messages?: Array<{ role: string; content: string }> }
+      | undefined;
+    const secondCall = textGenerator.mock.calls[2]?.[0] as
+      | { messages?: Array<{ role: string; content: string }> }
+      | undefined;
+    const firstPrompt = firstCall?.messages?.[0]?.content;
+    const secondPrompt = secondCall?.messages?.[0]?.content;
+    expect(firstPrompt).toContain('[COMPANION WITNESSED]');
+    expect(firstPrompt).toContain(event.summary);
+    expect(secondPrompt).not.toContain('[COMPANION WITNESSED]');
+    expect(fireUnpromptedTurn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-494 AC-1: the companion recruits through the existing roster
+// ---------------------------------------------------------------------------
+
+describe('C-494 AC-1: recruit through the existing dialogue seam', () => {
+  const recruitProvider = () =>
+    makeContentProvider({
+      npcs: {
+        village_guard: {
+          name: 'Bram the Guard',
+          isCompanion: true,
+          companionClassId: 'fighter',
+          initialApproval: 10,
+          recruitDialogueKey: 'bram_recruit_offer',
+          dismissDialogueKey: 'bram_dismiss',
+          banterPool: ['bram_banter_ward'],
+        },
+        village_elder: { name: 'Elder Thalia', defaultDialogueKey: 'elder_thalia_greeting' },
+      },
+    });
+
+  test('deriveAllowedCommands includes recruit for a companion NPC', () => {
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+    const allowed = npcDialogueService.deriveAllowedCommands('village_guard');
+    expect(allowed).toContain('recruit');
+  });
+
+  test('a non-companion NPC does not get the recruit command', () => {
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+    const allowed = npcDialogueService.deriveAllowedCommands('village_elder');
+    expect(allowed).not.toContain('recruit');
+  });
+
+  test('executeCommand dispatches the recruit command to the roster executor', () => {
+    const executors = makeExecutors();
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors,
+    });
+    const ok = npcDialogueService.executeCommand({
+      kind: 'recruit',
+      npcId: 'village_guard',
+      npcName: 'Bram the Guard',
+      command: { kind: 'recruit' },
+    });
+    expect(ok).toBe(true);
+    expect(execLog).toContain('recruit');
   });
 });

@@ -30,7 +30,9 @@ import {
   NpcSuggestionChipSchema,
 } from '@aikami/schemas';
 import type {
+  CommittedNarrativeEvent,
   ContentPackItemEntry,
+  ContentPackNpcEntry,
   ContentPackNpcPersonality,
   NpcDialogueChoice,
   NpcDialogueCommand,
@@ -47,9 +49,11 @@ import { createSeedableRng, resolveCommand } from '@aikami/utils';
 import { Value } from 'typebox/value';
 import {
   campaignService,
+  companionReactionService,
   inventoryService,
   narrativeEventService,
   npcAwarenessService,
+  partyRosterService,
   questStateService,
   relationshipService,
 } from '$services';
@@ -240,6 +244,13 @@ type DialogueContextProjection = {
   gameStateFacts: string[];
   relationshipFacts: string[];
   allowedCommands: NpcDialogueCommandKind[];
+  /**
+   * Companion witness recall (C-494 AC-3). Events this NPC witnessed
+   * (C-491) surfaced in their own voice. Empty for non-companions.
+   */
+  companionWitnessed: string[];
+  /** Pending event selected for this turn; consumed only after generation succeeds. */
+  pendingCompanionWitness?: CommittedNarrativeEvent;
 };
 
 // ---------------------------------------------------------------------------
@@ -681,6 +692,14 @@ export class NpcDialogueService
           turnCtx,
           onChunk: options.onChunk,
         });
+        const pendingWitness = contextProjection.pendingCompanionWitness;
+        if (pendingWitness) {
+          companionReactionService.fireUnpromptedTurn({
+            npcId: options.npcId,
+            npc: npc as ContentPackNpcEntry,
+            event: pendingWitness,
+          });
+        }
         return aiTurn;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1395,6 +1414,15 @@ export class NpcDialogueService
     // Persona: assembled from authored identity with per-field fallback (C-488).
     const persona = this._buildPersona({ npcId, npcName, npc });
 
+    // Companion witness recall (C-494 AC-3). Only for a recruited companion:
+    // surface the C-491 events they actually witnessed, in their own voice.
+    // Routed through narrativeEventService.witnessedBy (C-492's retrieveForNpc
+    // was reverted on main — see Amendment A-1).
+    const pendingCompanionWitness = this._selectPendingCompanionWitness({ npcId, npc });
+    const companionWitnessed = pendingCompanionWitness
+      ? [`- ${pendingCompanionWitness.summary}`]
+      : [];
+
     // Memory: recent conversation turns (bounded window — last 10 turns)
     const memory = messages
       .slice(-10)
@@ -1407,7 +1435,33 @@ export class NpcDialogueService
       gameStateFacts,
       relationshipFacts: [],
       allowedCommands,
+      companionWitnessed,
+      ...(pendingCompanionWitness ? { pendingCompanionWitness } : {}),
     };
+  }
+
+  /**
+   * C-494 AC-3: gathers the witness-scoped recall for a recruited companion.
+   * Returns a bounded list of `[COMPANION WITNESSED]` lines (event summaries)
+   * for the C-491 events this NPC witnessed. Empty for non-companions and for
+   * companions that have witnessed nothing. Never references events the NPC
+   * did not witness (security/privacy).
+   */
+  private _selectPendingCompanionWitness(options: {
+    npcId: string;
+    npc: ReturnType<NpcDialogueContentProvider['getNpc']>;
+  }): CommittedNarrativeEvent | undefined {
+    const { npcId, npc } = options;
+    const isCompanion = Boolean((npc as Record<string, unknown> | undefined)?.isCompanion);
+    if (!isCompanion || !partyRosterService.hasMember(npcId)) {
+      return undefined;
+    }
+
+    return narrativeEventService
+      .witnessedBy(npcId)
+      .filter((event) => event.kind === 'PromiseMade' || event.kind === 'ThreatWitnessed')
+      .filter((event) => !companionReactionService.hasFired({ npcId, eventId: event.id }))
+      .at(-1);
   }
 
   /**
@@ -1469,6 +1523,18 @@ export class NpcDialogueService
 
     if (projection.memory.length > 0) {
       lines.push('', '[CONVERSATION HISTORY]', ...projection.memory);
+    }
+
+    // C-494 AC-3: witness recall surfaces an event this companion actually
+    // witnessed, in their own voice. Injected as background — the companion
+    // raises it unprompted rather than as a numeric readout.
+    if (projection.companionWitnessed.length > 0) {
+      lines.push(
+        '',
+        '[COMPANION WITNESSED]',
+        ...projection.companionWitnessed,
+        'Bring this up naturally, in your own voice, without being asked.',
+      );
     }
 
     lines.push(
@@ -2244,7 +2310,7 @@ export class NpcDialogueService
       return;
     }
 
-    narrativeEventService.record({
+    const event = narrativeEventService.record({
       campaignId,
       kind,
       informationKind,
@@ -2257,6 +2323,24 @@ export class NpcDialogueService
       sourceEventId,
       deltasApplied: applied.length > 0 ? applied : undefined,
     });
+
+    // C-494 AC-4/AC-5: evaluate every recruited companion who witnessed the
+    // committed event. Witnesses are the commit-time authority; the dialogue
+    // actor is not necessarily the companion who reacts.
+    for (const witnessNpcId of event?.witnesses ?? []) {
+      const witnessNpc = this._contentProvider?.getNpc(witnessNpcId) as
+        | ContentPackNpcEntry
+        | undefined;
+      if (!witnessNpc?.isCompanion || !partyRosterService.hasMember(witnessNpcId)) {
+        continue;
+      }
+      companionReactionService.evaluateEvent({ npcId: witnessNpcId, npc: witnessNpc, event });
+      companionReactionService.fireUnpromptedTurn({
+        npcId: witnessNpcId,
+        npc: witnessNpc,
+        event,
+      });
+    }
   }
 
   /** Builds a human-readable summary for a dialogue-sourced event. */

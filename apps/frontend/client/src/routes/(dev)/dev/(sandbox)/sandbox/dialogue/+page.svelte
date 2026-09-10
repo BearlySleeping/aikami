@@ -172,6 +172,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       gameStateFacts: [],
       relationshipFacts: [],
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
+      companionWitnessed: [],
     }),
     executeCommand: () => true,
     /** Turn state owned by the dev mock (C-401) — mirrors the real service. */

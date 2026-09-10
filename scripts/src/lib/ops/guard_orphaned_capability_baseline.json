@@ -490,15 +490,20 @@
       "InputActionServiceOptions"
     ]
   },
-  "apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts": {
+  "apps/frontend/client/src/lib/services/game/companion_reaction.ts": {
     "orphaned": [
-      "PartyRosterService.activatePersonalQuest",
-      "PartyRosterService.adjustApproval",
-      "PartyRosterService.deactivatePersonalQuest",
-      "PartyRosterService.hasMember",
-      "PartyRosterServiceInterface",
-      "PartyRosterServiceOptions"
-    ]
+      "CompanionReactionKind",
+      "ParsedCompanionReaction",
+      "parseBoundaryReactions",
+      "parseCompanionReaction"
+    ],
+    "_comment": "C-494: pure helpers used internally (via detectBoundaryCrossing) and unit-tested directly; type exports are the module's public type surface."
+  },
+  "apps/frontend/client/src/lib/services/game/companion_reaction_service.svelte.ts": {
+    "orphaned": ["CompanionReactionServiceInterface", "CompanionReactionServiceOptions"]
+  },
+  "apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts": {
+    "orphaned": ["PartyRosterServiceInterface", "PartyRosterServiceOptions"]
   },
   "apps/frontend/client/src/lib/services/game/onboarding_hint_service.svelte.ts": {
     "orphaned": [

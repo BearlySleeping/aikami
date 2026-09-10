@@ -73,7 +73,6 @@
   "npcStorage",
   "parseSavePayloadEnvelope",
   "partyFollowService",
-  "partyRosterService",
   "playSfxByName",
   "playerJournalService",
   "publicEnv",
