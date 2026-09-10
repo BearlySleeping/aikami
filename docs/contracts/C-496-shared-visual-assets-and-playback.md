@@ -3,7 +3,7 @@ id: C-496
 title: "Shared visual assets, atlas import and playback"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -207,3 +207,85 @@ See [promotion lifecycle](SHARED_SECTIONS.md#promotion-lifecycle).
 ## Status Lifecycle
 
 See [status lifecycle](SHARED_SECTIONS.md#status-lifecycle). This draft claims no implementation or verification.
+
+## Execution Report
+
+### Summary
+Implemented the foundational shared visual-format layer of C-496: a versioned,
+strict TypeBox `VisualDefinition` schema (identity/images/frames/clips/
+components/presentation/provenance, discriminated by kind) with structural
+validation (bounds, duplicate ids, unresolved refs, acyclic fallbacks,
+unsupported-mode rejection), an LPC→definition adapter that emits explicit
+frames/clips/origins/actor-level fallbacks (replacing runtime dimension
+heuristics), an elapsed-time actor clock primitive, and the catalog
+publication revision-consistency fix (shard/seed failure prevents release
+pointer advancement). Added a user-facing visual-asset authoring docs page.
+
+Deferred (see Deviations): full engine/preview consumption of the definition,
+the mixed-asset `/game` renderer, and the production-path E2E + visual evidence
+for AC-3/AC-6/AC-7 — the shared format and playback clock they depend on are in
+place, but the renderer wiring and visual evidence were not completed in this
+session.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Shared visual schema + validator + LPC adapter compile into it; invalid inputs rejected. Unit-tested. |
+| AC-2 | ⚠️ | Component schema carries rig/body/pose + stable passes/deterministic order; LPC adapter emits `/behind`-style rear passes. Hub `buildLpcCatalog` regression not re-tested (C-504 already landed). |
+| AC-3 | ❌ | Mixed-asset `/game` rendering not implemented; no generic-atlas renderer wired into the engine yet. |
+| AC-4 | ✅ | Publication now blocks release-pointer advancement on shard/seed failure; failure-injection + offline-install tests added. `index/v1/` preserved. |
+| AC-5 | ⚠️ | Elapsed-time actor clock (`ElapsedTimeActor` + `resolveClipFrameAtTime`) added and unit-tested; full `animation_controller` engine swap deferred. |
+| AC-6 | ❌ | Preview integration of the shared definition not implemented; no visual/E2E evidence. |
+| AC-7 | ❌ | Resource/perf regression report not produced. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `packages/shared/schemas/src/lib/visual/visual_definition.ts` | Versioned shared visual definition schema + validator |
+| `packages/shared/schemas/src/lib/visual/visual_definition.test.ts` | AC-1 schema/validation tests |
+| `packages/shared/lpc/src/lib/visual_adapter.ts` | LPC→definition adapter (explicit frames/clips/fallbacks) |
+| `packages/shared/lpc/src/lib/elapsed_time.ts` | Elapsed-time actor clock + clip resolver |
+| `packages/shared/lpc/tests/visual_adapter.test.ts` | Adapter tests |
+| `packages/shared/lpc/tests/elapsed_time.test.ts` | AC-5 clock tests |
+| `apps/frontend/docs/src/content/docs/features/visual-asset-authoring.md` | User-facing authoring reference |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `packages/shared/schemas/src/index.ts` | Export visual definition schema |
+| `packages/shared/lpc/src/index.ts` | Export adapter + elapsed-time clock |
+| `packages/shared/lpc/src/lib/animation.ts` | Export `FRAMES_PER_STATE`, `LPC_STATE_NAMES` |
+| `scripts/src/lib/catalog/pipeline.ts` | Block release pointer on shard/seed failure; report seed stats |
+| `scripts/src/lib/catalog/__tests__/fixtures.ts` | Add seed files so happy path reports seed success |
+| `scripts/src/lib/catalog/__tests__/publish.test.ts` | Add AC-4 failure-injection tests; update seed count |
+| `scripts/src/lib/catalog/__tests__/thumbnail_generation.test.ts` | Add seed files to fixture |
+| `docs/contracts/C-496-shared-visual-assets-and-playback.md` | Status → implemented; this report |
+
+### Deviations from Spec
+- The shared visual definition, LPC adapter, elapsed-time clock and
+  publication fix were implemented and unit-tested. The **engine/preview
+  consumption** (game_world/lpc_renderer/lpc_preview_view_model using the new
+  definition), the **generic-atlas renderer** for non-LPC frames, and the
+  **production-path `/game` E2E + visual evidence** for AC-3, AC-6 and AC-7
+  were NOT completed in this session due to the contract's breadth (40–65
+  paths) relative to the implementation budget. The foundations they require
+  are in place and validated.
+- Proposed Amendment: split the remaining engine/preview integration and
+  visual-evidence ACs (AC-3, AC-6, AC-7) into a follow-up contract that
+  consumes this landed shared-format layer, or extend this run's budget to
+  wire `lpc_renderer`/`game_world` to the definition and produce the required
+  captures.
+
+### Test Results
+- Unit (schemas visual): 15/15 pass (0 failures)
+- Unit (lpc): 77/77 pass (0 failures)
+- Unit (scripts catalog): 71/71 pass (0 failures)
+- Visual/E2E: not run (deferred ACs — no production-path evidence yet)
+- Baseline: no pre-existing failures observed in the affected suites; 0 new
+  failures in the delivered tests.
+
+### Handoff
+Handed off for independent verification. AC-1 and AC-4 are fully implemented
+and unit-tested; AC-2/AC-5 partially (schema/clock primitives); AC-3/AC-6/AC-7
+deferred pending the proposed amendment. Verify the delivered shared-format
+layer, then decide on the amendment before promoting to `verified`.
