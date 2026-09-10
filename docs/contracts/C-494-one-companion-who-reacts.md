@@ -3,7 +3,7 @@ id: C-494
 title: "One companion who reacts"
 source: direct
 contract_type: full
-status: approved
+status: implemented
 github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
 created_at: "2026-09-09T00:00:00Z"
 ---
@@ -287,7 +287,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 | Version | Date | Change | Approved by |
 |---|---|---|---|
-| — | — | — | — |
+| A-1 | 2026-09-10 | AC-3 witness recall routed through `narrativeEventService.witnessedBy` (C-492's `retrieveForNpc` reverted on main); AC-5 unprompted turn keyed to the event-commit path. | Pipeline (deviation per AC-3/AC-5 Watch Points) |
 
 ## Promotion Lifecycle
 
@@ -298,3 +298,61 @@ Changes to ACs or scope require a version bump and user approval.
 > 📋 Status rules: see [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle)
 
 ---
+
+## Execution Report
+
+### Summary
+Authored one recruitable companion (`village_guard` / Bram the Guard) in the
+Emberwatch pack with the full companion field set and all five C-488 identity
+characteristics. Wired the companion witness-recall seam into the dialogue
+context (`[COMPANION WITNESSED]`), built a companion reaction authority that
+turns boundary crossings into real state changes (`refuse`/`object`/`leave`),
+and added a scripted unprompted-action trigger keyed to a witnessed event.
+Added tests covering AC-1 through AC-6 including the save/reload round-trip.
+
+### AC Status
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Companion recruits via existing `recruit` dialogue seam → `partyRosterService.recruit`; non-companions excluded; idempotent. |
+| AC-2 | ✅ | `content_pack.test.ts` asserts exactly one companion with all five identity characteristics. |
+| AC-3 | ✅ | `_buildCompanionWitnessRecall` injects `[COMPANION WITNESSED]` via `narrativeEventService.witnessedBy`; test asserts injected line + absence of unwitnessed events. |
+| AC-4 | ✅ | `companion_reaction_service` applies `refuse`/`object`/`leave` as real state changes, idempotent per event id. |
+| AC-5 | ✅ | `fireUnpromptedTurn` keyed to a witnessed event fires exactly once (idempotency). |
+| AC-6 | ✅ | Save/reload round-trip test: roster membership + approval survive `serialize`/`hydrate`. |
+
+### Files Created
+| File | Purpose |
+|---|---|
+| `apps/frontend/client/src/lib/services/game/companion_reaction.ts` | Pure `reaction\|trigger` convention parser + state-change application (AC-4). |
+| `apps/frontend/client/src/lib/services/game/companion_reaction_service.svelte.ts` | Companion reaction authority — `evaluateEvent`, `fireUnpromptedTurn`, idempotency ledger. |
+| `apps/frontend/client/src/lib/services/game/companion_reaction_service.test.ts` | Unit tests for AC-4/AC-5. |
+| `apps/frontend/docs/src/content/docs/features/companions.md` | User-facing docs page. |
+
+### Files Modified
+| File | Change |
+|---|---|
+| `content/packs/emberwatch/manifest.json` | Added `village_guard` companion (fields + 5 identity characteristics + recruit/dismiss/banter dialogues). |
+| `content/packs/emberwatch/maps/village.json` | Placed `village_guard` NPC spawn in the village. |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | Added `companionWitnessed` to context projection, `_buildCompanionWitnessRecall`, `[COMPANION WITNESSED]` prompt section, and reaction seam in `_recordDialogueEvent`. |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | Added AC-1, AC-3 tests. |
+| `apps/frontend/client/src/lib/services/game/party_roster_service.test.ts` | Added AC-6 round-trip test. |
+| `packages/shared/schemas/src/lib/game/content_pack.test.ts` | Added AC-2 identity tests. |
+| `apps/frontend/client/src/lib/services/index.ts` | Exported `companion_reaction_service`. |
+| `apps/frontend/client/src/lib/test_preload.ts` | Added `partyRosterService` + `companionReactionService` mock doubles. |
+| `apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/dialogue/+page.svelte` | Added `companionWitnessed` to mock projection. |
+
+### Deviations from Spec
+- **AC-3 witness recall routed through `narrativeEventService.witnessedBy`** rather
+  than C-492's `retrieveForNpc`, because C-492 was reverted on `main`
+  (commit `3f2568db4`). This is the explicitly permitted fallback in the AC-3
+  Watch Points. Recorded as Amendment A-1 below.
+- **AC-5 unprompted action is keyed to the event-commit path** (`_recordDialogueEvent`
+  → `fireUnpromptedTurn`) rather than C-493's autonomous poller, per the AC-5
+  Watch Points fallback when the poller is not wired for companion reactions.
+
+### Test Results
+- Unit: 682 pass / 0 fail across the touched suites (client game services,
+  schemas content-pack, engine loader integration).
+- E2E: N/A — full release-journey E2E is deferred to C-495 AC-6 per the contract.
+- Visual: N/A — contract marks all visual evidence N/A.
+- Baseline: 0 pre-existing failures in the targeted suites; 0 new failures.
