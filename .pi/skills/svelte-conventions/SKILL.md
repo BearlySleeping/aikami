@@ -160,24 +160,33 @@ or call server API endpoints directly. That belongs in services.
 ### Export ViewModels via Factory Function, Never Raw Class
 
 ```typescript
-// ✅ CORRECT — factory with create() returns interface
+// ✅ CORRECT — testable factory (no production imports) + production factory
 class MyViewModel extends BaseViewModel<MyOptions> implements MyViewModelInterface {
   // ...
 }
 
-export const getMyViewModel = (options: MyOptions): MyViewModelInterface =>
+// In my_view_model.svelte.ts — tests consume this with typed fixtures.
+export const createMyViewModel = (options: MyOptions): MyViewModelInterface =>
   MyViewModel.create(options);
 
-// ❌ WRONG — never export class directly, never use `new`
-export class MyViewModel { ... }
+// In my_composition.ts — the only module that imports production services.
+export const getMyViewModel = (options: BaseViewModelOptions): MyViewModelInterface =>
+  createMyViewModel({ ...options, myService });
+
+// ❌ WRONG — never instantiate with `new`, and never export a `get*` factory
+// from the ViewModel module itself.
 const vm = new MyViewModel(options);
 ```
 
 **Why**: `BaseViewModel.create()` instruments the instance so every public
 method call is auto-logged (prototype method shadowing — not an ES6 Proxy,
 which crashes Svelte 5 `$state`). Raw `new` bypasses this instrumentation —
-no logging, no diagnostics. The factory returns the Interface type so
+no logging, no diagnostics. The factories return the Interface type so
 consumers depend on the contract, not the implementation.
+
+The class itself is normally module-local. Export it **only** when a documented
+`*.dev.svelte.ts` subclass extends it (the AI settings editor is the current
+example), and never export a class as the primary consumption path.
 
 ### 🔴 Interface Methods: Method Signatures, NOT Arrow Properties
 
@@ -263,7 +272,7 @@ export type FeatureViewModelOptions = BaseViewModelOptions & {
   featureService: FeatureServiceCapabilities;
 };
 
-export class FeatureViewModel
+class FeatureViewModel
   extends BaseViewModel<FeatureViewModelOptions>
   implements FeatureViewModelInterface
 {
@@ -313,16 +322,47 @@ export const getFeatureViewModel = (
   createFeatureViewModel({ ...options, featureService: myService });
 ```
 
-The boundary is **enforced**: `guard-view-model-composition` (`bun run guard`)
-fails if a `*_view_model.svelte.ts` imports the `$services` barrel or the
-aggregate `@aikami/frontend/services` root at runtime. Type-only imports are
-allowed (erased), and base classes come from the narrow
-`@aikami/frontend/services/base`. Not-yet-migrated ViewModels are captured in a
-ratchet baseline; each migration must remove its entry via `--update-baseline`.
+The boundaries are **enforced** by `bun run guard`:
+
+- `guard-view-model-composition` (C1/C2) fails if a `*_view_model.svelte.ts`
+  imports the `$services` barrel or the aggregate `@aikami/frontend/services`
+  root at runtime. Type-only imports are allowed (erased); base classes come
+  from the narrow `@aikami/frontend/services/base`.
+- `guard-view-model-composition` (C3) fails if a section metadata registry
+  (`*_sections.ts`, but not `*_sections_composition.ts`) imports a ViewModel,
+  composition wrapper, or service at runtime. Metadata stays inert; factory
+  lookup lives in the sibling `*_sections_composition.ts`.
+- `guard-mvvm-conventions` (M8, AST-based) fails if a ViewModel imports another
+  ViewModel or a `*_composition.ts` wrapper at runtime.
+- `guard-mvvm-conventions` (M10) fails if application code writes `__mounted`.
+  That flag belongs to `BaseViewModelContainer` / lifecycle infrastructure.
+
+Not-yet-migrated ViewModels are captured in a ratchet baseline; each migration
+must remove its entry via `--update-baseline`, and baseline growth requires
+explicit review.
 
 Naming: the testable factory (no production imports) is `createFeatureViewModel`
 in the ViewModel module; `getFeatureViewModel` in the `*_composition.ts` file is
 the production-wired factory.
+
+### Child ViewModels: Composition vs Communication
+
+Each ViewModel instance has **exactly one lifecycle owner**. The default is
+`BaseViewModelContainer`: whatever view renders a child ViewModel owns its
+`initialize()`/`dispose()`. Do not manually call `initialize()`/`dispose()` on a
+child that a container renders, and never write `__mounted` (M10).
+
+| Situation | Correct shape |
+| --- | --- |
+| Parent exposes a child only for rendering | Pass the child `viewModel`; the child view's container owns lifecycle |
+| Two sections share persisted configuration / connection-test results | Shared service capability (appropriate scope), not a shared child VM |
+| Parent needs an adjacent editor to open | Narrow intent callback, injected as a capability |
+| Parent needs a child VM's domain/state as an API | Replace with a service capability or pure selector |
+| A section needs its own VM | Section host creates it; one owner per instance |
+
+Aggregator ViewModels receive already-built sub-ViewModels (or a factory
+capability) through typed options — with production wiring in a sibling
+`*_composition.ts` — rather than importing child `get*` factories themselves.
 
 ### ViewModel Rules
 
@@ -341,12 +381,12 @@ the production-wired factory.
 - Logging via inherited `this.debug()` / `this.error()` etc. — never `$logger`
 - ViewModel `$state` fields are public by design — do NOT prefix them with `_`
   (exception to the universal private-member `_` rule)
-- **Sub-view components** should accept optional `viewModel` via `$props()` with a default factory — never create ViewModels in the parent's `<script>` block and pass them down
+- **Sub-view components** accept an optional `viewModel` via `$props()` with a default factory; a host may instead pass a render-only child, but one owner initializes/disposes each instance (no `__mounted` writes in application code)
 
 ### Optional ViewModel Prop Pattern
 
-Sub-view components (reusable UI panels, editor modals) should self-instantiate
-their ViewModel via default `$props()`:
+Sub-view components (reusable UI panels, editor modals) self-instantiate their
+ViewModel via a default `$props()` when nothing else owns it:
 
 ```svelte
 <!-- ✅ CORRECT — optional viewModel with default factory -->
@@ -361,14 +401,23 @@ their ViewModel via default `$props()`:
     viewModel = getMyViewModel({ className: 'MyViewModel' }),
   }: Props = $props();
 </script>
-
-<!-- ❌ WRONG — creating ViewModel in parent's <script> -->
-<script lang="ts">
-  // parent_view.svelte
-  const childVm = getChildViewModel({ ... });
-</script>
-<ChildView viewModel={childVm} />
 ```
+
+A host (page or aggregator) may also own a child ViewModel and pass it down for
+rendering — this is permitted composition, as long as exactly one owner
+initializes/disposes it (normally the child view's `BaseViewModelContainer`).
+
+```svelte
+<!-- ✅ CORRECT — host passes a render-only child, container owns lifecycle -->
+<ChildView viewModel={hostViewModel.childViewModel} />
+
+<!-- ❌ WRONG — parent reads/mutates a child VM as its business/state API.
+     Put shared logic in a service capability or a pure selector instead. -->
+```
+
+For host-owned children, wire them through typed options in the host VM and
+build them in the host's `*_composition.ts` — the host VM module must not import
+child `get*` factories (M8).
 
 ---
 
@@ -376,6 +425,14 @@ their ViewModel via default `$props()`:
 
 Singleton classes with `$state` for external state management. Never use
 Svelte stores.
+
+Application-scoped singletons are the default for genuinely shared state (DB
+connection, game/campaign state, auth). **Scoped factories are also legitimate**
+when the scope is real — a settings session or a single editor may own its own
+instance. Do not promote editor visibility, form fields, or per-UI preview state
+to an application singleton merely because two components use it; and do not
+move a whole feature's state into a global service as a shortcut. Share only the
+fact or workflow that is actually shared.
 
 ```typescript
 // packages/frontend/services/src/lib/my_service.svelte.ts
