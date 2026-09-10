@@ -19,7 +19,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — "I disapprove: −5" is bookkeeping; a companion is a character |
 | **Dependencies** | [C-488](C-488-authored-npc-identity-in-the-content-pack.md) (authored identity), [C-491](C-491-committed-narrative-event-record.md) (the events the companion witnesses), [C-492](C-492-memory-retrieval-correctness-and-production-wiring.md) (witness-scoped recall feeding the companion's references). |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing |
 | **Contract version** | 2.0.0 |
