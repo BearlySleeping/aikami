@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-09)
+## Status Summary (Auto-generated: 2026-09-10)
 
-**258 active (0 without contract file), 119 archived, 0 duplicates**
+**260 active (0 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -255,9 +255,11 @@
 | C-491 | Committed Narrative Event Record | 🛠️ implemented | — | v2 | full |
 | C-492 | Memory Retrieval Correctness And Production Wiring | 👍 approved | — | v2 | full |
 | C-493 | Wire Group Scenes Into The Production Party Path | 👍 approved | — | v2 | thin |
-| C-494 | One Companion Who Reacts | 📝 draft | — | v2 | full |
-| C-495 | Emberwatch Dramatic Structure | 📝 draft | — | v2 | full |
-| C-496 | Shared Visual Assets And Playback | 📝 draft | — | v2 | full |
+| C-494 | One Companion Who Reacts | 🛠️ implemented | — | v2 | full |
+| C-495 | Emberwatch Dramatic Structure | 🛠️ implemented | — | v2 | full |
+| C-496 | Shared Visual Assets And Playback | 👍 approved | — | v2 | full |
+| C-497 | Camera Framing And Default Asset Review | 📝 draft | — | v2 | thin |
+| C-498 | Preset Means Character Is Ready | 📝 draft | — | v2 | thin |
 | C-499 | Dialogue Intent Envelope Extraction Resilience | 🛠️ implemented | ❓ `integrated` — production route `/game` | v2 | thin |
 | C-500 | Combat Overlay Rendering And Engine Stall | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
 | C-501 | Dialogue Slash Commands | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |

@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-09-09
+> Auto-generated: 2026-09-10
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 173 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 175 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -230,9 +230,11 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-491 | Committed Narrative Event Record | 🛠️ implemented | v2 | full |
 | C-492 | Memory Retrieval Correctness And Production Wiring | 👍 approved | v2 | full |
 | C-493 | Wire Group Scenes Into The Production Party Path | 👍 approved | v2 | thin |
-| C-494 | One Companion Who Reacts | 📝 draft | v2 | full |
-| C-495 | Emberwatch Dramatic Structure | 📝 draft | v2 | full |
-| C-496 | Shared Visual Assets And Playback | 📝 draft | v2 | full |
+| C-494 | One Companion Who Reacts | 🛠️ implemented | v2 | full |
+| C-495 | Emberwatch Dramatic Structure | 🛠️ implemented | v2 | full |
+| C-496 | Shared Visual Assets And Playback | 👍 approved | v2 | full |
+| C-497 | Camera Framing And Default Asset Review | 📝 draft | v2 | thin |
+| C-498 | Preset Means Character Is Ready | 📝 draft | v2 | thin |
 | C-504 | Stable Character Appearance Identity | 🛠️ implemented | v2 | full |
 | C-505 | Canonical Scene Data And Authoring Boundary | 🛠️ implemented | v2 | full |
 | C-506 | Emberwatch Visual Readability | 🛠️ implemented | v2 | thin |

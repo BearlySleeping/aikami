@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-09
-> Files: 448 across 18 categories
+> Generated: 2026-09-10
+> Files: 450 across 18 categories
 
 ## Quick Start (Read These First)
 
@@ -406,6 +406,8 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-494: One companion who reacts](contracts/C-494-one-companion-who-reacts.md)
 - [Contract C-495: Emberwatch dramatic structure](contracts/C-495-emberwatch-dramatic-structure.md)
 - [Contract C-496: Shared visual assets, atlas import and playback](contracts/C-496-shared-visual-assets-and-playback.md)
+- [Contract C-497: Camera framing and default-asset review](contracts/C-497-camera-framing-and-default-asset-review.md)
+- [Contract C-498: A preset means the character is ready](contracts/C-498-preset-means-character-is-ready.md)
 - [Contract C-499: Dialogue Intent Envelope Extraction Resilience](contracts/C-499-dialogue-intent-envelope-extraction-resilience.md)
 - [Contract C-500: Combat Overlay Rendering and Engine Stall](contracts/C-500-combat-overlay-rendering-and-engine-stall.md)
 - [Contract C-501: Dialogue Slash Commands](contracts/C-501-dialogue-slash-commands.md)
