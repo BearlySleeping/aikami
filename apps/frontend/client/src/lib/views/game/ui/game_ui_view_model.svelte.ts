@@ -47,8 +47,8 @@ import {
   getPartyRosterViewModel,
   type PartyRosterViewModelInterface,
 } from './overlays/party_roster/party_roster_view_model.svelte';
+import { getPauseMenuViewModel } from './overlays/pause_menu/pause_menu_composition.ts';
 import type { PauseMenuViewModelInterface } from './overlays/pause_menu/pause_menu_view_model.svelte';
-import { getPauseMenuViewModel } from './overlays/pause_menu/pause_menu_view_model.svelte';
 import {
   getReputationViewModel,
   type ReputationViewModelInterface,
