@@ -52,17 +52,17 @@ export type RigCompatibleAssetResult = {
 // ---------------------------------------------------------------------------
 
 /** Flat catalog body segments (e.g. `body/bodies_female`). */
-const RIG_BY_BODY_SEGMENT: Readonly<Record<string, LpcRig>> = {
+const RIG_BY_BODY_SEGMENT = {
   bodies_male: 'male',
   bodies_female: 'female',
   bodies_child: 'child',
   bodies_teen: 'teen',
   bodies_muscular: 'muscular',
   bodies_pregnant: 'pregnant',
-};
+} as const satisfies Readonly<Record<string, LpcRig>>;
 
 /** Nested body segments (e.g. `body/bodies/male/light`). */
-const RIG_BY_NESTED_SEGMENT: Readonly<Record<string, LpcRig>> = {
+const RIG_BY_NESTED_SEGMENT = {
   male: 'male',
   female: 'female',
   child: 'child',
@@ -72,7 +72,15 @@ const RIG_BY_NESTED_SEGMENT: Readonly<Record<string, LpcRig>> = {
   // `thin`/`thick` are legacy spellings of the female/male silhouettes.
   thin: 'female',
   thick: 'male',
-};
+} as const satisfies Readonly<Record<string, LpcRig>>;
+
+/** Narrows a dynamic segment to a catalog-verified flat body key. */
+const isFlatBodySegment = (segment: string): segment is keyof typeof RIG_BY_BODY_SEGMENT =>
+  Object.hasOwn(RIG_BY_BODY_SEGMENT, segment);
+
+/** Narrows a dynamic segment to a catalog-verified nested body key. */
+const isNestedBodySegment = (segment: string): segment is keyof typeof RIG_BY_NESTED_SEGMENT =>
+  Object.hasOwn(RIG_BY_NESTED_SEGMENT, segment);
 
 /**
  * Maps a body-slot asset ID to its rig. Unknown or missing bodies default to
@@ -85,15 +93,13 @@ export const resolveBodyRig = (bodyAssetId: string | null | undefined): LpcRig =
   }
   const segments = bodyAssetId.split('/');
   for (const segment of segments) {
-    const flat = RIG_BY_BODY_SEGMENT[segment];
-    if (flat) {
-      return flat;
+    if (isFlatBodySegment(segment)) {
+      return RIG_BY_BODY_SEGMENT[segment];
     }
   }
   for (const segment of segments) {
-    const nested = RIG_BY_NESTED_SEGMENT[segment];
-    if (nested) {
-      return nested;
+    if (isNestedBodySegment(segment)) {
+      return RIG_BY_NESTED_SEGMENT[segment];
     }
   }
   return 'male';
@@ -103,7 +109,7 @@ export const resolveBodyRig = (bodyAssetId: string | null | undefined): LpcRig =
 // Suffix resolution
 // ---------------------------------------------------------------------------
 
-const BODY_SUFFIXES: readonly LpcBodySuffix[] = [
+const BODY_SUFFIXES = [
   'male',
   'female',
   'thin',
@@ -111,7 +117,7 @@ const BODY_SUFFIXES: readonly LpcBodySuffix[] = [
   'child',
   'muscular',
   'pregnant',
-];
+] as const satisfies readonly LpcBodySuffix[];
 
 /**
  * Ordered, per-rig candidate suffixes.
@@ -123,14 +129,14 @@ const BODY_SUFFIXES: readonly LpcBodySuffix[] = [
  *     a dedicated suffix does not exist.
  *   - muscular falls back to `_male` (upstream maps muscular → male sheets).
  */
-export const RIG_SUFFIXES: Readonly<Record<LpcRig, readonly LpcBodySuffix[]>> = {
+export const RIG_SUFFIXES = {
   male: ['male'],
   female: ['female', 'thin'],
   teen: ['teen', 'female', 'thin'],
   muscular: ['muscular', 'male'],
   pregnant: ['pregnant', 'female', 'thin'],
   child: ['child', 'teen', 'female', 'thin'],
-};
+} as const satisfies Readonly<Record<LpcRig, readonly LpcBodySuffix[]>>;
 
 /** Extracts the trailing body suffix of an asset, or `null` when body-agnostic. */
 const detectBodySuffix = (assetId: string): LpcBodySuffix | null => {
@@ -171,7 +177,7 @@ export const resolveRigCompatibleAsset = (options: {
     return { assetId, status: 'compatible', diagnostics: [] };
   }
 
-  const priority = RIG_SUFFIXES[rig];
+  const priority: readonly LpcBodySuffix[] = RIG_SUFFIXES[rig];
   if (priority.includes(suffix)) {
     // Already acceptable for this rig — never re-cut an explicit choice.
     return { assetId, status: 'compatible', diagnostics: [] };

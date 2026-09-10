@@ -962,7 +962,7 @@ class DialogueOverlayViewModel
 
   /** Classifies a text-generation failure message as a "text not set up" error, or null. */
   private _classifySetupError(message: string): CapabilitySetupError | null {
-    if (!/(not configured|not defined|no provider|is not set up|not set up)/i.test(message)) {
+    if (!/(not configured|no provider|is not set up|not set up)/i.test(message)) {
       return null;
     }
     return {
@@ -975,7 +975,7 @@ class DialogueOverlayViewModel
 
   /** Whether an image-generation failure message indicates a missing provider. */
   private _isImageSetupError(message: string): boolean {
-    return /(not configured|not defined|no provider|is not set up|not set up)/i.test(message);
+    return /(not configured|no provider|is not set up|not set up)/i.test(message);
   }
 
   /** Records an actionable setup error with a Settings deep-link target. */

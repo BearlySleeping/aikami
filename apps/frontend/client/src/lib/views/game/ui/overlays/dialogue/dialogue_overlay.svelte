@@ -12,7 +12,7 @@
 // GuidedComposer components. Surface-specific concerns (skill-check dice,
 // portrait row, spatial speech bubble, suggestion chips, combat escalation)
 // are preserved here via snippets.
-import { Image } from '$components';
+import { CapabilityErrorBanner, Image, SlashAutocomplete } from '@aikami/frontend/components';
 import GameDice from '$lib/components/game/game_dice.svelte';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
@@ -344,37 +344,11 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </div>
         {/if}
 
-        {#if viewModel.capabilityError}
-          <div
-            class="rounded-xl border border-error/30 bg-error/10 p-3"
-            role="alert"
-            data-testid="capability-error"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <p class="text-sm font-semibold text-error">{viewModel.capabilityError.title}</p>
-                <p class="mt-0.5 text-xs text-base-content/80">
-                  {viewModel.capabilityError.message}
-                </p>
-              </div>
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs shrink-0 text-base-content/50"
-                onclick={() => viewModel.dismissCapabilityError()}
-                aria-label="Dismiss error"
-              >
-                ✕
-              </button>
-            </div>
-            <button
-              type="button"
-              class="btn btn-primary btn-sm mt-2 w-full"
-              onclick={() => viewModel.goToSettingsCapability()}
-            >
-              Fix in Settings
-            </button>
-          </div>
-        {/if}
+        <CapabilityErrorBanner
+          error={viewModel.capabilityError}
+          ondismiss={() => viewModel.dismissCapabilityError()}
+          onsettings={() => viewModel.goToSettingsCapability()}
+        />
 
         <!-- CYOA choice buttons -->
         {#if viewModel.activeChoices.length > 0}
@@ -475,30 +449,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </button>
         </div>
       {:else}
-        {#if viewModel.showSlashCompletions}
-          <div class="relative">
-            <ul
-              class="menu menu-sm bg-base-200 rounded-lg shadow-lg border border-base-300 absolute bottom-full left-0 right-0 mb-1 max-h-48 overflow-y-auto z-40"
-              data-testid="dialogue-slash-autocomplete-menu"
-            >
-              {#each viewModel.slashCompletions as cmd, i}
-                <li>
-                  <button
-                    type="button"
-                    class:menu-active={i === viewModel.selectedSlashCompletion}
-                    onmousedown={(e) => {
-                      e.preventDefault();
-                      viewModel.selectAndApplySlashCompletion(i);
-                    }}
-                  >
-                    <span class="font-mono font-bold">/{cmd.name}</span>
-                    <span class="text-xs text-base-content/50">{cmd.description}</span>
-                  </button>
-                </li>
-              {/each}
-            </ul>
-          </div>
-        {/if}
+        <SlashAutocomplete
+          show={viewModel.showSlashCompletions}
+          completions={viewModel.slashCompletions}
+          selectedIndex={viewModel.selectedSlashCompletion}
+          onselect={(index) => viewModel.selectAndApplySlashCompletion(index)}
+        />
         <GuidedComposer
           value={viewModel.inputText}
           onInput={(t) => viewModel.setInput(t)}

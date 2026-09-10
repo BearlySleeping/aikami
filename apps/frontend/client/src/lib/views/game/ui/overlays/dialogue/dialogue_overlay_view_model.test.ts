@@ -1125,8 +1125,7 @@ describe('DialogueOverlayViewModel', () => {
 
     const vm = createViewModel();
     vm.inputText = 'Tell me about the ward.';
-    vm.sendMessage();
-    await new Promise((r) => setTimeout(r, 50));
+    await vm.sendMessage();
 
     // streamError still carries the raw failure for the inline banner…
     expect(vm.streamError).toBe('Ollama is not configured (text.url missing from config.json)');
@@ -1134,6 +1133,19 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.capabilityError?.title).toContain('Text');
     expect(vm.capabilityError?.section).toBe('story-dialogue');
     expect(vm.capabilityError?.group).toBe('ai');
+  });
+
+  test('capability: a generic not-defined error does not redirect to provider settings', async () => {
+    analyzeIntentStub = mock(async () => {
+      throw new Error('Encounter script variable is not defined');
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    await vm.sendMessage('Tell me about the ward.');
+
+    expect(vm.streamError).toBe('Encounter script variable is not defined');
+    expect(vm.capabilityError).toBeNull();
   });
 
   test('capability: goToSettingsCapability navigates to the AI settings section', async () => {
