@@ -206,7 +206,7 @@ export const buildResumeRequest = (
 ): Request => {
   const headers: Record<string, string> = {};
   if (downloadedBytes > 0) {
-    headers['Range'] = `bytes=${downloadedBytes}-`;
+    headers.Range = `bytes=${downloadedBytes}-`;
   }
   if (etag) {
     headers['If-None-Match'] = etag;

@@ -27,11 +27,11 @@ describe('normalizeTimeout', () => {
 
 describe('guardCommand', () => {
   test('prepends the env guard', () => {
-    expect(guardCommand('git status')).toBe(ENV_GUARD + 'git status');
+    expect(guardCommand('git status')).toBe(`${ENV_GUARD}git status`);
   });
 
   test('does not double-prepend the guard', () => {
-    expect(guardCommand(ENV_GUARD + 'git status')).toBe(ENV_GUARD + 'git status');
+    expect(guardCommand(`${ENV_GUARD}git status`)).toBe(`${ENV_GUARD}git status`);
   });
 
   test('prepends the full guard when a command only starts with part of it', () => {

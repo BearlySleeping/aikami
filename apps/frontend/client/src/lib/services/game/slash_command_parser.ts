@@ -37,10 +37,13 @@ export const SLASH_COMMAND_HELP =
  * The slash commands the dialogue input can dispatch (C-501).
  *
  * Distinct from the chat surface's `SLASH_COMMANDS` registry — the dialogue
- * commands are scoped to the parser outcomes below. Used to power the
- * dialogue composer's autocomplete popup.
+ * commands are scoped to the parser outcomes below. Module-local: the only
+ * consumer is `getDialogueSlashCompletions` below, which is what the dialogue
+ * composer's autocomplete popup is wired to. Do not export it — an exported
+ * registry with no production caller is an orphaned capability
+ * (see guard_orphaned_capability.ts).
  */
-export const DIALOGUE_SLASH_COMMANDS: readonly SlashCommandEntry[] = [
+const DIALOGUE_SLASH_COMMANDS: readonly SlashCommandEntry[] = [
   {
     name: 'generate',
     description: 'Generate an inline image from a prompt',
