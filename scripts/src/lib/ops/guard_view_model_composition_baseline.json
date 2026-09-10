@@ -169,11 +169,6 @@
     "c2": 1,
     "c3": 0
   },
-  "apps/frontend/client/src/lib/views/game/ui/hud/music_player_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
   "apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte.ts": {
     "c1": 1,
     "c2": 1,
@@ -200,11 +195,6 @@
     "c3": 0
   },
   "apps/frontend/client/src/lib/views/journal/player_journal_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
-  "apps/frontend/client/src/lib/views/link/link_view_model.svelte.ts": {
     "c1": 1,
     "c2": 1,
     "c3": 0
@@ -240,11 +230,6 @@
     "c3": 0
   },
   "apps/frontend/client/src/lib/views/settings/audio/settings_audio_view_model.svelte.ts": {
-    "c1": 1,
-    "c2": 1,
-    "c3": 0
-  },
-  "apps/frontend/client/src/lib/views/settings/autonomous/schedule_editor_view_model.svelte.ts": {
     "c1": 1,
     "c2": 1,
     "c3": 0
