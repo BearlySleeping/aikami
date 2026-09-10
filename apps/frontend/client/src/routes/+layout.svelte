@@ -13,8 +13,8 @@ import '$appCss';
 import 'pixi.js/unsafe-eval';
 
 import { untrack } from 'svelte';
+import { getAppViewModel } from '$lib/views/app/app_composition.ts';
 import AppView from '$lib/views/app/app_view.svelte';
-import { getAppViewModel } from '$lib/views/app/app_view_model.svelte.ts';
 import type { LayoutProps } from './$types';
 
 let { data, children }: LayoutProps = $props();

@@ -29,7 +29,7 @@ Three files per page:
 
 Follow the template in `svelte-conventions` → ViewModel Pattern.
 
-- Extend `BaseViewModel` (from `@aikami/frontend/services`), implement `<Name>ViewModelInterface`
+- Extend `BaseViewModel` (from `@aikami/frontend/services/base`), implement `<Name>ViewModelInterface`
 - Interface methods use method shorthand: `close(): void`, NOT `close: () => void`
 - Export `get<Name>ViewModel` factory function using `ClassName.create()`
 - `initialize()` calls `super.initialize()` at the end

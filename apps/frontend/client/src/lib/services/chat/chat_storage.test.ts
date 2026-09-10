@@ -1,160 +1,63 @@
 // apps/frontend/client/src/lib/services/chat/chat_storage.test.ts
 //
-// Unit tests for the local SQLite chat repository (C-386a AC-1/AC-3).
-// Verifies chat turns are written to and read from the local `chat_history`
-// table plus the `chats` metadata table — no Firestore in the path.
+// Real-adapter contract tests for the local SQLite chat repository (C-386a).
+//
+// These run `chatStorage` against a real in-memory WASM libSQL database with
+// the production migrations applied, instead of a handwritten regex SQL fake.
+// That makes duplicate `INSERT OR IGNORE` handling, AUTOINCREMENT ordering and
+// transaction rollback observable exactly as they are on the player device —
+// the three semantics a regex fake has historically approximated incorrectly.
+//
+// The global `@aikami/frontend/storage` mock from test_preload.ts is overridden
+// here so `getLocalDatabase()` returns the real adapter.
 
-// biome-ignore-all lint/style/noNonNullAssertion: regex capture parsing in the in-memory fake DB
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { applyMigrations } from '@aikami/frontend/storage/migrations';
+import type { LocalDatabaseInterface } from '@aikami/frontend/storage/storage_adapter';
+import { WasmStorageAdapter } from '@aikami/frontend/storage/wasm_storage_adapter';
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+// ── Real in-memory database with production schema ─────────────────────
 
-// ── In-memory fake LocalDatabaseInterface ─────────────────────────────
-// Supports the SQL shapes used by chat_storage: multi-column WHERE,
-// INSERT OR IGNORE, UPDATE with datetime('now'), DELETE, transactions.
+const realAdapter = new WasmStorageAdapter({ databasePath: ':memory:' });
+await realAdapter.open();
+await applyMigrations(realAdapter);
 
-type Row = Record<string, unknown>;
-const tables = new Map<string, Row[]>();
-
-const table = (name: string): Row[] => {
-  if (!tables.has(name)) {
-    tables.set(name, []);
-  }
-  return tables.get(name)!;
-};
-
-const _where = (row: Row, cols: string[], args: readonly unknown[]): boolean =>
-  cols.every((c, i) => row[c] === args[i]);
-
-const fakeDb = {
-  async query(options: { sql: string; args: readonly unknown[] }) {
-    const sql = options.sql.trim();
-    const fromMatch = sql.match(/FROM\s+(\w+)/i);
-    if (!fromMatch) {
-      return { rows: [] };
-    }
-    const tableName = fromMatch[1]!.toLowerCase();
-    const rows = table(tableName);
-
-    // Extract WHERE column list: `WHERE col1 = ? AND col2 = ?` or single.
-    const whereMatch = sql.match(/WHERE\s+(.+?)(?:\s+ORDER BY|\s*$)/i);
-    let filtered = rows;
-    if (whereMatch) {
-      const whereClause = whereMatch[1]!;
-      const cols = [...whereClause.matchAll(/(\w+)\s*=\s*\?/g)].map((m) => m[1]!.toLowerCase());
-      if (cols.length > 0) {
-        filtered = rows.filter((r) => _where(r, cols, options.args));
-      }
-    }
-
-    const orderMatch = sql.match(/ORDER BY\s+(\w+)\s*(ASC|DESC)?/i);
-    if (orderMatch) {
-      const col = orderMatch[1]!.toLowerCase();
-      const dir = orderMatch[2]?.toUpperCase();
-      filtered = [...filtered].sort((a, b) => {
-        const av = String(a[col] ?? '');
-        const bv = String(b[col] ?? '');
-        return dir === 'DESC' ? bv.localeCompare(av) : av.localeCompare(bv);
-      });
-    }
-
-    const limitMatch = sql.match(/LIMIT\s+(\d+)/i);
-    if (limitMatch) {
-      filtered = filtered.slice(0, Number(limitMatch[1]));
-    }
-    return { rows: filtered };
-  },
-
-  async execute(options: { sql: string; args: readonly unknown[] }) {
-    const sql = options.sql.trim();
-
-    const insertMatch = sql.match(
-      /INSERT(?:\s+OR\s+(IGNORE|REPLACE))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i,
-    );
-    if (insertMatch) {
-      const mode = insertMatch[1]?.toUpperCase() as 'IGNORE' | 'REPLACE' | undefined;
-      const name = insertMatch[2]!.toLowerCase();
-      const cols = insertMatch[3]!.split(',').map((c) => c.trim().toLowerCase());
-      const row: Row = {};
-      for (let i = 0; i < cols.length; i++) {
-        row[cols[i]] = options.args[i];
-      }
-      const rows = table(name);
-      const keyIdx = cols.indexOf('id');
-      if (keyIdx >= 0) {
-        const existing = rows.findIndex((r) => r.id === options.args[keyIdx]);
-        if (existing >= 0) {
-          if (mode === 'IGNORE') {
-            return;
-          }
-          rows[existing] = { ...rows[existing], ...row };
-          return;
-        }
-      }
-      rows.push(row);
-      return;
-    }
-
-    const deleteMatch = sql.match(/^DELETE\s+FROM\s+(\w+)\s+WHERE\s+(.+)$/i);
-    if (deleteMatch) {
-      const name = deleteMatch[1]!.toLowerCase();
-      const whereClause = deleteMatch[2]!;
-      const cols = [...whereClause.matchAll(/(\w+)\s*=\s*\?/g)].map((m) => m[1]!.toLowerCase());
-      const remaining = table(name).filter((r) => !_where(r, cols, options.args));
-      tables.set(name, remaining);
-      return;
-    }
-
-    const updateMatch = sql.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(\w+)\s*=\s*\?/i);
-    if (updateMatch) {
-      const name = updateMatch[1]!.toLowerCase();
-      const whereCol = updateMatch[3]!.toLowerCase();
-      const whereVal = options.args[options.args.length - 1];
-      const row = table(name).find((r) => r[whereCol] === whereVal);
-      if (row) {
-        const setPairs = updateMatch[2]!.split(',').map((s) => s.trim());
-        let argIdx = 0;
-        for (const pair of setPairs) {
-          const eqIdx = pair.indexOf('=');
-          if (eqIdx >= 0) {
-            const key = pair.slice(0, eqIdx).trim().toLowerCase();
-            if (!pair.includes("datetime('now')")) {
-              row[key] = options.args[argIdx++];
-            }
-          }
-        }
-      }
-      return;
-    }
-  },
-
-  async transaction(queries: readonly { sql: string; args: readonly unknown[] }[]) {
-    for (const q of queries) {
-      await this.execute(q);
-    }
-  },
-  async sync() {},
-  async close() {},
-};
+/** Mutable handle so individual tests can swap in a fault-injecting adapter. */
+let activeDatabase: LocalDatabaseInterface = realAdapter;
 
 mock.module('@aikami/frontend/storage', () => ({
-  getLocalDatabase: mock(async () => fakeDb),
+  getLocalDatabase: mock(async () => activeDatabase),
+  closeLocalDatabase: mock(async () => {}),
+  resetLocalDatabase: mock(() => {}),
 }));
 
-// ── Service under test ────────────────────────────────────────────────
+const { chatStorage } = await import('./chat_storage.svelte.ts');
 
-import type { ChatStorageInterface } from './chat_storage.svelte.ts';
-import { chatStorage } from './chat_storage.svelte.ts';
+const clearChatTables = async (): Promise<void> => {
+  await realAdapter.execute({ sql: 'DELETE FROM chat_history', args: [] });
+  await realAdapter.execute({ sql: 'DELETE FROM chats', args: [] });
+};
 
-describe('ChatStorage (local SQLite)', () => {
-  let storage: ChatStorageInterface;
+const countRows = async (table: 'chats' | 'chat_history'): Promise<number> => {
+  const result = await realAdapter.query({ sql: `SELECT COUNT(*) AS n FROM ${table}`, args: [] });
+  const row = result.rows[0] as { n?: number } | undefined;
+  return Number(row?.n ?? 0);
+};
 
-  beforeEach(() => {
-    tables.clear();
-    storage = chatStorage;
-  });
+beforeEach(async () => {
+  activeDatabase = realAdapter;
+  await clearChatTables();
+});
 
+afterAll(async () => {
+  await realAdapter.close();
+});
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+describe('ChatStorage (real adapter contract)', () => {
   test('getOrCreateChat creates a chat and getChat reads it back', async () => {
-    const created = await storage.getOrCreateChat({
+    const created = await chatStorage.getOrCreateChat({
       uid: 'user-1',
       npcId: 'npc-1',
       npcName: 'Gandalf',
@@ -165,39 +68,41 @@ describe('ChatStorage (local SQLite)', () => {
     expect(created.npcName).toBe('Gandalf');
     expect(created.messages).toEqual([]);
 
-    const found = await storage.getChat({ uid: 'user-1', npcId: 'npc-1' });
+    const found = await chatStorage.getChat({ uid: 'user-1', npcId: 'npc-1' });
     expect(found?.id).toBe(created.id);
+    expect(await countRows('chats')).toBe(1);
   });
 
   test('getOrCreateChat returns existing chat on second call', async () => {
-    const first = await storage.getOrCreateChat({
+    const first = await chatStorage.getOrCreateChat({
       uid: 'user-1',
       npcId: 'npc-1',
       npcName: 'Gandalf',
     });
-    const second = await storage.getOrCreateChat({
+    const second = await chatStorage.getOrCreateChat({
       uid: 'user-1',
       npcId: 'npc-1',
       npcName: 'Gandalf',
     });
     expect(second.id).toBe(first.id);
+    expect(await countRows('chats')).toBe(1);
   });
 
-  test('addMessage writes a turn to chat_history and getMessages reads it back', async () => {
-    const chat = await storage.getOrCreateChat({
+  test('addMessage writes an ordered turn to chat_history', async () => {
+    const chat = await chatStorage.getOrCreateChat({
       uid: 'user-1',
       npcId: 'npc-1',
       npcName: 'Gandalf',
     });
 
-    await storage.addMessage({
+    await chatStorage.addMessage({
       chatId: chat.id,
       uid: 'user-1',
       npcId: 'npc-1',
       message: 'Hello there',
       sender: 'user',
     });
-    await storage.addMessage({
+    await chatStorage.addMessage({
       chatId: chat.id,
       uid: 'user-1',
       npcId: 'npc-1',
@@ -205,23 +110,22 @@ describe('ChatStorage (local SQLite)', () => {
       sender: 'ai',
     });
 
-    const messages = await storage.getMessages({ uid: 'user-1', npcId: 'npc-1' });
+    const messages = await chatStorage.getMessages({ uid: 'user-1', npcId: 'npc-1' });
     expect(messages).toHaveLength(2);
     expect(messages[0]).toMatchObject({ text: 'Hello there', sender: 'user' });
     expect(messages[1]).toMatchObject({ text: 'A wizard is never late.', sender: 'ai' });
 
-    // The underlying table is chat_history — no dual store.
-    expect(table('chat_history').length).toBe(2);
-    expect(table('chats').length).toBe(1);
+    expect(await countRows('chat_history')).toBe(2);
+    expect(await countRows('chats')).toBe(1);
   });
 
   test('getChatById returns chat with messages and metadata', async () => {
-    const chat = await storage.getOrCreateChat({
+    const chat = await chatStorage.getOrCreateChat({
       uid: 'user-1',
       npcId: 'npc-1',
       npcName: 'Gandalf',
     });
-    await storage.addMessage({
+    await chatStorage.addMessage({
       chatId: chat.id,
       uid: 'user-1',
       npcId: 'npc-1',
@@ -229,42 +133,41 @@ describe('ChatStorage (local SQLite)', () => {
       sender: 'ai',
     });
 
-    const found = await storage.getChatById({ chatId: chat.id });
+    const found = await chatStorage.getChatById({ chatId: chat.id });
     expect(found?.id).toBe(chat.id);
     expect(found?.npcName).toBe('Gandalf');
     expect(found?.messages).toHaveLength(1);
   });
 
   test('getChatById returns undefined for missing chat', async () => {
-    const found = await storage.getChatById({ chatId: 'missing' });
-    expect(found).toBeUndefined();
+    expect(await chatStorage.getChatById({ chatId: 'missing' })).toBeUndefined();
   });
 
   test('updateChat updates affection and backgroundImageUrl', async () => {
-    const chat = await storage.getOrCreateChat({
+    const chat = await chatStorage.getOrCreateChat({
       uid: 'user-1',
       npcId: 'npc-1',
       npcName: 'Gandalf',
     });
 
-    await storage.updateChat({
+    await chatStorage.updateChat({
       chatId: chat.id,
       affection: 7,
       backgroundImageUrl: 'http://img/foo.png',
     });
 
-    const found = await storage.getChatById({ chatId: chat.id });
+    const found = await chatStorage.getChatById({ chatId: chat.id });
     expect(found?.affection).toBe(7);
     expect(found?.backgroundImageUrl).toBe('http://img/foo.png');
   });
 
   test('updateChat rewrites the message set', async () => {
-    const chat = await storage.getOrCreateChat({
+    const chat = await chatStorage.getOrCreateChat({
       uid: 'user-1',
       npcId: 'npc-1',
       npcName: 'Gandalf',
     });
-    await storage.addMessage({
+    await chatStorage.addMessage({
       chatId: chat.id,
       uid: 'user-1',
       npcId: 'npc-1',
@@ -272,7 +175,7 @@ describe('ChatStorage (local SQLite)', () => {
       sender: 'user',
     });
 
-    await storage.updateChat({
+    await chatStorage.updateChat({
       chatId: chat.id,
       messages: [
         {
@@ -294,18 +197,18 @@ describe('ChatStorage (local SQLite)', () => {
       ],
     });
 
-    const found = await storage.getChatById({ chatId: chat.id });
+    const found = await chatStorage.getChatById({ chatId: chat.id });
     expect(found?.messages).toHaveLength(2);
-    expect(table('chat_history').length).toBe(2);
+    expect(await countRows('chat_history')).toBe(2);
   });
 
   test('deleteChatById removes metadata and history rows', async () => {
-    const chat = await storage.getOrCreateChat({
+    const chat = await chatStorage.getOrCreateChat({
       uid: 'user-1',
       npcId: 'npc-1',
       npcName: 'Gandalf',
     });
-    await storage.addMessage({
+    await chatStorage.addMessage({
       chatId: chat.id,
       uid: 'user-1',
       npcId: 'npc-1',
@@ -313,30 +216,78 @@ describe('ChatStorage (local SQLite)', () => {
       sender: 'user',
     });
 
-    await storage.deleteChatById({ chatId: chat.id });
+    await chatStorage.deleteChatById({ chatId: chat.id });
 
-    expect(table('chats').length).toBe(0);
-    expect(table('chat_history').length).toBe(0);
-    expect(await storage.getChatById({ chatId: chat.id })).toBeUndefined();
+    expect(await countRows('chats')).toBe(0);
+    expect(await countRows('chat_history')).toBe(0);
+    expect(await chatStorage.getChatById({ chatId: chat.id })).toBeUndefined();
   });
 
   test('deleteChat deletes by npc+uid pair', async () => {
-    const chat = await storage.getOrCreateChat({
+    const chat = await chatStorage.getOrCreateChat({
       uid: 'user-1',
       npcId: 'npc-1',
       npcName: 'Gandalf',
     });
-    await storage.deleteChat({ uid: 'user-1', npcId: 'npc-1' });
-    expect(table('chats').length).toBe(0);
+    await chatStorage.deleteChat({ uid: 'user-1', npcId: 'npc-1' });
+    expect(await countRows('chats')).toBe(0);
     expect(chat.id).toBeTruthy();
   });
 
   test('listChats returns only chats in the requested account scope', async () => {
-    await storage.getOrCreateChat({ uid: 'u1', npcId: 'n1', npcName: 'One' });
-    await storage.getOrCreateChat({ uid: 'u1', npcId: 'n2', npcName: 'Two' });
-    await storage.getOrCreateChat({ uid: 'u2', npcId: 'n3', npcName: 'Other account' });
-    const chats = await storage.listChats('u1');
+    await chatStorage.getOrCreateChat({ uid: 'u1', npcId: 'n1', npcName: 'One' });
+    await chatStorage.getOrCreateChat({ uid: 'u1', npcId: 'n2', npcName: 'Two' });
+    await chatStorage.getOrCreateChat({ uid: 'u2', npcId: 'n3', npcName: 'Other account' });
+
+    const chats = await chatStorage.listChats('u1');
     expect(chats).toHaveLength(2);
     expect(chats.every((chat) => chat.uid === 'u1')).toBe(true);
+  });
+
+  test('a failed transaction rolls back the whole chat turn (no partial write)', async () => {
+    const chat = await chatStorage.getOrCreateChat({
+      uid: 'user-1',
+      npcId: 'npc-1',
+      npcName: 'Gandalf',
+    });
+    await chatStorage.addMessage({
+      chatId: chat.id,
+      uid: 'user-1',
+      npcId: 'npc-1',
+      message: 'original',
+      sender: 'user',
+    });
+    const historyBefore = await countRows('chat_history');
+
+    // Fault injection: every transaction runs the repository's real statements
+    // and then a statement against a missing table, forcing libSQL to abort
+    // and roll back. A no-rollback fake would leave the turn written.
+    activeDatabase = new Proxy(realAdapter, {
+      get(target, property, receiver) {
+        if (property === 'transaction') {
+          return async (queries: readonly { sql: string; args: readonly unknown[] }[]) => {
+            await target.transaction([
+              ...queries,
+              { sql: 'INSERT INTO missing_table (id) VALUES (1)', args: [] },
+            ]);
+          };
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    await expect(
+      chatStorage.addMessage({
+        chatId: chat.id,
+        uid: 'user-1',
+        npcId: 'npc-1',
+        message: 'must not persist',
+        sender: 'user',
+      }),
+    ).rejects.toThrow();
+
+    activeDatabase = realAdapter;
+    expect(await countRows('chat_history')).toBe(historyBefore);
+    expect(await chatStorage.getMessages({ uid: 'user-1', npcId: 'npc-1' })).toHaveLength(1);
   });
 });

@@ -153,6 +153,14 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
    */
   deleteAccount(): Promise<boolean>;
 
+  /**
+   * Revokes every active session for the current account, signing the user out
+   * on all devices.
+   *
+   * @returns A promise that resolves with true if the sessions were revoked.
+   */
+  revokeAllSessions(): Promise<boolean>;
+
   completeDeviceHandoff(options: { code: string; uid: string }): Promise<void>;
 };
 
@@ -440,6 +448,28 @@ export class AuthService
       return true;
     } catch (error) {
       this.error('deleteAccount', error);
+      return false;
+    }
+  }
+
+  async revokeAllSessions(): Promise<boolean> {
+    this.log('revokeAllSessions');
+    try {
+      const base = hubApiBase();
+      const response = await fetch(`${base}/account/sessions/revoke-all`, {
+        method: 'POST',
+        headers: hubAuthHeaders(),
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        this.error('revokeAllSessions:failed', { status: response.status });
+        return false;
+      }
+      this.setCurrentUser(undefined);
+      this.log('revokeAllSessions:success');
+      return true;
+    } catch (error) {
+      this.error('revokeAllSessions', error);
       return false;
     }
   }

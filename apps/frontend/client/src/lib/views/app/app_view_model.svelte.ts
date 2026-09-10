@@ -208,5 +208,5 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   }
 }
 
-export const getAppViewModel = (options: AppViewModelOptions): AppViewModelInterface =>
+export const createAppViewModel = (options: AppViewModelOptions): AppViewModelInterface =>
   AppViewModel.create(options);

@@ -188,6 +188,13 @@ effectPolyfill.root = (fn: () => void) => {
 // Multiple test files mock this module with different exports. Bun caches the
 // first mock and subsequent test files get the cached version. Define a
 // superset here so all tests see all needed exports.
+//
+// QUARANTINED LEGACY LANE: migrated features must NOT rely on these base-class
+// fakes. Import the real hierarchy from the narrow, import-safe entrypoint
+// `@aikami/frontend/services/base` (see dialog_capabilities.ts) — the account
+// ViewModel's test is the reference. These fakes survive only for unmigrated
+// tests and are deleted with the rest of this preload once none remain. Do not
+// extend them.
 
 class MockBaseFrontendClass {
   protected readonly _options: { className: string };
@@ -821,7 +828,9 @@ mock.module('$services', localServicesMockBase);
 // ── Mock $logger alias required by game services ──────────────────────────
 
 // Must cover every method on BaseLoggerService — a missing one is a
-// TypeError at the call site, not a quiet no-op.
+// TypeError at the call site, not a quiet no-op. `write` and `setLogLevel`
+// are used by BaseClass when a real base subclass logs (the preload's
+// former fake base classes stubbed them out, so they went unnoticed).
 mock.module('$logger', () => ({
   logger: {
     debug: mock(() => {}),
@@ -830,6 +839,8 @@ mock.module('$logger', () => ({
     warn: mock(() => {}),
     error: mock(() => {}),
     spam: mock(() => {}),
+    write: mock(() => {}),
+    setLogLevel: mock(() => {}),
   },
   __esModule: true,
 }));
@@ -896,8 +907,15 @@ delete process.env.PUBLIC_OLLAMA_MODEL;
 
 // ── Mock @aikami/frontend/storage (C-321: Turso persistence) ──────────
 //
-// Provides an in-memory LocalDatabaseInterface fake so that repository
-// tests don't require a real SQLite connection.
+// QUARANTINED LEGACY LANE. This regex "SQL" fake does NOT reproduce SQLite
+// semantics: it replaces duplicate inserts where SQLite would reject them and
+// its transaction() has no rollback. Do not trust it for persistence
+// assertions and do not extend it.
+//
+// Migrated repositories test against a real in-memory adapter instead — see
+// apps/frontend/client/src/lib/services/chat/chat_storage.test.ts
+// (WasmStorageAdapter + applyMigrations, with fault-injected rollback). Delete
+// this fake with the rest of the preload once no unmigrated test depends on it.
 
 /** In-memory row store for the fake database. */
 const _fakeDbTables = new Map<string, Record<string, unknown>[]>();

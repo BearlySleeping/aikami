@@ -235,42 +235,82 @@ utils) that has no `BaseClass` to inherit from.
 
 ### ViewModel Template
 
+Import base classes from the **narrow** `@aikami/frontend/services/base`
+entrypoint — it loads no router/dialog/application graph. For new or migrated
+ViewModels, also inject only the service capabilities the ViewModel needs
+instead of importing singletons from `$services`; production wiring goes in a
+sibling `*_composition.ts` (reference: `views/settings/account/`).
+
 ```typescript
 // apps/frontend/client/src/lib/views/feature/feature_view_model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from "@aikami/frontend/services";
-import { myService } from "$services";
+} from "@aikami/frontend/services/base";
+
+/** Only the capabilities this ViewModel consumes — not the whole service. */
+export type FeatureServiceCapabilities = {
+  getItems(): string[];
+};
 
 export type FeatureViewModelInterface = BaseViewModelInterface & {
   readonly items: string[];
   refresh(): Promise<void>;
 };
 
-export type FeatureViewModelOptions = BaseViewModelOptions & {};
+export type FeatureViewModelOptions = BaseViewModelOptions & {
+  featureService: FeatureServiceCapabilities;
+};
 
 export class FeatureViewModel
   extends BaseViewModel<FeatureViewModelOptions>
   implements FeatureViewModelInterface
 {
+  private readonly _featureService: FeatureServiceCapabilities;
   items = $state<string[]>([]);
 
+  constructor(options: FeatureViewModelOptions) {
+    super(options);
+    this._featureService = options.featureService;
+  }
+
   async initialize(): Promise<void> {
-    this.items = myService.getItems();
+    this.items = this._featureService.getItems();
     await super.initialize();
   }
 
   async refresh(): Promise<void> {
     // create() auto-logs the call — no this.debug() needed at entry
-    this.items = myService.getItems();
+    this.items = this._featureService.getItems();
   }
 }
 
-export const getFeatureViewModel = (
+/**
+ * Testable factory — no production imports. Tests call this directly with
+ * feature fixtures. Production wiring lives in ./feature_composition.ts.
+ */
+export const createFeatureViewModel = (
   options: FeatureViewModelOptions,
 ): FeatureViewModelInterface => FeatureViewModel.create(options);
+```
+
+Production singletons are wired in a sibling composition file — the **only**
+feature module that imports `$services`:
+
+```typescript
+// apps/frontend/client/src/lib/views/feature/feature_composition.ts
+import type { BaseViewModelOptions } from "@aikami/frontend/services/base";
+import { myService } from "$services";
+import {
+  createFeatureViewModel,
+  type FeatureViewModelInterface,
+} from "./feature_view_model.svelte";
+
+export const getFeatureViewModel = (
+  options: BaseViewModelOptions,
+): FeatureViewModelInterface =>
+  createFeatureViewModel({ ...options, featureService: myService });
 ```
 
 ### ViewModel Rules

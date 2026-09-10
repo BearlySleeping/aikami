@@ -553,13 +553,17 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
     });
 
     test('campaign summary has correct isResumable for each state', async () => {
+      // Deterministic updatedAt: _refreshCampaignState sorts by updatedAt DESC,
+      // so relying on Date.now() ties across six objects is a millisecond race.
+      const base = Date.parse('2026-01-01T00:00:00.000Z');
+      const at = (offsetMs: number): string => new Date(base - offsetMs).toISOString();
       mockCampaigns = [
-        makeCampaign({ id: 'c1', state: 'playing' }),
-        makeCampaign({ id: 'c2', state: 'paused' }),
-        makeCampaign({ id: 'c3', state: 'saving' }),
-        makeCampaign({ id: 'c4', state: 'failed' }),
-        makeCampaign({ id: 'c5', state: 'creating' }),
-        makeCampaign({ id: 'c6', state: 'loading' }),
+        makeCampaign({ id: 'c1', state: 'playing', updatedAt: at(0) }),
+        makeCampaign({ id: 'c2', state: 'paused', updatedAt: at(1000) }),
+        makeCampaign({ id: 'c3', state: 'saving', updatedAt: at(2000) }),
+        makeCampaign({ id: 'c4', state: 'failed', updatedAt: at(3000) }),
+        makeCampaign({ id: 'c5', state: 'creating', updatedAt: at(4000) }),
+        makeCampaign({ id: 'c6', state: 'loading', updatedAt: at(5000) }),
       ];
       const vm = createViewModel();
       await vm.initialize();

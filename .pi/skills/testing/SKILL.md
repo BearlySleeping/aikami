@@ -59,7 +59,43 @@ bun test src/lib/services/game/game_composition_root.test.ts
 
 The `client:test` moon task already includes `--preload` — prefer it for running all tests.
 
-### Mock Patterns for Service Tests
+### 🔴 Preferred Pattern (New / Migrated Features): Feature-Owned Fixtures
+
+New ViewModels receive **only the capabilities they need** through typed options.
+Production singletons are wired in a sibling `*_composition.ts` file, and the
+ViewModel module never imports `$services`. Tests construct the ViewModel with
+fresh, typed doubles from a feature-local `testing/` directory — no global
+barrel mock, no `test_preload` inventory coupling.
+
+This is the migration target. `views/settings/account/` is the reference slice:
+
+```
+views/settings/account/
+  account_view.svelte
+  account_view_model.svelte.ts        # class + createAccountViewModel(capabilities)
+  account_composition.ts             # wires authService/gameStateSyncService from $services
+  account_view_model.test.ts         # builds VM from fixtures directly
+  testing/account_fixtures.ts        # fresh typed doubles, explicit defaults
+```
+
+```typescript
+// account_view_model.svelte.ts — no '$services' import
+const viewModel = createAccountViewModel({
+  className: 'AccountViewModel',
+  account: createSignedInAccount({ signOut }),
+  sync: createSyncCapabilities({ listSlots }),
+});
+```
+
+Prefer one narrow capability type per collaborator over a full service
+interface, and move credentialed HTTP calls behind a service operation rather
+than injecting `fetch` into the ViewModel.
+
+The legacy `mock.module()` / `localServicesMockBase()` pattern below remains for
+unmigrated tests until the preload lane is deleted. **Do not adopt it for new
+ViewModels.**
+
+### Mock Patterns for Service Tests (legacy preload lane)
 
 When testing a service that extends `BaseFrontendClass`, use `mock.module()` in
 `beforeEach` to stub its dependencies. The global mocks from `test_preload.ts`
@@ -99,7 +135,7 @@ before the real module is evaluated.
 | Issue | Details |
 |-------|---------|
 | `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. The global barrel mocks in `test_preload.ts` mitigate most cases. |
-| `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Pure Bun tests must treat `$state` fields as plain values. For real reactivity tests, use the compiled Playwright lane (see below). |
+| `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Pure Bun tests must treat `$state` fields as plain values. For real reactivity, use the Vitest Browser Mode lane (preferred for ViewModels/components) or the compiled Playwright lane. |
 | PixiJS / WebGPU | Not available in Bun. Tests that touch the game engine are skipped in CI (handled by E2E). |
 
 ### Compiled Component / Lifecycle Testing (C-477)
@@ -134,6 +170,66 @@ components through the dev sandbox.
 2. Create a View that renders the ViewModel's state
 3. Host the View in a dev sandbox route `(dev)/dev/<feature>/`
 4. Write Playwright E2E tests that navigate to the sandbox and verify DOM updates
+
+### Vitest Browser Mode (real-Svelte unit lane)
+
+The preferred lane for ViewModel/component reactivity: instead of the Bun
+preload's identity runes, Vitest compiles the `.svelte.ts`/`.svelte` with the
+real Svelte plugin and runs it in Chromium via Playwright. No preload, no
+global module mocks, no application boot or dev route.
+
+```bash
+# from apps/frontend/client
+bun run test:browser          # vitest run --config vitest.config.ts
+bun moon run client:test-browser
+```
+
+- Config: `apps/frontend/client/vitest.config.ts` (standalone; only the aliases
+  a component/ViewModel test needs).
+- Tests: `apps/frontend/client/src/browser_tests/**/*.browser.test.ts` —
+  deliberately outside `src/lib` so `bun test src/lib` never collects them.
+- Reference pilot: `reactive_lifecycle.browser.test.ts` asserts real
+  `$state`/`$derived` updates and `registerEffectRoot` cleanup on `dispose()`.
+- Use `flushSync()` from `svelte` after mutating state to force effects.
+
+**Status**: pilot. `client:test-browser` is `runInCI: false` until the CI
+client job installs Playwright browsers. The compiled E2E lane above remains
+the integration-level coverage (mount/unmount, DOM, full navigation).
+
+### Repository Contract Tests (real adapter)
+
+Do **not** assert persistence behavior against the regex SQL fake in
+`test_preload.ts` — it replaces duplicate inserts where SQLite would reject
+them and its `transaction()` never rolls back. For a repository under migration,
+override the preload's `@aikami/frontend/storage` mock and run the real
+repository against a real in-memory adapter with the production schema:
+
+```typescript
+import { applyMigrations } from '@aikami/frontend/storage/migrations';
+import { WasmStorageAdapter } from '@aikami/frontend/storage/wasm_storage_adapter';
+
+const db = new WasmStorageAdapter({ databasePath: ':memory:' });
+await db.open();
+await applyMigrations(db);
+
+mock.module('@aikami/frontend/storage', () => ({
+  getLocalDatabase: mock(async () => db),
+}));
+const { chatStorage } = await import('./chat_storage.svelte.ts');
+```
+
+Import the adapter/migrations from their **subpaths** so the preload's barrel
+mock does not intercept them. Reference:
+`src/lib/services/chat/chat_storage.test.ts`, which also fault-injects a failed
+transaction to prove rollback.
+
+### Import boundary (enforced)
+
+`guard-test-boundary` (`bun run guard`, `scripts/src/lib/ops/guard_test_boundary.ts`)
+fails CI if production source imports a test helper: `test_preload.ts`,
+`testing/` fixture directories, `__tests__/`, `__fixtures__/`, or `*.test.ts`.
+Inject a production dependency instead. Feature fixtures are only importable
+from test files.
 
 ---
 
