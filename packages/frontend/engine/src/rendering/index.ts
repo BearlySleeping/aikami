@@ -7,6 +7,12 @@ export {
   LpcDirection,
   velocityToDirection,
 } from './animation_controller.ts';
+export {
+  type ComponentCompositionResult,
+  type ComposedPass,
+  composeComponentPasses,
+  type RejectedComponent,
+} from './component_composer.ts';
 // C-430: composeMultiLayerSprite and multi-layer shaders removed — dead code.
 export {
   getMaxKnownDepth,

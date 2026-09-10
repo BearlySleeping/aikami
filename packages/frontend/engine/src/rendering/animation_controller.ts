@@ -165,6 +165,11 @@ export class AnimationController {
     return this._idle;
   }
 
+  /** The monotonic elapsed wall-clock time in ms for this entity (AC-5). */
+  get elapsedMs(): number {
+    return this._clock.elapsedMs;
+  }
+
   /** The computed frame index for the current state/direction/elapsed time. */
   get frameIndex(): number {
     const effectiveTicks = this.effectiveTickCount;

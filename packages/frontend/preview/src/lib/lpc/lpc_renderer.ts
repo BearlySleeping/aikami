@@ -6,7 +6,7 @@
 // Contract: C-372, C-444, C-445
 
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
-import { lpcStateSuffix, lpcTag } from '@aikami/lpc';
+import { compileLpcSpriteToVisualDefinition, lpcStateSuffix, lpcTag } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';
 import { Assets, Rectangle, Sprite, Texture } from 'pixi.js';
 import { resolveLpcSheetGeometry } from '../../../../engine/src/content.ts';
@@ -95,6 +95,18 @@ export const getLpcSpriteAnchor = (layout: LpcSheetLayout): { x: number; y: numb
   x: layout.anchorOffset.x,
   y: layout.anchorOffset.y,
 });
+
+/**
+ * LPC direction names keyed by {@link LpcDirection} row offset (C-496 AC-6),
+ * used to derive clip names like `walk.down` when resolving frames through the
+ * shared visual definition.
+ */
+const DIRECTION_NAMES: Record<number, string> = {
+  0: 'up',
+  1: 'left',
+  2: 'down',
+  3: 'right',
+} as const;
 
 // ── createLpcRenderer ─────────────────────────────────────────────────────
 
@@ -258,21 +270,64 @@ export const createLpcRenderer = (options: CreateLpcRendererOptions): LpcRendere
       return null;
     }
 
+    const layout = detectLpcSheetLayout(sheet);
+    const anchor = getLpcSpriteAnchor(layout);
+
+    // C-496 AC-6: route preview sprite creation through the shared visual
+    // definition (same one the game consumes) so frame slicing and origin
+    // agree with the game path. Falls back to the legacy layout math below.
+    let sprite: Sprite | null = null;
+    try {
+      const definition = compileLpcSpriteToVisualDefinition({
+        assetId,
+        geometry: layout,
+        revision: 'preview-v1',
+        source: 'preview',
+        licenses: [],
+        imageWidth: sheet.width,
+        imageHeight: sheet.height,
+        artifactRef: assetId,
+      });
+      const clipName = `walk.${DIRECTION_NAMES[direction]}`;
+      const clip = definition.clips.find((entry) => entry.name === clipName);
+      const occurrence = clip?.frames[frame % (clip?.frames.length ?? 1)];
+      const frameDef = occurrence
+        ? definition.frames.find((entry) => entry.id === occurrence.frameId)
+        : undefined;
+      if (frameDef) {
+        const frameTexture = new Texture({
+          source: sheet.source,
+          frame: new Rectangle(frameDef.x, frameDef.y, frameDef.width, frameDef.height),
+        });
+        const definitionSprite = new Sprite(frameTexture);
+        definitionSprite.eventMode = 'none';
+        definitionSprite.x = frameDef.originX;
+        definitionSprite.y = frameDef.originY;
+        definitionSprite.scale.set(layout.scale, layout.scale);
+        definitionSprite.alpha = 1.0;
+        definitionSprite.zIndex = zIndex;
+        sprite = definitionSprite;
+      }
+    } catch {
+      sprite = null;
+    }
+
+    if (sprite) {
+      return sprite;
+    }
+
     const texture = extractFrame(sheet, frame, direction);
     if (!texture) {
       return null;
     }
-
-    const layout = detectLpcSheetLayout(sheet);
-    const anchor = getLpcSpriteAnchor(layout);
-    const sprite = new Sprite(texture);
-    sprite.eventMode = 'none';
-    sprite.x = anchor.x;
-    sprite.y = anchor.y;
-    sprite.scale.set(layout.scale, layout.scale);
-    sprite.alpha = 1.0;
-    sprite.zIndex = zIndex;
-    return sprite;
+    const fallbackSprite = new Sprite(texture);
+    fallbackSprite.eventMode = 'none';
+    fallbackSprite.x = anchor.x;
+    fallbackSprite.y = anchor.y;
+    fallbackSprite.scale.set(layout.scale, layout.scale);
+    fallbackSprite.alpha = 1.0;
+    fallbackSprite.zIndex = zIndex;
+    return fallbackSprite;
   };
 
   const clearCaches = (): void => {
