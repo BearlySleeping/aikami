@@ -24,6 +24,7 @@ describe('NpcDialogueCommandSchema', () => {
       { kind: 'giveItem', itemId: 'wardShard', quantity: 1 },
       { kind: 'startCombat' },
       { kind: 'startCombat', encounterId: 'ruined_ward_encounter' },
+      { kind: 'presentEvidence', evidenceId: 'the_ledger' },
     ];
     for (const command of valid) {
       expect(Value.Check(NpcDialogueCommandSchema, command)).toBe(true);

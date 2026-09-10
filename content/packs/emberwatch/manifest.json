@@ -1,8 +1,8 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "4.0.0",
-  "updatedAt": "2026-09-09T00:00:00.000Z",
+  "version": "4.1.0",
+  "updatedAt": "2026-09-10T00:00:00.000Z",
   "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
   "atlas": {
@@ -924,6 +924,8 @@
     "elder_thalia_decline": "I understand — the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
     "elder_thalia_complete": "You found it! The Ward Wand — I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
     "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more — I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
+    "elder_thalia_ending_reconciled": "[PLACEHOLDER reaction — maintainer to author] You showed me what I refused to see. Emberwatch stands because of more than one relic, and I will not forget it. The ward is mended, and so, in time, may we be.",
+    "bram_ending_darkened": "[PLACEHOLDER reaction — maintainer to author] The ward has gone dark. I have kept this gate for years, and tonight I keep it against the dark. Whatever comes, we face it together.",
     "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick — it's mine. Found it fair and square off a dead man's hands. Now scram.",
     "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing — hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
     "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine — take the wand. Don't make me regret this.",
@@ -994,6 +996,20 @@
           "narration": "You place the Ward Wand into Elder Thalia's hands. She raises it toward the sky and speaks the old words of the Vesperine Order. A pulse of warm light rolls outward from the village, and the fading ward blazes bright once more. Emberwatch is saved — and the valley will remember the one who brought the wand home.",
           "reactionDialogueKey": "elder_thalia_ending_renewed",
           "worldStateFlag": "emberwatch.ending.renewed"
+        },
+        "ward_reconciled": {
+          "title": "The Ward Reconciled",
+          "narration": "[PLACEHOLDER — maintainer to author] You confront Rollo with the ledger, and the truth of who has truly guarded the ward comes to light. The village does not turn on Rollo; instead, an uneasy truce settles over Emberwatch. The ward is mended, but the trust that held the village together must be rebuilt, and the paths between its people are changed forever.",
+          "reactionDialogueKey": "elder_thalia_ending_reconciled",
+          "requiresWorldStateFlag": "evidence.presented.the_ledger",
+          "worldStateFlag": "emberwatch.ending.reconciled"
+        },
+        "ward_darkened": {
+          "title": "The Ward Darkened",
+          "narration": "[PLACEHOLDER — maintainer to author] The ward is not renewed. Whether through bargain, betrayal, or misfortune, the old protection flickers and dies, and the corruption beyond the hills creeps toward Emberwatch. The village braces for a long night, and every face in the square carries the weight of what was lost.",
+          "reactionDialogueKey": "bram_ending_darkened",
+          "requiresWorldStateFlag": "evidence.presented.elders_seal",
+          "worldStateFlag": "emberwatch.ending.darkened"
         }
       }
     }
@@ -1083,6 +1099,56 @@
       }
     ]
   },
+  "truthVariants": [
+    {
+      "id": "rollo_owns_the_ledger",
+      "label": "Rollo keeps the true ledger",
+      "startingConditions": [
+        { "key": "whoOwesWhom", "value": "rollo" },
+        { "key": "missingEvidence", "value": "the_ledger" },
+        { "key": "wardProximity", "value": "fading" }
+      ]
+    },
+    {
+      "id": "thalia_owns_the_seal",
+      "label": "Thalia's seal hides the truth",
+      "startingConditions": [
+        { "key": "whoOwesWhom", "value": "thalia" },
+        { "key": "missingEvidence", "value": "elders_seal" },
+        { "key": "wardProximity", "value": "near_breaking" }
+      ]
+    }
+  ],
+  "accounts": {
+    "the_ward_truth": [
+      {
+        "npcId": "rollo_grasper",
+        "claim": "[PLACEHOLDER account — maintainer to author] The ward has been failing for years because the village's own ledgers were cooked. I have the real ledger to prove it.",
+        "supportsTruthId": "rollo_owns_the_ledger"
+      },
+      {
+        "npcId": "village_elder",
+        "claim": "[PLACEHOLDER account — maintainer to author] The ward has held because of the elder's seal and the order's vigilance. Rollo stole the wand from a guardian's corpse; there is no other truth.",
+        "supportsTruthId": "thalia_owns_the_seal"
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "id": "the_ledger",
+      "label": "The Merchant's Ledger",
+      "discoverableAt": "merchant_shop:shop_counter_l",
+      "presentToNpcId": "village_elder",
+      "supportsTruthId": "rollo_owns_the_ledger"
+    },
+    {
+      "id": "elders_seal",
+      "label": "The Elder's Broken Seal",
+      "discoverableAt": "village:village_well",
+      "presentToNpcId": "rollo_grasper",
+      "supportsTruthId": "thalia_owns_the_seal"
+    }
+  ],
   "factions": {
     "town_guard": {
       "id": "town_guard",

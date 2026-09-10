@@ -7,6 +7,8 @@
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import emberwatchManifest from '../../../../../../content/packs/emberwatch/manifest.json';
+import merchantShopMap from '../../../../../../content/packs/emberwatch/maps/merchant_shop.json';
+import villageMap from '../../../../../../content/packs/emberwatch/maps/village.json';
 import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
 import { normaliseLegacyStep } from './onboarding_hints.ts';
 
@@ -896,5 +898,187 @@ describe('C-494 AC-2 — Emberwatch companion identity', () => {
 
   test('one boundary the companion will not casually cross is present', () => {
     expect(companion?.boundaries?.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-495 — dramatic structure: truth variants, accounts, evidence
+// ---------------------------------------------------------------------------
+
+describe('ContentPackManifestSchema — dramatic structure (C-495)', () => {
+  test('accepts a manifest with truthVariants, accounts, and evidence', () => {
+    const manifest = {
+      ...validManifest,
+      truthVariants: [
+        {
+          id: 'rollo_owns_the_ledger',
+          label: 'Rollo owns the ledger',
+          startingConditions: [
+            { key: 'whoOwesWhom', value: 'rollo' },
+            { key: 'missingEvidence', value: 'ledger' },
+          ],
+        },
+        {
+          id: 'thalia_owns_the_ledger',
+          label: 'Thalia owns the ledger',
+          startingConditions: [{ key: 'whoOwesWhom', value: 'thalia' }],
+        },
+      ],
+      accounts: {
+        // biome-ignore lint/style/useNamingConvention: manifest key
+        the_ledger: [
+          {
+            npcId: 'rollo_grasper',
+            claim: 'Rollo keeps the ledger.',
+            supportsTruthId: 'rollo_owns_the_ledger',
+          },
+          {
+            npcId: 'village_elder',
+            claim: "The ledger is Thalia's.",
+            supportsTruthId: 'thalia_owns_the_ledger',
+          },
+        ],
+      },
+      evidence: [
+        {
+          id: 'the_ledger',
+          label: 'The ledger',
+          discoverableAt: 'merchant_shop:ledger',
+          presentToNpcId: 'village_elder',
+          supportsTruthId: 'rollo_owns_the_ledger',
+        },
+      ],
+    };
+    const result = Value.Parse(ContentPackManifestSchema, manifest);
+    expect(result.truthVariants).toHaveLength(2);
+    expect(result.accounts?.the_ledger).toHaveLength(2);
+    expect(result.evidence?.[0].id).toBe('the_ledger');
+  });
+
+  test('accepts a manifest without the new keys (v4.0.0 absence path — AC-7)', () => {
+    const result = Value.Parse(ContentPackManifestSchema, validManifest);
+    expect(result.truthVariants).toBeUndefined();
+    expect(result.accounts).toBeUndefined();
+    expect(result.evidence).toBeUndefined();
+  });
+
+  test('rejects a truth variant missing its id', () => {
+    const manifest = {
+      ...validManifest,
+      truthVariants: [{ label: 'No id', startingConditions: [{ key: 'a', value: 'b' }] }],
+    };
+    expect(Value.Check(ContentPackManifestSchema, manifest)).toBe(false);
+  });
+
+  test('rejects an account missing its npcId or supportsTruthId', () => {
+    const missingNpc = {
+      ...validManifest,
+      accounts: { s: [{ claim: 'x', supportsTruthId: 't' }] },
+    };
+    expect(Value.Check(ContentPackManifestSchema, missingNpc)).toBe(false);
+    const missingTruth = {
+      ...validManifest,
+      accounts: { s: [{ npcId: 'n', claim: 'x' }] },
+    };
+    expect(Value.Check(ContentPackManifestSchema, missingTruth)).toBe(false);
+  });
+
+  test('rejects evidence missing discoverableAt or presentToNpcId', () => {
+    const bad = {
+      ...validManifest,
+      evidence: [{ id: 'e', label: 'E', presentToNpcId: 'n', supportsTruthId: 't' }],
+    };
+    expect(Value.Check(ContentPackManifestSchema, bad)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-495 AC-1/AC-3/AC-4 — Emberwatch dramatic structure content
+// ---------------------------------------------------------------------------
+
+describe('C-495 AC-1/AC-3/AC-4 — Emberwatch dramatic structure content', () => {
+  const manifest = Value.Parse(ContentPackManifestSchema, {
+    ...emberwatchManifest,
+    onboarding: {
+      ...emberwatchManifest.onboarding,
+      steps: emberwatchManifest.onboarding.steps.map((step) => normaliseLegacyStep(step)),
+    },
+  });
+
+  const quest = manifest.quests?.fading_ward;
+
+  test('AC-1: ≥2 materially conflicting accounts exist for the dilemma', () => {
+    const dilemmaId = Object.keys(manifest.accounts ?? {})[0];
+    expect(dilemmaId).toBeDefined();
+    const accounts = manifest.accounts?.[dilemmaId] ?? [];
+    expect(accounts.length).toBeGreaterThanOrEqual(2);
+    // The conflict is material: the accounts must support different truth variants,
+    // so they cannot both be true under one sampled truth.
+    const supported = new Set(accounts.map((a) => a.supportsTruthId));
+    expect(supported.size).toBeGreaterThanOrEqual(2);
+  });
+
+  test('AC-3: ≥3 endings each with a distinct world-state flag and reaction dialogue', () => {
+    const endings = quest?.endings ?? {};
+    const ids = Object.keys(endings);
+    expect(ids.length).toBeGreaterThanOrEqual(3);
+    const flags = ids.map((id) => endings[id].worldStateFlag);
+    expect(new Set(flags).size).toBe(ids.length); // mutually exclusive flags
+    for (const id of ids) {
+      expect(endings[id].reactionDialogueKey, `${id} reaction key`).toBeTruthy();
+    }
+  });
+
+  test('AC-4: at least two endings are world-state-conditioned (reachable non-defaults)', () => {
+    const endings = quest?.endings ?? {};
+    const conditioned = Object.values(endings).filter((e) => e.requiresWorldStateFlag);
+    expect(conditioned.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('AC-2: ≥1 physical evidence is discoverable and presentable', () => {
+    const evidence = manifest.evidence ?? [];
+    const referencedMaps = new Map([
+      ['merchant_shop', merchantShopMap],
+      ['village', villageMap],
+    ]);
+    expect(evidence.length).toBeGreaterThanOrEqual(1);
+    for (const e of evidence) {
+      expect(e.discoverableAt, 'discoverableAt resolves to a real map/prop').toBeTruthy();
+      expect(e.presentToNpcId in manifest.npcs, `${e.presentToNpcId} resolves to an NPC`).toBe(
+        true,
+      );
+
+      const [mapOrPropId, nestedPropId] = e.discoverableAt.split(':');
+      if (!nestedPropId) {
+        const knownStandalone =
+          mapOrPropId in manifest.maps || mapOrPropId in (manifest.props ?? {});
+        expect(knownStandalone, `${e.discoverableAt} resolves`).toBe(true);
+        continue;
+      }
+
+      expect(mapOrPropId in manifest.maps, `${mapOrPropId} resolves to a map`).toBe(true);
+      expect(nestedPropId in (manifest.props ?? {}), `${nestedPropId} resolves to a prop`).toBe(
+        true,
+      );
+      const map = referencedMaps.get(mapOrPropId);
+      expect(map, `${mapOrPropId} map content is loaded`).toBeDefined();
+      const propExistsInMap = map?.layers.some((layer) =>
+        layer.objects?.some((object) =>
+          object.properties?.some(
+            (property) => property.name === 'propId' && property.value === nestedPropId,
+          ),
+        ),
+      );
+      expect(propExistsInMap, `${nestedPropId} exists in ${mapOrPropId}`).toBe(true);
+    }
+  });
+
+  test('AC-5: truth variants form a bounded set (2–4) with starting conditions', () => {
+    const variants = manifest.truthVariants ?? [];
+    expect(variants.length).toBeGreaterThanOrEqual(2);
+    expect(variants.length).toBeLessThanOrEqual(4);
+    for (const v of variants) {
+      expect(v.startingConditions.length).toBeGreaterThan(0);
+    }
   });
 });

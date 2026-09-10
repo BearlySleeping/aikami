@@ -29,6 +29,12 @@ import type {
   QuestProgress,
 } from '@aikami/types';
 import { campaignService } from '$services';
+import {
+  getTruthVariant,
+  getTruthVariants,
+  resolveEvidence,
+  resolveEvidenceById,
+} from './dramatic_structure_service';
 import { inventoryService } from './inventory_service.svelte';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { partyRosterService } from './party_roster_service.svelte.ts';
@@ -86,6 +92,32 @@ export type QuestStateServiceInterface = BaseFrontendClassInterface & {
    */
   clearWorldStateFlag(flag: string): boolean;
 
+  /**
+   * Presents a discovered evidence item to its named NPC (C-495 AC-2).
+   * Records exactly one `EvidencePresented` event (idempotent — presenting
+   * the same evidence twice does not record twice) and sets a world-state flag
+   * that world-state-conditioned endings may require. Returns the committed
+   * event, or undefined when the evidence is not consistent with the sampled
+   * truth / not discoverable.
+   */
+  presentEvidence(options: {
+    evidenceId: string;
+    campaignId: string;
+    npcId: string;
+  }): CommittedNarrativeEvent | undefined;
+
+  /**
+   * Persists truth-compatible evidence whose authored discovery location has
+   * been reached. Discovery flags are serialized with quest world state.
+   */
+  discoverEvidenceAt(location: string): string[];
+
+  /** Returns discovered evidence compatible with the campaign's sampled truth. */
+  getDiscoverableEvidence(campaignId?: string): Array<{
+    id: string;
+    label: string;
+    presentToNpcId: string;
+  }>;
   /** Journal entries for completed and failed quests (C-339). */
   readonly journalEntries: readonly QuestJournalEntry[];
 
@@ -298,6 +330,116 @@ class QuestStateService
   }
 
   /** @inheritdoc */
+  presentEvidence(options: {
+    evidenceId: string;
+    campaignId: string;
+    npcId: string;
+  }): CommittedNarrativeEvent | undefined {
+    const { evidenceId, campaignId, npcId } = options;
+    if (!this._contentPackLoader || !campaignId) {
+      return undefined;
+    }
+    const sampledTruthId = campaignService.activeCampaign?.sampledTruthId;
+    const evidence = resolveEvidenceById(
+      this._contentPackLoader.manifest,
+      evidenceId,
+      sampledTruthId,
+    );
+    if (!evidence) {
+      this.debug('presentEvidence:incompatible', { evidenceId, sampledTruthId });
+      return undefined;
+    }
+    if (!this.worldStateFlags[`evidence.discovered.${evidence.id}`]) {
+      this.debug('presentEvidence:undiscovered', { evidenceId });
+      return undefined;
+    }
+    if (evidence.presentToNpcId !== npcId) {
+      this.debug('presentEvidence:wrong-recipient', {
+        evidenceId,
+        expectedNpcId: evidence.presentToNpcId,
+        npcId,
+      });
+      return undefined;
+    }
+    // Idempotency — presenting the same evidence twice records at most once.
+    const alreadyPresented = narrativeEventService.events.some(
+      (e) => e.kind === 'EvidencePresented' && e.subjectId === evidenceId,
+    );
+    if (alreadyPresented) {
+      this.debug('presentEvidence:already-presented', { evidenceId });
+      return undefined;
+    }
+    // Record exactly one EvidencePresented event (C-491 seam).
+    const event = narrativeEventService.record({
+      campaignId,
+      kind: 'EvidencePresented',
+      informationKind: 'world_fact',
+      summary: `Evidence presented: ${evidence.label}`,
+      subjectId: evidence.id,
+      actorId: evidence.presentToNpcId,
+      witnesses: [evidence.presentToNpcId],
+    });
+    // Set the evidence-presented world-state flag so world-state-conditioned
+    // endings become reachable (C-495 AC-3/AC-4).
+    this.setWorldStateFlag(`evidence.presented.${evidence.id}`);
+    this.debug('presentEvidence', { evidenceId, eventId: event.id });
+    return event;
+  }
+
+  /** @inheritdoc */
+  discoverEvidenceAt(location: string): string[] {
+    if (!this._contentPackLoader || !location) {
+      return [];
+    }
+    const sampledTruthId = campaignService.activeCampaign?.sampledTruthId;
+    const discovered: string[] = [];
+    for (const evidence of resolveEvidence(this._contentPackLoader.manifest, sampledTruthId)) {
+      if (
+        evidence.discoverableAt !== location &&
+        !evidence.discoverableAt.startsWith(`${location}:`)
+      ) {
+        continue;
+      }
+      this.setWorldStateFlag(`evidence.discovered.${evidence.id}`);
+      discovered.push(evidence.id);
+    }
+    if (discovered.length > 0) {
+      this.debug('discoverEvidenceAt', { location, evidenceIds: discovered });
+    }
+    return discovered;
+  }
+
+  /** @inheritdoc */
+  getDiscoverableEvidence(campaignId?: string): Array<{
+    id: string;
+    label: string;
+    presentToNpcId: string;
+  }> {
+    if (!this._contentPackLoader) {
+      return [];
+    }
+    let sampledTruthId = campaignService.activeCampaign?.sampledTruthId;
+    if (campaignId && campaignService.activeCampaign?.id !== campaignId) {
+      sampledTruthId = undefined;
+    }
+    const variants = getTruthVariants(this._contentPackLoader.manifest);
+    if (variants.length === 0) {
+      return [];
+    }
+    const truth = getTruthVariant(this._contentPackLoader.manifest, sampledTruthId);
+    if (!truth) {
+      return [];
+    }
+    return resolveEvidence(this._contentPackLoader.manifest, sampledTruthId)
+      .filter((evidence) => this.worldStateFlags[`evidence.discovered.${evidence.id}`])
+      .map((evidence) => ({
+        id: evidence.id,
+        label: evidence.label,
+        presentToNpcId: evidence.presentToNpcId,
+      }));
+  }
+
+  /** @inheritdoc */
   canAcceptQuest(questId: string): boolean {
     if (this._declinedQuestIds.includes(questId)) {
       return false;
@@ -434,6 +576,10 @@ class QuestStateService
     // zone objectives accepted while the player is already in the zone.
     if (trigger.type === 'MAP_ENTERED') {
       this._lastMapEntered = { mapUrl: trigger.mapUrl };
+      const mapId = this._contentPackLoader?.resolveMapId(trigger.mapUrl);
+      if (mapId) {
+        this.discoverEvidenceAt(mapId);
+      }
     }
 
     for (const progress of this._progress) {
@@ -668,6 +814,20 @@ class QuestStateService
         }),
       );
 
+      for (const eventType of [
+        'DOOR_OPENED',
+        'LEVER_TOGGLED',
+        'LOOT_GENERATED',
+        'READABLE_INTERACTED',
+        'TRAP_TRIGGERED',
+      ] as const) {
+        this._unsubscribers.push(
+          bridge.on(eventType, (event) => {
+            this._discoverEvidenceAtProp(event.spawnId);
+          }),
+        );
+      }
+
       // NPC_INTERACTED is already handled by the dialogue system.
       // We wire it here as a pass-through for quest evaluation.
       this._unsubscribers.push(
@@ -683,6 +843,16 @@ class QuestStateService
   }
 
   // ── Private: quest sync ──
+
+  /** Resolves standalone and map-qualified prop discovery locations. */
+  private _discoverEvidenceAtProp(propId: string): void {
+    this.discoverEvidenceAt(propId);
+    const mapUrl = this._lastMapEntered?.mapUrl;
+    const mapId = mapUrl ? this._contentPackLoader?.resolveMapId(mapUrl) : undefined;
+    if (mapId) {
+      this.discoverEvidenceAt(`${mapId}:${propId}`);
+    }
+  }
 
   /**
    * Rebuilds the quests array from internal _progress state.
@@ -933,10 +1103,18 @@ class QuestStateService
     progress.status = 'completed';
     progress.completedAt = Date.now();
 
-    // Default ending: first available ending ID, or undefined
+    // Ending selection (C-495): honour an explicit player-chosen ending first,
+    // then select the first ending whose `requiresWorldStateFlag` is currently set
+    // (world-state-conditioned), then default to the first available ending.
     const endingIds = Object.keys(definition.endings ?? {});
     if (endingIds.length > 0 && !progress.chosenEndingId) {
-      progress.chosenEndingId = endingIds[0];
+      const conditioned = endingIds.find((id) => {
+        const ending = definition.endings?.[id];
+        return (
+          ending?.requiresWorldStateFlag && this.worldStateFlags[ending.requiresWorldStateFlag]
+        );
+      });
+      progress.chosenEndingId = conditioned ?? endingIds[0];
     }
 
     // Deliver rewards (idempotent)

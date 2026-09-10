@@ -23,6 +23,7 @@ import {
 } from '@aikami/frontend/services';
 import {
   NpcDialogueAiEnvelopeSchema,
+  NpcDialogueCommandSchema,
   NpcDialogueTurnSchema,
   NpcIntentAnalysisOutputSchema,
   NpcQuestActivationSchema,
@@ -32,6 +33,7 @@ import {
 import type {
   CommittedNarrativeEvent,
   ContentPackItemEntry,
+  ContentPackManifest,
   ContentPackNpcEntry,
   ContentPackNpcPersonality,
   NpcDialogueChoice,
@@ -58,6 +60,7 @@ import {
   relationshipService,
 } from '$services';
 import type { ConsequenceRejectionReason, ConsequenceRequest, ConsequenceResult } from '$types';
+import { resolveAccounts } from './dramatic_structure_service';
 import { buildNpcPersona } from './npc_dialogue_persona';
 
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
@@ -120,6 +123,8 @@ const compareConsequenceDeltas = (a: NpcStateDelta, b: NpcStateDelta): number =>
 
 /** Content-pack data the orchestrator reads from (NPC entries, dialogues). */
 type NpcDialogueContentProvider = {
+  /** Loaded manifest used to project truth-compatible dramatic accounts. */
+  readonly manifest?: ContentPackManifest;
   /** Returns the NPC entry for a given NPC ID, or undefined. */
   getNpc(npcId: string):
     | {
@@ -234,6 +239,7 @@ type NpcDialogueExecutors = {
   giveItem(options: { itemId: string; quantity: number }): boolean;
   startCombat(options: { npcId: string; npcName: string; encounterId?: string }): boolean;
   recruit(options: { npcId: string; npcName: string }): boolean;
+  presentEvidence(options: { npcId: string; evidenceId: string }): boolean;
 };
 
 /** Context facts projected into the AI system prompt. */
@@ -769,7 +775,27 @@ export class NpcDialogueService
 
     const npc = npcEntry ?? this._contentProvider!.getNpc(npcId);
 
-    switch (kind) {
+    if (!Value.Check(NpcDialogueCommandSchema, command) || kind !== command.kind) {
+      this.warn('executeCommand:invalid-command', { kind });
+      return false;
+    }
+
+    const allowedCommands = this._deriveAllowedCommands(npc);
+    const precondition = this._validateCommandPreconditions({
+      command,
+      allowedCommands,
+      npcId,
+      npcEntry: npc,
+    });
+    if (!precondition.allowed) {
+      this.warn('executeCommand:precondition-denied', {
+        commandKind: command.kind,
+        reason: precondition.reason,
+      });
+      return false;
+    }
+
+    switch (command.kind) {
       case 'trade':
         return this._executors!.trade({
           npcId,
@@ -779,28 +805,33 @@ export class NpcDialogueService
       case 'offerQuest':
         return this._executors!.offerQuest({
           npcId,
-          questId: (command as { questId: string }).questId,
+          questId: command.questId,
         });
       case 'skillCheck':
         return this._executors!.skillCheck({
-          skill: (command as { skill: string }).skill,
-          difficultyClass: (command as { difficultyClass: number }).difficultyClass,
+          skill: command.skill,
+          difficultyClass: command.difficultyClass,
         });
       case 'giveItem':
         return this._executors!.giveItem({
-          itemId: (command as { itemId: string }).itemId,
-          quantity: (command as { quantity: number }).quantity ?? 1,
+          itemId: command.itemId,
+          quantity: command.quantity,
         });
       case 'startCombat':
         return this._executors!.startCombat({
           npcId,
           npcName,
-          encounterId: (command as { encounterId?: string }).encounterId,
+          encounterId: command.encounterId,
         });
       case 'recruit':
         return this._executors!.recruit({
           npcId,
           npcName: npc?.name ?? 'Unknown',
+        });
+      case 'presentEvidence':
+        return this._executors!.presentEvidence({
+          npcId,
+          evidenceId: command.evidenceId,
         });
       default:
         this.warn('executeCommand:unknown-kind', { kind });
@@ -1036,7 +1067,7 @@ export class NpcDialogueService
     contextProjection: DialogueContextProjection;
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     signal: AbortSignal;
-    turnCtx?: TurnContext;
+    turnCtx: TurnContext;
     onChunk?: (text: string) => void;
   }): Promise<NpcDialogueTurn> {
     const { contextProjection, messages, signal, onChunk } = options;
@@ -1121,11 +1152,12 @@ export class NpcDialogueService
 
       // Precondition check on command
       if (command) {
-        const precondResult = this._validateCommandPreconditions(
+        const precondResult = this._validateCommandPreconditions({
           command,
-          contextProjection.allowedCommands,
-          options.turnCtx?.npcEntry,
-        );
+          allowedCommands: contextProjection.allowedCommands,
+          npcId: options.turnCtx.npcId,
+          npcEntry: options.turnCtx.npcEntry,
+        });
         if (!precondResult.allowed) {
           this.warn('_generateAiTurn:command-denied', {
             commandKind: command.kind,
@@ -1427,17 +1459,37 @@ export class NpcDialogueService
     const memory = messages
       .slice(-10)
       .map((m) => `${m.role === 'player' ? 'Player' : npcName}: ${m.content}`);
+    const accountFacts = this._resolveAccountFacts(npcId);
 
     return {
       persona,
       npcName,
       memory,
-      gameStateFacts,
+      gameStateFacts: [...gameStateFacts, ...accountFacts],
       relationshipFacts: [],
       allowedCommands,
       companionWitnessed,
       ...(pendingCompanionWitness ? { pendingCompanionWitness } : {}),
     };
+  }
+
+  /** Projects only this NPC's account that matches the campaign's sampled truth. */
+  private _resolveAccountFacts(npcId: string): string[] {
+    const manifest = this._contentProvider?.manifest;
+    if (!manifest?.accounts) {
+      return [];
+    }
+    const sampledTruthId = campaignService.activeCampaign?.sampledTruthId;
+    const facts: string[] = [];
+    for (const situationId of Object.keys(manifest.accounts)) {
+      const accounts = resolveAccounts(manifest, situationId, sampledTruthId);
+      for (const account of accounts) {
+        if (account.npcId === npcId) {
+          facts.push(`[NPC ACCOUNT: ${situationId}] ${account.claim}`);
+        }
+      }
+    }
+    return facts;
   }
 
   /**
@@ -1603,6 +1655,11 @@ export class NpcDialogueService
       allowed.push('recruit');
     }
 
+    // presentEvidence: any NPC may receive evidence presentation; the command
+    // precondition additionally checks the evidence exists and is consistent
+    // with the sampled truth (C-495 AC-2).
+    allowed.push('presentEvidence');
+
     return allowed;
   }
 
@@ -1616,11 +1673,13 @@ export class NpcDialogueService
    * - skillCheck: difficulty class in [1, 30], skill must be non-empty
    * - trade: NPC must be a vendor
    */
-  private _validateCommandPreconditions(
-    command: NpcDialogueCommand,
-    allowedCommands: NpcDialogueCommandKind[],
-    npcEntry?: ReturnType<NpcDialogueContentProvider['getNpc']>,
-  ): { allowed: boolean; reason?: string } {
+  private _validateCommandPreconditions(options: {
+    command: NpcDialogueCommand;
+    allowedCommands: NpcDialogueCommandKind[];
+    npcId: string;
+    npcEntry?: ReturnType<NpcDialogueContentProvider['getNpc']>;
+  }): { allowed: boolean; reason?: string } {
+    const { command, allowedCommands, npcId, npcEntry } = options;
     // Kind-level check
     if (!allowedCommands.includes(command.kind)) {
       return { allowed: false, reason: `kind ${command.kind} not in whitelist` };
@@ -1687,6 +1746,37 @@ export class NpcDialogueService
       case 'trade': {
         if (!npcEntry?.isVendor) {
           return { allowed: false, reason: 'NPC is not a vendor' };
+        }
+        return { allowed: true };
+      }
+
+      case 'recruit': {
+        if (!(npcEntry as Record<string, unknown> | undefined)?.isCompanion) {
+          return { allowed: false, reason: 'NPC is not a recruitable companion' };
+        }
+        return { allowed: true };
+      }
+
+      case 'presentEvidence': {
+        const evidenceId = c.evidenceId as string | undefined;
+        if (!evidenceId) {
+          return { allowed: false, reason: 'presentEvidence missing evidenceId' };
+        }
+        // Validate the evidence is discoverable under the sampled truth.
+        const evidence = questStateService
+          .getDiscoverableEvidence(campaignService.activeCampaign?.id)
+          .find((candidate) => candidate.id === evidenceId);
+        if (!evidence) {
+          return {
+            allowed: false,
+            reason: `evidence ${evidenceId} has not been discovered under sampled truth`,
+          };
+        }
+        if (evidence.presentToNpcId !== npcId) {
+          return {
+            allowed: false,
+            reason: `evidence ${evidenceId} must be presented to ${evidence.presentToNpcId}`,
+          };
         }
         return { allowed: true };
       }
@@ -1828,6 +1918,7 @@ export class NpcDialogueService
     } = options;
 
     const persona = this._buildPersona({ npcId, npcName, npc });
+    const accountFacts = this._resolveAccountFacts(npcId);
 
     // Build the input for the LLM
     const input: NpcIntentAnalysisInput = {
@@ -1842,7 +1933,7 @@ export class NpcDialogueService
         role: m.role,
         content: m.content.slice(0, 200),
       })),
-      gameStateFacts,
+      gameStateFacts: [...gameStateFacts, ...accountFacts],
     };
 
     // Call 1 streams prose; call 2 extracts the intent envelope.
@@ -2009,7 +2100,8 @@ export class NpcDialogueService
       .slice(-10)
       .map((m) => `${m.role === 'player' ? 'Player' : npcName}: ${m.content.slice(0, 200)}`);
 
-    const factLines = gameStateFacts.length > 0 ? ['', '[GAME STATE]', ...gameStateFacts] : [];
+    const projectedFacts = [...gameStateFacts, ...this._resolveAccountFacts(npcId)];
+    const factLines = projectedFacts.length > 0 ? ['', '[GAME STATE]', ...projectedFacts] : [];
     const historyBlock =
       historyLines.length > 0 ? ['', '[CONVERSATION HISTORY]', ...historyLines] : [];
 

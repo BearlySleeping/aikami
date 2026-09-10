@@ -7,6 +7,7 @@
 // Contract: C-314 Establish a Production Game Composition Root and Split God Services
 // Contract: C-326 Make Game Boot Atomic, Observable, and Content-Driven (campaign wiring)
 
+import { getPublicMode } from '@aikami/frontend/configs';
 import type { GameCommand } from '@aikami/frontend/engine/sim';
 import {
   BaseFrontendClass,
@@ -502,6 +503,21 @@ export class GameCompositionRoot
           }
           return !!member;
         },
+        presentEvidence: (opts) => {
+          // Present the evidence to the NPC, recording exactly one
+          // EvidencePresented event and setting the world-state flag that
+          // gates world-state-conditioned endings (C-495 AC-2/AC-3).
+          const campaignId = campaignService.activeCampaign?.id;
+          if (!campaignId) {
+            return false;
+          }
+          const event = questStateService.presentEvidence({
+            evidenceId: opts.evidenceId,
+            campaignId,
+            npcId: opts.npcId,
+          });
+          return Boolean(event);
+        },
       },
     });
 
@@ -521,6 +537,43 @@ export class GameCompositionRoot
     await inventoryService.startListening();
     await questStateService.startListening();
 
+    // C-495 AC-6 test hook: expose a seam only in explicit non-production
+    // modes. The seam still uses the production discovery, derivation,
+    // validation, precondition, and command-execution paths.
+    if (getPublicMode() !== 'production' && typeof window !== 'undefined') {
+      try {
+        Object.assign(window, {
+          // biome-ignore lint/style/useNamingConvention: __AIKAMI_TEST__ is the fixed key the release-gate E2E reads back
+          __AIKAMI_TEST__: {
+            discoverEvidenceAt: (location: string): string[] =>
+              questStateService.discoverEvidenceAt(location),
+            presentEvidence: (options: {
+              npcId: string;
+              evidenceId: string;
+            }): { commandAvailable: boolean; flagSet: boolean } => {
+              const command = {
+                kind: 'presentEvidence' as const,
+                evidenceId: options.evidenceId,
+              };
+              const commandAvailable = npcDialogueService
+                .deriveAllowedCommands(options.npcId)
+                .includes(command.kind);
+              const flagSet =
+                commandAvailable &&
+                npcDialogueService.executeCommand({
+                  kind: command.kind,
+                  npcId: options.npcId,
+                  npcName: contentPack.getNpc(options.npcId)?.name ?? 'Unknown',
+                  command,
+                });
+              return { commandAvailable, flagSet };
+            },
+          },
+        });
+      } catch (error) {
+        this.warn('initialize:test-hook-failed', { error: String(error) });
+      }
+    }
     this._initialized = true;
 
     const elapsed = performance.now() - t0;

@@ -23,7 +23,9 @@ import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
+import { campaignStorage as campaignStorageRepo } from '../campaign/campaign_storage.svelte';
 import { personaService } from '../persona/persona_service.svelte';
+import { sampleTruthVariant } from './dramatic_structure_service';
 import { gameEngineService } from './game_engine_service.svelte';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 
@@ -809,6 +811,29 @@ class GameBootService
       // Check generation after async preload
       if (generation !== this._bootGeneration) {
         return;
+      }
+    }
+    // ── C-495: sample the hidden truth once at campaign creation and persist it.
+    // The pack manifest is loaded here; the campaign is already resolved. Sampling
+    // is deterministic from the campaign seed, so it never re-rolls on reload and
+    // never rolls per NPC. If the campaign already carries a sampledTruthId
+    // (e.g. a prior boot or a post-C-495 save), it is left untouched.
+    if (this._campaign && !this._campaign.sampledTruthId) {
+      const sampled = sampleTruthVariant(pack.manifest, this._campaign.seed ?? 0);
+      if (sampled) {
+        this._campaign = { ...this._campaign, sampledTruthId: sampled };
+        try {
+          await campaignStorageRepo.update(this._campaign);
+        } catch (error) {
+          this.warn('stage:preloading_content:truth-persist-failed', {
+            error: String(error),
+          });
+          throw error;
+        }
+        this.debug('stage:preloading_content:truth-sampled', {
+          sampledTruthId: sampled,
+          seed: this._campaign.seed,
+        });
       }
     }
 
