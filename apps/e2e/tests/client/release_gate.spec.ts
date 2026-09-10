@@ -531,27 +531,61 @@ test.describe('Release Gate', () => {
         const el = document.querySelector('[data-testid="quest-overlay"]');
         return el?.getAttribute('data-sampled-truth') ?? null;
       });
+      expect(truthProbe).not.toBeNull();
+      if (truthProbe === null) {
+        throw new Error('sampled truth probe is required');
+      }
+
+      const evidenceByTruth: Record<
+        string,
+        { evidenceId: string; location: string; npcId: string }
+      > = {
+        rollo_owns_the_ledger: {
+          evidenceId: 'the_ledger',
+          location: 'merchant_shop',
+          npcId: 'village_elder',
+        },
+        thalia_owns_the_seal: {
+          evidenceId: 'elders_seal',
+          location: 'village',
+          npcId: 'rollo_grasper',
+        },
+      };
+      const evidenceCase = evidenceByTruth[truthProbe];
+      expect(evidenceCase, `evidence fixture for truth ${truthProbe}`).toBeDefined();
+      if (!evidenceCase) {
+        throw new Error(`no evidence fixture for sampled truth ${truthProbe}`);
+      }
 
       // Present evidence through the production dialogue command seam. The
       // presentEvidence command is derivable for the NPC (allowed commands),
       // and executing it records exactly one EvidencePresented event and sets
       // the world-state flag that gates the non-default ending.
-      const evidenceOutcome = await page.evaluate(() => {
+      const evidenceOutcome = await page.evaluate((scenario) => {
         const api = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
-          | { presentEvidence?: (evidenceId: string) => boolean }
+          | {
+              discoverEvidenceAt?: (location: string) => string[];
+              presentEvidence?: (options: { npcId: string; evidenceId: string }) => {
+                commandAvailable: boolean;
+                flagSet: boolean;
+              };
+            }
           | undefined;
         const commandAvailable = typeof api?.presentEvidence === 'function';
-        const flagSet = commandAvailable ? (api?.presentEvidence?.('the_ledger') ?? false) : false;
-        return { commandAvailable, flagSet };
-      });
+        const discovered = api?.discoverEvidenceAt?.(scenario.location) ?? [];
+        const outcome = commandAvailable
+          ? api?.presentEvidence?.({ npcId: scenario.npcId, evidenceId: scenario.evidenceId })
+          : undefined;
+        return {
+          commandAvailable: outcome?.commandAvailable ?? false,
+          discovered,
+          flagSet: outcome?.flagSet ?? false,
+        };
+      }, evidenceCase);
 
-      // When evidence is presented under a sampled truth where the_ledger is
-      // consistent, the presentation succeeds and sets the gating flag.
-      // The evidence is the first variant's evidence; under the default truth
-      // it is consistent, so presenting it must succeed.
-      if (truthProbe === null || truthProbe === 'rollo_owns_the_ledger') {
-        expect(evidenceOutcome.flagSet).toBe(true);
-      }
+      expect(evidenceOutcome.discovered).toContain(evidenceCase.evidenceId);
+      expect(evidenceOutcome.commandAvailable).toBe(true);
+      expect(evidenceOutcome.flagSet).toBe(true);
 
       // Save, reload, and confirm the same campaign (and its sampled truth)
       // persists — the milestone's persistence leg.
@@ -561,15 +595,13 @@ test.describe('Release Gate', () => {
       await game.waitForPlayingState();
       await expect(game.hpBar).toBeVisible({ timeout: 15_000 });
 
-      // The truth probe, when present, must be stable across the reload
-      // (AC-5 — a reload must never re-sample).
-      if (truthProbe) {
-        const after = await page.evaluate(() => {
-          const el = document.querySelector('[data-testid="quest-overlay"]');
-          return el?.getAttribute('data-sampled-truth') ?? null;
-        });
-        expect(after).toBe(truthProbe);
-      }
+      // The truth probe must be stable across the reload (AC-5 — a reload
+      // must never re-sample).
+      const after = await page.evaluate(() => {
+        const el = document.querySelector('[data-testid="quest-overlay"]');
+        return el?.getAttribute('data-sampled-truth') ?? null;
+      });
+      expect(after).toBe(truthProbe);
 
       // The presentEvidence command must be derivable on the production
       // dialogue path (AC-2 player reachability) — the milestone invariant

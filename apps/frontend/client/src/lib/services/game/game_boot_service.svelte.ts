@@ -828,6 +828,7 @@ class GameBootService
           this.warn('stage:preloading_content:truth-persist-failed', {
             error: String(error),
           });
+          throw error;
         }
         this.debug('stage:preloading_content:truth-sampled', {
           sampledTruthId: sampled,

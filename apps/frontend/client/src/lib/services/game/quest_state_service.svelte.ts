@@ -103,13 +103,21 @@ export type QuestStateServiceInterface = BaseFrontendClassInterface & {
   presentEvidence(options: {
     evidenceId: string;
     campaignId: string;
+    npcId: string;
   }): CommittedNarrativeEvent | undefined;
 
   /**
-   * Returns the evidence items in the current pack that are discoverable under
-   * the campaign's single sampled truth (C-495 AC-2/AC-5).
+   * Persists truth-compatible evidence whose authored discovery location has
+   * been reached. Discovery flags are serialized with quest world state.
    */
-  getDiscoverableEvidence(campaignId?: string): Array<{ id: string; label: string }>;
+  discoverEvidenceAt(location: string): string[];
+
+  /** Returns discovered evidence compatible with the campaign's sampled truth. */
+  getDiscoverableEvidence(campaignId?: string): Array<{
+    id: string;
+    label: string;
+    presentToNpcId: string;
+  }>;
   /** Journal entries for completed and failed quests (C-339). */
   readonly journalEntries: readonly QuestJournalEntry[];
 
@@ -325,8 +333,9 @@ class QuestStateService
   presentEvidence(options: {
     evidenceId: string;
     campaignId: string;
+    npcId: string;
   }): CommittedNarrativeEvent | undefined {
-    const { evidenceId, campaignId } = options;
+    const { evidenceId, campaignId, npcId } = options;
     if (!this._contentPackLoader || !campaignId) {
       return undefined;
     }
@@ -337,7 +346,19 @@ class QuestStateService
       sampledTruthId,
     );
     if (!evidence) {
-      this.debug('presentEvidence:not-discoverable', { evidenceId, sampledTruthId });
+      this.debug('presentEvidence:incompatible', { evidenceId, sampledTruthId });
+      return undefined;
+    }
+    if (!this.worldStateFlags[`evidence.discovered.${evidence.id}`]) {
+      this.debug('presentEvidence:undiscovered', { evidenceId });
+      return undefined;
+    }
+    if (evidence.presentToNpcId !== npcId) {
+      this.debug('presentEvidence:wrong-recipient', {
+        evidenceId,
+        expectedNpcId: evidence.presentToNpcId,
+        npcId,
+      });
       return undefined;
     }
     // Idempotency — presenting the same evidence twice records at most once.
@@ -366,7 +387,34 @@ class QuestStateService
   }
 
   /** @inheritdoc */
-  getDiscoverableEvidence(campaignId?: string): Array<{ id: string; label: string }> {
+  discoverEvidenceAt(location: string): string[] {
+    if (!this._contentPackLoader || !location) {
+      return [];
+    }
+    const sampledTruthId = campaignService.activeCampaign?.sampledTruthId;
+    const discovered: string[] = [];
+    for (const evidence of resolveEvidence(this._contentPackLoader.manifest, sampledTruthId)) {
+      if (
+        evidence.discoverableAt !== location &&
+        !evidence.discoverableAt.startsWith(`${location}:`)
+      ) {
+        continue;
+      }
+      this.setWorldStateFlag(`evidence.discovered.${evidence.id}`);
+      discovered.push(evidence.id);
+    }
+    if (discovered.length > 0) {
+      this.debug('discoverEvidenceAt', { location, evidenceIds: discovered });
+    }
+    return discovered;
+  }
+
+  /** @inheritdoc */
+  getDiscoverableEvidence(campaignId?: string): Array<{
+    id: string;
+    label: string;
+    presentToNpcId: string;
+  }> {
     if (!this._contentPackLoader) {
       return [];
     }
@@ -382,10 +430,13 @@ class QuestStateService
     if (!truth) {
       return [];
     }
-    return resolveEvidence(this._contentPackLoader.manifest, sampledTruthId).map((e) => ({
-      id: e.id,
-      label: e.label,
-    }));
+    return resolveEvidence(this._contentPackLoader.manifest, sampledTruthId)
+      .filter((evidence) => this.worldStateFlags[`evidence.discovered.${evidence.id}`])
+      .map((evidence) => ({
+        id: evidence.id,
+        label: evidence.label,
+        presentToNpcId: evidence.presentToNpcId,
+      }));
   }
 
   /** @inheritdoc */
@@ -525,6 +576,10 @@ class QuestStateService
     // zone objectives accepted while the player is already in the zone.
     if (trigger.type === 'MAP_ENTERED') {
       this._lastMapEntered = { mapUrl: trigger.mapUrl };
+      const mapId = this._contentPackLoader?.resolveMapId(trigger.mapUrl);
+      if (mapId) {
+        this.discoverEvidenceAt(mapId);
+      }
     }
 
     for (const progress of this._progress) {
@@ -759,6 +814,20 @@ class QuestStateService
         }),
       );
 
+      for (const eventType of [
+        'DOOR_OPENED',
+        'LEVER_TOGGLED',
+        'LOOT_GENERATED',
+        'READABLE_INTERACTED',
+        'TRAP_TRIGGERED',
+      ] as const) {
+        this._unsubscribers.push(
+          bridge.on(eventType, (event) => {
+            this._discoverEvidenceAtProp(event.spawnId);
+          }),
+        );
+      }
+
       // NPC_INTERACTED is already handled by the dialogue system.
       // We wire it here as a pass-through for quest evaluation.
       this._unsubscribers.push(
@@ -774,6 +843,16 @@ class QuestStateService
   }
 
   // ── Private: quest sync ──
+
+  /** Resolves standalone and map-qualified prop discovery locations. */
+  private _discoverEvidenceAtProp(propId: string): void {
+    this.discoverEvidenceAt(propId);
+    const mapUrl = this._lastMapEntered?.mapUrl;
+    const mapId = mapUrl ? this._contentPackLoader?.resolveMapId(mapUrl) : undefined;
+    if (mapId) {
+      this.discoverEvidenceAt(`${mapId}:${propId}`);
+    }
+  }
 
   /**
    * Rebuilds the quests array from internal _progress state.

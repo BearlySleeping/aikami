@@ -11,6 +11,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type {
   CommittedNarrativeEvent,
+  ContentPackManifest,
   NpcRollResolutionOutput,
   NpcStateDelta,
 } from '@aikami/types';
@@ -21,6 +22,7 @@ import {
   narrativeEventService,
   npcAwarenessService,
   partyRosterService,
+  questStateService,
   relationshipService,
 } from '$services';
 import type { ConsequenceRequest, ConsequenceResult } from '$types';
@@ -201,6 +203,7 @@ const expectAbortRejection = async (promise: Promise<unknown>): Promise<void> =>
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
+  questStateService.getDiscoverableEvidence = () => [];
   const contentProvider = makeContentProvider();
   const textGenerator = makeTextGenerator();
   npcDialogueService.configure({
@@ -211,6 +214,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  questStateService.getDiscoverableEvidence = () => [];
   Reflect.deleteProperty(globalThis, '__AIKAMI_E2E_DIALOGUE_INTENT__');
   // Reconfigure with fresh state to prevent test bleed
   const contentProvider = makeContentProvider();
@@ -719,6 +723,79 @@ describe('AC-4: Context projection', () => {
     });
 
     expect(projection.gameStateFacts).toContain('Quest active: The Fading Ward');
+  });
+
+  test('projects only the NPC account compatible with the sampled truth', async () => {
+    const accountManifest = {
+      id: 'emberwatch',
+      name: 'Emberwatch',
+      version: '4.1.0',
+      updatedAt: '2026-09-10T00:00:00.000Z',
+      startingMapId: 'village',
+      maps: { village: { file: 'maps/village.json', name: 'Village' } },
+      npcs: {},
+      items: {},
+      dialogues: {},
+      truthVariants: [
+        { id: 'rollo_truth', label: 'Rollo', startingConditions: [] },
+        { id: 'thalia_truth', label: 'Thalia', startingConditions: [] },
+      ],
+      accounts: {
+        ward: [
+          {
+            npcId: 'village_elder',
+            claim: 'The ledger is false.',
+            supportsTruthId: 'rollo_truth',
+          },
+          {
+            npcId: 'village_elder',
+            claim: 'The seal is genuine.',
+            supportsTruthId: 'thalia_truth',
+          },
+        ],
+      },
+    } satisfies ContentPackManifest;
+    let capturedInput = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        capturedInput = messages.find((message) => message.role === 'user')?.content ?? '';
+        return { text: 'The elder considers.' };
+      }
+      return {
+        text: 'The elder considers.',
+        structured: {
+          requiresRoll: false,
+          npcResponse: 'The elder considers.',
+          suggestedChips: [],
+        },
+      };
+    });
+    npcDialogueService.configure({
+      contentProvider: { ...makeContentProvider(), manifest: accountManifest },
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+    });
+
+    expect(projection.gameStateFacts).toContain('[NPC ACCOUNT: ward] The ledger is false.');
+    expect(projection.gameStateFacts).not.toContain('[NPC ACCOUNT: ward] The seal is genuine.');
+
+    await npcDialogueService.analyzeIntent({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player', content: 'What happened to the ward?' }],
+      signal: new AbortController().signal,
+    });
+
+    const input = JSON.parse(capturedInput) as { gameStateFacts: string[] };
+    expect(input.gameStateFacts).toContain('[NPC ACCOUNT: ward] The ledger is false.');
+    expect(input.gameStateFacts).not.toContain('[NPC ACCOUNT: ward] The seal is genuine.');
   });
 });
 
@@ -2529,6 +2606,13 @@ describe('C-494 AC-1: recruit through the existing dialogue seam', () => {
       textGenerator: makeTextGenerator(),
       executors,
     });
+    questStateService.getDiscoverableEvidence = () => [
+      {
+        id: 'the_ledger',
+        label: 'The Ledger',
+        presentToNpcId: 'village_guard',
+      },
+    ];
     const ok = npcDialogueService.executeCommand({
       kind: 'presentEvidence',
       npcId: 'village_guard',
@@ -2537,5 +2621,31 @@ describe('C-494 AC-1: recruit through the existing dialogue seam', () => {
     });
     expect(ok).toBe(true);
     expect(execLog).toContain('presentEvidence');
+  });
+
+  test('executeCommand rejects evidence for a different NPC before dispatch', () => {
+    const executors = makeExecutors();
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors,
+    });
+    questStateService.getDiscoverableEvidence = () => [
+      {
+        id: 'the_ledger',
+        label: 'The Ledger',
+        presentToNpcId: 'village_elder',
+      },
+    ];
+
+    const ok = npcDialogueService.executeCommand({
+      kind: 'presentEvidence',
+      npcId: 'village_guard',
+      npcName: 'Bram the Guard',
+      command: { kind: 'presentEvidence', evidenceId: 'the_ledger' },
+    });
+
+    expect(ok).toBe(false);
+    expect(execLog).not.toContain('presentEvidence');
   });
 });

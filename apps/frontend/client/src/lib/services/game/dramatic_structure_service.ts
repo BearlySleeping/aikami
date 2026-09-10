@@ -55,7 +55,8 @@ export const sampleTruthVariant = (
 
 /**
  * Returns the truth variant matching a sampled id, or the first variant
- * (the pack default) when the id is absent/unknown.
+ * (the pack default) only when the id is absent. A stored but unknown id is
+ * rejected so content migrations cannot silently change an existing campaign.
  */
 export const getTruthVariant = (
   manifest: ContentPackManifest,
@@ -66,10 +67,7 @@ export const getTruthVariant = (
     return undefined;
   }
   if (sampledTruthId) {
-    const match = variants.find((v) => v.id === sampledTruthId);
-    if (match) {
-      return match;
-    }
+    return variants.find((variant) => variant.id === sampledTruthId);
   }
   return variants[0];
 };

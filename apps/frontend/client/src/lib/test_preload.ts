@@ -453,6 +453,9 @@ export const localServicesMockBase = () => ({
     declineQuest: _createCallableStub(),
     canAcceptQuest: () => true,
     getOfferableQuests: () => [],
+    discoverEvidenceAt: () => [],
+    getDiscoverableEvidence: () => [],
+    presentEvidence: _createCallableStub(),
     evaluateTriggers: _createCallableStub(),
     serialize: () => ({
       activeQuests: [],

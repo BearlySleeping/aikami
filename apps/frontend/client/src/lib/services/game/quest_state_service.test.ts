@@ -1568,7 +1568,12 @@ describe('C-495 dramatic structure', () => {
   });
 
   test('AC-2: presenting discoverable evidence records exactly one EvidencePresented event', () => {
-    const event = service.presentEvidence({ evidenceId: 'the_ledger', campaignId: 'camp-1' });
+    service.discoverEvidenceAt('merchant_shop');
+    const event = service.presentEvidence({
+      evidenceId: 'the_ledger',
+      campaignId: 'camp-1',
+      npcId: 'village_elder',
+    });
     expect(event).toBeDefined();
     expect(event?.kind).toBe('EvidencePresented');
     const presented = narrativeEventService.events.filter(
@@ -1578,8 +1583,17 @@ describe('C-495 dramatic structure', () => {
   });
 
   test('AC-2: presenting the same evidence twice does not record twice (idempotent)', () => {
-    service.presentEvidence({ evidenceId: 'the_ledger', campaignId: 'camp-1' });
-    const second = service.presentEvidence({ evidenceId: 'the_ledger', campaignId: 'camp-1' });
+    service.discoverEvidenceAt('merchant_shop');
+    service.presentEvidence({
+      evidenceId: 'the_ledger',
+      campaignId: 'camp-1',
+      npcId: 'village_elder',
+    });
+    const second = service.presentEvidence({
+      evidenceId: 'the_ledger',
+      campaignId: 'camp-1',
+      npcId: 'village_elder',
+    });
     expect(second).toBeUndefined();
     const presented = narrativeEventService.events.filter(
       (e) => e.kind === 'EvidencePresented' && e.subjectId === 'the_ledger',
@@ -1588,18 +1602,55 @@ describe('C-495 dramatic structure', () => {
   });
 
   test('AC-2: evidence inconsistent with the sampled truth is not presentable', () => {
-    const event = service.presentEvidence({ evidenceId: 'the_ledger', campaignId: 'camp-2' });
+    service.discoverEvidenceAt('merchant_shop');
+    const event = service.presentEvidence({
+      evidenceId: 'the_ledger',
+      campaignId: 'camp-2',
+      npcId: 'village_elder',
+    });
     // With no sampled truth, the default (first) variant is rollo_owns_the_ledger,
     // so the_ledger IS consistent. elders_seal is NOT (it supports thalia's).
-    const sealEvent = service.presentEvidence({ evidenceId: 'elders_seal', campaignId: 'camp-2' });
+    const sealEvent = service.presentEvidence({
+      evidenceId: 'elders_seal',
+      campaignId: 'camp-2',
+      npcId: 'rollo_grasper',
+    });
     expect(event).toBeDefined();
     expect(sealEvent).toBeUndefined();
+  });
+
+  test('AC-2: undiscovered evidence cannot emit an event or set the ending flag', () => {
+    const event = service.presentEvidence({
+      evidenceId: 'the_ledger',
+      campaignId: 'camp-2',
+      npcId: 'village_elder',
+    });
+    expect(event).toBeUndefined();
+    expect(narrativeEventService.events).toHaveLength(0);
+    expect(service.worldStateFlags['evidence.presented.the_ledger']).toBeUndefined();
+  });
+
+  test('AC-2: evidence cannot be presented to an NPC other than its authored recipient', () => {
+    service.discoverEvidenceAt('merchant_shop');
+    const event = service.presentEvidence({
+      evidenceId: 'the_ledger',
+      campaignId: 'camp-2',
+      npcId: 'rollo_grasper',
+    });
+    expect(event).toBeUndefined();
+    expect(narrativeEventService.events).toHaveLength(0);
+    expect(service.worldStateFlags['evidence.presented.the_ledger']).toBeUndefined();
   });
 
   test('AC-3: world-state-conditioned ending is reachable when its required flag is set', () => {
     service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
     // Present the ledger → sets evidence.presented.the_ledger flag
-    service.presentEvidence({ evidenceId: 'the_ledger', campaignId: 'camp-3' });
+    service.discoverEvidenceAt('merchant_shop');
+    service.presentEvidence({
+      evidenceId: 'the_ledger',
+      campaignId: 'camp-3',
+      npcId: 'village_elder',
+    });
     // Complete the quest
     service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
     expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBe(true);
@@ -1618,7 +1669,12 @@ describe('C-495 dramatic structure', () => {
   test('AC-3: at least two distinct endings resolve to distinct world state', () => {
     // reconciled
     service.acceptQuest({ questId: 'dramatic_ward', npcId: 'village_elder' });
-    service.presentEvidence({ evidenceId: 'the_ledger', campaignId: 'camp-4' });
+    service.discoverEvidenceAt('merchant_shop');
+    service.presentEvidence({
+      evidenceId: 'the_ledger',
+      campaignId: 'camp-4',
+      npcId: 'village_elder',
+    });
     service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/village.json' });
     expect(service.worldStateFlags['emberwatch.ending.reconciled']).toBe(true);
 
@@ -1633,8 +1689,21 @@ describe('C-495 dramatic structure', () => {
   });
 
   test('AC-5: getDiscoverableEvidence reflects the single sampled truth', () => {
+    expect(service.getDiscoverableEvidence()).toHaveLength(0);
+    service.discoverEvidenceAt('merchant_shop');
     const evidence = service.getDiscoverableEvidence();
     const ids = evidence.map((e) => e.id);
     expect(ids).toContain('the_ledger');
+  });
+
+  test('AC-2: discovered evidence persists through quest-state serialization', () => {
+    service.discoverEvidenceAt('merchant_shop');
+    const saved = service.serialize();
+
+    service.reset();
+    service.configure({ contentPackLoader: dramaticLoader });
+    service.hydrate(saved);
+
+    expect(service.getDiscoverableEvidence().map((e) => e.id)).toContain('the_ledger');
   });
 });

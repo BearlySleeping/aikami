@@ -7,6 +7,8 @@
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import emberwatchManifest from '../../../../../../content/packs/emberwatch/manifest.json';
+import merchantShopMap from '../../../../../../content/packs/emberwatch/maps/merchant_shop.json';
+import villageMap from '../../../../../../content/packs/emberwatch/maps/village.json';
 import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
 import { normaliseLegacyStep } from './onboarding_hints.ts';
 
@@ -1035,14 +1037,39 @@ describe('C-495 AC-1/AC-3/AC-4 — Emberwatch dramatic structure content', () =>
 
   test('AC-2: ≥1 physical evidence is discoverable and presentable', () => {
     const evidence = manifest.evidence ?? [];
+    const referencedMaps = new Map([
+      ['merchant_shop', merchantShopMap],
+      ['village', villageMap],
+    ]);
     expect(evidence.length).toBeGreaterThanOrEqual(1);
     for (const e of evidence) {
       expect(e.discoverableAt, 'discoverableAt resolves to a real map/prop').toBeTruthy();
-      expect(e.presentToNpcId, 'presentToNpcId names an NPC').toBeTruthy();
-      // discoverableAt must resolve to an existing map id or prop id.
-      const [mapOrProp] = e.discoverableAt.split(':');
-      const known = mapOrProp in (manifest.maps ?? {}) || mapOrProp in (manifest.props ?? {});
-      expect(known, `${e.discoverableAt} resolves`).toBe(true);
+      expect(e.presentToNpcId in manifest.npcs, `${e.presentToNpcId} resolves to an NPC`).toBe(
+        true,
+      );
+
+      const [mapOrPropId, nestedPropId] = e.discoverableAt.split(':');
+      if (!nestedPropId) {
+        const knownStandalone =
+          mapOrPropId in manifest.maps || mapOrPropId in (manifest.props ?? {});
+        expect(knownStandalone, `${e.discoverableAt} resolves`).toBe(true);
+        continue;
+      }
+
+      expect(mapOrPropId in manifest.maps, `${mapOrPropId} resolves to a map`).toBe(true);
+      expect(nestedPropId in (manifest.props ?? {}), `${nestedPropId} resolves to a prop`).toBe(
+        true,
+      );
+      const map = referencedMaps.get(mapOrPropId);
+      expect(map, `${mapOrPropId} map content is loaded`).toBeDefined();
+      const propExistsInMap = map?.layers.some((layer) =>
+        layer.objects?.some((object) =>
+          object.properties?.some(
+            (property) => property.name === 'propId' && property.value === nestedPropId,
+          ),
+        ),
+      );
+      expect(propExistsInMap, `${nestedPropId} exists in ${mapOrPropId}`).toBe(true);
     }
   });
 

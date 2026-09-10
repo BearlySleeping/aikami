@@ -85,6 +85,7 @@ describe('sampleTruthVariant (AC-5)', () => {
   test('returns undefined when the pack declares no truthVariants (v4.0.0)', () => {
     const noVariants = { ...manifest };
     delete (noVariants as Record<string, unknown>).truthVariants;
+    expect(sampleTruthVariant(noVariants, 12345)).toBeUndefined();
   });
 
   test('differs across seeds (variance exists in the bounded set)', () => {
@@ -132,5 +133,9 @@ describe('truth resolution — one sampled truth drives all accounts (AC-5 forbi
 
   test('getTruthVariant defaults to the first variant when no sampled id present (pre-C-495 campaign)', () => {
     expect(getTruthVariant(manifest)?.id).toBe('rollo_owns_the_ledger');
+  });
+
+  test('getTruthVariant rejects a stored sampled id that no longer exists', () => {
+    expect(getTruthVariant(manifest, 'removed_truth')).toBeUndefined();
   });
 });
