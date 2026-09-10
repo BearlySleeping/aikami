@@ -343,17 +343,17 @@ Changes to ACs or scope require a version bump and user approval.
 ## Execution Report
 
 ### Summary
-Expanded the Emberwatch content pack from a single fetch quest into a structural dramatic arc: optional `truthVariants`/`accounts`/`evidence` manifest structures (all back-compat, v4.0.0 still loads), a single sampled hidden truth persisted on the campaign at boot, world-state-conditioned ending selection reaching ≥3 distinct world-state endings, discoverable+presentable evidence producing exactly one `EvidencePresented` event, and the release-journey extension. Content prose is placeholder (clearly marked for the maintainer to author, per the Architecture Directives).
+Expanded the Emberwatch content pack from a single fetch quest into a structural dramatic arc: optional `truthVariants`/`accounts`/`evidence` manifest structures (all back-compat, v4.0.0 still loads), a single sampled hidden truth persisted on the campaign at boot, world-state-conditioned ending selection reaching ≥3 distinct world-state endings, discoverable+presentable evidence producing exactly one `EvidencePresented` event, and the release-journey extension. Evidence presentation is now **player-reachable**: a `presentEvidence` dialogue command was added to the command schema and wired end-to-end through the dialogue service (executor, allowed-commands derivation, precondition validation) and the composition root, plus a `__AIKAMI_TEST__` harness seam for the release-gate E2E. Content prose is placeholder (clearly marked for the maintainer to author, per the Architecture Directives).
 
 ### AC Status
 | AC | Status | Notes |
 |---|---|---|
 | AC-1 | ✅ | ≥2 materially conflicting accounts in manifest; schema `supportsTruthId` marks truth; unit tests assert conflict resolves against the single sampled truth |
-| AC-2 | ✅ | `evidence` presentable to a named NPC via `questStateService.presentEvidence`, producing exactly one `EvidencePresented` event (idempotent); unit-tested |
-| AC-3 | ✅ | 3 endings with distinct `worldStateFlag`s + `reactionDialogueKey`; world-state-conditioned selection (`requiresWorldStateFlag`) makes non-default endings reachable; unit-tested |
+| AC-2 | ✅ | `presentEvidence` wired as a player-reachable dialogue command (`presentEvidence` kind → executor → `questStateService.presentEvidence`), producing exactly one `EvidencePresented` event (idempotent); unit-tested at schema, dialogue-dispatch, and service levels |
+| AC-3 | ✅ | 3 endings with distinct `worldStateFlag`s + `reactionDialogueKey`; world-state-conditioned selection (`requiresWorldStateFlag`) makes non-default endings reachable; evidence presentation sets the gating flag; unit-tested |
 | AC-4 | ⚠️ | Village change projected from world-state flags + NPC reaction dialogue keys; schema/unit asserted — no visual suite yet (noted as future work) |
 | AC-5 | ✅ | One truth sampled deterministically from seed at boot, persisted on campaign (`sampledTruthId`); never re-rolled per NPC or on reload; unit-tested |
-| AC-6 | ⚠️ | `release_gate.spec.ts` extended with an AC-6 dramatic-structure journey; full E2E run requires the AI/dialogue stack on :5274 not available in this worktree — flagged for verifier/CI |
+| AC-6 | ⚠️ | `release_gate.spec.ts` extended with an AC-6 dramatic-structure journey asserting truth persistence, evidence-presentation reachability, and save/reload survival; full run requires the AI/dialogue stack on :5274 not available in this worktree — flagged for verifier/CI |
 | AC-7 | ✅ | New keys all optional; absence path unit-tested; v4.0.0 pack loads unchanged |
 
 ### Files Created
@@ -367,11 +367,16 @@ Expanded the Emberwatch content pack from a single fetch quest into a structural
 |---|---|
 | `packages/shared/schemas/src/lib/game/content_pack.ts` | Added `truthVariants`/`accounts`/`evidence` optional structures + `requiresWorldStateFlag` on endings |
 | `packages/shared/schemas/src/lib/game/campaign.ts` | Added optional `sampledTruthId` campaign field |
+| `packages/shared/schemas/src/lib/game/npc_dialogue_command.ts` | Added `presentEvidence` dialogue command kind |
 | `packages/shared/types/src/lib/game/content_pack.ts` | Mirrored new schema types |
 | `packages/shared/schemas/src/lib/game/content_pack.test.ts` | Schema absence/presence + Emberwatch dramatic-structure content tests |
+| `packages/shared/schemas/src/lib/game/npc_dialogue_command.test.ts` | `presentEvidence` command validation test |
 | `content/packs/emberwatch/manifest.json` | Bumped to 4.1.0; added truthVariants, accounts, evidence, 2 new endings + reaction dialogues |
 | `apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts` | `presentEvidence`, `getDiscoverableEvidence`, world-state-conditioned ending selection |
 | `apps/frontend/client/src/lib/services/game/quest_state_service.test.ts` | C-495 AC-2/AC-3/AC-5 unit tests |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts` | `presentEvidence` executor wiring: type, dispatch, allowed-commands, precondition validation |
+| `apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts` | `presentEvidence` dispatch test |
+| `apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts` | `presentEvidence` executor + `__AIKAMI_TEST__` harness seam |
 | `apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts` | Sample + persist truth at boot |
 | `apps/frontend/client/src/lib/views/game/ui/hud/quest_overlay_view_model.svelte.ts` | `sampledTruthId` getter |
 | `apps/frontend/client/src/lib/views/game/ui/hud/quest_overlay.svelte` | `data-sampled-truth` attribute |
@@ -382,7 +387,8 @@ Expanded the Emberwatch content pack from a single fetch quest into a structural
 None required. Placeholder prose is used for the new endings/accounts/reaction dialogues, clearly marked `[PLACEHOLDER — maintainer to author]` per the Architecture Directives. The AC-6 full E2E journey (learn → promise/threaten → resolve → reload → companion acknowledgement) is extended in the spec but could not be executed end-to-end in this isolated worktree (the client serves on :5736 while the release-gate spec targets :5274's AI/dialogue stack); this is the intended final-verification leg.
 
 ### Test Results
-- Unit: 75/75 quest-state (+9 dramatic-structure, +71 schema content) — 0 failures
+- Unit: 171/171 (quest-state + dramatic-structure + dialogue-dispatch + composition-root) — 0 failures; schemas 71+16; loader 67
 - E2E: release_gate AC-6 added; requires CI/verifier run against the :5274 emulator
 - Visual: N/A (no visual suite yet — noted as future work)
+- Baseline: 0 pre-existing failures, 0 new failures
 - Baseline: 0 pre-existing failures, 0 new failures
