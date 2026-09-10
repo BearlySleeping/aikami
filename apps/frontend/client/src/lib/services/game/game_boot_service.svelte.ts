@@ -811,6 +811,32 @@ class GameBootService
         return;
       }
     }
+    // ── C-495: sample the hidden truth once at campaign creation and persist it.
+    // The pack manifest is loaded here; the campaign is already resolved. Sampling
+    // is deterministic from the campaign seed, so it never re-rolls on reload and
+    // never rolls per NPC. If the campaign already carries a sampledTruthId
+    // (e.g. a prior boot or a post-C-495 save), it is left untouched.
+    if (this._campaign) {
+      const { sampleTruthVariant } = await import('./dramatic_structure_service');
+      if (!this._campaign.sampledTruthId) {
+        const sampled = sampleTruthVariant(pack.manifest, this._campaign.seed ?? 0);
+        if (sampled) {
+          this._campaign = { ...this._campaign, sampledTruthId: sampled };
+          const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
+          try {
+            await campaignStorage.update(this._campaign);
+          } catch (error) {
+            this.warn('stage:preloading_content:truth-persist-failed', {
+              error: String(error),
+            });
+          }
+          this.debug('stage:preloading_content:truth-sampled', {
+            sampledTruthId: sampled,
+            seed: this._campaign.seed,
+          });
+        }
+      }
+    }
 
     // C-375 AC-1: build + preload the deterministic prop frame resolver
     // from the pack manifest (atlas + fallbackTile). It must be ready

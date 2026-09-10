@@ -13,7 +13,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
-import { questOverlayService, questStateService } from '$services';
+import { campaignService, questOverlayService, questStateService } from '$services';
 
 export type QuestOverlayObjective = QuestObjectiveData;
 
@@ -44,6 +44,9 @@ export type QuestOverlayViewModelInterface = BaseViewModelInterface & {
 
   /** Hides the overlay (persisted). */
   hide(): void;
+
+  /** The campaign's sampled hidden truth id (C-495), or undefined. */
+  readonly sampledTruthId: string | undefined;
 };
 
 export type QuestOverlayViewModelOptions = BaseViewModelOptions;
@@ -106,6 +109,11 @@ class QuestOverlayViewModel
 
   hide(): void {
     questOverlayService.setVisible(false);
+  }
+
+  /** @inheritdoc */
+  get sampledTruthId(): string | undefined {
+    return campaignService.activeCampaign?.sampledTruthId;
   }
 }
 

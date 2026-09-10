@@ -420,6 +420,13 @@ export const ContentPackQuestEndingSchema = Type.Object({
   narration: Type.String({ minLength: 50, description: 'Authored narration text (50+ chars)' }),
   /** NPC reaction dialogue key */
   reactionDialogueKey: Type.Optional(Type.String({ description: 'NPC reaction dialogue key' })),
+  /** World-state flag required to be set for this ending to be selectable (C-495). Absent → reachable by default. */
+  requiresWorldStateFlag: Type.Optional(
+    Type.String({
+      pattern: '^[a-zA-Z0-9_.]+$',
+      description: 'World-state flag that must be set to reach this ending (C-495)',
+    }),
+  ),
   /** World-state flag set on activation */
   worldStateFlag: Type.String({
     minLength: 1,
@@ -500,6 +507,46 @@ export const ContentPackSkillStatSchema = Type.Union([
 
 export type ContentPackSkillStat = Static<typeof ContentPackSkillStatSchema>;
 
+// ---------------------------------------------------------------------------
+// Dramatic structure — hidden truth, accounts, and evidence (C-495)
+// ---------------------------------------------------------------------------
+
+export const ContentPackTruthVariantSchema = Type.Object({
+  id: Type.String({ minLength: 1, description: 'Truth variant ID' }),
+  label: Type.String({ minLength: 1, description: 'Short human label' }),
+  startingConditions: Type.Array(
+    Type.Object({
+      key: Type.String({ minLength: 1 }),
+      value: Type.String({ minLength: 1 }),
+    }),
+  ),
+});
+
+export type ContentPackTruthVariant = Static<typeof ContentPackTruthVariantSchema>;
+
+export const ContentPackEvidenceSchema = Type.Object({
+  id: Type.String({ minLength: 1, description: 'Evidence item ID' }),
+  label: Type.String({ minLength: 1, description: 'Evidence label' }),
+  discoverableAt: Type.String({
+    minLength: 1,
+    description: 'Map id / prop id / NPC interaction key',
+  }),
+  presentToNpcId: Type.String({ minLength: 1, description: 'NPC the player presents it to' }),
+  supportsTruthId: Type.String({ minLength: 1, description: 'Truth variant this evidence proves' }),
+});
+
+export type ContentPackEvidence = Static<typeof ContentPackEvidenceSchema>;
+
+export const ContentPackAccountSchema = Type.Object({
+  npcId: Type.String({ minLength: 1, description: 'NPC giving the account' }),
+  claim: Type.String({ minLength: 1, description: "The account's assertion" }),
+  supportsTruthId: Type.String({
+    minLength: 1,
+    description: 'Truth variant this account is consistent with',
+  }),
+});
+
+export type ContentPackAccount = Static<typeof ContentPackAccountSchema>;
 // ---------------------------------------------------------------------------
 // ContentPackSkillCheck — a skill check definition (C-316)
 // ---------------------------------------------------------------------------
@@ -1079,6 +1126,24 @@ export const ContentPackManifestSchema = Type.Object({
   lootTables: Type.Optional(
     Type.Record(Type.String(), Type.Array(ContentPackLootEntrySchema), {
       description: 'Loot tables keyed by table key',
+    }),
+  ),
+  /** Optional: hidden-truth starting-condition variants, sampled once at campaign creation (C-495). */
+  truthVariants: Type.Optional(
+    Type.Array(ContentPackTruthVariantSchema, {
+      description: 'Bounded set of hidden-truth starting conditions (C-495)',
+    }),
+  ),
+  /** Optional: conflicting NPC accounts keyed by situation/dilemma id (C-495). */
+  accounts: Type.Optional(
+    Type.Record(Type.String(), Type.Array(ContentPackAccountSchema), {
+      description: 'Conflicting NPC accounts keyed by situation id (C-495)',
+    }),
+  ),
+  /** Optional: discoverable, presentable physical evidence (C-495). */
+  evidence: Type.Optional(
+    Type.Array(ContentPackEvidenceSchema, {
+      description: 'Discoverable physical evidence producing EvidencePresented events (C-495)',
     }),
   ),
 });

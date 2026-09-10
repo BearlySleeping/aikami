@@ -25,6 +25,7 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
       class="pointer-events-auto absolute top-16 right-3 z-40 flex w-80 flex-col gap-2 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
       aria-label="Active quest"
       data-testid="quest-overlay"
+      data-sampled-truth={viewModel.sampledTruthId ?? undefined}
     >
       <!-- Header: quest title + hide -->
       <div class="flex items-start justify-between gap-2">

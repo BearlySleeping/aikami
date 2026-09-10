@@ -7,9 +7,11 @@
 // Contract: C-327 AC-3 — onboarding hint types added
 
 import type {
+  ContentPackAccountSchema,
   ContentPackCombatStatsSchema,
   ContentPackCreditsSchema,
   ContentPackEncounterEntrySchema,
+  ContentPackEvidenceSchema,
   ContentPackInteractableEntrySchema,
   ContentPackItemEntrySchema,
   ContentPackLootEntrySchema,
@@ -27,6 +29,7 @@ import type {
   ContentPackSkillCheckSchema,
   ContentPackSkillStatSchema,
   ContentPackTileSchema,
+  ContentPackTruthVariantSchema,
   ItemTypeSchema,
   OnboardingHintStepSchema,
   OnboardingSectionSchema,
@@ -112,3 +115,12 @@ export type ContentPackProp = Static<typeof ContentPackPropSchema>;
  * that crosses the worker boundary (C-376 AC-2). Derived from the schema.
  */
 export type PackConfig = Static<typeof PackConfigSchema>;
+
+/** A hidden-truth starting-condition variant (C-495). */
+export type ContentPackTruthVariant = Static<typeof ContentPackTruthVariantSchema>;
+
+/** A discoverable, presentable piece of physical evidence (C-495). */
+export type ContentPackEvidence = Static<typeof ContentPackEvidenceSchema>;
+
+/** An NPC account consistent with a truth variant (C-495). */
+export type ContentPackAccount = Static<typeof ContentPackAccountSchema>;

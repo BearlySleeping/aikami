@@ -213,3 +213,51 @@ Provenance data is stored in the manifest schema for future use in an
 attribution screen. The screen itself is not yet implemented — provenance
 information is available programmatically via the manifest for authors who
 need to verify licence compliance.
+
+## Dramatic Structure (C-495)
+
+Content packs can carry a small dramatic structure: a bounded set of hidden
+"truth variants," conflicting NPC accounts, and discoverable physical evidence.
+All of it is **optional** — a pack without these keys (e.g. a v4.0.0 pack)
+loads and behaves exactly as before.
+
+```json
+{
+  "truthVariants": [
+    {
+      "id": "rollo_owns_the_ledger",
+      "label": "Rollo keeps the true ledger",
+      "startingConditions": [{ "key": "whoOwesWhom", "value": "rollo" }]
+    }
+  ],
+  "accounts": {
+    "the_ward_truth": [
+      { "npcId": "rollo_grasper", "claim": "…", "supportsTruthId": "rollo_owns_the_ledger" }
+    ]
+  },
+  "evidence": [
+    { "id": "the_ledger", "label": "The Merchant's Ledger", "discoverableAt": "merchant_shop:shop_counter_l", "presentToNpcId": "village_elder", "supportsTruthId": "rollo_owns_the_ledger" }
+  ]
+}
+```
+
+### One hidden truth, sampled once
+
+When a new campaign starts, the game draws **one** truth variant id
+(`campaign.sampledTruthId`) deterministically from the campaign seed and
+persists it. Every account and evidence item resolves against that single
+sampled truth — NPC generations never invent their own truth, and a reload
+never re-samples. Campaigns created before this feature degrade to the pack's
+first truth variant.
+
+### Evidence and endings
+
+- **Evidence** (`evidence`) is a physical, world-discoverable thing
+  (`discoverableAt` resolves to a real map/prop) that the player presents to a
+  named NPC, producing exactly one `EvidencePresented` narrative event.
+- **Endings** may declare `requiresWorldStateFlag`. When the quest resolves,
+  the first ending whose required world-state flag is set is chosen (falling
+  back to the first ending). Presenting evidence sets an
+  `evidence.presented.<id>` flag, so evidence can gate which ending is reached.
+- Each ending carries a distinct `worldStateFlag` and a `reactionDialogueKey`,
+  so the village visibly changes per ending.
