@@ -16,6 +16,9 @@ project:
 
 dependsOn:
   - 'parser'
+  - 'frontend-ai-gateway'
+  - 'frontend-configs'
+  - 'frontend-storage'
   - 'frontend-utils'
   - 'frontend-services'
   - 'frontend-theme'
