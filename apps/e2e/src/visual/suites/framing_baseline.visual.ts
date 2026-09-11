@@ -104,6 +104,51 @@ const setSmallWindow = async (page: Page): Promise<void> => {
   await page.waitForTimeout(500);
 };
 
+/**
+ * Seeds an authored character sheet with a PARTIALLY-filled hotbar before the
+ * production boot reads it, via the sanctioned E2E hook (C-487):
+ * `globalThis.__AIKAMI_E2E_SHEET__`.
+ *
+ * AC-3 is about *assigned* slots. With the default (empty) sheet the hotbar
+ * group renders zero slots, so the capture could not show a hotbar at all —
+ * AC-3's verification explicitly asks for "a visual capture of the /game HUD
+ * with a partially-filled hotbar". Seeding two of the six slots produces
+ * exactly that state, while the remaining empty slots must still render no
+ * button, no `+` glyph and no keybind label.
+ */
+const seedPartialHotbar = async (page: Page): Promise<void> => {
+  await page.addInitScript(() => {
+    (window as unknown as Record<string, unknown>).__AIKAMI_E2E_SHEET__ = {
+      abilities: {
+        strength: { value: 15, modifier: 2 },
+        dexterity: { value: 13, modifier: 1 },
+        constitution: { value: 14, modifier: 2 },
+        intelligence: { value: 10, modifier: 0 },
+        wisdom: { value: 12, modifier: 1 },
+        charisma: { value: 8, modifier: -1 },
+      },
+      skills: [],
+      savingThrows: [],
+      traits: { personalityTraits: '', ideals: '', bonds: '', flaws: '' },
+      narrativeTraits: { likes: [], temptations: [], keys: [] },
+      proficiencyBonus: 2,
+      level: 1,
+      xp: 0,
+      hp: 12,
+      maxHp: 12,
+      attack: 0,
+      defense: 15,
+      classId: 'fighter',
+      classFeatures: ['fighter_fighting_style', 'fighter_second_wind'],
+      // Slots 1 and 3 assigned, slots 2/4/5/6 empty → partially-filled hotbar.
+      hotbarSlots: ['fighter_second_wind', '', 'fighter_action_surge'],
+    };
+  });
+  // The seed is read when the player-state service is constructed, so reload
+  // the route after registering the init script.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+};
+
 // ── Suite ─────────────────────────────────────────────────────
 
 export default defineConfig({
@@ -115,12 +160,16 @@ export default defineConfig({
       name: 'normal-boot-desktop',
       prompt: FRAMING_PROMPT,
       schema: FramingSchema,
+      // Full-viewport capture (not the default 256x256 center-crop) so the
+      // AC-1 framing claim is assessable.
+      screenshotSelector: 'body',
       requiredTrueFields: ['worldFillsViewport', 'noUnboundedEmptySpace', 'crispPixelArt'],
     },
     {
       name: 'normal-boot-small-window',
       prompt: FRAMING_PROMPT,
       schema: FramingSchema,
+      screenshotSelector: 'body',
       setupHook: setSmallWindow,
       requiredTrueFields: ['worldFillsViewport', 'noUnboundedEmptySpace'],
     },
@@ -128,6 +177,7 @@ export default defineConfig({
       name: 'default-boot',
       prompt: FRAMING_PROMPT,
       schema: FramingSchema,
+      screenshotSelector: 'body',
       // Fresh browser context with no persisted campaign → transient/default
       // state. Shares the normal framing (AC-2): must still fill the viewport
       // and not show unbounded empty space even without a completed boot.
@@ -137,6 +187,10 @@ export default defineConfig({
       name: 'hotbar-hud',
       prompt: HOTBAR_PROMPT,
       schema: HotbarSchema,
+      // The hotbar is a DOM overlay fixed at the bottom of the viewport — the
+      // default canvas center-crop never contains it, so capture the full page.
+      screenshotSelector: 'body',
+      setupHook: seedPartialHotbar,
       requiredTrueFields: ['onlyAssignedSlots', 'hotbarOnscreen'],
     },
   ],
