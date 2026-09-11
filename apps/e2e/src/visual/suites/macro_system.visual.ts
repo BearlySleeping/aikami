@@ -42,7 +42,7 @@ const MACRO_PROMPT = [
   '- Left panel: Context mock input fields labelled userName, characterName, etc.',
   '- Right panel: Resolved Output panel showing macro-expanded text.',
   '- Bottom panel: Prompt Presets section with preset list and editor.',
-  '- DaisyUI dark theme with form controls (inputs, textareas, selects, buttons).',
+  '- Aikami UI dark theme with form controls (inputs, textareas, selects, buttons).',
   '',
   'EVALUATE:',
   '- Is the split-panel layout rendered and properly aligned?',

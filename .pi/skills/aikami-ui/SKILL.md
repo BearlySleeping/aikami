@@ -1,34 +1,58 @@
 ---
 name: aikami-ui
 description: >-
-    Load for any frontend UI, styling, or Tailwind/DaisyUI tasks. Dictates
-    when to use raw HTML vs @aikami/frontend-components, strict typography,
-    semantic colors, and where global CSS lives.
-version: 1.0.0
-tags: ["aikami", "ui", "tailwind", "daisyui", "components", "frontend"]
+    Load for any frontend UI, styling, or Tailwind/Aikami UI task. Dictates
+    when to use raw HTML + Aikami semantic classes vs @aikami/frontend-components,
+    strict typography, semantic color tokens, and where global CSS lives.
+version: 2.0.0
+tags: ["aikami", "ui", "tailwind", "components", "frontend"]
 ---
 
 # Aikami UI & Theming
 
 **🔴 LOAD BEFORE writing any Svelte UI, Tailwind classes, or component code.**
 These rules prevent AI hallucination of arbitrary fonts, hex colors, and
-reinvented DaisyUI primitives.
+reinvented UI primitives.
+
+**The client and hub use plain Tailwind v4 — there is no daisyUI plugin.**
+The design system is owned by `@aikami/frontend/theme`:
+
+| File | Responsibility |
+| --- | --- |
+| `packages/frontend/theme/src/lib/aikami_theme.css` | Semantic palette (`--ui-*`) + Tailwind `@theme` registration (`--color-*`). |
+| `packages/frontend/theme/src/lib/aikami_ui.css` | Component classes (`btn`, `badge`, `input`, `modal`, `tabs`, ...) built from those tokens. |
+| `packages/frontend/theme/src/lib/brand_tokens.css` | Plain shadcn-style variables for the site + docs apps. |
+
+Both apps import the theme from `app.css`:
+
+```css
+/* apps/frontend/client/src/app.css */
+@import "tailwindcss";
+@import "@aikami/frontend/theme/aikami_theme.css";
+@import "@aikami/frontend/theme/aikami_ui.css";
+
+@theme {
+  --font-mono: "JetBrains Mono", monospace;
+  --font-sans: "Inter", sans-serif;
+}
+```
+
+The class names intentionally mirror the former daisyUI API so markup stayed
+stable through the migration — but every style is now Aikami-owned. **If a
+class is missing, add it to `aikami_ui.css` (one source of truth). Never
+reach for the daisyUI plugin, and never copy daisyUI's implementation.**
 
 ---
 
-## Rule 1: Primitive vs Complex Components
+## Rule 1: Primitive classes vs complex components
 
-| Component Type                            | Pattern                                   |
-| ----------------------------------------- | ----------------------------------------- |
-| **Primitive DaisyUI** (buttons, badges,   | Raw HTML with DaisyUI classes.            |
-| inputs, labels, toasts, loading spinners, | **NEVER wrap inside `@aikami/frontend-components`.** |
-| kbd, stats)                               | |
-| **Complex UI** (Select, Dropdown, Modal,  | Encapsulated in `@aikami/frontend-components`. |
-| Form, Tabs)                               | These manage internal state, accessibility,   |
-|                                           | and complex DaisyUI HTML structures.          |
+| Component type | Pattern |
+| --- | --- |
+| **Primitives** (buttons, badges, inputs, textareas, selects, checkboxes, toggles, ranges, progress, loading spinners, kbd, dividers, labels) | Raw HTML with Aikami classes. **NEVER wrap a primitive in a trivial Svelte component.** |
+| **Complex / structured / stateful** (Select, Modal, tabs, dropdowns, autocomplete, drawers) | Encapsulated in `@aikami/frontend-components` (shared) or `apps/frontend/client/src/lib/components/`. |
 
 ```svelte
-<!-- ✅ CORRECT — primitive: raw HTML + DaisyUI classes -->
+<!-- ✅ CORRECT — primitive: raw HTML + Aikami classes -->
 <button class="btn btn-primary">Save</button>
 <span class="badge badge-success">Active</span>
 <input class="input input-bordered" />
@@ -39,60 +63,34 @@ reinvented DaisyUI primitives.
 </script>
 <Select {options} bind:value />
 
-<!-- ❌ WRONG — wrapping a primitive DaisyUI element in a component -->
+<!-- ❌ WRONG — wrapping a primitive in a one-off component -->
 <script lang="ts">
   import { Button } from '$lib/components/my_button.svelte';
 </script>
 ```
 
-**Current `@aikami/frontend-components` exports:**
-- `Select` — DaisyUI `<select>` wrapper with `$bindable()` value, JSDoc props,
-  `SelectOption[]` options, and `size`/`bordered` DaisyUI modifiers.
-- `Modal` — Native `<dialog>` wrapper with `$bindable()` open, title/children/actions
-  snippets, `size` variants, backdrop click dismissal, and `onclose` callback.
-
-When you need a complex component that doesn't exist yet: add it to
-`@aikami/frontend-components`, never inline a one-off in the consuming app.
+When you need a complex component that doesn't exist yet, add it to
+`@aikami/frontend-components` (shared across client + hub) or, if it is
+client-only, to `apps/frontend/client/src/lib/components/` and export it from
+`.../components/index.ts`.
 
 ---
 
-## Rule 2: Component Purity — Dumb Components Only
+## Rule 2: Component purity — dumb components only
 
-**🔴 `@aikami/frontend-components` must remain 100% pure and stateless.
-Never import business logic, ViewModels, or services into the component library.**
+**🔴 `@aikami/frontend-components` must remain 100% pure and stateless. Never
+import business logic, ViewModels, or services into the component library.**
 
-| ❌ NEVER in `@aikami/frontend-components` | ✅ MUST pattern                          |
-| ----------------------------------------- | ---------------------------------------- |
-| `extends BaseViewModel` or `extends BaseClass` | Extend nothing (pure Svelte component) |
-| `import { ... } from '$services'`         | Accept everything via `$props()`         |
-| `$state()` / `$derived()` / `$effect()` for business state | `$props()` only; Svelte runes for internal UI state (open/closed) OK |
-| Direct repository, database, or service calls | Callbacks: `onchange`, `onclose`, etc. |
-| `onMount()` with data fetching            | Consumer ViewModel fetches, passes via props |
+| ❌ NEVER in `@aikami/frontend-components` | ✅ MUST pattern |
+| --- | --- |
+| `extends BaseViewModel` / `BaseClass` | Extend nothing (pure Svelte component) |
+| `import { ... } from '$services'` | Accept everything via `$props()` |
+| Business state in `$state()` / `$derived()` / `$effect()` | `$props()` only; runes for internal UI state (open/closed) OK |
+| Repository, database, or service calls | Callbacks: `onchange`, `onclose`, ... |
+| `onMount()` with data fetching | Consumer ViewModel fetches, passes via props |
 
-Components in this library are the "Shadcn layer" — pure template wrappers
-around DaisyUI HTML structures. They accept `$props()`, manage **internal UI
-state only** (e.g., is a dropdown open?), and communicate back via callbacks.
-
-```svelte
-<!-- ✅ CORRECT — pure component: $props() + callbacks only -->
-<script lang="ts">
-  type Props = {
-    value: string;
-    options: SelectOption[];
-    onchange?: (value: string) => void;
-  };
-  let { value = $bindable(), options, onchange }: Props = $props();
-</script>
-
-<!-- ❌ WRONG — component importing services or extending BaseClass -->
-<script lang="ts">
-  import { myService } from '$services/my_service';
-  import { BaseClass } from '@aikami/utils';
-</script>
-```
-
-If you need reactive business state: that belongs in a **ViewModel**
-(`_view_model.svelte.ts`), not in the component.
+If you need reactive business state, that belongs in a **ViewModel**
+(`_view_model.svelte.ts`), not in a component.
 
 ---
 
@@ -100,44 +98,27 @@ If you need reactive business state: that belongs in a **ViewModel**
 
 **🔴 NEVER use arbitrary font-family utilities or inline font declarations.**
 
-The Client's global `apps/frontend/client/src/app.css` defines Tailwind v4
-`@theme` variables. These are the **sole** font sources:
+The `@theme` block in each app's `app.css` is the sole font source.
 
-```css
-/* apps/frontend/client/src/app.css */
-@import "tailwindcss";
-@plugin "daisyui" {
-  themes:
-    light --default,
-    dark --prefersdark;
-}
+| ✅ DO | ❌ NEVER |
+| --- | --- |
+| `class="font-mono"` | `class="font-['JetBrains_Mono']"` |
+| `class="font-sans"` | `class="font-['Inter']"` |
+| | `class="font-mono" style="font-family: ..."` |
 
-@theme {
-  --font-mono: "JetBrains Mono", monospace;
-  --font-sans: "Inter", sans-serif;
-}
-```
-
-| ✅ DO                                                                    | ❌ NEVER                               |
-| ------------------------------------------------------------------------ | -------------------------------------- |
-| `class="font-mono"`                                                      | `class="font-['JetBrains_Mono']"`      |
-| `class="font-sans"`                                                      | `class="font-['Inter']"`               |
-|                                                                          | `class="font-mono" style="font-family: ..."` |
-|                                                                          | Any other font-family utility          |
-
-If you need a new font family: add it to the `@theme` block in `app.css` —
-never inline it.
+If you need a new font family, add it to the `@theme` block — never inline it.
 
 ---
 
-## Rule 4: Semantic Colors — DaisyUI Tokens, Never Hex
+## Rule 4: Semantic colors — Aikami tokens, never hex
 
-**🔴 NEVER use hardcoded hex colors (`#fff`, `text-[#1a1a1a]`, etc.).**
+**🔴 NEVER use hardcoded hex colors (`#fff`, `text-[#1a1a1a]`, ...).**
 
-Use DaisyUI's semantic color tokens. They adapt to the active theme (light/dark).
+Use the semantic tokens registered by `aikami_theme.css`. They adapt to the
+active theme (light / dark).
 
 ```svelte
-<!-- ✅ CORRECT — semantic DaisyUI color tokens -->
+<!-- ✅ CORRECT — semantic tokens -->
 <div class="bg-base-100 text-base-content">
 <span class="text-primary">Highlighted</span>
 <span class="text-error">Error message</span>
@@ -149,258 +130,149 @@ Use DaisyUI's semantic color tokens. They adapt to the active theme (light/dark)
 <div style="color: #333;">
 ```
 
-**DaisyUI semantic token reference:**
+**Token reference:**
 
-| Token              | Purpose                              |
-| ------------------ | ------------------------------------ |
-| `base-100`/`200`/`300` | Background surfaces (lightest → darkest) |
-| `base-content`     | Primary text on base backgrounds     |
-| `primary`          | Brand color (buttons, links)         |
-| `primary-content`  | Text on primary backgrounds          |
-| `secondary`        | Accent color                         |
-| `accent`           | Highlight color                      |
-| `neutral`          | Muted backgrounds                    |
-| `neutral-content`  | Text on neutral backgrounds          |
-| `info`             | Informational states                 |
-| `success`          | Positive states                      |
-| `warning`          | Caution states                       |
-| `error`            | Error/destructive states             |
+| Token | Purpose |
+| --- | --- |
+| `base-100` / `200` / `300` | Background surfaces (lightest → darkest) |
+| `base-content` | Primary text on base backgrounds |
+| `primary` | Brand color (rune purple) |
+| `primary-content` | Text on primary backgrounds |
+| `secondary` | Accent color |
+| `accent` | Highlight color |
+| `neutral` | Muted backgrounds |
+| `neutral-content` | Text on neutral backgrounds |
+| `info` / `success` / `warning` / `error` | Status colors (each has `-content`) |
 
-For opacity adjustments, use Tailwind opacity modifiers: `bg-primary/50`,
+For opacity, use Tailwind modifiers: `bg-primary/50`,
 `text-base-content/80`. Never use `opacity-50` on a container that holds text.
 
 ---
 
-## Rule 5: Global CSS — `app.css` is the Single Source
+## Rule 5: Global CSS — `app.css` is the single source
 
-**🔴 All global CSS changes (fonts, theme variables, scrollbar styles, animations)
-go in `apps/frontend/client/src/app.css` — nowhere else.**
+**🔴 All global CSS changes go in the app's `app.css` or the shared theme
+package — nowhere else.**
 
 - ❌ No `<style>` blocks in Svelte files for global utilities
 - ❌ No `@layer` directives in component files
-- ❌ No inline `@theme` blocks outside `app.css`
+- ❌ No `@theme` blocks outside `app.css` / `aikami_theme.css`
 - ✅ Component-scoped `<style>` blocks are fine for component-local styles
+
+New reusable component classes (the vocabulary every app shares) belong in
+`packages/frontend/theme/src/lib/aikami_ui.css`. New semantic tokens belong in
+`aikami_theme.css`.
 
 ---
 
-## Rule 6: DaisyUI Plugin Positioning
+## Rule 6: Theme import order
 
-The `@plugin "daisyui"` import **must precede** the `@theme` block in `app.css`
-so DaisyUI theme variables cascade correctly:
+`@import "tailwindcss"` must come first, then the shared theme files, then the
+app's own `@theme` overrides:
 
 ```css
 @import "tailwindcss";
-@plugin "daisyui" {   /* ← DaisyUI registers its theme tokens first */
-  themes:
-    light --default,
-    dark --prefersdark;
-}
+@import "@aikami/frontend/theme/aikami_theme.css";
+@import "@aikami/frontend/theme/aikami_ui.css";
 
-@theme {               /* ← custom overrides go after */
+@theme {
   --font-mono: "JetBrains Mono", monospace;
   --font-sans: "Inter", sans-serif;
 }
 ```
 
----
-
-## Quick-Reference Cheatsheet
-
-| Context                                       | Use                                     |
-| --------------------------------------------- | --------------------------------------- |
-| Button                                        | `<button class="btn btn-primary">`      |
-| Badge/status                                   | `<span class="badge badge-success">`    |
-| Text input                                    | `<input class="input input-bordered">`  |
-| Select dropdown                               | `<Select {options} bind:value />`       |
-| Modals, dropdowns, tabs (complex stateful)    | `@aikami/frontend-components`           |
-| Code/text blocks                              | `class="font-mono"`                     |
-| Body/UI text                                  | `class="font-sans"`                     |
-| Colors                                        | `bg-base-100` / `text-primary` / etc.   |
-| Opacity                                       | `bg-primary/50`                         |
-| Global CSS change                             | `app.css` `@theme` block                |
+The palette lives in `:root` as `--ui-*` custom properties (light) and in the
+`prefers-color-scheme: dark` / `[data-theme="dark"]` block (dark). The
+`@theme` block maps them onto `--color-*` so Tailwind generates
+`bg-base-100`, `text-primary`, and opacity variants automatically. A theme
+switch only has to redefine `--ui-*`.
 
 ---
 
-## Rule 7: Accessibility — No Ignores, Semantic Elements Only
+## Rule 7: Accessibility — no ignores, semantic elements only
 
 **🔴 NEVER add `svelte-ignore a11y_*` or `biome-ignore lint/a11y/*` comments.**
-Fix the underlying a11y issue instead. The linter rules exist to enforce real
-accessibility requirements.
+Fix the underlying issue instead.
 
 ### 7a: Interactive elements MUST be semantic
 
 | Pattern | ✅ DO | ❌ NEVER |
-|---|---|---|
+| --- | --- | --- |
 | Clickable overlay/backdrop | `<button type="button" class="..." aria-label="Close">` | `<div onclick={...}>` |
 | Clickable card/container | `<button type="button" class="..." aria-label="...">` | `<div role="button" onclick={...}>` |
-| **Exception**: Card with nested `<button>` children | `<div role="button" tabindex="0" onclick={...} onkeydown={...}>` + single `biome-ignore` for `useSemanticElements` | `<button>` (HTML forbids nested buttons) |
-| Modal backdrop with nested interactive children | `<div role="dialog" aria-modal="true" tabindex="-1">` | `<button>` (can't nest buttons) |
+| **Exception**: card with nested `<button>` children | `<div role="button" tabindex="0" onclick={...} onkeydown={...}>` + single `biome-ignore` for `useSemanticElements` | `<button>` (HTML forbids nested buttons) |
 
 ### 7b: Modal / dialog backdrops
 
-Every modal overlay MUST have all of:
-- `role="dialog"`
-- `aria-modal="true"`
-- `tabindex="-1"`
-- `onclick` for backdrop-close (using `e.target === e.currentTarget`)
-- `onkeydown` for Escape key dismissal
+Prefer the shared `Modal` component (`@aikami/frontend-components`) — it wraps
+a native `<dialog>` and handles `showModal()`, backdrop dismissal, Escape, and
+the `onclose` callback for you.
 
-```svelte
-<!-- ✅ CORRECT — modal backdrop overlay -->
-{#if open}
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Settings"
-    tabindex="-1"
-    onclick={(e) => { if (e.target === e.currentTarget) close(); }}
-    onkeydown={(e) => { if (e.key === 'Escape') close(); }}
-  >
-    <div class="modal-box">
-      <!-- content -->
-    </div>
-  </div>
-{/if}
-```
-
-**🔴 Use `e.target === e.currentTarget` — NEVER `onclick stopPropagation` on children.**
-The `stopPropagation` pattern requires extra event handlers on child divs which
-triggers `noStaticElementInteractions` and `useKeyWithClickEvents`.
+If you build a custom overlay, every modal must have `role="dialog"`,
+`aria-modal="true"`, `tabindex="-1"`, backdrop-close via
+`e.target === e.currentTarget`, and Escape handling in `onkeydown`. Use
+`e.target === e.currentTarget` — never `stopPropagation` on children.
 
 ### 7c: Labels MUST have `for` / `id`
 
-Every `<label>` element must be associated with a form control:
-
-```svelte
-<!-- ✅ CORRECT -->
-<label for="name-input" class="...">Name</label>
-<input id="name-input" class="input input-bordered" />
-
-<!-- ❌ WRONG -->
-<label class="...">Name</label>
-<input class="input input-bordered" />
-```
-
-**Static text headers that look like labels**: Use `<span>`, `<h4>`, or `<div>` —
-NOT `<label>`. The `<label>` element is only for form controls.
-
-**Group of inputs with a label**: Use `<fieldset>` + `<legend>`:
-
-```svelte
-<!-- ✅ CORRECT -->
-<fieldset class="border-0 p-0">
-  <legend class="text-xs font-semibold">Per-Image Tags</legend>
-  <!-- grouped inputs -->
-</fieldset>
-```
+Every `<label>` must be associated with a form control. Static text headers
+that merely look like labels use `<span>` / `<h4>` / `<div>`. Group inputs with
+`<fieldset>` + `<legend>`.
 
 ### 7d: Form controls MUST have `type` attributes
 
-Every `<button>` outside a `<form>` needs `type="button"` (prevents accidental
-form submission). Inside a form, use `type="submit"` for submit buttons.
+Every `<button>` outside a `<form>` needs `type="button"`; inside a form use
+`type="submit"` for the submit button.
 
 ### 7e: Media elements MUST have captions
 
-Every `<audio>` and `<video>` element must include a `<track>`:
-
-```svelte
-<audio controls class="w-full">
-  <source src={url}>
-  <track kind="captions">
-</audio>
-```
+Every `<audio>` / `<video>` includes a `<track kind="captions">`.
 
 ### 7f: Alt text — no redundant "image"/"picture"/"photo"
 
-Screen readers already announce "image" — don't repeat it in alt text.
+Screen readers already announce "image".
 
-```svelte
-<!-- ❌ WRONG -->
-<Image src={url} alt="Gallery image" />
-<Image src={url} alt="Picture of a dragon" />
+### 7g: Always use `<Image>`, never a raw `<img>` (C-455)
 
-<!-- ✅ CORRECT -->
-<Image src={url} alt="Generated artwork" />
-<Image src={url} alt="Red dragon breathing fire" />
-```
-
-### 7g: Fullscreen image modals
-
-```svelte
-{#if expandedUrl}
-  <div
-    class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
-    tabindex="-1"
-    onclick={() => (expandedUrl = null)}
-    onkeydown={(e) => { if (e.key === 'Escape') { expandedUrl = null; } }}
-  >
-    <button type="button"
-      class="absolute top-4 right-4 btn btn-sm btn-ghost text-white text-xl"
-      onclick={() => (expandedUrl = null)}>✕</button>
-    <Image src={expandedUrl} alt="Combat scene (fullscreen)"
-      class="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl" />
-  </div>
-{/if}
-```
-
-### 7h: DaisyUI dialog / modal-backdrop
-
-When using DaisyUI's `.modal` / `.modal-backdrop` pattern, the backdrop element
-must be a `<button>` (not `<div>`):
-
-```svelte
-<div class="modal modal-open">
-  <div class="modal-box">
-    <!-- content -->
-  </div>
-  <button
-    type="button"
-    class="modal-backdrop border-none bg-transparent p-0"
-    onclick={() => close()}
-    onkeydown={(e) => { if (e.key === 'Enter') close(); }}
-    aria-label="Close"
-  ></button>
-</div>
-```
-
-Note: DaisyUI `.modal-backdrop` on a `<button>` needs `border-none bg-transparent p-0`
-to reset default button styling.
-
-### 7i: Always use `<Image>`, never a raw `<img>` (C-455)
-
-`Image` (`packages/frontend/components/src/lib/image/image.svelte`, exported
-from both apps' `$components` barrel) is the single source of truth for
-`<img>` rendering. Import it like any other shared component:
+`Image` (`packages/frontend/components/src/lib/image/image.svelte`) is the
+single source of truth for `<img>` rendering. It defaults
+`crossorigin="anonymous"`, which COEP (`require-corp`) in the Tauri shell
+requires for cross-origin R2/hub URLs.
 
 ```svelte
 import { Image } from '$components';
-```
-
-```svelte
-<!-- ❌ WRONG -->
-<img src={npc.avatarUrl} alt={npc.name} class="h-full w-full object-cover">
-
-<!-- ✅ CORRECT -->
 <Image src={npc.avatarUrl} alt={npc.name} class="h-full w-full object-cover" />
 ```
 
-**Why**: the Tauri desktop app sets `Cross-Origin-Opener-Policy: same-origin`
-+ `Cross-Origin-Embedder-Policy: require-corp` (`tauri.conf.json`), and any
-cross-origin image load that isn't explicitly requested as CORS gets silently
-blocked under COEP. `Image` defaults `crossorigin="anonymous"` so every R2/
-hub-issued avatar and generated-art URL keeps loading — this is a no-op for
-same-origin and `blob:` URLs, so it's always safe to use. `Image` accepts
-every native `<img>` attribute (`class`, `loading`, `onload`, `onerror`,
-`data-testid`, `class:` directives, ...) via pass-through props, plus an
-optional `crossOrigin` override for the rare image known to reject CORS-mode
-requests.
+`scripts/src/lib/ops/guard_image_component.ts` fails CI on any raw `<img>` in
+`apps/frontend/client` or `apps/frontend/hub`. The only exception is code that
+constructs an `HTMLImageElement` directly for canvas/pixel access.
 
-The one exception is code that constructs an `HTMLImageElement` directly via
-`new Image()` for canvas/pixel access (e.g. `lpc_item_icon.svelte`) — set
-`img.crossOrigin = 'anonymous'` by hand there; there's no JSX-like tag to
-swap. `scripts/src/lib/ops/guard_image_component.ts` (wired into `moon run
-:guard-image-component`, part of CI) fails the build on any raw `<img>` tag
-in `apps/frontend/client` or `apps/frontend/hub`.
+---
+
+## Quick reference
+
+| Context | Use |
+| --- | --- |
+| Button | `<button class="btn btn-primary">` |
+| Badge / status | `<span class="badge badge-success">` |
+| Text input | `<input class="input input-bordered" />` |
+| Textarea | `<textarea class="textarea textarea-bordered">` |
+| Select dropdown | `<Select {options} bind:value />` |
+| Modal | `<Modal bind:open title={...} actions={...}>` |
+| Tabs | `GroupedTablist` or `tabs` / `tab` / `tab-active` classes |
+| Card | `card` + `card-body` / `card-title` / `card-actions` |
+| Colors | `bg-base-100` / `text-primary` / `border-base-300` |
+| Opacity | `bg-primary/50` |
+| Adding a token | `aikami_theme.css` (`--ui-*` + `@theme`) |
+| Adding a primitive class | `aikami_ui.css` |
+
+---
+
+## Related skills
+
+| Skill | Covers |
+| --- | --- |
+| `svelte-conventions` | Runes, Views/ViewModels, `$services` |
+| `aikami-conventions` | Universal TS + monorepo rules |
+| `pixijs-v8` | Game engine boundary — no `$state` in game code |

@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/components/macro_autocomplete.svelte
 //
-// Reusable DaisyUI dropdown component for macro autocomplete.
+// Reusable Aikami UI dropdown component for macro autocomplete.
 // Triggers when the user types `{{` in a textarea, filters available
 // macros by the typed fragment, and inserts `{{macroName}}` on selection.
 

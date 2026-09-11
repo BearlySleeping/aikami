@@ -2,7 +2,7 @@
 // apps/frontend/client/src/lib/views/app/dialogs/app_dialogs_view.svelte
 //
 // Renders global dialogs, snackbar, and loading overlay using
-// DaisyUI's native <dialog> element with showModal()/close().
+// Aikami UI's native <dialog> element with showModal()/close().
 
 import { BaseViewModelContainer } from '$components';
 import { getAppDialogsViewModel } from './app_dialogs_composition.ts';

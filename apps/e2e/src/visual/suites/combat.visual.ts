@@ -36,7 +36,7 @@ const COMBAT_PROMPT = [
   '- Combat sidebar or overlay with player and enemy HP bars.',
   '- Action buttons (Attack, Defend, Flee) or combat log entries.',
   '- Character stats display (HP, ATK, DEF, etc.).',
-  '- Dark fantasy-themed styling with DaisyUI components.',
+  '- Dark fantasy-themed styling with Aikami UI components.',
   '',
   'EVALUATE:',
   '- Is the combat UI rendered and visible?',

@@ -172,7 +172,7 @@ agent tooling required:
 | Universal rules | `.pi/skills/aikami-conventions/SKILL.md` |
 | Svelte / frontend | `.pi/skills/svelte-conventions/SKILL.md` |
 | Backend layering | `.pi/skills/backend-conventions/SKILL.md` |
-| UI / Tailwind + daisyUI | `.pi/skills/aikami-ui/SKILL.md` |
+| UI / Tailwind + Aikami UI | `.pi/skills/aikami-ui/SKILL.md` |
 | Testing | `.pi/skills/testing/SKILL.md` |
 
 Also: [Coding Standards](docs/guides/CODING_STANDARDS.md).

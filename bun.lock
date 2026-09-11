@@ -138,7 +138,6 @@
         "@types/png-chunks-extract": "1.0.2",
         "@types/text-encoding": "0.0.40",
         "@vitest/browser-playwright": "5.0.0",
-        "daisyui": "5.7.32",
         "gpt-tokenizer": "4.0.0",
         "playwright": "1.63.0",
         "rollup-plugin-visualizer": "7.1.1",
@@ -195,7 +194,6 @@
         "@sveltejs/vite-plugin-svelte": "7.3.0",
         "@tailwindcss/vite": "4.3.3",
         "@types/node": "26.5.0",
-        "daisyui": "5.7.32",
         "rollup-plugin-visualizer": "7.1.1",
         "svelte": "5.57.0",
         "svelte-check": "4.7.6",
@@ -1934,8 +1932,6 @@
     "csso": ["csso@5.0.5", "", { "dependencies": { "css-tree": "~2.2.0" } }, "sha512-0LrrStPOdJj+SPCCrGhzryycLjwcgUSHBtxNA8aIDxf0GLsRh1cKYhB00Gd1lDOS4yGH69+SNn13+TWbVHETFQ=="],
 
     "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
-
-    "daisyui": ["daisyui@5.7.32", "", {}, "sha512-8JQFneb+okHxzPimTGvRKX+5XF03GyAwGw7BaV6+6XpzW0klGuzc4rdfUpLQxIYPKEziwwlrsYfcxoltF2Rowg=="],
 
     "data-uri-to-buffer": ["data-uri-to-buffer@4.0.1", "", {}, "sha512-0R9ikRb668HB7QDxT1vkpuUBtqc53YyAwMwGeUFKRojY/NWKvdZ+9UYtRfGmhqNbRkTSVpMbmyhXipFFv2cb/A=="],
 

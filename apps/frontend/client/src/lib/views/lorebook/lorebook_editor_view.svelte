@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/lorebook/lorebook_editor_view.svelte
 //
-// DaisyUI CRUD form for lorebooks and entries. Pure view — delegates
+// Aikami UI CRUD form for lorebooks and entries. Pure view — delegates
 // all logic to LorebookEditorViewModel. Supports lorebook list sidebar,
 // entry cards with keyword chips, content textarea, constant toggle,
 // priority input, and inline editing.

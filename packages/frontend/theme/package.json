@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./brand_tokens.css": "./src/lib/brand_tokens.css",
-    "./brand_daisy.css": "./src/lib/brand_daisy.css"
+    "./aikami_theme.css": "./src/lib/aikami_theme.css",
+    "./aikami_ui.css": "./src/lib/aikami_ui.css"
   },
   "scripts": {
     "lint": "biome lint .",

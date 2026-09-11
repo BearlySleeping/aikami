@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view.svelte
 //
-// DaisyUI template for the World Generation Wizard.
+// Aikami UI template for the World Generation Wizard.
 // Implements a 5-step wizard with step indicator, genre/tone chips,
 // setting textarea, difficulty radio, goals textarea, generating spinner,
 // preview cards, and error state.

@@ -202,7 +202,7 @@ export const DICE_PRESETS = [
 
 /**
  * Semantic color tokens for each damage type.
- * Maps damage type name → DaisyUI color utility class.
+ * Maps damage type name → Aikami UI color utility class.
  */
 export const DAMAGE_TYPE_COLORS = {
   slashing: 'text-warning',

@@ -62,7 +62,7 @@ const cellBgFor = (status: AvailabilityStatus | undefined): string => {
 {#if viewModel}
   <BaseViewModelContainer {viewModel}>
     {#if viewModel?.isOpen}
-      <!-- daisyUI v5 .modal-box requires the .modal.modal-open wrapper to be
+      <!-- Aikami UI v5 .modal-box requires the .modal.modal-open wrapper to be
            visible (opacity:0 otherwise) — see settings_overlay.svelte for the pattern. -->
       <div
         class="modal modal-open backdrop-blur-sm bg-black/60"

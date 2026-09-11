@@ -49,12 +49,6 @@ const SKILL_SOURCES: SkillSource[] = [
     targetSubdir: 'pixijs',
   },
   {
-    name: 'daisyUI',
-    repoUrl: 'https://github.com/saadeghi/daisyui.git',
-    sourceSubdir: 'skills/daisyui',
-    targetSubdir: 'daisyui',
-  },
-  {
     name: 'Herdr',
     repoUrl: 'https://github.com/ogulcancelik/herdr.git',
     sourceSubdir: 'skills/herdr',

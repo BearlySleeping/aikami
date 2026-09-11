@@ -1,0 +1,125 @@
+/* biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind v4 directives */
+/* packages/frontend/theme/src/lib/aikami_theme.css
+ *
+ * Aikami UI design tokens — the single source of truth for the client + hub
+ * semantic palette, radii, and control metrics.
+ *
+ * This file replaces the former daisyUI `--color-*` theme (brand_daisy.css).
+ * The raw palette lives in `:root` / the dark `@media` block as `--ui-*`
+ * custom properties; the `@theme` block then registers the semantic tokens
+ * with Tailwind v4 so utilities (`bg-base-100`, `text-primary`,
+ * `border-base-300`, `bg-primary/50`, ...) are generated exactly as before —
+ * with no daisyUI plugin involved.
+ *
+ * Component classes that consume these tokens live in `./aikami_ui.css`.
+ */
+
+/* ── Light theme (parchment / warm slate) ── */
+:root {
+  color-scheme: light;
+
+  --ui-base-100: oklch(0.985 0.006 270);
+  --ui-base-200: oklch(0.94 0.01 270);
+  --ui-base-300: oklch(0.87 0.01 270);
+  --ui-base-content: oklch(0.18 0.03 270);
+
+  --ui-primary: oklch(0.52 0.22 285);
+  --ui-primary-content: oklch(0.985 0.006 270);
+
+  --ui-secondary: oklch(0.25 0.05 270);
+  --ui-secondary-content: oklch(0.985 0.006 270);
+
+  --ui-accent: oklch(0.62 0.18 48);
+  --ui-accent-content: oklch(0.18 0.03 270);
+
+  --ui-neutral: oklch(0.25 0.01 260);
+  --ui-neutral-content: oklch(0.985 0.006 270);
+
+  --ui-info: oklch(74% 0.16 232.661);
+  --ui-info-content: oklch(29% 0.066 243.157);
+  --ui-success: oklch(76% 0.177 163.223);
+  --ui-success-content: oklch(37% 0.077 168.94);
+  --ui-warning: oklch(82% 0.189 84.429);
+  --ui-warning-content: oklch(41% 0.112 45.904);
+  --ui-error: oklch(0.45 0.18 25);
+  --ui-error-content: oklch(0.985 0.006 270);
+
+  /* Component metrics — the vocabulary shared by every primitive in
+   * aikami_ui.css. Values mirror the previous daisyUI contract so control
+   * heights and corner radii do not shift. */
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+}
+
+/* ── Dark theme (obsidian / rune-glow) ── */
+/* `[data-theme='dark']` is included for parity with explicit theme
+ * toggles — nothing sets data-theme today, but without it an explicit
+ * toggle would fall back to the light palette. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]),
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --ui-base-100: oklch(0.13 0.015 260);
+    --ui-base-200: oklch(0.16 0.018 260);
+    --ui-base-300: oklch(0.24 0.02 260);
+    --ui-base-content: oklch(0.9 0.01 270);
+
+    --ui-primary: oklch(0.65 0.22 285);
+    --ui-primary-content: oklch(0.13 0.015 260);
+
+    --ui-secondary: oklch(0.9 0.01 270);
+    --ui-secondary-content: oklch(0.13 0.015 260);
+
+    --ui-accent: oklch(0.65 0.18 48);
+    --ui-accent-content: oklch(0.13 0.015 260);
+
+    --ui-neutral: oklch(0.32 0.01 260);
+    --ui-neutral-content: oklch(0.9 0.01 270);
+
+    --ui-info: oklch(74% 0.16 232.661);
+    --ui-info-content: oklch(29% 0.066 243.157);
+    --ui-success: oklch(76% 0.177 163.223);
+    --ui-success-content: oklch(37% 0.077 168.94);
+    --ui-warning: oklch(82% 0.189 84.429);
+    --ui-warning-content: oklch(41% 0.112 45.904);
+    --ui-error: oklch(0.55 0.18 25);
+    --ui-error-content: oklch(0.9 0.01 270);
+  }
+}
+
+/* Register the semantic palette with Tailwind v4. Values intentionally
+ * reference the `--ui-*` custom properties above so a theme switch only
+ * has to redefine those — the generated utilities track dark mode
+ * automatically. */
+@theme {
+  --color-base-100: var(--ui-base-100);
+  --color-base-200: var(--ui-base-200);
+  --color-base-300: var(--ui-base-300);
+  --color-base-content: var(--ui-base-content);
+
+  --color-primary: var(--ui-primary);
+  --color-primary-content: var(--ui-primary-content);
+  --color-secondary: var(--ui-secondary);
+  --color-secondary-content: var(--ui-secondary-content);
+  --color-accent: var(--ui-accent);
+  --color-accent-content: var(--ui-accent-content);
+  --color-neutral: var(--ui-neutral);
+  --color-neutral-content: var(--ui-neutral-content);
+
+  --color-info: var(--ui-info);
+  --color-info-content: var(--ui-info-content);
+  --color-success: var(--ui-success);
+  --color-success-content: var(--ui-success-content);
+  --color-warning: var(--ui-warning);
+  --color-warning-content: var(--ui-warning-content);
+  --color-error: var(--ui-error);
+  --color-error-content: var(--ui-error-content);
+
+  /* Radii — registered so Tailwind generates the `rounded-box`,
+   * `rounded-field`, and `rounded-selector` utilities the UI uses. */
+  --radius-selector: 0.5rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+}

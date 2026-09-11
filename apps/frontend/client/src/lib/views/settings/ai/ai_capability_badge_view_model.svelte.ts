@@ -15,7 +15,7 @@ import type { AiCapabilityStatus } from './ai_connection_status.svelte';
 export type AiCapabilityBadgeViewModelInterface = BaseViewModelInterface & {
   /** e.g. "AI: Connected" / "AI: Partial" / "AI: Not Set Up". */
   readonly label: string;
-  /** DaisyUI badge class, e.g. `badge-success`. */
+  /** Aikami UI badge class, e.g. `badge-success`. */
   readonly color: string;
 };
 

@@ -410,7 +410,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
 
     <!-- Delete confirmation modal -->
     {#if viewModel.pendingDeleteMessageId}
-      <!-- daisyUI v5: modal-box needs the .modal.modal-open wrapper to be visible -->
+      <!-- Aikami UI v5: modal-box needs the .modal.modal-open wrapper to be visible -->
       <div class="modal modal-open bg-base-300/60">
         <div class="modal-box w-80">
           <h3 class="text-lg font-bold">Delete Message?</h3>

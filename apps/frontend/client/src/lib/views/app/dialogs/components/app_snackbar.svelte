@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/app/dialogs/components/app_snackbar.svelte
 //
-// Toast stack using DaisyUI toast + alert. Toasts auto-dismiss
+// Toast stack using Aikami UI toast + alert. Toasts auto-dismiss
 // after 5s. Multiple toasts stack vertically. Click to dismiss.
 
 import type { AppDialogsViewModelInterface } from '../app_dialogs_view_model.svelte';

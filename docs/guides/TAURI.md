@@ -140,7 +140,7 @@ source of cross-device blits/hangs.
 - **Stylesheet refusals** (`Refused to apply a stylesheet ... style-src`): Tauri
   appends nonces/sha256 hashes to `style-src` at build time; per CSP3, once a
   directive contains any nonce/hash source, `'unsafe-inline'` is ignored — so
-  runtime-injected styles (Svelte/daisyUI) get refused. Fix (in tauri.conf.json):
+  runtime-injected styles (Svelte/Aikami UI) get refused. Fix (in tauri.conf.json):
   ```json
   "dangerousDisableAssetCspModification": ["style-src"]
   ```

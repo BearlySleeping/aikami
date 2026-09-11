@@ -314,7 +314,7 @@ const { viewModel }: Props = $props();
        Delete local data confirmation dialog (AC-7)
        ═══════════════════════════════════════════════════════════════════ -->
   {#if viewModel.isDeleteLocalDialogOpen}
-    <!-- daisyUI v5 .modal-box requires the .modal.modal-open wrapper to be
+    <!-- Aikami UI v5 .modal-box requires the .modal.modal-open wrapper to be
          visible (opacity:0 otherwise) — see settings_overlay.svelte for the pattern. -->
     <div
       class="modal modal-open backdrop-blur-sm bg-black/60"

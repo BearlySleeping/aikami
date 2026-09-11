@@ -5,7 +5,7 @@
 // connected chats bridge with game chat, tag parser test area,
 // OOC chat panel, and connected chats settings panel.
 //
-// Styled with daisyUI — distinct visual treatment for notes,
+// Styled with Aikami UI — distinct visual treatment for notes,
 // influences, OOC, narration, and dialogue, inspired by
 // Marinara-Engine's message-type differentiation.
 //
@@ -260,7 +260,7 @@ const panelViewModel = getConnectedChatsPanelViewModel({
               here.
             </div>
 
-            <!-- Messages area — daisyUI chat -->
+            <!-- Messages area — Aikami UI chat -->
             <div
               class="flex-1 overflow-y-auto min-h-0 border border-base-300 rounded-lg bg-base-100 p-2"
             >

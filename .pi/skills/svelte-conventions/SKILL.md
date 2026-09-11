@@ -536,5 +536,5 @@ When using `SharedArrayBuffer` for Web Workers, the document MUST be cross-origi
 | Skill         | Covers                                                    |
 | ------------- | --------------------------------------------------------- |
 | `svelte-page` | Scaffolding a new page (View + ViewModel files)           |
-| `aikami-ui`   | DaisyUI primitives vs components, typography, colors      |
+| `aikami-ui`   | Aikami UI primitives vs components, typography, colors    |
 | `pixijs-v8`   | Game engine boundary — no `$state` in game code, bridge   |

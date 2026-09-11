@@ -7,8 +7,7 @@
 // ai_settings_view.svelte so the same modals can be reused by a leaner host
 // (e.g. the onboarding capability screen) without embedding the full
 // Status board + Provider tree.
-import { Modal } from '@aikami/frontend/components';
-import VoiceModelDownload from '@aikami/frontend/components/voice-model-download/voice_model_download.svelte';
+import { Modal, VoiceModelDownload } from '@aikami/frontend/components';
 import type { AiSettingsViewModelInterface } from './ai_settings_view_model.svelte';
 
 type Props = {

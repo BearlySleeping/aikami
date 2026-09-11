@@ -44,7 +44,7 @@ export type AddressModeTogggleViewModelInterface = BaseViewModelInterface & {
   /** Display label for the current mode. */
   readonly modeLabel: string;
 
-  /** DaisyUI color class for the current mode badge. */
+  /** Aikami UI color class for the current mode badge. */
   readonly modeColorClass: string;
 
   /** Sets the address mode. */

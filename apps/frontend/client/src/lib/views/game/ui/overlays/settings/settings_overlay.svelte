@@ -19,7 +19,7 @@ const { viewModel }: Props = $props();
 </script>
 
 <!-- Overlay backdrop — semi-transparent, game world visible behind -->
-<!-- daisyUI v5 .modal-box requires the .modal.modal-open wrapper to be
+<!-- Aikami UI v5 .modal-box requires the .modal.modal-open wrapper to be
      visible (opacity:0 otherwise) — see party_roster_view for the pattern. -->
 <BaseViewModelContainer {viewModel}>
   <div

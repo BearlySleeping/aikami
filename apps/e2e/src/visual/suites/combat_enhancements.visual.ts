@@ -34,7 +34,7 @@ export default defineConfig({
 5. Section 4: Enriched Combat Log with input field and test preset buttons
 6. Section 5: Full Example section showing enriched log entries
 
-Rate the overall layout, spacing, and readability. Check that the DaisyUI dark theme is applied correctly (bg-base-100 backgrounds, proper text contrast).`,
+Rate the overall layout, spacing, and readability. Check that the Aikami UI dark theme is applied correctly (bg-base-100 backgrounds, proper text contrast).`,
       schema: CombatEnhancementsSchema,
       setupHook: async (page) => {
         // Wait for the sandbox to render

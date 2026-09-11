@@ -5,7 +5,7 @@
 // character dashboard from C-153. All state lives in the ViewModel.
 //
 // Contract: C-232 Character Sheet & Traits System
-import { Modal } from '@aikami/frontend/components';
+import { Modal, NumberStepper } from '@aikami/frontend/components';
 import { ABILITY_KEYS } from '@aikami/types';
 import { BaseViewModelContainer } from '$components';
 import type { CharacterSheetViewModelInterface } from './character_sheet_view_model.svelte';
@@ -151,15 +151,14 @@ const { viewModel }: Props = $props();
                 <div class="stat bg-base-200 rounded-lg p-2">
                   <div class="stat-title text-xs opacity-60">{label}</div>
                   <div class="flex items-center gap-1">
-                    <input
-                      type="number"
-                      class="input input-xs input-bordered w-14 text-center font-mono text-sm"
-                      min="3"
-                      max="20"
+                    <NumberStepper
                       value={ability.value}
-                      oninput={(e: Event) =>
-                      viewModel.setAbilityScore(key, Number((e.target as HTMLInputElement).value))}
-                    >
+                      min={3}
+                      max={20}
+                      size="xs"
+                      label="{label} score"
+                      onchange={(value) => viewModel.setAbilityScore(key, value)}
+                    />
                     <span
                       class="text-xs font-mono font-bold {viewModel.modifierColor(ability.modifier)}"
                     >
