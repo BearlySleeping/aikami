@@ -25,7 +25,6 @@ export type * from './service_options.ts';
 export type * from './session.ts';
 export type * from './session_checkpoint.ts';
 export type * from './sidecar.ts';
-export type * from './stream_orchestrator.ts';
 export type * from './text_chat.ts';
 export type * from './vendor.ts';
 export type * from './voice.ts';

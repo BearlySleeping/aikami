@@ -98,7 +98,6 @@
         "@aikami/frontend-preview": "workspace:*",
         "@aikami/frontend-services": "workspace:*",
         "@aikami/frontend-theme": "workspace:*",
-        "@aikami/frontend-utils": "workspace:*",
         "@aikami/local-ai": "workspace:*",
         "@aikami/logger": "workspace:*",
         "@aikami/lpc": "workspace:*",
@@ -109,23 +108,18 @@
         "@aikami/utils": "workspace:*",
         "@huggingface/transformers": "^4.2.0",
         "@tauri-apps/api": "^2",
-        "@tauri-apps/plugin-deep-link": "^2",
         "@tauri-apps/plugin-fs": "^2",
-        "@tauri-apps/plugin-http": "^2",
         "@tauri-apps/plugin-log": "2",
         "@tauri-apps/plugin-opener": "^2",
         "@tauri-apps/plugin-process": "^2",
         "@tauri-apps/plugin-shell": "^2",
         "@tauri-apps/plugin-updater": "^2",
-        "bitecs": "^0.4.0",
-        "device-detector-js": "3.0.3",
         "eruda": "3.4.3",
         "jszip": "3.10.2",
         "kokoro-js": "1.2.1",
         "onnxruntime-web": "1.29.0",
         "pixi.js": "8.20.1",
         "png-chunks-extract": "1.0.0",
-        "text-encoding": "0.7.0",
       },
       "devDependencies": {
         "@inlang/paraglide-js": "2.25.1",
@@ -1441,11 +1435,7 @@
 
     "@tauri-apps/cli-win32-x64-msvc": ["@tauri-apps/cli-win32-x64-msvc@2.11.4", "", { "os": "win32", "cpu": "x64" }, "sha512-+vDiqBIU5dMISg/wNvX3sF+ZHfgJGJ5T0AcO+EHNXV9GGAG+P5fzodlDXD3QdKCRgZxMoCm5PPvj3BqLNjBthw=="],
 
-    "@tauri-apps/plugin-deep-link": ["@tauri-apps/plugin-deep-link@2.4.9", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-u0SKOUHnJ1wqeqXsDFq2+kASCBj9xxbG0g9XZWPy9SOmU4wXtp6b/wiYpm6oH6/5fBTQsLqnLhIvqLBRpgHJlA=="],
-
     "@tauri-apps/plugin-fs": ["@tauri-apps/plugin-fs@2.5.1", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-9Lz+Jopp6QyeEWhlpkMx4R/+P9HgR+AVAI4vOZhlT8Xaymtz8iVI/Ov984/XTqgJz/5gz5NretqPB/XEMS3NhQ=="],
-
-    "@tauri-apps/plugin-http": ["@tauri-apps/plugin-http@2.5.9", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-lCiY0+vs4HvIUSvZrBs8TC3TiCB0MOPRmiUjTq4prW7SlcJE2jdLeT6KBsJrT9Tlplufl7W1pY6SFAO3gCWxDA=="],
 
     "@tauri-apps/plugin-log": ["@tauri-apps/plugin-log@2.9.0", "", { "dependencies": { "@tauri-apps/api": "^2.11.0" } }, "sha512-Ql8okrnsguk0eDq1GvRfttFV5KaeW/7vcao6bdbkXCRJ1+2sWE15ZJvJVEKVANrOKy1mRngqC3IFIAP+wP5qSw=="],
 
@@ -3124,8 +3114,6 @@
     "terser": ["terser@5.49.2", "", { "dependencies": { "@jridgewell/source-map": "^0.3.3", "acorn": "^8.15.0", "commander": "^2.20.0", "source-map-support": "~0.5.20" }, "bin": { "terser": "bin/terser" } }, "sha512-rGbJiKeQ4WDe3EXlDAIaQcwftVfv2Q8o1awFNfvXolJYKkb1AuZY1RTOmqx4LJXZENbWZA7eIsYGHuEzHsi1nQ=="],
 
     "text-decoder": ["text-decoder@1.2.7", "", { "dependencies": { "b4a": "^1.6.4" } }, "sha512-vlLytXkeP4xvEq2otHeJfSQIRyWxo/oZGEbXrtEEF9Hnmrdly59sUbzZ/QgyWuLYHctCHxFF4tRQZNQ9k60ExQ=="],
-
-    "text-encoding": ["text-encoding@0.7.0", "", {}, "sha512-oJQ3f1hrOnbRLOcwKz0Liq2IcrvDeZRHXhd9RgLrsT+DjWY/nty1Hi7v3dtkaEYbPYe0mUoOfzRrMwfXXwgPUA=="],
 
     "third-party-web": ["third-party-web@0.29.2", "", {}, "sha512-fegtha91tq2DHphyoiBXVHjVi2YG9zFaRnboT9C28tO1en9Y3wJsfspuy40F+u5wl3hHVbw7cnd1b67kEGHb8g=="],
 
