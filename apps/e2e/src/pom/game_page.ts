@@ -27,6 +27,14 @@ export type GameJourneyCheckpoint = {
   expectedMode: 'explore' | 'combat' | 'dialogue' | 'menu';
 };
 
+/** Engine state the render loop publishes to `window.__AIKAMI_DEBUG__`. */
+export type GameEngineDebugSnapshot = {
+  playerX: number;
+  playerY: number;
+  npcCount: number;
+  playerVisibleByMask: number;
+};
+
 export class GamePage {
   readonly page: Page;
 
@@ -94,8 +102,7 @@ export class GamePage {
     });
 
     // Wait for HUD to appear (player HUD is the visual indicator of engine ready)
-    const playerHud = this.page.locator('.bg-base-200\\/80');
-    await playerHud.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {
+    await this.playerHud.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {
       // HUD may not appear if boot fails — that's fine, caller checks
     });
   }
@@ -160,7 +167,7 @@ export class GamePage {
 
   /** Player HUD — the always-visible bottom-left overlay. */
   get playerHud() {
-    return this.page.locator('.bg-base-200\\/80');
+    return this.page.getByTestId('player-hud');
   }
 
   /** HP progress bar with ARIA role. */
@@ -527,6 +534,62 @@ export class GamePage {
       }
       return null;
     });
+  }
+
+  // ── Boot Check ────────────────────────────────────────────
+
+  /**
+   * Wait until the render loop has published a finite player position to
+   * `window.__AIKAMI_DEBUG__`.
+   *
+   * This is the strongest "engine is actually running" signal: the canvas can
+   * be attached while boot is still failing, but only a live render loop
+   * publishes player coordinates every frame.
+   */
+  async waitForEngineRunning(timeout = 45_000): Promise<void> {
+    await this.page.waitForFunction(
+      () => {
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | { playerX?: unknown; playerY?: unknown }
+          | undefined;
+        return (
+          typeof debug?.playerX === 'number' &&
+          Number.isFinite(debug.playerX) &&
+          typeof debug?.playerY === 'number' &&
+          Number.isFinite(debug.playerY)
+        );
+      },
+      undefined,
+      { timeout },
+    );
+  }
+
+  /** Read the engine debug snapshot the render loop publishes each frame. */
+  async getEngineDebugSnapshot(): Promise<GameEngineDebugSnapshot | null> {
+    return this.page.evaluate(() => {
+      const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+        | Partial<GameEngineDebugSnapshot>
+        | undefined;
+      if (typeof debug?.playerX !== 'number' || typeof debug.playerY !== 'number') {
+        return null;
+      }
+      return {
+        playerX: debug.playerX,
+        playerY: debug.playerY,
+        npcCount: typeof debug.npcCount === 'number' ? debug.npcCount : 0,
+        playerVisibleByMask:
+          typeof debug.playerVisibleByMask === 'number' ? debug.playerVisibleByMask : 0,
+      };
+    });
+  }
+
+  /** Assert the WebGL canvas is visible with a non-zero layout size. */
+  async expectCanvasSized(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.canvas).toBeVisible({ timeout: 15_000 });
+    const box = await this.canvas.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(0);
+    expect(box?.height ?? 0).toBeGreaterThan(0);
   }
 
   // ── Capability Screen ─────────────────────────────────────
