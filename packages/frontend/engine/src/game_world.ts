@@ -21,23 +21,19 @@ import type { InteractableStateMap } from './components/interactable_state.ts';
 import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
-import {
-  computeInterpolationAlpha,
-  interpolateValue,
-  unprojectScreenPoint,
-} from './frame_pacing.ts';
+import { unprojectScreenPoint } from './frame_pacing.ts';
 import {
   exposeEngineState,
   isE2ETestMode,
   isVisualScreenshotMode,
-  publishEntityPosition,
-  publishPlayerDebug,
   publishPlayerVisibleByMask,
   resetEntityPositions,
 } from './game_world/diagnostics.ts';
-import { type AppearanceLayer, EntityAppearanceLoader } from './game_world/entity_appearance.ts';
+import { EntityAppearanceLoader } from './game_world/entity_appearance.ts';
+import { FrameRenderer } from './game_world/frame_renderer.ts';
 import { InputController } from './game_world/input_controller.ts';
 import { RenderBufferPool } from './game_world/render_buffer_pool.ts';
+import type { RenderEntry } from './game_world/render_entry.ts';
 import {
   type HeartbeatEvent,
   type WorkerFailure,
@@ -53,14 +49,11 @@ import {
 } from './pixi_app.ts';
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { AnimationController } from './rendering/animation_controller.ts';
-import { computeEntityZIndex, WORLD_Z_BANDS } from './rendering/layer_bands.ts';
+import { WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance_resolver.ts';
-import { resolveLpcSheetGeometry } from './rendering/lpc_sheet_geometry.ts';
-import { snapToDevicePixels } from './rendering/pixel_snap.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
-import { frustumCullChunks, type TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
-import { resolveDefinitionFrameAtTime } from './rendering/visual_definition_playback.ts';
+import type { TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
 import { buildWalkabilityStyles } from './rendering/walkability_overlay.ts';
 import { WeatherOverlay } from './rendering/weather_overlay.ts';
 import type { GameAiService } from './services/ai_service.ts';
@@ -112,32 +105,6 @@ const HOVER_HIGHLIGHT_TIMEOUT_MS = 1000;
 //   right: { x: PLAYER_SPEED, y: 0 },
 // };
 
-/** Per-entity rendering data stored on the main thread. */
-type RenderEntry = {
-  /** The PixiJS display object (Sprite or Container). */
-  displayObject: Container;
-  /**
-   * Monotonic spawn order — tie-break for y-depth sorting so equal-Y
-   * entities render deterministically without per-frame flicker (C-375 AC-2).
-   */
-  spawnOrder: number;
-  /**
-   * Per-entity animation controller for directional walk/idle.
-   *
-   * Computes spritesheet frame indices from positional deltas across
-   * frames without access to the worker's Velocity component.
-   */
-  animationController?: AnimationController;
-  /** Tint color for the entity. */
-  tint: number;
-  /** When `true`, spatial culling is enabled for this entity. */
-  cullable: boolean;
-  /** Layer recipes for multi-layer rendering. */
-  recipes?: LpcLayerRecipe[];
-  /** Active layer sprites (owned by the appearance loader). */
-  layerSprites?: AppearanceLayer[];
-};
-
 /**
  * Metadata for an interactable NPC entity stored on the main thread.
  * Populated when ENTITY_CREATED fires for NPCs.
@@ -171,18 +138,6 @@ type NpcMetaEntry = {
 
 // C-428: LPC_WALK_COLUMNS removed — column count is now resolved per-sheet
 // via resolveLpcSheetGeometry(). The old global was wrong for oversize sheets.
-
-/**
- * LPC direction names keyed by {@link LpcDirection} row offset (C-496 AC-3).
- * Used to derive clip names like `walk.down` when resolving frames through the
- * shared visual definition.
- */
-const DIRECTION_NAMES: Record<number, string> = {
-  0: 'up',
-  1: 'left',
-  2: 'down',
-  3: 'right',
-} as const;
 
 /** Callback invoked when the player presses the interact key. */
 type InteractRequestCallback = (npc: NpcMetaEntry) => void;
@@ -335,9 +290,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Returns the player's equipped items as LPC layer recipes (C-374). */
   private readonly _equipmentRecipeProvider?: () => readonly LpcLayerRecipe[];
 
-  /** Texture manager instance. */
-  private readonly _textureManager?: TextureManager;
-
   /** Loads/orders entity appearance layers off-scene for atomic swaps. */
   private readonly _appearanceLoader: EntityAppearanceLoader;
 
@@ -430,13 +382,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** PixiJS ticker callback reference for teardown. */
   private _tickerCallback: ((ticker: Ticker) => void) | undefined;
 
-  /** Real wall-clock delta (ms) captured from the ticker on the last frame. */
-  private _lastFrameDeltaMs = 16.7;
-
-  // -- Render debug throttle ---------------------------------------------
-
-  /** Timestamp of the last render frame log (ms). */
-  private _lastRenderLog = 0;
+  /** Per-frame render transform (interpolation, camera, animation, culling). */
+  private readonly _frameRenderer: FrameRenderer;
 
   // -- Buffer state --------------------------------------------------------
 
@@ -508,9 +455,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * records instead of walking/removing children.
    */
   private _tilemapChunks: readonly TilemapChunk[] | undefined;
-
-  /** Last culled/visible chunk counts (render diagnostic, C-377). */
-  private _lastCulledChunkCounts: { visible: number; total: number } | undefined;
 
   // -- Render state (main thread) ------------------------------------------
 
@@ -593,7 +537,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._recipeResolver = options.recipeResolver;
     this._assetUrlResolver = options.assetUrlResolver;
     this._equipmentRecipeProvider = options.equipmentRecipeProvider;
-    this._textureManager = options.textureManager;
     this._appearanceLoader = new EntityAppearanceLoader({
       resolveAssetUrl: (slot, assetId, state) =>
         this._assetUrlResolver?.(slot, assetId, state) ?? null,
@@ -606,6 +549,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._releaseUrl = options.releaseUrl;
 
     this._renderBufferPool = new RenderBufferPool();
+    this._frameRenderer = new FrameRenderer({
+      textureManager: options.textureManager,
+    });
 
     this._inputController = new InputController({
       onVelocity: ({ x, y }) => {
@@ -788,17 +734,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._pointerInputTeardown = this._setupPointerInput();
 
     // ---- 5. Start the render loop (main thread) -----------------------
-    const stage = this._app.stage;
 
     this._tickerCallback = (ticker: Ticker): void => {
-      const renderView = this._renderBufferPool.activeView;
-      if (!this._running || !this._app || !renderView) {
+      if (!this._running || !this._app) {
         return;
       }
-      // C-496 AC-5: capture the real wall-clock delta for the elapsed-time
-      // actor clock; the per-entity AnimationController advances by this
-      // value (never by display refresh count).
-      this._lastFrameDeltaMs = ticker.deltaMS;
 
       // ── C-177: Update uTime for GPU tile animation ──
       // ── C-378 AC-9: update the day/night tint from the worker's UBO ──
@@ -842,7 +782,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         }
       }
 
-      this._updateRenderFromBuffer(renderView, stage);
+      this._frameRenderer.render({
+        app: this._app,
+        worldContainer: this._worldContainer,
+        renderEntries: this._renderEntries,
+        bufferPool: this._renderBufferPool,
+        camera: { x: this._cameraX, y: this._cameraY, zoom: this._cameraZoom },
+        deltaMs: ticker.deltaMS,
+        playerEntityId: this._playerEntityId,
+        playerVisibleByMask: this._playerVisibleByMask,
+        npcCount: this._npcMeta.size,
+        npcAppearance: this._debugNpcAppearance,
+        tilemapChunks: this._tilemapChunks,
+        onRenderLog: (message) => this.render(message),
+      });
       this._updateDestinationArrival();
     };
 
@@ -2335,7 +2288,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         // Release the owned chunk records with the container (C-377
         // cancellation/teardown requirement).
         this._tilemapChunks = undefined;
-        this._lastCulledChunkCounts = undefined;
+        this._frameRenderer.resetCullStats();
       }
 
       // 4. Load and parse the new tilemap through the CANONICAL scene
@@ -2801,236 +2754,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
   }
 
-  /**
-   * Updates PixiJS display object positions from the active render buffer.
-   *
-   * Reads entity positions (x, y) from the Float32Array buffer and applies
-   * them to the display objects stored in {@link renderEntries}.
-   *
-   * Also drives the per-entity {@link AnimationController} by computing
-   * positional deltas across frames. The controller derives facing
-   * direction (Up/Left/Down/Right) from the movement vector and
-   * transitions between Walk (non-zero delta) and Idle (zero delta)
-   * states, returning spritesheet frame indices for texture slicing.
-   *
-   * Applies spatial culling: entities flagged as `cullable` that are
-   * outside the visible stage bounds are hidden (`visible = false`).
-   *
-   * Runs every frame on the PixiJS ticker (~60fps).
-   *
-   * @param renderView - The Float32Array view into the active buffer.
-   * @param stage - The PixiJS stage container.
-   */
-  private _updateRenderFromBuffer(renderView: Float32Array, _stage: Container): void {
-    // Use the actual screen bounds (canvas dimensions) for spatial culling,
-    // rather than the stage's bounding box of children.
-    const stageBounds = this._app?.screen ?? {
-      x: 0,
-      y: 0,
-      width: this._app?.canvas.width ?? 800,
-      height: this._app?.canvas.height ?? 600,
-    };
-    let visibleCount = 0;
-    let totalCount = 0;
-
-    // ── C-380 AC-2: Compute interpolation alpha ──
-    // Blend between the previous and current sim states based on how much
-    // wall-clock time has passed since the current state was received.
-    // Alpha = elapsedSinceCurrentState / stepMs, clamped to [0, 1].
-    const timing = this._renderBufferPool.timing;
-    const hasTwoStates =
-      this._renderBufferPool.previousView !== undefined &&
-      timing !== undefined &&
-      this._renderBufferPool.previousSimTimeMs < timing.simTimeMs;
-    const stepMs = timing?.stepMs ?? 16.667;
-    const stateReceivedAt = this._renderBufferPool.currentStateReceivedAt;
-    const elapsedSinceCurrent = stateReceivedAt > 0 ? performance.now() - stateReceivedAt : 0;
-    const alpha = hasTwoStates
-      ? computeInterpolationAlpha({ elapsedMs: elapsedSinceCurrent, stepMs })
-      : 1;
-    const prevView = this._renderBufferPool.previousView;
-
-    for (const [eid, entry] of this._renderEntries) {
-      totalCount++;
-      const offset = eid * COMPONENT_STRIDE;
-
-      // C-380 AC-2: Interpolate between previous and current state
-      let x: number;
-      let y: number;
-      if (hasTwoStates && prevView) {
-        const prevX = prevView[offset];
-        const prevY = prevView[offset + 1];
-        const currX = renderView[offset];
-        const currY = renderView[offset + 1];
-        if (
-          prevX !== undefined &&
-          currX !== undefined &&
-          !Number.isNaN(prevX) &&
-          !Number.isNaN(currX)
-        ) {
-          x = interpolateValue({ previous: prevX, current: currX, alpha });
-          y = interpolateValue({ previous: prevY, current: currY, alpha });
-        } else {
-          x = renderView[offset];
-          y = renderView[offset + 1];
-        }
-      } else {
-        x = renderView[offset];
-        y = renderView[offset + 1];
-      }
-
-      if (x === undefined || y === undefined) {
-        continue;
-      }
-
-      // C-180: Expose player world coordinates for E2E collision testing.
-      // Playwright reads window.__AIKAMI_DEBUG__.playerPosition to verify
-      // that the spatial grid bitmask collision clamps movement at walls.
-      // C-379: also exposes playerEid (so E2E can exclude the player from
-      // NPC-movement assertions) and playerVisibleByMask (AC-2 — the
-      // player's VisionVisible.visibleByMask, forwarded from the worker).
-      // Published only once x/y resolved — a NaN/undefined frame must not
-      // poison the debug read.
-      if (eid === this._playerEntityId) {
-        publishPlayerDebug({
-          playerX: x,
-          playerY: y,
-          playerEid: eid,
-          playerVisibleByMask: this._playerVisibleByMask,
-          // C-400 AC-1: spawned NPC count for the loaded map — asserted by
-          // game_boot.spec.ts against the manifest-derived count.
-          npcCount: this._npcMeta.size,
-          // C-504 AC-5: resolved per-NPC appearance for E2E identity assertions.
-          npcAppearance: this._debugNpcAppearance,
-        });
-      }
-
-      // C-379 AC-7: expose every rendered entity's position so E2E can
-      // assert NPCs/companions actually moved (emergent-world integration
-      // spec reads this to verify distributed positions over time).
-      publishEntityPosition(eid, { x, y });
-
-      // Dynamic camera: center the world container on the camera position
-      // computed by the CameraSystem in the worker (with lerp + clamping).
-      // The old per-player-entity centering is replaced by this global
-      // camera transform applied once per frame outside the entity loop.
-      // Past this point in _updateRenderFromBuffer, the camera transform
-      // is applied after all entity positions are updated.
-      entry.displayObject.x = x;
-      entry.displayObject.y = y;
-
-      // C-376 AC-4: y-depth via in-place zIndex. Raw float — the stable
-      // sort + never-reparented containers give the tie-break free. The
-      // lower bound is clamped to MIN_ENTITY_Y so the documented band
-      // invariant (bands below MIN_ENTITY_Y) holds even for negative
-      // spawn coordinates (CodeRabbit review, C-376).
-      entry.displayObject.zIndex = computeEntityZIndex(y);
-
-      // Drive per-entity animation controller from positional deltas and the
-      // real elapsed wall-clock delta (C-496 AC-5).
-      entry.animationController?.update({ x, y, deltaMs: this._lastFrameDeltaMs });
-
-      // Apply LPC frame slicing when layer sprites are loaded.
-      if (entry.animationController) {
-        this._applyLpcFrame(entry, entry.animationController);
-      }
-
-      // Spatial culling: temporaily disabled.
-      // FIXME: The math is broken now that the world origin is centered
-      // and scaled via _worldContainer. Raw world coordinates can be
-      // negative (e.g., player at -100, -100) while the camera centers
-      // them on-screen, but this check treats negative coords as off-screen.
-      // Hardcoded outside any if-block to guarantee visibility.
-      entry.displayObject.visible = true;
-      visibleCount++;
-    }
-
-    // ── C-376 AC-4: y-depth entity sort via in-place zIndex ──
-    // Entity containers carry `zIndex = displayObject.y` and the world
-    // container has `sortableChildren = true`, so PixiJS sorts the display
-    // list in place with a stable sort every frame — no removeChild/addChild
-    // churn, no O(n²) reparenting, no `_entityRenderOrder` cache. The camera
-    // transform is applied to _worldContainer itself, so z-sorting children
-    // does not affect it.
-
-    // Camera transform: center the world container at the camera position
-    // computed by the CameraSystem in the worker (lerp + clamping).
-    // Applied once per frame after all entity display objects are positioned.
-    if (this._app && this._worldContainer) {
-      // Apply dynamic zoom to the world container scale (C-161).
-      // Base scale is the named policy constant, multiplied by lerped zoom
-      // (1.0–1.5). Each world unit renders as BASE_WORLD_SCALE CSS px.
-      const dynamicScale = BASE_WORLD_SCALE * this._cameraZoom;
-      if (this._worldContainer.scale.x !== dynamicScale) {
-        this._worldContainer.scale.set(dynamicScale);
-      }
-
-      // ── C-380 AC-2: Interpolated camera position ──
-      // Blend the camera position between previous and current states,
-      // matching the entity interpolation alpha.
-      const previousCamera = this._renderBufferPool.previousCamera;
-      const interpCameraX = hasTwoStates
-        ? interpolateValue({
-            previous: previousCamera.x,
-            current: this._cameraX,
-            alpha,
-          })
-        : this._cameraX;
-      const interpCameraY = hasTwoStates
-        ? interpolateValue({
-            previous: previousCamera.y,
-            current: this._cameraY,
-            alpha,
-          })
-        : this._cameraY;
-
-      // ── C-377 AC-3: device-pixel snap (applied AFTER blending) ──
-      // The world container position is the single place where continuous
-      // world coordinates become device pixels. Snap the final x/y to whole
-      // device pixels (accounting for renderer resolution) so the tile grid
-      // does not shimmer while the camera lerps across fractional positions.
-      const resolution = this._app.renderer.resolution || 1;
-      this._worldContainer.x = snapToDevicePixels(
-        this._app.screen.width / 2 - interpCameraX * this._worldContainer.scale.x,
-        resolution,
-      );
-      this._worldContainer.y = snapToDevicePixels(
-        this._app.screen.height / 2 - interpCameraY * this._worldContainer.scale.y,
-        resolution,
-      );
-
-      // ── C-171: CPU-side frustum culling for tilemap chunks ──
-      // Camera position is in world-space pixels; viewport dimensions
-      // are divided by the world scale to convert screen-space → world-space.
-      const viewportWorldW = this._app.screen.width / dynamicScale;
-      const viewportWorldH = this._app.screen.height / dynamicScale;
-
-      if (this._tilemapChunks && this._tilemapChunks.length > 0) {
-        const culled = frustumCullChunks(
-          this._tilemapChunks,
-          interpCameraX - viewportWorldW / 2,
-          interpCameraY - viewportWorldH / 2,
-          viewportWorldW,
-          viewportWorldH,
-        );
-        if (culled.total > 0) {
-          this._lastCulledChunkCounts = culled;
-        }
-      }
-    }
-
-    // Throttled per-second render diagnostic (only when BaseEngineClass.setRenderDebug(true))
-    if (totalCount > 0 && performance.now() - this._lastRenderLog > 1000) {
-      this._lastRenderLog = performance.now();
-      const chunkSummary = this._lastCulledChunkCounts
-        ? `, chunks ${this._lastCulledChunkCounts.visible}/${this._lastCulledChunkCounts.total} visible`
-        : '';
-      this.render(
-        `${visibleCount}/${totalCount} visible, stage ${stageBounds.width}x${stageBounds.height}${chunkSummary}`,
-      );
-    }
-  }
-
   // -----------------------------------------------------------------------
   // Internal: LPC spritesheet loading + frame slicing
   // -----------------------------------------------------------------------
@@ -3102,131 +2825,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     });
     entry.layerSprites = prepared.layers;
     this.debug('lpc-loaded', { eid, layers: prepared.layers.length });
-  }
-
-  /**
-   * Applies the current animation frame from the loaded LPC walk
-   * spritesheets to the layer sprites.
-   *
-   * Uses the PixiJS `Spritesheet` API (C-168) instead of manual
-   * `new Texture({ source, frame: rect })` to ensure correct
-   * WebGPU-compatible UV mappings on every sub-texture.
-   *
-   * Spritesheet instances are created once in {@link _loadEntityRecipes}
-   * and cached via {@link TextureManager._spritesheetCache} — this
-   * method performs only synchronous `spritesheet.textures[key]`
-   * lookups each frame.
-   */
-  private _applyLpcFrame(entry: RenderEntry, controller: AnimationController): void {
-    if (!entry.layerSprites || entry.layerSprites.length === 0) {
-      return;
-    }
-
-    const direction = controller.direction;
-    const row = direction as number; // Up=0, Left=1, Down=2, Right=3
-    const directionName = DIRECTION_NAMES[direction];
-
-    for (const layer of entry.layerSprites) {
-      if (!layer.texture) {
-        continue;
-      }
-
-      // C-496 AC-3/AC-6: when a shared visual definition was compiled at load,
-      // resolve the frame through it (elapsed-time clock + actor-level
-      // fallback) instead of hard-coding the 'walk' row. The resolved frame
-      // maps back to a cached spritesheet key so steady playback still
-      // allocates no new render objects.
-      if (layer.definition) {
-        const clipName = controller.isIdle ? `idle.${directionName}` : `walk.${directionName}`;
-        const resolved = resolveDefinitionFrameAtTime({
-          definition: layer.definition,
-          clipName,
-          elapsedMs: controller.elapsedMs,
-        });
-        if (resolved) {
-          const frame = resolved.frame;
-          const geometry = resolveLpcSheetGeometry(layer.texture);
-          const fCol = Math.floor(frame.x / geometry.pitch);
-          const fRow = Math.floor(frame.y / geometry.pitch);
-          if (layer.spritesheet) {
-            const frameKey = `walk_${fRow}_${fCol}`;
-            const frameTexture = layer.spritesheet.textures[frameKey];
-            if (frameTexture) {
-              layer.sprite.texture = frameTexture;
-              continue;
-            }
-          } else if (this._textureManager) {
-            const frameTexture = this._textureManager.getFrameAt({
-              texture: layer.texture,
-              layout: {
-                frameWidth: geometry.pitch,
-                frameHeight: geometry.pitch,
-                columns: geometry.columns,
-                rows: geometry.rows,
-              },
-              frameIndex: fRow * geometry.columns + fCol,
-            });
-            if (frameTexture) {
-              layer.sprite.texture = frameTexture;
-              continue;
-            }
-          }
-        }
-        // Fall through to the legacy row/column path if the definition path
-        // could not slice a texture.
-      }
-
-      // C-428: resolve sheet geometry from the loaded texture dimensions
-      const geometry = resolveLpcSheetGeometry(layer.texture);
-      const columns = geometry.columns;
-      const pitch = geometry.pitch;
-
-      // C-428: use the real per-sheet column count, not a global constant
-      const column = controller.getFrameColumn(columns);
-
-      // C-168: prefer the parsed Spritesheet for WebGPU-safe UV lookups.
-      // Fall back to getFrameAt when no spritesheet was created
-      // (e.g., dimensions don't align to the standard grid).
-      if (layer.spritesheet) {
-        const rows = geometry.rows;
-
-        let effectiveRow = row;
-        if (rows === 1) {
-          effectiveRow = 0;
-        }
-
-        const frameCol = column % columns;
-        const frameKey = `walk_${effectiveRow}_${frameCol}`;
-
-        const frameTexture = layer.spritesheet.textures[frameKey];
-        if (frameTexture) {
-          layer.sprite.texture = frameTexture;
-        }
-      } else if (this._textureManager) {
-        // Legacy fallback — manual frame slicing via Rectangle.
-        // This path is kept for spritesheets that don't conform to
-        // the standard LPC grid (e.g., odd-sized props).
-        const rows = geometry.rows;
-
-        let effectiveRow = row;
-        if (rows === 1) {
-          effectiveRow = 0;
-        }
-
-        const frameCol = column % columns;
-        const dynamicFrameIndex = effectiveRow * columns + frameCol;
-
-        const frameTexture = this._textureManager.getFrameAt({
-          texture: layer.texture,
-          layout: { frameWidth: pitch, frameHeight: pitch, columns, rows },
-          frameIndex: dynamicFrameIndex,
-        });
-
-        if (frameTexture) {
-          layer.sprite.texture = frameTexture;
-        }
-      }
-    }
   }
 
   // -----------------------------------------------------------------------
