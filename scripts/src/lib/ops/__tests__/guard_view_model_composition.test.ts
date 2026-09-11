@@ -7,6 +7,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   collectCompositionViolations,
+  collectRegistryPurityViolations,
   isAggregateServicesSpecifier,
   isServicesBarrelSpecifier,
 } from '../guard_view_model_composition.ts';
@@ -15,6 +16,12 @@ const file = 'apps/frontend/client/src/lib/views/example/example_view_model.svel
 
 const rulesFor = (source: string): string[] =>
   collectCompositionViolations({ file, source }).map((violation) => violation.rule);
+
+const registryRulesFor = (source: string): string[] =>
+  collectRegistryPurityViolations({
+    file: 'apps/frontend/client/src/lib/views/settings/settings_sections.ts',
+    source,
+  }).map((violation) => violation.rule);
 
 describe('isServicesBarrelSpecifier', () => {
   test('matches the barrel and its subpaths', () => {
@@ -92,5 +99,24 @@ describe('collectCompositionViolations — aggregate services root', () => {
   test('ignores relative and unrelated imports', () => {
     expect(rulesFor("import { helper } from './helper.ts';\n")).toEqual([]);
     expect(rulesFor("import type { Foo } from '@aikami/types';\n")).toEqual([]);
+  });
+});
+
+describe('collectRegistryPurityViolations — direct service imports', () => {
+  test('flags direct and nested $lib service paths as C3 violations', () => {
+    expect(registryRulesFor("import { authService } from '$lib/services/auth_service';\n")).toEqual(
+      ['c3'],
+    );
+    expect(
+      registryRulesFor(
+        "import { sessionService } from '$lib/services/game/session/session_service.svelte';\n",
+      ),
+    ).toEqual(['c3']);
+  });
+
+  test('allows type-only imports from direct $lib service paths', () => {
+    expect(
+      registryRulesFor("import type { SessionService } from '$lib/services/game/session';\n"),
+    ).toEqual([]);
   });
 });

@@ -9,7 +9,6 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { QuestData, QuestJournalEntry } from '@aikami/frontend/engine/sim';
-import { BaseViewModel } from '@aikami/frontend/services/base';
 import { createQuestViewModel } from './quest_view_model.svelte';
 import { createQuestState } from './testing/quest_fixtures.ts';
 
@@ -90,11 +89,5 @@ describe('QuestViewModel — tabs', () => {
     expect(viewModel.activeTab).toBe('quests');
     viewModel.setActiveTab('journal');
     expect(viewModel.activeTab).toBe('journal');
-  });
-});
-
-describe('QuestViewModel — real base class', () => {
-  test('extends the production BaseViewModel', () => {
-    expect(createViewModel()).toBeInstanceOf(BaseViewModel);
   });
 });

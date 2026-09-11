@@ -123,7 +123,7 @@ export const aiConnectionStatus = {
     _testResults = {};
     _testingIds = new Set();
     for (const connectionId of Object.keys(_generation)) {
-      delete _generation[connectionId];
+      _generation[connectionId] = (_generation[connectionId] ?? 0) + 1;
     }
   },
 };
