@@ -2,7 +2,7 @@
 //
 // Explicit-capability tests for the Connection Manager. Each test constructs
 // exactly the capabilities it needs — no `$services` barrel mock and no
-// dependency on a shared test inventory.
+// dependency on the test_preload mock inventory.
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { BUILT_IN_PRESETS } from '@aikami/constants';
