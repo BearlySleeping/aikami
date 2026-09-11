@@ -380,6 +380,45 @@ const CONFIG = { timeout: 5000, endpoint: "/api/v2" } as const
   satisfies Record<string, string | number>;                               // check without widening
 ```
 
+## File Size & Cohesion
+
+`guard-source-file-size` (`bun run guard`) stops new oversized,
+multi-responsibility modules — it does not force every file under a number or
+rewrite existing debt. Budgets:
+
+| Source                       | Warning  | Hard limit |
+| ---------------------------- | -------- | ---------- |
+| Handwritten production       | > 500    | > 800      |
+| Tests                        | > 800    | > 1500     |
+| Generated / `.d.ts` / static | excluded | excluded   |
+
+Warnings are **non-failing** signals to look, not build breaks. A **new** file
+over the hard limit fails. Files over it at bootstrap are grandfathered at
+their exact size in `guard_source_file_size_baseline.json` and may not grow;
+shrinking one needs `--update-baseline`, which refuses to add or raise an
+allowance (reductions must be locked in so headroom can't be re-consumed).
+Initial bootstrap is a one-time reviewed act: run
+`bun run scripts/src/lib/ops/guard_source_file_size.ts --bootstrap-baseline`
+once and commit the result; it refuses to run if the baseline exists. CI also
+rejects baseline expansion against the trusted base revision (`BASE_REF`).
+
+A genuinely unsplittable file — cohesive declarative data, a parser/rendering
+kernel, an inseparable test fixture — gets an **exception** in
+`guard_source_file_size_exceptions.json` with an exact `maxLines`, a
+`rationale`, an `owner`, and a `kind` (plus `issue`/`reviewBy` for temporary
+debt). "Too hard to refactor" is not a rationale; there is no blanket
+exemption for `engine/`, `services/`, `tests/`, or `scripts/`.
+
+File size is only a proxy. Before splitting, check: (1) one cohesive
+responsibility; (2) explicit state/resource ownership; (3) narrow dependencies
+and public API; (4) testable without private-state casts; (5) no giant shared
+context or circular imports; (6) a real boundary, not a helper dumping ground.
+**Prefer cohesion over arbitrary splitting** — never delete explanations,
+minify, or merge statements to satisfy a number. Biome's
+`complexity/noExcessiveCognitiveComplexity` is available but disabled today;
+enabling it is a separate, ratchetable policy — a LOC guard is not a
+complexity proof.
+
 ---
 
 ## Import Order
