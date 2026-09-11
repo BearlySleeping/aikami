@@ -24,7 +24,7 @@ created_at: "2026-09-09T00:00:00Z"
 | **Type** | full |
 | **Priority** | P1 — replace inferred geometry and divergent asset interpretations |
 | **Dependencies** | C-504 (implemented, PR #285) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | user-facing — visual asset authoring reference in `apps/frontend/docs/src/content/docs/` |
 | **Contract version** | 2.0.1 |

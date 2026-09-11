@@ -45,6 +45,10 @@ const SEED_PATH = join(GAME_DATA_DIR, 'asset_seed.json');
 const OFFLINE_CORE_PATH = join(GAME_DATA_DIR, 'offline_core.json');
 const CONTENT_PACKS_DIR = join(REPO_ROOT, 'content/packs');
 
+type AssetCreditsFile = {
+  credits: Record<string, { licenses?: readonly string[] }>;
+};
+
 // ---------------------------------------------------------------------------
 // Generation
 // ---------------------------------------------------------------------------
@@ -53,6 +57,7 @@ const CONTENT_PACKS_DIR = join(REPO_ROOT, 'content/packs');
 const buildRows = (options: {
   manifest: AssetManifest;
   hashes: AssetHashesFile;
+  credits: AssetCreditsFile;
 }): { rows: CompactSeedRow[]; skipped: string[] } => {
   const rows: CompactSeedRow[] = [];
   const skipped: string[] = [];
@@ -70,6 +75,7 @@ const buildRows = (options: {
       s: hashEntry.sizeBytes,
       c: entry.category,
       e: entry.ext,
+      l: options.credits.credits[tag]?.licenses ?? [],
     });
   }
 
@@ -163,8 +169,11 @@ if (values.write) {
 
   manifest = await readJson<AssetManifest>(manifestPath);
   const hashes = await readJson<AssetHashesFile>(hashesPath);
+  const credits = await readJson<AssetCreditsFile>(
+    join(resolve(manifestPath, '..'), 'asset_credits.json'),
+  );
 
-  const { rows, skipped } = buildRows({ manifest, hashes });
+  const { rows, skipped } = buildRows({ manifest, hashes, credits });
   if (skipped.length > 0) {
     log.warn(
       `⚠ Skipped ${skipped.length} tag(s) with no hash entry, e.g. ${skipped.slice(0, 3).join(', ')}`,
@@ -177,9 +186,13 @@ if (values.write) {
   try {
     const cpManifest = await readJson<AssetManifest>(contentPacksManifestPath);
     const cpHashes = await readJson<AssetHashesFile>(contentPacksHashesPath);
+    const cpCredits = await readJson<AssetCreditsFile>(
+      join(CONTENT_PACKS_DIR, 'asset_credits.json'),
+    );
     const { rows: cpRows, skipped: cpSkipped } = buildRows({
       manifest: cpManifest,
       hashes: cpHashes,
+      credits: cpCredits,
     });
     rows.push(...cpRows);
     if (cpSkipped.length > 0) {

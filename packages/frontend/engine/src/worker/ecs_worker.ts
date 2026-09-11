@@ -2149,14 +2149,23 @@ self.onmessage = (event: MessageEvent): void => {
             }
           }
 
-          // 7. Set camera map bounds and reset tracking for snap
+          // 7. Snap the camera to the new spawn, THEN apply the map bounds.
+          //    resetCameraTracking() clears the camera coords *and* the
+          //    map-bounds / screen-size configuration. Applying the bounds
+          //    before the reset (the previous order) left `mapPixel*` at 0,
+          //    so the `mapPixelWidth > 0` guard skipped viewport clamping
+          //    entirely and the camera could drift into empty background past
+          //    the map edge (C-497 AC-1/AC-2). Capture the live screen size,
+          //    reset for the snap, then restore both so clamping stays armed.
+          const screenBeforeReset = getScreenSize();
+          resetCameraTracking();
+          setScreenSize({ width: screenBeforeReset.width, height: screenBeforeReset.height });
           //    C-199: Support optional clamping bypass for visual testing.
           setMapBounds({
             width: mapPixelWidth as number,
             height: mapPixelHeight as number,
             disableClamping: disableClamping as boolean | undefined,
           });
-          resetCameraTracking();
 
           // 8. Notify main thread about the player entity (position updated)
           postMessage({ type: 'ENTITY_CREATED', eid: playerEntityId, tint: 0x00ff88 });

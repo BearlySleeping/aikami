@@ -1,4 +1,10 @@
 // packages/frontend/engine/src/systems/camera_system.ts
+
+import {
+  BASE_WORLD_SCALE,
+  DEFAULT_MAP_WORLD_HEIGHT,
+  DEFAULT_MAP_WORLD_WIDTH,
+} from '@aikami/constants';
 import type { World } from 'bitecs';
 import { getComponent, query } from 'bitecs';
 import { CameraFocus } from '../components/camera_focus.ts';
@@ -31,11 +37,12 @@ const ZOOM_LERP_FACTOR = 0.08;
 
 /** World-space scale factor applied by the main-thread world container.
  *
- * Defaults to 4 (matching the initial {@link GameWorld._worldContainer}
- * scale). Updated via {@link setScreenSize} when the main thread reports
- * a new container scale during resize events.
+ * Defaults to {@link BASE_WORLD_SCALE} (the named C-497 policy constant),
+ * matching the initial {@link GameWorld._worldContainer} scale. Updated via
+ * {@link setScreenSize} when the main thread reports a new container scale
+ * during resize events.
  */
-let currentWorldScale = 4;
+let currentWorldScale = BASE_WORLD_SCALE;
 
 /** Reference frame duration in milliseconds (60fps = ~16.67ms). */
 const REFERENCE_FRAME_MS = 1000 / 60;
@@ -108,7 +115,9 @@ const CAMERA_QUERY_TERMS = [CameraFocus, Position];
  *
  * When both width and height are positive, the camera will clamp to keep
  * the viewport within `[0, 0]` → `[mapWidth, mapHeight]` in world pixels.
- * When zero, clamping is disabled (free camera).
+ * When a dimension is zero or missing, the shared default map extent is
+ * substituted (C-497 AC-2) so clamping still engages and the camera is
+ * never left unbounded over empty space.
  *
  * When `disableClamping` is `true`, viewport boundary clamping is
  * bypassed entirely — the camera can track the player to any coordinate,
@@ -126,8 +135,12 @@ export const setMapBounds = (options: {
   height: number;
   disableClamping?: boolean;
 }): void => {
-  mapPixelWidth = options.width;
-  mapPixelHeight = options.height;
+  // C-497 AC-2: a missing/zero map dimension must never leave the camera
+  // unbounded over empty space. Substitute the shared default map extent so
+  // clamping still engages; only an explicit disableClamping bypass disables
+  // viewport boundary enforcement (visual-testing sandboxes).
+  mapPixelWidth = options.width > 0 ? options.width : DEFAULT_MAP_WORLD_WIDTH;
+  mapPixelHeight = options.height > 0 ? options.height : DEFAULT_MAP_WORLD_HEIGHT;
   if (options.disableClamping !== undefined) {
     disableClamping = options.disableClamping;
   }
@@ -142,7 +155,7 @@ export const setMapBounds = (options: {
  * @param options.width - Screen width in CSS pixels.
  * @param options.height - Screen height in CSS pixels.
  * @param options.scale - World-space scale factor applied by the main-thread
- *   world container. Defaults to 4 when omitted or zero.
+ *   world container. Defaults to {@link BASE_WORLD_SCALE} when omitted or zero.
  */
 export const setScreenSize = (options: { width: number; height: number; scale?: number }): void => {
   screenWidth = options.width;
@@ -261,7 +274,7 @@ export const resetCameraTracking = (): void => {
   screenWidth = 0;
   screenHeight = 0;
   initialized = false;
-  currentWorldScale = 4;
+  currentWorldScale = BASE_WORLD_SCALE;
   currentZoom = 1.0;
   targetZoom = 1.0;
   dialogueNpcX = 0;

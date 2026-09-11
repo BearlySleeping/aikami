@@ -8,7 +8,7 @@
 // Capture is always sequential — parallel capture risks corrupting
 // the single WebGL context shared by Chromium headless.
 
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EMULATOR_PORTS } from '@aikami/constants';
 
@@ -118,8 +118,29 @@ const getChromiumPath = (): string | undefined => {
   if (existsSync(NIX_CHROMIUM)) {
     return NIX_CHROMIUM;
   }
-  if (process.env.PLAYWRIGHT_BROWSERS_PATH) {
-    return `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium-1217/chrome-linux64/chrome`;
+  const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (browsersPath) {
+    // Prefer the historically pinned revision, but never point at a path that
+    // does not exist: a stale hard-coded revision makes `chromium.launch()`
+    // fail outright ("executable doesn't exist") even though the toolchain
+    // ships a perfectly good browser. Fall back to whichever `chromium-<rev>`
+    // is actually present, and otherwise return undefined so Playwright
+    // resolves the browser from its own browsers.json revision.
+    const pinned = `${browsersPath}/chromium-1217/chrome-linux64/chrome`;
+    if (existsSync(pinned)) {
+      return pinned;
+    }
+    try {
+      const chromiumDir = readdirSync(browsersPath).find((entry) => entry.startsWith('chromium-'));
+      if (chromiumDir) {
+        const candidate = `${browsersPath}/${chromiumDir}/chrome-linux64/chrome`;
+        if (existsSync(candidate)) {
+          return candidate;
+        }
+      }
+    } catch {
+      // Unreadable browsers path — fall through to Playwright's resolution.
+    }
   }
   return undefined;
 };

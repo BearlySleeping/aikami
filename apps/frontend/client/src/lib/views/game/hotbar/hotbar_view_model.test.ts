@@ -76,6 +76,45 @@ describe('HotbarViewModel — slot derivation', () => {
   });
 });
 
+describe('HotbarViewModel — assigned-slot projection (C-497 AC-3)', () => {
+  test('projects only filled slots from a partially-filled hotbar', () => {
+    const viewModel = createViewModel(
+      createHotbarPlayerState({ hotbarSlots: ['action_surge', '', 'second_wind'] }),
+    );
+
+    expect(viewModel.slots).toHaveLength(6);
+    const assigned = viewModel.assignedSlots;
+    expect(assigned).toHaveLength(2);
+    expect(assigned.map((slot) => slot.featureId)).toEqual(['action_surge', 'second_wind']);
+    expect(assigned.every((slot) => slot.filled)).toBe(true);
+  });
+
+  test('retains true keybind/index on projected slots', () => {
+    const viewModel = createViewModel(
+      createHotbarPlayerState({ hotbarSlots: ['', '', 'action_surge'] }),
+    );
+
+    const [slot] = viewModel.assignedSlots;
+    expect(slot.index).toBe(2);
+    expect(slot.keybind).toBe('3');
+  });
+
+  test('projects nothing when the hotbar is empty', () => {
+    const viewModel = createViewModel(createHotbarPlayerState());
+    expect(viewModel.assignedSlots).toHaveLength(0);
+  });
+
+  test('updates the projected count when an ability is assigned or cleared', () => {
+    const playerState = createHotbarPlayerState({ hotbarSlots: ['action_surge'] });
+    const viewModel = createViewModel(playerState);
+    expect(viewModel.assignedSlots).toHaveLength(1);
+
+    // Simulate clearing slot 0 — the projection re-derives without a reload.
+    playerState.hotbarSlots = [];
+    expect(viewModel.assignedSlots).toHaveLength(0);
+  });
+});
+
 describe('HotbarViewModel — activation', () => {
   test('activateSlot uses the slot ability', () => {
     const useAbility = mock((_featureId: string) => {});

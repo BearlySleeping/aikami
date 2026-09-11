@@ -9,6 +9,7 @@
 // textures.
 
 import {
+  ElapsedTimeActor,
   getLpcFrameIndex,
   getLpcStateRow,
   LpcAnimationState,
@@ -29,62 +30,55 @@ export { getLpcFrameIndex, getLpcStateRow, LpcAnimationState, LpcDirection, velo
 // ---------------------------------------------------------------------------
 
 /**
- * Default tick divisor for walk animation playback speed.
+ * Wall-clock duration of one walk frame in ms (C-496).
  *
- * Matches {@link ANIMATION_TICK_DIVISOR} in render_system.ts so
- * worker-computed and main-thread-computed frame indices stay in sync.
+ * Replaces the old `ANIMATION_TICK_DIVISOR = 8` frame-count divisor: at the
+ * previous ~60fps ticker the walk cycle advanced one frame every 8 ticks ≈
+ * 136ms of continuous movement. The clock now advances by real elapsed
+ * time, so a 60Hz and a 30Hz host move the same sprite at the same speed
+ * without a second, refresh-count clock.
  */
-const ANIMATION_TICK_DIVISOR = 8;
+const FRAME_DURATION_MS = 136;
 
 /**
- * Consecutive zero-delta frames tolerated before the entity is considered
- * idle (C-378).
- *
- * The main-thread ticker (~16.7ms rAF) reads positions from the worker's
- * render-view buffer, which updates on a setTimeout(16) loop that drifts
- * to 20-30ms under load. A single stale read therefore produces a
- * zero-delta frame while the entity is still moving. Without a grace
- * period the controller resets its tick counter on every such frame and
- * the walk cycle never advances past frame 0 — the sprite slides with no
- * walking animation. A ~100ms grace (≈6 frames) absorbs the jitter while
- * keeping the idle→frame-0 lock responsive when the player really stops.
+ * Default delta (ms) applied per `update` call when the caller does not
+ * supply real elapsed time (e.g. unit tests). Roughly one 60fps tick (17ms).
  */
-const IDLE_GRACE_FRAMES = 6;
+const DEFAULT_DELTA_MS = 17;
+
+/**
+ * Consecutive zero-delta idle time tolerated before the entity is considered
+ * idle (C-378, C-496). Roughly ~102ms (≈6 frames at 60fps), absorbing the
+ * worker render-buffer drift while keeping the idle→frame-0 lock responsive.
+ */
+const IDLE_GRACE_MS = 102;
 
 /**
  * Per-entity animation state machine for the main thread.
  *
- * Tracks facing direction, walk/idle state, and a monotonic tick counter.
- * On each frame, the caller feeds the entity's current world-space position
- * via {@link update}. The controller computes the delta from the last known
- * position, derives the facing direction via {@link velocityToDirection},
- * and transitions between Walk (non-zero delta) and Idle (zero delta) states.
+ * Tracks facing direction, walk/idle state, and a monotonic elapsed-time
+ * clock ({@link ElapsedTimeActor}). On each frame the caller feeds the
+ * entity's current world-space position and the real elapsed wall-clock
+ * delta; the controller derives facing direction from the movement vector
+ * and advances the clock only while the entity is moving.
  *
  * The returned frame index is a zero-based spritesheet index (row-major)
- * suitable for passing to {@link TextureManager.getFrameAt}.
- *
- * Idle entities lock to frame 0 of the Walk row for their last known
- * direction. Moving entities cycle through the full walk frame range at
- * a playback speed controlled by {@link ANIMATION_TICK_DIVISOR}.
+ * suitable for passing to {@link TextureManager.getFrameAt}. Idle entities
+ * lock to frame 0 of the Walk row for their last known direction.
  *
  * Usage:
  * ```typescript
  * const anim = new AnimationController();
- * // Each frame:
- * const frameIndex = anim.update({ x: entityX, y: entityY });
- * const frameTexture = textureManager.getFrameAt({
- *   texture: sheet,
- *   layout: { frameWidth: 64, frameHeight: 64, columns: 13 },
- *   frameIndex,
- * });
+ * // Each ticker frame (ticker.deltaMS ≈ 16.7ms at 60Hz):
+ * const frameIndex = anim.update({ x: entityX, y: entityY, deltaMs: ticker.deltaMS });
  * ```
  */
 export class AnimationController {
   /** Current facing direction based on last non-zero movement delta. */
   private _direction: LpcDirection = LpcDirection.Down;
 
-  /** Monotonic tick counter, reset to 0 on idle transition. */
-  private _tickCount = 0;
+  /** Monotonic elapsed-time clock, reset to 0 on idle transition. */
+  private readonly _clock = new ElapsedTimeActor();
 
   /** Last known world-space X position. */
   private _lastX = 0;
@@ -98,30 +92,32 @@ export class AnimationController {
   /** Whether the entity is currently in idle state (zero velocity). */
   private _idle = true;
 
-  /** Consecutive zero-delta frames — resets on any movement frame. */
-  private _consecutiveIdleFrames = 0;
+  /** Consecutive zero-delta idle time in ms — resets on any movement frame. */
+  private _consecutiveIdleMs = 0;
 
   /**
-   * Updates the animation state machine with the entity's current
-   * world-space position.
+   * Updates the animation state machine with the entity's current world-space
+   * position and the real elapsed wall-clock delta since the last frame.
    *
    * On the first call, records the position and returns frame 0 for the
-   * default direction (Down). On subsequent calls, computes the delta
-   * from the last position to determine movement and facing direction.
+   * default direction (Down). On subsequent calls, computes the delta from
+   * the last position to determine movement and facing direction.
    *
-   * Zero-delta frames are treated as "no new data" (stale render-view
-   * read) rather than instant idle: the walk cycle keeps advancing as
-   * long as the entity was moving within the last
-   * {@link IDLE_GRACE_FRAMES} frames. Only a sustained zero-delta run
-   * (≥ IDLE_GRACE_FRAMES) locks the sprite to the idle frame (C-378).
+   * Zero-delta frames are treated as "no new data" (stale render-view read)
+   * rather than instant idle: the walk cycle keeps advancing as long as the
+   * entity was moving within the last {@link IDLE_GRACE_MS}. Only a sustained
+   * zero-delta run (≥ IDLE_GRACE_MS) locks the sprite to the idle frame.
    *
    * @param options - Update options.
    * @param options.x - Current world-space X position.
    * @param options.y - Current world-space Y position.
+   * @param options.deltaMs - Real elapsed wall-clock time since the last
+   *   update in ms (from the ticker). Falls back to {@link DEFAULT_DELTA_MS}.
    * @returns The zero-based spritesheet frame index for this frame.
    */
-  update(options: { x: number; y: number }): number {
+  update(options: { x: number; y: number; deltaMs?: number }): number {
     const { x, y } = options;
+    const deltaMs = options.deltaMs ?? DEFAULT_DELTA_MS;
 
     if (!this._hasLastPosition) {
       this._lastX = x;
@@ -138,22 +134,25 @@ export class AnimationController {
     const isMoving = dx !== 0 || dy !== 0;
 
     if (isMoving) {
-      this._consecutiveIdleFrames = 0;
+      this._consecutiveIdleMs = 0;
       this._direction = velocityToDirection(dx, dy);
       this._idle = false;
-      this._tickCount += 1;
+      // Advance the single elapsed-time clock; playback speed is determined
+      // by wall-clock time, never by how many refresh ticks fired (C-496).
+      this._clock.advance(deltaMs);
     } else {
-      this._consecutiveIdleFrames += 1;
-      if (this._consecutiveIdleFrames >= IDLE_GRACE_FRAMES && !this._idle) {
+      this._consecutiveIdleMs += deltaMs;
+      this._clock.advance(deltaMs);
+      if (this._consecutiveIdleMs >= IDLE_GRACE_MS && !this._idle) {
         // Sustained zero-delta — genuinely stopped. Lock to frame 0.
         this._idle = true;
-        this._tickCount = 0;
+        this._clock.reset();
       }
     }
-    // While moving (or within the grace window), tickCount keeps
+    // While moving (or within the grace window), the elapsed clock keeps
     // accumulating so the walk cycle advances across stale reads.
 
-    const effectiveTicks = Math.floor(this._tickCount / ANIMATION_TICK_DIVISOR);
+    const effectiveTicks = this.effectiveTickCount;
     return getLpcFrameIndex(LpcAnimationState.Walk, this._direction, effectiveTicks);
   }
 
@@ -167,20 +166,25 @@ export class AnimationController {
     return this._idle;
   }
 
-  /** The computed frame index for the current state/direction/tick. */
+  /** The monotonic elapsed wall-clock time in ms for this entity (AC-5). */
+  get elapsedMs(): number {
+    return this._clock.elapsedMs;
+  }
+
+  /** The computed frame index for the current state/direction/elapsed time. */
   get frameIndex(): number {
-    const effectiveTicks = Math.floor(this._tickCount / ANIMATION_TICK_DIVISOR);
+    const effectiveTicks = this.effectiveTickCount;
     return getLpcFrameIndex(LpcAnimationState.Walk, this._direction, effectiveTicks);
   }
 
   /**
-   * The effective tick count after divisor scaling.
+   * The effective frame step after elapsed-time scaling.
    *
-   * Suitable for modulus-wrapping against a custom frame count when
-   * the spritesheet layout differs from the standard 13-column LPC grid.
+   * Suitable for modulus-wrapping against a custom frame count when the
+   * spritesheet layout differs from the standard 13-column LPC grid.
    */
   get effectiveTickCount(): number {
-    return Math.floor(this._tickCount / ANIMATION_TICK_DIVISOR);
+    return Math.floor(this._clock.elapsedMs / FRAME_DURATION_MS);
   }
 
   /**
@@ -198,14 +202,14 @@ export class AnimationController {
     return effective % columns;
   }
 
-  /** Resets all internal state (position tracking, ticks, direction). */
+  /** Resets all internal state (position tracking, elapsed clock, direction). */
   reset(): void {
     this._direction = LpcDirection.Down;
-    this._tickCount = 0;
+    this._clock.reset();
     this._lastX = 0;
     this._lastY = 0;
     this._hasLastPosition = false;
     this._idle = true;
-    this._consecutiveIdleFrames = 0;
+    this._consecutiveIdleMs = 0;
   }
 }

@@ -24,7 +24,7 @@ created_at: "2026-09-10T00:00:00Z"
 | **Type** | thin |
 | **Priority** | P2 — scale and composition strongly affect perceived sprite quality; cheap to fix, highly visible |
 | **Dependencies** | None (preserve C-505 and C-506, both implemented; do not regress their scene semantics or readability work) |
-| **Status** | approved |
+| **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal |
 | **Contract version** | 2.0.0 |
