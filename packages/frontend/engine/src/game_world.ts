@@ -35,6 +35,21 @@ import {
   unprojectScreenPoint,
 } from './frame_pacing.ts';
 import {
+  exposeEngineState,
+  isE2ETestMode,
+  isVisualScreenshotMode,
+  publishEntityPosition,
+  publishPlayerDebug,
+  publishPlayerVisibleByMask,
+  resetEntityPositions,
+} from './game_world/diagnostics.ts';
+import {
+  type HeartbeatEvent,
+  type WorkerFailure,
+  type WorkerOutboundMessage,
+  WorkerSession,
+} from './game_world/worker_session.ts';
+import {
   createPixiApp,
   DEFAULT_HEIGHT,
   DEFAULT_WIDTH,
@@ -62,20 +77,17 @@ import type { CollisionGrid } from './systems/collision_system.ts';
 import { keyToDirection } from './systems/keybinding_config.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { type FrameUvResolver, renderTilemap } from './systems/tilemap_render_system.ts';
-import type { GameEvent } from './types.ts';
+import type { GameCommand } from './types.ts';
+import type {
+  EntityCreatedMessage,
+  StateUpdateMessage,
+  WorkerMessage,
+} from './worker/worker_protocol.ts';
 
-// Vite ?worker&type=module import for the bootstrap entry point.
-//
-// MUST NOT be inlined (?worker&inline): the bootstrap dynamic-imports
-// ./ecs_worker.ts, and a relative dynamic import cannot resolve inside a
-// blob/data-URL worker (no path base) — the module never evaluates and the
-// engine silently hangs (LOAD_MAP timeout). A real worker file keeps the
-// dynamic-import chunk resolvable at its emitted URL.
-//
-// The import is lazy (dynamic) so non-Vite runtimes — e.g. bun's test
-// runner — can evaluate this module without resolving the `?worker` query
-// (Vite-specific syntax). `_spawnWorker` loads the constructor on first use.
-type EcsWorkerConstructor = new () => Worker;
+// The Vite `?worker&type=module` bootstrap import now lives in
+// ./game_world/worker_session.ts, which owns worker creation. It stays a lazy
+// dynamic import so non-Vite runtimes (e.g. bun's test runner) can evaluate
+// this module without resolving the `?worker` query.
 
 /**
  * Milliseconds the hover cell highlight stays visible after the last pointer
@@ -89,8 +101,8 @@ const HOVER_HIGHLIGHT_TIMEOUT_MS = 1000;
 //
 // The worker owns the bitECS world and all game systems. The main thread
 // owns the PixiJS renderer and the EngineBridge for UI communication.
-// Entity state flows worker → main via SharedArrayBuffer (or N-buffer
-// Transferable fallback).
+// Entity state flows worker → main via transferable ArrayBuffers (the
+// zero-copy SharedArrayBuffer path was removed).
 // ---------------------------------------------------------------------------
 
 /** Base movement speed in pixels per second — copied from input_system. */
@@ -320,11 +332,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Optional game AI service for AI-powered features. */
   private _aiService: GameAiService | undefined;
 
-  /** Optional factory for creating the worker (Vite ?worker import). */
-  private readonly _workerFactory?: () => Worker;
-
-  /** Lazily-loaded Vite `?worker` constructor (see module top comment). */
-  private _workerConstructor: EcsWorkerConstructor | undefined;
+  /** Owns worker creation, typed messaging, correlation, and heartbeat. */
+  private readonly _session: WorkerSession;
   /** Set by destroy() so in-flight async init paths can abort early. */
   private _disposed = false;
 
@@ -355,13 +364,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Weather overlay quad for procedural rain/fog (C-213). */
   private _weatherOverlay: WeatherOverlay | undefined;
 
-  /**
-   * Rejects the pending _postLoadMap or restoreWorld promise when the
-   * worker crashes. Set by _postLoadMap / restoreWorld, cleared on
-   * resolve/reject. Prevents the boot pipeline from hanging forever.
-   */
-  private _pendingWorkerReject: ((reason: Error) => void) | undefined;
-
   /** The PixiJS Application (owns the canvas, ticker, stage). */
   private _app: Application | undefined;
 
@@ -380,8 +382,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private _worldContainer: Container | undefined;
 
-  /** The Web Worker running the bitECS simulation. */
-  private _worker: Worker | undefined;
+  /** The Web Worker running the bitECS simulation (owned by the session). */
+  private get _worker(): Worker | undefined {
+    return this._session.worker;
+  }
 
   /** The entity ID of the player entity (set from worker ENTITY_CREATED). */
   private _playerEntityId = 0;
@@ -437,43 +441,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Whether the game loop is currently running. */
   private _running = false;
 
-  // ── Worker heartbeat (C-332) ──
+  // ── Worker heartbeat (C-332) — owned by WorkerSession ──
 
-  /** Heartbeat interval timer handle. */
-  private _heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   /** Unsubscribe function for the MAP_LOADED listener. */
   private _mapLoadedUnsubscribe: (() => void) | undefined;
 
   /** Unsubscribe function for the pointer input listener (C-380). */
   private _pointerInputTeardown: (() => void) | undefined;
-  /** Timestamp of the last pong received from the worker (ms). */
-  private _lastPongMs = 0;
-  /** Number of consecutive missed heartbeats. */
-  private _missedHeartbeats = 0;
-  /** Heartbeat interval in milliseconds. */
-  private static readonly _heartbeatIntervalMs = 2000;
-  /** Last known tickCount from the worker (0 if never received). */
-  private _lastKnownTickCount = 0;
-  /** Baseline tickCount from the previous heartbeat cycle (for stale-tick detection). */
-  private _lastCheckedTickCount = 0;
-  /** Number of consecutive heartbeat cycles with no tickCount progress. */
-  private _staleTickCycles = 0;
-  /**
-   * N-buffer transfer accounting, for diagnosing a stalled simulation.
-   *
-   * The worker only increments tickCount *after* it secures a writable
-   * buffer, so a tickCount frozen at exactly FALLBACK_BUFFER_COUNT means
-   * every buffer was transferred to this thread and none came back — a
-   * recycle-path failure, not a dead tick timer. These counters tell the
-   * two apart in the stall warning instead of requiring a re-run.
-   */
-  private _lastWritableBufferCount = -1;
-  /** SYNC messages carrying a transferred buffer. */
-  private _syncWithBufferCount = 0;
-  /** SYNC messages with no buffer (events only) — these never recycle. */
-  private _syncWithoutBufferCount = 0;
-  /** Buffers posted back to the worker via RECYCLE_BUFFER. */
-  private _recycledBufferCount = 0;
+
+  /** Bridge command registrations owned by this world (released on destroy). */
+  private _commandUnsubscribes: Array<() => void> = [];
 
   /** PixiJS ticker callback reference for teardown. */
   private _tickerCallback: ((ticker: Ticker) => void) | undefined;
@@ -528,6 +505,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Wall-clock timestamp when the current state was received. */
   private _currentStateReceivedAt = 0;
+
+  /**
+   * Monotonic scene generation.
+   *
+   * Bumped at the start of every scene transition (loadMap/restore). Async
+   * prepare phases capture the generation they started under and abort
+   * before applying anything if a newer transition has superseded them —
+   * a stale load can never mutate a newer scene.
+   */
+  private _sceneGeneration = 0;
 
   // -- C-380 AC-6: Cursor feedback ----------------------------------------
 
@@ -652,19 +639,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    */
   private _lastReportedGameHour: number | undefined;
 
-  /**
-   * Cached result of the `screenshot=true` URL check — computed once, since
-   * it cannot change without a page load (C-378 performance pass: the check
-   * used to rebuild URLSearchParams on every ticker frame).
-   */
-  private _visualScreenshotMode: boolean | undefined;
-
   constructor(options: GameWorldOptions) {
     super(options);
     this._bridge = options.bridge;
     this._apiService = options.apiService;
     this._aiService = options.aiService;
-    this._workerFactory = options.workerFactory;
     this._recipeResolver = options.recipeResolver;
     this._assetUrlResolver = options.assetUrlResolver;
     this._equipmentRecipeProvider = options.equipmentRecipeProvider;
@@ -673,6 +652,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._lpcCatalog = options.lpcCatalog;
     this._resolveTag = options.resolveTag;
     this._releaseUrl = options.releaseUrl;
+
+    this._session = new WorkerSession({
+      workerFactory: options.workerFactory,
+      onMessage: (message) => this._handleWorkerMessage(message),
+      onFailure: (failure) => this._handleWorkerFailure(failure),
+      onHeartbeat: (event) => this._handleHeartbeatEvent(event),
+      shouldCheckStall: () => !this._inputLocked,
+    });
   }
 
   /**
@@ -937,14 +924,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
     // Notify the worker so the camera system updates its screen dimensions
     // and recalculates clamping with the active world container scale.
-    if (this._worker) {
-      this._worker.postMessage({
-        type: 'SET_SCREEN_SIZE',
-        width: safeWidth,
-        height: safeHeight,
-        scale: this._worldContainer?.scale.x ?? BASE_WORLD_SCALE,
-      });
-    }
+    this._session.post({
+      type: 'SET_SCREEN_SIZE',
+      width: safeWidth,
+      height: safeHeight,
+      scale: this._worldContainer?.scale.x ?? BASE_WORLD_SCALE,
+    });
   }
 
   /**
@@ -977,15 +962,21 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Stop the render loop
     this._running = false;
 
-    // ── Clear any pending worker promise so timeouts don't fire after teardown ──
-    // Reject any in-flight restoreWorld/postLoadMap operations before clearing
-    if (this._pendingWorkerReject) {
-      this._pendingWorkerReject(new Error('GameWorld destroyed during pending worker operation'));
-      this._pendingWorkerReject = undefined;
-    }
-
-    // ── C-332: Stop worker heartbeat ──
+    // ── C-332: Tear the worker session down ──
+    // Rejects every pending worker request exactly once, stops the
+    // heartbeat, detaches handlers, and terminates the worker.
+    this._session.terminate();
     this._stopHeartbeat();
+
+    // Release only the bridge registrations this world owns — command
+    // forwarders and snapshot/restore delegates. Never reset() the bridge:
+    // that would also drop UI listeners registered by other consumers.
+    for (const unsubscribe of this._commandUnsubscribes) {
+      unsubscribe();
+    }
+    this._commandUnsubscribes = [];
+    this._bridge.setSnapshotHandler(undefined);
+    this._bridge.setRestoreHandler(undefined);
 
     if (this._app && this._tickerCallback) {
       this._app.ticker.remove(this._tickerCallback);
@@ -1004,18 +995,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._pointerInputTeardown = undefined;
     }
 
-    // Terminate the worker
-    if (this._worker) {
-      this._worker.terminate();
-      this._worker = undefined;
-    }
-
     // Release buffer references
     this._bufferPool = [];
     this._activeRenderView = undefined;
 
     // Clear render entries
     this._renderEntries.clear();
+    resetEntityPositions();
 
     // Destroy services
     this._apiService?.destroy();
@@ -1049,48 +1035,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /**
    * Detects whether the engine is running in E2E visual test mode.
    *
-   * Checks URL search params (`?e2e=true`) and a global window flag
-   * (`window.__AIKAMI_E2E_TEST_MODE__`) set by Playwright before
-   * page navigation.
+   * Delegates to the diagnostics boundary; see {@link isE2ETestMode}.
    */
   private _isE2ETestMode(): boolean {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    try {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('e2e') === 'true') {
-        return true;
-      }
-    } catch {
-      // window.location may be unavailable (SSR)
-    }
-    return !!(window as unknown as Record<string, unknown>).__AIKAMI_E2E_TEST_MODE__; // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
+    return isE2ETestMode();
   }
 
   /**
-   * True in visual-screenshot mode (the visual runner always injects
-   * `screenshot=true`). Used to freeze time-varying rendering (C-378 visual
-   * determinism): the tilemap clock is pinned so animated tiles render
-   * identically across runs.
+   * True in visual-screenshot mode. Delegates to the diagnostics boundary,
+   * which memoizes the immutable URL check.
    */
   private _isVisualScreenshotMode(): boolean {
-    if (this._visualScreenshotMode !== undefined) {
-      return this._visualScreenshotMode;
-    }
-    if (typeof window === 'undefined') {
-      this._visualScreenshotMode = false;
-      return false;
-    }
-    let enabled = false;
-    try {
-      const params = new URLSearchParams(window.location.search);
-      enabled = params.get('screenshot') === 'true';
-    } catch {
-      // window.location may be unavailable (SSR)
-    }
-    this._visualScreenshotMode = enabled;
-    return enabled;
+    return isVisualScreenshotMode();
   }
 
   /**
@@ -1098,10 +1054,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * can await specific bitECS conditions before capturing screenshots.
    */
   private _exposeEngineState(): void {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const state = {
+    exposeEngineState({
       frozen: !this._running,
       entityCount: this._renderEntries.size,
       // C-400 AC-1: spawned NPC count (entities created with npcData — authored
@@ -1111,8 +1064,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       playerEntityId: this._playerEntityId,
       cameraX: this._cameraX,
       cameraY: this._cameraY,
-    } as const;
-    (window as unknown as Record<string, unknown>).__AIKAMI_ENGINE_STATE__ = state; // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
+    });
   }
 
   /**
@@ -1129,6 +1081,23 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._bufferPool.push(createEngineBuffer(BUFFER_SIZE));
     }
     // No active render view yet — first STATE_UPDATE will provide one
+  }
+
+  /**
+   * Drops retained interpolation/camera history at a scene discontinuity.
+   *
+   * Without this, the first STATE_UPDATE after a map switch or restore
+   * would blend the previous map's entity positions and camera with the new
+   * scene's, producing a one-frame smear. Camera history is reseeded from
+   * the current camera so the world does not jump on resume.
+   */
+  private _resetInterpolationHistory(): void {
+    this._previousRenderView = undefined;
+    this._lastStateTiming = undefined;
+    this._previousSimTimeMs = 0;
+    this._currentStateReceivedAt = 0;
+    this._previousCameraX = this._cameraX;
+    this._previousCameraY = this._cameraY;
   }
 
   // -----------------------------------------------------------------------
@@ -1151,96 +1120,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     collisionGrid?: CollisionGrid,
     lpcCatalog?: readonly LpcSlotCatalog[],
   ): Promise<void> {
-    if (this._workerFactory) {
-      this.debug('spawnWorker:using-workerFactory');
-      this._worker = this._workerFactory();
-    } else {
-      if (!this._workerConstructor) {
-        try {
-          const workerModule = await import('./worker/ecs_worker_bootstrap.ts?worker&type=module');
-          this._workerConstructor = workerModule.default as EcsWorkerConstructor;
-        } catch (error) {
-          this.error('spawnWorker:import-failed', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-          // Clean up partial state so initialize() can be retried
-          this._workerConstructor = undefined;
-          this._worker = undefined;
-          throw error;
-        }
-      }
-
-      // Check if destroy() was called during the await above
-      if (this._disposed) {
-        this.warn('spawnWorker:aborted-after-import', {
-          reason: 'GameWorld was destroyed during worker module import',
-        });
-        return;
-      }
-
-      this._worker = new this._workerConstructor();
-      this.debug('spawnWorker:created', { name: this._workerConstructor.name });
-    }
-
-    const worker = this._worker;
-    if (!worker) {
-      this.error('spawnWorker: worker is undefined after creation');
-      return;
-    }
-
-    // ── Set up error handler BEFORE postMessage so any synchronous
-    // module-evaluation error in the worker is captured. ──
-    worker.onerror = (error: ErrorEvent): void => {
-      const detail = {
-        message: error.message || '(no message)',
-        filename: error.filename || '(unknown)',
-        lineno: error.lineno,
-        colno: error.colno,
-        errorMessage:
-          error.error instanceof Error ? error.error.message : String(error.error ?? 'none'),
-        errorStack: error.error instanceof Error ? error.error.stack : undefined,
-        errorConstructor: error.error?.constructor?.name ?? 'none',
-      };
-      this.error('[GameWorld] Worker error', detail);
-
-      // Mark worker as dead so pending operations fail fast
-
-      // Reject any pending load/restore promise so the boot pipeline
-      // doesn't hang forever waiting for a crashed worker.
-      if (this._pendingWorkerReject) {
-        this._pendingWorkerReject(
-          new Error(`Worker crashed: ${detail.message} @ ${detail.filename}:${detail.lineno}`),
-        );
-        this._pendingWorkerReject = undefined;
-      }
-
-      this._bridge.emit({
-        type: 'GAME_ERROR',
-        message: `Worker: ${detail.message} @ ${detail.filename}:${detail.lineno}:${detail.colno}`,
-      });
-    };
-
-    // ── C-332: Handle worker message serialization errors ──
-    worker.onmessageerror = (event: MessageEvent): void => {
-      this.error('[GameWorld] Worker message serialization error', {
-        data: typeof event.data,
-      });
-      if (this._pendingWorkerReject) {
-        this._pendingWorkerReject(
-          new Error('Worker message serialization error — data could not be deserialized'),
-        );
-        this._pendingWorkerReject = undefined;
-      }
-      this._bridge.emit({
-        type: 'GAME_ERROR',
-        message: 'Worker message serialization error — data could not be deserialized',
-      });
-    };
-
-    // Send initialization message with buffers
-    worker.postMessage(
-      {
-        type: 'INITIALIZE_ENGINE',
+    try {
+      await this._session.start({
         canvasWidth,
         canvasHeight,
         buffers: this._bufferPool,
@@ -1248,22 +1129,26 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         playerData,
         collisionGrid,
         lpcCatalog,
-      },
-      // ── RC-1 FIX: Transfer buffers to worker, don't structure-clone ──
-      // Without the transferables array, postMessage clones the 3 buffers
-      // instead of transferring ownership. This creates 6 distinct buffers
-      // — the main thread's 3 originals and the worker's 3 clones — which
-      // are completely disjoint pools.
-      [...this._bufferPool],
-    );
-    // Ownership moved to worker — clear main-thread references
-    this._bufferPool = [];
-    this._activeRenderView = undefined;
+      });
+    } catch (error) {
+      this.error('spawnWorker:failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      this._bufferPool = [];
+      this._activeRenderView = undefined;
+      throw error;
+    }
 
-    // Set up message listener for worker → main communication
-    worker.onmessage = (event: MessageEvent): void => {
-      this._handleWorkerMessage(event.data);
-    };
+    // Abort if destroy() ran during the async worker import — never
+    // resurrect a disposed world's event wiring.
+    if (this._disposed || !this._session.worker) {
+      this.warn('spawnWorker:aborted-after-import', {
+        reason: 'GameWorld was destroyed during worker initialization',
+      });
+      this._bufferPool = [];
+      this._activeRenderView = undefined;
+      return;
+    }
 
     // Forward bridge commands to the worker
     this._setupCommandForwarding();
@@ -1273,9 +1158,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // the worker's tick loop is paused/restarted during LOAD_MAP in the boot
     // pipeline. MAP_LOADED signals the game is fully interactive.
     this._mapLoadedUnsubscribe = this._bridge.on('MAP_LOADED', () => {
-      if (!this._heartbeatTimer) {
-        this._startHeartbeat();
-      }
+      this._session.startHeartbeat();
     });
 
     // Register snapshot/restore handlers on the bridge
@@ -1289,11 +1172,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /**
    * Handles messages received from the simulation worker.
    */
-  private _handleWorkerMessage(message: { type: string } & Record<string, unknown>): void {
+  private _handleWorkerMessage(message: WorkerMessage): void {
     switch (message.type) {
-      case 'SYNC':
       case 'STATE_UPDATE': {
         this._handleStateUpdate(message);
+        break;
+      }
+
+      case 'SYNC': {
+        // Events-only sync (no buffer swap) — normalize to the shared handler.
+        this._handleStateUpdate({ ...message, type: 'STATE_UPDATE' });
         break;
       }
 
@@ -1303,7 +1191,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       case 'ENGINE_READY': {
-        this._pendingWorkerReject = undefined;
+        // Correlated completion is settled by WorkerSession. This path keeps
+        // the UI-visible ready signal for boot and restores.
         this._bridge.emit({ type: 'GAME_READY' });
         break;
       }
@@ -1321,23 +1210,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       case 'ENGINE_ERROR': {
-        if (this._pendingWorkerReject) {
-          this._pendingWorkerReject(new Error(message.message as string));
-          this._pendingWorkerReject = undefined;
-        }
         this._bridge.emit({
           type: 'GAME_ERROR',
-          message: message.message as string,
+          message: message.message ?? 'Unknown engine error',
         });
         break;
       }
 
       case 'ENGINE_FATAL': {
         // ── RC-2: Unrecoverable — terminate the worker ──
-        this.error('[GameWorld] ENGINE_FATAL', { message: message.message as string });
+        this.error('[GameWorld] ENGINE_FATAL', { message: message.message });
         this._bridge.emit({
           type: 'GAME_ERROR',
-          message: `FATAL: ${message.message as string}`,
+          message: `FATAL: ${message.message ?? 'unknown'}`,
         });
 
         // Terminate the worker immediately on fatal errors (detached
@@ -1357,7 +1242,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       case 'DIAGNOSTIC_MODULE_LOADED': {
         // Phase 1: bootstrap loaded (ecs_worker_bootstrap.ts)
         this.debug('[GameWorld] worker bootstrap loaded', {
-          timestamp: message.timestamp as number,
+          timestamp: message.timestamp,
         });
         break;
       }
@@ -1365,15 +1250,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       case 'DIAGNOSTIC_WORKER_EVALUATED': {
         // Phase 2: all 56 ECS worker imports resolved successfully
         this.debug('[GameWorld] worker fully evaluated — all imports OK', {
-          timestamp: message.timestamp as number,
+          timestamp: message.timestamp,
         });
-        break;
-      }
-
-      // ── C-332: Worker heartbeat — record pong timestamp ──
-      case 'PONG': {
-        this._lastPongMs = performance.now();
-        this._missedHeartbeats = 0;
         break;
       }
 
@@ -1384,13 +1262,51 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   /**
+   * Surfaces a worker transport failure on the bridge and logs it.
+   *
+   * Pending requests are already rejected by {@link WorkerSession}; this
+   * only translates the failure into the engine's error event.
+   */
+  private _handleWorkerFailure(failure: WorkerFailure): void {
+    if (failure.kind === 'error') {
+      this.error('[GameWorld] Worker error', failure.detail);
+      this._bridge.emit({
+        type: 'GAME_ERROR',
+        message: `Worker: ${failure.detail.message} @ ${failure.detail.filename}:${failure.detail.lineno}:${failure.detail.colno}`,
+      });
+      return;
+    }
+    this.error('[GameWorld] Worker transport failure', { kind: failure.kind });
+    this._bridge.emit({ type: 'GAME_ERROR', message: failure.message });
+  }
+
+  /** Logs heartbeat observations (control flow stays in WorkerSession). */
+  private _handleHeartbeatEvent(event: HeartbeatEvent): void {
+    if (event.kind === 'stall') {
+      this.warn('[GameWorld] WARN: Simulation stalled — tickCount unchanged for 3 heartbeats', {
+        tickCount: event.tickCount,
+        staleCycles: event.staleCycles,
+        writableBufferCount: event.writableBufferCount,
+        syncWithBuffer: event.syncWithBuffer,
+        syncWithoutBuffer: event.syncWithoutBuffer,
+        recycled: event.recycled,
+      });
+      return;
+    }
+    this.warn('[GameWorld] WARN: Worker engine heartbeat missed!', {
+      elapsedMs: event.elapsedMs,
+      missedCount: event.missedCount,
+    });
+  }
+
+  /**
    * Handles a STATE_UPDATE message from the worker.
    *
    * Swaps the active render view, stores the camera position, and
    * re-emits bridged events.
    */
-  private _handleStateUpdate(message: { type: string } & Record<string, unknown>): void {
-    const newBuffer = message.buffer as ArrayBuffer | undefined;
+  private _handleStateUpdate(message: StateUpdateMessage): void {
+    const newBuffer = message.buffer;
 
     // Preserve the old state before applying the incoming camera and timing.
     // The active buffer is recycled below, so its render data must be copied.
@@ -1408,9 +1324,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       typeof message.stepMs === 'number'
     ) {
       this._lastStateTiming = {
-        tick: message.tick as number,
-        simTimeMs: message.simTimeMs as number,
-        stepMs: message.stepMs as number,
+        tick: message.tick,
+        simTimeMs: message.simTimeMs,
+        stepMs: message.stepMs,
       };
     }
 
@@ -1428,56 +1344,33 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // N-buffer transfer cycle — the worker transferred ownership of the
-    // buffer. Swap the render view and recycle the old buffer. A SYNC-only
-    // message (e.g. the post-LOAD_MAP APPEARANCE_CHANGED batch from the
-    // worker) carries NO buffer — skip the swap but still process its
-    // events below, otherwise the player stays a tinted placeholder square
-    // on every portal transition (C-378).
+    // buffer. Swap the render view and recycle the old buffer through the
+    // session, which owns the transfer accounting. A SYNC-only message
+    // (e.g. the post-LOAD_MAP APPEARANCE_CHANGED batch from the worker)
+    // carries NO buffer — skip the swap but still process its events below,
+    // otherwise the player stays a tinted placeholder square on every portal
+    // transition (C-378).
     if (newBuffer) {
-      this._syncWithBufferCount++;
-
       // ── RC-1 FIX: Recycle the outgoing buffer being replaced, not a
       // FIFO shift from a ring buffer that has no relation to what the
       // worker actually owns. After INITIALIZE_ENGINE with transferables,
       // _bufferPool is empty — and even before the fix, the original
       // buffers were clones disconnected from the worker's pool. ──
       const outgoing = this._activeRenderView?.buffer as ArrayBuffer | undefined;
-      if (outgoing && outgoing.byteLength > 0 && this._worker) {
-        this._worker.postMessage({ type: 'RECYCLE_BUFFER', buffer: outgoing }, [outgoing]);
-        this._recycledBufferCount++;
-      }
-
+      this._session.recycleBuffer(outgoing);
       this._activeRenderView = new Float32Array(newBuffer);
       this._currentStateReceivedAt = performance.now();
-    } else {
-      this._syncWithoutBufferCount++;
-    }
-
-    // ── C-332: Extract tickCount for semantic heartbeat ──
-    const ack = message.ack as { tickCount?: number; writableBufferCount?: number } | undefined;
-    if (typeof ack?.tickCount === 'number') {
-      this._lastKnownTickCount = ack.tickCount;
-    }
-    if (typeof ack?.writableBufferCount === 'number') {
-      this._lastWritableBufferCount = ack.writableBufferCount;
     }
 
     // C-379 AC-2: forward the player's vision mask onto the debug bridge
     // so E2E can assert the vision system actually marks the player visible.
     if (typeof message.playerVisibleByMask === 'number') {
       this._playerVisibleByMask = message.playerVisibleByMask;
-      if (typeof window !== 'undefined') {
-        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
-          | Record<string, unknown>
-          | undefined;
-        if (debug) {
-          debug.playerVisibleByMask = message.playerVisibleByMask;
-        }
-      }
+      publishPlayerVisibleByMask(message.playerVisibleByMask);
     }
 
     // Re-emit events through the bridge
-    const events = message.events as GameEvent[] | undefined;
+    const events = message.events;
     if (events) {
       for (const gameEvent of events) {
         // Intercept APPEARANCE_CHANGED for composited sprite invalidation
@@ -1570,9 +1463,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Creates a PixiJS display object for the entity and registers it
    * in the main-thread render map. For NPCs, also stores NPC metadata.
    */
-  private _handleEntityCreated(message: { type: string } & Record<string, unknown>): void {
-    const eid = message.eid as number;
-    const tint = message.tint as number;
+  private _handleEntityCreated(message: EntityCreatedMessage): void {
+    const eid = message.eid;
+    const tint = message.tint ?? 0xffffff;
 
     if (eid === undefined || !this._app) {
       return;
@@ -1585,7 +1478,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       this._playerEntityId = eid;
     } else {
       // Non-player entities are NPCs — store metadata if provided
-      const npcData = message.npcData as NpcMetaEntry | undefined;
+      const npcData = message.npcData;
       if (npcData) {
         this._npcMeta.set(eid, {
           eid,
@@ -1618,10 +1511,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Anchored bottom-center (0.5, 1.0) so the position represents the
     // character's feet — consistent with the LPC layer sprite anchor.
     // 32×32 world units → 128×128 screen pixels at 4× scale.
-    const parsedTint =
-      typeof tint === 'string' ? Number.parseInt(String(tint).replace('0x', ''), 16) : tint;
-    const safeTint =
-      typeof parsedTint === 'number' && !Number.isNaN(parsedTint) ? parsedTint : 0xff00ff;
+    // The worker posts a numeric tint; guard NaN from a malformed message
+    // rather than rendering an invisible (NaN-tinted) placeholder.
+    const safeTint = Number.isNaN(tint) ? 0xff00ff : tint;
     const sprite = new Sprite(Texture.WHITE);
     sprite.width = 32;
     sprite.height = 32;
@@ -1632,7 +1524,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Props carry their named atlas frame from the worker — swap the white
     // placeholder for the real tileset sprite (e.g. "well.png"). The atlas
     // spritesheet is preloaded at boot so Texture.from(frame) resolves.
-    const frame = message.frame as string | undefined;
+    const frame = message.frame;
     if (frame) {
       void this._loadPropFrameTexture({ eid, frame, container });
     }
@@ -1786,160 +1678,132 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * worker via postMessage so the worker can apply it to the bitECS world.
    */
   private _setupCommandForwarding(): void {
-    // Use the bridge's internal onCommand to intercept commands
-    const bridgeWithCommands = this._bridge as unknown as {
-      // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
-      onCommand: (type: string, handler: (cmd: unknown) => void) => () => void;
-    };
-
-    if (typeof bridgeWithCommands.onCommand !== 'function') {
-      return;
-    }
-
-    // Forward SET_PLAYER_VELOCITY commands
-    bridgeWithCommands.onCommand('SET_PLAYER_VELOCITY', (cmd: unknown) => {
+    // Register each forwarder through the typed engine-facing capability.
+    // The session owns the transport; this only translates bridge commands
+    // into worker messages.
+    this._registerBridgeCommand('SET_PLAYER_VELOCITY', (cmd) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'SET_PLAYER_VELOCITY',
-          velocity: (cmd as { velocity: { x: number; y: number } }).velocity,
-        },
+        command: { type: 'SET_PLAYER_VELOCITY', velocity: cmd.velocity },
       });
     });
 
-    // Forward SPAWN_NPC commands
-    bridgeWithCommands.onCommand('SPAWN_NPC', (cmd: unknown) => {
+    this._registerBridgeCommand('SPAWN_NPC', (cmd) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'SPAWN_NPC',
-          npcData: (cmd as { npcData: unknown }).npcData,
-        },
+        command: { type: 'SPAWN_NPC', npcData: cmd.npcData },
       });
     });
 
-    // Forward SET_ENTITY_VELOCITY commands (C-212)
-    bridgeWithCommands.onCommand('SET_ENTITY_VELOCITY', (cmd: unknown) => {
-      const vCmd = cmd as { entityId: number; velocity: { x: number; y: number } };
+    this._registerBridgeCommand('SET_ENTITY_VELOCITY', (cmd) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: {
           type: 'SET_ENTITY_VELOCITY',
-          entityId: vCmd.entityId,
-          velocity: vCmd.velocity,
+          entityId: cmd.entityId,
+          velocity: cmd.velocity,
         },
       });
     });
 
-    // Forward TRIGGER_MACRO commands
-    bridgeWithCommands.onCommand('TRIGGER_MACRO', (cmd: unknown) => {
-      const macroCmd = cmd as { macro: string; args: string[]; entityId?: number };
+    this._registerBridgeCommand('TRIGGER_MACRO', (cmd) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: {
           type: 'TRIGGER_MACRO',
-          macro: macroCmd.macro,
-          args: macroCmd.args,
-          entityId: macroCmd.entityId,
+          macro: cmd.macro,
+          args: cmd.args,
+          entityId: cmd.entityId,
         },
       });
     });
 
     // Forward SET_GAME_MODE commands (C-140)
-    bridgeWithCommands.onCommand('SET_GAME_MODE', (cmd: unknown) => {
-      const modeCmd = cmd as { mode: 'EXPLORE' | 'DIALOGUE' | 'MENU' | 'COMBAT' };
+    this._registerBridgeCommand('SET_GAME_MODE', (cmd) => {
       // C-380 AC-7: Mode changes cancel click-path
-      if (modeCmd.mode !== 'EXPLORE') {
+      if (cmd.mode !== 'EXPLORE') {
         this._cancelClickPath();
       }
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'SET_GAME_MODE',
-          mode: modeCmd.mode,
-        },
+        command: { type: 'SET_GAME_MODE', mode: cmd.mode },
       });
     });
 
     // Forward COMBAT_ACTION commands (C-145)
-    bridgeWithCommands.onCommand('COMBAT_ACTION', (cmd: unknown) => {
-      const actionCmd = cmd as { action: 'ATTACK' | 'FLEE' | 'DEFEND'; targetId?: number };
+    this._registerBridgeCommand('COMBAT_ACTION', (cmd) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: {
           type: 'COMBAT_ACTION',
-          action: actionCmd.action,
-          targetId: actionCmd.targetId,
+          action: cmd.action,
+          targetId: cmd.targetId,
         },
       });
     });
 
     // Forward UPDATE_PLAYER_APPEARANCE commands (C-163)
-    bridgeWithCommands.onCommand('UPDATE_PLAYER_APPEARANCE', (cmd: unknown) => {
-      const appearanceCmd = cmd as { weapon?: string; armor?: string };
+    this._registerBridgeCommand('UPDATE_PLAYER_APPEARANCE', (cmd) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: {
           type: 'UPDATE_PLAYER_APPEARANCE',
-          weapon: appearanceCmd.weapon,
-          armor: appearanceCmd.armor,
+          slots: cmd.slots,
         },
       });
     });
 
     // Forward INTERACT commands (C-161 camera zoom)
-    bridgeWithCommands.onCommand('INTERACT', (cmd: unknown) => {
-      const interactCmd = cmd as { targetEntityId: string };
+    this._registerBridgeCommand('INTERACT', (cmd) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
-        command: {
-          type: 'INTERACT',
-          targetEntityId: interactCmd.targetEntityId,
-        },
+        command: { type: 'INTERACT', targetEntityId: cmd.targetEntityId },
       });
     });
 
     // Forward SET_ENVIRONMENT_CONFIG commands (C-213)
-    bridgeWithCommands.onCommand('SET_ENVIRONMENT_CONFIG', (cmd: unknown) => {
-      const envCmd = cmd as {
-        timeScale?: number;
-        windVelocity?: number;
-        rainIntensity?: number;
-        startHour?: number;
-      };
+    this._registerBridgeCommand('SET_ENVIRONMENT_CONFIG', (cmd) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: {
           type: 'SET_ENVIRONMENT_CONFIG',
-          timeScale: envCmd.timeScale,
-          windVelocity: envCmd.windVelocity,
-          rainIntensity: envCmd.rainIntensity,
-          startHour: envCmd.startHour,
+          timeScale: cmd.timeScale,
+          windVelocity: cmd.windVelocity,
+          rainIntensity: cmd.rainIntensity,
+          startHour: cmd.startHour,
         },
       });
     });
 
     // Forward SET_COMPANION_RECRUITED commands (C-212, C-340)
-    bridgeWithCommands.onCommand('SET_COMPANION_RECRUITED', (cmd: unknown) => {
-      const recruitCmd = cmd as { entityId: number; recruited: boolean };
+    this._registerBridgeCommand('SET_COMPANION_RECRUITED', (cmd) => {
       this._postToWorker({
         type: 'BRIDGE_COMMAND',
         command: {
           type: 'SET_COMPANION_RECRUITED',
-          entityId: recruitCmd.entityId,
-          recruited: recruitCmd.recruited,
+          entityId: cmd.entityId,
+          recruited: cmd.recruited,
         },
       });
     });
   }
 
   /**
+   * Registers a bridge command forwarder and retains its unsubscribe so
+   * {@link destroy} can release exactly the registrations this world owns.
+   */
+  private _registerBridgeCommand<T extends GameCommand['type']>(
+    type: T,
+    handler: (command: Extract<GameCommand, { type: T }>) => void,
+  ): void {
+    this._commandUnsubscribes.push(this._bridge.onCommand(type, handler));
+  }
+
+  /**
    * Posts a message to the worker, if it exists.
    */
-  private _postToWorker(message: Record<string, unknown>): void {
-    if (this._worker) {
-      this._worker.postMessage(message);
-    }
+  private _postToWorker(message: WorkerOutboundMessage): void {
+    this._session.post(message);
   }
 
   // -----------------------------------------------------------------------
@@ -1951,21 +1815,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * so the UI can request serialization without direct access to the worker.
    */
   private _setupSnapshotHandlers(): void {
-    const bridgeWithHandlers = this._bridge as unknown as {
-      // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
-      setSnapshotHandler: (handler: (scope?: 'player' | 'world') => Promise<string>) => void;
-      setRestoreHandler: (handler: (snapshot: string) => Promise<void>) => void;
-    };
-
-    if (typeof bridgeWithHandlers.setSnapshotHandler === 'function') {
-      bridgeWithHandlers.setSnapshotHandler((scope?: 'player' | 'world') =>
-        this.snapshotWorld(scope),
-      );
-    }
-
-    if (typeof bridgeWithHandlers.setRestoreHandler === 'function') {
-      bridgeWithHandlers.setRestoreHandler((payload: string) => this.restoreWorld(payload));
-    }
+    this._bridge.setSnapshotHandler((scope?: 'player' | 'world') => this.snapshotWorld(scope));
+    this._bridge.setRestoreHandler((payload: string) => this.restoreWorld(payload));
   }
 
   /**
@@ -2021,96 +1872,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   }
 
   // -----------------------------------------------------------------------
-  // Internal: Worker heartbeat (C-332)
+  // Internal: Worker heartbeat (C-332) — transport owned by WorkerSession
   // -----------------------------------------------------------------------
 
   /**
-   * Starts the worker heartbeat interval.
+   * Unsubscribes the bridge's MAP_LOADED heartbeat trigger.
    *
-   * Sends a PING message every {@link _heartbeatIntervalMs}ms.
-   * If the worker fails to respond with PONG within 3 intervals,
-   * logs a warning and attempts recovery.
-   *
-   * Called by {@link GameBootService._stageSpawnEntities} after the
-   * game is fully booted and input is unlocked.
-   */
-  private _startHeartbeat(): void {
-    if (this._heartbeatTimer) {
-      return;
-    }
-
-    this._lastPongMs = performance.now();
-    this._missedHeartbeats = 0;
-    this._lastKnownTickCount = 0;
-    this._lastCheckedTickCount = 0;
-    this._staleTickCycles = 0;
-
-    this._heartbeatTimer = setInterval(() => {
-      if (!this._worker) {
-        return;
-      }
-
-      // ── C-332: Semantic heartbeat — check for simulation progress ──
-      // The PONG proves message-handler liveness. But the real signal is
-      // whether tickCount is advancing. If tickCount stagnates across 3
-      // heartbeat cycles while the engine is unpaused, the simulation is
-      // stalled — even if PONG answers perfectly.
-      const currentTick = this._lastKnownTickCount;
-      if (currentTick > 0 && !this._inputLocked) {
-        if (currentTick === this._lastCheckedTickCount) {
-          this._staleTickCycles++;
-        } else {
-          this._staleTickCycles = 0;
-        }
-
-        if (this._staleTickCycles >= 3) {
-          this.warn('[GameWorld] WARN: Simulation stalled — tickCount unchanged for 3 heartbeats', {
-            tickCount: currentTick,
-            staleCycles: this._staleTickCycles,
-            // writableBufferCount 0 => the worker is still ticking but has
-            // no buffer to write into (recycle path broken). Non-zero =>
-            // the worker has a buffer and simply is not ticking.
-            writableBufferCount: this._lastWritableBufferCount,
-            syncWithBuffer: this._syncWithBufferCount,
-            syncWithoutBuffer: this._syncWithoutBufferCount,
-            recycled: this._recycledBufferCount,
-          });
-          // Escalate: send RESET_TICK_LOOP to the worker
-          this._postToWorker({ type: 'RESET_TICK_LOOP' });
-          this._staleTickCycles = 0;
-        }
-
-        this._lastCheckedTickCount = currentTick;
-      }
-
-      // Check for missed PONG heartbeats (connection-level failure)
-      const elapsed = performance.now() - this._lastPongMs;
-      if (elapsed > GameWorld._heartbeatIntervalMs * 3) {
-        this._missedHeartbeats++;
-        this.warn('[GameWorld] WARN: Worker engine heartbeat missed!', {
-          elapsedMs: Math.round(elapsed),
-          missedCount: this._missedHeartbeats,
-        });
-        this._lastPongMs = performance.now();
-      }
-
-      this._postToWorker({ type: 'PING', timestamp: performance.now() });
-    }, GameWorld._heartbeatIntervalMs);
-
-    this.debug('[GameWorld] heartbeat:started', {
-      intervalMs: GameWorld._heartbeatIntervalMs,
-    });
-  }
-
-  /**
-   * Stops the worker heartbeat interval.
+   * The PING/PONG + tick-stall loop itself lives in {@link WorkerSession};
+   * this only releases the bridge registration this world owns.
    */
   private _stopHeartbeat(): void {
-    if (this._heartbeatTimer) {
-      clearInterval(this._heartbeatTimer);
-      this._heartbeatTimer = undefined;
-      this.debug('[GameWorld] heartbeat:stopped');
-    }
     if (this._mapLoadedUnsubscribe) {
       this._mapLoadedUnsubscribe();
       this._mapLoadedUnsubscribe = undefined;
@@ -2661,31 +2432,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @returns The serialized ECS world state as a JSON string.
    */
   snapshotWorld(scope: 'player' | 'world' = 'player'): Promise<string> {
-    return new Promise((resolve, reject) => {
-      if (!this._worker) {
-        reject(new Error('Worker not running — cannot snapshot'));
-        return;
-      }
-
-      const handler = (event: MessageEvent): void => {
-        const message = event.data;
-        if (message.type !== 'SNAPSHOT_RESPONSE') {
-          return;
-        }
-
-        this._worker?.removeEventListener('message', handler);
-
-        if (message.error) {
-          reject(new Error(message.error as string));
-          return;
-        }
-
-        resolve(message.payload as string);
-      };
-
-      this._worker.addEventListener('message', handler);
-      this._worker.postMessage({ type: 'REQUEST_SNAPSHOT', scope });
-    });
+    return this._session
+      .request({
+        message: { type: 'REQUEST_SNAPSHOT', scope },
+        expect: 'SNAPSHOT_RESPONSE',
+      })
+      .then((message) => message.payload ?? '');
   }
 
   /**
@@ -2701,68 +2453,32 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @param payload - The serialized ECS snapshot JSON string.
    * @throws If the worker is not running or the restore fails.
    */
-  restoreWorld(payload: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this._worker) {
-        reject(new Error('Worker not running — cannot restore'));
-        return;
-      }
+  async restoreWorld(payload: string): Promise<void> {
+    if (!this._worker) {
+      throw new Error('Worker not running — cannot restore');
+    }
 
-      // ═══ Timeout: 15s max wait for worker response ═══
-      const RestoreTimeoutMs = 15_000;
-      let settled = false;
+    // A full-world restore is a scene discontinuity: supersede any in-flight
+    // transition and drop cross-scene interpolation history.
+    ++this._sceneGeneration;
+    this._resetInterpolationHistory();
 
-      const finish = (fn: () => void): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timeout);
-        this._worker?.removeEventListener('message', handler);
-        this._pendingWorkerReject = undefined;
-        fn();
-      };
+    // Clear all existing render entries (PixiJS display objects) before the
+    // worker hydrates the world. Done synchronously so the scene is empty
+    // the moment the restore is requested.
+    for (const entry of this._renderEntries.values()) {
+      entry.displayObject.destroy({ children: true });
+    }
+    this._renderEntries.clear();
+    this._npcMeta.clear();
+    this._playerEntityId = 0;
+    resetEntityPositions();
 
-      const timeout = setTimeout(() => {
-        this.error('restoreWorld:timeout', { timeoutMs: RestoreTimeoutMs });
-        finish(() =>
-          reject(
-            new Error('Worker did not respond to LOAD_GAME within 15s — worker may have crashed'),
-          ),
-        );
-      }, RestoreTimeoutMs);
-
-      // Store reject so worker onerror can also reject
-      this._pendingWorkerReject = (reason: Error): void => {
-        finish(() => reject(reason));
-      };
-
-      // Clear all existing render entries (PixiJS display objects)
-      for (const entry of this._renderEntries.values()) {
-        entry.displayObject.destroy({ children: true });
-      }
-      this._renderEntries.clear();
-      this._npcMeta.clear();
-      this._playerEntityId = 0;
-
-      // Wait for the worker to finish restoring
-      const handler = (event: MessageEvent): void => {
-        const message = event.data;
-
-        if (message.type === 'ENGINE_ERROR') {
-          finish(() => reject(new Error(message.message as string)));
-          return;
-        }
-
-        if (message.type !== 'ENGINE_READY') {
-          return;
-        }
-
-        finish(() => resolve());
-      };
-
-      this._worker.addEventListener('message', handler);
-      this._worker.postMessage({ type: 'LOAD_GAME', payload });
+    // Wait for the worker to finish restoring. WorkerSession correlates the
+    // reply and rejects on timeout/crash/disposal exactly once.
+    await this._session.request({
+      message: { type: 'LOAD_GAME', payload },
+      expect: 'ENGINE_READY',
     });
   }
 
@@ -2782,60 +2498,17 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @param payload - A player-scoped ECS snapshot JSON string.
    * @throws If the worker is not running or the restore fails.
    */
-  restorePlayer(payload: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this._worker) {
-        reject(new Error('Worker not running — cannot restore player'));
-        return;
-      }
-
-      // ═══ Timeout: 15s max wait for worker response ═══
-      const RestoreTimeoutMs = 15_000;
-      let settled = false;
-
-      const finish = (fn: () => void): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timeout);
-        this._worker?.removeEventListener('message', handler);
-        this._pendingWorkerReject = undefined;
-        fn();
-      };
-
-      const timeout = setTimeout(() => {
-        this.error('restorePlayer:timeout', { timeoutMs: RestoreTimeoutMs });
-        finish(() =>
-          reject(
-            new Error(
-              'Worker did not respond to RESTORE_PLAYER within 15s — worker may have crashed',
-            ),
-          ),
-        );
-      }, RestoreTimeoutMs);
-
-      this._pendingWorkerReject = (reason: Error): void => {
-        finish(() => reject(reason));
-      };
-
-      const handler = (event: MessageEvent): void => {
-        const message = event.data;
-
-        if (message.type === 'ENGINE_ERROR') {
-          finish(() => reject(new Error(message.message as string)));
-          return;
-        }
-
-        if (message.type !== 'ENGINE_READY') {
-          return;
-        }
-
-        finish(() => resolve());
-      };
-
-      this._worker.addEventListener('message', handler);
-      this._worker.postMessage({ type: 'RESTORE_PLAYER', payload });
+  async restorePlayer(payload: string): Promise<void> {
+    if (!this._worker) {
+      throw new Error('Worker not running — cannot restore player');
+    }
+    // The player teleports — reseed interpolation so the camera/entity blend
+    // does not smear from the pre-restore position.
+    ++this._sceneGeneration;
+    this._resetInterpolationHistory();
+    await this._session.request({
+      message: { type: 'RESTORE_PLAYER', payload },
+      expect: 'ENGINE_READY',
     });
   }
 
@@ -2902,6 +2575,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     } = options;
     this.debug('loadMap', { mapUrl, targetX, targetY, disableClamping });
 
+    // Supersede any in-flight scene transition. The captured generation is
+    // re-checked after every await so a stale prepare phase can never mutate
+    // a newer scene.
+    const generation = ++this._sceneGeneration;
+    // A map switch is a discontinuity — drop cross-scene interpolation data.
+    this._resetInterpolationHistory();
+
     // C-417 AC-2: interior maps pin their ambient to a fixed warm colour
     // independent of the outdoor clock. The flag is declared generically in
     // the content-pack manifest (per-map `interior`) and projected through
@@ -2923,6 +2603,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // stale map's NPCs never leak into the next map's debug state.
       this._debugNpcAppearance = {};
       this._playerEntityId = 0;
+      resetEntityPositions();
       this._activeTileSize = undefined;
       this._activeTerrainGrid = undefined;
       this._activePathGrid = undefined;
@@ -2972,6 +2653,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         baseTerrain,
         terrains: packConfig?.terrains,
       });
+      if (generation !== this._sceneGeneration) {
+        this.debug('loadMap:superseded-after-parse', { mapUrl, generation });
+        return;
+      }
       // C-376 AC-1: derive the boolean grid from manifest walkability when a
       // pack config is available; fall back to the explicit collision layer
       // for packless maps (dev sandbox) or when manifest resolution failed.
@@ -3083,6 +2768,19 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           resolveTag: this._resolveTag,
           releaseUrl: this._releaseUrl,
         });
+        if (generation !== this._sceneGeneration) {
+          // Superseded mid-render — release the just-built GPU resources
+          // and leave the newer scene untouched.
+          if (result.bandContainers.length > 0) {
+            for (const band of result.bandContainers) {
+              band.container.destroy({ children: true, texture: true });
+            }
+          } else {
+            result.container.destroy({ children: true, texture: true });
+          }
+          this.debug('loadMap:superseded-after-render', { mapUrl, generation });
+          return;
+        }
         // C-378 AC-1: add each band container with its declared zIndex —
         // ground/decor below entities, overhead above every entity zIndex.
         // The merged `result.container` is kept inside the world at the
@@ -3125,6 +2823,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       });
 
       // 6. Post LOAD_MAP to worker and wait for completion
+      if (generation !== this._sceneGeneration) {
+        this.debug('loadMap:superseded-before-worker', { mapUrl, generation });
+        return;
+      }
       await this._postLoadMap({
         spawnPoints,
         transitionZones,
@@ -3152,6 +2854,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         mapId,
       });
 
+      // A newer transition may have started while the worker loaded this map.
+      if (generation !== this._sceneGeneration) {
+        this.debug('loadMap:superseded-after-worker', { mapUrl, generation });
+        return;
+      }
+
       // 7. Resume the engine
       this._running = true;
       this.setInputLocked(false);
@@ -3165,6 +2873,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
       this.debug('loadMap:complete');
     } catch (error) {
+      // A superseded load must not resume/unlock the engine or surface an
+      // error — the newer transition owns engine state now.
+      if (generation !== this._sceneGeneration) {
+        this.debug('loadMap:superseded-error', { mapUrl, generation });
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.error('loadMap:failed', { mapUrl, error: message });
 
@@ -3205,99 +2919,54 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     /** Stable map id (URL filename without extension) for zone derivation. */
     mapId: string;
   }): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this._worker) {
-        reject(new Error('Worker not running — cannot load map'));
-        return;
-      }
+    if (!this._worker) {
+      return Promise.reject(new Error('Worker not running — cannot load map'));
+    }
 
-      // ── Worker is in bootstrap phase — dynamic import may be in-flight.
-      // Don't fail fast here; the 15s timeout covers the waiting period.
-      // ENGINE_ERROR from bootstrap will reject via the handler below.
+    // Sanitize spawn-point properties for postMessage — some Tiled
+    // property values (e.g. Python bools read as Proxy) may not be
+    // structurally clonable by the Worker API.
+    const safeSpawnPoints = options.spawnPoints.map((sp) => ({
+      ...sp,
+      properties: JSON.parse(JSON.stringify(sp.properties)),
+    }));
 
-      // ═══ Timeout: 15s max wait for worker response ═══
-      const LoadMapTimeoutMs = 15_000;
-      let settled = false;
+    // Sanitize collision grid — ensure it is a plain boolean array,
+    // not a typed array or proxy that postMessage cannot clone.
+    const safeCollisionGrid = options.collisionGrid
+      ? { ...options.collisionGrid, grid: [...options.collisionGrid.grid] }
+      : undefined;
 
-      const finish = (fn: () => void): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timeout);
-        this._worker?.removeEventListener('message', handler);
-        this._pendingWorkerReject = undefined;
-        fn();
-      };
-
-      const timeout = setTimeout(() => {
-        this.error('_postLoadMap:timeout', { timeoutMs: LoadMapTimeoutMs });
-        finish(() =>
-          reject(
-            new Error('Worker did not respond to LOAD_MAP within 15s — worker may have crashed'),
-          ),
-        );
-      }, LoadMapTimeoutMs);
-
-      // Store reject so worker onerror can also reject
-      this._pendingWorkerReject = (reason: Error): void => {
-        finish(() => reject(reason));
-      };
-
-      const handler = (event: MessageEvent): void => {
-        const message = event.data;
-
-        if (message.type === 'ENGINE_ERROR') {
-          finish(() => reject(new Error(message.message as string)));
-          return;
-        }
-
-        if (message.type !== 'MAP_LOADED') {
-          return;
-        }
-
-        finish(() => resolve());
-      };
-
-      this._worker.addEventListener('message', handler);
-
-      // Sanitize spawn-point properties for postMessage — some Tiled
-      // property values (e.g. Python bools read as Proxy) may not be
-      // structurally clonable by the Worker API.
-      const safeSpawnPoints = options.spawnPoints.map((sp) => ({
-        ...sp,
-        properties: JSON.parse(JSON.stringify(sp.properties)),
-      }));
-
-      // Sanitize collision grid — ensure it is a plain boolean array,
-      // not a typed array or proxy that postMessage cannot clone.
-      const safeCollisionGrid = options.collisionGrid
-        ? { ...options.collisionGrid, grid: [...options.collisionGrid.grid] }
-        : undefined;
-
-      this._worker.postMessage({
-        type: 'LOAD_MAP',
-        spawnPoints: safeSpawnPoints,
-        transitionZones: options.transitionZones,
-        collisionGrid: safeCollisionGrid,
-        // C-379 AC-4: the authoritative terrain grid — typed arrays clone
-        // structurally, no sanitization needed.
-        terrainGrid: options.terrainGrid,
-        packConfig: options.packConfig,
-        mapPixelWidth: options.mapPixelWidth,
-        mapPixelHeight: options.mapPixelHeight,
-        targetX: options.targetX,
-        targetY: options.targetY,
-        defeatedEnemies: options.defeatedEnemies,
-        collectedPickups: options.collectedPickups,
-        interactableStates: options.interactableStates,
-        targetSpawnHash: options.targetSpawnHash,
-        defaultSpawnHash: options.defaultSpawnHash,
-        spawnPointEntities: options.spawnPointEntities,
-        disableClamping: options.disableClamping,
-        mapId: options.mapId,
-      });
-    });
+    // WorkerSession correlates MAP_LOADED / ENGINE_ERROR and enforces the
+    // timeout, so the worker-bootstrap window is covered without a bespoke
+    // per-call listener.
+    return this._session
+      .request({
+        message: {
+          type: 'LOAD_MAP',
+          spawnPoints: safeSpawnPoints,
+          transitionZones: options.transitionZones,
+          collisionGrid: safeCollisionGrid,
+          // C-379 AC-4: the authoritative terrain grid — typed arrays clone
+          // structurally, no sanitization needed.
+          terrainGrid: options.terrainGrid,
+          packConfig: options.packConfig,
+          mapPixelWidth: options.mapPixelWidth,
+          mapPixelHeight: options.mapPixelHeight,
+          targetX: options.targetX,
+          targetY: options.targetY,
+          defeatedEnemies: options.defeatedEnemies,
+          collectedPickups: options.collectedPickups,
+          interactableStates: options.interactableStates,
+          targetSpawnHash: options.targetSpawnHash,
+          defaultSpawnHash: options.defaultSpawnHash,
+          spawnPointEntities: options.spawnPointEntities,
+          disableClamping: options.disableClamping,
+          mapId: options.mapId,
+        },
+        expect: 'MAP_LOADED',
+      })
+      .then(() => undefined);
   }
 
   // -----------------------------------------------------------------------
@@ -3508,15 +3177,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         y = renderView[offset + 1];
       }
 
+      if (x === undefined || y === undefined) {
+        continue;
+      }
+
       // C-180: Expose player world coordinates for E2E collision testing.
       // Playwright reads window.__AIKAMI_DEBUG__.playerPosition to verify
       // that the spatial grid bitmask collision clamps movement at walls.
       // C-379: also exposes playerEid (so E2E can exclude the player from
       // NPC-movement assertions) and playerVisibleByMask (AC-2 — the
       // player's VisionVisible.visibleByMask, forwarded from the worker).
-      if (eid === this._playerEntityId && typeof window !== 'undefined') {
-        (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ = {
-          // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
+      // Published only once x/y resolved — a NaN/undefined frame must not
+      // poison the debug read.
+      if (eid === this._playerEntityId) {
+        publishPlayerDebug({
           playerX: x,
           playerY: y,
           playerEid: eid,
@@ -3526,29 +3200,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           npcCount: this._npcMeta.size,
           // C-504 AC-5: resolved per-NPC appearance for E2E identity assertions.
           npcAppearance: this._debugNpcAppearance,
-        };
+        });
       }
 
       // C-379 AC-7: expose every rendered entity's position so E2E can
       // assert NPCs/companions actually moved (emergent-world integration
       // spec reads this to verify distributed positions over time).
-      if (typeof window !== 'undefined') {
-        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as // guard-ignore lint/type-safety/casting: private engine internals or dynamic window globals for devtools/E2E
-          | Record<string, unknown>
-          | undefined;
-        if (debug) {
-          const positions = (debug.entityPositions ?? {}) as Record<
-            string,
-            { x: number; y: number }
-          >;
-          positions[String(eid)] = { x, y };
-          debug.entityPositions = positions;
-        }
-      }
-
-      if (x === undefined || y === undefined) {
-        continue;
-      }
+      publishEntityPosition(eid, { x, y });
 
       // Dynamic camera: center the world container on the camera position
       // computed by the CameraSystem in the worker (with lerp + clamping).
