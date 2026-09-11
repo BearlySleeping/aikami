@@ -1,8 +1,8 @@
 // apps/frontend/client/src/lib/views/character/persona/list/persona_list_view_model.svelte.ts
 //
-// ViewModel for the Persona List screen. Loads personas from localStorage
-// and the local personas table (C-386b), supports selection (→ /game),
-// deletion, active persona management, and navigation to persona creation.
+// ViewModel for the Persona List screen. Loads personas from the local
+// personas table (C-386b), supports selection (→ /game), deletion, active
+// persona management, and navigation to persona creation.
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -30,7 +30,7 @@ import type {
 /** Per-install persona persistence. */
 export type PersonaListPersonaCapabilities = Pick<
   PersonaServiceInterface,
-  'getPersonas' | 'setActivePersona' | 'updatePersona'
+  'getPersonas' | 'setActivePersona' | 'updatePersona' | 'deletePersona'
 >;
 
 /** Identity used for avatar uploads. */
@@ -74,7 +74,7 @@ export type PersonaListLorebookCapabilities = Pick<
 // Types
 // ---------------------------------------------------------------------------
 
-/** A saved persona entry from localStorage. */
+/** A persona entry presented by the list. */
 export type SavedPersona = {
   persona: PersonaData;
   avatarUrl: string;
@@ -101,13 +101,13 @@ export type PersonaListViewModelOptions = BaseViewModelOptions & {
 };
 
 export type PersonaListViewModelInterface = BaseViewModelInterface & {
-  /** All saved personas (localStorage + Firestore merged, sorted newest first). */
+  /** All saved personas from the local table, sorted newest first. */
   readonly personas: readonly SavedPersona[];
 
   /** Whether the list of personas is empty. */
   readonly isEmpty: boolean;
 
-  /** Whether personas are being loaded from Firestore. */
+  /** Whether personas are being loaded from the local table. */
   readonly isLoading: boolean;
 
   /** Whether a card import is in flight. */
@@ -122,8 +122,8 @@ export type PersonaListViewModelInterface = BaseViewModelInterface & {
   /** Selects a persona and navigates to /game to start playing. */
   selectPersona(options: { id: string }): Promise<void>;
 
-  /** Deletes a persona from localStorage. */
-  deletePersona(options: { id: string }): void;
+  /** Deletes a persona. */
+  deletePersona(options: { id: string }): Promise<void>;
 
   /** Navigates to persona creation. */
   createPersona(): Promise<void>;
@@ -185,16 +185,14 @@ class PersonaListViewModel
     this.isLoading = true;
 
     try {
-      // Load from localStorage (always available)
-      this._loadFromStorage();
+      // Load from the local personas table (C-386b) — personas are per-install.
+      // This also runs the one-time legacy localStorage import.
+      await this._loadFromLocalTable();
 
       // Wait for Firebase Auth to resolve before checking uid.
       // On direct refresh, auth may not be ready yet (IndexedDB read).
       // this._auth.initialize() is idempotent — returns immediately if already ready.
       await this._auth.initialize();
-
-      // Load from the local personas table (C-386b) — personas are per-install.
-      await this._loadFromLocalTable();
     } catch (error) {
       this.warn('initialize:partial-load-failed', error);
     } finally {
@@ -230,7 +228,7 @@ class PersonaListViewModel
     try {
       await this._personas.setActivePersona(id);
     } catch (error) {
-      // Non-critical — localStorage fallback in GameViewModel handles this
+      // Non-critical — boot resolves the active persona from the local table.
       this.debug('selectPersona:setActivePersona-failed', error);
     }
 
@@ -247,12 +245,15 @@ class PersonaListViewModel
   }
 
   /** @inheritdoc */
-  deletePersona(options: { id: string }): void {
+  async deletePersona(options: { id: string }): Promise<void> {
     const { id } = options;
-    const updated = this.personas.filter((p) => p.persona.id !== id);
-    this.personas = updated;
-    this._saveToStorage(updated);
-    this.debug('deletePersona', { id, remaining: updated.length });
+    try {
+      await this._personas.deletePersona(id);
+      await this._loadFromLocalTable();
+      this.debug('deletePersona', { id, remaining: this.personas.length });
+    } catch (error) {
+      this.error('deletePersona', error);
+    }
   }
 
   /** @inheritdoc */
@@ -320,7 +321,7 @@ class PersonaListViewModel
       }
       persona.avatarUrl = avatarUrl || undefined;
 
-      // Upsert into the local personas table + localStorage mirror.
+      // Upsert into the authoritative local personas table.
       await this._personas.updatePersona(personaId, persona);
       await this._loadFromLocalTable();
 
@@ -432,63 +433,28 @@ class PersonaListViewModel
     }
   }
 
-  private _loadFromStorage(): void {
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (stored) {
-        const parsed = JSON.parse(stored) as SavedPersona[];
-        // Sort newest first
-        this.personas = parsed.sort(
-          (a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime(),
-        );
-      }
-    } catch (error) {
-      this.warn('_loadFromStorage:failed', error);
-    }
-  }
-
   private async _loadFromLocalTable(): Promise<void> {
     try {
       const localPersonas = await this._personas.getPersonas('local');
 
-      if (localPersonas.length > 0) {
-        // Merge local-table personas into the local list
-        // Local-table personas take precedence for matching IDs
-        const mergedMap = new Map<string, SavedPersona>();
+      // Preserve the previously displayed savedAt for rows we already had so
+      // the newest-first ordering stays stable across refreshes. New rows fall
+      // back to now (getPersonas already returns updated_at DESC).
+      const existingById = new Map(this.personas.map((sp) => [sp.persona.id, sp]));
 
-        // Start with localStorage personas
-        for (const sp of this.personas) {
-          mergedMap.set(sp.persona.id, sp);
-        }
-
-        // Overlay local-table personas (more authoritative)
-        for (const fp of localPersonas) {
-          if (!fp.id) {
-            continue;
-          }
-          const existing = mergedMap.get(fp.id);
-          mergedMap.set(fp.id, {
-            persona: fp,
-            avatarUrl: fp.avatarUrl || existing?.avatarUrl || '',
-            savedAt: existing?.savedAt || new Date().toISOString(),
-          });
-        }
-
-        // Convert back to sorted array
-        this.personas = Array.from(mergedMap.values()).sort(
-          (a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime(),
-        );
-      }
+      this.personas = localPersonas
+        .filter((persona) => Boolean(persona.id))
+        .map((persona) => {
+          const existing = existingById.get(persona.id);
+          return {
+            persona,
+            avatarUrl: persona.avatarUrl || existing?.avatarUrl || '',
+            savedAt: existing?.savedAt ?? new Date().toISOString(),
+          };
+        })
+        .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
     } catch (error) {
       this.warn('_loadFromLocalTable:failed', error);
-    }
-  }
-
-  private _saveToStorage(personas: SavedPersona[]): void {
-    try {
-      localStorage.setItem('aikami-characters', JSON.stringify(personas));
-    } catch (error) {
-      this.error('_saveToStorage:failed', error);
     }
   }
 }

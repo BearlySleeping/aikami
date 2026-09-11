@@ -707,12 +707,6 @@ export class PersonaCreateViewModel
       }
     }
 
-    const characterData = {
-      persona,
-      avatarUrl: persistentAvatarUrl,
-      savedAt: new Date().toISOString(),
-    };
-
     // SQLite is authoritative — updatePersona upserts, so this covers both
     // create and update. A failure propagates so the save is never reported
     // successful when nothing was persisted.
@@ -722,25 +716,6 @@ export class PersonaCreateViewModel
       isActive: persona.isActive ?? false,
     });
     this.info('saveCharacter:local-table', { id: persona.id });
-
-    // Best-effort legacy mirror for the migration window.
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      const characters = stored ? (JSON.parse(stored) as unknown[]) : [];
-      // Replace existing entry for this character ID or append
-      const idx = characters.findIndex(
-        (c: unknown) => (c as { persona: { id: string } }).persona?.id === persona.id,
-      );
-      if (idx >= 0) {
-        characters[idx] = characterData;
-      } else {
-        characters.push(characterData);
-      }
-      localStorage.setItem('aikami-characters', JSON.stringify(characters));
-      this.info('saveCharacter:local', { id: persona.id });
-    } catch (error) {
-      this.warn('saveCharacter:local-failed', error);
-    }
   }
 
   // ── Private: avatar editing (img2img) ────────────────────────────────

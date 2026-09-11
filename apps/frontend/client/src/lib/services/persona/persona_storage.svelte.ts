@@ -224,8 +224,8 @@ class PersonaStorage
     const existing = await this._getById(personaId);
     if (!existing) {
       // Upsert semantics: Firestore's update-on-missing-doc threw; locally we
-      // create so the create flow (which historically wrote to localStorage
-      // only) lands in the canonical table too.
+      // create so a create flow lands in the canonical table even when the
+      // persona did not previously exist.
       const persona: PersonaData = {
         id: personaId,
         name: data.name ?? 'Unnamed',
