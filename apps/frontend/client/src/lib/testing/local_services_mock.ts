@@ -398,7 +398,6 @@ export const localServicesMockBase = () => ({
     getNpcPersonality: mock(async () => 'Unknown'),
     getNpcName: mock(async () => 'Unknown'),
   }),
-  onboardingService: _createServiceStub(),
   onboardingHintService: _createServiceStub(),
   personaService: _createServiceStub(),
 

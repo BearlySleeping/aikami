@@ -420,21 +420,14 @@
   "apps/frontend/client/src/lib/services/game/quest_overlay_service.svelte.ts": {
     "orphaned": ["QuestOverlayServiceInterface", "QuestOverlayServiceOptions"]
   },
-  "apps/frontend/client/src/lib/services/game/pixi_texture_injector.ts": {
-    "orphaned": [
-      "PixiTextureInjector",
-      "PixiTextureInjector.clearTexture",
-      "PixiTextureInjector.injectTexture",
-      "PixiTextureInjectorInterface",
-      "PixiTextureInjectorOptions",
-      "getPixiTextureInjector"
-    ]
-  },
   "apps/frontend/client/src/lib/services/game/player_journal_service.svelte.ts": {
     "orphaned": [
       "PlayerJournalService",
+      "PlayerJournalService.createEntry",
+      "PlayerJournalService.loadEntries",
       "PlayerJournalServiceInterface",
-      "PlayerJournalServiceOptions"
+      "PlayerJournalServiceOptions",
+      "playerJournalService"
     ]
   },
   "apps/frontend/client/src/lib/services/game/player_state_service.svelte.ts": {
@@ -623,14 +616,6 @@
   },
   "apps/frontend/client/src/lib/services/npc/npc_storage.svelte.ts": {
     "orphaned": ["NpcStorageInterface", "NpcStorageOptions"]
-  },
-  "apps/frontend/client/src/lib/services/onboarding/onboarding.svelte.ts": {
-    "orphaned": [
-      "OnboardingService.needsOnboarding",
-      "OnboardingService.redirectIfNeeded",
-      "OnboardingServiceInterface",
-      "OnboardingServiceOptions"
-    ]
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_service.svelte.ts": {
     "orphaned": ["PersonaCreationServiceInterface", "PersonaCreationServiceOptions"]
