@@ -12,7 +12,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ContextualTriggerEvent, ImageType } from '@aikami/types';
 import { compileImagePrompt } from './prompt_compiler';
 import { styleProfileService } from './style_profile_service.svelte';

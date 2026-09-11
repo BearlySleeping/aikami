@@ -11,7 +11,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { resolveMacros } from '@aikami/parser';
 import type { BridgeContext } from '@aikami/types';
 import type { AddressMode } from '$types';

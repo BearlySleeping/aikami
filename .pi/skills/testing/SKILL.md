@@ -32,16 +32,18 @@ Client-side unit tests use Bun's test runner with a required preload script.
 | What | Why |
 |------|-----|
 | Svelte 5 rune polyfills (`$state`, `$derived`, `$effect`) | `.svelte.ts` files won't parse without them |
-| `@aikami/frontend/services` root mock | avoids loading the router/dialog/R2/preference aggregation |
 | `$app/navigation`, `$app/state` mocks | SvelteKit virtual modules required by transitive deps |
 | `indexedDB` polyfill | Required by `DraftStore` in test env |
 | `window`, `AudioContext`, `KeyboardEvent` polyfills | Browser APIs not available in Bun |
 | Vite env vars (`PUBLIC_*`) | Required by `@aikami/frontend/configs/environment.ts` |
 
 **No feature names, no service inventory, no business-success defaults.** The
-legacy `$services` barrel mock and the global `@aikami/frontend/storage` mock
-have been removed — the client runtime graph no longer reaches either from this
-lane.
+legacy `$services` barrel mock, the `@aikami/frontend/services` root mock, and
+the global `@aikami/frontend/storage` mock have all been removed. Base classes
+are imported from the narrow `@aikami/frontend/services/base` entrypoint and
+platform singletons from their own subpaths (`/router`, `/dialog`,
+`/preference`, `/backup_client`, `/r2_storage`), so no import evaluates the
+package aggregation.
 
 The one remaining broad stub, `localServicesMockBase()`, lives in
 `src/lib/testing/local_services_mock.ts` (not the setup file) and is used only
@@ -105,9 +107,10 @@ ViewModels.**
 ### Mock Patterns for Service Tests (legacy preload lane)
 
 When testing a service that extends `BaseFrontendClass`, use `mock.module()` in
-`beforeEach` to stub its dependencies. The infrastructure mocks from `test_setup.ts`
-cover `@aikami/frontend/services` — you only need to mock the service's own
-imports:
+`beforeEach` to stub its dependencies. The base hierarchy is imported from
+`@aikami/frontend/services/base`, so a test that replaces `BaseFrontendClass`
+must register the mock for that subpath (the root barrel is not evaluated).
+You only need to mock the service's own direct collaborators:
 
 ```typescript
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -141,7 +144,7 @@ before the real module is evaluated.
 
 | Issue | Details |
 |-------|---------|
-| `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. The `@aikami/frontend/services` root mock in `test_setup.ts` mitigates most cases. |
+| `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. Register the mock against the exact specifier the production module imports (e.g. the `@aikami/frontend/services/base` subpath or a relative collaborator), not the package root. |
 | `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Pure Bun tests must treat `$state` fields as plain values. For real reactivity, use the Vitest Browser Mode lane (preferred for ViewModels/components) or the compiled Playwright lane. |
 | PixiJS / WebGPU | Not available in Bun. Tests that touch the game engine are skipped in CI (handled by E2E). |
 

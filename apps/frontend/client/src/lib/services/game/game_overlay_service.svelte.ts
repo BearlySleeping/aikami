@@ -6,8 +6,8 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-  routerService,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
+import { routerService } from '@aikami/frontend/services/router';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
 import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
 import { audioService } from '../audio/audio_service.svelte.ts';

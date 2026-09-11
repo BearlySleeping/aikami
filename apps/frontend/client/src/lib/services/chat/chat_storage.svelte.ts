@@ -13,7 +13,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { ChatData, MessageData } from '@aikami/types';
 

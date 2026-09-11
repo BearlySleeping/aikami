@@ -10,7 +10,7 @@ export {
   toRouteHref,
   toRoutePathFromRouteId,
   toRoutePathFromURL,
-} from '@aikami/frontend/services';
+} from '$router';
 
 export const routes = {
   index: {

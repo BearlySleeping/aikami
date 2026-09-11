@@ -13,7 +13,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { gameEngineService } from './game_engine_service.svelte';
 import { partyRosterService } from './party_roster_service.svelte.ts';
 

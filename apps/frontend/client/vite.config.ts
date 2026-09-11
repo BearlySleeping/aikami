@@ -185,6 +185,12 @@ export default defineConfig(({ mode }) => {
         '@aikami/constants': toPackagesPath('shared/constants/src'),
         '@aikami/frontend/services/base': toPackagesPath('frontend/services/src/base'),
         '@aikami/frontend/services/r2_storage': toPackagesPath('frontend/services/src/r2_storage'),
+        '@aikami/frontend/services/backup_client': toPackagesPath(
+          'frontend/services/src/backup_client',
+        ),
+        '@aikami/frontend/services/router': toPackagesPath('frontend/services/src/router'),
+        '@aikami/frontend/services/preference': toPackagesPath('frontend/services/src/preference'),
+        '@aikami/frontend/services/dialog': toPackagesPath('frontend/services/src/dialog'),
         '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
         '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib/*'),
         '@aikami/frontend/components': toPackagesPath('frontend/components/src'),

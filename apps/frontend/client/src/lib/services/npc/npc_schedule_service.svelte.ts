@@ -11,7 +11,7 @@ import {
   DEFAULT_COOLDOWN_MINUTES,
   DEFAULT_TALKATIVENESS,
 } from '@aikami/constants';
-import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import { NpcScheduleSchema, schemaCheck } from '@aikami/schemas';
 import type { AvailabilityStatus, NpcSchedule } from '@aikami/types';
 import type { NpcScheduleServiceOptions } from '$types';

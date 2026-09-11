@@ -11,7 +11,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { PersonaData } from '@aikami/types';
 import { aiService } from '../ai/ai_service.svelte.ts';
 import { imageGenerationService } from '../image/image_generation_service.svelte.ts';

@@ -1,10 +1,10 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/settings/settings_overlay_view_model.test.ts
 //
 // Unit tests for SettingsOverlayViewModel — registry-driven section list,
-// "Full Settings" navigation, retained-instance caching, and revert-on-close.
+// "Full Settings" navigation, and retained-instance caching (immediate-save).
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/game/ui/overlays/settings/settings_overlay_view_model.test.ts
 
 import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -154,7 +154,7 @@ describe('SettingsOverlayViewModel', () => {
     expect(vm.pauseSections.every((s) => s.contexts.includes('pause'))).toBe(true);
   });
 
-  test('AC-3: audio volume reverts on dispose', async () => {
+  test('AC-3: audio volume edits persist on dispose (immediate-save)', async () => {
     const vm = createVm();
     await vm.initialize();
     vm.setActiveSection('audio');
@@ -166,9 +166,12 @@ describe('SettingsOverlayViewModel', () => {
     const originalVolume = audioVm.masterVolume;
 
     audioVm.setMasterVolume(0.5);
+    const callCountAfterEdit = audioVm.setMasterVolume.mock.calls.length;
     await vm.dispose();
 
-    expect(audioVm.setMasterVolume).toHaveBeenCalledWith(originalVolume);
+    // Dispose must not roll the edit back to the pre-edit volume.
+    expect(audioVm.setMasterVolume).not.toHaveBeenCalledWith(originalVolume);
+    expect(audioVm.setMasterVolume.mock.calls.length).toBe(callCountAfterEdit);
   });
 
   test('dispose does not dispose retained section ViewModels (container owns lifecycle)', async () => {

@@ -25,7 +25,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { RuntimeEngineConfigSchema, schemaCheck } from '@aikami/schemas';
 import type { RuntimeEngineConfig, TtsMode } from '@aikami/types';
 

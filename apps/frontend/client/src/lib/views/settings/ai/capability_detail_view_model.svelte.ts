@@ -11,6 +11,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { ConnectionCapability } from '$types';
+import type { CapabilityStatusEntry } from './ai_connection_status.svelte';
 import type { AiSettingsViewModelInterface } from './ai_settings_view_model.svelte';
 
 /** Presentation state and actions for configuring one AI capability. */
@@ -34,7 +35,12 @@ export type CapabilityDetailViewModelInterface = BaseViewModelInterface & {
 /** Identifies the AI capability exposed by a capability detail ViewModel. */
 export type CapabilityDetailViewModelOptions = BaseViewModelOptions & {
   capability: ConnectionCapability;
-  /** Builds the shared AI settings editor the detail page delegates to. */
+  /**
+   * Shared capability-status projection (config + the shared connection-test
+   * store). Injected so the status card never reads the AI settings editor.
+   */
+  getStatusEntries: () => readonly CapabilityStatusEntry[];
+  /** Builds the shared AI settings editor the detail page's controls delegate to. */
   createAiSettings: () => AiSettingsViewModelInterface;
 };
 
@@ -44,10 +50,12 @@ class CapabilityDetailViewModel
 {
   readonly capability: ConnectionCapability;
   readonly aiSettingsViewModel: AiSettingsViewModelInterface;
+  private readonly _getStatusEntries: () => readonly CapabilityStatusEntry[];
 
   constructor(options: CapabilityDetailViewModelOptions) {
     super(options);
     this.capability = options.capability;
+    this._getStatusEntries = options.getStatusEntries;
     this.aiSettingsViewModel = options.createAiSettings();
   }
 
@@ -104,11 +112,7 @@ class CapabilityDetailViewModel
   }
 
   get isTesting(): boolean {
-    const entry = this._getStatusEntry();
-    if (!entry?.connectionId) {
-      return false;
-    }
-    return this.aiSettingsViewModel.testingIds.has(entry.connectionId);
+    return this.status === 'testing';
   }
 
   openSetup(): void {
@@ -131,8 +135,8 @@ class CapabilityDetailViewModel
     }
   }
 
-  private _getStatusEntry() {
-    return this.aiSettingsViewModel.statusEntries.find((e) => e.capability === this.capability);
+  private _getStatusEntry(): CapabilityStatusEntry | undefined {
+    return this._getStatusEntries().find((entry) => entry.capability === this.capability);
   }
 }
 

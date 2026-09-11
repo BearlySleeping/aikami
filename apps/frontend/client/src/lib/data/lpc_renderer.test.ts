@@ -145,7 +145,16 @@ describe('C-428 AC-4: Both renderers agree on every shipped LPC sheet shape', ()
       lpcTag: () => 'lpc:test',
     }));
     mock.module('$logger', () => ({
-      logger: { debug: () => {}, warn: () => {}, info: () => {}, error: () => {} },
+      logger: {
+        debug: () => {},
+        warn: () => {},
+        info: () => {},
+        error: () => {},
+        log: () => {},
+        spam: () => {},
+        write: () => {},
+        setLogLevel: () => {},
+      },
     }));
 
     engine = await import('../../../../../../packages/frontend/engine/src/index.ts');

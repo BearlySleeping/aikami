@@ -3,15 +3,7 @@
 // ViewModel for the Connection Manager — CRUD, testing, preset management,
 // model fetching, provider caching, and per-chat assignment (C-230).
 
-import {
-  buildVerifyHeaders,
-  buildVerifyUrl,
-  IMAGE_PROVIDERS,
-  PROVIDER_ENDPOINTS,
-  providerNeedsKey,
-  TEXT_PROVIDERS,
-  VOICE_PROVIDERS,
-} from '@aikami/constants';
+import { providerNeedsKey } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -27,6 +19,18 @@ import type {
   resolveChatTestRequest,
 } from '$services';
 import type { Connection, ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
+import {
+  type LocalProviderStatus,
+  probeDraftConnection,
+  probeOllamaRuntime,
+  probeSavedConnection,
+} from './connection_prober';
+import {
+  capabilityProviderNeedsUrl,
+  DEFAULT_PROVIDER_BY_CAPABILITY,
+  LOCAL_GUIDE_PROVIDERS,
+  providerOptionsForCapability,
+} from './connection_provider_rules';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -66,9 +70,7 @@ export type ConnectionManagerViewModelInterface = BaseViewModelInterface & {
   /** Whether to show the local (Ollama) web setup guide. */
   readonly showLocalGuide: boolean;
   /** Live probe result for the selected local provider (Ollama). */
-  readonly localProviderStatus:
-    | { checking: boolean; ok: boolean; error?: string; latencyMs?: number; modelCount?: number }
-    | undefined;
+  readonly localProviderStatus: LocalProviderStatus | undefined;
   readonly draftParams: Connection['generationParams'];
   readonly presetOptions: ReadonlyArray<{ id: string; name: string }>;
   readonly formattedParams: {
@@ -150,13 +152,6 @@ export type ConnectionManagerViewModelOptions = BaseViewModelOptions & {
 
 const TEST_TIMEOUT_MS = 15_000;
 
-/**
- * Local providers that get a live probe + web setup guide when selected.
- * Probing localhost from an HTTPS origin triggers the browser's Private
- * Network Access permission prompt — that's intentional and user-initiated.
- */
-const LOCAL_GUIDE_PROVIDERS = new Set(['ollama']);
-
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -177,9 +172,7 @@ class ConnectionManagerViewModel
   isTestingDraftModel = $state(false);
   draftModelTestResult: ConnectionTestResult | undefined = $state(undefined);
   isFetchingModels = $state(false);
-  localProviderStatus:
-    | { checking: boolean; ok: boolean; error?: string; latencyMs?: number; modelCount?: number }
-    | undefined = $state(undefined);
+  localProviderStatus: LocalProviderStatus | undefined = $state(undefined);
   private _availableModels: FetchedModel[] = $state([]);
   private _providerCache: Record<string, { apiKey: string; baseUrl: string; model: string }> = {};
   private readonly _config: ConnectionManagerConfigCapabilities;
@@ -202,7 +195,7 @@ class ConnectionManagerViewModel
   }
 
   get providerLabels(): Record<string, string> {
-    const providers = this._capabilityProviders();
+    const providers = providerOptionsForCapability(this.draft.capability);
     const labels: Record<string, string> = {};
     for (const p of providers) {
       labels[p.id] = p.label;
@@ -211,7 +204,7 @@ class ConnectionManagerViewModel
   }
 
   get providerOptions(): ReadonlyArray<{ id: string; label: string }> {
-    return this._capabilityProviders().map((p) => ({
+    return providerOptionsForCapability(this.draft.capability).map((p) => ({
       id: p.id,
       label: `${p.label} — ${p.description}`,
     }));
@@ -223,7 +216,7 @@ class ConnectionManagerViewModel
 
   get needsApiKey(): boolean {
     const provider = this.draft.provider ?? 'openrouter';
-    const desc = this._capabilityProviders().find((p) => p.id === provider);
+    const desc = providerOptionsForCapability(this.draft.capability).find((p) => p.id === provider);
     if (!desc) {
       return true;
     }
@@ -234,19 +227,16 @@ class ConnectionManagerViewModel
   get needsUrl(): boolean {
     const capability = this.draft.capability ?? 'text';
     const provider = this.draft.provider ?? 'openrouter';
-    if (capability === 'image') {
-      return ['comfyui', 'webui', 'sdcpp', 'openai-compat'].includes(provider);
-    }
-    if (capability === 'voice') {
-      return ['kokoro', 'voicevox', 'fish-speech'].includes(provider);
-    }
-    return ['ollama', 'llamacpp', 'ooba', 'custom'].includes(provider);
+    return capabilityProviderNeedsUrl(capability, provider);
   }
 
   /** True when the draft provider runs locally (no API key, no cloud auth). */
   get isLocalProvider(): boolean {
     const provider = this.draft.provider ?? 'openrouter';
-    return this._capabilityProviders().find((p) => p.id === provider)?.isLocal ?? false;
+    return (
+      providerOptionsForCapability(this.draft.capability).find((p) => p.id === provider)?.isLocal ??
+      false
+    );
   }
 
   /** Whether to show the local provider (Ollama) web setup guide. */
@@ -308,41 +298,6 @@ class ConnectionManagerViewModel
     return (this.draft.capability ?? 'text') === 'text';
   }
 
-  // ── Private: capability-aware helpers ─────────────────────────────────
-
-  /**
-   * Returns the provider registry for the draft's current capability.
-   * Falls back to TEXT_PROVIDERS for backward compatibility.
-   */
-  private _capabilityProviders(capabilityOverride?: ConnectionCapability): ReadonlyArray<{
-    id: string;
-    label: string;
-    description: string;
-    needsKey: boolean;
-    needsUrl?: boolean;
-    isLocal: boolean;
-  }> {
-    const capability = capabilityOverride ?? this.draft.capability ?? 'text';
-    if (capability === 'image') {
-      return IMAGE_PROVIDERS.map((p) => ({
-        ...p,
-        needsKey: p.id !== 'comfyui' && p.id !== 'webui' && p.id !== 'sdcpp',
-        needsUrl:
-          p.id === 'comfyui' || p.id === 'webui' || p.id === 'sdcpp' || p.id === 'openai-compat',
-        isLocal: p.id === 'comfyui' || p.id === 'webui' || p.id === 'sdcpp',
-      }));
-    }
-    if (capability === 'voice') {
-      return VOICE_PROVIDERS.map((p) => ({
-        ...p,
-        needsKey: p.id === 'elevenlabs' || p.id === 'openai',
-        needsUrl: p.id === 'kokoro' || p.id === 'voicevox' || p.id === 'fish-speech',
-        isLocal: p.id === 'kokoro' || p.id === 'voicevox' || p.id === 'fish-speech',
-      }));
-    }
-    return TEXT_PROVIDERS;
-  }
-
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -370,7 +325,7 @@ class ConnectionManagerViewModel
       isDefault: false,
       model: '',
       // Name is optional — default it to the selected provider's label.
-      name: this._capabilityProviders('text').find((p) => p.id === provider)?.label ?? provider,
+      name: providerOptionsForCapability('text').find((p) => p.id === provider)?.label ?? provider,
       provider,
     };
     this.localProviderStatus = undefined;
@@ -385,14 +340,7 @@ class ConnectionManagerViewModel
     this.editingConnectionId = undefined;
     this.isEditorOpen = true;
     // Default provider per capability
-    let defaultProvider: string;
-    if (capability === 'text') {
-      defaultProvider = 'openrouter';
-    } else if (capability === 'image') {
-      defaultProvider = 'comfyui';
-    } else {
-      defaultProvider = 'kokoro';
-    }
+    const defaultProvider = DEFAULT_PROVIDER_BY_CAPABILITY[capability];
     this.draft = {
       apiKey: '',
       baseUrl: '',
@@ -402,7 +350,7 @@ class ConnectionManagerViewModel
       model: '',
       // Name is optional — default it to the selected provider's label.
       name:
-        this._capabilityProviders(capability).find((p) => p.id === defaultProvider)?.label ??
+        providerOptionsForCapability(capability).find((p) => p.id === defaultProvider)?.label ??
         defaultProvider,
       provider: defaultProvider,
     };
@@ -505,7 +453,10 @@ class ConnectionManagerViewModel
 
   /** Resolves the human-readable label for a provider in the draft's capability. */
   private _providerLabel(provider: string): string {
-    return this._capabilityProviders().find((p) => p.id === provider)?.label ?? provider;
+    return (
+      providerOptionsForCapability(this.draft.capability).find((p) => p.id === provider)?.label ??
+      provider
+    );
   }
 
   /** Returns the default API key for a provider based on current capability. */
@@ -614,11 +565,11 @@ class ConnectionManagerViewModel
     const startMs = performance.now();
 
     try {
-      if (connection.provider === 'ollama') {
-        await this._testOllama(id, startMs);
-      } else {
-        await this._testProvider(id, connection, startMs);
-      }
+      const result = await probeSavedConnection({
+        connection,
+        ollamaUrl: this._ai.getOllamaRuntimeEndpoints().url,
+      });
+      this.testResults = { ...this.testResults, [id]: result };
     } catch (err) {
       this.testResults = {
         ...this.testResults,
@@ -681,11 +632,10 @@ class ConnectionManagerViewModel
     const startMs = performance.now();
 
     try {
-      if (provider === 'ollama') {
-        await this._testDraftOllama(startMs);
-      } else {
-        await this._testDraftProvider(provider, startMs);
-      }
+      this.draftTestResult = await probeDraftConnection({
+        draft: this.draft,
+        ollamaUrl: this._ai.getOllamaRuntimeEndpoints().url,
+      });
     } catch (err) {
       const elapsed = Math.round(performance.now() - startMs);
       this.debug('testDraftConnection:failed', { provider, elapsed, error: String(err) });
@@ -854,294 +804,14 @@ class ConnectionManagerViewModel
     }
 
     this.localProviderStatus = { checking: true, ok: false };
-    const startMs = performance.now();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const ollamaUrl = this._ai.getOllamaRuntimeEndpoints().url;
-      if (!ollamaUrl) {
-        this.localProviderStatus = {
-          checking: false,
-          ok: false,
-          error: 'No Ollama endpoint configured — set text.url in config.json',
-        };
-        return;
-      }
-      const response = await fetch(ollamaUrl, { signal: controller.signal });
-      const elapsed = Math.round(performance.now() - startMs);
-
-      if (response.ok) {
-        const data = (await response.json()) as { models?: unknown[] };
-        const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
-        this.localProviderStatus = { checking: false, ok: true, latencyMs: elapsed, modelCount };
-        this.debug('checkLocalProvider:ok', { elapsed, modelCount });
-        // Populate the model list right away so the user can pick one.
-        if (provider in this._ai.providerModelFetch) {
-          void this.fetchModels();
-        }
-      } else {
-        this.localProviderStatus = {
-          checking: false,
-          ok: false,
-          latencyMs: elapsed,
-          error: `HTTP ${response.status}`,
-        };
-        this.debug('checkLocalProvider:failed', { status: response.status, elapsed });
-      }
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.localProviderStatus = {
-        checking: false,
-        ok: false,
-        latencyMs: elapsed,
-        error: message,
-      };
-      this.debug('checkLocalProvider:exception', { elapsed, error: message });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  // ── Private: saved-connection test helpers ────────────────────────────
-
-  private async _testOllama(id: ConnectionId, startMs: number): Promise<void> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const ollamaUrl = this._ai.getOllamaRuntimeEndpoints().url;
-      if (!ollamaUrl) {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: 0, error: 'No Ollama endpoint configured' },
-        };
-        return;
-      }
-      const response = await fetch(ollamaUrl, { signal: controller.signal });
-      const elapsed = Math.round(performance.now() - startMs);
-
-      if (!response.ok) {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` },
-        };
-        return;
-      }
-
-      const data = (await response.json()) as { models?: unknown[] };
-      const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: true, latencyMs: elapsed, modelCount },
-      };
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: false, latencyMs: elapsed, error: message },
-      };
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  private async _testProvider(
-    id: ConnectionId,
-    connection: Connection,
-    startMs: number,
-  ): Promise<void> {
-    const endpoint = PROVIDER_ENDPOINTS[connection.provider];
-    if (!endpoint) {
-      const elapsed = Math.round(performance.now() - startMs);
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: false, latencyMs: elapsed, error: `Unknown provider: ${connection.provider}` },
-      };
-      return;
-    }
-
-    if (!connection.apiKey) {
-      this.testResults = {
-        ...this.testResults,
-        [id]: {
-          ok: false,
-          latencyMs: Math.round(performance.now() - startMs),
-          error: 'No API key configured',
-        },
-      };
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const url = buildVerifyUrl({ endpoint, apiKey: connection.apiKey });
-      const headers = buildVerifyHeaders({ endpoint, apiKey: connection.apiKey });
-      const response = await fetch(url, {
-        headers,
-        method: endpoint.method,
-        signal: controller.signal,
-      });
-      const elapsed = Math.round(performance.now() - startMs);
-
-      if (!response.ok) {
-        this.testResults = {
-          ...this.testResults,
-          [id]: { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` },
-        };
-        return;
-      }
-
-      let modelCount: number | undefined;
-      try {
-        const data = (await response.clone().json()) as Record<string, unknown>;
-        if (Array.isArray(data.data)) {
-          modelCount = data.data.length;
-        } else if (Array.isArray(data.models)) {
-          modelCount = data.models.length;
-        }
-      } catch {
-        /* not JSON */
-      }
-
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: true, latencyMs: elapsed, modelCount },
-      };
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.testResults = {
-        ...this.testResults,
-        [id]: { ok: false, latencyMs: elapsed, error: message },
-      };
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  // ── Private: draft connection test helpers ────────────────────────────
-
-  private async _testDraftOllama(startMs: number): Promise<void> {
-    const ollamaUrl = this._ai.getOllamaRuntimeEndpoints().url;
-    if (!ollamaUrl) {
-      this.draftTestResult = {
-        ok: false,
-        latencyMs: 0,
-        error: 'No Ollama endpoint configured — set text.url in config.json',
-      };
-      return;
-    }
-    this.debug('_testDraftOllama:fetch', { url: ollamaUrl });
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(ollamaUrl, { signal: controller.signal });
-      const elapsed = Math.round(performance.now() - startMs);
-      this.debug('_testDraftOllama:response', { status: response.status, elapsed });
-
-      if (!response.ok) {
-        this.draftTestResult = { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` };
-        return;
-      }
-
-      const data = (await response.json()) as { models?: unknown[] };
-      const modelCount = Array.isArray(data.models) ? data.models.length : undefined;
-      this.debug('_testDraftOllama:ok', { elapsed, modelCount });
-      this.draftTestResult = { ok: true, latencyMs: elapsed, modelCount };
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.debug('_testDraftOllama:failed', { elapsed, error: message });
-      this.draftTestResult = { ok: false, latencyMs: elapsed, error: message };
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  }
-
-  private async _testDraftProvider(provider: string, startMs: number): Promise<void> {
-    const endpoint = PROVIDER_ENDPOINTS[provider];
-    this.debug('_testDraftProvider', { provider, hasEndpoint: !!endpoint });
-    if (!endpoint) {
-      this.draftTestResult = {
-        ok: false,
-        latencyMs: Math.round(performance.now() - startMs),
-        error: `Unknown provider: ${provider}`,
-      };
-      return;
-    }
-
-    const apiKey = this.draft.apiKey;
-    if (!apiKey) {
-      this.draftTestResult = {
-        ok: false,
-        latencyMs: Math.round(performance.now() - startMs),
-        error: 'No API key configured',
-      };
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
-
-    try {
-      const url = buildVerifyUrl({ endpoint, apiKey });
-      const headers = buildVerifyHeaders({ endpoint, apiKey });
-      this.debug('_testDraftProvider:fetch', { url, method: endpoint.method });
-      const response = await fetch(url, {
-        headers,
-        method: endpoint.method,
-        signal: controller.signal,
-      });
-      const elapsed = Math.round(performance.now() - startMs);
-      this.debug('_testDraftProvider:response', { status: response.status, elapsed });
-
-      if (!response.ok) {
-        this.draftTestResult = { ok: false, latencyMs: elapsed, error: `HTTP ${response.status}` };
-        return;
-      }
-
-      let modelCount: number | undefined;
-      try {
-        const data = (await response.clone().json()) as Record<string, unknown>;
-        if (Array.isArray(data.data)) {
-          modelCount = data.data.length;
-        } else if (Array.isArray(data.models)) {
-          modelCount = data.models.length;
-        }
-      } catch {
-        /* not JSON */
-      }
-
-      this.debug('_testDraftProvider:ok', { elapsed, modelCount });
-      this.draftTestResult = { ok: true, latencyMs: elapsed, modelCount };
-    } catch (err) {
-      const elapsed = Math.round(performance.now() - startMs);
-      const message =
-        err instanceof DOMException && err.name === 'AbortError'
-          ? 'Connection timed out'
-          : String(err);
-      this.debug('_testDraftProvider:failed', { elapsed, error: message });
-      this.draftTestResult = { ok: false, latencyMs: elapsed, error: message };
-    } finally {
-      clearTimeout(timeoutId);
+    const status = await probeOllamaRuntime({
+      ollamaUrl: this._ai.getOllamaRuntimeEndpoints().url,
+    });
+    this.localProviderStatus = status;
+    this.debug('checkLocalProvider:result', { ok: status.ok, error: status.error });
+    // Populate the model list right away so the user can pick one.
+    if (status.ok && provider in this._ai.providerModelFetch) {
+      void this.fetchModels();
     }
   }
 }

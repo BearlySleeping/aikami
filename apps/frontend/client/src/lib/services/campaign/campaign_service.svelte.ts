@@ -9,7 +9,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { Campaign, CapabilityProfile } from '@aikami/types';
 import { AiTextProviderRequiredError } from '@aikami/utils';
 import { configService } from '../config/config_service.svelte.ts';

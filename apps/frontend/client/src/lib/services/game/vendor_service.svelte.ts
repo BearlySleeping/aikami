@@ -12,7 +12,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ItemDefinition } from '@aikami/types';
 import {
   VENDOR_ACTION_SYSTEM_PROMPT,

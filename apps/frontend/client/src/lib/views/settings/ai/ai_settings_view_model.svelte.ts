@@ -4,13 +4,7 @@
 // (C-465) with a status board, provider tree, roles drawer, voice/image
 // panels, and generation-parameter disclosure.
 
-import {
-  type GenParamPreset,
-  IMAGE_PROVIDERS,
-  providerNeedsKey,
-  TEXT_PROVIDERS,
-  VOICE_PROVIDERS,
-} from '@aikami/constants';
+import { type GenParamPreset, providerNeedsKey } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -50,129 +44,66 @@ import type {
 } from '$types';
 import {
   aiConnectionStatus,
+  buildCapabilityStatusEntries,
   type CapabilityStatus,
-  capabilityStatusColor,
-  capabilityStatusDot,
-  deriveCapabilityStatus,
+  type CapabilityStatusEntry,
+  connectionStatusDescriptor,
 } from './ai_connection_status.svelte';
+import {
+  type CapabilitySetupPrefill,
+  defaultParamsForCapability,
+  draftSignature,
+  type EditorDraft,
+  type KeyConflictPrompt,
+  modelTestUnavailableError,
+  uniqueConnectionLabel,
+} from './ai_draft_editor';
+import {
+  IMAGE_QUALITY_LEVELS,
+  IMAGE_SIZE_PRESETS,
+  type ImagePreviewState,
+  type ImageQualityLevel,
+  type ImageSizePreset,
+  imageParamsFor,
+  imagePreviewErrorFor,
+  imagePreviewUrlFor,
+} from './ai_image_section';
+import { registryForCapability, registryLabel } from './ai_provider_registry';
+import { buildProviderTree, type ProviderTreeEntry } from './ai_provider_tree';
+import {
+  ALL_ROLES,
+  buildConnectionsWithRoles,
+  type ConnectionWithRoles,
+  rolesForCapability,
+  unassignedConnections,
+} from './ai_roles';
+import {
+  probeKokoroConnection,
+  type VoicePreviewState,
+  voiceIdInputLabelFor,
+  voiceModelProgress,
+  voiceModelSizeLabel,
+  voicePreviewLine,
+} from './ai_voice_section';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+export type { CapabilitySetupPrefill, EditorDraft, KeyConflictPrompt } from './ai_draft_editor';
+export type { ImagePreviewState, ImageQualityLevel, ImageSizePreset } from './ai_image_section';
+// Pure projections and section types now live with their own modules;
+// re-exported here for existing importers of this ViewModel.
+export type { ProviderTreeConnection, ProviderTreeEntry } from './ai_provider_tree';
+export type { ConnectionWithRoles } from './ai_roles';
+export type { VoicePreviewState } from './ai_voice_section';
+export { VOICE_PREVIEW_FALLBACK_LINE } from './ai_voice_section';
 /**
- * Per-capability connection status for the status board. Defined in
- * ./ai_connection_status.svelte (the shared store) and re-exported here for
- * existing importers.
+ * Per-capability connection status for the status board. Both are defined in
+ * ./ai_connection_status.svelte (the shared store/projection) and re-exported
+ * here for existing importers.
  */
-export type { CapabilityStatus };
-
-/** Status board entry for one capability. */
-export type CapabilityStatusEntry = {
-  capability: ConnectionCapability;
-  connectionId: ConnectionId | undefined;
-  status: CapabilityStatus;
-  color: string;
-  dot: string;
-  label: string;
-  modelName: string | undefined;
-  latencyMs: number | undefined;
-  providerLabel: string | undefined;
-};
-
-/** A provider with its nested connections, for the provider tree. */
-export type ProviderTreeEntry = {
-  provider: AiProvider;
-  connections: ProviderTreeConnection[];
-  registryLabel: string;
-  isLocal: boolean;
-  connectionCount: number;
-  statusLabel: string;
-  statusColorClass: string;
-};
-
-/** A provider-tree connection with its resolved verification status. */
-export type ProviderTreeConnection = AiConnection & {
-  statusLabel: string;
-  statusColorClass: string;
-  statusDot: string;
-};
-
-/** A connection with its role assignments. */
-export type ConnectionWithRoles = {
-  connection: AiConnection;
-  roles: AiRole[];
-};
-
-/** Editor draft state for a new or edited connection. */
-export type EditorDraft = {
-  providerId: string | undefined;
-  registryId: string;
-  capability: ConnectionCapability;
-  label: string;
-  model: string;
-  apiKey: string;
-  baseUrl: string;
-  showApiKey: boolean;
-  isEditing: boolean;
-  editingConnectionId: ConnectionId | undefined;
-};
-
-/** Optional values to prefill when opening the connection editor for a capability. */
-export type CapabilitySetupPrefill = {
-  registryId: string;
-  baseUrl?: string;
-  model?: string;
-};
-
-/**
- * State of a voice preview (AC-6). `synthesizing` covers the request/worker
- * round trip; `playing` only holds while {@link TtsServiceInterface.isPlaying}
- * is actually true — a resolved synthesis promise is not audible success.
- */
-export type VoicePreviewState =
-  | { status: 'idle' }
-  | { status: 'synthesizing' }
-  | { status: 'playing' }
-  | { status: 'error'; error: string };
-
-/** State of the image connection preview (AC-7). */
-export type ImagePreviewState =
-  | { status: 'idle' }
-  | { status: 'generating' }
-  | { status: 'ready'; url: string }
-  | { status: 'error'; error: string };
-
-/** A size preset applied to an image connection's params. */
-export type ImageSizePreset = {
-  id: string;
-  label: string;
-  role: AiRole;
-  width: number;
-  height: number;
-};
-
-/** A quality level mapped onto steps/cfg. */
-export type ImageQualityLevel = {
-  id: string;
-  label: string;
-  steps: number;
-  cfg: number;
-};
-
-/** Ambiguous-key prompt state. */
-export type KeyConflictPrompt = {
-  /** The new key the user pasted. */
-  newKey: string;
-  /** The provider whose credential would change. */
-  providerLabel: string;
-  /** How many connections share this provider. */
-  sharedConnectionCount: number;
-  /** Whether the user chose to update the shared account. */
-  resolveUpdate: boolean;
-  /** Whether the user chose to create a separate account. */
-  resolveSeparate: boolean;
-};
+export type { CapabilityStatus, CapabilityStatusEntry };
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -462,78 +393,6 @@ export type AiSettingsViewModelOptions = BaseViewModelOptions & {
 // ---------------------------------------------------------------------------
 
 const TEST_TIMEOUT_MS = 15_000;
-const LOCAL_PROVIDER_IDS = new Set([
-  'ollama',
-  'llamacpp',
-  'ooba',
-  'comfyui',
-  'webui',
-  'sdcpp',
-  'kokoro',
-  'voicevox',
-  'fish-speech',
-]);
-
-const ALL_ROLES: readonly AiRole[] = [
-  'narration',
-  'dialogue',
-  'summarization',
-  'structured',
-  'portrait',
-  'scene',
-  'narrator-voice',
-  'npc-voice',
-] as const;
-
-/** Which capability a role is served by (mirrors the config service mapping). */
-const ROLE_CAPABILITY: Record<AiRole, ConnectionCapability> = {
-  narration: 'text',
-  dialogue: 'text',
-  summarization: 'text',
-  structured: 'text',
-  portrait: 'image',
-  scene: 'image',
-  'narrator-voice': 'voice',
-  'npc-voice': 'voice',
-};
-
-const IMAGE_SIZE_PRESETS: readonly ImageSizePreset[] = [
-  { id: 'portrait', label: 'Portrait (768×1024)', role: 'portrait', width: 768, height: 1024 },
-  { id: 'scene', label: 'Scene (1024×768)', role: 'scene', width: 1024, height: 768 },
-];
-
-const IMAGE_QUALITY_LEVELS: readonly ImageQualityLevel[] = [
-  { id: 'draft', label: 'Draft', steps: 15, cfg: 5 },
-  { id: 'standard', label: 'Standard', steps: 25, cfg: 7 },
-  { id: 'high', label: 'High', steps: 35, cfg: 9 },
-];
-
-const DEFAULT_IMAGE_PARAMS: ImageParams = {
-  checkpoint: '',
-  width: 512,
-  height: 512,
-  steps: 20,
-  cfg: 7,
-};
-
-/** Used for the voice preview when no campaign is active (AC-6, Edge Cases). */
-export const VOICE_PREVIEW_FALLBACK_LINE =
-  'The tavern door creaks open as a gust of wind sweeps through the room.';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const _registryForCapability = (capability: ConnectionCapability) => {
-  if (capability === 'image') {
-    return IMAGE_PROVIDERS;
-  }
-  if (capability === 'voice') {
-    return VOICE_PROVIDERS;
-  }
-  return TEXT_PROVIDERS;
-};
-
 // Status derivation/color/dot live in ./ai_connection_status.svelte and are
 // shared with the lightweight header badge.
 
@@ -624,85 +483,33 @@ export class AiSettingsViewModel
   // ── Derived: status board ──
 
   get statusEntries(): readonly CapabilityStatusEntry[] {
-    const capabilities: ConnectionCapability[] = ['text', 'voice', 'image'];
-    return capabilities.map((cap) => {
-      const connections = this._connectionsForCapability(cap);
-      const providers = this._providersForCapability(cap);
-      // The effective connection is the one actually resolved for this
-      // capability's default role — never just the first array entry,
-      // which can be stale or arbitrary once more than one connection
-      // exists for a capability.
-      const effectiveId = this._config.state.defaultByCapability?.[cap];
-      const effectiveConn = connections.find((c) => c.id === effectiveId) ?? connections[0];
-      const status = deriveCapabilityStatus({
-        connection: effectiveConn,
-        testResults: this.testResults,
-        testingIds: this.testingIds,
-      });
-      const testResult = effectiveConn ? this.testResults[effectiveConn.id] : undefined;
-      const provider = effectiveConn
-        ? providers.find((p) => p.id === effectiveConn.providerId)
-        : undefined;
-      const registry = _registryForCapability(cap);
-      const registryEntry = registry.find((r) => r.id === provider?.registryId);
-      return {
-        capability: cap,
-        connectionId: effectiveConn?.id,
-        status,
-        color: capabilityStatusColor(status),
-        dot: capabilityStatusDot(status),
-        label: cap.charAt(0).toUpperCase() + cap.slice(1),
-        modelName: effectiveConn?.model,
-        latencyMs: testResult?.ok ? testResult.latencyMs : undefined,
-        providerLabel: registryEntry?.label,
-      };
+    return buildCapabilityStatusEntries({
+      connections: this._config.getAiConnections(),
+      providers: this._config.getProviders(),
+      defaultByCapability: this._config.state.defaultByCapability,
+      testResults: this.testResults,
+      testingIds: this.testingIds,
     });
   }
 
   // ── Derived: provider tree ──
 
   get providerTree(): readonly ProviderTreeEntry[] {
-    const providers = this._config.getProviders();
-    const aiConnections = this._config.getAiConnections();
-    return providers.map((p) => {
-      const conns = aiConnections.filter((c) => c.providerId === p.id);
-      const connections = conns.map((connection): ProviderTreeConnection => {
-        const status = this.connectionStatusFor(connection.id);
-        return {
-          ...connection,
-          statusLabel: status.label,
-          statusColorClass: status.colorClass,
-          statusDot: status.dot,
-        };
-      });
-      const registry = _registryForCapability(conns[0]?.capability ?? 'text');
-      const regEntry = registry.find((r) => r.id === p.registryId);
-      const status = this._providerStatus(conns);
-      return {
-        provider: p,
-        connections,
-        registryLabel: regEntry?.label ?? p.registryId,
-        isLocal: LOCAL_PROVIDER_IDS.has(p.registryId),
-        connectionCount: conns.length,
-        statusLabel: status.label,
-        statusColorClass: status.colorClass,
-      };
+    return buildProviderTree({
+      providers: this._config.getProviders(),
+      connections: this._config.getAiConnections(),
+      testResults: this.testResults,
+      testingIds: this.testingIds,
     });
   }
 
   // ── Derived: roles ──
 
   get connectionsWithRoles(): readonly ConnectionWithRoles[] {
-    const assignments = this._config.getRoleAssignments();
-    const connections = this._config.getAiConnections();
-    return connections
-      .map((connection) => {
-        const roles = (Object.keys(assignments) as AiRole[]).filter(
-          (role) => assignments[role] === connection.id,
-        );
-        return { connection, roles };
-      })
-      .filter((entry) => entry.roles.length > 0);
+    return buildConnectionsWithRoles(
+      this._config.getAiConnections(),
+      this._config.getRoleAssignments(),
+    );
   }
 
   get availableRoles(): readonly AiRole[] {
@@ -710,9 +517,10 @@ export class AiSettingsViewModel
   }
 
   get unassignedConnections(): readonly AiConnection[] {
-    const assignments = this._config.getRoleAssignments();
-    const assignedIds = new Set(Object.values(assignments));
-    return this._config.getAiConnections().filter((c) => !assignedIds.has(c.id));
+    return unassignedConnections(
+      this._config.getAiConnections(),
+      this._config.getRoleAssignments(),
+    );
   }
 
   connectionsForCapability(capability: ConnectionCapability): readonly AiConnection[] {
@@ -720,7 +528,7 @@ export class AiSettingsViewModel
   }
 
   rolesForCapability(capability: ConnectionCapability): readonly AiRole[] {
-    return ALL_ROLES.filter((role) => ROLE_CAPABILITY[role] === capability);
+    return rolesForCapability(capability);
   }
 
   connectionIdForRole(role: AiRole): ConnectionId | undefined {
@@ -730,7 +538,7 @@ export class AiSettingsViewModel
   // ── Derived: editor state ──
 
   get providerOptions(): ReadonlyArray<{ id: string; label: string; description: string }> {
-    return _registryForCapability(this.draft.capability).map((p) => ({
+    return registryForCapability(this.draft.capability).map((p) => ({
       id: p.id,
       label: p.label,
       description: p.description,
@@ -738,7 +546,7 @@ export class AiSettingsViewModel
   }
 
   get labelHint(): string {
-    return this._registryLabel(this.draft.registryId) ?? this.draft.registryId;
+    return registryLabel(this.draft.registryId) ?? this.draft.registryId;
   }
 
   get modelOptions(): readonly FetchedModel[] {
@@ -767,7 +575,7 @@ export class AiSettingsViewModel
   }
 
   get needsApiKey(): boolean {
-    const regEntry = _registryForCapability(this.draft.capability).find(
+    const regEntry = registryForCapability(this.draft.capability).find(
       (p) => p.id === this.draft.registryId,
     );
     if (!regEntry) {
@@ -789,7 +597,7 @@ export class AiSettingsViewModel
   }
 
   get isLocalProvider(): boolean {
-    const regEntry = _registryForCapability(this.draft.capability).find(
+    const regEntry = registryForCapability(this.draft.capability).find(
       (p) => p.id === this.draft.registryId,
     );
     return regEntry?.isLocal ?? false;
@@ -840,7 +648,7 @@ export class AiSettingsViewModel
   }
 
   voiceIdInputLabelFor(archetypeLabel: string): string {
-    return `Voice ID for ${archetypeLabel}`;
+    return voiceIdInputLabelFor(archetypeLabel);
   }
 
   get voiceSpeed(): number {
@@ -921,19 +729,11 @@ export class AiSettingsViewModel
   }
 
   get voiceModelProgress(): number {
-    const state = this._voiceModel.state;
-    if (state.status === 'downloading') {
-      return Math.round((state.receivedBytes / Math.max(1, state.totalBytes)) * 100);
-    }
-    if (state.status === 'verifying') {
-      return 100;
-    }
-    return 0;
+    return voiceModelProgress(this._voiceModel.state);
   }
 
   get voiceModelSizeLabel(): string {
-    const bytes = this._voiceModel.totalBytes;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return voiceModelSizeLabel(this._voiceModel.totalBytes);
   }
 
   get voiceRuntimeStatus(): TtsStatus {
@@ -1053,11 +853,7 @@ export class AiSettingsViewModel
   }
 
   imageParamsFor(connectionId: ConnectionId): ImageParams {
-    const conn = this._config.getAiConnection(connectionId);
-    if (conn?.capability !== 'image' || !('checkpoint' in conn.params)) {
-      return DEFAULT_IMAGE_PARAMS;
-    }
-    return conn.params;
+    return imageParamsFor(this._config.getAiConnection(connectionId));
   }
 
   setImageParamField(connectionId: ConnectionId, field: 'steps' | 'cfg', value: number): void {
@@ -1090,13 +886,11 @@ export class AiSettingsViewModel
   }
 
   imagePreviewUrlFor(connectionId: ConnectionId): string {
-    const state = this.imagePreviewStateFor(connectionId);
-    return state.status === 'ready' ? state.url : '';
+    return imagePreviewUrlFor(this.imagePreviewStateFor(connectionId));
   }
 
   imagePreviewErrorFor(connectionId: ConnectionId): string {
-    const state = this.imagePreviewStateFor(connectionId);
-    return state.status === 'error' ? state.error : '';
+    return imagePreviewErrorFor(this.imagePreviewStateFor(connectionId));
   }
 
   async previewImage(connectionId: ConnectionId): Promise<void> {
@@ -1153,7 +947,7 @@ export class AiSettingsViewModel
     const base =
       conn?.capability === 'text'
         ? (conn.params as TextParams)
-        : (this._defaultParams('text') as TextParams);
+        : (defaultParamsForCapability('text') as TextParams);
     return { ...base, ...this._genParamsDraft };
   }
 
@@ -1310,7 +1104,7 @@ export class AiSettingsViewModel
     if (conflictProvider) {
       this.keyConflictPrompt = {
         newKey: oldApiKey,
-        providerLabel: this._registryLabel(registryId) ?? registryId,
+        providerLabel: registryLabel(registryId) ?? registryId,
         sharedConnectionCount: this._connectionsForProvider(conflictProvider.id).length,
         resolveUpdate: false,
         resolveSeparate: false,
@@ -1326,7 +1120,7 @@ export class AiSettingsViewModel
     // connection. Verify first so a typo'd key is caught here rather than
     // surfacing as a broken game several screens later.
     if (this.canVerifyDraft) {
-      if (this._testedDraftSignature !== this._draftSignature()) {
+      if (this._testedDraftSignature !== draftSignature(this.draft)) {
         await this.testDraftConnection();
       }
       if (this.draftTestResult && !this.draftTestResult.ok) {
@@ -1352,10 +1146,13 @@ export class AiSettingsViewModel
 
     const reg = this.draft.registryId;
     const cap = this.draft.capability;
-    const requestedLabel = this.draft.label?.trim() || this._registryLabel(reg) || reg;
+    const requestedLabel = this.draft.label?.trim() || registryLabel(reg) || reg;
     const label = this.draft.isEditing
       ? requestedLabel
-      : this._uniqueConnectionLabel(requestedLabel, cap);
+      : uniqueConnectionLabel(
+          requestedLabel,
+          this._connectionsForCapability(cap).map((connection) => connection.label?.trim()),
+        );
     const model = this.draft.model;
     let savedConnectionId: ConnectionId | undefined;
 
@@ -1383,7 +1180,7 @@ export class AiSettingsViewModel
         } else {
           targetProviderId = this._config.addProvider({
             registryId: this.draft.registryId,
-            label: this._registryLabel(this.draft.registryId) ?? this.draft.registryId,
+            label: registryLabel(this.draft.registryId) ?? this.draft.registryId,
             credential: this.draft.apiKey || undefined,
             baseUrl: this.draft.baseUrl?.trim() || undefined,
             source: 'stored',
@@ -1431,7 +1228,7 @@ export class AiSettingsViewModel
       if (conflictPrompt?.resolveSeparate) {
         providerId = this._config.addProvider({
           registryId: reg,
-          label: this._registryLabel(reg) ?? reg,
+          label: registryLabel(reg) ?? reg,
           credential: conflictPrompt.newKey,
           baseUrl: this.draft.baseUrl || undefined,
           source: 'stored',
@@ -1448,7 +1245,7 @@ export class AiSettingsViewModel
         } else {
           providerId = this._config.addProvider({
             registryId: reg,
-            label: this._registryLabel(reg) ?? reg,
+            label: registryLabel(reg) ?? reg,
             credential: this.draft.apiKey || undefined,
             baseUrl: this.draft.baseUrl || undefined,
             source: 'stored',
@@ -1458,7 +1255,7 @@ export class AiSettingsViewModel
 
       // Create the new connection
       if (providerId) {
-        const defaultParams = this._defaultParams(cap);
+        const defaultParams = defaultParamsForCapability(cap);
         const params =
           cap === 'text' && Object.keys(this._genParamsDraft).length > 0
             ? ({ ...(defaultParams as TextParams), ...this._genParamsDraft } as TextParams)
@@ -1564,44 +1361,12 @@ export class AiSettingsViewModel
    * means the voice model is downloaded and the TTS runtime can start.
    */
   private async _probeKokoroConnection(): Promise<ConnectionTestResult> {
-    const startMs = performance.now();
-    const elapsed = () => Math.round(performance.now() - startMs);
-    const model = this.voiceModelState;
-
-    if (model.status === 'error') {
-      return {
-        ok: false,
-        latencyMs: elapsed(),
-        error: model.message || 'Voice model download failed',
-      };
-    }
-    if (model.status !== 'ready') {
-      return {
-        ok: false,
-        latencyMs: elapsed(),
-        error: 'Voice model not downloaded',
-      };
-    }
-
-    try {
-      if (this._tts.status !== 'ready') {
-        await this.retryVoiceRuntime();
-      }
-      if (this._tts.status === 'ready') {
-        return { ok: true, latencyMs: elapsed() };
-      }
-      return {
-        ok: false,
-        latencyMs: elapsed(),
-        error: this.voiceRuntimeError ?? 'Voice engine failed to start',
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        latencyMs: elapsed(),
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
+    return probeKokoroConnection({
+      modelState: this.voiceModelState,
+      getTtsStatus: () => this._tts.status,
+      getRuntimeError: () => this.voiceRuntimeError,
+      retryRuntime: () => this.retryVoiceRuntime(),
+    });
   }
 
   /** Resolves the current verification status for one connection. */
@@ -1610,21 +1375,11 @@ export class AiSettingsViewModel
     colorClass: string;
     dot: string;
   } {
-    if (this.testingIds.has(connectionId)) {
-      return { label: 'testing…', colorClass: 'text-warning', dot: '◌' };
-    }
-    const result = this.testResults[connectionId];
-    if (!result) {
-      return { label: 'not checked', colorClass: 'text-base-content/40', dot: '○' };
-    }
-    if (result.ok) {
-      return { label: `reachable (${result.latencyMs}ms)`, colorClass: 'text-success', dot: '●' };
-    }
-    return {
-      label: result.error ? `unreachable: ${result.error}` : 'unreachable',
-      colorClass: 'text-error',
-      dot: '●',
-    };
+    return connectionStatusDescriptor({
+      connectionId,
+      testResults: this.testResults,
+      testingIds: this.testingIds,
+    });
   }
 
   get canVerifyDraft(): boolean {
@@ -1646,7 +1401,7 @@ export class AiSettingsViewModel
       return;
     }
 
-    const signature = this._draftSignature();
+    const signature = draftSignature(this.draft);
     const generation = ++this._draftTestGeneration;
     this.isTestingDraft = true;
 
@@ -1703,7 +1458,7 @@ export class AiSettingsViewModel
       this.draftModelTestResult = {
         ok: false,
         latencyMs: 0,
-        error: this._modelTestUnavailableError(reg),
+        error: modelTestUnavailableError(reg, this._ai.providerModelFetch),
       };
       return;
     }
@@ -1768,35 +1523,6 @@ export class AiSettingsViewModel
   }
 
   /**
-   * Explains why a model test has no request to send. The message names the
-   * actual gap — a missing endpoint — rather than implying the provider is
-   * unsupported, which is only true for ids absent from the registry.
-   */
-  private _modelTestUnavailableError(registryId: string): string {
-    if (!this._ai.providerModelFetch[registryId]) {
-      return 'Model testing not supported for this provider';
-    }
-    if (registryId === 'ollama') {
-      return 'No local text engine configured (text.url missing from config.json)';
-    }
-    return 'No endpoint configured — set a base URL';
-  }
-
-  /**
-   * Identifies the credential/endpoint the current draft would probe. A
-   * change to any of these invalidates a previous result — a key that
-   * verified before the user edited it is not evidence about the new one.
-   */
-  private _draftSignature(): string {
-    return [
-      this.draft.registryId,
-      this.draft.apiKey ?? '',
-      this.draft.baseUrl?.trim() ?? '',
-      this.draft.providerId ?? '',
-    ].join(' ');
-  }
-
-  /**
    * Projects the draft onto an AiProvider for verification. The stored
    * credential stands in when the user left the key field untouched while
    * editing an existing connection (the editor never prefills the secret).
@@ -1809,7 +1535,7 @@ export class AiSettingsViewModel
     return {
       id: existing?.id ?? 'draft',
       registryId: this.draft.registryId,
-      label: this._registryLabel(this.draft.registryId) ?? this.draft.registryId,
+      label: registryLabel(this.draft.registryId) ?? this.draft.registryId,
       credential,
       baseUrl: this.draft.baseUrl?.trim() || existing?.baseUrl,
       source: existing?.source ?? 'stored',
@@ -1938,7 +1664,7 @@ export class AiSettingsViewModel
     prefill?: CapabilitySetupPrefill,
   ): void {
     const registryId =
-      prefill?.registryId ?? _registryForCapability(capability)[0]?.id ?? 'openrouter';
+      prefill?.registryId ?? registryForCapability(capability)[0]?.id ?? 'openrouter';
     const existingProvider = this._findProviderByRegistry(registryId);
     this.draft = {
       providerId: existingProvider?.id,
@@ -1978,8 +1704,7 @@ export class AiSettingsViewModel
   }
 
   private _voicePreviewLine(): string {
-    const campaign = this._campaign.activeCampaign;
-    return campaign ? `Welcome back to ${campaign.name}.` : VOICE_PREVIEW_FALLBACK_LINE;
+    return voicePreviewLine(this._campaign.activeCampaign?.name);
   }
 
   private _updateImageParams(connectionId: ConnectionId, patch: Partial<ImageParams>): void {
@@ -1992,16 +1717,6 @@ export class AiSettingsViewModel
     });
   }
 
-  private _registryLabel(registryId: string): string | undefined {
-    for (const reg of [TEXT_PROVIDERS, VOICE_PROVIDERS, IMAGE_PROVIDERS]) {
-      const found = reg.find((p) => p.id === registryId);
-      if (found) {
-        return found.label;
-      }
-    }
-    return undefined;
-  }
-
   private _findProviderByRegistry(registryId: string): AiProvider | undefined {
     return this._config.getProviders().find((p) => p.registryId === registryId);
   }
@@ -2012,68 +1727,6 @@ export class AiSettingsViewModel
 
   private _connectionsForCapability(cap: ConnectionCapability): AiConnection[] {
     return this._config.getAiConnections().filter((c) => c.capability === cap);
-  }
-
-  /**
-   * Returns a capability-unique label: the requested name as-is when unused,
-   * otherwise the next "Name 2", "Name 3", … slot.
-   */
-  private _uniqueConnectionLabel(requested: string, cap: ConnectionCapability): string {
-    const used = new Set(
-      this._connectionsForCapability(cap)
-        .map((c) => c.label?.trim())
-        .filter(Boolean),
-    );
-    if (!used.has(requested)) {
-      return requested;
-    }
-    let suffix = 2;
-    while (used.has(`${requested} ${suffix}`)) {
-      suffix += 1;
-    }
-    return `${requested} ${suffix}`;
-  }
-
-  private _providersForCapability(cap: ConnectionCapability): AiProvider[] {
-    const registryIds = new Set<string>(_registryForCapability(cap).map((r) => r.id));
-    return this._config.getProviders().filter((p) => registryIds.has(p.registryId));
-  }
-
-  private _providerStatus(connections: AiConnection[]): { label: string; colorClass: string } {
-    if (connections.length === 0) {
-      return { label: 'no connections', colorClass: 'badge-ghost' };
-    }
-
-    // Check if any connection is currently being tested
-    for (const conn of connections) {
-      if (this.testingIds.has(conn.id)) {
-        return { label: 'testing…', colorClass: 'badge-warning' };
-      }
-    }
-
-    // Check if any connection has failed
-    for (const conn of connections) {
-      const result = this.testResults[conn.id];
-      if (result && !result.ok) {
-        return { label: 'unreachable', colorClass: 'badge-error' };
-      }
-    }
-
-    // Check if all connections have passed
-    let allTested = true;
-    for (const conn of connections) {
-      const result = this.testResults[conn.id];
-      if (!result) {
-        allTested = false;
-        break;
-      }
-    }
-    if (allTested) {
-      return { label: 'reachable', colorClass: 'badge-success' };
-    }
-
-    // Configured but never tested
-    return { label: 'not checked', colorClass: 'badge-ghost' };
   }
 
   /**
@@ -2096,24 +1749,6 @@ export class AiSettingsViewModel
     // Clears the shared result + in-flight marker and advances the generation
     // so an in-flight probe cannot write a pre-rotation result back.
     aiConnectionStatus.clear(connectionId);
-  }
-
-  private _defaultParams(cap: ConnectionCapability): TextParams | ImageParams | VoiceParams {
-    if (cap === 'voice') {
-      return { voiceId: '', speed: 1.0, pitch: 0 } as VoiceParams;
-    }
-    if (cap === 'image') {
-      return DEFAULT_IMAGE_PARAMS;
-    }
-    return {
-      temperature: 0.7,
-      topP: 1,
-      topK: 40,
-      repetitionPenalty: 1,
-      presencePenalty: 0,
-      maxTokens: 2048,
-      contextSize: 4096,
-    } as TextParams;
   }
 }
 

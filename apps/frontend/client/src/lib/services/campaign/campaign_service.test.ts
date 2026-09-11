@@ -10,27 +10,8 @@
 
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { Campaign } from '@aikami/types';
+import { AiTextProviderRequiredError } from '@aikami/utils';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
-
-// Mock @aikami/utils before it gets resolved — Bun's tsconfig paths don't
-// cover workspace packages in test mode, so we provide the AiTextProviderRequiredError
-// class locally.
-mock.module('@aikami/utils', () => {
-  class MockAiTextProviderRequiredError extends Error {
-    readonly code = 'text-provider-required' as const;
-    constructor(message = 'A text AI provider is required to start a campaign.') {
-      super(message);
-      this.name = 'AiTextProviderRequiredError';
-    }
-  }
-  return {
-    AiTextProviderRequiredError: MockAiTextProviderRequiredError,
-    isAiTextProviderRequiredError: (error: unknown): error is MockAiTextProviderRequiredError =>
-      error instanceof MockAiTextProviderRequiredError,
-  };
-});
-
-const { AiTextProviderRequiredError } = await import('@aikami/utils');
 
 // Mocks — must run before any imports that transitively touch configService
 // ---------------------------------------------------------------------------

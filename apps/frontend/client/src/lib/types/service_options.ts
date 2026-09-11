@@ -1,6 +1,6 @@
 // apps/frontend/client/src/lib/types/service_options.ts
 
-import type { BaseFrontendClassOptions } from '@aikami/frontend/services';
+import type { BaseFrontendClassOptions } from '@aikami/frontend/services/base';
 
 /** Options used to construct the legacy AI service. */
 export type AiServiceOptions = BaseFrontendClassOptions;

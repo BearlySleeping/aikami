@@ -1,5 +1,5 @@
 // apps/frontend/client/src/lib/services/character/character.svelte.ts
-import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services/base';
 import type { Character } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
 import { authService } from '../auth/auth_service.svelte.ts';

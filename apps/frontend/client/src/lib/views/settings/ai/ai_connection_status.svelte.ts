@@ -11,7 +11,9 @@
 // UI; call `resetAiConnectionStatus()` when the settings session ends if a
 // fresh session is required.
 
+import type { AiConnection, AiProvider } from '@aikami/types';
 import type { ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
+import { registryForCapability } from './ai_provider_registry';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,6 +35,23 @@ export type CapabilityStatus =
 export type AiCapabilityStatus = {
   capability: ConnectionCapability;
   status: CapabilityStatus;
+};
+
+/**
+ * Rich status-board entry for one capability. Produced by
+ * {@link buildCapabilityStatusEntries} so the AI editor's status board and the
+ * per-capability detail page render the same projection.
+ */
+export type CapabilityStatusEntry = {
+  capability: ConnectionCapability;
+  connectionId: ConnectionId | undefined;
+  status: CapabilityStatus;
+  color: string;
+  dot: string;
+  label: string;
+  modelName: string | undefined;
+  latencyMs: number | undefined;
+  providerLabel: string | undefined;
 };
 
 // ---------------------------------------------------------------------------
@@ -135,7 +154,7 @@ export const aiConnectionStatus = {
 export const deriveCapabilityStatus = (options: {
   connection: { id: ConnectionId } | undefined;
   testResults: Record<string, ConnectionTestResult>;
-  testingIds: Set<string>;
+  testingIds: ReadonlySet<string>;
 }): CapabilityStatus => {
   if (!options.connection) {
     return 'not_configured';
@@ -173,6 +192,64 @@ export const capabilityStatusDot = (status: CapabilityStatus): string => {
   return '\u25CB';
 };
 
+/** Provider registry for a capability — pure metadata lookup. */
+const _registryForCapability = registryForCapability;
+
+/** Inputs required to project the shared capability status board. */
+export type CapabilityStatusEntryInput = {
+  connections: readonly AiConnection[];
+  providers: readonly AiProvider[];
+  defaultByCapability: Record<string, string | null> | undefined;
+  testResults: Record<string, ConnectionTestResult>;
+  testingIds: ReadonlySet<string>;
+};
+
+/**
+ * Pure projection of the shared status board. Reads only its inputs, so both
+ * the AI editor and a lightweight per-capability detail page can render the
+ * same facts without sharing an editor instance.
+ */
+export const buildCapabilityStatusEntries = (
+  input: CapabilityStatusEntryInput,
+): readonly CapabilityStatusEntry[] => {
+  const capabilities: ConnectionCapability[] = ['text', 'voice', 'image'];
+  return capabilities.map((capability) => {
+    const connections = input.connections.filter(
+      (connection) => connection.capability === capability,
+    );
+    const registry = _registryForCapability(capability);
+    const registryIds = new Set<string>(registry.map((entry) => entry.id));
+    const providers = input.providers.filter((candidate) => registryIds.has(candidate.registryId));
+    // The effective connection is the one actually resolved for this
+    // capability's default role — never just the first array entry, which can
+    // be stale or arbitrary once more than one connection exists.
+    const effectiveId = input.defaultByCapability?.[capability];
+    const effectiveConnection =
+      connections.find((connection) => connection.id === effectiveId) ?? connections[0];
+    const status = deriveCapabilityStatus({
+      connection: effectiveConnection,
+      testResults: input.testResults,
+      testingIds: input.testingIds,
+    });
+    const testResult = effectiveConnection ? input.testResults[effectiveConnection.id] : undefined;
+    const provider = effectiveConnection
+      ? providers.find((entry) => entry.id === effectiveConnection.providerId)
+      : undefined;
+    const registryEntry = registry.find((entry) => entry.id === provider?.registryId);
+    return {
+      capability,
+      connectionId: effectiveConnection?.id,
+      status,
+      color: capabilityStatusColor(status),
+      dot: capabilityStatusDot(status),
+      label: capability.charAt(0).toUpperCase() + capability.slice(1),
+      modelName: effectiveConnection?.model,
+      latencyMs: testResult?.ok ? testResult.latencyMs : undefined,
+      providerLabel: registryEntry?.label,
+    };
+  });
+};
+
 /** Narrow config surface needed to resolve the effective connection per capability. */
 export type CapabilityStatusConfig = {
   getAiConnections(): readonly { id: ConnectionId; capability: ConnectionCapability }[];
@@ -204,4 +281,73 @@ export const buildCapabilityStatuses = (
       }),
     };
   });
+};
+
+// ---------------------------------------------------------------------------
+// Per-connection / per-provider descriptors (provider tree)
+// ---------------------------------------------------------------------------
+
+/** Human-readable status descriptor for one connection row. */
+export type ConnectionStatusDescriptor = {
+  label: string;
+  colorClass: string;
+  dot: string;
+};
+
+/** Resolves the display status for one connection from the shared store. */
+export const connectionStatusDescriptor = (options: {
+  connectionId: ConnectionId;
+  testResults: Record<string, ConnectionTestResult>;
+  testingIds: ReadonlySet<string>;
+}): ConnectionStatusDescriptor => {
+  if (options.testingIds.has(options.connectionId)) {
+    return { label: 'testing…', colorClass: 'text-warning', dot: '◌' };
+  }
+  const result = options.testResults[options.connectionId];
+  if (!result) {
+    return { label: 'not checked', colorClass: 'text-base-content/40', dot: '○' };
+  }
+  if (result.ok) {
+    return { label: `reachable (${result.latencyMs}ms)`, colorClass: 'text-success', dot: '●' };
+  }
+  return {
+    label: result.error ? `unreachable: ${result.error}` : 'unreachable',
+    colorClass: 'text-error',
+    dot: '●',
+  };
+};
+
+/** Provider badge status derived from the connections it owns. */
+export type ProviderStatusDescriptor = {
+  label: string;
+  colorClass: string;
+};
+
+/** Resolves a provider badge status from its connections + the shared store. */
+export const providerStatusFor = (options: {
+  connections: readonly { id: ConnectionId }[];
+  testResults: Record<string, ConnectionTestResult>;
+  testingIds: ReadonlySet<string>;
+}): ProviderStatusDescriptor => {
+  if (options.connections.length === 0) {
+    return { label: 'no connections', colorClass: 'badge-ghost' };
+  }
+  for (const connection of options.connections) {
+    if (options.testingIds.has(connection.id)) {
+      return { label: 'testing…', colorClass: 'badge-warning' };
+    }
+  }
+  for (const connection of options.connections) {
+    const result = options.testResults[connection.id];
+    if (result && !result.ok) {
+      return { label: 'unreachable', colorClass: 'badge-error' };
+    }
+  }
+  const allTested = options.connections.every(
+    (connection) => options.testResults[connection.id] !== undefined,
+  );
+  if (allTested) {
+    return { label: 'reachable', colorClass: 'badge-success' };
+  }
+  return { label: 'not checked', colorClass: 'badge-ghost' };
 };

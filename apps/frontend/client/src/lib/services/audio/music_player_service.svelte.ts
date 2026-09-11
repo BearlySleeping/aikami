@@ -17,7 +17,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { MusicSceneContext, Track } from '@aikami/types';
 import { MUSIC_VIBE_TAGS } from '$lib/data/music_track_catalog';
 import { audioService } from './audio_service.svelte.ts';

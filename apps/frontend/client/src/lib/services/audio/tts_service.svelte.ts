@@ -3,7 +3,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { VoiceParams } from '@aikami/types';
 import type { TtsBackend, TtsStatus, VoiceInfo } from '$types';
 import { configService } from '../config/config_service.svelte.ts';

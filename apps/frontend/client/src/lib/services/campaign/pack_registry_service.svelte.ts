@@ -9,7 +9,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { PackIndexSchema } from '@aikami/schemas';
 import type { PackIndexEntry } from '@aikami/types';
 import { Value } from 'typebox/value';

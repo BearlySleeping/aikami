@@ -9,7 +9,7 @@
 //
 // Contract: C-388 Image Engine Provider Abstraction
 
-import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import type { ImageEngineId, ImageParams } from '@aikami/types';
 import type { CheckpointInfo, ImageGenerationServiceOptions } from '$types';
 import { configService } from '../config/config_service.svelte.ts';

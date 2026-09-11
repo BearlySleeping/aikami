@@ -20,7 +20,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AssetResolver } from '@aikami/types';
 
 // ── Theme helpers ──────────────────────────────────────────────────────────

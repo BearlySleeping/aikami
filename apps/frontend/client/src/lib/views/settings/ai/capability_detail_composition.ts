@@ -5,7 +5,9 @@
 // ViewModel receives the child as a typed construction capability.
 
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
+import { configService } from '$services';
 import type { ConnectionCapability } from '$types';
+import { aiConnectionStatus, buildCapabilityStatusEntries } from './ai_connection_status.svelte';
 import { getAiSettingsViewModel } from './ai_settings_composition.ts';
 import {
   type CapabilityDetailViewModelInterface,
@@ -17,11 +19,26 @@ export type CapabilityDetailCompositionOptions = BaseViewModelOptions & {
   capability: ConnectionCapability;
 };
 
+/**
+ * Shared status projection for every capability detail page. Reads saved
+ * config + the shared test-result store directly, so the status card no longer
+ * depends on the AI settings editor instance.
+ */
+const _getStatusEntries = () =>
+  buildCapabilityStatusEntries({
+    connections: configService.getAiConnections(),
+    providers: configService.getProviders(),
+    defaultByCapability: configService.state.defaultByCapability,
+    testResults: aiConnectionStatus.testResults,
+    testingIds: aiConnectionStatus.testingIds,
+  });
+
 export const getCapabilityDetailViewModel = (
   options: CapabilityDetailCompositionOptions,
 ): CapabilityDetailViewModelInterface =>
   createCapabilityDetailViewModel({
     ...options,
+    getStatusEntries: _getStatusEntries,
     createAiSettings: () =>
       getAiSettingsViewModel({
         className: 'AiSettingsViewModel',

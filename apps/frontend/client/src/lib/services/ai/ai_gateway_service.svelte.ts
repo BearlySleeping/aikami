@@ -34,7 +34,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AiCapability, AiDetectionResult, AiModeResolution, TextParams } from '@aikami/types';
 import { ttsService } from '../audio/tts_service.svelte.ts';
 import { voiceModelService } from '../audio/voice_model_service.svelte.ts';

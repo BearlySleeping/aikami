@@ -12,7 +12,7 @@
 
 import { MAX_INVENTORY_SLOTS } from '@aikami/constants';
 import type { GameCommand } from '@aikami/frontend/engine/sim';
-import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import type { InventorySnapshot, ItemDefinition } from '@aikami/types';
 import type { InventoryServiceOptions } from '$types';
 import { getItemDefinition, setActiveCatalog } from '$utils/inventory_utils';

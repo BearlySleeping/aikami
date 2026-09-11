@@ -21,7 +21,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import { validateEcsSnapshot } from '@aikami/schemas';
 import type { SaveSlotEntry, SaveSlotMetadata } from '@aikami/types';

@@ -38,6 +38,13 @@ mock.module('@aikami/frontend/services', () => ({
   BaseFrontendClass: MockBaseFrontendClass,
 }));
 
+// gm_prompt_service imports the base hierarchy from the narrow `/base`
+// entrypoint, so the root mock above no longer intercepts it.
+mock.module('@aikami/frontend/services/base', () => ({
+  // biome-ignore lint/style/useNamingConvention: mirrors the real module's exported PascalCase class name
+  BaseFrontendClass: MockBaseFrontendClass,
+}));
+
 // ── Mock service dependencies ─────────────────────────────────────
 // Config service pulls in crypto_vault which can't be resolved in Bun test env.
 // Mock the config service at its resolved filesystem path to break the chain.

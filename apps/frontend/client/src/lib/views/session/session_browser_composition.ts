@@ -4,7 +4,7 @@
 // the feature that imports the production `$services`/router singletons; the
 // ViewModel receives its dependencies as typed capabilities.
 
-import { routerService } from '@aikami/frontend/services';
+import { routerService } from '@aikami/frontend/services/router';
 import { sessionService } from '$services/game/session_service.svelte';
 import {
   createSessionBrowserViewModel,

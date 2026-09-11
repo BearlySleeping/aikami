@@ -5,7 +5,7 @@
 // Firebase `ai` callable), preserving the original public interface and
 // undefined-on-error semantics. Contract: C-320 AC-2/AC-4.
 
-import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import type { NpcData, PersonaData } from '@aikami/types';
 import type { AiServiceOptions } from '$types';
 import { aiGatewayService } from './ai_gateway_service.svelte.ts';
