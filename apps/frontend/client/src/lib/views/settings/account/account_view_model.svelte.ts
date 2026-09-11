@@ -14,7 +14,7 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type { SaveSlotEntry } from '@aikami/types';
+import type { BackupEntry } from '@aikami/frontend/services/backup_client';
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -34,9 +34,9 @@ export type AccountCapabilities = {
   revokeAllSessions(): Promise<boolean>;
 };
 
-/** The cloud-sync capability the account view reads. */
-export type AccountSyncCapabilities = {
-  listSlots(options: { uid: string }): Promise<SaveSlotEntry[]>;
+/** The cloud-backup capability the account view reads. */
+export type AccountBackupCapabilities = {
+  listBackups(): Promise<BackupEntry[]>;
 };
 
 // ── Types ───────────────────────────────────────────────────────────────
@@ -44,8 +44,8 @@ export type AccountSyncCapabilities = {
 export type AccountViewModelOptions = BaseViewModelOptions & {
   /** Account/identity operations. */
   account: AccountCapabilities;
-  /** Cloud-sync slot operations. */
-  sync: AccountSyncCapabilities;
+  /** Cloud backup listing. */
+  backups: AccountBackupCapabilities;
   /** Platform online probe. Defaults to `navigator.onLine` when omitted. */
   isOnline?: () => boolean;
 };
@@ -59,10 +59,10 @@ export type AccountViewModelInterface = BaseViewModelInterface & {
   readonly email: string | undefined;
   /** Whether the device is online. */
   readonly isOnline: boolean;
-  /** Sync slots from the local database. */
-  readonly syncSlots: SaveSlotEntry[];
-  /** Whether sync data is loading. */
-  readonly isSyncLoading: boolean;
+  /** Backups available for the signed-in user. */
+  readonly backups: BackupEntry[];
+  /** Whether backups are loading. */
+  readonly isBackupsLoading: boolean;
   /** Whether a sign-out is in progress. */
   readonly isSigningOut: boolean;
   /** Whether all account sessions are being revoked. */
@@ -88,8 +88,8 @@ export type AccountViewModelInterface = BaseViewModelInterface & {
   updateDeleteConfirmText(value: string): void;
   /** Confirms and executes account deletion. */
   confirmDeleteAccount(): Promise<void>;
-  /** Refreshes the sync slots list. */
-  refreshSyncSlots(): Promise<void>;
+  /** Refreshes the cloud backups list. */
+  refreshBackups(): Promise<void>;
 };
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -99,21 +99,21 @@ class AccountViewModel
   implements AccountViewModelInterface
 {
   private readonly _account: AccountCapabilities;
-  private readonly _sync: AccountSyncCapabilities;
+  private readonly _backups: AccountBackupCapabilities;
   private readonly _isOnline: () => boolean;
 
-  isSyncLoading = $state(false);
+  isBackupsLoading = $state(false);
   isSigningOut = $state(false);
   isRevokingAllSessions = $state(false);
   isDeleteDialogOpen = $state(false);
   deleteConfirmText = $state('');
   isDeleting = $state(false);
-  syncSlots = $state<SaveSlotEntry[]>([]);
+  backups = $state<BackupEntry[]>([]);
 
   constructor(options: AccountViewModelOptions) {
     super(options);
     this._account = options.account;
-    this._sync = options.sync;
+    this._backups = options.backups;
     this._isOnline =
       options.isOnline ?? (() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   }
@@ -140,7 +140,7 @@ class AccountViewModel
 
   override async initialize(): Promise<void> {
     if (this.isLoggedIn) {
-      await this.refreshSyncSlots();
+      await this.refreshBackups();
     }
     await super.initialize();
   }
@@ -179,18 +179,14 @@ class AccountViewModel
     }
   }
 
-  async refreshSyncSlots(): Promise<void> {
-    const uid = this._account.uid;
-    if (!uid) {
-      return;
-    }
-    this.isSyncLoading = true;
+  async refreshBackups(): Promise<void> {
+    this.isBackupsLoading = true;
     try {
-      this.syncSlots = await this._sync.listSlots({ uid });
+      this.backups = await this._backups.listBackups();
     } catch (error) {
-      this.error('refreshSyncSlots', error);
+      this.error('refreshBackups', error);
     } finally {
-      this.isSyncLoading = false;
+      this.isBackupsLoading = false;
     }
   }
 

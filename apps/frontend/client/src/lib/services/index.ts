@@ -1,7 +1,6 @@
 // apps/frontend/client/src/lib/services/index.ts
 export { type DialogServiceInterface, dialogService } from '@aikami/frontend/services/dialog';
 export { type RouterServiceInterface, routerService } from '@aikami/frontend/services/router';
-export type { SaveSlotEntry, SaveSlotMetadata } from '@aikami/types';
 export type { SidecarState, TextEngineConfig } from '$types';
 // ── Agent Pipeline ────────────────────────────────────────────────────
 export {
@@ -98,8 +97,6 @@ export * from './game/slash_command_parser';
 export * from './game/time_service.svelte';
 export * from './game/vendor_service.svelte.ts';
 export * from './game/world_state_service.svelte.ts';
-export type { GameStateSyncServiceInterface } from './game_state_sync.svelte.ts';
-export { gameStateSyncService } from './game_state_sync.svelte.ts';
 export * from './gm/gm_prompt_service.svelte.ts';
 export * from './gm/gm_types';
 export * from './gm/impersonation_service.svelte.ts';
