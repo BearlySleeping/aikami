@@ -20,7 +20,6 @@ import { type LpcAnimationState, resolveBaseAppearanceRecipe } from '@aikami/lpc
 import type { Campaign, PersonaData } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
-import { authService } from '../auth/auth_service.svelte.ts';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { campaignStorage as campaignStorageRepo } from '../campaign/campaign_storage.svelte';
@@ -1224,51 +1223,14 @@ class GameBootService
 
   // ── Persona resolution ──
 
-  /** Resolves persona preferring campaign.personaId, then active persona, then localStorage. */
+  /** Resolves the play persona: campaign persona first, then the active persona. */
   private async _resolvePersona(campaign?: Campaign): Promise<PersonaData | undefined> {
-    // 1. Prefer campaign.personaId
-    if (campaign?.personaId) {
-      try {
-        const user = authService.currentUser;
-        if (user) {
-          const personas = await personaService.getPersonas(user.id);
-          const match = personas.find((p) => p.id === campaign.personaId);
-          if (match) {
-            return match;
-          }
-        }
-      } catch (error) {
-        this.debug('_resolvePersona:campaign-persona-failed', { error: String(error) });
-      }
-    }
-
-    // 2. Fall back to active persona
     try {
-      const active = await personaService.getActivePersona();
-      if (active) {
-        return active;
-      }
+      return await personaService.resolvePersona(campaign?.personaId);
     } catch (error) {
-      this.debug('_resolvePersona:active-persona-failed', { error: String(error) });
+      this.debug('_resolvePersona:failed', { error: String(error) });
+      return undefined;
     }
-
-    // 3. Fall back to localStorage
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (stored) {
-        const characters = JSON.parse(stored) as Array<{ persona: PersonaData }>;
-        if (characters.length > 0) {
-          const last = characters[characters.length - 1];
-          if (last) {
-            return last.persona;
-          }
-        }
-      }
-    } catch (error) {
-      this.debug('_resolvePersona:localStorage-failed', { error: String(error) });
-    }
-
-    return undefined;
   }
 
   // ── LPC pipeline ──

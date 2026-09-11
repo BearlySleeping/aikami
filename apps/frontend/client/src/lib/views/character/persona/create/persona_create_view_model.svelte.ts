@@ -635,9 +635,8 @@ export class PersonaCreateViewModel
     // plus a couple of potions in the bag.
     this._seedStarterKit();
 
-    // Set persona as active if user is logged in
-    const uid = this._auth.uid;
-    if (uid && this.persona?.id) {
+    // Mark the persona active locally regardless of sign-in (local-first).
+    if (this.persona?.id) {
       try {
         await this._personas.setActivePersona(this.persona.id);
         this.info('enterWorld:active-set', { personaId: this.persona.id });
@@ -714,7 +713,17 @@ export class PersonaCreateViewModel
       savedAt: new Date().toISOString(),
     };
 
-    // 1. Save locally to localStorage
+    // SQLite is authoritative — updatePersona upserts, so this covers both
+    // create and update. A failure propagates so the save is never reported
+    // successful when nothing was persisted.
+    await this._personas.updatePersona(persona.id, {
+      ...persona,
+      avatarUrl: persistentAvatarUrl || persona.avatarUrl || '',
+      isActive: persona.isActive ?? false,
+    });
+    this.info('saveCharacter:local-table', { id: persona.id });
+
+    // Best-effort legacy mirror for the migration window.
     try {
       const stored = localStorage.getItem('aikami-characters');
       const characters = stored ? (JSON.parse(stored) as unknown[]) : [];
@@ -730,20 +739,7 @@ export class PersonaCreateViewModel
       localStorage.setItem('aikami-characters', JSON.stringify(characters));
       this.info('saveCharacter:local', { id: persona.id });
     } catch (error) {
-      this.error('saveCharacter:local-failed', error);
-    }
-
-    // 2. Save to the local personas table (C-386b) — per-install persistence.
-    //    updatePersona upserts, so this covers both create and update.
-    try {
-      await this._personas.updatePersona(persona.id, {
-        ...persona,
-        avatarUrl: persistentAvatarUrl || persona.avatarUrl || '',
-        isActive: persona.isActive ?? false,
-      });
-      this.info('saveCharacter:local-table', { id: persona.id });
-    } catch (error) {
-      this.error('saveCharacter:local-table-failed', error);
+      this.warn('saveCharacter:local-failed', error);
     }
   }
 

@@ -816,7 +816,6 @@ class OnboardingCoordinatorViewModel
       // Persist the persona to the same stores the game reads
       await this._persistPersona(persona);
 
-      localStorage.setItem(`persona-${persona.id}`, JSON.stringify(persona));
       campaign.personaId = persona.id;
       this._campaign.completeSetup();
       this._clearDraft();
@@ -839,7 +838,13 @@ class OnboardingCoordinatorViewModel
   // ── Private: Persona Persistence ──────────────────────────────────
 
   private async _persistPersona(persona: PersonaData): Promise<void> {
-    // 1. Legacy `aikami-characters` list (append or replace by id)
+    // SQLite is authoritative — a failure here must propagate so the caller
+    // does not attach a campaign to a persona that was never persisted.
+    await this._personas.updatePersona(persona.id, { ...persona, isActive: true });
+    await this._personas.setActivePersona(persona.id);
+
+    // Best-effort legacy mirror for the migration window (readers no longer
+    // depend on it once the one-time import has run).
     try {
       const stored = localStorage.getItem('aikami-characters');
       const characters = stored ? (JSON.parse(stored) as unknown[]) : [];
@@ -855,14 +860,6 @@ class OnboardingCoordinatorViewModel
       localStorage.setItem('aikami-characters', JSON.stringify(characters));
     } catch (error) {
       this.warn('_persistPersona:local-list-failed', error);
-    }
-
-    // 2. Local `personas` SQLite table (upsert) + mark active
-    try {
-      await this._personas.updatePersona(persona.id, { ...persona, isActive: true });
-      await this._personas.setActivePersona(persona.id);
-    } catch (error) {
-      this.warn('_persistPersona:local-table-failed', error);
     }
   }
 

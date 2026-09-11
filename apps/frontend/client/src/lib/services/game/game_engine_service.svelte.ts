@@ -1036,26 +1036,9 @@ class GameEngineService
       if (activePersona) {
         this._activePersona = activePersona;
         this._personaPlayerName = activePersona.name || activePersona.race || '';
-        return;
       }
     } catch (error) {
       this.debug('GameEngineService:loadActivePersona:local-failed', {
-        error: String(error),
-      });
-    }
-
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (stored) {
-        const characters = JSON.parse(stored) as Array<{ persona: PersonaData }>;
-        if (characters.length > 0) {
-          const persona = characters[characters.length - 1].persona;
-          this._activePersona = persona;
-          this._personaPlayerName = persona.name || persona.race || '';
-        }
-      }
-    } catch (error) {
-      this.debug('GameEngineService:loadActivePersona:localStorage-failed', {
         error: String(error),
       });
     }
