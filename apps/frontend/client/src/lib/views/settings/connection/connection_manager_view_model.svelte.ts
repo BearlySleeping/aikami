@@ -6,11 +6,8 @@
 import {
   buildVerifyHeaders,
   buildVerifyUrl,
-  IMAGE_PROVIDERS,
   PROVIDER_ENDPOINTS,
   providerNeedsKey,
-  TEXT_PROVIDERS,
-  VOICE_PROVIDERS,
 } from '@aikami/constants';
 import {
   BaseViewModel,
@@ -27,6 +24,12 @@ import type {
   resolveChatTestRequest,
 } from '$services';
 import type { Connection, ConnectionCapability, ConnectionId, ConnectionTestResult } from '$types';
+import {
+  capabilityProviderNeedsUrl,
+  DEFAULT_PROVIDER_BY_CAPABILITY,
+  LOCAL_GUIDE_PROVIDERS,
+  providerOptionsForCapability,
+} from './connection_provider_rules';
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -150,13 +153,6 @@ export type ConnectionManagerViewModelOptions = BaseViewModelOptions & {
 
 const TEST_TIMEOUT_MS = 15_000;
 
-/**
- * Local providers that get a live probe + web setup guide when selected.
- * Probing localhost from an HTTPS origin triggers the browser's Private
- * Network Access permission prompt — that's intentional and user-initiated.
- */
-const LOCAL_GUIDE_PROVIDERS = new Set(['ollama']);
-
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -202,7 +198,7 @@ class ConnectionManagerViewModel
   }
 
   get providerLabels(): Record<string, string> {
-    const providers = this._capabilityProviders();
+    const providers = providerOptionsForCapability(this.draft.capability);
     const labels: Record<string, string> = {};
     for (const p of providers) {
       labels[p.id] = p.label;
@@ -211,7 +207,7 @@ class ConnectionManagerViewModel
   }
 
   get providerOptions(): ReadonlyArray<{ id: string; label: string }> {
-    return this._capabilityProviders().map((p) => ({
+    return providerOptionsForCapability(this.draft.capability).map((p) => ({
       id: p.id,
       label: `${p.label} — ${p.description}`,
     }));
@@ -223,7 +219,7 @@ class ConnectionManagerViewModel
 
   get needsApiKey(): boolean {
     const provider = this.draft.provider ?? 'openrouter';
-    const desc = this._capabilityProviders().find((p) => p.id === provider);
+    const desc = providerOptionsForCapability(this.draft.capability).find((p) => p.id === provider);
     if (!desc) {
       return true;
     }
@@ -234,19 +230,16 @@ class ConnectionManagerViewModel
   get needsUrl(): boolean {
     const capability = this.draft.capability ?? 'text';
     const provider = this.draft.provider ?? 'openrouter';
-    if (capability === 'image') {
-      return ['comfyui', 'webui', 'sdcpp', 'openai-compat'].includes(provider);
-    }
-    if (capability === 'voice') {
-      return ['kokoro', 'voicevox', 'fish-speech'].includes(provider);
-    }
-    return ['ollama', 'llamacpp', 'ooba', 'custom'].includes(provider);
+    return capabilityProviderNeedsUrl(capability, provider);
   }
 
   /** True when the draft provider runs locally (no API key, no cloud auth). */
   get isLocalProvider(): boolean {
     const provider = this.draft.provider ?? 'openrouter';
-    return this._capabilityProviders().find((p) => p.id === provider)?.isLocal ?? false;
+    return (
+      providerOptionsForCapability(this.draft.capability).find((p) => p.id === provider)?.isLocal ??
+      false
+    );
   }
 
   /** Whether to show the local provider (Ollama) web setup guide. */
@@ -308,41 +301,6 @@ class ConnectionManagerViewModel
     return (this.draft.capability ?? 'text') === 'text';
   }
 
-  // ── Private: capability-aware helpers ─────────────────────────────────
-
-  /**
-   * Returns the provider registry for the draft's current capability.
-   * Falls back to TEXT_PROVIDERS for backward compatibility.
-   */
-  private _capabilityProviders(capabilityOverride?: ConnectionCapability): ReadonlyArray<{
-    id: string;
-    label: string;
-    description: string;
-    needsKey: boolean;
-    needsUrl?: boolean;
-    isLocal: boolean;
-  }> {
-    const capability = capabilityOverride ?? this.draft.capability ?? 'text';
-    if (capability === 'image') {
-      return IMAGE_PROVIDERS.map((p) => ({
-        ...p,
-        needsKey: p.id !== 'comfyui' && p.id !== 'webui' && p.id !== 'sdcpp',
-        needsUrl:
-          p.id === 'comfyui' || p.id === 'webui' || p.id === 'sdcpp' || p.id === 'openai-compat',
-        isLocal: p.id === 'comfyui' || p.id === 'webui' || p.id === 'sdcpp',
-      }));
-    }
-    if (capability === 'voice') {
-      return VOICE_PROVIDERS.map((p) => ({
-        ...p,
-        needsKey: p.id === 'elevenlabs' || p.id === 'openai',
-        needsUrl: p.id === 'kokoro' || p.id === 'voicevox' || p.id === 'fish-speech',
-        isLocal: p.id === 'kokoro' || p.id === 'voicevox' || p.id === 'fish-speech',
-      }));
-    }
-    return TEXT_PROVIDERS;
-  }
-
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
@@ -370,7 +328,7 @@ class ConnectionManagerViewModel
       isDefault: false,
       model: '',
       // Name is optional — default it to the selected provider's label.
-      name: this._capabilityProviders('text').find((p) => p.id === provider)?.label ?? provider,
+      name: providerOptionsForCapability('text').find((p) => p.id === provider)?.label ?? provider,
       provider,
     };
     this.localProviderStatus = undefined;
@@ -385,14 +343,7 @@ class ConnectionManagerViewModel
     this.editingConnectionId = undefined;
     this.isEditorOpen = true;
     // Default provider per capability
-    let defaultProvider: string;
-    if (capability === 'text') {
-      defaultProvider = 'openrouter';
-    } else if (capability === 'image') {
-      defaultProvider = 'comfyui';
-    } else {
-      defaultProvider = 'kokoro';
-    }
+    const defaultProvider = DEFAULT_PROVIDER_BY_CAPABILITY[capability];
     this.draft = {
       apiKey: '',
       baseUrl: '',
@@ -402,7 +353,7 @@ class ConnectionManagerViewModel
       model: '',
       // Name is optional — default it to the selected provider's label.
       name:
-        this._capabilityProviders(capability).find((p) => p.id === defaultProvider)?.label ??
+        providerOptionsForCapability(capability).find((p) => p.id === defaultProvider)?.label ??
         defaultProvider,
       provider: defaultProvider,
     };
@@ -505,7 +456,10 @@ class ConnectionManagerViewModel
 
   /** Resolves the human-readable label for a provider in the draft's capability. */
   private _providerLabel(provider: string): string {
-    return this._capabilityProviders().find((p) => p.id === provider)?.label ?? provider;
+    return (
+      providerOptionsForCapability(this.draft.capability).find((p) => p.id === provider)?.label ??
+      provider
+    );
   }
 
   /** Returns the default API key for a provider based on current capability. */
