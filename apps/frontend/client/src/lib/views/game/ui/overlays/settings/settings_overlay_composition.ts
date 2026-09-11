@@ -7,6 +7,7 @@
 
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 import { createSectionViewModelMount } from '$lib/views/settings/settings_sections_composition';
+import { gameOverlayService, routerService } from '$services';
 import {
   createSettingsOverlayViewModel,
   type SettingsOverlayViewModelInterface,
@@ -15,4 +16,9 @@ import {
 export const getSettingsOverlayViewModel = (
   options: BaseViewModelOptions,
 ): SettingsOverlayViewModelInterface =>
-  createSettingsOverlayViewModel({ ...options, createSectionMount: createSectionViewModelMount });
+  createSettingsOverlayViewModel({
+    ...options,
+    createSectionMount: createSectionViewModelMount,
+    router: routerService,
+    overlay: gameOverlayService,
+  });

@@ -1,10 +1,4 @@
 {
-  "apps/frontend/client/src/lib/views/agent/agent_pipeline_sandbox_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 2,
-    "m9": 0
-  },
   "apps/frontend/client/src/lib/views/app/dialogs/app_dialogs_view.svelte": {
     "v6": 1,
     "v7": 0,
@@ -44,28 +38,10 @@
   "apps/frontend/client/src/lib/views/chat/chat_view_model.svelte.ts": {
     "v6": 0,
     "v7": 0,
-    "m8": 1,
-    "m9": 1
-  },
-  "apps/frontend/client/src/lib/views/chat/connected_chats_sandbox_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 1,
-    "m9": 0
-  },
-  "apps/frontend/client/src/lib/views/chat/cyoa_sandbox_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 1,
-    "m9": 0
-  },
-  "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
     "m8": 0,
     "m9": 1
   },
-  "apps/frontend/client/src/lib/views/dev/autonomous_sandbox_view_model.svelte.ts": {
+  "apps/frontend/client/src/lib/views/chat/connected_chats_sandbox_view_model.svelte.ts": {
     "v6": 0,
     "v7": 0,
     "m8": 1,
@@ -92,7 +68,7 @@
   "apps/frontend/client/src/lib/views/dev/lpc_inventory/lpc_inventory_view_model.svelte.ts": {
     "v6": 0,
     "v7": 0,
-    "m8": 2,
+    "m8": 1,
     "m9": 0
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/camera/camera_sandbox_view.svelte": {
@@ -100,12 +76,6 @@
     "v7": 1,
     "m8": 0,
     "m9": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/sandbox/camera/camera_sandbox_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 0,
-    "m9": 4
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view.svelte": {
     "v6": 2,
@@ -117,7 +87,7 @@
     "v6": 0,
     "v7": 0,
     "m8": 0,
-    "m9": 4
+    "m9": 2
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view.svelte": {
     "v6": 1,
@@ -149,12 +119,6 @@
     "m8": 0,
     "m9": 0
   },
-  "apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 0,
-    "m9": 2
-  },
   "apps/frontend/client/src/lib/views/dev/text/text_view.svelte": {
     "v6": 1,
     "v7": 0,
@@ -167,28 +131,10 @@
     "m8": 1,
     "m9": 0
   },
-  "apps/frontend/client/src/lib/views/game/game_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 2,
-    "m9": 0
-  },
-  "apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 14,
-    "m9": 0
-  },
   "apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte": {
     "v6": 1,
     "v7": 0,
     "m8": 0,
-    "m9": 0
-  },
-  "apps/frontend/client/src/lib/views/gm/gm_system_sandbox_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 3,
     "m9": 0
   },
   "apps/frontend/client/src/lib/views/onboarding/onboarding_appearance_step_view.svelte": {
@@ -203,12 +149,6 @@
     "m8": 0,
     "m9": 0
   },
-  "apps/frontend/client/src/lib/views/onboarding/onboarding_coordinator_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 1,
-    "m9": 0
-  },
   "apps/frontend/client/src/lib/views/onboarding/onboarding_review_view.svelte": {
     "v6": 1,
     "v7": 1,
@@ -216,12 +156,6 @@
     "m9": 0
   },
   "apps/frontend/client/src/lib/views/onboarding/starter_hero_card_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 1,
-    "m9": 0
-  },
-  "apps/frontend/client/src/lib/views/settings/ai/capability_detail_view_model.svelte.ts": {
     "v6": 0,
     "v7": 0,
     "m8": 1,
@@ -239,29 +173,11 @@
     "m8": 0,
     "m9": 3
   },
-  "apps/frontend/client/src/lib/views/settings/settings_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 12,
-    "m9": 0
-  },
   "apps/frontend/client/src/lib/views/setup_subflow/setup_entry_view_model.svelte.ts": {
     "v6": 0,
     "v7": 0,
     "m8": 1,
     "m9": 0
-  },
-  "apps/frontend/client/src/lib/views/setup_subflow/setup_subflow_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 1,
-    "m9": 0
-  },
-  "apps/frontend/client/src/lib/views/start/start_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 0,
-    "m9": 1
   },
   "apps/frontend/client/src/lib/views/vendor/vendor_view.svelte": {
     "v6": 3,

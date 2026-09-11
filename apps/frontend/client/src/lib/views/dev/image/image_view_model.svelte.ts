@@ -12,18 +12,49 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { ImageEngineId, ImageType } from '@aikami/types';
-import {
-  compileImagePrompt,
-  getConfiguredImageEngineId,
-  type ImageEngineCapabilities,
-  imageGenerationService,
-  styleProfileService,
+} from '@aikami/frontend/services/base';
+import type { CompiledPrompt, ImageEngineId, ImageStyleProfile, ImageType } from '@aikami/types';
+import type {
+  ImageEngineCapabilities,
+  ImageGenerationServiceInterface,
+  StyleProfileServiceInterface,
 } from '$services';
 import type { CheckpointInfo } from '$types';
 
 export type { CheckpointInfo };
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The image generation operations and observable state the sandbox drives. */
+export type ImageGenerationCapabilities = Pick<
+  ImageGenerationServiceInterface,
+  | 'checkpoints'
+  | 'selectedCheckpoint'
+  | 'engineId'
+  | 'capabilities'
+  | 'isAutoDetect'
+  | 'loadCheckpoints'
+  | 'refreshEngine'
+  | 'setEngine'
+  | 'generateImage'
+  | 'releaseResultUrl'
+  | 'cancel'
+>;
+
+/** The style-profile state and operations the sandbox reads. */
+export type StyleProfileCapabilities = Pick<
+  StyleProfileServiceInterface,
+  'profiles' | 'activeProfileId' | 'activeProfile' | 'setActiveProfile'
+>;
+
+/** The prompt-compiler pure function the sandbox invokes. */
+export type ImagePromptCompilerCapabilities = {
+  compileImagePrompt(options: {
+    basePrompt: string;
+    profile: ImageStyleProfile;
+    imageType: ImageType;
+  }): CompiledPrompt;
+};
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -204,7 +235,16 @@ export type ImageViewModelInterface = BaseViewModelInterface & {
   editImage(): Promise<void>;
 };
 
-export type ImageViewModelOptions = BaseViewModelOptions & {};
+export type ImageViewModelOptions = BaseViewModelOptions & {
+  /** Image generation transport + observable state. */
+  imageGeneration: ImageGenerationCapabilities;
+  /** Style profile pipeline state. */
+  styleProfiles: StyleProfileCapabilities;
+  /** Prompt compiler. */
+  compiler: ImagePromptCompilerCapabilities;
+  /** Reads the configured/preferred engine id (defaults to 'auto'). */
+  getConfiguredEngineId: () => ImageEngineId;
+};
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -265,6 +305,18 @@ class ImageViewModel
 
   private _abortController: AbortController | undefined;
 
+  private readonly _imageGeneration: ImageGenerationCapabilities;
+  private readonly _styleProfiles: StyleProfileCapabilities;
+  private readonly _compiler: ImagePromptCompilerCapabilities;
+
+  constructor(options: ImageViewModelOptions) {
+    super(options);
+    this._imageGeneration = options.imageGeneration;
+    this._styleProfiles = options.styleProfiles;
+    this._compiler = options.compiler;
+    this._selectedEngine = options.getConfiguredEngineId();
+  }
+
   // ── Getters ──────────────────────────────────────────────────────────
 
   get tabs(): readonly ImageTabMeta[] {
@@ -272,15 +324,15 @@ class ImageViewModel
   }
 
   get checkpoints(): readonly CheckpointInfo[] {
-    return imageGenerationService.checkpoints;
+    return this._imageGeneration.checkpoints;
   }
 
   get selectedCheckpoint(): string {
-    return imageGenerationService.selectedCheckpoint;
+    return this._imageGeneration.selectedCheckpoint;
   }
 
   set selectedCheckpoint(value: string) {
-    imageGenerationService.selectedCheckpoint = value;
+    this._imageGeneration.selectedCheckpoint = value;
   }
 
   get expressions(): readonly ExpressionDef[] {
@@ -290,10 +342,10 @@ class ImageViewModel
   // ── Engine selector (C-388) ──────────────────────────────────────────
 
   /** Configured/preferred engine shown by the selector (default 'auto'). */
-  private _selectedEngine = $state<ImageEngineId>(getConfiguredImageEngineId());
+  private _selectedEngine = $state<ImageEngineId>('auto');
 
   get engineId(): string | undefined {
-    return imageGenerationService.engineId;
+    return this._imageGeneration.engineId;
   }
 
   /**
@@ -314,11 +366,11 @@ class ImageViewModel
   }
 
   get isAutoDetect(): boolean {
-    return imageGenerationService.isAutoDetect;
+    return this._imageGeneration.isAutoDetect;
   }
 
   get availableControls(): readonly ImageControlId[] {
-    const capabilities = imageGenerationService.capabilities;
+    const capabilities = this._imageGeneration.capabilities;
     if (!capabilities) {
       return [];
     }
@@ -332,7 +384,7 @@ class ImageViewModel
     this._releaseResults();
     this.inputMaskDataUrl = undefined;
     this.inputMaskName = '';
-    await imageGenerationService.refreshEngine();
+    await this._imageGeneration.refreshEngine();
   }
 
   async setEngine(engine: ImageEngineId): Promise<void> {
@@ -341,21 +393,21 @@ class ImageViewModel
     this.inputMaskDataUrl = undefined;
     this.inputMaskName = '';
     this._selectedEngine = engine;
-    await imageGenerationService.setEngine(engine);
+    await this._imageGeneration.setEngine(engine);
   }
 
   // ── Pipeline getters/setters (C-242) ──────────────────────────────────
 
   get styleProfiles(): readonly { id: string; name: string; isBuiltIn: boolean }[] {
-    return styleProfileService.profiles;
+    return this._styleProfiles.profiles;
   }
 
   get styleProfileId(): string {
-    return styleProfileService.activeProfileId;
+    return this._styleProfiles.activeProfileId;
   }
 
   set styleProfileId(value: string) {
-    styleProfileService.setActiveProfile(value);
+    this._styleProfiles.setActiveProfile(value);
   }
 
   get compiledTagsSummary(): string {
@@ -364,12 +416,12 @@ class ImageViewModel
 
   /** Compiles the current prompt through the active style profile pipeline. */
   compilePrompt(): void {
-    const profile = styleProfileService.activeProfile;
+    const profile = this._styleProfiles.activeProfile;
     if (!profile) {
       return;
     }
 
-    const compiled = compileImagePrompt({
+    const compiled = this._compiler.compileImagePrompt({
       basePrompt: this.prompt,
       profile,
       imageType: this.imageType,
@@ -393,7 +445,7 @@ class ImageViewModel
 
   override async initialize(): Promise<void> {
     await super.initialize();
-    void imageGenerationService.loadCheckpoints();
+    void this._imageGeneration.loadCheckpoints();
   }
 
   // ── Public: image upload ──────────────────────────────────────────────
@@ -435,7 +487,7 @@ class ImageViewModel
   cancel(): void {
     this._abortController?.abort();
     this._abortController = undefined;
-    imageGenerationService.cancel();
+    this._imageGeneration.cancel();
     this.isGenerating = false;
     this.generationProgress = 0;
     this.generationStatus = '';
@@ -444,7 +496,7 @@ class ImageViewModel
   /** Releases previously returned result URLs before they are replaced. */
   private _releaseResults(): void {
     for (const url of this.results) {
-      imageGenerationService.releaseResultUrl(url);
+      this._imageGeneration.releaseResultUrl(url);
     }
   }
 
@@ -474,7 +526,7 @@ class ImageViewModel
       const { prompt, negativePrompt, steps, cfg, sampler, seed } = this;
       const actualSeed = seed < 0 ? undefined : seed;
 
-      const result = await imageGenerationService.generateImage({
+      const result = await this._imageGeneration.generateImage({
         prompt: prompt.trim(),
         negativePrompt: negativePrompt.trim() || undefined,
         checkpoint: this.selectedCheckpoint,
@@ -526,7 +578,7 @@ class ImageViewModel
 
         this.expressionProgress = { ...this.expressionProgress, [expr.id]: 'Generating...' };
 
-        const result = await imageGenerationService.generateImage({
+        const result = await this._imageGeneration.generateImage({
           prompt: `${expr.prompt}, same person, same face, same style, high quality`,
           negativePrompt: 'different person, different face, deformed, blurry',
           checkpoint: this.selectedCheckpoint,
@@ -575,7 +627,7 @@ class ImageViewModel
     this._abortController = abortController;
 
     try {
-      const result = await imageGenerationService.generateImage({
+      const result = await this._imageGeneration.generateImage({
         prompt: this.editPrompt.trim(),
         negativePrompt: 'deformed, blurry, low quality',
         checkpoint: this.selectedCheckpoint,
@@ -602,5 +654,11 @@ class ImageViewModel
   }
 }
 
-export const getImageViewModel = (options: ImageViewModelOptions): ImageViewModelInterface =>
+/**
+ * Builds an image ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getImageViewModel` in ./image_composition.ts.
+ */
+export const createImageViewModel = (options: ImageViewModelOptions): ImageViewModelInterface =>
   ImageViewModel.create(options);

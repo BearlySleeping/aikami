@@ -6,11 +6,9 @@
 // Active Context panel + AI generator panel.
 
 import ActiveContextPanel from './active_context_panel.svelte';
+import { getLorebookEditorViewModel } from './lorebook_editor_composition.ts';
 import LorebookEditorView from './lorebook_editor_view.svelte';
-import {
-  getLorebookEditorViewModel,
-  type LorebookEditorViewModelInterface,
-} from './lorebook_editor_view_model.svelte';
+import type { LorebookEditorViewModelInterface } from './lorebook_editor_view_model.svelte';
 import LorebookGenerator from './lorebook_generator.svelte';
 import type { LorebookSandboxViewModelInterface } from './lorebook_sandbox_view_model.svelte';
 

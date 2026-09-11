@@ -7,23 +7,34 @@
 // static/game-data/ and run the manifest scanner (Bun CLI or Tauri).
 // The upload modal shows instructions instead of a network form.
 //
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or the production asset singleton, so its
+// tests can inject fresh feature fixtures. Production wiring lives in
+// ./asset_browser_composition.ts.
+//
 // Contract: C-243
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AssetEntry, AssetTreeNode } from '@aikami/types';
-import { assetStore } from '$services';
+import type { AssetStore } from '$services/assets/asset_store.svelte';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/** The asset-catalog operations and observable state the browser reads. */
+export type AssetBrowserStoreCapabilities = Pick<
+  AssetStore,
+  'manifest' | 'isLoading' | 'error' | 'fetchManifest' | 'resolveUrl'
+>;
+
 export type AssetBrowserViewModelInterface = BaseViewModelInterface & {
   /** Full asset manifest (null while loading). */
-  readonly manifest: typeof assetStore.manifest;
+  readonly manifest: AssetStore['manifest'];
   /** Whether the manifest is currently being fetched. */
   readonly isLoading: boolean;
   /** Error message if manifest fetch failed. */
@@ -79,7 +90,10 @@ export type AssetBrowserViewModelInterface = BaseViewModelInterface & {
   deleteAsset(asset: AssetEntry): void;
 };
 
-export type AssetBrowserViewModelOptions = BaseViewModelOptions & {};
+export type AssetBrowserViewModelOptions = BaseViewModelOptions & {
+  /** Asset-catalog store. */
+  store: AssetBrowserStoreCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // ViewModel
@@ -89,6 +103,8 @@ export class AssetBrowserViewModel
   extends BaseViewModel<AssetBrowserViewModelOptions>
   implements AssetBrowserViewModelInterface
 {
+  private readonly _store: AssetBrowserStoreCapabilities;
+
   selectedFolder = $state<string>('');
   activeCategory = $state<string>('all');
   uploadInfoOpen = $state<boolean>(false);
@@ -102,6 +118,11 @@ export class AssetBrowserViewModel
     y: number;
     asset: AssetEntry | null;
   }>({ open: false, x: 0, y: 0, asset: null });
+
+  constructor(options: AssetBrowserViewModelOptions) {
+    super(options);
+    this._store = options.store;
+  }
 
   // -----------------------------------------------------------------------
   // Lifecycle
@@ -117,24 +138,24 @@ export class AssetBrowserViewModel
   // -----------------------------------------------------------------------
 
   get manifest() {
-    return assetStore.manifest;
+    return this._store.manifest;
   }
 
   get isLoading() {
-    return assetStore.isLoading;
+    return this._store.isLoading;
   }
 
   get assetError() {
-    return assetStore.error;
+    return this._store.error;
   }
 
   get folderTree() {
-    if (!assetStore.manifest) {
+    if (!this._store.manifest) {
       return [];
     }
 
     const tree: AssetTreeNode[] = [];
-    for (const [categoryName, entries] of Object.entries(assetStore.manifest.byCategory)) {
+    for (const [categoryName, entries] of Object.entries(this._store.manifest.byCategory)) {
       if (entries.length === 0) {
         continue;
       }
@@ -158,16 +179,16 @@ export class AssetBrowserViewModel
   }
 
   get currentFiles() {
-    if (!assetStore.manifest) {
+    if (!this._store.manifest) {
       return [];
     }
 
     let entries: AssetEntry[];
 
     if (this.activeCategory === 'all') {
-      entries = Object.values(assetStore.manifest.assets);
+      entries = Object.values(this._store.manifest.assets);
     } else {
-      entries = assetStore.manifest.byCategory[this.activeCategory] ?? [];
+      entries = this._store.manifest.byCategory[this.activeCategory] ?? [];
     }
 
     if (this.selectedFolder) {
@@ -181,7 +202,7 @@ export class AssetBrowserViewModel
     if (!this.previewAsset) {
       return null;
     }
-    return assetStore.resolveUrl(this.previewAsset.tag);
+    return this._store.resolveUrl(this.previewAsset.tag);
   }
 
   get hasPreview(): boolean {
@@ -207,7 +228,7 @@ export class AssetBrowserViewModel
   // -----------------------------------------------------------------------
 
   async fetchManifest(): Promise<void> {
-    await assetStore.fetchManifest();
+    await this._store.fetchManifest();
   }
 
   navigateToFolder(path: string): void {
@@ -276,6 +297,12 @@ export class AssetBrowserViewModel
   }
 }
 
-export const getAssetBrowserViewModel = (
+/**
+ * Builds an asset-browser ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getAssetBrowserViewModel` in ./asset_browser_composition.ts.
+ */
+export const createAssetBrowserViewModel = (
   options: AssetBrowserViewModelOptions,
 ): AssetBrowserViewModelInterface => AssetBrowserViewModel.create(options);

@@ -9,9 +9,9 @@
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
 import MacroAutocomplete from '$lib/components/macro_autocomplete.svelte';
 import type { DevAction } from '$types';
-import { getMacrosSandboxViewModel } from '$views/macros/macros_sandbox_view_model.svelte.ts';
+import { getMacrosSandboxViewModel } from '$views/macros/macros_sandbox_composition.ts';
+import { getPresetEditorViewModel } from '$views/presets/preset_editor_composition.ts';
 import PresetEditorView from '$views/presets/preset_editor_view.svelte';
-import { getPresetEditorViewModel } from '$views/presets/preset_editor_view_model.svelte.ts';
 
 const sandboxViewModel = getMacrosSandboxViewModel({ className: 'MacrosSandboxViewModel' });
 const presetEditorViewModel = getPresetEditorViewModel({ className: 'PresetEditorViewModel' });

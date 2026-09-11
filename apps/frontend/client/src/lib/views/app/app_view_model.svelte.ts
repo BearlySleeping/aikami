@@ -1,31 +1,77 @@
 // apps/frontend/client/src/lib/views/app/app_view_model.svelte.ts
+//
+// Headless application bootstrapper. Dependencies arrive through typed
+// capability options; the production singletons are wired in
+// ./app_composition.ts. This module never imports the `$services` barrel.
 
 import { getPublicMode, isDevelopmentModePublic, publicEnv } from '@aikami/frontend/configs';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { CurrentUser } from '@aikami/types';
 import { untrack } from 'svelte';
 import { goto } from '$app/navigation';
-import { navigating, page } from '$app/state';
+import * as appState from '$app/state';
 import type { RouteName } from '$router';
-import {
-  appService,
-  authService,
-  emulatorSeedService,
-  routerService,
-  runtimeConfigService,
-  updaterService,
+import type {
+  AppServiceInterface,
+  AuthServiceInterface,
+  EmulatorSeedServiceInterface,
+  RouterServiceInterface,
+  RuntimeConfigServiceInterface,
+  UpdaterServiceInterface,
 } from '$services';
 import type { ClientHookData } from '$types';
 
 /** Delay before the background desktop update check — keeps first paint clear. */
 const UPDATE_CHECK_DELAY_MS = 5000;
 
-export type AppViewModelOptions = BaseViewModelOptions & {
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** Auth state and lifecycle operations the bootstrapper drives. */
+export type AppAuthCapabilities = Pick<
+  AuthServiceInterface,
+  'setCurrentUser' | 'isLoggedIn' | 'currentUser' | 'isAuthReady' | 'initialize'
+>;
+
+/** Shell/device state the bootstrapper seeds from the SSR hook payload. */
+export type AppShellCapabilities = Pick<AppServiceInterface, 'setCurrentDevice' | 'sessionId'>;
+
+/** Router operations and observable state the bootstrapper syncs. */
+export type AppRouterCapabilities = Pick<
+  RouterServiceInterface,
+  'setCurrentRoute' | 'currentRoute' | 'isNavigating' | 'initialize' | 'syncNavigation'
+>;
+
+/** Runtime engine config loader. */
+export type AppRuntimeConfigCapabilities = Pick<RuntimeConfigServiceInterface, 'loadConfig'>;
+
+/** Emulator-only local seed. */
+export type AppEmulatorSeedCapabilities = Pick<EmulatorSeedServiceInterface, 'seedIfEmpty'>;
+
+/** Desktop updater check. */
+export type AppUpdaterCapabilities = Pick<UpdaterServiceInterface, 'checkForUpdates'>;
+
+/** Options supplied by the root layout. */
+export type AppViewModelCallerOptions = BaseViewModelOptions & {
   data: ClientHookData;
+};
+
+export type AppViewModelOptions = AppViewModelCallerOptions & {
+  /** Auth capability. */
+  auth: AppAuthCapabilities;
+  /** Shell/device capability. */
+  app: AppShellCapabilities;
+  /** Router capability. */
+  router: AppRouterCapabilities;
+  /** Runtime config capability. */
+  runtimeConfig: AppRuntimeConfigCapabilities;
+  /** Emulator seed capability. */
+  emulatorSeed: AppEmulatorSeedCapabilities;
+  /** Desktop updater capability. */
+  updater: AppUpdaterCapabilities;
 };
 
 export type AppViewModelInterface = BaseViewModelInterface & {
@@ -43,24 +89,38 @@ export type AppViewModelInterface = BaseViewModelInterface & {
  * drawers, app bars, or padding.
  */
 class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppViewModelInterface {
+  private readonly _auth: AppAuthCapabilities;
+  private readonly _app: AppShellCapabilities;
+  private readonly _router: AppRouterCapabilities;
+  private readonly _runtimeConfig: AppRuntimeConfigCapabilities;
+  private readonly _emulatorSeed: AppEmulatorSeedCapabilities;
+  private readonly _updater: AppUpdaterCapabilities;
+
   private _initialRouteHandled = false;
 
   constructor(options: AppViewModelOptions) {
     super(options);
+    this._auth = options.auth;
+    this._app = options.app;
+    this._router = options.router;
+    this._runtimeConfig = options.runtimeConfig;
+    this._emulatorSeed = options.emulatorSeed;
+    this._updater = options.updater;
+
     // this data comes from PWA hook (ssr), but since we are a SPA this is will always be {}, but keeping the code
     // here to handle it in case we ever switch back to SSR
     const { userSession, device, logLevel, currentRoute, sessionId } = options.data;
 
     if (userSession) {
-      authService.setCurrentUser(userSession);
+      this._auth.setCurrentUser(userSession);
     }
 
     if (device) {
-      appService.setCurrentDevice(device);
+      this._app.setCurrentDevice(device);
     }
 
     if (currentRoute) {
-      routerService.setCurrentRoute(currentRoute);
+      this._router.setCurrentRoute(currentRoute);
     }
 
     if (logLevel) {
@@ -68,7 +128,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     }
 
     if (sessionId) {
-      appService.sessionId = sessionId;
+      this._app.sessionId = sessionId;
     }
   }
 
@@ -77,15 +137,15 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   // --------------------------------------------------------------------------
 
   get isLoggedIn() {
-    return authService.isLoggedIn;
+    return this._auth.isLoggedIn;
   }
 
   get currentUser() {
-    return authService.currentUser;
+    return this._auth.currentUser;
   }
 
   get currentRoute() {
-    return routerService.currentRoute;
+    return this._router.currentRoute;
   }
 
   // --------------------------------------------------------------------------
@@ -99,23 +159,23 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     // 0b. Resolve the runtime engine config (C-389) — config.json beside
     //    index.html, Tauri app config dir, or dev-only defaults. Loaded
     //    early so first engine requests target the configured hosts.
-    await runtimeConfigService.loadConfig();
+    await this._runtimeConfig.loadConfig();
 
     // 1. Wire router into SvelteKit primitives.
-    routerService.initialize({ goto, page: page as never });
+    this._router.initialize({ goto, page: appState.page as never });
 
     // 2. Set up reactive listeners for routing and auth changes.
     this._setupReactiveListeners();
 
     // 3. Resolve auth state and handle the initial route.
-    const user = await authService.initialize();
+    const user = await this._auth.initialize();
 
     // Seed local personas/NPCs/custom agents in emulator mode BEFORE the
     // initial route renders, so a fresh browser (empty local DB) boots into
     // a playable game (C-386 AC-11). The Firebase emulator cannot reach the
     // browser's local DB — seeding is client-side.
     if (getPublicMode() === 'emulator') {
-      await emulatorSeedService.seedIfEmpty();
+      await this._emulatorSeed.seedIfEmpty();
     }
 
     this.log('initialize', {
@@ -135,7 +195,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     // Tauri desktop only: check for updates a few seconds after startup so
     // first paint is never blocked. No-op in the browser PWA.
     setTimeout(() => {
-      void updaterService.checkForUpdates();
+      void this._updater.checkForUpdates();
     }, UPDATE_CHECK_DELAY_MS);
 
     return await super.initialize();
@@ -154,7 +214,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     this.registerEffectRoot(() => {
       // EFFECT 1: Bridge SvelteKit navigation state into RouterService.
       $effect(() => {
-        routerService.syncNavigation(navigating, page as never);
+        this._router.syncNavigation(appState.navigating, appState.page as never);
       });
 
       // EFFECT 2: Route transitions on subsequent navigations.
@@ -162,8 +222,8 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
       $effect(() => {
         const route = this.currentRoute;
         const user = this.currentUser;
-        const isNavigating = routerService.isNavigating;
-        const isAuthReady = authService.isAuthReady;
+        const isNavigating = this._router.isNavigating;
+        const isAuthReady = this._auth.isAuthReady;
 
         if (isNavigating) {
           return;
@@ -208,5 +268,11 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   }
 }
 
+/**
+ * Builds the app ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getAppViewModel` in ./app_composition.ts.
+ */
 export const createAppViewModel = (options: AppViewModelOptions): AppViewModelInterface =>
   AppViewModel.create(options);

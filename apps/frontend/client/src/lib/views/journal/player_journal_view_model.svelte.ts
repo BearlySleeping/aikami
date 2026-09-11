@@ -9,10 +9,20 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-  dialogService,
-} from '@aikami/frontend/services';
-import { playerJournalService } from '$services/game/player_journal_service.svelte';
+} from '@aikami/frontend/services/base';
+import type { DialogServiceInterface, PlayerJournalServiceInterface } from '$services';
 import type { PlayerJournalEntry } from '$types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The journal store operations the ViewModel drives. */
+export type PlayerJournalStoreCapabilities = Pick<
+  PlayerJournalServiceInterface,
+  'entries' | 'loadEntries' | 'createEntry' | 'updateEntry' | 'deleteEntry'
+>;
+
+/** The confirmation dialog the ViewModel opens before deleting. */
+export type PlayerJournalDialogCapabilities = Pick<DialogServiceInterface, 'open'>;
 
 export type PlayerJournalViewModelInterface = BaseViewModelInterface & {
   /** All journal entries for the current campaign, ordered by createdAt descending. */
@@ -68,12 +78,19 @@ export type PlayerJournalViewModelInterface = BaseViewModelInterface & {
 
 export type PlayerJournalViewModelOptions = BaseViewModelOptions & {
   campaignId: string;
+  /** Journal store. */
+  journal: PlayerJournalStoreCapabilities;
+  /** Confirmation dialog. */
+  dialog: PlayerJournalDialogCapabilities;
 };
 
 class PlayerJournalViewModel
   extends BaseViewModel<PlayerJournalViewModelOptions>
   implements PlayerJournalViewModelInterface
 {
+  private readonly _journal: PlayerJournalStoreCapabilities;
+  private readonly _dialog: PlayerJournalDialogCapabilities;
+
   isLoading = $state(false);
   isEditorOpen = $state(false);
   isEditingExisting = $state(false);
@@ -89,6 +106,8 @@ class PlayerJournalViewModel
 
   constructor(options: PlayerJournalViewModelOptions) {
     super(options);
+    this._journal = options.journal;
+    this._dialog = options.dialog;
     this._campaignId = options.campaignId;
   }
 
@@ -98,14 +117,14 @@ class PlayerJournalViewModel
   }
 
   get entries(): PlayerJournalEntry[] {
-    return playerJournalService.entries;
+    return this._journal.entries;
   }
 
   /** @inheritdoc */
   async loadEntries(options: { campaignId: string }): Promise<void> {
     this.isLoading = true;
     try {
-      await playerJournalService.loadEntries({ campaignId: options.campaignId });
+      await this._journal.loadEntries({ campaignId: options.campaignId });
       this._campaignId = options.campaignId;
     } finally {
       this.isLoading = false;
@@ -192,14 +211,14 @@ class PlayerJournalViewModel
         .filter((t) => t.length > 0);
 
       if (this.isEditingExisting && this._editingEntryId) {
-        await playerJournalService.updateEntry({
+        await this._journal.updateEntry({
           id: this._editingEntryId,
           title: this.editorTitle,
           content: this.editorContent,
           tags,
         });
       } else {
-        await playerJournalService.createEntry({
+        await this._journal.createEntry({
           campaignId: this._campaignId,
           sessionNumber: this._sessionNumber,
           title: this.editorTitle,
@@ -220,7 +239,7 @@ class PlayerJournalViewModel
 
   /** @inheritdoc */
   async deleteEntry(options: { id: string }): Promise<void> {
-    const confirmed = await dialogService.open({
+    const confirmed = await this._dialog.open({
       type: 'confirm',
       props: {
         title: 'Delete Entry?',
@@ -231,7 +250,7 @@ class PlayerJournalViewModel
     });
 
     if (confirmed) {
-      await playerJournalService.deleteEntry({ id: options.id });
+      await this._journal.deleteEntry({ id: options.id });
     }
   }
 
@@ -257,6 +276,13 @@ class PlayerJournalViewModel
   }
 }
 
-export const getPlayerJournalViewModel = (
+/**
+ * Builds a player-journal ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getPlayerJournalViewModel` in
+ * ./player_journal_composition.ts.
+ */
+export const createPlayerJournalViewModel = (
   options: PlayerJournalViewModelOptions,
 ): PlayerJournalViewModelInterface => PlayerJournalViewModel.create(options);

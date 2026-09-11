@@ -10,14 +10,15 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { SettingsSection } from '../../../../settings/settings_sections';
 import type { SimpleSectionViewModelMount } from '../../../../settings/settings_sections_composition';
-import type {
-  createSettingsOverlayViewModel as createSettingsOverlayViewModelFactory,
-  SettingsOverlayViewModelInterface,
+import {
+  createSettingsOverlayViewModel,
+  type SettingsOverlayViewModelInterface,
 } from './settings_overlay_view_model.svelte';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
-// The ViewModel receives its section factory as an injected capability, so the
-// test supplies a fresh fixture instead of mocking a production module.
+// The ViewModel receives its section factory and router/overlay capabilities as
+// injected options, so the test supplies fresh fixtures instead of mocking a
+// production module.
 
 const _sectionMounts = new Map<string, SimpleSectionViewModelMount>();
 
@@ -53,37 +54,24 @@ const _createSectionMount = mock((sectionId: string): SimpleSectionViewModelMoun
   return mount;
 });
 
-// ── Setup ──────────────────────────────────────────────────────────────────
-// test_preload.ts provides global mocks for @aikami/frontend/services. We mock
-// the one service the overlay actually consumes and augment routerService with
-// navigation methods.
-
-mock.module('$services', () => ({
-  gameOverlayService: {
-    popOverlay: mock(() => {}),
-  },
-}));
-
-const _augmentRouterService = async (): Promise<void> => {
-  const mod = await import('@aikami/frontend/services');
-  const rs = mod.routerService as Record<string, unknown>;
-  rs.goToHref = mock(async () => {});
-  rs.goBack = mock(async () => {});
-  rs.goToRoute = mock(async () => {});
-};
-
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-let createSettingsOverlayViewModel: typeof createSettingsOverlayViewModelFactory;
 type Vm = SettingsOverlayViewModelInterface;
 let productionPauseSections: readonly SettingsSection[];
 let productionExpectedPauseSections: readonly SettingsSection[];
+let goToHref: ReturnType<typeof mock>;
+let popOverlay: ReturnType<typeof mock>;
 
-const createVm = (): Vm =>
-  createSettingsOverlayViewModel({
+const createVm = (): Vm => {
+  goToHref = mock(async () => {});
+  popOverlay = mock(() => {});
+  return createSettingsOverlayViewModel({
     className: 'SettingsOverlayViewModel',
     createSectionMount: _createSectionMount,
+    router: { goToHref },
+    overlay: { popOverlay },
   });
+};
 
 beforeAll(async () => {
   const productionSettingsSections = await import('../../../../settings/settings_sections');
@@ -93,11 +81,9 @@ beforeAll(async () => {
   productionPauseSections = productionSettingsSections.sectionsForContext('pause');
 });
 
-beforeEach(async () => {
+beforeEach(() => {
   _sectionMounts.clear();
   _createSectionMount.mockClear();
-  await _augmentRouterService();
-  ({ createSettingsOverlayViewModel } = await import('./settings_overlay_view_model.svelte'));
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -219,39 +205,32 @@ describe('SettingsOverlayViewModel', () => {
   });
 
   test('AC-4: navigateToFullSettings calls goToHref with section/group params', async () => {
-    const { routerService } = await import('@aikami/frontend/services');
-    const goToHrefMock = routerService.goToHref as ReturnType<typeof mock>;
-    goToHrefMock.mockClear();
-
     const vm = createVm();
     vm.setActiveSection('controls');
     await vm.navigateToFullSettings();
 
-    expect(goToHrefMock).toHaveBeenCalledTimes(1);
-    const href = goToHrefMock.mock.calls[0]?.[0] as string;
+    expect(goToHref).toHaveBeenCalledTimes(1);
+    const href = goToHref.mock.calls[0]?.[0] as string;
     expect(href).toContain('/settings');
     expect(href).toContain('group=play');
     expect(href).toContain('section=controls');
   });
 
   test('AC-4: navigateToFullSettings from gameplay includes correct params', async () => {
-    const { routerService } = await import('@aikami/frontend/services');
-    const goToHrefMock = routerService.goToHref as ReturnType<typeof mock>;
-    goToHrefMock.mockClear();
-
     const vm = createVm();
     vm.setActiveSection('gameplay');
     await vm.navigateToFullSettings();
 
-    const href = goToHrefMock.mock.calls[0]?.[0] as string;
+    const href = goToHref.mock.calls[0]?.[0] as string;
     expect(href).toContain('section=gameplay');
     expect(href).toContain('group=play');
   });
 
-  test('close sets isOpen to false', () => {
+  test('close sets isOpen to false and pops the overlay', () => {
     const vm = createVm();
     expect(vm.isOpen).toBe(true);
     vm.close();
     expect(vm.isOpen).toBe(false);
+    expect(popOverlay).toHaveBeenCalledTimes(1);
   });
 });

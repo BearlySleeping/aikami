@@ -4,7 +4,7 @@
 // in the feature that builds the onboarding coordinator; the ViewModel receives
 // it as a typed capability.
 
-import { getOnboardingCoordinatorViewModel } from '$views/onboarding/onboarding_coordinator_view_model.svelte';
+import { getOnboardingCoordinatorViewModel } from '$views/onboarding/onboarding_coordinator_composition.ts';
 import {
   createSetupViewModel,
   type SetupViewModelInterface,

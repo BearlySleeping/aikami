@@ -13,27 +13,20 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { CapabilitySnapshot, ConnectionEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
-import { isTauri } from '$lib/views/utils/is_tauri';
-import {
-  campaignService,
-  capabilityService,
-  configService,
-  equipmentService,
-  gameModeService,
-  inventoryService,
-  playerStateService,
-  routerService,
-  runtimeConfigService,
-  worldStateService,
+import type {
+  CampaignServiceInterface,
+  CapabilityServiceInterface,
+  ConfigServiceInterface,
+  RouterServiceInterface,
+  RuntimeConfigServiceInterface,
 } from '$services';
 import type { ConnectionCapability } from '$types';
-import {
-  type AiSettingsViewModelInterface,
-  type CapabilitySetupPrefill,
-  getAiSettingsViewModel,
+import type {
+  AiSettingsViewModelInterface,
+  CapabilitySetupPrefill,
 } from '../settings/ai/ai_settings_view_model.svelte';
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -275,9 +268,44 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   retry(): void;
 };
 
+export type SetupSubflowConfigCapabilities = Pick<
+  ConfigServiceInterface,
+  'state' | 'load' | 'save' | 'addConnection' | 'setDefaultConnection'
+>;
+
+export type SetupSubflowDetectionCapabilities = Pick<CapabilityServiceInterface, 'detect'>;
+
+export type SetupSubflowRuntimeConfigCapabilities = Pick<
+  RuntimeConfigServiceInterface,
+  'getTextUrl' | 'getImageUrl' | 'getVoiceTtsUrl'
+>;
+
+export type SetupSubflowCampaignCapabilities = Pick<CampaignServiceInterface, 'startNewCampaign'>;
+
+export type SetupSubflowRouterCapabilities = Pick<RouterServiceInterface, 'goToRoute'>;
+
+/** The per-service state reset invoked when resuming campaign creation. */
+export type SetupSubflowResetCapabilities = {
+  inventory: { reset(): void };
+  worldState: { reset(): void };
+  playerState: { reset(): void };
+  equipment: { reset(): void };
+  gameMode: { reset(): void };
+};
+
 export type SetupSubflowViewModelOptions = BaseViewModelOptions & {
   /** Where the flow was entered from — decides what leave()/completion does. Defaults to 'direct'. */
   origin?: SetupOrigin;
+  config: SetupSubflowConfigCapabilities;
+  detection: SetupSubflowDetectionCapabilities;
+  runtimeConfig: SetupSubflowRuntimeConfigCapabilities;
+  campaign: SetupSubflowCampaignCapabilities;
+  router: SetupSubflowRouterCapabilities;
+  reset: SetupSubflowResetCapabilities;
+  /** Whether the app runs in the Tauri desktop shell. */
+  isDesktop: () => boolean;
+  /** Builds the shared connection-editor ViewModel mounted during 'manual'. */
+  createEditor: () => AiSettingsViewModelInterface;
 };
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -369,6 +397,13 @@ class SetupSubflowViewModel
   /** The in-flight discovery run, so a second request joins it instead of racing it. */
   private _pendingDiscovery: Promise<void> | null = null;
   private readonly _origin: SetupOrigin;
+  private readonly _config: SetupSubflowConfigCapabilities;
+  private readonly _detection: SetupSubflowDetectionCapabilities;
+  private readonly _runtimeConfig: SetupSubflowRuntimeConfigCapabilities;
+  private readonly _campaign: SetupSubflowCampaignCapabilities;
+  private readonly _router: SetupSubflowRouterCapabilities;
+  private readonly _reset: SetupSubflowResetCapabilities;
+  private readonly _isDesktop: () => boolean;
 
   readonly editorViewModel: AiSettingsViewModelInterface;
 
@@ -390,7 +425,14 @@ class SetupSubflowViewModel
   constructor(options: SetupSubflowViewModelOptions) {
     super(options);
     this._origin = options.origin ?? 'direct';
-    this.editorViewModel = getAiSettingsViewModel({ className: 'SetupSubflowEditor' });
+    this._config = options.config;
+    this._detection = options.detection;
+    this._runtimeConfig = options.runtimeConfig;
+    this._campaign = options.campaign;
+    this._router = options.router;
+    this._reset = options.reset;
+    this._isDesktop = options.isDesktop;
+    this.editorViewModel = options.createEditor();
   }
 
   // ── Getters ────────────────────────────────────────────────────────────
@@ -441,7 +483,7 @@ class SetupSubflowViewModel
   }
 
   get isDesktop(): boolean {
-    return isTauri();
+    return this._isDesktop();
   }
 
   get hasScanned(): boolean {
@@ -607,8 +649,8 @@ class SetupSubflowViewModel
 
   get manualConnections(): readonly ManualConnectionRow[] {
     const capability = this.manualCapability ?? 'text';
-    const connections = (configService.state.connections ?? []) as ConnectionEntry[];
-    const defaultId = configService.state.defaultByCapability?.[capability];
+    const connections = (this._config.state.connections ?? []) as ConnectionEntry[];
+    const defaultId = this._config.state.defaultByCapability?.[capability];
     return connections
       .filter((c) => (c.capability ?? 'text') === capability)
       .map((c) => {
@@ -656,8 +698,8 @@ class SetupSubflowViewModel
 
   useConnection(connectionId: string): void {
     this.debug('useConnection', { connectionId });
-    configService.setDefaultConnection(connectionId);
-    void configService.save();
+    this._config.setDefaultConnection(connectionId);
+    void this._config.save();
   }
 
   /**
@@ -678,7 +720,7 @@ class SetupSubflowViewModel
     // so a refresh "forgot" every saved connection — and worse, the next
     // save() serialized that empty state over the vault, destroying the
     // connections it had not read.
-    await configService.load();
+    await this._config.load();
     // Auto-enable optional capabilities (image/voice) already backed by a
     // stored connection, so a reload keeps them on and a removed connection
     // drops them back to off + disabled.
@@ -803,7 +845,7 @@ class SetupSubflowViewModel
     try {
       // The initial scan probes optional capabilities so they can become
       // selectable when found. Later rescans remain scoped to enabled choices.
-      const snapshot = await capabilityService.detect({ capabilities: requestedIds });
+      const snapshot = await this._detection.detect({ capabilities: requestedIds });
       if (operationId !== this._discoveryOperationId) {
         return;
       }
@@ -845,7 +887,7 @@ class SetupSubflowViewModel
         isLocal: LOCAL_PROVIDER_IDS.has(snapshot.textProviderId),
         isCompatible: true,
         modelName: snapshot.textModelName,
-        baseUrl: runtimeConfigService.getTextUrl() ?? undefined,
+        baseUrl: this._runtimeConfig.getTextUrl() ?? undefined,
         key: `${snapshot.textProviderId}-text`,
         icon: LOCAL_PROVIDER_IDS.has(snapshot.textProviderId) ? '🖥️' : '☁️',
         detailText: _providerDetailText('text', snapshot.textModelName),
@@ -863,7 +905,7 @@ class SetupSubflowViewModel
         isLocal: LOCAL_PROVIDER_IDS.has(snapshot.imageProviderId),
         isCompatible: true,
         modelName: undefined,
-        baseUrl: runtimeConfigService.getImageUrl() ?? undefined,
+        baseUrl: this._runtimeConfig.getImageUrl() ?? undefined,
         key: `${snapshot.imageProviderId}-image`,
         icon: LOCAL_PROVIDER_IDS.has(snapshot.imageProviderId) ? '🖥️' : '☁️',
         detailText: _providerDetailText('image', undefined),
@@ -918,7 +960,7 @@ class SetupSubflowViewModel
     if (capability === 'image') {
       const snapshot = await this._detectSingleCapability(capability);
       if (snapshot?.imageStatus === 'detected' && snapshot.imageProviderId) {
-        const baseUrl = runtimeConfigService.getImageUrl();
+        const baseUrl = this._runtimeConfig.getImageUrl();
         if (baseUrl?.trim()) {
           this.debug('reviewCapability:detected', {
             capability,
@@ -1076,7 +1118,7 @@ class SetupSubflowViewModel
 
   async leave(): Promise<void> {
     if (this._origin === 'settings') {
-      await routerService.goToRoute('settings', {
+      await this._router.goToRoute('settings', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
@@ -1089,7 +1131,7 @@ class SetupSubflowViewModel
       // to resume — starting a campaign here would be a guess. Send the
       // player home rather than fabricate an action for a context this
       // flow was never told about.
-      await routerService.goToRoute('index', {
+      await this._router.goToRoute('index', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
@@ -1101,15 +1143,15 @@ class SetupSubflowViewModel
     // the redirect here (the gate throws before campaignService writes
     // anything), so this creates exactly one.
     try {
-      inventoryService.reset();
-      worldStateService.reset();
-      playerStateService.reset();
-      equipmentService.reset();
-      gameModeService.reset();
+      this._reset.inventory.reset();
+      this._reset.worldState.reset();
+      this._reset.playerState.reset();
+      this._reset.equipment.reset();
+      this._reset.gameMode.reset();
 
-      await campaignService.startNewCampaign({ contentPackId: 'emberwatch' });
+      await this._campaign.startNewCampaign({ contentPackId: 'emberwatch' });
 
-      await routerService.goToRoute('personaCreate', {
+      await this._router.goToRoute('personaCreate', {
         queryParameters: { onboarding: '1' },
         pathParameters: undefined,
       });
@@ -1148,7 +1190,7 @@ class SetupSubflowViewModel
     this.step = 'detecting';
 
     try {
-      const snapshot = await capabilityService.detect({ capabilities: [capability] });
+      const snapshot = await this._detection.detect({ capabilities: [capability] });
       if (operationId !== this._discoveryOperationId) {
         return null;
       }
@@ -1176,9 +1218,9 @@ class SetupSubflowViewModel
       throw new Error('A usable text provider is required before setup can complete.');
     }
 
-    const connections = (configService.state.connections ?? []) as ConnectionEntry[];
-    const textBaseUrl = runtimeConfigService.getTextUrl();
-    configService.addConnection({
+    const connections = (this._config.state.connections ?? []) as ConnectionEntry[];
+    const textBaseUrl = this._runtimeConfig.getTextUrl();
+    this._config.addConnection({
       name: `${snapshot.textProviderId} (local)`,
       provider: snapshot.textProviderId,
       capability: 'text',
@@ -1197,7 +1239,7 @@ class SetupSubflowViewModel
       isDefault: connections.length === 0,
       source: 'detected',
     });
-    await configService.save();
+    await this._config.save();
   }
 
   private _invalidateDiscovery(): void {
@@ -1218,11 +1260,11 @@ class SetupSubflowViewModel
       return;
     }
 
-    const connections = (configService.state.connections ?? []) as ConnectionEntry[];
+    const connections = (this._config.state.connections ?? []) as ConnectionEntry[];
     const baseUrl =
       capability === 'image'
-        ? (runtimeConfigService.getImageUrl() ?? '')
-        : (runtimeConfigService.getVoiceTtsUrl() ?? '');
+        ? (this._runtimeConfig.getImageUrl() ?? '')
+        : (this._runtimeConfig.getVoiceTtsUrl() ?? '');
 
     // Kokoro is bundled and _isUsable() treats its persisted connection as
     // usable without an endpoint. Other local providers still need one.
@@ -1241,7 +1283,7 @@ class SetupSubflowViewModel
     };
 
     if (capability === 'image') {
-      configService.addConnection({
+      this._config.addConnection({
         name: `${_labelForProvider('image', providerId)}`,
         provider: providerId,
         capability: 'image',
@@ -1254,7 +1296,7 @@ class SetupSubflowViewModel
         source: 'detected',
       });
     } else {
-      configService.addConnection({
+      this._config.addConnection({
         name: `${_labelForProvider('voice', providerId)}`,
         provider: providerId,
         capability: 'voice',
@@ -1268,7 +1310,7 @@ class SetupSubflowViewModel
       });
     }
 
-    await configService.save();
+    await this._config.save();
   }
 
   /** Whether the capability was detected as available by the last scan. */
@@ -1311,11 +1353,11 @@ class SetupSubflowViewModel
   }
 
   private _connectionFor(capability: ConnectionCapability): ConnectionEntry | undefined {
-    const connections = (configService.state.connections ?? []) as ConnectionEntry[];
+    const connections = (this._config.state.connections ?? []) as ConnectionEntry[];
     const usable = connections.filter(
       (c) => (c.capability ?? 'text') === capability && this._isUsable(c),
     );
-    const defaultId = configService.state.defaultByCapability?.[capability];
+    const defaultId = this._config.state.defaultByCapability?.[capability];
     return usable.find((c) => c.id === defaultId) ?? usable[0];
   }
 
@@ -1365,6 +1407,6 @@ class SetupSubflowViewModel
 
 // ── Factory ────────────────────────────────────────────────────────────
 
-export const getSetupSubflowViewModel = (
+export const createSetupSubflowViewModel = (
   options: SetupSubflowViewModelOptions,
 ): SetupSubflowViewModelInterface => SetupSubflowViewModel.create(options);

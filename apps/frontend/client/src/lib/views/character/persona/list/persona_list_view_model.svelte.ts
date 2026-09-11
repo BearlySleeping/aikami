@@ -7,26 +7,68 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { PersonaData } from '@aikami/types';
 import { toAppError } from '@aikami/utils';
-import {
-  authService,
-  campaignService,
+import type {
+  AuthServiceInterface,
+  CampaignServiceInterface,
   compileCardToPersona,
-  equipmentService,
-  gameModeService,
   hasDeclaredAbilityScores,
   importFromJson,
   importFromPng,
-  inventoryService,
   lorebookStore,
-  personaService,
-  playerStateService,
-  routerService,
-  storageService,
-  worldStateService,
+  PersonaServiceInterface,
+  RouterServiceInterface,
+  StorageServiceInterface,
 } from '$services';
+
+// ---------------------------------------------------------------------------
+// Capability contracts
+// ---------------------------------------------------------------------------
+
+/** Per-install persona persistence. */
+export type PersonaListPersonaCapabilities = Pick<
+  PersonaServiceInterface,
+  'getPersonas' | 'setActivePersona' | 'updatePersona'
+>;
+
+/** Identity used for avatar uploads. */
+export type PersonaListAuthCapabilities = Pick<AuthServiceInterface, 'initialize' | 'uid'>;
+
+/** Avatar storage. */
+export type PersonaListStorageCapabilities = Pick<StorageServiceInterface, 'uploadAvatar'>;
+
+/** Campaign lifecycle around entering play. */
+export type PersonaListCampaignCapabilities = Pick<
+  CampaignServiceInterface,
+  'startNewCampaign' | 'completeSetup'
+>;
+
+/** Navigation used by persona selection and creation. */
+export type PersonaListRouterCapabilities = Pick<
+  RouterServiceInterface,
+  'goToRoute' | 'navigateToApp'
+>;
+
+/** Resets the transient game-mode state before entering play. */
+export type PersonaListGameStateCapabilities = {
+  resetAll(): void;
+};
+
+/** Card parsing/compilation used by character-card import. */
+export type PersonaListCardCapabilities = {
+  compileCardToPersona: typeof compileCardToPersona;
+  hasDeclaredAbilityScores: typeof hasDeclaredAbilityScores;
+  importFromJson: typeof importFromJson;
+  importFromPng: typeof importFromPng;
+};
+
+/** Lorebook persistence used when a card carries a character_book. */
+export type PersonaListLorebookCapabilities = Pick<
+  typeof lorebookStore,
+  'addLorebook' | 'addEntry' | 'deleteLorebook'
+>;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,7 +81,24 @@ export type SavedPersona = {
   savedAt: string;
 };
 
-export type PersonaListViewModelOptions = BaseViewModelOptions;
+export type PersonaListViewModelOptions = BaseViewModelOptions & {
+  /** Per-install persona persistence. */
+  personas: PersonaListPersonaCapabilities;
+  /** Identity capability. */
+  auth: PersonaListAuthCapabilities;
+  /** Avatar storage capability. */
+  storage: PersonaListStorageCapabilities;
+  /** Campaign lifecycle capability. */
+  campaign: PersonaListCampaignCapabilities;
+  /** Navigation capability. */
+  router: PersonaListRouterCapabilities;
+  /** Game-mode reset capability. */
+  gameState: PersonaListGameStateCapabilities;
+  /** Card parsing/compilation capability. */
+  cards: PersonaListCardCapabilities;
+  /** Lorebook persistence capability. */
+  lorebook: PersonaListLorebookCapabilities;
+};
 
 export type PersonaListViewModelInterface = BaseViewModelInterface & {
   /** All saved personas (localStorage + Firestore merged, sorted newest first). */
@@ -91,10 +150,31 @@ class PersonaListViewModel
   extends BaseViewModel<PersonaListViewModelOptions>
   implements PersonaListViewModelInterface
 {
+  private readonly _personas: PersonaListPersonaCapabilities;
+  private readonly _auth: PersonaListAuthCapabilities;
+  private readonly _storage: PersonaListStorageCapabilities;
+  private readonly _campaign: PersonaListCampaignCapabilities;
+  private readonly _router: PersonaListRouterCapabilities;
+  private readonly _gameState: PersonaListGameStateCapabilities;
+  private readonly _cards: PersonaListCardCapabilities;
+  private readonly _lorebook: PersonaListLorebookCapabilities;
+
   personas: SavedPersona[] = $state([]);
   isLoading = $state(false);
   isImporting = $state(false);
   importSummary: string | undefined = $state();
+
+  constructor(options: PersonaListViewModelOptions) {
+    super(options);
+    this._personas = options.personas;
+    this._auth = options.auth;
+    this._storage = options.storage;
+    this._campaign = options.campaign;
+    this._router = options.router;
+    this._gameState = options.gameState;
+    this._cards = options.cards;
+    this._lorebook = options.lorebook;
+  }
 
   get isEmpty(): boolean {
     return this.personas.length === 0;
@@ -110,8 +190,8 @@ class PersonaListViewModel
 
       // Wait for Firebase Auth to resolve before checking uid.
       // On direct refresh, auth may not be ready yet (IndexedDB read).
-      // authService.initialize() is idempotent — returns immediately if already ready.
-      await authService.initialize();
+      // this._auth.initialize() is idempotent — returns immediately if already ready.
+      await this._auth.initialize();
 
       // Load from the local personas table (C-386b) — personas are per-install.
       await this._loadFromLocalTable();
@@ -140,7 +220,7 @@ class PersonaListViewModel
     // even if a previous campaign was left in 'playing' state (e.g., after
     // pressing back from a game session).
     try {
-      await campaignService.startNewCampaign({ contentPackId: 'emberwatch' });
+      await this._campaign.startNewCampaign({ contentPackId: 'emberwatch' });
     } catch (error) {
       this.error('selectPersona:start-campaign-failed', error);
       return;
@@ -148,23 +228,19 @@ class PersonaListViewModel
 
     // Set as active persona if logged in, so Firestore-aware game init can find it
     try {
-      await personaService.setActivePersona(id);
+      await this._personas.setActivePersona(id);
     } catch (error) {
       // Non-critical — localStorage fallback in GameViewModel handles this
       this.debug('selectPersona:setActivePersona-failed', error);
     }
 
     // Clear any stale state from a previous play session
-    playerStateService.reset();
-    inventoryService.reset();
-    equipmentService.reset();
-    gameModeService.reset();
-    worldStateService.reset();
+    this._gameState.resetAll();
 
     // Transition campaign from creating → playing before the game boot loads it
-    campaignService.completeSetup();
+    this._campaign.completeSetup();
 
-    await routerService.goToRoute('game', {
+    await this._router.goToRoute('game', {
       queryParameters: undefined,
       pathParameters: undefined,
     });
@@ -181,7 +257,7 @@ class PersonaListViewModel
 
   /** @inheritdoc */
   async createPersona(): Promise<void> {
-    await routerService.goToRoute('newCampaign', {
+    await this._router.goToRoute('newCampaign', {
       queryParameters: undefined,
       pathParameters: undefined,
     });
@@ -189,13 +265,13 @@ class PersonaListViewModel
 
   /** @inheritdoc */
   async goBack(): Promise<void> {
-    await routerService.navigateToApp();
+    await this._router.navigateToApp();
   }
 
   /** @inheritdoc */
   async setActivePersona(personaId: string): Promise<void> {
     try {
-      await personaService.setActivePersona(personaId);
+      await this._personas.setActivePersona(personaId);
 
       // Refresh to get updated active states
       await this._loadFromLocalTable();
@@ -221,7 +297,7 @@ class PersonaListViewModel
       const { character, avatarFile, lorebook } = await this._extractCharacter({ file });
 
       // Compile into PersonaSheetSchema fields, inferring ability scores.
-      const sheet = compileCardToPersona({ character });
+      const sheet = this._cards.compileCardToPersona({ character });
       const personaId = crypto.randomUUID();
 
       const persona: PersonaData = {
@@ -245,20 +321,20 @@ class PersonaListViewModel
       persona.avatarUrl = avatarUrl || undefined;
 
       // Upsert into the local personas table + localStorage mirror.
-      await personaService.updatePersona(personaId, persona);
+      await this._personas.updatePersona(personaId, persona);
       await this._loadFromLocalTable();
 
       // C-439 AC-3: Create lorebook from imported card's character_book
       if (lorebook && lorebook.entries.length > 0) {
         let lorebookId: string | undefined;
         try {
-          lorebookId = lorebookStore.addLorebook({
+          lorebookId = this._lorebook.addLorebook({
             name: lorebook.name,
             description: lorebook.description,
           });
           // Add all entries atomically - if any fails, roll back the lorebook
           for (const entry of lorebook.entries) {
-            lorebookStore.addEntry({ lorebookId, entry });
+            this._lorebook.addEntry({ lorebookId, entry });
           }
           // C-439 AC-4: Surface import summary
           const { summary } = lorebook;
@@ -281,7 +357,7 @@ class PersonaListViewModel
           // Roll back the lorebook if it was created but entry insertion failed
           if (lorebookId) {
             try {
-              lorebookStore.deleteLorebook({ id: lorebookId });
+              this._lorebook.deleteLorebook({ id: lorebookId });
             } catch (rollbackError) {
               this.warn('handleFileImport:lorebook-rollback-failed', rollbackError);
             }
@@ -296,7 +372,7 @@ class PersonaListViewModel
       this.info('handleFileImport', {
         personaId,
         name: sheet.name,
-        abilityScoresInferred: !hasDeclaredAbilityScores({ character }),
+        abilityScoresInferred: !this._cards.hasDeclaredAbilityScores({ character }),
       });
     } catch (error) {
       this.error('handleFileImport:failed', error);
@@ -318,11 +394,11 @@ class PersonaListViewModel
     const { file } = options;
 
     if (file.type === 'image/png') {
-      return await importFromPng({ file });
+      return await this._cards.importFromPng({ file });
     }
 
     if (file.type === 'application/json' || file.name.endsWith('.json')) {
-      return await importFromJson({ file });
+      return await this._cards.importFromJson({ file });
     }
 
     throw toAppError({
@@ -336,7 +412,7 @@ class PersonaListViewModel
     personaId: string;
   }): Promise<string | undefined> {
     const { file, personaId } = options;
-    const uid = authService.uid;
+    const uid = this._auth.uid;
 
     if (!uid) {
       throw toAppError({
@@ -346,7 +422,7 @@ class PersonaListViewModel
     }
 
     try {
-      return await storageService.uploadAvatar({
+      return await this._storage.uploadAvatar({
         file,
         uid: `${uid}/personas/${personaId}`,
       });
@@ -373,7 +449,7 @@ class PersonaListViewModel
 
   private async _loadFromLocalTable(): Promise<void> {
     try {
-      const localPersonas = await personaService.getPersonas('local');
+      const localPersonas = await this._personas.getPersonas('local');
 
       if (localPersonas.length > 0) {
         // Merge local-table personas into the local list
@@ -417,6 +493,6 @@ class PersonaListViewModel
   }
 }
 
-export const getPersonaListViewModel = (
+export const createPersonaListViewModel = (
   options: PersonaListViewModelOptions,
 ): PersonaListViewModelInterface => PersonaListViewModel.create(options);

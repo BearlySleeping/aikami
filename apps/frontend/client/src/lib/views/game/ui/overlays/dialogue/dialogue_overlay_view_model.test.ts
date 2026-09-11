@@ -127,106 +127,123 @@ const mockNpcDialogueService = {
 };
 
 // ---------------------------------------------------------------------------
-// Mock: services barrel (minimal)
+// Capability fixtures — the ViewModel receives every collaborator explicitly,
+// so no global `$services` module mock is registered.
 // ---------------------------------------------------------------------------
 
-// In isolated test runs the bare `$services` alias is resolved through the
-// tsconfig paths BEFORE mock.module matching; keep the bare-specifier mock
-// (the same form the other passing ViewModel tests use).
-mock.module('$services', () => ({
-  buildGameStateFacts: () => ['Location: Village of Oakvale', 'Time: Midday'],
-  combatService: {
-    lastCombatOptions: undefined,
-    enemyName: 'Unknown Enemy',
-    enemyHp: 0,
-    enemyMaxHp: 0,
+const mockBuildGameStateFacts = () => ['Location: Village of Oakvale', 'Time: Midday'];
+
+const mockCombatService = {
+  lastCombatOptions: undefined as
+    | {
+        enemyName: string;
+        enemyNpcId?: string;
+        enemyHp: number;
+        enemyMaxHp: number;
+        participantIds: number[];
+        firstTurnEntityId: number;
+        combatSeed?: number;
+        encounterId?: string | null;
+        allowNonCombatResolution?: boolean;
+      }
+    | undefined,
+};
+
+const mockDiceService = {
+  rollD20: (_modifier: number) => ({ natural: 14, total: 14 }),
+};
+
+const mockDraftStore = {
+  loadDraft: mock(async () => ''),
+  saveDraft: mock(async () => {}),
+  clearDraft: mock(async () => {}),
+};
+
+const mockGameModeService = {
+  currentMode: 'DIALOGUE' as const,
+};
+
+const mockMessageBranchStore = {
+  swipeAlternative: mock(() => {}),
+  clearAlternatives: mock(() => {}),
+  addAlternative: mock(() => {}),
+  enrichMessage: mock((options: { id: string; text: string; sender: string; timestamp: Date }) => ({
+    ...options,
+    alternativeCount: 1,
+    alternativeLabel: '',
+    canSwipeLeft: false,
+    canSwipeRight: false,
+    showActions: true,
+  })),
+};
+
+const mockPlayerStateService = {
+  classId: 'fighter',
+  get characterSheet() {
+    return seededSheet;
   },
-  diceService: {
-    rollD20: (_modifier: number) => ({ natural: 14, total: 14 }),
+  get isCharacterSheetAuthored() {
+    return isCharacterSheetAuthored;
   },
-  draftStore: {
-    loadDraft: mock(async () => ''),
-    saveDraft: mock(async () => {}),
-    clearDraft: mock(async () => {}),
-  },
-  gameModeService: {
-    currentMode: 'DIALOGUE',
-  },
-  gameOverlayService: {
-    openVendor: mock(() => {}),
-    startCombat: mock(() => {}),
-    closeEndSession: mock(() => {}),
-    endSession: mock(async () => {}),
-  },
-  questStateService: mockQuestStateService,
-  messageBranchStore: {
-    swipeAlternative: mock(() => {}),
-    clearAlternatives: mock(() => {}),
-    addAlternative: mock(() => {}),
-    enrichMessage: mock(
-      (options: { id: string; text: string; sender: string; timestamp: Date }) => ({
-        ...options,
-        alternativeCount: 1,
-        alternativeLabel: '',
-        canSwipeLeft: false,
-        canSwipeRight: false,
-        showActions: true,
-      }),
-    ),
-  },
-  playerStateService: {
-    characterSheetSummary: undefined,
-    classId: 'fighter',
-    get characterSheet() {
-      return seededSheet;
-    },
-    get isCharacterSheetAuthored() {
-      return isCharacterSheetAuthored;
-    },
-  },
-  ttsService: {
-    selectedVoice: 'default',
-    initialize: mock(async () => {}),
-    synthesize: mock(() => {}),
-    stop: mock(() => {}),
-    status: 'uninitialized',
-    speak: mock(async () => {}),
-    isKokoroServerAvailable: false,
-  },
-  expressionService: {
-    detectExpression: mock(async () => ({
-      expressionMap: { 'Elder Thrain': 'happy' },
-      detectionTier: 'keyword' as const,
-    })),
-  },
-  SentenceBoundaryChunker: class {
-    onSentence = mock(() => {});
-    feed = mock(() => {});
-    close = mock(() => {});
-  },
-  npcDialogueService: mockNpcDialogueService,
-  routerService: {
-    goToHref: mock(async () => {}),
-  },
-  imageGenerationService: {
-    isGenerating: false,
-    generateImage: mock(async ({ prompt }: { prompt: string }) => ({
-      url: `blob:mock-${prompt}`,
-      isDemo: false,
-    })),
-  },
-  __esModule: true,
-  default: {},
-}));
+};
+
+const mockTtsService = {
+  status: 'uninitialized' as string,
+  isPlaying: false,
+  initialize: mock(async () => {}),
+  speak: mock(async () => {}),
+  stop: mock(() => {}),
+};
+
+const mockExpressionService = {
+  detectExpression: mock(async () => ({
+    expressionMap: { 'Elder Thrain': 'happy' },
+    detectionTier: 'keyword' as const,
+  })),
+};
+
+class MockSentenceBoundaryChunker {
+  onSentence = mock(() => {});
+  feed = mock(() => {});
+  close = mock(() => {});
+}
+
+const mockRouterService = {
+  goToHref: mock(async () => {}),
+};
+
+const mockImageGenerationService = {
+  isGenerating: false,
+  generateImage: mock(async ({ prompt }: { prompt: string }) => ({
+    url: `blob:mock-${prompt}`,
+    isDemo: false,
+  })),
+};
+
+const dialogueCapabilities = {
+  combat: mockCombatService,
+  dice: mockDiceService,
+  draft: mockDraftStore,
+  expression: mockExpressionService,
+  gameMode: mockGameModeService,
+  image: mockImageGenerationService,
+  messageBranch: mockMessageBranchStore,
+  quest: mockQuestStateService,
+  router: mockRouterService,
+  tts: mockTtsService,
+  chunker: MockSentenceBoundaryChunker,
+  gameStateFacts: mockBuildGameStateFacts,
+  playerState: mockPlayerStateService,
+};
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
 import {
+  createDialogueOverlayViewModel,
   type DialogueOverlayViewModelInterface,
   type DialogueOverlayViewModelOptions,
-  getDialogueOverlayViewModel,
 } from './dialogue_overlay_view_model.svelte';
 
 // ---------------------------------------------------------------------------
@@ -248,13 +265,14 @@ const createViewModel = (options?: {
   imageProviderAvailable?: boolean;
 }): DialogueOverlayViewModelInterface => {
   mockNpcDialogueService.useFreeTextFirst = options?.useFreeTextFirst ?? true;
-  return getDialogueOverlayViewModel({
+  return createDialogueOverlayViewModel({
     className: 'TestDialogueOverlayViewModel',
     npcData: options?.npcData ?? createNpcData(),
     onEndChat: options?.onEndChat ?? (() => {}),
     npcDialogueService: mockNpcDialogueService,
     isCampaignPlay: options?.isCampaignPlay,
     imageProviderAvailable: options?.imageProviderAvailable,
+    ...dialogueCapabilities,
   });
 };
 
@@ -1149,8 +1167,7 @@ describe('DialogueOverlayViewModel', () => {
   });
 
   test('capability: goToSettingsCapability navigates to the AI settings section', async () => {
-    const { routerService } = await import('$services');
-    const goToHrefMock = routerService.goToHref as ReturnType<typeof mock>;
+    const goToHrefMock = mockRouterService.goToHref as ReturnType<typeof mock>;
 
     const vm = createViewModel({ imageProviderAvailable: false });
     await vm.sendMessage('/generate a forest clearing');
@@ -1165,10 +1182,9 @@ describe('DialogueOverlayViewModel', () => {
   });
 
   test('capability: toggling TTS when voice is not set up surfaces a read-aloud Settings link and does not enable it', async () => {
-    const { ttsService } = await import('$services');
-    const originalStatus = ttsService.status;
+    const originalStatus = mockTtsService.status;
     // Simulate "voice not downloaded / disabled" — a setup gap, not a warm-up.
-    ttsService.status = 'not-downloaded';
+    mockTtsService.status = 'not-downloaded';
     try {
       const vm = createViewModel();
       vm.toggleStreamingTts();
@@ -1178,7 +1194,7 @@ describe('DialogueOverlayViewModel', () => {
       expect(vm.capabilityError?.section).toBe('read-aloud');
       expect(vm.capabilityError?.group).toBe('ai');
     } finally {
-      ttsService.status = originalStatus;
+      mockTtsService.status = originalStatus;
     }
   });
 

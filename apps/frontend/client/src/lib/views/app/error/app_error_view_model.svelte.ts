@@ -3,9 +3,9 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { page } from '$app/state';
-import { routerService } from '$services';
+import type { RouterServiceInterface } from '$services';
 
 import type { BaseMetaTags } from '../metadata/head_tags_view_model.svelte.ts';
 
@@ -16,7 +16,13 @@ interface CustomError extends Error {
   type?: string;
 }
 
-export type AppErrorViewModelOptions = BaseViewModelOptions;
+/** The router operations the error view delegates to. */
+export type AppErrorRouterCapabilities = Pick<RouterServiceInterface, 'goBack' | 'navigateToApp'>;
+
+export type AppErrorViewModelOptions = BaseViewModelOptions & {
+  /** Router operations. */
+  router: AppErrorRouterCapabilities;
+};
 
 export type AppErrorViewModelInterface = BaseViewModelInterface & {
   /**
@@ -64,6 +70,13 @@ class AppErrorViewModel
   extends BaseViewModel<AppErrorViewModelOptions>
   implements AppErrorViewModelInterface
 {
+  private readonly _router: AppErrorRouterCapabilities;
+
+  constructor(options: AppErrorViewModelOptions) {
+    super(options);
+    this._router = options.router;
+  }
+
   // Note: Ensure you have `import { page } from '$app/state';` at the top of your file.
 
   get errorType() {
@@ -147,9 +160,9 @@ class AppErrorViewModel
   async handleRetry(): Promise<void> {
     const currentErrorType = this.errorType;
     if (currentErrorType === 'page-not-found') {
-      await routerService.goBack();
+      await this._router.goBack();
     } else if (currentErrorType === 'access-denied') {
-      await routerService.navigateToApp();
+      await this._router.navigateToApp();
     } else {
       globalThis.window.location.reload();
     }
@@ -159,9 +172,9 @@ class AppErrorViewModel
     const { status } = page;
 
     if (status === 403) {
-      await routerService.navigateToApp();
+      await this._router.navigateToApp();
     } else {
-      await routerService.goBack();
+      await this._router.goBack();
     }
   }
 
@@ -215,12 +228,15 @@ class AppErrorViewModel
 }
 
 /**
- * Constructs the app-error ViewModel from its base ViewModel options.
+ * Builds an app-error ViewModel from explicit capabilities.
  *
- * @param options - Construction options forwarded to the instrumented ViewModel factory.
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getAppErrorViewModel` in ./app_error_composition.ts.
+ *
+ * @param options - Construction options forwarded to the ViewModel factory.
  * @returns The initialized app-error ViewModel contract.
  */
-export const getAppErrorViewModel = (options: AppErrorViewModelOptions) =>
+export const createAppErrorViewModel = (options: AppErrorViewModelOptions) =>
   AppErrorViewModel.create({
     ...options,
     className: 'AppErrorViewModel',

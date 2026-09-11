@@ -1,13 +1,22 @@
 // apps/frontend/client/src/lib/views/ai/local_ai_wizard_view_model.test.ts
 //
 // Tests for the local AI install wizard ViewModel (C-467).
-// Uses createFixtureExecutor for deterministic hardware probes.
+// Uses createFixtureExecutor for deterministic hardware probes and injects the
+// sidecar/config/runtime capabilities directly — no global service registry
+// mock.
 //
 // AC-2: Hardware detection produces a plan matching real hardware.
 // AC-4: Corrupted/interrupted downloads are never mistaken for ready.
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { createFixtureExecutor } from '@aikami/local-ai';
+import {
+  createLocalAiWizardViewModel,
+  type LocalAiWizardConfigCapabilities,
+  type LocalAiWizardRuntimeCapabilities,
+  type LocalAiWizardSidecarCapabilities,
+  type LocalAiWizardViewModelOptions,
+} from './local_ai_wizard_view_model.svelte';
 
 // ── Fixtures ──────────────────────────────────────────────────────────
 
@@ -35,22 +44,38 @@ const NVIDIA_FIXTURES = {
   statfs: [{ path: '.', result: { freeBytes: 220_000_000_000 } }],
 };
 
-// ── Mocks ─────────────────────────────────────────────────────────────
-
-// Mock configService before importing the ViewModel
-mock.module('$services', () => ({
-  getTauriRuntimeInfo: mock(async () => ({ platform: 'linux', arch: 'x64' })),
-  configService: {
-    state: {
-      connections: [],
-      defaultByCapability: {},
+const CPU_FIXTURES = {
+  commands: [
+    {
+      command: 'nvidia-smi',
+      args: ['--query-gpu=name,memory.total,driver_version', '--format=csv,noheader'],
+      result: { ok: false, reason: 'not-found' as const, stdout: '', stderr: '', exitCode: -1 },
     },
-    addConnection: mock(() => 'new-id'),
-    setDefaultConnection: mock(() => {}),
-    save: mock(async () => {}),
-  },
-  sidecarService: {
-    state: { status: 'not-installed' },
+    {
+      command: 'nproc',
+      args: [],
+      result: { ok: true, stdout: '4\n', stderr: '', exitCode: 0 },
+    },
+  ],
+  files: [
+    {
+      path: '/proc/meminfo',
+      result: { ok: true, stdout: 'MemTotal:       16777216 kB\n', stderr: '', exitCode: 0 },
+    },
+  ],
+  statfs: [{ path: '.', result: { freeBytes: 50_000_000_000 } }],
+};
+
+const runtime: LocalAiWizardRuntimeCapabilities = {
+  getRuntimeInfo: async () => ({ platform: 'linux' as const, arch: 'x64' as const }),
+};
+
+const createSidecar = (): LocalAiWizardSidecarCapabilities => {
+  const state: LocalAiWizardSidecarCapabilities['state'] = { status: 'not-installed' };
+  return {
+    get state() {
+      return state;
+    },
     config: {
       host: '127.0.0.1',
       port: 11434,
@@ -58,35 +83,38 @@ mock.module('$services', () => ({
       modelPath: '',
       healthEndpoint: '/health',
     },
-    start: mock(async () => {}),
-    stop: mock(async () => {}),
-    healthCheck: mock(async () => false),
-  },
-}));
+    start: async () => {},
+    stop: async () => {},
+  };
+};
+
+const createConfig = (): LocalAiWizardConfigCapabilities => ({
+  state: { connections: [] },
+  addConnection: () => 'new-id',
+  save: async () => {},
+});
+
+const createViewModel = (
+  options: Partial<
+    Pick<LocalAiWizardViewModelOptions, 'executor' | 'platform' | 'arch' | 'isDesktop'>
+  > = {},
+) =>
+  createLocalAiWizardViewModel({
+    className: 'test-wizard',
+    executor: options.executor ?? createFixtureExecutor({ table: NVIDIA_FIXTURES }),
+    platform: options.platform,
+    arch: options.arch,
+    isDesktop: options.isDesktop ?? (() => true),
+    sidecar: createSidecar(),
+    config: createConfig(),
+    runtime,
+  });
 
 // ── Tests ─────────────────────────────────────────────────────────────
 
 describe('LocalAiWizardViewModel', () => {
-  let getViewModel: typeof import('./local_ai_wizard_view_model.svelte').getLocalAiWizardViewModel;
-
-  beforeEach(async () => {
-    const mod = await import('./local_ai_wizard_view_model.svelte');
-    getViewModel = mod.getLocalAiWizardViewModel;
-    // Set __TAURI__ so detection/install tests work in the simulated desktop context.
-    // P01 added isTauri() guards to startDetection() and startInstall().
-    (window as Record<string, unknown>).__TAURI__ = true;
-  });
-
-  afterEach(() => {
-    delete (window as Record<string, unknown>).__TAURI__;
-  });
-
   test('starts in idle state', () => {
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard',
-      executor,
-    });
+    const vm = createViewModel();
 
     expect(vm.step).toBe('idle');
     expect(vm.hardwareProfile).toBeNull();
@@ -95,20 +123,12 @@ describe('LocalAiWizardViewModel', () => {
   });
 
   test('detection transitions through detecting → plan (AC-2)', async () => {
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard',
-      executor,
-      platform: 'linux',
-      arch: 'x64',
-    });
+    const vm = createViewModel({ platform: 'linux', arch: 'x64' });
 
-    // Start detection
     const promise = vm.startDetection();
     expect(vm.step).toBe('detecting');
     await promise;
 
-    // Should have a plan
     expect(vm.step).toBe('plan');
     expect(vm.hardwareProfile).not.toBeNull();
     expect(vm.hardwareProfile?.gpu.vendor).toBe('nvidia');
@@ -117,32 +137,8 @@ describe('LocalAiWizardViewModel', () => {
   });
 
   test('detection with no GPU (CPU-only) still produces a plan', async () => {
-    const CpuFixtures = {
-      commands: [
-        {
-          command: 'nvidia-smi',
-          args: ['--query-gpu=name,memory.total,driver_version', '--format=csv,noheader'],
-          result: { ok: false, reason: 'not-found' as const, stdout: '', stderr: '', exitCode: -1 },
-        },
-        {
-          command: 'nproc',
-          args: [],
-          result: { ok: true, stdout: '4\n', stderr: '', exitCode: 0 },
-        },
-      ],
-      files: [
-        {
-          path: '/proc/meminfo',
-          result: { ok: true, stdout: 'MemTotal:       16777216 kB\n', stderr: '', exitCode: 0 },
-        },
-      ],
-      statfs: [{ path: '.', result: { freeBytes: 50_000_000_000 } }],
-    };
-
-    const executor = createFixtureExecutor({ table: CpuFixtures });
-    const vm = getViewModel({
-      className: 'test-wizard-cpu',
-      executor,
+    const vm = createViewModel({
+      executor: createFixtureExecutor({ table: CPU_FIXTURES }),
       platform: 'linux',
       arch: 'x64',
     });
@@ -156,11 +152,7 @@ describe('LocalAiWizardViewModel', () => {
   });
 
   test('startInstall without detection shows error', async () => {
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard-no-detect',
-      executor,
-    });
+    const vm = createViewModel();
 
     await vm.startInstall();
 
@@ -169,11 +161,7 @@ describe('LocalAiWizardViewModel', () => {
   });
 
   test('reset returns to idle', async () => {
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard-reset',
-      executor,
-    });
+    const vm = createViewModel();
 
     await vm.startDetection();
     expect(vm.step).toBe('plan');
@@ -184,51 +172,31 @@ describe('LocalAiWizardViewModel', () => {
     expect(vm.stackPlan).toBeNull();
   });
 
-  test('retry from error returns to plan when hardware known', async () => {
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard-retry',
-      executor,
-    });
+  test('retry from error returns to idle when hardware is unknown', async () => {
+    const vm = createViewModel();
 
-    // Start install without detection → error
     await vm.startInstall();
     expect(vm.step).toBe('error');
 
-    // Retry should go back to plan since we have no hardware profile
     vm.retry();
     expect(vm.step).toBe('idle');
   });
-  test('startInstall with detection skips download in non-Tauri context (AC-4)', async () => {
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard-download',
-      executor,
-      platform: 'linux',
-      arch: 'x64',
-    });
+
+  test('startInstall with detection errors when the download host is unavailable (AC-4)', async () => {
+    const vm = createViewModel({ platform: 'linux', arch: 'x64' });
 
     await vm.startDetection();
     expect(vm.step).toBe('plan');
 
-    // In non-Tauri context, startInstall should skip download and attempt
-    // sidecar start. The sidecar mock resolves immediately.
     await vm.startInstall();
 
-    // The sidecar mock's start() resolves without changing state to 'running',
-    // so we expect 'error' from the sidecar start failure
     expect(vm.step).toBe('error');
   });
 
-  test('contract suite placeholder — AC-1 requires Tauri runtime', async () => {
+  test('contract suite placeholder — AC-1 requires Tauri runtime', () => {
     // The probe_executor.contract_suite.ts requires a real Tauri webview
     // context to run against the Tauri adapter. In unit tests, we verify
     // the adapter shape and the fixture_executor conformance instead.
-    //
-    // To run AC-1 verification:
-    //   1. Build the Tauri app with `bun run build:tauri`
-    //   2. Run the test suite from within the Tauri webview
-    //   3. Or use Playwright E2E with Tauri
     const hasTauriInternals = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     expect(hasTauriInternals).toBe(false);
   });
@@ -236,34 +204,25 @@ describe('LocalAiWizardViewModel', () => {
   // ── P01: Unsupported-host guards ───────────────────────────────────
 
   test('P01: startDetection returns error when not in Tauri (browser)', async () => {
-    delete (window as Record<string, unknown>).__TAURI__;
-
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard-browser',
-      executor,
+    const vm = createViewModel({
       platform: 'linux',
       arch: 'x64',
+      isDesktop: () => false,
     });
 
     await vm.startDetection();
 
     expect(vm.step).toBe('error');
     expect(vm.errorMessage).toContain('requires the desktop app');
-    // Verify no probes were invoked by checking hardware profile was never set
     expect(vm.hardwareProfile).toBeNull();
     expect(vm.stackPlan).toBeNull();
   });
 
   test('P01: startInstall returns error when not in Tauri (browser)', async () => {
-    delete (window as Record<string, unknown>).__TAURI__;
-
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard-browser-install',
-      executor,
+    const vm = createViewModel({
       platform: 'linux',
       arch: 'x64',
+      isDesktop: () => false,
     });
 
     await vm.startInstall();
@@ -273,14 +232,10 @@ describe('LocalAiWizardViewModel', () => {
   });
 
   test('P01: startDetection still works in Tauri context (desktop)', async () => {
-    (window as Record<string, unknown>).__TAURI__ = true;
-
-    const executor = createFixtureExecutor({ table: NVIDIA_FIXTURES });
-    const vm = getViewModel({
-      className: 'test-wizard-desktop',
-      executor,
+    const vm = createViewModel({
       platform: 'linux',
       arch: 'x64',
+      isDesktop: () => true,
     });
 
     await vm.startDetection();

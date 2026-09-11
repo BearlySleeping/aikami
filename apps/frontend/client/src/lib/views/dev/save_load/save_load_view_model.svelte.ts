@@ -8,9 +8,20 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { SaveSlotEntry } from '@aikami/types';
-import { authService, gameStateSyncService } from '$services';
+import type { AuthServiceInterface, GameStateSyncServiceInterface } from '$services';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The auth state + lifecycle the save/load sandbox gates on. */
+export type SaveLoadAuthCapabilities = Pick<AuthServiceInterface, 'uid' | 'initialize'>;
+
+/** The cloud save/load operations the sandbox exercises. */
+export type GameStateSyncCapabilities = Pick<
+  GameStateSyncServiceInterface,
+  'listSlots' | 'saveGame' | 'loadGame' | 'deleteSlot'
+>;
 
 /** Sample ECS snapshot for dev sandbox pre-fill. */
 const DEFAULT_SNAPSHOT = JSON.stringify(
@@ -86,7 +97,12 @@ export type SaveLoadViewModelInterface = BaseViewModelInterface & {
   deleteSlot(): Promise<void>;
 };
 
-export type SaveLoadViewModelOptions = BaseViewModelOptions;
+export type SaveLoadViewModelOptions = BaseViewModelOptions & {
+  /** Auth state + lifecycle. */
+  auth: SaveLoadAuthCapabilities;
+  /** Cloud save/load operations. */
+  sync: GameStateSyncCapabilities;
+};
 
 class SaveLoadViewModel
   extends BaseViewModel<SaveLoadViewModelOptions>
@@ -100,16 +116,25 @@ class SaveLoadViewModel
   message = $state<string | undefined>(undefined);
   loadedPayload = $state<string | undefined>(undefined);
 
+  private readonly _auth: SaveLoadAuthCapabilities;
+  private readonly _sync: GameStateSyncCapabilities;
+
+  constructor(options: SaveLoadViewModelOptions) {
+    super(options);
+    this._auth = options.auth;
+    this._sync = options.sync;
+  }
+
   get uid(): string | undefined {
-    return authService.uid;
+    return this._auth.uid;
   }
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
     // Ensure auth is initialized so the session is resolved before loading
-    // slots. Safe to call repeatedly — AuthService guards with a cached
-    // in-flight promise.
-    await authService.initialize();
+    // slots. Safe to call repeatedly — the auth capability guards with a
+    // cached in-flight promise.
+    await this._auth.initialize();
 
     this.payload = DEFAULT_SNAPSHOT;
     await this.loadSlots();
@@ -139,7 +164,7 @@ class SaveLoadViewModel
     this.isLoadingSlots = true;
 
     try {
-      this.slots = await gameStateSyncService.listSlots({ uid });
+      this.slots = await this._sync.listSlots({ uid });
     } catch (error) {
       this.debug('loadSlots:error', { error: String(error) });
       this.slots = [];
@@ -165,7 +190,7 @@ class SaveLoadViewModel
     this.message = undefined;
 
     try {
-      await gameStateSyncService.saveGame({
+      await this._sync.saveGame({
         uid,
         slot: this.slotNumber,
         payload: this.payload,
@@ -195,7 +220,7 @@ class SaveLoadViewModel
     this.loadedPayload = undefined;
 
     try {
-      const result = await gameStateSyncService.loadGame({
+      const result = await this._sync.loadGame({
         uid,
         slot: this.slotNumber,
       });
@@ -228,7 +253,7 @@ class SaveLoadViewModel
     this.loadedPayload = undefined;
 
     try {
-      await gameStateSyncService.deleteSlot({ uid, slot: this.slotNumber });
+      await this._sync.deleteSlot({ uid, slot: this.slotNumber });
       this.message = `Deleted slot ${this.slotNumber}.`;
       await this.loadSlots();
     } catch (error) {
@@ -241,6 +266,12 @@ class SaveLoadViewModel
   }
 }
 
-export const getSaveLoadViewModel = (
+/**
+ * Builds a save/load ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getSaveLoadViewModel` in ./save_load_composition.ts.
+ */
+export const createSaveLoadViewModel = (
   options: SaveLoadViewModelOptions,
 ): SaveLoadViewModelInterface => SaveLoadViewModel.create(options);

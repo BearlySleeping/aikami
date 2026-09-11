@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { BUILT_IN_PRESETS } from '@aikami/constants';
 import { createDeferred } from '@aikami/utils';
 import type { ConnectionTestResult } from '$types';
-import { localServicesMockBase } from '../../../test_preload.ts';
 import { aiConnectionStatus } from './ai_connection_status.svelte';
 
 // Mock configService with a controlled test state
@@ -185,24 +184,15 @@ mock.module('$lib/utils/fuzzy_match', () => ({
   ),
 }));
 
-mock.module('$services', () => ({
-  ...localServicesMockBase(),
-  configService: mockConfigService,
-  // biome-ignore lint/style/useNamingConvention: matches actual $services export name
-  PROVIDER_MODEL_FETCH: mockProviderModelFetch,
-  fetchModelsFromProvider: mockFetchModelsFromProvider,
-  fetchWithCredentialPolicy: mockFetchWithCredentialPolicy,
-  resolveChatTestRequest: mockResolveChatTestRequest,
-  verifyConnection: mockVerifyConnection,
-  hasVerificationStrategy: mockHasVerificationStrategy,
-  ttsService: mockTtsService,
-  voiceModelService: mockVoiceModelService,
-  campaignService: mockCampaignService,
-  imageGenerationService: mockImageGenerationService,
-  styleProfileService: mockStyleProfileService,
-}));
+type TestViewModelOptions = {
+  className?: string;
+  capability?: import('$types').ConnectionCapability;
+  showAdvancedSections?: boolean;
+};
 
-let getAiSettingsViewModel: typeof import('./ai_settings_view_model.svelte').getAiSettingsViewModel;
+let getAiSettingsViewModel: (
+  options?: TestViewModelOptions,
+) => import('./ai_settings_view_model.svelte').AiSettingsViewModelInterface;
 let voicePreviewFallbackLine: typeof import('./ai_settings_view_model.svelte').VOICE_PREVIEW_FALLBACK_LINE;
 
 beforeEach(async () => {
@@ -244,9 +234,30 @@ beforeEach(async () => {
   mockImageGenerationService.generateImage.mockClear();
   mockStyleProfileService.setActiveProfile.mockClear();
 
-  ({ getAiSettingsViewModel, VOICE_PREVIEW_FALLBACK_LINE: voicePreviewFallbackLine } = await import(
+  const { createAiSettingsViewModel, VOICE_PREVIEW_FALLBACK_LINE } = await import(
     './ai_settings_view_model.svelte'
-  ));
+  );
+  voicePreviewFallbackLine = VOICE_PREVIEW_FALLBACK_LINE;
+  getAiSettingsViewModel = (options: TestViewModelOptions = {}) =>
+    createAiSettingsViewModel({
+      className: options.className ?? 'AiSettingsViewModel',
+      capability: options.capability,
+      showAdvancedSections: options.showAdvancedSections,
+      config: mockConfigService,
+      campaign: mockCampaignService,
+      image: mockImageGenerationService,
+      styleProfiles: mockStyleProfileService,
+      tts: mockTtsService,
+      voiceModel: mockVoiceModelService,
+      ai: {
+        providerModelFetch: mockProviderModelFetch,
+        hasVerificationStrategy: mockHasVerificationStrategy,
+        fetchModelsFromProvider: mockFetchModelsFromProvider,
+        fetchWithCredentialPolicy: mockFetchWithCredentialPolicy,
+        resolveChatTestRequest: mockResolveChatTestRequest,
+        verifyConnection: mockVerifyConnection,
+      },
+    });
 });
 
 describe('AiSettingsViewModel — AC-1: Second model reuses key', () => {

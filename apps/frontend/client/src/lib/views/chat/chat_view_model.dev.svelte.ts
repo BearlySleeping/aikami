@@ -11,7 +11,12 @@ import {
   textGenerationService,
 } from '$services';
 import type { TextChatMessage } from '$types';
-import { ChatViewModel, type ChatViewModelOptions } from './chat_view_model.svelte.ts';
+import { createChatCapabilities } from './chat_composition.ts';
+import {
+  ChatViewModel,
+  type ChatViewModelOptions,
+  type ChatViewModelPublicOptions,
+} from './chat_view_model.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -390,5 +395,7 @@ export class ChatDevViewModel extends ChatViewModel {
  * Factory function — returns a ChatDevViewModel with mock data.
  * Only use in (dev) routes or tests.
  */
-export const getChatDevViewModel = (options: ChatViewModelOptions): ChatDevViewModel =>
-  new ChatDevViewModel(options);
+export const getChatDevViewModel = (options: ChatViewModelPublicOptions): ChatDevViewModel => {
+  const opts: ChatViewModelOptions = { ...options, ...createChatCapabilities() };
+  return ChatDevViewModel.create(opts);
+};

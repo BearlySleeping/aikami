@@ -11,51 +11,19 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state, $derived, $effect are polyfilled globally via test_preload.ts
-
-// The gatekeeping tests below mutate the real textGenerationService's
-// extractStructure. The ViewModel reads textGenerationService from the
-// barrel, so the barrel mock must expose the REAL singleton (the same
-// instance the tests import and patch).
-import { textGenerationService as realTextGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-import { localServicesMockBase } from '../../test_preload.ts';
-
-mock.module('$services', () => ({
-  ...localServicesMockBase(),
-  diceService: {
-    rollWithModifier: () => ({ roll: 17, modifier: 4, total: 21, success: true }),
-    async rollDice() {
-      return { roll: 17, modifier: 4, total: 21, success: true };
-    },
-  },
-  gameStateService: {
-    inventory: [],
-    worldGenOutput: undefined,
-  },
-  audioService: {
-    playBgm: () => {},
-    crossFadeBgm: () => {},
-    stopAll: () => {},
-  },
-  vendorService: undefined,
-  textGenerationService: realTextGenerationService,
-}));
-
 import {
-  CombatViewModel,
   type CombatViewModelInterface,
   type CombatViewModelOptions,
+  createCombatViewModel,
 } from './combat_view_model.svelte.ts';
+import { createCombatTestOptions } from './testing/combat_fixtures.ts';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 /** Creates a fresh CombatViewModel instance with test options. */
-const createViewModel = (): CombatViewModel => {
-  const options: CombatViewModelOptions = {
-    className: 'CombatViewModelTest',
-  };
-  return CombatViewModel.create(options);
-};
+const createViewModel = (
+  overrides: Partial<CombatViewModelOptions> = {},
+): CombatViewModelInterface => createCombatViewModel(createCombatTestOptions(overrides));
 
 /** Extracts the active dice roll value with a non-null assertion guard. */
 const getDiceRoll = (vm: CombatViewModelInterface) => {
@@ -66,6 +34,36 @@ const getDiceRoll = (vm: CombatViewModelInterface) => {
   return roll;
 };
 
+/** Installs a spy bridge and active-combat state on a fresh ViewModel. */
+const armViewModel = (
+  vm: CombatViewModelInterface,
+  overrides: { enemyHp?: number; enemyMaxHp?: number; playerAttack?: number } = {},
+): Array<Record<string, unknown>> => {
+  const bridgeSendCalls: Array<Record<string, unknown>> = [];
+  (
+    vm as unknown as {
+      _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
+    }
+  )._bridge = {
+    send: (cmd: Record<string, unknown>) => {
+      bridgeSendCalls.push(cmd);
+    },
+    on: () => () => {},
+  };
+  vm.currentTurnEntity = 1;
+  vm.enemyEntityId = 2;
+  vm.enemyName = 'Goblin';
+  vm.playerHp = 80;
+  vm.playerMaxHp = 100;
+  vm.enemyHp = overrides.enemyHp ?? 60;
+  vm.enemyMaxHp = overrides.enemyMaxHp ?? 80;
+  vm.activeEntities = [1, 2];
+  vm.playerLevel = 3;
+  vm.playerAttack = overrides.playerAttack ?? 7;
+  vm.playerDefense = 14;
+  return bridgeSendCalls;
+};
+
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CombatViewModel — C-148 Combat Immersion', () => {
@@ -74,7 +72,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('activeDiceRoll', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
 
     beforeEach(() => {
       viewModel = createViewModel();
@@ -171,7 +169,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('combatBackgroundImageUrl', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
 
     beforeEach(() => {
       viewModel = createViewModel();
@@ -195,54 +193,16 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('executeCustomAction — C-149 Gatekeeping', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
     let bridgeSendCalls: Array<Record<string, unknown>>;
 
     beforeEach(() => {
       viewModel = createViewModel();
-      bridgeSendCalls = [];
-
-      // Set up mock engine bridge
-      const vm = viewModel as unknown as {
-        _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
-      };
-      vm._bridge = {
-        send: (cmd: Record<string, unknown>) => {
-          bridgeSendCalls.push(cmd);
-        },
-        on: () => () => {}, // No-op listener cleanup
-      };
-
-      // Put the ViewModel in an active combat state
-      viewModel.currentTurnEntity = 1;
-      viewModel.enemyEntityId = 2;
-      viewModel.enemyName = 'Goblin';
-      viewModel.playerHp = 80;
-      viewModel.playerMaxHp = 100;
-      viewModel.enemyHp = 60;
-      viewModel.enemyMaxHp = 80;
-      viewModel.activeEntities = [1, 2];
-      viewModel.playerLevel = 3;
-      viewModel.playerAttack = 7;
-      viewModel.playerDefense = 14;
+      bridgeSendCalls = armViewModel(viewModel);
     });
 
     test('should append invalidReason to combat log when actionValid is false', async () => {
-      // Mock textGenerationService to return a gatekept response
-      const extractStructureMod = await import(
-        '$lib/services/ai/text_generation_service.svelte.ts'
-      );
-      const origExtract = (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure;
-
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = async () => ({
+      const extractStructure = mock(async () => ({
         actionType: 'ATTACK',
         narrative: "You reach for your potion belt — but it's empty!",
         bonusDamage: 0,
@@ -251,7 +211,9 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
         actionValid: false,
         invalidReason:
           'You reach for a healing potion, but your bags are empty! The goblin snickers at your misfortune.',
-      });
+      }));
+      viewModel = createViewModel({ text: { extractStructure } });
+      bridgeSendCalls = armViewModel(viewModel);
 
       await viewModel.executeCustomAction('I drink a healing potion');
 
@@ -266,37 +228,19 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       // Should not be stuck in resolving state
       expect(viewModel.isResolvingAiAction).toBe(false);
-
-      // Restore original
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = origExtract;
     });
 
     test('should dispatch COMBAT_ACTION when actionValid is true', async () => {
-      const extractStructureMod = await import(
-        '$lib/services/ai/text_generation_service.svelte.ts'
-      );
-      const origExtract = (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure;
-
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = async () => ({
+      const extractStructure = mock(async () => ({
         actionType: 'ATTACK',
         narrative: 'You swing your sword in a wide arc!',
         bonusDamage: 2,
         advantage: false,
         generateImage: false,
         actionValid: true,
-      });
+      }));
+      viewModel = createViewModel({ text: { extractStructure } });
+      bridgeSendCalls = armViewModel(viewModel);
 
       await viewModel.executeCustomAction('I swing my sword at the goblin');
 
@@ -308,13 +252,6 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       // Should not be stuck in resolving state
       expect(viewModel.isResolvingAiAction).toBe(false);
-
-      // Restore original
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = origExtract;
     });
   });
 
@@ -323,67 +260,16 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('executeCustomAction — C-151 AI Dynamic Music', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
     let bridgeSendCalls: Array<Record<string, unknown>>;
 
     beforeEach(() => {
       viewModel = createViewModel();
-      bridgeSendCalls = [];
-
-      // Set up mock engine bridge
-      const vm = viewModel as unknown as {
-        _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
-      };
-      vm._bridge = {
-        send: (cmd: Record<string, unknown>) => {
-          bridgeSendCalls.push(cmd);
-        },
-        on: () => () => {},
-      };
-
-      // Put the ViewModel in active combat state
-      viewModel.currentTurnEntity = 1;
-      viewModel.enemyEntityId = 2;
-      viewModel.enemyName = 'Goblin';
-      viewModel.playerHp = 80;
-      viewModel.playerMaxHp = 100;
-      viewModel.enemyHp = 60;
-      viewModel.enemyMaxHp = 80;
-      viewModel.activeEntities = [1, 2];
-      viewModel.playerLevel = 3;
-      viewModel.playerAttack = 7;
-      viewModel.playerDefense = 14;
-    });
-
-    afterEach(() => {
-      // Unmock audioService
-      try {
-        (
-          viewModel as unknown as {
-            _transitionBgmByMood: (mood: string) => Promise<void>;
-          }
-        )._transitionBgmByMood = async () => {};
-      } catch {
-        // No-op
-      }
+      bridgeSendCalls = armViewModel(viewModel);
     });
 
     test('should call _transitionBgmByMood when LLM returns sceneMood', async () => {
-      // Mock textGenerationService to return a response with sceneMood
-      const extractStructureMod = await import(
-        '$lib/services/ai/text_generation_service.svelte.ts'
-      );
-      const origExtract = (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure;
-
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = async () => ({
+      const extractStructure = mock(async () => ({
         actionType: 'ATTACK',
         narrative: 'With a thunderous roar, you strike the killing blow!',
         bonusDamage: 3,
@@ -391,7 +277,9 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
         generateImage: false,
         actionValid: true,
         sceneMood: 'triumph',
-      });
+      }));
+      viewModel = createViewModel({ text: { extractStructure } });
+      bridgeSendCalls = armViewModel(viewModel);
 
       // Spy on _transitionBgmByMood via method override
       let wasCalled = false;
@@ -399,7 +287,6 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
       const vm = viewModel as unknown as {
         _transitionBgmByMood: (mood: string) => Promise<void>;
       };
-      const origTransition = vm._transitionBgmByMood;
       vm._transitionBgmByMood = async (mood: string) => {
         wasCalled = true;
         receivedMood = mood;
@@ -412,45 +299,24 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       // COMBAT_ACTION_ANIMATE + COMBAT_ACTION dispatched
       expect(bridgeSendCalls.length).toBe(2);
-
-      // Restore
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = origExtract;
-      vm._transitionBgmByMood = origTransition;
     });
 
     test('should NOT call _transitionBgmByMood when sceneMood is undefined', async () => {
-      const extractStructureMod = await import(
-        '$lib/services/ai/text_generation_service.svelte.ts'
-      );
-      const origExtract = (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure;
-
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = async () => ({
+      const extractStructure = mock(async () => ({
         actionType: 'ATTACK',
         narrative: 'You swing your sword at the goblin.',
         bonusDamage: 0,
         advantage: false,
         generateImage: false,
         actionValid: true,
-        // sceneMood intentionally omitted
-      });
+      }));
+      viewModel = createViewModel({ text: { extractStructure } });
+      bridgeSendCalls = armViewModel(viewModel);
 
       let wasCalled = false;
       const vm = viewModel as unknown as {
         _transitionBgmByMood: (mood: string) => Promise<void>;
       };
-      const origTransition = vm._transitionBgmByMood;
       vm._transitionBgmByMood = async () => {
         wasCalled = true;
       };
@@ -461,14 +327,6 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       // Engine command should still be dispatched
       expect(bridgeSendCalls.length).toBe(2);
-
-      // Restore
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = origExtract;
-      vm._transitionBgmByMood = origTransition;
     });
   });
 
@@ -477,7 +335,7 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
   // -----------------------------------------------------------------------
 
   describe('CombatViewModel — C-165 CombatLogEntry', () => {
-    let viewModel: CombatViewModel;
+    let viewModel: CombatViewModelInterface;
 
     beforeEach(() => {
       viewModel = createViewModel();
@@ -603,51 +461,25 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 // ---------------------------------------------------------------------------
 
 describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from state)', () => {
-  let viewModel: CombatViewModel;
+  let viewModel: CombatViewModelInterface;
   let bridgeSendCalls: Array<Record<string, unknown>>;
 
   beforeEach(() => {
     viewModel = createViewModel();
-    bridgeSendCalls = [];
-    const vm = viewModel as unknown as {
-      _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
-    };
-    vm._bridge = {
-      send: (cmd: Record<string, unknown>) => {
-        bridgeSendCalls.push(cmd);
-      },
-      on: () => () => {},
-    };
-    // Fresh combat — enemy at full HP, default player attack (5).
-    viewModel.currentTurnEntity = 1;
-    viewModel.enemyEntityId = 2;
-    viewModel.enemyName = 'Goblin';
-    viewModel.enemyHp = 80;
-    viewModel.enemyMaxHp = 80;
-    viewModel.activeEntities = [1, 2];
-    viewModel.playerLevel = 1;
-    viewModel.playerAttack = 5;
+    bridgeSendCalls = armViewModel(viewModel, { enemyHp: 80, enemyMaxHp: 80, playerAttack: 5 });
   });
 
   test('ignores a model-proposed +10 bonus and fabricated advantage', async () => {
-    const extractStructureMod = await import('$lib/services/ai/text_generation_service.svelte.ts');
-    const origExtract = (
-      extractStructureMod.textGenerationService as {
-        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
-      }
-    ).extractStructure;
-    (
-      extractStructureMod.textGenerationService as {
-        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
-      }
-    ).extractStructure = async () => ({
+    const extractStructure = mock(async () => ({
       actionType: 'ATTACK',
       narrative: 'You unleash a devastating blow!',
       bonusDamage: 10, // model claims +10
       advantage: true, // model claims advantage
       generateImage: false,
       actionValid: true,
-    });
+    }));
+    viewModel = createViewModel({ text: { extractStructure } });
+    bridgeSendCalls = armViewModel(viewModel, { enemyHp: 80, enemyMaxHp: 80, playerAttack: 5 });
 
     await viewModel.executeCustomAction('I unleash a devastating blow');
 
@@ -658,34 +490,19 @@ describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from sta
     // Enemy at full HP → no advantage from state; player attack 5 → +2 bonus.
     expect(action.advantage).toBe(false);
     expect(action.bonusDamage).toBe(2);
-
-    (
-      extractStructureMod.textGenerationService as {
-        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
-      }
-    ).extractStructure = origExtract;
   });
 
   test('grants advantage from state when the enemy is wounded', async () => {
-    viewModel.enemyHp = 20; // <= 50% of max → advantage justified by state
-    const extractStructureMod = await import('$lib/services/ai/text_generation_service.svelte.ts');
-    const origExtract = (
-      extractStructureMod.textGenerationService as {
-        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
-      }
-    ).extractStructure;
-    (
-      extractStructureMod.textGenerationService as {
-        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
-      }
-    ).extractStructure = async () => ({
+    const extractStructure = mock(async () => ({
       actionType: 'ATTACK',
       narrative: 'You press the advantage!',
       bonusDamage: 0,
       advantage: false,
       generateImage: false,
       actionValid: true,
-    });
+    }));
+    viewModel = createViewModel({ text: { extractStructure } });
+    bridgeSendCalls = armViewModel(viewModel, { enemyHp: 20, enemyMaxHp: 80, playerAttack: 5 });
 
     await viewModel.executeCustomAction('I press the advantage');
 
@@ -694,11 +511,5 @@ describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from sta
       throw new Error('expected a COMBAT_ACTION to be dispatched');
     }
     expect(action.advantage).toBe(true);
-
-    (
-      extractStructureMod.textGenerationService as {
-        extractStructure: (o: Record<string, unknown>) => Promise<Record<string, unknown>>;
-      }
-    ).extractStructure = origExtract;
   });
 });

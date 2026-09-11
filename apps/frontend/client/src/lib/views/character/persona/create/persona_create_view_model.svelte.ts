@@ -6,7 +6,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { PersonaData } from '@aikami/types';
 import {
   buildCharacterExtractionPrompt,
@@ -14,19 +14,6 @@ import {
 } from '$lib/data/ai_prompts/character_extraction_schema';
 import { DND_CREATION_SYSTEM_PROMPT } from '$lib/data/ai_prompts/dnd_creation';
 import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
-import {
-  authService,
-  equipmentService,
-  imageGenerationService,
-  inventoryService,
-  personaCreationService,
-  personaService,
-  playerStateService,
-  routerService,
-  storageService,
-  textGenerationService,
-  worldStateService,
-} from '$services';
 
 // LPC Slot → index lookup (built from catalog)
 const _getLpcSlotIndex = (): Map<string, number> => {
@@ -75,6 +62,93 @@ export type ScoreLabel = {
   readonly key: 'strength' | 'dexterity' | 'constitution' | 'intelligence' | 'wisdom' | 'charisma';
   readonly label: string;
   readonly desc: string;
+};
+
+// ---------------------------------------------------------------------------
+// Capability contracts
+// ---------------------------------------------------------------------------
+
+/** Persona chat/generation state and operations. */
+export type PersonaCreationCapabilities = {
+  persona: PersonaData | undefined;
+  avatarUrl: string;
+  readonly isStreaming: boolean;
+  sendMessage(options: { text: string; messages: ChatMessage[] }): Promise<ChatMessage[]>;
+  startAvatarGeneration(options: { prompt: string }): void;
+  cancel(): void;
+};
+
+/** Image generation readiness and operations. */
+export type ImageGenerationCapabilities = {
+  readonly isReady: boolean;
+  generateImage(options: {
+    prompt: string;
+    negativePrompt?: string;
+    initImage?: string;
+    denoise?: number;
+    steps?: number;
+    cfgScale?: number;
+  }): Promise<{ url: string }>;
+};
+
+/** Structured text extraction for persona fields. */
+export type TextGenerationCapabilities = {
+  extractStructure(options: {
+    schema: Record<string, unknown>;
+    schemaName: string;
+    prompt: string;
+    systemPrompt?: string;
+  }): Promise<unknown>;
+};
+
+/** The signed-in identity the create flow reads. */
+export type AuthCapabilities = {
+  readonly uid: string | undefined;
+};
+
+/** Avatar upload. */
+export type StorageCapabilities = {
+  uploadAvatar(options: { file: Blob | File; uid: string }): Promise<string | undefined>;
+};
+
+/** Inventory seeding for the starter kit. */
+export type InventoryCapabilities = {
+  reset(): void;
+  addItem(options: { itemId: string; quantity: number }): boolean;
+};
+
+/** Equipment reset + starter-kit equipping. */
+export type EquipmentCapabilities = {
+  reset(): void;
+  equipItem(options: { itemId: string }): boolean;
+};
+
+/** World state reset before entering the world. */
+export type WorldStateCapabilities = {
+  reset(): void;
+};
+
+/** Player state reset before entering the world. */
+export type PlayerStateCapabilities = {
+  reset(): void;
+};
+
+/** Per-install persona persistence. */
+export type PersonaServiceCapabilities = {
+  updatePersona(personaId: string, data: Partial<PersonaData>): Promise<void>;
+  setActivePersona(personaId: string): Promise<void>;
+};
+
+/** Navigation used by the create flow. */
+export type RouterCapabilities = {
+  goToRoute(
+    route: 'game',
+    options: {
+      queryParameters: undefined;
+      pathParameters: undefined;
+    },
+  ): Promise<void>;
+  goToDevRoute(devPath: string): Promise<void>;
 };
 
 // ---------------------------------------------------------------------------
@@ -154,7 +228,19 @@ export type PersonaCreateViewModelInterface = BaseViewModelInterface & {
 // Options
 // ---------------------------------------------------------------------------
 
-export type PersonaCreateViewModelOptions = BaseViewModelOptions & {};
+export type PersonaCreateViewModelOptions = BaseViewModelOptions & {
+  personaCreation: PersonaCreationCapabilities;
+  imageGeneration: ImageGenerationCapabilities;
+  textGeneration: TextGenerationCapabilities;
+  auth: AuthCapabilities;
+  storage: StorageCapabilities;
+  inventory: InventoryCapabilities;
+  equipment: EquipmentCapabilities;
+  worldState: WorldStateCapabilities;
+  playerState: PlayerStateCapabilities;
+  personas: PersonaServiceCapabilities;
+  router: RouterCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -185,6 +271,33 @@ export class PersonaCreateViewModel
   /** Message shown after successful save. */
   characterSavedMessage = $state('');
 
+  private readonly _personaCreation: PersonaCreationCapabilities;
+  private readonly _imageGeneration: ImageGenerationCapabilities;
+  private readonly _textGeneration: TextGenerationCapabilities;
+  private readonly _auth: AuthCapabilities;
+  private readonly _storage: StorageCapabilities;
+  private readonly _inventory: InventoryCapabilities;
+  private readonly _equipment: EquipmentCapabilities;
+  private readonly _worldState: WorldStateCapabilities;
+  private readonly _playerState: PlayerStateCapabilities;
+  private readonly _personas: PersonaServiceCapabilities;
+  private readonly _router: RouterCapabilities;
+
+  constructor(options: PersonaCreateViewModelOptions) {
+    super(options);
+    this._personaCreation = options.personaCreation;
+    this._imageGeneration = options.imageGeneration;
+    this._textGeneration = options.textGeneration;
+    this._auth = options.auth;
+    this._storage = options.storage;
+    this._inventory = options.inventory;
+    this._equipment = options.equipment;
+    this._worldState = options.worldState;
+    this._playerState = options.playerState;
+    this._personas = options.personas;
+    this._router = options.router;
+  }
+
   private static readonly _scoreLabels: readonly ScoreLabel[] = [
     { key: 'strength', label: 'STR', desc: 'Strength' },
     { key: 'dexterity', label: 'DEX', desc: 'Dexterity' },
@@ -195,15 +308,15 @@ export class PersonaCreateViewModel
   ] as const;
 
   get persona(): PersonaData | undefined {
-    return personaCreationService.persona;
+    return this._personaCreation.persona;
   }
 
   get avatarUrl(): string {
-    return personaCreationService.avatarUrl;
+    return this._personaCreation.avatarUrl;
   }
 
   get isStreaming(): boolean {
-    return personaCreationService.isStreaming;
+    return this._personaCreation.isStreaming;
   }
 
   get scoreLabels(): readonly ScoreLabel[] {
@@ -211,7 +324,7 @@ export class PersonaCreateViewModel
   }
 
   get isImageGenReady(): boolean {
-    return imageGenerationService.isReady;
+    return this._imageGeneration.isReady;
   }
 
   get hasMessages(): boolean {
@@ -271,7 +384,7 @@ export class PersonaCreateViewModel
 
   configureImageGen(): void {
     // Navigate to the Config dev dashboard
-    void routerService.goToDevRoute('config');
+    void this._router.goToDevRoute('config');
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -303,7 +416,7 @@ export class PersonaCreateViewModel
 
     // Then get the AI response
     try {
-      this.messages = await personaCreationService.sendMessage({
+      this.messages = await this._personaCreation.sendMessage({
         text,
         messages: this.messages,
       });
@@ -327,7 +440,7 @@ export class PersonaCreateViewModel
       // If extraction is already done, go straight to TWEAK
       const persona = await extractionPromise;
       if (persona) {
-        personaCreationService.persona = persona;
+        this._personaCreation.persona = persona;
         this._startAvatarIfReady();
         this.phase = 'TWEAK';
       } else {
@@ -375,7 +488,7 @@ export class PersonaCreateViewModel
 
     const persona = await this._extractCharacter();
     if (persona) {
-      personaCreationService.persona = persona;
+      this._personaCreation.persona = persona;
       this._startAvatarIfReady();
       this.phase = 'TWEAK';
     } else {
@@ -388,7 +501,7 @@ export class PersonaCreateViewModel
   }
 
   cancel(): void {
-    personaCreationService.cancel();
+    this._personaCreation.cancel();
     this.phase = 'CHAT';
   }
 
@@ -426,15 +539,15 @@ export class PersonaCreateViewModel
     this.isUploading = true;
 
     try {
-      const uid = (authService as { uid?: string }).uid;
+      const uid = this._auth.uid;
       if (!uid) {
         this.warn('uploadAvatar: not authenticated');
         return;
       }
 
-      const url = await storageService.uploadAvatar({ file, uid });
+      const url = await this._storage.uploadAvatar({ file, uid });
       if (url) {
-        personaCreationService.avatarUrl = url;
+        this._personaCreation.avatarUrl = url;
       }
     } catch (error) {
       this.error('uploadAvatar', error);
@@ -472,21 +585,21 @@ export class PersonaCreateViewModel
           return;
         }
         const prompt = this._enhanceForComfyUI(appearance);
-        const result = await imageGenerationService.generateImage({ prompt });
-        personaCreationService.avatarUrl = result.url;
+        const result = await this._imageGeneration.generateImage({ prompt });
+        this._personaCreation.avatarUrl = result.url;
       } else if (this.regenerationMode === 'direct') {
         const prompt = this.directPrompt.trim();
         if (!prompt) {
           return;
         }
-        const result = await imageGenerationService.generateImage({ prompt });
-        personaCreationService.avatarUrl = result.url;
+        const result = await this._imageGeneration.generateImage({ prompt });
+        this._personaCreation.avatarUrl = result.url;
       } else if (this.regenerationMode === 'edit') {
         const instruction = this.editInstruction.trim();
         if (!instruction) {
           return;
         }
-        const currentUrl = personaCreationService.avatarUrl;
+        const currentUrl = this._personaCreation.avatarUrl;
         if (!currentUrl) {
           return;
         }
@@ -513,20 +626,20 @@ export class PersonaCreateViewModel
 
     // Clear any stale game state from a previous play session
     // so the new game starts with a clean inventory, quest log, etc.
-    inventoryService.reset();
-    worldStateService.reset();
-    playerStateService.reset();
-    equipmentService.reset();
+    this._inventory.reset();
+    this._worldState.reset();
+    this._playerState.reset();
+    this._equipment.reset();
 
     // C-374: grant the starter kit — clothes/armour + equipment pre-equipped,
     // plus a couple of potions in the bag.
     this._seedStarterKit();
 
     // Set persona as active if user is logged in
-    const uid = (authService as { uid?: string }).uid;
+    const uid = this._auth.uid;
     if (uid && this.persona?.id) {
       try {
-        await personaService.setActivePersona(this.persona.id);
+        await this._personas.setActivePersona(this.persona.id);
         this.info('enterWorld:active-set', { personaId: this.persona.id });
       } catch (error) {
         this.warn('enterWorld:active-set-failed (continuing anyway)', error);
@@ -534,7 +647,7 @@ export class PersonaCreateViewModel
     }
 
     // Navigate to game
-    await routerService.goToRoute('game', {
+    await this._router.goToRoute('game', {
       queryParameters: undefined,
       pathParameters: undefined,
     });
@@ -550,7 +663,7 @@ export class PersonaCreateViewModel
    */
   private _seedStarterKit(): void {
     for (const entry of STARTER_KIT.inventory) {
-      inventoryService.addItem({ itemId: entry.itemId, quantity: entry.quantity });
+      this._inventory.addItem({ itemId: entry.itemId, quantity: entry.quantity });
     }
     for (const [, itemId] of Object.entries(STARTER_KIT.equipment)) {
       if (!itemId) {
@@ -558,8 +671,8 @@ export class PersonaCreateViewModel
       }
       // Equipment items must exist in the bag before equipItem can move
       // them into a slot.
-      inventoryService.addItem({ itemId, quantity: 1 });
-      equipmentService.equipItem({ itemId });
+      this._inventory.addItem({ itemId, quantity: 1 });
+      this._equipment.equipItem({ itemId });
     }
     this.info('enterWorld:starter-kit-seeded', {
       equipment: Object.keys(STARTER_KIT.equipment).join(','),
@@ -580,7 +693,7 @@ export class PersonaCreateViewModel
     }
 
     // Convert blob URL to data URL so it survives page refresh
-    let persistentAvatarUrl = personaCreationService.avatarUrl;
+    let persistentAvatarUrl = this._personaCreation.avatarUrl;
     if (persistentAvatarUrl?.startsWith('blob:')) {
       try {
         const blobResponse = await fetch(persistentAvatarUrl);
@@ -623,7 +736,7 @@ export class PersonaCreateViewModel
     // 2. Save to the local personas table (C-386b) — per-install persistence.
     //    updatePersona upserts, so this covers both create and update.
     try {
-      await personaService.updatePersona(persona.id, {
+      await this._personas.updatePersona(persona.id, {
         ...persona,
         avatarUrl: persistentAvatarUrl || persona.avatarUrl || '',
         isActive: persona.isActive ?? false,
@@ -652,7 +765,7 @@ export class PersonaCreateViewModel
     // Convert blob → data URL so it can ride in ImageGenerationRequest.initImage
     const dataUrl = await blobToDataUrl(blob);
 
-    const result = await imageGenerationService.generateImage({
+    const result = await this._imageGeneration.generateImage({
       prompt: `${instruction}, same person, same face, high quality`,
       negativePrompt: 'deformed, different person, blurry, low quality',
       initImage: dataUrl,
@@ -661,7 +774,7 @@ export class PersonaCreateViewModel
       cfgScale: 7.0,
     });
 
-    personaCreationService.avatarUrl = result.url;
+    this._personaCreation.avatarUrl = result.url;
   }
 
   /** Enhances an appearance description for better ComfyUI image generation. */
@@ -676,7 +789,7 @@ export class PersonaCreateViewModel
     const compiledHistory = this._compileChatHistory();
 
     try {
-      const extracted = await textGenerationService.extractStructure({
+      const extracted = await this._textGeneration.extractStructure({
         schema: CharacterExtractionSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: Record cast for AI-generated persona data
         schemaName: 'CharacterExtraction',
         prompt: compiledHistory,
@@ -790,7 +903,7 @@ export class PersonaCreateViewModel
     if (!this.isImageGenReady) {
       return;
     }
-    const p = personaCreationService.persona;
+    const p = this._personaCreation.persona;
     if (!p) {
       return;
     }
@@ -799,7 +912,7 @@ export class PersonaCreateViewModel
       (p?.race && p?.class
         ? `${p.race} ${p.class}, fantasy character portrait`
         : p?.name || 'fantasy character');
-    personaCreationService.startAvatarGeneration({ prompt: imagePrompt });
+    this._personaCreation.startAvatarGeneration({ prompt: imagePrompt });
   }
 
   private _compileChatHistory(): string {
@@ -829,7 +942,13 @@ export class PersonaCreateViewModel
   }
 }
 
-export const getPersonaCreateViewModel = (
+/**
+ * Builds a persona-create ViewModel from explicit capabilities.
+ *
+ * Tests and sandboxes call this directly; production code goes through
+ * `getPersonaCreateViewModel` in ./persona_create_composition.ts.
+ */
+export const createPersonaCreateViewModel = (
   options: PersonaCreateViewModelOptions,
 ): PersonaCreateViewModelInterface => PersonaCreateViewModel.create(options);
 

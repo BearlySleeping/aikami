@@ -7,15 +7,38 @@
 import type { ChatData } from '@aikami/types';
 import {
   type ExportableCharacter,
+  type ExportPrivacyCapabilities,
+  type ExportServiceCapabilities,
   ExportViewModel,
   type ExportViewModelInterface,
   type ExportViewModelOptions,
 } from '$views/settings/export/export_view_model.svelte';
 
-/** Production export configuration reused by the export sandbox ViewModel. */
-export type ExportSandboxViewModelOptions = ExportViewModelOptions;
+/**
+ * Sandbox options — the export service and privacy store are supplied by the
+ * sandbox because its overridden `_loadData` never touches production storage.
+ */
+export type ExportSandboxViewModelOptions = Omit<ExportViewModelOptions, 'service' | 'privacy'>;
 
 export type ExportSandboxViewModelInterface = ExportViewModelInterface;
+
+const _sandboxService: ExportServiceCapabilities = {
+  listChats: async () => [],
+  listCompletedSessions: () => [],
+  listExportableCharacters: async () => [],
+  exportChatAsJsonl: async () => {},
+  exportChatAsPlainText: async () => {},
+  exportCharacterAsJson: async () => {},
+  exportCharacterAsPng: async () => {},
+  exportSessionAsEpub: async () => {},
+  exportBulkBackup: async () => {},
+  deleteAllLocalData: async () => {},
+};
+
+const _sandboxPrivacy: ExportPrivacyCapabilities = {
+  read: () => ({ offlineMode: false, telemetryOptOut: false }),
+  write: () => {},
+};
 
 class ExportSandboxViewModel extends ExportViewModel implements ExportSandboxViewModelInterface {
   override async _loadData(): Promise<void> {
@@ -184,5 +207,10 @@ class ExportSandboxViewModel extends ExportViewModel implements ExportSandboxVie
 }
 
 export const getExportSandboxViewModel = (
-  options: ExportViewModelOptions,
-): ExportSandboxViewModelInterface => ExportSandboxViewModel.create(options);
+  options: ExportSandboxViewModelOptions,
+): ExportSandboxViewModelInterface =>
+  ExportSandboxViewModel.create({
+    ...options,
+    service: _sandboxService,
+    privacy: _sandboxPrivacy,
+  });

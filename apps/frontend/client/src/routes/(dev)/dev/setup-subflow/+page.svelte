@@ -4,8 +4,8 @@
 // Dev sandbox page for the setup subflow component.
 // Contract: C-483
 
+import { getSetupSubflowViewModel } from '$views/setup_subflow/setup_subflow_composition.ts';
 import SetupSubflowView from '$views/setup_subflow/setup_subflow_view.svelte';
-import { getSetupSubflowViewModel } from '$views/setup_subflow/setup_subflow_view_model.svelte';
 
 const viewModel = getSetupSubflowViewModel({ className: 'DevSetupSubflow' });
 </script>

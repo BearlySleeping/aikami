@@ -15,18 +15,50 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AvailabilityStatus, DaySchedule } from '@aikami/types';
-import { idleDetectionService } from '$services/game/idle_detection_service.svelte';
-import { autonomousMessageService } from '$services/npc/autonomous_message_service.svelte';
-import { npcScheduleService } from '$services/npc/npc_schedule_service.svelte';
-import { getScheduleEditorViewModel } from '../settings/autonomous/schedule_editor_composition.ts';
+import type {
+  AutonomousMessageServiceInterface,
+  IdleDetectionServiceInterface,
+  NpcScheduleServiceInterface,
+} from '$services';
 import type { ScheduleEditorViewModelInterface } from '../settings/autonomous/schedule_editor_view_model.svelte';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** Idle/DND state and controls the sandbox exercises. */
+export type IdleCapabilities = Pick<
+  IdleDetectionServiceInterface,
+  'idleDurationMs' | 'isDnd' | 'isIdle' | 'resetIdle' | 'setDnd'
+>;
+
+/** Autonomous poller state and controls the sandbox exercises. */
+export type AutonomousMessageCapabilities = Pick<
+  AutonomousMessageServiceInterface,
+  'isRunning' | 'isPaused' | 'start' | 'stop' | 'pause' | 'resume'
+>;
+
+/** NPC schedule persistence the sandbox seeds and reads. */
+export type AutonomousScheduleCapabilities = Pick<
+  NpcScheduleServiceInterface,
+  'getSchedule' | 'setSchedule'
+>;
 
 // ── Types ────────────────────────────────────────────────────────────────
 
 /** Base configuration used to create the autonomous-messaging sandbox ViewModel. */
-export type AutonomousSandboxViewModelOptions = BaseViewModelOptions;
+export type AutonomousSandboxViewModelOptions = BaseViewModelOptions & {
+  /** Idle detection capability. */
+  idle: IdleCapabilities;
+  /** Autonomous message poller capability. */
+  autonomousMessages: AutonomousMessageCapabilities;
+  /** NPC schedule persistence capability. */
+  schedules: AutonomousScheduleCapabilities;
+  /** Schedule editor sub-ViewModel. */
+  scheduleEditor: ScheduleEditorViewModelInterface;
+  /** Platform id generator. Defaults to `crypto.randomUUID`. */
+  randomId?: () => string;
+};
 
 export type AutonomousSandboxViewModelInterface = BaseViewModelInterface & {
   // --- Reactive state ---
@@ -91,11 +123,16 @@ const MOCK_NPCS = [
 // ── Implementation ───────────────────────────────────────────────────────
 
 class AutonomousSandboxViewModel
-  extends BaseViewModel<BaseViewModelOptions>
+  extends BaseViewModel<AutonomousSandboxViewModelOptions>
   implements AutonomousSandboxViewModelInterface
 {
   testLog = $state<string[]>([]);
   readonly scheduleEditorViewModel: ScheduleEditorViewModelInterface;
+
+  private readonly _idle: IdleCapabilities;
+  private readonly _autonomousMessages: AutonomousMessageCapabilities;
+  private readonly _schedules: AutonomousScheduleCapabilities;
+  private readonly _randomId: () => string;
 
   readonly dayLabels = DAY_LABELS;
   readonly statusLabels = AVAILABILITY_STATUS_LABELS;
@@ -111,30 +148,32 @@ class AutonomousSandboxViewModel
   });
 
   get idleDurationMs(): number {
-    return idleDetectionService.idleDurationMs;
+    return this._idle.idleDurationMs;
   }
 
   get isDnd(): boolean {
-    return idleDetectionService.isDnd;
+    return this._idle.isDnd;
   }
 
   get isPollerRunning(): boolean {
-    return autonomousMessageService.isRunning;
+    return this._autonomousMessages.isRunning;
   }
 
   get isPollerPaused(): boolean {
-    return autonomousMessageService.isPaused;
+    return this._autonomousMessages.isPaused;
   }
 
   get mockNpcIds(): string[] {
     return MOCK_NPCS.map((n) => n.id);
   }
 
-  constructor(options: BaseViewModelOptions) {
+  constructor(options: AutonomousSandboxViewModelOptions) {
     super(options);
-    this.scheduleEditorViewModel = getScheduleEditorViewModel({
-      className: 'ScheduleEditorViewModel',
-    });
+    this._idle = options.idle;
+    this._autonomousMessages = options.autonomousMessages;
+    this._schedules = options.schedules;
+    this._randomId = options.randomId ?? (() => crypto.randomUUID());
+    this.scheduleEditorViewModel = options.scheduleEditor;
   }
 
   override async initialize(): Promise<void> {
@@ -146,29 +185,29 @@ class AutonomousSandboxViewModel
   // ── Actions ─────────────────────────────────────────────────────────
 
   simulateIdle(options: { seconds: number }): void {
-    idleDetectionService.resetIdle();
+    this._idle.resetIdle();
     this._log(
-      `Simulated idle wanted ${options.seconds}s — reset. Current: ${idleDetectionService.idleDurationMs}ms`,
+      `Simulated idle wanted ${options.seconds}s — reset. Current: ${this._idle.idleDurationMs}ms`,
     );
 
     // HACK: advance time via the tracking interval
     // The idle duration updates every 1s via setInterval
     setTimeout(() => {
-      this._log(`After 1s tick: idleDurationMs = ${idleDetectionService.idleDurationMs}ms`);
+      this._log(`After 1s tick: idleDurationMs = ${this._idle.idleDurationMs}ms`);
       this._log(
-        `isIdle(300000) = ${idleDetectionService.isIdle(300_000)} | isIdle(0) = ${idleDetectionService.isIdle(0)}`,
+        `isIdle(300000) = ${this._idle.isIdle(300_000)} | isIdle(0) = ${this._idle.isIdle(0)}`,
       );
     }, 1100);
   }
 
   resetIdle(): void {
-    idleDetectionService.resetIdle();
+    this._idle.resetIdle();
     this._log('Idle reset to 0');
   }
 
   toggleDnd(): void {
-    const newState = !idleDetectionService.isDnd;
-    idleDetectionService.setDnd(newState);
+    const newState = !this._idle.isDnd;
+    this._idle.setDnd(newState);
     this._log(`DND ${newState ? 'ON' : 'OFF'}`);
   }
 
@@ -177,7 +216,7 @@ class AutonomousSandboxViewModel
     personality: string;
     talkativeness: number;
   }): Promise<void> {
-    const mockId = `mock-${crypto.randomUUID().slice(0, 8)}`;
+    const mockId = `mock-${this._randomId().slice(0, 8)}`;
 
     // Create a default 7×24 schedule for this mock NPC
     const makeDay = (day: number): DaySchedule => ({
@@ -189,7 +228,7 @@ class AutonomousSandboxViewModel
       })),
     });
 
-    await npcScheduleService.setSchedule(mockId, {
+    await this._schedules.setSchedule(mockId, {
       npcId: mockId,
       days: Array.from({ length: 7 }, (_, day) => makeDay(day)),
       autonomousEnabled: true,
@@ -205,22 +244,22 @@ class AutonomousSandboxViewModel
   }
 
   startPoller(): void {
-    autonomousMessageService.start();
+    this._autonomousMessages.start();
     this._log('Poller started');
   }
 
   stopPoller(): void {
-    autonomousMessageService.stop();
+    this._autonomousMessages.stop();
     this._log('Poller stopped');
   }
 
   pausePoller(): void {
-    autonomousMessageService.pause();
+    this._autonomousMessages.pause();
     this._log('Poller paused');
   }
 
   resumePoller(): void {
-    autonomousMessageService.resume();
+    this._autonomousMessages.resume();
     this._log('Poller resumed');
   }
 
@@ -228,7 +267,7 @@ class AutonomousSandboxViewModel
     const npc = MOCK_NPCS.find((n) => n.id === options.npcId);
     if (npc) {
       // Ensure the mock schedule exists
-      const schedule = await npcScheduleService.getSchedule(options.npcId);
+      const schedule = await this._schedules.getSchedule(options.npcId);
       if (schedule.generated) {
         // Already exists — just open
       }
@@ -313,7 +352,7 @@ class AutonomousSandboxViewModel
       };
 
       // Seed silently — don't await, it will be picked up from cache
-      npcScheduleService.setSchedule(npc.id, schedule).catch(() => {
+      this._schedules.setSchedule(npc.id, schedule).catch(() => {
         // Firestore may not be available in sandbox — that's OK
       });
     }
@@ -327,6 +366,6 @@ class AutonomousSandboxViewModel
   }
 }
 
-export const getAutonomousSandboxViewModel = (
-  options: BaseViewModelOptions,
+export const createAutonomousSandboxViewModel = (
+  options: AutonomousSandboxViewModelOptions,
 ): AutonomousSandboxViewModelInterface => AutonomousSandboxViewModel.create(options);

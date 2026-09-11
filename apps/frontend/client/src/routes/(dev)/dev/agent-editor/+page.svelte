@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { CustomAgentDefinition } from '$types';
+import { getAgentEditorViewModel } from '$views/agent/editor/agent_editor_composition.ts';
 import AgentEditorView from '$views/agent/editor/agent_editor_view.svelte';
-import { getAgentEditorViewModel } from '$views/agent/editor/agent_editor_view_model.svelte.ts';
 import { getAgentListViewModel } from '$views/agent/list/agent_list_composition.ts';
 // apps/frontend/client/src/routes/(dev)/dev/agent-editor/+page.svelte
 import AgentListView from '$views/agent/list/agent_list_view.svelte';

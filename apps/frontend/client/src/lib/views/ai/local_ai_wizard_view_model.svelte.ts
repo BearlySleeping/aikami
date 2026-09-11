@@ -16,7 +16,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import {
   detectHardware,
   type HardwareProfile,
@@ -27,8 +27,34 @@ import {
   resolveArtifact,
   type StackPlan,
 } from '@aikami/local-ai';
-import { isTauri } from '$lib/views/utils/is_tauri';
-import { configService, getTauriRuntimeInfo, type SidecarState, sidecarService } from '$services';
+import type { ConfigServiceInterface, SidecarServiceInterface } from '$services';
+import type { SidecarState } from '$types';
+
+// ── Capability contracts ──────────────────────────────────────────────
+
+/** The sidecar process lifecycle the wizard drives. */
+export type LocalAiWizardSidecarCapabilities = Pick<
+  SidecarServiceInterface,
+  'state' | 'config' | 'start' | 'stop'
+>;
+
+/** The connection catalog the wizard registers a local provider into. */
+export type LocalAiWizardConfigCapabilities = Pick<
+  ConfigServiceInterface,
+  'addConnection' | 'save'
+> & {
+  readonly state: {
+    readonly connections: readonly { provider?: string; capability?: string }[];
+  };
+};
+
+/** The native runtime identifier lookup. */
+export type LocalAiWizardRuntimeCapabilities = {
+  getRuntimeInfo(): Promise<{
+    readonly platform: 'linux' | 'darwin' | 'win32';
+    readonly arch: 'x64' | 'arm64';
+  }>;
+};
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -49,7 +75,7 @@ export type LocalAiWizardViewModelInterface = BaseViewModelInterface & {
   readonly hardwareProfile: HardwareProfile | null;
   /** Recommended stack plan (null before detection). */
   readonly stackPlan: StackPlan | null;
-  /** Sidecar state (mirrored from sidecarService). */
+  /** Sidecar state (mirrored from the sidecar capability). */
   readonly sidecarState: SidecarState;
   /** Error message to display. */
   readonly errorMessage: string;
@@ -126,6 +152,14 @@ export type LocalAiWizardViewModelOptions = BaseViewModelOptions & {
   readonly platform?: 'linux' | 'darwin' | 'win32';
   /** CPU architecture (defaults to the current architecture). */
   readonly arch?: 'x64' | 'arm64';
+  /** Whether the current host is the desktop (Tauri) webview. */
+  readonly isDesktop: () => boolean;
+  /** Sidecar lifecycle capability. */
+  readonly sidecar: LocalAiWizardSidecarCapabilities;
+  /** Connection catalog capability. */
+  readonly config: LocalAiWizardConfigCapabilities;
+  /** Native runtime identifier capability. */
+  readonly runtime: LocalAiWizardRuntimeCapabilities;
 };
 
 // ── ViewModel ─────────────────────────────────────────────────────────
@@ -135,6 +169,10 @@ class LocalAiWizardViewModel
   implements LocalAiWizardViewModelInterface
 {
   private readonly _executor: ProbeExecutor;
+  private readonly _isDesktop: () => boolean;
+  private readonly _sidecar: LocalAiWizardSidecarCapabilities;
+  private readonly _config: LocalAiWizardConfigCapabilities;
+  private readonly _runtime: LocalAiWizardRuntimeCapabilities;
   private _platform: RuntimePlatform | undefined;
   private _arch: RuntimeArch | undefined;
   private _installToken = 0;
@@ -149,13 +187,17 @@ class LocalAiWizardViewModel
   constructor(options: LocalAiWizardViewModelOptions) {
     super(options);
     this._executor = options.executor;
+    this._isDesktop = options.isDesktop;
+    this._sidecar = options.sidecar;
+    this._config = options.config;
+    this._runtime = options.runtime;
     this._platform = options.platform;
     this._arch = options.arch;
   }
 
-  /** Sidecar state (mirrored from sidecarService). */
+  /** Sidecar state (mirrored from the injected sidecar capability). */
   get sidecarState(): SidecarState {
-    return sidecarService.state;
+    return this._sidecar.state;
   }
 
   get showPlan(): boolean {
@@ -192,7 +234,7 @@ class LocalAiWizardViewModel
 
   /** Sidecar port when running (or null). */
   get sidecarPort(): number | null {
-    const s = sidecarService.state;
+    const s = this._sidecar.state;
     if (s.status === 'running') {
       return s.port;
     }
@@ -213,7 +255,7 @@ class LocalAiWizardViewModel
 
     // P01: hardware detection is only supported in the Tauri desktop webview.
     // Do not invoke probes, shell, filesystem or download IPC on unsupported hosts.
-    if (!isTauri()) {
+    if (!this._isDesktop()) {
       this.errorMessage = 'Local AI hardware detection requires the desktop app.';
       this.step = 'error';
       return;
@@ -283,7 +325,7 @@ class LocalAiWizardViewModel
   async startInstall(): Promise<void> {
     // P01: model download and sidecar operations are only supported in the
     // Tauri desktop webview. Do not invoke download IPC on unsupported hosts.
-    if (!isTauri()) {
+    if (!this._isDesktop()) {
       this.errorMessage = 'Local model installation requires the desktop app.';
       this.step = 'error';
       return;
@@ -311,17 +353,17 @@ class LocalAiWizardViewModel
 
       // Step 2: Start the sidecar with the downloaded model
       this.step = 'starting';
-      await sidecarService.start({
+      await this._sidecar.start({
         modelPath,
         executor: this._executor,
       });
       if (!this._isInstallCurrent(installToken)) {
-        await sidecarService.stop();
+        await this._sidecar.stop();
         return;
       }
 
-      if (sidecarService.state.status === 'running') {
-        // Step 3: Register as a local provider through configService
+      if (this._sidecar.state.status === 'running') {
+        // Step 3: Register as a local provider through the config capability
         await this._registerLocalProvider();
         if (!this._isInstallCurrent(installToken)) {
           return;
@@ -329,7 +371,7 @@ class LocalAiWizardViewModel
         this.step = 'ready';
       } else {
         const reason =
-          sidecarService.state.status === 'error' ? sidecarService.state.reason : 'Unknown error';
+          this._sidecar.state.status === 'error' ? this._sidecar.state.reason : 'Unknown error';
         this.errorMessage = `Failed to start: ${reason}`;
         this.step = 'error';
       }
@@ -412,7 +454,7 @@ class LocalAiWizardViewModel
   /** Cancels download. */
   cancelDownload(): void {
     this._installToken += 1;
-    void sidecarService.stop();
+    void this._sidecar.stop();
     this.downloadProgress = 0;
     this.errorMessage = '';
     this.step = 'plan';
@@ -442,22 +484,22 @@ class LocalAiWizardViewModel
 
   /**
    * Registers the running sidecar as a local AiProvider/AiConnection
-   * through configService, so it appears in the AI settings provider tree
+   * through the config capability, so it appears in the AI settings provider tree
    * like any other local connection (C-467 AC-3).
    */
   private async _registerLocalProvider(): Promise<void> {
-    const port = sidecarService.config.port;
-    const baseUrl = `http://${sidecarService.config.host}:${port}`;
+    const port = this._sidecar.config.port;
+    const baseUrl = `http://${this._sidecar.config.host}:${port}`;
 
     // Check if a llamacpp connection already exists
-    const connections = configService.state.connections ?? [];
+    const connections = this._config.state.connections ?? [];
     const exists = connections.some(
       (c: { provider?: string; capability?: string }) =>
         c.provider === 'llamacpp' && (c.capability ?? 'text') === 'text',
     );
 
     if (!exists) {
-      configService.addConnection({
+      this._config.addConnection({
         name: 'llama.cpp (local)',
         provider: 'llamacpp',
         capability: 'text',
@@ -479,7 +521,7 @@ class LocalAiWizardViewModel
 
       this.debug('_registerLocalProvider:registered', { baseUrl });
     }
-    await configService.save();
+    await this._config.save();
   }
 
   private _isInstallCurrent(installToken: number): boolean {
@@ -502,7 +544,7 @@ class LocalAiWizardViewModel
     }
 
     if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const runtime = await getTauriRuntimeInfo();
+      const runtime = await this._runtime.getRuntimeInfo();
       this._platform = runtime.platform;
       this._arch = runtime.arch;
     }
@@ -515,6 +557,6 @@ class LocalAiWizardViewModel
 
 // ── Factory ───────────────────────────────────────────────────────────
 
-export const getLocalAiWizardViewModel = (
+export const createLocalAiWizardViewModel = (
   options: LocalAiWizardViewModelOptions,
 ): LocalAiWizardViewModelInterface => LocalAiWizardViewModel.create(options);
